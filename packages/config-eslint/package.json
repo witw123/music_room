@@ -1,0 +1,7 @@
+{
+  "name": "@music-room/config-eslint",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.js"
+}
+

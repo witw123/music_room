@@ -1,0 +1,45 @@
+{
+  "name": "@music-room/server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "nest start --watch",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/generated/prisma','dist/generated/prisma',{ recursive: true })\"",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --passWithNoTests",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@music-room/shared": "workspace:*",
+    "@nestjs/common": "^11.0.11",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.0.11",
+    "@nestjs/platform-express": "^11.0.11",
+    "@nestjs/platform-socket.io": "^11.0.11",
+    "@nestjs/websockets": "^11.0.11",
+    "@prisma/client": "^6.5.0",
+    "ioredis": "^5.5.0",
+    "pino": "^9.6.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@music-room/config-eslint": "workspace:*",
+    "@music-room/config-typescript": "workspace:*",
+    "@nestjs/cli": "^11.0.5",
+    "@nestjs/schematics": "^11.0.1",
+    "@nestjs/testing": "^11.0.11",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.13.10",
+    "eslint": "^9.22.0",
+    "jest": "^29.7.0",
+    "prisma": "^6.5.0",
+    "ts-jest": "^29.2.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  }
+}
