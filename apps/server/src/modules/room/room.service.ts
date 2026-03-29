@@ -149,7 +149,11 @@ export class RoomService {
     const records = await this.listRecoverableRecords();
 
     return records
-      .filter((record) => record.room.visibility === "public")
+      .filter(
+        (record) =>
+          record.room.visibility === "public" &&
+          record.room.members.some((member) => member.role === "member")
+      )
       .map((record) => ({
         room: record.room,
         tracks: record.tracks,

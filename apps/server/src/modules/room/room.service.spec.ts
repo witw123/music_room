@@ -311,6 +311,25 @@ describe("RoomService", () => {
     });
   });
 
+  it("only lists public rooms that currently have non-host members", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await expect(roomService.listPublicRooms()).resolves.toEqual([]);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
+
+    await roomService.leaveRoom(snapshot.room.id, member.id);
+    await expect(roomService.listPublicRooms()).resolves.toEqual([]);
+  });
+
   it("rejects joining a room with a duplicate nickname", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

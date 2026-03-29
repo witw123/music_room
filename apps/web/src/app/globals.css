@@ -1207,7 +1207,7 @@ input {
   bottom: 0;
   z-index: 100;
   transition: opacity 300ms ease, filter 300ms ease;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .bottom-player.playing {
@@ -1493,6 +1493,7 @@ input {
   background: rgba(10, 10, 12, 0.96);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(16px);
+  z-index: 180;
 }
 
 .player-queue-header {
