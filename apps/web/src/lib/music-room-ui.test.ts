@@ -9,13 +9,16 @@ import {
 describe("music-room-ui helpers", () => {
   it("falls back to the default playlist title when the input is blank", () => {
     expect(normalizePlaylistTitle("   ")).toBe("Tonight Selects");
-    expect(normalizePlaylistTitle(" 夜间精选 ")).toBe("夜间精选");
+    expect(normalizePlaylistTitle("夜间精选")).toBe("夜间精选");
   });
 
   it("maps backend errors to user-facing Chinese copy", () => {
-    expect(
-      toUserFacingError(new Error("Nickname already exists in this room"))
-    ).toBe("这个昵称已经在房间里被使用了，请换一个再加入。");
+    expect(toUserFacingError(new Error("Nickname already exists in this room"))).toBe(
+      "这个昵称已经在房间里被使用了，请换一个再加入。"
+    );
+    expect(toUserFacingError(new Error("Queue item not found in this room."))).toBe(
+      "这首歌已经不在当前播放队列里了。"
+    );
   });
 
   it("removes evicted uploads from the in-memory track map", () => {

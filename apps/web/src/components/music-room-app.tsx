@@ -26,7 +26,7 @@ import {
   getCachedTrackAssets,
   pruneCachedTracks
 } from "@/lib/indexeddb";
-import { removeTracksFromUploads } from "@/lib/music-room-ui";
+import { removeTracksFromUploads, toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 import { TopBar } from "@/components/TopBar";
@@ -50,44 +50,6 @@ const capturedAudioGraphs = new WeakMap<
     stream: MediaStream;
   }
 >();
-
-function toUserFacingError(error: unknown) {
-  const message = error instanceof Error ? error.message : "请求失败。";
-
-  if (message.includes("Only the host can control playback")) {
-    return "只有房主可以控制当前房间的播放。";
-  }
-
-  if (message.includes("Only the host or the requester can remove this queue item")) {
-    return "只有房主或点歌者可以移除这首歌。";
-  }
-
-  if (message.includes("Only room members can perform this action")) {
-    return "加入房间后才能执行这个操作。";
-  }
-
-  if (message.includes("Room not found")) {
-    return "房间不存在或已经被删除。";
-  }
-
-  if (message.includes("No tracks from this playlist are available")) {
-    return "这个歌单和当前房间曲库不匹配。";
-  }
-
-  if (message.includes("Nickname is required")) {
-    return "请输入昵称后再继续。";
-  }
-
-  if (message.includes("Nickname already exists in this room")) {
-    return "这个昵称已经在房间里被使用了，请换一个再加入。";
-  }
-
-  if (message.includes("Only the host can delete this room")) {
-    return "只有房主可以删除房间。";
-  }
-
-  return message;
-}
 
 export function MusicRoomApp() {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -159,6 +121,30 @@ export function MusicRoomApp() {
     void refreshAvailableRooms();
     void refreshPlaylists(activeSession.id);
   }, [activeSession]);
+
+  useEffect(() => {
+    if (!activeSession || roomSnapshot) {
+      return;
+    }
+
+    void refreshAvailableRooms();
+    const intervalId = window.setInterval(() => {
+      void refreshAvailableRooms();
+    }, 5000);
+
+    const handleFocus = () => {
+      void refreshAvailableRooms();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [activeSession, roomSnapshot]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId) return;
@@ -294,6 +280,7 @@ export function MusicRoomApp() {
       }));
     });
     socket.on("room.snapshot.missing", () => {
+      resetPlayerSurface();
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage("这个房间已不可用，请创建新房间或加入其他房间。");
@@ -701,6 +688,30 @@ export function MusicRoomApp() {
     await refreshAvailableRooms();
   }
 
+  function resetPlayerSurface() {
+    const localAudio = audioRef.current;
+    const remoteAudio = remoteAudioRef.current;
+
+    if (localAudio) {
+      localAudio.pause();
+      localAudio.removeAttribute("src");
+      localAudio.load();
+    }
+
+    if (remoteAudio) {
+      remoteAudio.pause();
+      remoteAudio.srcObject = null;
+      remoteAudio.load();
+    }
+
+    hostStreamRef.current = null;
+    setProgressMs(0);
+    setAudioDurationMs(0);
+    setSeekDraft(null);
+    setMediaConnectionState("idle");
+    setMediaConnectedPeers([]);
+  }
+
   async function handleCreateRoom() {
     if (!activeSession) {
       setStatusMessage("请先输入昵称并确认身份。");
@@ -722,6 +733,7 @@ export function MusicRoomApp() {
   }
 
   function handleClearIdentity() {
+    resetPlayerSurface();
     setActiveSession(null);
     setNickname("");
     setRoomSnapshot(null);
@@ -755,7 +767,12 @@ export function MusicRoomApp() {
       const snapshot = await musicRoomApi.joinRoomByCode(activeSession.id, code.trim());
       setRoomSnapshot(snapshot);
       await refreshAvailableRooms();
-      setStatusMessage(`已加入房间 ${snapshot.room.joinCode}。`);
+      const joinedMember = snapshot.room.members.find((member) => member.id === activeSession.id);
+      setStatusMessage(
+        joinedMember?.role === "host"
+          ? `已加入房间 ${snapshot.room.joinCode}，你当前是房主。`
+          : `已加入房间 ${snapshot.room.joinCode}，你当前是听众。`
+      );
       await refreshPlaylists(activeSession.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -769,7 +786,7 @@ export function MusicRoomApp() {
 
   async function refreshAvailableRooms() {
     try {
-      const rooms = await musicRoomApi.listRooms(activeSession?.id);
+      const rooms = await musicRoomApi.listRooms();
       setAvailableRooms(rooms);
     } catch {
       setAvailableRooms([]);
@@ -790,10 +807,11 @@ export function MusicRoomApp() {
 
     try {
       await musicRoomApi.leaveRoom(roomSnapshot.room.id, activeSession.id);
+      resetPlayerSurface();
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
-      setStatusMessage("已离开房间。创建新房间或加入其他房间。");
+      setStatusMessage("已离开房间。再次加入时将作为当前房间规则下的成员进入。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -804,6 +822,7 @@ export function MusicRoomApp() {
 
     try {
       await musicRoomApi.deleteRoom(roomSnapshot.room.id, activeSession.id);
+      resetPlayerSurface();
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
@@ -888,6 +907,21 @@ export function MusicRoomApp() {
       await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "play",
         trackId,
+        sessionId: activeSession.id
+      });
+      await refreshRoom(roomSnapshot.room.id);
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
+    }
+  }
+
+  async function playQueueItem(queueItemId: string) {
+    if (!roomSnapshot || !activeSession) return;
+
+    try {
+      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        action: "play",
+        queueItemId,
         sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
@@ -1018,6 +1052,21 @@ export function MusicRoomApp() {
       await musicRoomApi.removeQueueItemAs(roomSnapshot.room.id, queueItemId, activeSession.id);
       await refreshRoom(roomSnapshot.room.id);
       setStatusMessage("曲目已从队列中移除。");
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
+    }
+  }
+
+  async function reorderQueue(queueItemIds: string[]) {
+    if (!roomSnapshot || !activeSession) return;
+
+    try {
+      await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
+        sessionId: activeSession.id,
+        queueItemIds
+      });
+      await refreshRoom(roomSnapshot.room.id);
+      setStatusMessage("播放队列顺序已更新。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -1263,7 +1312,6 @@ export function MusicRoomApp() {
               onDeleteRoom={() => deleteRoom()}
               onFilesSelected={(files) => handleFilesSelected(files)}
               onAddToQueue={(trackId) => addToQueue(trackId)}
-              onRemoveQueueItem={(itemId) => removeQueueItem(itemId)}
               onPlayTrack={(trackId) => playTrack(trackId)}
               onSavePlaylistFromQueue={(title) => savePlaylistFromQueue(title)}
               onLoadPlaylistIntoRoom={(playlistId) => loadPlaylistIntoRoom(playlistId)}
@@ -1330,6 +1378,9 @@ export function MusicRoomApp() {
           )
         }
         onRemoteError={() => setMediaConnectionState("failed")}
+        onPlayQueueItem={playQueueItem}
+        onRemoveQueueItem={removeQueueItem}
+        onReorderQueue={reorderQueue}
       />
 
       {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}

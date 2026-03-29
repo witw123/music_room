@@ -66,6 +66,7 @@ export function RoomStage({
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const isHost = !!activeSession && activeSession.id === roomSnapshot.room.hostId;
+  const roleLabel = isHost ? "房主" : "听众";
 
   return (
     <>
@@ -93,7 +94,9 @@ export function RoomStage({
           <div className="room-stage-identity">
             <span className="field-label">当前身份</span>
             <strong>{activeSession?.nickname ?? "未确认"}</strong>
-            <p>房主: {host?.nickname ?? "未连接"}</p>
+            <p>
+              你当前是 {roleLabel} · 房主: {host?.nickname ?? "未连接"}
+            </p>
           </div>
 
           <div className="room-stage-buttons">

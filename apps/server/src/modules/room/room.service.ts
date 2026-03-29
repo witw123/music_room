@@ -382,11 +382,39 @@ export class RoomService {
     return record.queue;
   }
 
+  async reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
+    const record = await this.getRoomRecord(roomId);
+    this.assertMember(record, actorSessionId);
+    await this.assertHost(record, actorSessionId);
+
+    const existingIds = record.queue.map((item) => item.id);
+    if (
+      queueItemIds.length !== existingIds.length ||
+      queueItemIds.some((id) => !existingIds.includes(id))
+    ) {
+      throw new Error("Queue reorder payload does not match the current room queue.");
+    }
+
+    const nextQueue = queueItemIds
+      .map((queueItemId) => record.queue.find((item) => item.id === queueItemId))
+      .filter((item): item is QueueItem => !!item)
+      .map((item, index) => ({
+        ...item,
+        position: index
+      }));
+
+    record.queue = nextQueue;
+    record.room.playback.queueVersion += 1;
+    await this.persistRecord(record);
+    return record.queue;
+  }
+
   async updatePlayback(
     roomId: string,
     input: {
-      action: "play" | "pause" | "seek" | "next";
+      action: "play" | "pause" | "seek" | "next" | "prev";
       trackId?: string;
+      queueItemId?: string;
       positionMs?: number;
       actorSessionId?: string;
     }
@@ -411,10 +439,33 @@ export class RoomService {
       playback.startedAt = nextItem ? new Date().toISOString() : null;
     }
 
+    if (input.action === "prev") {
+      const currentIndex = record.queue.findIndex(
+        (item) => item.trackId === playback.currentTrackId
+      );
+      const previousItem =
+        currentIndex > 0 ? record.queue[currentIndex - 1] : record.queue[0];
+
+      playback.currentTrackId = previousItem?.trackId ?? playback.currentTrackId;
+      playback.positionMs = 0;
+      playback.status = previousItem ? "playing" : playback.status;
+      playback.startedAt = previousItem ? new Date().toISOString() : playback.startedAt;
+    }
+
     if (input.action === "play") {
-      playback.status = "playing";
-      playback.currentTrackId =
+      let nextTrackId =
         input.trackId ?? playback.currentTrackId ?? record.queue[0]?.trackId ?? null;
+
+      if (input.queueItemId) {
+        const queueItem = record.queue.find((item) => item.id === input.queueItemId);
+        if (!queueItem) {
+          throw new Error("Queue item not found in this room.");
+        }
+        nextTrackId = queueItem.trackId;
+      }
+
+      playback.status = "playing";
+      playback.currentTrackId = nextTrackId;
       playback.positionMs = input.positionMs ?? playback.positionMs;
       playback.startedAt = new Date().toISOString();
     }

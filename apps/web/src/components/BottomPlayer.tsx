@@ -8,6 +8,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
+import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -41,6 +42,9 @@ type BottomPlayerProps = {
   onRemoteWaiting: () => void;
   onRemotePause: () => void;
   onRemoteError: () => void;
+  onPlayQueueItem: (queueItemId: string) => Promise<void>;
+  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
+  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
 
 function getMediaStatusLabel(state: RoomMediaConnectionState) {
@@ -88,7 +92,10 @@ export function BottomPlayer({
   onRemotePlaying,
   onRemoteWaiting,
   onRemotePause,
-  onRemoteError
+  onRemoteError,
+  onPlayQueueItem,
+  onRemoveQueueItem,
+  onReorderQueue
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -109,7 +116,7 @@ export function BottomPlayer({
       </div>
 
       <div className="bp-track-info">
-        <div className={`bp-artwork${currentTrack?.artworkUrl ? "" : " is-placeholder"}`}>
+        <div className={`bp-artwork${currentTrack?.artworkUrl ? "" : " is-placeholder"}${isPlaying ? " is-rotating" : ""}`}>
           {currentTrack?.artworkUrl ? (
             <img src={currentTrack.artworkUrl} alt="" className="bp-artwork-image" />
           ) : (
@@ -204,8 +211,7 @@ export function BottomPlayer({
         ) : null}
         {!localTrackAvailable && currentTrackAvailability ? (
           <span className="bp-note">
-            缓存 {currentTrackAvailability.localChunkCount}/
-            {currentTrackAvailability.totalChunks || 0} 分片
+            缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0} 分片
           </span>
         ) : null}
         <label className="bp-volume" aria-label="音量">
@@ -219,6 +225,17 @@ export function BottomPlayer({
             onChange={(e) => setVolume(Number(e.target.value))}
           />
         </label>
+        <PlayerQueueDrawer
+          queue={roomSnapshot?.queue ?? []}
+          tracks={roomSnapshot?.tracks ?? []}
+          currentTrackId={roomSnapshot?.room.playback.currentTrackId ?? null}
+          activeSessionId={activeSession?.id}
+          hostId={roomSnapshot?.room.hostId}
+          canControlPlayback={canControlPlayback}
+          onPlayQueueItem={onPlayQueueItem}
+          onRemoveQueueItem={onRemoveQueueItem}
+          onReorderQueue={onReorderQueue}
+        />
       </div>
 
       <audio

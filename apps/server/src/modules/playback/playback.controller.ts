@@ -32,8 +32,9 @@ export class PlaybackController {
     @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
-      action: "play" | "pause" | "seek" | "next";
+      action: "play" | "pause" | "seek" | "next" | "prev";
       trackId?: string;
+      queueItemId?: string;
       positionMs?: number;
       sessionId: string;
     }

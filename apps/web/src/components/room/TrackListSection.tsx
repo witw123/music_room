@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import type { TrackMeta } from "@music-room/shared";
+import { formatDuration } from "@/lib/music-room-ui";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
@@ -11,14 +12,6 @@ type TrackListSectionProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
 };
-
-function formatDuration(durationMs: number) {
-  if (!durationMs) return "0:00";
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
 
 export function TrackListSection({
   tracks,
@@ -47,9 +40,7 @@ export function TrackListSection({
           accept="audio/*"
           multiple
           className="hidden"
-          onChange={(event) =>
-            startTransition(() => void onFilesSelected(event.target.files))
-          }
+          onChange={(event) => startTransition(() => void onFilesSelected(event.target.files))}
         />
       </label>
 
@@ -82,9 +73,11 @@ export function TrackListSection({
             </article>
           ))
         ) : (
-          <p className="placeholder-copy">还没有曲目。先导入本地音频，队列和歌单会跟着联动。</p>
+          <p className="placeholder-copy">还没有曲目。先导入本地音频，队列和歌单才会联动起来。</p>
         )}
       </div>
+
+      {isPending ? <div className="pending-indicator">正在处理曲库操作…</div> : null}
     </section>
   );
 }

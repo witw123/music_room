@@ -66,5 +66,13 @@ export function toUserFacingError(error: unknown) {
     return "只有房主可以删除房间。";
   }
 
+  if (message.includes("Queue reorder payload does not match")) {
+    return "队列顺序已经变化，请刷新后再试一次。";
+  }
+
+  if (message.includes("Queue item not found")) {
+    return "这首歌已经不在当前播放队列里了。";
+  }
+
   return message;
 }

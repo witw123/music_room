@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import type {
   GuestSession,
   Playlist,
@@ -11,7 +10,6 @@ import type {
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { TrackListSection } from "./TrackListSection";
-import { QueuePanel } from "./QueuePanel";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { MembersPanel } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
@@ -38,7 +36,6 @@ type RoomDashboardViewProps = {
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
-  onRemoveQueueItem: (itemId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
@@ -67,7 +64,6 @@ export function RoomDashboardView({
   onDeleteRoom,
   onFilesSelected,
   onAddToQueue,
-  onRemoveQueueItem,
   onPlayTrack,
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
@@ -102,15 +98,6 @@ export function RoomDashboardView({
             onFilesSelected={onFilesSelected}
             onAddToQueue={onAddToQueue}
             onPlayTrack={onPlayTrack}
-          />
-
-          <QueuePanel
-            queue={roomSnapshot.queue}
-            tracks={roomSnapshot.tracks}
-            activeSession={activeSession}
-            hostId={roomSnapshot.room.hostId}
-            onRemoveQueueItem={onRemoveQueueItem}
-            onAddToQueue={onAddToQueue}
           />
         </div>
 

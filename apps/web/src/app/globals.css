@@ -1268,6 +1268,9 @@ input {
   border-radius: 50%;
   border: 0.28rem solid rgba(246, 241, 232, 0.82);
   border-right-color: rgba(246, 241, 232, 0.2);
+}
+
+.bp-artwork.is-rotating .bp-artwork-disc {
   animation: spin 5.5s linear infinite;
 }
 
@@ -1433,9 +1436,11 @@ input {
 
 .bp-status {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  align-items: center;
+  gap: 0.75rem;
   min-width: 120px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .bp-note {
@@ -1450,6 +1455,107 @@ input {
   align-items: center;
   justify-content: flex-end;
   gap: 0.55rem;
+}
+
+.player-queue {
+  position: relative;
+}
+
+.player-queue-toggle {
+  min-width: 5.8rem;
+  height: 2.4rem;
+  gap: 0.45rem;
+  border-radius: 999px;
+  padding-inline: 0.9rem;
+}
+
+.player-queue-count {
+  display: inline-flex;
+  min-width: 1.45rem;
+  min-height: 1.45rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.72rem;
+}
+
+.player-queue-drawer {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.9rem);
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: min(32rem, 70vh);
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid rgba(246, 241, 232, 0.12);
+  border-radius: 1.25rem;
+  background: rgba(10, 10, 12, 0.96);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+}
+
+.player-queue-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.player-queue-header h3 {
+  margin: 0.2rem 0 0;
+  font-size: 1.35rem;
+}
+
+.player-queue-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.player-queue-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid rgba(246, 241, 232, 0.08);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.player-queue-row.is-current {
+  border-color: rgba(207, 122, 73, 0.38);
+  background: rgba(207, 122, 73, 0.08);
+}
+
+.player-queue-row.is-dragging {
+  opacity: 0.65;
+}
+
+.player-queue-index {
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  color: rgba(246, 241, 232, 0.45);
+}
+
+.player-queue-copy strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.player-queue-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.player-queue-actions {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
 }
 
 .bp-volume input {
@@ -1531,7 +1637,6 @@ input {
 
   .bp-status {
     grid-column: 1 / -1;
-    flex-direction: row;
     flex-wrap: wrap;
     gap: 0.5rem;
     min-width: 0;
@@ -1623,6 +1728,12 @@ input {
 
   .bp-volume input {
     width: 100%;
+  }
+
+  .player-queue-drawer {
+    right: auto;
+    left: 0;
+    width: min(30rem, calc(100vw - 2rem));
   }
 }
 

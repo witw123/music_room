@@ -36,7 +36,7 @@ export function TopBar({
       </div>
       <div className="top-bar-intro">
         {roomSnapshot
-          ? "房间、曲库、队列和歌单已经合到同一工作台"
+          ? "房间、曲库和歌单已经合到同一工作台"
           : "输入昵称后即可开房或通过房间码加入"}
       </div>
       <div className="top-bar-right">

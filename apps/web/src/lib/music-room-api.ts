@@ -104,6 +104,11 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  reorderQueue: (roomId: string, payload: { sessionId: string; queueItemIds: string[] }) =>
+    request<QueueItem[]>(`/v1/rooms/${roomId}/queue/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
   removeQueueItem: (roomId: string, queueItemId: string) =>
     request<QueueItem[]>(`/v1/rooms/${roomId}/queue/${queueItemId}`, {
       method: "DELETE"

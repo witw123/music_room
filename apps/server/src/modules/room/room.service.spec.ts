@@ -188,6 +188,64 @@ describe("RoomService", () => {
     });
   });
 
+  it("allows the host to reorder the queue and jump to a queue item", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "First",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 100000,
+      bitrate: null,
+      fileHash: "first",
+      artworkUrl: null,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Second",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 100000,
+      bitrate: null,
+      fileHash: "second",
+      artworkUrl: null,
+      sourceType: "local_upload"
+    });
+
+    const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, firstTrack.id);
+    const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, secondTrack.id);
+
+    await expect(
+      roomService.reorderQueue(snapshot.room.id, member.id, [secondQueueItem.id, firstQueueItem.id])
+    ).rejects.toThrow("Only the host can control playback.");
+
+    const reordered = await roomService.reorderQueue(snapshot.room.id, host.id, [
+      secondQueueItem.id,
+      firstQueueItem.id
+    ]);
+    expect(reordered[0]?.id).toBe(secondQueueItem.id);
+    expect(reordered[1]?.position).toBe(1);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        queueItemId: secondQueueItem.id,
+        actorSessionId: host.id
+      })
+    ).resolves.toMatchObject({
+      currentTrackId: secondTrack.id,
+      status: "playing"
+    });
+  });
+
   it("restores the recent active room for a session from redis", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

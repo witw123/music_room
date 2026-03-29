@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Headers,
+  Patch,
   Param,
   Post,
   Query,
@@ -58,6 +59,21 @@ export class QueueController {
   ) {
     await this.assertSession(sessionId, sessionToken);
     const queue = await this.roomService.removeQueueItem(roomId, queueItemId, sessionId);
+    this.signalingGateway.emitRoomSnapshot(
+      roomId,
+      await this.roomService.getRoomSnapshot(roomId, [])
+    );
+    return queue;
+  }
+
+  @Patch("reorder")
+  async reorderQueue(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: { sessionId: string; queueItemIds: string[] }
+  ) {
+    await this.assertSession(body.sessionId, sessionToken);
+    const queue = await this.roomService.reorderQueue(roomId, body.sessionId, body.queueItemIds);
     this.signalingGateway.emitRoomSnapshot(
       roomId,
       await this.roomService.getRoomSnapshot(roomId, [])
