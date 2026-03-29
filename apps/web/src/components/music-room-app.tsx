@@ -458,25 +458,7 @@ export function MusicRoomApp() {
       return;
     }
 
-    const listenerPeerIds =
-      roomSnapshot.room.members
-        .map((member) => member.peerId)
-        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
-
-    const audio = audioRef.current;
-    if (!audio || !roomSnapshot.room.playback.currentTrackId) {
-      void mediaMeshRef.current?.syncHostPeers([], null);
-      return;
-    }
-
-    const capture = captureAudioStream(audio);
-    if (!capture) {
-      setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
-      return;
-    }
-
-    hostStreamRef.current = capture;
-    void mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture);
+    void syncHostMediaStream();
   }, [
     roomSnapshot?.room.id,
     roomSnapshot?.room.members,
@@ -1180,6 +1162,32 @@ export function MusicRoomApp() {
     });
   }
 
+  async function syncHostMediaStream() {
+    if (!roomSnapshot?.room.id || !peerId || !canControlPlayback) {
+      return;
+    }
+
+    const audio = audioRef.current;
+    if (!audio || !roomSnapshot.room.playback.currentTrackId) {
+      await mediaMeshRef.current?.syncHostPeers([], null);
+      return;
+    }
+
+    const listenerPeerIds =
+      roomSnapshot.room.members
+        .map((member) => member.peerId)
+        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
+
+    const capture = captureAudioStream(audio);
+    if (!capture) {
+      setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+      return;
+    }
+
+    hostStreamRef.current = capture;
+    await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture);
+  }
+
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
   const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
@@ -1304,6 +1312,9 @@ export function MusicRoomApp() {
         onPrev={prevTrack}
         onNext={nextTrack}
         onEnded={handleEnded}
+        onLocalPlaybackReady={() => {
+          void syncHostMediaStream();
+        }}
         onRemotePlaying={() => setMediaConnectionState("live")}
         onRemoteWaiting={() => setMediaConnectionState("buffering")}
         onRemotePause={() =>

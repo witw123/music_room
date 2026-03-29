@@ -15,6 +15,7 @@ type MediaPeerEntry = {
   connection: RTCPeerConnection;
   stream: MediaStream | null;
   senders: RTCRtpSender[];
+  pendingCandidates: RTCIceCandidateInit[];
 };
 
 export class RoomMediaMesh {
@@ -74,6 +75,7 @@ export class RoomMediaMesh {
       }
 
       await entry.connection.setRemoteDescription(remoteDescription);
+      await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
       this.sendSignal({
@@ -94,12 +96,18 @@ export class RoomMediaMesh {
       }
 
       await entry.connection.setRemoteDescription(remoteDescription);
+      await this.flushPendingCandidates(entry);
       return;
     }
 
     if (payload.type === "candidate") {
       const candidate = toIceCandidateInit(payload.payload);
       if (!candidate) {
+        return;
+      }
+
+      if (!entry.connection.remoteDescription) {
+        entry.pendingCandidates.push(candidate);
         return;
       }
 
@@ -152,8 +160,13 @@ export class RoomMediaMesh {
     const entry: MediaPeerEntry = {
       connection,
       stream: null,
-      senders: []
+      senders: [],
+      pendingCandidates: []
     };
+
+    connection.addTransceiver("audio", {
+      direction: "recvonly"
+    });
 
     connection.onicecandidate = (event) => {
       if (!event.candidate) {
@@ -224,6 +237,18 @@ export class RoomMediaMesh {
       state: "closed",
       connectedPeerIds: this.getConnectedPeerIds()
     });
+  }
+
+  private async flushPendingCandidates(entry: MediaPeerEntry) {
+    if (entry.pendingCandidates.length === 0) {
+      return;
+    }
+
+    const nextCandidates = [...entry.pendingCandidates];
+    entry.pendingCandidates = [];
+    for (const candidate of nextCandidates) {
+      await entry.connection.addIceCandidate(candidate);
+    }
   }
 }
 

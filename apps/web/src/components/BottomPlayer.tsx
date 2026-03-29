@@ -36,6 +36,7 @@ type BottomPlayerProps = {
   onPrev: () => void;
   onNext: () => void;
   onEnded: () => void;
+  onLocalPlaybackReady: () => void;
   onRemotePlaying: () => void;
   onRemoteWaiting: () => void;
   onRemotePause: () => void;
@@ -83,6 +84,7 @@ export function BottomPlayer({
   onPrev,
   onNext,
   onEnded,
+  onLocalPlaybackReady,
   onRemotePlaying,
   onRemoteWaiting,
   onRemotePause,
@@ -227,9 +229,13 @@ export function BottomPlayer({
         onLoadedMetadata={() => {
           syncDurationFromAudio();
           syncProgressFromAudio();
+          onLocalPlaybackReady();
         }}
         onDurationChange={syncDurationFromAudio}
-        onPlay={syncProgressFromAudio}
+        onPlay={() => {
+          syncProgressFromAudio();
+          onLocalPlaybackReady();
+        }}
         onPause={syncProgressFromAudio}
         onSeeked={syncProgressFromAudio}
       />
