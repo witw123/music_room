@@ -30,5 +30,4 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/package.json ./package.json
 EXPOSE 3001
-CMD ["sh", "-c", "cd apps/server && node dist/main.js"]
-
+CMD ["sh", "-c", "cd apps/server && ../../node_modules/.bin/prisma db push && node dist/main.js"]

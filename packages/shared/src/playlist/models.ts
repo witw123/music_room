@@ -16,6 +16,7 @@ export const queueItemSchema = z.object({
   id: z.string(),
   trackId: z.string(),
   requestedBy: z.string(),
+  requestedById: z.string(),
   position: z.number().int().nonnegative(),
   createdAt: z.string().datetime()
 });
@@ -36,4 +37,3 @@ export const playlistSchema = z.object({
 export type TrackMeta = z.infer<typeof trackMetaSchema>;
 export type QueueItem = z.infer<typeof queueItemSchema>;
 export type Playlist = z.infer<typeof playlistSchema>;
-

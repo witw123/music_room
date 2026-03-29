@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { peerSignalMessageSchema } from "../p2p/models";
+import { peerSignalMessageSchema, trackAvailabilityAnnouncementSchema } from "../p2p/models";
 import { playbackSnapshotSchema } from "../playback/models";
 import { roomSchema } from "../room/models";
 
@@ -28,5 +28,9 @@ export const peerSignalEventSchema = z.object({
   payload: peerSignalMessageSchema
 });
 
-export type WebsocketEvent = z.infer<typeof websocketEventSchema>;
+export const pieceAvailabilityEventSchema = z.object({
+  event: z.literal("piece.availability"),
+  payload: trackAvailabilityAnnouncementSchema
+});
 
+export type WebsocketEvent = z.infer<typeof websocketEventSchema>;

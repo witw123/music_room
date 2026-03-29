@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "postinstall": "prisma generate",
+    "db:push": "prisma db push",
     "dev": "nest start --watch",
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/generated/prisma','dist/generated/prisma',{ recursive: true })\"",
     "start": "node dist/main.js",
+    "start:deploy": "prisma db push && node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests",
+    "test": "jest --config jest.config.cjs --passWithNoTests --modulePathIgnorePatterns=dist src/generated",
     "prisma:generate": "prisma generate"
   },
   "dependencies": {

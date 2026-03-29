@@ -19,6 +19,11 @@ export type PrismaPromise<T> = $Public.PrismaPromise<T>
  */
 export type GuestSession = $Result.DefaultSelection<Prisma.$GuestSessionPayload>
 /**
+ * Model RoomState
+ * 
+ */
+export type RoomState = $Result.DefaultSelection<Prisma.$RoomStatePayload>
+/**
  * Model Playlist
  * 
  */
@@ -151,6 +156,16 @@ export class PrismaClient<
     * ```
     */
   get guestSession(): Prisma.GuestSessionDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.roomState`: Exposes CRUD operations for the **RoomState** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more RoomStates
+    * const roomStates = await prisma.roomState.findMany()
+    * ```
+    */
+  get roomState(): Prisma.RoomStateDelegate<ExtArgs, ClientOptions>;
 
   /**
    * `prisma.playlist`: Exposes CRUD operations for the **Playlist** model.
@@ -603,6 +618,7 @@ export namespace Prisma {
 
   export const ModelName: {
     GuestSession: 'GuestSession',
+    RoomState: 'RoomState',
     Playlist: 'Playlist'
   };
 
@@ -622,7 +638,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "guestSession" | "playlist"
+      modelProps: "guestSession" | "roomState" | "playlist"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -697,6 +713,80 @@ export namespace Prisma {
           count: {
             args: Prisma.GuestSessionCountArgs<ExtArgs>
             result: $Utils.Optional<GuestSessionCountAggregateOutputType> | number
+          }
+        }
+      }
+      RoomState: {
+        payload: Prisma.$RoomStatePayload<ExtArgs>
+        fields: Prisma.RoomStateFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.RoomStateFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.RoomStateFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>
+          }
+          findFirst: {
+            args: Prisma.RoomStateFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.RoomStateFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>
+          }
+          findMany: {
+            args: Prisma.RoomStateFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>[]
+          }
+          create: {
+            args: Prisma.RoomStateCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>
+          }
+          createMany: {
+            args: Prisma.RoomStateCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.RoomStateCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>[]
+          }
+          delete: {
+            args: Prisma.RoomStateDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>
+          }
+          update: {
+            args: Prisma.RoomStateUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>
+          }
+          deleteMany: {
+            args: Prisma.RoomStateDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.RoomStateUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.RoomStateUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>[]
+          }
+          upsert: {
+            args: Prisma.RoomStateUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$RoomStatePayload>
+          }
+          aggregate: {
+            args: Prisma.RoomStateAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateRoomState>
+          }
+          groupBy: {
+            args: Prisma.RoomStateGroupByArgs<ExtArgs>
+            result: $Utils.Optional<RoomStateGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.RoomStateCountArgs<ExtArgs>
+            result: $Utils.Optional<RoomStateCountAggregateOutputType> | number
           }
         }
       }
@@ -871,6 +961,7 @@ export namespace Prisma {
   }
   export type GlobalOmitConfig = {
     guestSession?: GuestSessionOmit
+    roomState?: RoomStateOmit
     playlist?: PlaylistOmit
   }
 
@@ -1935,6 +2026,1050 @@ export namespace Prisma {
 
 
   /**
+   * Model RoomState
+   */
+
+  export type AggregateRoomState = {
+    _count: RoomStateCountAggregateOutputType | null
+    _min: RoomStateMinAggregateOutputType | null
+    _max: RoomStateMaxAggregateOutputType | null
+  }
+
+  export type RoomStateMinAggregateOutputType = {
+    id: string | null
+    hostId: string | null
+    joinCode: string | null
+    visibility: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type RoomStateMaxAggregateOutputType = {
+    id: string | null
+    hostId: string | null
+    joinCode: string | null
+    visibility: string | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type RoomStateCountAggregateOutputType = {
+    id: number
+    hostId: number
+    joinCode: number
+    visibility: number
+    playback: number
+    members: number
+    tracks: number
+    queue: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type RoomStateMinAggregateInputType = {
+    id?: true
+    hostId?: true
+    joinCode?: true
+    visibility?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type RoomStateMaxAggregateInputType = {
+    id?: true
+    hostId?: true
+    joinCode?: true
+    visibility?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type RoomStateCountAggregateInputType = {
+    id?: true
+    hostId?: true
+    joinCode?: true
+    visibility?: true
+    playback?: true
+    members?: true
+    tracks?: true
+    queue?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type RoomStateAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which RoomState to aggregate.
+     */
+    where?: RoomStateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of RoomStates to fetch.
+     */
+    orderBy?: RoomStateOrderByWithRelationInput | RoomStateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: RoomStateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` RoomStates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` RoomStates.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned RoomStates
+    **/
+    _count?: true | RoomStateCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: RoomStateMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: RoomStateMaxAggregateInputType
+  }
+
+  export type GetRoomStateAggregateType<T extends RoomStateAggregateArgs> = {
+        [P in keyof T & keyof AggregateRoomState]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateRoomState[P]>
+      : GetScalarType<T[P], AggregateRoomState[P]>
+  }
+
+
+
+
+  export type RoomStateGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: RoomStateWhereInput
+    orderBy?: RoomStateOrderByWithAggregationInput | RoomStateOrderByWithAggregationInput[]
+    by: RoomStateScalarFieldEnum[] | RoomStateScalarFieldEnum
+    having?: RoomStateScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: RoomStateCountAggregateInputType | true
+    _min?: RoomStateMinAggregateInputType
+    _max?: RoomStateMaxAggregateInputType
+  }
+
+  export type RoomStateGroupByOutputType = {
+    id: string
+    hostId: string
+    joinCode: string
+    visibility: string
+    playback: JsonValue
+    members: JsonValue
+    tracks: JsonValue
+    queue: JsonValue
+    createdAt: Date
+    updatedAt: Date
+    _count: RoomStateCountAggregateOutputType | null
+    _min: RoomStateMinAggregateOutputType | null
+    _max: RoomStateMaxAggregateOutputType | null
+  }
+
+  type GetRoomStateGroupByPayload<T extends RoomStateGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<RoomStateGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof RoomStateGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], RoomStateGroupByOutputType[P]>
+            : GetScalarType<T[P], RoomStateGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type RoomStateSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    hostId?: boolean
+    joinCode?: boolean
+    visibility?: boolean
+    playback?: boolean
+    members?: boolean
+    tracks?: boolean
+    queue?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["roomState"]>
+
+  export type RoomStateSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    hostId?: boolean
+    joinCode?: boolean
+    visibility?: boolean
+    playback?: boolean
+    members?: boolean
+    tracks?: boolean
+    queue?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["roomState"]>
+
+  export type RoomStateSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    hostId?: boolean
+    joinCode?: boolean
+    visibility?: boolean
+    playback?: boolean
+    members?: boolean
+    tracks?: boolean
+    queue?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }, ExtArgs["result"]["roomState"]>
+
+  export type RoomStateSelectScalar = {
+    id?: boolean
+    hostId?: boolean
+    joinCode?: boolean
+    visibility?: boolean
+    playback?: boolean
+    members?: boolean
+    tracks?: boolean
+    queue?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+  export type RoomStateOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "hostId" | "joinCode" | "visibility" | "playback" | "members" | "tracks" | "queue" | "createdAt" | "updatedAt", ExtArgs["result"]["roomState"]>
+
+  export type $RoomStatePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "RoomState"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      hostId: string
+      joinCode: string
+      visibility: string
+      playback: Prisma.JsonValue
+      members: Prisma.JsonValue
+      tracks: Prisma.JsonValue
+      queue: Prisma.JsonValue
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["roomState"]>
+    composites: {}
+  }
+
+  type RoomStateGetPayload<S extends boolean | null | undefined | RoomStateDefaultArgs> = $Result.GetResult<Prisma.$RoomStatePayload, S>
+
+  type RoomStateCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<RoomStateFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: RoomStateCountAggregateInputType | true
+    }
+
+  export interface RoomStateDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['RoomState'], meta: { name: 'RoomState' } }
+    /**
+     * Find zero or one RoomState that matches the filter.
+     * @param {RoomStateFindUniqueArgs} args - Arguments to find a RoomState
+     * @example
+     * // Get one RoomState
+     * const roomState = await prisma.roomState.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends RoomStateFindUniqueArgs>(args: SelectSubset<T, RoomStateFindUniqueArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one RoomState that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {RoomStateFindUniqueOrThrowArgs} args - Arguments to find a RoomState
+     * @example
+     * // Get one RoomState
+     * const roomState = await prisma.roomState.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends RoomStateFindUniqueOrThrowArgs>(args: SelectSubset<T, RoomStateFindUniqueOrThrowArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first RoomState that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateFindFirstArgs} args - Arguments to find a RoomState
+     * @example
+     * // Get one RoomState
+     * const roomState = await prisma.roomState.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends RoomStateFindFirstArgs>(args?: SelectSubset<T, RoomStateFindFirstArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first RoomState that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateFindFirstOrThrowArgs} args - Arguments to find a RoomState
+     * @example
+     * // Get one RoomState
+     * const roomState = await prisma.roomState.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends RoomStateFindFirstOrThrowArgs>(args?: SelectSubset<T, RoomStateFindFirstOrThrowArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more RoomStates that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all RoomStates
+     * const roomStates = await prisma.roomState.findMany()
+     * 
+     * // Get first 10 RoomStates
+     * const roomStates = await prisma.roomState.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const roomStateWithIdOnly = await prisma.roomState.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends RoomStateFindManyArgs>(args?: SelectSubset<T, RoomStateFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a RoomState.
+     * @param {RoomStateCreateArgs} args - Arguments to create a RoomState.
+     * @example
+     * // Create one RoomState
+     * const RoomState = await prisma.roomState.create({
+     *   data: {
+     *     // ... data to create a RoomState
+     *   }
+     * })
+     * 
+     */
+    create<T extends RoomStateCreateArgs>(args: SelectSubset<T, RoomStateCreateArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many RoomStates.
+     * @param {RoomStateCreateManyArgs} args - Arguments to create many RoomStates.
+     * @example
+     * // Create many RoomStates
+     * const roomState = await prisma.roomState.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends RoomStateCreateManyArgs>(args?: SelectSubset<T, RoomStateCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many RoomStates and returns the data saved in the database.
+     * @param {RoomStateCreateManyAndReturnArgs} args - Arguments to create many RoomStates.
+     * @example
+     * // Create many RoomStates
+     * const roomState = await prisma.roomState.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many RoomStates and only return the `id`
+     * const roomStateWithIdOnly = await prisma.roomState.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends RoomStateCreateManyAndReturnArgs>(args?: SelectSubset<T, RoomStateCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a RoomState.
+     * @param {RoomStateDeleteArgs} args - Arguments to delete one RoomState.
+     * @example
+     * // Delete one RoomState
+     * const RoomState = await prisma.roomState.delete({
+     *   where: {
+     *     // ... filter to delete one RoomState
+     *   }
+     * })
+     * 
+     */
+    delete<T extends RoomStateDeleteArgs>(args: SelectSubset<T, RoomStateDeleteArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one RoomState.
+     * @param {RoomStateUpdateArgs} args - Arguments to update one RoomState.
+     * @example
+     * // Update one RoomState
+     * const roomState = await prisma.roomState.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends RoomStateUpdateArgs>(args: SelectSubset<T, RoomStateUpdateArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more RoomStates.
+     * @param {RoomStateDeleteManyArgs} args - Arguments to filter RoomStates to delete.
+     * @example
+     * // Delete a few RoomStates
+     * const { count } = await prisma.roomState.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends RoomStateDeleteManyArgs>(args?: SelectSubset<T, RoomStateDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more RoomStates.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many RoomStates
+     * const roomState = await prisma.roomState.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends RoomStateUpdateManyArgs>(args: SelectSubset<T, RoomStateUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more RoomStates and returns the data updated in the database.
+     * @param {RoomStateUpdateManyAndReturnArgs} args - Arguments to update many RoomStates.
+     * @example
+     * // Update many RoomStates
+     * const roomState = await prisma.roomState.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more RoomStates and only return the `id`
+     * const roomStateWithIdOnly = await prisma.roomState.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends RoomStateUpdateManyAndReturnArgs>(args: SelectSubset<T, RoomStateUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one RoomState.
+     * @param {RoomStateUpsertArgs} args - Arguments to update or create a RoomState.
+     * @example
+     * // Update or create a RoomState
+     * const roomState = await prisma.roomState.upsert({
+     *   create: {
+     *     // ... data to create a RoomState
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the RoomState we want to update
+     *   }
+     * })
+     */
+    upsert<T extends RoomStateUpsertArgs>(args: SelectSubset<T, RoomStateUpsertArgs<ExtArgs>>): Prisma__RoomStateClient<$Result.GetResult<Prisma.$RoomStatePayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of RoomStates.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateCountArgs} args - Arguments to filter RoomStates to count.
+     * @example
+     * // Count the number of RoomStates
+     * const count = await prisma.roomState.count({
+     *   where: {
+     *     // ... the filter for the RoomStates we want to count
+     *   }
+     * })
+    **/
+    count<T extends RoomStateCountArgs>(
+      args?: Subset<T, RoomStateCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], RoomStateCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a RoomState.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends RoomStateAggregateArgs>(args: Subset<T, RoomStateAggregateArgs>): Prisma.PrismaPromise<GetRoomStateAggregateType<T>>
+
+    /**
+     * Group by RoomState.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {RoomStateGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends RoomStateGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: RoomStateGroupByArgs['orderBy'] }
+        : { orderBy?: RoomStateGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, RoomStateGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetRoomStateGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the RoomState model
+   */
+  readonly fields: RoomStateFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for RoomState.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__RoomStateClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the RoomState model
+   */
+  interface RoomStateFieldRefs {
+    readonly id: FieldRef<"RoomState", 'String'>
+    readonly hostId: FieldRef<"RoomState", 'String'>
+    readonly joinCode: FieldRef<"RoomState", 'String'>
+    readonly visibility: FieldRef<"RoomState", 'String'>
+    readonly playback: FieldRef<"RoomState", 'Json'>
+    readonly members: FieldRef<"RoomState", 'Json'>
+    readonly tracks: FieldRef<"RoomState", 'Json'>
+    readonly queue: FieldRef<"RoomState", 'Json'>
+    readonly createdAt: FieldRef<"RoomState", 'DateTime'>
+    readonly updatedAt: FieldRef<"RoomState", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * RoomState findUnique
+   */
+  export type RoomStateFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * Filter, which RoomState to fetch.
+     */
+    where: RoomStateWhereUniqueInput
+  }
+
+  /**
+   * RoomState findUniqueOrThrow
+   */
+  export type RoomStateFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * Filter, which RoomState to fetch.
+     */
+    where: RoomStateWhereUniqueInput
+  }
+
+  /**
+   * RoomState findFirst
+   */
+  export type RoomStateFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * Filter, which RoomState to fetch.
+     */
+    where?: RoomStateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of RoomStates to fetch.
+     */
+    orderBy?: RoomStateOrderByWithRelationInput | RoomStateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for RoomStates.
+     */
+    cursor?: RoomStateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` RoomStates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` RoomStates.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of RoomStates.
+     */
+    distinct?: RoomStateScalarFieldEnum | RoomStateScalarFieldEnum[]
+  }
+
+  /**
+   * RoomState findFirstOrThrow
+   */
+  export type RoomStateFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * Filter, which RoomState to fetch.
+     */
+    where?: RoomStateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of RoomStates to fetch.
+     */
+    orderBy?: RoomStateOrderByWithRelationInput | RoomStateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for RoomStates.
+     */
+    cursor?: RoomStateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` RoomStates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` RoomStates.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of RoomStates.
+     */
+    distinct?: RoomStateScalarFieldEnum | RoomStateScalarFieldEnum[]
+  }
+
+  /**
+   * RoomState findMany
+   */
+  export type RoomStateFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * Filter, which RoomStates to fetch.
+     */
+    where?: RoomStateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of RoomStates to fetch.
+     */
+    orderBy?: RoomStateOrderByWithRelationInput | RoomStateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing RoomStates.
+     */
+    cursor?: RoomStateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` RoomStates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` RoomStates.
+     */
+    skip?: number
+    distinct?: RoomStateScalarFieldEnum | RoomStateScalarFieldEnum[]
+  }
+
+  /**
+   * RoomState create
+   */
+  export type RoomStateCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * The data needed to create a RoomState.
+     */
+    data: XOR<RoomStateCreateInput, RoomStateUncheckedCreateInput>
+  }
+
+  /**
+   * RoomState createMany
+   */
+  export type RoomStateCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many RoomStates.
+     */
+    data: RoomStateCreateManyInput | RoomStateCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * RoomState createManyAndReturn
+   */
+  export type RoomStateCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * The data used to create many RoomStates.
+     */
+    data: RoomStateCreateManyInput | RoomStateCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * RoomState update
+   */
+  export type RoomStateUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * The data needed to update a RoomState.
+     */
+    data: XOR<RoomStateUpdateInput, RoomStateUncheckedUpdateInput>
+    /**
+     * Choose, which RoomState to update.
+     */
+    where: RoomStateWhereUniqueInput
+  }
+
+  /**
+   * RoomState updateMany
+   */
+  export type RoomStateUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update RoomStates.
+     */
+    data: XOR<RoomStateUpdateManyMutationInput, RoomStateUncheckedUpdateManyInput>
+    /**
+     * Filter which RoomStates to update
+     */
+    where?: RoomStateWhereInput
+    /**
+     * Limit how many RoomStates to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * RoomState updateManyAndReturn
+   */
+  export type RoomStateUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * The data used to update RoomStates.
+     */
+    data: XOR<RoomStateUpdateManyMutationInput, RoomStateUncheckedUpdateManyInput>
+    /**
+     * Filter which RoomStates to update
+     */
+    where?: RoomStateWhereInput
+    /**
+     * Limit how many RoomStates to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * RoomState upsert
+   */
+  export type RoomStateUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * The filter to search for the RoomState to update in case it exists.
+     */
+    where: RoomStateWhereUniqueInput
+    /**
+     * In case the RoomState found by the `where` argument doesn't exist, create a new RoomState with this data.
+     */
+    create: XOR<RoomStateCreateInput, RoomStateUncheckedCreateInput>
+    /**
+     * In case the RoomState was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<RoomStateUpdateInput, RoomStateUncheckedUpdateInput>
+  }
+
+  /**
+   * RoomState delete
+   */
+  export type RoomStateDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+    /**
+     * Filter which RoomState to delete.
+     */
+    where: RoomStateWhereUniqueInput
+  }
+
+  /**
+   * RoomState deleteMany
+   */
+  export type RoomStateDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which RoomStates to delete
+     */
+    where?: RoomStateWhereInput
+    /**
+     * Limit how many RoomStates to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * RoomState without action
+   */
+  export type RoomStateDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the RoomState
+     */
+    select?: RoomStateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the RoomState
+     */
+    omit?: RoomStateOmit<ExtArgs> | null
+  }
+
+
+  /**
    * Model Playlist
    */
 
@@ -1947,8 +3082,11 @@ export namespace Prisma {
   export type PlaylistMinAggregateOutputType = {
     id: string | null
     ownerId: string | null
+    roomId: string | null
     title: string | null
     description: string | null
+    coverUrl: string | null
+    isCollaborative: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1956,8 +3094,11 @@ export namespace Prisma {
   export type PlaylistMaxAggregateOutputType = {
     id: string | null
     ownerId: string | null
+    roomId: string | null
     title: string | null
     description: string | null
+    coverUrl: string | null
+    isCollaborative: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1965,8 +3106,13 @@ export namespace Prisma {
   export type PlaylistCountAggregateOutputType = {
     id: number
     ownerId: number
+    roomId: number
     title: number
     description: number
+    coverUrl: number
+    tags: number
+    isCollaborative: number
+    trackIds: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -1976,8 +3122,11 @@ export namespace Prisma {
   export type PlaylistMinAggregateInputType = {
     id?: true
     ownerId?: true
+    roomId?: true
     title?: true
     description?: true
+    coverUrl?: true
+    isCollaborative?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1985,8 +3134,11 @@ export namespace Prisma {
   export type PlaylistMaxAggregateInputType = {
     id?: true
     ownerId?: true
+    roomId?: true
     title?: true
     description?: true
+    coverUrl?: true
+    isCollaborative?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1994,8 +3146,13 @@ export namespace Prisma {
   export type PlaylistCountAggregateInputType = {
     id?: true
     ownerId?: true
+    roomId?: true
     title?: true
     description?: true
+    coverUrl?: true
+    tags?: true
+    isCollaborative?: true
+    trackIds?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -2076,8 +3233,13 @@ export namespace Prisma {
   export type PlaylistGroupByOutputType = {
     id: string
     ownerId: string
+    roomId: string | null
     title: string
     description: string | null
+    coverUrl: string | null
+    tags: JsonValue
+    isCollaborative: boolean
+    trackIds: JsonValue
     createdAt: Date
     updatedAt: Date
     _count: PlaylistCountAggregateOutputType | null
@@ -2102,8 +3264,13 @@ export namespace Prisma {
   export type PlaylistSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     ownerId?: boolean
+    roomId?: boolean
     title?: boolean
     description?: boolean
+    coverUrl?: boolean
+    tags?: boolean
+    isCollaborative?: boolean
+    trackIds?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["playlist"]>
@@ -2111,8 +3278,13 @@ export namespace Prisma {
   export type PlaylistSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     ownerId?: boolean
+    roomId?: boolean
     title?: boolean
     description?: boolean
+    coverUrl?: boolean
+    tags?: boolean
+    isCollaborative?: boolean
+    trackIds?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["playlist"]>
@@ -2120,8 +3292,13 @@ export namespace Prisma {
   export type PlaylistSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     ownerId?: boolean
+    roomId?: boolean
     title?: boolean
     description?: boolean
+    coverUrl?: boolean
+    tags?: boolean
+    isCollaborative?: boolean
+    trackIds?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["playlist"]>
@@ -2129,13 +3306,18 @@ export namespace Prisma {
   export type PlaylistSelectScalar = {
     id?: boolean
     ownerId?: boolean
+    roomId?: boolean
     title?: boolean
     description?: boolean
+    coverUrl?: boolean
+    tags?: boolean
+    isCollaborative?: boolean
+    trackIds?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type PlaylistOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "ownerId" | "title" | "description" | "createdAt" | "updatedAt", ExtArgs["result"]["playlist"]>
+  export type PlaylistOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "ownerId" | "roomId" | "title" | "description" | "coverUrl" | "tags" | "isCollaborative" | "trackIds" | "createdAt" | "updatedAt", ExtArgs["result"]["playlist"]>
 
   export type $PlaylistPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "Playlist"
@@ -2143,8 +3325,13 @@ export namespace Prisma {
     scalars: $Extensions.GetPayloadResult<{
       id: string
       ownerId: string
+      roomId: string | null
       title: string
       description: string | null
+      coverUrl: string | null
+      tags: Prisma.JsonValue
+      isCollaborative: boolean
+      trackIds: Prisma.JsonValue
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["playlist"]>
@@ -2572,8 +3759,13 @@ export namespace Prisma {
   interface PlaylistFieldRefs {
     readonly id: FieldRef<"Playlist", 'String'>
     readonly ownerId: FieldRef<"Playlist", 'String'>
+    readonly roomId: FieldRef<"Playlist", 'String'>
     readonly title: FieldRef<"Playlist", 'String'>
     readonly description: FieldRef<"Playlist", 'String'>
+    readonly coverUrl: FieldRef<"Playlist", 'String'>
+    readonly tags: FieldRef<"Playlist", 'Json'>
+    readonly isCollaborative: FieldRef<"Playlist", 'Boolean'>
+    readonly trackIds: FieldRef<"Playlist", 'Json'>
     readonly createdAt: FieldRef<"Playlist", 'DateTime'>
     readonly updatedAt: FieldRef<"Playlist", 'DateTime'>
   }
@@ -2966,11 +4158,32 @@ export namespace Prisma {
   export type GuestSessionScalarFieldEnum = (typeof GuestSessionScalarFieldEnum)[keyof typeof GuestSessionScalarFieldEnum]
 
 
+  export const RoomStateScalarFieldEnum: {
+    id: 'id',
+    hostId: 'hostId',
+    joinCode: 'joinCode',
+    visibility: 'visibility',
+    playback: 'playback',
+    members: 'members',
+    tracks: 'tracks',
+    queue: 'queue',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type RoomStateScalarFieldEnum = (typeof RoomStateScalarFieldEnum)[keyof typeof RoomStateScalarFieldEnum]
+
+
   export const PlaylistScalarFieldEnum: {
     id: 'id',
     ownerId: 'ownerId',
+    roomId: 'roomId',
     title: 'title',
     description: 'description',
+    coverUrl: 'coverUrl',
+    tags: 'tags',
+    isCollaborative: 'isCollaborative',
+    trackIds: 'trackIds',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -2986,12 +4199,28 @@ export namespace Prisma {
   export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
 
 
+  export const JsonNullValueInput: {
+    JsonNull: typeof JsonNull
+  };
+
+  export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
   export const QueryMode: {
     default: 'default',
     insensitive: 'insensitive'
   };
 
   export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode]
+
+
+  export const JsonNullValueFilter: {
+    DbNull: typeof DbNull,
+    JsonNull: typeof JsonNull,
+    AnyNull: typeof AnyNull
+  };
+
+  export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 
 
   export const NullsOrder: {
@@ -3032,6 +4261,27 @@ export namespace Prisma {
    * Reference to a field of type 'DateTime[]'
    */
   export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'Json'
+   */
+  export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
+    
+
+
+  /**
+   * Reference to a field of type 'QueryMode'
+   */
+  export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+  /**
+   * Reference to a field of type 'Boolean'
+   */
+  export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>
     
 
 
@@ -3099,14 +4349,96 @@ export namespace Prisma {
     createdAt?: DateTimeWithAggregatesFilter<"GuestSession"> | Date | string
   }
 
+  export type RoomStateWhereInput = {
+    AND?: RoomStateWhereInput | RoomStateWhereInput[]
+    OR?: RoomStateWhereInput[]
+    NOT?: RoomStateWhereInput | RoomStateWhereInput[]
+    id?: StringFilter<"RoomState"> | string
+    hostId?: StringFilter<"RoomState"> | string
+    joinCode?: StringFilter<"RoomState"> | string
+    visibility?: StringFilter<"RoomState"> | string
+    playback?: JsonFilter<"RoomState">
+    members?: JsonFilter<"RoomState">
+    tracks?: JsonFilter<"RoomState">
+    queue?: JsonFilter<"RoomState">
+    createdAt?: DateTimeFilter<"RoomState"> | Date | string
+    updatedAt?: DateTimeFilter<"RoomState"> | Date | string
+  }
+
+  export type RoomStateOrderByWithRelationInput = {
+    id?: SortOrder
+    hostId?: SortOrder
+    joinCode?: SortOrder
+    visibility?: SortOrder
+    playback?: SortOrder
+    members?: SortOrder
+    tracks?: SortOrder
+    queue?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type RoomStateWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    joinCode?: string
+    AND?: RoomStateWhereInput | RoomStateWhereInput[]
+    OR?: RoomStateWhereInput[]
+    NOT?: RoomStateWhereInput | RoomStateWhereInput[]
+    hostId?: StringFilter<"RoomState"> | string
+    visibility?: StringFilter<"RoomState"> | string
+    playback?: JsonFilter<"RoomState">
+    members?: JsonFilter<"RoomState">
+    tracks?: JsonFilter<"RoomState">
+    queue?: JsonFilter<"RoomState">
+    createdAt?: DateTimeFilter<"RoomState"> | Date | string
+    updatedAt?: DateTimeFilter<"RoomState"> | Date | string
+  }, "id" | "joinCode">
+
+  export type RoomStateOrderByWithAggregationInput = {
+    id?: SortOrder
+    hostId?: SortOrder
+    joinCode?: SortOrder
+    visibility?: SortOrder
+    playback?: SortOrder
+    members?: SortOrder
+    tracks?: SortOrder
+    queue?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: RoomStateCountOrderByAggregateInput
+    _max?: RoomStateMaxOrderByAggregateInput
+    _min?: RoomStateMinOrderByAggregateInput
+  }
+
+  export type RoomStateScalarWhereWithAggregatesInput = {
+    AND?: RoomStateScalarWhereWithAggregatesInput | RoomStateScalarWhereWithAggregatesInput[]
+    OR?: RoomStateScalarWhereWithAggregatesInput[]
+    NOT?: RoomStateScalarWhereWithAggregatesInput | RoomStateScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"RoomState"> | string
+    hostId?: StringWithAggregatesFilter<"RoomState"> | string
+    joinCode?: StringWithAggregatesFilter<"RoomState"> | string
+    visibility?: StringWithAggregatesFilter<"RoomState"> | string
+    playback?: JsonWithAggregatesFilter<"RoomState">
+    members?: JsonWithAggregatesFilter<"RoomState">
+    tracks?: JsonWithAggregatesFilter<"RoomState">
+    queue?: JsonWithAggregatesFilter<"RoomState">
+    createdAt?: DateTimeWithAggregatesFilter<"RoomState"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"RoomState"> | Date | string
+  }
+
   export type PlaylistWhereInput = {
     AND?: PlaylistWhereInput | PlaylistWhereInput[]
     OR?: PlaylistWhereInput[]
     NOT?: PlaylistWhereInput | PlaylistWhereInput[]
     id?: StringFilter<"Playlist"> | string
     ownerId?: StringFilter<"Playlist"> | string
+    roomId?: StringNullableFilter<"Playlist"> | string | null
     title?: StringFilter<"Playlist"> | string
     description?: StringNullableFilter<"Playlist"> | string | null
+    coverUrl?: StringNullableFilter<"Playlist"> | string | null
+    tags?: JsonFilter<"Playlist">
+    isCollaborative?: BoolFilter<"Playlist"> | boolean
+    trackIds?: JsonFilter<"Playlist">
     createdAt?: DateTimeFilter<"Playlist"> | Date | string
     updatedAt?: DateTimeFilter<"Playlist"> | Date | string
   }
@@ -3114,8 +4446,13 @@ export namespace Prisma {
   export type PlaylistOrderByWithRelationInput = {
     id?: SortOrder
     ownerId?: SortOrder
+    roomId?: SortOrderInput | SortOrder
     title?: SortOrder
     description?: SortOrderInput | SortOrder
+    coverUrl?: SortOrderInput | SortOrder
+    tags?: SortOrder
+    isCollaborative?: SortOrder
+    trackIds?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -3126,8 +4463,13 @@ export namespace Prisma {
     OR?: PlaylistWhereInput[]
     NOT?: PlaylistWhereInput | PlaylistWhereInput[]
     ownerId?: StringFilter<"Playlist"> | string
+    roomId?: StringNullableFilter<"Playlist"> | string | null
     title?: StringFilter<"Playlist"> | string
     description?: StringNullableFilter<"Playlist"> | string | null
+    coverUrl?: StringNullableFilter<"Playlist"> | string | null
+    tags?: JsonFilter<"Playlist">
+    isCollaborative?: BoolFilter<"Playlist"> | boolean
+    trackIds?: JsonFilter<"Playlist">
     createdAt?: DateTimeFilter<"Playlist"> | Date | string
     updatedAt?: DateTimeFilter<"Playlist"> | Date | string
   }, "id">
@@ -3135,8 +4477,13 @@ export namespace Prisma {
   export type PlaylistOrderByWithAggregationInput = {
     id?: SortOrder
     ownerId?: SortOrder
+    roomId?: SortOrderInput | SortOrder
     title?: SortOrder
     description?: SortOrderInput | SortOrder
+    coverUrl?: SortOrderInput | SortOrder
+    tags?: SortOrder
+    isCollaborative?: SortOrder
+    trackIds?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: PlaylistCountOrderByAggregateInput
@@ -3150,8 +4497,13 @@ export namespace Prisma {
     NOT?: PlaylistScalarWhereWithAggregatesInput | PlaylistScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"Playlist"> | string
     ownerId?: StringWithAggregatesFilter<"Playlist"> | string
+    roomId?: StringNullableWithAggregatesFilter<"Playlist"> | string | null
     title?: StringWithAggregatesFilter<"Playlist"> | string
     description?: StringNullableWithAggregatesFilter<"Playlist"> | string | null
+    coverUrl?: StringNullableWithAggregatesFilter<"Playlist"> | string | null
+    tags?: JsonWithAggregatesFilter<"Playlist">
+    isCollaborative?: BoolWithAggregatesFilter<"Playlist"> | boolean
+    trackIds?: JsonWithAggregatesFilter<"Playlist">
     createdAt?: DateTimeWithAggregatesFilter<"Playlist"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"Playlist"> | Date | string
   }
@@ -3205,11 +4557,107 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
+  export type RoomStateCreateInput = {
+    id: string
+    hostId: string
+    joinCode: string
+    visibility: string
+    playback: JsonNullValueInput | InputJsonValue
+    members: JsonNullValueInput | InputJsonValue
+    tracks: JsonNullValueInput | InputJsonValue
+    queue: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type RoomStateUncheckedCreateInput = {
+    id: string
+    hostId: string
+    joinCode: string
+    visibility: string
+    playback: JsonNullValueInput | InputJsonValue
+    members: JsonNullValueInput | InputJsonValue
+    tracks: JsonNullValueInput | InputJsonValue
+    queue: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type RoomStateUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    hostId?: StringFieldUpdateOperationsInput | string
+    joinCode?: StringFieldUpdateOperationsInput | string
+    visibility?: StringFieldUpdateOperationsInput | string
+    playback?: JsonNullValueInput | InputJsonValue
+    members?: JsonNullValueInput | InputJsonValue
+    tracks?: JsonNullValueInput | InputJsonValue
+    queue?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type RoomStateUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    hostId?: StringFieldUpdateOperationsInput | string
+    joinCode?: StringFieldUpdateOperationsInput | string
+    visibility?: StringFieldUpdateOperationsInput | string
+    playback?: JsonNullValueInput | InputJsonValue
+    members?: JsonNullValueInput | InputJsonValue
+    tracks?: JsonNullValueInput | InputJsonValue
+    queue?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type RoomStateCreateManyInput = {
+    id: string
+    hostId: string
+    joinCode: string
+    visibility: string
+    playback: JsonNullValueInput | InputJsonValue
+    members: JsonNullValueInput | InputJsonValue
+    tracks: JsonNullValueInput | InputJsonValue
+    queue: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type RoomStateUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    hostId?: StringFieldUpdateOperationsInput | string
+    joinCode?: StringFieldUpdateOperationsInput | string
+    visibility?: StringFieldUpdateOperationsInput | string
+    playback?: JsonNullValueInput | InputJsonValue
+    members?: JsonNullValueInput | InputJsonValue
+    tracks?: JsonNullValueInput | InputJsonValue
+    queue?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type RoomStateUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    hostId?: StringFieldUpdateOperationsInput | string
+    joinCode?: StringFieldUpdateOperationsInput | string
+    visibility?: StringFieldUpdateOperationsInput | string
+    playback?: JsonNullValueInput | InputJsonValue
+    members?: JsonNullValueInput | InputJsonValue
+    tracks?: JsonNullValueInput | InputJsonValue
+    queue?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
   export type PlaylistCreateInput = {
     id: string
     ownerId: string
+    roomId?: string | null
     title: string
     description?: string | null
+    coverUrl?: string | null
+    tags: JsonNullValueInput | InputJsonValue
+    isCollaborative?: boolean
+    trackIds: JsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -3217,8 +4665,13 @@ export namespace Prisma {
   export type PlaylistUncheckedCreateInput = {
     id: string
     ownerId: string
+    roomId?: string | null
     title: string
     description?: string | null
+    coverUrl?: string | null
+    tags: JsonNullValueInput | InputJsonValue
+    isCollaborative?: boolean
+    trackIds: JsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -3226,8 +4679,13 @@ export namespace Prisma {
   export type PlaylistUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     ownerId?: StringFieldUpdateOperationsInput | string
+    roomId?: NullableStringFieldUpdateOperationsInput | string | null
     title?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    coverUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    tags?: JsonNullValueInput | InputJsonValue
+    isCollaborative?: BoolFieldUpdateOperationsInput | boolean
+    trackIds?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -3235,8 +4693,13 @@ export namespace Prisma {
   export type PlaylistUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     ownerId?: StringFieldUpdateOperationsInput | string
+    roomId?: NullableStringFieldUpdateOperationsInput | string | null
     title?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    coverUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    tags?: JsonNullValueInput | InputJsonValue
+    isCollaborative?: BoolFieldUpdateOperationsInput | boolean
+    trackIds?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -3244,8 +4707,13 @@ export namespace Prisma {
   export type PlaylistCreateManyInput = {
     id: string
     ownerId: string
+    roomId?: string | null
     title: string
     description?: string | null
+    coverUrl?: string | null
+    tags: JsonNullValueInput | InputJsonValue
+    isCollaborative?: boolean
+    trackIds: JsonNullValueInput | InputJsonValue
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -3253,8 +4721,13 @@ export namespace Prisma {
   export type PlaylistUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
     ownerId?: StringFieldUpdateOperationsInput | string
+    roomId?: NullableStringFieldUpdateOperationsInput | string | null
     title?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    coverUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    tags?: JsonNullValueInput | InputJsonValue
+    isCollaborative?: BoolFieldUpdateOperationsInput | boolean
+    trackIds?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -3262,8 +4735,13 @@ export namespace Prisma {
   export type PlaylistUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     ownerId?: StringFieldUpdateOperationsInput | string
+    roomId?: NullableStringFieldUpdateOperationsInput | string | null
     title?: StringFieldUpdateOperationsInput | string
     description?: NullableStringFieldUpdateOperationsInput | string | null
+    coverUrl?: NullableStringFieldUpdateOperationsInput | string | null
+    tags?: JsonNullValueInput | InputJsonValue
+    isCollaborative?: BoolFieldUpdateOperationsInput | boolean
+    trackIds?: JsonNullValueInput | InputJsonValue
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -3346,6 +4824,86 @@ export namespace Prisma {
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
+  export type JsonFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
+
+  export type RoomStateCountOrderByAggregateInput = {
+    id?: SortOrder
+    hostId?: SortOrder
+    joinCode?: SortOrder
+    visibility?: SortOrder
+    playback?: SortOrder
+    members?: SortOrder
+    tracks?: SortOrder
+    queue?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type RoomStateMaxOrderByAggregateInput = {
+    id?: SortOrder
+    hostId?: SortOrder
+    joinCode?: SortOrder
+    visibility?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type RoomStateMinOrderByAggregateInput = {
+    id?: SortOrder
+    hostId?: SortOrder
+    joinCode?: SortOrder
+    visibility?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+  export type JsonWithAggregatesFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonWithAggregatesFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonWithAggregatesFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedJsonFilter<$PrismaModel>
+    _max?: NestedJsonFilter<$PrismaModel>
+  }
 
   export type StringNullableFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel> | null
@@ -3362,6 +4920,11 @@ export namespace Prisma {
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
+  export type BoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
@@ -3370,8 +4933,13 @@ export namespace Prisma {
   export type PlaylistCountOrderByAggregateInput = {
     id?: SortOrder
     ownerId?: SortOrder
+    roomId?: SortOrder
     title?: SortOrder
     description?: SortOrder
+    coverUrl?: SortOrder
+    tags?: SortOrder
+    isCollaborative?: SortOrder
+    trackIds?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -3379,8 +4947,11 @@ export namespace Prisma {
   export type PlaylistMaxOrderByAggregateInput = {
     id?: SortOrder
     ownerId?: SortOrder
+    roomId?: SortOrder
     title?: SortOrder
     description?: SortOrder
+    coverUrl?: SortOrder
+    isCollaborative?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -3388,8 +4959,11 @@ export namespace Prisma {
   export type PlaylistMinOrderByAggregateInput = {
     id?: SortOrder
     ownerId?: SortOrder
+    roomId?: SortOrder
     title?: SortOrder
     description?: SortOrder
+    coverUrl?: SortOrder
+    isCollaborative?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -3412,6 +4986,14 @@ export namespace Prisma {
     _max?: NestedStringNullableFilter<$PrismaModel>
   }
 
+  export type BoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
+  }
+
   export type StringFieldUpdateOperationsInput = {
     set?: string
   }
@@ -3422,6 +5004,10 @@ export namespace Prisma {
 
   export type NullableStringFieldUpdateOperationsInput = {
     set?: string | null
+  }
+
+  export type BoolFieldUpdateOperationsInput = {
+    set?: boolean
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -3490,6 +5076,29 @@ export namespace Prisma {
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
+  export type NestedJsonFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<NestedJsonFilterBase<$PrismaModel>>, Exclude<keyof Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>,
+        Required<NestedJsonFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>
+
+  export type NestedJsonFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
 
   export type NestedStringNullableFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel> | null
@@ -3503,6 +5112,11 @@ export namespace Prisma {
     startsWith?: string | StringFieldRefInput<$PrismaModel>
     endsWith?: string | StringFieldRefInput<$PrismaModel>
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
+  }
+
+  export type NestedBoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolFilter<$PrismaModel> | boolean
   }
 
   export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -3531,6 +5145,14 @@ export namespace Prisma {
     gt?: number | IntFieldRefInput<$PrismaModel>
     gte?: number | IntFieldRefInput<$PrismaModel>
     not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
+  export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedBoolFilter<$PrismaModel>
+    _max?: NestedBoolFilter<$PrismaModel>
   }
 
 
