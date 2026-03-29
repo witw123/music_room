@@ -27,6 +27,8 @@ type MeshCallbacks = {
 type PeerEntry = {
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
+  /** The peerId that initiated this connection (so we don't initiate twice) */
+  initiatorPeerId: string | null;
 };
 
 type PendingPieceRequest = {
@@ -50,8 +52,9 @@ export class P2PMesh {
 
     for (const peerId of nextPeers) {
       if (!this.peers.has(peerId)) {
-        const shouldInitiate = this.localPeerId.localeCompare(peerId) < 0;
-        await this.ensurePeer(peerId, shouldInitiate);
+        // Always initiate — the other side may or may not also initiate, which is fine.
+        // ensurePeer tracks initiatorPeerId to avoid duplicate connections.
+        await this.ensurePeer(peerId, true);
       }
     }
 
@@ -67,7 +70,9 @@ export class P2PMesh {
       return;
     }
 
-    const entry = await this.ensurePeer(payload.fromPeerId, false);
+    // handleSignal is for processing incoming signals — always get/create the peer
+    // entry and process the signal regardless of who initiated.
+    const entry = this.peers.get(payload.fromPeerId) ?? (await this.ensurePeer(payload.fromPeerId, false));
 
     if (payload.type === "offer") {
       const remoteDescription = toSessionDescriptionInit(payload.payload);
@@ -157,7 +162,15 @@ export class P2PMesh {
 
   private async ensurePeer(peerId: string, shouldInitiate: boolean) {
     const existing = this.peers.get(peerId);
+
     if (existing) {
+      // If an entry exists and we are the initiator, do NOT initiate again.
+      // The remote peer may already be trying to connect to us.
+      if (shouldInitiate && existing.initiatorPeerId === this.localPeerId) {
+        return existing;
+      }
+      // If an entry exists and we are NOT the initiator, return it.
+      // handleSignal will use it to process the incoming offer/answer.
       return existing;
     }
 
@@ -166,7 +179,8 @@ export class P2PMesh {
     });
     const entry: PeerEntry = {
       connection,
-      channel: null
+      channel: null,
+      initiatorPeerId: shouldInitiate ? this.localPeerId : null
     };
 
     connection.onicecandidate = (event) => {

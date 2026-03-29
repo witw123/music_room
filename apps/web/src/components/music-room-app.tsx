@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type SyntheticEvent } from "react";
 import type {
@@ -23,8 +23,13 @@ import {
   getCachedTrackAssets,
   pruneCachedTracks
 } from "@/lib/indexeddb";
+import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
+import { TopBar } from "@/components/TopBar";
+import { BottomPlayer } from "@/components/BottomPlayer";
+import { LobbyView } from "@/components/LobbyView";
+import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 
 type UploadedTrack = {
   file: File;
@@ -40,23 +45,23 @@ function toUserFacingError(error: unknown) {
   const message = error instanceof Error ? error.message : "请求失败。";
 
   if (message.includes("Only the host can control playback")) {
-    return "只有房主可以控制该房间的播放。";
+    return "只有房主可以控制当前房间的播放。";
   }
 
   if (message.includes("Only the host or the requester can remove this queue item")) {
-    return "只有房主或点歌者可以移除该曲目。";
+    return "只有房主或点歌者可以移除这首歌。";
   }
 
   if (message.includes("Only room members can perform this action")) {
-    return "该操作需要在加入房间后才能使用。";
+    return "加入房间后才能执行这个操作。";
   }
 
   if (message.includes("Room not found")) {
-    return "该房间已不存在。";
+    return "房间不存在或已经被删除。";
   }
 
   if (message.includes("No tracks from this playlist are available")) {
-    return "该歌单与当前房间的曲目不匹配。";
+    return "这个歌单和当前房间曲库不匹配。";
   }
 
   if (message.includes("Nickname is required")) {
@@ -64,7 +69,7 @@ function toUserFacingError(error: unknown) {
   }
 
   if (message.includes("Nickname already exists in this room")) {
-    return "该房间里已经有人使用这个昵称了，请更换一个昵称再加入。";
+    return "这个昵称已经在房间里被使用了，请换一个再加入。";
   }
 
   if (message.includes("Only the host can delete this room")) {
@@ -87,10 +92,6 @@ export function MusicRoomApp() {
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
-  const [playlistEditId, setPlaylistEditId] = useState<string | null>(null);
-  const [playlistEditTitle, setPlaylistEditTitle] = useState("");
-  const [joinCode, setJoinCode] = useState("");
   const [progressMs, setProgressMs] = useState(0);
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const [audioDurationMs, setAudioDurationMs] = useState(0);
@@ -101,9 +102,7 @@ export function MusicRoomApp() {
   const [availabilityByTrack, setAvailabilityByTrack] = useState<
     Record<string, Record<string, TrackAvailabilityAnnouncement>>
   >({});
-  const [statusMessage, setStatusMessage] = useState(
-    "请先输入昵称并确认身份。"
-  );
+  const [statusMessage, setStatusMessage] = useState("请输入昵称并确认身份。");
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
 
   useEffect(() => {
@@ -139,6 +138,8 @@ export function MusicRoomApp() {
   useEffect(() => {
     if (!activeSession) return;
     window.localStorage.setItem(sessionStorageKey, JSON.stringify(activeSession));
+    void refreshAvailableRooms();
+    void refreshPlaylists(activeSession.id);
   }, [activeSession]);
 
   useEffect(() => {
@@ -224,10 +225,10 @@ export function MusicRoomApp() {
     socket.on("room.snapshot.missing", () => {
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage("该房间已不可用。创建新房间或加入其他房间。");
+      setStatusMessage("这个房间已不可用，请创建新房间或加入其他房间。");
     });
     socket.on("disconnect", () => {
-      setStatusMessage("实时连接中断，正在重新连接...");
+      setStatusMessage("实时连接已断开，正在尝试重新连接…");
     });
 
     return () => {
@@ -334,7 +335,7 @@ export function MusicRoomApp() {
 
     if (uploaded && playback.status === "playing") {
       void audio.play().catch(() => {
-        setStatusMessage("浏览器已阻止自动播放，请点击播放以恢复本地音频。");
+        setStatusMessage("浏览器阻止了自动播放，请手动点击播放恢复。");
       });
     }
 
@@ -465,7 +466,7 @@ export function MusicRoomApp() {
 
       const announcements = Object.values(availabilityByTrack[plan.track.id] ?? {});
       const localChunks = availabilityByTrack[plan.track.id]?.[peerId]?.availableChunks ?? [];
-      const totalChunks = announcements[0]?.totalChunks ?? 0;
+      const totalChunks = announcements.reduce((max, a) => Math.max(max, a.totalChunks), 0);
       const missingChunkIndexes = getMissingChunkIndexes(totalChunks, localChunks, plan.limit);
 
       for (const chunkIndex of missingChunkIndexes) {
@@ -475,9 +476,10 @@ export function MusicRoomApp() {
         }
 
         const excludedPeerIds = [...(failedPiecePeersRef.current.get(requestKey) ?? new Set())];
+        const connectedPeerIds = meshRef.current?.getConnectedPeerIds() ?? [];
         const preferredSource = selectChunkSource(
           announcements.filter((announcement) => announcement.availableChunks.includes(chunkIndex)),
-          connectedPeers,
+          connectedPeerIds,
           peerId,
           excludedPeerIds
         );
@@ -496,7 +498,7 @@ export function MusicRoomApp() {
         }
       }
     }
-  }, [availabilityByTrack, connectedPeers, currentTrack, upcomingTrack, peerId, uploadedTracks]);
+  }, [availabilityByTrack, currentTrack, upcomingTrack, peerId, uploadedTracks]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -540,43 +542,41 @@ export function MusicRoomApp() {
     }
   }
 
-  function clearIdentity() {
-    setActiveSession(null);
-    setNickname("");
-    setJoinCode("");
-    window.localStorage.removeItem(sessionStorageKey);
-    setStatusMessage("请先输入昵称并确认身份。");
+  async function handleConfirmIdentity() {
+    const sessionForAction = await ensureSession(nickname, "确认昵称");
+    if (!sessionForAction) return;
+    setStatusMessage(`已确认身份：${sessionForAction.nickname}。现在可以创建或加入房间。`);
+    await refreshAvailableRooms();
   }
 
-  function handleConfirmIdentity() {
-    void (async () => {
-      const sessionForAction = await ensureSession(nickname, "确认昵称");
-      if (!sessionForAction) return;
-      setStatusMessage(`已确认身份：${sessionForAction.nickname}。现在可以创建房间或加入已有房间。`);
-    })();
-  }
-
-  function handleCreateRoom() {
+  async function handleCreateRoom() {
     if (!activeSession) {
       setStatusMessage("请先输入昵称并确认身份。");
       return;
     }
-
-    void doCreateRoom(activeSession);
+    await doCreateRoom(activeSession);
   }
 
-  function handleJoinRoom(code: string) {
+  async function handleJoinRoom(code: string) {
     if (!activeSession) {
       setStatusMessage("请先输入昵称并确认身份。");
       return;
     }
-
     if (!code.trim()) {
       setStatusMessage("请输入房间码。");
       return;
     }
+    await doJoinRoom(activeSession, code);
+  }
 
-    void doJoinRoom(activeSession, code);
+  function handleClearIdentity() {
+    setActiveSession(null);
+    setNickname("");
+    setRoomSnapshot(null);
+    setPlaylists([]);
+    window.localStorage.removeItem(sessionStorageKey);
+    window.localStorage.removeItem(lastRoomStorageKey);
+    setStatusMessage("请输入昵称并确认身份。");
   }
 
   async function doCreateRoom(activeSession: GuestSession) {
@@ -617,7 +617,7 @@ export function MusicRoomApp() {
 
   async function refreshAvailableRooms() {
     try {
-      const rooms = await musicRoomApi.listRooms();
+      const rooms = await musicRoomApi.listRooms(activeSession?.id);
       setAvailableRooms(rooms);
     } catch {
       setAvailableRooms([]);
@@ -625,8 +625,12 @@ export function MusicRoomApp() {
   }
 
   async function refreshPlaylists(ownerId: string) {
-    const nextPlaylists = await musicRoomApi.listPlaylists(ownerId);
-    setPlaylists(nextPlaylists);
+    try {
+      const nextPlaylists = await musicRoomApi.listPlaylists(ownerId);
+      setPlaylists(nextPlaylists);
+    } catch {
+      setPlaylists([]);
+    }
   }
 
   async function leaveRoom() {
@@ -635,7 +639,6 @@ export function MusicRoomApp() {
     try {
       await musicRoomApi.leaveRoom(roomSnapshot.room.id, activeSession.id);
       setRoomSnapshot(null);
-      setJoinCode("");
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
       setStatusMessage("已离开房间。创建新房间或加入其他房间。");
@@ -650,7 +653,6 @@ export function MusicRoomApp() {
     try {
       await musicRoomApi.deleteRoom(roomSnapshot.room.id, activeSession.id);
       setRoomSnapshot(null);
-      setJoinCode("");
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
       setStatusMessage("房间已删除。");
@@ -706,7 +708,7 @@ export function MusicRoomApp() {
         ...Object.keys(nextUploads)
       ]);
       await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage(`${Object.keys(nextUploads).length} 首本地曲目已导入房间曲目库。`);
+      setStatusMessage(`${Object.keys(nextUploads).length} 首本地歌曲已导入房间曲库。`);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -742,13 +744,13 @@ export function MusicRoomApp() {
     }
   }
 
-  async function pauseTrack() {
+  async function pauseTrack(positionMs = Math.round((audioRef.current?.currentTime ?? 0) * 1000)) {
     if (!roomSnapshot || !activeSession) return;
 
     try {
       await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "pause",
-        positionMs: Math.round((audioRef.current?.currentTime ?? 0) * 1000),
+        positionMs,
         sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
@@ -798,34 +800,32 @@ export function MusicRoomApp() {
     }
   }
 
-  async function savePlaylistFromQueue() {
+  async function savePlaylistFromQueue(title: string) {
     if (!activeSession || !roomSnapshot) return;
 
     try {
       await musicRoomApi.createPlaylistFromRoom({
         ownerId: activeSession.id,
         roomId: roomSnapshot.room.id,
-        title: playlistTitle,
-        description: "从当前房间队列保存。"
+        title,
+        description: "从当前房间队列保存"
       });
       await refreshPlaylists(activeSession.id);
-      setStatusMessage(`歌单"${playlistTitle}"已从当前房间队列保存。`);
+      setStatusMessage(`歌单“${title}”已保存。`);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
-  async function updatePlaylistTitle() {
-    if (!activeSession || !playlistEditId || !playlistEditTitle.trim()) return;
+  async function updatePlaylistTitle(playlistId: string, title: string) {
+    if (!activeSession) return;
 
     try {
-      await musicRoomApi.updatePlaylist(playlistEditId, {
+      await musicRoomApi.updatePlaylist(playlistId, {
         ownerId: activeSession.id,
-        title: playlistEditTitle.trim()
+        title
       });
       await refreshPlaylists(activeSession.id);
-      setPlaylistEditId(null);
-      setPlaylistEditTitle("");
       setStatusMessage("歌单名称已更新。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -838,10 +838,6 @@ export function MusicRoomApp() {
     try {
       await musicRoomApi.deletePlaylist(playlistId, activeSession.id);
       await refreshPlaylists(activeSession.id);
-      if (playlistEditId === playlistId) {
-        setPlaylistEditId(null);
-        setPlaylistEditTitle("");
-      }
       setStatusMessage("歌单已从个人存档中删除。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -1025,10 +1021,7 @@ export function MusicRoomApp() {
   }
 
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
-  const currentTrackDuration = currentTrack?.durationMs || audioDurationMs || 0;
-  const effectiveProgressMs = seekDraft ?? progressMs;
-  const progressRatio =
-    currentTrackDuration > 0 ? Math.min(effectiveProgressMs / currentTrackDuration, 1) : 0;
+  const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
   const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
@@ -1046,50 +1039,19 @@ export function MusicRoomApp() {
   const currentTrackAvailability = currentTrack
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
-  const nextTrackAvailability = upcomingTrack
-    ? availabilitySummary.find((entry) => entry.track.id === upcomingTrack.id) ?? null
-    : null;
-  const quickQueueTracks =
-    roomSnapshot?.tracks
-      .filter((track) => !roomSnapshot.queue.some((item) => item.trackId === track.id))
-      .slice(0, 3) ?? [];
   const statusTone = statusMessage.includes("失败") || statusMessage.includes("不可用")
     ? "warning"
     : statusMessage.includes("已")
       ? "success"
       : "neutral";
-  const hasArtwork = Boolean(currentTrack?.artworkUrl);
   const visibleRooms = availableRooms.filter((item) => item.room.id !== roomSnapshot?.room.id);
-  const activeTab: string = roomSnapshot ? "__merged__" : "room";
-
   return (
     <main className="music-room-shell">
-      {/* ── Top Bar ── */}
-      <header className="top-bar">
-        <div className="top-bar-left">
-          <span className="top-bar-appname">🎵 音乐房间</span>
-          {roomSnapshot ? (
-            <span className="top-bar-room-info">
-              <span className={`signal-dot${roomSnapshot ? " live" : ""}`} />
-              房间码 <strong>{roomSnapshot.room.joinCode}</strong>
-              <span className="top-bar-sep">·</span>
-              {roomSnapshot.room.members.length} 人在线
-              <span className="top-bar-sep">·</span>
-              Mesh {connectedPeers.length} 已连接
-            </span>
-          ) : (
-            <span className="top-bar-mode">本地曲库实时同播</span>
-          )}
-        </div>
-        <div className="top-bar-intro">
-          {roomSnapshot ? "房间、曲库、队列和歌单已整合到同一工作台" : "输入昵称后即可开房或通过房间码加入"}
-        </div>
-        <div className="top-bar-right">
-          {activeSession?.nickname ? (
-            <span className="identity-badge">{activeSession.nickname}</span>
-          ) : null}
-        </div>
-      </header>
+      <TopBar
+        activeSession={activeSession}
+        roomSnapshot={roomSnapshot}
+        connectedPeersCount={connectedPeers.length}
+      />
 
       {roomSnapshot ? (
         <div className="status-toast-wrap" aria-live="polite">
@@ -1097,1008 +1059,91 @@ export function MusicRoomApp() {
         </div>
       ) : null}
 
-      {/* ── Main Content ── */}
       <div className="main-content" role="tabpanel">
         <div className="panel-room">
           {roomSnapshot ? (
-            <div className="room-dashboard">
-              <section className="room-stage room-command-bar">
-                <div className="room-stage-copy room-command-copy">
-                  <p className="block-kicker">Now Playing</p>
-                  <h1>{currentTrack?.title ?? "等待播放"}</h1>
-                  <div className="room-command-meta">
-                    <span className={`room-playback-badge${isPlaying ? " live" : ""}`}>
-                      {isPlaying ? "正在播放" : "已暂停"}
-                    </span>
-                    <span className="room-code-chip">房间码 {roomSnapshot.room.joinCode}</span>
-                    <span className="room-meta-copy">
-                      {currentTrack
-                        ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`
-                        : `${roomSnapshot.tracks.length} 首曲目待命`}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="room-stage-side">
-                  <div className="room-stage-identity">
-                    <span className="field-label">当前身份</span>
-                    <strong>{activeSession?.nickname ?? "—"}</strong>
-                    <p>房主：{host?.nickname ?? "—"}</p>
-                  </div>
-
-                  <div className="room-stage-buttons">
-                    <button
-                      className="solid-action compact room-copy-action"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(roomSnapshot.room.joinCode);
-                          setStatusMessage(`已复制房间码 ${roomSnapshot.room.joinCode}。`);
-                        } catch {
-                          setStatusMessage("复制房间码失败，请手动复制。");
-                        }
-                      }}
-                    >
-                      复制房间码
-                    </button>
-                    <button
-                      className="ghost-action room-leave-action"
-                      onClick={() => startTransition(() => void leaveRoom())}
-                    >
-                      离开房间
-                    </button>
-                    {canDeleteRoom ? (
-                      <button
-                        className="queue-remove room-delete-button"
-                        onClick={() => startTransition(() => void deleteRoom())}
-                      >
-                        删除房间
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-
-              <div className="room-stat-strip room-stat-strip-compact">
-                <div className="room-stat-card">
-                  <span className="field-label">曲目</span>
-                  <strong>{roomSnapshot.tracks.length}</strong>
-                </div>
-                <div className="room-stat-card">
-                  <span className="field-label">队列</span>
-                  <strong>{roomSnapshot.queue.length}</strong>
-                </div>
-                <div className="room-stat-card">
-                  <span className="field-label">成员</span>
-                  <strong>{roomSnapshot.room.members.length}</strong>
-                </div>
-              </div>
-
-              <div className="room-workbench">
-                <div className="room-workbench-main">
-                  <section className="workspace-block room-block">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">曲库</p>
-                        <h2>导入本地音乐</h2>
-                      </div>
-                      <span>{roomSnapshot.tracks.length} 首曲目</span>
-                    </div>
-
-                    <label className="drop-zone room-drop-zone">
-                      <span>拖放音频文件到这里，或点击从设备中选择。</span>
-                      <input
-                        type="file"
-                        accept="audio/*"
-                        multiple
-                        className="hidden"
-                        onChange={(event) =>
-                          startTransition(() => void handleFilesSelected(event.target.files))
-                        }
-                      />
-                    </label>
-
-                    <div className="track-list">
-                      {roomSnapshot.tracks.length ? (
-                        roomSnapshot.tracks.map((track) => (
-                          <article key={track.id} className="track-row">
-                            <div className="track-row-copy">
-                              <h3>{track.title}</h3>
-                              <p>
-                                {track.artist} · {formatDuration(track.durationMs)} ·{" "}
-                                {uploadedTracks[track.id] ? "已缓存" : "房间可用"}
-                              </p>
-                            </div>
-                            <div className="track-row-actions">
-                              <button
-                                className="ghost-action"
-                                onClick={() => startTransition(() => void addToQueue(track.id))}
-                              >
-                                入队
-                              </button>
-                              <button
-                                className="solid-action compact"
-                                disabled={!canControlPlayback}
-                                onClick={() => startTransition(() => void playTrack(track.id))}
-                              >
-                                立即播放
-                              </button>
-                            </div>
-                          </article>
-                        ))
-                      ) : (
-                        <p className="placeholder-copy">还没有曲目。先导入本地音频，队列和歌单会跟着联动。</p>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="workspace-block room-block">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">队列</p>
-                        <h2>共享播放顺序</h2>
-                      </div>
-                      <span>{roomSnapshot.queue.length} 首在队列</span>
-                    </div>
-
-                    <div className="queue-stack">
-                      {roomSnapshot.queue.length ? (
-                        roomSnapshot.queue.map((item, index) => {
-                          const track = roomSnapshot.tracks.find((entry) => entry.id === item.trackId);
-                          const canRemoveQueueItem =
-                            !!activeSession &&
-                            (roomSnapshot.room.hostId === activeSession.id ||
-                              item.requestedById === activeSession.id);
-
-                          return (
-                            <div key={item.id} className="queue-line">
-                              <span className="queue-index">{String(index + 1).padStart(2, "0")}</span>
-                              <div className="queue-copy">
-                                <strong>{track?.title ?? "未知曲目"}</strong>
-                                <p>点歌人：{item.requestedBy}</p>
-                              </div>
-                              <button
-                                className="queue-remove"
-                                disabled={!canRemoveQueueItem}
-                                onClick={() => startTransition(() => void removeQueueItem(item.id))}
-                              >
-                                移除
-                              </button>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="queue-empty-state">
-                          <p className="placeholder-copy">队列还是空的。先挑几首歌进队，房间才会真正开始转起来。</p>
-                          {quickQueueTracks.length ? (
-                            <div className="queue-empty-actions">
-                              {quickQueueTracks.map((track) => (
-                                <button
-                                  key={track.id}
-                                  className="ghost-action queue-suggestion"
-                                  onClick={() => startTransition(() => void addToQueue(track.id))}
-                                >
-                                  {track.title}
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                </div>
-
-                <div className="room-workbench-side">
-                  <section className="workspace-block room-block room-block-compact playlist-panel">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">歌单</p>
-                        <h2>保存今晚的歌</h2>
-                      </div>
-                      <span>{playlists.length} 个歌单</span>
-                    </div>
-
-                    <div className="playlist-create">
-                      <label className="field-stack">
-                        <span className="field-label">歌单名称</span>
-                        <input
-                          className="hero-input subtle"
-                          value={playlistTitle}
-                          onChange={(event) => setPlaylistTitle(event.target.value)}
-                          placeholder="例如：今晚的歌"
-                        />
-                      </label>
-                      <button
-                        className="solid-action"
-                        disabled={!activeSession || roomSnapshot.queue.length === 0}
-                        onClick={() => startTransition(() => void savePlaylistFromQueue())}
-                      >
-                        保存当前队列为歌单
-                      </button>
-                    </div>
-
-                    <div className="playlist-list">
-                      {playlists.length ? (
-                        playlists.map((playlist) => (
-                          <div key={playlist.id} className="playlist-line">
-                            {playlistEditId === playlist.id ? (
-                              <>
-                                <label className="field-stack">
-                                  <span className="field-label">重命名歌单</span>
-                                  <input
-                                    className="hero-input subtle"
-                                    value={playlistEditTitle}
-                                    onChange={(event) => setPlaylistEditTitle(event.target.value)}
-                                  />
-                                </label>
-                                <div className="track-row-actions">
-                                  <button
-                                    className="solid-action compact"
-                                    disabled={!playlistEditTitle.trim()}
-                                    onClick={() => startTransition(() => void updatePlaylistTitle())}
-                                  >
-                                    保存
-                                  </button>
-                                  <button
-                                    className="ghost-action"
-                                    onClick={() => {
-                                      setPlaylistEditId(null);
-                                      setPlaylistEditTitle("");
-                                    }}
-                                  >
-                                    取消
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div>
-                                  <strong>{playlist.title}</strong>
-                                  <p>
-                                    {playlist.trackIds.length} 首曲目 ·{" "}
-                                    {playlist.isCollaborative ? "协作" : "个人"}
-                                  </p>
-                                </div>
-                                <div className="track-row-actions">
-                                  <button
-                                    className="solid-action compact"
-                                    onClick={() =>
-                                      startTransition(() => void loadPlaylistIntoRoom(playlist.id))
-                                    }
-                                  >
-                                    加载到房间
-                                  </button>
-                                  <button
-                                    className="ghost-action"
-                                    onClick={() => {
-                                      setPlaylistEditId(playlist.id);
-                                      setPlaylistEditTitle(playlist.title);
-                                    }}
-                                  >
-                                    重命名
-                                  </button>
-                                  <button
-                                    className="queue-remove"
-                                    onClick={() =>
-                                      startTransition(() => void deletePlaylist(playlist.id))
-                                    }
-                                  >
-                                    删除
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="placeholder-copy">把当前队列存成歌单，之后可以一键重新加载回房间。</p>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="workspace-block room-block room-block-compact">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">成员</p>
-                        <h2>房间里的听众</h2>
-                      </div>
-                      <span>{roomSnapshot.room.members.length} 人</span>
-                    </div>
-                    <div className="member-list">
-                      {roomSnapshot.room.members.length ? (
-                        roomSnapshot.room.members.map((member) => (
-                          <div key={member.id} className="member-line">
-                            <div>
-                              <strong>{member.nickname}</strong>
-                              <span>{member.role === "host" ? "房主" : "听众"}</span>
-                            </div>
-                            <em>{member.peerId ? "在线" : "已连接"}</em>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="placeholder-copy">暂无成员</p>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="workspace-block room-block room-block-compact">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">Mesh</p>
-                        <h2>P2P 缓存状态</h2>
-                      </div>
-                      <span>{availabilitySummary.length} 首曲目</span>
-                    </div>
-                    <div className="mesh-summary">
-                      <span>Mesh {connectedPeers.length}</span>
-                      <span>本地缓存 {cachedTrackCount}</span>
-                    </div>
-                    <div className="playlist-list">
-                      {availabilitySummary.length ? (
-                        availabilitySummary.slice(0, 6).map(({ track, peerCount, localChunkCount, totalChunks, sources }) => (
-                          <div key={track.id} className="playlist-line">
-                            <div>
-                              <strong>{track.title}</strong>
-                              <p>
-                                本地 {localChunkCount}/{totalChunks || 0} 分片 · {peerCount} 个节点
-                              </p>
-                              {sources.length ? (
-                                <span className="playlist-sources">
-                                  {sources.slice(0, 2).join(" · ")}
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="placeholder-copy">导入曲目后，这里会显示每首歌的分片缓存和可见节点。</p>
-                      )}
-                    </div>
-                  </section>
-                </div>
-              </div>
-            </div>
-          ) : null}
+            <RoomDashboardView
+              roomSnapshot={roomSnapshot}
+              currentTrack={currentTrack}
+              currentTrackDuration={currentTrackDuration}
+              isPlaying={isPlaying}
+              activeSession={activeSession}
+              host={host}
+              canControlPlayback={canControlPlayback}
+              canDeleteRoom={canDeleteRoom}
+              uploadedTracks={uploadedTracks}
+              connectedPeersCount={connectedPeers.length}
+              cachedTrackCount={cachedTrackCount}
+              playlists={playlists}
+              availabilitySummary={availabilitySummary}
+              onCopyJoinCode={async () => {
+                try {
+                  await navigator.clipboard.writeText(roomSnapshot.room.joinCode);
+                  setStatusMessage(`已复制房间码 ${roomSnapshot.room.joinCode}。`);
+                } catch {
+                  setStatusMessage("复制房间码失败，请手动复制。");
+                }
+              }}
+              onLeaveRoom={() => leaveRoom()}
+              onDeleteRoom={() => deleteRoom()}
+              onFilesSelected={(files) => handleFilesSelected(files)}
+              onAddToQueue={(trackId) => addToQueue(trackId)}
+              onRemoveQueueItem={(itemId) => removeQueueItem(itemId)}
+              onPlayTrack={(trackId) => playTrack(trackId)}
+              onSavePlaylistFromQueue={(title) => savePlaylistFromQueue(title)}
+              onLoadPlaylistIntoRoom={(playlistId) => loadPlaylistIntoRoom(playlistId)}
+              onUpdatePlaylistTitle={(playlistId, title) => updatePlaylistTitle(playlistId, title)}
+              onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
+            />
+          ) : (
+            <LobbyView
+              nickname={nickname}
+              setNickname={setNickname}
+              activeSession={activeSession}
+              visibleRooms={visibleRooms}
+              statusMessage={statusMessage}
+              onConfirmIdentity={handleConfirmIdentity}
+              onCreateRoom={handleCreateRoom}
+              onJoinRoom={handleJoinRoom}
+              onLeaveRoom={handleClearIdentity}
+              onRefreshRooms={refreshAvailableRooms}
+            />
+          )}
         </div>
-
-        {/* ── Tab: 房间 ── */}
-        {activeTab === "room" && (
-          <div className="panel-room">
-            {roomSnapshot ? (
-              /* In a room */
-              <div className="room-section">
-                {/* Identity card */}
-                <div className="identity-card">
-                  <div className="identity-info">
-                    <span className="field-label">当前身份</span>
-                    <strong>{activeSession?.nickname ?? "—"}</strong>
-                  </div>
-                  <div className="room-controls">
-                    <button
-                      className="ghost-action"
-                      onClick={() => startTransition(() => void leaveRoom())}
-                    >
-                      离开房间
-                    </button>
-                  </div>
-                </div>
-
-                {/* Room info */}
-                <>
-                  <div className="room-info-grid">
-                    <div className="room-info-card">
-                      <span className="field-label">房间码</span>
-                      <strong className="room-code-display">{roomSnapshot.room.joinCode}</strong>
-                      <p className="room-info-hint">分享给朋友，让他们加入</p>
-                    </div>
-                    <div className="room-info-card">
-                      <span className="field-label">房主</span>
-                      <strong>{host?.nickname ?? "—"}</strong>
-                    </div>
-                    <div className="room-info-card">
-                      <span className="field-label">曲目</span>
-                      <strong>{roomSnapshot.tracks.length}</strong>
-                    </div>
-                    <div className="room-info-card">
-                      <span className="field-label">队列</span>
-                      <strong>{roomSnapshot.queue.length}</strong>
-                    </div>
-                    <div className="room-info-card">
-                      <span className="field-label">在线成员</span>
-                      <strong>{roomSnapshot.room.members.length}</strong>
-                    </div>
-                    <div className="room-info-card">
-                      <span className="field-label">Mesh 连接</span>
-                      <strong>{connectedPeers.length} 节点</strong>
-                    </div>
-                  </div>
-
-                  {/* Members list */}
-                  <section className="workspace-block">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">成员</p>
-                        <h2>房间里的人</h2>
-                      </div>
-                      <span>{roomSnapshot.room.members.length} 人</span>
-                    </div>
-                    <div className="member-rail">
-                      {roomSnapshot.room.members.length ? (
-                        roomSnapshot.room.members.map((member) => (
-                          <div key={member.id} className="member-pill">
-                            <strong>{member.nickname}</strong>
-                            <span>{member.role === "host" ? "👑 房主" : "🎧 听众"}</span>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="placeholder-copy">暂无成员</p>
-                      )}
-                    </div>
-                  </section>
-
-                  {/* P2P Mesh status */}
-                  <section className="workspace-block">
-                    <div className="block-heading">
-                      <div>
-                        <p className="block-kicker">Mesh</p>
-                        <h2>P2P 缓存状态</h2>
-                      </div>
-                      <span>{availabilitySummary.length} 曲目</span>
-                    </div>
-                    <div className="playlist-list">
-                      {availabilitySummary.length ? (
-                        availabilitySummary.slice(0, 6).map(({ track, peerCount, localChunkCount, totalChunks }) => (
-                          <div key={track.id} className="playlist-line">
-                            <div>
-                              <strong>{track.title}</strong>
-                              <p>
-                                本地 {localChunkCount}/{totalChunks || 0} 分片 · {peerCount} 个节点
-                              </p>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="placeholder-copy">导入曲目后，这里显示分片缓存状态。</p>
-                      )}
-                    </div>
-                  </section>
-                </>
-              </div>
-            ) : (
-/* Not in a room - show create/join controls */
-              <div className="room-section">
-                <section className="lobby-hero">
-                  <div className="lobby-hero-copy">
-                    <p className="lobby-kicker">MUSIC ROOM</p>
-                    <h1>音乐房间</h1>
-                    <p className="lobby-lead">先确认昵称，再创建房间或通过房间码加入别人的房间。</p>
-                  </div>
-
-                  <div className="lobby-form-shell">
-                    <div className="lobby-form-intro">
-                      <p className="block-kicker">{activeSession ? "身份已确认" : "先确认身份"}</p>
-                      <h2>{activeSession ? "创建房间或加入已有房间" : "输入昵称"}</h2>
-                      <p className={`lobby-support-copy ${statusTone}`}>
-                        {statusMessage || "昵称是创建房间的前提，房间码会在建房成功后生成。"}
-                      </p>
-                    </div>
-
-                    <div className="lobby-form-stack">
-                      <label className="field-stack compact-field">
-                        <span className="field-label">昵称</span>
-                        <input
-                          className="hero-input subtle"
-                          value={nickname}
-                          onChange={(event) => setNickname(event.target.value)}
-                          placeholder="输入你的昵称"
-                          disabled={Boolean(activeSession)}
-                        />
-                      </label>
-
-                      <div className="lobby-action-stack">
-                        {!activeSession ? (
-                          <button
-                            className="solid-action lobby-primary-action"
-                            disabled={!nickname.trim()}
-                            onClick={handleConfirmIdentity}
-                          >
-                            确认昵称
-                          </button>
-                        ) : (
-                          <>
-                            <div className="lobby-identity-row">
-                              <span className="identity-badge lobby-identity-badge">
-                                {activeSession.nickname}
-                              </span>
-                              <button
-                                className="ghost-action lobby-inline-action"
-                                onClick={clearIdentity}
-                              >
-                                更换昵称
-                              </button>
-                            </div>
-
-                            <button
-                              className="solid-action lobby-primary-action"
-                              onClick={handleCreateRoom}
-                            >
-                              创建房间
-                            </button>
-
-                            <label className="field-stack compact-field">
-                              <span className="field-label">房间码</span>
-                              <input
-                                className="hero-input subtle"
-                                value={joinCode}
-                                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                                placeholder="输入房间码后加入"
-                              />
-                            </label>
-
-                            <button
-                              className="ghost-action ghost-action-emphasis lobby-secondary-action"
-                              disabled={!joinCode.trim()}
-                              onClick={() => handleJoinRoom(joinCode)}
-                            >
-                              加入已有房间
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="workspace-block lobby-room-list">
-                  <div className="block-heading lobby-room-list-heading">
-                    <div>
-                      <p className="block-kicker">实时房间</p>
-                      <h2>可加入的房间</h2>
-                    </div>
-                    <button
-                      className="ghost-action lobby-refresh"
-                      onClick={() => startTransition(() => void refreshAvailableRooms())}
-                    >
-                      刷新
-                    </button>
-                  </div>
-
-                  {visibleRooms.length ? (
-                    <div className="room-list">
-                      {visibleRooms.map((item) => {
-                        const roomHost =
-                          item.room.members.find((member) => member.role === "host")?.nickname ?? "—";
-
-                        return (
-                          <button
-                            key={item.room.id}
-                            type="button"
-                            className="room-card room-card-button"
-                            onClick={() => handleJoinRoom(item.room.joinCode)}
-                          >
-                            <div className="room-card-info">
-                              <div className="room-card-code-row">
-                                <span className="room-card-code">{item.room.joinCode}</span>
-                                <span
-                                  className="room-code-copy"
-                                  onClick={async (event) => {
-                                    event.stopPropagation();
-                                    try {
-                                      await navigator.clipboard.writeText(item.room.joinCode);
-                                      setStatusMessage(`已复制房间码 ${item.room.joinCode}。`);
-                                    } catch {
-                                      setStatusMessage("复制房间码失败，请手动复制。");
-                                    }
-                                  }}
-                                >
-                                  复制
-                                </span>
-                              </div>
-                              <span className="room-card-host">房主：{roomHost}</span>
-                            </div>
-                            <span className="room-card-members">
-                              {item.room.members.length} 人在线
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="placeholder-copy">当前还没有公开房间，先创建一个让朋友加入。</p>
-                  )}
-                </section>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Tab: 曲库 ── */}
-        {activeTab === "library" && (
-          <div className="panel-library">
-            <section className="workspace-block">
-              <div className="block-heading">
-                <div>
-                  <p className="block-kicker">曲库</p>
-                  <h2>导入本地音乐</h2>
-                </div>
-                <span>{roomSnapshot?.tracks.length ?? 0} 首曲目</span>
-              </div>
-
-              <label className="drop-zone">
-                <span>拖放音频文件到此处，或从设备中选择。</span>
-                <input
-                  type="file"
-                  accept="audio/*"
-                  multiple
-                  className="hidden"
-                  disabled={!roomSnapshot}
-                  onChange={(event) =>
-                    startTransition(() => void handleFilesSelected(event.target.files))
-                  }
-                />
-              </label>
-              {!roomSnapshot && (
-                <p className="player-note">请先在「房间」标签页创建或加入一个房间。</p>
-              )}
-
-              <div className="track-list">
-                {roomSnapshot?.tracks.length ? (
-                  roomSnapshot.tracks.map((track) => (
-                    <article key={track.id} className="track-row">
-                      <div className="track-row-copy">
-                        <h3>{track.title}</h3>
-                        <p>
-                          {track.artist} · {formatDuration(track.durationMs)}
-                        </p>
-                      </div>
-                      <div className="track-row-actions">
-                        <button
-                          className="ghost-action"
-                          disabled={!roomSnapshot}
-                          onClick={() => startTransition(() => void addToQueue(track.id))}
-                        >
-                          入队
-                        </button>
-                        <button
-                          className="solid-action compact"
-                          disabled={!canControlPlayback}
-                          onClick={() => startTransition(() => void playTrack(track.id))}
-                        >
-                          立即播放
-                        </button>
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <p className="placeholder-copy">暂无曲目。打开房间后，拖放或选择本地音频文件导入。</p>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* ── Tab: 队列 ── */}
-        {activeTab === "queue" && (
-          <div className="panel-queue">
-            <section className="workspace-block">
-              <div className="block-heading">
-                <div>
-                  <p className="block-kicker">队列</p>
-                  <h2>共享播放顺序</h2>
-                </div>
-                <span>{roomSnapshot?.queue.length ?? 0} 首在队列</span>
-              </div>
-
-              <div className="queue-stack">
-                {roomSnapshot?.queue.length ? (
-                  roomSnapshot.queue.map((item, index) => {
-                    const track = roomSnapshot.tracks.find((entry) => entry.id === item.trackId);
-                    const canRemoveQueueItem =
-                      !!activeSession &&
-                      (roomSnapshot.room.hostId === activeSession.id ||
-                        item.requestedById === activeSession.id);
-
-                    return (
-                      <div key={item.id} className="queue-line">
-                        <span className="queue-index">{String(index + 1).padStart(2, "0")}</span>
-                        <div className="queue-copy">
-                          <strong>{track?.title ?? "未知曲目"}</strong>
-                          <p>点歌人：{item.requestedBy}</p>
-                        </div>
-                        <button
-                          className="queue-remove"
-                          disabled={!canRemoveQueueItem}
-                          onClick={() => startTransition(() => void removeQueueItem(item.id))}
-                        >
-                          移除
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="placeholder-copy">队列为空。从曲库选择曲目入队开始播放。</p>
-                )}
-              </div>
-            </section>
-
-            {/* Quick track add when queue is empty */}
-            {roomSnapshot && roomSnapshot.tracks.length > 0 && (
-              <section className="workspace-block">
-                <div className="block-heading">
-                  <div>
-                    <p className="block-kicker">快速添加</p>
-                    <h2>从曲库入队</h2>
-                  </div>
-                </div>
-                <div className="track-list">
-                  {roomSnapshot.tracks.slice(0, 8).map((track) => (
-                    <article key={track.id} className="track-row">
-                      <div className="track-row-copy">
-                        <h3>{track.title}</h3>
-                        <p>{track.artist} · {formatDuration(track.durationMs)}</p>
-                      </div>
-                      <div className="track-row-actions">
-                        <button
-                          className="ghost-action"
-                          onClick={() => startTransition(() => void addToQueue(track.id))}
-                        >
-                          入队
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-
-        {/* ── Tab: 歌单 ── */}
-        {activeTab === "playlist" && (
-          <div className="panel-playlist">
-            <section className="workspace-block">
-              <div className="block-heading">
-                <div>
-                  <p className="block-kicker">存档</p>
-                  <h2>保存今晚的歌</h2>
-                </div>
-                <span>{playlists.length} 个歌单</span>
-              </div>
-
-              <div className="playlist-create">
-                <label className="field-stack">
-                  <span className="field-label">歌单名称</span>
-                  <input
-                    className="hero-input subtle"
-                    value={playlistTitle}
-                    onChange={(event) => setPlaylistTitle(event.target.value)}
-                    placeholder="例如：今晚的歌"
-                  />
-                </label>
-                <button
-                  className="solid-action"
-                  disabled={!activeSession || !roomSnapshot || roomSnapshot.queue.length === 0}
-                  onClick={() => startTransition(() => void savePlaylistFromQueue())}
-                >
-                  保存当前队列为歌单
-                </button>
-              </div>
-
-              <div className="playlist-list">
-                {playlists.length ? (
-                  playlists.map((playlist) => (
-                    <div key={playlist.id} className="playlist-line">
-                      {playlistEditId === playlist.id ? (
-                        <>
-                          <label className="field-stack">
-                            <span className="field-label">重命名歌单</span>
-                            <input
-                              className="hero-input subtle"
-                              value={playlistEditTitle}
-                              onChange={(event) => setPlaylistEditTitle(event.target.value)}
-                            />
-                          </label>
-                          <div className="track-row-actions">
-                            <button
-                              className="solid-action compact"
-                              disabled={!playlistEditTitle.trim()}
-                              onClick={() => startTransition(() => void updatePlaylistTitle())}
-                            >
-                              保存
-                            </button>
-                            <button
-                              className="ghost-action"
-                              onClick={() => {
-                                setPlaylistEditId(null);
-                                setPlaylistEditTitle("");
-                              }}
-                            >
-                              取消
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div>
-                            <strong>{playlist.title}</strong>
-                            <p>
-                              {playlist.trackIds.length} 首曲目 ·{" "}
-                              {playlist.isCollaborative ? "协作" : "个人"}
-                            </p>
-                          </div>
-                          <div className="track-row-actions">
-                            <button
-                              className="solid-action compact"
-                              disabled={!roomSnapshot}
-                              onClick={() => startTransition(() => void loadPlaylistIntoRoom(playlist.id))}
-                            >
-                              加载到房间
-                            </button>
-                            <button
-                              className="ghost-action"
-                              onClick={() => {
-                                setPlaylistEditId(playlist.id);
-                                setPlaylistEditTitle(playlist.title);
-                              }}
-                            >
-                              重命名
-                            </button>
-                            <button
-                              className="queue-remove"
-                              onClick={() => startTransition(() => void deletePlaylist(playlist.id))}
-                            >
-                              删除
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="placeholder-copy">把今晚的队列保存为歌单，开始建立你的收藏。</p>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
       </div>
 
-      {/* ── Bottom Player ── */}
-      <footer className={`bottom-player${isPlaying ? " playing" : ""}`}>
-        <div className="bottom-progress-rail" aria-hidden="true">
-          <div
-            className="bottom-progress-fill"
-            style={{ width: `${progressRatio * 100}%` }}
-          />
-        </div>
-
-        {/* Track info */}
-        <div className="bp-track-info">
-          <div className={`bp-artwork${hasArtwork ? "" : " is-placeholder"}`}>
-            {hasArtwork ? (
-              <img src={currentTrack?.artworkUrl ?? ""} alt="" className="bp-artwork-image" />
-            ) : (
-              <div className="bp-artwork-fallback" aria-hidden="true">
-                <span className="bp-artwork-disc" />
-                <span className="bp-artwork-note">♪</span>
-              </div>
-            )}
-          </div>
-          <div className="bp-track-copy">
-            <p className="player-caption">正在播放</p>
-            <h3 className="bp-track-title">{currentTrack?.title ?? "等待播放"}</h3>
-            <p className="bp-track-artist">{currentTrack?.artist ?? "从曲库或队列选择曲目"}</p>
-          </div>
-        </div>
-
-        {/* Playback controls */}
-        <div className="bp-controls">
-          <button
-            className="bp-btn ghost-action inverse"
-            disabled={!canControlPlayback || !roomSnapshot?.room.playback?.currentTrackId}
-            onClick={() => startTransition(() => void prevTrack())}
-            title="前一首"
-          >
-            ⏮
-          </button>
-          <button
-            className={`bp-btn bp-btn-main ${isPlaying ? "bp-btn-playing" : "bp-btn-paused"}`}
-            disabled={!canControlPlayback}
-            onClick={() =>
-              startTransition(() => void (isPlaying ? pauseTrack() : playTrack()))
-            }
-            title={isPlaying ? "暂停" : "播放"}
-          >
-            {isPlaying ? "⏸" : "▶"}
-          </button>
-          <button
-            className="bp-btn ghost-action inverse"
-            disabled={!canControlPlayback || !roomSnapshot?.room.playback?.currentTrackId}
-            onClick={() => startTransition(() => void nextTrack())}
-            title="下一首"
-          >
-            ⏭
-          </button>
-        </div>
-
-        {/* Progress bar */}
-        <div className="bp-progress-area">
-          <span className="bp-time">{formatDuration(effectiveProgressMs)}</span>
-          <div className="progress-shell bp-progress-shell">
-            <div className="progress-track-gray" />
-            <div
-              className="progress-fill"
-              style={{ width: `${progressRatio * 100}%` }}
-            />
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={currentTrackDuration || 1}
-            step={1000}
-            value={effectiveProgressMs}
-            className="progress-slider bp-slider"
-            disabled={!currentTrackDuration || !canControlPlayback}
-            onChange={(event) => setSeekDraft(Number(event.target.value))}
-            onMouseUp={() => {
-              if (seekDraft !== null && canControlPlayback) {
-                startTransition(() => void seekTrack(seekDraft));
-                setSeekDraft(null);
+      {/* 鈹€鈹€ Bottom Player 鈹€鈹€ */}
+      <BottomPlayer
+        audioRef={audioRef}
+        progressMs={progressMs}
+        seekDraft={seekDraft}
+        setSeekDraft={setSeekDraft}
+        audioDurationMs={audioDurationMs}
+        volume={volume}
+        setVolume={setVolume}
+        syncProgressFromAudio={syncProgressFromAudio}
+        syncDurationFromAudio={syncDurationFromAudio}
+        roomSnapshot={roomSnapshot}
+        activeSession={activeSession}
+        uploadedTracks={uploadedTracks}
+        currentTrack={currentTrack}
+        currentTrackAvailability={
+          currentTrackAvailability
+            ? {
+                localChunkCount: currentTrackAvailability.localChunkCount,
+                totalChunks: currentTrackAvailability.totalChunks,
               }
-            }}
-            onTouchEnd={() => {
-              if (seekDraft !== null && canControlPlayback) {
-                startTransition(() => void seekTrack(seekDraft));
-                setSeekDraft(null);
-              }
-            }}
-          />
-          <span className="bp-time">{formatDuration(currentTrackDuration)}</span>
-        </div>
+            : null
+        }
+        onPlay={playTrack}
+        onPause={pauseTrack}
+        onSeek={seekTrack}
+        onPrev={prevTrack}
+        onNext={nextTrack}
+        onEnded={handleEnded}
+      />
 
-        {/* Status notes */}
-        <div className="bp-status">
-          {!canControlPlayback && roomSnapshot && (
-            <span className="bp-note">仅房主可控制播放</span>
-          )}
-          {!uploadedTracks[currentTrack?.id ?? ""] && currentTrack && (
-            <span className="bp-note">本地无文件 · P2P传输中</span>
-          )}
-          {!uploadedTracks[currentTrack?.id ?? ""] && currentTrackAvailability ? (
-            <span className="bp-note">
-              缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0} 分片
-            </span>
-          ) : null}
-          <label className="bp-volume" aria-label="音量">
-            <span className="bp-volume-icon">🔊</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={volume}
-              onChange={(event) => setVolume(Number(event.target.value))}
-            />
-          </label>
-        </div>
-
-        <audio
-          ref={audioRef}
-          className="player-audio hidden"
-          onEnded={() => void handleEnded()}
-          onTimeUpdate={syncProgressFromAudio}
-          onLoadedMetadata={(event) => {
-            syncDurationFromAudio(event);
-            syncProgressFromAudio(event);
-          }}
-          onDurationChange={syncDurationFromAudio}
-          onPlay={syncProgressFromAudio}
-          onPause={syncProgressFromAudio}
-          onSeeked={syncProgressFromAudio}
-        />
-      </footer>
-
-      {isPending ? <div className="pending-indicator">正在同步房间状态...</div> : null}
+      {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
     </main>
   );
 }
@@ -2152,12 +1197,3 @@ function readDuration(objectUrl: string) {
   });
 }
 
-function formatDuration(durationMs: number) {
-  if (!durationMs) {
-    return "0:00";
-  }
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}

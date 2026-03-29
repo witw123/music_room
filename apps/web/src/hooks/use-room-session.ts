@@ -1,6 +1,2 @@
-import { useRoomStore } from "@/stores/room-store";
-
-export function useRoomSession() {
-  return useRoomStore();
-}
-
+// Re-export from SessionContext for backwards compatibility
+export { useSession as useRoomSession } from "@/context/SessionContext";
