@@ -35,7 +35,7 @@ export class RoomService {
 
   async createRoom(
     hostSessionId: string,
-    visibility: Room["visibility"] = "private"
+    visibility: Room["visibility"] = "public"
   ) {
     const hostSession = await this.authService.getSessionOrThrow(hostSessionId);
     const room: Room = {
@@ -115,6 +115,19 @@ export class RoomService {
           record.room.members.some((member: RoomMember) => member.id === sessionId)
       )
       .map((record: RoomRecord) => ({
+        room: record.room,
+        tracks: record.tracks,
+        queue: record.queue,
+        playlists: []
+      }));
+  }
+
+  async listPublicRooms(): Promise<RoomSnapshot[]> {
+    const records = await this.listRecoverableRecords();
+
+    return records
+      .filter((record) => record.room.visibility === "public")
+      .map((record) => ({
         room: record.room,
         tracks: record.tracks,
         queue: record.queue,

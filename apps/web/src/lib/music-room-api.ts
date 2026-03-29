@@ -28,8 +28,8 @@ function getSessionToken() {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const sessionToken = getSessionToken();
+async function request<T>(path: string, init?: RequestInit, retryWithoutSession = false): Promise<T> {
+  const sessionToken = retryWithoutSession ? null : getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
@@ -42,6 +42,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const message = await response.text();
+    // 401 = session 失效，清除本地存储，并自动重试一次（不使用旧 token）
+    if (response.status === 401 && !retryWithoutSession) {
+      window.localStorage.removeItem(sessionStorageKey);
+      return request(path, init, true);
+    }
     throw new Error(message || `Request failed: ${response.status}`);
   }
 
@@ -54,10 +59,10 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify({ nickname })
     }),
-  createRoom: (sessionId: string) =>
+  createRoom: (sessionId: string, visibility?: "private" | "public") =>
     request<RoomSnapshot>("/v1/rooms", {
       method: "POST",
-      body: JSON.stringify({ sessionId })
+      body: JSON.stringify({ sessionId, visibility })
     }),
   getRecentRoom: (sessionId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/recent/active?sessionId=${encodeURIComponent(sessionId)}`),
@@ -65,8 +70,10 @@ export const musicRoomApi = {
     request<RoomSnapshot | null>(
       `/v1/rooms/${roomId}/recover?sessionId=${encodeURIComponent(sessionId)}`
     ),
-  listRooms: (sessionId: string) =>
-    request<RoomSnapshot[]>(`/v1/rooms?sessionId=${encodeURIComponent(sessionId)}`),
+  listRooms: (sessionId?: string) =>
+    request<RoomSnapshot[]>(
+      sessionId ? `/v1/rooms?sessionId=${encodeURIComponent(sessionId)}` : "/v1/rooms"
+    ),
   joinRoomByCode: (sessionId: string, joinCode: string) =>
     request<RoomSnapshot>("/v1/rooms/join-by-code", {
       method: "POST",

@@ -49,7 +49,7 @@ export class RoomController {
     @Query("sessionId") sessionId?: string
   ) {
     if (!sessionId) {
-      return [];
+      return this.roomService.listPublicRooms();
     }
 
     await this.assertSession(sessionId, sessionToken);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type SyntheticEvent } from "react";
 import type {
   GuestSession,
   Playlist,
@@ -37,26 +37,26 @@ const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
 
 function toUserFacingError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Request failed.";
+  const message = error instanceof Error ? error.message : "请求失败。";
 
   if (message.includes("Only the host can control playback")) {
-    return "Only the host can control playback for this room.";
+    return "只有房主可以控制该房间的播放。";
   }
 
   if (message.includes("Only the host or the requester can remove this queue item")) {
-    return "Only the host or the member who queued this track can remove it.";
+    return "只有房主或点歌者可以移除该曲目。";
   }
 
   if (message.includes("Only room members can perform this action")) {
-    return "This action is only available after joining the room.";
+    return "该操作需要在加入房间后才能使用。";
   }
 
   if (message.includes("Room not found")) {
-    return "That room is no longer available.";
+    return "该房间已不存在。";
   }
 
   if (message.includes("No tracks from this playlist are available")) {
-    return "This playlist does not match any tracks in the current room.";
+    return "该歌单与当前房间的曲目不匹配。";
   }
 
   return message;
@@ -70,9 +70,10 @@ export function MusicRoomApp() {
   const failedPiecePeersRef = useRef<Map<string, Set<string>>>(new Map());
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const [isPending, startTransition] = useTransition();
-  const [nickname, setNickname] = useState("Host");
-  const [session, setSession] = useState<GuestSession | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [activeSession, setActiveSession] = useState<GuestSession | null>(null);
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
+  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [playlistTitle, setPlaylistTitle] = useState("Tonight Selects");
   const [playlistEditId, setPlaylistEditId] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export function MusicRoomApp() {
   const [joinCode, setJoinCode] = useState("");
   const [progressMs, setProgressMs] = useState(0);
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
+  const [volume, setVolume] = useState(0.72);
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
@@ -87,22 +89,10 @@ export function MusicRoomApp() {
     Record<string, Record<string, TrackAvailabilityAnnouncement>>
   >({});
   const [statusMessage, setStatusMessage] = useState(
-    "Create a guest identity, open a room, import local tracks, and turn the queue into a sharable playlist."
+    "输入昵称后即可创建或加入房间。"
   );
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
-
-  useEffect(() => {
-    const raw = window.localStorage.getItem(sessionStorageKey);
-    if (!raw) return;
-
-    try {
-      const parsed = JSON.parse(raw) as GuestSession;
-      setSession(parsed);
-      setNickname(parsed.nickname);
-    } catch {
-      window.localStorage.removeItem(sessionStorageKey);
-    }
-  }, []);
+  const [activeTab, setActiveTab] = useState<"room" | "library" | "queue" | "playlist">("room");
 
   useEffect(() => {
     const storedPeerId = window.localStorage.getItem(peerStorageKey);
@@ -117,61 +107,14 @@ export function MusicRoomApp() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
-    window.localStorage.setItem(sessionStorageKey, JSON.stringify(session));
-  }, [session]);
+    if (!activeSession) return;
+    window.localStorage.setItem(sessionStorageKey, JSON.stringify(activeSession));
+  }, [activeSession]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId) return;
     window.localStorage.setItem(lastRoomStorageKey, roomSnapshot.room.id);
   }, [roomSnapshot?.room.id]);
-
-  useEffect(() => {
-    if (!session) return;
-
-    const restore = async () => {
-      try {
-        const snapshot = await musicRoomApi.getRecentRoom(session.id);
-        if (snapshot) {
-          setRoomSnapshot(snapshot);
-          window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-          setStatusMessage(`Restored active room ${snapshot.room.joinCode}.`);
-          await refreshPlaylists(session.id);
-          return;
-        }
-      } catch {
-        // Fall through to room-specific recovery when the recent-room index is missing.
-      }
-
-      const lastRoomId = window.localStorage.getItem(lastRoomStorageKey);
-
-      if (lastRoomId) {
-        try {
-          const snapshot = await musicRoomApi.recoverRoom(lastRoomId, session.id);
-          if (snapshot) {
-            setRoomSnapshot(snapshot);
-            setStatusMessage(`Restored room ${snapshot.room.joinCode}.`);
-            await refreshPlaylists(session.id);
-            return;
-          }
-        } catch {
-          // Continue to broader room listing below.
-        }
-
-        window.localStorage.removeItem(lastRoomStorageKey);
-      }
-
-      const rooms = await musicRoomApi.listRooms(session.id);
-      if (rooms.length > 0) {
-        setRoomSnapshot(rooms[0]);
-        window.localStorage.setItem(lastRoomStorageKey, rooms[0].room.id);
-        setStatusMessage(`Rejoined recent room ${rooms[0].room.joinCode}.`);
-        await refreshPlaylists(session.id);
-      }
-    };
-
-    void restore();
-  }, [session]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id) return;
@@ -220,14 +163,14 @@ export function MusicRoomApp() {
     const subscribeToRoom = () => {
       socket.emit("room.subscribe", {
         roomId,
-        sessionId: session?.id,
+        sessionId: activeSession?.id,
         peerId
       });
     };
 
     socket.on("connect", () => {
       subscribeToRoom();
-      setStatusMessage(`Socket connected to room ${roomSnapshot.room.joinCode}.`);
+      setStatusMessage(`已连接到房间 ${roomSnapshot.room.joinCode}。`);
     });
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
       setRoomSnapshot((current) => ({
@@ -251,10 +194,10 @@ export function MusicRoomApp() {
     socket.on("room.snapshot.missing", () => {
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage("The room is no longer available. Open a new room or join another one.");
+      setStatusMessage("该房间已不可用。创建新房间或加入其他房间。");
     });
     socket.on("disconnect", () => {
-      setStatusMessage("Realtime link lost. Reconnecting to room state...");
+      setStatusMessage("实时连接中断，正在重新连接...");
     });
 
     return () => {
@@ -265,7 +208,7 @@ export function MusicRoomApp() {
       meshRef.current = null;
       setConnectedPeers([]);
     };
-  }, [roomSnapshot?.room.id, peerId, session?.id]);
+  }, [roomSnapshot?.room.id, peerId, activeSession?.id]);
 
   useEffect(() => {
     requestedPiecesRef.current.clear();
@@ -306,6 +249,7 @@ export function MusicRoomApp() {
   useEffect(() => {
     const playback = roomSnapshot?.room.playback;
     const track = roomSnapshot?.tracks.find((item) => item.id === playback?.currentTrackId);
+    const audio = audioRef.current;
 
     if (!playback || !track) {
       setProgressMs(0);
@@ -313,6 +257,11 @@ export function MusicRoomApp() {
     }
 
     const tick = () => {
+      if (audio && !audio.paused && Number.isFinite(audio.currentTime)) {
+        setProgressMs(Math.floor(audio.currentTime * 1000));
+        return;
+      }
+
       if (playback.status !== "playing" || !playback.startedAt) {
         setProgressMs(playback.positionMs);
         return;
@@ -330,22 +279,31 @@ export function MusicRoomApp() {
   useEffect(() => {
     const playback = roomSnapshot?.room.playback;
     const audio = audioRef.current;
-    if (!audio || !playback?.currentTrackId) return;
+    if (!audio) return;
+
+    if (!playback?.currentTrackId) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      setProgressMs(0);
+      return;
+    }
 
     const uploaded = uploadedTracks[playback.currentTrackId];
 
     if (uploaded && audio.src !== uploaded.objectUrl) {
       audio.src = uploaded.objectUrl;
+      audio.load();
     }
 
     const expectedSeconds = playback.positionMs / 1000;
-    if (Math.abs(audio.currentTime - expectedSeconds) > 1.2) {
+    if (uploaded && Math.abs(audio.currentTime - expectedSeconds) > 1.2) {
       audio.currentTime = expectedSeconds;
     }
 
     if (uploaded && playback.status === "playing") {
       void audio.play().catch(() => {
-        setStatusMessage("Autoplay was blocked by the browser. Press play to resume local audio.");
+        setStatusMessage("浏览器已阻止自动播放，请点击播放以恢复本地音频。");
       });
     }
 
@@ -353,6 +311,11 @@ export function MusicRoomApp() {
       audio.pause();
     }
   }, [roomSnapshot?.room.playback, uploadedTracks]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = volume;
+  }, [volume]);
 
   useEffect(() => {
     if (!roomSnapshot?.tracks.length) {
@@ -399,7 +362,7 @@ export function MusicRoomApp() {
         return next;
       });
 
-      if (roomSnapshot && peerId && session) {
+      if (roomSnapshot && peerId && activeSession) {
         for (const asset of cachedAssets) {
           const availability = await buildTrackAvailabilityFromFile({
             roomId: roomSnapshot.room.id,
@@ -407,7 +370,7 @@ export function MusicRoomApp() {
             fileHash: asset.fileHash,
             file: asset.file,
             peerId,
-            nickname: session.nickname,
+            nickname: activeSession.nickname,
             source: "local_cache"
           });
           mergeAvailability(availability);
@@ -421,7 +384,7 @@ export function MusicRoomApp() {
     return () => {
       disposed = true;
     };
-  }, [roomSnapshot, uploadedTracks, peerId, session]);
+  }, [roomSnapshot, uploadedTracks, peerId, activeSession]);
 
   const currentTrack = useMemo(() => {
     const currentTrackId = roomSnapshot?.room.playback.currentTrackId;
@@ -518,37 +481,81 @@ export function MusicRoomApp() {
     return () => window.clearInterval(timer);
   }, []);
 
-  async function createSession() {
+  async function ensureSession(requiredNickname: string, actionLabel: string) {
+    const trimmedNickname = requiredNickname.trim();
+    if (!trimmedNickname) {
+      setStatusMessage("请输入昵称。");
+      return null;
+    }
+
+    setNickname(trimmedNickname);
+
+    if (activeSession && activeSession.nickname === trimmedNickname) {
+      return activeSession;
+    }
+
     try {
-      const nextSession = await musicRoomApi.createGuestSession(nickname);
-      setSession(nextSession);
-      setStatusMessage(`Signed in as ${nextSession.nickname}.`);
+      const nextSession = await musicRoomApi.createGuestSession(trimmedNickname);
+      setActiveSession(nextSession);
+      return nextSession;
+    } catch (error) {
+      const message = toUserFacingError(error);
+      setStatusMessage(
+        message === "请求失败。"
+          ? `${actionLabel}失败，请检查网络后重试。`
+          : `${actionLabel}失败：${message}`
+      );
+      return null;
+    }
+  }
+
+  function handleCreateRoom() {
+    void (async () => {
+      const sessionForAction = await ensureSession(nickname, "创建房间");
+      if (!sessionForAction) return;
+      await doCreateRoom(sessionForAction);
+    })();
+  }
+
+  function handleJoinRoom(code: string) {
+    if (!code.trim()) {
+      setStatusMessage("请输入房间码。");
+      return;
+    }
+
+    void (async () => {
+      const sessionForAction = await ensureSession(nickname, "加入房间");
+      if (!sessionForAction) return;
+      await doJoinRoom(sessionForAction, code);
+    })();
+  }
+
+  async function doCreateRoom(activeSession: GuestSession) {
+    if (!activeSession) return;
+
+    try {
+      const snapshot = await musicRoomApi.createRoom(activeSession.id, "public");
+      setRoomSnapshot(snapshot);
+      setAvailableRooms((current) => {
+        const next = current.filter((room) => room.room.id !== snapshot.room.id);
+        return [snapshot, ...next];
+      });
+      setStatusMessage(`房间已创建，分享码 ${snapshot.room.joinCode} 邀请他人加入。`);
+      await refreshPlaylists(activeSession.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
-  async function createRoom() {
-    if (!session) return;
+  async function doJoinRoom(activeSession: GuestSession, code: string) {
+    if (!activeSession || !code.trim()) return;
 
     try {
-      const snapshot = await musicRoomApi.createRoom(session.id);
+      const snapshot = await musicRoomApi.joinRoomByCode(activeSession.id, code.trim());
       setRoomSnapshot(snapshot);
-      setStatusMessage(`Room opened. Share code ${snapshot.room.joinCode} to invite others.`);
-      await refreshPlaylists(session.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function joinRoomByCode() {
-    if (!session || !joinCode.trim()) return;
-
-    try {
-      const snapshot = await musicRoomApi.joinRoomByCode(session.id, joinCode.trim());
-      setRoomSnapshot(snapshot);
-      setStatusMessage(`Joined room ${snapshot.room.joinCode}.`);
-      await refreshPlaylists(session.id);
+      await refreshAvailableRooms();
+      setStatusMessage(`已加入房间 ${snapshot.room.joinCode}。`);
+      await refreshPlaylists(activeSession.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -559,27 +566,37 @@ export function MusicRoomApp() {
     setRoomSnapshot(snapshot);
   }
 
+  async function refreshAvailableRooms() {
+    try {
+      const rooms = await musicRoomApi.listRooms();
+      setAvailableRooms(rooms);
+    } catch {
+      setAvailableRooms([]);
+    }
+  }
+
   async function refreshPlaylists(ownerId: string) {
     const nextPlaylists = await musicRoomApi.listPlaylists(ownerId);
     setPlaylists(nextPlaylists);
   }
 
   async function leaveRoom() {
-    if (!session || !roomSnapshot) return;
+    if (!activeSession || !roomSnapshot) return;
 
     try {
-      await musicRoomApi.leaveRoom(roomSnapshot.room.id, session.id);
+      await musicRoomApi.leaveRoom(roomSnapshot.room.id, activeSession.id);
       setRoomSnapshot(null);
       setJoinCode("");
       window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage("Left the room. Open a new room or join another one.");
+      await refreshAvailableRooms();
+      setStatusMessage("已离开房间。创建新房间或加入其他房间。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function handleFilesSelected(files: FileList | null) {
-    if (!files || !session || !roomSnapshot) return;
+    if (!files || !activeSession || !roomSnapshot) return;
 
     try {
       const nextUploads: Record<string, UploadedTrack> = {};
@@ -588,7 +605,7 @@ export function MusicRoomApp() {
         const objectUrl = URL.createObjectURL(file);
         const track = await buildTrackMeta(file, objectUrl);
         const registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
-          sessionId: session.id,
+          sessionId: activeSession.id,
           ...track
         });
 
@@ -611,7 +628,7 @@ export function MusicRoomApp() {
             fileHash: registered.fileHash,
             file,
             peerId,
-            nickname: session.nickname,
+            nickname: activeSession.nickname,
             source: "live_upload"
           });
           mergeAvailability(availability);
@@ -625,35 +642,35 @@ export function MusicRoomApp() {
         ...Object.keys(nextUploads)
       ]);
       await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage(`${Object.keys(nextUploads).length} local track(s) imported into the room crate.`);
+      setStatusMessage(`${Object.keys(nextUploads).length} 首本地曲目已导入房间曲目库。`);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function addToQueue(trackId: string) {
-    if (!session || !roomSnapshot) return;
+    if (!activeSession || !roomSnapshot) return;
 
     try {
       await musicRoomApi.addQueueItem(roomSnapshot.room.id, {
-        sessionId: session.id,
+        sessionId: activeSession.id,
         trackId
       });
       await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("Track added to the live queue.");
+      setStatusMessage("曲目已添加到播放队列。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function playTrack(trackId?: string) {
-    if (!roomSnapshot || !session) return;
+    if (!roomSnapshot || !activeSession) return;
 
     try {
       await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "play",
         trackId,
-        sessionId: session.id
+        sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
@@ -662,13 +679,13 @@ export function MusicRoomApp() {
   }
 
   async function pauseTrack() {
-    if (!roomSnapshot || !session) return;
+    if (!roomSnapshot || !activeSession) return;
 
     try {
       await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "pause",
         positionMs: Math.round((audioRef.current?.currentTime ?? 0) * 1000),
-        sessionId: session.id
+        sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
@@ -676,13 +693,40 @@ export function MusicRoomApp() {
     }
   }
 
+  async function prevTrack() {
+    if (!roomSnapshot || !activeSession) return;
+
+    try {
+      // Go to previous track - restart current or go to previous in queue
+      const playback = roomSnapshot?.room.playback;
+      if (playback?.currentTrackId) {
+        // If progress > 3s, restart current track; otherwise seek to 0
+        if (progressMs > 3000) {
+          await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "seek",
+            positionMs: 0,
+            sessionId: activeSession.id
+          });
+        } else {
+          await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "prev",
+            sessionId: activeSession.id
+          });
+        }
+        await refreshRoom(roomSnapshot.room.id);
+      }
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
+    }
+  }
+
   async function nextTrack() {
-    if (!roomSnapshot || !session) return;
+    if (!roomSnapshot || !activeSession) return;
 
     try {
       await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "next",
-        sessionId: session.id
+        sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
@@ -691,90 +735,90 @@ export function MusicRoomApp() {
   }
 
   async function savePlaylistFromQueue() {
-    if (!session || !roomSnapshot) return;
+    if (!activeSession || !roomSnapshot) return;
 
     try {
       await musicRoomApi.createPlaylistFromRoom({
-        ownerId: session.id,
+        ownerId: activeSession.id,
         roomId: roomSnapshot.room.id,
         title: playlistTitle,
-        description: "Saved from the current room queue."
+        description: "从当前房间队列保存。"
       });
-      await refreshPlaylists(session.id);
-      setStatusMessage(`Playlist "${playlistTitle}" saved from the current room flow.`);
+      await refreshPlaylists(activeSession.id);
+      setStatusMessage(`歌单"${playlistTitle}"已从当前房间队列保存。`);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function updatePlaylistTitle() {
-    if (!session || !playlistEditId || !playlistEditTitle.trim()) return;
+    if (!activeSession || !playlistEditId || !playlistEditTitle.trim()) return;
 
     try {
       await musicRoomApi.updatePlaylist(playlistEditId, {
-        ownerId: session.id,
+        ownerId: activeSession.id,
         title: playlistEditTitle.trim()
       });
-      await refreshPlaylists(session.id);
+      await refreshPlaylists(activeSession.id);
       setPlaylistEditId(null);
       setPlaylistEditTitle("");
-      setStatusMessage("Playlist title updated.");
+      setStatusMessage("歌单名称已更新。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function deletePlaylist(playlistId: string) {
-    if (!session) return;
+    if (!activeSession) return;
 
     try {
-      await musicRoomApi.deletePlaylist(playlistId, session.id);
-      await refreshPlaylists(session.id);
+      await musicRoomApi.deletePlaylist(playlistId, activeSession.id);
+      await refreshPlaylists(activeSession.id);
       if (playlistEditId === playlistId) {
         setPlaylistEditId(null);
         setPlaylistEditTitle("");
       }
-      setStatusMessage("Playlist removed from your archive.");
+      setStatusMessage("歌单已从个人存档中删除。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function loadPlaylistIntoRoom(playlistId: string) {
-    if (!session || !roomSnapshot) return;
+    if (!activeSession || !roomSnapshot) return;
 
     try {
       await musicRoomApi.importPlaylistToRoom(playlistId, {
         roomId: roomSnapshot.room.id,
-        sessionId: session.id
+        sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("Playlist loaded back into the live room queue.");
+      setStatusMessage("歌单已加载到当前房间的播放队列。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function removeQueueItem(queueItemId: string) {
-    if (!roomSnapshot || !session) return;
+    if (!roomSnapshot || !activeSession) return;
 
     try {
-      await musicRoomApi.removeQueueItemAs(roomSnapshot.room.id, queueItemId, session.id);
+      await musicRoomApi.removeQueueItemAs(roomSnapshot.room.id, queueItemId, activeSession.id);
       await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("Track removed from the queue.");
+      setStatusMessage("曲目已从队列中移除。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function seekTrack(positionMs: number) {
-    if (!roomSnapshot || !session) return;
+    if (!roomSnapshot || !activeSession) return;
 
     try {
       await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "seek",
         positionMs,
-        sessionId: session.id
+        sessionId: activeSession.id
       });
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
@@ -785,6 +829,18 @@ export function MusicRoomApp() {
   async function handleEnded() {
     if (!roomSnapshot) return;
     await nextTrack();
+  }
+
+  function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
+    const audio = event?.currentTarget ?? audioRef.current;
+    if (!audio || !Number.isFinite(audio.currentTime)) {
+      return;
+    }
+
+    const nextProgressMs = Math.floor(audio.currentTime * 1000);
+    setProgressMs(
+      currentTrackDuration > 0 ? Math.min(nextProgressMs, currentTrackDuration) : nextProgressMs
+    );
   }
 
   function mergeAvailability(announcement: TrackAvailabilityAnnouncement) {
@@ -798,7 +854,7 @@ export function MusicRoomApp() {
   }
 
   async function announceLocalCache(trackId: string, totalChunks?: number) {
-    if (!roomSnapshot || !session || !peerId) {
+    if (!roomSnapshot || !activeSession || !peerId) {
       return;
     }
 
@@ -806,7 +862,7 @@ export function MusicRoomApp() {
       roomId: roomSnapshot.room.id,
       trackId,
       peerId,
-      nickname: session.nickname,
+      nickname: activeSession.nickname,
       totalChunks
     });
 
@@ -842,7 +898,7 @@ export function MusicRoomApp() {
     });
 
     if (!assembled) {
-      setStatusMessage(`Downloaded chunks for ${track.title} are incomplete or failed validation.`);
+      setStatusMessage(`曲目 ${track.title} 的下载分片不完整或校验失败。`);
       return;
     }
 
@@ -874,7 +930,7 @@ export function MusicRoomApp() {
       }
     });
     await trimLocalCache(roomSnapshot.tracks.map((entry) => entry.id));
-    setStatusMessage(`Recovered playable local cache for ${track.title} from room peers.`);
+    setStatusMessage(`已从房间其他成员恢复曲目 ${track.title} 的本地缓存。`);
   }
 
   async function trimLocalCache(protectedTrackIds: string[]) {
@@ -900,7 +956,8 @@ export function MusicRoomApp() {
   const effectiveProgressMs = seekDraft ?? progressMs;
   const progressRatio =
     currentTrackDuration > 0 ? Math.min(effectiveProgressMs / currentTrackDuration, 1) : 0;
-  const canControlPlayback = !!session && roomSnapshot?.room.hostId === session.id;
+  const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
+  const isPlaying = roomSnapshot?.room.playback?.status === "playing";
   const availabilitySummary = roomSnapshot?.tracks.map((track) => {
     const peers = Object.values(availabilityByTrack[track.id] ?? {});
     const local = peers.find((peer) => peer.ownerPeerId === peerId);
@@ -918,477 +975,653 @@ export function MusicRoomApp() {
   const nextTrackAvailability = upcomingTrack
     ? availabilitySummary.find((entry) => entry.track.id === upcomingTrack.id) ?? null
     : null;
+  const statusTone = statusMessage.includes("失败") || statusMessage.includes("不可用")
+    ? "warning"
+    : statusMessage.includes("已")
+      ? "success"
+      : "neutral";
+  const hasArtwork = Boolean(currentTrack?.artworkUrl);
+  const visibleRooms = availableRooms.filter((item) => item.room.id !== roomSnapshot?.room.id);
 
   return (
-    <main className="stage-shell">
-      <section className="hero-stage">
-        <div className="hero-copy reveal-up">
-          <p className="hero-kicker">Music Room</p>
-          <h1 className="hero-title">A listening room that feels live, local, and under your control.</h1>
-          <p className="hero-body">
-            The server handles identity, room state, and coordination. The tracks stay with the host and the listeners.
-          </p>
-          <div className="hero-actions">
-            <label className="field-stack">
-              <span className="field-label">Alias</span>
-              <input
-                className="hero-input"
-                value={nickname}
-                onChange={(event) => setNickname(event.target.value)}
-                placeholder="Pick a room name"
-              />
-            </label>
-            <div className="hero-buttons">
-              <button className="solid-action" onClick={() => startTransition(() => void createSession())}>
-                {session ? `Signed in as ${session.nickname}` : "Create guest identity"}
-              </button>
-              <button
-                className="ghost-action"
-                disabled={!session}
-                onClick={() => startTransition(() => void createRoom())}
-              >
-                Open room
-              </button>
-              <button
-                className="ghost-action"
-                disabled={!roomSnapshot || !session}
-                onClick={() => startTransition(() => void leaveRoom())}
-              >
-                Leave room
-              </button>
-            </div>
-            <div className="join-cluster">
-              <label className="field-stack">
-                <span className="field-label">Join by room code</span>
-                <input
-                  className="hero-input subtle"
-                  value={joinCode}
-                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                  placeholder="Enter room code"
-                />
-              </label>
-              <button
-                className="ghost-action"
-                disabled={!session || !joinCode.trim()}
-                onClick={() => startTransition(() => void joinRoomByCode())}
-              >
-                Join room
-              </button>
-            </div>
-          </div>
+    <main className="music-room-shell">
+      {/* ── Top Bar ── */}
+      <header className="top-bar">
+        <div className="top-bar-left">
+          <span className="top-bar-appname">🎵 音乐房间</span>
+          {roomSnapshot ? (
+            <span className="top-bar-room-info">
+              <span className={`signal-dot${roomSnapshot ? " live" : ""}`} />
+              房间码 <strong>{roomSnapshot.room.joinCode}</strong>
+              <span className="top-bar-sep">·</span>
+              {roomSnapshot.room.members.length} 人在线
+              <span className="top-bar-sep">·</span>
+              Mesh {connectedPeers.length} 已连接
+            </span>
+          ) : null}
         </div>
+        <nav className="tab-bar" role="tablist">
+          {(["room", "library", "queue", "playlist"] as const).map((tab) => (
+            <button
+              key={tab}
+              role="tab"
+              aria-selected={activeTab === tab}
+              className={`tab-btn${activeTab === tab ? " active" : ""}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === "room" && "房间"}
+              {tab === "library" && "曲库"}
+              {tab === "queue" && "队列"}
+              {tab === "playlist" && "歌单"}
+            </button>
+          ))}
+        </nav>
+        <div className="top-bar-right">
+          {activeSession?.nickname ? (
+            <span className="identity-badge">{activeSession.nickname}</span>
+          ) : null}
+        </div>
+      </header>
 
-        <div className="hero-display reveal-up delay-1">
-          <div className="display-glow" />
-          <div className="display-label-row">
-            <span>Now hosting</span>
-            <span className={`signal-dot${roomSnapshot ? " live" : ""}`}>Live state</span>
-          </div>
-          <div className="display-roomcode">
-            <span className="display-caption">Room code</span>
-            <strong>{roomSnapshot?.room.joinCode ?? "------"}</strong>
-          </div>
-          <div className="display-track">
-            <p className="display-caption">Current selection</p>
-            <h2>{currentTrack?.title ?? "No track on air yet"}</h2>
-            <p>{currentTrack?.artist ?? "Import local files to start the set."}</p>
-          </div>
-          <div className="display-meta">
-            <div>
-              <span>Members</span>
-              <strong>{roomSnapshot?.room.members.length ?? 0}</strong>
-            </div>
-            <div>
-              <span>Tracks</span>
-              <strong>{roomSnapshot?.tracks.length ?? 0}</strong>
-            </div>
-            <div>
-              <span>Queue</span>
-              <strong>{roomSnapshot?.queue.length ?? 0}</strong>
-            </div>
-          </div>
-        </div>
-      </section>
+      <div className="status-toast-wrap" aria-live="polite">
+        <div className={`status-toast ${statusTone}`}>{statusMessage}</div>
+      </div>
 
-      <section className="status-ribbon reveal-up delay-2">
-        <div>
-          <span className="ribbon-label">Host</span>
-          <strong>{host?.nickname ?? "No host yet"}</strong>
-        </div>
-        <div>
-          <span className="ribbon-label">Playback</span>
-          <strong>{roomSnapshot?.room.playback.status ?? "idle"}</strong>
-        </div>
-        <div>
-          <span className="ribbon-label">Presence</span>
-          <strong>{roomSnapshot?.room.members.map((member) => member.nickname).join(", ") || "No listeners yet"}</strong>
-        </div>
-        <div>
-          <span className="ribbon-label">Local cache</span>
-          <strong>{cachedTrackCount} ready</strong>
-        </div>
-        <div>
-          <span className="ribbon-label">Mesh links</span>
-          <strong>{connectedPeers.length} connected</strong>
-        </div>
-        <p>{statusMessage}</p>
-      </section>
+      {/* ── Main Content ── */}
+      <div className="main-content" role="tabpanel">
 
-      <section className="workspace-grid">
-        <div className="workspace-main">
-          <section className="workspace-block reveal-up">
-            <div className="block-heading">
-              <div>
-                <p className="block-kicker">Crate</p>
-                <h2>Import local music</h2>
-              </div>
-              <span>{roomSnapshot?.tracks.length ?? 0} files</span>
-            </div>
+        {/* ── Tab: 房间 ── */}
+        {activeTab === "room" && (
+          <div className="panel-room">
+            {roomSnapshot ? (
+              /* In a room */
+              <div className="room-section">
+                {/* Identity card */}
+                <div className="identity-card">
+                  <div className="identity-info">
+                    <span className="field-label">当前身份</span>
+                    <strong>{activeSession?.nickname ?? "—"}</strong>
+                  </div>
+                  <div className="room-controls">
+                    <button
+                      className="ghost-action"
+                      onClick={() => startTransition(() => void leaveRoom())}
+                    >
+                      离开房间
+                    </button>
+                  </div>
+                </div>
 
-            <label className="drop-zone">
-              <span>Drop audio files here or browse from your device.</span>
-              <input
-                type="file"
-                accept="audio/*"
-                multiple
-                className="hidden"
-                disabled={!roomSnapshot}
-                onChange={(event) =>
-                  startTransition(() => void handleFilesSelected(event.target.files))
-                }
-              />
-            </label>
-
-            <div className="track-list">
-              {roomSnapshot?.tracks.length ? (
-                roomSnapshot.tracks.map((track) => (
-                  <article key={track.id} className="track-row">
-                    <div className="track-row-copy">
-                      <h3>{track.title}</h3>
-                      <p>
-                        {track.artist} · {formatDuration(track.durationMs)}
-                      </p>
+                {/* Room info */}
+                <>
+                  <div className="room-info-grid">
+                    <div className="room-info-card">
+                      <span className="field-label">房间码</span>
+                      <strong className="room-code-display">{roomSnapshot.room.joinCode}</strong>
+                      <p className="room-info-hint">分享给朋友，让他们加入</p>
                     </div>
-                    <div className="track-row-actions">
-                      <button
-                        className="ghost-action"
-                        onClick={() => startTransition(() => void addToQueue(track.id))}
-                      >
-                        Queue
-                      </button>
-                      <button
-                        className="solid-action compact"
-                        disabled={!canControlPlayback}
-                        onClick={() => startTransition(() => void playTrack(track.id))}
-                      >
-                        Play now
-                      </button>
+                    <div className="room-info-card">
+                      <span className="field-label">房主</span>
+                      <strong>{host?.nickname ?? "—"}</strong>
                     </div>
-                  </article>
-                ))
-              ) : (
-                <p className="placeholder-copy">No local tracks yet. Open a room, then import music from this browser.</p>
-              )}
-            </div>
-          </section>
+                    <div className="room-info-card">
+                      <span className="field-label">曲目</span>
+                      <strong>{roomSnapshot.tracks.length}</strong>
+                    </div>
+                    <div className="room-info-card">
+                      <span className="field-label">队列</span>
+                      <strong>{roomSnapshot.queue.length}</strong>
+                    </div>
+                    <div className="room-info-card">
+                      <span className="field-label">在线成员</span>
+                      <strong>{roomSnapshot.room.members.length}</strong>
+                    </div>
+                    <div className="room-info-card">
+                      <span className="field-label">Mesh 连接</span>
+                      <strong>{connectedPeers.length} 节点</strong>
+                    </div>
+                  </div>
 
-          <section className="workspace-block reveal-up delay-1">
-            <div className="block-heading">
-              <div>
-                <p className="block-kicker">Queue</p>
-                <h2>Shared room order</h2>
+                  {/* Members list */}
+                  <section className="workspace-block">
+                    <div className="block-heading">
+                      <div>
+                        <p className="block-kicker">成员</p>
+                        <h2>房间里的人</h2>
+                      </div>
+                      <span>{roomSnapshot.room.members.length} 人</span>
+                    </div>
+                    <div className="member-rail">
+                      {roomSnapshot.room.members.length ? (
+                        roomSnapshot.room.members.map((member) => (
+                          <div key={member.id} className="member-pill">
+                            <strong>{member.nickname}</strong>
+                            <span>{member.role === "host" ? "👑 房主" : "🎧 听众"}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="placeholder-copy">暂无成员</p>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* P2P Mesh status */}
+                  <section className="workspace-block">
+                    <div className="block-heading">
+                      <div>
+                        <p className="block-kicker">Mesh</p>
+                        <h2>P2P 缓存状态</h2>
+                      </div>
+                      <span>{availabilitySummary.length} 曲目</span>
+                    </div>
+                    <div className="playlist-list">
+                      {availabilitySummary.length ? (
+                        availabilitySummary.slice(0, 6).map(({ track, peerCount, localChunkCount, totalChunks }) => (
+                          <div key={track.id} className="playlist-line">
+                            <div>
+                              <strong>{track.title}</strong>
+                              <p>
+                                本地 {localChunkCount}/{totalChunks || 0} 分片 · {peerCount} 个节点
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="placeholder-copy">导入曲目后，这里显示分片缓存状态。</p>
+                      )}
+                    </div>
+                  </section>
+                </>
               </div>
-              <span>{roomSnapshot?.queue.length ?? 0} queued</span>
-            </div>
+            ) : (
+              /* Not in a room - show create/join controls */
+              <div className="room-section">
+                <section className="workspace-block lobby-card">
+                  <div className="block-heading">
+                    <div>
+                      <p className="block-kicker">房间</p>
+                      <h2>创建或加入房间</h2>
+                    </div>
+                  </div>
 
-            <div className="queue-stack">
-              {roomSnapshot?.queue.length ? (
-                roomSnapshot.queue.map((item, index) => {
-                  const track = roomSnapshot.tracks.find((entry) => entry.id === item.trackId);
-                  const canRemoveQueueItem =
-                    !!session &&
-                    (roomSnapshot.room.hostId === session.id || item.requestedById === session.id);
+                  <div className="field-stack compact-field">
+                    <span className="field-label">昵称</span>
+                    <input
+                      className="hero-input subtle"
+                      value={nickname}
+                      onChange={(event) => setNickname(event.target.value)}
+                      placeholder="输入你的昵称"
+                    />
+                  </div>
 
-                  return (
-                    <div key={item.id} className="queue-line">
-                      <span className="queue-index">{String(index + 1).padStart(2, "0")}</span>
-                      <div className="queue-copy">
-                        <strong>{track?.title ?? "Unknown track"}</strong>
-                        <p>Requested by {item.requestedBy}</p>
+                  <div className="room-actions-row">
+                    <div className="field-stack compact-field">
+                      <span className="field-label">房间码</span>
+                      <div className="join-inline">
+                        <input
+                          className="hero-input subtle"
+                          value={joinCode}
+                          onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                          placeholder="输入房间码"
+                        />
+                        <button
+                          className="ghost-action ghost-action-emphasis"
+                          disabled={!nickname.trim() || !joinCode.trim()}
+                          onClick={() => handleJoinRoom(joinCode)}
+                        >
+                          加入
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      className="solid-action"
+                      disabled={!nickname.trim()}
+                      onClick={handleCreateRoom}
+                    >
+                      创建房间
+                    </button>
+                  </div>
+
+                  <div className="lobby-room-list">
+                    <div className="block-heading lobby-room-list-heading">
+                      <div>
+                        <p className="block-kicker">实时房间</p>
+                        <h2>可加入的房间</h2>
                       </div>
                       <button
-                        className="queue-remove"
-                        disabled={!canRemoveQueueItem}
-                        onClick={() => startTransition(() => void removeQueueItem(item.id))}
+                        className="ghost-action lobby-refresh"
+                        onClick={() => startTransition(() => void refreshAvailableRooms())}
                       >
-                        Remove
+                        刷新
                       </button>
                     </div>
-                  );
-                })
-              ) : (
-                <p className="placeholder-copy">The room queue is empty. Add tracks from the crate to start the session.</p>
+
+                    {visibleRooms.length ? (
+                      <div className="room-list">
+                        {visibleRooms.map((item) => {
+                          const roomHost =
+                            item.room.members.find((member) => member.role === "host")?.nickname ?? "—";
+
+                          return (
+                            <button
+                              key={item.room.id}
+                              type="button"
+                              className="room-card room-card-button"
+                              onClick={() => handleJoinRoom(item.room.joinCode)}
+                            >
+                              <div className="room-card-info">
+                                <div className="room-card-code-row">
+                                  <span className="room-card-code">{item.room.joinCode}</span>
+                                  <span
+                                    className="room-code-copy"
+                                    onClick={async (event) => {
+                                      event.stopPropagation();
+                                      try {
+                                        await navigator.clipboard.writeText(item.room.joinCode);
+                                        setStatusMessage(`已复制房间码 ${item.room.joinCode}。`);
+                                      } catch {
+                                        setStatusMessage("复制房间码失败，请手动复制。");
+                                      }
+                                    }}
+                                  >
+                                    复制
+                                  </span>
+                                </div>
+                                <span className="room-card-host">房主：{roomHost}</span>
+                              </div>
+                              <span className="room-card-members">
+                                {item.room.members.length} 人在线
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="placeholder-copy">暂无可用房间</p>
+                    )}
+                  </div>
+                </section>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab: 曲库 ── */}
+        {activeTab === "library" && (
+          <div className="panel-library">
+            <section className="workspace-block">
+              <div className="block-heading">
+                <div>
+                  <p className="block-kicker">曲库</p>
+                  <h2>导入本地音乐</h2>
+                </div>
+                <span>{roomSnapshot?.tracks.length ?? 0} 首曲目</span>
+              </div>
+
+              <label className="drop-zone">
+                <span>拖放音频文件到此处，或从设备中选择。</span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  multiple
+                  className="hidden"
+                  disabled={!roomSnapshot}
+                  onChange={(event) =>
+                    startTransition(() => void handleFilesSelected(event.target.files))
+                  }
+                />
+              </label>
+              {!roomSnapshot && (
+                <p className="player-note">请先在「房间」标签页创建或加入一个房间。</p>
               )}
-            </div>
-          </section>
+
+              <div className="track-list">
+                {roomSnapshot?.tracks.length ? (
+                  roomSnapshot.tracks.map((track) => (
+                    <article key={track.id} className="track-row">
+                      <div className="track-row-copy">
+                        <h3>{track.title}</h3>
+                        <p>
+                          {track.artist} · {formatDuration(track.durationMs)}
+                        </p>
+                      </div>
+                      <div className="track-row-actions">
+                        <button
+                          className="ghost-action"
+                          disabled={!roomSnapshot}
+                          onClick={() => startTransition(() => void addToQueue(track.id))}
+                        >
+                          入队
+                        </button>
+                        <button
+                          className="solid-action compact"
+                          disabled={!canControlPlayback}
+                          onClick={() => startTransition(() => void playTrack(track.id))}
+                        >
+                          立即播放
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="placeholder-copy">暂无曲目。打开房间后，拖放或选择本地音频文件导入。</p>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ── Tab: 队列 ── */}
+        {activeTab === "queue" && (
+          <div className="panel-queue">
+            <section className="workspace-block">
+              <div className="block-heading">
+                <div>
+                  <p className="block-kicker">队列</p>
+                  <h2>共享播放顺序</h2>
+                </div>
+                <span>{roomSnapshot?.queue.length ?? 0} 首在队列</span>
+              </div>
+
+              <div className="queue-stack">
+                {roomSnapshot?.queue.length ? (
+                  roomSnapshot.queue.map((item, index) => {
+                    const track = roomSnapshot.tracks.find((entry) => entry.id === item.trackId);
+                    const canRemoveQueueItem =
+                      !!activeSession &&
+                      (roomSnapshot.room.hostId === activeSession.id ||
+                        item.requestedById === activeSession.id);
+
+                    return (
+                      <div key={item.id} className="queue-line">
+                        <span className="queue-index">{String(index + 1).padStart(2, "0")}</span>
+                        <div className="queue-copy">
+                          <strong>{track?.title ?? "未知曲目"}</strong>
+                          <p>点歌人：{item.requestedBy}</p>
+                        </div>
+                        <button
+                          className="queue-remove"
+                          disabled={!canRemoveQueueItem}
+                          onClick={() => startTransition(() => void removeQueueItem(item.id))}
+                        >
+                          移除
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="placeholder-copy">队列为空。从曲库选择曲目入队开始播放。</p>
+                )}
+              </div>
+            </section>
+
+            {/* Quick track add when queue is empty */}
+            {roomSnapshot && roomSnapshot.tracks.length > 0 && (
+              <section className="workspace-block">
+                <div className="block-heading">
+                  <div>
+                    <p className="block-kicker">快速添加</p>
+                    <h2>从曲库入队</h2>
+                  </div>
+                </div>
+                <div className="track-list">
+                  {roomSnapshot.tracks.slice(0, 8).map((track) => (
+                    <article key={track.id} className="track-row">
+                      <div className="track-row-copy">
+                        <h3>{track.title}</h3>
+                        <p>{track.artist} · {formatDuration(track.durationMs)}</p>
+                      </div>
+                      <div className="track-row-actions">
+                        <button
+                          className="ghost-action"
+                          onClick={() => startTransition(() => void addToQueue(track.id))}
+                        >
+                          入队
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab: 歌单 ── */}
+        {activeTab === "playlist" && (
+          <div className="panel-playlist">
+            <section className="workspace-block">
+              <div className="block-heading">
+                <div>
+                  <p className="block-kicker">存档</p>
+                  <h2>保存今晚的歌</h2>
+                </div>
+                <span>{playlists.length} 个歌单</span>
+              </div>
+
+              <div className="playlist-create">
+                <label className="field-stack">
+                  <span className="field-label">歌单名称</span>
+                  <input
+                    className="hero-input subtle"
+                    value={playlistTitle}
+                    onChange={(event) => setPlaylistTitle(event.target.value)}
+                    placeholder="例如：今晚的歌"
+                  />
+                </label>
+                <button
+                  className="solid-action"
+                  disabled={!activeSession || !roomSnapshot || roomSnapshot.queue.length === 0}
+                  onClick={() => startTransition(() => void savePlaylistFromQueue())}
+                >
+                  保存当前队列为歌单
+                </button>
+              </div>
+
+              <div className="playlist-list">
+                {playlists.length ? (
+                  playlists.map((playlist) => (
+                    <div key={playlist.id} className="playlist-line">
+                      {playlistEditId === playlist.id ? (
+                        <>
+                          <label className="field-stack">
+                            <span className="field-label">重命名歌单</span>
+                            <input
+                              className="hero-input subtle"
+                              value={playlistEditTitle}
+                              onChange={(event) => setPlaylistEditTitle(event.target.value)}
+                            />
+                          </label>
+                          <div className="track-row-actions">
+                            <button
+                              className="solid-action compact"
+                              disabled={!playlistEditTitle.trim()}
+                              onClick={() => startTransition(() => void updatePlaylistTitle())}
+                            >
+                              保存
+                            </button>
+                            <button
+                              className="ghost-action"
+                              onClick={() => {
+                                setPlaylistEditId(null);
+                                setPlaylistEditTitle("");
+                              }}
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <strong>{playlist.title}</strong>
+                            <p>
+                              {playlist.trackIds.length} 首曲目 ·{" "}
+                              {playlist.isCollaborative ? "协作" : "个人"}
+                            </p>
+                          </div>
+                          <div className="track-row-actions">
+                            <button
+                              className="solid-action compact"
+                              disabled={!roomSnapshot}
+                              onClick={() => startTransition(() => void loadPlaylistIntoRoom(playlist.id))}
+                            >
+                              加载到房间
+                            </button>
+                            <button
+                              className="ghost-action"
+                              onClick={() => {
+                                setPlaylistEditId(playlist.id);
+                                setPlaylistEditTitle(playlist.title);
+                              }}
+                            >
+                              重命名
+                            </button>
+                            <button
+                              className="queue-remove"
+                              onClick={() => startTransition(() => void deletePlaylist(playlist.id))}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="placeholder-copy">把今晚的队列保存为歌单，开始建立你的收藏。</p>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom Player ── */}
+      <footer className={`bottom-player${isPlaying ? " playing" : ""}`}>
+        {/* Track info */}
+        <div className="bp-track-info">
+          <div className={`bp-artwork${hasArtwork ? "" : " is-placeholder"}`}>
+            {hasArtwork ? (
+              <img src={currentTrack?.artworkUrl ?? ""} alt="" className="bp-artwork-image" />
+            ) : (
+              <div className="bp-artwork-fallback" aria-hidden="true">
+                <span className="bp-artwork-disc" />
+                <span className="bp-artwork-note">♪</span>
+              </div>
+            )}
+          </div>
+          <div className="bp-track-copy">
+            <p className="player-caption">正在播放</p>
+            <h3 className="bp-track-title">{currentTrack?.title ?? "等待播放"}</h3>
+            <p className="bp-track-artist">{currentTrack?.artist ?? "从曲库或队列选择曲目"}</p>
+          </div>
         </div>
 
-        <aside className="workspace-side">
-          <section className="player-panel reveal-up">
-            <div className="block-heading invert">
-              <div>
-                <p className="block-kicker">Player</p>
-                <h2>Deck control</h2>
-              </div>
-              <span>{roomSnapshot?.room.playback.status ?? "idle"}</span>
-            </div>
+        {/* Playback controls */}
+        <div className="bp-controls">
+          <button
+            className="bp-btn ghost-action inverse"
+            disabled={!canControlPlayback || !roomSnapshot?.room.playback?.currentTrackId}
+            onClick={() => startTransition(() => void prevTrack())}
+            title="前一首"
+          >
+            ⏮
+          </button>
+          <button
+            className={`bp-btn bp-btn-main ${isPlaying ? "bp-btn-playing" : "bp-btn-paused"}`}
+            disabled={!canControlPlayback}
+            onClick={() =>
+              startTransition(() => void (isPlaying ? pauseTrack() : playTrack()))
+            }
+            title={isPlaying ? "暂停" : "播放"}
+          >
+            {isPlaying ? "⏸" : "▶"}
+          </button>
+          <button
+            className="bp-btn ghost-action inverse"
+            disabled={!canControlPlayback || !roomSnapshot?.room.playback?.currentTrackId}
+            onClick={() => startTransition(() => void nextTrack())}
+            title="下一首"
+          >
+            ⏭
+          </button>
+        </div>
 
-            <div className="player-current">
-              <p className="player-caption">On air</p>
-              <h3>{currentTrack?.title ?? "Waiting for a lead track"}</h3>
-              <p>{currentTrack?.artist ?? "Choose a track from the crate or queue."}</p>
-            </div>
+        {/* Progress bar */}
+        <div className="bp-progress-area">
+          <span className="bp-time">{formatDuration(effectiveProgressMs)}</span>
+          <div className="progress-shell bp-progress-shell">
+            <div className="progress-track-gray" />
+            <div
+              className="progress-fill"
+              style={{ width: `${progressRatio * 100}%` }}
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={currentTrackDuration || 1}
+            step={1000}
+            value={effectiveProgressMs}
+            className="progress-slider bp-slider"
+            disabled={!currentTrackDuration || !canControlPlayback}
+            onChange={(event) => setSeekDraft(Number(event.target.value))}
+            onMouseUp={() => {
+              if (seekDraft !== null && canControlPlayback) {
+                startTransition(() => void seekTrack(seekDraft));
+                setSeekDraft(null);
+              }
+            }}
+            onTouchEnd={() => {
+              if (seekDraft !== null && canControlPlayback) {
+                startTransition(() => void seekTrack(seekDraft));
+                setSeekDraft(null);
+              }
+            }}
+          />
+          <span className="bp-time">{formatDuration(currentTrackDuration)}</span>
+        </div>
 
-            <div className="progress-shell" aria-hidden="true">
-              <div className="progress-fill" style={{ width: `${progressRatio * 100}%` }} />
-            </div>
+        {/* Status notes */}
+        <div className="bp-status">
+          {!canControlPlayback && roomSnapshot && (
+            <span className="bp-note">仅房主可控制播放</span>
+          )}
+          {!uploadedTracks[currentTrack?.id ?? ""] && currentTrack && (
+            <span className="bp-note">本地无文件 · P2P传输中</span>
+          )}
+          {!uploadedTracks[currentTrack?.id ?? ""] && currentTrackAvailability ? (
+            <span className="bp-note">
+              缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0} 分片
+            </span>
+          ) : null}
+          <label className="bp-volume" aria-label="音量">
+            <span className="bp-volume-icon">🔊</span>
             <input
               type="range"
               min={0}
-              max={currentTrackDuration || 1}
-              step={1000}
-              value={effectiveProgressMs}
-              className="progress-slider"
-              disabled={!currentTrackDuration || !canControlPlayback}
-              onChange={(event) => setSeekDraft(Number(event.target.value))}
-              onMouseUp={() => {
-                if (seekDraft !== null && canControlPlayback) {
-                  startTransition(() => void seekTrack(seekDraft));
-                  setSeekDraft(null);
-                }
-              }}
-              onTouchEnd={() => {
-                if (seekDraft !== null && canControlPlayback) {
-                  startTransition(() => void seekTrack(seekDraft));
-                  setSeekDraft(null);
-                }
-              }}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(event) => setVolume(Number(event.target.value))}
             />
-            <div className="progress-meta">
-              <span>{formatDuration(effectiveProgressMs)}</span>
-              <span>{formatDuration(currentTrackDuration)}</span>
-            </div>
+          </label>
+        </div>
 
-            <audio ref={audioRef} controls className="player-audio" onEnded={() => void handleEnded()} />
+        <audio
+          ref={audioRef}
+          className="player-audio hidden"
+          onEnded={() => void handleEnded()}
+          onTimeUpdate={syncProgressFromAudio}
+          onLoadedMetadata={syncProgressFromAudio}
+          onPlay={syncProgressFromAudio}
+          onPause={syncProgressFromAudio}
+          onSeeked={syncProgressFromAudio}
+        />
+      </footer>
 
-            <div className="player-actions">
-              <button
-                className="solid-action"
-                disabled={!canControlPlayback}
-                onClick={() => startTransition(() => void playTrack())}
-              >
-                Play
-              </button>
-              <button
-                className="ghost-action inverse"
-                disabled={!canControlPlayback}
-                onClick={() => startTransition(() => void pauseTrack())}
-              >
-                Pause
-              </button>
-              <button
-                className="ghost-action inverse"
-                disabled={!canControlPlayback}
-                onClick={() => startTransition(() => void nextTrack())}
-              >
-                Next
-              </button>
-            </div>
-
-            {!canControlPlayback && roomSnapshot ? (
-              <p className="player-note">Only the host can seek or control transport for the room.</p>
-            ) : null}
-
-            {!uploadedTracks[currentTrack?.id ?? ""] && currentTrack ? (
-              <p className="player-note">
-                This browser does not hold the local file for the current track, so it can follow room state without playing the audio payload.
-              </p>
-            ) : null}
-
-            {!uploadedTracks[currentTrack?.id ?? ""] && currentTrackAvailability ? (
-              <p className="player-note">
-                P2P download progress: {currentTrackAvailability.localChunkCount}/
-                {currentTrackAvailability.totalChunks || 0} chunks from {currentTrackAvailability.peerCount} peer source(s).
-              </p>
-            ) : null}
-
-            {!uploadedTracks[upcomingTrack?.id ?? ""] && nextTrackAvailability ? (
-              <p className="player-note">
-                Next up prefetch: {nextTrackAvailability.localChunkCount}/
-                {nextTrackAvailability.totalChunks || 0} chunks ready for {upcomingTrack?.title}.
-              </p>
-            ) : null}
-          </section>
-
-          <section className="workspace-block reveal-up delay-2">
-            <div className="block-heading">
-              <div>
-                <p className="block-kicker">Archive</p>
-                <h2>Save the night</h2>
-              </div>
-              <span>{playlists.length} playlists</span>
-            </div>
-
-            <div className="playlist-create">
-              <label className="field-stack">
-                <span className="field-label">Playlist title</span>
-                <input
-                  className="hero-input subtle"
-                  value={playlistTitle}
-                  onChange={(event) => setPlaylistTitle(event.target.value)}
-                />
-              </label>
-              <button
-                className="solid-action"
-                disabled={!session || !roomSnapshot || roomSnapshot.queue.length === 0}
-                onClick={() => startTransition(() => void savePlaylistFromQueue())}
-              >
-                Save current queue
-              </button>
-            </div>
-
-            <div className="playlist-list">
-              {playlists.length ? (
-                playlists.map((playlist) => (
-                  <div key={playlist.id} className="playlist-line">
-                    {playlistEditId === playlist.id ? (
-                      <>
-                        <label className="field-stack">
-                          <span className="field-label">Rename playlist</span>
-                          <input
-                            className="hero-input subtle"
-                            value={playlistEditTitle}
-                            onChange={(event) => setPlaylistEditTitle(event.target.value)}
-                          />
-                        </label>
-                        <div className="track-row-actions">
-                          <button
-                            className="solid-action compact"
-                            disabled={!playlistEditTitle.trim()}
-                            onClick={() => startTransition(() => void updatePlaylistTitle())}
-                          >
-                            Save
-                          </button>
-                          <button
-                            className="ghost-action"
-                            onClick={() => {
-                              setPlaylistEditId(null);
-                              setPlaylistEditTitle("");
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <strong>{playlist.title}</strong>
-                          <p>
-                            {playlist.trackIds.length} tracks ·{" "}
-                            {playlist.isCollaborative ? "Collaborative" : "Personal"}
-                          </p>
-                        </div>
-                        <div className="track-row-actions">
-                          <button
-                            className="solid-action compact"
-                            disabled={!roomSnapshot}
-                            onClick={() => startTransition(() => void loadPlaylistIntoRoom(playlist.id))}
-                          >
-                            Load to room
-                          </button>
-                          <button
-                            className="ghost-action"
-                            onClick={() => {
-                              setPlaylistEditId(playlist.id);
-                              setPlaylistEditTitle(playlist.title);
-                            }}
-                          >
-                            Rename
-                          </button>
-                          <button
-                            className="queue-remove"
-                            onClick={() => startTransition(() => void deletePlaylist(playlist.id))}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="placeholder-copy">Save the current queue to start building your archive.</p>
-              )}
-            </div>
-          </section>
-
-          <section className="workspace-block reveal-up delay-2">
-            <div className="block-heading">
-              <div>
-                <p className="block-kicker">Mesh</p>
-                <h2>P2P cache status</h2>
-              </div>
-              <span>{availabilitySummary.length} tracks</span>
-            </div>
-
-            <div className="playlist-list">
-              {availabilitySummary.length ? (
-                availabilitySummary.map(({ track, peerCount, localChunkCount, totalChunks, sources }) => (
-                  <div key={track.id} className="playlist-line">
-                    <div>
-                      <strong>{track.title}</strong>
-                      <p>
-                        Local {localChunkCount}/{totalChunks || 0} chunks · {peerCount} peer source(s)
-                      </p>
-                    </div>
-                    <div className="playlist-sources">
-                      <span>{sources.slice(0, 2).join(", ") || "Awaiting availability"}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="placeholder-copy">Import local tracks to build the first chunk availability map.</p>
-              )}
-            </div>
-          </section>
-
-          <section className="workspace-block reveal-up delay-2">
-            <div className="block-heading">
-              <div>
-                <p className="block-kicker">Members</p>
-                <h2>Who is inside</h2>
-              </div>
-              <span>{roomSnapshot?.room.members.length ?? 0} live</span>
-            </div>
-
-            <div className="member-rail">
-              {roomSnapshot?.room.members.length ? (
-                roomSnapshot.room.members.map((member) => (
-                  <div key={member.id} className="member-pill">
-                    <strong>{member.nickname}</strong>
-                    <span>{member.role === "host" ? "Host" : "Listener"}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="placeholder-copy">Members will appear here as soon as someone joins by room code.</p>
-              )}
-            </div>
-          </section>
-        </aside>
-      </section>
-
-      {isPending ? <div className="pending-indicator">Syncing room state...</div> : null}
+      {isPending ? <div className="pending-indicator">正在同步房间状态...</div> : null}
     </main>
   );
 }
@@ -1404,7 +1637,7 @@ async function buildTrackMeta(file: File, objectUrl: string) {
 
   return {
     title,
-    artist: "Local Upload",
+    artist: "本地上传",
     album: null,
     durationMs,
     bitrate: null,
