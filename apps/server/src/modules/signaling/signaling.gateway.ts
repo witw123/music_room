@@ -34,7 +34,6 @@ function getCorsOrigins() {
 }
 
 @WebSocketGateway({
-  namespace: "/ws",
   path: "/ws/socket.io",
   cors: { origin: getCorsOrigins(), credentials: true }
 })
