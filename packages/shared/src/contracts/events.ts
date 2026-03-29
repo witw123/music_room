@@ -8,6 +8,7 @@ import { roomSnapshotSchema } from "../room/models";
 
 export const websocketEventSchema = z.union([
   z.literal("room.subscribe"),
+  z.literal("room.presence"),
   z.literal("room.unsubscribe"),
   z.literal("room.snapshot"),
   z.literal("room.snapshot.missing"),
@@ -23,6 +24,12 @@ export const roomSubscribePayloadSchema = z.object({
 
 export const roomUnsubscribePayloadSchema = z.object({
   roomId: z.string()
+});
+
+export const roomPresencePayloadSchema = z.object({
+  roomId: z.string(),
+  sessionId: z.string(),
+  peerId: z.string()
 });
 
 export const roomSnapshotMissingPayloadSchema = z.object({
@@ -52,6 +59,7 @@ export const pieceAvailabilityEventSchema = z.object({
 export type WebsocketEvent = z.infer<typeof websocketEventSchema>;
 export type RoomSubscribePayload = z.infer<typeof roomSubscribePayloadSchema>;
 export type RoomUnsubscribePayload = z.infer<typeof roomUnsubscribePayloadSchema>;
+export type RoomPresencePayload = z.infer<typeof roomPresencePayloadSchema>;
 export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
 
@@ -66,6 +74,7 @@ export type ServerToClientEvents = {
 
 export type ClientToServerEvents = {
   "room.subscribe": (payload: RoomSubscribePayload) => void;
+  "room.presence": (payload: RoomPresencePayload) => void;
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;

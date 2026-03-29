@@ -1,5 +1,7 @@
 "use client";
 
+import type { RoomMember } from "@music-room/shared";
+
 export function formatDuration(durationMs: number) {
   if (!durationMs) {
     return "0:00";
@@ -29,6 +31,14 @@ export function removeTracksFromUploads<T>(
     delete next[trackId];
   }
   return next;
+}
+
+export function getOnlineMembers(members: RoomMember[]) {
+  return members.filter((member) => !!member.peerId);
+}
+
+export function getOnlineMemberCount(members: RoomMember[]) {
+  return getOnlineMembers(members).length;
 }
 
 export function toUserFacingError(error: unknown) {

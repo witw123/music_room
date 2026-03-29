@@ -184,6 +184,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return { ok: true };
   }
 
+  @SubscribeMessage("room.presence")
+  async handleRoomPresence(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { roomId: string; sessionId: string; peerId: string }
+  ) {
+    this.assertRealtimeClient(client, payload.roomId);
+
+    if (client.data.sessionId !== payload.sessionId || client.data.peerId !== payload.peerId) {
+      throw new WsException("Presence mismatch.");
+    }
+
+    const roomService = this.moduleRef.get(RoomService, { strict: false });
+    if (!roomService) {
+      return { ok: true };
+    }
+
+    await roomService.touchRealtimePresence(payload.roomId, payload.sessionId, payload.peerId);
+    return { ok: true };
+  }
+
   @SubscribeMessage("room.unsubscribe")
   handleRoomUnsubscribe(
     @ConnectedSocket() client: Socket,
@@ -192,6 +212,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     client.leave(payload.roomId);
     if (client.data.sessionId) {
       void this.updatePeerPresence(payload.roomId, client.data.sessionId, null);
+      const roomService = this.moduleRef.get(RoomService, { strict: false });
+      void roomService?.clearRealtimePresence(payload.roomId, client.data.sessionId);
     }
     if (client.data.peerId) {
       this.clearPeerAvailability(payload.roomId, client.data.peerId);
@@ -208,6 +230,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     if (roomId && sessionId) {
       void this.updatePeerPresence(roomId, sessionId, null);
+      const roomService = this.moduleRef.get(RoomService, { strict: false });
+      void roomService?.clearRealtimePresence(roomId, sessionId);
     }
     if (roomId && client.data.peerId) {
       this.clearPeerAvailability(roomId, client.data.peerId as string);
@@ -244,6 +268,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     try {
       await roomService.updatePeerPresence(roomId, sessionId, peerId);
+      if (peerId) {
+        await roomService.touchRealtimePresence(roomId, sessionId, peerId);
+      } else {
+        await roomService.clearRealtimePresence(roomId, sessionId);
+      }
       this.emitRoomSnapshot(roomId, await roomService.getRoomSnapshot(roomId, []));
     } catch {
       clientSafeNoop();

@@ -1,6 +1,7 @@
 "use client";
 
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
+import { getOnlineMemberCount } from "@/lib/music-room-ui";
 
 type TopBarProps = {
   activeSession: GuestSession | null;
@@ -24,7 +25,7 @@ export function TopBar({
             <span className={`signal-dot${roomSnapshot ? " live" : ""}`} />
             房间码 <strong>{roomSnapshot.room.joinCode}</strong>
             <span className="top-bar-sep">·</span>
-            {roomSnapshot.room.members.length} 人在线
+            {getOnlineMemberCount(roomSnapshot.room.members)} 人在线
             <span className="top-bar-sep">·</span>
             直播音频 {mediaConnectedPeersCount} 已连接
             <span className="top-bar-sep">·</span>

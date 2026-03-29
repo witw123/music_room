@@ -25,7 +25,12 @@ export class RoomService {
   private readonly rooms = new Map<string, RoomRecord>();
   private readonly roomCacheTtlSeconds = 60 * 60 * 12;
   private readonly sessionRecentRoomTtlSeconds = 60 * 60 * 24 * 7;
+  private readonly presenceTtlSeconds = 20;
   private readonly roomRegistryKey = "music-room:rooms";
+  private readonly inMemoryPresence = new Map<
+    string,
+    Map<string, { peerId: string; expiresAt: number }>
+  >();
 
   constructor(
     private readonly authService: AuthService,
@@ -96,13 +101,7 @@ export class RoomService {
 
   async getRoomSnapshot(roomId: string, playlists: Playlist[]): Promise<RoomSnapshot> {
     const record = await this.getRoomRecord(roomId);
-
-    return {
-      room: record.room,
-      tracks: record.tracks,
-      queue: record.queue,
-      playlists
-    };
+    return this.buildSnapshot(record, playlists);
   }
 
   async getAccessibleRoomSnapshot(
@@ -120,42 +119,30 @@ export class RoomService {
       throw new Error("Room not found.");
     }
 
-    return {
-      room: record.room,
-      tracks: record.tracks,
-      queue: record.queue,
-      playlists
-    };
+    return this.buildSnapshot(record, playlists);
   }
 
   async listRoomsForSession(sessionId: string): Promise<RoomSnapshot[]> {
     const records = await this.listRecoverableRecords();
 
-    return records
-      .filter(
-        (record: RoomRecord) =>
-          record.room.hostId === sessionId ||
-          record.room.members.some((member: RoomMember) => member.id === sessionId)
-      )
-      .map((record: RoomRecord) => ({
-        room: record.room,
-        tracks: record.tracks,
-        queue: record.queue,
-        playlists: []
-      }));
+    const accessibleRecords = records.filter(
+      (record: RoomRecord) =>
+        record.room.hostId === sessionId ||
+        record.room.members.some((member: RoomMember) => member.id === sessionId)
+    );
+
+    return Promise.all(
+      accessibleRecords.map((record: RoomRecord) => this.buildSnapshot(record, []))
+    );
   }
 
   async listPublicRooms(): Promise<RoomSnapshot[]> {
     const records = await this.listRecoverableRecords();
-
-    return records
-      .filter((record) => record.room.visibility === "public" && record.room.members.length > 0)
-      .map((record) => ({
-        room: record.room,
-        tracks: record.tracks,
-        queue: record.queue,
-        playlists: []
-      }));
+    const publicRecords = records.filter((record) => record.room.visibility === "public");
+    const snapshots = await Promise.all(
+      publicRecords.map((record) => this.buildSnapshot(record, []))
+    );
+    return snapshots.filter((snapshot) => snapshot.room.members.length > 0);
   }
 
   async getRecentRoomSnapshotForSession(sessionId: string): Promise<RoomSnapshot | null> {
@@ -183,12 +170,7 @@ export class RoomService {
       return null;
     }
 
-    return {
-      room: record.room,
-      tracks: record.tracks,
-      queue: record.queue,
-      playlists: []
-    };
+    return this.buildSnapshot(record, []);
   }
 
   async joinRoom(roomId: string, sessionId: string) {
@@ -231,6 +213,23 @@ export class RoomService {
 
     await this.persistRecord(record);
     return record.room;
+  }
+
+  async touchRealtimePresence(roomId: string, sessionId: string, peerId: string) {
+    const record = await this.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
+
+    this.setInMemoryPresence(roomId, sessionId, peerId);
+    await this.redis.setString(
+      this.realtimePresenceKey(roomId, sessionId),
+      peerId,
+      this.presenceTtlSeconds
+    );
+  }
+
+  async clearRealtimePresence(roomId: string, sessionId: string) {
+    this.deleteInMemoryPresence(roomId, sessionId);
+    await this.redis.delete(this.realtimePresenceKey(roomId, sessionId));
   }
 
   async leaveRoom(roomId: string, sessionId: string) {
@@ -730,5 +729,99 @@ export class RoomService {
       tracks: persisted.tracks as TrackMeta[],
       queue: persisted.queue as QueueItem[]
     };
+  }
+
+  private async buildSnapshot(record: RoomRecord, playlists: Playlist[]): Promise<RoomSnapshot> {
+    const activePresence = await this.getActivePresence(record.room.id, record.room.members);
+    const activeMembers = record.room.members
+      .map((member) => ({
+        ...member,
+        peerId: activePresence.get(member.id) ?? null
+      }))
+      .filter((member) => !!member.peerId);
+
+    return {
+      room: {
+        ...record.room,
+        members: activeMembers
+      },
+      tracks: record.tracks,
+      queue: record.queue,
+      playlists
+    };
+  }
+
+  private async getActivePresence(roomId: string, members: RoomMember[]) {
+    this.pruneExpiredInMemoryPresence(roomId);
+
+    const activePresence = new Map<string, string>();
+    const roomPresence = this.inMemoryPresence.get(roomId);
+
+    for (const member of members) {
+      const localPresence = roomPresence?.get(member.id);
+      if (localPresence && localPresence.expiresAt > Date.now()) {
+        activePresence.set(member.id, localPresence.peerId);
+      }
+    }
+
+    const redisPresence = await Promise.all(
+      members.map(async (member) => ({
+        memberId: member.id,
+        peerId: await this.redis.getString(this.realtimePresenceKey(roomId, member.id))
+      }))
+    );
+
+    for (const entry of redisPresence) {
+      if (!entry.peerId) {
+        continue;
+      }
+
+      activePresence.set(entry.memberId, entry.peerId);
+      this.setInMemoryPresence(roomId, entry.memberId, entry.peerId);
+    }
+
+    return activePresence;
+  }
+
+  private setInMemoryPresence(roomId: string, sessionId: string, peerId: string) {
+    const roomPresence = this.inMemoryPresence.get(roomId) ?? new Map();
+    roomPresence.set(sessionId, {
+      peerId,
+      expiresAt: Date.now() + this.presenceTtlSeconds * 1000
+    });
+    this.inMemoryPresence.set(roomId, roomPresence);
+  }
+
+  private deleteInMemoryPresence(roomId: string, sessionId: string) {
+    const roomPresence = this.inMemoryPresence.get(roomId);
+    if (!roomPresence) {
+      return;
+    }
+
+    roomPresence.delete(sessionId);
+    if (roomPresence.size === 0) {
+      this.inMemoryPresence.delete(roomId);
+    }
+  }
+
+  private pruneExpiredInMemoryPresence(roomId: string) {
+    const roomPresence = this.inMemoryPresence.get(roomId);
+    if (!roomPresence) {
+      return;
+    }
+
+    for (const [sessionId, presence] of roomPresence.entries()) {
+      if (presence.expiresAt <= Date.now()) {
+        roomPresence.delete(sessionId);
+      }
+    }
+
+    if (roomPresence.size === 0) {
+      this.inMemoryPresence.delete(roomId);
+    }
+  }
+
+  private realtimePresenceKey(roomId: string, sessionId: string) {
+    return `music-room:presence:${roomId}:${sessionId}`;
   }
 }

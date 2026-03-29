@@ -1,6 +1,7 @@
 "use client";
 
 import type { RoomMember } from "@music-room/shared";
+import { getOnlineMemberCount } from "@/lib/music-room-ui";
 
 type MembersPanelProps = {
   members: RoomMember[];
@@ -14,7 +15,7 @@ export function MembersPanel({ members }: MembersPanelProps) {
           <p className="block-kicker">成员</p>
           <h2>房间里的听众</h2>
         </div>
-        <span>{members.length} 人</span>
+        <span>{getOnlineMemberCount(members)} 人</span>
       </div>
       <div className="member-list">
         {members.length ? (
@@ -24,7 +25,7 @@ export function MembersPanel({ members }: MembersPanelProps) {
                 <strong>{member.nickname}</strong>
                 <span>{member.role === "host" ? "房主" : "听众"}</span>
               </div>
-              <em>{member.peerId ? "在线" : "已连接"}</em>
+              <em>{member.peerId ? "在线" : "离线"}</em>
             </div>
           ))
         ) : (

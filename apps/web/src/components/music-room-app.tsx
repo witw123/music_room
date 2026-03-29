@@ -305,6 +305,27 @@ export function MusicRoomApp() {
   }, [roomSnapshot?.room.id, peerId, activeSession?.id]);
 
   useEffect(() => {
+    if (!roomSnapshot?.room.id || !activeSession?.id || !peerId || !socketRef.current) {
+      return;
+    }
+
+    const emitPresence = () => {
+      socketRef.current?.emit("room.presence", {
+        roomId: roomSnapshot.room.id,
+        sessionId: activeSession.id,
+        peerId
+      });
+    };
+
+    emitPresence();
+    const intervalId = window.setInterval(emitPresence, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [roomSnapshot?.room.id, activeSession?.id, peerId]);
+
+  useEffect(() => {
     requestedPiecesRef.current.clear();
     failedPiecePeersRef.current.clear();
   }, [roomSnapshot?.room.id, peerId]);

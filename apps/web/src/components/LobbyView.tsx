@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
+import { getOnlineMemberCount } from "@/lib/music-room-ui";
 
 type LobbyViewProps = {
   nickname: string;
@@ -149,7 +150,9 @@ export function LobbyView({
                     </div>
                     <span className="room-card-host">房主：{roomHost}</span>
                   </div>
-                  <span className="room-card-members">{item.room.members.length} 人在线</span>
+                  <span className="room-card-members">
+                    {getOnlineMemberCount(item.room.members)} 人在线
+                  </span>
                 </button>
               );
             })}

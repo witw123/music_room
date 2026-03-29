@@ -8,7 +8,7 @@ import type {
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
-import { formatDuration } from "@/lib/music-room-ui";
+import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -135,7 +135,7 @@ export function RoomStage({
         </div>
         <div className="room-stat-card">
           <span className="field-label">成员</span>
-          <strong>{roomSnapshot.room.members.length}</strong>
+          <strong>{getOnlineMemberCount(roomSnapshot.room.members)}</strong>
         </div>
       </div>
 
