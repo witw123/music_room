@@ -74,6 +74,13 @@ export class RoomMediaMesh {
         return;
       }
 
+      if (
+        entry.connection.signalingState !== "stable" &&
+        entry.connection.signalingState !== "have-local-offer"
+      ) {
+        return;
+      }
+
       await entry.connection.setRemoteDescription(remoteDescription);
       await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
@@ -92,6 +99,10 @@ export class RoomMediaMesh {
     if (payload.type === "answer") {
       const remoteDescription = toSessionDescriptionInit(payload.payload);
       if (!remoteDescription) {
+        return;
+      }
+
+      if (entry.connection.signalingState !== "have-local-offer") {
         return;
       }
 
@@ -185,7 +196,11 @@ export class RoomMediaMesh {
 
     connection.ontrack = (event) => {
       const [stream] = event.streams;
-      this.callbacks.onRemoteStream(stream ?? new MediaStream([event.track]));
+      const nextStream = stream ?? new MediaStream([event.track]);
+      this.callbacks.onRemoteStream(nextStream);
+      event.track.onunmute = () => {
+        this.callbacks.onRemoteStream(nextStream);
+      };
     };
 
     connection.onconnectionstatechange = () => {

@@ -30,7 +30,7 @@ export function createRoomSocket() {
   return io(baseUrl, {
     path: socketPath,
     auth: sessionToken ? { sessionToken } : undefined,
-    transports: ["websocket", "polling"],
+    tryAllTransports: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 800,

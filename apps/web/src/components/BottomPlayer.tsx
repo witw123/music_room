@@ -151,7 +151,7 @@ export function BottomPlayer({
           }
           title={isPlaying ? "暂停" : "播放"}
         >
-          {isPlaying ? "⏸" : "▶"}
+          {isPlaying ? "❚❚" : "▶"}
         </button>
         <button
           className="bp-btn ghost-action inverse"

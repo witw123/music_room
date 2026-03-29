@@ -81,6 +81,13 @@ export class P2PMesh {
         return;
       }
 
+      if (
+        entry.connection.signalingState !== "stable" &&
+        entry.connection.signalingState !== "have-local-offer"
+      ) {
+        return;
+      }
+
       await entry.connection.setRemoteDescription(remoteDescription);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
@@ -98,6 +105,10 @@ export class P2PMesh {
     if (payload.type === "answer") {
       const remoteDescription = toSessionDescriptionInit(payload.payload);
       if (!remoteDescription) {
+        return;
+      }
+
+      if (entry.connection.signalingState !== "have-local-offer") {
         return;
       }
 
@@ -256,6 +267,10 @@ export class P2PMesh {
       const message: P2PDataMessage = result.data;
 
       if (message.kind === "request-piece") {
+        if (channel.readyState !== "open") {
+          return;
+        }
+
         const piece = await getCachedPiece(message.trackId, this.localPeerId, message.chunkIndex);
         if (!piece) {
           return;
@@ -271,6 +286,11 @@ export class P2PMesh {
           pieceHash: piece.hash,
           payloadBase64: arrayBufferToBase64(piece.payload)
         };
+
+        if (channel.readyState !== "open") {
+          return;
+        }
+
         channel.send(JSON.stringify(payload));
         return;
       }

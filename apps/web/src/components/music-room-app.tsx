@@ -43,7 +43,13 @@ const sessionStorageKey = "music-room-session";
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
-const capturedAudioStreams = new WeakMap<HTMLAudioElement, MediaStream>();
+const capturedAudioGraphs = new WeakMap<
+  HTMLAudioElement,
+  {
+    context: AudioContext;
+    stream: MediaStream;
+  }
+>();
 
 function toUserFacingError(error: unknown) {
   const message = error instanceof Error ? error.message : "请求失败。";
@@ -136,14 +142,14 @@ export function MusicRoomApp() {
   }, []);
 
   useEffect(() => {
-    const storedPeerId = window.localStorage.getItem(peerStorageKey);
+    const storedPeerId = window.sessionStorage.getItem(peerStorageKey);
     if (storedPeerId) {
       setPeerId(storedPeerId);
       return;
     }
 
     const nextPeerId = `peer_${crypto.randomUUID()}`;
-    window.localStorage.setItem(peerStorageKey, nextPeerId);
+    window.sessionStorage.setItem(peerStorageKey, nextPeerId);
     setPeerId(nextPeerId);
   }, []);
 
@@ -1217,6 +1223,7 @@ export function MusicRoomApp() {
         activeSession={activeSession}
         roomSnapshot={roomSnapshot}
         connectedPeersCount={connectedPeers.length}
+        mediaConnectedPeersCount={mediaConnectedPeers.length}
       />
 
       {roomSnapshot ? (
@@ -1354,6 +1361,7 @@ async function buildTrackMeta(file: File, objectUrl: string) {
 function readDuration(objectUrl: string) {
   return new Promise<number>((resolve) => {
     const audio = document.createElement("audio");
+    audio.preload = "metadata";
     audio.src = objectUrl;
 
     const cleanup = () => {
@@ -1376,30 +1384,18 @@ function readDuration(objectUrl: string) {
 
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("error", handleError);
+    audio.load();
   });
 }
 
 function captureAudioStream(audio: HTMLAudioElement) {
-  const cachedStream = capturedAudioStreams.get(audio);
-  if (cachedStream) {
-    return cachedStream;
-  }
+  const cachedGraph = capturedAudioGraphs.get(audio);
+  if (cachedGraph) {
+    if (cachedGraph.context.state === "suspended") {
+      void cachedGraph.context.resume().catch(() => undefined);
+    }
 
-  const mediaAudio = audio as HTMLAudioElement & {
-    captureStream?: () => MediaStream;
-    mozCaptureStream?: () => MediaStream;
-  };
-
-  if (typeof mediaAudio.captureStream === "function") {
-    const stream = mediaAudio.captureStream();
-    capturedAudioStreams.set(audio, stream);
-    return stream;
-  }
-
-  if (typeof mediaAudio.mozCaptureStream === "function") {
-    const stream = mediaAudio.mozCaptureStream();
-    capturedAudioStreams.set(audio, stream);
-    return stream;
+    return cachedGraph.stream;
   }
 
   if (typeof window !== "undefined") {
@@ -1410,9 +1406,28 @@ function captureAudioStream(audio: HTMLAudioElement) {
       const destination = context.createMediaStreamDestination();
       source.connect(destination);
       source.connect(context.destination);
-      capturedAudioStreams.set(audio, destination.stream);
+      capturedAudioGraphs.set(audio, {
+        context,
+        stream: destination.stream
+      });
+      if (context.state === "suspended") {
+        void context.resume().catch(() => undefined);
+      }
       return destination.stream;
     }
+  }
+
+  const mediaAudio = audio as HTMLAudioElement & {
+    captureStream?: () => MediaStream;
+    mozCaptureStream?: () => MediaStream;
+  };
+
+  if (typeof mediaAudio.captureStream === "function") {
+    return mediaAudio.captureStream();
+  }
+
+  if (typeof mediaAudio.mozCaptureStream === "function") {
+    return mediaAudio.mozCaptureStream();
   }
 
   return null;

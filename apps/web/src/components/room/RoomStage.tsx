@@ -93,7 +93,7 @@ export function RoomStage({
           <div className="room-stage-identity">
             <span className="field-label">当前身份</span>
             <strong>{activeSession?.nickname ?? "未确认"}</strong>
-            <p>房主：{host?.nickname ?? "未连接"}</p>
+            <p>房主: {host?.nickname ?? "未连接"}</p>
           </div>
 
           <div className="room-stage-buttons">
