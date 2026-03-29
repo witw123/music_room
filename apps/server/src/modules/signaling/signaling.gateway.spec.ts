@@ -190,6 +190,87 @@ describe("SignalingGateway", () => {
     expect(emit).toHaveBeenCalledWith("piece.availability", payload);
   });
 
+  it("replays cached availability to a newly subscribed client", async () => {
+    const redisService = {
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const roomService = {
+      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue({
+        room: {
+          id: "room_1",
+          hostId: "guest_host",
+          joinCode: "ABC123",
+          visibility: "private",
+          members: [],
+          playback: {
+            status: "paused",
+            currentTrackId: null,
+            positionMs: 0,
+            startedAt: null,
+            queueVersion: 1
+          }
+        },
+        tracks: [],
+        queue: [],
+        playlists: []
+      })
+    };
+    const moduleRef = {
+      get: jest.fn().mockReturnValue(roomService)
+    };
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+
+    gateway.handlePieceAvailability(
+      {
+        data: {
+          roomId: "room_1",
+          peerId: "peer_host",
+          isRealtimeAuthenticated: true
+        },
+        to: jest.fn().mockReturnValue({ emit: jest.fn() })
+      } as never,
+      {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_host",
+        nickname: "Host",
+        totalChunks: 8,
+        availableChunks: [0, 1, 2],
+        source: "live_upload",
+        announcedAt: new Date().toISOString()
+      }
+    );
+
+    const client = {
+      handshake: { auth: { sessionToken: "token" }, headers: {} },
+      data: {},
+      join: jest.fn(),
+      emit: jest.fn()
+    };
+
+    await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_guest"
+    });
+
+    expect(client.emit).toHaveBeenCalledWith(
+      "piece.availability",
+      expect.objectContaining({
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_host"
+      })
+    );
+  });
+
   it("rejects realtime messages from unauthenticated clients", () => {
     const redisService = {
       publish: jest.fn(),
@@ -214,6 +295,7 @@ describe("SignalingGateway", () => {
           roomId: "room_1",
           fromPeerId: "peer_a",
           toPeerId: "peer_b",
+          channelKind: "data",
           type: "offer",
           payload: {}
         }

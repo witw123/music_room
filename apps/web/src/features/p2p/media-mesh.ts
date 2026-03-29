@@ -1,0 +1,257 @@
+import type { IceServerConfig, PeerSignalMessage } from "@music-room/shared";
+
+type MediaConnectionState = "idle" | RTCPeerConnectionState;
+
+type MediaMeshCallbacks = {
+  onRemoteStream: (stream: MediaStream | null) => void;
+  onConnectionStateChange?: (payload: {
+    peerId: string;
+    state: MediaConnectionState;
+    connectedPeerIds: string[];
+  }) => void;
+};
+
+type MediaPeerEntry = {
+  connection: RTCPeerConnection;
+  stream: MediaStream | null;
+  senders: RTCRtpSender[];
+};
+
+export class RoomMediaMesh {
+  private readonly peers = new Map<string, MediaPeerEntry>();
+
+  constructor(
+    private readonly roomId: string,
+    private readonly localPeerId: string,
+    private readonly sendSignal: (payload: PeerSignalMessage) => void,
+    private readonly iceServers: IceServerConfig[],
+    private readonly callbacks: MediaMeshCallbacks
+  ) {}
+
+  async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null) {
+    const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
+
+    for (const peerId of nextPeers) {
+      await this.ensurePeer(peerId, localStream, true);
+    }
+
+    for (const [peerId, entry] of this.peers.entries()) {
+      if (!nextPeers.has(peerId)) {
+        this.releasePeer(peerId, entry);
+      }
+    }
+  }
+
+  async updateLocalStream(localStream: MediaStream | null) {
+    for (const [peerId, entry] of this.peers.entries()) {
+      this.attachStream(entry, localStream);
+      if (entry.connection.signalingState === "stable") {
+        const offer = await entry.connection.createOffer();
+        await entry.connection.setLocalDescription(offer);
+        this.sendSignal({
+          roomId: this.roomId,
+          fromPeerId: this.localPeerId,
+          toPeerId: peerId,
+          channelKind: "media",
+          type: "offer",
+          payload: offer as unknown as Record<string, unknown>
+        });
+      }
+    }
+  }
+
+  async handleSignal(payload: PeerSignalMessage) {
+    if (payload.channelKind !== "media" || payload.toPeerId !== this.localPeerId) {
+      return;
+    }
+
+    const entry = this.peers.get(payload.fromPeerId) ?? this.createPeer(payload.fromPeerId);
+
+    if (payload.type === "offer") {
+      const remoteDescription = toSessionDescriptionInit(payload.payload);
+      if (!remoteDescription) {
+        return;
+      }
+
+      await entry.connection.setRemoteDescription(remoteDescription);
+      const answer = await entry.connection.createAnswer();
+      await entry.connection.setLocalDescription(answer);
+      this.sendSignal({
+        roomId: this.roomId,
+        fromPeerId: this.localPeerId,
+        toPeerId: payload.fromPeerId,
+        channelKind: "media",
+        type: "answer",
+        payload: answer as unknown as Record<string, unknown>
+      });
+      return;
+    }
+
+    if (payload.type === "answer") {
+      const remoteDescription = toSessionDescriptionInit(payload.payload);
+      if (!remoteDescription) {
+        return;
+      }
+
+      await entry.connection.setRemoteDescription(remoteDescription);
+      return;
+    }
+
+    if (payload.type === "candidate") {
+      const candidate = toIceCandidateInit(payload.payload);
+      if (!candidate) {
+        return;
+      }
+
+      await entry.connection.addIceCandidate(candidate);
+    }
+  }
+
+  getConnectedPeerIds() {
+    return [...this.peers.entries()]
+      .filter(([, entry]) => entry.connection.connectionState === "connected")
+      .map(([peerId]) => peerId);
+  }
+
+  destroy() {
+    for (const [peerId, entry] of this.peers.entries()) {
+      this.releasePeer(peerId, entry);
+    }
+    this.peers.clear();
+    this.callbacks.onRemoteStream(null);
+  }
+
+  private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
+    const entry = this.peers.get(peerId) ?? this.createPeer(peerId);
+    this.attachStream(entry, localStream);
+
+    if (initiateOffer && entry.connection.signalingState === "stable") {
+      if (!localStream || localStream.getAudioTracks().length === 0) {
+        return entry;
+      }
+
+      const offer = await entry.connection.createOffer();
+      await entry.connection.setLocalDescription(offer);
+      this.sendSignal({
+        roomId: this.roomId,
+        fromPeerId: this.localPeerId,
+        toPeerId: peerId,
+        channelKind: "media",
+        type: "offer",
+        payload: offer as unknown as Record<string, unknown>
+      });
+    }
+
+    return entry;
+  }
+
+  private createPeer(peerId: string) {
+    const connection = new RTCPeerConnection({
+      iceServers: this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+    const entry: MediaPeerEntry = {
+      connection,
+      stream: null,
+      senders: []
+    };
+
+    connection.onicecandidate = (event) => {
+      if (!event.candidate) {
+        return;
+      }
+
+      this.sendSignal({
+        roomId: this.roomId,
+        fromPeerId: this.localPeerId,
+        toPeerId: peerId,
+        channelKind: "media",
+        type: "candidate",
+        payload: event.candidate.toJSON() as unknown as Record<string, unknown>
+      });
+    };
+
+    connection.ontrack = (event) => {
+      const [stream] = event.streams;
+      this.callbacks.onRemoteStream(stream ?? new MediaStream([event.track]));
+    };
+
+    connection.onconnectionstatechange = () => {
+      this.callbacks.onConnectionStateChange?.({
+        peerId,
+        state: connection.connectionState,
+        connectedPeerIds: this.getConnectedPeerIds()
+      });
+
+      if (connection.connectionState === "failed" || connection.connectionState === "closed") {
+        if (entry.stream) {
+          this.callbacks.onRemoteStream(null);
+        }
+      }
+    };
+
+    this.peers.set(peerId, entry);
+    return entry;
+  }
+
+  private attachStream(entry: MediaPeerEntry, localStream: MediaStream | null) {
+    if (entry.stream === localStream) {
+      return;
+    }
+
+    const audioTracks = localStream?.getAudioTracks() ?? [];
+    const nextTrack = audioTracks[0] ?? null;
+
+    if (entry.senders.length === 0 && nextTrack) {
+      entry.senders = [entry.connection.addTrack(nextTrack, localStream as MediaStream)];
+      entry.stream = localStream;
+      return;
+    }
+
+    if (entry.senders.length > 0) {
+      for (const sender of entry.senders) {
+        void sender.replaceTrack(nextTrack);
+      }
+    }
+
+    entry.stream = localStream;
+  }
+
+  private releasePeer(peerId: string, entry: MediaPeerEntry) {
+    entry.connection.close();
+    this.peers.delete(peerId);
+    this.callbacks.onConnectionStateChange?.({
+      peerId,
+      state: "closed",
+      connectedPeerIds: this.getConnectedPeerIds()
+    });
+  }
+}
+
+function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {
+  const type = typeof payload.type === "string" ? payload.type : null;
+  const sdp = typeof payload.sdp === "string" ? payload.sdp : null;
+
+  if (!type || !sdp) {
+    return null;
+  }
+
+  return {
+    type: type as RTCSdpType,
+    sdp
+  };
+}
+
+function toIceCandidateInit(payload: Record<string, unknown>): RTCIceCandidateInit | null {
+  if (typeof payload.candidate !== "string") {
+    return null;
+  }
+
+  return {
+    candidate: payload.candidate,
+    sdpMid: typeof payload.sdpMid === "string" ? payload.sdpMid : undefined,
+    sdpMLineIndex:
+      typeof payload.sdpMLineIndex === "number" ? payload.sdpMLineIndex : undefined,
+    usernameFragment:
+      typeof payload.usernameFragment === "string" ? payload.usernameFragment : undefined
+  };
+}

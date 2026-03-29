@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition, type SyntheticEven
 import type {
   GuestSession,
   Playlist,
+  RoomMediaConnectionState,
   RoomSnapshot,
   PeerSignalMessage,
   TrackAvailabilityAnnouncement
@@ -13,6 +14,8 @@ import {
   buildTrackAvailabilityFromCache,
   buildTrackAvailabilityFromFile,
   getMissingChunkIndexes,
+  getWebRTCIceServers,
+  RoomMediaMesh,
   selectChunkSource,
   P2PMesh
 } from "@/features/p2p";
@@ -40,6 +43,7 @@ const sessionStorageKey = "music-room-session";
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
+const capturedAudioStreams = new WeakMap<HTMLAudioElement, MediaStream>();
 
 function toUserFacingError(error: unknown) {
   const message = error instanceof Error ? error.message : "请求失败。";
@@ -81,8 +85,11 @@ function toUserFacingError(error: unknown) {
 
 export function MusicRoomApp() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
   const meshRef = useRef<P2PMesh | null>(null);
+  const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
+  const hostStreamRef = useRef<MediaStream | null>(null);
   const requestedPiecesRef = useRef<Map<string, number>>(new Map());
   const failedPiecePeersRef = useRef<Map<string, Set<string>>>(new Map());
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
@@ -98,12 +105,17 @@ export function MusicRoomApp() {
   const [volume, setVolume] = useState(0.72);
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
+  const [mediaConnectedPeers, setMediaConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
+  const [mediaConnectionState, setMediaConnectionState] =
+    useState<RoomMediaConnectionState>("idle");
   const [availabilityByTrack, setAvailabilityByTrack] = useState<
     Record<string, Record<string, TrackAvailabilityAnnouncement>>
   >({});
   const [statusMessage, setStatusMessage] = useState("请输入昵称并确认身份。");
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
+  const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
+  const canDeleteRoom = canControlPlayback;
 
   useEffect(() => {
     const storedSession = window.localStorage.getItem(sessionStorageKey);
@@ -153,6 +165,7 @@ export function MusicRoomApp() {
     const socket = createRoomSocket();
     socketRef.current = socket;
     const roomId = roomSnapshot.room.id;
+    const iceServers = getWebRTCIceServers();
     const mesh = new P2PMesh(
       roomId,
       peerId,
@@ -191,6 +204,53 @@ export function MusicRoomApp() {
       }
     );
     meshRef.current = mesh;
+    const mediaMesh = new RoomMediaMesh(
+      roomId,
+      peerId,
+      (payload: PeerSignalMessage) => socket.emit("peer.signal", payload),
+      iceServers,
+      {
+        onRemoteStream: (stream) => {
+          const remoteAudio = remoteAudioRef.current;
+          if (!remoteAudio) {
+            return;
+          }
+
+          if (remoteAudio.srcObject !== stream) {
+            remoteAudio.srcObject = stream;
+          }
+
+          if (stream) {
+            void remoteAudio.play().catch(() => {
+              setStatusMessage("浏览器阻止了远端音频自动播放，请再次点击页面继续。");
+            });
+          }
+        },
+        onConnectionStateChange: ({ state, connectedPeerIds }) => {
+          setMediaConnectedPeers(connectedPeerIds);
+
+          if (state === "connected") {
+            setMediaConnectionState("buffering");
+            return;
+          }
+
+          if (state === "connecting" || state === "new") {
+            setMediaConnectionState("connecting");
+            return;
+          }
+
+          if (state === "failed") {
+            setMediaConnectionState("reconnecting");
+            return;
+          }
+
+          if (state === "disconnected" || state === "closed") {
+            setMediaConnectionState((current) => (current === "live" ? "reconnecting" : "idle"));
+          }
+        }
+      }
+    );
+    mediaMeshRef.current = mediaMesh;
     const subscribeToRoom = () => {
       socket.emit("room.subscribe", {
         roomId,
@@ -211,6 +271,11 @@ export function MusicRoomApp() {
       }));
     });
     socket.on("peer.signal", (payload: PeerSignalMessage) => {
+      if (payload.channelKind === "media") {
+        void mediaMesh.handleSignal(payload);
+        return;
+      }
+
       void mesh.handleSignal(payload);
     });
     socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
@@ -237,7 +302,12 @@ export function MusicRoomApp() {
       socketRef.current = null;
       mesh.destroy();
       meshRef.current = null;
+      mediaMesh.destroy();
+      mediaMeshRef.current = null;
+      hostStreamRef.current = null;
       setConnectedPeers([]);
+      setMediaConnectedPeers([]);
+      setMediaConnectionState("idle");
     };
   }, [roomSnapshot?.room.id, peerId, activeSession?.id]);
 
@@ -316,8 +386,29 @@ export function MusicRoomApp() {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
+      remoteAudioRef.current?.pause();
       setAudioDurationMs(0);
       setProgressMs(0);
+      setMediaConnectionState("idle");
+      return;
+    }
+
+    if (!canControlPlayback) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+
+      const remoteAudio = remoteAudioRef.current;
+      if (remoteAudio) {
+        remoteAudio.volume = volume;
+        if (playback.status === "playing") {
+          void remoteAudio.play().catch(() => {
+            setStatusMessage("浏览器阻止了远端音频自动播放，请再次点击页面继续。");
+          });
+        } else if (playback.status === "paused") {
+          remoteAudio.pause();
+        }
+      }
       return;
     }
 
@@ -342,12 +433,58 @@ export function MusicRoomApp() {
     if (playback.status === "paused") {
       audio.pause();
     }
-  }, [roomSnapshot?.room.playback, uploadedTracks]);
+  }, [roomSnapshot?.room.playback, uploadedTracks, canControlPlayback, volume]);
 
   useEffect(() => {
     if (!audioRef.current) return;
     audioRef.current.volume = volume;
   }, [volume]);
+
+  useEffect(() => {
+    const remoteAudio = remoteAudioRef.current;
+    if (!remoteAudio) {
+      return;
+    }
+
+    remoteAudio.volume = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !peerId) {
+      return;
+    }
+
+    if (!canControlPlayback) {
+      return;
+    }
+
+    const listenerPeerIds =
+      roomSnapshot.room.members
+        .map((member) => member.peerId)
+        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
+
+    const audio = audioRef.current;
+    if (!audio || !roomSnapshot.room.playback.currentTrackId) {
+      void mediaMeshRef.current?.syncHostPeers([], null);
+      return;
+    }
+
+    const capture = captureAudioStream(audio);
+    if (!capture) {
+      setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+      return;
+    }
+
+    hostStreamRef.current = capture;
+    void mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture);
+  }, [
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.status,
+    canControlPlayback,
+    peerId
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.tracks.length) {
@@ -445,6 +582,32 @@ export function MusicRoomApp() {
   }, [currentTrack, roomSnapshot]);
 
   useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+
+    if (!playback?.currentTrackId) {
+      setMediaConnectionState("idle");
+      return;
+    }
+
+    if (canControlPlayback) {
+      return;
+    }
+
+    if (playback.status === "paused") {
+      setMediaConnectionState((current) => (current === "live" ? "buffering" : current));
+      return;
+    }
+
+    setMediaConnectionState((current) => {
+      if (current === "live" || current === "buffering") {
+        return current;
+      }
+
+      return mediaConnectedPeers.length > 0 ? "buffering" : "connecting";
+    });
+  }, [roomSnapshot?.room.playback, canControlPlayback, mediaConnectedPeers.length]);
+
+  useEffect(() => {
     const remotePeerIds =
       roomSnapshot?.room.members
         .map((member) => member.peerId)
@@ -490,7 +653,8 @@ export function MusicRoomApp() {
         const didRequest = meshRef.current?.requestPiece(
           preferredSource.ownerPeerId,
           plan.track.id,
-          chunkIndex
+          chunkIndex,
+          totalChunks
         );
 
         if (didRequest) {
@@ -1012,18 +1176,12 @@ export function MusicRoomApp() {
     }
 
     setUploadedTracks((current) => {
-      const next = { ...current };
-      for (const trackId of removedTrackIds) {
-        delete next[trackId];
-      }
-      return next;
+      return removeTracksFromUploads(current, removedTrackIds);
     });
   }
 
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
   const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
-  const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
-  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
   const availabilitySummary = roomSnapshot?.tracks.map((track) => {
     const peers = Object.values(availabilityByTrack[track.id] ?? {});
@@ -1073,6 +1231,8 @@ export function MusicRoomApp() {
               canDeleteRoom={canDeleteRoom}
               uploadedTracks={uploadedTracks}
               connectedPeersCount={connectedPeers.length}
+              mediaConnectionState={mediaConnectionState}
+              mediaConnectedPeersCount={mediaConnectedPeers.length}
               cachedTrackCount={cachedTrackCount}
               playlists={playlists}
               availabilitySummary={availabilitySummary}
@@ -1115,10 +1275,11 @@ export function MusicRoomApp() {
       {/* 鈹€鈹€ Bottom Player 鈹€鈹€ */}
       <BottomPlayer
         audioRef={audioRef}
+        remoteAudioRef={remoteAudioRef}
         progressMs={progressMs}
         seekDraft={seekDraft}
         setSeekDraft={setSeekDraft}
-        audioDurationMs={audioDurationMs}
+        audioDurationMs={currentTrackDuration}
         volume={volume}
         setVolume={setVolume}
         syncProgressFromAudio={syncProgressFromAudio}
@@ -1135,12 +1296,22 @@ export function MusicRoomApp() {
               }
             : null
         }
+        mediaConnectionState={mediaConnectionState}
+        mediaConnectedPeersCount={mediaConnectedPeers.length}
         onPlay={playTrack}
         onPause={pauseTrack}
         onSeek={seekTrack}
         onPrev={prevTrack}
         onNext={nextTrack}
         onEnded={handleEnded}
+        onRemotePlaying={() => setMediaConnectionState("live")}
+        onRemoteWaiting={() => setMediaConnectionState("buffering")}
+        onRemotePause={() =>
+          setMediaConnectionState((current) =>
+            roomSnapshot?.room.playback.status === "paused" ? current : "buffering"
+          )
+        }
+        onRemoteError={() => setMediaConnectionState("failed")}
       />
 
       {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
@@ -1195,5 +1366,44 @@ function readDuration(objectUrl: string) {
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("error", handleError);
   });
+}
+
+function captureAudioStream(audio: HTMLAudioElement) {
+  const cachedStream = capturedAudioStreams.get(audio);
+  if (cachedStream) {
+    return cachedStream;
+  }
+
+  const mediaAudio = audio as HTMLAudioElement & {
+    captureStream?: () => MediaStream;
+    mozCaptureStream?: () => MediaStream;
+  };
+
+  if (typeof mediaAudio.captureStream === "function") {
+    const stream = mediaAudio.captureStream();
+    capturedAudioStreams.set(audio, stream);
+    return stream;
+  }
+
+  if (typeof mediaAudio.mozCaptureStream === "function") {
+    const stream = mediaAudio.mozCaptureStream();
+    capturedAudioStreams.set(audio, stream);
+    return stream;
+  }
+
+  if (typeof window !== "undefined") {
+    const AudioContextCtor = window.AudioContext;
+    if (AudioContextCtor) {
+      const context = new AudioContextCtor();
+      const source = context.createMediaElementSource(audio);
+      const destination = context.createMediaStreamDestination();
+      source.connect(destination);
+      source.connect(context.destination);
+      capturedAudioStreams.set(audio, destination.stream);
+      return destination.stream;
+    }
+  }
+
+  return null;
 }
 

@@ -1,10 +1,17 @@
 "use client";
 
 import { useTransition } from "react";
-import type { GuestSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type {
+  GuestSession,
+  RoomMediaConnectionState,
+  RoomSnapshot,
+  TrackMeta
+} from "@music-room/shared";
+import { formatDuration } from "@/lib/music-room-ui";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
   progressMs: number;
   seekDraft: number | null;
   setSeekDraft: (v: number | null) => void;
@@ -21,24 +28,40 @@ type BottomPlayerProps = {
     localChunkCount: number;
     totalChunks: number;
   } | null;
+  mediaConnectionState: RoomMediaConnectionState;
+  mediaConnectedPeersCount: number;
   onPlay: () => void;
   onPause: (positionMs: number) => void;
   onSeek: (positionMs: number) => void;
   onPrev: () => void;
   onNext: () => void;
   onEnded: () => void;
+  onRemotePlaying: () => void;
+  onRemoteWaiting: () => void;
+  onRemotePause: () => void;
+  onRemoteError: () => void;
 };
 
-function formatDuration(durationMs: number) {
-  if (!durationMs) return "0:00";
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+function getMediaStatusLabel(state: RoomMediaConnectionState) {
+  switch (state) {
+    case "connecting":
+      return "正在连接房主音频";
+    case "buffering":
+      return "正在缓冲直播音频";
+    case "live":
+      return "已连接直播音频";
+    case "reconnecting":
+      return "连接中断，正在重试";
+    case "failed":
+      return "音频连接失败";
+    default:
+      return "等待房主开始播放";
+  }
 }
 
 export function BottomPlayer({
   audioRef,
+  remoteAudioRef,
   progressMs,
   seekDraft,
   setSeekDraft,
@@ -50,38 +73,39 @@ export function BottomPlayer({
   roomSnapshot,
   activeSession,
   uploadedTracks,
+  currentTrack,
   currentTrackAvailability,
+  mediaConnectionState,
+  mediaConnectedPeersCount,
   onPlay,
   onPause,
   onSeek,
   onPrev,
   onNext,
-  onEnded
+  onEnded,
+  onRemotePlaying,
+  onRemoteWaiting,
+  onRemotePause,
+  onRemoteError
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
 
   const playback = roomSnapshot?.room.playback;
-  const currentTrackId = playback?.currentTrackId;
-  const currentTrack = roomSnapshot?.tracks.find((t) => t.id === currentTrackId) ?? null;
   const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
   const isPlaying = playback?.status === "playing";
   const effectiveProgressMs = seekDraft ?? progressMs;
   const currentTrackDuration = audioDurationMs;
   const progressRatio =
-    currentTrackDuration > 0
-      ? Math.min(effectiveProgressMs / currentTrackDuration, 1)
-      : 0;
+    currentTrackDuration > 0 ? Math.min(effectiveProgressMs / currentTrackDuration, 1) : 0;
+  const localTrackAvailable = !!uploadedTracks[currentTrack?.id ?? ""];
+  const mediaStatusLabel = getMediaStatusLabel(mediaConnectionState);
 
   return (
     <footer className={`bottom-player${isPlaying ? " playing" : ""}`}>
       <div className="bottom-progress-rail" aria-hidden="true">
-        <div
-          className="bottom-progress-fill"
-          style={{ width: `${progressRatio * 100}%` }}
-        />
+        <div className="bottom-progress-fill" style={{ width: `${progressRatio * 100}%` }} />
       </div>
 
-      {/* Track info */}
       <div className="bp-track-info">
         <div className={`bp-artwork${currentTrack?.artworkUrl ? "" : " is-placeholder"}`}>
           {currentTrack?.artworkUrl ? (
@@ -96,17 +120,18 @@ export function BottomPlayer({
         <div className="bp-track-copy">
           <p className="player-caption">正在播放</p>
           <h3 className="bp-track-title">{currentTrack?.title ?? "等待播放"}</h3>
-          <p className="bp-track-artist">{currentTrack?.artist ?? "从曲库或队列选择曲目"}</p>
+          <p className="bp-track-artist">
+            {currentTrack?.artist ?? "从曲库或队列里选择一首歌"}
+          </p>
         </div>
       </div>
 
-      {/* Playback controls */}
       <div className="bp-controls">
         <button
           className="bp-btn ghost-action inverse"
           disabled={!canControlPlayback || !playback?.currentTrackId}
           onClick={() => startTransition(() => void onPrev())}
-          title="前一首"
+          title="上一首"
         >
           ⏮
         </button>
@@ -114,7 +139,13 @@ export function BottomPlayer({
           className={`bp-btn bp-btn-main ${isPlaying ? "bp-btn-playing" : "bp-btn-paused"}`}
           disabled={!canControlPlayback}
           onClick={() =>
-            startTransition(() => void (isPlaying ? onPause(Math.round((audioRef.current?.currentTime ?? 0) * 1000)) : onPlay()))
+            startTransition(() =>
+              void (
+                isPlaying
+                  ? onPause(Math.round((audioRef.current?.currentTime ?? 0) * 1000))
+                  : onPlay()
+              )
+            )
           }
           title={isPlaying ? "暂停" : "播放"}
         >
@@ -130,15 +161,11 @@ export function BottomPlayer({
         </button>
       </div>
 
-      {/* Progress bar */}
       <div className="bp-progress-area">
         <span className="bp-time">{formatDuration(effectiveProgressMs)}</span>
         <div className="progress-shell bp-progress-shell">
           <div className="progress-track-gray" />
-          <div
-            className="progress-fill"
-            style={{ width: `${progressRatio * 100}%` }}
-          />
+          <div className="progress-fill" style={{ width: `${progressRatio * 100}%` }} />
         </div>
         <input
           type="range"
@@ -165,17 +192,18 @@ export function BottomPlayer({
         <span className="bp-time">{formatDuration(currentTrackDuration)}</span>
       </div>
 
-      {/* Status notes */}
       <div className="bp-status">
-        {!canControlPlayback && roomSnapshot && (
-          <span className="bp-note">仅房主可控制播放</span>
-        )}
-        {!uploadedTracks[currentTrack?.id ?? ""] && currentTrack && (
-          <span className="bp-note">本地无文件 · P2P传输中</span>
-        )}
-        {!uploadedTracks[currentTrack?.id ?? ""] && currentTrackAvailability ? (
+        {!canControlPlayback && roomSnapshot ? <span className="bp-note">{mediaStatusLabel}</span> : null}
+        {canControlPlayback ? (
+          <span className="bp-note">正在向 {mediaConnectedPeersCount} 位成员发送音频</span>
+        ) : null}
+        {!canControlPlayback && !localTrackAvailable && currentTrack ? (
+          <span className="bp-note">成员端优先收听房主直播音频</span>
+        ) : null}
+        {!localTrackAvailable && currentTrackAvailability ? (
           <span className="bp-note">
-            缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0} 分片
+            缓存 {currentTrackAvailability.localChunkCount}/
+            {currentTrackAvailability.totalChunks || 0} 分片
           </span>
         ) : null}
         <label className="bp-volume" aria-label="音量">
@@ -196,7 +224,7 @@ export function BottomPlayer({
         className="player-audio hidden"
         onEnded={() => void onEnded()}
         onTimeUpdate={syncProgressFromAudio}
-        onLoadedMetadata={(event) => {
+        onLoadedMetadata={() => {
           syncDurationFromAudio();
           syncProgressFromAudio();
         }}
@@ -206,7 +234,18 @@ export function BottomPlayer({
         onSeeked={syncProgressFromAudio}
       />
 
-      {isPending ? <div className="pending-indicator">正在同步房间状态...</div> : null}
+      <audio
+        ref={remoteAudioRef}
+        className="player-audio hidden"
+        autoPlay
+        playsInline
+        onPlaying={onRemotePlaying}
+        onWaiting={onRemoteWaiting}
+        onPause={onRemotePause}
+        onError={onRemoteError}
+      />
+
+      {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
     </footer>
   );
 }

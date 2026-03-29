@@ -124,7 +124,7 @@ describe("P2PMesh", () => {
     });
 
     await mesh.syncPeers(["peer_b"]);
-    expect(mesh.requestPiece("peer_b", "track_1", 0, 1000)).toBe(true);
+    expect(mesh.requestPiece("peer_b", "track_1", 0, undefined, 1000)).toBe(true);
 
     mesh.destroy();
     await vi.advanceTimersByTimeAsync(1200);
@@ -140,7 +140,7 @@ describe("P2PMesh", () => {
     });
 
     await mesh.syncPeers(["peer_b"]);
-    expect(mesh.requestPiece("peer_b", "track_1", 0, 1000)).toBe(true);
+    expect(mesh.requestPiece("peer_b", "track_1", 0, undefined, 1000)).toBe(true);
 
     await mesh.syncPeers([]);
     await vi.advanceTimersByTimeAsync(1200);

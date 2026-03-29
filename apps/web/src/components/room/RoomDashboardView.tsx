@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type {
   GuestSession,
   Playlist,
+  RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
   TrackMeta
@@ -27,6 +28,8 @@ type RoomDashboardViewProps = {
   canDeleteRoom: boolean;
   uploadedTracks: Record<string, { objectUrl: string }>;
   connectedPeersCount: number;
+  mediaConnectionState: RoomMediaConnectionState;
+  mediaConnectedPeersCount: number;
   cachedTrackCount: number;
   playlists: Playlist[];
   availabilitySummary: AvailabilityEntry[];
@@ -54,6 +57,8 @@ export function RoomDashboardView({
   canDeleteRoom,
   uploadedTracks,
   connectedPeersCount,
+  mediaConnectionState,
+  mediaConnectedPeersCount,
   cachedTrackCount,
   playlists,
   availabilitySummary,
@@ -81,6 +86,8 @@ export function RoomDashboardView({
         activeSession={activeSession}
         host={host}
         canDeleteRoom={canDeleteRoom}
+        mediaConnectionState={mediaConnectionState}
+        mediaConnectedPeersCount={mediaConnectedPeersCount}
         onCopyJoinCode={onCopyJoinCode}
         onLeaveRoom={onLeaveRoom}
         onDeleteRoom={onDeleteRoom}

@@ -33,6 +33,7 @@ type PeerEntry = {
 
 type PendingPieceRequest = {
   peerId: string;
+  expectedTotalChunks?: number;
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
@@ -66,7 +67,7 @@ export class P2PMesh {
   }
 
   async handleSignal(payload: PeerSignalMessage) {
-    if (payload.toPeerId !== this.localPeerId) {
+    if (payload.channelKind !== "data" || payload.toPeerId !== this.localPeerId) {
       return;
     }
 
@@ -87,6 +88,7 @@ export class P2PMesh {
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
         toPeerId: payload.fromPeerId,
+        channelKind: "data",
         type: "answer",
         payload: answer as unknown as Record<string, unknown>
       });
@@ -113,7 +115,13 @@ export class P2PMesh {
     }
   }
 
-  requestPiece(peerId: string, trackId: string, chunkIndex: number, timeoutMs = 6000) {
+  requestPiece(
+    peerId: string,
+    trackId: string,
+    chunkIndex: number,
+    expectedTotalChunks?: number,
+    timeoutMs = 6000
+  ) {
     const entry = this.peers.get(peerId);
     if (!entry?.channel || entry.channel.readyState !== "open") {
       return false;
@@ -138,7 +146,7 @@ export class P2PMesh {
         peerId
       });
     }, timeoutMs);
-    this.pendingPieceRequests.set(requestKey, { peerId, timeoutId });
+    this.pendingPieceRequests.set(requestKey, { peerId, expectedTotalChunks, timeoutId });
     return true;
   }
 
@@ -192,6 +200,7 @@ export class P2PMesh {
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
         toPeerId: peerId,
+        channelKind: "data",
         type: "candidate",
         payload: event.candidate.toJSON() as unknown as Record<string, unknown>
       });
@@ -219,6 +228,7 @@ export class P2PMesh {
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
         toPeerId: peerId,
+        channelKind: "data",
         type: "offer",
         payload: offer as unknown as Record<string, unknown>
       });
@@ -298,7 +308,7 @@ export class P2PMesh {
         this.callbacks.onPieceReceived({
           trackId: message.trackId,
           chunkIndex: message.chunkIndex,
-          totalChunks: message.totalChunks,
+          totalChunks: pendingRequest?.expectedTotalChunks ?? message.totalChunks,
           mimeType: message.mimeType
         });
       }

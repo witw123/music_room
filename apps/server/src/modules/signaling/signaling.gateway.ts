@@ -40,6 +40,10 @@ function getCorsOrigins() {
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly instanceId = randomUUID();
   private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
+  private readonly availabilityByRoom = new Map<
+    string,
+    Map<string, TrackAvailabilityAnnouncement>
+  >();
 
   constructor(
     private readonly redisService: RedisService,
@@ -60,6 +64,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   emitRoomMissing(roomId: string) {
+    this.availabilityByRoom.delete(roomId);
     this.server.to(roomId).emit("room.snapshot.missing", { roomId });
     void this.redisService.publish(roomSnapshotMissingChannel, {
       sourceId: this.instanceId,
@@ -101,6 +106,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return;
       }
 
+      this.availabilityByRoom.delete(message.roomId);
       this.server.to(message.roomId).emit("room.snapshot.missing", { roomId: message.roomId });
     });
   }
@@ -132,6 +138,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       throw new WsException("Peer mismatch.");
     }
 
+    const roomAvailability = this.availabilityByRoom.get(payload.roomId) ?? new Map();
+    roomAvailability.set(`${payload.trackId}:${payload.ownerPeerId}`, payload);
+    this.availabilityByRoom.set(payload.roomId, roomAvailability);
     client.to(payload.roomId).emit("piece.availability", payload);
     return payload;
   }
@@ -162,6 +171,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     try {
       await this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId);
       await this.emitLatestSnapshot(payload.roomId, payload.sessionId, client);
+      this.emitAvailabilitySnapshot(payload.roomId, client);
     } catch (error) {
       client.leave(payload.roomId);
       client.data.roomId = undefined;
@@ -183,6 +193,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     if (client.data.sessionId) {
       void this.updatePeerPresence(payload.roomId, client.data.sessionId, null);
     }
+    if (client.data.peerId) {
+      this.clearPeerAvailability(payload.roomId, client.data.peerId);
+    }
     client.data.roomId = undefined;
     client.data.peerId = undefined;
     client.data.isRealtimeAuthenticated = false;
@@ -195,6 +208,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     if (roomId && sessionId) {
       void this.updatePeerPresence(roomId, sessionId, null);
+    }
+    if (roomId && client.data.peerId) {
+      this.clearPeerAvailability(roomId, client.data.peerId as string);
     }
   }
 
@@ -251,6 +267,34 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private assertRealtimeClient(client: Socket, roomId: string) {
     if (!client.data.isRealtimeAuthenticated || client.data.roomId !== roomId) {
       throw new WsException("Unauthorized realtime request.");
+    }
+  }
+
+  private emitAvailabilitySnapshot(roomId: string, client: Socket) {
+    const roomAvailability = this.availabilityByRoom.get(roomId);
+    if (!roomAvailability) {
+      return;
+    }
+
+    for (const announcement of roomAvailability.values()) {
+      client.emit("piece.availability", announcement);
+    }
+  }
+
+  private clearPeerAvailability(roomId: string, peerId: string) {
+    const roomAvailability = this.availabilityByRoom.get(roomId);
+    if (!roomAvailability) {
+      return;
+    }
+
+    for (const [key, announcement] of roomAvailability.entries()) {
+      if (announcement.ownerPeerId === peerId) {
+        roomAvailability.delete(key);
+      }
+    }
+
+    if (roomAvailability.size === 0) {
+      this.availabilityByRoom.delete(roomId);
     }
   }
 }

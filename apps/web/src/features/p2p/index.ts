@@ -1,12 +1,49 @@
-import type { TrackAvailabilityAnnouncement } from "@music-room/shared";
+import {
+  iceServerConfigSchema,
+  type IceServerConfig,
+  type TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import { cacheTrackPieces, getCachedPieceIndexes } from "@/lib/indexeddb";
 
 export const p2pFeatureBoundary =
   "P2P feature owns peer connectivity, chunk transfer, cache indexing, and source selection.";
 
 export * from "./mesh";
+export * from "./media-mesh";
 
 export const defaultChunkSize = 512 * 1024;
+
+export function getWebRTCIceServers(): IceServerConfig[] {
+  const rawJson = process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS;
+
+  if (rawJson) {
+    try {
+      const parsed = JSON.parse(rawJson) as unknown;
+      const result = iceServerConfigSchema.array().safeParse(parsed);
+      if (result.success && result.data.length > 0) {
+        return result.data;
+      }
+    } catch {
+      // Fallback to simple envs below.
+    }
+  }
+
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL?.trim();
+  const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME?.trim();
+  const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL?.trim();
+  const stunUrl = process.env.NEXT_PUBLIC_STUN_URL?.trim() || "stun:stun.l.google.com:19302";
+
+  const servers: IceServerConfig[] = [{ urls: stunUrl }];
+  if (turnUrl) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUsername || undefined,
+      credential: turnCredential || undefined
+    });
+  }
+
+  return servers;
+}
 
 export function getMissingChunkIndexes(
   totalChunks: number,

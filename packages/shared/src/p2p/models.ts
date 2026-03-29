@@ -1,5 +1,20 @@
 import { z } from "zod";
 
+export const iceServerConfigSchema = z.object({
+  urls: z.union([z.string(), z.array(z.string())]),
+  username: z.string().optional(),
+  credential: z.string().optional()
+});
+
+export const roomMediaConnectionStateSchema = z.enum([
+  "idle",
+  "connecting",
+  "buffering",
+  "live",
+  "reconnecting",
+  "failed"
+]);
+
 export const trackPieceInfoSchema = z.object({
   id: z.string(),
   trackId: z.string(),
@@ -31,6 +46,7 @@ export const peerSignalMessageSchema = z.object({
   roomId: z.string(),
   fromPeerId: z.string(),
   toPeerId: z.string(),
+  channelKind: z.enum(["data", "media"]),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
 });
@@ -57,3 +73,5 @@ export type TrackAvailability = z.infer<typeof trackAvailabilitySchema>;
 export type TrackAvailabilityAnnouncement = z.infer<typeof trackAvailabilityAnnouncementSchema>;
 export type PeerSignalMessage = z.infer<typeof peerSignalMessageSchema>;
 export type P2PDataMessage = z.infer<typeof p2pDataMessageSchema>;
+export type IceServerConfig = z.infer<typeof iceServerConfigSchema>;
+export type RoomMediaConnectionState = z.infer<typeof roomMediaConnectionStateSchema>;

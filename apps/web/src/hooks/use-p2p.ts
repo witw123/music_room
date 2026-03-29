@@ -178,7 +178,8 @@ export function useP2P({
         const didRequest = meshRef.current?.requestPiece(
           preferredSource.ownerPeerId,
           plan.track.id,
-          chunkIndex
+          chunkIndex,
+          totalChunks
         );
 
         if (didRequest) {
