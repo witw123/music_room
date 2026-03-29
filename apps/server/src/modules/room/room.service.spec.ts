@@ -311,7 +311,7 @@ describe("RoomService", () => {
     });
   });
 
-  it("only lists public rooms that currently have non-host members", async () => {
+  it("lists public rooms whenever the room still has members", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -321,12 +321,15 @@ describe("RoomService", () => {
     const member = await authService.createGuestSession("Member");
     const snapshot = await roomService.createRoom(host.id);
 
-    await expect(roomService.listPublicRooms()).resolves.toEqual([]);
+    await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
     await roomService.leaveRoom(snapshot.room.id, member.id);
+    await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
+
+    await roomService.leaveRoom(snapshot.room.id, host.id);
     await expect(roomService.listPublicRooms()).resolves.toEqual([]);
   });
 
