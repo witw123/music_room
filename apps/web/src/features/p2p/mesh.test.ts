@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { P2PMesh } from "./mesh";
 import { getMissingChunkIndexes, summarizeTrackAvailability } from "./index";
 
 describe("p2p feature helpers", () => {
@@ -42,5 +43,108 @@ describe("p2p feature helpers", () => {
       "Host (live_upload)",
       "Guest (local_cache)"
     ]);
+  });
+});
+
+class FakeDataChannel {
+  readyState: RTCDataChannelState = "open";
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onclose: (() => void) | null = null;
+  sentMessages: string[] = [];
+
+  send(payload: string) {
+    this.sentMessages.push(payload);
+  }
+
+  close() {
+    this.readyState = "closed";
+    this.onclose?.();
+  }
+}
+
+class FakeRTCPeerConnection {
+  connectionState: RTCPeerConnectionState = "connected";
+  onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null = null;
+  onconnectionstatechange: (() => void) | null = null;
+  ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
+  channel = new FakeDataChannel();
+
+  createDataChannel() {
+    return this.channel as unknown as RTCDataChannel;
+  }
+
+  async createOffer() {
+    return { type: "offer" as const, sdp: "fake-offer" };
+  }
+
+  async setLocalDescription() {
+    return undefined;
+  }
+
+  async createAnswer() {
+    return { type: "answer" as const, sdp: "fake-answer" };
+  }
+
+  async setRemoteDescription() {
+    return undefined;
+  }
+
+  async addIceCandidate() {
+    return undefined;
+  }
+
+  close() {
+    this.connectionState = "closed";
+  }
+}
+
+vi.mock("@/lib/indexeddb", () => ({
+  cacheTrackPieces: vi.fn(),
+  getCachedPiece: vi.fn(),
+  getCachedPieceIndexes: vi.fn(async () => [])
+}));
+
+describe("P2PMesh", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("clears pending piece timeouts when the mesh is destroyed", async () => {
+    const onPieceRequestTimeout = vi.fn();
+    const sendSignal = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", sendSignal, {
+      onPieceReceived: vi.fn(),
+      onPieceRequestTimeout
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    expect(mesh.requestPiece("peer_b", "track_1", 0, 1000)).toBe(true);
+
+    mesh.destroy();
+    await vi.advanceTimersByTimeAsync(1200);
+
+    expect(onPieceRequestTimeout).not.toHaveBeenCalled();
+  });
+
+  it("clears pending piece timeouts when a peer is removed", async () => {
+    const onPieceRequestTimeout = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn(),
+      onPieceRequestTimeout
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    expect(mesh.requestPiece("peer_b", "track_1", 0, 1000)).toBe(true);
+
+    await mesh.syncPeers([]);
+    await vi.advanceTimersByTimeAsync(1200);
+
+    expect(onPieceRequestTimeout).not.toHaveBeenCalled();
   });
 });

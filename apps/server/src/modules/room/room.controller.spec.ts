@@ -33,6 +33,12 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
 }
 
 describe("RoomController", () => {
+  function createAuthServiceMock() {
+    return {
+      assertSessionToken: jest.fn().mockResolvedValue(undefined)
+    };
+  }
+
   it("returns the recent room snapshot for a session", async () => {
     const snapshot = buildSnapshot();
     const roomService = {
@@ -41,9 +47,15 @@ describe("RoomController", () => {
     const signalingGateway = {
       emitRoomSnapshot: jest.fn()
     };
-    const controller = new RoomController(roomService as never, signalingGateway as never);
+    const authService = createAuthServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never
+    );
 
-    await expect(controller.getRecentRoom("guest_host")).resolves.toEqual(snapshot);
+    await expect(controller.getRecentRoom("token", "guest_host")).resolves.toEqual(snapshot);
+    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
     expect(roomService.getRecentRoomSnapshotForSession).toHaveBeenCalledWith("guest_host");
   });
 
@@ -55,9 +67,15 @@ describe("RoomController", () => {
     const signalingGateway = {
       emitRoomSnapshot: jest.fn()
     };
-    const controller = new RoomController(roomService as never, signalingGateway as never);
+    const authService = createAuthServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never
+    );
 
-    await expect(controller.recoverRoom("room_1", "guest_host")).resolves.toEqual(snapshot);
+    await expect(controller.recoverRoom("room_1", "token", "guest_host")).resolves.toEqual(snapshot);
+    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
     expect(roomService.getRecoverableRoomSnapshot).toHaveBeenCalledWith("room_1", "guest_host");
   });
 
@@ -70,11 +88,17 @@ describe("RoomController", () => {
     const signalingGateway = {
       emitRoomSnapshot: jest.fn()
     };
-    const controller = new RoomController(roomService as never, signalingGateway as never);
+    const authService = createAuthServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never
+    );
 
-    const result = await controller.leaveRoom("room_1", { sessionId: "guest_host" });
+    const result = await controller.leaveRoom("room_1", "token", { sessionId: "guest_host" });
 
     expect(result).toEqual(emptyRoom);
+    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
     expect(roomService.getRoomSnapshot).not.toHaveBeenCalled();
     expect(signalingGateway.emitRoomSnapshot).not.toHaveBeenCalled();
   });
@@ -89,14 +113,20 @@ describe("RoomController", () => {
     const signalingGateway = {
       emitRoomSnapshot: jest.fn()
     };
-    const controller = new RoomController(roomService as never, signalingGateway as never);
+    const authService = createAuthServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never
+    );
 
-    const result = await controller.joinRoomByCode({
+    const result = await controller.joinRoomByCode("token", {
       sessionId: "guest_member",
       joinCode: "abc123"
     });
 
     expect(result).toEqual(snapshot);
+    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_member", "token");
     expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("abc123");
     expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_member");
     expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith(snapshot.room.id, snapshot);

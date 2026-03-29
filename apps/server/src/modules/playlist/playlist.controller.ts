@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UnauthorizedException
+} from "@nestjs/common";
+import { AuthService } from "../auth/auth.service";
 import { SignalingGateway } from "../signaling/signaling.gateway";
 import { RoomService } from "../room/room.service";
 import { PlaylistService } from "./playlist.service";
@@ -8,16 +20,32 @@ export class PlaylistController {
   constructor(
     private readonly playlistService: PlaylistService,
     private readonly roomService: RoomService,
-    private readonly signalingGateway: SignalingGateway
+    private readonly signalingGateway: SignalingGateway,
+    private readonly authService: AuthService
   ) {}
 
+  private async assertSession(sessionId: string, sessionToken?: string) {
+    try {
+      await this.authService.assertSessionToken(sessionId, sessionToken);
+    } catch (error) {
+      throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
+    }
+  }
+
   @Get()
-  async listPlaylists(@Query("ownerId") ownerId?: string) {
+  async listPlaylists(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Query("ownerId") ownerId?: string
+  ) {
+    if (ownerId) {
+      await this.assertSession(ownerId, sessionToken);
+    }
     return this.playlistService.listPlaylists(ownerId);
   }
 
   @Post()
   async createPlaylist(
+    @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
       ownerId: string;
@@ -29,12 +57,14 @@ export class PlaylistController {
       isCollaborative?: boolean;
     }
   ) {
+    await this.assertSession(body.ownerId, sessionToken);
     return this.playlistService.createPlaylist(body);
   }
 
   @Patch(":playlistId")
   async updatePlaylist(
     @Param("playlistId") playlistId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
       ownerId: string;
@@ -45,27 +75,32 @@ export class PlaylistController {
       trackIds?: string[];
     }
   ) {
+    await this.assertSession(body.ownerId, sessionToken);
     return this.playlistService.updatePlaylist(playlistId, body);
   }
 
   @Delete(":playlistId")
   async deletePlaylist(
     @Param("playlistId") playlistId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
     @Query("ownerId") ownerId: string
   ) {
+    await this.assertSession(ownerId, sessionToken);
     return this.playlistService.deletePlaylist(playlistId, ownerId);
   }
 
   @Post(":playlistId/import-to-room")
   async importPlaylistToRoom(
     @Param("playlistId") playlistId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
       roomId: string;
       sessionId: string;
     }
   ) {
-    const playlist = await this.playlistService.getPlaylist(playlistId);
+    await this.assertSession(body.sessionId, sessionToken);
+    const playlist = await this.playlistService.getPlaylistForOwner(playlistId, body.sessionId);
     await this.roomService.importPlaylistToQueue(body.roomId, body.sessionId, playlist.trackIds);
     this.signalingGateway.emitRoomSnapshot(
       body.roomId,
@@ -79,6 +114,7 @@ export class PlaylistController {
 
   @Post("from-room")
   async createPlaylistFromRoom(
+    @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
       ownerId: string;
@@ -87,6 +123,7 @@ export class PlaylistController {
       description?: string | null;
     }
   ) {
+    await this.assertSession(body.ownerId, sessionToken);
     const playlist = await this.playlistService.createPlaylistFromRoom(body);
     this.signalingGateway.emitRoomSnapshot(
       body.roomId,

@@ -4,6 +4,7 @@ import Redis from "ioredis";
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
+  private readonly messageHandlers = new Map<string, Set<(payload: unknown) => void>>();
   readonly client = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
     lazyConnect: true,
     maxRetriesPerRequest: 1
@@ -12,13 +13,30 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     lazyConnect: true,
     maxRetriesPerRequest: 1
   });
+  private readonly handleSubscriberMessage = (messageChannel: string, message: string) => {
+    const handlers = this.messageHandlers.get(messageChannel);
+    if (!handlers?.size) {
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(message) as unknown;
+      handlers.forEach((handler) => handler(payload));
+    } catch (error) {
+      this.logger.warn(`Failed to parse redis message on ${messageChannel}: ${String(error)}`);
+    }
+  };
 
   async onModuleInit() {
     await this.connectSafely(this.client, "publisher");
     await this.connectSafely(this.subscriber, "subscriber");
+    if (this.subscriber.status === "ready") {
+      this.subscriber.on("message", this.handleSubscriberMessage);
+    }
   }
 
   async onModuleDestroy() {
+    this.subscriber.off("message", this.handleSubscriberMessage);
     await Promise.allSettled([this.client.quit(), this.subscriber.quit()]);
   }
 
@@ -116,19 +134,34 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async subscribe(channel: string, handler: (payload: unknown) => void) {
     if (this.subscriber.status !== "ready") {
-      return;
+      return () => undefined;
     }
 
-    await this.subscriber.subscribe(channel);
-    this.subscriber.on("message", (messageChannel, message) => {
-      if (messageChannel !== channel) return;
+    const handlers = this.messageHandlers.get(channel) ?? new Set<(payload: unknown) => void>();
+    const shouldSubscribe = handlers.size === 0;
+    handlers.add(handler);
+    this.messageHandlers.set(channel, handlers);
 
-      try {
-        handler(JSON.parse(message));
-      } catch (error) {
-        this.logger.warn(`Failed to parse redis message on ${channel}: ${String(error)}`);
+    if (shouldSubscribe) {
+      await this.subscriber.subscribe(channel);
+    }
+
+    return async () => {
+      const nextHandlers = this.messageHandlers.get(channel);
+      if (!nextHandlers) {
+        return;
       }
-    });
+
+      nextHandlers.delete(handler);
+      if (nextHandlers.size > 0) {
+        return;
+      }
+
+      this.messageHandlers.delete(channel);
+      if (this.subscriber.status === "ready") {
+        await this.subscriber.unsubscribe(channel);
+      }
+    };
   }
 
   private async connectSafely(client: Redis, label: string) {

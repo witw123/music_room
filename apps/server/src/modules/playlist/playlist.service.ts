@@ -14,9 +14,13 @@ export class PlaylistService {
   ) {}
 
   async listPlaylists(ownerId?: string) {
+    if (!ownerId) {
+      return [];
+    }
+
     if (this.prisma.isAvailable()) {
       const persisted = await this.prisma.playlists.findMany({
-        where: ownerId ? { ownerId } : undefined,
+        where: { ownerId },
         orderBy: { updatedAt: "desc" }
       });
 
@@ -29,9 +33,7 @@ export class PlaylistService {
       right.updatedAt.localeCompare(left.updatedAt)
     );
 
-    return ownerId
-      ? playlists.filter((playlist) => playlist.ownerId === ownerId)
-      : playlists;
+    return playlists.filter((playlist) => playlist.ownerId === ownerId);
   }
 
   async listPlaylistsForRoom(roomId: string) {
@@ -181,6 +183,16 @@ export class PlaylistService {
 
   async getPlaylist(playlistId: string) {
     return this.getPlaylistOrThrow(playlistId);
+  }
+
+  async getPlaylistForOwner(playlistId: string, ownerId: string) {
+    const playlist = await this.getPlaylistOrThrow(playlistId);
+
+    if (playlist.ownerId !== ownerId) {
+      throw new Error("Only the playlist owner can access this playlist.");
+    }
+
+    return playlist;
   }
 
   private deserializePlaylist(item: {

@@ -24,7 +24,7 @@ import {
   pruneCachedTracks
 } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { createRoomSocket } from "@/lib/ws-client";
+import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 
 type UploadedTrack = {
   file: File;
@@ -64,10 +64,11 @@ function toUserFacingError(error: unknown) {
 
 export function MusicRoomApp() {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const socketRef = useRef<ReturnType<typeof createRoomSocket> | null>(null);
+  const socketRef = useRef<RoomSocket | null>(null);
   const meshRef = useRef<P2PMesh | null>(null);
   const requestedPiecesRef = useRef<Map<string, number>>(new Map());
   const failedPiecePeersRef = useRef<Map<string, Set<string>>>(new Map());
+  const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const [isPending, startTransition] = useTransition();
   const [nickname, setNickname] = useState("Host");
   const [session, setSession] = useState<GuestSession | null>(null);
@@ -270,6 +271,29 @@ export function MusicRoomApp() {
     requestedPiecesRef.current.clear();
     failedPiecePeersRef.current.clear();
   }, [roomSnapshot?.room.id, peerId]);
+
+  useEffect(() => {
+    const nextUrls = new Map(
+      Object.entries(uploadedTracks).map(([trackId, upload]) => [trackId, upload.objectUrl])
+    );
+
+    for (const [trackId, objectUrl] of uploadedTrackUrlsRef.current.entries()) {
+      if (nextUrls.get(trackId) !== objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    uploadedTrackUrlsRef.current = nextUrls;
+  }, [uploadedTracks]);
+
+  useEffect(() => {
+    return () => {
+      for (const objectUrl of uploadedTrackUrlsRef.current.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      uploadedTrackUrlsRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!roomSnapshot) {
@@ -1394,10 +1418,27 @@ function readDuration(objectUrl: string) {
   return new Promise<number>((resolve) => {
     const audio = document.createElement("audio");
     audio.src = objectUrl;
-    audio.addEventListener("loadedmetadata", () => {
+
+    const cleanup = () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("error", handleError);
+      audio.pause();
+      audio.src = "";
+      audio.load();
+    };
+
+    const handleLoadedMetadata = () => {
+      cleanup();
       resolve(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
-    });
-    audio.addEventListener("error", () => resolve(0));
+    };
+
+    const handleError = () => {
+      cleanup();
+      resolve(0);
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("error", handleError);
   });
 }
 

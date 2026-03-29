@@ -1,26 +1,42 @@
 import { z } from "zod";
-import { peerSignalMessageSchema, trackAvailabilityAnnouncementSchema } from "../p2p/models";
-import { playbackSnapshotSchema } from "../playback/models";
-import { roomSchema } from "../room/models";
+import {
+  p2pDataMessageSchema,
+  peerSignalMessageSchema,
+  trackAvailabilityAnnouncementSchema
+} from "../p2p/models";
+import { roomSnapshotSchema } from "../room/models";
 
 export const websocketEventSchema = z.union([
-  z.literal("room.join"),
+  z.literal("room.subscribe"),
+  z.literal("room.unsubscribe"),
   z.literal("room.snapshot"),
-  z.literal("queue.update"),
-  z.literal("playback.update"),
-  z.literal("track.announce"),
+  z.literal("room.snapshot.missing"),
   z.literal("piece.availability"),
   z.literal("peer.signal")
 ]);
 
-export const roomSnapshotMessageSchema = z.object({
-  event: z.literal("room.snapshot"),
-  payload: roomSchema
+export const roomSubscribePayloadSchema = z.object({
+  roomId: z.string(),
+  sessionId: z.string().optional(),
+  peerId: z.string().optional()
 });
 
-export const playbackUpdateMessageSchema = z.object({
-  event: z.literal("playback.update"),
-  payload: playbackSnapshotSchema
+export const roomUnsubscribePayloadSchema = z.object({
+  roomId: z.string()
+});
+
+export const roomSnapshotMissingPayloadSchema = z.object({
+  roomId: z.string()
+});
+
+export const roomSnapshotEventSchema = z.object({
+  event: z.literal("room.snapshot"),
+  payload: roomSnapshotSchema
+});
+
+export const roomSnapshotMissingEventSchema = z.object({
+  event: z.literal("room.snapshot.missing"),
+  payload: roomSnapshotMissingPayloadSchema
 });
 
 export const peerSignalEventSchema = z.object({
@@ -34,3 +50,23 @@ export const pieceAvailabilityEventSchema = z.object({
 });
 
 export type WebsocketEvent = z.infer<typeof websocketEventSchema>;
+export type RoomSubscribePayload = z.infer<typeof roomSubscribePayloadSchema>;
+export type RoomUnsubscribePayload = z.infer<typeof roomUnsubscribePayloadSchema>;
+export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPayloadSchema>;
+export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
+
+export type ServerToClientEvents = {
+  "room.snapshot": (snapshot: z.infer<typeof roomSnapshotSchema>) => void;
+  "room.snapshot.missing": (payload: RoomSnapshotMissingPayload) => void;
+  "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
+  "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
+  connect: () => void;
+  disconnect: () => void;
+};
+
+export type ClientToServerEvents = {
+  "room.subscribe": (payload: RoomSubscribePayload) => void;
+  "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
+  "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
+  "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
+};

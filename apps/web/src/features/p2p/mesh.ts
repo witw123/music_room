@@ -1,4 +1,8 @@
-import type { P2PDataMessage, PeerSignalMessage } from "@music-room/shared";
+import {
+  p2pDataMessageSchema,
+  type P2PDataMessage,
+  type PeerSignalMessage
+} from "@music-room/shared";
 import { cacheTrackPieces, getCachedPiece, getCachedPieceIndexes } from "@/lib/indexeddb";
 import { validateTrackPiecePayload } from "./index";
 
@@ -25,9 +29,14 @@ type PeerEntry = {
   channel: RTCDataChannel | null;
 };
 
+type PendingPieceRequest = {
+  peerId: string;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
+
 export class P2PMesh {
   private readonly peers = new Map<string, PeerEntry>();
-  private readonly pendingPieceRequests = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly pendingPieceRequests = new Map<string, PendingPieceRequest>();
 
   constructor(
     private readonly roomId: string,
@@ -48,9 +57,7 @@ export class P2PMesh {
 
     for (const [peerId, entry] of this.peers.entries()) {
       if (!nextPeers.has(peerId)) {
-        entry.channel?.close();
-        entry.connection.close();
-        this.peers.delete(peerId);
+        this.releasePeer(peerId, entry);
       }
     }
   }
@@ -63,9 +70,12 @@ export class P2PMesh {
     const entry = await this.ensurePeer(payload.fromPeerId, false);
 
     if (payload.type === "offer") {
-      await entry.connection.setRemoteDescription(
-        payload.payload as unknown as RTCSessionDescriptionInit
-      );
+      const remoteDescription = toSessionDescriptionInit(payload.payload);
+      if (!remoteDescription) {
+        return;
+      }
+
+      await entry.connection.setRemoteDescription(remoteDescription);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
       this.sendSignal({
@@ -79,14 +89,22 @@ export class P2PMesh {
     }
 
     if (payload.type === "answer") {
-      await entry.connection.setRemoteDescription(
-        payload.payload as unknown as RTCSessionDescriptionInit
-      );
+      const remoteDescription = toSessionDescriptionInit(payload.payload);
+      if (!remoteDescription) {
+        return;
+      }
+
+      await entry.connection.setRemoteDescription(remoteDescription);
       return;
     }
 
     if (payload.type === "candidate") {
-      await entry.connection.addIceCandidate(payload.payload as RTCIceCandidateInit);
+      const candidate = toIceCandidateInit(payload.payload);
+      if (!candidate) {
+        return;
+      }
+
+      await entry.connection.addIceCandidate(candidate);
     }
   }
 
@@ -115,7 +133,7 @@ export class P2PMesh {
         peerId
       });
     }, timeoutMs);
-    this.pendingPieceRequests.set(requestKey, timeoutId);
+    this.pendingPieceRequests.set(requestKey, { peerId, timeoutId });
     return true;
   }
 
@@ -126,14 +144,13 @@ export class P2PMesh {
   }
 
   destroy() {
-    for (const timeoutId of this.pendingPieceRequests.values()) {
-      clearTimeout(timeoutId);
+    for (const pendingRequest of this.pendingPieceRequests.values()) {
+      clearTimeout(pendingRequest.timeoutId);
     }
     this.pendingPieceRequests.clear();
 
-    for (const entry of this.peers.values()) {
-      entry.channel?.close();
-      entry.connection.close();
+    for (const [peerId, entry] of this.peers.entries()) {
+      this.releasePeer(peerId, entry);
     }
     this.peers.clear();
   }
@@ -199,7 +216,20 @@ export class P2PMesh {
 
   private bindChannel(peerId: string, channel: RTCDataChannel) {
     channel.onmessage = async (event) => {
-      const message = JSON.parse(String(event.data)) as P2PDataMessage;
+      let parsedMessage: unknown;
+
+      try {
+        parsedMessage = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+
+      const result = p2pDataMessageSchema.safeParse(parsedMessage);
+      if (!result.success) {
+        return;
+      }
+
+      const message: P2PDataMessage = result.data;
 
       if (message.kind === "request-piece") {
         const piece = await getCachedPiece(message.trackId, this.localPeerId, message.chunkIndex);
@@ -223,9 +253,9 @@ export class P2PMesh {
 
       if (message.kind === "send-piece") {
         const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
-        const timeoutId = this.pendingPieceRequests.get(requestKey);
-        if (timeoutId) {
-          clearTimeout(timeoutId);
+        const pendingRequest = this.pendingPieceRequests.get(requestKey);
+        if (pendingRequest) {
+          clearTimeout(pendingRequest.timeoutId);
           this.pendingPieceRequests.delete(requestKey);
         }
 
@@ -261,11 +291,30 @@ export class P2PMesh {
     };
 
     channel.onclose = () => {
+      this.clearPendingRequestsForPeer(peerId);
       this.callbacks.onPeerConnectionChange?.({
         peerId,
         state: "closed"
       });
     };
+  }
+
+  private releasePeer(peerId: string, entry: PeerEntry) {
+    this.clearPendingRequestsForPeer(peerId);
+    entry.channel?.close();
+    entry.connection.close();
+    this.peers.delete(peerId);
+  }
+
+  private clearPendingRequestsForPeer(peerId: string) {
+    for (const [requestKey, pendingRequest] of this.pendingPieceRequests.entries()) {
+      if (pendingRequest.peerId !== peerId) {
+        continue;
+      }
+
+      clearTimeout(pendingRequest.timeoutId);
+      this.pendingPieceRequests.delete(requestKey);
+    }
   }
 
   private buildRequestKey(trackId: string, chunkIndex: number) {
@@ -293,4 +342,30 @@ function base64ToArrayBuffer(base64: string) {
   }
 
   return bytes.buffer;
+}
+
+function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {
+  if (typeof payload.type !== "string") {
+    return null;
+  }
+
+  return {
+    type: payload.type as RTCSdpType,
+    sdp: typeof payload.sdp === "string" ? payload.sdp : undefined
+  };
+}
+
+function toIceCandidateInit(payload: Record<string, unknown>): RTCIceCandidateInit | null {
+  if (typeof payload.candidate !== "string") {
+    return null;
+  }
+
+  return {
+    candidate: payload.candidate,
+    sdpMid: typeof payload.sdpMid === "string" ? payload.sdpMid : undefined,
+    sdpMLineIndex:
+      typeof payload.sdpMLineIndex === "number" ? payload.sdpMLineIndex : undefined,
+    usernameFragment:
+      typeof payload.usernameFragment === "string" ? payload.usernameFragment : undefined
+  };
 }

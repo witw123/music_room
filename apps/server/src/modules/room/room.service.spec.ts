@@ -204,6 +204,18 @@ describe("RoomService", () => {
     expect(redis.setString).toHaveBeenCalled();
   });
 
+  it("creates a six-character uppercase join code", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+    const host = await authService.createGuestSession("Host");
+
+    const snapshot = await roomService.createRoom(host.id);
+
+    expect(snapshot.room.joinCode).toMatch(/^[A-Z0-9]{6}$/);
+  });
+
   it("lists rooms from the redis registry when memory state is empty", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

@@ -1,3 +1,4 @@
+import { OnModuleDestroy } from "@nestjs/common";
 import {
   ConnectedSocket,
   OnGatewayDisconnect,
@@ -19,13 +20,23 @@ import { RedisService } from "../../infra/redis/redis.service";
 import { RoomService } from "../room/room.service";
 
 const roomSnapshotChannel = "music-room:room-snapshot";
+const defaultCorsOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
+
+function getCorsOrigins() {
+  const configuredOrigins = process.env.CORS_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return configuredOrigins?.length ? configuredOrigins : defaultCorsOrigins;
+}
 
 @WebSocketGateway({
   namespace: "/ws",
-  cors: { origin: "*" }
+  cors: { origin: getCorsOrigins(), credentials: true }
 })
-export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly instanceId = randomUUID();
+  private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
 
   constructor(
     private readonly redisService: RedisService,
@@ -45,24 +56,32 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect {
   }
 
   afterInit() {
-    void this.redisService.subscribe(roomSnapshotChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        snapshot?: RoomSnapshot;
-      };
+    void this.redisService
+      .subscribe(roomSnapshotChannel, (payload) => {
+        const message = payload as {
+          sourceId?: string;
+          roomId?: string;
+          snapshot?: RoomSnapshot;
+        };
 
-      if (
-        !message.roomId ||
-        !message.snapshot ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+        if (
+          !message.roomId ||
+          !message.snapshot ||
+          !message.sourceId ||
+          message.sourceId === this.instanceId
+        ) {
+          return;
+        }
 
-      this.server.to(message.roomId).emit("room.snapshot", message.snapshot);
-    });
+        this.server.to(message.roomId).emit("room.snapshot", message.snapshot);
+      })
+      .then((unsubscribe) => {
+        this.unsubscribeRoomSnapshots = unsubscribe;
+      });
+  }
+
+  onModuleDestroy() {
+    void this.unsubscribeRoomSnapshots?.();
   }
 
   @SubscribeMessage("peer.signal")

@@ -1,4 +1,12 @@
-import { Body, Controller, Param, Patch } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Headers,
+  Param,
+  Patch,
+  UnauthorizedException
+} from "@nestjs/common";
+import { AuthService } from "../auth/auth.service";
 import { RoomService } from "../room/room.service";
 import { SignalingGateway } from "../signaling/signaling.gateway";
 
@@ -6,12 +14,22 @@ import { SignalingGateway } from "../signaling/signaling.gateway";
 export class PlaybackController {
   constructor(
     private readonly roomService: RoomService,
-    private readonly signalingGateway: SignalingGateway
+    private readonly signalingGateway: SignalingGateway,
+    private readonly authService: AuthService
   ) {}
+
+  private async assertSession(sessionId: string, sessionToken?: string) {
+    try {
+      await this.authService.assertSessionToken(sessionId, sessionToken);
+    } catch (error) {
+      throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
+    }
+  }
 
   @Patch()
   async updatePlayback(
     @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
       action: "play" | "pause" | "seek" | "next";
@@ -20,6 +38,9 @@ export class PlaybackController {
       sessionId?: string;
     }
   ) {
+    if (body.sessionId) {
+      await this.assertSession(body.sessionId, sessionToken);
+    }
     const playback = await this.roomService.updatePlayback(roomId, {
       ...body,
       actorSessionId: body.sessionId

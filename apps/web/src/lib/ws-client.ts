@@ -1,4 +1,5 @@
-import { io } from "socket.io-client";
+import type { ClientToServerEvents, ServerToClientEvents } from "@music-room/shared";
+import { io, type Socket } from "socket.io-client";
 
 export const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001/ws";
 
@@ -9,5 +10,7 @@ export function createRoomSocket() {
     reconnectionAttempts: Infinity,
     reconnectionDelay: 800,
     reconnectionDelayMax: 4000
-  });
+  }) as RoomSocket;
 }
+
+export type RoomSocket = Socket<ServerToClientEvents, ClientToServerEvents>;

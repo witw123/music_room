@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type {
   GuestSession,
   PlaybackSnapshot,
@@ -391,7 +391,13 @@ export class RoomService {
   }
 
   private buildJoinCode() {
-    return Math.random().toString(36).slice(2, 8).toUpperCase();
+    let joinCode = "";
+
+    while (joinCode.length < 6) {
+      joinCode += randomBytes(6).toString("base64url").replace(/[^A-Z0-9]/gi, "");
+    }
+
+    return joinCode.slice(0, 6).toUpperCase();
   }
 
   private buildMember(session: GuestSession, role: RoomMember["role"]): RoomMember {

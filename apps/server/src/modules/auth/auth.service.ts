@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { GuestSession } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 
@@ -13,7 +13,7 @@ export class AuthService {
     const session = {
       id: `guest_${randomUUID()}`,
       nickname: nickname.trim() || "Guest",
-      token: "replace-with-jwt",
+      token: randomBytes(32).toString("base64url"),
       createdAt: new Date().toISOString()
     };
 
@@ -40,6 +40,16 @@ export class AuthService {
 
   getSession(sessionId: string) {
     return this.sessions.get(sessionId);
+  }
+
+  async assertSessionToken(sessionId: string, token?: string) {
+    const session = await this.getSessionOrThrow(sessionId);
+
+    if (!token || session.token !== token) {
+      throw new Error("Invalid session token.");
+    }
+
+    return session;
   }
 
   async getSessionOrThrow(sessionId: string) {

@@ -8,11 +8,33 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 
+const sessionStorageKey = "music-room-session";
+
+function getSessionToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(sessionStorageKey);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const session = JSON.parse(raw) as GuestSession;
+    return session.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(sessionToken ? { "x-session-token": sessionToken } : {}),
       ...(init?.headers ?? {})
     },
     cache: "no-store"
