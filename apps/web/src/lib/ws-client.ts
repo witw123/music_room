@@ -2,9 +2,31 @@ import type { ClientToServerEvents, ServerToClientEvents } from "@music-room/sha
 import { io, type Socket } from "socket.io-client";
 
 export const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001/ws";
+const sessionStorageKey = "music-room-session";
+
+function getSessionToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(sessionStorageKey);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const session = JSON.parse(raw) as { token?: string };
+    return session.token ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function createRoomSocket() {
+  const sessionToken = getSessionToken();
+
   return io(wsBaseUrl, {
+    auth: sessionToken ? { sessionToken } : undefined,
     transports: ["websocket"],
     reconnection: true,
     reconnectionAttempts: Infinity,

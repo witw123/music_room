@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Post } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 
 @Controller("v1/guest-sessions")
@@ -7,6 +7,11 @@ export class AuthController {
 
   @Post()
   async createGuestSession(@Body() body: { nickname?: string }) {
-    return this.authService.createGuestSession(body.nickname ?? "Guest");
+    const nickname = body.nickname?.trim();
+    if (!nickname) {
+      throw new BadRequestException("Nickname is required.");
+    }
+
+    return this.authService.createGuestSession(nickname);
   }
 }

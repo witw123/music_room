@@ -28,8 +28,8 @@ function getSessionToken() {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit, retryWithoutSession = false): Promise<T> {
-  const sessionToken = retryWithoutSession ? null : getSessionToken();
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
@@ -42,10 +42,8 @@ async function request<T>(path: string, init?: RequestInit, retryWithoutSession 
 
   if (!response.ok) {
     const message = await response.text();
-    // 401 = session 失效，清除本地存储，并自动重试一次（不使用旧 token）
-    if (response.status === 401 && !retryWithoutSession) {
+    if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem(sessionStorageKey);
-      return request(path, init, true);
     }
     throw new Error(message || `Request failed: ${response.status}`);
   }
@@ -65,7 +63,9 @@ export const musicRoomApi = {
       body: JSON.stringify({ sessionId, visibility })
     }),
   getRecentRoom: (sessionId: string) =>
-    request<RoomSnapshot | null>(`/v1/rooms/recent/active?sessionId=${encodeURIComponent(sessionId)}`),
+    request<RoomSnapshot | null>(
+      `/v1/rooms/recent/active?sessionId=${encodeURIComponent(sessionId)}`
+    ),
   recoverRoom: (roomId: string, sessionId: string) =>
     request<RoomSnapshot | null>(
       `/v1/rooms/${roomId}/recover?sessionId=${encodeURIComponent(sessionId)}`
@@ -79,11 +79,20 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify({ sessionId, joinCode })
     }),
-  getRoom: (roomId: string) => request<RoomSnapshot>(`/v1/rooms/${roomId}`),
+  getRoom: (roomId: string, sessionId?: string) =>
+    request<RoomSnapshot>(
+      sessionId
+        ? `/v1/rooms/${roomId}?sessionId=${encodeURIComponent(sessionId)}`
+        : `/v1/rooms/${roomId}`
+    ),
   leaveRoom: (roomId: string, sessionId: string) =>
     request(`/v1/rooms/${roomId}/leave`, {
       method: "POST",
       body: JSON.stringify({ sessionId })
+    }),
+  deleteRoom: (roomId: string, sessionId: string) =>
+    request<{ ok: boolean }>(`/v1/rooms/${roomId}?sessionId=${encodeURIComponent(sessionId)}`, {
+      method: "DELETE"
     }),
   registerTrack: (roomId: string, payload: object) =>
     request<TrackMeta>(`/v1/rooms/${roomId}/tracks`, {

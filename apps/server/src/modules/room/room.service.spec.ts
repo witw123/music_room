@@ -252,4 +252,40 @@ describe("RoomService", () => {
       room: { id: snapshot.room.id }
     });
   });
+
+  it("rejects joining a room with a duplicate nickname", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const duplicate = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await expect(roomService.joinRoom(snapshot.room.id, duplicate.id)).rejects.toThrow(
+      "Nickname already exists in this room."
+    );
+  });
+
+  it("allows the host to delete a room and blocks non-host members", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    await expect(roomService.deleteRoom(snapshot.room.id, member.id)).rejects.toThrow(
+      "Only the host can delete this room."
+    );
+
+    await expect(roomService.deleteRoom(snapshot.room.id, host.id)).resolves.toEqual({ ok: true });
+    await expect(roomService.getRoomSnapshot(snapshot.room.id, [])).rejects.toThrow(
+      `Room not found: ${snapshot.room.id}`
+    );
+  });
 });

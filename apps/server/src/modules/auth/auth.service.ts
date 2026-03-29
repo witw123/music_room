@@ -10,9 +10,14 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createGuestSession(nickname: string): Promise<GuestSession> {
+    const trimmedNickname = nickname.trim();
+    if (!trimmedNickname) {
+      throw new Error("Nickname is required.");
+    }
+
     const session = {
       id: `guest_${randomUUID()}`,
-      nickname: nickname.trim() || "Guest",
+      nickname: trimmedNickname,
       token: randomBytes(32).toString("base64url"),
       createdAt: new Date().toISOString()
     };

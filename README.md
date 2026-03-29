@@ -82,7 +82,7 @@ Compose 会启动：
 - `postgres`: PostgreSQL 16
 - `redis`: Redis 7
 
-服务端容器启动时会先执行 `prisma db push`，再启动 API。
+服务端容器启动时会先执行 `prisma migrate deploy`，再启动 API。
 
 ## Linux 服务器部署
 
@@ -105,7 +105,8 @@ Compose 会启动：
 
 - 未配置 `DATABASE_URL` 时：以内存模式运行，适合本地开发和演示。
 - 配置 `DATABASE_URL` 后：游客会话、房间快照和歌单会持久化到 PostgreSQL。
-- 手动同步 schema：`npx pnpm --filter @music-room/server db:push`
+- 生产环境迁移：`npx pnpm --filter @music-room/server db:migrate:deploy`
+- 开发环境快速同步 schema：`npx pnpm --filter @music-room/server db:push`
 
 ## 仓库结构
 

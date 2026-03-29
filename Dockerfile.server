@@ -3,12 +3,13 @@ WORKDIR /app
 RUN npm install -g pnpm@10.0.0
 
 FROM base AS deps
-COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
 COPY apps/server/package.json apps/server/package.json
+COPY apps/server/prisma/schema.prisma apps/server/prisma/schema.prisma
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/config-eslint/package.json packages/config-eslint/package.json
 COPY packages/config-typescript/package.json packages/config-typescript/package.json
-RUN pnpm install --filter @music-room/server... --frozen-lockfile=false
+RUN pnpm install --filter @music-room/server... --frozen-lockfile=true
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
@@ -30,4 +31,4 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/package.json ./package.json
 EXPOSE 3001
-CMD ["sh", "-c", "cd apps/server && ../../node_modules/.bin/prisma db push && node dist/main.js"]
+CMD ["sh", "-c", "./apps/server/node_modules/.bin/prisma migrate deploy --schema apps/server/prisma/schema.prisma && node apps/server/dist/main.js"]

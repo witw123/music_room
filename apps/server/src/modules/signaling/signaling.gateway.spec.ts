@@ -1,6 +1,12 @@
 import { SignalingGateway } from "./signaling.gateway";
 
 describe("SignalingGateway", () => {
+  function createAuthServiceMock() {
+    return {
+      assertSessionToken: jest.fn().mockResolvedValue(undefined)
+    };
+  }
+
   it("emits the latest snapshot immediately after a room subscribe", async () => {
     const snapshot = {
       room: {
@@ -26,23 +32,39 @@ describe("SignalingGateway", () => {
       subscribe: jest.fn()
     };
     const roomService = {
-      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
     };
     const moduleRef = {
       get: jest.fn().mockReturnValue(roomService)
     };
-    const gateway = new SignalingGateway(redisService as never, moduleRef as never);
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
     const client = {
+      handshake: { auth: { sessionToken: "token" }, headers: {} },
       data: {},
       join: jest.fn(),
       emit: jest.fn()
     };
 
-    gateway.handleRoomSubscribe(client as never, { roomId: "room_1" });
-    await new Promise((resolve) => setImmediate(resolve));
+    await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
 
     expect(client.join).toHaveBeenCalledWith("room_1");
-    expect(roomService.getRoomSnapshot).toHaveBeenCalledWith("room_1", []);
+    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
+    expect(roomService.updatePeerPresence).toHaveBeenCalledWith(
+      "room_1",
+      "guest_host",
+      "peer_host"
+    );
+    expect(roomService.getAccessibleRoomSnapshot).toHaveBeenCalledWith("room_1", [], "guest_host");
     expect(client.emit).toHaveBeenCalledWith("room.snapshot", snapshot);
   });
 
@@ -52,36 +74,55 @@ describe("SignalingGateway", () => {
       subscribe: jest.fn()
     };
     const roomService = {
-      getRoomSnapshot: jest.fn().mockRejectedValue(new Error("missing"))
+      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+      getAccessibleRoomSnapshot: jest.fn().mockRejectedValue(new Error("missing"))
     };
     const moduleRef = {
       get: jest.fn().mockReturnValue(roomService)
     };
-    const gateway = new SignalingGateway(redisService as never, moduleRef as never);
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
     const client = {
+      handshake: { auth: { sessionToken: "token" }, headers: {} },
       data: {},
       join: jest.fn(),
+      leave: jest.fn(),
       emit: jest.fn()
     };
 
-    gateway.handleRoomSubscribe(client as never, { roomId: "room_404" });
-    await new Promise((resolve) => setImmediate(resolve));
+    await expect(
+      gateway.handleRoomSubscribe(client as never, {
+        roomId: "room_404",
+        sessionId: "guest_host",
+        peerId: "peer_host"
+      })
+    ).resolves.toEqual({ ok: true });
 
     expect(client.emit).toHaveBeenCalledWith("room.snapshot.missing", { roomId: "room_404" });
+    expect(client.leave).not.toHaveBeenCalled();
   });
 
   it("forwards room snapshots received from redis when they come from another instance", async () => {
-    let handler: ((payload: unknown) => void) | undefined;
+    const handlers = new Map<string, (payload: unknown) => void>();
     const redisService = {
       publish: jest.fn(),
-      subscribe: jest.fn(async (_channel: string, next: (payload: unknown) => void) => {
-        handler = next;
+      subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+        handlers.set(channel, next);
       })
     };
     const moduleRef = {
       get: jest.fn()
     };
-    const gateway = new SignalingGateway(redisService as never, moduleRef as never);
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
     gateway.server = {
       to: jest.fn().mockReturnValue({
         emit: jest.fn()
@@ -94,7 +135,7 @@ describe("SignalingGateway", () => {
     const serverRoom = gateway.server.to("room_1");
     const emit = serverRoom.emit as jest.Mock;
 
-    handler?.({
+    handlers.get("music-room:room-snapshot")?.({
       sourceId: "other-instance",
       roomId: "room_1",
       snapshot: { room: { id: "room_1" }, tracks: [], queue: [], playlists: [] }
@@ -116,9 +157,19 @@ describe("SignalingGateway", () => {
     const moduleRef = {
       get: jest.fn()
     };
-    const gateway = new SignalingGateway(redisService as never, moduleRef as never);
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
     const emit = jest.fn();
     const client = {
+      data: {
+        roomId: "room_1",
+        peerId: "peer_1",
+        isRealtimeAuthenticated: true
+      },
       to: jest.fn().mockReturnValue({ emit })
     };
     const payload = {
@@ -137,5 +188,36 @@ describe("SignalingGateway", () => {
     expect(result).toEqual(payload);
     expect(client.to).toHaveBeenCalledWith("room_1");
     expect(emit).toHaveBeenCalledWith("piece.availability", payload);
+  });
+
+  it("rejects realtime messages from unauthenticated clients", () => {
+    const redisService = {
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const moduleRef = {
+      get: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+
+    expect(() =>
+      gateway.handleSignal(
+        {
+          data: {}
+        } as never,
+        {
+          roomId: "room_1",
+          fromPeerId: "peer_a",
+          toPeerId: "peer_b",
+          type: "offer",
+          payload: {}
+        }
+      )
+    ).toThrow("Unauthorized realtime request.");
   });
 });

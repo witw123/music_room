@@ -131,4 +131,28 @@ describe("RoomController", () => {
     expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_member");
     expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith(snapshot.room.id, snapshot);
   });
+
+  it("allows the host to delete a room and emits room missing", async () => {
+    const roomService = {
+      deleteRoom: jest.fn().mockResolvedValue({ ok: true })
+    };
+    const signalingGateway = {
+      emitRoomSnapshot: jest.fn(),
+      emitRoomMissing: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never
+    );
+
+    await expect(controller.deleteRoom("room_1", "token", "guest_host")).resolves.toEqual({
+      ok: true
+    });
+
+    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
+    expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
+    expect(signalingGateway.emitRoomMissing).toHaveBeenCalledWith("room_1");
+  });
 });

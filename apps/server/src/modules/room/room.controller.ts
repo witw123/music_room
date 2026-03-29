@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -84,8 +85,16 @@ export class RoomController {
   }
 
   @Get(":roomId")
-  async getRoom(@Param("roomId") roomId: string) {
-    return this.roomService.getRoomSnapshot(roomId, []);
+  async getRoom(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Query("sessionId") sessionId?: string
+  ) {
+    if (sessionId) {
+      await this.assertSession(sessionId, sessionToken);
+    }
+
+    return this.roomService.getAccessibleRoomSnapshot(roomId, [], sessionId);
   }
 
   @Post("join-by-code")
@@ -131,6 +140,22 @@ export class RoomController {
       this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
     }
     return room;
+  }
+
+  @Delete(":roomId")
+  async deleteRoom(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Query("sessionId") sessionId?: string
+  ) {
+    if (!sessionId) {
+      throw new UnauthorizedException("Unauthorized.");
+    }
+
+    await this.assertSession(sessionId, sessionToken);
+    const result = await this.roomService.deleteRoom(roomId, sessionId);
+    this.signalingGateway.emitRoomMissing(roomId);
+    return result;
   }
 
   @Post(":roomId/tracks")

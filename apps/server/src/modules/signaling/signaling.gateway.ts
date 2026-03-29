@@ -6,7 +6,8 @@ import {
   OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
-  WebSocketServer
+  WebSocketServer,
+  WsException
 } from "@nestjs/websockets";
 import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "node:crypto";
@@ -17,9 +18,11 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import { RedisService } from "../../infra/redis/redis.service";
+import { AuthService } from "../auth/auth.service";
 import { RoomService } from "../room/room.service";
 
 const roomSnapshotChannel = "music-room:room-snapshot";
+const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
 const defaultCorsOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
 
 function getCorsOrigins() {
@@ -40,7 +43,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   constructor(
     private readonly redisService: RedisService,
-    private readonly moduleRef: ModuleRef
+    private readonly moduleRef: ModuleRef,
+    private readonly authService: AuthService
   ) {}
 
   @WebSocketServer()
@@ -52,6 +56,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       sourceId: this.instanceId,
       roomId,
       snapshot
+    });
+  }
+
+  emitRoomMissing(roomId: string) {
+    this.server.to(roomId).emit("room.snapshot.missing", { roomId });
+    void this.redisService.publish(roomSnapshotMissingChannel, {
+      sourceId: this.instanceId,
+      roomId
     });
   }
 
@@ -78,6 +90,19 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       .then((unsubscribe) => {
         this.unsubscribeRoomSnapshots = unsubscribe;
       });
+
+    void this.redisService.subscribe(roomSnapshotMissingChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+      };
+
+      if (!message.roomId || !message.sourceId || message.sourceId === this.instanceId) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.snapshot.missing", { roomId: message.roomId });
+    });
   }
 
   onModuleDestroy() {
@@ -85,7 +110,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   @SubscribeMessage("peer.signal")
-  handleSignal(@MessageBody() payload: PeerSignalMessage) {
+  handleSignal(@ConnectedSocket() client: Socket, @MessageBody() payload: PeerSignalMessage) {
+    this.assertRealtimeClient(client, payload.roomId);
+
+    if (client.data.peerId !== payload.fromPeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+
     this.server.to(payload.roomId).emit("peer.signal", payload);
     return payload;
   }
@@ -95,24 +126,51 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: TrackAvailabilityAnnouncement
   ) {
+    this.assertRealtimeClient(client, payload.roomId);
+
+    if (client.data.peerId !== payload.ownerPeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+
     client.to(payload.roomId).emit("piece.availability", payload);
     return payload;
   }
 
   @SubscribeMessage("room.subscribe")
-  handleRoomSubscribe(
+  async handleRoomSubscribe(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { roomId: string; sessionId?: string; peerId?: string }
   ) {
+    if (!payload.sessionId || !payload.peerId) {
+      throw new WsException("Missing session identity.");
+    }
+
+    const sessionToken = this.getSocketSessionToken(client);
+    try {
+      await this.authService.assertSessionToken(payload.sessionId, sessionToken);
+    } catch (error) {
+      throw new WsException(error instanceof Error ? error.message : "Unauthorized.");
+    }
+
     client.data ??= {};
     client.data.roomId = payload.roomId;
     client.data.sessionId = payload.sessionId;
     client.data.peerId = payload.peerId;
+    client.data.isRealtimeAuthenticated = true;
     client.join(payload.roomId);
-    if (payload.sessionId && payload.peerId) {
-      void this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId);
+
+    try {
+      await this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId);
+      await this.emitLatestSnapshot(payload.roomId, payload.sessionId, client);
+    } catch (error) {
+      client.leave(payload.roomId);
+      client.data.roomId = undefined;
+      client.data.sessionId = undefined;
+      client.data.peerId = undefined;
+      client.data.isRealtimeAuthenticated = false;
+      throw new WsException(error instanceof Error ? error.message : "Unauthorized.");
     }
-    void this.emitLatestSnapshot(payload.roomId, client);
+
     return { ok: true };
   }
 
@@ -125,6 +183,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     if (client.data.sessionId) {
       void this.updatePeerPresence(payload.roomId, client.data.sessionId, null);
     }
+    client.data.roomId = undefined;
+    client.data.peerId = undefined;
+    client.data.isRealtimeAuthenticated = false;
     return { ok: true };
   }
 
@@ -137,7 +198,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
   }
 
-  private async emitLatestSnapshot(roomId: string, client: Socket) {
+  private async emitLatestSnapshot(roomId: string, sessionId: string, client: Socket) {
     const roomService = this.moduleRef.get(RoomService, { strict: false });
 
     if (!roomService) {
@@ -145,7 +206,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
 
     try {
-      client.emit("room.snapshot", await roomService.getRoomSnapshot(roomId, []));
+      client.emit(
+        "room.snapshot",
+        await roomService.getAccessibleRoomSnapshot(roomId, [], sessionId)
+      );
     } catch {
       client.emit("room.snapshot.missing", { roomId });
     }
@@ -167,6 +231,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.emitRoomSnapshot(roomId, await roomService.getRoomSnapshot(roomId, []));
     } catch {
       clientSafeNoop();
+    }
+  }
+
+  private getSocketSessionToken(client: Socket) {
+    const authToken =
+      typeof client.handshake.auth?.sessionToken === "string"
+        ? client.handshake.auth.sessionToken
+        : undefined;
+
+    if (authToken) {
+      return authToken;
+    }
+
+    const headerToken = client.handshake.headers["x-session-token"];
+    return typeof headerToken === "string" ? headerToken : undefined;
+  }
+
+  private assertRealtimeClient(client: Socket, roomId: string) {
+    if (!client.data.isRealtimeAuthenticated || client.data.roomId !== roomId) {
+      throw new WsException("Unauthorized realtime request.");
     }
   }
 }

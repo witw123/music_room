@@ -105,6 +105,29 @@ export class RoomService {
     };
   }
 
+  async getAccessibleRoomSnapshot(
+    roomId: string,
+    playlists: Playlist[],
+    sessionId?: string
+  ): Promise<RoomSnapshot> {
+    const record = await this.getRoomRecord(roomId);
+    const isMember =
+      !!sessionId &&
+      (record.room.hostId === sessionId ||
+        record.room.members.some((member) => member.id === sessionId));
+
+    if (!isMember && record.room.visibility !== "public") {
+      throw new Error("Room not found.");
+    }
+
+    return {
+      room: record.room,
+      tracks: record.tracks,
+      queue: record.queue,
+      playlists
+    };
+  }
+
   async listRoomsForSession(sessionId: string): Promise<RoomSnapshot[]> {
     const records = await this.listRecoverableRecords();
 
@@ -171,6 +194,7 @@ export class RoomService {
   async joinRoom(roomId: string, sessionId: string) {
     const record = await this.getRoomRecord(roomId);
     const session = await this.authService.getSessionOrThrow(sessionId);
+    this.assertUniqueNickname(record, session.id, session.nickname);
 
     if (!record.room.members.some((member) => member.id === session.id)) {
       record.room.members.push(this.buildMember(session, "member"));
@@ -178,6 +202,23 @@ export class RoomService {
     }
 
     return record.room;
+  }
+
+  async deleteRoom(roomId: string, sessionId: string) {
+    const record = await this.getRoomRecord(roomId);
+
+    if (record.room.hostId !== sessionId) {
+      throw new Error("Only the host can delete this room.");
+    }
+
+    await this.deleteRecord(record);
+    await Promise.all(
+      record.room.members.map((member) =>
+        this.clearRecentRoomForSessionIfMatching(member.id, roomId)
+      )
+    );
+
+    return { ok: true };
   }
 
   async updatePeerPresence(roomId: string, sessionId: string, peerId: string | null) {
@@ -524,6 +565,19 @@ export class RoomService {
   private assertMember(record: RoomRecord, sessionId: string) {
     if (!record.room.members.some((member) => member.id === sessionId)) {
       throw new Error("Only room members can perform this action.");
+    }
+  }
+
+  private assertUniqueNickname(record: RoomRecord, sessionId: string, nickname: string) {
+    const normalizedNickname = nickname.trim().toLowerCase();
+
+    if (
+      record.room.members.some(
+        (member) =>
+          member.id !== sessionId && member.nickname.trim().toLowerCase() === normalizedNickname
+      )
+    ) {
+      throw new Error("Nickname already exists in this room.");
     }
   }
 

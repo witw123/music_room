@@ -10,7 +10,7 @@
   - `Dockerfile.server`
   - `Dockerfile.web`
   - PostgreSQL 与 Redis 编排
-  - 服务端启动前自动执行 `prisma db push`
+  - 服务端启动前自动执行 `prisma migrate deploy`
   - `GET /health`
   - `GET /health/readiness`
   - 根目录部署自检：`npx pnpm deploy:check`

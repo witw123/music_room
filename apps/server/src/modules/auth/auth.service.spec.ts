@@ -41,4 +41,11 @@ describe("AuthService", () => {
       "Invalid session token."
     );
   });
+
+  it("requires a non-empty nickname to create a guest session", async () => {
+    const prisma = createPrismaMock();
+    const service = new AuthService(prisma as never);
+
+    await expect(service.createGuestSession("   ")).rejects.toThrow("Nickname is required.");
+  });
 });

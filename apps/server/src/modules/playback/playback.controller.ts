@@ -35,12 +35,10 @@ export class PlaybackController {
       action: "play" | "pause" | "seek" | "next";
       trackId?: string;
       positionMs?: number;
-      sessionId?: string;
+      sessionId: string;
     }
   ) {
-    if (body.sessionId) {
-      await this.assertSession(body.sessionId, sessionToken);
-    }
+    await this.assertSession(body.sessionId, sessionToken);
     const playback = await this.roomService.updatePlayback(roomId, {
       ...body,
       actorSessionId: body.sessionId
