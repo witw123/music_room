@@ -180,7 +180,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "E:\\code\\music_room\\apps\\server\\src\\generated\\prisma",
+      "value": "/root/music_room/apps/server/src/generated/prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -189,16 +189,17 @@ const config = {
     "binaryTargets": [
       {
         "fromEnvVar": null,
-        "value": "windows",
+        "value": "debian-openssl-3.0.x",
         "native": true
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "E:\\code\\music_room\\apps\\server\\prisma\\schema.prisma",
+    "sourceFilePath": "/root/music_room/apps/server/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": null
+    "rootEnvPath": null,
+    "schemaEnvPath": "../../../.env"
   },
   "relativePath": "../../../prisma",
   "clientVersion": "6.19.2",

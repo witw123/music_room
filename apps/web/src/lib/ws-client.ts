@@ -30,11 +30,15 @@ export function createRoomSocket() {
   return io(baseUrl, {
     path: socketPath,
     auth: sessionToken ? { sessionToken } : undefined,
-    tryAllTransports: true,
+    // Only use WebSocket, never fallback to polling — polling causes
+    // excessive concurrent connections that can exhaust the browser socket pool.
+    tryAllTransports: false,
+    // Exponential backoff capped at 30s instead of 4s to avoid
+    // hammering the server during prolonged outages.
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 800,
-    reconnectionDelayMax: 4000
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 30000
   }) as RoomSocket;
 }
 

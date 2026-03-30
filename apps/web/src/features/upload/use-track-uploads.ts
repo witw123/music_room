@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
 import {
   assembleTrackFileFromPieces,
@@ -277,12 +277,12 @@ export function useTrackUploads(options: {
     setStatusMessage(`已从房间其他成员恢复曲目 ${track.title} 的本地缓存。`);
   }
 
-  async function deleteUploadedTrackArtifacts(trackId: string) {
+  const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
     await deleteCachedTrackAsset(trackId);
     await deleteCachedPiecesForTrack(trackId);
     setUploadedTracks((current) => removeTracksFromUploads(current, [trackId]));
     setCachedTrackCount(await getCachedTrackAssetCount());
-  }
+  }, []);
 
   return {
     uploadedTracks,

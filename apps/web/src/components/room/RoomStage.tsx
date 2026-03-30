@@ -143,7 +143,7 @@ export function RoomStage({
           </Button>
 
           {showSettings ? (
-            <div className="animate-fade-in absolute right-0 top-11 z-50 flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
+            <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
               {activeSession ? (
                 <div className="mb-1 flex items-center gap-2 border-b border-white/5 px-3 py-3">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
@@ -162,7 +162,10 @@ export function RoomStage({
 
               <button
                 className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
-                onClick={() => startTransition(() => void onLeaveRoom())}
+                onClick={() => {
+                  setShowSettings(false);
+                  void onLeaveRoom();
+                }}
                 type="button"
               >
                 离开房间
@@ -177,7 +180,10 @@ export function RoomStage({
                         : "cursor-not-allowed text-red-400/45 opacity-70"
                     }`}
                     disabled={!canDisbandRoom}
-                    onClick={() => startTransition(() => void onDeleteRoom())}
+                    onClick={() => {
+                      setShowSettings(false);
+                      void onDeleteRoom();
+                    }}
                     title={canDisbandRoom ? "解散房间" : "只有所有成员都在线时才能解散房间"}
                     type="button"
                   >

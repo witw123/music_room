@@ -4,10 +4,12 @@ import {
   Delete,
   Get,
   Headers,
+  Inject,
   Param,
   Patch,
   Post,
-  UnauthorizedException
+  UnauthorizedException,
+  forwardRef
 } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
 import { SignalingGateway } from "../signaling/signaling.gateway";
@@ -18,7 +20,7 @@ import { PlaylistService } from "./playlist.service";
 export class PlaylistController {
   constructor(
     private readonly playlistService: PlaylistService,
-    private readonly roomService: RoomService,
+    @Inject(forwardRef(() => RoomService)) private readonly roomService: RoomService,
     private readonly signalingGateway: SignalingGateway,
     private readonly authService: AuthService
   ) {}
