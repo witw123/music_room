@@ -28,7 +28,7 @@ export function RoomsHomePage() {
     refreshSession
   } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
-    initialStatusMessage: "登录后即可创建房间、加入房间，并直接进入音乐房工作台。"
+    initialStatusMessage: "登录后即可创建房间、加入房间，并直接进入音乐房工作区。"
   });
 
   useEffect(() => {
@@ -115,55 +115,55 @@ export function RoomsHomePage() {
   }
 
   return (
-    <main className="min-h-screen pb-20 bg-background text-foreground flex flex-col relative">
+    <main className="relative flex min-h-screen flex-col bg-background pb-24 text-foreground">
       <TopBar activeSession={activeSession} onLogout={handleLogout} />
 
-      {/* Hero Section */}
-      <section className="relative px-4 py-16 md:py-24 mx-auto max-w-[1200px] w-full flex flex-col md:flex-row gap-12 lg:gap-24">
-        <div className="flex-1 flex flex-col justify-center items-start z-10">
-          <p className="text-xs font-bold tracking-[0.2em] text-accent uppercase mb-4 text-glow transition-all">
-            Music Room
-          </p>
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-foreground mb-6 leading-[1.1]">
-            欢迎回来，<br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent to-fuchsia-400">
+      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:py-14 lg:flex-row lg:gap-16 lg:px-8">
+        <div className="z-10 flex flex-1 flex-col items-start justify-center">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.28em] text-accent">Music Room</p>
+          <h1 className="mb-4 text-3xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
+            欢迎回来，
+            <br />
+            <span className="bg-gradient-to-r from-accent to-fuchsia-400 bg-clip-text text-transparent">
               {activeSession.nickname}
-            </span>。
+            </span>
           </h1>
-          <p className="text-lg text-foreground-muted leading-relaxed max-w-md mb-10">
-            这里是你的音乐房入口。可以随时创建新房间发起一起听、或者通过房间码快速加入。
+          <p className="mb-8 max-w-xl text-sm leading-relaxed text-foreground-muted sm:text-base md:text-lg">
+            这里是你的音乐房入口。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
           </p>
-          <div className="flex flex-wrap items-center gap-4">
-            <Button size="lg" onClick={handleCreateRoom} type="button">
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+            <Button size="lg" className="w-full sm:w-auto" onClick={handleCreateRoom} type="button">
               创建公开房间
             </Button>
-            <Link href={"/features" as Route}>
-              <Button variant="ghost" size="lg">查看产品结构</Button>
+            <Link href={"/features" as Route} className="w-full sm:w-auto">
+              <Button variant="ghost" size="lg" className="w-full sm:w-auto">
+                查看功能
+              </Button>
             </Link>
           </div>
         </div>
 
-        {/* Join Card */}
-        <div className="w-full md:w-[400px] lg:w-[480px] shrink-0 z-10">
-          <div className="glass-panel p-8 md:p-10 rounded-3xl flex flex-col gap-6 shadow-2xl relative overflow-hidden group">
-             <div className="absolute top-0 right-0 p-30 opacity-20 bg-accent blur-[100px] w-full h-full rounded-full mix-blend-screen -z-10 pointer-events-none" />
-             
-            <div className="flex justify-between items-start gap-4">
+        <div className="z-10 w-full shrink-0 lg:w-[420px] xl:w-[460px]">
+          <div className="glass-panel relative flex flex-col gap-5 overflow-hidden rounded-[28px] p-5 shadow-2xl sm:p-7">
+            <div className="pointer-events-none absolute right-0 top-0 h-36 w-36 rounded-full bg-accent/20 blur-[90px]" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-[10px] font-bold tracking-[0.2em] text-foreground-muted uppercase mb-2">Join with code</p>
-                <h2 className="text-2xl font-bold text-foreground">输入房间码加入</h2>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
+                  Join with code
+                </p>
+                <h2 className="text-xl font-bold text-foreground sm:text-2xl">输入房间码加入</h2>
               </div>
-              <span className="px-3 py-1 rounded-full bg-surface border border-surface-border text-xs font-medium text-foreground-muted truncate max-w-[120px]">
+              <span className="inline-flex max-w-full rounded-full border border-surface-border bg-surface px-3 py-1 text-xs font-medium text-foreground-muted">
                 {activeSession.username}
               </span>
             </div>
 
-            <div className="flex flex-col gap-4 mt-2">
+            <div className="mt-1 flex flex-col gap-3">
               <input
-                className="w-full bg-black/40 border border-surface-border rounded-xl px-5 py-4 text-base font-mono text-foreground uppercase placeholder:text-foreground-muted/50 placeholder:normal-case placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                className="w-full rounded-2xl border border-surface-border bg-black/40 px-4 py-3 text-base font-mono uppercase text-foreground placeholder:font-sans placeholder:normal-case placeholder:text-foreground-muted/50 focus:outline-none focus:ring-2 focus:ring-accent"
                 value={joinCode}
                 onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                placeholder="输入音乐房 6 位房间码..."
+                placeholder="输入 6 位房间码"
               />
               <Button
                 size="lg"
@@ -176,42 +176,55 @@ export function RoomsHomePage() {
                 直接进入工作台
               </Button>
 
-              {statusMessage && (
-                <p className="text-sm text-red-400 mt-2 text-center animate-fade-in">{statusMessage}</p>
-              )}
+              {statusMessage ? (
+                <p className="animate-fade-in text-center text-sm text-red-400">{statusMessage}</p>
+              ) : null}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Second half - Grids */}
-      <section className="px-4 py-12 mx-auto max-w-[1200px] w-full flex flex-col lg:flex-row gap-8 lg:gap-12 relative z-10">
-        
-        {/* Recent Room */}
-        <div className="w-full lg:w-[320px] shrink-0 flex flex-col gap-6">
-          <div className="flex flex-col justify-end min-h-[50px]">
-            <p className="text-[10px] font-bold tracking-[0.2em] text-foreground-muted uppercase mb-1">Recent room</p>
-            <h2 className="text-xl font-bold text-foreground">最近的协作</h2>
+      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-8 sm:px-6 lg:flex-row lg:gap-10 lg:px-8">
+        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[320px]">
+          <div>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
+              Recent room
+            </p>
+            <h2 className="text-xl font-bold text-foreground">最近一次协作</h2>
           </div>
 
-          <div className="glass-panel p-6 rounded-3xl h-full flex flex-col justify-between">
+          <div className="glass-panel flex h-full min-h-[220px] flex-col justify-between rounded-[28px] p-5 sm:p-6">
             {recentRoom ? (
-              <div className="flex flex-col h-full gap-5">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-surface to-surface-hover border border-surface-border shadow-inner flex items-center justify-center text-accent">
-                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+              <div className="flex h-full flex-col gap-5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-surface-border bg-gradient-to-br from-surface to-surface-hover text-accent shadow-inner">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
                 </div>
                 <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="font-mono text-lg font-bold text-foreground">{recentRoom.room.joinCode}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-xs font-medium border border-green-500/20">
+                  <div className="mb-2 flex flex-wrap items-center gap-3">
+                    <span className="font-mono text-lg font-bold text-foreground">
+                      {recentRoom.room.joinCode}
+                    </span>
+                    <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                       {getOnlineMemberCount(recentRoom.room.members)} 在线
                     </span>
                   </div>
-                  <p className="text-sm text-foreground-muted leading-relaxed">
-                    如果你刚离开不久，可以直接回到这个房间继续听歌和改队列。
+                  <p className="text-sm leading-relaxed text-foreground-muted">
+                    如果你刚离开不久，可以直接返回这个房间继续听歌、改队列和协作控制。
                   </p>
                 </div>
-                <div className="mt-auto pt-4">
+                <div className="mt-auto pt-2">
                   <Button
                     variant="glass"
                     className="w-full border-accent/20 hover:border-accent hover:bg-accent/10"
@@ -223,25 +236,42 @@ export function RoomsHomePage() {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                <div className="w-10 h-10 rounded-full bg-surface border border-surface-border flex items-center justify-center mb-3 text-foreground-muted opacity-50">
-                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted opacity-60">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
                 </div>
-                <p className="text-sm text-foreground-muted opacity-70">还没有历史房间记录。创建一个房间后，这里会成为快速返回入口。</p>
+                <p className="text-sm text-foreground-muted opacity-80">
+                  还没有历史房间记录。创建一个房间后，这里会成为你的快速返回入口。
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Available Rooms */}
-        <div className="flex-1 min-w-0 flex flex-col gap-6">
-          <div className="flex items-end justify-between min-h-[50px]">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <div className="flex items-end justify-between gap-3">
             <div>
-               <p className="text-[10px] font-bold tracking-[0.2em] text-foreground-muted uppercase mb-1">Available rooms</p>
-               <h2 className="text-xl font-bold text-foreground flex items-center gap-3">
-                 正在开放的房间
-                 {isPending && <div className="w-4 h-4 rounded-full border-2 border-accent border-t-transparent animate-spin" />}
-               </h2>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
+                Available rooms
+              </p>
+              <h2 className="flex items-center gap-3 text-xl font-bold text-foreground">
+                正在开放的房间
+                {isPending ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                ) : null}
+              </h2>
             </div>
             <Button
               variant="ghost"
@@ -249,34 +279,39 @@ export function RoomsHomePage() {
               onClick={() => startTransition(() => void refreshAvailableRooms())}
               type="button"
             >
-              刷新列表
+              刷新
             </Button>
           </div>
 
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl min-h-[300px]">
+          <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
             {visibleRooms.length ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {visibleRooms.map((item) => {
                   const host =
                     item.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
 
                   return (
-                    <article key={item.room.id} className="group bg-surface hover:bg-surface-hover border border-surface-border rounded-2xl p-5 flex flex-col gap-4 transition-all duration-300 hover:-translate-y-1 shadow-md">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono font-bold text-accent px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20">{item.room.joinCode}</span>
-                        <span className="text-xs font-medium text-foreground-muted px-2 py-1 rounded bg-background/50 border border-surface-border">
+                    <article
+                      key={item.room.id}
+                      className="group flex flex-col gap-4 rounded-3xl border border-surface-border bg-surface p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:bg-surface-hover"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 font-mono font-bold text-accent">
+                          {item.room.joinCode}
+                        </span>
+                        <span className="rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
                           {getOnlineMemberCount(item.room.members)} 人在线
                         </span>
                       </div>
                       <div className="mt-1">
-                        <h3 className="font-semibold text-foreground truncate">{host} 的房间</h3>
-                        <p className="text-xs text-foreground-muted line-clamp-2 mt-1.5 leading-relaxed">
-                          进入后会直接跳到房间工作台，队列、当前播放和成员状态都在同一页完成。
+                        <h3 className="truncate font-semibold text-foreground">{host} 的房间</h3>
+                        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
+                          进入后会直接跳到房间工作台，当前播放、共享队列和成员状态都在同一处完成。
                         </p>
                       </div>
                       <Button
                         variant="ghost"
-                        className="w-full mt-auto bg-white/5 group-hover:bg-accent group-hover:text-white border border-surface-border group-hover:border-accent transition-all"
+                        className="mt-auto w-full border border-surface-border bg-white/5 transition-all group-hover:border-accent group-hover:bg-accent group-hover:text-white"
                         onClick={() => handleJoinRoom(item.room.joinCode)}
                         type="button"
                       >
@@ -287,19 +322,32 @@ export function RoomsHomePage() {
                 })}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center py-16 opacity-80">
-                <div className="w-16 h-16 rounded-full bg-surface border border-surface-border flex items-center justify-center mb-4 text-foreground-muted">
-                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              <div className="flex h-full flex-col items-center justify-center py-14 text-center opacity-85">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                  </svg>
                 </div>
-                <h3 className="font-semibold text-foreground mb-2">当前没有公开的房间</h3>
-                <p className="text-sm text-foreground-muted max-w-sm">你可以先创建一个公开房间，等待别人加入，或者稍后再回来刷新列表。</p>
+                <h3 className="mb-2 font-semibold text-foreground">当前没有公开房间</h3>
+                <p className="max-w-sm text-sm text-foreground-muted">
+                  你可以先创建一个公开房间等待其他人加入，或者稍后回来刷新列表。
+                </p>
               </div>
             )}
           </div>
         </div>
-
       </section>
-
     </main>
   );
 }
