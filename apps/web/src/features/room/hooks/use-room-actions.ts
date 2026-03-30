@@ -230,6 +230,20 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
   }
 
+  async function updatePlaylistTracks(playlistId: string, trackIds: string[]) {
+    if (!activeSession) {
+      return;
+    }
+
+    try {
+      await musicRoomApi.updatePlaylist(playlistId, { trackIds });
+      await refreshPlaylists();
+      setStatusMessage("歌单曲目已更新。");
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
+    }
+  }
+
   async function deletePlaylist(playlistId: string) {
     if (!activeSession) {
       return;
@@ -326,6 +340,7 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     nextTrack,
     savePlaylistFromQueue,
     updatePlaylistTitle,
+    updatePlaylistTracks,
     deletePlaylist,
     loadPlaylistIntoRoom,
     removeQueueItem,

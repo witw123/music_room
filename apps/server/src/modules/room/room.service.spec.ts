@@ -369,6 +369,114 @@ describe("RoomService", () => {
     });
   });
 
+  it("starts a different track from the beginning when play switches songs", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "First",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "first-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Second",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "second-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: firstTrack.id,
+      actorSessionId: member.id,
+      positionMs: 45000
+    });
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: secondTrack.id,
+        actorSessionId: member.id
+      })
+    ).resolves.toMatchObject({
+      currentTrackId: secondTrack.id,
+      positionMs: 0
+    });
+  });
+
+  it("keeps the same media epoch when switching tracks owned by the same online source", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "First",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "same-owner-1",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Second",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "same-owner-2",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const firstPlayback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: firstTrack.id,
+      actorSessionId: host.id
+    });
+    const secondPlayback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: secondTrack.id,
+      actorSessionId: host.id
+    });
+
+    expect(secondPlayback.mediaEpoch).toBe(firstPlayback.mediaEpoch);
+  });
+
   it("restores the recent active room for a session from redis", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

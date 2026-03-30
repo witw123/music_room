@@ -34,6 +34,7 @@ type RoomDashboardViewProps = {
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
   playlists: Playlist[];
+  tracks: TrackMeta[];
   availabilitySummary: AvailabilityEntry[];
   onCopyJoinCode: () => Promise<void>;
   onLeaveRoom: () => void;
@@ -47,6 +48,7 @@ type RoomDashboardViewProps = {
   onSavePlaylistFromQueue: (title: string) => Promise<void>;
   onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
+  onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
 };
 
@@ -75,6 +77,7 @@ export function RoomDashboardView({
   mediaConnectedPeersCount,
   cachedTrackCount,
   playlists,
+  tracks,
   availabilitySummary,
   onCopyJoinCode,
   onLeaveRoom,
@@ -88,6 +91,7 @@ export function RoomDashboardView({
   onSavePlaylistFromQueue,
   onLoadPlaylistIntoRoom,
   onUpdatePlaylistTitle,
+  onUpdatePlaylistTracks,
   onDeletePlaylist
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
@@ -185,11 +189,13 @@ export function RoomDashboardView({
 
               <PlaylistPanel
                 playlists={playlists}
+                tracks={tracks}
                 activeSession={activeSession}
                 canCreatePlaylist={canCreatePlaylist}
                 onSavePlaylistFromQueue={onSavePlaylistFromQueue}
                 onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
                 onUpdatePlaylistTitle={onUpdatePlaylistTitle}
+                onUpdatePlaylistTracks={onUpdatePlaylistTracks}
                 onDeletePlaylist={onDeletePlaylist}
               />
             </div>

@@ -51,7 +51,9 @@ export class RoomPlaybackService {
       if (!nextTrackId) {
         this.clearPlayback(playback);
       } else {
-        await this.applyTrackPlayback(record, nextTrackId, input.positionMs ?? playback.positionMs);
+        const isTrackSwitch = nextTrackId !== playback.currentTrackId;
+        const startPositionMs = input.positionMs ?? (isTrackSwitch ? 0 : playback.positionMs);
+        await this.applyTrackPlayback(record, nextTrackId, startPositionMs);
       }
     }
 
@@ -117,9 +119,7 @@ export class RoomPlaybackService {
     }
 
     const isSwitchingSource =
-      playback.currentTrackId !== trackId ||
-      playback.sourceSessionId !== track.ownerSessionId ||
-      playback.sourcePeerId !== ownerPeerId;
+      playback.sourceSessionId !== track.ownerSessionId || playback.sourcePeerId !== ownerPeerId;
 
     playback.status = "playing";
     playback.currentTrackId = trackId;

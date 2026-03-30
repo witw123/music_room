@@ -26,7 +26,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { useRoomPlayback } from "@/features/playback/use-room-playback";
+import { getPlaybackEffectivePositionMs, useRoomPlayback } from "@/features/playback/use-room-playback";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
@@ -82,9 +82,11 @@ export function MusicRoomApp({
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
   const getCurrentPlaybackPositionMs = () => {
-    const activeAudio = isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current;
-    if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
-      return Math.round(activeAudio.currentTime * 1000);
+    if (isCurrentSourceOwner) {
+      const activeAudio = audioRef.current;
+      if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
+        return Math.round(activeAudio.currentTime * 1000);
+      }
     }
 
     return progressMs;
@@ -151,6 +153,7 @@ export function MusicRoomApp({
     nextTrack,
     savePlaylistFromQueue,
     updatePlaylistTitle,
+    updatePlaylistTracks,
     deletePlaylist,
     loadPlaylistIntoRoom,
     removeQueueItem,
@@ -479,7 +482,8 @@ export function MusicRoomApp({
       audio.load();
     }
 
-    const expectedSeconds = playback.positionMs / 1000;
+    const expectedSeconds =
+      getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
     if (uploaded && Math.abs(audio.currentTime - expectedSeconds) > 1.2) {
       audio.currentTime = expectedSeconds;
     }
@@ -493,7 +497,16 @@ export function MusicRoomApp({
     if (playback.status === "paused") {
       audio.pause();
     }
-  }, [playback, uploadedTracks, isCurrentSourceOwner]);
+  }, [
+    playback?.currentTrackId,
+    playback?.status,
+    playback?.positionMs,
+    playback?.startedAt,
+    playback?.mediaEpoch,
+    progressTrack?.durationMs,
+    uploadedTracks,
+    isCurrentSourceOwner
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
@@ -811,6 +824,7 @@ export function MusicRoomApp({
               mediaConnectedPeersCount={mediaConnectedPeers.length}
               cachedTrackCount={cachedTrackCount}
               playlists={playlists}
+              tracks={roomSnapshot.tracks}
               availabilitySummary={availabilitySummary}
               onCopyJoinCode={async () => {
                 try {
@@ -831,6 +845,9 @@ export function MusicRoomApp({
               onSavePlaylistFromQueue={(title) => savePlaylistFromQueue(title)}
               onLoadPlaylistIntoRoom={(playlistId) => loadPlaylistIntoRoom(playlistId)}
               onUpdatePlaylistTitle={(playlistId, title) => updatePlaylistTitle(playlistId, title)}
+              onUpdatePlaylistTracks={(playlistId, trackIds) =>
+                updatePlaylistTracks(playlistId, trackIds)
+              }
               onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
             />
           ) : (

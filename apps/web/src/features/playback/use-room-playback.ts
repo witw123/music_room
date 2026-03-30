@@ -28,7 +28,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   useEffect(() => {
     const localAudio = audioRef.current;
-    const remoteAudio = remoteAudioRef.current;
 
     if (!playback || !progressTrack) {
       setProgressMs(0);
@@ -36,19 +35,12 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const tick = () => {
-      const liveAudio = isCurrentSourceOwner ? localAudio : remoteAudio;
-      if (liveAudio && !liveAudio.paused && Number.isFinite(liveAudio.currentTime)) {
-        setProgressMs(Math.floor(liveAudio.currentTime * 1000));
+      if (isCurrentSourceOwner && localAudio && !localAudio.paused && Number.isFinite(localAudio.currentTime)) {
+        setProgressMs(Math.min(Math.floor(localAudio.currentTime * 1000), progressTrack.durationMs));
         return;
       }
 
-      if (playback.status !== "playing" || !playback.startedAt) {
-        setProgressMs(playback.positionMs);
-        return;
-      }
-
-      const elapsed = Date.now() - new Date(playback.startedAt).getTime();
-      setProgressMs(Math.min(progressTrack.durationMs, playback.positionMs + elapsed));
+      setProgressMs(getPlaybackEffectivePositionMs(playback, progressTrack.durationMs));
     };
 
     tick();
@@ -85,6 +77,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [remoteAudioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
+    if (!isCurrentSourceOwner) {
+      return;
+    }
+
     const audio = event?.currentTarget ?? audioRef.current;
     if (!audio || !Number.isFinite(audio.currentTime)) {
       return;
@@ -101,11 +97,19 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   function syncDurationFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
     const audio = event?.currentTarget ?? audioRef.current;
     if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+      if (progressTrack?.durationMs) {
+        setAudioDurationMs(progressTrack.durationMs);
+      }
       return;
     }
 
     setAudioDurationMs(Math.round(audio.duration * 1000));
   }
+
+  useEffect(() => {
+    setSeekDraft(null);
+    setAudioDurationMs(progressTrack?.durationMs ?? 0);
+  }, [progressTrack?.id, progressTrack?.durationMs, setSeekDraft]);
 
   return {
     progressTrack,
@@ -120,4 +124,22 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     syncProgressFromAudio,
     syncDurationFromAudio
   };
+}
+
+export function getPlaybackEffectivePositionMs(
+  playback: PlaybackSnapshot | null | undefined,
+  durationMs: number,
+  now = Date.now()
+) {
+  if (!playback) {
+    return 0;
+  }
+
+  if (playback.status !== "playing" || !playback.startedAt) {
+    return durationMs > 0 ? Math.min(playback.positionMs, durationMs) : playback.positionMs;
+  }
+
+  const elapsed = Math.max(0, now - new Date(playback.startedAt).getTime());
+  const nextPositionMs = playback.positionMs + elapsed;
+  return durationMs > 0 ? Math.min(nextPositionMs, durationMs) : nextPositionMs;
 }

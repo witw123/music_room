@@ -38,7 +38,8 @@ export class RoomMediaMesh {
     const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
 
     for (const peerId of nextPeers) {
-      await this.ensurePeer(peerId, localStream, true);
+      const shouldInitiateOffer = !this.peers.has(peerId);
+      await this.ensurePeer(peerId, localStream, shouldInitiateOffer);
     }
 
     for (const [peerId, entry] of this.peers.entries()) {

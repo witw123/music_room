@@ -96,10 +96,12 @@ export function BottomPlayer({
   const playback = roomSnapshot?.room.playback;
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const isPlaying = playback?.status === "playing";
-  const effectiveProgressMs = seekDraft ?? progressMs;
+  const effectiveProgressMs = Math.max(0, seekDraft ?? progressMs);
   const currentTrackDuration = audioDurationMs;
+  const boundedProgressMs =
+    currentTrackDuration > 0 ? Math.min(effectiveProgressMs, currentTrackDuration) : effectiveProgressMs;
   const progressRatio =
-    currentTrackDuration > 0 ? Math.min(effectiveProgressMs / currentTrackDuration, 1) : 0;
+    currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const localTrackAvailable = !!uploadedTracks[currentTrack?.id ?? ""];
   const mediaStatusLabel = getMediaStatusLabel(mediaConnectionState);
   const sourceOwnedByMe = roomSnapshot?.room.playback.sourceSessionId === activeSession?.id;
@@ -200,11 +202,11 @@ export function BottomPlayer({
 
       <div className="mt-4 flex items-center gap-3 lg:hidden">
         <span className="min-w-[42px] text-right text-xs tabular-nums text-foreground-muted">
-          {formatDuration(effectiveProgressMs)}
+          {formatDuration(boundedProgressMs)}
         </span>
         <div className="flex-1">
           <Slider
-            value={effectiveProgressMs}
+            value={boundedProgressMs}
             max={currentTrackDuration || 1}
             disabled={!currentTrackDuration || !canControlPlayback}
             onChange={(event) => setSeekDraft(Number(event.target.value))}
@@ -242,11 +244,11 @@ export function BottomPlayer({
         <div className="flex items-center gap-3 lg:justify-end">
           <div className="hidden w-full items-center gap-4 px-4 lg:flex">
             <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
-              {formatDuration(effectiveProgressMs)}
+              {formatDuration(boundedProgressMs)}
             </span>
             <div className="flex h-8 flex-1 items-center">
               <Slider
-                value={effectiveProgressMs}
+                value={boundedProgressMs}
                 max={currentTrackDuration || 1}
                 disabled={!currentTrackDuration || !canControlPlayback}
                 onChange={(event) => setSeekDraft(Number(event.target.value))}
