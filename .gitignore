@@ -9,3 +9,4 @@ coverage/
 pnpm-lock.yaml
 apps/server/prisma/dev.db
 
+.gstack/
