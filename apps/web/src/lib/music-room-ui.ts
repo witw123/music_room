@@ -88,6 +88,10 @@ export function toUserFacingError(error: unknown) {
     return "这个用户名已被使用。";
   }
 
+  if (message.includes("Nickname already exists in this room")) {
+    return "这个昵称已经在房间里被使用了，请换一个再加入。";
+  }
+
   if (message.includes("Account storage is temporarily unavailable")) {
     return "账号存储当前不可用。请检查数据库与迁移状态后重试。";
   }

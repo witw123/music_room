@@ -756,6 +756,16 @@ export function MusicRoomApp({
   const currentTrackAvailability = currentTrack
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
+  const mediaConnectedListenerNames = useMemo(
+    () =>
+      mediaConnectedPeers
+        .map(
+          (connectedPeerId) =>
+            roomSnapshot?.room.members.find((member) => member.peerId === connectedPeerId)?.nickname
+        )
+        .filter((nickname): nickname is string => !!nickname),
+    [mediaConnectedPeers, roomSnapshot?.room.members]
+  );
   const statusTone =
     statusMessage.includes("失败") || statusMessage.includes("不可用")
       ? "warning"
@@ -801,6 +811,8 @@ export function MusicRoomApp({
               connectedPeersCount={connectedPeers.length}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeers.length}
+              mediaConnectedListenerNames={mediaConnectedListenerNames}
+              localPeerId={peerId}
               cachedTrackCount={cachedTrackCount}
               playlists={playlists}
               availabilitySummary={availabilitySummary}

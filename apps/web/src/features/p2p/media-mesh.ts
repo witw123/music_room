@@ -32,11 +32,7 @@ export class RoomMediaMesh {
 
   async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null, mediaEpoch = 0) {
     if (this.currentMediaEpoch !== mediaEpoch) {
-      for (const [peerId, entry] of this.peers.entries()) {
-        this.releasePeer(peerId, entry);
-      }
-      this.peers.clear();
-      this.currentMediaEpoch = mediaEpoch;
+      this.resetForMediaEpoch(mediaEpoch);
     }
 
     const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
@@ -72,12 +68,18 @@ export class RoomMediaMesh {
   }
 
   async handleSignal(payload: PeerSignalMessage) {
-    if (
-      payload.channelKind !== "media" ||
-      payload.toPeerId !== this.localPeerId ||
-      (payload.mediaEpoch ?? 0) !== this.currentMediaEpoch
-    ) {
+    if (payload.channelKind !== "media" || payload.toPeerId !== this.localPeerId) {
       return;
+    }
+
+    const incomingMediaEpoch = payload.mediaEpoch ?? 0;
+
+    if (incomingMediaEpoch < this.currentMediaEpoch) {
+      return;
+    }
+
+    if (incomingMediaEpoch > this.currentMediaEpoch) {
+      this.resetForMediaEpoch(incomingMediaEpoch);
     }
 
     const entry = this.peers.get(payload.fromPeerId) ?? this.createPeer(payload.fromPeerId);
@@ -148,11 +150,7 @@ export class RoomMediaMesh {
   }
 
   destroy() {
-    for (const [peerId, entry] of this.peers.entries()) {
-      this.releasePeer(peerId, entry);
-    }
-    this.peers.clear();
-    this.callbacks.onRemoteStream(null);
+    this.resetForMediaEpoch(this.currentMediaEpoch);
   }
 
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
@@ -269,6 +267,15 @@ export class RoomMediaMesh {
       state: "closed",
       connectedPeerIds: this.getConnectedPeerIds()
     });
+  }
+
+  private resetForMediaEpoch(nextMediaEpoch: number) {
+    for (const [peerId, entry] of this.peers.entries()) {
+      this.releasePeer(peerId, entry);
+    }
+    this.peers.clear();
+    this.currentMediaEpoch = nextMediaEpoch;
+    this.callbacks.onRemoteStream(null);
   }
 
   private async flushPendingCandidates(entry: MediaPeerEntry) {

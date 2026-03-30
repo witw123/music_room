@@ -20,6 +20,8 @@ type RoomStageProps = {
   currentSourceOwnerNickname: string | null;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
+  mediaConnectedListenerNames: string[];
+  localPeerId: string;
   onCopyJoinCode: () => Promise<void>;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
@@ -61,6 +63,8 @@ export function RoomStage({
   currentSourceOwnerNickname,
   mediaConnectionState,
   mediaConnectedPeersCount,
+  mediaConnectedListenerNames,
+  localPeerId,
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom
@@ -254,6 +258,68 @@ export function RoomStage({
               ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`
               : "从曲库添加音乐，或导入本地音频，马上开始这场协作收听。"}
           </p>
+        
+          <div className="mt-4 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left backdrop-blur-md">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/45">
+                  Media diagnostics
+                </p>
+                <h3 className="mt-1 text-sm font-semibold text-white/85">实时音频诊断</h3>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/60">
+                {mediaConnectionState}
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">当前音源</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {currentSourceOwnerNickname ?? "未指定"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">Media Epoch</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {roomSnapshot.room.playback.mediaEpoch}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">本机 Peer ID</p>
+                <p className="mt-1 truncate font-mono text-xs text-white/80">
+                  {localPeerId || "未建立"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/8 bg-black/10 px-3 py-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">已连接听众</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {mediaConnectedPeersCount} 人
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-white/8 bg-black/10 px-3 py-3">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-white/40">听众列表</p>
+              {mediaConnectedListenerNames.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {mediaConnectedListenerNames.map((listenerName) => (
+                    <span
+                      key={listenerName}
+                      className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/75"
+                    >
+                      {listenerName}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-white/50">当前还没有听众连接到实时音频流。</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </section>

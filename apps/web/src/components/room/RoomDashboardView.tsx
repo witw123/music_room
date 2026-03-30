@@ -32,6 +32,8 @@ type RoomDashboardViewProps = {
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
+  mediaConnectedListenerNames: string[];
+  localPeerId: string;
   cachedTrackCount: number;
   playlists: Playlist[];
   availabilitySummary: AvailabilityEntry[];
@@ -73,6 +75,8 @@ export function RoomDashboardView({
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
+  mediaConnectedListenerNames,
+  localPeerId,
   cachedTrackCount,
   playlists,
   availabilitySummary,
@@ -110,10 +114,12 @@ export function RoomDashboardView({
           activeSession={activeSession}
           host={host}
           canDeleteRoom={canDeleteRoom}
-          currentSourceOwnerNickname={currentSourceOwnerNickname}
-          mediaConnectionState={mediaConnectionState}
-          mediaConnectedPeersCount={mediaConnectedPeersCount}
-          onCopyJoinCode={onCopyJoinCode}
+        currentSourceOwnerNickname={currentSourceOwnerNickname}
+        mediaConnectionState={mediaConnectionState}
+        mediaConnectedPeersCount={mediaConnectedPeersCount}
+        mediaConnectedListenerNames={mediaConnectedListenerNames}
+        localPeerId={localPeerId}
+        onCopyJoinCode={onCopyJoinCode}
           onLeaveRoom={onLeaveRoom}
           onDeleteRoom={onDeleteRoom}
         />
