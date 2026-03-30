@@ -18,20 +18,12 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import { RedisService } from "../../infra/redis/redis.service";
+import { getCorsOrigins } from "../../common/cors/get-cors-origins";
 import { AuthService } from "../auth/auth.service";
 import { RoomService } from "../room/room.service";
 
 const roomSnapshotChannel = "music-room:room-snapshot";
 const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
-const defaultCorsOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
-
-function getCorsOrigins() {
-  const configuredOrigins = process.env.CORS_ORIGINS?.split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
-  return configuredOrigins?.length ? configuredOrigins : defaultCorsOrigins;
-}
 
 @WebSocketGateway({
   path: "/ws/socket.io",

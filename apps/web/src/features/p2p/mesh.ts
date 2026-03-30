@@ -29,6 +29,7 @@ type PeerEntry = {
   channel: RTCDataChannel | null;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
+  pendingCandidates: RTCIceCandidateInit[];
 };
 
 type PendingPieceRequest = {
@@ -89,6 +90,7 @@ export class P2PMesh {
       }
 
       await entry.connection.setRemoteDescription(remoteDescription);
+      await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
       this.sendSignal({
@@ -113,12 +115,18 @@ export class P2PMesh {
       }
 
       await entry.connection.setRemoteDescription(remoteDescription);
+      await this.flushPendingCandidates(entry);
       return;
     }
 
     if (payload.type === "candidate") {
       const candidate = toIceCandidateInit(payload.payload);
       if (!candidate) {
+        return;
+      }
+
+      if (!entry.connection.remoteDescription) {
+        entry.pendingCandidates.push(candidate);
         return;
       }
 
@@ -199,7 +207,8 @@ export class P2PMesh {
     const entry: PeerEntry = {
       connection,
       channel: null,
-      initiatorPeerId: shouldInitiate ? this.localPeerId : null
+      initiatorPeerId: shouldInitiate ? this.localPeerId : null,
+      pendingCandidates: []
     };
 
     connection.onicecandidate = (event) => {
@@ -348,6 +357,18 @@ export class P2PMesh {
     entry.channel?.close();
     entry.connection.close();
     this.peers.delete(peerId);
+  }
+
+  private async flushPendingCandidates(entry: PeerEntry) {
+    if (entry.pendingCandidates.length === 0) {
+      return;
+    }
+
+    const nextCandidates = [...entry.pendingCandidates];
+    entry.pendingCandidates = [];
+    for (const candidate of nextCandidates) {
+      await entry.connection.addIceCandidate(candidate);
+    }
   }
 
   private clearPendingRequestsForPeer(peerId: string) {
