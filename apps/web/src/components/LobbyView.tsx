@@ -38,9 +38,11 @@ export function LobbyView({
     <div className="room-section">
       <section className="lobby-hero">
         <div className="lobby-hero-copy">
-          <p className="lobby-kicker">MUSIC ROOM</p>
+          <p className="lobby-kicker">Music Room</p>
           <h1>音乐房间</h1>
-          <p className="lobby-lead">本地曲库，实时同播。先确认昵称，再创建房间或输入房间码加入。</p>
+          <p className="lobby-lead">
+            本地曲库，实时同播。先确认昵称，再创建房间或通过房间码加入。
+          </p>
         </div>
 
         {!activeSession ? (
@@ -49,7 +51,7 @@ export function LobbyView({
               <p className="block-kicker">第一步</p>
               <h2>确认昵称</h2>
               <p className={`lobby-support-copy ${statusTone}`}>
-                {statusMessage || "昵称是创建房间和加入房间的前提。"}
+                {statusMessage || "昵称是创建或加入房间的前提。"}
               </p>
             </div>
 
@@ -79,7 +81,7 @@ export function LobbyView({
               <p className="block-kicker">第二步</p>
               <h2>创建房间或加入房间</h2>
               <p className={`lobby-support-copy ${statusTone}`}>
-                {statusMessage || "你已确认身份，现在可以创建新房间或通过房间码加入现有房间。"}
+                {statusMessage || "现在可以创建新房间，或通过房间码加入已有房间。"}
               </p>
             </div>
 

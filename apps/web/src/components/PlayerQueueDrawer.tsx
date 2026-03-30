@@ -122,8 +122,8 @@ export function PlayerQueueDrawer({
                     <div className="player-queue-copy">
                       <strong>{track?.title ?? "未知曲目"}</strong>
                       <p>
-                        {track?.artist ?? "本地上传"} · {formatDuration(track?.durationMs ?? 0)} · 点歌人{" "}
-                        {item.requestedBy}
+                        {track?.artist ?? "本地上传"} · {formatDuration(track?.durationMs ?? 0)} ·
+                        点歌人 {item.requestedBy}
                       </p>
                     </div>
                     <div className="player-queue-actions">

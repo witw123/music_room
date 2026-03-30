@@ -1,0 +1,145 @@
+.rooms-home-hero {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 24px;
+  align-items: start;
+  padding: 30px 0 22px;
+}
+
+.rooms-home-hero__copy h1 {
+  margin: 12px 0 18px;
+  max-width: 13ch;
+  font-size: clamp(2.6rem, 5vw, 4.6rem);
+  line-height: 0.97;
+  letter-spacing: -0.045em;
+}
+
+.rooms-home-panel,
+.rooms-home-card,
+.rooms-home-empty {
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-sm);
+}
+
+.rooms-home-panel {
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.rooms-home-panel__header h2 {
+  margin: 8px 0 10px;
+  font-size: 1.8rem;
+}
+
+.rooms-home-panel__header p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.rooms-home-panel__identity,
+.rooms-home-panel__recent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rooms-home-panel__recent {
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border);
+}
+
+.rooms-home-panel__recent strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1rem;
+}
+
+.rooms-home-list {
+  padding-bottom: 40px;
+}
+
+.rooms-home-list__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.rooms-home-list__header h2 {
+  margin: 8px 0 0;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+}
+
+.rooms-home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rooms-home-card {
+  padding: 22px;
+  display: grid;
+  gap: 14px;
+}
+
+.rooms-home-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.rooms-home-card__code {
+  color: var(--primary-strong);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.rooms-home-card h3,
+.rooms-home-empty h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.rooms-home-card p,
+.rooms-home-empty p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.rooms-home-empty {
+  padding: 26px;
+}
+
+@media (max-width: 1023px) {
+  .rooms-home-hero,
+  .rooms-home-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .rooms-home-panel,
+  .rooms-home-card,
+  .rooms-home-empty {
+    border-radius: 22px;
+  }
+
+  .rooms-home-panel__identity,
+  .rooms-home-panel__recent,
+  .rooms-home-list__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

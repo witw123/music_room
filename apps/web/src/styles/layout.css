@@ -1,0 +1,229 @@
+.music-room-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.main-content {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 32px 0 124px;
+}
+
+.panel-room {
+  width: 100%;
+}
+
+.status-toast-wrap {
+  position: fixed;
+  top: 96px;
+  right: 24px;
+  z-index: 40;
+}
+
+.status-toast {
+  max-width: 320px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.status-toast.warning {
+  border-color: rgba(220, 38, 38, 0.18);
+  color: var(--danger);
+}
+
+.status-toast.success {
+  border-color: rgba(22, 163, 74, 0.18);
+  color: var(--success);
+}
+
+.workspace-block,
+.player-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+}
+
+.solid-action,
+.ghost-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border-radius: var(--radius-pill);
+  padding: 0 18px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    transform var(--transition),
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
+}
+
+.solid-action:hover:not(:disabled),
+.ghost-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.solid-action {
+  background: linear-gradient(135deg, var(--primary), #3b82f6);
+  color: white;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
+.solid-action.compact {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.ghost-action {
+  background: #fff;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.ghost-action-emphasis {
+  border-color: rgba(37, 99, 235, 0.2);
+  color: var(--primary);
+  background: var(--primary-wash);
+}
+
+.solid-action:disabled,
+.ghost-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.hero-buttons,
+.track-row-actions,
+.player-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.field-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label,
+.block-kicker,
+.landing-kicker {
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.block-kicker,
+.landing-kicker {
+  color: var(--primary);
+}
+
+.hero-input {
+  width: 100%;
+  min-height: 52px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text);
+  padding: 0 16px;
+  outline: none;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    background var(--transition);
+}
+
+.hero-input:focus {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.identity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.block-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.block-heading h2 {
+  margin: 6px 0 0;
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  line-height: 1.1;
+}
+
+.block-heading span {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.placeholder-copy {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.pending-indicator {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.room-empty-state {
+  padding: 32px;
+  display: grid;
+  gap: 16px;
+}
+
+.room-empty-state h2 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  line-height: 1.02;
+}
+
+@media (max-width: 767px) {
+  .main-content {
+    width: min(100% - 28px, 1180px);
+    padding: 20px 0 118px;
+  }
+
+  .status-toast-wrap {
+    top: 88px;
+    left: 14px;
+    right: 14px;
+  }
+
+  .status-toast {
+    max-width: none;
+  }
+}

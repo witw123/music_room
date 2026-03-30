@@ -1,47 +1,74 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { Route } from "next";
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import { getOnlineMemberCount } from "@/lib/music-room-ui";
 
 type TopBarProps = {
-  activeSession: GuestSession | null;
-  roomSnapshot: RoomSnapshot | null;
-  connectedPeersCount: number;
-  mediaConnectedPeersCount: number;
+  activeSession?: GuestSession | null;
+  roomSnapshot?: RoomSnapshot | null;
 };
 
-export function TopBar({
-  activeSession,
-  roomSnapshot,
-  connectedPeersCount,
-  mediaConnectedPeersCount
-}: TopBarProps) {
+const navItems = [
+  { href: "/" as Route, label: "产品" },
+  { href: "/rooms" as Route, label: "房间主页" },
+  { href: "/rooms" as Route, label: "房间页", match: "/room/" }
+];
+
+export function TopBar({ activeSession = null, roomSnapshot = null }: TopBarProps) {
+  const pathname = usePathname();
+
   return (
-    <header className="top-bar">
-      <div className="top-bar-left">
-        <span className="top-bar-appname">音乐房间</span>
-        {roomSnapshot ? (
-          <span className="top-bar-room-info">
-            <span className={`signal-dot${roomSnapshot ? " live" : ""}`} />
-            房间码 <strong>{roomSnapshot.room.joinCode}</strong>
-            <span className="top-bar-sep">·</span>
-            {getOnlineMemberCount(roomSnapshot.room.members)} 人在线
-            <span className="top-bar-sep">·</span>
-            直播音频 {mediaConnectedPeersCount} 已连接
-            <span className="top-bar-sep">·</span>
-            缓存 Mesh {connectedPeersCount}
+    <header className="site-nav">
+      <div className="site-nav__inner">
+        <Link href="/" className="site-nav__brand">
+          <span className="site-nav__brand-mark" aria-hidden="true">
+            <span />
           </span>
-        ) : (
-          <span className="top-bar-mode">本地曲库实时同播</span>
-        )}
-      </div>
-      <div className="top-bar-intro">
-        {roomSnapshot
-          ? "房间、曲库和歌单已经合到同一工作台"
-          : "输入昵称后即可开房或通过房间码加入"}
-      </div>
-      <div className="top-bar-right">
-        {activeSession?.nickname ? <span className="identity-badge">{activeSession.nickname}</span> : null}
+          <span className="site-nav__brand-copy">
+            <strong>音乐房间</strong>
+            <em>Local music, synced listening</em>
+          </span>
+        </Link>
+
+        <nav className="site-nav__tabs" aria-label="站点导航">
+          {navItems.map((item) => {
+            const isActive = item.match
+              ? pathname.startsWith(item.match)
+              : pathname === item.href;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`site-nav__tab${isActive ? " is-active" : ""}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="site-nav__meta">
+          {roomSnapshot ? (
+            <div className="site-nav__room">
+              <span className="site-nav__room-chip">房间码 {roomSnapshot.room.joinCode}</span>
+              <span className="site-nav__room-chip subtle">
+                {getOnlineMemberCount(roomSnapshot.room.members)} 人在线
+              </span>
+            </div>
+          ) : null}
+
+          {activeSession?.nickname ? (
+            <span className="site-nav__identity">{activeSession.nickname}</span>
+          ) : (
+            <Link href={"/rooms" as Route} className="site-nav__cta">
+              进入房间
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );

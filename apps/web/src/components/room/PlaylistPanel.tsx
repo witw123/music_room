@@ -110,8 +110,7 @@ export function PlaylistPanel({
                   <div>
                     <strong>{playlist.title}</strong>
                     <p>
-                      {playlist.trackIds.length} 首曲目 ·{" "}
-                      {playlist.isCollaborative ? "协作" : "个人"}
+                      {playlist.trackIds.length} 首曲目 · {playlist.isCollaborative ? "协作" : "个人"}
                     </p>
                   </div>
                   <div className="track-row-actions">
@@ -134,9 +133,7 @@ export function PlaylistPanel({
                     </button>
                     <button
                       className="queue-remove"
-                      onClick={() =>
-                        startTransition(() => void onDeletePlaylist(playlist.id))
-                      }
+                      onClick={() => startTransition(() => void onDeletePlaylist(playlist.id))}
                     >
                       删除
                     </button>
@@ -146,9 +143,7 @@ export function PlaylistPanel({
             </div>
           ))
         ) : (
-          <p className="placeholder-copy">
-            把当前队列保存成歌单，之后可以一键重新加载回房间。
-          </p>
+          <p className="placeholder-copy">把当前队列保存成歌单，之后可以一键重新加载回房间。</p>
         )}
       </div>
     </section>

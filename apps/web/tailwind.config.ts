@@ -5,10 +5,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#111111",
-        sand: "#efe6d3",
-        ember: "#cd4c2f",
-        pine: "#1f4f46"
+        ink: "#0c0c10",
+        sand: "#eee8d5",
+        accent: "#8b5cf6",
+        "accent-hover": "#a78bfa",
+        pine: "#22c55e"
+      },
+      fontFamily: {
+        sans: ["Inter", "Segoe UI", "system-ui", "sans-serif"],
+        display: ["Outfit", "Inter", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"]
       }
     }
   },

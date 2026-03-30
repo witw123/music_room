@@ -1,8 +1,7 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
-  GuestSession,
   Playlist,
   RoomMediaConnectionState,
   RoomSnapshot,
@@ -19,39 +18,34 @@ import {
   selectChunkSource,
   P2PMesh
 } from "@/features/p2p";
-import {
-  cacheTrackAsset,
-  getCachedTrackAssetCount,
-  getCachedPiecesForTrack,
-  getCachedTrackAssets,
-  pruneCachedTracks
-} from "@/lib/indexeddb";
-import { removeTracksFromUploads, toUserFacingError } from "@/lib/music-room-ui";
+import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 import { TopBar } from "@/components/TopBar";
 import { BottomPlayer } from "@/components/BottomPlayer";
-import { LobbyView } from "@/components/LobbyView";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
-
-type UploadedTrack = {
-  file: File;
-  objectUrl: string;
-};
+import Link from "next/link";
+import type { Route } from "next";
+import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { useRoomPlayback } from "@/features/playback/use-room-playback";
+import { captureAudioStream } from "@/features/upload/audio-utils";
+import { useTrackUploads } from "@/features/upload/use-track-uploads";
+import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 
 const sessionStorageKey = "music-room-session";
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
-const capturedAudioGraphs = new WeakMap<
-  HTMLAudioElement,
-  {
-    context: AudioContext;
-    stream: MediaStream;
-  }
->();
 
-export function MusicRoomApp() {
+type MusicRoomAppProps = {
+  workspaceOnly?: boolean;
+  initialRoomId?: string | null;
+};
+
+export function MusicRoomApp({
+  workspaceOnly = true,
+  initialRoomId = null
+}: MusicRoomAppProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
@@ -60,18 +54,10 @@ export function MusicRoomApp() {
   const hostStreamRef = useRef<MediaStream | null>(null);
   const requestedPiecesRef = useRef<Map<string, number>>(new Map());
   const failedPiecePeersRef = useRef<Map<string, Set<string>>>(new Map());
-  const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const [isPending, startTransition] = useTransition();
-  const [nickname, setNickname] = useState("");
-  const [activeSession, setActiveSession] = useState<GuestSession | null>(null);
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [progressMs, setProgressMs] = useState(0);
-  const [seekDraft, setSeekDraft] = useState<number | null>(null);
-  const [audioDurationMs, setAudioDurationMs] = useState(0);
-  const [volume, setVolume] = useState(0.72);
-  const [cachedTrackCount, setCachedTrackCount] = useState(0);
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
   const [mediaConnectedPeers, setMediaConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
@@ -80,31 +66,97 @@ export function MusicRoomApp() {
   const [availabilityByTrack, setAvailabilityByTrack] = useState<
     Record<string, Record<string, TrackAvailabilityAnnouncement>>
   >({});
-  const [statusMessage, setStatusMessage] = useState("请输入昵称并确认身份。");
-  const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
+  const {
+    nickname,
+    setNickname,
+    activeSession,
+    setActiveSession,
+    statusMessage,
+    setStatusMessage,
+    clearIdentity
+  } = useSessionIdentity({
+    sessionStorageKey,
+    initialStatusMessage: "请输入昵称并确认身份。"
+  });
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
-
-  useEffect(() => {
-    const storedSession = window.localStorage.getItem(sessionStorageKey);
-    if (!storedSession) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(storedSession) as GuestSession;
-      if (parsed.id && parsed.nickname && parsed.token) {
-        setActiveSession(parsed);
-        setNickname(parsed.nickname);
-        setStatusMessage(`已恢复身份：${parsed.nickname}。`);
-      }
-    } catch {
-      window.localStorage.removeItem(sessionStorageKey);
-    }
-  }, []);
+  const {
+    progressTrack,
+    progressMs,
+    setProgressMs,
+    seekDraft,
+    setSeekDraft,
+    audioDurationMs,
+    setAudioDurationMs,
+    volume,
+    setVolume,
+    syncProgressFromAudio,
+    syncDurationFromAudio
+  } = useRoomPlayback({
+    audioRef,
+    remoteAudioRef,
+    playback: roomSnapshot?.room.playback,
+    tracks: roomSnapshot?.tracks ?? [],
+    isCurrentSourceOwner
+  });
+  const {
+    uploadedTracks,
+    setUploadedTracks,
+    cachedTrackCount,
+    handleFilesSelected: handleTrackFilesSelected,
+    announceLocalCache,
+    hydrateTrackFromPieces,
+    trimLocalCache
+  } = useTrackUploads({
+    maxCachedTracks,
+    peerId,
+    activeSession,
+    roomSnapshot,
+    setStatusMessage,
+    onAvailability: mergeAvailability,
+    emitAvailability: (announcement) => socketRef.current?.emit("piece.availability", announcement),
+    refreshRoom
+  });
+  const {
+    handleConfirmIdentity,
+    handleCreateRoom,
+    handleJoinRoom,
+    leaveRoom,
+    deleteRoom,
+    addToQueue,
+    playTrack,
+    playQueueItem,
+    pauseTrack,
+    prevTrack,
+    nextTrack,
+    savePlaylistFromQueue,
+    updatePlaylistTitle,
+    deletePlaylist,
+    loadPlaylistIntoRoom,
+    removeQueueItem,
+    reorderQueue,
+    seekTrack,
+    handleEnded
+  } = useRoomActions({
+    activeSession,
+    nickname,
+    roomSnapshot,
+    progressMs,
+    setNickname,
+    setActiveSession,
+    setRoomSnapshot,
+    setAvailableRooms,
+    setPlaylists,
+    setStatusMessage,
+    refreshAvailableRooms,
+    refreshPlaylists,
+    resetPlayerSurface,
+    lastRoomStorageKey,
+    audioRef
+  });
 
   useEffect(() => {
     const storedPeerId = window.sessionStorage.getItem(peerStorageKey);
@@ -120,13 +172,12 @@ export function MusicRoomApp() {
 
   useEffect(() => {
     if (!activeSession) return;
-    window.localStorage.setItem(sessionStorageKey, JSON.stringify(activeSession));
     void refreshAvailableRooms();
     void refreshPlaylists(activeSession.id);
   }, [activeSession]);
 
   useEffect(() => {
-    if (!activeSession || roomSnapshot) {
+    if (!activeSession || roomSnapshot || workspaceOnly) {
       return;
     }
 
@@ -147,7 +198,36 @@ export function MusicRoomApp() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
     };
-  }, [activeSession, roomSnapshot]);
+  }, [activeSession, roomSnapshot, workspaceOnly]);
+
+  useEffect(() => {
+    if (!workspaceOnly || !initialRoomId || !activeSession || roomSnapshot?.room.id === initialRoomId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const snapshot = await musicRoomApi.recoverRoom(initialRoomId, activeSession.id);
+        if (!snapshot || cancelled) {
+          return;
+        }
+
+        setRoomSnapshot(snapshot);
+        setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
+        await refreshPlaylists(activeSession.id);
+      } catch {
+        if (!cancelled) {
+          setStatusMessage("未找到可恢复的房间状态，请返回房间主页重新创建或加入房间。");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceOnly, initialRoomId, activeSession?.id, roomSnapshot?.room.id]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId) return;
@@ -174,7 +254,7 @@ export function MusicRoomApp() {
             }
           });
           void announceLocalCache(trackId, totalChunks);
-          void hydrateTrackFromPieces(trackId, mimeType, totalChunks);
+          void hydrateTrackFromPiecesWithCleanup(trackId, mimeType, totalChunks);
         },
         onPieceRequestTimeout: ({ trackId, chunkIndex, peerId: timedOutPeerId }) => {
           const requestKey = `${trackId}:${chunkIndex}`;
@@ -333,77 +413,7 @@ export function MusicRoomApp() {
     failedPiecePeersRef.current.clear();
   }, [roomSnapshot?.room.id, peerId]);
 
-  useEffect(() => {
-    const nextUrls = new Map(
-      Object.entries(uploadedTracks).map(([trackId, upload]) => [trackId, upload.objectUrl])
-    );
-
-    for (const [trackId, objectUrl] of uploadedTrackUrlsRef.current.entries()) {
-      if (nextUrls.get(trackId) !== objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    }
-
-    uploadedTrackUrlsRef.current = nextUrls;
-  }, [uploadedTracks]);
-
-  useEffect(() => {
-    return () => {
-      for (const objectUrl of uploadedTrackUrlsRef.current.values()) {
-        URL.revokeObjectURL(objectUrl);
-      }
-      uploadedTrackUrlsRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!roomSnapshot) {
-      return;
-    }
-
-    void trimLocalCache(roomSnapshot.tracks.map((track) => track.id));
-  }, [roomSnapshot?.tracks]);
-
   const playback = roomSnapshot?.room.playback;
-  const progressTrack = roomSnapshot?.tracks.find((item) => item.id === playback?.currentTrackId) ?? null;
-
-  useEffect(() => {
-    const localAudio = audioRef.current;
-    const remoteAudio = remoteAudioRef.current;
-
-    if (!playback || !progressTrack) {
-      setProgressMs(0);
-      return;
-    }
-
-    const tick = () => {
-      const liveAudio = isCurrentSourceOwner ? localAudio : remoteAudio;
-      if (liveAudio && !liveAudio.paused && Number.isFinite(liveAudio.currentTime)) {
-        setProgressMs(Math.floor(liveAudio.currentTime * 1000));
-        return;
-      }
-
-      if (playback.status !== "playing" || !playback.startedAt) {
-        setProgressMs(playback.positionMs);
-        return;
-      }
-
-      const elapsed = Date.now() - new Date(playback.startedAt).getTime();
-      setProgressMs(Math.min(progressTrack.durationMs, playback.positionMs + elapsed));
-    };
-
-    tick();
-    const timer = window.setInterval(tick, 500);
-    return () => window.clearInterval(timer);
-  }, [
-    playback?.status,
-    playback?.currentTrackId,
-    playback?.positionMs,
-    playback?.startedAt,
-    playback?.mediaEpoch,
-    progressTrack?.durationMs,
-    isCurrentSourceOwner
-  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -463,20 +473,6 @@ export function MusicRoomApp() {
   }, [playback, uploadedTracks, isCurrentSourceOwner, volume]);
 
   useEffect(() => {
-    if (!audioRef.current) return;
-    audioRef.current.volume = volume;
-  }, [volume]);
-
-  useEffect(() => {
-    const remoteAudio = remoteAudioRef.current;
-    if (!remoteAudio) {
-      return;
-    }
-
-    remoteAudio.volume = volume;
-  }, [volume]);
-
-  useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId) {
       return;
     }
@@ -496,81 +492,7 @@ export function MusicRoomApp() {
     isCurrentSourceOwner,
     peerId
   ]);
-
-  useEffect(() => {
-    if (!roomSnapshot?.tracks.length) {
-      setCachedTrackCount(0);
-      return;
-    }
-
-    let disposed = false;
-
-    const restoreCachedAssets = async () => {
-      const uncachedTrackIds = roomSnapshot.tracks
-        .filter((track) => !uploadedTracks[track.id])
-        .map((track) => track.id);
-
-      if (uncachedTrackIds.length === 0) {
-        if (!disposed) {
-          setCachedTrackCount(Object.keys(uploadedTracks).length);
-        }
-        return;
-      }
-
-      const cachedAssets = await getCachedTrackAssets(uncachedTrackIds);
-      if (disposed || cachedAssets.length === 0) {
-        if (!disposed) {
-          setCachedTrackCount(Object.keys(uploadedTracks).length);
-        }
-        return;
-      }
-
-      setUploadedTracks((current) => {
-        const next = { ...current };
-        for (const asset of cachedAssets) {
-          if (!next[asset.trackId]) {
-            next[asset.trackId] = {
-              file: new File([asset.file], `${asset.title}.bin`, {
-                type: asset.mimeType || "audio/mpeg"
-              }),
-              objectUrl: URL.createObjectURL(asset.file)
-            };
-          }
-        }
-
-        setCachedTrackCount(Object.keys(next).length);
-        return next;
-      });
-
-      if (roomSnapshot && peerId && activeSession) {
-        for (const asset of cachedAssets) {
-          const availability = await buildTrackAvailabilityFromFile({
-            roomId: roomSnapshot.room.id,
-            trackId: asset.trackId,
-            fileHash: asset.fileHash,
-            file: asset.file,
-            peerId,
-            nickname: activeSession.nickname,
-            source: "local_cache"
-          });
-          mergeAvailability(availability);
-          socketRef.current?.emit("piece.availability", availability);
-        }
-      }
-    };
-
-    void restoreCachedAssets();
-
-    return () => {
-      disposed = true;
-    };
-  }, [roomSnapshot, uploadedTracks, peerId, activeSession]);
-
-  const currentTrack = useMemo(() => {
-    const currentTrackId = roomSnapshot?.room.playback.currentTrackId;
-    if (!currentTrackId) return null;
-    return roomSnapshot?.tracks.find((track) => track.id === currentTrackId) ?? null;
-  }, [roomSnapshot]);
+  const currentTrack = progressTrack;
 
   const upcomingTrack = useMemo(() => {
     if (!roomSnapshot || !currentTrack) {
@@ -689,41 +611,6 @@ export function MusicRoomApp() {
     return () => window.clearInterval(timer);
   }, []);
 
-  async function ensureSession(requiredNickname: string, actionLabel: string) {
-    const trimmedNickname = requiredNickname.trim();
-    if (!trimmedNickname) {
-      setStatusMessage("请输入昵称。");
-      return null;
-    }
-
-    setNickname(trimmedNickname);
-
-    if (activeSession && activeSession.nickname === trimmedNickname) {
-      return activeSession;
-    }
-
-    try {
-      const nextSession = await musicRoomApi.createGuestSession(trimmedNickname);
-      setActiveSession(nextSession);
-      return nextSession;
-    } catch (error) {
-      const message = toUserFacingError(error);
-      setStatusMessage(
-        message === "请求失败。"
-          ? `${actionLabel}失败，请检查网络后重试。`
-          : `${actionLabel}失败：${message}`
-      );
-      return null;
-    }
-  }
-
-  async function handleConfirmIdentity() {
-    const sessionForAction = await ensureSession(nickname, "确认昵称");
-    if (!sessionForAction) return;
-    setStatusMessage(`已确认身份：${sessionForAction.nickname}。现在可以创建或加入房间。`);
-    await refreshAvailableRooms();
-  }
-
   function resetPlayerSurface() {
     const localAudio = audioRef.current;
     const remoteAudio = remoteAudioRef.current;
@@ -748,75 +635,12 @@ export function MusicRoomApp() {
     setMediaConnectedPeers([]);
   }
 
-  async function handleCreateRoom() {
-    if (!activeSession) {
-      setStatusMessage("请先输入昵称并确认身份。");
-      return;
-    }
-    await doCreateRoom(activeSession);
-  }
-
-  async function handleJoinRoom(code: string) {
-    if (!activeSession) {
-      setStatusMessage("请先输入昵称并确认身份。");
-      return;
-    }
-    if (!code.trim()) {
-      setStatusMessage("请输入房间码。");
-      return;
-    }
-    await doJoinRoom(activeSession, code);
-  }
-
   function handleClearIdentity() {
     resetPlayerSurface();
-    setActiveSession(null);
-    setNickname("");
+    clearIdentity();
     setRoomSnapshot(null);
     setPlaylists([]);
-    window.localStorage.removeItem(sessionStorageKey);
     window.localStorage.removeItem(lastRoomStorageKey);
-    setStatusMessage("请输入昵称并确认身份。");
-  }
-
-  async function doCreateRoom(activeSession: GuestSession) {
-    if (!activeSession) return;
-
-    try {
-      const snapshot = await musicRoomApi.createRoom(activeSession.id, "public");
-      setRoomSnapshot(snapshot);
-      setAvailableRooms((current) => {
-        const next = current.filter((room) => room.room.id !== snapshot.room.id);
-        return [snapshot, ...next];
-      });
-      setStatusMessage(`房间已创建，分享码 ${snapshot.room.joinCode} 邀请他人加入。`);
-      await refreshPlaylists(activeSession.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function doJoinRoom(activeSession: GuestSession, code: string) {
-    if (!activeSession || !code.trim()) return;
-
-    try {
-      const snapshot = await musicRoomApi.joinRoomByCode(activeSession.id, code.trim());
-      setRoomSnapshot(snapshot);
-      await refreshAvailableRooms();
-      const joinedMember =
-        snapshot.room.members.find((member) => member.id === activeSession.id) ??
-        (snapshot.room.hostId === activeSession.id
-          ? { role: "host" as const }
-          : { role: "member" as const });
-      setStatusMessage(
-        joinedMember?.role === "host"
-          ? `已加入房间 ${snapshot.room.joinCode}，你当前是房主。`
-          : `已加入房间 ${snapshot.room.joinCode}，你当前是听众。`
-      );
-      await refreshPlaylists(activeSession.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
   }
 
   async function refreshRoom(roomId: string) {
@@ -842,316 +666,14 @@ export function MusicRoomApp() {
     }
   }
 
-  async function leaveRoom() {
-    if (!activeSession || !roomSnapshot) return;
-
-    try {
-      await musicRoomApi.leaveRoom(roomSnapshot.room.id, activeSession.id);
-      resetPlayerSurface();
-      setRoomSnapshot(null);
-      window.localStorage.removeItem(lastRoomStorageKey);
-      await refreshAvailableRooms();
-      setStatusMessage("已离开房间。再次加入时将作为当前房间规则下的成员进入。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function deleteRoom() {
-    if (!activeSession || !roomSnapshot) return;
-
-    try {
-      await musicRoomApi.deleteRoom(roomSnapshot.room.id, activeSession.id);
-      resetPlayerSurface();
-      setRoomSnapshot(null);
-      window.localStorage.removeItem(lastRoomStorageKey);
-      await refreshAvailableRooms();
-      setStatusMessage("房间已删除。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
   async function handleFilesSelected(files: FileList | null) {
-    if (!files || !activeSession || !roomSnapshot) return;
-
     try {
-      const nextUploads: Record<string, UploadedTrack> = {};
-
-      for (const file of Array.from(files)) {
-        const objectUrl = URL.createObjectURL(file);
-        const track = await buildTrackMeta(file, objectUrl, activeSession);
-        const registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
-          sessionId: activeSession.id,
-          ...track
-        });
-
-        nextUploads[registered.id] = {
-          file,
-          objectUrl
-        };
-        await cacheTrackAsset({
-          trackId: registered.id,
-          fileHash: registered.fileHash,
-          title: registered.title,
-          mimeType: file.type || "audio/mpeg",
-          file
-        });
-
-        if (peerId) {
-          const availability = await buildTrackAvailabilityFromFile({
-            roomId: roomSnapshot.room.id,
-            trackId: registered.id,
-            fileHash: registered.fileHash,
-            file,
-            peerId,
-            nickname: activeSession.nickname,
-            source: "live_upload"
-          });
-          mergeAvailability(availability);
-          socketRef.current?.emit("piece.availability", availability);
-        }
-      }
-
-      setUploadedTracks((current) => ({ ...current, ...nextUploads }));
-      await trimLocalCache([
-        ...roomSnapshot.tracks.map((track) => track.id),
-        ...Object.keys(nextUploads)
-      ]);
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage(`${Object.keys(nextUploads).length} 首本地歌曲已导入房间曲库。`);
+      await handleTrackFilesSelected(files);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
-  async function addToQueue(trackId: string) {
-    if (!activeSession || !roomSnapshot) return;
-
-    try {
-      await musicRoomApi.addQueueItem(roomSnapshot.room.id, {
-        sessionId: activeSession.id,
-        trackId
-      });
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("曲目已添加到播放队列。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function playTrack(trackId?: string) {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "play",
-        trackId,
-        sessionId: activeSession.id
-      });
-      await refreshRoom(roomSnapshot.room.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function playQueueItem(queueItemId: string) {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "play",
-        queueItemId,
-        sessionId: activeSession.id
-      });
-      await refreshRoom(roomSnapshot.room.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function pauseTrack(positionMs = Math.round((audioRef.current?.currentTime ?? 0) * 1000)) {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "pause",
-        positionMs,
-        sessionId: activeSession.id
-      });
-      await refreshRoom(roomSnapshot.room.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function prevTrack() {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      // Go to previous track - restart current or go to previous in queue
-      const playback = roomSnapshot?.room.playback;
-      if (playback?.currentTrackId) {
-        // If progress > 3s, restart current track; otherwise seek to 0
-        if (progressMs > 3000) {
-          await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-            action: "seek",
-            positionMs: 0,
-            sessionId: activeSession.id
-          });
-        } else {
-          await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-            action: "prev",
-            sessionId: activeSession.id
-          });
-        }
-        await refreshRoom(roomSnapshot.room.id);
-      }
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function nextTrack() {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "next",
-        sessionId: activeSession.id
-      });
-      await refreshRoom(roomSnapshot.room.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function savePlaylistFromQueue(title: string) {
-    if (!activeSession || !roomSnapshot) return;
-
-    try {
-      await musicRoomApi.createPlaylistFromRoom({
-        ownerId: activeSession.id,
-        roomId: roomSnapshot.room.id,
-        title,
-        description: "从当前房间队列保存"
-      });
-      await refreshPlaylists(activeSession.id);
-      setStatusMessage(`歌单“${title}”已保存。`);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function updatePlaylistTitle(playlistId: string, title: string) {
-    if (!activeSession) return;
-
-    try {
-      await musicRoomApi.updatePlaylist(playlistId, {
-        ownerId: activeSession.id,
-        title
-      });
-      await refreshPlaylists(activeSession.id);
-      setStatusMessage("歌单名称已更新。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function deletePlaylist(playlistId: string) {
-    if (!activeSession) return;
-
-    try {
-      await musicRoomApi.deletePlaylist(playlistId, activeSession.id);
-      await refreshPlaylists(activeSession.id);
-      setStatusMessage("歌单已从个人存档中删除。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function loadPlaylistIntoRoom(playlistId: string) {
-    if (!activeSession || !roomSnapshot) return;
-
-    try {
-      await musicRoomApi.importPlaylistToRoom(playlistId, {
-        roomId: roomSnapshot.room.id,
-        sessionId: activeSession.id
-      });
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("歌单已加载到当前房间的播放队列。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function removeQueueItem(queueItemId: string) {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.removeQueueItemAs(roomSnapshot.room.id, queueItemId, activeSession.id);
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("曲目已从队列中移除。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function reorderQueue(queueItemIds: string[]) {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
-        sessionId: activeSession.id,
-        queueItemIds
-      });
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("播放队列顺序已更新。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function seekTrack(positionMs: number) {
-    if (!roomSnapshot || !activeSession) return;
-
-    try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "seek",
-        positionMs,
-        sessionId: activeSession.id
-      });
-      await refreshRoom(roomSnapshot.room.id);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function handleEnded() {
-    if (!roomSnapshot) return;
-    await nextTrack();
-  }
-
-  function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    const audio = event?.currentTarget ?? audioRef.current;
-    if (!audio || !Number.isFinite(audio.currentTime)) {
-      return;
-    }
-
-    const nextProgressMs = Math.floor(audio.currentTime * 1000);
-    setProgressMs(
-      currentTrackDuration > 0 ? Math.min(nextProgressMs, currentTrackDuration) : nextProgressMs
-    );
-  }
-
-  function syncDurationFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    const audio = event?.currentTarget ?? audioRef.current;
-    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
-      return;
-    }
-
-    setAudioDurationMs(Math.round(audio.duration * 1000));
-  }
 
   function mergeAvailability(announcement: TrackAvailabilityAnnouncement) {
     setAvailabilityByTrack((current) => ({
@@ -1163,72 +685,12 @@ export function MusicRoomApp() {
     }));
   }
 
-  async function announceLocalCache(trackId: string, totalChunks?: number) {
-    if (!roomSnapshot || !activeSession || !peerId) {
-      return;
-    }
-
-    const availability = await buildTrackAvailabilityFromCache({
-      roomId: roomSnapshot.room.id,
-      trackId,
-      peerId,
-      nickname: activeSession.nickname,
-      totalChunks
-    });
-
-    if (!availability) {
-      return;
-    }
-
-    mergeAvailability(availability);
-    socketRef.current?.emit("piece.availability", availability);
-  }
-
-  async function hydrateTrackFromPieces(trackId: string, mimeType: string, totalChunks: number) {
-    if (!roomSnapshot) {
-      return;
-    }
-
-    const pieces = await getCachedPiecesForTrack(trackId, peerId);
-    if (pieces.length < totalChunks) {
-      return;
-    }
-
-    const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
-    if (!track || uploadedTracks[trackId]) {
-      return;
-    }
-
-    const assembled = await assembleTrackFileFromPieces({
-      pieces,
-      totalChunks,
-      mimeType: mimeType || "audio/mpeg",
-      title: track.title,
-      expectedFileHash: track.fileHash
-    });
-
-    if (!assembled) {
-      setStatusMessage(`曲目 ${track.title} 的下载分片不完整或校验失败。`);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(assembled.blob);
-
-    await cacheTrackAsset({
-      trackId,
-      fileHash: track.fileHash,
-      title: track.title,
-      mimeType: mimeType || "audio/mpeg",
-      file: assembled.blob
-    });
-
-    setUploadedTracks((current) => ({
-      ...current,
-      [trackId]: {
-        file: assembled.file,
-        objectUrl
-      }
-    }));
+  async function hydrateTrackFromPiecesWithCleanup(
+    trackId: string,
+    mimeType: string,
+    totalChunks: number
+  ) {
+    await hydrateTrackFromPieces(trackId, mimeType, totalChunks);
     requestedPiecesRef.current.forEach((_startedAt, requestKey) => {
       if (requestKey.startsWith(`${trackId}:`)) {
         requestedPiecesRef.current.delete(requestKey);
@@ -1238,22 +700,6 @@ export function MusicRoomApp() {
       if (requestKey.startsWith(`${trackId}:`)) {
         failedPiecePeersRef.current.delete(requestKey);
       }
-    });
-    await trimLocalCache(roomSnapshot.tracks.map((entry) => entry.id));
-    setStatusMessage(`已从房间其他成员恢复曲目 ${track.title} 的本地缓存。`);
-  }
-
-  async function trimLocalCache(protectedTrackIds: string[]) {
-    const removedTrackIds = await pruneCachedTracks(maxCachedTracks, protectedTrackIds);
-    const nextCount = await getCachedTrackAssetCount();
-    setCachedTrackCount(nextCount);
-
-    if (removedTrackIds.length === 0) {
-      return;
-    }
-
-    setUploadedTracks((current) => {
-      return removeTracksFromUploads(current, removedTrackIds);
     });
   }
 
@@ -1312,12 +758,7 @@ export function MusicRoomApp() {
   const visibleRooms = availableRooms.filter((item) => item.room.id !== roomSnapshot?.room.id);
   return (
     <main className="music-room-shell">
-      <TopBar
-        activeSession={activeSession}
-        roomSnapshot={roomSnapshot}
-        connectedPeersCount={connectedPeers.length}
-        mediaConnectedPeersCount={mediaConnectedPeers.length}
-      />
+      <TopBar activeSession={activeSession} roomSnapshot={roomSnapshot} />
 
       {roomSnapshot ? (
         <div className="status-toast-wrap" aria-live="polite">
@@ -1367,18 +808,25 @@ export function MusicRoomApp() {
               onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
             />
           ) : (
-            <LobbyView
-              nickname={nickname}
-              setNickname={setNickname}
-              activeSession={activeSession}
-              visibleRooms={visibleRooms}
-              statusMessage={statusMessage}
-              onConfirmIdentity={handleConfirmIdentity}
-              onCreateRoom={handleCreateRoom}
-              onJoinRoom={handleJoinRoom}
-              onLeaveRoom={handleClearIdentity}
-              onRefreshRooms={refreshAvailableRooms}
-            />
+            <section className="room-empty-state workspace-block">
+              <p className="block-kicker">房间页</p>
+              <h2>当前没有可用的房间工作台</h2>
+              <p className="placeholder-copy">
+                {activeSession
+                  ? "这个地址没有恢复到有效房间。请回到房间主页，重新创建或通过房间码加入。"
+                  : "你还没有确认身份。请先进入房间主页确认昵称，再创建或加入房间。"}
+              </p>
+              <div className="hero-buttons">
+                <Link href={"/rooms" as Route} className="solid-action">
+                  返回房间主页
+                </Link>
+                {activeSession ? (
+                  <button className="ghost-action" onClick={handleClearIdentity}>
+                    清除当前身份
+                  </button>
+                ) : null}
+              </div>
+            </section>
           )}
         </div>
       </div>
@@ -1435,103 +883,5 @@ export function MusicRoomApp() {
       {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
     </main>
   );
-}
-
-async function buildTrackMeta(file: File, objectUrl: string, session: GuestSession) {
-  const buffer = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  const fileHash = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-  const durationMs = await readDuration(objectUrl);
-  const title = file.name.replace(/\.[^/.]+$/, "");
-
-  return {
-    title,
-    artist: "本地上传",
-    album: null,
-    durationMs,
-    bitrate: null,
-    fileHash,
-    artworkUrl: null,
-    ownerSessionId: session.id,
-    ownerNickname: session.nickname,
-    sourceType: "local_upload" as const
-  };
-}
-
-function readDuration(objectUrl: string) {
-  return new Promise<number>((resolve) => {
-    const audio = document.createElement("audio");
-    audio.preload = "metadata";
-    audio.src = objectUrl;
-
-    const cleanup = () => {
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("error", handleError);
-      audio.pause();
-      audio.src = "";
-      audio.load();
-    };
-
-    const handleLoadedMetadata = () => {
-      cleanup();
-      resolve(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
-    };
-
-    const handleError = () => {
-      cleanup();
-      resolve(0);
-    };
-
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("error", handleError);
-    audio.load();
-  });
-}
-
-function captureAudioStream(audio: HTMLAudioElement) {
-  const cachedGraph = capturedAudioGraphs.get(audio);
-  if (cachedGraph) {
-    if (cachedGraph.context.state === "suspended") {
-      void cachedGraph.context.resume().catch(() => undefined);
-    }
-
-    return cachedGraph.stream;
-  }
-
-  if (typeof window !== "undefined") {
-    const AudioContextCtor = window.AudioContext;
-    if (AudioContextCtor) {
-      const context = new AudioContextCtor();
-      const source = context.createMediaElementSource(audio);
-      const destination = context.createMediaStreamDestination();
-      source.connect(destination);
-      source.connect(context.destination);
-      capturedAudioGraphs.set(audio, {
-        context,
-        stream: destination.stream
-      });
-      if (context.state === "suspended") {
-        void context.resume().catch(() => undefined);
-      }
-      return destination.stream;
-    }
-  }
-
-  const mediaAudio = audio as HTMLAudioElement & {
-    captureStream?: () => MediaStream;
-    mozCaptureStream?: () => MediaStream;
-  };
-
-  if (typeof mediaAudio.captureStream === "function") {
-    return mediaAudio.captureStream();
-  }
-
-  if (typeof mediaAudio.mozCaptureStream === "function") {
-    return mediaAudio.mozCaptureStream();
-  }
-
-  return null;
 }
 

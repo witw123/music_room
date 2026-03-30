@@ -73,7 +73,9 @@ export function TrackListSection({
             </article>
           ))
         ) : (
-          <p className="placeholder-copy">还没有曲目。先导入本地音频，队列和歌单才会联动起来。</p>
+          <p className="placeholder-copy">
+            还没有曲目。先导入本地音频，队列和歌单才会联动起来。
+          </p>
         )}
       </div>
 

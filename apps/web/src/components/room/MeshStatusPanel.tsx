@@ -44,9 +44,7 @@ export function MeshStatusPanel({
                   本地 {localChunkCount}/{totalChunks || 0} 分片 · {peerCount} 个节点
                 </p>
                 {sources.length ? (
-                  <span className="playlist-sources">
-                    {sources.slice(0, 2).join(" · ")}
-                  </span>
+                  <span className="playlist-sources">{sources.slice(0, 2).join(" · ")}</span>
                 ) : null}
               </div>
             </div>

@@ -51,7 +51,7 @@ type BottomPlayerProps = {
 function getMediaStatusLabel(state: RoomMediaConnectionState) {
   switch (state) {
     case "connecting":
-      return "正在连接房主音频";
+      return "正在连接房间音频";
     case "buffering":
       return "正在缓冲直播音频";
     case "live":
@@ -61,7 +61,7 @@ function getMediaStatusLabel(state: RoomMediaConnectionState) {
     case "failed":
       return "音频连接失败";
     default:
-      return "等待房主开始播放";
+      return "等待房间开始播放";
   }
 }
 
@@ -100,7 +100,6 @@ export function BottomPlayer({
   onReorderQueue
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
-
   const playback = roomSnapshot?.room.playback;
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const isPlaying = playback?.status === "playing";
@@ -118,7 +117,11 @@ export function BottomPlayer({
       </div>
 
       <div className="bp-track-info">
-        <div className={`bp-artwork${currentTrack?.artworkUrl ? "" : " is-placeholder"}${isPlaying ? " is-rotating" : ""}`}>
+        <div
+          className={`bp-artwork${currentTrack?.artworkUrl ? "" : " is-placeholder"}${
+            isPlaying ? " is-rotating" : ""
+          }`}
+        >
           {currentTrack?.artworkUrl ? (
             <img src={currentTrack.artworkUrl} alt="" className="bp-artwork-image" />
           ) : (
@@ -144,7 +147,9 @@ export function BottomPlayer({
           onClick={() => startTransition(() => void onPrev())}
           title="上一首"
         >
-          ⏮
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+          </svg>
         </button>
         <button
           className={`bp-btn bp-btn-main ${isPlaying ? "bp-btn-playing" : "bp-btn-paused"}`}
@@ -160,7 +165,15 @@ export function BottomPlayer({
           }
           title={isPlaying ? "暂停" : "播放"}
         >
-          {isPlaying ? "❚❚" : "▶"}
+          {isPlaying ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19h4V5H6zm8-14v14h4V5z" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
         </button>
         <button
           className="bp-btn ghost-action inverse"
@@ -168,7 +181,9 @@ export function BottomPlayer({
           onClick={() => startTransition(() => void onNext())}
           title="下一首"
         >
-          ⏭
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
+          </svg>
         </button>
       </div>
 
@@ -209,7 +224,7 @@ export function BottomPlayer({
           <span className="bp-note">正在向 {mediaConnectedPeersCount} 位成员发送音频</span>
         ) : null}
         {!canControlPlayback && !localTrackAvailable && currentTrack ? (
-          <span className="bp-note">成员端优先收听房主直播音频</span>
+          <span className="bp-note">成员端优先收听房间直播音频</span>
         ) : null}
         {!localTrackAvailable && currentTrackAvailability ? (
           <span className="bp-note">
@@ -217,7 +232,11 @@ export function BottomPlayer({
           </span>
         ) : null}
         <label className="bp-volume" aria-label="音量">
-          <span className="bp-volume-icon">🔊</span>
+          <span className="bp-volume-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
+            </svg>
+          </span>
           <input
             type="range"
             min={0}

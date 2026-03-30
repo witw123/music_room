@@ -1,0 +1,226 @@
+/* ━━━ Music Room — Lobby Page ━━━ */
+
+.lobby-hero {
+  padding: 3rem 0 2rem;
+  animation: fade-in-up 0.6s ease-out;
+}
+
+.lobby-hero-copy {
+  max-width: 36rem;
+  margin-bottom: 2.5rem;
+}
+
+.lobby-hero-copy .lobby-kicker {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lobby-hero-copy h1 {
+  margin: 0.6rem 0 0.75rem;
+  font-family: 'Outfit', sans-serif;
+  font-size: clamp(2.8rem, 6vw, 4.5rem);
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, var(--text) 30%, var(--accent-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lobby-lead {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 1.02rem;
+  line-height: 1.7;
+  max-width: 32rem;
+}
+
+/* ── Form Shell ── */
+
+.lobby-form-shell {
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 2rem;
+  animation: fade-in-up 0.5s ease-out 0.15s both;
+}
+
+.lobby-form-intro {
+  margin-bottom: 1.5rem;
+}
+
+.lobby-form-intro h2 {
+  margin: 0.35rem 0 0.5rem;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.lobby-support-copy {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.lobby-support-copy.negative {
+  color: var(--danger);
+}
+
+/* ── Form Stack ── */
+
+.lobby-form-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.lobby-identity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.lobby-identity-badge {
+  font-size: 0.88rem;
+  padding: 0.45rem 1rem;
+}
+
+.lobby-inline-action {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.85rem;
+}
+
+.lobby-primary-action {
+  font-size: 0.92rem;
+  padding: 0.85rem 1.5rem;
+}
+
+.lobby-secondary-action {
+  font-size: 0.88rem;
+}
+
+.compact-field .hero-input {
+  padding: 0.75rem 1rem;
+  font-size: 0.88rem;
+}
+
+/* ── Room List ── */
+
+.lobby-room-list {
+  margin-top: 2.5rem;
+  animation: fade-in-up 0.5s ease-out 0.3s both;
+}
+
+.lobby-room-list-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.lobby-refresh {
+  font-size: 0.82rem;
+  padding: 0.5rem 0.9rem;
+}
+
+.room-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .room-list {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+}
+
+/* ── Room Card ── */
+
+.room-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    transform var(--transition),
+    box-shadow var(--transition);
+}
+
+.room-card:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 24px var(--accent-glow);
+}
+
+.room-card-button {
+  width: 100%;
+}
+
+.room-card-info {
+  min-width: 0;
+}
+
+.room-card-code-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.room-card-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.room-card-host {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.room-card-members {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Responsive Lobby ── */
+
+@media (max-width: 767px) {
+  .lobby-hero {
+    padding: 2rem 0 1.5rem;
+  }
+
+  .lobby-form-shell {
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+  }
+
+  .lobby-form-intro h2 {
+    font-size: 1.3rem;
+  }
+}

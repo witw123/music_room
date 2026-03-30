@@ -1,5 +1,5 @@
-import { MusicRoomApp } from "@/components/music-room-app";
+import { ProductLandingPage } from "@/components/ProductLandingPage";
 
 export default function HomePage() {
-  return <MusicRoomApp />;
+  return <ProductLandingPage />;
 }

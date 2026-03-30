@@ -1,0 +1,56 @@
+.room-dashboard {
+  display: grid;
+  gap: 24px;
+}
+
+.room-stage {
+  border-radius: 32px;
+}
+
+.room-stage,
+.room-workbench-main > *,
+.room-workbench-side > * {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.room-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 20px;
+}
+
+.room-workbench-main,
+.room-workbench-side {
+  display: grid;
+  gap: 18px;
+}
+
+.room-stage .display-caption,
+.room-stage .block-kicker {
+  color: var(--primary);
+}
+
+.room-stage .display-title,
+.room-stage h1,
+.room-stage h2 {
+  color: var(--text);
+}
+
+.room-stage .display-chip {
+  background: var(--surface-secondary);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.room-stage .display-chip.active,
+.room-stage .display-chip.live {
+  background: var(--primary-soft);
+  border-color: rgba(37, 99, 235, 0.18);
+  color: var(--primary-strong);
+}
+
+@media (max-width: 1023px) {
+  .room-workbench {
+    grid-template-columns: 1fr;
+  }
+}

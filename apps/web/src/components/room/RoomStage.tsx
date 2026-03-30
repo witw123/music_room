@@ -28,26 +28,26 @@ type RoomStageProps = {
 
 function getMediaStageLabel(
   mediaConnectionState: RoomMediaConnectionState,
-  isHost: boolean,
+  isSourceOwner: boolean,
   mediaConnectedPeersCount: number
 ) {
-  if (isHost) {
-    return `实时音频已连接 ${mediaConnectedPeersCount} 人`;
+  if (isSourceOwner) {
+    return `正在向 ${mediaConnectedPeersCount} 位成员发送音频`;
   }
 
   switch (mediaConnectionState) {
     case "connecting":
-      return "正在连接房主音频";
+      return "正在连接房间音频";
     case "buffering":
-      return "正在缓冲直播音频";
+      return "正在缓冲实时音频";
     case "live":
-      return "已接入房主直播音频";
+      return "已接入房间直播音频";
     case "reconnecting":
-      return "正在重连房主音频";
+      return "正在重连房间音频";
     case "failed":
-      return "直播音频连接失败";
+      return "实时音频连接失败";
     default:
-      return "等待房主开始播放";
+      return "等待音源开始播放";
   }
 }
 
@@ -68,30 +68,37 @@ export function RoomStage({
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const isHost = !!activeSession && activeSession.id === roomSnapshot.room.hostId;
-  const roleLabel = isHost ? "房主" : "听众";
+  const isSourceOwner =
+    !!activeSession && activeSession.id === roomSnapshot.room.playback.sourceSessionId;
 
   return (
     <>
-      <section className="room-stage room-command-bar">
+      <section className="room-stage room-command-bar workspace-block">
         <div className="room-stage-copy room-command-copy">
           <p className="block-kicker">Now Playing</p>
           <h1>{currentTrack?.title ?? "等待播放"}</h1>
+          {currentTrack ? (
+            <p className="room-stage-lead">
+              {currentTrack.artist} · {formatDuration(currentTrackDuration)} · 当前音源{" "}
+              {currentSourceOwnerNickname ?? "未连接"}
+            </p>
+          ) : (
+            <p className="room-stage-lead room-stage-empty-copy">
+              先导入一首本地歌曲，或从队列中点击一首歌，开始这个房间的实时同听。
+            </p>
+          )}
+
           <div className="room-command-meta">
             <span className={`room-playback-badge${isPlaying ? " live" : ""}`}>
               {isPlaying ? "正在播放" : "已暂停"}
             </span>
             <span className="room-code-chip">房间码 {roomSnapshot.room.joinCode}</span>
-            <span className="room-code-chip room-code-chip-secondary">
-              {getMediaStageLabel(mediaConnectionState, isHost, mediaConnectedPeersCount)}
+            <span className="room-code-chip">
+              {getMediaStageLabel(mediaConnectionState, isSourceOwner, mediaConnectedPeersCount)}
             </span>
-            {currentSourceOwnerNickname ? (
-              <span className="room-code-chip room-code-chip-secondary">
-                当前音源 {currentSourceOwnerNickname}
-              </span>
-            ) : null}
             <span className="room-meta-copy">
               {currentTrack
-                ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`
+                ? `${roomSnapshot.queue.length} 首在队列中`
                 : `${roomSnapshot.tracks.length} 首曲目待命`}
             </span>
           </div>
@@ -102,7 +109,7 @@ export function RoomStage({
             <span className="field-label">当前身份</span>
             <strong>{activeSession?.nickname ?? "未确认"}</strong>
             <p>
-              你当前是 {roleLabel} · 房主: {host?.nickname ?? "未连接"}
+              {isHost ? "房主" : "成员"} · 房主：{host?.nickname ?? "未连接"}
             </p>
           </div>
 
@@ -141,7 +148,7 @@ export function RoomStage({
           <strong>{roomSnapshot.queue.length}</strong>
         </div>
         <div className="room-stat-card">
-          <span className="field-label">成员</span>
+          <span className="field-label">在线成员</span>
           <strong>{getOnlineMemberCount(roomSnapshot.room.members)}</strong>
         </div>
       </div>
