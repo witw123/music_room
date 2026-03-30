@@ -56,7 +56,7 @@ export function useRoomActions(options: UseRoomActionsOptions) {
 
   async function leaveRoom() {
     if (!activeSession || !roomSnapshot) {
-      return;
+      return false;
     }
 
     try {
@@ -66,14 +66,16 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
       setStatusMessage("已离开房间。");
+      return true;
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
+      return false;
     }
   }
 
   async function deleteRoom() {
     if (!activeSession || !roomSnapshot) {
-      return;
+      return false;
     }
 
     try {
@@ -83,8 +85,10 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
       setStatusMessage("房间已删除。");
+      return true;
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
+      return false;
     }
   }
 
@@ -165,17 +169,18 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       }
 
       if (progressMs > 3000) {
-        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "seek",
           positionMs: 0
         });
-        applyPlaybackLocally(playback);
+        applyPlaybackLocally(nextPlayback);
       } else {
-        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "prev"
         });
-        applyPlaybackLocally(playback);
+        applyPlaybackLocally(nextPlayback);
       }
+
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));

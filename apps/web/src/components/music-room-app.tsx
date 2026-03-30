@@ -60,6 +60,7 @@ export function MusicRoomApp({
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
   const [mediaConnectedPeers, setMediaConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
+  const [suppressRoomRecovery, setSuppressRoomRecovery] = useState(false);
   const [mediaConnectionState, setMediaConnectionState] =
     useState<RoomMediaConnectionState>("idle");
   const [availabilityByTrack, setAvailabilityByTrack] = useState<
@@ -221,7 +222,13 @@ export function MusicRoomApp({
   }, [activeSession]);
 
   useEffect(() => {
-    if (!workspaceOnly || !initialRoomId || !activeSession || roomSnapshot?.room.id === initialRoomId) {
+    if (
+      suppressRoomRecovery ||
+      !workspaceOnly ||
+      !initialRoomId ||
+      !activeSession ||
+      roomSnapshot?.room.id === initialRoomId
+    ) {
       return;
     }
 
@@ -247,7 +254,7 @@ export function MusicRoomApp({
     return () => {
       cancelled = true;
     };
-  }, [workspaceOnly, initialRoomId, activeSession?.id, roomSnapshot?.room.id]);
+  }, [workspaceOnly, initialRoomId, activeSession?.id, roomSnapshot?.room.id, suppressRoomRecovery]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId) {
@@ -667,11 +674,36 @@ export function MusicRoomApp({
   }
 
   function handleClearIdentity() {
+    setSuppressRoomRecovery(true);
     resetPlayerSurface();
     clearIdentity();
     setRoomSnapshot(null);
     setPlaylists([]);
     window.localStorage.removeItem(lastRoomStorageKey);
+  }
+
+  async function handleLeaveRoomAction() {
+    const didLeave = await leaveRoom();
+    if (!didLeave) {
+      return;
+    }
+
+    setSuppressRoomRecovery(true);
+    if (workspaceOnly) {
+      router.push("/rooms" as Route);
+    }
+  }
+
+  async function handleDeleteRoomAction() {
+    const didDelete = await deleteRoom();
+    if (!didDelete) {
+      return;
+    }
+
+    setSuppressRoomRecovery(true);
+    if (workspaceOnly) {
+      router.push("/rooms" as Route);
+    }
   }
 
   async function handleLogout() {
@@ -834,8 +866,8 @@ export function MusicRoomApp({
                   setStatusMessage("复制房间码失败，请手动复制。");
                 }
               }}
-              onLeaveRoom={() => leaveRoom()}
-              onDeleteRoom={() => deleteRoom()}
+              onLeaveRoom={handleLeaveRoomAction}
+              onDeleteRoom={handleDeleteRoomAction}
               onFilesSelected={(files) => handleFilesSelected(files)}
               onAddToQueue={(trackId) => addToQueue(trackId)}
               onPlayTrack={(trackId) => playTrack(trackId)}
