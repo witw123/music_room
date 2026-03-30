@@ -225,9 +225,17 @@ export class RoomMediaMesh {
         connectedPeerIds: this.getConnectedPeerIds()
       });
 
-      if (connection.connectionState === "failed" || connection.connectionState === "closed") {
+      if (
+        connection.connectionState === "failed" ||
+        connection.connectionState === "disconnected" ||
+        connection.connectionState === "closed"
+      ) {
         if (entry.stream) {
           this.callbacks.onRemoteStream(null);
+        }
+
+        if (this.peers.get(peerId) === entry) {
+          this.releasePeer(peerId, entry);
         }
       }
     };
@@ -260,8 +268,10 @@ export class RoomMediaMesh {
   }
 
   private releasePeer(peerId: string, entry: MediaPeerEntry) {
-    entry.connection.close();
     this.peers.delete(peerId);
+    if (entry.connection.connectionState !== "closed") {
+      entry.connection.close();
+    }
     this.callbacks.onConnectionStateChange?.({
       peerId,
       state: "closed",
