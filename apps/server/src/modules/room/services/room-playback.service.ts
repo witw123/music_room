@@ -56,19 +56,34 @@ export class RoomPlaybackService {
     }
 
     if (input.action === "pause") {
+      const sourcePeerId = await this.resolveSourcePeerId(record, playback.sourceSessionId);
       playback.status = "paused";
       playback.positionMs = input.positionMs ?? playback.positionMs;
+      playback.startedAt = null;
+      playback.sourcePeerId = sourcePeerId;
     }
 
     if (input.action === "seek") {
+      const sourcePeerId = await this.resolveSourcePeerId(record, playback.sourceSessionId);
+      if (playback.status === "playing" && playback.currentTrackId && !sourcePeerId) {
+        throw new Error("Track owner is not online, so this song cannot be played right now.");
+      }
+
+      if (sourcePeerId && playback.sourcePeerId !== sourcePeerId) {
+        playback.sourcePeerId = sourcePeerId;
+        playback.mediaEpoch += 1;
+      }
+
       playback.positionMs = input.positionMs ?? 0;
       if (playback.status === "playing") {
         playback.startedAt = new Date().toISOString();
+      } else {
+        playback.startedAt = null;
       }
     }
 
     playback.queueVersion += 1;
-    return playback;
+    return this.buildPlaybackForSnapshot(record);
   }
 
   async buildPlaybackForSnapshot(record: RoomRecord) {
@@ -102,7 +117,9 @@ export class RoomPlaybackService {
     }
 
     const isSwitchingSource =
-      playback.currentTrackId !== trackId || playback.sourceSessionId !== track.ownerSessionId;
+      playback.currentTrackId !== trackId ||
+      playback.sourceSessionId !== track.ownerSessionId ||
+      playback.sourcePeerId !== ownerPeerId;
 
     playback.status = "playing";
     playback.currentTrackId = trackId;
@@ -125,5 +142,17 @@ export class RoomPlaybackService {
     playback.positionMs = 0;
     playback.startedAt = null;
     playback.mediaEpoch += 1;
+  }
+
+  private async resolveSourcePeerId(record: RoomRecord, sourceSessionId: string | null) {
+    if (!sourceSessionId) {
+      return null;
+    }
+
+    const activePresence = await this.roomPresenceService.getActivePresence(
+      record.room.id,
+      record.room.members
+    );
+    return activePresence.get(sourceSessionId) ?? null;
   }
 }

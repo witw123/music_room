@@ -81,6 +81,14 @@ export function MusicRoomApp({
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
+  const getCurrentPlaybackPositionMs = () => {
+    const activeAudio = isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current;
+    if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
+      return Math.round(activeAudio.currentTime * 1000);
+    }
+
+    return progressMs;
+  };
   const {
     progressTrack,
     progressMs,
@@ -161,7 +169,7 @@ export function MusicRoomApp({
     refreshPlaylists,
     resetPlayerSurface,
     lastRoomStorageKey,
-    audioRef
+    getCurrentPlaybackPositionMs
   });
 
   useEffect(() => {

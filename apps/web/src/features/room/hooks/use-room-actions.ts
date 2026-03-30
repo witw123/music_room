@@ -1,5 +1,6 @@
 "use client";
 
+import type { Dispatch, SetStateAction } from "react";
 import type { AuthSession, Playlist, RoomSnapshot } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
@@ -8,15 +9,15 @@ type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
   roomSnapshot: RoomSnapshot | null;
   progressMs: number;
-  setRoomSnapshot: (value: RoomSnapshot | null) => void;
-  setAvailableRooms: React.Dispatch<React.SetStateAction<RoomSnapshot[]>>;
-  setPlaylists: React.Dispatch<React.SetStateAction<Playlist[]>>;
+  setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
+  setAvailableRooms: Dispatch<SetStateAction<RoomSnapshot[]>>;
+  setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
   setStatusMessage: (value: string) => void;
   refreshAvailableRooms: () => Promise<void>;
   refreshPlaylists: () => Promise<void>;
   resetPlayerSurface: () => void;
   lastRoomStorageKey: string;
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  getCurrentPlaybackPositionMs: () => number;
 };
 
 export function useRoomActions(options: UseRoomActionsOptions) {
@@ -31,12 +32,26 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     refreshPlaylists,
     resetPlayerSurface,
     lastRoomStorageKey,
-    audioRef
+    getCurrentPlaybackPositionMs
   } = options;
 
   async function refreshRoom(roomId: string) {
     const snapshot = await musicRoomApi.getRoom(roomId);
     setRoomSnapshot(snapshot);
+  }
+
+  function applyPlaybackLocally(playback: Awaited<ReturnType<typeof musicRoomApi.updatePlayback>>) {
+    setRoomSnapshot((current) =>
+      current
+        ? {
+            ...current,
+            room: {
+              ...current.room,
+              playback
+            }
+          }
+        : current
+    );
   }
 
   async function leaveRoom() {
@@ -93,10 +108,11 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "play",
         trackId
       });
+      applyPlaybackLocally(playback);
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -109,26 +125,28 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "play",
         queueItemId
       });
+      applyPlaybackLocally(playback);
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
-  async function pauseTrack(positionMs = Math.round((audioRef.current?.currentTime ?? 0) * 1000)) {
+  async function pauseTrack(positionMs = getCurrentPlaybackPositionMs()) {
     if (!roomSnapshot || !activeSession) {
       return;
     }
 
     try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "pause",
         positionMs
       });
+      applyPlaybackLocally(playback);
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -147,14 +165,16 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       }
 
       if (progressMs > 3000) {
-        await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "seek",
           positionMs: 0
         });
+        applyPlaybackLocally(playback);
       } else {
-        await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "prev"
         });
+        applyPlaybackLocally(playback);
       }
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
@@ -168,9 +188,10 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "next"
       });
+      applyPlaybackLocally(playback);
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -275,10 +296,11 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "seek",
         positionMs
       });
+      applyPlaybackLocally(playback);
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));

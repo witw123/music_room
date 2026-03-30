@@ -4,6 +4,7 @@ import { RoomService } from "./room.service";
 function createPrismaMock() {
   return {
     isAvailable: jest.fn(() => false),
+    ensureAvailable: jest.fn(async () => false),
     guestSessions: {
       upsert: jest.fn(),
       findUnique: jest.fn()
@@ -299,6 +300,73 @@ describe("RoomService", () => {
         actorSessionId: host.id
       })
     ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
+  });
+
+  it("keeps playback snapshot consistent when a member pauses and seeks", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Track Four",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 150000,
+      bitrate: null,
+      fileHash: "track-four",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: member.id,
+      positionMs: 4000
+    });
+
+    const paused = await roomService.updatePlayback(snapshot.room.id, {
+      action: "pause",
+      actorSessionId: member.id,
+      positionMs: 12000
+    });
+
+    expect(paused).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: "peer-host",
+      sourceTrackId: track.id,
+      positionMs: 12000,
+      startedAt: null
+    });
+
+    const seeked = await roomService.updatePlayback(snapshot.room.id, {
+      action: "seek",
+      actorSessionId: member.id,
+      positionMs: 30000
+    });
+
+    expect(seeked).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: "peer-host",
+      sourceTrackId: track.id,
+      positionMs: 30000,
+      startedAt: null
+    });
   });
 
   it("restores the recent active room for a session from redis", async () => {

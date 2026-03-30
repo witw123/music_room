@@ -33,7 +33,7 @@ type BottomPlayerProps = {
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
   onPlay: () => void;
-  onPause: (positionMs: number) => void;
+  onPause: (positionMs?: number) => void;
   onSeek: (positionMs: number) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -166,7 +166,7 @@ export function BottomPlayer({
             startTransition(() =>
               void (
                 isPlaying
-                  ? onPause(Math.round((audioRef.current?.currentTime ?? 0) * 1000))
+                  ? onPause()
                   : onPlay()
               )
             )
@@ -328,9 +328,13 @@ export function BottomPlayer({
         className="hidden"
         autoPlay
         playsInline
+        onTimeUpdate={syncProgressFromAudio}
+        onLoadedMetadata={syncDurationFromAudio}
+        onDurationChange={syncDurationFromAudio}
         onPlaying={onRemotePlaying}
         onWaiting={onRemoteWaiting}
         onPause={onRemotePause}
+        onSeeked={syncProgressFromAudio}
         onError={onRemoteError}
       />
 
