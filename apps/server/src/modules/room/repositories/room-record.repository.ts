@@ -21,7 +21,7 @@ export class RoomRecordRepository {
     }
 
     if (this.prisma.isAvailable()) {
-      const persisted = await this.prisma.roomStates.findUnique({
+      const persisted = await this.prisma.roomState.findUnique({
         where: { joinCode: code }
       });
 
@@ -49,7 +49,7 @@ export class RoomRecordRepository {
     }
 
     if (this.prisma.isAvailable()) {
-      const persisted = await this.prisma.roomStates.findUnique({
+      const persisted = await this.prisma.roomState.findUnique({
         where: { id: roomId }
       });
 
@@ -92,7 +92,7 @@ export class RoomRecordRepository {
       return;
     }
 
-    await this.prisma.roomStates.upsert({
+    await this.prisma.roomState.upsert({
       where: { id: record.room.id },
       update: {
         hostId: record.room.hostId,
@@ -128,7 +128,7 @@ export class RoomRecordRepository {
       return;
     }
 
-    await this.prisma.roomStates.deleteMany({
+    await this.prisma.roomState.deleteMany({
       where: { id: record.room.id }
     });
   }
@@ -141,7 +141,7 @@ export class RoomRecordRepository {
     }
 
     if (this.prisma.isAvailable()) {
-      const persisted = await this.prisma.roomStates.findMany({
+      const persisted = await this.prisma.roomState.findMany({
         orderBy: { updatedAt: "desc" }
       });
 

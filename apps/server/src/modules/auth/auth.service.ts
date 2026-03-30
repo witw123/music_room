@@ -89,7 +89,7 @@ export class AuthService {
     this.cacheUser(user);
 
     if (persistence === "database") {
-      await this.prisma.users.create({
+      await this.prisma.user.create({
         data: {
           id: user.id,
           username: user.username,
@@ -157,7 +157,7 @@ export class AuthService {
 
     if (session.persistence === "database") {
       if (await this.prisma.ensureAvailable()) {
-        await this.prisma.userSessions.deleteMany({
+        await this.prisma.userSession.deleteMany({
           where: { token }
         });
       }
@@ -186,7 +186,7 @@ export class AuthService {
       this.sessionsByToken.delete(token);
       if (storedSession.persistence === "database") {
         if (await this.prisma.ensureAvailable()) {
-          await this.prisma.userSessions.deleteMany({
+          await this.prisma.userSession.deleteMany({
             where: { token }
           });
         }
@@ -219,7 +219,7 @@ export class AuthService {
     }
 
     if (await this.prisma.ensureAvailable()) {
-      const persisted = await this.prisma.users.findUnique({
+      const persisted = await this.prisma.user.findUnique({
         where: { id: userId }
       });
 
@@ -257,7 +257,7 @@ export class AuthService {
     }
 
     if (await this.prisma.ensureAvailable()) {
-      const persisted = await this.prisma.users.findUnique({
+      const persisted = await this.prisma.user.findUnique({
         where: { username }
       });
 
@@ -303,7 +303,7 @@ export class AuthService {
     this.sessionsByToken.set(storedSession.token, storedSession);
 
     if (persistence === "database") {
-      await this.prisma.userSessions.create({
+      await this.prisma.userSession.create({
         data: {
           id: storedSession.id,
           userId: storedSession.userId,
@@ -338,7 +338,7 @@ export class AuthService {
     }
 
     if (await this.prisma.ensureAvailable()) {
-      const existing = await this.prisma.users.findUnique({
+      const existing = await this.prisma.user.findUnique({
         where: { username }
       });
 
@@ -352,7 +352,7 @@ export class AuthService {
     await this.ensureFallbackStoreLoaded();
 
     if (await this.prisma.ensureAvailable()) {
-      const persisted = await this.prisma.userSessions.findUnique({
+      const persisted = await this.prisma.userSession.findUnique({
         where: { token }
       });
 

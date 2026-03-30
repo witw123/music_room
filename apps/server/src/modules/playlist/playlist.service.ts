@@ -15,7 +15,7 @@ export class PlaylistService {
 
   async listPlaylists(ownerId?: string) {
     if (this.prisma.isAvailable()) {
-      const persisted = await this.prisma.playlists.findMany({
+      const persisted = await this.prisma.playlist.findMany({
         ...(ownerId ? { where: { ownerId } } : {}),
         orderBy: { updatedAt: "desc" }
       });
@@ -66,7 +66,7 @@ export class PlaylistService {
     this.playlists.set(playlist.id, playlist);
 
     if (this.prisma.isAvailable()) {
-      await this.prisma.playlists.upsert({
+      await this.prisma.playlist.upsert({
         where: { id: playlist.id },
         update: {
           ownerId: playlist.ownerId,
@@ -144,7 +144,7 @@ export class PlaylistService {
     this.playlists.set(updated.id, updated);
 
     if (this.prisma.isAvailable()) {
-      await this.prisma.playlists.update({
+      await this.prisma.playlist.update({
         where: { id: updated.id },
         data: {
           title: updated.title,
@@ -169,7 +169,7 @@ export class PlaylistService {
     this.playlists.delete(playlistId);
 
     if (this.prisma.isAvailable()) {
-      await this.prisma.playlists.deleteMany({
+      await this.prisma.playlist.deleteMany({
         where: { id: playlistId, ownerId }
       });
     }
@@ -224,7 +224,7 @@ export class PlaylistService {
     }
 
     if (this.prisma.isAvailable()) {
-      const persisted = await this.prisma.playlists.findUnique({
+      const persisted = await this.prisma.playlist.findUnique({
         where: { id: playlistId }
       });
 
