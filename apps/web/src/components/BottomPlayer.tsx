@@ -31,6 +31,7 @@ type BottomPlayerProps = {
   } | null;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
+  canReorderQueue: boolean;
   onPlay: () => void;
   onPause: (positionMs: number) => void;
   onSeek: (positionMs: number) => void;
@@ -82,6 +83,7 @@ export function BottomPlayer({
   currentTrackAvailability,
   mediaConnectionState,
   mediaConnectedPeersCount,
+  canReorderQueue,
   onPlay,
   onPause,
   onSeek,
@@ -100,7 +102,7 @@ export function BottomPlayer({
   const [isPending, startTransition] = useTransition();
 
   const playback = roomSnapshot?.room.playback;
-  const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
+  const canControlPlayback = !!activeSession && !!roomSnapshot;
   const isPlaying = playback?.status === "playing";
   const effectiveProgressMs = seekDraft ?? progressMs;
   const currentTrackDuration = audioDurationMs;
@@ -203,7 +205,7 @@ export function BottomPlayer({
 
       <div className="bp-status">
         {!canControlPlayback && roomSnapshot ? <span className="bp-note">{mediaStatusLabel}</span> : null}
-        {canControlPlayback ? (
+        {roomSnapshot?.room.playback.sourceSessionId === activeSession?.id ? (
           <span className="bp-note">正在向 {mediaConnectedPeersCount} 位成员发送音频</span>
         ) : null}
         {!canControlPlayback && !localTrackAvailable && currentTrack ? (
@@ -232,6 +234,7 @@ export function BottomPlayer({
           activeSessionId={activeSession?.id}
           hostId={roomSnapshot?.room.hostId}
           canControlPlayback={canControlPlayback}
+          canReorderQueue={canReorderQueue}
           onPlayQueueItem={onPlayQueueItem}
           onRemoveQueueItem={onRemoveQueueItem}
           onReorderQueue={onReorderQueue}

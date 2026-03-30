@@ -84,5 +84,9 @@ export function toUserFacingError(error: unknown) {
     return "这首歌已经不在当前播放队列里了。";
   }
 
+  if (message.includes("Track owner is not online")) {
+    return "这首歌的上传者当前不在线，暂时无法播放。";
+  }
+
   return message;
 }

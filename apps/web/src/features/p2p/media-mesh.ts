@@ -20,6 +20,7 @@ type MediaPeerEntry = {
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
+  private currentMediaEpoch = 0;
 
   constructor(
     private readonly roomId: string,
@@ -29,7 +30,15 @@ export class RoomMediaMesh {
     private readonly callbacks: MediaMeshCallbacks
   ) {}
 
-  async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null) {
+  async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null, mediaEpoch = 0) {
+    if (this.currentMediaEpoch !== mediaEpoch) {
+      for (const [peerId, entry] of this.peers.entries()) {
+        this.releasePeer(peerId, entry);
+      }
+      this.peers.clear();
+      this.currentMediaEpoch = mediaEpoch;
+    }
+
     const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
 
     for (const peerId of nextPeers) {
@@ -54,6 +63,7 @@ export class RoomMediaMesh {
           fromPeerId: this.localPeerId,
           toPeerId: peerId,
           channelKind: "media",
+          mediaEpoch: this.currentMediaEpoch,
           type: "offer",
           payload: offer as unknown as Record<string, unknown>
         });
@@ -62,7 +72,11 @@ export class RoomMediaMesh {
   }
 
   async handleSignal(payload: PeerSignalMessage) {
-    if (payload.channelKind !== "media" || payload.toPeerId !== this.localPeerId) {
+    if (
+      payload.channelKind !== "media" ||
+      payload.toPeerId !== this.localPeerId ||
+      (payload.mediaEpoch ?? 0) !== this.currentMediaEpoch
+    ) {
       return;
     }
 
@@ -90,6 +104,7 @@ export class RoomMediaMesh {
         fromPeerId: this.localPeerId,
         toPeerId: payload.fromPeerId,
         channelKind: "media",
+        mediaEpoch: this.currentMediaEpoch,
         type: "answer",
         payload: answer as unknown as Record<string, unknown>
       });
@@ -156,6 +171,7 @@ export class RoomMediaMesh {
         fromPeerId: this.localPeerId,
         toPeerId: peerId,
         channelKind: "media",
+        mediaEpoch: this.currentMediaEpoch,
         type: "offer",
         payload: offer as unknown as Record<string, unknown>
       });
@@ -189,6 +205,7 @@ export class RoomMediaMesh {
         fromPeerId: this.localPeerId,
         toPeerId: peerId,
         channelKind: "media",
+        mediaEpoch: this.currentMediaEpoch,
         type: "candidate",
         payload: event.candidate.toJSON() as unknown as Record<string, unknown>
       });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatDuration,
+  getOnlineMemberCount,
   normalizePlaylistTitle,
   removeTracksFromUploads,
   toUserFacingError
@@ -19,6 +20,9 @@ describe("music-room-ui helpers", () => {
     expect(toUserFacingError(new Error("Queue item not found in this room."))).toBe(
       "这首歌已经不在当前播放队列里了。"
     );
+    expect(toUserFacingError(new Error("Track owner is not online, so this song cannot be played right now."))).toBe(
+      "这首歌的上传者当前不在线，暂时无法播放。"
+    );
   });
 
   it("removes evicted uploads from the in-memory track map", () => {
@@ -34,6 +38,27 @@ describe("music-room-ui helpers", () => {
     ).toEqual({
       a: { objectUrl: "blob:a" }
     });
+  });
+
+  it("counts only members with active peer ids as online", () => {
+    expect(
+      getOnlineMemberCount([
+        {
+          id: "host",
+          nickname: "Host",
+          role: "host",
+          joinedAt: new Date().toISOString(),
+          peerId: "peer-host"
+        },
+        {
+          id: "member",
+          nickname: "Member",
+          role: "member",
+          joinedAt: new Date().toISOString(),
+          peerId: null
+        }
+      ])
+    ).toBe(1);
   });
 
   it("formats milliseconds into player-friendly timestamps", () => {

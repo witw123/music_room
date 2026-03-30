@@ -24,6 +24,7 @@ type RoomDashboardViewProps = {
   host: RoomMember | undefined;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
+  currentSourceOwnerNickname: string | null;
   uploadedTracks: Record<string, { objectUrl: string }>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
@@ -52,6 +53,7 @@ export function RoomDashboardView({
   host,
   canControlPlayback,
   canDeleteRoom,
+  currentSourceOwnerNickname,
   uploadedTracks,
   connectedPeersCount,
   mediaConnectionState,
@@ -82,6 +84,7 @@ export function RoomDashboardView({
         activeSession={activeSession}
         host={host}
         canDeleteRoom={canDeleteRoom}
+        currentSourceOwnerNickname={currentSourceOwnerNickname}
         mediaConnectionState={mediaConnectionState}
         mediaConnectedPeersCount={mediaConnectedPeersCount}
         onCopyJoinCode={onCopyJoinCode}

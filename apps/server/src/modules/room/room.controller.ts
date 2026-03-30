@@ -173,11 +173,18 @@ export class RoomController {
       bitrate: number | null;
       fileHash: string;
       artworkUrl: string | null;
+      ownerSessionId?: string;
+      ownerNickname?: string;
       sourceType: "local_upload";
     }
   ) {
     await this.assertSession(body.sessionId, sessionToken);
-    const track = await this.roomService.registerTrack(roomId, body.sessionId, body);
+    const { sessionId, ...trackInput } = body;
+    const track = await this.roomService.registerTrack(roomId, sessionId, {
+      ...trackInput,
+      ownerSessionId: trackInput.ownerSessionId ?? sessionId,
+      ownerNickname: trackInput.ownerNickname ?? ""
+    });
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
     return track;

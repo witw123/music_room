@@ -58,7 +58,7 @@ function createRedisMock() {
 }
 
 describe("RoomService", () => {
-  it("only allows the host to control playback", async () => {
+  it("allows any room member to control playback and uses the track owner as source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -69,6 +69,8 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track One",
       artist: "Local Upload",
@@ -77,6 +79,8 @@ describe("RoomService", () => {
       bitrate: null,
       fileHash: "abc123",
       artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
       sourceType: "local_upload"
     });
     await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
@@ -86,17 +90,23 @@ describe("RoomService", () => {
         action: "pause",
         actorSessionId: member.id
       })
-    ).rejects.toThrow("Only the host can control playback.");
+    ).resolves.toMatchObject({
+      status: "paused"
+    });
 
     await expect(
       roomService.updatePlayback(snapshot.room.id, {
-        action: "pause",
+        action: "play",
+        trackId: track.id,
         actorSessionId: host.id,
         positionMs: 5000
       })
     ).resolves.toMatchObject({
-      status: "paused",
-      positionMs: 5000
+      status: "playing",
+      positionMs: 5000,
+      sourceSessionId: host.id,
+      sourceTrackId: track.id,
+      sourcePeerId: "peer-host"
     });
   });
 
@@ -113,6 +123,7 @@ describe("RoomService", () => {
 
     await roomService.joinRoom(snapshot.room.id, requester.id);
     await roomService.joinRoom(snapshot.room.id, otherMember.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
 
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track Two",
@@ -122,6 +133,8 @@ describe("RoomService", () => {
       bitrate: null,
       fileHash: "def456",
       artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
       sourceType: "local_upload"
     });
 
@@ -147,6 +160,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
 
     expect(roomAfterLeave.hostId).toBe(member.id);
@@ -168,6 +182,7 @@ describe("RoomService", () => {
     const snapshot = await roomService.createRoom(host.id);
 
     await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
     const track = await roomService.registerTrack(snapshot.room.id, host.id, {
       title: "Track Three",
       artist: "Local Upload",
@@ -176,6 +191,8 @@ describe("RoomService", () => {
       bitrate: null,
       fileHash: "ghi789",
       artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
       sourceType: "local_upload"
     });
 
@@ -207,6 +224,8 @@ describe("RoomService", () => {
       bitrate: null,
       fileHash: "first",
       artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
       sourceType: "local_upload"
     });
     const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
@@ -217,15 +236,14 @@ describe("RoomService", () => {
       bitrate: null,
       fileHash: "second",
       artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
       sourceType: "local_upload"
     });
 
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
     const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, firstTrack.id);
     const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, secondTrack.id);
-
-    await expect(
-      roomService.reorderQueue(snapshot.room.id, member.id, [secondQueueItem.id, firstQueueItem.id])
-    ).rejects.toThrow("Only the host can control playback.");
 
     const reordered = await roomService.reorderQueue(snapshot.room.id, host.id, [
       secondQueueItem.id,
@@ -242,8 +260,45 @@ describe("RoomService", () => {
       })
     ).resolves.toMatchObject({
       currentTrackId: secondTrack.id,
-      status: "playing"
+      status: "playing",
+      sourceSessionId: host.id
     });
+  });
+
+  it("rejects playback when the track owner is offline", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 60000,
+      bitrate: null,
+      fileHash: "member-track",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: memberTrack.id,
+        actorSessionId: host.id
+      })
+    ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
   });
 
   it("restores the recent active room for a session from redis", async () => {

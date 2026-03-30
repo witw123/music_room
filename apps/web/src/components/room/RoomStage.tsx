@@ -18,6 +18,7 @@ type RoomStageProps = {
   activeSession: GuestSession | null;
   host: RoomMember | undefined;
   canDeleteRoom: boolean;
+  currentSourceOwnerNickname: string | null;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
   onCopyJoinCode: () => Promise<void>;
@@ -58,6 +59,7 @@ export function RoomStage({
   activeSession,
   host,
   canDeleteRoom,
+  currentSourceOwnerNickname,
   mediaConnectionState,
   mediaConnectedPeersCount,
   onCopyJoinCode,
@@ -82,6 +84,11 @@ export function RoomStage({
             <span className="room-code-chip room-code-chip-secondary">
               {getMediaStageLabel(mediaConnectionState, isHost, mediaConnectedPeersCount)}
             </span>
+            {currentSourceOwnerNickname ? (
+              <span className="room-code-chip room-code-chip-secondary">
+                当前音源 {currentSourceOwnerNickname}
+              </span>
+            ) : null}
             <span className="room-meta-copy">
               {currentTrack
                 ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`

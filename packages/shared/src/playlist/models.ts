@@ -9,6 +9,8 @@ export const trackMetaSchema = z.object({
   bitrate: z.number().int().positive().nullable(),
   fileHash: z.string(),
   artworkUrl: z.string().nullable(),
+  ownerSessionId: z.string(),
+  ownerNickname: z.string(),
   sourceType: z.literal("local_upload")
 });
 

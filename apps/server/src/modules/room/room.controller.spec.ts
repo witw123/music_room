@@ -20,9 +20,13 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
       playback: {
         status: "paused",
         currentTrackId: null,
+        sourceSessionId: "guest_host",
+        sourcePeerId: null,
+        sourceTrackId: null,
         positionMs: 0,
         startedAt: null,
-        queueVersion: 1
+        queueVersion: 1,
+        mediaEpoch: 0
       },
       ...overrides
     },

@@ -18,9 +18,13 @@ describe("SignalingGateway", () => {
         playback: {
           status: "paused",
           currentTrackId: null,
+          sourceSessionId: "guest_host",
+          sourcePeerId: null,
+          sourceTrackId: null,
           positionMs: 0,
           startedAt: null,
-          queueVersion: 1
+          queueVersion: 1,
+          mediaEpoch: 0
         }
       },
       tracks: [],
@@ -207,9 +211,13 @@ describe("SignalingGateway", () => {
           playback: {
             status: "paused",
             currentTrackId: null,
+            sourceSessionId: "guest_host",
+            sourcePeerId: null,
+            sourceTrackId: null,
             positionMs: 0,
             startedAt: null,
-            queueVersion: 1
+            queueVersion: 1,
+            mediaEpoch: 0
           }
         },
         tracks: [],

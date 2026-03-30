@@ -47,6 +47,7 @@ export const peerSignalMessageSchema = z.object({
   fromPeerId: z.string(),
   toPeerId: z.string(),
   channelKind: z.enum(["data", "media"]),
+  mediaEpoch: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
 });

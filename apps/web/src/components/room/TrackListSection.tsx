@@ -52,7 +52,7 @@ export function TrackListSection({
                 <h3>{track.title}</h3>
                 <p>
                   {track.artist} · {formatDuration(track.durationMs)} ·{" "}
-                  {uploadedTracks[track.id] ? "已缓存" : "房间可用"}
+                  {uploadedTracks[track.id] ? "已缓存" : "房间可用"} · 上传者 {track.ownerNickname}
                 </p>
               </div>
               <div className="track-row-actions">

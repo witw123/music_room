@@ -82,8 +82,11 @@ export function MusicRoomApp() {
   >({});
   const [statusMessage, setStatusMessage] = useState("请输入昵称并确认身份。");
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
-  const canControlPlayback = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
-  const canDeleteRoom = canControlPlayback;
+  const canControlPlayback = !!activeSession && !!roomSnapshot;
+  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
+  const canReorderQueue = canDeleteRoom;
+  const isCurrentSourceOwner =
+    !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
 
   useEffect(() => {
     const storedSession = window.localStorage.getItem(sessionStorageKey);
@@ -361,19 +364,22 @@ export function MusicRoomApp() {
     void trimLocalCache(roomSnapshot.tracks.map((track) => track.id));
   }, [roomSnapshot?.tracks]);
 
-  useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
-    const track = roomSnapshot?.tracks.find((item) => item.id === playback?.currentTrackId);
-    const audio = audioRef.current;
+  const playback = roomSnapshot?.room.playback;
+  const progressTrack = roomSnapshot?.tracks.find((item) => item.id === playback?.currentTrackId) ?? null;
 
-    if (!playback || !track) {
+  useEffect(() => {
+    const localAudio = audioRef.current;
+    const remoteAudio = remoteAudioRef.current;
+
+    if (!playback || !progressTrack) {
       setProgressMs(0);
       return;
     }
 
     const tick = () => {
-      if (audio && !audio.paused && Number.isFinite(audio.currentTime)) {
-        setProgressMs(Math.floor(audio.currentTime * 1000));
+      const liveAudio = isCurrentSourceOwner ? localAudio : remoteAudio;
+      if (liveAudio && !liveAudio.paused && Number.isFinite(liveAudio.currentTime)) {
+        setProgressMs(Math.floor(liveAudio.currentTime * 1000));
         return;
       }
 
@@ -383,16 +389,23 @@ export function MusicRoomApp() {
       }
 
       const elapsed = Date.now() - new Date(playback.startedAt).getTime();
-      setProgressMs(Math.min(track.durationMs, playback.positionMs + elapsed));
+      setProgressMs(Math.min(progressTrack.durationMs, playback.positionMs + elapsed));
     };
 
     tick();
     const timer = window.setInterval(tick, 500);
     return () => window.clearInterval(timer);
-  }, [roomSnapshot]);
+  }, [
+    playback?.status,
+    playback?.currentTrackId,
+    playback?.positionMs,
+    playback?.startedAt,
+    playback?.mediaEpoch,
+    progressTrack?.durationMs,
+    isCurrentSourceOwner
+  ]);
 
   useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -407,7 +420,7 @@ export function MusicRoomApp() {
       return;
     }
 
-    if (!canControlPlayback) {
+    if (!isCurrentSourceOwner) {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
@@ -447,7 +460,7 @@ export function MusicRoomApp() {
     if (playback.status === "paused") {
       audio.pause();
     }
-  }, [roomSnapshot?.room.playback, uploadedTracks, canControlPlayback, volume]);
+  }, [playback, uploadedTracks, isCurrentSourceOwner, volume]);
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -468,7 +481,7 @@ export function MusicRoomApp() {
       return;
     }
 
-    if (!canControlPlayback) {
+    if (!isCurrentSourceOwner) {
       return;
     }
 
@@ -478,7 +491,9 @@ export function MusicRoomApp() {
     roomSnapshot?.room.members,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.status,
-    canControlPlayback,
+    roomSnapshot?.room.playback.sourceSessionId,
+    roomSnapshot?.room.playback.mediaEpoch,
+    isCurrentSourceOwner,
     peerId
   ]);
 
@@ -585,7 +600,7 @@ export function MusicRoomApp() {
       return;
     }
 
-    if (canControlPlayback) {
+    if (isCurrentSourceOwner) {
       return;
     }
 
@@ -601,7 +616,7 @@ export function MusicRoomApp() {
 
       return mediaConnectedPeers.length > 0 ? "buffering" : "connecting";
     });
-  }, [roomSnapshot?.room.playback, canControlPlayback, mediaConnectedPeers.length]);
+  }, [roomSnapshot?.room.playback, isCurrentSourceOwner, mediaConnectedPeers.length]);
 
   useEffect(() => {
     const remotePeerIds =
@@ -788,7 +803,11 @@ export function MusicRoomApp() {
       const snapshot = await musicRoomApi.joinRoomByCode(activeSession.id, code.trim());
       setRoomSnapshot(snapshot);
       await refreshAvailableRooms();
-      const joinedMember = snapshot.room.members.find((member) => member.id === activeSession.id);
+      const joinedMember =
+        snapshot.room.members.find((member) => member.id === activeSession.id) ??
+        (snapshot.room.hostId === activeSession.id
+          ? { role: "host" as const }
+          : { role: "member" as const });
       setStatusMessage(
         joinedMember?.role === "host"
           ? `已加入房间 ${snapshot.room.joinCode}，你当前是房主。`
@@ -861,7 +880,7 @@ export function MusicRoomApp() {
 
       for (const file of Array.from(files)) {
         const objectUrl = URL.createObjectURL(file);
-        const track = await buildTrackMeta(file, objectUrl);
+        const track = await buildTrackMeta(file, objectUrl, activeSession);
         const registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
           sessionId: activeSession.id,
           ...track
@@ -1239,13 +1258,13 @@ export function MusicRoomApp() {
   }
 
   async function syncHostMediaStream() {
-    if (!roomSnapshot?.room.id || !peerId || !canControlPlayback) {
+    if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
       return;
     }
 
     const audio = audioRef.current;
     if (!audio || !roomSnapshot.room.playback.currentTrackId) {
-      await mediaMeshRef.current?.syncHostPeers([], null);
+      await mediaMeshRef.current?.syncHostPeers([], null, roomSnapshot.room.playback.mediaEpoch);
       return;
     }
 
@@ -1261,7 +1280,11 @@ export function MusicRoomApp() {
     }
 
     hostStreamRef.current = capture;
-    await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture);
+    await mediaMeshRef.current?.syncHostPeers(
+      listenerPeerIds,
+      capture,
+      roomSnapshot.room.playback.mediaEpoch
+    );
   }
 
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
@@ -1314,6 +1337,10 @@ export function MusicRoomApp() {
               host={host}
               canControlPlayback={canControlPlayback}
               canDeleteRoom={canDeleteRoom}
+              currentSourceOwnerNickname={
+                roomSnapshot.tracks.find((track) => track.id === roomSnapshot.room.playback.sourceTrackId)
+                  ?.ownerNickname ?? null
+              }
               uploadedTracks={uploadedTracks}
               connectedPeersCount={connectedPeers.length}
               mediaConnectionState={mediaConnectionState}
@@ -1402,6 +1429,7 @@ export function MusicRoomApp() {
         onPlayQueueItem={playQueueItem}
         onRemoveQueueItem={removeQueueItem}
         onReorderQueue={reorderQueue}
+        canReorderQueue={canReorderQueue}
       />
 
       {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
@@ -1409,7 +1437,7 @@ export function MusicRoomApp() {
   );
 }
 
-async function buildTrackMeta(file: File, objectUrl: string) {
+async function buildTrackMeta(file: File, objectUrl: string, session: GuestSession) {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);
   const fileHash = [...new Uint8Array(digest)]
@@ -1426,6 +1454,8 @@ async function buildTrackMeta(file: File, objectUrl: string) {
     bitrate: null,
     fileHash,
     artworkUrl: null,
+    ownerSessionId: session.id,
+    ownerNickname: session.nickname,
     sourceType: "local_upload" as const
   };
 }

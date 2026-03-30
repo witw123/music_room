@@ -11,6 +11,7 @@ type PlayerQueueDrawerProps = {
   activeSessionId?: string;
   hostId?: string;
   canControlPlayback: boolean;
+  canReorderQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
@@ -23,6 +24,7 @@ export function PlayerQueueDrawer({
   activeSessionId,
   hostId,
   canControlPlayback,
+  canReorderQueue,
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue
@@ -43,7 +45,7 @@ export function PlayerQueueDrawer({
   const toggleDrawer = () => setIsOpen((current) => !current);
 
   async function handleDrop(targetQueueItemId: string) {
-    if (!draggingQueueItemId || draggingQueueItemId === targetQueueItemId || !canControlPlayback) {
+    if (!draggingQueueItemId || draggingQueueItemId === targetQueueItemId || !canReorderQueue) {
       setDraggingQueueItemId(null);
       return;
     }
@@ -103,10 +105,10 @@ export function PlayerQueueDrawer({
                     className={`player-queue-row${isCurrent ? " is-current" : ""}${
                       draggingQueueItemId === item.id ? " is-dragging" : ""
                     }`}
-                    draggable={canControlPlayback}
+                    draggable={canReorderQueue}
                     onDragStart={() => setDraggingQueueItemId(item.id)}
                     onDragOver={(event) => {
-                      if (canControlPlayback) {
+                      if (canReorderQueue) {
                         event.preventDefault();
                       }
                     }}
