@@ -39,7 +39,14 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
 describe("RoomController", () => {
   function createAuthServiceMock() {
     return {
-      assertSessionToken: jest.fn().mockResolvedValue(undefined)
+      getAuthSessionByTokenOrThrow: jest.fn().mockResolvedValue({
+        id: "guest_host",
+        userId: "guest_host",
+        username: "host",
+        nickname: "Host",
+        token: "token",
+        createdAt: new Date().toISOString()
+      })
     };
   }
 
@@ -58,8 +65,8 @@ describe("RoomController", () => {
       authService as never
     );
 
-    await expect(controller.getRecentRoom("token", "guest_host")).resolves.toEqual(snapshot);
-    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
+    await expect(controller.getRecentRoom("token")).resolves.toEqual(snapshot);
+    expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.getRecentRoomSnapshotForSession).toHaveBeenCalledWith("guest_host");
   });
 
@@ -78,8 +85,8 @@ describe("RoomController", () => {
       authService as never
     );
 
-    await expect(controller.recoverRoom("room_1", "token", "guest_host")).resolves.toEqual(snapshot);
-    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
+    await expect(controller.recoverRoom("room_1", "token")).resolves.toEqual(snapshot);
+    expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.getRecoverableRoomSnapshot).toHaveBeenCalledWith("room_1", "guest_host");
   });
 
@@ -99,10 +106,10 @@ describe("RoomController", () => {
       authService as never
     );
 
-    const result = await controller.leaveRoom("room_1", "token", { sessionId: "guest_host" });
+    const result = await controller.leaveRoom("room_1", "token");
 
     expect(result).toEqual(emptyRoom);
-    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
+    expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.getRoomSnapshot).not.toHaveBeenCalled();
     expect(signalingGateway.emitRoomSnapshot).not.toHaveBeenCalled();
   });
@@ -125,14 +132,13 @@ describe("RoomController", () => {
     );
 
     const result = await controller.joinRoomByCode("token", {
-      sessionId: "guest_member",
       joinCode: "abc123"
     });
 
     expect(result).toEqual(snapshot);
-    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_member", "token");
+    expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("abc123");
-    expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_member");
+    expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_host");
     expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith(snapshot.room.id, snapshot);
   });
 
@@ -151,11 +157,11 @@ describe("RoomController", () => {
       authService as never
     );
 
-    await expect(controller.deleteRoom("room_1", "token", "guest_host")).resolves.toEqual({
+    await expect(controller.deleteRoom("room_1", "token")).resolves.toEqual({
       ok: true
     });
 
-    expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
+    expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
     expect(signalingGateway.emitRoomMissing).toHaveBeenCalledWith("room_1");
   });

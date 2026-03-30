@@ -49,7 +49,7 @@ export function toUserFacingError(error: unknown) {
   }
 
   if (message.includes("Only the host or the requester can remove this queue item")) {
-    return "只有房主或点歌者可以移除这首歌。";
+    return "只有房主或点歌人可以移除这首歌。";
   }
 
   if (message.includes("Only room members can perform this action")) {
@@ -62,14 +62,6 @@ export function toUserFacingError(error: unknown) {
 
   if (message.includes("No tracks from this playlist are available")) {
     return "这个歌单和当前房间曲库不匹配。";
-  }
-
-  if (message.includes("Nickname is required")) {
-    return "请输入昵称后再继续。";
-  }
-
-  if (message.includes("Nickname already exists in this room")) {
-    return "这个昵称已经在房间里被使用了，请换一个再加入。";
   }
 
   if (message.includes("Only the host can delete this room")) {
@@ -86,6 +78,18 @@ export function toUserFacingError(error: unknown) {
 
   if (message.includes("Track owner is not online")) {
     return "这首歌的上传者当前不在线，暂时无法播放。";
+  }
+
+  if (message.includes("Invalid username or password")) {
+    return "用户名或密码错误。";
+  }
+
+  if (message.includes("Username already exists")) {
+    return "这个用户名已被使用。";
+  }
+
+  if (message.includes("Unauthorized")) {
+    return "当前登录状态已失效，请重新登录。";
   }
 
   return message;

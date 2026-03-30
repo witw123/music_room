@@ -7,7 +7,6 @@ import {
   Patch,
   Param,
   Post,
-  Query,
   UnauthorizedException
 } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
@@ -22,16 +21,21 @@ export class QueueController {
     private readonly authService: AuthService
   ) {}
 
-  private async assertSession(sessionId: string, sessionToken?: string) {
+  private async getCurrentUserId(sessionToken?: string) {
     try {
-      await this.authService.assertSessionToken(sessionId, sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      return session.userId;
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }
   }
 
   @Get()
-  async listQueue(@Param("roomId") roomId: string) {
+  async listQueue(
+    @Param("roomId") roomId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    await this.getCurrentUserId(sessionToken);
     return this.roomService.getQueue(roomId);
   }
 
@@ -39,10 +43,10 @@ export class QueueController {
   async addQueueItem(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { sessionId: string; trackId: string }
+    @Body() body: { trackId: string }
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
-    const item = await this.roomService.addQueueItem(roomId, body.sessionId, body.trackId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const item = await this.roomService.addQueueItem(roomId, userId, body.trackId);
     this.signalingGateway.emitRoomSnapshot(
       roomId,
       await this.roomService.getRoomSnapshot(roomId, [])
@@ -54,11 +58,10 @@ export class QueueController {
   async removeQueueItem(
     @Param("roomId") roomId: string,
     @Param("queueItemId") queueItemId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Query("sessionId") sessionId: string
+    @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    await this.assertSession(sessionId, sessionToken);
-    const queue = await this.roomService.removeQueueItem(roomId, queueItemId, sessionId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const queue = await this.roomService.removeQueueItem(roomId, queueItemId, userId);
     this.signalingGateway.emitRoomSnapshot(
       roomId,
       await this.roomService.getRoomSnapshot(roomId, [])
@@ -70,10 +73,10 @@ export class QueueController {
   async reorderQueue(
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { sessionId: string; queueItemIds: string[] }
+    @Body() body: { queueItemIds: string[] }
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
-    const queue = await this.roomService.reorderQueue(roomId, body.sessionId, body.queueItemIds);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const queue = await this.roomService.reorderQueue(roomId, userId, body.queueItemIds);
     this.signalingGateway.emitRoomSnapshot(
       roomId,
       await this.roomService.getRoomSnapshot(roomId, [])

@@ -14,13 +14,9 @@ export class PlaylistService {
   ) {}
 
   async listPlaylists(ownerId?: string) {
-    if (!ownerId) {
-      return [];
-    }
-
     if (this.prisma.isAvailable()) {
       const persisted = await this.prisma.playlists.findMany({
-        where: { ownerId },
+        ...(ownerId ? { where: { ownerId } } : {}),
         orderBy: { updatedAt: "desc" }
       });
 
@@ -33,7 +29,7 @@ export class PlaylistService {
       right.updatedAt.localeCompare(left.updatedAt)
     );
 
-    return playlists.filter((playlist) => playlist.ownerId === ownerId);
+    return ownerId ? playlists.filter((playlist) => playlist.ownerId === ownerId) : playlists;
   }
 
   async listPlaylistsForRoom(roomId: string) {

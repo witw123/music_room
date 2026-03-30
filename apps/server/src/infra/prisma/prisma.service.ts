@@ -22,8 +22,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     return this.connected;
   }
 
-  get guestSessions() {
-    return (this as unknown as { guestSession: any }).guestSession;
+  get users() {
+    return (this as unknown as { user: any }).user;
+  }
+
+  get userSessions() {
+    return (this as unknown as { userSession: any }).userSession;
   }
 
   get roomStates() {

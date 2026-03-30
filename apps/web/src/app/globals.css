@@ -2,11 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "../styles/theme.css";
-@import "../styles/layout.css";
-@import "../styles/site-nav.css";
-@import "../styles/landing.css";
-@import "../styles/rooms-home.css";
-@import "../styles/room-page.css";
-@import "../styles/room-dashboard.css";
-@import "../styles/player.css";
+@layer base {
+  :root {
+    --background: #09090b;
+    --background-secondary: #121215;
+    --foreground: #fafafa;
+    --foreground-muted: #a1a1aa;
+    
+    --surface: rgba(255, 255, 255, 0.03);
+    --surface-hover: rgba(255, 255, 255, 0.08);
+    --surface-border: rgba(255, 255, 255, 0.1);
+  }
+
+  body {
+    background-color: #000000;
+    color: var(--foreground);
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-surface border border-surface-border backdrop-blur-xl shadow-xl;
+  }
+  .glass-button {
+    @apply bg-surface hover:bg-surface-hover border border-surface-border backdrop-blur-md transition-colors;
+  }
+  .text-glow {
+    text-shadow: 0 0 20px var(--accent-glow);
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

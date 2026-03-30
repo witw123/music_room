@@ -1,91 +1,32 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode
-} from "react";
-import type { GuestSession } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/music-room-api";
+import { createContext, useContext, type ReactNode } from "react";
+import type { AuthSession } from "@music-room/shared";
+import { useSessionIdentity } from "@/features/session/use-session-identity";
 
 type SessionContextValue = {
-  activeSession: GuestSession | null;
+  activeSession: AuthSession | null;
   nickname: string;
   setNickname: (nickname: string) => void;
-  ensureSession: (actionLabel: string) => Promise<GuestSession | null>;
+  ensureSession: (_actionLabel: string) => Promise<AuthSession | null>;
   clearIdentity: () => void;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-const sessionStorageKey = "music-room-session";
-
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [activeSession, setActiveSession] = useState<GuestSession | null>(null);
-  const [nickname, setNickname] = useState("");
-
-  // Restore session from localStorage on mount
-  useEffect(() => {
-    const stored = window.localStorage.getItem(sessionStorageKey);
-    if (!stored) {
-      return;
-    }
-    try {
-      const parsed = JSON.parse(stored) as GuestSession;
-      if (parsed.id && parsed.nickname && parsed.token) {
-        setActiveSession(parsed);
-        setNickname(parsed.nickname);
-      }
-    } catch {
-      window.localStorage.removeItem(sessionStorageKey);
-    }
-  }, []);
-
-  // Persist session to localStorage when it changes
-  useEffect(() => {
-    if (activeSession) {
-      window.localStorage.setItem(sessionStorageKey, JSON.stringify(activeSession));
-    }
-  }, [activeSession]);
-
-  const ensureSession = useCallback(
-    async (actionLabel: string): Promise<GuestSession | null> => {
-      const trimmedNickname = nickname.trim();
-      if (!trimmedNickname) {
-        return null;
-      }
-
-      if (activeSession && activeSession.nickname === trimmedNickname) {
-        return activeSession;
-      }
-
-      try {
-        const nextSession = await musicRoomApi.createGuestSession(trimmedNickname);
-        setActiveSession(nextSession);
-        return nextSession;
-      } catch {
-        return null;
-      }
-    },
-    [activeSession, nickname]
-  );
-
-  const clearIdentity = useCallback(() => {
-    setActiveSession(null);
-    setNickname("");
-    window.localStorage.removeItem(sessionStorageKey);
-  }, []);
+  const { activeSession, clearIdentity } = useSessionIdentity({
+    sessionStorageKey: "music-room-session",
+    initialStatusMessage: "登录后即可进入音乐房。"
+  });
 
   return (
     <SessionContext.Provider
       value={{
         activeSession,
-        nickname,
-        setNickname,
-        ensureSession,
+        nickname: activeSession?.nickname ?? "",
+        setNickname: () => undefined,
+        ensureSession: async () => activeSession,
         clearIdentity
       }}
     >

@@ -1,14 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { randomBytes, randomUUID } from "node:crypto";
 import type {
-  GuestSession,
   PlaybackSnapshot,
   Playlist,
   QueueItem,
   Room,
   RoomMember,
   RoomSnapshot,
-  TrackMeta
+  TrackMeta,
+  UserProfile
 } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -450,7 +450,7 @@ export class RoomService {
     return joinCode.slice(0, 6).toUpperCase();
   }
 
-  private buildMember(session: GuestSession, role: RoomMember["role"]): RoomMember {
+  private buildMember(session: UserProfile, role: RoomMember["role"]): RoomMember {
     return {
       id: session.id,
       nickname: session.nickname,

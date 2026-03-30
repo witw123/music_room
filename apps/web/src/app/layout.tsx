@@ -10,13 +10,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#F8FAFC"
+  themeColor: "#09090b"
 };
 
 export const metadata: Metadata = {
-  title: "音乐房间",
-  description: "本地上传、实时同听、房间协作的一体化音乐网站。",
-  keywords: ["音乐房间", "音乐同听", "P2P", "房间协作", "实时同播"]
+  title: "Music Room",
+  description: "一个面向实时协作听歌的音乐房网站，支持房间、共享队列、本地音乐与登录账号体系。",
+  keywords: ["Music Room", "音乐房", "一起听歌", "共享队列", "本地音乐", "实时协作"]
 };
 
 export default function RootLayout({

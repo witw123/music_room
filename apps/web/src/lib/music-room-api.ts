@@ -1,6 +1,6 @@
 import { apiBaseUrl } from "./api-client";
 import type {
-  GuestSession,
+  AuthSession,
   PlaybackSnapshot,
   Playlist,
   QueueItem,
@@ -21,7 +21,7 @@ function getSessionToken() {
   }
 
   try {
-    const session = JSON.parse(raw) as GuestSession;
+    const session = JSON.parse(raw) as AuthSession;
     return session.token ?? null;
   } catch {
     return null;
@@ -44,6 +44,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const message = await response.text();
     if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem(sessionStorageKey);
+      window.dispatchEvent(
+        new CustomEvent("music-room-auth-expired", {
+          detail: { message }
+        })
+      );
     }
     throw new Error(message || `Request failed: ${response.status}`);
   }
@@ -52,46 +57,43 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const musicRoomApi = {
-  createGuestSession: (nickname: string) =>
-    request<GuestSession>("/v1/guest-sessions", {
+  register: (username: string, password: string, nickname: string) =>
+    request<AuthSession>("/v1/auth/register", {
       method: "POST",
-      body: JSON.stringify({ nickname })
+      body: JSON.stringify({ username, password, nickname })
     }),
-  createRoom: (sessionId: string, visibility?: "private" | "public") =>
+  login: (username: string, password: string) =>
+    request<AuthSession>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    }),
+  logout: () =>
+    request<{ ok: boolean }>("/v1/auth/logout", {
+      method: "POST"
+    }),
+  me: () => request<AuthSession>("/v1/auth/me"),
+  createRoom: (visibility?: "private" | "public") =>
     request<RoomSnapshot>("/v1/rooms", {
       method: "POST",
-      body: JSON.stringify({ sessionId, visibility })
+      body: JSON.stringify({ visibility })
     }),
-  getRecentRoom: (sessionId: string) =>
-    request<RoomSnapshot | null>(
-      `/v1/rooms/recent/active?sessionId=${encodeURIComponent(sessionId)}`
-    ),
-  recoverRoom: (roomId: string, sessionId: string) =>
-    request<RoomSnapshot | null>(
-      `/v1/rooms/${roomId}/recover?sessionId=${encodeURIComponent(sessionId)}`
-    ),
-  listRooms: (sessionId?: string) =>
-    request<RoomSnapshot[]>(
-      sessionId ? `/v1/rooms?sessionId=${encodeURIComponent(sessionId)}` : "/v1/rooms"
-    ),
-  joinRoomByCode: (sessionId: string, joinCode: string) =>
+  getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
+  recoverRoom: (roomId: string) =>
+    request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
+  listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
+  joinRoomByCode: (joinCode: string) =>
     request<RoomSnapshot>("/v1/rooms/join-by-code", {
       method: "POST",
-      body: JSON.stringify({ sessionId, joinCode })
+      body: JSON.stringify({ joinCode })
     }),
-  getRoom: (roomId: string, sessionId?: string) =>
-    request<RoomSnapshot>(
-      sessionId
-        ? `/v1/rooms/${roomId}?sessionId=${encodeURIComponent(sessionId)}`
-        : `/v1/rooms/${roomId}`
-    ),
-  leaveRoom: (roomId: string, sessionId: string) =>
+  getRoom: (roomId: string) =>
+    request<RoomSnapshot>(`/v1/rooms/${roomId}`),
+  leaveRoom: (roomId: string) =>
     request(`/v1/rooms/${roomId}/leave`, {
-      method: "POST",
-      body: JSON.stringify({ sessionId })
+      method: "POST"
     }),
-  deleteRoom: (roomId: string, sessionId: string) =>
-    request<{ ok: boolean }>(`/v1/rooms/${roomId}?sessionId=${encodeURIComponent(sessionId)}`, {
+  deleteRoom: (roomId: string) =>
+    request<{ ok: boolean }>(`/v1/rooms/${roomId}`, {
       method: "DELETE"
     }),
   registerTrack: (roomId: string, payload: object) =>
@@ -99,12 +101,12 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  addQueueItem: (roomId: string, payload: object) =>
+  addQueueItem: (roomId: string, payload: { trackId: string }) =>
     request<QueueItem>(`/v1/rooms/${roomId}/queue`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  reorderQueue: (roomId: string, payload: { sessionId: string; queueItemIds: string[] }) =>
+  reorderQueue: (roomId: string, payload: { queueItemIds: string[] }) =>
     request<QueueItem[]>(`/v1/rooms/${roomId}/queue/reorder`, {
       method: "PATCH",
       body: JSON.stringify(payload)
@@ -113,38 +115,49 @@ export const musicRoomApi = {
     request<QueueItem[]>(`/v1/rooms/${roomId}/queue/${queueItemId}`, {
       method: "DELETE"
     }),
-  removeQueueItemAs: (roomId: string, queueItemId: string, sessionId: string) =>
-    request<QueueItem[]>(
-      `/v1/rooms/${roomId}/queue/${queueItemId}?sessionId=${encodeURIComponent(sessionId)}`,
-      {
-        method: "DELETE"
-      }
-    ),
-  updatePlayback: (roomId: string, payload: object) =>
+  updatePlayback: (
+    roomId: string,
+    payload: {
+      action: "play" | "pause" | "seek" | "next" | "prev";
+      trackId?: string;
+      queueItemId?: string;
+      positionMs?: number;
+    }
+  ) =>
     request<PlaybackSnapshot>(`/v1/rooms/${roomId}/playback`, {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
-  listPlaylists: (ownerId: string) =>
-    request<Playlist[]>(`/v1/playlists?ownerId=${encodeURIComponent(ownerId)}`),
-  updatePlaylist: (playlistId: string, payload: object) =>
+  listMyPlaylists: () =>
+    request<Playlist[]>("/v1/playlists"),
+  updatePlaylist: (
+    playlistId: string,
+    payload: {
+      title?: string;
+      description?: string | null;
+      tags?: string[];
+      coverUrl?: string | null;
+      trackIds?: string[];
+    }
+  ) =>
     request<Playlist>(`/v1/playlists/${playlistId}`, {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
-  deletePlaylist: (playlistId: string, ownerId: string) =>
-    request<{ ok: boolean }>(
-      `/v1/playlists/${playlistId}?ownerId=${encodeURIComponent(ownerId)}`,
-      {
-        method: "DELETE"
-      }
-    ),
-  importPlaylistToRoom: (playlistId: string, payload: object) =>
+  deletePlaylist: (playlistId: string) =>
+    request<{ ok: boolean }>(`/v1/playlists/${playlistId}`, {
+      method: "DELETE"
+    }),
+  importPlaylistToRoom: (playlistId: string, payload: { roomId: string }) =>
     request<{ ok: boolean }>(`/v1/playlists/${playlistId}/import-to-room`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  createPlaylistFromRoom: (payload: object) =>
+  createPlaylistFromRoom: (payload: {
+    roomId: string;
+    title: string;
+    description?: string | null;
+  }) =>
     request<Playlist>("/v1/playlists/from-room", {
       method: "POST",
       body: JSON.stringify(payload)

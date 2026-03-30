@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
@@ -9,9 +9,6 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import {
-  assembleTrackFileFromPieces,
-  buildTrackAvailabilityFromCache,
-  buildTrackAvailabilityFromFile,
   getMissingChunkIndexes,
   getWebRTCIceServers,
   RoomMediaMesh,
@@ -24,15 +21,16 @@ import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 import { TopBar } from "@/components/TopBar";
 import { BottomPlayer } from "@/components/BottomPlayer";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 
-const sessionStorageKey = "music-room-session";
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
@@ -46,6 +44,7 @@ export function MusicRoomApp({
   workspaceOnly = true,
   initialRoomId = null
 }: MusicRoomAppProps) {
+  const router = useRouter();
   const audioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
@@ -67,16 +66,15 @@ export function MusicRoomApp({
     Record<string, Record<string, TrackAvailabilityAnnouncement>>
   >({});
   const {
-    nickname,
-    setNickname,
     activeSession,
-    setActiveSession,
+    hydrated,
     statusMessage,
     setStatusMessage,
-    clearIdentity
+    clearIdentity,
+    refreshSession
   } = useSessionIdentity({
-    sessionStorageKey,
-    initialStatusMessage: "请输入昵称并确认身份。"
+    initialStatusMessage: "登录后即可进入音乐房工作台。",
+    sessionStorageKey: "music-room-session"
   });
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
@@ -102,14 +100,28 @@ export function MusicRoomApp({
     tracks: roomSnapshot?.tracks ?? [],
     isCurrentSourceOwner
   });
+
+  async function refreshRoom(roomId: string) {
+    const snapshot = await musicRoomApi.getRoom(roomId);
+    setRoomSnapshot(snapshot);
+  }
+
+  function mergeAvailability(announcement: TrackAvailabilityAnnouncement) {
+    setAvailabilityByTrack((current) => ({
+      ...current,
+      [announcement.trackId]: {
+        ...(current[announcement.trackId] ?? {}),
+        [announcement.ownerPeerId]: announcement
+      }
+    }));
+  }
+
   const {
     uploadedTracks,
-    setUploadedTracks,
     cachedTrackCount,
     handleFilesSelected: handleTrackFilesSelected,
     announceLocalCache,
-    hydrateTrackFromPieces,
-    trimLocalCache
+    hydrateTrackFromPieces
   } = useTrackUploads({
     maxCachedTracks,
     peerId,
@@ -121,9 +133,6 @@ export function MusicRoomApp({
     refreshRoom
   });
   const {
-    handleConfirmIdentity,
-    handleCreateRoom,
-    handleJoinRoom,
     leaveRoom,
     deleteRoom,
     addToQueue,
@@ -142,11 +151,8 @@ export function MusicRoomApp({
     handleEnded
   } = useRoomActions({
     activeSession,
-    nickname,
     roomSnapshot,
     progressMs,
-    setNickname,
-    setActiveSession,
     setRoomSnapshot,
     setAvailableRooms,
     setPlaylists,
@@ -157,6 +163,30 @@ export function MusicRoomApp({
     lastRoomStorageKey,
     audioRef
   });
+
+  useEffect(() => {
+    if (!statusMessage) return;
+    const t = setTimeout(() => {
+      setStatusMessage("");
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [statusMessage, setStatusMessage]);
+
+  useEffect(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    void refreshSession();
+  }, [activeSession, refreshSession]);
+
+  useEffect(() => {
+    if (!workspaceOnly || !initialRoomId || !hydrated || activeSession) {
+      return;
+    }
+
+    router.replace(`/auth?redirectTo=${encodeURIComponent(`/room/${initialRoomId}`)}` as Route);
+  }, [workspaceOnly, initialRoomId, activeSession, hydrated, router]);
 
   useEffect(() => {
     const storedPeerId = window.sessionStorage.getItem(peerStorageKey);
@@ -171,34 +201,13 @@ export function MusicRoomApp({
   }, []);
 
   useEffect(() => {
-    if (!activeSession) return;
-    void refreshAvailableRooms();
-    void refreshPlaylists(activeSession.id);
-  }, [activeSession]);
-
-  useEffect(() => {
-    if (!activeSession || roomSnapshot || workspaceOnly) {
+    if (!activeSession) {
       return;
     }
 
     void refreshAvailableRooms();
-    const intervalId = window.setInterval(() => {
-      void refreshAvailableRooms();
-    }, 5000);
-
-    const handleFocus = () => {
-      void refreshAvailableRooms();
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleFocus);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleFocus);
-    };
-  }, [activeSession, roomSnapshot, workspaceOnly]);
+    void refreshPlaylists();
+  }, [activeSession]);
 
   useEffect(() => {
     if (!workspaceOnly || !initialRoomId || !activeSession || roomSnapshot?.room.id === initialRoomId) {
@@ -209,17 +218,17 @@ export function MusicRoomApp({
 
     void (async () => {
       try {
-        const snapshot = await musicRoomApi.recoverRoom(initialRoomId, activeSession.id);
+        const snapshot = await musicRoomApi.recoverRoom(initialRoomId);
         if (!snapshot || cancelled) {
           return;
         }
 
         setRoomSnapshot(snapshot);
         setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
-        await refreshPlaylists(activeSession.id);
+        await refreshPlaylists();
       } catch {
         if (!cancelled) {
-          setStatusMessage("未找到可恢复的房间状态，请返回房间主页重新创建或加入房间。");
+          setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
         }
       }
     })();
@@ -230,12 +239,17 @@ export function MusicRoomApp({
   }, [workspaceOnly, initialRoomId, activeSession?.id, roomSnapshot?.room.id]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !peerId) return;
+    if (!roomSnapshot?.room.id || !peerId) {
+      return;
+    }
+
     window.localStorage.setItem(lastRoomStorageKey, roomSnapshot.room.id);
-  }, [roomSnapshot?.room.id]);
+  }, [roomSnapshot?.room.id, peerId]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id) return;
+    if (!roomSnapshot?.room.id) {
+      return;
+    }
 
     const socket = createRoomSocket();
     socketRef.current = socket;
@@ -326,6 +340,7 @@ export function MusicRoomApp({
       }
     );
     mediaMeshRef.current = mediaMesh;
+
     const subscribeToRoom = () => {
       socket.emit("room.subscribe", {
         roomId,
@@ -341,8 +356,7 @@ export function MusicRoomApp({
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
       setRoomSnapshot((current) => ({
         ...snapshot,
-        playlists:
-          snapshot.playlists.length > 0 ? snapshot.playlists : (current?.playlists ?? [])
+        playlists: snapshot.playlists.length > 0 ? snapshot.playlists : (current?.playlists ?? [])
       }));
     });
     socket.on("peer.signal", (payload: PeerSignalMessage) => {
@@ -366,7 +380,7 @@ export function MusicRoomApp({
       resetPlayerSurface();
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage("这个房间已不可用，请创建新房间或加入其他房间。");
+      setStatusMessage("这个房间已不可用，请返回音乐房重新加入。");
     });
     socket.on("disconnect", () => {
       setStatusMessage("实时连接已断开，正在尝试重新连接…");
@@ -417,7 +431,9 @@ export function MusicRoomApp({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) {
+      return;
+    }
 
     if (!playback?.currentTrackId) {
       audio.pause();
@@ -437,7 +453,6 @@ export function MusicRoomApp({
 
       const remoteAudio = remoteAudioRef.current;
       if (remoteAudio) {
-        remoteAudio.volume = volume;
         if (playback.status === "playing") {
           void remoteAudio.play().catch(() => {
             setStatusMessage("浏览器阻止了远端音频自动播放，请再次点击页面继续。");
@@ -470,14 +485,10 @@ export function MusicRoomApp({
     if (playback.status === "paused") {
       audio.pause();
     }
-  }, [playback, uploadedTracks, isCurrentSourceOwner, volume]);
+  }, [playback, uploadedTracks, isCurrentSourceOwner]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !peerId) {
-      return;
-    }
-
-    if (!isCurrentSourceOwner) {
+    if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
       return;
     }
 
@@ -492,6 +503,7 @@ export function MusicRoomApp({
     isCurrentSourceOwner,
     peerId
   ]);
+
   const currentTrack = progressTrack;
 
   const upcomingTrack = useMemo(() => {
@@ -499,9 +511,7 @@ export function MusicRoomApp({
       return null;
     }
 
-    const currentQueueIndex = roomSnapshot.queue.findIndex(
-      (item) => item.trackId === currentTrack.id
-    );
+    const currentQueueIndex = roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id);
     if (currentQueueIndex < 0) {
       return null;
     }
@@ -515,9 +525,9 @@ export function MusicRoomApp({
   }, [currentTrack, roomSnapshot]);
 
   useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
+    const nextPlayback = roomSnapshot?.room.playback;
 
-    if (!playback?.currentTrackId) {
+    if (!nextPlayback?.currentTrackId) {
       setMediaConnectionState("idle");
       return;
     }
@@ -526,7 +536,7 @@ export function MusicRoomApp({
       return;
     }
 
-    if (playback.status === "paused") {
+    if (nextPlayback.status === "paused") {
       setMediaConnectionState((current) => (current === "live" ? "buffering" : current));
       return;
     }
@@ -562,7 +572,7 @@ export function MusicRoomApp({
 
       const announcements = Object.values(availabilityByTrack[plan.track.id] ?? {});
       const localChunks = availabilityByTrack[plan.track.id]?.[peerId]?.availableChunks ?? [];
-      const totalChunks = announcements.reduce((max, a) => Math.max(max, a.totalChunks), 0);
+      const totalChunks = announcements.reduce((max, entry) => Math.max(max, entry.totalChunks), 0);
       const missingChunkIndexes = getMissingChunkIndexes(totalChunks, localChunks, plan.limit);
 
       for (const chunkIndex of missingChunkIndexes) {
@@ -643,9 +653,15 @@ export function MusicRoomApp({
     window.localStorage.removeItem(lastRoomStorageKey);
   }
 
-  async function refreshRoom(roomId: string) {
-    const snapshot = await musicRoomApi.getRoom(roomId, activeSession?.id);
-    setRoomSnapshot(snapshot);
+  async function handleLogout() {
+    try {
+      await musicRoomApi.logout();
+    } catch {
+      // Keep local logout behavior even if the server session is already gone.
+    }
+
+    handleClearIdentity();
+    router.replace(`/auth?redirectTo=${encodeURIComponent(initialRoomId ? `/room/${initialRoomId}` : "/rooms")}` as Route);
   }
 
   async function refreshAvailableRooms() {
@@ -657,9 +673,9 @@ export function MusicRoomApp({
     }
   }
 
-  async function refreshPlaylists(ownerId: string) {
+  async function refreshPlaylists() {
     try {
-      const nextPlaylists = await musicRoomApi.listPlaylists(ownerId);
+      const nextPlaylists = await musicRoomApi.listMyPlaylists();
       setPlaylists(nextPlaylists);
     } catch {
       setPlaylists([]);
@@ -672,17 +688,6 @@ export function MusicRoomApp({
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
-  }
-
-
-  function mergeAvailability(announcement: TrackAvailabilityAnnouncement) {
-    setAvailabilityByTrack((current) => ({
-      ...current,
-      [announcement.trackId]: {
-        ...(current[announcement.trackId] ?? {}),
-        [announcement.ownerPeerId]: announcement
-      }
-    }));
   }
 
   async function hydrateTrackFromPiecesWithCleanup(
@@ -736,38 +741,46 @@ export function MusicRoomApp({
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
   const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
-  const availabilitySummary = roomSnapshot?.tracks.map((track) => {
-    const peers = Object.values(availabilityByTrack[track.id] ?? {});
-    const local = peers.find((peer) => peer.ownerPeerId === peerId);
-    return {
-      track,
-      peerCount: peers.length,
-      localChunkCount: local?.availableChunks.length ?? 0,
-      totalChunks: local?.totalChunks ?? peers[0]?.totalChunks ?? 0,
-      sources: peers.map((peer) => `${peer.nickname} (${peer.source})`)
-    };
-  }) ?? [];
+  const availabilitySummary =
+    roomSnapshot?.tracks.map((track) => {
+      const peers = Object.values(availabilityByTrack[track.id] ?? {});
+      const local = peers.find((peer) => peer.ownerPeerId === peerId);
+      return {
+        track,
+        peerCount: peers.length,
+        localChunkCount: local?.availableChunks.length ?? 0,
+        totalChunks: local?.totalChunks ?? peers[0]?.totalChunks ?? 0,
+        sources: peers.map((peer) => `${peer.nickname} (${peer.source})`)
+      };
+    }) ?? [];
   const currentTrackAvailability = currentTrack
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
-  const statusTone = statusMessage.includes("失败") || statusMessage.includes("不可用")
-    ? "warning"
-    : statusMessage.includes("已")
-      ? "success"
-      : "neutral";
-  const visibleRooms = availableRooms.filter((item) => item.room.id !== roomSnapshot?.room.id);
-  return (
-    <main className="music-room-shell">
-      <TopBar activeSession={activeSession} roomSnapshot={roomSnapshot} />
+  const statusTone =
+    statusMessage.includes("失败") || statusMessage.includes("不可用")
+      ? "warning"
+      : statusMessage.includes("已")
+        ? "success"
+        : "neutral";
 
-      {roomSnapshot ? (
-        <div className="status-toast-wrap" aria-live="polite">
-          <div className={`status-toast ${statusTone}`}>{statusMessage}</div>
+  return (
+    <main className="min-h-screen bg-background relative flex flex-col pb-32">
+      <TopBar activeSession={activeSession} roomSnapshot={roomSnapshot} onLogout={handleLogout} />
+
+      {roomSnapshot && statusMessage ? (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4" aria-live="polite">
+          <div className={`pointer-events-auto px-5 py-2.5 rounded-full text-sm font-medium shadow-xl backdrop-blur-md transition-all duration-300 animate-slide-up ${
+            statusTone === "warning" ? "bg-red-500/10 border border-red-500/20 text-red-400" :
+            statusTone === "success" ? "bg-green-500/10 border border-green-500/20 text-green-400" :
+            "bg-surface/80 border border-surface-border text-foreground"
+          }`}>
+            {statusMessage}
+          </div>
         </div>
       ) : null}
 
-      <div className="main-content" role="tabpanel">
-        <div className="panel-room">
+      <div className="flex-1 min-h-0 relative" role="tabpanel">
+        <div className="w-full h-full">
           {roomSnapshot ? (
             <RoomDashboardView
               roomSnapshot={roomSnapshot}
@@ -778,9 +791,11 @@ export function MusicRoomApp({
               host={host}
               canControlPlayback={canControlPlayback}
               canDeleteRoom={canDeleteRoom}
+              canReorderQueue={canReorderQueue}
               currentSourceOwnerNickname={
-                roomSnapshot.tracks.find((track) => track.id === roomSnapshot.room.playback.sourceTrackId)
-                  ?.ownerNickname ?? null
+                roomSnapshot.tracks.find(
+                  (track) => track.id === roomSnapshot.room.playback.sourceTrackId
+                )?.ownerNickname ?? null
               }
               uploadedTracks={uploadedTracks}
               connectedPeersCount={connectedPeers.length}
@@ -802,36 +817,45 @@ export function MusicRoomApp({
               onFilesSelected={(files) => handleFilesSelected(files)}
               onAddToQueue={(trackId) => addToQueue(trackId)}
               onPlayTrack={(trackId) => playTrack(trackId)}
+              onPlayQueueItem={(queueItemId) => playQueueItem(queueItemId)}
+              onRemoveQueueItem={(queueItemId) => removeQueueItem(queueItemId)}
+              onReorderQueue={(queueItemIds) => reorderQueue(queueItemIds)}
               onSavePlaylistFromQueue={(title) => savePlaylistFromQueue(title)}
               onLoadPlaylistIntoRoom={(playlistId) => loadPlaylistIntoRoom(playlistId)}
               onUpdatePlaylistTitle={(playlistId, title) => updatePlaylistTitle(playlistId, title)}
               onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
             />
           ) : (
-            <section className="room-empty-state workspace-block">
-              <p className="block-kicker">房间页</p>
-              <h2>当前没有可用的房间工作台</h2>
-              <p className="placeholder-copy">
+            <section className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-fade-in pt-12">
+              <div className="w-16 h-16 rounded-full bg-surface border border-surface-border flex items-center justify-center mb-6 text-foreground-muted">
+                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+              </div>
+              <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-foreground-muted mb-3">Room page</p>
+              <h2 className="text-2xl font-bold text-foreground mb-4">当前没有可用的房间工作台</h2>
+              <p className="text-sm text-foreground-muted max-w-sm mb-8 leading-relaxed">
                 {activeSession
-                  ? "这个地址没有恢复到有效房间。请回到房间主页，重新创建或通过房间码加入。"
-                  : "你还没有确认身份。请先进入房间主页确认昵称，再创建或加入房间。"}
+                  ? "这个地址没有恢复到有效房间。请回到音乐房入口页，重新创建或通过房间码加入。"
+                  : "你还没有登录。先进入登录页，再回到房间或音乐房入口页继续。"}
               </p>
-              <div className="hero-buttons">
-                <Link href={"/rooms" as Route} className="solid-action">
-                  返回房间主页
+              <div className="flex flex-wrap items-center justify-center gap-4">
+                <Link href={"/rooms" as Route}>
+                  <Button size="lg">返回音乐房入口</Button>
                 </Link>
                 {activeSession ? (
-                  <button className="ghost-action" onClick={handleClearIdentity}>
-                    清除当前身份
-                  </button>
-                ) : null}
+                  <Button variant="ghost" onClick={handleClearIdentity} type="button">
+                    清除当前会话状态
+                  </Button>
+                ) : (
+                  <Link href={"/auth?redirectTo=/rooms" as Route}>
+                    <Button variant="ghost">去登录</Button>
+                  </Link>
+                )}
               </div>
             </section>
           )}
         </div>
       </div>
 
-      {/* 鈹€鈹€ Bottom Player 鈹€鈹€ */}
       <BottomPlayer
         audioRef={audioRef}
         remoteAudioRef={remoteAudioRef}
@@ -851,7 +875,7 @@ export function MusicRoomApp({
           currentTrackAvailability
             ? {
                 localChunkCount: currentTrackAvailability.localChunkCount,
-                totalChunks: currentTrackAvailability.totalChunks,
+                totalChunks: currentTrackAvailability.totalChunks
               }
             : null
         }
@@ -874,14 +898,14 @@ export function MusicRoomApp({
           )
         }
         onRemoteError={() => setMediaConnectionState("failed")}
-        onPlayQueueItem={playQueueItem}
-        onRemoveQueueItem={removeQueueItem}
-        onReorderQueue={reorderQueue}
-        canReorderQueue={canReorderQueue}
       />
 
-      {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
+      {isPending ? (
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 bg-surface backdrop-blur-md rounded-full px-4 py-1.5 border border-surface-border shadow-lg flex items-center gap-2 z-50 animate-fade-in">
+           <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
+           <span className="text-xs text-foreground">正在同步房间状态…</span>
+        </div>
+      ) : null}
     </main>
   );
 }
-

@@ -18,9 +18,10 @@ export class PlaybackController {
     private readonly authService: AuthService
   ) {}
 
-  private async assertSession(sessionId: string, sessionToken?: string) {
+  private async getCurrentUserId(sessionToken?: string) {
     try {
-      await this.authService.assertSessionToken(sessionId, sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      return session.userId;
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }
@@ -36,13 +37,12 @@ export class PlaybackController {
       trackId?: string;
       queueItemId?: string;
       positionMs?: number;
-      sessionId: string;
     }
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
+    const userId = await this.getCurrentUserId(sessionToken);
     const playback = await this.roomService.updatePlayback(roomId, {
       ...body,
-      actorSessionId: body.sessionId
+      actorSessionId: userId
     });
     this.signalingGateway.emitRoomSnapshot(
       roomId,

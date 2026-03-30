@@ -6,7 +6,6 @@ import {
   Headers,
   Param,
   Post,
-  Query,
   UnauthorizedException
 } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
@@ -21,9 +20,10 @@ export class RoomController {
     private readonly authService: AuthService
   ) {}
 
-  private async assertSession(sessionId: string, sessionToken?: string) {
+  private async getCurrentUserId(sessionToken?: string) {
     try {
-      await this.authService.assertSessionToken(sessionId, sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      return session.userId;
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }
@@ -32,83 +32,62 @@ export class RoomController {
   @Post()
   async createRoom(
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body()
-    body: {
-      sessionId: string;
-      visibility?: "private" | "public";
-    }
+    @Body() body: { visibility?: "private" | "public" }
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
-    const snapshot = await this.roomService.createRoom(body.sessionId, body.visibility);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const snapshot = await this.roomService.createRoom(userId, body.visibility);
     this.signalingGateway.emitRoomSnapshot(snapshot.room.id, snapshot);
     return snapshot;
   }
 
   @Get()
-  async listRooms(
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Query("sessionId") sessionId?: string
-  ) {
-    if (!sessionId) {
-      return this.roomService.listPublicRooms();
+  async listRooms(@Headers("x-session-token") sessionToken: string | undefined) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const [accessibleRooms, publicRooms] = await Promise.all([
+      this.roomService.listRoomsForSession(userId),
+      this.roomService.listPublicRooms()
+    ]);
+
+    const deduped = new Map<string, (typeof accessibleRooms)[number]>();
+    for (const room of [...accessibleRooms, ...publicRooms]) {
+      deduped.set(room.room.id, room);
     }
 
-    await this.assertSession(sessionId, sessionToken);
-    return this.roomService.listRoomsForSession(sessionId);
+    return [...deduped.values()];
   }
 
   @Get("recent/active")
-  async getRecentRoom(
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Query("sessionId") sessionId?: string
-  ) {
-    if (!sessionId) {
-      return null;
-    }
-
-    await this.assertSession(sessionId, sessionToken);
-    return this.roomService.getRecentRoomSnapshotForSession(sessionId);
+  async getRecentRoom(@Headers("x-session-token") sessionToken: string | undefined) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.getRecentRoomSnapshotForSession(userId);
   }
 
   @Get(":roomId/recover")
   async recoverRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Query("sessionId") sessionId?: string
+    @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    if (!sessionId) {
-      return null;
-    }
-
-    await this.assertSession(sessionId, sessionToken);
-    return this.roomService.getRecoverableRoomSnapshot(roomId, sessionId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.getRecoverableRoomSnapshot(roomId, userId);
   }
 
   @Get(":roomId")
   async getRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Query("sessionId") sessionId?: string
+    @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    if (sessionId) {
-      await this.assertSession(sessionId, sessionToken);
-    }
-
-    return this.roomService.getAccessibleRoomSnapshot(roomId, [], sessionId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.getAccessibleRoomSnapshot(roomId, [], userId);
   }
 
   @Post("join-by-code")
   async joinRoomByCode(
     @Headers("x-session-token") sessionToken: string | undefined,
-    @Body()
-    body: {
-      sessionId: string;
-      joinCode: string;
-    }
+    @Body() body: { joinCode: string }
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
+    const userId = await this.getCurrentUserId(sessionToken);
     const room = await this.roomService.findRoomByJoinCode(body.joinCode);
-    await this.roomService.joinRoom(room.id, body.sessionId);
+    await this.roomService.joinRoom(room.id, userId);
     const snapshot = await this.roomService.getRoomSnapshot(room.id, []);
     this.signalingGateway.emitRoomSnapshot(room.id, snapshot);
     return snapshot;
@@ -117,11 +96,10 @@ export class RoomController {
   @Post(":roomId/join")
   async joinRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { sessionId: string }
+    @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
-    const room = await this.roomService.joinRoom(roomId, body.sessionId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const room = await this.roomService.joinRoom(roomId, userId);
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
     return room;
@@ -130,11 +108,10 @@ export class RoomController {
   @Post(":roomId/leave")
   async leaveRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Body() body: { sessionId: string }
+    @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
-    const room = await this.roomService.leaveRoom(roomId, body.sessionId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const room = await this.roomService.leaveRoom(roomId, userId);
     if (room.members.length > 0) {
       const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
       this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
@@ -145,15 +122,10 @@ export class RoomController {
   @Delete(":roomId")
   async deleteRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
-    @Query("sessionId") sessionId?: string
+    @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    if (!sessionId) {
-      throw new UnauthorizedException("Unauthorized.");
-    }
-
-    await this.assertSession(sessionId, sessionToken);
-    const result = await this.roomService.deleteRoom(roomId, sessionId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    const result = await this.roomService.deleteRoom(roomId, userId);
     this.signalingGateway.emitRoomMissing(roomId);
     return result;
   }
@@ -164,7 +136,6 @@ export class RoomController {
     @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
     body: {
-      sessionId: string;
       id?: string;
       title: string;
       artist: string;
@@ -178,12 +149,11 @@ export class RoomController {
       sourceType: "local_upload";
     }
   ) {
-    await this.assertSession(body.sessionId, sessionToken);
-    const { sessionId, ...trackInput } = body;
-    const track = await this.roomService.registerTrack(roomId, sessionId, {
-      ...trackInput,
-      ownerSessionId: trackInput.ownerSessionId ?? sessionId,
-      ownerNickname: trackInput.ownerNickname ?? ""
+    const userId = await this.getCurrentUserId(sessionToken);
+    const track = await this.roomService.registerTrack(roomId, userId, {
+      ...body,
+      ownerSessionId: body.ownerSessionId ?? userId,
+      ownerNickname: body.ownerNickname ?? ""
     });
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitRoomSnapshot(roomId, snapshot);

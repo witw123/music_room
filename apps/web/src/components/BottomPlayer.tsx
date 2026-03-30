@@ -2,13 +2,14 @@
 
 import { useTransition } from "react";
 import type {
-  GuestSession,
+  AuthSession,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
-import { PlayerQueueDrawer } from "@/components/PlayerQueueDrawer";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -22,7 +23,7 @@ type BottomPlayerProps = {
   syncProgressFromAudio: () => void;
   syncDurationFromAudio: () => void;
   roomSnapshot: RoomSnapshot | null;
-  activeSession: GuestSession | null;
+  activeSession: AuthSession | null;
   uploadedTracks: Record<string, { objectUrl: string }>;
   currentTrack: TrackMeta | null;
   currentTrackAvailability: {
@@ -31,7 +32,6 @@ type BottomPlayerProps = {
   } | null;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  canReorderQueue: boolean;
   onPlay: () => void;
   onPause: (positionMs: number) => void;
   onSeek: (positionMs: number) => void;
@@ -43,25 +43,22 @@ type BottomPlayerProps = {
   onRemoteWaiting: () => void;
   onRemotePause: () => void;
   onRemoteError: () => void;
-  onPlayQueueItem: (queueItemId: string) => Promise<void>;
-  onRemoveQueueItem: (queueItemId: string) => Promise<void>;
-  onReorderQueue: (queueItemIds: string[]) => Promise<void>;
 };
 
 function getMediaStatusLabel(state: RoomMediaConnectionState) {
   switch (state) {
     case "connecting":
-      return "正在连接房间音频";
+      return "正在连接...";
     case "buffering":
-      return "正在缓冲直播音频";
+      return "正在缓冲...";
     case "live":
-      return "已连接直播音频";
+      return "房间音频已接入";
     case "reconnecting":
-      return "连接中断，正在重试";
+      return "重新连接中...";
     case "failed":
-      return "音频连接失败";
+      return "连接失败";
     default:
-      return "等待房间开始播放";
+      return "等待播放";
   }
 }
 
@@ -83,7 +80,6 @@ export function BottomPlayer({
   currentTrackAvailability,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  canReorderQueue,
   onPlay,
   onPause,
   onSeek,
@@ -94,10 +90,7 @@ export function BottomPlayer({
   onRemotePlaying,
   onRemoteWaiting,
   onRemotePause,
-  onRemoteError,
-  onPlayQueueItem,
-  onRemoveQueueItem,
-  onReorderQueue
+  onRemoteError
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const playback = roomSnapshot?.room.playback;
@@ -111,48 +104,61 @@ export function BottomPlayer({
   const mediaStatusLabel = getMediaStatusLabel(mediaConnectionState);
 
   return (
-    <footer className={`bottom-player${isPlaying ? " playing" : ""}`}>
-      <div className="bottom-progress-rail" aria-hidden="true">
-        <div className="bottom-progress-fill" style={{ width: `${progressRatio * 100}%` }} />
+    <footer className="fixed bottom-0 left-0 right-0 z-50 flex flex-col lg:grid lg:grid-cols-[1.5fr_auto_2fr_1.5fr] items-center gap-6 p-4 lg:px-8 bg-background-secondary/85 backdrop-blur-2xl border-t border-surface-border shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all">
+      {/* Top Progress Rail (Full bleeding progress bar for visual flair) */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-white/5" aria-hidden="true">
+        <div 
+          className="h-full bg-gradient-to-r from-accent to-blue-400 transition-all duration-300 ease-linear shadow-[0_0_10px_rgba(0,112,243,0.6)]" 
+          style={{ width: `${progressRatio * 100}%` }} 
+        />
       </div>
 
-      <div className="bp-track-info">
+      {/* Track Info */}
+      <div className="flex items-center gap-4 w-full min-w-0">
         <div
-          className={`bp-artwork${currentTrack?.artworkUrl ? "" : " is-placeholder"}${
-            isPlaying ? " is-rotating" : ""
+          className={`relative w-14 h-14 rounded-2xl overflow-hidden bg-surface border border-surface-border flex-shrink-0 shadow-lg ${
+            isPlaying ? "animate-spin-slow rounded-full border-accent/30 shadow-accent/20" : "transition-all duration-700"
           }`}
         >
           {currentTrack?.artworkUrl ? (
-            <img src={currentTrack.artworkUrl} alt="" className="bp-artwork-image" />
+            <img src={currentTrack.artworkUrl} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className="bp-artwork-fallback" aria-hidden="true">
-              <span className="bp-artwork-disc" />
-              <span className="bp-artwork-note">♪</span>
+            <div className="w-full h-full bg-gradient-to-br from-surface to-surface-hover flex items-center justify-center">
+              <div className="w-3 h-3 rounded-full border-2 border-accent/20" />
             </div>
           )}
+          {isPlaying && (
+            <div className="absolute inset-0 rounded-full border border-white/10" />
+          )}
         </div>
-        <div className="bp-track-copy">
-          <p className="player-caption">正在播放</p>
-          <h3 className="bp-track-title">{currentTrack?.title ?? "等待播放"}</h3>
-          <p className="bp-track-artist">
-            {currentTrack?.artist ?? "从曲库或队列里选择一首歌"}
+        <div className="min-w-0 truncate">
+          <p className="text-[10px] uppercase font-bold tracking-widest text-accent text-glow mb-1">
+            {isPlaying ? "正在播放" : "已暂停"}
           </p>
+          <h3 className="text-sm font-semibold text-foreground truncate">{currentTrack?.title ?? "等待选择歌曲"}</h3>
+          <p className="text-xs text-foreground-muted truncate mt-0.5">{currentTrack?.artist ?? "从曲库或共享队列中选择一首歌"}</p>
         </div>
       </div>
 
-      <div className="bp-controls">
-        <button
-          className="bp-btn ghost-action inverse"
+      {/* Play Controls */}
+      <div className="flex items-center gap-4 justify-center">
+        <Button
+          variant="ghost"
+          size="icon"
           disabled={!canControlPlayback || !playback?.currentTrackId}
           onClick={() => startTransition(() => void onPrev())}
           title="上一首"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
           </svg>
-        </button>
+        </Button>
         <button
-          className={`bp-btn bp-btn-main ${isPlaying ? "bp-btn-playing" : "bp-btn-paused"}`}
+          className={`inline-grid place-items-center w-12 h-12 rounded-full transition-all group outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+            canControlPlayback 
+              ? "bg-foreground text-background hover:scale-105 active:scale-95 shadow-xl" 
+              : "bg-surface text-foreground-muted opacity-50 cursor-not-allowed"
+          }`}
           disabled={!canControlPlayback}
           onClick={() =>
             startTransition(() =>
@@ -164,105 +170,92 @@ export function BottomPlayer({
             )
           }
           title={isPlaying ? "暂停" : "播放"}
+          type="button"
         >
           {isPlaying ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 19h4V5H6zm8-14v14h4V5z" />
             </svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z" />
             </svg>
           )}
         </button>
-        <button
-          className="bp-btn ghost-action inverse"
+        <Button
+          variant="ghost"
+          size="icon"
           disabled={!canControlPlayback || !playback?.currentTrackId}
           onClick={() => startTransition(() => void onNext())}
           title="下一首"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
           </svg>
-        </button>
+        </Button>
       </div>
 
-      <div className="bp-progress-area">
-        <span className="bp-time">{formatDuration(effectiveProgressMs)}</span>
-        <div className="progress-shell bp-progress-shell">
-          <div className="progress-track-gray" />
-          <div className="progress-fill" style={{ width: `${progressRatio * 100}%` }} />
+      {/* Center Progress Slider Area */}
+      <div className="hidden lg:flex items-center w-full gap-4 px-4">
+        <span className="text-xs tabular-nums text-foreground-muted min-w-[40px] text-right">{formatDuration(effectiveProgressMs)}</span>
+        <div className="flex-1 flex items-center h-8">
+          <Slider 
+           value={effectiveProgressMs}
+           max={currentTrackDuration || 1}
+           disabled={!currentTrackDuration || !canControlPlayback}
+           onChange={(event) => setSeekDraft(Number(event.target.value))}
+           onMouseUp={() => {
+             if (seekDraft !== null && canControlPlayback) {
+               startTransition(() => void onSeek(seekDraft));
+               setSeekDraft(null);
+             }
+           }}
+           onTouchEnd={() => {
+             if (seekDraft !== null && canControlPlayback) {
+               startTransition(() => void onSeek(seekDraft));
+               setSeekDraft(null);
+             }
+           }}
+          />
         </div>
-        <input
-          type="range"
-          min={0}
-          max={currentTrackDuration || 1}
-          step={1000}
-          value={effectiveProgressMs}
-          className="progress-slider bp-slider"
-          disabled={!currentTrackDuration || !canControlPlayback}
-          onChange={(e) => setSeekDraft(Number(e.target.value))}
-          onMouseUp={() => {
-            if (seekDraft !== null && canControlPlayback) {
-              startTransition(() => void onSeek(seekDraft));
-              setSeekDraft(null);
-            }
-          }}
-          onTouchEnd={() => {
-            if (seekDraft !== null && canControlPlayback) {
-              startTransition(() => void onSeek(seekDraft));
-              setSeekDraft(null);
-            }
-          }}
-        />
-        <span className="bp-time">{formatDuration(currentTrackDuration)}</span>
+        <span className="text-xs tabular-nums text-foreground-muted min-w-[40px]">{formatDuration(currentTrackDuration)}</span>
       </div>
 
-      <div className="bp-status">
-        {!canControlPlayback && roomSnapshot ? <span className="bp-note">{mediaStatusLabel}</span> : null}
-        {roomSnapshot?.room.playback.sourceSessionId === activeSession?.id ? (
-          <span className="bp-note">正在向 {mediaConnectedPeersCount} 位成员发送音频</span>
-        ) : null}
-        {!canControlPlayback && !localTrackAvailable && currentTrack ? (
-          <span className="bp-note">成员端优先收听房间直播音频</span>
-        ) : null}
-        {!localTrackAvailable && currentTrackAvailability ? (
-          <span className="bp-note">
-            缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0} 分片
-          </span>
-        ) : null}
-        <label className="bp-volume" aria-label="音量">
-          <span className="bp-volume-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      {/* Right Status & Volume */}
+      <div className="flex items-center justify-end gap-5 w-full">
+        <div className="hidden sm:flex flex-col items-end gap-1">
+          {roomSnapshot?.room.playback.sourceSessionId === activeSession?.id ? (
+            <span className="text-xs text-accent font-medium text-glow truncate">正在分发给 {mediaConnectedPeersCount} 人</span>
+          ) : (
+            <span className="text-xs text-foreground-muted truncate">{mediaStatusLabel}</span>
+          )}
+          {!localTrackAvailable && currentTrackAvailability ? (
+            <span className="text-[10px] text-foreground-muted">缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0}</span>
+          ) : null}
+          {!canControlPlayback && currentTrack ? (
+            <span className="text-[10px] text-foreground-muted">当前为成员旁听模式</span>
+          ) : null}
+        </div>
+        
+        <div className="flex items-center justify-center gap-3 min-w-[120px]">
+          <span className="text-foreground-muted">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
             </svg>
           </span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={(e) => setVolume(Number(e.target.value))}
+          <Slider 
+           className="w-20"
+           value={volume}
+           max={1}
+           step={0.01}
+           onChange={(event) => setVolume(Number(event.target.value))}
           />
-        </label>
-        <PlayerQueueDrawer
-          queue={roomSnapshot?.queue ?? []}
-          tracks={roomSnapshot?.tracks ?? []}
-          currentTrackId={roomSnapshot?.room.playback.currentTrackId ?? null}
-          activeSessionId={activeSession?.id}
-          hostId={roomSnapshot?.room.hostId}
-          canControlPlayback={canControlPlayback}
-          canReorderQueue={canReorderQueue}
-          onPlayQueueItem={onPlayQueueItem}
-          onRemoveQueueItem={onRemoveQueueItem}
-          onReorderQueue={onReorderQueue}
-        />
+        </div>
       </div>
 
       <audio
         ref={audioRef}
-        className="player-audio hidden"
+        className="hidden"
         onEnded={() => void onEnded()}
         onTimeUpdate={syncProgressFromAudio}
         onLoadedMetadata={() => {
@@ -281,7 +274,7 @@ export function BottomPlayer({
 
       <audio
         ref={remoteAudioRef}
-        className="player-audio hidden"
+        className="hidden"
         autoPlay
         playsInline
         onPlaying={onRemotePlaying}
@@ -290,7 +283,12 @@ export function BottomPlayer({
         onError={onRemoteError}
       />
 
-      {isPending ? <div className="pending-indicator">正在同步房间状态…</div> : null}
+      {isPending ? (
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-surface backdrop-blur-md border border-surface-border text-foreground-muted text-xs px-3 py-1 rounded-full shadow-lg flex items-center gap-2 animate-fade-in">
+          <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
+          同步中...
+        </div>
+      ) : null}
     </footer>
   );
 }

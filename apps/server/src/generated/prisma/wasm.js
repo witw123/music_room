@@ -93,11 +93,21 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: 'Serializable'
 });
 
-exports.Prisma.GuestSessionScalarFieldEnum = {
+exports.Prisma.UserScalarFieldEnum = {
   id: 'id',
+  username: 'username',
+  passwordHash: 'passwordHash',
   nickname: 'nickname',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.UserSessionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
   token: 'token',
-  createdAt: 'createdAt'
+  createdAt: 'createdAt',
+  expiresAt: 'expiresAt'
 };
 
 exports.Prisma.RoomStateScalarFieldEnum = {
@@ -154,7 +164,8 @@ exports.Prisma.NullsOrder = {
 
 
 exports.Prisma.ModelName = {
-  GuestSession: 'GuestSession',
+  User: 'User',
+  UserSession: 'UserSession',
   RoomState: 'RoomState',
   Playlist: 'Playlist'
 };
@@ -205,13 +216,13 @@ const config = {
       }
     }
   },
-  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel GuestSession {\n  id        String   @id\n  nickname  String\n  token     String\n  createdAt DateTime @default(now())\n}\n\nmodel RoomState {\n  id         String   @id\n  hostId     String\n  joinCode   String   @unique\n  visibility String\n  playback   Json\n  members    Json\n  tracks     Json\n  queue      Json\n  createdAt  DateTime @default(now())\n  updatedAt  DateTime @updatedAt\n}\n\nmodel Playlist {\n  id              String   @id\n  ownerId         String\n  roomId          String?\n  title           String\n  description     String?\n  coverUrl        String?\n  tags            Json\n  isCollaborative Boolean  @default(false)\n  trackIds        Json\n  createdAt       DateTime @default(now())\n  updatedAt       DateTime @updatedAt\n}\n",
-  "inlineSchemaHash": "eb20264f1149b4d1055c211b10f8b9154a600102b4b9007c1bdd7f5297bb3ffb",
+  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../src/generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel User {\n  id           String   @id\n  username     String   @unique\n  passwordHash String\n  nickname     String\n  createdAt    DateTime @default(now())\n  updatedAt    DateTime @updatedAt\n}\n\nmodel UserSession {\n  id        String   @id\n  userId    String\n  token     String   @unique\n  createdAt DateTime @default(now())\n  expiresAt DateTime\n}\n\nmodel RoomState {\n  id         String   @id\n  hostId     String\n  joinCode   String   @unique\n  visibility String\n  playback   Json\n  members    Json\n  tracks     Json\n  queue      Json\n  createdAt  DateTime @default(now())\n  updatedAt  DateTime @updatedAt\n}\n\nmodel Playlist {\n  id              String   @id\n  ownerId         String\n  roomId          String?\n  title           String\n  description     String?\n  coverUrl        String?\n  tags            Json\n  isCollaborative Boolean  @default(false)\n  trackIds        Json\n  createdAt       DateTime @default(now())\n  updatedAt       DateTime @updatedAt\n}\n",
+  "inlineSchemaHash": "0e76d8fbc5092444a9946f4368852932e78094196ce32717287b91388e05110a",
   "copyEngine": true
 }
 config.dirname = '/'
 
-config.runtimeDataModel = JSON.parse("{\"models\":{\"GuestSession\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"nickname\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"RoomState\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"hostId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"joinCode\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"visibility\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"playback\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"members\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"tracks\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"queue\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"Playlist\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"ownerId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"roomId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"title\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"description\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"coverUrl\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tags\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"isCollaborative\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"trackIds\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
+config.runtimeDataModel = JSON.parse("{\"models\":{\"User\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"username\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"passwordHash\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"nickname\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"UserSession\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"userId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"token\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"expiresAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"RoomState\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"hostId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"joinCode\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"visibility\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"playback\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"members\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"tracks\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"queue\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null},\"Playlist\":{\"fields\":[{\"name\":\"id\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"ownerId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"roomId\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"title\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"description\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"coverUrl\",\"kind\":\"scalar\",\"type\":\"String\"},{\"name\":\"tags\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"isCollaborative\",\"kind\":\"scalar\",\"type\":\"Boolean\"},{\"name\":\"trackIds\",\"kind\":\"scalar\",\"type\":\"Json\"},{\"name\":\"createdAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"},{\"name\":\"updatedAt\",\"kind\":\"scalar\",\"type\":\"DateTime\"}],\"dbName\":null}},\"enums\":{},\"types\":{}}")
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel)
 config.engineWasm = {
   getRuntime: async () => require('./query_engine_bg.js'),
