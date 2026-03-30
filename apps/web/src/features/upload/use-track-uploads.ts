@@ -9,6 +9,8 @@ import {
 } from "@/features/p2p";
 import {
   cacheTrackAsset,
+  deleteCachedTrackAsset,
+  deleteCachedPiecesForTrack,
   getCachedTrackAssetCount,
   getCachedPiecesForTrack,
   getCachedTrackAssets,
@@ -275,6 +277,13 @@ export function useTrackUploads(options: {
     setStatusMessage(`已从房间其他成员恢复曲目 ${track.title} 的本地缓存。`);
   }
 
+  async function deleteUploadedTrackArtifacts(trackId: string) {
+    await deleteCachedTrackAsset(trackId);
+    await deleteCachedPiecesForTrack(trackId);
+    setUploadedTracks((current) => removeTracksFromUploads(current, [trackId]));
+    setCachedTrackCount(await getCachedTrackAssetCount());
+  }
+
   return {
     uploadedTracks,
     setUploadedTracks,
@@ -282,6 +291,7 @@ export function useTrackUploads(options: {
     handleFilesSelected,
     announceLocalCache,
     hydrateTrackFromPieces,
-    trimLocalCache
+    trimLocalCache,
+    deleteUploadedTrackArtifacts
   };
 }

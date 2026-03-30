@@ -266,6 +266,78 @@ describe("RoomService", () => {
     });
   });
 
+  it("allows the original uploader to delete a track and removes it from queue and playback", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const track = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "member-track-delete",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+
+    await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: member.id
+    });
+
+    await expect(
+      roomService.removeTrack(snapshot.room.id, member.id, track.id)
+    ).resolves.toEqual({ ok: true });
+
+    const roomAfterDelete = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(roomAfterDelete.tracks).toHaveLength(0);
+    expect(roomAfterDelete.queue).toHaveLength(0);
+    expect(roomAfterDelete.room.playback.currentTrackId).toBeNull();
+  });
+
+  it("blocks other members from deleting someone else's uploaded track", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Host Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "host-track-delete",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    await expect(
+      roomService.removeTrack(snapshot.room.id, member.id, track.id)
+    ).rejects.toThrow("Only the original uploader can delete this track.");
+  });
+
   it("rejects playback when the track owner is offline", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

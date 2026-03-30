@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import type { TrackMeta } from "@music-room/shared";
+import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 
@@ -9,8 +9,10 @@ type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, { objectUrl: string }>;
   canControlPlayback: boolean;
+  activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
+  onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
 };
 
@@ -18,8 +20,10 @@ export function TrackListSection({
   tracks,
   uploadedTracks,
   canControlPlayback,
+  activeSession,
   onFilesSelected,
   onAddToQueue,
+  onDeleteTrack,
   onPlayTrack
 }: TrackListSectionProps) {
   const [isPending, startTransition] = useTransition();
@@ -67,6 +71,16 @@ export function TrackListSection({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 mt-auto">
+                  {track.ownerSessionId === activeSession?.id ? (
+                    <Button
+                      variant="ghost"
+                      className="h-10 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => startTransition(() => void onDeleteTrack(track.id))}
+                      type="button"
+                    >
+                      删除
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
                     className="flex-1 bg-background/50"

@@ -194,6 +194,10 @@ export class RoomService {
       throw new Error("Only the host can delete this room.");
     }
 
+    if (record.room.members.some((member) => !member.peerId)) {
+      throw new Error("All room members must be online before deleting the room.");
+    }
+
     await this.roomRecordRepository.deleteRecord(record);
     await Promise.all(
       record.room.members.map((member) =>
@@ -276,6 +280,34 @@ export class RoomService {
 
     await this.roomRecordRepository.persistRecord(record);
     return track;
+  }
+
+  async removeTrack(roomId: string, sessionId: string, trackId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
+
+    const track = record.tracks.find((item) => item.id === trackId);
+    if (!track) {
+      throw new Error(`Track not found in room: ${trackId}`);
+    }
+
+    if (track.ownerSessionId !== sessionId) {
+      throw new Error("Only the original uploader can delete this track.");
+    }
+
+    record.tracks = record.tracks.filter((item) => item.id !== trackId);
+    record.queue = record.queue
+      .filter((item) => item.trackId !== trackId)
+      .map((item, index) => ({ ...item, position: index }));
+
+    if (record.room.playback.currentTrackId === trackId) {
+      this.roomPlaybackService.clearPlayback(record.room.playback);
+    } else {
+      record.room.playback.queueVersion += 1;
+    }
+
+    await this.roomRecordRepository.persistRecord(record);
+    return { ok: true };
   }
 
   async addQueueItem(roomId: string, sessionId: string, trackId: string) {

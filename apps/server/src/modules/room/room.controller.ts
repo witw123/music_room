@@ -9,6 +9,7 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
+import { PlaylistService } from "../playlist/playlist.service";
 import { SignalingGateway } from "../signaling/signaling.gateway";
 import { RoomService } from "./room.service";
 
@@ -17,7 +18,8 @@ export class RoomController {
   constructor(
     private readonly roomService: RoomService,
     private readonly signalingGateway: SignalingGateway,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly playlistService: PlaylistService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -125,7 +127,14 @@ export class RoomController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const snapshot = await this.roomService.getRoomSnapshot(
+      roomId,
+      await this.playlistService.listPlaylistsForRoom(roomId)
+    );
+    const trackIds = snapshot.tracks.map((track) => track.id);
+    await this.playlistService.deletePlaylistsForRoom(roomId);
     const result = await this.roomService.deleteRoom(roomId, userId);
+    this.signalingGateway.emitRoomDeleted(roomId, trackIds);
     this.signalingGateway.emitRoomMissing(roomId);
     return result;
   }
@@ -158,5 +167,19 @@ export class RoomController {
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
     return track;
+  }
+
+  @Delete(":roomId/tracks/:trackId")
+  async deleteTrack(
+    @Param("roomId") roomId: string,
+    @Param("trackId") trackId: string,
+    @Headers("x-session-token") sessionToken: string | undefined
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const result = await this.roomService.removeTrack(roomId, userId, trackId);
+    await this.playlistService.removeTrackFromPlaylists(trackId);
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
+    return result;
   }
 }

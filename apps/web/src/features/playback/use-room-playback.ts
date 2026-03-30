@@ -28,6 +28,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   useEffect(() => {
     const localAudio = audioRef.current;
+    const remoteAudio = remoteAudioRef.current;
 
     if (!playback || !progressTrack) {
       setProgressMs(0);
@@ -35,8 +36,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const tick = () => {
-      if (isCurrentSourceOwner && localAudio && !localAudio.paused && Number.isFinite(localAudio.currentTime)) {
-        setProgressMs(Math.min(Math.floor(localAudio.currentTime * 1000), progressTrack.durationMs));
+      const activeAudio = isCurrentSourceOwner ? localAudio : remoteAudio;
+
+      if (
+        playback.status === "playing" &&
+        activeAudio &&
+        Number.isFinite(activeAudio.currentTime) &&
+        activeAudio.currentTime >= 0 &&
+        !activeAudio.paused
+      ) {
+        setProgressMs(Math.min(Math.floor(activeAudio.currentTime * 1000), progressTrack.durationMs));
         return;
       }
 
@@ -44,7 +53,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     };
 
     tick();
-    const timer = window.setInterval(tick, 500);
+    const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
   }, [
     audioRef,
@@ -77,11 +86,9 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [remoteAudioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    if (!isCurrentSourceOwner) {
-      return;
-    }
-
-    const audio = event?.currentTarget ?? audioRef.current;
+    const audio =
+      event?.currentTarget ??
+      (isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current);
     if (!audio || !Number.isFinite(audio.currentTime)) {
       return;
     }
@@ -95,6 +102,11 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }
 
   function syncDurationFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
+    if (progressTrack?.durationMs && progressTrack.durationMs > 0) {
+      setAudioDurationMs(progressTrack.durationMs);
+      return;
+    }
+
     const audio = event?.currentTarget ?? audioRef.current;
     if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
       if (progressTrack?.durationMs) {

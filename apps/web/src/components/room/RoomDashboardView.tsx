@@ -14,6 +14,7 @@ import { TrackListSection } from "./TrackListSection";
 import { QueuePanel } from "./QueuePanel";
 import { PlaylistPanel } from "./PlaylistPanel";
 import { MembersPanel } from "./MembersPanel";
+import type { MemberTransferSummary } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 
@@ -26,6 +27,7 @@ type RoomDashboardViewProps = {
   host: RoomMember | undefined;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
+  canDisbandRoom: boolean;
   canReorderQueue: boolean;
   currentSourceOwnerNickname: string | null;
   uploadedTracks: Record<string, { objectUrl: string }>;
@@ -36,11 +38,13 @@ type RoomDashboardViewProps = {
   playlists: Playlist[];
   tracks: TrackMeta[];
   availabilitySummary: AvailabilityEntry[];
+  memberTransferSummaries: MemberTransferSummary[];
   onCopyJoinCode: () => Promise<void>;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
+  onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
@@ -69,6 +73,7 @@ export function RoomDashboardView({
   host,
   canControlPlayback,
   canDeleteRoom,
+  canDisbandRoom,
   canReorderQueue,
   currentSourceOwnerNickname,
   uploadedTracks,
@@ -79,11 +84,13 @@ export function RoomDashboardView({
   playlists,
   tracks,
   availabilitySummary,
+  memberTransferSummaries,
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom,
   onFilesSelected,
   onAddToQueue,
+  onDeleteTrack,
   onPlayTrack,
   onPlayQueueItem,
   onRemoveQueueItem,
@@ -114,10 +121,11 @@ export function RoomDashboardView({
           activeSession={activeSession}
           host={host}
           canDeleteRoom={canDeleteRoom}
-        currentSourceOwnerNickname={currentSourceOwnerNickname}
-        mediaConnectionState={mediaConnectionState}
-        mediaConnectedPeersCount={mediaConnectedPeersCount}
-        onCopyJoinCode={onCopyJoinCode}
+          canDisbandRoom={canDisbandRoom}
+          currentSourceOwnerNickname={currentSourceOwnerNickname}
+          mediaConnectionState={mediaConnectionState}
+          mediaConnectedPeersCount={mediaConnectedPeersCount}
+          onCopyJoinCode={onCopyJoinCode}
           onLeaveRoom={onLeaveRoom}
           onDeleteRoom={onDeleteRoom}
         />
@@ -180,8 +188,10 @@ export function RoomDashboardView({
                 tracks={roomSnapshot.tracks}
                 uploadedTracks={uploadedTracks}
                 canControlPlayback={canControlPlayback}
+                activeSession={activeSession}
                 onFilesSelected={onFilesSelected}
                 onAddToQueue={onAddToQueue}
+                onDeleteTrack={onDeleteTrack}
                 onPlayTrack={onPlayTrack}
               />
 
@@ -203,7 +213,10 @@ export function RoomDashboardView({
 
           {activeTab === "members" ? (
             <div className="animate-fade-in flex w-full flex-col gap-8">
-              <MembersPanel members={roomSnapshot.room.members} />
+              <MembersPanel
+                members={roomSnapshot.room.members}
+                memberTransferSummaries={memberTransferSummaries}
+              />
 
               <div className="h-px w-full shrink-0 bg-white/5" />
 

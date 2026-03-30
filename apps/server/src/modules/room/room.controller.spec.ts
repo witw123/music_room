@@ -59,10 +59,12 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
+    const playlistService = {};
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
-      authService as never
+      authService as never,
+      playlistService as never
     );
 
     await expect(controller.getRecentRoom("token")).resolves.toEqual(snapshot);
@@ -79,10 +81,12 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
+    const playlistService = {};
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
-      authService as never
+      authService as never,
+      playlistService as never
     );
 
     await expect(controller.recoverRoom("room_1", "token")).resolves.toEqual(snapshot);
@@ -100,10 +104,12 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
+    const playlistService = {};
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
-      authService as never
+      authService as never,
+      playlistService as never
     );
 
     const result = await controller.leaveRoom("room_1", "token");
@@ -125,10 +131,12 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
+    const playlistService = {};
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
-      authService as never
+      authService as never,
+      playlistService as never
     );
 
     const result = await controller.joinRoomByCode("token", {
@@ -151,10 +159,12 @@ describe("RoomController", () => {
       emitRoomMissing: jest.fn()
     };
     const authService = createAuthServiceMock();
+    const playlistService = {};
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
-      authService as never
+      authService as never,
+      playlistService as never
     );
 
     await expect(controller.deleteRoom("room_1", "token")).resolves.toEqual({

@@ -83,11 +83,9 @@ export function MusicRoomApp({
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
   const getCurrentPlaybackPositionMs = () => {
-    if (isCurrentSourceOwner) {
-      const activeAudio = audioRef.current;
-      if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
-        return Math.round(activeAudio.currentTime * 1000);
-      }
+    const activeAudio = isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current;
+    if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
+      return Math.round(activeAudio.currentTime * 1000);
     }
 
     return progressMs;
@@ -132,7 +130,8 @@ export function MusicRoomApp({
     cachedTrackCount,
     handleFilesSelected: handleTrackFilesSelected,
     announceLocalCache,
-    hydrateTrackFromPieces
+    hydrateTrackFromPieces,
+    deleteUploadedTrackArtifacts
   } = useTrackUploads({
     maxCachedTracks,
     peerId,
@@ -146,6 +145,7 @@ export function MusicRoomApp({
   const {
     leaveRoom,
     deleteRoom,
+    deleteTrack,
     addToQueue,
     playTrack,
     playQueueItem,
@@ -173,7 +173,11 @@ export function MusicRoomApp({
     refreshPlaylists,
     resetPlayerSurface,
     lastRoomStorageKey,
-    getCurrentPlaybackPositionMs
+    getCurrentPlaybackPositionMs,
+    onTrackDeleted: (trackId) => deleteUploadedTrackArtifacts(trackId),
+    onRoomDeleted: async (trackIds) => {
+      await Promise.all(trackIds.map((trackId) => deleteUploadedTrackArtifacts(trackId)));
+    }
   });
 
   useEffect(() => {
@@ -394,6 +398,21 @@ export function MusicRoomApp({
         }
       }));
     });
+    socket.on("room.deleted", ({ roomId: deletedRoomId, trackIds }) => {
+      if (deletedRoomId !== roomId) {
+        return;
+      }
+
+      void Promise.allSettled(trackIds.map((trackId) => deleteUploadedTrackArtifacts(trackId)));
+      setSuppressRoomRecovery(true);
+      resetPlayerSurface();
+      setRoomSnapshot(null);
+      window.localStorage.removeItem(lastRoomStorageKey);
+      setStatusMessage("房间已解散，当前房间的歌单和本地缓存已清理。");
+      if (workspaceOnly) {
+        router.push("/rooms" as Route);
+      }
+    });
     socket.on("room.snapshot.missing", () => {
       resetPlayerSurface();
       setRoomSnapshot(null);
@@ -417,7 +436,15 @@ export function MusicRoomApp({
       setMediaConnectedPeers([]);
       setMediaConnectionState("idle");
     };
-  }, [roomSnapshot?.room.id, peerId, activeSession?.id]);
+  }, [
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.joinCode,
+    peerId,
+    activeSession?.id,
+    deleteUploadedTrackArtifacts,
+    workspaceOnly,
+    router
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession?.id || !peerId || !socketRef.current) {
@@ -792,6 +819,11 @@ export function MusicRoomApp({
   }
 
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
+  const canDisbandRoom =
+    !!roomSnapshot &&
+    canDeleteRoom &&
+    roomSnapshot.room.members.length > 0 &&
+    roomSnapshot.room.members.every((member) => !!member.peerId);
   const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
   const availabilitySummary =
@@ -809,6 +841,39 @@ export function MusicRoomApp({
   const currentTrackAvailability = currentTrack
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
+  const memberTransferSummaries = useMemo(() => {
+    if (!roomSnapshot) {
+      return [];
+    }
+
+    return roomSnapshot.room.members.map((member) => {
+      const announcements = member.peerId
+        ? Object.values(availabilityByTrack).flatMap((trackAvailability) =>
+            Object.values(trackAvailability).filter(
+              (announcement) => announcement.ownerPeerId === member.peerId
+            )
+          )
+        : [];
+      const currentTrackAnnouncements = currentTrack
+        ? announcements.filter((announcement) => announcement.trackId === currentTrack.id)
+        : [];
+
+      return {
+        memberId: member.id,
+        announcedTrackCount: new Set(announcements.map((announcement) => announcement.trackId)).size,
+        totalChunkCount: announcements.reduce(
+          (total, announcement) => total + announcement.availableChunks.length,
+          0
+        ),
+        currentTrackChunkCount: currentTrackAnnouncements.reduce(
+          (total, announcement) => total + announcement.availableChunks.length,
+          0
+        ),
+        currentTrackTotalChunks: currentTrackAnnouncements[0]?.totalChunks ?? 0,
+        currentTrackSources: [...new Set(currentTrackAnnouncements.map((announcement) => announcement.source))]
+      };
+    });
+  }, [availabilityByTrack, currentTrack, roomSnapshot]);
   const statusTone =
     statusMessage.includes("失败") || statusMessage.includes("不可用")
       ? "warning"
@@ -844,6 +909,7 @@ export function MusicRoomApp({
               host={host}
               canControlPlayback={canControlPlayback}
               canDeleteRoom={canDeleteRoom}
+              canDisbandRoom={canDisbandRoom}
               canReorderQueue={canReorderQueue}
               currentSourceOwnerNickname={
                 roomSnapshot.tracks.find(
@@ -858,6 +924,7 @@ export function MusicRoomApp({
               playlists={playlists}
               tracks={roomSnapshot.tracks}
               availabilitySummary={availabilitySummary}
+              memberTransferSummaries={memberTransferSummaries}
               onCopyJoinCode={async () => {
                 try {
                   await navigator.clipboard.writeText(roomSnapshot.room.joinCode);
@@ -870,6 +937,7 @@ export function MusicRoomApp({
               onDeleteRoom={handleDeleteRoomAction}
               onFilesSelected={(files) => handleFilesSelected(files)}
               onAddToQueue={(trackId) => addToQueue(trackId)}
+              onDeleteTrack={(trackId) => deleteTrack(trackId)}
               onPlayTrack={(trackId) => playTrack(trackId)}
               onPlayQueueItem={(queueItemId) => playQueueItem(queueItemId)}
               onRemoveQueueItem={(queueItemId) => removeQueueItem(queueItemId)}

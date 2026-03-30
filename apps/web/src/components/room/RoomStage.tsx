@@ -1,4 +1,4 @@
-import { useTransition, useState } from "react";
+import { useState, useTransition } from "react";
 import type {
   AuthSession,
   RoomMediaConnectionState,
@@ -6,8 +6,8 @@ import type {
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
-import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -17,6 +17,7 @@ type RoomStageProps = {
   activeSession: AuthSession | null;
   host: RoomMember | undefined;
   canDeleteRoom: boolean;
+  canDisbandRoom: boolean;
   currentSourceOwnerNickname: string | null;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -58,6 +59,7 @@ export function RoomStage({
   activeSession,
   host,
   canDeleteRoom,
+  canDisbandRoom,
   currentSourceOwnerNickname,
   mediaConnectionState,
   mediaConnectedPeersCount,
@@ -125,7 +127,7 @@ export function RoomStage({
           </div>
         </div>
 
-        <div className="relative shrink-0">
+        <div className="relative shrink-0 pointer-events-auto">
           <Button
             variant="ghost"
             size="icon"
@@ -141,7 +143,7 @@ export function RoomStage({
           </Button>
 
           {showSettings ? (
-            <div className="animate-fade-in absolute right-0 top-11 z-50 flex w-52 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
+            <div className="animate-fade-in absolute right-0 top-11 z-50 flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
               {activeSession ? (
                 <div className="mb-1 flex items-center gap-2 border-b border-white/5 px-3 py-3">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
@@ -157,21 +159,36 @@ export function RoomStage({
                   </div>
                 </div>
               ) : null}
+
               <button
-                className="w-full rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
                 onClick={() => startTransition(() => void onLeaveRoom())}
                 type="button"
               >
                 离开房间
               </button>
+
               {canDeleteRoom ? (
-                <button
-                  className="my-1 w-full rounded-xl px-3 py-2.5 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
-                  onClick={() => startTransition(() => void onDeleteRoom())}
-                  type="button"
-                >
-                  解散房间
-                </button>
+                <>
+                  <button
+                    className={`my-1 w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/30 ${
+                      canDisbandRoom
+                        ? "cursor-pointer text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                        : "cursor-not-allowed text-red-400/45 opacity-70"
+                    }`}
+                    disabled={!canDisbandRoom}
+                    onClick={() => startTransition(() => void onDeleteRoom())}
+                    title={canDisbandRoom ? "解散房间" : "只有所有成员都在线时才能解散房间"}
+                    type="button"
+                  >
+                    解散房间
+                  </button>
+                  {!canDisbandRoom ? (
+                    <p className="px-3 pb-2 text-[11px] leading-5 text-white/45">
+                      只有所有成员都在线时才能解散房间
+                    </p>
+                  ) : null}
+                </>
               ) : null}
             </div>
           ) : null}
@@ -240,7 +257,7 @@ export function RoomStage({
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
+                当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
               </span>
             ) : null}
           </div>

@@ -7,6 +7,7 @@ import { RoomService } from "../room/room.service";
 @Injectable()
 export class PlaylistService {
   private readonly playlists = new Map<string, Playlist>();
+  private readonly playlistRoomIds = new Map<string, string | null>();
 
   constructor(
     private readonly roomService: RoomService,
@@ -21,6 +22,9 @@ export class PlaylistService {
       });
 
       const playlists = persisted.map((item: any) => this.deserializePlaylist(item));
+      persisted.forEach((item: any) => {
+        this.playlistRoomIds.set(item.id, item.roomId ?? null);
+      });
       playlists.forEach((playlist: Playlist) => this.playlists.set(playlist.id, playlist));
       return playlists;
     }
@@ -64,6 +68,7 @@ export class PlaylistService {
     };
 
     this.playlists.set(playlist.id, playlist);
+    this.playlistRoomIds.set(playlist.id, input.roomId ?? null);
 
     if (this.prisma.isAvailable()) {
       await this.prisma.playlist.upsert({
@@ -167,10 +172,54 @@ export class PlaylistService {
     }
 
     this.playlists.delete(playlistId);
+    this.playlistRoomIds.delete(playlistId);
 
     if (this.prisma.isAvailable()) {
       await this.prisma.playlist.deleteMany({
         where: { id: playlistId, ownerId }
+      });
+    }
+
+    return { ok: true };
+  }
+
+  async removeTrackFromPlaylists(trackId: string) {
+    const playlists = await this.listPlaylists();
+    const affectedPlaylists = playlists.filter((playlist) => playlist.trackIds.includes(trackId));
+
+    for (const playlist of affectedPlaylists) {
+      const nextTrackIds = playlist.trackIds.filter((id) => id !== trackId);
+      const updated: Playlist = {
+        ...playlist,
+        trackIds: nextTrackIds,
+        updatedAt: new Date().toISOString()
+      };
+
+      this.playlists.set(updated.id, updated);
+
+      if (this.prisma.isAvailable()) {
+        await this.prisma.playlist.update({
+          where: { id: updated.id },
+          data: {
+            trackIds: updated.trackIds
+          }
+        });
+      }
+    }
+  }
+
+  async deletePlaylistsForRoom(roomId: string) {
+    const playlists = await this.listPlaylists();
+    const roomPlaylists = playlists.filter((playlist) => this.playlistRoomIds.get(playlist.id) === roomId);
+
+    for (const playlist of roomPlaylists) {
+      this.playlists.delete(playlist.id);
+      this.playlistRoomIds.delete(playlist.id);
+    }
+
+    if (this.prisma.isAvailable()) {
+      await this.prisma.playlist.deleteMany({
+        where: { roomId }
       });
     }
 

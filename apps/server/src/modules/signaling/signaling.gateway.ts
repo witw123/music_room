@@ -24,6 +24,7 @@ import { RoomService } from "../room/room.service";
 
 const roomSnapshotChannel = "music-room:room-snapshot";
 const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
+const roomDeletedChannel = "music-room:room-deleted";
 
 @WebSocketGateway({
   path: "/ws/socket.io",
@@ -64,6 +65,16 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     });
   }
 
+  emitRoomDeleted(roomId: string, trackIds: string[]) {
+    this.availabilityByRoom.delete(roomId);
+    this.server.to(roomId).emit("room.deleted", { roomId, trackIds });
+    void this.redisService.publish(roomDeletedChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      trackIds
+    });
+  }
+
   afterInit() {
     void this.redisService
       .subscribe(roomSnapshotChannel, (payload) => {
@@ -100,6 +111,23 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
       this.availabilityByRoom.delete(message.roomId);
       this.server.to(message.roomId).emit("room.snapshot.missing", { roomId: message.roomId });
+    });
+
+    void this.redisService.subscribe(roomDeletedChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        trackIds?: string[];
+      };
+
+      if (!message.roomId || !message.sourceId || message.sourceId === this.instanceId) {
+        return;
+      }
+
+      this.availabilityByRoom.delete(message.roomId);
+      this.server
+        .to(message.roomId)
+        .emit("room.deleted", { roomId: message.roomId, trackIds: message.trackIds ?? [] });
     });
   }
 

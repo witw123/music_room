@@ -18,6 +18,8 @@ type UseRoomActionsOptions = {
   resetPlayerSurface: () => void;
   lastRoomStorageKey: string;
   getCurrentPlaybackPositionMs: () => number;
+  onTrackDeleted?: (trackId: string) => Promise<void> | void;
+  onRoomDeleted?: (trackIds: string[]) => Promise<void> | void;
 };
 
 export function useRoomActions(options: UseRoomActionsOptions) {
@@ -32,7 +34,9 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     refreshPlaylists,
     resetPlayerSurface,
     lastRoomStorageKey,
-    getCurrentPlaybackPositionMs
+    getCurrentPlaybackPositionMs,
+    onTrackDeleted,
+    onRoomDeleted
   } = options;
 
   async function refreshRoom(roomId: string) {
@@ -79,7 +83,9 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
+      const trackIds = roomSnapshot.tracks.map((track) => track.id);
       await musicRoomApi.deleteRoom(roomSnapshot.room.id);
+      await onRoomDeleted?.(trackIds);
       resetPlayerSurface();
       setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
@@ -101,6 +107,22 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
       await refreshRoom(roomSnapshot.room.id);
       setStatusMessage("曲目已加入共享队列。");
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
+    }
+  }
+
+  async function deleteTrack(trackId: string) {
+    if (!activeSession || !roomSnapshot) {
+      return;
+    }
+
+    try {
+      await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
+      await onTrackDeleted?.(trackId);
+      await refreshRoom(roomSnapshot.room.id);
+      await refreshPlaylists();
+      setStatusMessage("曲目已从房间曲库中删除。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -337,6 +359,7 @@ export function useRoomActions(options: UseRoomActionsOptions) {
   return {
     leaveRoom,
     deleteRoom,
+    deleteTrack,
     addToQueue,
     playTrack,
     playQueueItem,

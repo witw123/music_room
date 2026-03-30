@@ -101,6 +101,10 @@ export const musicRoomApi = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  deleteTrack: (roomId: string, trackId: string) =>
+    request<{ ok: boolean }>(`/v1/rooms/${roomId}/tracks/${trackId}`, {
+      method: "DELETE"
+    }),
   addQueueItem: (roomId: string, payload: { trackId: string }) =>
     request<QueueItem>(`/v1/rooms/${roomId}/queue`, {
       method: "POST",

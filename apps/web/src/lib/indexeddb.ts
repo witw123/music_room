@@ -52,6 +52,10 @@ export async function getCachedTrackAsset(trackId: string) {
   return musicRoomDatabase.trackAssets.get(trackId);
 }
 
+export async function deleteCachedTrackAsset(trackId: string) {
+  await musicRoomDatabase.trackAssets.delete(trackId);
+}
+
 export async function getCachedTrackAssets(trackIds: string[]) {
   if (trackIds.length === 0) {
     return [];

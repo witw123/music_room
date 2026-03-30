@@ -68,6 +68,10 @@ export function toUserFacingError(error: unknown) {
     return "只有房主可以删除房间。";
   }
 
+  if (message.includes("All room members must be online before deleting the room")) {
+    return "只有所有成员都在线时才能解散房间。";
+  }
+
   if (message.includes("Queue reorder payload does not match")) {
     return "队列顺序已经变化，请刷新后再试一次。";
   }
@@ -78,6 +82,10 @@ export function toUserFacingError(error: unknown) {
 
   if (message.includes("Track owner is not online")) {
     return "这首歌的上传者当前不在线，暂时无法播放。";
+  }
+
+  if (message.includes("Only the original uploader can delete this track")) {
+    return "只有歌曲上传者本人可以删除这首歌。";
   }
 
   if (message.includes("Invalid username or password")) {
