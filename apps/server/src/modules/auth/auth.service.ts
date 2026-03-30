@@ -132,6 +132,7 @@ export class AuthService {
       throw new Error("Username and password are required.");
     }
 
+    await this.ensureAuthLookupAvailableOrThrow();
     const user = await this.getUserByUsernameOrThrow(username);
     if (!verifyPassword(password, user.passwordHash)) {
       throw new Error("Invalid username or password.");
@@ -380,6 +381,22 @@ export class AuthService {
     if (this.allowFallbackPersistence) {
       await this.ensureFallbackStoreLoaded();
       return "fallback";
+    }
+
+    throw new Error(
+      "Account storage is temporarily unavailable. Please try again after the database is ready."
+    );
+  }
+
+  private async ensureAuthLookupAvailableOrThrow() {
+    if (await this.prisma.ensureAvailable()) {
+      return;
+    }
+
+    await this.ensureFallbackStoreLoaded();
+
+    if (this.allowFallbackPersistence) {
+      return;
     }
 
     throw new Error(

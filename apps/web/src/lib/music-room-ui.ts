@@ -88,6 +88,10 @@ export function toUserFacingError(error: unknown) {
     return "这个用户名已被使用。";
   }
 
+  if (message.includes("Account storage is temporarily unavailable")) {
+    return "账号存储当前不可用。请检查数据库与迁移状态后重试。";
+  }
+
   if (message.includes("Unauthorized")) {
     return "当前登录状态已失效，请重新登录。";
   }

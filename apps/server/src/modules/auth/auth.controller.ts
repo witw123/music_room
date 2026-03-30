@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Get,
   Headers,
   Post,
+  ServiceUnavailableException,
   UnauthorizedException
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
@@ -24,7 +26,14 @@ export class AuthController {
         nickname: body.nickname ?? ""
       });
     } catch (error) {
-      throw new BadRequestException(error instanceof Error ? error.message : "Invalid payload.");
+      const message = error instanceof Error ? error.message : "Invalid payload.";
+      if (message.includes("Username already exists")) {
+        throw new ConflictException(message);
+      }
+      if (message.includes("Account storage is temporarily unavailable")) {
+        throw new ServiceUnavailableException(message);
+      }
+      throw new BadRequestException(message);
     }
   }
 
@@ -36,7 +45,11 @@ export class AuthController {
         password: body.password ?? ""
       });
     } catch (error) {
-      throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
+      const message = error instanceof Error ? error.message : "Unauthorized.";
+      if (message.includes("Account storage is temporarily unavailable")) {
+        throw new ServiceUnavailableException(message);
+      }
+      throw new UnauthorizedException(message);
     }
   }
 
