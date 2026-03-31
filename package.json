@@ -1,6 +1,6 @@
 {
   "name": "music-room",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
@@ -22,8 +22,6 @@
       "@nestjs/core",
       "@prisma/client",
       "@prisma/engines",
-      "electron",
-      "electron-builder",
       "esbuild",
       "prisma",
       "sharp"

@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Allow the main Music Room desktop window to use the default Tauri APIs.",
+  "windows": [
+    "main"
+  ],
+  "remote": {
+    "urls": [
+      "http://localhost:3000",
+      "http://localhost:3000/*",
+      "https://witw.top",
+      "https://witw.top/*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "default"
+  ]
+}

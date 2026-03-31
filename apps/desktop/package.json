@@ -1,32 +1,16 @@
 {
   "name": "@music-room/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
-  "main": "dist/main/main.js",
   "scripts": {
-    "clean": "node -e \"['dist','release'].forEach((dir)=>require('node:fs').rmSync(dir,{ recursive: true, force: true, maxRetries: 10, retryDelay: 200 }))\"",
-    "build:main": "esbuild src/main/main.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/main/main.js",
-    "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/preload.js",
-    "build": "pnpm run clean && pnpm run build:main && pnpm run build:preload",
-    "dev:watch:main": "esbuild src/main/main.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/main/main.js --watch",
-    "dev:watch:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --outfile=dist/preload/preload.js --watch",
-    "dev:electron": "wait-on file:dist/main/main.js file:dist/preload/preload.js tcp:3000 && electronmon .",
-    "dev": "concurrently -k \"pnpm run dev:watch:main\" \"pnpm run dev:watch:preload\" \"pnpm run dev:electron\"",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pack": "pnpm run build && electron-builder --config electron-builder.yml"
-  },
-  "dependencies": {
-    "@music-room/shared": "workspace:*"
+    "clean": "node scripts/clean.mjs",
+    "build": "pnpm run typecheck",
+    "dev": "wait-on tcp:3000 && node scripts/run-tauri.mjs dev --no-watch",
+    "typecheck": "node -e \"console.log('Tauri desktop shell does not have standalone TypeScript sources to check.')\"",
+    "pack": "pnpm run clean && node scripts/run-tauri.mjs build && node scripts/collect-bundles.mjs"
   },
   "devDependencies": {
-    "@music-room/config-typescript": "workspace:*",
-    "@types/node": "^22.13.10",
-    "concurrently": "^9.1.2",
-    "electron": "^35.1.4",
-    "electron-builder": "^25.1.8",
-    "electronmon": "^2.0.2",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.8.2",
+    "@tauri-apps/cli": "^2.10.1",
     "wait-on": "^8.0.2"
   }
 }

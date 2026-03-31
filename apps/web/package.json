@@ -1,6 +1,6 @@
 {
   "name": "@music-room/web",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
     "@music-room/shared": "workspace:*",
     "@tanstack/react-query": "^5.68.0",
     "dexie": "^4.0.11",

@@ -5,27 +5,27 @@
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room 是一个面向多人在线听歌场景的房间式应用，提供房间协作、播放队列、歌单管理、聊天互动与实时同步能力。项目采用 Monorepo 结构，包含 Web 前端、NestJS 后端，以及用于分发的桌面端和 Android 客户端外壳。
+Music Room 是一个面向多人在线听歌场景的房间式应用，提供房间协作、播放队列、歌单管理、聊天互动与实时同步能力。仓库采用 Monorepo 结构，包含 Web 前端、NestJS 后端、Tauri 桌面客户端和 Android 客户端壳。
 
 ## 下载
 
 - Windows / macOS / Linux / Android 安装包：前往 [Releases](https://github.com/witw123/music_room/releases)
-- 当前稳定版本：`v0.2.1`
+- 当前稳定版本：`v0.2.2`
 
 ## 功能特性
 
 - 支持用户注册、登录与会话保持
 - 支持创建房间、加入房间和恢复最近房间
-- 支持房主控制播放、房间成员实时同步
+- 支持房主控制播放，房间成员实时同步
 - 支持本地音频导入、播放队列和歌单管理
 - 支持房间聊天与状态广播
-- 支持 Web、桌面端和 Android 客户端接入同一套后端服务
+- 支持 Web、桌面端和 Android 连接同一套后端服务
 
 ## 技术栈
 
 - 前端：Next.js 15、React 19、TypeScript、Tailwind CSS、Zustand、Socket.IO Client
 - 后端：NestJS 11、Prisma 6、PostgreSQL、Redis、Socket.IO
-- 桌面端：Electron、esbuild、electron-builder
+- 桌面端：Tauri 2、Rust
 - 移动端：Capacitor Android
 - 工程化：pnpm workspace、Turborepo、GitHub Actions
 
@@ -35,9 +35,10 @@ Music Room 是一个面向多人在线听歌场景的房间式应用，提供房
 
 - Node.js 22.x
 - pnpm 10.x
+- Rust 工具链与 Cargo
 - PostgreSQL
 - Redis
-- Android SDK（仅在本地构建 Android 安装包时需要）
+- Android SDK，仅在本地构建 Android 安装包时需要
 
 ### 安装与启动
 
@@ -63,14 +64,12 @@ pnpm pack:desktop
 pnpm pack:mobile
 ```
 
-执行 `pnpm pack:mobile` 前，需要先正确配置本机 `ANDROID_HOME` 或 Android SDK。
-
 ## 前后端连接
 
 - REST API 基地址由 `NEXT_PUBLIC_API_BASE_URL` 提供
 - WebSocket 基地址由 `NEXT_PUBLIC_WS_URL` 提供
 - Socket.IO 路径由 `NEXT_PUBLIC_SOCKET_PATH` 提供
-- 登录成功后返回的 `token` 同时用于 REST 请求头 `x-session-token` 与 Socket.IO 握手参数 `auth.sessionToken`
+- 登录成功后返回的 `token` 同时用于 REST 请求头 `x-session-token` 和 Socket.IO 握手参数 `auth.sessionToken`
 
 推荐的同域部署配置：
 
@@ -83,22 +82,16 @@ CORS_ORIGINS=https://witw.top
 
 ## 客户端说明
 
-- Web：核心使用形态，直接通过浏览器访问
-- Desktop：Electron 前端壳，生产环境默认加载 `https://witw.top`
+- Web：浏览器直接访问
+- Desktop：Tauri 前端壳，开发环境加载 `http://localhost:3000`，生产环境默认加载 `https://witw.top`
 - Android：Capacitor 前端壳，当前同样连接 `https://witw.top`
 
-当前 GitHub Release 已支持自动上传：
+当前 GitHub Release 提供：
 
-- Windows `.exe`
+- Windows `.exe` / `.msi`
 - macOS `.dmg`
-- Linux `.AppImage`
+- Linux `.AppImage` / `.deb` / `.rpm`
 - Android `.apk`
-
-版本发布规则：
-
-- Git 标签作为发布版本号来源，例如 `v0.2.1`
-- 工作区包版本与发布版本保持一致
-- 客户端安装包通过 GitHub Actions 自动构建并上传到 Releases
 
 ## 部署
 

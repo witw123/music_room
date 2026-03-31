@@ -1,0 +1,20 @@
+{
+  "default": null,
+  "permission": [
+    {
+      "identifier": "default",
+      "description": "Default desktop commands exposed to the Music Room frontend shell.",
+      "commands": {
+        "allow": [
+          "pick_audio_files",
+          "read_audio_file",
+          "get_app_version",
+          "open_external",
+          "show_item_in_folder",
+          "write_desktop_log"
+        ],
+        "deny": []
+      }
+    }
+  ]
+}
