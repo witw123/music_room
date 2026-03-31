@@ -109,6 +109,8 @@ export function MusicRoomApp({
     initialStatusMessage: "登录后即可进入你的音乐房。",
     sessionStorageKey: "music-room-session"
   });
+  const activeSessionRef = useRef(activeSession);
+  const currentRoomRef = useRef<RoomSnapshot | null>(null);
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
@@ -133,7 +135,10 @@ export function MusicRoomApp({
 
   const mergeLocalPieceAvailability = useCallback(
     (trackId: string, chunkIndex: number, totalChunks: number) => {
-      if (!peerId || !activeSession || !roomSnapshot) {
+      const session = activeSessionRef.current;
+      const room = currentRoomRef.current;
+
+      if (!peerId || !session || !room) {
         return;
       }
 
@@ -157,10 +162,10 @@ export function MusicRoomApp({
           [trackId]: {
             ...trackAvailability,
             [peerId]: {
-              roomId: roomSnapshot.room.id,
+              roomId: room.room.id,
               trackId,
               ownerPeerId: peerId,
-              nickname: activeSession.nickname,
+              nickname: session.nickname,
               totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
               availableChunks: [...availableChunkSet].sort((left, right) => left - right),
               source: existing?.source ?? "local_cache",
@@ -170,7 +175,7 @@ export function MusicRoomApp({
         };
       });
     },
-    [activeSession, peerId, roomSnapshot]
+    [peerId]
   );
 
   const stableEmitAvailability = useCallback(
@@ -262,6 +267,14 @@ export function MusicRoomApp({
       await Promise.all(trackIds.map((trackId) => deleteUploadedTrackArtifacts(trackId)));
     }
   });
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
+  useEffect(() => {
+    currentRoomRef.current = roomSnapshot;
+  }, [roomSnapshot]);
 
   useEffect(() => {
     if (!statusMessage) return;
@@ -498,7 +511,13 @@ export function MusicRoomApp({
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage("这个房间已不可用，请返回音乐房重新加入。");
     });
-    socket.on("disconnect", () => {
+    socket.on("connect_error", (error) => {
+      setStatusMessage(`实时连接失败：${toUserFacingError(error)}`);
+    });
+    socket.on("disconnect", (reason) => {
+      if (reason === "io client disconnect") {
+        return;
+      }
       setStatusMessage("实时连接已断开，正在尝试重新连接…");
     });
 

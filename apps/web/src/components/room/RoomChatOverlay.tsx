@@ -96,7 +96,7 @@ export function RoomChatOverlay({
         }`}
       >
         <div
-          className={`flex w-full flex-col overflow-y-auto thin-scrollbar scroll-smooth ${
+          className={`hide-scrollbar flex w-full flex-col overflow-y-auto scroll-smooth ${
             ultraCompact
               ? "max-h-[72px] gap-1 px-1.5 py-0.5"
               : compact

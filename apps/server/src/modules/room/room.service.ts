@@ -332,11 +332,23 @@ export class RoomService {
     record.queue.push(queueItem);
 
     if (!record.room.playback.currentTrackId) {
-      await this.updatePlayback(roomId, {
-        action: "play",
-        queueItemId: queueItem.id,
-        actorSessionId: sessionId
-      });
+      try {
+        await this.updatePlayback(roomId, {
+          action: "play",
+          queueItemId: queueItem.id,
+          actorSessionId: sessionId
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message.includes("Track owner is not online")
+        ) {
+          record.room.playback.queueVersion += 1;
+          await this.roomRecordRepository.persistRecord(record);
+        } else {
+          throw error;
+        }
+      }
     } else {
       record.room.playback.queueVersion += 1;
       await this.roomRecordRepository.persistRecord(record);
@@ -372,12 +384,21 @@ export class RoomService {
     record.queue.push(...nextItems);
 
     if (!record.room.playback.currentTrackId) {
-      await this.updatePlayback(roomId, {
-        action: "play",
-        queueItemId: nextItems[0]?.id,
-        actorSessionId: sessionId
-      });
-      return record.queue;
+      try {
+        await this.updatePlayback(roomId, {
+          action: "play",
+          queueItemId: nextItems[0]?.id,
+          actorSessionId: sessionId
+        });
+        return record.queue;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !error.message.includes("Track owner is not online")
+        ) {
+          throw error;
+        }
+      }
     }
 
     record.room.playback.queueVersion += 1;

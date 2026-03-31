@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useTransition } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
-import { isDesktopRuntime, pickDesktopAudioFilesAsFileObjects } from "@/lib/desktop-api";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
@@ -28,29 +27,39 @@ export function TrackListSection({
   onPlayTrack
 }: TrackListSectionProps) {
   const [isPending, startTransition] = useTransition();
-  const [desktopPickerAvailable, setDesktopPickerAvailable] = useState(false);
-
-  useEffect(() => {
-    setDesktopPickerAvailable(isDesktopRuntime());
-  }, []);
 
   return (
-    <section className="flex flex-col gap-8 relative w-full">
+    <section className="relative flex w-full flex-col gap-8">
       <div className="flex items-end justify-between border-b border-surface-border pb-4">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.2em] text-foreground-muted uppercase mb-1">Library</p>
-          <h2 className="text-xl md:text-2xl font-bold text-foreground">本地音乐与曲库</h2>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
+            Library
+          </p>
+          <h2 className="text-xl font-bold text-foreground md:text-2xl">本地音乐与曲库</h2>
         </div>
-        <span className="text-sm font-semibold text-foreground-muted bg-surface border border-surface-border px-3 py-1 rounded-full">
+        <span className="rounded-full border border-surface-border bg-surface px-3 py-1 text-sm font-semibold text-foreground-muted">
           {tracks.length} 首在库
         </span>
       </div>
 
-      <label className="relative group flex flex-col items-center justify-center p-12 border-2 border-dashed border-accent/20 rounded-2xl bg-accent/5 hover:bg-accent/10 hover:border-accent/40 transition-all cursor-pointer overflow-hidden">
-        <div className="w-16 h-16 rounded-full bg-surface border border-surface-border flex items-center justify-center mb-4 text-accent shadow-lg shadow-accent/10 group-hover:scale-110 group-hover:bg-accent group-hover:text-white transition-all duration-300">
-           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <label className="relative group flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-12 transition-all hover:border-accent/40 hover:bg-accent/10">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent group-hover:text-white">
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
         </div>
-        <span className="text-base font-semibold text-foreground mb-1">导入本地音频</span>
+        <span className="mb-1 text-base font-semibold text-foreground">导入本地音频</span>
         <span className="text-sm text-foreground-muted">点击选择或将文件拖至此处</span>
         <input
           type="file"
@@ -61,40 +70,30 @@ export function TrackListSection({
         />
       </label>
 
-      {desktopPickerAvailable ? (
-        <div className="-mt-4 flex justify-center">
-          <Button
-            variant="outline"
-            type="button"
-            className="bg-surface/50"
-            onClick={() =>
-              startTransition(async () => {
-                const files = await pickDesktopAudioFilesAsFileObjects();
-                await onFilesSelected(files);
-              })
-            }
-          >
-            从桌面文件选择器导入
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="flex flex-col gap-2 mt-4">
+      <div className="mt-4 flex flex-col gap-2">
         {tracks.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {tracks.map((track) => (
-              <article key={track.id} className="group bg-surface hover:bg-surface-hover border border-surface-border rounded-2xl p-4 flex flex-col justify-between gap-4 transition-all duration-300 hover:shadow-md">
-                <div className="flex flex-col gap-1 min-w-0">
-                  <h3 className="font-semibold text-foreground truncate">{track.title}</h3>
-                  <p className="text-xs text-foreground-muted truncate">
-                    {track.artist} · {formatDuration(track.durationMs)}
+              <article
+                key={track.id}
+                className="group flex flex-col justify-between gap-4 rounded-2xl border border-surface-border bg-surface p-4 transition-all duration-300 hover:bg-surface-hover hover:shadow-md"
+              >
+                <div className="min-w-0 space-y-1">
+                  <h3 className="truncate font-semibold text-foreground">{track.title}</h3>
+                  <p className="truncate text-xs text-foreground-muted">
+                    {track.artist} 路 {formatDuration(track.durationMs)}
                   </p>
-                  <p className="text-[10px] text-foreground-muted/60 mt-1">
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${uploadedTracks[track.id] ? "bg-green-500" : "bg-blue-500"}`} />
-                    {uploadedTracks[track.id] ? "已缓存并准备推送" : "房间可用"} · {track.ownerNickname} 上传
+                  <p className="mt-1 text-[10px] text-foreground-muted/60">
+                    <span
+                      className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
+                        uploadedTracks[track.id] ? "bg-green-500" : "bg-blue-500"
+                      }`}
+                    />
+                    {uploadedTracks[track.id] ? "已缓存并准备推流" : "房间可用"} 路 {track.ownerNickname} 上传
                   </p>
                 </div>
-                <div className="flex items-center gap-2 mt-auto">
+
+                <div className="mt-auto flex items-center gap-2">
                   {track.ownerSessionId === activeSession?.userId ? (
                     <Button
                       variant="ghost"
@@ -105,39 +104,54 @@ export function TrackListSection({
                       删除
                     </Button>
                   ) : null}
+
                   <Button
                     variant="outline"
-                    className="flex-1 bg-background/50"
+                    className="h-10 min-w-[8.5rem] flex-1 whitespace-nowrap bg-background/50 px-4"
                     onClick={() => startTransition(() => void onAddToQueue(track.id))}
                     type="button"
                   >
                     加入队列
                   </Button>
+
                   <Button
                     variant="ghost"
-                    className="w-12 h-10 px-0 hover:bg-accent/10 hover:text-accent"
+                    className="h-10 w-12 px-0 hover:bg-accent/10 hover:text-accent"
                     disabled={!canControlPlayback}
                     onClick={() => startTransition(() => void onPlayTrack(track.id))}
                     type="button"
                     title="立即播放"
                   >
-                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
                   </Button>
                 </div>
               </article>
             ))}
           </div>
         ) : (
-          <div className="py-12 px-6 text-center bg-surface/30 rounded-2xl border border-surface-border">
-            <p className="text-sm text-foreground-muted max-w-sm mx-auto">还没有曲目在库中。先导入本地音乐，之后可在队列中协作。</p>
+          <div className="rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center">
+            <p className="mx-auto max-w-sm text-sm text-foreground-muted">
+              还没有曲目在库中。先导入本地音乐，之后即可在队列中协作播放。
+            </p>
           </div>
         )}
       </div>
 
       {isPending ? (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-surface backdrop-blur-md rounded-full px-4 py-1.5 border border-surface-border shadow-lg flex items-center gap-2 z-50 animate-fade-in">
-           <div className="w-2 h-2 rounded-full bg-accent animate-ping" />
-           <span className="text-xs text-foreground">处理曲目中...</span>
+        <div className="animate-fade-in absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-4 py-1.5 shadow-lg backdrop-blur-md">
+          <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
+          <span className="text-xs text-foreground">处理中…</span>
         </div>
       ) : null}
     </section>

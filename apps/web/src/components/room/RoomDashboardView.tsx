@@ -166,7 +166,7 @@ export function RoomDashboardView({
           </div>
         </div>
 
-        <div className="custom-scrollbar flex-1 overflow-y-auto px-4 pb-36 pt-5 sm:px-6 lg:pb-32">
+        <div className="hide-scrollbar flex-1 overflow-y-auto px-4 pb-36 pt-5 sm:px-6 lg:pb-32">
           {activeTab === "queue" ? (
             <div className="animate-fade-in flex w-full flex-col gap-8">
               <QueuePanel
