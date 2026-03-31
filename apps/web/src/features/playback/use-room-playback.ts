@@ -28,7 +28,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   useEffect(() => {
     const localAudio = audioRef.current;
-    const remoteAudio = remoteAudioRef.current;
 
     if (!playback || !progressTrack) {
       setProgressMs(0);
@@ -36,16 +35,15 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const tick = () => {
-      const activeAudio = isCurrentSourceOwner ? localAudio : remoteAudio;
-
       if (
+        isCurrentSourceOwner &&
         playback.status === "playing" &&
-        activeAudio &&
-        Number.isFinite(activeAudio.currentTime) &&
-        activeAudio.currentTime >= 0 &&
-        !activeAudio.paused
+        localAudio &&
+        Number.isFinite(localAudio.currentTime) &&
+        localAudio.currentTime >= 0 &&
+        !localAudio.paused
       ) {
-        setProgressMs(Math.min(Math.floor(activeAudio.currentTime * 1000), progressTrack.durationMs));
+        setProgressMs(Math.min(Math.floor(localAudio.currentTime * 1000), progressTrack.durationMs));
         return;
       }
 
@@ -86,9 +84,14 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [remoteAudioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    const audio =
-      event?.currentTarget ??
-      (isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current);
+    if (!isCurrentSourceOwner) {
+      // For listeners, the remote audio's currentTime is stream-connection time,
+      // NOT the track position. Let the 250ms tick (which uses getPlaybackEffectivePositionMs)
+      // be the single source of truth to avoid competing updates causing jitter.
+      return;
+    }
+
+    const audio = event?.currentTarget ?? audioRef.current;
     if (!audio || !Number.isFinite(audio.currentTime)) {
       return;
     }
@@ -107,7 +110,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       return;
     }
 
-    const audio = event?.currentTarget ?? audioRef.current;
+    const audio =
+      event?.currentTarget ?? (isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current);
     if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
       if (progressTrack?.durationMs) {
         setAudioDurationMs(progressTrack.durationMs);

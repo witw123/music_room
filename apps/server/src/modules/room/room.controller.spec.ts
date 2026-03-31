@@ -50,6 +50,13 @@ describe("RoomController", () => {
     };
   }
 
+  function createPlaylistServiceMock() {
+    return {
+      listPlaylistsForRoom: jest.fn().mockResolvedValue([]),
+      deletePlaylistsForRoom: jest.fn().mockResolvedValue(undefined)
+    };
+  }
+
   it("returns the recent room snapshot for a session", async () => {
     const snapshot = buildSnapshot();
     const roomService = {
@@ -59,7 +66,7 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
-    const playlistService = {};
+    const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
@@ -81,7 +88,7 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
-    const playlistService = {};
+    const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
@@ -104,7 +111,7 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
-    const playlistService = {};
+    const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
@@ -131,7 +138,7 @@ describe("RoomController", () => {
       emitRoomSnapshot: jest.fn()
     };
     const authService = createAuthServiceMock();
-    const playlistService = {};
+    const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
@@ -151,15 +158,18 @@ describe("RoomController", () => {
   });
 
   it("allows the host to delete a room and emits room missing", async () => {
+    const snapshot = buildSnapshot();
     const roomService = {
+      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
       deleteRoom: jest.fn().mockResolvedValue({ ok: true })
     };
     const signalingGateway = {
       emitRoomSnapshot: jest.fn(),
+      emitRoomDeleted: jest.fn(),
       emitRoomMissing: jest.fn()
     };
     const authService = createAuthServiceMock();
-    const playlistService = {};
+    const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
       signalingGateway as never,
@@ -172,7 +182,10 @@ describe("RoomController", () => {
     });
 
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
+    expect(playlistService.listPlaylistsForRoom).toHaveBeenCalledWith("room_1");
+    expect(playlistService.deletePlaylistsForRoom).toHaveBeenCalledWith("room_1");
     expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
+    expect(signalingGateway.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);
     expect(signalingGateway.emitRoomMissing).toHaveBeenCalledWith("room_1");
   });
 });

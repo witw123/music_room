@@ -76,7 +76,7 @@ export function RoomStage({
     <section className="relative flex h-full w-full flex-col justify-between px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-accent/5 to-transparent blur-[120px]" />
 
-      <div className="relative z-20 mb-5 flex w-full shrink-0 items-start justify-between gap-3 sm:mb-6">
+      <div className="relative z-30 mb-5 flex w-full shrink-0 items-start justify-between gap-3 sm:mb-6">
         <div className="min-w-0 space-y-2">
           <button
             className="group flex max-w-full items-center gap-2"

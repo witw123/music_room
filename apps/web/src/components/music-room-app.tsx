@@ -83,9 +83,11 @@ export function MusicRoomApp({
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
   const getCurrentPlaybackPositionMs = () => {
-    const activeAudio = isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current;
-    if (activeAudio && Number.isFinite(activeAudio.currentTime)) {
-      return Math.round(activeAudio.currentTime * 1000);
+    if (isCurrentSourceOwner) {
+      const audio = audioRef.current;
+      if (audio && Number.isFinite(audio.currentTime)) {
+        return Math.round(audio.currentTime * 1000);
+      }
     }
 
     return progressMs;

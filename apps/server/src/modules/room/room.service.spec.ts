@@ -670,6 +670,9 @@ describe("RoomService", () => {
       "Only the host can delete this room."
     );
 
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.updatePeerPresence(snapshot.room.id, member.id, "peer-member");
+
     await expect(roomService.deleteRoom(snapshot.room.id, host.id)).resolves.toEqual({ ok: true });
     await expect(roomService.getRoomSnapshot(snapshot.room.id, [])).rejects.toThrow(
       `Room not found: ${snapshot.room.id}`

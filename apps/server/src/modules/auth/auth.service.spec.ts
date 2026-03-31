@@ -3,6 +3,7 @@ import { AuthService } from "./auth.service";
 function createPrismaMock() {
   return {
     isAvailable: jest.fn(() => false),
+    ensureAvailable: jest.fn(async () => false),
     guestSessions: {
       upsert: jest.fn(),
       findUnique: jest.fn()
