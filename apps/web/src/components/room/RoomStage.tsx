@@ -236,6 +236,12 @@ export function RoomStage({
           </div>
         </div>
 
+        <RoomChatOverlay 
+          roomId={roomSnapshot.room.id}
+          activeSession={activeSession}
+          socket={socket}
+        />
+
         <div className="flex w-full shrink-0 flex-col items-center gap-2 text-center md:gap-3">
           <div className="mb-1 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             <span
@@ -269,12 +275,6 @@ export function RoomStage({
           </p>
         </div>
       </div>
-      
-      <RoomChatOverlay 
-        roomId={roomSnapshot.room.id}
-        activeSession={activeSession}
-        socket={socket}
-      />
     </section>
   );
 }
