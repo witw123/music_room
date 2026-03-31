@@ -200,7 +200,8 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability,
     refreshRoom
   });
-  const shouldUseLocalPlayback = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
+  const hasLocalCurrentTrack = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
+  const shouldUseLocalPlayback = isCurrentSourceOwner && hasLocalCurrentTrack;
   const {
     progressTrack,
     progressMs,
@@ -590,7 +591,7 @@ export function MusicRoomApp({
     const remoteAudio = remoteAudioRef.current;
     const uploaded = uploadedTracks[playback.currentTrackId];
 
-    if (uploaded) {
+    if (isCurrentSourceOwner && uploaded) {
       if (remoteAudio) {
         remoteAudio.pause();
         remoteAudio.srcObject = null;
