@@ -83,7 +83,7 @@ export function MembersPanel({
 
                 <div className="grid grid-cols-2 gap-2 text-[10px]">
                   <div className="rounded-lg border border-surface-border bg-background/40 px-2 py-1.5">
-                    <span className="block text-foreground-muted">当前曲目分片</span>
+                    <span className="block text-foreground-muted">当前曲目缓存分片</span>
                     <strong className="mt-0.5 block text-foreground">
                       {summary
                         ? `${summary.currentTrackChunkCount}/${summary.currentTrackTotalChunks || 0}`
@@ -91,21 +91,21 @@ export function MembersPanel({
                     </strong>
                   </div>
                   <div className="rounded-lg border border-surface-border bg-background/40 px-2 py-1.5">
-                    <span className="block text-foreground-muted">已广播缓存</span>
+                    <span className="block text-foreground-muted">本地缓存曲目</span>
                     <strong className="mt-0.5 block text-foreground">
                       {summary
                         ? `${summary.announcedTrackCount} 首 / ${summary.totalChunkCount} 片`
-                        : "暂无"}
+                        : "0 首 / 0 片"}
                     </strong>
                   </div>
                 </div>
 
                 <p className="text-[10px] text-foreground-muted">
                   {summary?.currentTrackSources.length
-                    ? `来源：${summary.currentTrackSources.join("、")}`
+                    ? `当前分片来源：${summary.currentTrackSources.join("、")}`
                     : member.peerId
-                      ? "当前还没有广播缓存分片。"
-                      : "成员离线后不会继续广播缓存。"}
+                      ? "当前还没有可用于同步的缓存分片。"
+                      : "成员离线后不会继续参与缓存分发。"}
                 </p>
               </div>
             );

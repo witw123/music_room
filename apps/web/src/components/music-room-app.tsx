@@ -400,7 +400,8 @@ export function MusicRoomApp({
             return [...next];
           });
         }
-      }
+      },
+      iceServers
     );
     meshRef.current = mesh;
     chunkSchedulerRef.current = new ChunkScheduler(peerId, {

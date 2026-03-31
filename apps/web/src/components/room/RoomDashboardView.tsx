@@ -226,6 +226,7 @@ export function RoomDashboardView({
               <MeshStatusPanel
                 availabilitySummary={availabilitySummary}
                 connectedPeersCount={connectedPeersCount}
+                mediaConnectedPeersCount={mediaConnectedPeersCount}
                 cachedTrackCount={cachedTrackCount}
               />
             </div>

@@ -1,5 +1,6 @@
 import {
   p2pDataMessageSchema,
+  type IceServerConfig,
   type P2PDataMessage,
   type PeerSignalMessage
 } from "@music-room/shared";
@@ -60,7 +61,8 @@ export class P2PMesh {
     private readonly roomId: string,
     private readonly localPeerId: string,
     private readonly sendSignal: (payload: PeerSignalMessage) => void,
-    private readonly callbacks: MeshCallbacks
+    private readonly callbacks: MeshCallbacks,
+    private readonly iceServers: IceServerConfig[] = []
   ) {}
 
   async syncPeers(remotePeerIds: string[]) {
@@ -216,7 +218,7 @@ export class P2PMesh {
     }
 
     const connection = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      iceServers: this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
     });
     const entry: PeerEntry = {
       connection,

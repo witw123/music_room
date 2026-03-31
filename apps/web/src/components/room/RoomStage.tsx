@@ -1,5 +1,4 @@
 import { useEffect, useState, useTransition } from "react";
-import { RoomChatOverlay } from "./RoomChatOverlay";
 import type {
   AuthSession,
   RoomMediaConnectionState,
@@ -9,7 +8,8 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
-import { RoomSocket } from "@/lib/ws-client";
+import type { RoomSocket } from "@/lib/ws-client";
+import { RoomChatOverlay } from "./RoomChatOverlay";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -32,25 +32,36 @@ type RoomStageProps = {
 function getConnectionLabel(
   mediaConnectionState: RoomMediaConnectionState,
   isSourceOwner: boolean,
-  mediaConnectedPeersCount: number
+  mediaConnectedPeersCount: number,
+  onlineMemberCount: number
 ) {
   if (isSourceOwner) {
-    return `已向 ${mediaConnectedPeersCount} 位成员分发音频`;
+    const listeners = Math.max(0, onlineMemberCount - 1);
+
+    if (listeners === 0) {
+      return "当前没有其他在线成员";
+    }
+
+    if (mediaConnectedPeersCount === 0) {
+      return `有 ${listeners} 位成员在线，实时音频尚未接通`;
+    }
+
+    return `已向 ${mediaConnectedPeersCount} 位成员分发实时音频`;
   }
 
   switch (mediaConnectionState) {
     case "connecting":
-      return "正在连接";
+      return "正在连接实时音频";
     case "buffering":
-      return "正在缓冲";
+      return "已接入音频链路，正在缓冲";
     case "live":
-      return "已接入音频";
+      return "已接入实时音频";
     case "reconnecting":
-      return "重新连接中";
+      return "实时音频重连中";
     case "failed":
-      return "连接失败";
+      return "实时音频连接失败";
     default:
-      return "等待播放";
+      return "等待当前音源开始播放";
   }
 }
 
@@ -78,6 +89,7 @@ export function RoomStage({
     !!activeSession && activeSession.userId === roomSnapshot.room.playback.sourceSessionId;
   const compactStage = viewportHeight !== null && viewportHeight < 820;
   const ultraCompactStage = viewportHeight !== null && viewportHeight < 720;
+  const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
 
   useEffect(() => {
     const updateViewportHeight = () => {
@@ -137,17 +149,28 @@ export function RoomStage({
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              {getOnlineMemberCount(roomSnapshot.room.members)} 人在线
+              {onlineMemberCount} 人在线
             </span>
             <span>·</span>
             <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
+            {host ? (
+              <>
+                <span>·</span>
+                <span>房主 {host.nickname}</span>
+              </>
+            ) : null}
             <span>·</span>
             <span
               className={
                 mediaConnectionState === "live" || isSourceOwner ? "text-green-400" : "text-yellow-400"
               }
             >
-              {getConnectionLabel(mediaConnectionState, isSourceOwner, mediaConnectedPeersCount)}
+              {getConnectionLabel(
+                mediaConnectionState,
+                isSourceOwner,
+                mediaConnectedPeersCount,
+                onlineMemberCount
+              )}
             </span>
           </div>
         </div>
@@ -193,14 +216,14 @@ export function RoomStage({
                       setShowSettings(false);
                       void onDeleteRoom();
                     }}
-                    title={canDisbandRoom ? "解散房间" : "只有所有成员都在线时才能解散房间"}
+                    title={canDisbandRoom ? "解散房间" : "只有全部上传者在线时才能解散房间"}
                     type="button"
                   >
                     解散房间
                   </button>
                   {!canDisbandRoom ? (
                     <p className="px-3 pb-2 text-[11px] leading-5 text-white/45">
-                      只有所有成员都在线时才能解散房间
+                      只有全部上传者都在线时才能解散房间。
                     </p>
                   ) : null}
                 </>
@@ -212,7 +235,7 @@ export function RoomStage({
 
       <div className="relative z-20 min-h-0 overflow-visible">
         <div
-          className={`flex h-full items-center justify-center pointer-events-none ${
+          className={`pointer-events-none flex h-full items-center justify-center ${
             ultraCompactStage ? "-translate-y-8" : compactStage ? "-translate-y-4" : ""
           }`}
         >
@@ -250,7 +273,7 @@ export function RoomStage({
                 <div className="h-[clamp(0.75rem,1.8vh,0.8rem)] w-[clamp(0.75rem,1.8vh,0.8rem)] rounded-full bg-[#111] shadow-inner" />
               </div>
               <div className="h-full w-[clamp(0.6rem,1.5vh,0.65rem)] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[clamp(1.75rem,4.2vh,2rem)] shadow-lg" />
-              <div className="ml-[clamp(-0.9rem,-2vh,-0.75rem)] h-[clamp(2.25rem,5.4vh,2.5rem)] w-[clamp(1.25rem,3vh,1.5rem)] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl">
+              <div className="relative ml-[clamp(-0.9rem,-2vh,-0.75rem)] h-[clamp(2.25rem,5.4vh,2.5rem)] w-[clamp(1.25rem,3vh,1.5rem)] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl">
                 <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
               </div>
             </div>
