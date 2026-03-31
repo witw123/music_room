@@ -10,6 +10,7 @@ Music Room 是一个面向多人在线听歌场景的房间式应用，提供房
 ## 下载
 
 - Windows / macOS / Linux / Android 安装包：前往 [Releases](https://github.com/witw123/music_room/releases)
+- 当前稳定版本：`v0.2.1`
 
 ## 功能特性
 
@@ -92,6 +93,12 @@ CORS_ORIGINS=https://witw.top
 - macOS `.dmg`
 - Linux `.AppImage`
 - Android `.apk`
+
+版本发布规则：
+
+- Git 标签作为发布版本号来源，例如 `v0.2.1`
+- 工作区包版本与发布版本保持一致
+- 客户端安装包通过 GitHub Actions 自动构建并上传到 Releases
 
 ## 部署
 

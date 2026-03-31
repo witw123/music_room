@@ -15,6 +15,23 @@
 - GitHub Release 现支持统一上传 Windows、macOS、Linux、Android 客户端安装包
 - Android 客户端默认连接 `https://witw.top`
 
+## [0.2.1] - 2026-03-31
+
+### 新增
+
+- 新增 Android 客户端壳与 APK 构建链路
+- GitHub Release 新增 Android 安装包产物
+
+### 调整
+
+- 统一仓库工作区版本号到 `0.2.1`
+- Release 现统一覆盖 Windows、macOS、Linux、Android 四个平台
+
+### 修复
+
+- 修复 Android Gradle Wrapper 在 GitHub Actions 中缺少执行权限的问题
+- 修复四平台自动发版中 Android 构建失败的问题
+
 ## [0.1.0] - 2026-03-31
 
 ### 新增

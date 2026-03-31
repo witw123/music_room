@@ -1,6 +1,6 @@
 {
   "name": "@music-room/config-typescript",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "exports": {
     "./base.json": "./base.json",
@@ -8,4 +8,3 @@
     "./nestjs.json": "./nestjs.json"
   }
 }
-
