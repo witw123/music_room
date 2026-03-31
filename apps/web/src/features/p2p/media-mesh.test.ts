@@ -146,4 +146,28 @@ describe("RoomMediaMesh", () => {
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
     expect(sendSignal).toHaveBeenCalledTimes(2);
   });
+
+  it("renegotiates when audio tracks become available after the first sync", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const emptyStream = {
+      getAudioTracks: () => []
+    } as unknown as MediaStream;
+    const liveStream = {
+      getAudioTracks: () => [{ id: "track_live" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], emptyStream, 1);
+    expect(sendSignal).toHaveBeenCalledTimes(0);
+
+    await mesh.syncHostPeers(["peer_listener"], liveStream, 1);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 1
+    });
+  });
 });

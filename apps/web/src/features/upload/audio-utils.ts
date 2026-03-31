@@ -90,6 +90,19 @@ export function captureAudioStream(audio: HTMLAudioElement) {
     return cachedGraph.stream;
   }
 
+  const mediaAudio = audio as HTMLAudioElement & {
+    captureStream?: () => MediaStream;
+    mozCaptureStream?: () => MediaStream;
+  };
+
+  if (typeof mediaAudio.captureStream === "function") {
+    return mediaAudio.captureStream();
+  }
+
+  if (typeof mediaAudio.mozCaptureStream === "function") {
+    return mediaAudio.mozCaptureStream();
+  }
+
   if (typeof window !== "undefined") {
     const AudioContextCtor = window.AudioContext;
     if (AudioContextCtor) {
@@ -107,19 +120,6 @@ export function captureAudioStream(audio: HTMLAudioElement) {
       }
       return destination.stream;
     }
-  }
-
-  const mediaAudio = audio as HTMLAudioElement & {
-    captureStream?: () => MediaStream;
-    mozCaptureStream?: () => MediaStream;
-  };
-
-  if (typeof mediaAudio.captureStream === "function") {
-    return mediaAudio.captureStream();
-  }
-
-  if (typeof mediaAudio.mozCaptureStream === "function") {
-    return mediaAudio.mozCaptureStream();
   }
 
   return null;

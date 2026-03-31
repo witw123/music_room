@@ -30,10 +30,10 @@ export function createRoomSocket() {
   return io(baseUrl, {
     path: socketPath,
     auth: sessionToken ? { sessionToken } : undefined,
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
     // Only use WebSocket, never fallback to polling — polling causes
     // excessive concurrent connections that can exhaust the browser socket pool.
-    tryAllTransports: false,
+    tryAllTransports: true,
     // Exponential backoff capped at 30s instead of 4s to avoid
     // hammering the server during prolonged outages.
     reconnection: true,

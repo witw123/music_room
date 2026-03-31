@@ -156,12 +156,18 @@ export class RoomMediaMesh {
 
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
     const entry = this.peers.get(peerId) ?? this.createPeer(peerId);
-    this.attachStream(entry, localStream);
+    const streamChanged = this.attachStream(entry, localStream);
 
-    if (initiateOffer && entry.connection.signalingState === "stable") {
-      if (!localStream || localStream.getAudioTracks().length === 0) {
-        return entry;
-      }
+    if (
+      entry.connection.signalingState === "stable" &&
+      localStream &&
+      localStream.getAudioTracks().length > 0 &&
+      (initiateOffer ||
+        streamChanged ||
+        entry.connection.connectionState === "new" ||
+        entry.connection.connectionState === "disconnected" ||
+        entry.connection.connectionState === "failed")
+    ) {
 
       const offer = await entry.connection.createOffer();
       await entry.connection.setLocalDescription(offer);
@@ -247,7 +253,7 @@ export class RoomMediaMesh {
 
   private attachStream(entry: MediaPeerEntry, localStream: MediaStream | null) {
     if (entry.stream === localStream) {
-      return;
+      return false;
     }
 
     const audioTracks = localStream?.getAudioTracks() ?? [];
@@ -256,7 +262,7 @@ export class RoomMediaMesh {
     if (entry.senders.length === 0 && nextTrack) {
       entry.senders = [entry.connection.addTrack(nextTrack, localStream as MediaStream)];
       entry.stream = localStream;
-      return;
+      return true;
     }
 
     if (entry.senders.length > 0) {
@@ -266,6 +272,7 @@ export class RoomMediaMesh {
     }
 
     entry.stream = localStream;
+    return true;
   }
 
   private releasePeer(peerId: string, entry: MediaPeerEntry) {
