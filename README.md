@@ -7,6 +7,8 @@
 
 Music Room 是一个面向多人同步听歌场景的音乐房应用。此项目的宗旨是实现多人本地同步播放无损音乐。
 
+
+
 项目采用 Monorepo 结构，包含：
 
 - `apps/web`：官网展示页与 Web 前端
@@ -14,21 +16,6 @@ Music Room 是一个面向多人同步听歌场景的音乐房应用。此项目
 - `apps/desktop`：Tauri 桌面应用
 - `apps/mobile`：Capacitor 移动端壳
 - `packages/shared`：前后端共享类型与协议
-
-## 项目特点
-
-- 以“房间”为核心组织多人听歌体验，而不是以聊天流为核心
-- 支持账号体系、房间创建、邀请码加入、最近房间恢复
-- 支持共享播放队列、房主控制、多人同步播放
-- 支持导入本地音频文件，围绕本地音乐做协作播放
-- 支持桌面端、移动端与服务端共用同一套后端能力
-
-## 适合的使用场景
-
-- 和朋友一起听同一张专辑或同一条播放列表
-- 在小型社区、社群、学习空间里做同步背景音乐
-- 围绕本地收藏音乐做共享播放，而不是依赖单一流媒体平台
-
 
 ## 下载路径
 - 桌面端与移动端安装包发布在 [GitHub Releases](https://github.com/witw123/music_room/releases)
@@ -40,13 +27,28 @@ Music Room 是一个面向多人同步听歌场景的音乐房应用。此项目
 - Linux `.AppImage` / `.deb` / `.rpm`
 - Android `.apk`
 
+## 项目特点
+
+- 支持账号体系、房间创建、邀请码加入、房间恢复
+- 支持共享播放队列、房主控制、多人同步播放
+- 支持导入本地音频文件，围绕本地音乐做协作播放
+
+
+## 适合的使用场景
+
+- 和朋友一起听同一张专辑或同一条播放列表
+- 在小型社区、社群、学习空间里做同步背景音乐
+- 围绕本地收藏音乐做共享播放，而不是依赖单一流媒体平台
+
+
+
 ## 技术栈
 
 - 前端：Next.js 15、React 19、TypeScript、Tailwind CSS、Socket.IO Client
 - 后端：NestJS 11、Prisma 6、PostgreSQL、Redis、Socket.IO
 - 桌面端：Tauri 2、Rust
 - 移动端：Capacitor
-- 工程化：pnpm workspace、Turborepo、GitHub Actions
+
 
 ## 快速开始
 
@@ -105,12 +107,6 @@ NEXT_PUBLIC_WS_URL=wss://witw.top
 NEXT_PUBLIC_SOCKET_PATH=/ws/socket.io
 CORS_ORIGINS=https://witw.top
 ```
-
-## 多端说明
-
-- Web：默认访问 `https://witw.top/`
-- Desktop：开发环境加载 `http://localhost:3000/app?client=desktop`，生产环境加载 `https://witw.top/app?client=desktop`
-- Mobile：当前连接 `https://witw.top/app?client=mobile`
 
 ## 部署
 
