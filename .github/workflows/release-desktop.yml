@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release Clients
 
 on:
   push:
@@ -9,8 +9,34 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build_desktop:
+    name: Build Desktop ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: windows
+            runner: windows-latest
+            artifact: desktop-windows
+            release_glob: |
+              apps/desktop/release/*.exe
+              apps/desktop/release/*.blockmap
+          - name: macos
+            runner: macos-latest
+            artifact: desktop-macos
+            release_glob: |
+              apps/desktop/release/*.dmg
+              apps/desktop/release/*.zip
+              apps/desktop/release/*.blockmap
+          - name: linux
+            runner: ubuntu-latest
+            artifact: desktop-linux
+            release_glob: |
+              apps/desktop/release/*.AppImage
+              apps/desktop/release/*.deb
+              apps/desktop/release/*.rpm
+              apps/desktop/release/*.blockmap
 
     steps:
       - name: Checkout
@@ -35,10 +61,86 @@ jobs:
           MUSIC_ROOM_DESKTOP_RENDERER_URL: https://witw.top
         run: pnpm --filter @music-room/desktop run pack
 
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform.artifact }}
+          if-no-files-found: error
+          path: ${{ matrix.platform.release_glob }}
+
+  build_android:
+    name: Build Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Android version metadata
+        run: |
+          echo "ANDROID_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Build Android APK
+        env:
+          MUSIC_ROOM_ANDROID_VERSION_CODE: ${{ env.ANDROID_VERSION_CODE }}
+          MUSIC_ROOM_ANDROID_VERSION_NAME: ${{ env.ANDROID_VERSION_NAME }}
+        run: pnpm --filter @music-room/mobile run pack
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-android
+          if-no-files-found: error
+          path: apps/mobile/release/*.apk
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build_desktop
+      - build_android
+
+    steps:
+      - name: Download all packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            apps/desktop/release/*.exe
-            apps/desktop/release/*.blockmap
+            release-assets/**/*.exe
+            release-assets/**/*.blockmap
+            release-assets/**/*.dmg
+            release-assets/**/*.zip
+            release-assets/**/*.AppImage
+            release-assets/**/*.deb
+            release-assets/**/*.rpm
+            release-assets/**/*.apk

@@ -1,0 +1,24 @@
+{
+  "name": "@music-room/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "clean": "node -e \"['release'].forEach((dir)=>require('node:fs').rmSync(dir,{ recursive: true, force: true, maxRetries: 10, retryDelay: 200 }))\"",
+    "build": "node -e \"console.log('Capacitor shell does not require a local web build.')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android",
+    "android:gradle:debug": "node -e \"const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cmd = process.platform === 'win32' ? 'gradlew.bat' : './gradlew'; const result = spawnSync(cmd, ['assembleDebug'], { cwd: path.join(process.cwd(), 'android'), stdio: 'inherit', shell: process.platform === 'win32' }); process.exit(result.status ?? 1);\"",
+    "pack": "pnpm run clean && pnpm run build && pnpm run android:sync && pnpm run android:gradle:debug && node -e \"const fs = require('node:fs'); const path = require('node:path'); const source = path.join(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'); const targetDir = path.join(process.cwd(), 'release'); fs.mkdirSync(targetDir, { recursive: true }); fs.copyFileSync(source, path.join(targetDir, 'Music.Room-Android.apk'));\""
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "@music-room/config-typescript": "workspace:*",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  }
+}

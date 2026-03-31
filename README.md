@@ -5,30 +5,28 @@
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room 是一个面向多人在线听歌场景的音乐房间项目，提供房间、播放队列、歌单、聊天与实时同步能力，同时支持 Electron 桌面端作为前端壳使用。
-
-项目采用 Monorepo 结构，包含 Web 前端、NestJS 后端与 Electron 桌面端。系统以 Web 为核心形态，服务端负责会话、房间、播放状态与实时信令协调，客户端负责音频选择、播放与缓存。
+Music Room 是一个面向多人在线听歌场景的房间式应用，提供房间协作、播放队列、歌单管理、聊天互动与实时同步能力。项目采用 Monorepo 结构，包含 Web 前端、NestJS 后端，以及用于分发的桌面端和 Android 客户端外壳。
 
 ## 下载
 
-- Windows 安装包：前往 [Releases](https://github.com/witw123/music_room/releases) 下载
+- Windows / macOS / Linux / Android 安装包：前往 [Releases](https://github.com/witw123/music_room/releases)
 
 ## 功能特性
 
-- 用户注册、登录、会话保持
-- 创建房间、加入房间、恢复最近房间
-- 房主控制播放与队列同步
-- 本地音频导入与曲目信息注册
-- 歌单创建、编辑、删除、导入房间
-- 房间聊天与实时状态同步
-- Electron 桌面端文件选择、外链打开、版本读取等系统能力
+- 支持用户注册、登录与会话保持
+- 支持创建房间、加入房间和恢复最近房间
+- 支持房主控制播放、房间成员实时同步
+- 支持本地音频导入、播放队列和歌单管理
+- 支持房间聊天与状态广播
+- 支持 Web、桌面端和 Android 客户端接入同一套后端服务
 
 ## 技术栈
 
 - 前端：Next.js 15、React 19、TypeScript、Tailwind CSS、Zustand、Socket.IO Client
 - 后端：NestJS 11、Prisma 6、PostgreSQL、Redis、Socket.IO
-- 桌面端：Electron 35、esbuild、electron-builder
-- 工程基础设施：pnpm workspace、Turborepo
+- 桌面端：Electron、esbuild、electron-builder
+- 移动端：Capacitor Android
+- 工程化：pnpm workspace、Turborepo、GitHub Actions
 
 ## 快速开始
 
@@ -36,8 +34,9 @@ Music Room 是一个面向多人在线听歌场景的音乐房间项目，提供
 
 - Node.js 22.x
 - pnpm 10.x
-- PostgreSQL 可选
-- Redis 可选
+- PostgreSQL
+- Redis
+- Android SDK（仅在本地构建 Android 安装包时需要）
 
 ### 安装与启动
 
@@ -49,31 +48,30 @@ pnpm dev
 
 默认地址：
 
-- 前端：`http://localhost:3000`
-- 后端：`http://localhost:3001`
-- 健康检查：`http://localhost:3001/health`
+- Web：`http://localhost:3000`
+- Server：`http://localhost:3001`
+- Health Check：`http://localhost:3001/health`
 
 ### 常用命令
 
 ```bash
 pnpm dev
 pnpm build
-pnpm lint
 pnpm typecheck
-pnpm test
-pnpm build:desktop
 pnpm pack:desktop
+pnpm pack:mobile
 ```
+
+执行 `pnpm pack:mobile` 前，需要先正确配置本机 `ANDROID_HOME` 或 Android SDK。
 
 ## 前后端连接
 
-- REST 请求使用 `NEXT_PUBLIC_API_BASE_URL`
-- 实时连接使用 `NEXT_PUBLIC_WS_URL + NEXT_PUBLIC_SOCKET_PATH`
-- 登录后返回的会话 `token` 同时用于：
-  - REST 请求头 `x-session-token`
-  - Socket.IO 握手参数 `auth.sessionToken`
+- REST API 基地址由 `NEXT_PUBLIC_API_BASE_URL` 提供
+- WebSocket 基地址由 `NEXT_PUBLIC_WS_URL` 提供
+- Socket.IO 路径由 `NEXT_PUBLIC_SOCKET_PATH` 提供
+- 登录成功后返回的 `token` 同时用于 REST 请求头 `x-session-token` 与 Socket.IO 握手参数 `auth.sessionToken`
 
-同域部署时推荐配置：
+推荐的同域部署配置：
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=https://witw.top
@@ -82,61 +80,45 @@ NEXT_PUBLIC_SOCKET_PATH=/ws/socket.io
 CORS_ORIGINS=https://witw.top
 ```
 
-## 桌面端
+## 客户端说明
 
-桌面端当前定位为前端壳：
+- Web：核心使用形态，直接通过浏览器访问
+- Desktop：Electron 前端壳，生产环境默认加载 `https://witw.top`
+- Android：Capacitor 前端壳，当前同样连接 `https://witw.top`
 
-- 开发模式加载本地 Web 前端
-- 生产模式加载远程前端地址
-- 不内置本地 Next.js runtime
-- 不内置本地后端服务
+当前 GitHub Release 已支持自动上传：
 
-当前生产环境默认前端地址：
-
-```text
-https://witw.top
-```
-
-桌面端打包：
-
-```bash
-pnpm pack:desktop
-```
-
-打包产物输出到：
-
-```text
-apps/desktop/release/
-```
+- Windows `.exe`
+- macOS `.dmg`
+- Linux `.AppImage`
+- Android `.apk`
 
 ## 部署
 
-项目提供 Linux Docker 部署模板，详见：
+项目提供 Linux 部署模板与说明：
 
 - [deploy/linux](./deploy/linux)
 - [docs/deployment/deployment.md](./docs/deployment/deployment.md)
 
-生产环境建议通过 Nginx 同域反向代理：
+生产环境建议使用 Nginx 进行同域反向代理：
 
 - `/` 转发到 Web 前端
-- `/v1/` 转发到后端 REST
-- `/ws/socket.io` 转发到后端 Socket.IO
+- `/v1/` 转发到后端 REST API
+- `/ws/socket.io` 转发到后端 Socket.IO 服务
 
 ## 目录结构
 
 ```text
 music-room/
-├── apps/
-│   ├── web/
-│   ├── server/
-│   └── desktop/
-├── packages/
-│   ├── shared/
-│   ├── ui/
-│   └── config-*
-├── docs/
-├── deploy/
-└── scripts/
+├─ apps/
+│  ├─ web/
+│  ├─ server/
+│  ├─ desktop/
+│  └─ mobile/
+├─ packages/
+├─ docs/
+├─ deploy/
+└─ scripts/
 ```
 
 ## 许可证
