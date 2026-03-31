@@ -68,8 +68,8 @@ export function toUserFacingError(error: unknown) {
     return "只有房主可以删除房间。";
   }
 
-  if (message.includes("All room members must be online before deleting the room")) {
-    return "只有所有成员都在线时才能解散房间。";
+  if (message.includes("All track uploaders must be online before deleting the room")) {
+    return "只有所有已上传歌曲的成员在线时才能解散房间。";
   }
 
   if (message.includes("Queue reorder payload does not match")) {

@@ -144,21 +144,7 @@ export function RoomStage({
 
           {showSettings ? (
             <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
-              {activeSession ? (
-                <div className="mb-1 flex items-center gap-2 border-b border-white/5 px-3 py-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
-                    {activeSession.nickname.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-white">
-                      {activeSession.nickname}
-                    </span>
-                    {host ? (
-                      <span className="block truncate text-xs text-white/45">房主：{host.nickname}</span>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
+
 
               <button
                 className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"

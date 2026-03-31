@@ -45,25 +45,37 @@ export function readDuration(objectUrl: string) {
     audio.src = objectUrl;
 
     const cleanup = () => {
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("error", handleError);
+      audio.onloadedmetadata = null;
+      audio.ontimeupdate = null;
+      audio.onerror = null;
       audio.pause();
-      audio.src = "";
+      audio.removeAttribute("src");
       audio.load();
     };
 
-    const handleLoadedMetadata = () => {
-      cleanup();
-      resolve(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
+    audio.onloadedmetadata = () => {
+      if (audio.duration === Infinity) {
+        // Chrome bug: duration is Infinity for some local objectURLs
+        // Fix: seek to a huge number to force duration calculation
+        audio.currentTime = 1e101;
+        audio.ontimeupdate = () => {
+          audio.ontimeupdate = null;
+          const dur = audio.duration;
+          cleanup();
+          resolve(Number.isFinite(dur) ? Math.round(dur * 1000) : 0);
+        };
+      } else {
+        const dur = audio.duration;
+        cleanup();
+        resolve(Number.isFinite(dur) ? Math.round(dur * 1000) : 0);
+      }
     };
 
-    const handleError = () => {
+    audio.onerror = () => {
       cleanup();
       resolve(0);
     };
 
-    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audio.addEventListener("error", handleError);
     audio.load();
   });
 }

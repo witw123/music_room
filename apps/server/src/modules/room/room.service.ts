@@ -194,8 +194,9 @@ export class RoomService {
       throw new Error("Only the host can delete this room.");
     }
 
-    if (record.room.members.some((member) => !member.peerId)) {
-      throw new Error("All room members must be online before deleting the room.");
+    const uploaderIds = new Set(record.tracks.map((t) => t.ownerSessionId));
+    if (record.room.members.some((member) => uploaderIds.has(member.id) && !member.peerId)) {
+      throw new Error("All track uploaders must be online before deleting the room.");
     }
 
     await this.roomRecordRepository.deleteRecord(record);

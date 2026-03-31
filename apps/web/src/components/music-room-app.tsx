@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
   Playlist,
   RoomMediaConnectionState,
@@ -117,7 +117,7 @@ export function MusicRoomApp({
     setRoomSnapshot(snapshot);
   }
 
-  function mergeAvailability(announcement: TrackAvailabilityAnnouncement) {
+  const mergeAvailability = useCallback((announcement: TrackAvailabilityAnnouncement) => {
     setAvailabilityByTrack((current) => ({
       ...current,
       [announcement.trackId]: {
@@ -125,7 +125,12 @@ export function MusicRoomApp({
         [announcement.ownerPeerId]: announcement
       }
     }));
-  }
+  }, []);
+
+  const stableEmitAvailability = useCallback(
+    (announcement: TrackAvailabilityAnnouncement) => socketRef.current?.emit("piece.availability", announcement),
+    []
+  );
 
   const {
     uploadedTracks,
@@ -141,7 +146,7 @@ export function MusicRoomApp({
     roomSnapshot,
     setStatusMessage,
     onAvailability: mergeAvailability,
-    emitAvailability: (announcement) => socketRef.current?.emit("piece.availability", announcement),
+    emitAvailability: stableEmitAvailability,
     refreshRoom
   });
   const {
@@ -824,8 +829,10 @@ export function MusicRoomApp({
   const canDisbandRoom =
     !!roomSnapshot &&
     canDeleteRoom &&
-    roomSnapshot.room.members.length > 0 &&
-    roomSnapshot.room.members.every((member) => !!member.peerId);
+    (() => {
+      const uploaderIds = new Set(roomSnapshot.tracks.map((t) => t.ownerSessionId));
+      return !roomSnapshot.room.members.some((member) => uploaderIds.has(member.id) && !member.peerId);
+    })();
   const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
   const availabilitySummary =

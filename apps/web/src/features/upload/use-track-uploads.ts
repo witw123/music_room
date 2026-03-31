@@ -104,6 +104,7 @@ export function useTrackUploads(options: {
       }
 
       setUploadedTracks((current) => {
+        let didAdd = false;
         const next = { ...current };
         for (const asset of cachedAssets) {
           if (!next[asset.trackId]) {
@@ -113,7 +114,16 @@ export function useTrackUploads(options: {
               }),
               objectUrl: URL.createObjectURL(asset.file)
             };
+            didAdd = true;
           }
+        }
+
+        if (!didAdd) {
+          // Return the original reference to avoid retriggering dependent effects
+          // (the playback effect depends on uploadedTracks — a new reference would
+          // cause audio.load() which resets currentTime to 0).
+          setCachedTrackCount(Object.keys(current).length);
+          return current;
         }
 
         setCachedTrackCount(Object.keys(next).length);

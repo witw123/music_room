@@ -107,7 +107,7 @@ export function BottomPlayer({
   const sourceOwnedByMe = roomSnapshot?.room.playback.sourceSessionId === activeSession?.id;
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-background-secondary/88 px-4 pb-[calc(env(safe-area-inset-bottom)+0.9rem)] pt-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-all lg:grid lg:grid-cols-[1.5fr_auto_2fr_1.5fr] lg:items-center lg:gap-6 lg:px-8">
+    <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-background-secondary/88 px-4 pb-[calc(env(safe-area-inset-bottom)+0.9rem)] pt-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-all lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-6 lg:px-8">
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5" aria-hidden="true">
         <div
           className="h-full bg-gradient-to-r from-accent to-blue-400 shadow-[0_0_10px_rgba(0,112,243,0.6)] transition-all duration-300 ease-linear"

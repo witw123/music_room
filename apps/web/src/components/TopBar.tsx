@@ -16,8 +16,7 @@ type TopBarProps = {
 
 const navItems = [
   { key: "home", href: "/" as Route, label: "主页" },
-  { key: "features", href: "/features" as Route, label: "功能" },
-  { key: "rooms", href: "/rooms" as Route, label: "音乐房", match: "/room/" }
+  { key: "rooms", href: "/rooms" as Route, label: "音乐室", match: "/room/" }
 ];
 
 export function TopBar({ activeSession, roomSnapshot = null, onLogout }: TopBarProps) {
@@ -82,7 +81,7 @@ export function TopBar({ activeSession, roomSnapshot = null, onLogout }: TopBarP
                     size="sm"
                     className="text-white/70 hover:bg-white/5 hover:text-white"
                   >
-                    进入音乐房
+                    进入音乐室
                   </Button>
                 </Link>
                 {onLogout ? (
