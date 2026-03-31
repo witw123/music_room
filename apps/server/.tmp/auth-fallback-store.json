@@ -703,6 +703,14 @@
       "passwordHash": "aa01e704e218d894e77c9f15e8ea2551:8031f82bfdcaa95286f30903465c83a0610019dd265d95b3922df905bf642e927c6dace486e221a0d7757f0919167b11d9b6b29c66e630cfa97f83cf725b0193",
       "createdAt": "2026-03-30T15:25:09.511Z",
       "updatedAt": "2026-03-30T15:25:09.511Z"
+    },
+    {
+      "id": "user_1113cea9-83c9-4377-a112-8a8ed75c4d75",
+      "username": "111",
+      "nickname": "111111",
+      "passwordHash": "870e84c8148cd8267667d8c5a2cf6b44:a79b94d7739eb97aa7fff02dcc3fce8ac7d93b680338b066d51e656d8cf685e1598f69931c46bfcef504199c99ac7d8a2b8f8e59bc986fdb65213b47392f3a0b",
+      "createdAt": "2026-03-31T03:02:54.901Z",
+      "updatedAt": "2026-03-31T03:02:54.901Z"
     }
   ],
   "sessions": [
@@ -1321,6 +1329,13 @@
       "token": "wkGEkf0WbdNdrUj0X4gz47oLHAwSXU87XhcLsRNeLcU",
       "createdAt": "2026-03-30T15:25:09.566Z",
       "expiresAt": "2026-04-29T15:25:09.566Z"
+    },
+    {
+      "id": "session_681b920c-d1d6-4927-bbb7-8805518b564e",
+      "userId": "user_1113cea9-83c9-4377-a112-8a8ed75c4d75",
+      "token": "7XVKptTO-RFB1QXp_sSJcoX2xVNKsVvTG3jEzbZMpak",
+      "createdAt": "2026-03-31T03:02:54.958Z",
+      "expiresAt": "2026-04-30T03:02:54.958Z"
     }
   ]
 }

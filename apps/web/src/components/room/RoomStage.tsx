@@ -1,4 +1,4 @@
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { RoomChatOverlay } from "./RoomChatOverlay";
 import type {
   AuthSession,
@@ -35,7 +35,7 @@ function getConnectionLabel(
   mediaConnectedPeersCount: number
 ) {
   if (isSourceOwner) {
-    return `向 ${mediaConnectedPeersCount} 位成员分发音频`;
+    return `已向 ${mediaConnectedPeersCount} 位成员分发音频`;
   }
 
   switch (mediaConnectionState) {
@@ -73,14 +73,35 @@ export function RoomStage({
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const isSourceOwner =
     !!activeSession && activeSession.id === roomSnapshot.room.playback.sourceSessionId;
+  const compactStage = viewportHeight !== null && viewportHeight < 820;
+  const ultraCompactStage = viewportHeight !== null && viewportHeight < 720;
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      setViewportHeight(window.innerHeight);
+    };
+
+    updateViewportHeight();
+    window.addEventListener("resize", updateViewportHeight);
+    return () => window.removeEventListener("resize", updateViewportHeight);
+  }, []);
 
   return (
-    <section className="relative flex h-full w-full flex-col justify-between px-4 py-4 sm:px-5 sm:py-5 md:px-8 md:py-6">
+    <section
+      className={`relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] px-4 sm:px-5 md:px-8 ${
+        ultraCompactStage ? "py-2" : compactStage ? "py-3" : "py-4 sm:py-5 md:py-6"
+      }`}
+    >
       <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-accent/5 to-transparent blur-[120px]" />
 
-      <div className="relative z-30 mb-5 flex w-full shrink-0 items-start justify-between gap-3 sm:mb-6">
+      <div
+        className={`relative z-30 flex w-full shrink-0 items-start justify-between gap-3 ${
+          compactStage ? "mb-3" : "mb-5 sm:mb-6"
+        }`}
+      >
         <div className="min-w-0 space-y-2">
           <button
             className="group flex max-w-full items-center gap-2"
@@ -148,8 +169,6 @@ export function RoomStage({
 
           {showSettings ? (
             <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
-
-
               <button
                 className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
                 onClick={() => {
@@ -191,13 +210,21 @@ export function RoomStage({
         </div>
       </div>
 
-      <div className="z-20 flex min-h-0 flex-1 flex-col overflow-hidden pb-4 sm:pb-6">
-        <div className="relative mb-6 flex min-h-0 flex-1 items-center justify-center sm:mb-8">
+      <div className="relative z-20 min-h-0 overflow-visible">
+        <div
+          className={`flex h-full items-center justify-center pointer-events-none ${
+            ultraCompactStage ? "-translate-y-8" : compactStage ? "-translate-y-4" : ""
+          }`}
+        >
           <div className="group relative flex items-center justify-center">
             <div
-              className={`relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-all duration-1000 sm:h-48 sm:w-48 md:h-64 md:w-64 lg:h-80 lg:w-80 ${
-                isPlaying ? "animate-spin-slow" : ""
-              }`}
+              className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-all duration-1000 ${
+                ultraCompactStage
+                  ? "h-[clamp(9.5rem,28vh,14rem)] w-[clamp(9.5rem,28vh,14rem)]"
+                  : compactStage
+                    ? "h-[clamp(10.5rem,31vh,17rem)] w-[clamp(10.5rem,31vh,17rem)]"
+                    : "h-[clamp(11rem,34vh,20rem)] w-[clamp(11rem,34vh,20rem)]"
+              } ${isPlaying ? "animate-spin-slow" : ""}`}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
               <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
@@ -208,71 +235,101 @@ export function RoomStage({
                   style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
                 />
               ))}
-              <div className="relative z-10 flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner sm:h-16 sm:w-16 md:h-20 md:w-20">
-                <div className="h-4 w-4 rounded-full border border-white/5 bg-black shadow-inner" />
+              <div className="relative z-10 flex h-[clamp(3.5rem,9vh,5rem)] w-[clamp(3.5rem,9vh,5rem)] items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner">
+                <div className="h-[clamp(1rem,2.4vh,1.25rem)] w-[clamp(1rem,2.4vh,1.25rem)] rounded-full border border-white/5 bg-black shadow-inner" />
               </div>
             </div>
 
             <div
-              className={`absolute -right-4 top-3 flex h-28 w-7 origin-[14px_14px] flex-col items-center transition-transform duration-[800ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] sm:-right-5 sm:h-32 sm:w-8 md:-right-8 md:h-48 ${
+              className={`absolute right-[clamp(-2.4rem,-5vh,-1rem)] top-[clamp(0.5rem,1.8vh,0.75rem)] flex h-[clamp(7rem,21vh,12rem)] w-[clamp(1.75rem,4.2vh,2rem)] origin-[14px_14px] flex-col items-center transition-transform duration-[800ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
                 isPlaying ? "rotate-[20deg]" : "-rotate-[15deg]"
               }`}
               style={{ zIndex: 30 }}
             >
-              <div className="absolute top-0 z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#111] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl sm:h-8 sm:w-8">
-                <div className="h-3 w-3 rounded-full bg-[#111] shadow-inner" />
+              <div className="absolute top-0 z-10 flex h-[clamp(1.75rem,4.2vh,2rem)] w-[clamp(1.75rem,4.2vh,2rem)] items-center justify-center rounded-full border-2 border-[#111] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl">
+                <div className="h-[clamp(0.75rem,1.8vh,0.8rem)] w-[clamp(0.75rem,1.8vh,0.8rem)] rounded-full bg-[#111] shadow-inner" />
               </div>
-              <div className="h-full w-2.5 bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-8 shadow-lg" />
-              <div className="-ml-3 h-9 w-5 skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl sm:h-10 sm:w-6">
+              <div className="h-full w-[clamp(0.6rem,1.5vh,0.65rem)] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[clamp(1.75rem,4.2vh,2rem)] shadow-lg" />
+              <div className="ml-[clamp(-0.9rem,-2vh,-0.75rem)] h-[clamp(2.25rem,5.4vh,2.5rem)] w-[clamp(1.25rem,3vh,1.5rem)] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl">
                 <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
               </div>
             </div>
 
             <div
-              className={`absolute -bottom-8 left-1/2 h-8 w-[72%] -translate-x-1/2 bg-accent/20 blur-[45px] transition-all duration-1000 sm:-bottom-10 sm:h-10 sm:w-[80%] ${
+              className={`absolute bottom-[clamp(-2.5rem,-5vh,-2rem)] left-1/2 h-[clamp(2rem,5vh,2.5rem)] w-[72%] -translate-x-1/2 bg-accent/20 blur-[45px] transition-all duration-1000 sm:w-[80%] ${
                 isPlaying ? "scale-110 opacity-100" : "scale-90 opacity-30"
               }`}
             />
           </div>
         </div>
+      </div>
 
-        <RoomChatOverlay 
-          roomId={roomSnapshot.room.id}
-          activeSession={activeSession}
-          socket={socket}
-        />
+      <div
+        className={`relative z-30 flex flex-col items-center pb-2 ${
+          ultraCompactStage ? "gap-1.5 pt-0" : compactStage ? "gap-2 pt-1" : "gap-4 pt-4"
+        }`}
+      >
+        <div className={`flex w-full flex-col items-center text-center ${compactStage ? "gap-1.5" : "gap-2 md:gap-3"}`}>
+          {currentTrack ? (
+            <>
+              <div className={`flex flex-wrap items-center justify-center ${compactStage ? "mb-0.5 gap-1.5" : "mb-1 gap-2 sm:gap-3"}`}>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
+                    isPlaying
+                      ? "border border-accent/30 bg-accent/20 text-accent"
+                      : "border border-white/10 bg-white/10 text-white/55"
+                  }`}
+                >
+                  {isPlaying ? "正在播放" : "准备就绪"}
+                </span>
+                {currentSourceOwnerNickname ? (
+                  <span className={`flex items-center gap-1 text-white/45 ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
+                  </span>
+                ) : null}
+              </div>
 
-        <div className="flex w-full shrink-0 flex-col items-center gap-2 text-center md:gap-3">
-          <div className="mb-1 flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-            <span
-              className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
-                isPlaying
-                  ? "border border-accent/30 bg-accent/20 text-accent"
-                  : "border border-white/10 bg-white/10 text-white/55"
-              }`}
-            >
-              {isPlaying ? "正在播放" : "准备就绪"}
-            </span>
-            {currentTrack && currentSourceOwnerNickname ? (
-              <span className="flex items-center gap-1 text-[10px] text-white/45">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-                当前音源：<span className="text-white/70">{currentSourceOwnerNickname}</span>
-              </span>
-            ) : null}
-          </div>
+              <h2
+                className={`max-w-[18ch] font-extrabold tracking-tight text-white drop-shadow-lg ${
+                  ultraCompactStage
+                    ? "text-[2.2rem] leading-[0.96]"
+                    : compactStage
+                      ? "text-[2.7rem] leading-[0.98]"
+                      : "text-2xl leading-[1.06] sm:text-3xl md:text-[38px] lg:text-[44px]"
+                }`}
+              >
+                {currentTrack.title}
+              </h2>
+            </>
+          ) : null}
 
-          <h2 className="max-w-[18ch] text-2xl font-extrabold leading-[1.06] tracking-tight text-white drop-shadow-lg sm:text-3xl md:text-4xl lg:text-5xl">
-            {currentTrack?.title ?? "房间已就绪"}
-          </h2>
-
-          <p className="max-w-[26ch] text-sm font-medium leading-relaxed tracking-wide text-white/60 sm:text-base md:text-lg">
+          <p
+            className={`font-medium tracking-wide text-white/60 ${
+              ultraCompactStage
+                ? "max-w-[24ch] text-[13px] leading-snug"
+                : compactStage
+                  ? "max-w-[24ch] text-[15px] leading-snug"
+                  : "max-w-[26ch] text-sm leading-relaxed sm:text-base md:text-[17px]"
+            }`}
+          >
             {currentTrack
               ? `${currentTrack.artist} · ${formatDuration(currentTrackDuration)}`
               : "从曲库添加音乐，或导入本地音频，马上开始这场协作收听。"}
           </p>
+        </div>
+
+        <div className={`w-full ${ultraCompactStage ? "max-w-[460px]" : compactStage ? "max-w-[500px]" : "max-w-[540px]"}`}>
+          <RoomChatOverlay
+            roomId={roomSnapshot.room.id}
+            activeSession={activeSession}
+            socket={socket}
+            compact={compactStage}
+            ultraCompact={ultraCompactStage}
+          />
         </div>
       </div>
     </section>

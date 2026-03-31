@@ -13,9 +13,17 @@ interface RoomChatOverlayProps {
   roomId: string;
   activeSession: AuthSession | null;
   socket: RoomSocket | null;
+  compact?: boolean;
+  ultraCompact?: boolean;
 }
 
-export function RoomChatOverlay({ roomId, activeSession, socket }: RoomChatOverlayProps) {
+export function RoomChatOverlay({
+  roomId,
+  activeSession,
+  socket,
+  compact = false,
+  ultraCompact = false
+}: RoomChatOverlayProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isVisible, setIsVisible] = useState(true);
@@ -72,17 +80,36 @@ export function RoomChatOverlay({ roomId, activeSession, socket }: RoomChatOverl
   };
 
   return (
-    <div className="z-40 flex w-full max-w-[540px] flex-col items-center gap-3 px-4 mx-auto my-4">
+    <div
+      className={`z-40 mx-auto flex w-full max-w-[540px] flex-col items-center px-4 ${
+        ultraCompact
+          ? "my-1.5 gap-1.5 px-2"
+          : compact
+            ? "my-2 gap-2 px-2"
+            : "my-4 gap-3"
+      }`}
+    >
       {/* Messages Area - Glassmorphic Container */}
-      <div className="relative w-full rounded-2xl bg-white/[0.03] border border-white/5 p-2 backdrop-blur-md">
-        <div className="flex max-h-[140px] w-full flex-col gap-1.5 overflow-y-auto thin-scrollbar scroll-smooth py-1 px-2"
+      <div
+        className={`relative w-full border border-white/5 bg-white/[0.03] backdrop-blur-md ${
+          compact ? "rounded-[1.1rem] p-1.5" : "rounded-2xl p-2"
+        }`}
+      >
+        <div
+          className={`flex w-full flex-col overflow-y-auto thin-scrollbar scroll-smooth ${
+            ultraCompact
+              ? "max-h-[72px] gap-1 px-1.5 py-0.5"
+              : compact
+                ? "max-h-[96px] gap-1 px-1.5 py-0.5"
+                : "max-h-[140px] gap-1.5 px-2 py-1"
+          }`}
              style={{ 
                maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)',
                WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)'
              }}>
           {messages.length === 0 ? (
-            <div className="py-4 text-center">
-              <p className="text-[11px] text-white/20 italic tracking-wide">暂时还没人说话，打破沉默...</p>
+            <div className={`text-center ${ultraCompact ? "py-2" : compact ? "py-2.5" : "py-4"}`}>
+              <p className={`italic tracking-wide text-white/20 ${ultraCompact ? "text-[9px]" : compact ? "text-[10px]" : "text-[11px]"}`}>暂时还没人说话，打破沉默...</p>
             </div>
           ) : (
             messages.map((msg) => {
@@ -91,16 +118,18 @@ export function RoomChatOverlay({ roomId, activeSession, socket }: RoomChatOverl
               return (
                 <div 
                   key={msg.id} 
-                  className={`animate-slide-up-subtle flex items-baseline gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors ${
+                  className={`animate-slide-up-subtle flex items-baseline rounded-lg transition-colors ${
+                    compact ? "gap-2 px-2 py-1" : "gap-2.5 px-2.5 py-1.5"
+                  } ${
                     isMe ? "bg-accent/10" : "hover:bg-white/5"
                   }`}
                 >
-                  <span className={`shrink-0 text-[10px] font-black uppercase tracking-[0.15em] ${
+                  <span className={`shrink-0 font-black uppercase tracking-[0.15em] ${compact ? "text-[9px]" : "text-[10px]"} ${
                     isMe ? "text-accent" : "text-white/40"
                   }`}>
                     {msg.senderName}
                   </span>
-                  <p className="text-[13px] leading-relaxed text-white/80 break-words flex-1">
+                  <p className={`flex-1 break-words text-white/80 ${ultraCompact ? "text-[11px] leading-snug" : compact ? "text-[12px] leading-snug" : "text-[13px] leading-relaxed"}`}>
                     {msg.content}
                   </p>
                 </div>
@@ -120,13 +149,21 @@ export function RoomChatOverlay({ roomId, activeSession, socket }: RoomChatOverl
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="分享你的感受..."
-          className="relative flex-1 rounded-full border border-white/10 bg-black/40 backdrop-blur-3xl px-5 py-2 text-sm text-white placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-accent/40 transition-all"
+          className={`relative flex-1 rounded-full border border-white/10 bg-black/40 text-white placeholder:text-white/20 transition-all focus:outline-none focus:ring-1 focus:ring-accent/40 backdrop-blur-3xl ${
+            ultraCompact
+              ? "px-3.5 py-1.5 text-[12px]"
+              : compact
+                ? "px-4 py-1.5 text-[13px]"
+                : "px-5 py-2 text-sm"
+          }`}
         />
         <Button 
             size="icon" 
             onClick={handleSend}
             disabled={!inputValue.trim()}
-            className="relative h-9 w-9 shrink-0 rounded-full bg-accent/90 hover:bg-accent text-white shadow-lg shadow-accent/20 transition-all active:scale-90 disabled:opacity-30 disabled:grayscale"
+            className={`relative shrink-0 rounded-full bg-accent/90 text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent active:scale-90 disabled:grayscale disabled:opacity-30 ${
+              compact ? "h-8 w-8" : "h-9 w-9"
+            }`}
         >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
