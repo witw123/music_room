@@ -54,6 +54,7 @@ type RoomDashboardViewProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
+  socket: any; // Using any for RoomSocket to avoid circular or complex imports here for now
 };
 
 type TabId = "queue" | "library" | "members";
@@ -99,7 +100,8 @@ export function RoomDashboardView({
   onLoadPlaylistIntoRoom,
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
-  onDeletePlaylist
+  onDeletePlaylist,
+  socket
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
   const canCreatePlaylist = roomSnapshot.queue.length > 0;
@@ -128,6 +130,7 @@ export function RoomDashboardView({
           onCopyJoinCode={onCopyJoinCode}
           onLeaveRoom={onLeaveRoom}
           onDeleteRoom={onDeleteRoom}
+          socket={socket}
         />
       </div>
 

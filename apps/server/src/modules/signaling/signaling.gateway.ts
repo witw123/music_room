@@ -165,6 +165,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return payload;
   }
 
+  @SubscribeMessage("room.chat")
+  handleRoomChat(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { roomId: string; senderId: string; senderName: string; content: string; timestamp?: number }
+  ) {
+    this.assertRealtimeClient(client, payload.roomId);
+    
+    // Broadcast chat message to everyone in the room except sender (or including sender)?
+    // Usually we broadcast to all in room except sender, and sender updates their own state, 
+    // or just broadcast to everyone. Socket.io's `client.to(room).emit` broadcasts to everyone ELSE.
+    client.to(payload.roomId).emit("room.chat", payload);
+    return payload;
+  }
+
   @SubscribeMessage("room.subscribe")
   async handleRoomSubscribe(
     @ConnectedSocket() client: Socket,

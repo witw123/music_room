@@ -958,6 +958,7 @@ export function MusicRoomApp({
                 updatePlaylistTracks(playlistId, trackIds)
               }
               onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
+              socket={socketRef.current}
             />
           ) : (
             <section className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-fade-in pt-12">

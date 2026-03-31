@@ -66,6 +66,24 @@ export function MeshStatusPanel({
               <p className="text-[10px] text-foreground-muted/70">导入曲目后，显示分片和可见节点信息。</p>
             </div>
           )}
+          
+          <div className="mt-2 flex items-center justify-between border-t border-surface-border pt-3">
+             <span className="text-[10px] text-foreground-muted">产生无用分片时可清理</span>
+             <Button
+               variant="outline"
+               size="sm"
+               className="h-7 text-xs px-3 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50 transition-colors"
+               onClick={async () => {
+                 if (confirm("确定要彻底清空本设备所有的音乐缓存文件吗？这将释放空间并解决卡流等异常，操作后页面将重新加载。")) {
+                   const { clearAllCachedTracks } = await import("@/lib/indexeddb");
+                   await clearAllCachedTracks();
+                   window.location.reload();
+                 }
+               }}
+             >
+               清除本地缓存
+             </Button>
+          </div>
         </div>
       ) : null}
     </section>

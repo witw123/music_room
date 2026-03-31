@@ -69,9 +69,9 @@ export function RoomsHomePage() {
     }
   }
 
-  async function handleCreateRoom() {
+  async function handleCreateRoom(visibility: "public" | "private" = "public") {
     try {
-      const snapshot = await musicRoomApi.createRoom("public");
+      const snapshot = await musicRoomApi.createRoom(visibility);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
       router.push(`/room/${snapshot.room.id}` as Route);
     } catch (error) {
@@ -132,14 +132,12 @@ export function RoomsHomePage() {
             这里是你的音乐房入口。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
           </p>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-            <Button size="lg" className="w-full sm:w-auto" onClick={handleCreateRoom} type="button">
+            <Button size="lg" className="w-full sm:w-auto" onClick={() => handleCreateRoom("public")} type="button">
               创建公开房间
             </Button>
-            <Link href={"/features" as Route} className="w-full sm:w-auto">
-              <Button variant="ghost" size="lg" className="w-full sm:w-auto">
-                查看功能
-              </Button>
-            </Link>
+            <Button variant="outline" size="lg" className="w-full sm:w-auto bg-surface hover:bg-surface-hover border-surface-border" onClick={() => handleCreateRoom("private")} type="button">
+              创建私密房间
+            </Button>
           </div>
         </div>
 

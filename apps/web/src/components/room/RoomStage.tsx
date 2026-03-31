@@ -1,4 +1,5 @@
 import { useState, useTransition } from "react";
+import { RoomChatOverlay } from "./RoomChatOverlay";
 import type {
   AuthSession,
   RoomMediaConnectionState,
@@ -8,6 +9,7 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
+import { RoomSocket } from "@/lib/ws-client";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -24,6 +26,7 @@ type RoomStageProps = {
   onCopyJoinCode: () => Promise<void>;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
+  socket: RoomSocket | null;
 };
 
 function getConnectionLabel(
@@ -65,7 +68,8 @@ export function RoomStage({
   mediaConnectedPeersCount,
   onCopyJoinCode,
   onLeaveRoom,
-  onDeleteRoom
+  onDeleteRoom,
+  socket
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
@@ -265,6 +269,12 @@ export function RoomStage({
           </p>
         </div>
       </div>
+      
+      <RoomChatOverlay 
+        roomId={roomSnapshot.room.id}
+        activeSession={activeSession}
+        socket={socket}
+      />
     </section>
   );
 }

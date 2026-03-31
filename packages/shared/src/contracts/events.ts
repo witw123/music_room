@@ -67,12 +67,21 @@ export const pieceAvailabilityEventSchema = z.object({
   payload: trackAvailabilityAnnouncementSchema
 });
 
+export const roomChatPayloadSchema = z.object({
+  roomId: z.string(),
+  senderId: z.string(),
+  senderName: z.string(),
+  content: z.string(),
+  timestamp: z.number().optional()
+});
+
 export type WebsocketEvent = z.infer<typeof websocketEventSchema>;
 export type RoomSubscribePayload = z.infer<typeof roomSubscribePayloadSchema>;
 export type RoomUnsubscribePayload = z.infer<typeof roomUnsubscribePayloadSchema>;
 export type RoomPresencePayload = z.infer<typeof roomPresencePayloadSchema>;
 export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPayloadSchema>;
 export type RoomDeletedPayload = z.infer<typeof roomDeletedPayloadSchema>;
+export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
 
 export type ServerToClientEvents = {
@@ -81,6 +90,7 @@ export type ServerToClientEvents = {
   "room.deleted": (payload: RoomDeletedPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
+  "room.chat": (payload: RoomChatPayload) => void;
   connect: () => void;
   disconnect: () => void;
 };
@@ -91,4 +101,5 @@ export type ClientToServerEvents = {
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
+  "room.chat": (payload: RoomChatPayload) => void;
 };

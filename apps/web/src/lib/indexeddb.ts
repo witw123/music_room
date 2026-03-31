@@ -160,3 +160,10 @@ export async function pruneCachedTracks(maxAssets: number, protectedTrackIds: st
 
   return removedTrackIds;
 }
+
+export async function clearAllCachedTracks() {
+  await musicRoomDatabase.transaction("rw", musicRoomDatabase.trackAssets, musicRoomDatabase.trackPieces, async () => {
+    await musicRoomDatabase.trackAssets.clear();
+    await musicRoomDatabase.trackPieces.clear();
+  });
+}

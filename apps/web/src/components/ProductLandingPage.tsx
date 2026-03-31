@@ -47,7 +47,7 @@ export function ProductLandingPage() {
           </h1>
           
           <p className="text-base md:text-xl text-white/50 max-w-2xl leading-relaxed mb-10">
-            Music Room 专为对听歌协同有执念的极客而生。没有杂乱的聊天系统面板和沉余的功能拼凑，从第一秒开始，一切的设计都聚焦在“现在放什么”和“谁切的歌”。
+            Music Room 专为对听歌协同有执念的极客而生。没有杂乱的聊天系统面板和沉余的功能拼凑，从第一秒开始，一切的设计都聚焦在音乐本身。
           </p>
           
           <div className="flex items-center justify-center gap-4 w-full md:w-auto">
