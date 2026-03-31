@@ -172,6 +172,25 @@ describe("RoomService", () => {
     });
   });
 
+  it("keeps the recent room record after a member leaves an existing room", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.leaveRoom(snapshot.room.id, member.id);
+
+    const recentRoom = await roomService.getRecentRoomSnapshotForSession(member.id);
+
+    expect(recentRoom).not.toBeNull();
+    expect(recentRoom?.room.id).toBe(snapshot.room.id);
+  });
+
   it("imports a playlist back into the room queue when tracks exist in the room", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

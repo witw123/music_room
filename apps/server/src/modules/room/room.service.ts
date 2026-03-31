@@ -251,7 +251,6 @@ export class RoomService {
     }
 
     await this.roomRecordRepository.persistRecord(record);
-    await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);
     return record.room;
   }
 
