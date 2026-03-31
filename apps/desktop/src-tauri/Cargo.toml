@@ -1,6 +1,6 @@
 [package]
 name = "music-room-desktop"
-version = "0.2.3"
+version = "0.2.4"
 description = "Music Room desktop shell powered by Tauri"
 authors = ["witw123"]
 license = "MIT"
