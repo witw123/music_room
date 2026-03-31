@@ -8,7 +8,6 @@ coverage/
 .env
 .env.local
 *.log
-pnpm-lock.yaml
 apps/server/prisma/dev.db
 
 .gstack/
