@@ -14,13 +14,13 @@ const featureSections = [
     eyebrow: "实时同步",
     title: "歌曲状态始终保持一致",
     body: "通过 WebRTC 与 WebSocket 的混合拓扑，房间开始播放后，每个成员看到的进度线和反馈都尽量保持一致。",
-    bullets: ["共享播放控制权", "播放 / 暂停 / 进度实时同步"]
+    bullets: ["共享播放控制权", "播放 / 暂停 / 进度实时同步","重传机制实时保证体验"]
   },
   {
     eyebrow: "本地音乐",
     title: "带着你的本地曲库，无惧流媒体",
     body: "你可以导入本地音频、快速入队，并把多人协作后的队列继续沉淀为歌单。",
-    bullets: ["支持导入本地音频文件", "队列与歌单可持续复用", "清楚记录每首歌来自谁的提交"]
+    bullets: ["支持导入本地音频文件", "队列与歌单可持续复用", "多人一同提交和管理"]
   }
 ];
 
@@ -166,7 +166,7 @@ export function ProductLandingPage() {
           {[
             { label: "毫秒级同步", val: "< 100ms" },
             { label: "支持格式", val: "FLAC/MP3" },
-            { label: "依赖平台", val: "web" },
+            { label: "依赖平台", val: "WEB" },
             { label: "网络架构", val: "P2P WebRTC" }
           ].map((stat) => (
             <div key={stat.label} className="flex flex-col items-center justify-center text-center">
@@ -305,9 +305,7 @@ export function ProductLandingPage() {
 
           <p className="mb-6 font-mono text-xs font-bold uppercase tracking-[0.2em] text-accent">Download</p>
           <h2 className="mb-6 text-3xl font-extrabold tracking-tight text-white md:text-5xl">统一下载区</h2>
-          <p className="mb-10 max-w-2xl text-base text-white/50">
-            下载桌面端或移动端安装包，和朋友一起进入同一房间，继续共享队列、同步播放和多人协作听歌。
-          </p>
+         
 
           <div className="grid w-full max-w-4xl gap-4 px-6 sm:grid-cols-2 sm:px-0">
             <a

@@ -110,10 +110,10 @@ export function MusicRoomApp({
     sessionStorageKey: "music-room-session"
   });
   const canControlPlayback = !!activeSession && !!roomSnapshot;
-  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.id;
+  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
-    !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
+    !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId;
   const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
 
   async function refreshRoom(roomId: string) {
@@ -341,7 +341,7 @@ export function MusicRoomApp({
     return () => {
       cancelled = true;
     };
-  }, [workspaceOnly, initialRoomId, activeSession?.id, roomSnapshot?.room.id, suppressRoomRecovery]);
+  }, [workspaceOnly, initialRoomId, activeSession?.userId, roomSnapshot?.room.id, suppressRoomRecovery]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId) {
@@ -445,7 +445,7 @@ export function MusicRoomApp({
     const subscribeToRoom = () => {
       socket.emit("room.subscribe", {
         roomId,
-        sessionId: activeSession?.id,
+        sessionId: activeSession?.userId,
         peerId
       });
     };
@@ -520,7 +520,7 @@ export function MusicRoomApp({
     roomSnapshot?.room.id,
     roomSnapshot?.room.joinCode,
     peerId,
-    activeSession?.id,
+    activeSession?.userId,
     mergeLocalPieceAvailability,
     deleteUploadedTrackArtifacts,
     workspaceOnly,
@@ -528,14 +528,14 @@ export function MusicRoomApp({
   ]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !activeSession?.id || !peerId || !socketRef.current) {
+    if (!roomSnapshot?.room.id || !activeSession?.userId || !peerId || !socketRef.current) {
       return;
     }
 
     const emitPresence = () => {
       socketRef.current?.emit("room.presence", {
         roomId: roomSnapshot.room.id,
-        sessionId: activeSession.id,
+        sessionId: activeSession.userId,
         peerId
       });
     };
@@ -546,7 +546,7 @@ export function MusicRoomApp({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [roomSnapshot?.room.id, activeSession?.id, peerId]);
+  }, [roomSnapshot?.room.id, activeSession?.userId, peerId]);
 
   const playback = roomSnapshot?.room.playback;
 

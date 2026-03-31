@@ -67,7 +67,7 @@ export function RoomChatOverlay({
 
     const payload: RoomChatPayload = {
       roomId,
-      senderId: activeSession.id,
+      senderId: activeSession.userId,
       senderName: activeSession.nickname,
       content: inputValue.trim(),
       timestamp: Date.now(),
@@ -113,7 +113,7 @@ export function RoomChatOverlay({
             </div>
           ) : (
             messages.map((msg) => {
-              const isMe = msg.senderId === activeSession?.id;
+              const isMe = msg.senderId === activeSession?.userId;
 
               return (
                 <div 

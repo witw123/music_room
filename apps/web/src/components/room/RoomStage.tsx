@@ -75,7 +75,7 @@ export function RoomStage({
   const [showSettings, setShowSettings] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const isSourceOwner =
-    !!activeSession && activeSession.id === roomSnapshot.room.playback.sourceSessionId;
+    !!activeSession && activeSession.userId === roomSnapshot.room.playback.sourceSessionId;
   const compactStage = viewportHeight !== null && viewportHeight < 820;
   const ultraCompactStage = viewportHeight !== null && viewportHeight < 720;
 

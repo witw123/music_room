@@ -104,7 +104,7 @@ export function BottomPlayer({
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const localTrackAvailable = !!uploadedTracks[currentTrack?.id ?? ""];
   const mediaStatusLabel = getMediaStatusLabel(mediaConnectionState);
-  const sourceOwnedByMe = roomSnapshot?.room.playback.sourceSessionId === activeSession?.id;
+  const sourceOwnedByMe = roomSnapshot?.room.playback.sourceSessionId === activeSession?.userId;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-background-secondary/88 px-4 pb-[calc(env(safe-area-inset-bottom)+0.9rem)] pt-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl transition-all lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-6 lg:px-8">

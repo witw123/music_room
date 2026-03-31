@@ -80,7 +80,7 @@ export function QueuePanel({
             const isCurrent = currentQueueItemId === item.id;
             const canRemoveQueueItem =
               !!activeSession &&
-              (hostId === activeSession.id || item.requestedById === activeSession.id);
+              (hostId === activeSession.userId || item.requestedById === activeSession.userId);
 
             return (
               <article

@@ -32,7 +32,7 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     bitrate: null,
     fileHash,
     artworkUrl: null,
-    ownerSessionId: session.id,
+    ownerSessionId: session.userId,
     ownerNickname: session.nickname,
     sourceType: "local_upload" as const
   };

@@ -95,7 +95,7 @@ export function TrackListSection({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 mt-auto">
-                  {track.ownerSessionId === activeSession?.id ? (
+                  {track.ownerSessionId === activeSession?.userId ? (
                     <Button
                       variant="ghost"
                       className="h-10 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"

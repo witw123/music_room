@@ -178,7 +178,7 @@ export function useTrackUploads(options: {
       const objectUrl = URL.createObjectURL(file);
       const track = await buildTrackMeta(file, objectUrl, activeSession);
       const registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
-        sessionId: activeSession.id,
+        sessionId: activeSession.userId,
         ...track
       });
 
