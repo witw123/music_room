@@ -51,6 +51,27 @@ export function RoomsHomePage() {
     void refreshRecentRoom();
   }, [activeSession?.id, refreshSession]);
 
+  useEffect(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    const refresh = () => {
+      void refreshAvailableRooms();
+      void refreshRecentRoom();
+    };
+
+    const intervalId = window.setInterval(refresh, 10000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [activeSession?.id]);
+
   async function refreshAvailableRooms() {
     try {
       const rooms = await musicRoomApi.listRooms();
@@ -89,6 +110,32 @@ export function RoomsHomePage() {
       const snapshot = await musicRoomApi.joinRoomByCode(code.trim());
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
       router.push(`/room/${snapshot.room.id}` as Route);
+    } catch (error) {
+      setStatusMessage(toUserFacingError(error));
+    }
+  }
+
+  async function handleReturnToRecentRoom() {
+    if (!recentRoom) {
+      return;
+    }
+
+    try {
+      const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
+      if (recovered) {
+        window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
+        router.push(`/room/${recovered.room.id}` as Route);
+        return;
+      }
+
+      if (recentRoom.room.visibility === "public") {
+        const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
+        window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
+        router.push(`/room/${joined.room.id}` as Route);
+        return;
+      }
+
+      setStatusMessage("这个最近房间当前无法直接恢复，请让房主重新邀请你加入。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -226,7 +273,7 @@ export function RoomsHomePage() {
                   <Button
                     variant="glass"
                     className="w-full border-accent/20 hover:border-accent hover:bg-accent/10"
-                    onClick={() => router.push(`/room/${recentRoom.room.id}` as Route)}
+                    onClick={() => startTransition(() => void handleReturnToRecentRoom())}
                     type="button"
                   >
                     回到最近房间
