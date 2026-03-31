@@ -1,16 +1,17 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { isDesktopRuntime, pickDesktopAudioFilesAsFileObjects } from "@/lib/desktop-api";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, { objectUrl: string }>;
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
-  onFilesSelected: (files: FileList | null) => Promise<void>;
+  onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
@@ -27,6 +28,11 @@ export function TrackListSection({
   onPlayTrack
 }: TrackListSectionProps) {
   const [isPending, startTransition] = useTransition();
+  const [desktopPickerAvailable, setDesktopPickerAvailable] = useState(false);
+
+  useEffect(() => {
+    setDesktopPickerAvailable(isDesktopRuntime());
+  }, []);
 
   return (
     <section className="flex flex-col gap-8 relative w-full">
@@ -54,6 +60,24 @@ export function TrackListSection({
           onChange={(event) => startTransition(() => void onFilesSelected(event.target.files))}
         />
       </label>
+
+      {desktopPickerAvailable ? (
+        <div className="-mt-4 flex justify-center">
+          <Button
+            variant="outline"
+            type="button"
+            className="bg-surface/50"
+            onClick={() =>
+              startTransition(async () => {
+                const files = await pickDesktopAudioFilesAsFileObjects();
+                await onFilesSelected(files);
+              })
+            }
+          >
+            从桌面文件选择器导入
+          </Button>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2 mt-4">
         {tracks.length > 0 ? (

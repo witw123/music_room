@@ -5,10 +5,13 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "turbo run dev --parallel",
+    "dev:desktop": "turbo run dev --filter=@music-room/server --filter=@music-room/web --filter=@music-room/desktop --parallel",
     "build": "turbo run build",
+    "build:desktop": "turbo run build --filter=@music-room/desktop",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "pack:desktop": "turbo run pack --filter=@music-room/desktop",
     "deploy:check": "node scripts/deploy-check.mjs",
     "deploy:linux": "sh scripts/deploy-linux.sh"
   },
@@ -17,6 +20,8 @@
       "@nestjs/core",
       "@prisma/client",
       "@prisma/engines",
+      "electron",
+      "electron-builder",
       "esbuild",
       "prisma",
       "sharp"

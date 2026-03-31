@@ -166,7 +166,7 @@ export function useTrackUploads(options: {
     setUploadedTracks((current) => removeTracksFromUploads(current, removedTrackIds));
   }
 
-  async function handleFilesSelected(files: FileList | null) {
+  async function handleFilesSelected(files: FileList | File[] | null) {
     if (!files || !activeSession || !roomSnapshot) {
       return;
     }

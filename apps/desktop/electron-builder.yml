@@ -1,0 +1,23 @@
+appId: com.musicroom.desktop
+productName: Music Room
+directories:
+  output: release
+files:
+  - dist/main/**/*
+  - dist/preload/**/*
+  - package.json
+asar: true
+win:
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
+  target:
+    - nsis
+mac:
+  target:
+    - dmg
+linux:
+  target:
+    - AppImage
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

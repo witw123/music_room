@@ -798,7 +798,7 @@ export function MusicRoomApp({
     }
   }
 
-  async function handleFilesSelected(files: FileList | null) {
+  async function handleFilesSelected(files: FileList | File[] | null) {
     try {
       await handleTrackFilesSelected(files);
     } catch (error) {
