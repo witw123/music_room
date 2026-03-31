@@ -1,14 +1,14 @@
 import Link from "next/link";
-import type { Route } from "next";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
+import { githubReleasesUrl } from "@/lib/client-shell";
 
 const featureSections = [
   {
     eyebrow: "房间系统",
     title: "每一个房间，都围绕共享队列展开",
     body: "彻底抛弃了聊天框为主的传统房间模式。在这里，所有成员围绕同一套播放序列协作，当前播放与下一首始终是视觉的核心锚点。",
-    bullets: ["房间页面直接进入工作台", "断线或刷新也能秒速恢复最近连线", "基于邀请码极其克制的加入流程"]
+    bullets: ["进入房间即可开始同播", "断线或刷新也能秒速恢复最近连线", "基于邀请码极其克制的加入流程"]
   },
   {
     eyebrow: "实时体验",
@@ -50,12 +50,15 @@ export function ProductLandingPage() {
             Music Room 专为对听歌协同有执念的极客而生。没有杂乱的聊天系统面板和沉余的功能拼凑，从第一秒开始，一切的设计都聚焦在音乐本身。
           </p>
           
-          <div className="flex items-center justify-center gap-4 w-full md:w-auto">
-            <Link href={"/auth?redirectTo=/rooms" as Route} className="w-full md:w-auto">
+          <div className="flex flex-col items-center justify-center gap-4 w-full md:w-auto sm:flex-row">
+            <Link href={githubReleasesUrl} className="w-full md:w-auto" target="_blank" rel="noreferrer">
               <Button size="lg" className="w-full md:w-auto h-14 px-10 text-base md:text-lg bg-accent hover:bg-accent-hover text-white rounded-xl transition-all border border-transparent font-medium shadow-[0_0_20px_rgba(0,112,243,0.3)] hover:shadow-[0_0_30px_rgba(0,112,243,0.5)]">
-                开启音乐之旅
+                下载应用
               </Button>
             </Link>
+            <p className="max-w-md text-sm leading-relaxed text-white/45">
+              下载应用，和朋友一起创建房间、共享队列、实时同播你们真正想听的音乐。
+            </p>
           </div>
           
           <p className="text-xs text-white/30 mt-6 font-mono hidden md:block select-none">Requires modern browser. Peer-to-peer technology empowered.</p>
@@ -174,11 +177,45 @@ export function ProductLandingPage() {
            ))}
         </section>
 
+        <section className="mb-32 w-full rounded-[32px] border border-white/8 bg-[linear-gradient(135deg,#050505_0%,#0b1020_100%)] px-6 py-10 sm:px-8 lg:px-12">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.28em] text-accent">Download</p>
+              <h2 className="mb-4 text-3xl font-bold text-white sm:text-4xl">带上你的设备，随时加入同一间音乐房。</h2>
+              <p className="text-sm leading-relaxed text-white/60 sm:text-base">
+                无论在桌面端还是移动端，你都可以登录自己的账号，恢复最近的房间，继续共享队列、同步播放和多人协作聆听。
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:min-w-[420px]">
+              <a
+                href={githubReleasesUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 transition-colors hover:border-accent/40 hover:bg-accent/10"
+              >
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-accent">Desktop</p>
+                <h3 className="mb-2 text-xl font-semibold text-white">Windows / macOS</h3>
+                <p className="text-sm leading-relaxed text-white/55">下载桌面版本，在更稳定的环境里管理房间、导入本地音乐并保持长时间同播。</p>
+              </a>
+              <a
+                href={githubReleasesUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 transition-colors hover:border-accent/40 hover:bg-accent/10"
+              >
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-accent">Mobile</p>
+                <h3 className="mb-2 text-xl font-semibold text-white">iOS / Android</h3>
+                <p className="text-sm leading-relaxed text-white/55">在移动端快速回到正在进行的房间，让同步播放和共享队列始终跟着你走。</p>
+              </a>
+            </div>
+          </div>
+        </section>
+
         {/* === FEATURE BENTO / ALTERNATING BLOCKS === */}
         <section className="w-full flex flex-col gap-24 md:gap-32 mb-40">
            <div className="text-center mb-10 w-full flex flex-col items-center">
              <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">不为功能而功能，只为核心工作流让路。</h2>
-             <p className="text-white/50 max-w-2xl text-base">在这个工作台中，除了纯粹的聆听与实时的协作确认，我们剥离了所有会分散注意力的冗余元素。</p>
+             <p className="text-white/50 max-w-2xl text-base">在这个空间里，除了纯粹的聆听与实时的协作确认，我们剥离了所有会分散注意力的冗余元素。</p>
            </div>
 
           {featureSections.map((section, idx) => {
@@ -302,11 +339,11 @@ export function ProductLandingPage() {
             
             <p className="text-xs uppercase font-bold tracking-[0.2em] text-accent mb-6 font-mono">Start Session</p>
             <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">准备好加入共振节点了吗？</h2>
-            <p className="text-base text-white/50 mb-10 max-w-sm">注册并登录系统账号，你的所有协作队列、好友房间以及资产播放列表都会自动漫游。</p>
+            <p className="text-base text-white/50 mb-10 max-w-sm">准备好你的播放列表，下载应用，和朋友一起进入同一间房，把一次听歌变成一次真正同步的现场。</p>
             
-            <Link href={"/auth?redirectTo=/rooms" as Route}>
+            <Link href={githubReleasesUrl} target="_blank" rel="noreferrer">
               <Button size="lg" className="h-14 px-10 text-lg rounded-xl bg-accent hover:bg-accent-hover text-white transition-all shadow-[0_4px_14px_0_rgba(0,112,243,0.39)] hover:shadow-[0_6px_20px_rgba(0,112,243,0.23)]">
-                开始使用 Music Room
+                前往 GitHub Releases
               </Button>
             </Link>
         </section>

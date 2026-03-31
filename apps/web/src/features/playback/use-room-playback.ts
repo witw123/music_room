@@ -51,7 +51,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     };
 
     tick();
-    const timer = window.setInterval(tick, 250);
+    const timer = window.setInterval(tick, 750);
     return () => window.clearInterval(timer);
   }, [
     audioRef,

@@ -7,6 +7,8 @@ import type { Route } from "next";
 import type { RoomSnapshot } from "@music-room/shared";
 import { TopBar } from "@/components/TopBar";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -15,6 +17,12 @@ const lastRoomStorageKey = "music-room-last-room";
 
 export function RoomsHomePage() {
   const router = useRouter();
+  const clientPlatform = getClientPlatformFromBrowser();
+  const workspaceEntryHref = buildAppEntryHref(clientPlatform);
+  const authEntryHref = buildWorkspaceAuthHref({
+    clientPlatform,
+    redirectTo: workspaceEntryHref
+  });
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [recentRoom, setRecentRoom] = useState<RoomSnapshot | null>(null);
@@ -37,9 +45,9 @@ export function RoomsHomePage() {
     }
 
     if (!activeSession) {
-      router.replace("/auth?redirectTo=/rooms" as Route);
+      router.replace(authEntryHref as Route);
     }
-  }, [activeSession, hydrated, router]);
+  }, [activeSession, hydrated, router, authEntryHref]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -94,7 +102,7 @@ export function RoomsHomePage() {
     try {
       const snapshot = await musicRoomApi.createRoom(visibility);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-      router.push(`/room/${snapshot.room.id}` as Route);
+      router.push(workspaceEntryHref as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -109,7 +117,7 @@ export function RoomsHomePage() {
     try {
       const snapshot = await musicRoomApi.joinRoomByCode(code.trim());
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-      router.push(`/room/${snapshot.room.id}` as Route);
+      router.push(workspaceEntryHref as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -124,13 +132,13 @@ export function RoomsHomePage() {
       const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
       if (recovered) {
         window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
-        router.push(`/room/${recovered.room.id}` as Route);
+        router.push(workspaceEntryHref as Route);
         return;
       }
 
       const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
       window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-      router.push(`/room/${joined.room.id}` as Route);
+      router.push(workspaceEntryHref as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -144,7 +152,7 @@ export function RoomsHomePage() {
     }
 
     clearIdentity();
-    router.replace("/auth?redirectTo=/rooms" as Route);
+    router.replace(authEntryHref as Route);
   }
 
   const visibleRooms = useMemo(
@@ -171,7 +179,7 @@ export function RoomsHomePage() {
             </span>
           </h1>
           <p className="mb-8 max-w-xl text-sm leading-relaxed text-foreground-muted sm:text-base md:text-lg">
-            这里是你的音乐房入口。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
+            这里是你的房间列表。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
           </p>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button size="lg" className="w-full sm:w-auto" onClick={() => handleCreateRoom("public")} type="button">
@@ -213,7 +221,7 @@ export function RoomsHomePage() {
                 onClick={() => startTransition(() => void handleJoinRoom(joinCode))}
                 type="button"
               >
-                直接进入工作台
+                直接进入房间
               </Button>
 
               {statusMessage ? (
@@ -293,7 +301,7 @@ export function RoomsHomePage() {
                   </svg>
                 </div>
                 <p className="text-sm text-foreground-muted opacity-80">
-                  还没有历史房间记录。创建一个房间后，这里会成为你的快速返回入口。
+                  还没有历史房间记录。创建一个房间后，这里会成为你的快速返回列表。
                 </p>
               </div>
             )}
@@ -346,7 +354,7 @@ export function RoomsHomePage() {
                       <div className="mt-1">
                         <h3 className="truncate font-semibold text-foreground">{host} 的房间</h3>
                         <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-foreground-muted">
-                          进入后会直接跳到房间工作台，当前播放、共享队列和成员状态都在同一处完成。
+                          进入后即可参与当前播放、共享队列和成员协作，所有动作都在同一处完成。
                         </p>
                       </div>
                       <Button

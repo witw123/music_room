@@ -7,6 +7,8 @@ import type { Route } from "next";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { buildAppEntryHref, githubReleasesUrl } from "@/lib/client-shell";
+import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
 
@@ -15,7 +17,8 @@ type AuthMode = "login" | "register";
 export function AuthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") ?? "/rooms";
+  const clientPlatform = getClientPlatformFromBrowser();
+  const redirectTo = searchParams.get("redirectTo") ?? buildAppEntryHref(clientPlatform);
   const [mode, setMode] = useState<AuthMode>("login");
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -39,8 +42,10 @@ export function AuthPage() {
       return;
     }
 
-    router.replace((redirectTo.startsWith("/") ? redirectTo : "/rooms") as Route);
-  }, [activeSession, hydrated, redirectTo, router]);
+    router.replace(
+      (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref(clientPlatform)) as Route
+    );
+  }, [activeSession, hydrated, redirectTo, router, clientPlatform]);
 
   async function handleLogin() {
     if (!loginUsername.trim() || !loginPassword) {
@@ -52,7 +57,9 @@ export function AuthPage() {
       const session = await musicRoomApi.login(loginUsername.trim(), loginPassword);
       setActiveSession(session);
       setStatusMessage(`欢迎回来，${session.nickname}。`);
-      router.replace((redirectTo.startsWith("/") ? redirectTo : "/rooms") as Route);
+      router.replace(
+        (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref(clientPlatform)) as Route
+      );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -72,7 +79,9 @@ export function AuthPage() {
       );
       setActiveSession(session);
       setStatusMessage(`账号已创建，欢迎你，${session.nickname}。`);
-      router.replace((redirectTo.startsWith("/") ? redirectTo : "/rooms") as Route);
+      router.replace(
+        (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref(clientPlatform)) as Route
+      );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -226,8 +235,13 @@ export function AuthPage() {
               )}
 
               <div className="mt-8 text-center pt-8 border-t border-white/5">
-                <Link href={"/features" as Route} className="text-xs font-medium text-white/40 hover:text-white transition-colors">
-                  不确定是否需要？查看功能结构 &rarr;
+                <Link
+                  href={githubReleasesUrl}
+                  className="text-xs font-medium text-white/40 hover:text-white transition-colors"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  下载应用版本与更新包 &rarr;
                 </Link>
               </div>
             </div>

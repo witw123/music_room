@@ -84,13 +84,14 @@ export function useTrackUploads(options: {
     let disposed = false;
 
     const restoreCachedAssets = async () => {
+      const uploadedTrackIds = new Set(uploadedTrackUrlsRef.current.keys());
       const uncachedTrackIds = roomSnapshot.tracks
-        .filter((track) => !uploadedTracks[track.id])
+        .filter((track) => !uploadedTrackIds.has(track.id))
         .map((track) => track.id);
 
       if (uncachedTrackIds.length === 0) {
         if (!disposed) {
-          setCachedTrackCount(Object.keys(uploadedTracks).length);
+          setCachedTrackCount(uploadedTrackIds.size);
         }
         return;
       }
@@ -98,7 +99,7 @@ export function useTrackUploads(options: {
       const cachedAssets = await getCachedTrackAssets(uncachedTrackIds);
       if (disposed || cachedAssets.length === 0) {
         if (!disposed) {
-          setCachedTrackCount(Object.keys(uploadedTracks).length);
+          setCachedTrackCount(uploadedTrackIds.size);
         }
         return;
       }
@@ -152,7 +153,7 @@ export function useTrackUploads(options: {
     return () => {
       disposed = true;
     };
-  }, [roomSnapshot, uploadedTracks, peerId, activeSession, onAvailability, emitAvailability]);
+  }, [roomSnapshot, peerId, activeSession, onAvailability, emitAvailability]);
 
   async function trimLocalCache(protectedTrackIds: string[]) {
     const removedTrackIds = await pruneCachedTracks(maxCachedTracks, protectedTrackIds);

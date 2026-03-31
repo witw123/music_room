@@ -1,8 +1,8 @@
 const queueFeatures = [
   "共享播放队列",
   "成员点歌入队",
-  "房主管控排序与跳过",
-  "客户端缓存与预取"
+  "房主管理排序与切换",
+  "本地缓存与预取"
 ];
 
 export function RoomSummaryCard() {
@@ -13,7 +13,7 @@ export function RoomSummaryCard() {
           核心体验
         </p>
         <h2 className="text-3xl font-semibold">
-          一个房间内完成建房、同播、点歌、缓存和协作歌单。
+          一间房内完成建房、同播、点歌、缓存和协作歌单。
         </h2>
       </div>
       <ul className="grid gap-3 text-sm text-sand/80">
@@ -29,4 +29,3 @@ export function RoomSummaryCard() {
     </section>
   );
 }
-

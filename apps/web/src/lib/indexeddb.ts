@@ -30,6 +30,11 @@ export class MusicRoomDatabase extends Dexie {
       trackAssets: "&trackId, fileHash, cachedAt",
       trackPieces: "&pieceId, trackId, peerId, [trackId+peerId], createdAt"
     });
+    this.version(3).stores({
+      trackAssets: "&trackId, fileHash, cachedAt",
+      trackPieces:
+        "&pieceId, trackId, peerId, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], createdAt"
+    });
   }
 }
 
@@ -107,12 +112,12 @@ export async function getCachedPiece(
   peerId: string,
   chunkIndex: number
 ) {
-  const pieces = await musicRoomDatabase.trackPieces
-    .where("[trackId+peerId]")
-    .equals([trackId, peerId])
-    .toArray();
-
-  return pieces.find((piece) => piece.chunkIndex === chunkIndex) ?? null;
+  return (
+    (await musicRoomDatabase.trackPieces
+      .where("[trackId+peerId+chunkIndex]")
+      .equals([trackId, peerId, chunkIndex])
+      .first()) ?? null
+  );
 }
 
 export async function getCachedPiecesForTrack(trackId: string, peerId: string) {

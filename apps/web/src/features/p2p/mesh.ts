@@ -38,6 +38,20 @@ type PendingPieceRequest = {
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
+type PieceFrameHeader = {
+  kind: "send-piece";
+  trackId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  mimeType: string;
+  pieceHash: string;
+};
+
+type BinaryPieceMessage = PieceFrameHeader & {
+  header: PieceFrameHeader;
+  payload: ArrayBuffer;
+};
+
 export class P2PMesh {
   private readonly peers = new Map<string, PeerEntry>();
   private readonly pendingPieceRequests = new Map<string, PendingPieceRequest>();
@@ -259,21 +273,13 @@ export class P2PMesh {
   }
 
   private bindChannel(peerId: string, channel: RTCDataChannel) {
+    channel.binaryType = "arraybuffer";
+
     channel.onmessage = async (event) => {
-      let parsedMessage: unknown;
-
-      try {
-        parsedMessage = JSON.parse(String(event.data));
-      } catch {
+      const message = await parseIncomingMessage(event.data);
+      if (!message) {
         return;
       }
-
-      const result = p2pDataMessageSchema.safeParse(parsedMessage);
-      if (!result.success) {
-        return;
-      }
-
-      const message: P2PDataMessage = result.data;
 
       if (message.kind === "request-piece") {
         if (channel.readyState !== "open") {
@@ -286,25 +292,28 @@ export class P2PMesh {
         }
         const chunkIndexes = await getCachedPieceIndexes(message.trackId, this.localPeerId);
 
-        const payload: P2PDataMessage = {
-          kind: "send-piece",
-          trackId: message.trackId,
-          chunkIndex: piece.chunkIndex,
-          totalChunks: chunkIndexes.length,
-          mimeType: "audio/mpeg",
-          pieceHash: piece.hash,
-          payloadBase64: arrayBufferToBase64(piece.payload)
-        };
-
         if (channel.readyState !== "open") {
           return;
         }
 
-        channel.send(JSON.stringify(payload));
+        channel.send(
+          buildPieceFrame(
+            {
+              kind: "send-piece",
+              trackId: message.trackId,
+              chunkIndex: piece.chunkIndex,
+              totalChunks: chunkIndexes.length,
+              mimeType: "audio/mpeg",
+              pieceHash: piece.hash
+            },
+            piece.payload
+          )
+        );
         return;
       }
 
-      if (message.kind === "send-piece") {
+      if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
+        const { header, payload } = message;
         const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
         const pendingRequest = this.pendingPieceRequests.get(requestKey);
         if (pendingRequest) {
@@ -312,7 +321,6 @@ export class P2PMesh {
           this.pendingPieceRequests.delete(requestKey);
         }
 
-        const payload = base64ToArrayBuffer(message.payloadBase64);
         const isValid = await validateTrackPiecePayload(payload, message.pieceHash);
         if (!isValid) {
           this.callbacks.onPieceRequestTimeout?.({
@@ -335,10 +343,10 @@ export class P2PMesh {
           }
         ]);
         this.callbacks.onPieceReceived({
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex,
+          trackId: header.trackId,
+          chunkIndex: header.chunkIndex,
           totalChunks: pendingRequest?.expectedTotalChunks ?? message.totalChunks,
-          mimeType: message.mimeType
+          mimeType: header.mimeType
         });
       }
     };
@@ -387,26 +395,120 @@ export class P2PMesh {
   }
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-  let binary = "";
-  const bytes = new Uint8Array(buffer);
+async function parseIncomingMessage(data: unknown): Promise<
+  P2PDataMessage | BinaryPieceMessage | null
+> {
+  if (typeof data === "string") {
+    let parsedMessage: unknown;
 
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
+    try {
+      parsedMessage = JSON.parse(data);
+    } catch {
+      return null;
+    }
+
+    const result = p2pDataMessageSchema.safeParse(parsedMessage);
+    return result.success ? result.data : null;
   }
 
-  return btoa(binary);
+  const buffer = await toArrayBuffer(data);
+  if (!buffer) {
+    return null;
+  }
+
+  const frame = decodePieceFrame(buffer);
+  if (!frame) {
+    return null;
+  }
+
+  return {
+    ...frame.header,
+    header: frame.header,
+    payload: frame.payload
+  };
 }
 
-function base64ToArrayBuffer(base64: string) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
+async function toArrayBuffer(data: unknown) {
+  if (data instanceof ArrayBuffer) {
+    return data;
   }
 
-  return bytes.buffer;
+  if (ArrayBuffer.isView(data)) {
+    const view = data;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength).slice().buffer;
+  }
+
+  if (data instanceof Blob) {
+    return data.arrayBuffer();
+  }
+
+  return null;
+}
+
+function buildPieceFrame(header: PieceFrameHeader, payload: ArrayBuffer) {
+  const encoder = new TextEncoder();
+  const headerBytes = encoder.encode(JSON.stringify(header));
+  const payloadBytes = new Uint8Array(payload);
+  const frame = new Uint8Array(4 + headerBytes.byteLength + payloadBytes.byteLength);
+
+  new DataView(frame.buffer).setUint32(0, headerBytes.byteLength, false);
+  frame.set(headerBytes, 4);
+  frame.set(payloadBytes, 4 + headerBytes.byteLength);
+
+  return frame.buffer;
+}
+
+function decodePieceFrame(buffer: ArrayBuffer) {
+  if (buffer.byteLength < 5) {
+    return null;
+  }
+
+  const view = new DataView(buffer);
+  const headerLength = view.getUint32(0, false);
+  const payloadOffset = 4 + headerLength;
+
+  if (headerLength <= 0 || payloadOffset > buffer.byteLength) {
+    return null;
+  }
+
+  const headerBytes = new Uint8Array(buffer, 4, headerLength);
+  const payload = buffer.slice(payloadOffset);
+
+  let parsedHeader: unknown;
+  try {
+    parsedHeader = JSON.parse(new TextDecoder().decode(headerBytes));
+  } catch {
+    return null;
+  }
+
+  if (!isPieceFrameHeader(parsedHeader)) {
+    return null;
+  }
+
+  return {
+    header: parsedHeader,
+    payload
+  };
+}
+
+function isPieceFrameHeader(value: unknown): value is PieceFrameHeader {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const header = value as Record<string, unknown>;
+  return (
+    header.kind === "send-piece" &&
+    typeof header.trackId === "string" &&
+    typeof header.chunkIndex === "number" &&
+    typeof header.totalChunks === "number" &&
+    typeof header.mimeType === "string" &&
+    typeof header.pieceHash === "string"
+  );
+}
+
+function isBinaryPieceMessage(value: P2PDataMessage | BinaryPieceMessage): value is BinaryPieceMessage {
+  return "header" in value && "payload" in value;
 }
 
 function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {

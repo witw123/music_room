@@ -4,21 +4,43 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-03-31
+
+### 新增
+
+- 新增 `/app` 客户端入口页，用于承载登录、房间列表与房间内功能
+- 新增客户端路由守卫，生产环境下限制浏览器直接访问应用内页面
+- 新增官网下载区与 GitHub Releases 下载入口
+- 新增分片调度器测试，覆盖窗口优先级、优选 peer 与超时冷却
+
 ### 调整
 
-- 桌面端从 Electron 迁移为 Tauri 2，保留远程前端壳模式
-- 桌面端生产环境继续默认加载 `https://witw.top`
-- 桌面端 GitHub Actions 构建链路切换为 Tauri Windows、macOS、Linux 打包
-- Web 端桌面桥接从 `window.electron` 迁移为 Tauri `invoke`
+- 浏览器默认显示官网展示页，桌面端与移动端默认进入应用内页面
+- 桌面端与移动端壳的默认加载地址改为 `/app?client=...`
+- 官网、房间页与 README 文案统一收敛为面向用户的产品表达
+- README 重写为项目介绍导向，弱化内部实现口径
+
+### 性能
+
+- 分片传输由 `base64 + JSON` 调整为二进制通道，降低 CPU 与内存开销
+- 分片请求从整首扫描改为播放窗口优先调度，限制每曲目与每 peer 并发
+- IndexedDB 增加精确索引，降低按单片读取时的全量扫描开销
+- 播放同步从高频轮询改为事件主导加低频校正，减少无意义校准
+
+### 修复
+
+- 修复首次通过快捷方式启动桌面端时窗口可能被隐藏的问题
+- 修复房间页、登录页与顶部导航中残留的旧入口跳转
+- 修复官网和页面文案中混入实现说明式表达的问题
 
 ## [0.2.2] - 2026-03-31
 
 ### 调整
 
-- 桌面端从 Electron 正式迁移为 Tauri 2
+- 桌面端从 Electron 正式迁移到 Tauri 2
 - 桌面端本地构建链路切换为 Rust + Tauri CLI
 - GitHub Actions 桌面端构建链路切换为 Tauri Windows、macOS、Linux 打包
-- Web 端桌面桥接从 `window.electron` 迁移为 Tauri `invoke`
+- Web 端桌面桥接从 `window.electron` 迁移到 Tauri `invoke`
 
 ### 修复
 
@@ -35,7 +57,7 @@
 ### 调整
 
 - 统一仓库工作区版本号到 `0.2.1`
-- Release 现已覆盖 Windows、macOS、Linux、Android 四个平台
+- Release 覆盖 Windows、macOS、Linux、Android 四个平台
 
 ### 修复
 

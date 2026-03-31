@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Music Room",
   webDir: "www",
   server: {
-    url: "https://witw.top",
+    url: "https://witw.top/app?client=mobile",
     cleartext: false,
     androidScheme: "https"
   }

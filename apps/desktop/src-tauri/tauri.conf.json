@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Music Room",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "identifier": "top.witw.musicroom",
   "build": {
-    "frontendDist": "https://witw.top",
-    "devUrl": "http://localhost:3000"
+    "frontendDist": "https://witw.top/app?client=desktop",
+    "devUrl": "http://localhost:3000/app?client=desktop"
   },
   "app": {
     "windows": [
@@ -18,7 +18,7 @@
         "minHeight": 760,
         "resizable": true,
         "fullscreen": false,
-        "visible": false
+        "visible": true
       }
     ],
     "security": {

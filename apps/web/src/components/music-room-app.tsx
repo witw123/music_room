@@ -9,13 +9,10 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import {
-  currentTrackChunkRequestLimit,
-  getMissingChunkIndexes,
+  ChunkScheduler,
   getWebRTCIceServers,
   RoomMediaMesh,
-  selectChunkSource,
-  P2PMesh,
-  upcomingTrackChunkRequestLimit
+  P2PMesh
 } from "@/features/p2p";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -32,10 +29,38 @@ import { getPlaybackEffectivePositionMs, useRoomPlayback } from "@/features/play
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
+import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
+const localPlaybackSoftDriftMs = 180;
+const localPlaybackHardDriftMs = 1_200;
+
+function syncLocalPlaybackWindow(audio: HTMLAudioElement, expectedSeconds: number, isPlaying: boolean) {
+  if (!Number.isFinite(audio.currentTime)) {
+    return;
+  }
+
+  const driftMs = (expectedSeconds - audio.currentTime) * 1000;
+  const absDriftMs = Math.abs(driftMs);
+
+  if (!isPlaying || absDriftMs >= localPlaybackHardDriftMs) {
+    if (absDriftMs >= localPlaybackSoftDriftMs) {
+      audio.currentTime = Math.max(0, expectedSeconds);
+    }
+    audio.playbackRate = 1;
+    return;
+  }
+
+  if (absDriftMs <= localPlaybackSoftDriftMs) {
+    audio.playbackRate = 1;
+    return;
+  }
+
+  audio.playbackRate = driftMs > 0 ? 1.04 : 0.96;
+}
 
 type MusicRoomAppProps = {
   workspaceOnly?: boolean;
@@ -47,14 +72,19 @@ export function MusicRoomApp({
   initialRoomId = null
 }: MusicRoomAppProps) {
   const router = useRouter();
+  const clientPlatform = getClientPlatformFromBrowser();
+  const workspaceEntryHref = buildAppEntryHref(clientPlatform);
+  const authEntryHref = buildWorkspaceAuthHref({
+    clientPlatform,
+    redirectTo: initialRoomId ? `/room/${initialRoomId}` : workspaceEntryHref
+  });
   const audioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
   const meshRef = useRef<P2PMesh | null>(null);
+  const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
-  const requestedPiecesRef = useRef<Map<string, number>>(new Map());
-  const failedPiecePeersRef = useRef<Map<string, Set<string>>>(new Map());
   const [isPending, startTransition] = useTransition();
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
@@ -76,7 +106,7 @@ export function MusicRoomApp({
     clearIdentity,
     refreshSession
   } = useSessionIdentity({
-    initialStatusMessage: "登录后即可进入音乐房工作台。",
+    initialStatusMessage: "登录后即可进入你的音乐房。",
     sessionStorageKey: "music-room-session"
   });
   const canControlPlayback = !!activeSession && !!roomSnapshot;
@@ -100,6 +130,48 @@ export function MusicRoomApp({
       }
     }));
   }, []);
+
+  const mergeLocalPieceAvailability = useCallback(
+    (trackId: string, chunkIndex: number, totalChunks: number) => {
+      if (!peerId || !activeSession || !roomSnapshot) {
+        return;
+      }
+
+      setAvailabilityByTrack((current) => {
+        const trackAvailability = current[trackId] ?? {};
+        const existing = trackAvailability[peerId];
+        const availableChunkSet = new Set(existing?.availableChunks ?? []);
+        const nextChunkCountBefore = availableChunkSet.size;
+        availableChunkSet.add(chunkIndex);
+
+        if (
+          existing &&
+          availableChunkSet.size === nextChunkCountBefore &&
+          existing.totalChunks >= totalChunks
+        ) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [trackId]: {
+            ...trackAvailability,
+            [peerId]: {
+              roomId: roomSnapshot.room.id,
+              trackId,
+              ownerPeerId: peerId,
+              nickname: activeSession.nickname,
+              totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
+              availableChunks: [...availableChunkSet].sort((left, right) => left - right),
+              source: existing?.source ?? "local_cache",
+              announcedAt: new Date().toISOString()
+            }
+          }
+        };
+      });
+    },
+    [activeSession, peerId, roomSnapshot]
+  );
 
   const stableEmitAvailability = useCallback(
     (announcement: TrackAvailabilityAnnouncement) => socketRef.current?.emit("piece.availability", announcement),
@@ -212,8 +284,8 @@ export function MusicRoomApp({
       return;
     }
 
-    router.replace(`/auth?redirectTo=${encodeURIComponent(`/room/${initialRoomId}`)}` as Route);
-  }, [workspaceOnly, initialRoomId, activeSession, hydrated, router]);
+    router.replace(authEntryHref as Route);
+  }, [workspaceOnly, initialRoomId, activeSession, hydrated, router, authEntryHref]);
 
   useEffect(() => {
     const storedPeerId = window.sessionStorage.getItem(peerStorageKey);
@@ -293,22 +365,14 @@ export function MusicRoomApp({
       peerId,
       (payload: PeerSignalMessage) => socket.emit("peer.signal", payload),
       {
-        onPieceReceived: ({ trackId, totalChunks, mimeType }) => {
-          requestedPiecesRef.current.forEach((_startedAt, requestKey) => {
-            if (requestKey.startsWith(`${trackId}:`)) {
-              requestedPiecesRef.current.delete(requestKey);
-              failedPiecePeersRef.current.delete(requestKey);
-            }
-          });
+        onPieceReceived: ({ trackId, chunkIndex, totalChunks, mimeType }) => {
+          chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
+          mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks);
           void announceLocalCache(trackId, totalChunks);
           void hydrateTrackFromPiecesWithCleanup(trackId, mimeType, totalChunks);
         },
         onPieceRequestTimeout: ({ trackId, chunkIndex, peerId: timedOutPeerId }) => {
-          const requestKey = `${trackId}:${chunkIndex}`;
-          requestedPiecesRef.current.delete(requestKey);
-          const failedPeers = failedPiecePeersRef.current.get(requestKey) ?? new Set<string>();
-          failedPeers.add(timedOutPeerId);
-          failedPiecePeersRef.current.set(requestKey, failedPeers);
+          chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
         },
         onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
           setConnectedPeers((current) => {
@@ -326,6 +390,10 @@ export function MusicRoomApp({
       }
     );
     meshRef.current = mesh;
+    chunkSchedulerRef.current = new ChunkScheduler(peerId, {
+      requestPiece: ({ peerId: remotePeerId, trackId, chunkIndex, totalChunks }) =>
+        mesh.requestPiece(remotePeerId, trackId, chunkIndex, totalChunks)
+    });
     const mediaMesh = new RoomMediaMesh(
       roomId,
       peerId,
@@ -421,7 +489,7 @@ export function MusicRoomApp({
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage("房间已解散，当前房间的歌单和本地缓存已清理。");
       if (workspaceOnly) {
-        router.push("/rooms" as Route);
+        router.push(workspaceEntryHref as Route);
       }
     });
     socket.on("room.snapshot.missing", () => {
@@ -440,6 +508,7 @@ export function MusicRoomApp({
       socketRef.current = null;
       mesh.destroy();
       meshRef.current = null;
+      chunkSchedulerRef.current = null;
       mediaMesh.destroy();
       mediaMeshRef.current = null;
       hostStreamRef.current = null;
@@ -452,6 +521,7 @@ export function MusicRoomApp({
     roomSnapshot?.room.joinCode,
     peerId,
     activeSession?.id,
+    mergeLocalPieceAvailability,
     deleteUploadedTrackArtifacts,
     workspaceOnly,
     router
@@ -477,11 +547,6 @@ export function MusicRoomApp({
       window.clearInterval(intervalId);
     };
   }, [roomSnapshot?.room.id, activeSession?.id, peerId]);
-
-  useEffect(() => {
-    requestedPiecesRef.current.clear();
-    failedPiecePeersRef.current.clear();
-  }, [roomSnapshot?.room.id, peerId]);
 
   const playback = roomSnapshot?.room.playback;
 
@@ -519,9 +584,7 @@ export function MusicRoomApp({
 
       const expectedSeconds =
         getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
-      if (Math.abs(audio.currentTime - expectedSeconds) > 0.35) {
-        audio.currentTime = expectedSeconds;
-      }
+      syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing");
 
       if (playback.status === "playing") {
         void audio.play().catch(() => {
@@ -532,6 +595,7 @@ export function MusicRoomApp({
 
       if (playback.status === "paused") {
         audio.pause();
+        audio.playbackRate = 1;
         setMediaConnectionState("idle");
       }
       return;
@@ -556,6 +620,7 @@ export function MusicRoomApp({
 
     if (playback.status === "paused") {
       audio.pause();
+      audio.playbackRate = 1;
     }
   }, [
     playback?.currentTrackId,
@@ -587,28 +652,6 @@ export function MusicRoomApp({
   ]);
 
   const currentTrack = progressTrack;
-
-  const upcomingTrack = useMemo(() => {
-    if (!roomSnapshot || !currentTrack) {
-      return null;
-    }
-
-    const currentQueueIndex = roomSnapshot.room.playback.currentQueueItemId
-      ? roomSnapshot.queue.findIndex(
-          (item) => item.id === roomSnapshot.room.playback.currentQueueItemId
-        )
-      : roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id);
-    if (currentQueueIndex < 0) {
-      return null;
-    }
-
-    const nextQueueItem = roomSnapshot.queue[currentQueueIndex + 1];
-    if (!nextQueueItem) {
-      return null;
-    }
-
-    return roomSnapshot.tracks.find((track) => track.id === nextQueueItem.trackId) ?? null;
-  }, [currentTrack, roomSnapshot]);
 
   useEffect(() => {
     const nextPlayback = roomSnapshot?.room.playback;
@@ -651,66 +694,14 @@ export function MusicRoomApp({
   }, [roomSnapshot?.room.members, peerId]);
 
   useEffect(() => {
-    const requestPlan = [
-      { track: currentTrack, limit: currentTrackChunkRequestLimit },
-      { track: upcomingTrack, limit: upcomingTrackChunkRequestLimit }
-    ];
-
-    for (const plan of requestPlan) {
-      if (!plan.track || uploadedTracks[plan.track.id]) {
-        continue;
-      }
-
-      const announcements = Object.values(availabilityByTrack[plan.track.id] ?? {});
-      const localChunks = availabilityByTrack[plan.track.id]?.[peerId]?.availableChunks ?? [];
-      const totalChunks = announcements.reduce((max, entry) => Math.max(max, entry.totalChunks), 0);
-      const missingChunkIndexes = getMissingChunkIndexes(totalChunks, localChunks, plan.limit);
-
-      for (const chunkIndex of missingChunkIndexes) {
-        const requestKey = `${plan.track.id}:${chunkIndex}`;
-        if (requestedPiecesRef.current.has(requestKey)) {
-          continue;
-        }
-
-        const excludedPeerIds = [...(failedPiecePeersRef.current.get(requestKey) ?? new Set())];
-        const connectedPeerIds = meshRef.current?.getConnectedPeerIds() ?? [];
-        const preferredSource = selectChunkSource(
-          announcements.filter((announcement) => announcement.availableChunks.includes(chunkIndex)),
-          connectedPeerIds,
-          peerId,
-          excludedPeerIds
-        );
-        if (!preferredSource) {
-          continue;
-        }
-
-        const didRequest = meshRef.current?.requestPiece(
-          preferredSource.ownerPeerId,
-          plan.track.id,
-          chunkIndex,
-          totalChunks
-        );
-
-        if (didRequest) {
-          requestedPiecesRef.current.set(requestKey, Date.now());
-        }
-      }
-    }
-  }, [availabilityByTrack, currentTrack, upcomingTrack, peerId, uploadedTracks]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const now = Date.now();
-
-      for (const [requestKey, startedAt] of requestedPiecesRef.current.entries()) {
-        if (now - startedAt > 8000) {
-          requestedPiecesRef.current.delete(requestKey);
-        }
-      }
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, []);
+    chunkSchedulerRef.current?.sync({
+      roomSnapshot,
+      availabilityByTrack,
+      connectedPeerIds: connectedPeers,
+      uploadedTrackIds: Object.keys(uploadedTracks),
+      playbackPositionMs: getCurrentPlaybackPositionMs()
+    });
+  }, [availabilityByTrack, connectedPeers, roomSnapshot, uploadedTracks, progressMs]);
 
   function resetPlayerSurface() {
     const localAudio = audioRef.current;
@@ -753,7 +744,7 @@ export function MusicRoomApp({
 
     setSuppressRoomRecovery(true);
     if (workspaceOnly) {
-      router.push("/rooms" as Route);
+      router.push(workspaceEntryHref as Route);
     }
   }
 
@@ -765,7 +756,7 @@ export function MusicRoomApp({
 
     setSuppressRoomRecovery(true);
     if (workspaceOnly) {
-      router.push("/rooms" as Route);
+      router.push(workspaceEntryHref as Route);
     }
   }
 
@@ -777,7 +768,7 @@ export function MusicRoomApp({
     }
 
     handleClearIdentity();
-    router.replace(`/auth?redirectTo=${encodeURIComponent(initialRoomId ? `/room/${initialRoomId}` : "/rooms")}` as Route);
+    router.replace(authEntryHref as Route);
   }
 
   async function refreshAvailableRooms() {
@@ -812,16 +803,7 @@ export function MusicRoomApp({
     totalChunks: number
   ) {
     await hydrateTrackFromPieces(trackId, mimeType, totalChunks);
-    requestedPiecesRef.current.forEach((_startedAt, requestKey) => {
-      if (requestKey.startsWith(`${trackId}:`)) {
-        requestedPiecesRef.current.delete(requestKey);
-      }
-    });
-    failedPiecePeersRef.current.forEach((_failedPeers, requestKey) => {
-      if (requestKey.startsWith(`${trackId}:`)) {
-        failedPiecePeersRef.current.delete(requestKey);
-      }
-    });
+    chunkSchedulerRef.current?.markTrackHydrated(trackId);
   }
 
   async function syncHostMediaStream() {
@@ -995,22 +977,22 @@ export function MusicRoomApp({
                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
               </div>
               <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-foreground-muted mb-3">Room page</p>
-              <h2 className="text-2xl font-bold text-foreground mb-4">当前没有可用的房间工作台</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-4">当前没有可用的房间</h2>
               <p className="text-sm text-foreground-muted max-w-sm mb-8 leading-relaxed">
                 {activeSession
-                  ? "这个地址没有恢复到有效房间。请回到音乐房入口页，重新创建或通过房间码加入。"
-                  : "你还没有登录。先进入登录页，再回到房间或音乐房入口页继续。"}
+                  ? "这个地址没有恢复到有效房间。请回到房间列表，重新创建或通过房间码加入。"
+                  : "你还没有登录。先进入登录页，再回到房间列表继续。"}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-4">
-                <Link href={"/rooms" as Route}>
-                  <Button size="lg">返回音乐房入口</Button>
+                <Link href={workspaceEntryHref as Route}>
+                  <Button size="lg">返回房间列表</Button>
                 </Link>
                 {activeSession ? (
                   <Button variant="ghost" onClick={handleClearIdentity} type="button">
                     清除当前会话状态
                   </Button>
                 ) : (
-                  <Link href={"/auth?redirectTo=/rooms" as Route}>
+                  <Link href={authEntryHref as Route}>
                     <Button variant="ghost">去登录</Button>
                   </Link>
                 )}

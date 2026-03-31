@@ -10,6 +10,7 @@ export const p2pFeatureBoundary =
 
 export * from "./mesh";
 export * from "./media-mesh";
+export * from "./chunk-scheduler";
 
 export const defaultChunkSize = 128 * 1024;
 export const currentTrackChunkRequestLimit = 24;

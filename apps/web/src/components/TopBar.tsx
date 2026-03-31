@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import type { AuthSession, RoomSnapshot } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
+import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
+import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { getOnlineMemberCount } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 
@@ -14,18 +16,20 @@ type TopBarProps = {
   onLogout?: () => void;
 };
 
-const navItems = [
-  { key: "home", href: "/" as Route, label: "主页" },
-  { key: "rooms", href: "/rooms" as Route, label: "音乐室", match: "/room/" }
-];
-
 export function TopBar({ activeSession, roomSnapshot = null, onLogout }: TopBarProps) {
   const pathname = usePathname();
+  const clientPlatform = getClientPlatformFromBrowser();
   const { activeSession: storedSession } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
   const session = activeSession === undefined ? storedSession : activeSession;
+  const workspaceEntryHref = buildAppEntryHref(clientPlatform) as Route;
+  const authEntryHref = buildWorkspaceAuthHref({ clientPlatform }) as Route;
+  const navItems = [
+    { key: "home", href: "/" as Route, label: "主页" },
+    { key: "app", href: workspaceEntryHref, label: "房间", match: "/room/" }
+  ];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-[#000000]/85 backdrop-blur-xl">
@@ -65,7 +69,7 @@ export function TopBar({ activeSession, roomSnapshot = null, onLogout }: TopBarP
             {roomSnapshot ? (
               <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-white/65">
                 <span>{getOnlineMemberCount(roomSnapshot.room.members)} 人在线</span>
-                <span className="text-white/20">·</span>
+                <span className="text-white/20">路</span>
                 <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
               </div>
             ) : session ? (
@@ -75,13 +79,13 @@ export function TopBar({ activeSession, roomSnapshot = null, onLogout }: TopBarP
                     {session.nickname}
                   </span>
                 </div>
-                <Link href={"/rooms" as Route} className="hidden sm:block">
+                <Link href={workspaceEntryHref} className="hidden sm:block">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="text-white/70 hover:bg-white/5 hover:text-white"
                   >
-                    进入音乐室
+                    进入房间
                   </Button>
                 </Link>
                 {onLogout ? (
@@ -97,7 +101,7 @@ export function TopBar({ activeSession, roomSnapshot = null, onLogout }: TopBarP
                 ) : null}
               </>
             ) : (
-              <Link href={"/auth?redirectTo=/rooms" as Route}>
+              <Link href={authEntryHref}>
                 <Button size="sm" className="border-0 bg-white/10 text-white hover:bg-white/20">
                   登录 / 注册
                 </Button>
