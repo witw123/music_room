@@ -19,6 +19,8 @@ export function RoomsHomePage() {
   const router = useRouter();
   const clientPlatform = getClientPlatformFromBrowser();
   const workspaceEntryHref = buildAppEntryHref(clientPlatform);
+  const buildRoomHref = (roomId: string) =>
+    clientPlatform ? `/room/${roomId}?client=${clientPlatform}` : `/room/${roomId}`;
   const authEntryHref = buildWorkspaceAuthHref({
     clientPlatform,
     redirectTo: workspaceEntryHref
@@ -102,7 +104,7 @@ export function RoomsHomePage() {
     try {
       const snapshot = await musicRoomApi.createRoom(visibility);
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-      router.push(workspaceEntryHref as Route);
+      router.push(buildRoomHref(snapshot.room.id) as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -117,7 +119,7 @@ export function RoomsHomePage() {
     try {
       const snapshot = await musicRoomApi.joinRoomByCode(code.trim());
       window.localStorage.setItem(lastRoomStorageKey, snapshot.room.id);
-      router.push(workspaceEntryHref as Route);
+      router.push(buildRoomHref(snapshot.room.id) as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -132,13 +134,13 @@ export function RoomsHomePage() {
       const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
       if (recovered) {
         window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
-        router.push(workspaceEntryHref as Route);
+        router.push(buildRoomHref(recovered.room.id) as Route);
         return;
       }
 
       const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
       window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-      router.push(workspaceEntryHref as Route);
+      router.push(buildRoomHref(joined.room.id) as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }

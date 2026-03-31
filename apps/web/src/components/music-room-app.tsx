@@ -903,7 +903,7 @@ export function MusicRoomApp({
 
   return (
     <main className="min-h-screen bg-background relative flex flex-col pb-32">
-      <TopBar activeSession={activeSession} roomSnapshot={roomSnapshot} onLogout={handleLogout} />
+      <TopBar activeSession={activeSession} onLogout={handleLogout} />
 
       {roomSnapshot && statusMessage ? (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4" aria-live="polite">
