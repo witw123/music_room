@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
@@ -9,11 +9,13 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import {
+  currentTrackChunkRequestLimit,
   getMissingChunkIndexes,
   getWebRTCIceServers,
   RoomMediaMesh,
   selectChunkSource,
-  P2PMesh
+  P2PMesh,
+  upcomingTrackChunkRequestLimit
 } from "@/features/p2p";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -82,35 +84,7 @@ export function MusicRoomApp({
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.id;
-  const getCurrentPlaybackPositionMs = () => {
-    if (isCurrentSourceOwner) {
-      const audio = audioRef.current;
-      if (audio && Number.isFinite(audio.currentTime)) {
-        return Math.round(audio.currentTime * 1000);
-      }
-    }
-
-    return progressMs;
-  };
-  const {
-    progressTrack,
-    progressMs,
-    setProgressMs,
-    seekDraft,
-    setSeekDraft,
-    audioDurationMs,
-    setAudioDurationMs,
-    volume,
-    setVolume,
-    syncProgressFromAudio,
-    syncDurationFromAudio
-  } = useRoomPlayback({
-    audioRef,
-    remoteAudioRef,
-    playback: roomSnapshot?.room.playback,
-    tracks: roomSnapshot?.tracks ?? [],
-    isCurrentSourceOwner
-  });
+  const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
 
   async function refreshRoom(roomId: string) {
     const snapshot = await musicRoomApi.getRoom(roomId);
@@ -149,6 +123,36 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability,
     refreshRoom
   });
+  const shouldUseLocalPlayback = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
+  const {
+    progressTrack,
+    progressMs,
+    setProgressMs,
+    seekDraft,
+    setSeekDraft,
+    audioDurationMs,
+    setAudioDurationMs,
+    volume,
+    setVolume,
+    syncProgressFromAudio,
+    syncDurationFromAudio
+  } = useRoomPlayback({
+    audioRef,
+    remoteAudioRef,
+    playback: roomSnapshot?.room.playback,
+    tracks: roomSnapshot?.tracks ?? [],
+    shouldUseLocalAudio: shouldUseLocalPlayback
+  });
+  const getCurrentPlaybackPositionMs = () => {
+    if (shouldUseLocalPlayback) {
+      const audio = audioRef.current;
+      if (audio && Number.isFinite(audio.currentTime)) {
+        return Math.round(audio.currentTime * 1000);
+      }
+    }
+
+    return progressMs;
+  };
   const {
     leaveRoom,
     deleteRoom,
@@ -498,12 +502,46 @@ export function MusicRoomApp({
       return;
     }
 
+    const remoteAudio = remoteAudioRef.current;
+    const uploaded = uploadedTracks[playback.currentTrackId];
+
+    if (uploaded) {
+      if (remoteAudio) {
+        remoteAudio.pause();
+        remoteAudio.srcObject = null;
+        remoteAudio.load();
+      }
+
+      if (audio.src !== uploaded.objectUrl) {
+        audio.src = uploaded.objectUrl;
+        audio.load();
+      }
+
+      const expectedSeconds =
+        getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
+      if (Math.abs(audio.currentTime - expectedSeconds) > 0.35) {
+        audio.currentTime = expectedSeconds;
+      }
+
+      if (playback.status === "playing") {
+        void audio.play().catch(() => {
+          setStatusMessage("浏览器阻止了自动播放，请手动点击播放恢复。");
+        });
+        setMediaConnectionState("live");
+      }
+
+      if (playback.status === "paused") {
+        audio.pause();
+        setMediaConnectionState("idle");
+      }
+      return;
+    }
+
     if (!isCurrentSourceOwner) {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
 
-      const remoteAudio = remoteAudioRef.current;
       if (remoteAudio) {
         if (playback.status === "playing") {
           void remoteAudio.play().catch(() => {
@@ -514,25 +552,6 @@ export function MusicRoomApp({
         }
       }
       return;
-    }
-
-    const uploaded = uploadedTracks[playback.currentTrackId];
-
-    if (uploaded && audio.src !== uploaded.objectUrl) {
-      audio.src = uploaded.objectUrl;
-      audio.load();
-    }
-
-    const expectedSeconds =
-      getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
-    if (uploaded && Math.abs(audio.currentTime - expectedSeconds) > 1.2) {
-      audio.currentTime = expectedSeconds;
-    }
-
-    if (uploaded && playback.status === "playing") {
-      void audio.play().catch(() => {
-        setStatusMessage("浏览器阻止了自动播放，请手动点击播放恢复。");
-      });
     }
 
     if (playback.status === "paused") {
@@ -563,7 +582,8 @@ export function MusicRoomApp({
     roomSnapshot?.room.playback.sourceSessionId,
     roomSnapshot?.room.playback.mediaEpoch,
     isCurrentSourceOwner,
-    peerId
+    peerId,
+    mediaConnectedPeers.length
   ]);
 
   const currentTrack = progressTrack;
@@ -573,7 +593,11 @@ export function MusicRoomApp({
       return null;
     }
 
-    const currentQueueIndex = roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id);
+    const currentQueueIndex = roomSnapshot.room.playback.currentQueueItemId
+      ? roomSnapshot.queue.findIndex(
+          (item) => item.id === roomSnapshot.room.playback.currentQueueItemId
+        )
+      : roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id);
     if (currentQueueIndex < 0) {
       return null;
     }
@@ -598,6 +622,11 @@ export function MusicRoomApp({
       return;
     }
 
+    if (shouldUseLocalPlayback) {
+      setMediaConnectionState(nextPlayback.status === "playing" ? "live" : "idle");
+      return;
+    }
+
     if (nextPlayback.status === "paused") {
       setMediaConnectionState((current) => (current === "live" ? "buffering" : current));
       return;
@@ -610,7 +639,7 @@ export function MusicRoomApp({
 
       return mediaConnectedPeers.length > 0 ? "buffering" : "connecting";
     });
-  }, [roomSnapshot?.room.playback, isCurrentSourceOwner, mediaConnectedPeers.length]);
+  }, [roomSnapshot?.room.playback, isCurrentSourceOwner, mediaConnectedPeers.length, shouldUseLocalPlayback]);
 
   useEffect(() => {
     const remotePeerIds =
@@ -623,8 +652,8 @@ export function MusicRoomApp({
 
   useEffect(() => {
     const requestPlan = [
-      { track: currentTrack, limit: 8 },
-      { track: upcomingTrack, limit: 3 }
+      { track: currentTrack, limit: currentTrackChunkRequestLimit },
+      { track: upcomingTrack, limit: upcomingTrackChunkRequestLimit }
     ];
 
     for (const plan of requestPlan) {

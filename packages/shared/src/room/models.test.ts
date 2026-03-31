@@ -21,6 +21,7 @@ describe("roomSnapshotSchema", () => {
         playback: {
           status: "paused",
           currentTrackId: null,
+          currentQueueItemId: null,
           sourceSessionId: "guest_1",
           sourcePeerId: null,
           sourceTrackId: null,

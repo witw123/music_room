@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PeerSignalMessage, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
-import { P2PMesh, getMissingChunkIndexes, selectChunkSource } from "@/features/p2p";
+import {
+  P2PMesh,
+  currentTrackChunkRequestLimit,
+  getMissingChunkIndexes,
+  selectChunkSource,
+  upcomingTrackChunkRequestLimit
+} from "@/features/p2p";
 
 type UploadedTrack = { objectUrl: string };
 
@@ -136,15 +142,19 @@ export function useP2P({
     const currentTrack = roomSnapshot.tracks.find((t) => t.id === currentTrackId) ?? null;
 
     const queue = roomSnapshot.queue;
-    const currentQueueIndex = currentTrackId ? queue.findIndex((q) => q.trackId === currentTrackId) : -1;
+    const currentQueueIndex = roomSnapshot.room.playback.currentQueueItemId
+      ? queue.findIndex((q) => q.id === roomSnapshot.room.playback.currentQueueItemId)
+      : currentTrackId
+        ? queue.findIndex((q) => q.trackId === currentTrackId)
+        : -1;
     const nextQueueItem = currentQueueIndex >= 0 ? queue[currentQueueIndex + 1] : null;
     const upcomingTrack = nextQueueItem
       ? roomSnapshot.tracks.find((t) => t.id === nextQueueItem.trackId) ?? null
       : null;
 
     const requestPlan = [
-      { track: currentTrack, limit: 8 },
-      { track: upcomingTrack, limit: 3 }
+      { track: currentTrack, limit: currentTrackChunkRequestLimit },
+      { track: upcomingTrack, limit: upcomingTrackChunkRequestLimit }
     ];
 
     for (const plan of requestPlan) {

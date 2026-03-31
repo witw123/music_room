@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 type PlayerQueueDrawerProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
-  currentTrackId: string | null;
+  currentQueueItemId: string | null;
   activeSessionId?: string;
   hostId?: string;
   canControlPlayback: boolean;
@@ -21,7 +21,7 @@ type PlayerQueueDrawerProps = {
 export function PlayerQueueDrawer({
   queue,
   tracks,
-  currentTrackId,
+  currentQueueItemId,
   activeSessionId,
   hostId,
   canControlPlayback,
@@ -102,7 +102,7 @@ export function PlayerQueueDrawer({
                 const canRemove =
                   !!activeSessionId &&
                   (hostId === activeSessionId || item.requestedById === activeSessionId);
-                const isCurrent = currentTrackId === item.trackId;
+                const isCurrent = currentQueueItemId === item.id;
 
                 return (
                   <div

@@ -128,14 +128,9 @@ export function RoomsHomePage() {
         return;
       }
 
-      if (recentRoom.room.visibility === "public") {
-        const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
-        window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-        router.push(`/room/${joined.room.id}` as Route);
-        return;
-      }
-
-      setStatusMessage("这个最近房间当前无法直接恢复，请让房主重新邀请你加入。");
+      const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
+      window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
+      router.push(`/room/${joined.room.id}` as Route);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }

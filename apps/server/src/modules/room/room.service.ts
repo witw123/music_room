@@ -74,6 +74,7 @@ export class RoomService {
       playback: {
         status: "paused",
         currentTrackId: null,
+        currentQueueItemId: null,
         sourceSessionId: hostSession.id,
         sourcePeerId: null,
         sourceTrackId: null,
@@ -333,7 +334,7 @@ export class RoomService {
     if (!record.room.playback.currentTrackId) {
       await this.updatePlayback(roomId, {
         action: "play",
-        trackId,
+        queueItemId: queueItem.id,
         actorSessionId: sessionId
       });
     } else {
@@ -373,7 +374,7 @@ export class RoomService {
     if (!record.room.playback.currentTrackId) {
       await this.updatePlayback(roomId, {
         action: "play",
-        trackId: nextItems[0]?.trackId,
+        queueItemId: nextItems[0]?.id,
         actorSessionId: sessionId
       });
       return record.queue;
@@ -399,12 +400,12 @@ export class RoomService {
       .filter((item) => item.id !== queueItemId)
       .map((item, index) => ({ ...item, position: index }));
 
-    if (removed && record.room.playback.currentTrackId === removed.trackId) {
-      const nextItem = record.queue[0];
+    if (removed && record.room.playback.currentQueueItemId === removed.id) {
+      const nextItem = record.queue[removed.position] ?? record.queue[removed.position - 1] ?? null;
       if (nextItem) {
         await this.updatePlayback(roomId, {
           action: "play",
-          trackId: nextItem.trackId,
+          queueItemId: nextItem.id,
           actorSessionId
         });
         return record.queue;

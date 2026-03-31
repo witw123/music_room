@@ -8,11 +8,11 @@ type UseRoomPlaybackOptions = {
   remoteAudioRef: RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null | undefined;
   tracks: TrackMeta[];
-  isCurrentSourceOwner: boolean;
+  shouldUseLocalAudio: boolean;
 };
 
 export function useRoomPlayback(options: UseRoomPlaybackOptions) {
-  const { audioRef, remoteAudioRef, playback, tracks, isCurrentSourceOwner } = options;
+  const { audioRef, remoteAudioRef, playback, tracks, shouldUseLocalAudio } = options;
   const [progressMs, setProgressMs] = useState(0);
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const [audioDurationMs, setAudioDurationMs] = useState(0);
@@ -36,7 +36,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
     const tick = () => {
       if (
-        isCurrentSourceOwner &&
+        shouldUseLocalAudio &&
         playback.status === "playing" &&
         localAudio &&
         Number.isFinite(localAudio.currentTime) &&
@@ -62,7 +62,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     playback?.startedAt,
     playback?.mediaEpoch,
     progressTrack?.durationMs,
-    isCurrentSourceOwner
+    shouldUseLocalAudio
   ]);
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [remoteAudioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    if (!isCurrentSourceOwner) {
+    if (!shouldUseLocalAudio) {
       // For listeners, the remote audio's currentTime is stream-connection time,
       // NOT the track position. Let the 250ms tick (which uses getPlaybackEffectivePositionMs)
       // be the single source of truth to avoid competing updates causing jitter.
@@ -111,7 +111,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const audio =
-      event?.currentTarget ?? (isCurrentSourceOwner ? audioRef.current : remoteAudioRef.current);
+      event?.currentTarget ?? (shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current);
     if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
       if (progressTrack?.durationMs) {
         setAudioDurationMs(progressTrack.durationMs);
@@ -124,8 +124,13 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   useEffect(() => {
     setSeekDraft(null);
+    setProgressMs(
+      progressTrack && playback
+        ? getPlaybackEffectivePositionMs(playback, progressTrack.durationMs)
+        : 0
+    );
     setAudioDurationMs(progressTrack?.durationMs ?? 0);
-  }, [progressTrack?.id, progressTrack?.durationMs, setSeekDraft]);
+  }, [progressTrack?.id, progressTrack?.durationMs, playback, setSeekDraft]);
 
   return {
     progressTrack,

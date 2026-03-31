@@ -172,7 +172,7 @@ export function RoomDashboardView({
               <QueuePanel
                 queue={roomSnapshot.queue}
                 tracks={roomSnapshot.tracks}
-                currentTrackId={roomSnapshot.room.playback.currentTrackId ?? null}
+                currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
                 activeSession={activeSession}
                 hostId={roomSnapshot.room.hostId}
                 canControlPlayback={canControlPlayback}

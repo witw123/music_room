@@ -139,7 +139,7 @@ export class P2PMesh {
     trackId: string,
     chunkIndex: number,
     expectedTotalChunks?: number,
-    timeoutMs = 6000
+    timeoutMs = 10000
   ) {
     const entry = this.peers.get(peerId);
     if (!entry?.channel || entry.channel.readyState !== "open") {

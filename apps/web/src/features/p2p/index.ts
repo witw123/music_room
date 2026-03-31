@@ -11,7 +11,9 @@ export const p2pFeatureBoundary =
 export * from "./mesh";
 export * from "./media-mesh";
 
-export const defaultChunkSize = 512 * 1024;
+export const defaultChunkSize = 128 * 1024;
+export const currentTrackChunkRequestLimit = 24;
+export const upcomingTrackChunkRequestLimit = 8;
 
 export function getWebRTCIceServers(): IceServerConfig[] {
   const rawJson = process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS;

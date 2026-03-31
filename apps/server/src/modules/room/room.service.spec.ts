@@ -280,9 +280,56 @@ describe("RoomService", () => {
       })
     ).resolves.toMatchObject({
       currentTrackId: secondTrack.id,
+      currentQueueItemId: secondQueueItem.id,
       status: "playing",
       sourceSessionId: host.id
     });
+  });
+
+  it("keeps the active queue item stable when the same track appears multiple times", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Repeat",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "repeat-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+    const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+
+    const nextPlayback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+
+    expect(nextPlayback.currentTrackId).toBe(track.id);
+    expect(nextPlayback.currentQueueItemId).toBe(secondQueueItem.id);
+
+    const previousPlayback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "prev",
+      actorSessionId: host.id
+    });
+
+    expect(previousPlayback.currentTrackId).toBe(track.id);
+    expect(previousPlayback.currentQueueItemId).toBe(firstQueueItem.id);
   });
 
   it("allows the original uploader to delete a track and removes it from queue and playback", async () => {

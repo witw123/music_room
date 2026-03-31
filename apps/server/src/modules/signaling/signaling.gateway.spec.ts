@@ -18,6 +18,7 @@ describe("SignalingGateway", () => {
         playback: {
           status: "paused",
           currentTrackId: null,
+          currentQueueItemId: null,
           sourceSessionId: "guest_host",
           sourcePeerId: null,
           sourceTrackId: null,
@@ -211,6 +212,7 @@ describe("SignalingGateway", () => {
           playback: {
             status: "paused",
             currentTrackId: null,
+            currentQueueItemId: null,
             sourceSessionId: "guest_host",
             sourcePeerId: null,
             sourceTrackId: null,

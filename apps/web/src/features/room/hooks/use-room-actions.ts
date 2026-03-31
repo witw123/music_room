@@ -190,18 +190,10 @@ export function useRoomActions(options: UseRoomActionsOptions) {
         return;
       }
 
-      if (progressMs > 3000) {
-        const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-          action: "seek",
-          positionMs: 0
-        });
-        applyPlaybackLocally(nextPlayback);
-      } else {
-        const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-          action: "prev"
-        });
-        applyPlaybackLocally(nextPlayback);
-      }
+      const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        action: "prev"
+      });
+      applyPlaybackLocally(nextPlayback);
 
       await refreshRoom(roomSnapshot.room.id);
     } catch (error) {

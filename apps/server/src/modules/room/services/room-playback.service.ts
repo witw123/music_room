@@ -17,24 +17,30 @@ export class RoomPlaybackService {
     const playback = record.room.playback;
 
     if (input.action === "next") {
-      const currentIndex = record.queue.findIndex(
-        (item) => item.trackId === playback.currentTrackId
-      );
-      const nextItem = record.queue[currentIndex + 1] ?? record.queue[0];
+      const currentIndex = this.getCurrentQueueIndex(record);
+      const nextItem = (currentIndex >= 0 ? record.queue[currentIndex + 1] : null) ?? record.queue[0];
       if (nextItem) {
-        await this.applyTrackPlayback(record, nextItem.trackId, input.positionMs ?? 0);
+        await this.applyTrackPlayback(record, nextItem.trackId, input.positionMs ?? 0, nextItem.id);
       } else {
         this.clearPlayback(playback);
       }
     }
 
     if (input.action === "prev") {
-      const currentIndex = record.queue.findIndex(
-        (item) => item.trackId === playback.currentTrackId
-      );
-      const previousItem = currentIndex > 0 ? record.queue[currentIndex - 1] : record.queue[0];
+      const currentIndex = this.getCurrentQueueIndex(record);
+      const previousItem =
+        currentIndex > 0
+          ? record.queue[currentIndex - 1]
+          : currentIndex === -1
+            ? record.queue[0]
+            : record.queue[currentIndex] ?? record.queue[0];
       if (previousItem) {
-        await this.applyTrackPlayback(record, previousItem.trackId, input.positionMs ?? 0);
+        await this.applyTrackPlayback(
+          record,
+          previousItem.trackId,
+          input.positionMs ?? 0,
+          previousItem.id
+        );
       }
     }
 
@@ -53,7 +59,12 @@ export class RoomPlaybackService {
       } else {
         const isTrackSwitch = nextTrackId !== playback.currentTrackId;
         const startPositionMs = input.positionMs ?? (isTrackSwitch ? 0 : playback.positionMs);
-        await this.applyTrackPlayback(record, nextTrackId, startPositionMs);
+        await this.applyTrackPlayback(
+          record,
+          nextTrackId,
+          startPositionMs,
+          input.queueItemId ?? this.findQueueItemIdForTrack(record, nextTrackId)
+        );
       }
     }
 
@@ -102,7 +113,12 @@ export class RoomPlaybackService {
     };
   }
 
-  async applyTrackPlayback(record: RoomRecord, trackId: string, positionMs: number) {
+  async applyTrackPlayback(
+    record: RoomRecord,
+    trackId: string,
+    positionMs: number,
+    queueItemId: string | null
+  ) {
     const playback = record.room.playback;
     const track = record.tracks.find((item) => item.id === trackId);
     if (!track) {
@@ -123,6 +139,7 @@ export class RoomPlaybackService {
 
     playback.status = "playing";
     playback.currentTrackId = trackId;
+    playback.currentQueueItemId = queueItemId;
     playback.sourceSessionId = track.ownerSessionId;
     playback.sourcePeerId = ownerPeerId;
     playback.sourceTrackId = trackId;
@@ -136,6 +153,7 @@ export class RoomPlaybackService {
   clearPlayback(playback: PlaybackSnapshot) {
     playback.status = "paused";
     playback.currentTrackId = null;
+    playback.currentQueueItemId = null;
     playback.sourceSessionId = null;
     playback.sourcePeerId = null;
     playback.sourceTrackId = null;
@@ -154,5 +172,26 @@ export class RoomPlaybackService {
       record.room.members
     );
     return activePresence.get(sourceSessionId) ?? null;
+  }
+
+  private getCurrentQueueIndex(record: RoomRecord) {
+    const currentQueueItemId = record.room.playback.currentQueueItemId;
+    if (currentQueueItemId) {
+      const byQueueItemId = record.queue.findIndex((item) => item.id === currentQueueItemId);
+      if (byQueueItemId >= 0) {
+        return byQueueItemId;
+      }
+    }
+
+    const currentTrackId = record.room.playback.currentTrackId;
+    if (!currentTrackId) {
+      return -1;
+    }
+
+    return record.queue.findIndex((item) => item.trackId === currentTrackId);
+  }
+
+  private findQueueItemIdForTrack(record: RoomRecord, trackId: string) {
+    return record.queue.find((item) => item.trackId === trackId)?.id ?? null;
   }
 }

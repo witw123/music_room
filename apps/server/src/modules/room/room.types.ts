@@ -29,6 +29,7 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       playback: {
         status: persistedPlayback.status ?? "paused",
         currentTrackId: persistedPlayback.currentTrackId ?? null,
+        currentQueueItemId: persistedPlayback.currentQueueItemId ?? null,
         sourceSessionId: persistedPlayback.sourceSessionId ?? persisted.hostId,
         sourcePeerId: persistedPlayback.sourcePeerId ?? null,
         sourceTrackId: persistedPlayback.sourceTrackId ?? persistedPlayback.currentTrackId ?? null,

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 type QueuePanelProps = {
   queue: QueueItem[];
   tracks: TrackMeta[];
-  currentTrackId: string | null;
+  currentQueueItemId: string | null;
   activeSession: AuthSession | null;
   hostId: string;
   canControlPlayback: boolean;
@@ -22,7 +22,7 @@ type QueuePanelProps = {
 export function QueuePanel({
   queue,
   tracks,
-  currentTrackId,
+  currentQueueItemId,
   activeSession,
   hostId,
   canControlPlayback,
@@ -77,7 +77,7 @@ export function QueuePanel({
         <div className="flex flex-col gap-3 pt-2">
           {queue.map((item, index) => {
             const track = tracks.find((entry) => entry.id === item.trackId);
-            const isCurrent = currentTrackId === item.trackId;
+            const isCurrent = currentQueueItemId === item.id;
             const canRemoveQueueItem =
               !!activeSession &&
               (hostId === activeSession.id || item.requestedById === activeSession.id);

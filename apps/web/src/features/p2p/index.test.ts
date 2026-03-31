@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleTrackFileFromPieces,
+  currentTrackChunkRequestLimit,
+  defaultChunkSize,
   getMissingChunkIndexes,
   hashArrayBuffer,
   selectChunkSource,
-  summarizeTrackAvailability
+  summarizeTrackAvailability,
+  upcomingTrackChunkRequestLimit
 } from "./index";
 
 describe("p2p helpers", () => {
@@ -14,6 +17,12 @@ describe("p2p helpers", () => {
 
   it("respects the missing chunk request limit", () => {
     expect(getMissingChunkIndexes(8, [0, 1], 3)).toEqual([2, 3, 4]);
+  });
+
+  it("uses conservative chunk sizing and wider fetch windows for larger tracks", () => {
+    expect(defaultChunkSize).toBe(128 * 1024);
+    expect(currentTrackChunkRequestLimit).toBe(24);
+    expect(upcomingTrackChunkRequestLimit).toBe(8);
   });
 
   it("summarizes local chunk progress and source count", () => {
