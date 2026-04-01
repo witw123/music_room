@@ -30,7 +30,7 @@ export function TrackListSection({
 
   return (
     <section className="relative flex w-full flex-col gap-8">
-      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-12 transition-all hover:border-accent/40 hover:bg-accent/10">
+      <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-8 text-center transition-all hover:border-accent/40 hover:bg-accent/10 sm:p-12">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-surface-border bg-surface text-accent shadow-lg shadow-accent/10 transition-all duration-300 group-hover:scale-110 group-hover:bg-accent group-hover:text-white">
           <svg
             width="28"
@@ -73,7 +73,7 @@ export function TrackListSection({
                   <div className="min-w-0 space-y-1">
                     <h3 className="truncate font-semibold text-foreground">{track.title}</h3>
                     <p className="truncate text-xs text-foreground-muted">
-                      {track.artist} · {formatDuration(track.durationMs)}
+                      {track.artist} 路 {formatDuration(track.durationMs)}
                     </p>
                     <p className="mt-1 text-[10px] text-foreground-muted/60">
                       <span
@@ -81,13 +81,15 @@ export function TrackListSection({
                           isUploadedLocally ? "bg-green-500" : "bg-blue-500"
                         }`}
                       />
-                      {isUploadedLocally ? "已缓存并准备推流" : "房间可用"} · {track.ownerNickname} 上传
+                      {isUploadedLocally ? "已缓存并准备推流" : "房间可用"} 路 {track.ownerNickname} 上传
                     </p>
                   </div>
 
                   <div
                     className={`mt-auto grid items-center gap-2 ${
-                      isMine ? "grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"
+                      isMine
+                        ? "grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+                        : "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto]"
                     }`}
                   >
                     {isMine ? (
@@ -112,7 +114,7 @@ export function TrackListSection({
 
                     <Button
                       variant="ghost"
-                      className="h-10 w-10 shrink-0 px-0 hover:bg-accent/10 hover:text-accent sm:w-12"
+                      className="h-10 w-full shrink-0 px-0 hover:bg-accent/10 hover:text-accent sm:w-12"
                       disabled={!canControlPlayback}
                       onClick={() => startTransition(() => void onPlayTrack(track.id))}
                       type="button"
