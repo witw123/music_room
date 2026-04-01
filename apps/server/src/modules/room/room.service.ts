@@ -234,15 +234,21 @@ export class RoomService {
 
   async leaveRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    const leavingHost = record.room.hostId === sessionId;
     record.room.members = record.room.members.filter((member) => member.id !== sessionId);
 
-    if (record.room.hostId === sessionId && record.room.members.length > 0) {
+    if (leavingHost && record.room.members.length > 0) {
       const [nextHost, ...members] = record.room.members;
       record.room.hostId = nextHost.id;
       record.room.members = [
         { ...nextHost, role: "host" },
         ...members.map((member) => ({ ...member, role: "member" as const }))
       ];
+    }
+
+    this.roomPlaybackService.handleSourceDeparture(record, sessionId);
+    if (leavingHost) {
+      this.incrementPlaybackVersion(record.room.playback);
     }
 
     if (record.room.members.length === 0) {
@@ -336,21 +342,22 @@ export class RoomService {
         await this.updatePlayback(roomId, {
           action: "play",
           queueItemId: queueItem.id,
-          actorSessionId: sessionId
+          actorSessionId: sessionId,
+          expectedVersion: record.room.playback.queueVersion
         });
       } catch (error) {
         if (
           error instanceof Error &&
           error.message.includes("Track owner is not online")
         ) {
-          record.room.playback.queueVersion += 1;
+          this.incrementPlaybackVersion(record.room.playback);
           await this.roomRecordRepository.persistRecord(record);
         } else {
           throw error;
         }
       }
     } else {
-      record.room.playback.queueVersion += 1;
+      this.incrementPlaybackVersion(record.room.playback);
       await this.roomRecordRepository.persistRecord(record);
     }
 
@@ -388,7 +395,8 @@ export class RoomService {
         await this.updatePlayback(roomId, {
           action: "play",
           queueItemId: nextItems[0]?.id,
-          actorSessionId: sessionId
+          actorSessionId: sessionId,
+          expectedVersion: record.room.playback.queueVersion
         });
         return record.queue;
       } catch (error) {
@@ -401,7 +409,7 @@ export class RoomService {
       }
     }
 
-    record.room.playback.queueVersion += 1;
+    this.incrementPlaybackVersion(record.room.playback);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
   }
@@ -427,14 +435,15 @@ export class RoomService {
         await this.updatePlayback(roomId, {
           action: "play",
           queueItemId: nextItem.id,
-          actorSessionId
+          actorSessionId,
+          expectedVersion: record.room.playback.queueVersion
         });
         return record.queue;
       }
       this.roomPlaybackService.clearPlayback(record.room.playback);
     }
 
-    record.room.playback.queueVersion += 1;
+    this.incrementPlaybackVersion(record.room.playback);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
   }
@@ -461,7 +470,7 @@ export class RoomService {
       }));
 
     record.queue = nextQueue;
-    record.room.playback.queueVersion += 1;
+    this.incrementPlaybackVersion(record.room.playback);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
   }
@@ -474,16 +483,29 @@ export class RoomService {
       queueItemId?: string;
       positionMs?: number;
       actorSessionId?: string;
+      expectedVersion?: number;
     }
   ): Promise<PlaybackSnapshot> {
+    if (!this.isRealtimeAvailable()) {
+      throw new Error("Realtime sync unavailable.");
+    }
+
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
 
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
     }
+    const expectedVersion = input.expectedVersion ?? record.room.playback.queueVersion;
+    if (record.room.playback.queueVersion !== expectedVersion) {
+      throw new Error("Playback state version conflict.");
+    }
     const playback = await this.roomPlaybackService.updatePlayback(record, input);
     await this.roomRecordRepository.persistRecord(record);
     return playback;
+  }
+
+  isRealtimeAvailable() {
+    return typeof this.redis.isAvailable === "function" ? this.redis.isAvailable() : true;
   }
 
   async getTracks(roomId: string) {
@@ -550,5 +572,9 @@ export class RoomService {
     ) {
       throw new Error("Only the host or the requester can remove this queue item.");
     }
+  }
+
+  private incrementPlaybackVersion(playback: PlaybackSnapshot) {
+    playback.queueVersion += 1;
   }
 }

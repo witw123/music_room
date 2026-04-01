@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import type { AuthSession } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { Button } from "@/components/ui/button";
+import { clearMusicRoomLocalCache } from "@/lib/local-cache";
 
 type TopBarProps = {
   activeSession?: AuthSession | null;
@@ -10,11 +12,26 @@ type TopBarProps = {
 };
 
 export function TopBar({ activeSession, onLogout }: TopBarProps) {
+  const [isClearingCache, setIsClearingCache] = useState(false);
   const { activeSession: storedSession } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
     initialStatusMessage: ""
   });
   const session = activeSession === undefined ? storedSession : activeSession;
+
+  async function handleClearLocalCache() {
+    if (isClearingCache) {
+      return;
+    }
+
+    setIsClearingCache(true);
+
+    try {
+      await clearMusicRoomLocalCache();
+    } finally {
+      window.location.reload();
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/5 bg-[#000000]/85 backdrop-blur-xl">
@@ -30,6 +47,16 @@ export function TopBar({ activeSession, onLogout }: TopBarProps) {
         </div>
 
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearLocalCache}
+            type="button"
+            disabled={isClearingCache}
+            className="text-white/55 hover:bg-white/5 hover:text-white"
+          >
+            {isClearingCache ? "清理中…" : "清除本地缓存"}
+          </Button>
           {session && onLogout ? (
             <Button
               variant="ghost"

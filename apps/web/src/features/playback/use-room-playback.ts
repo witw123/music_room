@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import { shouldAcceptPlaybackSnapshot } from "@/lib/music-room-ui";
 
 type UseRoomPlaybackOptions = {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -17,19 +18,31 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const [audioDurationMs, setAudioDurationMs] = useState(0);
   const [volume, setVolume] = useState(0.72);
+  const [acceptedPlayback, setAcceptedPlayback] = useState<PlaybackSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!playback) {
+      setAcceptedPlayback(null);
+      return;
+    }
+
+    setAcceptedPlayback((current) =>
+      shouldAcceptPlaybackSnapshot(current, playback) ? playback : current
+    );
+  }, [playback]);
 
   const progressTrack = useMemo(() => {
-    if (!playback?.currentTrackId) {
+    if (!acceptedPlayback?.currentTrackId) {
       return null;
     }
 
-    return tracks.find((item) => item.id === playback.currentTrackId) ?? null;
-  }, [playback?.currentTrackId, tracks]);
+    return tracks.find((item) => item.id === acceptedPlayback.currentTrackId) ?? null;
+  }, [acceptedPlayback?.currentTrackId, tracks]);
 
   useEffect(() => {
     const localAudio = audioRef.current;
 
-    if (!playback || !progressTrack) {
+    if (!acceptedPlayback || !progressTrack) {
       setProgressMs(0);
       return;
     }
@@ -37,7 +50,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     const tick = () => {
       if (
         shouldUseLocalAudio &&
-        playback.status === "playing" &&
+        acceptedPlayback.status === "playing" &&
         localAudio &&
         Number.isFinite(localAudio.currentTime) &&
         localAudio.currentTime >= 0 &&
@@ -47,7 +60,11 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         return;
       }
 
-      setProgressMs(getPlaybackEffectivePositionMs(playback, progressTrack.durationMs));
+      if (seekDraft !== null) {
+        return;
+      }
+
+      setProgressMs(getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs));
     };
 
     tick();
@@ -56,13 +73,14 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [
     audioRef,
     remoteAudioRef,
-    playback?.status,
-    playback?.currentTrackId,
-    playback?.positionMs,
-    playback?.startedAt,
-    playback?.mediaEpoch,
+    acceptedPlayback?.status,
+    acceptedPlayback?.currentTrackId,
+    acceptedPlayback?.positionMs,
+    acceptedPlayback?.startedAt,
+    acceptedPlayback?.mediaEpoch,
     progressTrack?.durationMs,
-    shouldUseLocalAudio
+    shouldUseLocalAudio,
+    seekDraft
   ]);
 
   useEffect(() => {
@@ -85,9 +103,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
     if (!shouldUseLocalAudio) {
-      // For listeners, the remote audio's currentTime is stream-connection time,
-      // NOT the track position. Let the 250ms tick (which uses getPlaybackEffectivePositionMs)
-      // be the single source of truth to avoid competing updates causing jitter.
       return;
     }
 
@@ -123,14 +138,26 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }
 
   useEffect(() => {
-    setSeekDraft(null);
-    setProgressMs(
-      progressTrack && playback
-        ? getPlaybackEffectivePositionMs(playback, progressTrack.durationMs)
-        : 0
-    );
+    const trackChanged = progressTrack?.id !== acceptedPlayback?.currentTrackId;
+    if (trackChanged) {
+      setSeekDraft(null);
+    }
+
+    if (seekDraft === null) {
+      setProgressMs(
+        progressTrack && acceptedPlayback
+          ? getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs)
+          : 0
+      );
+    }
     setAudioDurationMs(progressTrack?.durationMs ?? 0);
-  }, [progressTrack?.id, progressTrack?.durationMs, playback, setSeekDraft]);
+  }, [
+    progressTrack?.id,
+    progressTrack?.durationMs,
+    acceptedPlayback,
+    seekDraft,
+    setSeekDraft
+  ]);
 
   return {
     progressTrack,

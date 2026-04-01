@@ -19,7 +19,7 @@ import {
   RoomMediaMesh,
   P2PMesh
 } from "@/features/p2p";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { shouldAcceptPlaybackSnapshot, toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 import { TopBar } from "@/components/TopBar";
@@ -150,7 +150,16 @@ export function MusicRoomApp({
 
   async function refreshRoom(roomId: string) {
     const snapshot = await musicRoomApi.getRoom(roomId);
-    setRoomSnapshot(snapshot);
+    setRoomSnapshot((current) => {
+      if (
+        current &&
+        !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
+      ) {
+        return current;
+      }
+
+      return snapshot;
+    });
   }
 
   const mergeAvailability = useCallback((announcement: TrackAvailabilityAnnouncement) => {
@@ -513,7 +522,16 @@ export function MusicRoomApp({
           return;
         }
 
-        setRoomSnapshot(snapshot);
+        setRoomSnapshot((current) => {
+          if (
+            current &&
+            !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
+          ) {
+            return current;
+          }
+
+          return snapshot;
+        });
         setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
         await refreshPlaylists();
       } catch {
@@ -738,6 +756,21 @@ export function MusicRoomApp({
               }
             })
           });
+        },
+        onSourcePeerFailed: ({ peerId: remotePeerId, mediaEpoch }) => {
+          recordPeerDiagnostic({
+            peerId: remotePeerId,
+            channelKind: "media",
+            direction: "local",
+            event: "source-peer-failed",
+            level: "warning",
+            summary: `媒体源 ${remotePeerId} 失效，mediaEpoch=${mediaEpoch}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              lastError: `媒体源 ${remotePeerId} 已失效`
+            })
+          });
+          setMediaConnectionState("reconnecting");
         }
       }
     );
@@ -780,10 +813,19 @@ export function MusicRoomApp({
     let didReplayLocalAvailability = false;
 
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
-      setRoomSnapshot((current) => ({
-        ...snapshot,
-        playlists: snapshot.playlists.length > 0 ? snapshot.playlists : (current?.playlists ?? [])
-      }));
+      setRoomSnapshot((current) => {
+        if (
+          current &&
+          !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
+        ) {
+          return current;
+        }
+
+        return {
+          ...snapshot,
+          playlists: snapshot.playlists.length > 0 ? snapshot.playlists : (current?.playlists ?? [])
+        };
+      });
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
@@ -836,9 +878,9 @@ export function MusicRoomApp({
       }
 
       void Promise.allSettled(trackIds.map((trackId) => deleteUploadedTrackArtifacts(trackId)));
+      setIsNavigatingRoomExit(true);
       setSuppressRoomRecovery(true);
       resetPlayerSurface();
-      setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage("房间已解散，当前房间的歌单和本地缓存已清理。");
       if (workspaceOnly) {
@@ -846,10 +888,18 @@ export function MusicRoomApp({
       }
     });
     socket.on("room.snapshot.missing", () => {
+      if (isNavigatingRoomExit) {
+        return;
+      }
+
+      setIsNavigatingRoomExit(true);
+      setSuppressRoomRecovery(true);
       resetPlayerSurface();
-      setRoomSnapshot(null);
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage("这个房间已不可用，请返回音乐房重新加入。");
+      if (workspaceOnly) {
+        router.push(workspaceEntryHref as Route);
+      }
     });
     socket.on("connect_error", (error) => {
       recordPeerDiagnostic({
@@ -917,6 +967,7 @@ export function MusicRoomApp({
     flushPendingAvailability,
     scheduleRemotePlaybackRetry,
     workspaceOnly,
+    isNavigatingRoomExit,
     router
   ]);
 
@@ -1316,9 +1367,10 @@ export function MusicRoomApp({
       ? "当前未拿到短期 TURN 凭证，已回退静态 STUN/TURN 配置。"
       : "正在获取 ICE/TURN 配置…";
   const iceConfigSource = iceConfig?.source ?? (iceConfigResolved ? "static-fallback" : "loading");
+  const isRoomTransitionPending =
+    workspaceOnly && !!initialRoomId && !!activeSession && !suppressRoomRecovery && !roomSnapshot;
   const showRoomTransitionState =
-    !roomSnapshot &&
-    ((workspaceOnly && !!initialRoomId && !!activeSession && isRecoveringRoom) || isNavigatingRoomExit);
+    isNavigatingRoomExit || isRecoveringRoom || isRoomTransitionPending;
 
   return (
     <main className="min-h-screen bg-background relative flex flex-col pb-32">

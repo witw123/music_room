@@ -71,7 +71,7 @@ export class RoomPlaybackService {
     if (input.action === "pause") {
       const sourcePeerId = await this.resolveSourcePeerId(record, playback.sourceSessionId);
       playback.status = "paused";
-      playback.positionMs = input.positionMs ?? playback.positionMs;
+      playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, input.positionMs ?? playback.positionMs);
       playback.startedAt = null;
       playback.sourcePeerId = sourcePeerId;
     }
@@ -87,7 +87,7 @@ export class RoomPlaybackService {
         playback.mediaEpoch += 1;
       }
 
-      playback.positionMs = input.positionMs ?? 0;
+      playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, input.positionMs ?? 0);
       if (playback.status === "playing") {
         playback.startedAt = new Date().toISOString();
       } else {
@@ -95,7 +95,7 @@ export class RoomPlaybackService {
       }
     }
 
-    playback.queueVersion += 1;
+    this.bumpPlaybackVersion(playback);
     return this.buildPlaybackForSnapshot(record);
   }
 
@@ -143,7 +143,7 @@ export class RoomPlaybackService {
     playback.sourceSessionId = track.ownerSessionId;
     playback.sourcePeerId = ownerPeerId;
     playback.sourceTrackId = trackId;
-    playback.positionMs = positionMs;
+    playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
     playback.startedAt = new Date().toISOString();
     if (isSwitchingSource) {
       playback.mediaEpoch += 1;
@@ -160,6 +160,34 @@ export class RoomPlaybackService {
     playback.positionMs = 0;
     playback.startedAt = null;
     playback.mediaEpoch += 1;
+    this.bumpPlaybackVersion(playback);
+  }
+
+  handleSourceDeparture(record: RoomRecord, sessionId: string) {
+    const playback = record.room.playback;
+    if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
+      return;
+    }
+
+    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+    const nextSourceSessionId =
+      currentTrack &&
+      currentTrack.ownerSessionId !== sessionId &&
+      record.room.members.some((member) => member.id === currentTrack.ownerSessionId)
+        ? currentTrack.ownerSessionId
+        : null;
+    const nextSourcePeerId =
+      nextSourceSessionId
+        ? record.room.members.find((member) => member.id === nextSourceSessionId)?.peerId ?? null
+        : null;
+
+    playback.status = "paused";
+    playback.startedAt = null;
+    playback.sourceSessionId = nextSourceSessionId;
+    playback.sourcePeerId = nextSourcePeerId;
+    playback.sourceTrackId = nextSourceSessionId ? playback.currentTrackId : null;
+    playback.mediaEpoch += 1;
+    this.bumpPlaybackVersion(playback);
   }
 
   private async resolveSourcePeerId(record: RoomRecord, sourceSessionId: string | null) {
@@ -193,5 +221,23 @@ export class RoomPlaybackService {
 
   private findQueueItemIdForTrack(record: RoomRecord, trackId: string) {
     return record.queue.find((item) => item.trackId === trackId)?.id ?? null;
+  }
+
+  private bumpPlaybackVersion(playback: PlaybackSnapshot) {
+    playback.queueVersion += 1;
+  }
+
+  private clampPositionMs(record: RoomRecord, trackId: string | null, positionMs: number) {
+    const normalized = Math.max(0, Math.floor(positionMs));
+    if (!trackId) {
+      return normalized;
+    }
+
+    const track = record.tracks.find((item) => item.id === trackId);
+    if (!track?.durationMs || track.durationMs <= 0) {
+      return normalized;
+    }
+
+    return Math.min(normalized, track.durationMs);
   }
 }

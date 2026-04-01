@@ -1,6 +1,6 @@
 "use client";
 
-import type { RoomMember } from "@music-room/shared";
+import type { PlaybackSnapshot, RoomMember } from "@music-room/shared";
 
 export function formatDuration(durationMs: number) {
   if (!durationMs) {
@@ -41,6 +41,17 @@ export function getOnlineMemberCount(members: RoomMember[]) {
   return getOnlineMembers(members).length;
 }
 
+export function getPlaybackConsistencyVersion(playback: PlaybackSnapshot | null | undefined) {
+  return playback?.queueVersion ?? 0;
+}
+
+export function shouldAcceptPlaybackSnapshot(
+  current: PlaybackSnapshot | null | undefined,
+  incoming: PlaybackSnapshot | null | undefined
+) {
+  return getPlaybackConsistencyVersion(incoming) >= getPlaybackConsistencyVersion(current);
+}
+
 export function toUserFacingError(error: unknown) {
   const message = error instanceof Error ? error.message : "请求失败。";
 
@@ -69,7 +80,7 @@ export function toUserFacingError(error: unknown) {
   }
 
   if (message.includes("All track uploaders must be online before deleting the room")) {
-    return "只有所有已上传歌曲的成员在线时才能解散房间。";
+    return "只有所有已上传歌曲的成员都在线时才能解散房间。";
   }
 
   if (message.includes("Queue reorder payload does not match")) {
@@ -86,6 +97,18 @@ export function toUserFacingError(error: unknown) {
 
   if (message.includes("Only the original uploader can delete this track")) {
     return "只有歌曲上传者本人可以删除这首歌。";
+  }
+
+  if (message.includes("Playback state version conflict")) {
+    return "房间播放状态刚刚被别人改动，请稍后再试。";
+  }
+
+  if (message.includes("Realtime sync unavailable")) {
+    return "实时同步暂不可用，请稍后再试。";
+  }
+
+  if (message.includes("Playback control rate limit exceeded")) {
+    return "操作过于频繁，请稍后再试。";
   }
 
   if (message.includes("Invalid username or password")) {

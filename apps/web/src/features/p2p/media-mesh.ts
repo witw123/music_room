@@ -22,6 +22,10 @@ type MediaMeshCallbacks = {
     peerId: string;
     trackId: string;
   }) => void;
+  onSourcePeerFailed?: (payload: {
+    peerId: string;
+    mediaEpoch: number;
+  }) => void;
 };
 
 type MediaPeerEntry = {
@@ -29,6 +33,7 @@ type MediaPeerEntry = {
   stream: MediaStream | null;
   senders: RTCRtpSender[];
   pendingCandidates: RTCIceCandidateInit[];
+  wantsIncomingAudio: boolean;
 };
 
 export class RoomMediaMesh {
@@ -178,7 +183,13 @@ export class RoomMediaMesh {
         return;
       }
 
-      await entry.connection.addIceCandidate(candidate);
+      try {
+        await entry.connection.addIceCandidate(candidate);
+      } catch {
+        if (!entry.connection.remoteDescription) {
+          entry.pendingCandidates.push(candidate);
+        }
+      }
     }
   }
 
@@ -206,7 +217,6 @@ export class RoomMediaMesh {
         entry.connection.connectionState === "disconnected" ||
         entry.connection.connectionState === "failed")
     ) {
-
       const offer = await entry.connection.createOffer();
       await entry.connection.setLocalDescription(offer);
       this.callbacks.onSignal?.({
@@ -236,7 +246,8 @@ export class RoomMediaMesh {
       connection,
       stream: null,
       senders: [],
-      pendingCandidates: []
+      pendingCandidates: [],
+      wantsIncomingAudio
     };
 
     if (wantsIncomingAudio) {
@@ -287,6 +298,13 @@ export class RoomMediaMesh {
       });
 
       if (connection.connectionState === "failed" || connection.connectionState === "closed") {
+        if (entry.wantsIncomingAudio) {
+          this.callbacks.onSourcePeerFailed?.({
+            peerId,
+            mediaEpoch: this.currentMediaEpoch
+          });
+        }
+
         if (entry.stream) {
           this.callbacks.onRemoteStream(null);
         }
@@ -346,11 +364,11 @@ export class RoomMediaMesh {
   }
 
   private resetForMediaEpoch(nextMediaEpoch: number) {
+    this.currentMediaEpoch = nextMediaEpoch;
     for (const [peerId, entry] of this.peers.entries()) {
       this.releasePeer(peerId, entry);
     }
     this.peers.clear();
-    this.currentMediaEpoch = nextMediaEpoch;
     this.callbacks.onRemoteStream(null);
   }
 
@@ -362,7 +380,13 @@ export class RoomMediaMesh {
     const nextCandidates = [...entry.pendingCandidates];
     entry.pendingCandidates = [];
     for (const candidate of nextCandidates) {
-      await entry.connection.addIceCandidate(candidate);
+      try {
+        await entry.connection.addIceCandidate(candidate);
+      } catch {
+        if (!entry.connection.remoteDescription) {
+          entry.pendingCandidates.push(candidate);
+        }
+      }
     }
   }
 }

@@ -198,7 +198,7 @@ describe("SignalingGateway", () => {
     }));
   });
 
-  it("broadcasts piece availability updates to the rest of the room", () => {
+  it("broadcasts piece availability updates to the rest of the room", async () => {
     const redisService = {
       publish: jest.fn(),
       subscribe: jest.fn()
@@ -232,7 +232,7 @@ describe("SignalingGateway", () => {
       announcedAt: new Date().toISOString()
     };
 
-    const result = gateway.handlePieceAvailability(client as never, payload);
+    const result = await gateway.handlePieceAvailability(client as never, payload);
 
     expect(result).toEqual(payload);
     expect(client.to).toHaveBeenCalledWith("room_1");
@@ -246,7 +246,7 @@ describe("SignalingGateway", () => {
     );
   });
 
-  it("publishes peer signals so they can cross server instances", () => {
+  it("publishes peer signals so they can cross server instances", async () => {
     const redisService = {
       publish: jest.fn(),
       subscribe: jest.fn()
@@ -276,7 +276,7 @@ describe("SignalingGateway", () => {
       payload: { type: "offer", sdp: "fake" }
     };
 
-    const result = gateway.handleSignal(
+    const result = await gateway.handleSignal(
       {
         data: {
           roomId: "room_1",
@@ -287,7 +287,7 @@ describe("SignalingGateway", () => {
       payload
     );
 
-    expect(result).toEqual(payload);
+    expect(result).toEqual(expect.objectContaining(payload));
     expect(redisService.publish).toHaveBeenCalledWith(
       "music-room:peer-signal",
       expect.objectContaining({
@@ -339,7 +339,7 @@ describe("SignalingGateway", () => {
       authService as never
     );
 
-    gateway.handlePieceAvailability(
+    await gateway.handlePieceAvailability(
       {
         data: {
           roomId: "room_1",
@@ -383,7 +383,7 @@ describe("SignalingGateway", () => {
     );
   });
 
-  it("rejects realtime messages from unauthenticated clients", () => {
+  it("rejects realtime messages from unauthenticated clients", async () => {
     const redisService = {
       publish: jest.fn(),
       subscribe: jest.fn()
@@ -398,7 +398,7 @@ describe("SignalingGateway", () => {
       authService as never
     );
 
-    expect(() =>
+    await expect(
       gateway.handleSignal(
         {
           data: {}
@@ -412,6 +412,6 @@ describe("SignalingGateway", () => {
           payload: {}
         }
       )
-    ).toThrow("Unauthorized realtime request.");
+    ).rejects.toThrow("Unauthorized realtime request.");
   });
 });

@@ -45,17 +45,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async publish(channel: string, payload: unknown) {
-    if (this.client.status !== "ready") {
-      return;
-    }
+    this.assertReady(this.client, "publisher");
 
     await this.client.publish(channel, JSON.stringify(payload));
   }
 
   async setJson(key: string, payload: unknown, ttlSeconds?: number) {
-    if (this.client.status !== "ready") {
-      return;
-    }
+    this.assertReady(this.client, "publisher");
 
     const value = JSON.stringify(payload);
     if (ttlSeconds) {
@@ -67,9 +63,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async setString(key: string, value: string, ttlSeconds?: number) {
-    if (this.client.status !== "ready") {
-      return;
-    }
+    this.assertReady(this.client, "publisher");
 
     if (ttlSeconds) {
       await this.client.set(key, value, "EX", ttlSeconds);
@@ -80,17 +74,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getString(key: string) {
-    if (this.client.status !== "ready") {
-      return null;
-    }
+    this.assertReady(this.client, "publisher");
 
     return this.client.get(key);
   }
 
   async getJson<T>(key: string): Promise<T | null> {
-    if (this.client.status !== "ready") {
-      return null;
-    }
+    this.assertReady(this.client, "publisher");
 
     const value = await this.client.get(key);
     if (!value) {
@@ -101,41 +91,31 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async delete(key: string) {
-    if (this.client.status !== "ready") {
-      return;
-    }
+    this.assertReady(this.client, "publisher");
 
     await this.client.del(key);
   }
 
   async addToSet(key: string, value: string) {
-    if (this.client.status !== "ready") {
-      return;
-    }
+    this.assertReady(this.client, "publisher");
 
     await this.client.sadd(key, value);
   }
 
   async removeFromSet(key: string, value: string) {
-    if (this.client.status !== "ready") {
-      return;
-    }
+    this.assertReady(this.client, "publisher");
 
     await this.client.srem(key, value);
   }
 
   async getSetMembers(key: string) {
-    if (this.client.status !== "ready") {
-      return [];
-    }
+    this.assertReady(this.client, "publisher");
 
     return this.client.smembers(key);
   }
 
   async subscribe(channel: string, handler: (payload: unknown) => void) {
-    if (this.subscriber.status !== "ready") {
-      return () => undefined;
-    }
+    this.assertReady(this.subscriber, "subscriber");
 
     const handlers = this.messageHandlers.get(channel) ?? new Set<(payload: unknown) => void>();
     const shouldSubscribe = handlers.size === 0;
@@ -171,5 +151,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.warn(`Redis ${label} unavailable; continuing without pub/sub. ${String(error)}`);
     }
+  }
+
+  private assertReady(client: Redis, label: string) {
+    if (client.status === "ready") {
+      return;
+    }
+
+    throw new Error(`Redis unavailable (${label}).`);
   }
 }

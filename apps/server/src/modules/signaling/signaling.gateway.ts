@@ -35,6 +35,7 @@ const pieceAvailabilityChannel = "music-room:piece-availability";
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly instanceId = randomUUID();
   private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
+  private sequence = 0;
   private readonly availabilityByRoom = new Map<
     string,
     Map<string, TrackAvailabilityAnnouncement>
@@ -182,28 +183,35 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   @SubscribeMessage("peer.signal")
-  handleSignal(@ConnectedSocket() client: Socket, @MessageBody() payload: PeerSignalMessage) {
+  async handleSignal(@ConnectedSocket() client: Socket, @MessageBody() payload: PeerSignalMessage) {
     this.assertRealtimeClient(client, payload.roomId);
+    this.assertRealtimeAvailable();
 
     if (client.data.peerId !== payload.fromPeerId) {
       throw new WsException("Peer mismatch.");
     }
 
-    this.server.to(payload.roomId).emit("peer.signal", payload);
-    void this.redisService.publish(peerSignalChannel, {
+    const nextPayload = {
+      ...payload,
+      sequence: (payload as PeerSignalMessage & { sequence?: number }).sequence ?? this.nextSequence()
+    } as PeerSignalMessage;
+
+    this.server.to(payload.roomId).emit("peer.signal", nextPayload);
+    await this.redisService.publish(peerSignalChannel, {
       sourceId: this.instanceId,
       roomId: payload.roomId,
-      payload
+      payload: nextPayload
     });
-    return payload;
+    return nextPayload;
   }
 
   @SubscribeMessage("piece.availability")
-  handlePieceAvailability(
+  async handlePieceAvailability(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: TrackAvailabilityAnnouncement
   ) {
     this.assertRealtimeClient(client, payload.roomId);
+    this.assertRealtimeAvailable();
 
     if (client.data.peerId !== payload.ownerPeerId) {
       throw new WsException("Peer mismatch.");
@@ -213,7 +221,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     roomAvailability.set(`${payload.trackId}:${payload.ownerPeerId}`, payload);
     this.availabilityByRoom.set(payload.roomId, roomAvailability);
     client.to(payload.roomId).emit("piece.availability", payload);
-    void this.redisService.publish(pieceAvailabilityChannel, {
+    await this.redisService.publish(pieceAvailabilityChannel, {
       sourceId: this.instanceId,
       roomId: payload.roomId,
       payload
@@ -240,6 +248,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { roomId: string; sessionId?: string; peerId?: string }
   ) {
+    this.assertRealtimeAvailable();
+
     if (!payload.sessionId || !payload.peerId) {
       throw new WsException("Missing session identity.");
     }
@@ -280,6 +290,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @MessageBody() payload: { roomId: string; sessionId: string; peerId: string }
   ) {
     this.assertRealtimeClient(client, payload.roomId);
+    this.assertRealtimeAvailable();
 
     if (client.data.sessionId !== payload.sessionId || client.data.peerId !== payload.peerId) {
       throw new WsException("Presence mismatch.");
@@ -387,6 +398,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     if (!client.data.isRealtimeAuthenticated || client.data.roomId !== roomId) {
       throw new WsException("Unauthorized realtime request.");
     }
+  }
+
+  private assertRealtimeAvailable() {
+    if (
+      typeof this.redisService.isAvailable === "function" &&
+      !this.redisService.isAvailable()
+    ) {
+      throw new WsException("Realtime sync unavailable.");
+    }
+  }
+
+  private nextSequence() {
+    this.sequence += 1;
+    return this.sequence;
   }
 
   private emitAvailabilitySnapshot(roomId: string, client: Socket) {

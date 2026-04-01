@@ -127,6 +127,7 @@ export const musicRoomApi = {
       trackId?: string;
       queueItemId?: string;
       positionMs?: number;
+      expectedVersion: number;
     }
   ) =>
     request<PlaybackSnapshot>(`/v1/rooms/${roomId}/playback`, {
