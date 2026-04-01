@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type {
   AuthSession,
+  PeerDiagnosticsSnapshot,
+  PeerRecentEvent,
   Playlist,
   RoomMediaConnectionState,
   RoomMember,
@@ -17,7 +19,6 @@ import { MembersPanel } from "./MembersPanel";
 import type { MemberTransferSummary } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
-import type { PeerDiagnosticsSnapshot, PeerRecentEvent } from "@music-room/shared";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -59,7 +60,7 @@ type RoomDashboardViewProps = {
   onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
-  socket: any; // Using any for RoomSocket to avoid circular or complex imports here for now
+  socket: any;
 };
 
 type TabId = "queue" | "library" | "members";
@@ -145,18 +146,6 @@ export function RoomDashboardView({
 
       <div className="relative z-20 flex w-full min-h-[46svh] flex-1 flex-col rounded-t-[28px] border-t border-white/8 bg-[#050505]/92 backdrop-blur-2xl lg:min-h-0 lg:rounded-none lg:rounded-tl-[28px] lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
         <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/70 px-4 pb-3 pt-4 sm:px-6 sm:pt-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/78">
-                协作面板
-              </h3>
-              <p className="mt-1 text-xs text-white/42">队列优先，曲库和成员作为次级上下文</p>
-            </div>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/55">
-              {tabLabels[activeTab]}
-            </span>
-          </div>
-
           <div className="flex items-center gap-1 rounded-xl bg-white/5 p-1">
             {(["queue", "library", "members"] as TabId[]).map((tab) => (
               <button

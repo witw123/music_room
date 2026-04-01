@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { buildAppEntryHref, githubReleasesUrl } from "@/lib/client-shell";
+import { buildAppEntryHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
@@ -34,7 +33,7 @@ export function AuthPage() {
     setActiveSession
   } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
-    initialStatusMessage: "登录后即可创建房间、加入房间，并恢复最近的音乐房。"
+    initialStatusMessage: ""
   });
 
   useEffect(() => {
@@ -87,31 +86,39 @@ export function AuthPage() {
     }
   }
 
+  const statusToneClass =
+    statusMessage.includes("失败") || statusMessage.includes("错误")
+      ? "text-red-400"
+      : "text-accent";
+
   return (
-    <main className="min-h-screen bg-[#000000] relative flex flex-col font-sans selection:bg-accent/30 selection:text-white">
+    <main className="relative flex min-h-screen flex-col bg-[#000000] font-sans selection:bg-accent/30 selection:text-white">
       <TopBar />
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12 animate-fade-in relative z-10 w-full max-w-5xl mx-auto my-auto min-h-[80vh]">
-        <div className="flex flex-col lg:flex-row w-full bg-transparent border border-white/10 rounded-2xl overflow-hidden relative">
-          
-          <div className="flex-[1.2] p-8 lg:p-16 flex flex-col justify-center relative border-b lg:border-b-0 lg:border-r border-white/10 bg-[#050505]">
+      <div className="relative z-10 mx-auto my-auto flex min-h-[80vh] w-full max-w-5xl flex-col items-center justify-center p-6 lg:p-12">
+        <div className="relative flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-transparent lg:flex-row">
+          <div className="relative flex flex-[1.2] flex-col justify-center border-b border-white/10 bg-[#050505] p-8 lg:border-b-0 lg:border-r lg:p-16">
             <div className="relative z-10">
-              <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-accent mb-6 block">Music Room account</span>
-              <h1 className="text-3xl font-bold text-white mb-6">让协作听歌成为连续路径</h1>
-              <p className="text-sm text-white/50 leading-relaxed mb-12">
-                统一管理你的房间权限、昵称与历史连线记录。
+              <span className="mb-6 block text-[10px] font-bold uppercase tracking-[0.2em] text-accent">
+                Music Room account
+              </span>
+              <h1 className="mb-6 text-3xl font-bold text-white">让听歌随心所欲，让共享触手可及</h1>
+              <p className="mb-12 text-sm leading-relaxed text-white/50">
+                我们致力于满足音乐极客
               </p>
-              
+
               <div className="flex flex-col gap-6">
                 {[
-                  { title: "创建 / 加入房间", desc: "直接验证身份，不再重复处理弹窗或访客确认。" },
-                  { title: "共享队列协作", desc: "当前播放与排队状态实时显示所有人提交的曲目。" },
-                  { title: "恢复最近房间", desc: "关闭标签页或是断网后，也能快速回到刚刚的房间。" }
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4 items-start">
-                    <span className="text-accent text-sm font-mono mt-0.5 font-bold">0{i + 1}</span>
+                  { title: "房间", desc: "实时共享，亦可纯享" },
+                  { title: "歌单", desc: "互利共赢的歌曲控制" },
+                  { title: "记录", desc: "保存你的音乐所想" }
+                ].map((item, index) => (
+                  <div key={item.title} className="flex items-start gap-4">
+                    <span className="mt-0.5 text-sm font-mono font-bold text-accent">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
                     <div>
-                      <h3 className="text-sm font-bold text-white mb-1">{item.title}</h3>
+                      <h3 className="mb-1 text-sm font-bold text-white">{item.title}</h3>
                       <p className="text-xs text-white/40">{item.desc}</p>
                     </div>
                   </div>
@@ -120,18 +127,26 @@ export function AuthPage() {
             </div>
           </div>
 
-          <div className="flex-1 p-8 lg:p-16 flex flex-col justify-center bg-[#000000]">
-            <div className="w-full max-w-sm mx-auto">
-              <div className="flex p-1 bg-white/5 border border-white/5 rounded-lg mb-10 w-full max-w-[240px]">
+          <div className="flex flex-1 flex-col justify-center bg-[#000000] p-8 lg:p-16">
+            <div className="mx-auto w-full max-w-sm">
+              <div className="mb-10 flex w-full max-w-[240px] rounded-lg border border-white/5 bg-white/5 p-1">
                 <button
-                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-all ${mode === "login" ? "bg-[#111] text-white shadow-sm border border-white/10" : "text-white/50 hover:text-white"}`}
+                  className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
+                    mode === "login"
+                      ? "border border-white/10 bg-[#111] text-white shadow-sm"
+                      : "text-white/50 hover:text-white"
+                  }`}
                   onClick={() => setMode("login")}
                   type="button"
                 >
                   登录
                 </button>
                 <button
-                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-all ${mode === "register" ? "bg-[#111] text-white shadow-sm border border-white/10" : "text-white/50 hover:text-white"}`}
+                  className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
+                    mode === "register"
+                      ? "border border-white/10 bg-[#111] text-white shadow-sm"
+                      : "text-white/50 hover:text-white"
+                  }`}
                   onClick={() => setMode("register")}
                   type="button"
                 >
@@ -140,9 +155,11 @@ export function AuthPage() {
               </div>
 
               <div className="mb-8">
-                <h2 className="text-2xl font-bold text-white mb-2">{mode === "login" ? "登录音乐房" : "创建账号"}</h2>
-                <p className={`text-xs ${statusMessage?.includes("错误") || statusMessage?.includes("失败") ? "text-red-400" : "text-accent"}`}>
-                  {statusMessage || "欢迎来到 Music Room。"}
+                <h2 className="mb-2 text-2xl font-bold text-white">
+                  {mode === "login" ? "登录音乐房" : "创建账号"}
+                </h2>
+                <p className={`text-xs ${statusMessage ? statusToneClass : "text-white/45"}`}>
+                  {statusMessage || (mode === "login" ? "输入账号信息后继续进入房间。" : "创建账号后立即进入音乐房。")}
                 </p>
               </div>
 
@@ -151,7 +168,7 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">用户名</span>
                     <input
-                      className="w-full bg-[#111] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-accent transition-all placeholder:text-white/20"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={loginUsername}
                       onChange={(event) => setLoginUsername(event.target.value)}
                       placeholder="输入用户名"
@@ -161,13 +178,13 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
-                      className="w-full bg-[#111] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-accent transition-all placeholder:text-white/20"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       type="password"
                       value={loginPassword}
                       onChange={(event) => setLoginPassword(event.target.value)}
                       placeholder="输入密码"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && loginUsername.trim() && loginPassword) {
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && loginUsername.trim() && loginPassword) {
                           startTransition(() => void handleLogin());
                         }
                       }}
@@ -176,7 +193,7 @@ export function AuthPage() {
 
                   <Button
                     size="lg"
-                    className="w-full mt-4 h-12 rounded-lg bg-accent hover:bg-accent-hover text-white text-base font-bold transition-all"
+                    className="mt-4 h-12 w-full rounded-lg bg-accent text-base font-bold text-white transition-all hover:bg-accent-hover"
                     disabled={!loginUsername.trim() || !loginPassword || isPending}
                     onClick={() => startTransition(() => void handleLogin())}
                     type="button"
@@ -187,19 +204,19 @@ export function AuthPage() {
               ) : (
                 <div className="flex flex-col gap-5">
                   <label className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-white/50">用户名（用于登录）</span>
+                    <span className="text-xs font-medium text-white/50">用户名</span>
                     <input
-                      className="w-full bg-[#111] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-accent transition-all placeholder:text-white/20"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={registerUsername}
                       onChange={(event) => setRegisterUsername(event.target.value)}
-                      placeholder="例如：jack"
+                      placeholder="设置登录用户名"
                     />
                   </label>
 
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
-                      className="w-full bg-[#111] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-accent transition-all placeholder:text-white/20"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       type="password"
                       value={registerPassword}
                       onChange={(event) => setRegisterPassword(event.target.value)}
@@ -208,14 +225,19 @@ export function AuthPage() {
                   </label>
 
                   <label className="flex flex-col gap-2">
-                    <span className="text-xs font-medium text-white/50">昵称（用于在房间内展示）</span>
+                    <span className="text-xs font-medium text-white/50">昵称</span>
                     <input
-                      className="w-full bg-[#111] border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-accent transition-all placeholder:text-white/20"
+                      className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={registerNickname}
                       onChange={(event) => setRegisterNickname(event.target.value)}
-                      placeholder="例如：Jack Smith"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && registerUsername.trim() && registerPassword && registerNickname.trim()) {
+                      placeholder="房间内显示的名字"
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Enter" &&
+                          registerUsername.trim() &&
+                          registerPassword &&
+                          registerNickname.trim()
+                        ) {
                           startTransition(() => void handleRegister());
                         }
                       }}
@@ -224,8 +246,13 @@ export function AuthPage() {
 
                   <Button
                     size="lg"
-                    className="w-full mt-4 h-12 rounded-lg bg-accent hover:bg-accent-hover text-white text-base font-bold transition-all"
-                    disabled={!registerUsername.trim() || !registerPassword || !registerNickname.trim() || isPending}
+                    className="mt-4 h-12 w-full rounded-lg bg-accent text-base font-bold text-white transition-all hover:bg-accent-hover"
+                    disabled={
+                      !registerUsername.trim() ||
+                      !registerPassword ||
+                      !registerNickname.trim() ||
+                      isPending
+                    }
                     onClick={() => startTransition(() => void handleRegister())}
                     type="button"
                   >
@@ -234,15 +261,17 @@ export function AuthPage() {
                 </div>
               )}
 
-              <div className="mt-8 text-center pt-8 border-t border-white/5">
-                <Link
-                  href={githubReleasesUrl}
-                  className="text-xs font-medium text-white/40 hover:text-white transition-colors"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  下载应用版本与更新包 &rarr;
-                </Link>
+              <div className="mt-8 border-t border-white/5 pt-8 text-center">
+                <p className="text-xs text-white/40">
+                  {mode === "login" ? "还没有账号？" : "已有账号？"}
+                  <button
+                    className="ml-2 font-medium text-white transition-colors hover:text-accent"
+                    onClick={() => setMode(mode === "login" ? "register" : "login")}
+                    type="button"
+                  >
+                    {mode === "login" ? "去注册" : "去登录"}
+                  </button>
+                </p>
               </div>
             </div>
           </div>

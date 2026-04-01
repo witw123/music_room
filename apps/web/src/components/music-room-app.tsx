@@ -90,6 +90,8 @@ export function MusicRoomApp({
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
+  const pendingAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
+  const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
     lastAppliedKey: string | null;
@@ -107,6 +109,8 @@ export function MusicRoomApp({
   const [mediaConnectedPeers, setMediaConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
   const [suppressRoomRecovery, setSuppressRoomRecovery] = useState(false);
+  const [isRecoveringRoom, setIsRecoveringRoom] = useState(false);
+  const [isNavigatingRoomExit, setIsNavigatingRoomExit] = useState(false);
   const [mediaConnectionState, setMediaConnectionState] =
     useState<RoomMediaConnectionState>("idle");
   const [availabilityByTrack, setAvailabilityByTrack] = useState<
@@ -205,7 +209,17 @@ export function MusicRoomApp({
   );
 
   const stableEmitAvailability = useCallback(
-    (announcement: TrackAvailabilityAnnouncement) => socketRef.current?.emit("piece.availability", announcement),
+    (announcement: TrackAvailabilityAnnouncement) => {
+      const socket = socketRef.current;
+      const key = `${announcement.trackId}:${announcement.ownerPeerId}`;
+
+      if (!socket || !socket.connected) {
+        pendingAvailabilityRef.current.set(key, announcement);
+        return;
+      }
+
+      socket.emit("piece.availability", announcement);
+    },
     []
   );
 
@@ -311,6 +325,60 @@ export function MusicRoomApp({
   useEffect(() => {
     announceLocalCacheRef.current = announceLocalCache;
   }, [announceLocalCache]);
+
+  const flushPendingAvailability = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || !socket.connected || pendingAvailabilityRef.current.size === 0) {
+      return;
+    }
+
+    for (const announcement of pendingAvailabilityRef.current.values()) {
+      socket.emit("piece.availability", announcement);
+    }
+
+    pendingAvailabilityRef.current.clear();
+  }, []);
+
+  const scheduleRemotePlaybackRetry = useCallback(
+    (attempt = 0) => {
+      if (remotePlaybackRetryRef.current !== null) {
+        window.clearTimeout(remotePlaybackRetryRef.current);
+        remotePlaybackRetryRef.current = null;
+      }
+
+      const remoteAudio = remoteAudioRef.current;
+      const playback = currentRoomRef.current?.room.playback;
+
+      if (
+        !remoteAudio ||
+        !remoteAudio.srcObject ||
+        !playback?.currentTrackId ||
+        playback.status !== "playing"
+      ) {
+        return;
+      }
+
+      void remoteAudio.play().catch(() => {
+        if (attempt >= 6) {
+          setStatusMessage("远端音频连接已建立，但播放未稳定，请点击一次播放继续。");
+          return;
+        }
+
+        remotePlaybackRetryRef.current = window.setTimeout(() => {
+          scheduleRemotePlaybackRetry(attempt + 1);
+        }, 800);
+      });
+    },
+    [setStatusMessage]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (remotePlaybackRetryRef.current !== null) {
+        window.clearTimeout(remotePlaybackRetryRef.current);
+      }
+    };
+  }, []);
 
   const recordPeerDiagnostic = useCallback(
     (input: Parameters<typeof recordDiagnosticsEvent>[1]) => {
@@ -433,11 +501,15 @@ export function MusicRoomApp({
     }
 
     let cancelled = false;
+    setIsRecoveringRoom(true);
 
     void (async () => {
       try {
         const snapshot = await musicRoomApi.recoverRoom(initialRoomId);
         if (!snapshot || cancelled) {
+          if (!cancelled) {
+            setIsRecoveringRoom(false);
+          }
           return;
         }
 
@@ -447,6 +519,10 @@ export function MusicRoomApp({
       } catch {
         if (!cancelled) {
           setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRecoveringRoom(false);
         }
       }
     })();
@@ -596,9 +672,7 @@ export function MusicRoomApp({
           }
 
           if (stream) {
-            void remoteAudio.play().catch(() => {
-              setStatusMessage("浏览器阻止了远端音频自动播放，请再次点击页面继续。");
-            });
+            scheduleRemotePlaybackRetry();
           }
         },
         onConnectionStateChange: ({ state, connectedPeerIds }) => {
@@ -700,6 +774,7 @@ export function MusicRoomApp({
     socket.on("connect", () => {
       subscribeToRoom();
       startPresenceHeartbeat();
+      flushPendingAvailability();
       setStatusMessage(`已连接到房间 ${roomSnapshot.room.joinCode}。`);
     });
     let didReplayLocalAvailability = false;
@@ -716,6 +791,8 @@ export function MusicRoomApp({
           void announceLocalCacheRef.current(trackId);
         }
       }
+
+      flushPendingAvailability();
     });
     socket.on("peer.signal", (payload: PeerSignalMessage) => {
       recordPeerDiagnostic({
@@ -805,6 +882,10 @@ export function MusicRoomApp({
       if (presenceIntervalId !== null) {
         window.clearInterval(presenceIntervalId);
       }
+      if (remotePlaybackRetryRef.current !== null) {
+        window.clearTimeout(remotePlaybackRetryRef.current);
+        remotePlaybackRetryRef.current = null;
+      }
       socket.emit("room.unsubscribe", { roomId });
       socket.disconnect();
       socketRef.current = null;
@@ -833,6 +914,8 @@ export function MusicRoomApp({
     mergeLocalPieceAvailability,
     deleteUploadedTrackArtifacts,
     recordPeerDiagnostic,
+    flushPendingAvailability,
+    scheduleRemotePlaybackRetry,
     workspaceOnly,
     router
   ]);
@@ -1026,8 +1109,10 @@ export function MusicRoomApp({
   }
 
   async function handleLeaveRoomAction() {
+    setIsNavigatingRoomExit(true);
     const didLeave = await leaveRoom();
     if (!didLeave) {
+      setIsNavigatingRoomExit(false);
       return;
     }
 
@@ -1038,8 +1123,10 @@ export function MusicRoomApp({
   }
 
   async function handleDeleteRoomAction() {
+    setIsNavigatingRoomExit(true);
     const didDelete = await deleteRoom();
     if (!didDelete) {
+      setIsNavigatingRoomExit(false);
       return;
     }
 
@@ -1229,6 +1316,9 @@ export function MusicRoomApp({
       ? "当前未拿到短期 TURN 凭证，已回退静态 STUN/TURN 配置。"
       : "正在获取 ICE/TURN 配置…";
   const iceConfigSource = iceConfig?.source ?? (iceConfigResolved ? "static-fallback" : "loading");
+  const showRoomTransitionState =
+    !roomSnapshot &&
+    ((workspaceOnly && !!initialRoomId && !!activeSession && isRecoveringRoom) || isNavigatingRoomExit);
 
   return (
     <main className="min-h-screen bg-background relative flex flex-col pb-32">
@@ -1304,6 +1394,23 @@ export function MusicRoomApp({
               onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
               socket={socketRef.current}
             />
+          ) : showRoomTransitionState ? (
+            <section className="flex min-h-[60vh] flex-col items-center justify-center px-4 pt-12 text-center animate-fade-in">
+              <div className="mb-6 h-16 w-16 rounded-full border border-surface-border bg-surface flex items-center justify-center text-accent">
+                <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              </div>
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
+                Room transition
+              </p>
+              <h2 className="mb-3 text-2xl font-bold text-foreground">
+                {isNavigatingRoomExit ? "正在离开房间" : "正在连接房间"}
+              </h2>
+              <p className="max-w-sm text-sm leading-relaxed text-foreground-muted">
+                {isNavigatingRoomExit
+                  ? "正在返回房间列表，请稍候。"
+                  : "正在恢复房间状态并连接实时链路，请稍候。"}
+              </p>
+            </section>
           ) : (
             <section className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-fade-in pt-12">
               <div className="w-16 h-16 rounded-full bg-surface border border-surface-border flex items-center justify-center mb-6 text-foreground-muted">
@@ -1387,6 +1494,7 @@ export function MusicRoomApp({
           setMediaConnectionState("live");
         }}
         onRemoteWaiting={() => {
+          scheduleRemotePlaybackRetry();
           recordPeerDiagnostic({
             peerId: "remote-media",
             channelKind: "media",
@@ -1404,6 +1512,7 @@ export function MusicRoomApp({
           setMediaConnectionState("buffering");
         }}
         onRemotePause={() => {
+          scheduleRemotePlaybackRetry();
           recordPeerDiagnostic({
             peerId: "remote-media",
             channelKind: "media",

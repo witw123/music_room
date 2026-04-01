@@ -23,6 +23,32 @@ type MeshStatusPanelProps = {
   iceConfigStatus: string;
 };
 
+function formatEventLabel(event: PeerRecentEvent) {
+  const channelMap: Record<PeerRecentEvent["channelKind"], string> = {
+    data: "数据",
+    media: "音频",
+    system: "系统"
+  };
+  const directionMap: Record<PeerRecentEvent["direction"], string> = {
+    sent: "发出",
+    received: "收到",
+    local: "本地"
+  };
+
+  return `[${channelMap[event.channelKind]}/${directionMap[event.direction]}] ${event.summary}`;
+}
+
+function formatTimestamp(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString("zh-CN", {
+    hour12: false
+  });
+}
+
 export function MeshStatusPanel({
   availabilitySummary,
   connectedPeersCount,
@@ -87,23 +113,25 @@ export function MeshStatusPanel({
                 >
                   <div className="flex items-center justify-between gap-3">
                     <strong className="text-xs font-semibold text-foreground">{peer.peerId}</strong>
-                    <span className="text-[10px] text-foreground-muted">{peer.updatedAt}</span>
+                    <span className="text-[10px] text-foreground-muted">
+                      {formatTimestamp(peer.updatedAt)}
+                    </span>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-foreground-muted">
-                    <span>Data 连接: {peer.dataConnectionState ?? "unknown"}</span>
-                    <span>Media 连接: {peer.mediaConnectionState ?? "unknown"}</span>
-                    <span>Data ICE: {peer.dataIceState ?? "unknown"}</span>
-                    <span>Media ICE: {peer.mediaIceState ?? "unknown"}</span>
+                    <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
+                    <span>音频连接: {peer.mediaConnectionState ?? "未知"}</span>
+                    <span>数据 ICE: {peer.dataIceState ?? "未知"}</span>
+                    <span>音频 ICE: {peer.mediaIceState ?? "未知"}</span>
                     <span>
-                      发信令:
+                      发出信令:
                       {` ${peer.signalStats.sentOffers}/${peer.signalStats.sentAnswers}/${peer.signalStats.sentCandidates}`}
                     </span>
                     <span>
-                      收信令:
+                      收到信令:
                       {` ${peer.signalStats.receivedOffers}/${peer.signalStats.receivedAnswers}/${peer.signalStats.receivedCandidates}`}
                     </span>
-                    <span>收到远端 track: {peer.remoteTrackStatus.received ? "yes" : "no"}</span>
-                    <span>绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "yes" : "no"}</span>
+                    <span>收到远端音轨: {peer.remoteTrackStatus.received ? "是" : "否"}</span>
+                    <span>绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}</span>
                   </div>
                   {peer.lastError ? (
                     <p className="mt-2 text-[10px] text-red-400">{peer.lastError}</p>
@@ -138,7 +166,7 @@ export function MeshStatusPanel({
           ) : (
             <div className="py-4 text-center">
               <p className="text-[10px] text-foreground-muted/70">
-                导入曲目后，这里会显示缓存分片与 peer 诊断信息。
+                导入曲目后，这里会显示缓存分片与连接诊断信息。
               </p>
             </div>
           )}
@@ -146,7 +174,7 @@ export function MeshStatusPanel({
           {recentEvents.length ? (
             <div className="flex flex-col gap-2 border-t border-surface-border pt-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground-muted">
-                Recent Events
+                最近事件
               </p>
               {recentEvents.slice(0, 20).map((event) => (
                 <div
@@ -154,25 +182,25 @@ export function MeshStatusPanel({
                   className="rounded-lg border border-surface-border bg-background/40 px-3 py-2 text-[10px]"
                 >
                   <div className="flex items-center justify-between gap-2 text-foreground-muted">
-                    <span>{event.timestamp}</span>
+                    <span>{formatTimestamp(event.timestamp)}</span>
                     <span>{event.peerId}</span>
                   </div>
-                  <p className="mt-1 text-foreground">
-                    [{event.channelKind}/{event.direction}] {event.event} - {event.summary}
-                  </p>
+                  <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
                 </div>
               ))}
             </div>
           ) : null}
 
           <div className="mt-2 flex items-center justify-between border-t border-surface-border pt-3">
-            <span className="text-[10px] text-foreground-muted">缓存异常时可在此清理本地数据</span>
+            <span className="text-[10px] text-foreground-muted">
+              如果本地缓存异常，可以在这里清理后重新同步。
+            </span>
             <Button
               variant="outline"
               size="sm"
               className="h-7 border-destructive/30 px-3 text-xs text-destructive transition-colors hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
               onClick={async () => {
-                if (confirm("确定要清空当前设备上的本地音乐缓存吗？操作后页面将重新加载。")) {
+                if (confirm("确定要清空当前设备上的本地音乐缓存吗？页面将会重新加载。")) {
                   const { clearAllCachedTracks } = await import("@/lib/indexeddb");
                   await clearAllCachedTracks();
                   window.location.reload();

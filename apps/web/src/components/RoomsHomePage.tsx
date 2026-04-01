@@ -38,7 +38,7 @@ export function RoomsHomePage() {
     refreshSession
   } = useSessionIdentity({
     sessionStorageKey: "music-room-session",
-    initialStatusMessage: "登录后即可创建房间、加入房间，并直接进入音乐房工作区。"
+    initialStatusMessage: ""
   });
 
   useEffect(() => {
