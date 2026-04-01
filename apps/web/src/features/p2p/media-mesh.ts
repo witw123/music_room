@@ -234,11 +234,7 @@ export class RoomMediaMesh {
         connectedPeerIds: this.getConnectedPeerIds()
       });
 
-      if (
-        connection.connectionState === "failed" ||
-        connection.connectionState === "disconnected" ||
-        connection.connectionState === "closed"
-      ) {
+      if (connection.connectionState === "failed" || connection.connectionState === "closed") {
         if (entry.stream) {
           this.callbacks.onRemoteStream(null);
         }

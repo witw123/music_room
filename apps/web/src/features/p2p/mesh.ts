@@ -72,7 +72,7 @@ export class P2PMesh {
       if (!this.peers.has(peerId)) {
         // Always initiate — the other side may or may not also initiate, which is fine.
         // ensurePeer tracks initiatorPeerId to avoid duplicate connections.
-        await this.ensurePeer(peerId, true);
+        await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
       }
     }
 
@@ -394,6 +394,10 @@ export class P2PMesh {
 
   private buildRequestKey(trackId: string, chunkIndex: number) {
     return `${trackId}:${chunkIndex}`;
+  }
+
+  private shouldInitiatePeer(peerId: string) {
+    return this.localPeerId.localeCompare(peerId) < 0;
   }
 }
 

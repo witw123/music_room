@@ -147,4 +147,26 @@ describe("P2PMesh", () => {
 
     expect(onPieceRequestTimeout).not.toHaveBeenCalled();
   });
+
+  it("only lets one side initiate the data channel offer", async () => {
+    const sendSignalA = vi.fn();
+    const sendSignalB = vi.fn();
+    const meshA = new P2PMesh("room_1", "peer_a", sendSignalA, {
+      onPieceReceived: vi.fn()
+    });
+    const meshB = new P2PMesh("room_1", "peer_b", sendSignalB, {
+      onPieceReceived: vi.fn()
+    });
+
+    await meshA.syncPeers(["peer_b"]);
+    await meshB.syncPeers(["peer_a"]);
+
+    expect(sendSignalA).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "offer",
+        toPeerId: "peer_b"
+      })
+    );
+    expect(sendSignalB).not.toHaveBeenCalled();
+  });
 });

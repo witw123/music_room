@@ -147,6 +147,28 @@ describe("RoomMediaMesh", () => {
     expect(sendSignal).toHaveBeenCalledTimes(2);
   });
 
+  it("does not tear down peers on transient disconnected state", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const stream = {
+      getAudioTracks: () => [{ id: "track_1" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+
+    const firstPeer = FakeRTCPeerConnection.instances[0];
+    firstPeer!.connectionState = "disconnected";
+    firstPeer!.onconnectionstatechange?.();
+
+    expect(firstPeer!.closed).toBe(false);
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+  });
+
   it("renegotiates when audio tracks become available after the first sync", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
