@@ -151,6 +151,8 @@ export class RoomController {
       album: string | null;
       durationMs: number;
       bitrate: number | null;
+      sizeBytes?: number | null;
+      codec?: string | null;
       fileHash: string;
       artworkUrl: string | null;
       ownerSessionId?: string;
@@ -165,7 +167,11 @@ export class RoomController {
       ownerNickname: body.ownerNickname ?? ""
     });
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
+    this.signalingGateway.emitLibraryPatch(roomId, {
+      tracks: snapshot.tracks,
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    });
     return track;
   }
 
@@ -179,7 +185,11 @@ export class RoomController {
     const result = await this.roomService.removeTrack(roomId, userId, trackId);
     await this.playlistService.removeTrackFromPlaylists(trackId);
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
+    this.signalingGateway.emitLibraryPatch(roomId, {
+      tracks: snapshot.tracks,
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    });
     return result;
   }
 }

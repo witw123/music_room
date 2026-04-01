@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import {
   assembleTrackFileFromPieces,
   buildTrackAvailabilityFromCache,
@@ -25,20 +25,20 @@ export function useTrackUploads(options: {
   peerId: string;
   activeSession: GuestSession | null;
   roomSnapshot: RoomSnapshot | null;
+  setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
   setStatusMessage: (message: string) => void;
   onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
-  refreshRoom: (roomId: string) => Promise<void>;
 }) {
   const {
     maxCachedTracks,
     peerId,
     activeSession,
     roomSnapshot,
+    setRoomSnapshot,
     setStatusMessage,
     onAvailability,
-    emitAvailability,
-    refreshRoom
+    emitAvailability
   } = options;
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
@@ -120,9 +120,6 @@ export function useTrackUploads(options: {
         }
 
         if (!didAdd) {
-          // Return the original reference to avoid retriggering dependent effects
-          // (the playback effect depends on uploadedTracks — a new reference would
-          // cause audio.load() which resets currentTime to 0).
           setCachedTrackCount(Object.keys(current).length);
           return current;
         }
@@ -173,6 +170,7 @@ export function useTrackUploads(options: {
     }
 
     const nextUploads: Record<string, UploadedTrack> = {};
+    const nextTracks: TrackMeta[] = [];
 
     for (const file of Array.from(files)) {
       const objectUrl = URL.createObjectURL(file);
@@ -186,6 +184,7 @@ export function useTrackUploads(options: {
         file,
         objectUrl
       };
+      nextTracks.push(registered);
       await cacheTrackAsset({
         trackId: registered.id,
         fileHash: registered.fileHash,
@@ -210,11 +209,18 @@ export function useTrackUploads(options: {
     }
 
     setUploadedTracks((current) => ({ ...current, ...nextUploads }));
+    setRoomSnapshot((current) =>
+      current
+        ? {
+            ...current,
+            tracks: [...nextTracks, ...current.tracks]
+          }
+        : current
+    );
     await trimLocalCache([
       ...roomSnapshot.tracks.map((track) => track.id),
       ...Object.keys(nextUploads)
     ]);
-    await refreshRoom(roomSnapshot.room.id);
     setStatusMessage(`${Object.keys(nextUploads).length} 首本地歌曲已导入房间曲库。`);
   }
 

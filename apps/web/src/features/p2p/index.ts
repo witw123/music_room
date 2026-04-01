@@ -17,6 +17,7 @@ export * from "./diagnostics";
 export const defaultChunkSize = 128 * 1024;
 export const currentTrackChunkRequestLimit = 24;
 export const upcomingTrackChunkRequestLimit = 8;
+const piecePersistenceBatchSize = 8;
 
 export function getWebRTCIceServers(config?: IceConfigResponse | null): IceServerConfig[] {
   if (config?.iceServers?.length) {
@@ -167,20 +168,25 @@ export async function buildTrackAvailabilityFromFile(input: {
   const chunkSize = input.chunkSize ?? defaultChunkSize;
   const totalChunks = Math.max(1, Math.ceil(input.file.size / chunkSize));
   const chunks = await splitBlobIntoChunks(input.file, chunkSize);
+  const pieces = [];
 
-  await cacheTrackPieces(
-    await Promise.all(
-      chunks.map(async (chunk, chunkIndex) => ({
-        pieceId: `${input.trackId}:${input.peerId}:${chunkIndex}`,
-        trackId: input.trackId,
-        peerId: input.peerId,
-        chunkIndex,
-        chunkSize: chunk.byteLength,
-        hash: await hashArrayBuffer(chunk),
-        payload: chunk
-      }))
-    )
-  );
+  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+    const chunk = chunks[chunkIndex];
+    pieces.push({
+      pieceId: `${input.trackId}:${input.peerId}:${chunkIndex}`,
+      trackId: input.trackId,
+      peerId: input.peerId,
+      chunkIndex,
+      chunkSize: chunk.byteLength,
+      hash: await hashArrayBuffer(chunk),
+      payload: chunk
+    });
+
+    if (pieces.length >= piecePersistenceBatchSize || chunkIndex === chunks.length - 1) {
+      await cacheTrackPieces(pieces.splice(0, pieces.length));
+      await yieldToMainThread();
+    }
+  }
 
   const availableChunks = chunks.map((_, chunkIndex) => chunkIndex);
 
@@ -229,6 +235,7 @@ export async function assembleTrackFileFromPieces(input: {
   const blob = new Blob(sortedPieces.map((piece) => piece.payload), {
     type: input.mimeType || "audio/mpeg"
   });
+  await yieldToMainThread();
   const fileBuffer = await blob.arrayBuffer();
   const fileHash = await hashArrayBuffer(fileBuffer);
 
@@ -276,7 +283,16 @@ async function splitBlobIntoChunks(blob: Blob, chunkSize: number) {
   for (let offset = 0; offset < blob.size; offset += chunkSize) {
     const nextChunk = blob.slice(offset, offset + chunkSize);
     chunks.push(await nextChunk.arrayBuffer());
+    if (chunks.length % piecePersistenceBatchSize === 0) {
+      await yieldToMainThread();
+    }
   }
 
   return chunks;
+}
+
+async function yieldToMainThread() {
+  await new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, 0);
+  });
 }

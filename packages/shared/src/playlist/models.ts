@@ -7,6 +7,8 @@ export const trackMetaSchema = z.object({
   album: z.string().nullable(),
   durationMs: z.number().int().nonnegative(),
   bitrate: z.number().int().positive().nullable(),
+  sizeBytes: z.number().int().nonnegative().nullable().optional(),
+  codec: z.string().nullable().optional(),
   fileHash: z.string(),
   artworkUrl: z.string().nullable(),
   ownerSessionId: z.string(),

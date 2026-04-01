@@ -14,6 +14,10 @@ import { randomUUID } from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import type {
   PeerSignalMessage,
+  RoomLibraryPatchPayload,
+  RoomPlaybackPatchPayload,
+  RoomPresencePatchPayload,
+  RoomQueuePatchPayload,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
@@ -25,6 +29,10 @@ import { RoomService } from "../room/room.service";
 const roomSnapshotChannel = "music-room:room-snapshot";
 const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
 const roomDeletedChannel = "music-room:room-deleted";
+const roomPlaybackPatchChannel = "music-room:room-playback-patch";
+const roomQueuePatchChannel = "music-room:room-queue-patch";
+const roomPresencePatchChannel = "music-room:room-presence-patch";
+const roomLibraryPatchChannel = "music-room:room-library-patch";
 const peerSignalChannel = "music-room:peer-signal";
 const pieceAvailabilityChannel = "music-room:piece-availability";
 
@@ -75,6 +83,69 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       sourceId: this.instanceId,
       roomId,
       trackIds
+    });
+  }
+
+  emitPlaybackPatch(roomId: string, payload: Omit<RoomPlaybackPatchPayload, "roomId" | "updatedAt">) {
+    const message: RoomPlaybackPatchPayload = {
+      roomId,
+      playback: payload.playback,
+      updatedAt: new Date().toISOString()
+    };
+    this.server.to(roomId).emit("room.playback.patch", message);
+    void this.redisService.publish(roomPlaybackPatchChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitQueuePatch(roomId: string, payload: Omit<RoomQueuePatchPayload, "roomId" | "updatedAt">) {
+    const message: RoomQueuePatchPayload = {
+      roomId,
+      queue: payload.queue,
+      playback: payload.playback,
+      updatedAt: new Date().toISOString()
+    };
+    this.server.to(roomId).emit("room.queue.patch", message);
+    void this.redisService.publish(roomQueuePatchChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitPresencePatch(
+    roomId: string,
+    payload: Omit<RoomPresencePatchPayload, "roomId" | "updatedAt">
+  ) {
+    const message: RoomPresencePatchPayload = {
+      roomId,
+      members: payload.members,
+      playback: payload.playback,
+      updatedAt: new Date().toISOString()
+    };
+    this.server.to(roomId).emit("room.presence.patch", message);
+    void this.redisService.publish(roomPresencePatchChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
+    });
+  }
+
+  emitLibraryPatch(roomId: string, payload: Omit<RoomLibraryPatchPayload, "roomId" | "updatedAt">) {
+    const message: RoomLibraryPatchPayload = {
+      roomId,
+      tracks: payload.tracks,
+      queue: payload.queue,
+      playback: payload.playback,
+      updatedAt: new Date().toISOString()
+    };
+    this.server.to(roomId).emit("room.library.patch", message);
+    void this.redisService.publish(roomLibraryPatchChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload: message
     });
   }
 
@@ -131,6 +202,82 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.server
         .to(message.roomId)
         .emit("room.deleted", { roomId: message.roomId, trackIds: message.trackIds ?? [] });
+    });
+
+    void this.redisService.subscribe(roomPlaybackPatchChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomPlaybackPatchPayload;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.playback.patch", message.payload);
+    });
+
+    void this.redisService.subscribe(roomQueuePatchChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomQueuePatchPayload;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.queue.patch", message.payload);
+    });
+
+    void this.redisService.subscribe(roomPresencePatchChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomPresencePatchPayload;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.presence.patch", message.payload);
+    });
+
+    void this.redisService.subscribe(roomLibraryPatchChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomLibraryPatchPayload;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.library.patch", message.payload);
     });
 
     void this.redisService.subscribe(peerSignalChannel, (payload) => {
@@ -374,7 +521,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       } else {
         await roomService.clearRealtimePresence(roomId, sessionId);
       }
-      this.emitRoomSnapshot(roomId, await roomService.getRoomSnapshot(roomId, []));
+      const snapshot = await roomService.getRoomSnapshot(roomId, []);
+      this.emitPresencePatch(roomId, {
+        members: snapshot.room.members,
+        playback: snapshot.room.playback
+      });
     } catch {
       clientSafeNoop();
     }

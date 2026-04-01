@@ -5,6 +5,8 @@ import {
   trackAvailabilityAnnouncementSchema
 } from "../p2p/models";
 import { roomSnapshotSchema } from "../room/models";
+import { playbackSnapshotSchema } from "../playback/models";
+import { queueItemSchema, trackMetaSchema } from "../playlist/models";
 
 export const websocketEventSchema = z.union([
   z.literal("room.subscribe"),
@@ -13,6 +15,10 @@ export const websocketEventSchema = z.union([
   z.literal("room.snapshot"),
   z.literal("room.snapshot.missing"),
   z.literal("room.deleted"),
+  z.literal("room.playback.patch"),
+  z.literal("room.queue.patch"),
+  z.literal("room.presence.patch"),
+  z.literal("room.library.patch"),
   z.literal("piece.availability"),
   z.literal("peer.signal")
 ]);
@@ -42,6 +48,34 @@ export const roomDeletedPayloadSchema = z.object({
   trackIds: z.array(z.string())
 });
 
+export const roomPlaybackPatchPayloadSchema = z.object({
+  roomId: z.string(),
+  playback: playbackSnapshotSchema,
+  updatedAt: z.string().datetime()
+});
+
+export const roomQueuePatchPayloadSchema = z.object({
+  roomId: z.string(),
+  queue: z.array(queueItemSchema),
+  playback: playbackSnapshotSchema,
+  updatedAt: z.string().datetime()
+});
+
+export const roomPresencePatchPayloadSchema = z.object({
+  roomId: z.string(),
+  members: roomSnapshotSchema.shape.room.shape.members,
+  playback: playbackSnapshotSchema,
+  updatedAt: z.string().datetime()
+});
+
+export const roomLibraryPatchPayloadSchema = z.object({
+  roomId: z.string(),
+  tracks: z.array(trackMetaSchema),
+  queue: z.array(queueItemSchema),
+  playback: playbackSnapshotSchema,
+  updatedAt: z.string().datetime()
+});
+
 export const roomSnapshotEventSchema = z.object({
   event: z.literal("room.snapshot"),
   payload: roomSnapshotSchema
@@ -55,6 +89,26 @@ export const roomSnapshotMissingEventSchema = z.object({
 export const roomDeletedEventSchema = z.object({
   event: z.literal("room.deleted"),
   payload: roomDeletedPayloadSchema
+});
+
+export const roomPlaybackPatchEventSchema = z.object({
+  event: z.literal("room.playback.patch"),
+  payload: roomPlaybackPatchPayloadSchema
+});
+
+export const roomQueuePatchEventSchema = z.object({
+  event: z.literal("room.queue.patch"),
+  payload: roomQueuePatchPayloadSchema
+});
+
+export const roomPresencePatchEventSchema = z.object({
+  event: z.literal("room.presence.patch"),
+  payload: roomPresencePatchPayloadSchema
+});
+
+export const roomLibraryPatchEventSchema = z.object({
+  event: z.literal("room.library.patch"),
+  payload: roomLibraryPatchPayloadSchema
 });
 
 export const peerSignalEventSchema = z.object({
@@ -81,6 +135,10 @@ export type RoomUnsubscribePayload = z.infer<typeof roomUnsubscribePayloadSchema
 export type RoomPresencePayload = z.infer<typeof roomPresencePayloadSchema>;
 export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPayloadSchema>;
 export type RoomDeletedPayload = z.infer<typeof roomDeletedPayloadSchema>;
+export type RoomPlaybackPatchPayload = z.infer<typeof roomPlaybackPatchPayloadSchema>;
+export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
+export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
+export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
 
@@ -88,6 +146,10 @@ export type ServerToClientEvents = {
   "room.snapshot": (snapshot: z.infer<typeof roomSnapshotSchema>) => void;
   "room.snapshot.missing": (payload: RoomSnapshotMissingPayload) => void;
   "room.deleted": (payload: RoomDeletedPayload) => void;
+  "room.playback.patch": (payload: RoomPlaybackPatchPayload) => void;
+  "room.queue.patch": (payload: RoomQueuePatchPayload) => void;
+  "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
+  "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PeerDiagnosticsSnapshot, PeerRecentEvent, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 
@@ -60,6 +60,36 @@ export function MeshStatusPanel({
   iceConfigStatus
 }: MeshStatusPanelProps) {
   const [isOpen, setIsOpen] = useState(true);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (isMobileViewport) {
+      setIsOpen(false);
+    }
+  }, [isMobileViewport]);
+
+  const visiblePeerDiagnostics = useMemo(
+    () => (isMobileViewport ? peerDiagnostics.slice(0, 4) : peerDiagnostics),
+    [isMobileViewport, peerDiagnostics]
+  );
+  const visibleAvailabilitySummary = useMemo(
+    () => availabilitySummary.slice(0, isMobileViewport ? 3 : 6),
+    [availabilitySummary, isMobileViewport]
+  );
+  const visibleRecentEvents = useMemo(
+    () => recentEvents.slice(0, isMobileViewport ? 8 : 20),
+    [isMobileViewport, recentEvents]
+  );
 
   return (
     <section className="flex w-full flex-col gap-4">
@@ -104,9 +134,9 @@ export function MeshStatusPanel({
             {iceConfigStatus}
           </div>
 
-          {peerDiagnostics.length ? (
+          {visiblePeerDiagnostics.length ? (
             <div className="flex flex-col gap-2">
-              {peerDiagnostics.map((peer) => (
+              {visiblePeerDiagnostics.map((peer) => (
                 <div
                   key={peer.peerId}
                   className="rounded-lg border border-surface-border bg-surface/30 p-3"
@@ -123,15 +153,17 @@ export function MeshStatusPanel({
                     <span>数据 ICE: {peer.dataIceState ?? "未知"}</span>
                     <span>音频 ICE: {peer.mediaIceState ?? "未知"}</span>
                     <span>
-                      发出信令:
+                      发信令:
                       {` ${peer.signalStats.sentOffers}/${peer.signalStats.sentAnswers}/${peer.signalStats.sentCandidates}`}
                     </span>
                     <span>
-                      收到信令:
+                      收信令:
                       {` ${peer.signalStats.receivedOffers}/${peer.signalStats.receivedAnswers}/${peer.signalStats.receivedCandidates}`}
                     </span>
-                    <span>收到远端音轨: {peer.remoteTrackStatus.received ? "是" : "否"}</span>
-                    <span>绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}</span>
+                    <span>收到远端 track: {peer.remoteTrackStatus.received ? "是" : "否"}</span>
+                    <span>
+                      绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}
+                    </span>
                   </div>
                   {peer.lastError ? (
                     <p className="mt-2 text-[10px] text-red-400">{peer.lastError}</p>
@@ -141,8 +173,8 @@ export function MeshStatusPanel({
             </div>
           ) : null}
 
-          {availabilitySummary.length ? (
-            availabilitySummary.slice(0, 6).map(
+          {visibleAvailabilitySummary.length ? (
+            visibleAvailabilitySummary.map(
               ({ track, peerCount, localChunkCount, totalChunks, sources }) => (
                 <div
                   key={track.id}
@@ -171,12 +203,12 @@ export function MeshStatusPanel({
             </div>
           )}
 
-          {recentEvents.length ? (
+          {visibleRecentEvents.length ? (
             <div className="flex flex-col gap-2 border-t border-surface-border pt-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground-muted">
                 最近事件
               </p>
-              {recentEvents.slice(0, 20).map((event) => (
+              {visibleRecentEvents.map((event) => (
                 <div
                   key={event.id}
                   className="rounded-lg border border-surface-border bg-background/40 px-3 py-2 text-[10px]"

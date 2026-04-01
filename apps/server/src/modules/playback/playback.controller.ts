@@ -81,10 +81,7 @@ export class PlaybackController {
       this.logger.log(
         `accepted playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} nextVersion=${playback.queueVersion}`
       );
-      this.signalingGateway.emitRoomSnapshot(
-        roomId,
-        await this.roomService.getRoomSnapshot(roomId, [])
-      );
+      this.signalingGateway.emitPlaybackPatch(roomId, { playback });
       return playback;
     } catch (error) {
       this.logger.warn(

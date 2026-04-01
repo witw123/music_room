@@ -1,6 +1,7 @@
 import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 
 export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
+export type ChunkSchedulerMode = "normal" | "conservative" | "idle";
 
 type ChunkSchedulerTrackState = {
   totalChunks: number;
@@ -15,6 +16,9 @@ type ChunkSchedulerSyncInput = {
   connectedPeerIds: string[];
   uploadedTrackIds: string[];
   playbackPositionMs: number;
+  playbackStatus?: RoomSnapshot["room"]["playback"]["status"] | null;
+  pageVisible?: boolean;
+  mode?: ChunkSchedulerMode;
 };
 
 type ChunkSchedulerRequestArgs = {
@@ -65,6 +69,9 @@ export class ChunkScheduler {
   private connectedPeerIds = new Set<string>();
   private uploadedTrackIds = new Set<string>();
   private playbackPositionMs = 0;
+  private playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null = null;
+  private pageVisible = true;
+  private mode: ChunkSchedulerMode = "normal";
   private readonly trackStates = new Map<string, ChunkSchedulerTrackState>();
 
   constructor(
@@ -78,6 +85,9 @@ export class ChunkScheduler {
     this.connectedPeerIds = new Set(input.connectedPeerIds);
     this.uploadedTrackIds = new Set(input.uploadedTrackIds);
     this.playbackPositionMs = input.playbackPositionMs;
+    this.playbackStatus = input.playbackStatus ?? this.roomSnapshot?.room.playback.status ?? null;
+    this.pageVisible = input.pageVisible ?? true;
+    this.mode = input.mode ?? "normal";
     this.reconcileTrackStates();
     this.schedule();
   }
@@ -188,6 +198,10 @@ export class ChunkScheduler {
       return [];
     }
 
+    if (this.mode === "idle" || (!this.pageVisible && this.playbackStatus !== "playing")) {
+      return [];
+    }
+
     const currentTrack = this.roomSnapshot.tracks.find(
       (track) => track.id === this.roomSnapshot?.room.playback.currentTrackId
     );
@@ -208,22 +222,27 @@ export class ChunkScheduler {
     const plans: TrackPlan[] = [];
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
+      const currentTrackProfile = getTrackStreamingProfile(currentTrack, this.mode);
       plans.push({
         track: currentTrack,
         priority: "current",
-        maxConcurrent: this.maxConcurrentCurrentTrack(),
+        maxConcurrent: currentTrackProfile.maxConcurrent,
         preferredPeerId: this.roomSnapshot.room.playback.sourcePeerId,
         wantedChunks: getCurrentPlaybackWindowChunks({
           durationMs: currentTrack.durationMs,
           totalChunks: this.getTotalChunks(currentTrack.id),
           playbackPositionMs: this.playbackPositionMs,
-          lookBehindMs: this.currentLookBehindMs(),
-          lookAheadMs: this.currentLookAheadMs()
+          lookBehindMs: currentTrackProfile.lookBehindMs,
+          lookAheadMs: currentTrackProfile.lookAheadMs
         })
       });
     }
 
-    if (upcomingTrack && !this.uploadedTrackIds.has(upcomingTrack.id)) {
+    if (
+      this.mode !== "conservative" &&
+      upcomingTrack &&
+      !this.uploadedTrackIds.has(upcomingTrack.id)
+    ) {
       plans.push({
         track: upcomingTrack,
         priority: "upcoming",
@@ -238,6 +257,10 @@ export class ChunkScheduler {
     }
 
     for (const track of this.roomSnapshot.tracks) {
+      if (!this.pageVisible || this.mode !== "normal") {
+        break;
+      }
+
       if (
         this.uploadedTrackIds.has(track.id) ||
         track.id === currentTrack?.id ||
@@ -375,6 +398,36 @@ export class ChunkScheduler {
   private backgroundChunkBatchSize() {
     return this.options.backgroundChunkBatchSize ?? DEFAULTS.backgroundChunkBatchSize;
   }
+}
+
+function getTrackStreamingProfile(track: TrackMeta, mode: ChunkSchedulerMode) {
+  const codec = track.codec?.toLowerCase() ?? "";
+  const isLargeFlac =
+    codec.includes("flac") ||
+    track.artist.toLowerCase().includes("flac") ||
+    (track.sizeBytes ?? 0) >= 40 * 1024 * 1024;
+
+  if (mode === "conservative") {
+    return {
+      maxConcurrent: 4,
+      lookBehindMs: 8_000,
+      lookAheadMs: isLargeFlac ? 55_000 : 35_000
+    };
+  }
+
+  if (isLargeFlac) {
+    return {
+      maxConcurrent: 5,
+      lookBehindMs: 6_000,
+      lookAheadMs: 38_000
+    };
+  }
+
+  return {
+    maxConcurrent: DEFAULTS.maxConcurrentCurrentTrack,
+    lookBehindMs: DEFAULTS.currentLookBehindMs,
+    lookAheadMs: DEFAULTS.currentLookAheadMs
+  };
 }
 
 export function getCurrentPlaybackWindowChunks(input: {

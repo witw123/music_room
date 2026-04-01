@@ -42,6 +42,36 @@ const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
 const localPlaybackSoftDriftMs = 180;
 const localPlaybackHardDriftMs = 1_200;
+const diagnosticsFlushDelayMs = 120;
+const availabilityFlushDelayMs = 90;
+
+type AvailabilityState = Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+
+function upsertAvailabilityAnnouncement(
+  current: AvailabilityState,
+  announcement: TrackAvailabilityAnnouncement
+) {
+  const trackAvailability = current[announcement.trackId] ?? {};
+  const existing = trackAvailability[announcement.ownerPeerId];
+
+  if (
+    existing &&
+    existing.totalChunks === announcement.totalChunks &&
+    existing.source === announcement.source &&
+    existing.availableChunks.length === announcement.availableChunks.length &&
+    existing.availableChunks.every((chunk, index) => chunk === announcement.availableChunks[index])
+  ) {
+    return current;
+  }
+
+  return {
+    ...current,
+    [announcement.trackId]: {
+      ...trackAvailability,
+      [announcement.ownerPeerId]: announcement
+    }
+  };
+}
 
 function syncLocalPlaybackWindow(audio: HTMLAudioElement, expectedSeconds: number, isPlaying: boolean) {
   if (!Number.isFinite(audio.currentTime)) {
@@ -91,6 +121,10 @@ export function MusicRoomApp({
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
   const pendingAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
+  const queuedAvailabilityRef = useRef<TrackAvailabilityAnnouncement[]>([]);
+  const availabilityFlushTimerRef = useRef<number | null>(null);
+  const queuedDiagnosticsRef = useRef<Parameters<typeof recordDiagnosticsEvent>[1][]>([]);
+  const diagnosticsFlushTimerRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
@@ -119,6 +153,11 @@ export function MusicRoomApp({
   const [iceConfig, setIceConfig] = useState<IceConfigResponse | null>(null);
   const [iceConfigResolved, setIceConfigResolved] = useState(false);
   const [diagnosticsState, setDiagnosticsState] = useState(createEmptyDiagnosticsState);
+  const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "members">("queue");
+  const [isPageVisible, setIsPageVisible] = useState(
+    typeof document === "undefined" ? true : !document.hidden
+  );
+  const [schedulerMode, setSchedulerMode] = useState<"normal" | "conservative" | "idle">("normal");
   const {
     activeSession,
     hydrated,
@@ -148,29 +187,45 @@ export function MusicRoomApp({
   );
   const peerRecentEvents = diagnosticsState.recentEvents as PeerRecentEvent[];
 
-  async function refreshRoom(roomId: string) {
-    const snapshot = await musicRoomApi.getRoom(roomId);
-    setRoomSnapshot((current) => {
-      if (
-        current &&
-        !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
-      ) {
-        return current;
-      }
+  const flushQueuedAvailability = useCallback(() => {
+    if (availabilityFlushTimerRef.current !== null) {
+      window.clearTimeout(availabilityFlushTimerRef.current);
+      availabilityFlushTimerRef.current = null;
+    }
 
-      return snapshot;
-    });
-  }
+    if (queuedAvailabilityRef.current.length === 0) {
+      return;
+    }
 
-  const mergeAvailability = useCallback((announcement: TrackAvailabilityAnnouncement) => {
-    setAvailabilityByTrack((current) => ({
-      ...current,
-      [announcement.trackId]: {
-        ...(current[announcement.trackId] ?? {}),
-        [announcement.ownerPeerId]: announcement
-      }
-    }));
+    const queued = queuedAvailabilityRef.current.splice(0, queuedAvailabilityRef.current.length);
+    setAvailabilityByTrack((current) =>
+      queued.reduce(
+        (state, announcement) => upsertAvailabilityAnnouncement(state, announcement),
+        current
+      )
+    );
   }, []);
+
+  const queueAvailability = useCallback(
+    (announcement: TrackAvailabilityAnnouncement) => {
+      queuedAvailabilityRef.current.push(announcement);
+      if (availabilityFlushTimerRef.current !== null) {
+        return;
+      }
+
+      availabilityFlushTimerRef.current = window.setTimeout(() => {
+        flushQueuedAvailability();
+      }, availabilityFlushDelayMs);
+    },
+    [flushQueuedAvailability]
+  );
+
+  const mergeAvailability = useCallback(
+    (announcement: TrackAvailabilityAnnouncement) => {
+      queueAvailability(announcement);
+    },
+    [queueAvailability]
+  );
 
   const mergeLocalPieceAvailability = useCallback(
     (trackId: string, chunkIndex: number, totalChunks: number) => {
@@ -181,40 +236,37 @@ export function MusicRoomApp({
         return;
       }
 
-      setAvailabilityByTrack((current) => {
-        const trackAvailability = current[trackId] ?? {};
-        const existing = trackAvailability[peerId];
-        const availableChunkSet = new Set(existing?.availableChunks ?? []);
-        const nextChunkCountBefore = availableChunkSet.size;
-        availableChunkSet.add(chunkIndex);
+      const queuedExisting = [...queuedAvailabilityRef.current]
+        .reverse()
+        .find(
+          (announcement) =>
+            announcement.trackId === trackId && announcement.ownerPeerId === peerId
+        );
+      const existing = availabilityByTrack[trackId]?.[peerId] ?? queuedExisting;
+      const availableChunkSet = new Set(existing?.availableChunks ?? []);
+      const nextChunkCountBefore = availableChunkSet.size;
+      availableChunkSet.add(chunkIndex);
 
-        if (
-          existing &&
-          availableChunkSet.size === nextChunkCountBefore &&
-          existing.totalChunks >= totalChunks
-        ) {
-          return current;
-        }
+      if (
+        existing &&
+        availableChunkSet.size === nextChunkCountBefore &&
+        existing.totalChunks >= totalChunks
+      ) {
+        return;
+      }
 
-        return {
-          ...current,
-          [trackId]: {
-            ...trackAvailability,
-            [peerId]: {
-              roomId: room.room.id,
-              trackId,
-              ownerPeerId: peerId,
-              nickname: session.nickname,
-              totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
-              availableChunks: [...availableChunkSet].sort((left, right) => left - right),
-              source: existing?.source ?? "local_cache",
-              announcedAt: new Date().toISOString()
-            }
-          }
-        };
+      queueAvailability({
+        roomId: room.room.id,
+        trackId,
+        ownerPeerId: peerId,
+        nickname: session.nickname,
+        totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
+        availableChunks: [...availableChunkSet].sort((left, right) => left - right),
+        source: existing?.source ?? "local_cache",
+        announcedAt: new Date().toISOString()
       });
     },
-    [peerId]
+    [availabilityByTrack, peerId, queueAvailability]
   );
 
   const stableEmitAvailability = useCallback(
@@ -244,10 +296,10 @@ export function MusicRoomApp({
     peerId,
     activeSession,
     roomSnapshot,
+    setRoomSnapshot,
     setStatusMessage,
     onAvailability: mergeAvailability,
-    emitAvailability: stableEmitAvailability,
-    refreshRoom
+    emitAvailability: stableEmitAvailability
   });
   const announceLocalCacheRef = useRef(announceLocalCache);
   const hasLocalCurrentTrack = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
@@ -335,6 +387,19 @@ export function MusicRoomApp({
     announceLocalCacheRef.current = announceLocalCache;
   }, [announceLocalCache]);
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const nextVisible = !document.hidden;
+      setIsPageVisible(nextVisible);
+      if (nextVisible) {
+        setSchedulerMode((current) => (current === "idle" ? "normal" : current));
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   const flushPendingAvailability = useCallback(() => {
     const socket = socketRef.current;
     if (!socket || !socket.connected || pendingAvailabilityRef.current.size === 0) {
@@ -386,15 +451,58 @@ export function MusicRoomApp({
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
       }
+      if (availabilityFlushTimerRef.current !== null) {
+        window.clearTimeout(availabilityFlushTimerRef.current);
+      }
+      if (diagnosticsFlushTimerRef.current !== null) {
+        window.clearTimeout(diagnosticsFlushTimerRef.current);
+      }
     };
+  }, []);
+
+  const flushQueuedDiagnostics = useCallback(() => {
+    if (diagnosticsFlushTimerRef.current !== null) {
+      window.clearTimeout(diagnosticsFlushTimerRef.current);
+      diagnosticsFlushTimerRef.current = null;
+    }
+
+    if (queuedDiagnosticsRef.current.length === 0) {
+      return;
+    }
+
+    const queued = queuedDiagnosticsRef.current.splice(0, queuedDiagnosticsRef.current.length);
+    setDiagnosticsState((current) =>
+      queued.reduce((state, input) => recordDiagnosticsEvent(state, input), current)
+    );
   }, []);
 
   const recordPeerDiagnostic = useCallback(
     (input: Parameters<typeof recordDiagnosticsEvent>[1]) => {
-      setDiagnosticsState((current) => recordDiagnosticsEvent(current, input));
+      queuedDiagnosticsRef.current.push(input);
+      if (diagnosticsFlushTimerRef.current !== null) {
+        return;
+      }
+
+      diagnosticsFlushTimerRef.current = window.setTimeout(() => {
+        flushQueuedDiagnostics();
+      }, diagnosticsFlushDelayMs);
     },
-    []
+    [flushQueuedDiagnostics]
   );
+
+  const applyPlaybackPatch = useCallback((playback: RoomSnapshot["room"]["playback"]) => {
+    setRoomSnapshot((current) =>
+      current && shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+        ? {
+            ...current,
+            room: {
+              ...current.room,
+              playback
+            }
+          }
+        : current
+    );
+  }, []);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession) {
@@ -836,6 +944,58 @@ export function MusicRoomApp({
 
       flushPendingAvailability();
     });
+    socket.on("room.playback.patch", ({ playback }) => {
+      applyPlaybackPatch(playback);
+    });
+    socket.on("room.queue.patch", ({ queue, playback }) => {
+      setRoomSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              queue,
+              room: {
+                ...current.room,
+                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                  ? playback
+                  : current.room.playback
+              }
+            }
+          : current
+      );
+    });
+    socket.on("room.presence.patch", ({ members, playback }) => {
+      setRoomSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              room: {
+                ...current.room,
+                members,
+                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                  ? playback
+                  : current.room.playback
+              }
+            }
+          : current
+      );
+    });
+    socket.on("room.library.patch", ({ tracks, queue, playback }) => {
+      setRoomSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              tracks,
+              queue,
+              room: {
+                ...current.room,
+                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                  ? playback
+                  : current.room.playback
+              }
+            }
+          : current
+      );
+    });
     socket.on("peer.signal", (payload: PeerSignalMessage) => {
       recordPeerDiagnostic({
         peerId: payload.fromPeerId,
@@ -864,13 +1024,7 @@ export function MusicRoomApp({
       void mesh.handleSignal(payload);
     });
     socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
-      setAvailabilityByTrack((current) => ({
-        ...current,
-        [announcement.trackId]: {
-          ...(current[announcement.trackId] ?? {}),
-          [announcement.ownerPeerId]: announcement
-        }
-      }));
+      queueAvailability(announcement);
     });
     socket.on("room.deleted", ({ roomId: deletedRoomId, trackIds }) => {
       if (deletedRoomId !== roomId) {
@@ -964,7 +1118,9 @@ export function MusicRoomApp({
     mergeLocalPieceAvailability,
     deleteUploadedTrackArtifacts,
     recordPeerDiagnostic,
+    applyPlaybackPatch,
     flushPendingAvailability,
+    queueAvailability,
     scheduleRemotePlaybackRetry,
     workspaceOnly,
     isNavigatingRoomExit,
@@ -972,6 +1128,12 @@ export function MusicRoomApp({
   ]);
 
   const playback = roomSnapshot?.room.playback;
+
+  useEffect(() => {
+    if (!playback?.currentTrackId || playback.status !== "playing") {
+      setSchedulerMode(isPageVisible ? "normal" : "idle");
+    }
+  }, [isPageVisible, playback?.currentTrackId, playback?.status]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1057,6 +1219,47 @@ export function MusicRoomApp({
   ]);
 
   useEffect(() => {
+    const localAudio = audioRef.current;
+    const remoteAudio = remoteAudioRef.current;
+
+    const handlePlaying = () => {
+      setSchedulerMode("normal");
+      setMediaConnectionState((current) =>
+        current === "idle" && !(roomSnapshot?.room.playback.currentTrackId) ? current : "live"
+      );
+    };
+    const handleWaiting = () => {
+      setSchedulerMode("conservative");
+      setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
+    };
+    const handlePause = () => {
+      if (roomSnapshot?.room.playback.status !== "playing") {
+        setSchedulerMode(isPageVisible ? "normal" : "idle");
+      }
+    };
+
+    localAudio?.addEventListener("playing", handlePlaying);
+    remoteAudio?.addEventListener("playing", handlePlaying);
+    localAudio?.addEventListener("waiting", handleWaiting);
+    remoteAudio?.addEventListener("waiting", handleWaiting);
+    localAudio?.addEventListener("stalled", handleWaiting);
+    remoteAudio?.addEventListener("stalled", handleWaiting);
+    localAudio?.addEventListener("pause", handlePause);
+    remoteAudio?.addEventListener("pause", handlePause);
+
+    return () => {
+      localAudio?.removeEventListener("playing", handlePlaying);
+      remoteAudio?.removeEventListener("playing", handlePlaying);
+      localAudio?.removeEventListener("waiting", handleWaiting);
+      remoteAudio?.removeEventListener("waiting", handleWaiting);
+      localAudio?.removeEventListener("stalled", handleWaiting);
+      remoteAudio?.removeEventListener("stalled", handleWaiting);
+      localAudio?.removeEventListener("pause", handlePause);
+      remoteAudio?.removeEventListener("pause", handlePause);
+    };
+  }, [isPageVisible, roomSnapshot?.room.playback.currentTrackId, roomSnapshot?.room.playback.status]);
+
+  useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
       return;
     }
@@ -1116,15 +1319,28 @@ export function MusicRoomApp({
     void meshRef.current?.syncPeers(remotePeerIds);
   }, [roomSnapshot?.room.members, peerId]);
 
+  const schedulerPlaybackPositionMs = Math.floor(progressMs / 2_000) * 2_000;
+
   useEffect(() => {
     chunkSchedulerRef.current?.sync({
       roomSnapshot,
       availabilityByTrack,
       connectedPeerIds: connectedPeers,
       uploadedTrackIds: Object.keys(uploadedTracks),
-      playbackPositionMs: getCurrentPlaybackPositionMs()
+      playbackPositionMs: schedulerPlaybackPositionMs,
+      playbackStatus: roomSnapshot?.room.playback.status ?? null,
+      pageVisible: isPageVisible,
+      mode: schedulerMode
     });
-  }, [availabilityByTrack, connectedPeers, roomSnapshot, uploadedTracks, progressMs]);
+  }, [
+    availabilityByTrack,
+    connectedPeers,
+    roomSnapshot,
+    uploadedTracks,
+    schedulerPlaybackPositionMs,
+    isPageVisible,
+    schedulerMode
+  ]);
 
   function resetPlayerSurface() {
     const localAudio = audioRef.current;
@@ -1323,7 +1539,7 @@ export function MusicRoomApp({
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
   const memberTransferSummaries = useMemo(() => {
-    if (!roomSnapshot) {
+    if (!roomSnapshot || activeDashboardTab !== "members") {
       return [];
     }
 
@@ -1354,7 +1570,7 @@ export function MusicRoomApp({
         currentTrackSources: [...new Set(currentTrackAnnouncements.map((announcement) => announcement.source))]
       };
     });
-  }, [availabilityByTrack, currentTrack, roomSnapshot]);
+  }, [activeDashboardTab, availabilityByTrack, currentTrack, roomSnapshot]);
   const statusTone =
     statusMessage.includes("失败") || statusMessage.includes("不可用")
       ? "warning"
@@ -1445,6 +1661,7 @@ export function MusicRoomApp({
               }
               onDeletePlaylist={(playlistId) => deletePlaylist(playlistId)}
               socket={socketRef.current}
+              onTabChange={setActiveDashboardTab}
             />
           ) : showRoomTransitionState ? (
             <section className="flex min-h-[60vh] flex-col items-center justify-center px-4 pt-12 text-center animate-fade-in">

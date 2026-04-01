@@ -23,6 +23,7 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     .join("");
   const durationMs = await readDuration(objectUrl);
   const title = file.name.replace(/\.[^/.]+$/, "");
+  const codec = file.type.split("/")[1]?.trim() || null;
 
   return {
     title,
@@ -30,6 +31,8 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     album: null,
     durationMs,
     bitrate: null,
+    sizeBytes: file.size,
+    codec,
     fileHash,
     artworkUrl: null,
     ownerSessionId: session.userId,
@@ -55,19 +58,17 @@ export function readDuration(objectUrl: string) {
 
     audio.onloadedmetadata = () => {
       if (audio.duration === Infinity) {
-        // Chrome bug: duration is Infinity for some local objectURLs
-        // Fix: seek to a huge number to force duration calculation
         audio.currentTime = 1e101;
         audio.ontimeupdate = () => {
           audio.ontimeupdate = null;
-          const dur = audio.duration;
+          const duration = audio.duration;
           cleanup();
-          resolve(Number.isFinite(dur) ? Math.round(dur * 1000) : 0);
+          resolve(Number.isFinite(duration) ? Math.round(duration * 1000) : 0);
         };
       } else {
-        const dur = audio.duration;
+        const duration = audio.duration;
         cleanup();
-        resolve(Number.isFinite(dur) ? Math.round(dur * 1000) : 0);
+        resolve(Number.isFinite(duration) ? Math.round(duration * 1000) : 0);
       }
     };
 

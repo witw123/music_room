@@ -47,10 +47,11 @@ export class QueueController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const item = await this.roomService.addQueueItem(roomId, userId, body.trackId);
-    this.signalingGateway.emitRoomSnapshot(
-      roomId,
-      await this.roomService.getRoomSnapshot(roomId, [])
-    );
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    this.signalingGateway.emitQueuePatch(roomId, {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    });
     return item;
   }
 
@@ -62,10 +63,11 @@ export class QueueController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const queue = await this.roomService.removeQueueItem(roomId, queueItemId, userId);
-    this.signalingGateway.emitRoomSnapshot(
-      roomId,
-      await this.roomService.getRoomSnapshot(roomId, [])
-    );
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    this.signalingGateway.emitQueuePatch(roomId, {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    });
     return queue;
   }
 
@@ -77,10 +79,11 @@ export class QueueController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const queue = await this.roomService.reorderQueue(roomId, userId, body.queueItemIds);
-    this.signalingGateway.emitRoomSnapshot(
-      roomId,
-      await this.roomService.getRoomSnapshot(roomId, [])
-    );
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    this.signalingGateway.emitQueuePatch(roomId, {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    });
     return queue;
   }
 }

@@ -61,6 +61,7 @@ type RoomDashboardViewProps = {
   onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
   onDeletePlaylist: (playlistId: string) => Promise<void>;
   socket: any;
+  onTabChange?: (tab: TabId) => void;
 };
 
 type TabId = "queue" | "library" | "members";
@@ -111,10 +112,16 @@ export function RoomDashboardView({
   onUpdatePlaylistTitle,
   onUpdatePlaylistTracks,
   onDeletePlaylist,
-  socket
+  socket,
+  onTabChange
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
   const canCreatePlaylist = roomSnapshot.queue.length > 0;
+
+  function handleTabChange(tab: TabId) {
+    setActiveTab(tab);
+    onTabChange?.(tab);
+  }
 
   return (
     <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100vh-140px)] lg:min-h-0 lg:flex-row lg:overflow-hidden">
@@ -150,7 +157,7 @@ export function RoomDashboardView({
             {(["queue", "library", "members"] as TabId[]).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabChange(tab)}
                 className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
                   activeTab === tab
                     ? "bg-white/10 text-white shadow-sm"

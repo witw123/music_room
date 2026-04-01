@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type RefObject, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldAcceptPlaybackSnapshot } from "@/lib/music-room-ui";
 
@@ -19,6 +19,23 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const [audioDurationMs, setAudioDurationMs] = useState(0);
   const [volume, setVolume] = useState(0.72);
   const [acceptedPlayback, setAcceptedPlayback] = useState<PlaybackSnapshot | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState(
+    typeof document === "undefined" ? true : !document.hidden
+  );
+  const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      setIsPageVisible(!document.hidden);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     if (!playback) {
@@ -41,6 +58,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   useEffect(() => {
     const localAudio = audioRef.current;
+    const remoteAudio = remoteAudioRef.current;
 
     if (!acceptedPlayback || !progressTrack) {
       setProgressMs(0);
@@ -57,19 +75,37 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         !localAudio.paused
       ) {
         setProgressMs(Math.min(Math.floor(localAudio.currentTime * 1000), progressTrack.durationMs));
-        return;
+      } else if (
+        !shouldUseLocalAudio &&
+        acceptedPlayback.status === "playing" &&
+        remoteAudio &&
+        Number.isFinite(remoteAudio.currentTime) &&
+        remoteAudio.currentTime >= 0 &&
+        !remoteAudio.paused
+      ) {
+        setProgressMs(Math.min(Math.floor(remoteAudio.currentTime * 1000), progressTrack.durationMs));
+      } else if (seekDraft === null) {
+        setProgressMs(getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs));
       }
+    };
 
-      if (seekDraft !== null) {
-        return;
-      }
-
-      setProgressMs(getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs));
+    const animate = () => {
+      tick();
+      animationFrameRef.current = window.requestAnimationFrame(animate);
     };
 
     tick();
-    const timer = window.setInterval(tick, 750);
-    return () => window.clearInterval(timer);
+
+    if (acceptedPlayback.status === "playing" && seekDraft === null && isPageVisible) {
+      animationFrameRef.current = window.requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
   }, [
     audioRef,
     remoteAudioRef,
@@ -80,7 +116,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     acceptedPlayback?.mediaEpoch,
     progressTrack?.durationMs,
     shouldUseLocalAudio,
-    seekDraft
+    seekDraft,
+    isPageVisible
   ]);
 
   useEffect(() => {

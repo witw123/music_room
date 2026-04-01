@@ -1,7 +1,7 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
-import type { AuthSession, PlaybackSnapshot, Playlist, RoomSnapshot } from "@music-room/shared";
+import type { AuthSession, PlaybackSnapshot, Playlist, QueueItem, RoomSnapshot } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
 import {
   shouldAcceptPlaybackSnapshot,
@@ -25,12 +25,25 @@ type UseRoomActionsOptions = {
   onRoomDeleted?: (trackIds: string[]) => Promise<void> | void;
 };
 
+function applyQueueLocally(
+  setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>,
+  queue: QueueItem[]
+) {
+  setRoomSnapshot((current) =>
+    current
+      ? {
+          ...current,
+          queue
+        }
+      : current
+  );
+}
+
 export function useRoomActions(options: UseRoomActionsOptions) {
   const {
     activeSession,
     roomSnapshot,
     setRoomSnapshot,
-    setAvailableRooms,
     setStatusMessage,
     refreshAvailableRooms,
     refreshPlaylists,
@@ -40,20 +53,6 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     onTrackDeleted,
     onRoomDeleted
   } = options;
-
-  async function refreshRoom(roomId: string) {
-    const snapshot = await musicRoomApi.getRoom(roomId);
-    setRoomSnapshot((current) => {
-      if (
-        current &&
-        !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
-      ) {
-        return current;
-      }
-
-      return snapshot;
-    });
-  }
 
   function applyPlaybackLocally(playback: PlaybackSnapshot) {
     setRoomSnapshot((current) =>
@@ -113,9 +112,15 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("曲目已加入共享队列。");
+      const queueItem = await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
+      applyQueueLocally(
+        setRoomSnapshot,
+        [...roomSnapshot.queue, queueItem].map((item, index) => ({
+          ...item,
+          position: index
+        }))
+      );
+      setStatusMessage("歌曲已加入共享队列。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -129,9 +134,19 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     try {
       await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
       await onTrackDeleted?.(trackId);
-      await refreshRoom(roomSnapshot.room.id);
+      setRoomSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              tracks: current.tracks.filter((track) => track.id !== trackId),
+              queue: current.queue
+                .filter((item) => item.trackId !== trackId)
+                .map((item, index) => ({ ...item, position: index }))
+            }
+          : current
+      );
       await refreshPlaylists();
-      setStatusMessage("曲目已从房间曲库中删除。");
+      setStatusMessage("歌曲已从房间曲库中删除。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -149,7 +164,6 @@ export function useRoomActions(options: UseRoomActionsOptions) {
         expectedVersion: roomSnapshot.room.playback.queueVersion
       });
       applyPlaybackLocally(playback);
-      await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -167,7 +181,6 @@ export function useRoomActions(options: UseRoomActionsOptions) {
         expectedVersion: roomSnapshot.room.playback.queueVersion
       });
       applyPlaybackLocally(playback);
-      await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -185,29 +198,22 @@ export function useRoomActions(options: UseRoomActionsOptions) {
         expectedVersion: roomSnapshot.room.playback.queueVersion
       });
       applyPlaybackLocally(playback);
-      await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
   }
 
   async function prevTrack() {
-    if (!roomSnapshot || !activeSession) {
+    if (!roomSnapshot || !activeSession || !roomSnapshot.room.playback.currentTrackId) {
       return;
     }
 
     try {
-      const playback = roomSnapshot.room.playback;
-      if (!playback?.currentTrackId) {
-        return;
-      }
-
       const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
         action: "prev",
         expectedVersion: roomSnapshot.room.playback.queueVersion
       });
       applyPlaybackLocally(nextPlayback);
-      await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -224,7 +230,6 @@ export function useRoomActions(options: UseRoomActionsOptions) {
         expectedVersion: roomSnapshot.room.playback.queueVersion
       });
       applyPlaybackLocally(playback);
-      await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -299,7 +304,6 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       await musicRoomApi.importPlaylistToRoom(playlistId, {
         roomId: roomSnapshot.room.id
       });
-      await refreshRoom(roomSnapshot.room.id);
       setStatusMessage("歌单已加入当前房间队列。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -312,9 +316,9 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
-      await refreshRoom(roomSnapshot.room.id);
-      setStatusMessage("曲目已从队列中移除。");
+      const nextQueue = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
+      applyQueueLocally(setRoomSnapshot, nextQueue);
+      setStatusMessage("歌曲已从队列中移除。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
@@ -326,10 +330,10 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     }
 
     try {
-      await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
+      const nextQueue = await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
         queueItemIds
       });
-      await refreshRoom(roomSnapshot.room.id);
+      applyQueueLocally(setRoomSnapshot, nextQueue);
       setStatusMessage("播放队列顺序已更新。");
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -348,7 +352,6 @@ export function useRoomActions(options: UseRoomActionsOptions) {
         expectedVersion: roomSnapshot.room.playback.queueVersion
       });
       applyPlaybackLocally(playback);
-      await refreshRoom(roomSnapshot.room.id);
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }

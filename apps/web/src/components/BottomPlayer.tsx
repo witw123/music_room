@@ -45,23 +45,6 @@ type BottomPlayerProps = {
   onRemoteError: () => void;
 };
 
-function getMediaStatusLabel(state: RoomMediaConnectionState) {
-  switch (state) {
-    case "connecting":
-      return "正在连接";
-    case "buffering":
-      return "正在缓冲";
-    case "live":
-      return "实时音频已接通";
-    case "reconnecting":
-      return "正在重新连接";
-    case "failed":
-      return "连接失败";
-    default:
-      return "等待播放";
-  }
-}
-
 function VinylBadge({ isPlaying, compact = false }: { isPlaying: boolean; compact?: boolean }) {
   const shellSize = compact ? "h-10 w-10" : "h-12 w-12";
   const centerSize = compact ? "h-3.5 w-3.5" : "h-4 w-4";
@@ -132,14 +115,22 @@ export function BottomPlayer({
     currentTrackDuration > 0 ? Math.min(effectiveProgressMs, currentTrackDuration) : effectiveProgressMs;
   const progressRatio =
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
-  const localTrackAvailable = !!uploadedTracks[currentTrack?.id ?? ""];
-  const mediaStatusLabel = getMediaStatusLabel(mediaConnectionState);
-  const sourceOwnedByMe = roomSnapshot?.room.playback.sourceSessionId === activeSession?.userId;
-
   const commitSeek = () => {
     if (seekDraft !== null && canControlPlayback) {
       startTransition(() => void onSeek(seekDraft));
       setSeekDraft(null);
+    }
+  };
+
+  const applyVolume = (nextVolume: number) => {
+    setVolume(nextVolume);
+
+    if (audioRef.current) {
+      audioRef.current.volume = nextVolume;
+    }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.volume = nextVolume;
     }
   };
 
@@ -187,8 +178,10 @@ export function BottomPlayer({
             </span>
           </div>
 
-          <div className="col-span-2 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
+          <div className="col-span-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div />
+
+            <div className="flex items-center justify-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -248,26 +241,17 @@ export function BottomPlayer({
                 className="w-[72px]"
                 value={volume}
                 max={1}
+                min={0}
                 step={0.01}
-                onChange={(event) => setVolume(Number(event.target.value))}
+                onChange={(event) => applyVolume(Number(event.target.value))}
+                onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))}
               />
             </div>
-          </div>
-
-          <div className="col-span-2 flex min-h-[1rem] items-center justify-between gap-3 text-[11px]">
-            <span className="truncate text-foreground-muted">
-              {!sourceOwnedByMe ? mediaStatusLabel : ""}
-            </span>
-            {!localTrackAvailable && currentTrackAvailability ? (
-              <span className="shrink-0 text-foreground-muted">
-                缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0}
-              </span>
-            ) : null}
           </div>
         </div>
       </div>
 
-      <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.45fr)] lg:items-center lg:gap-4">
+      <div className="mx-auto hidden w-full max-w-[1400px] lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <VinylBadge isPlaying={isPlaying} />
 
@@ -334,52 +318,41 @@ export function BottomPlayer({
           </Button>
         </div>
 
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex w-full items-center gap-4">
-              <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
-                {formatDuration(boundedProgressMs)}
-              </span>
-              <div className="flex h-8 flex-1 items-center">
-                <Slider
-                  value={boundedProgressMs}
-                  max={currentTrackDuration || 1}
-                  disabled={!currentTrackDuration || !canControlPlayback}
-                  onChange={(event) => setSeekDraft(Number(event.target.value))}
-                  onMouseUp={commitSeek}
-                  onTouchEnd={commitSeek}
-                />
-              </div>
-              <span className="min-w-[40px] text-xs tabular-nums text-foreground-muted">
-                {formatDuration(currentTrackDuration)}
-              </span>
-            </div>
-
-            <div className="flex min-w-[146px] items-center justify-center gap-3">
-              <span className="text-foreground-muted">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
-                </svg>
-              </span>
+        <div className="flex items-center justify-end gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <span className="min-w-[40px] text-right text-xs tabular-nums text-foreground-muted">
+              {formatDuration(boundedProgressMs)}
+            </span>
+            <div className="flex h-8 flex-1 items-center">
               <Slider
-                className="w-full max-w-[124px]"
-                value={volume}
-                max={1}
-                step={0.01}
-                onChange={(event) => setVolume(Number(event.target.value))}
+                value={boundedProgressMs}
+                max={currentTrackDuration || 1}
+                disabled={!currentTrackDuration || !canControlPlayback}
+                onChange={(event) => setSeekDraft(Number(event.target.value))}
+                onMouseUp={commitSeek}
+                onTouchEnd={commitSeek}
               />
             </div>
+            <span className="min-w-[40px] text-xs tabular-nums text-foreground-muted">
+              {formatDuration(currentTrackDuration)}
+            </span>
           </div>
 
-          <div className="flex min-h-[1rem] items-center justify-between gap-3 text-xs">
-            <span className="truncate text-foreground-muted">
-              {!sourceOwnedByMe ? mediaStatusLabel : ""}
+          <div className="flex min-w-[146px] items-center justify-center gap-3">
+            <span className="text-foreground-muted">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />
+              </svg>
             </span>
-            {!localTrackAvailable && currentTrackAvailability ? (
-              <span className="shrink-0 text-foreground-muted">
-                缓存 {currentTrackAvailability.localChunkCount}/{currentTrackAvailability.totalChunks || 0}
-              </span>
-            ) : null}
+            <Slider
+              className="w-full max-w-[124px]"
+              value={volume}
+              max={1}
+              min={0}
+              step={0.01}
+              onChange={(event) => applyVolume(Number(event.target.value))}
+              onInput={(event) => applyVolume(Number((event.target as HTMLInputElement).value))}
+            />
           </div>
         </div>
       </div>
