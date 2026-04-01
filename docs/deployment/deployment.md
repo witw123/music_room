@@ -81,11 +81,19 @@ npx pnpm deploy:linux
 - `3478/udp`
 - `3478/tcp`
 - `5349/tcp`
+- `TURN_MIN_PORT-TURN_MAX_PORT/udp`
 
-如果你的网络环境要求严格，也可以只保留：
+如果你的网络环境要求严格，也至少要保留：
 
 - `3478/udp`
 - `5349/tcp`
+- `TURN_MIN_PORT-TURN_MAX_PORT/udp`
+
+注意：`3478/5349` 只是 TURN 控制端口，真正的 relay 流量会走中继端口范围。如果这段 UDP 端口没有放行，浏览器即使拿到了 `ephemeral` TURN 凭证，也会出现：
+
+- `offer / answer / candidate` 正常
+- `ICE checking`
+- 最终 `disconnected / failed`
 
 ### 环境变量
 
@@ -95,6 +103,8 @@ npx pnpm deploy:linux
 - `TURN_PUBLIC_HOST=turn.example.com`
 - `TURN_PORT=3478`
 - `TURN_TLS_PORT=5349`
+- `TURN_MIN_PORT=49160`
+- `TURN_MAX_PORT=49200`
 - `TURN_SHARED_SECRET=<replace-me>`
 - `TURN_REALM=turn.example.com`
 - `TURN_PROTOCOLS=udp,tcp,tls`

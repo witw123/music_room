@@ -36,6 +36,8 @@ services:
       - --use-auth-secret
       - --static-auth-secret=${TURN_SHARED_SECRET}
       - --realm=${TURN_REALM}
+      - --min-port=${TURN_MIN_PORT}
+      - --max-port=${TURN_MAX_PORT}
       - --no-cli
       - --no-multicast-peers
     ports:
@@ -43,6 +45,7 @@ services:
       - "3478:3478/udp"
       - "5349:5349"
       - "5349:5349/udp"
+      - "${TURN_MIN_PORT}-${TURN_MAX_PORT}:${TURN_MIN_PORT}-${TURN_MAX_PORT}/udp"
 
   server:
     build:
@@ -65,6 +68,8 @@ services:
       TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST}
       TURN_PORT: ${TURN_PORT}
       TURN_TLS_PORT: ${TURN_TLS_PORT}
+      TURN_MIN_PORT: ${TURN_MIN_PORT}
+      TURN_MAX_PORT: ${TURN_MAX_PORT}
       TURN_SHARED_SECRET: ${TURN_SHARED_SECRET}
       TURN_REALM: ${TURN_REALM}
       TURN_PROTOCOLS: ${TURN_PROTOCOLS}
