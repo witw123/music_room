@@ -24,6 +24,11 @@ export function useAvailabilityAnnouncements({
   const queuedAvailabilityRef = useRef<TrackAvailabilityAnnouncement[]>([]);
   const availabilityFlushTimerRef = useRef<number | null>(null);
   const [availabilityByTrack, setAvailabilityByTrack] = useState<AvailabilityState>({});
+  const availabilityByTrackRef = useRef<AvailabilityState>({});
+
+  useEffect(() => {
+    availabilityByTrackRef.current = availabilityByTrack;
+  }, [availabilityByTrack]);
 
   const flushQueuedAvailability = useCallback(() => {
     if (availabilityFlushTimerRef.current !== null) {
@@ -80,7 +85,7 @@ export function useAvailabilityAnnouncements({
           (announcement) =>
             announcement.trackId === trackId && announcement.ownerPeerId === peerId
         );
-      const existing = availabilityByTrack[trackId]?.[peerId] ?? queuedExisting;
+      const existing = availabilityByTrackRef.current[trackId]?.[peerId] ?? queuedExisting;
       const availableChunkSet = new Set(existing?.availableChunks ?? []);
       const nextChunkCountBefore = availableChunkSet.size;
       availableChunkSet.add(chunkIndex);
@@ -104,7 +109,7 @@ export function useAvailabilityAnnouncements({
         announcedAt: new Date().toISOString()
       });
     },
-    [activeSessionRef, availabilityByTrack, currentRoomRef, peerId, queueAvailability]
+    [activeSessionRef, currentRoomRef, peerId, queueAvailability]
   );
 
   const emitAvailability = useCallback(
