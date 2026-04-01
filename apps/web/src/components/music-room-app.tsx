@@ -217,6 +217,7 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability,
     refreshRoom
   });
+  const announceLocalCacheRef = useRef(announceLocalCache);
   const hasLocalCurrentTrack = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
   const shouldUseLocalPlayback = isCurrentSourceOwner && hasLocalCurrentTrack;
   const {
@@ -297,6 +298,10 @@ export function MusicRoomApp({
   useEffect(() => {
     uploadedTrackIdsRef.current = Object.keys(uploadedTracks);
   }, [uploadedTracks]);
+
+  useEffect(() => {
+    announceLocalCacheRef.current = announceLocalCache;
+  }, [announceLocalCache]);
 
   const recordPeerDiagnostic = useCallback(
     (input: Parameters<typeof recordDiagnosticsEvent>[1]) => {
@@ -490,7 +495,7 @@ export function MusicRoomApp({
         onPieceReceived: ({ trackId, chunkIndex, totalChunks, mimeType }) => {
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
           mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks);
-          void announceLocalCache(trackId, totalChunks);
+          void announceLocalCacheRef.current(trackId, totalChunks);
           void hydrateTrackFromPiecesWithCleanup(trackId, mimeType, totalChunks);
         },
         onPieceRequestTimeout: ({ trackId, chunkIndex, peerId: timedOutPeerId }) => {
@@ -699,7 +704,7 @@ export function MusicRoomApp({
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
         for (const trackId of uploadedTrackIdsRef.current) {
-          void announceLocalCache(trackId);
+          void announceLocalCacheRef.current(trackId);
         }
       }
     });
@@ -813,7 +818,6 @@ export function MusicRoomApp({
     activeSession?.userId,
     mergeLocalPieceAvailability,
     deleteUploadedTrackArtifacts,
-    announceLocalCache,
     recordPeerDiagnostic,
     workspaceOnly,
     router
