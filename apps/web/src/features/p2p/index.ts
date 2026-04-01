@@ -1,5 +1,4 @@
 import {
-  iceConfigResponseSchema,
   iceServerConfigSchema,
   type IceConfigResponse,
   type IceServerConfig,
@@ -60,8 +59,30 @@ export function getStaticWebRTCIceServers(): IceServerConfig[] {
 }
 
 export function parseIceConfigResponse(payload: unknown) {
-  const result = iceConfigResponseSchema.safeParse(payload);
-  return result.success ? result.data : null;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  const iceServersResult = iceServerConfigSchema.array().safeParse(candidate.iceServers);
+  const ttlSeconds = candidate.ttlSeconds;
+  const source = candidate.source;
+
+  if (
+    !iceServersResult.success ||
+    typeof ttlSeconds !== "number" ||
+    !Number.isInteger(ttlSeconds) ||
+    ttlSeconds <= 0 ||
+    (source !== "ephemeral" && source !== "static" && source !== "stun-only")
+  ) {
+    return null;
+  }
+
+  return {
+    iceServers: iceServersResult.data,
+    ttlSeconds,
+    source
+  } satisfies IceConfigResponse;
 }
 
 export function getMissingChunkIndexes(

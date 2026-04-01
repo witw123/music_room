@@ -10,10 +10,16 @@ export class RealtimeController {
   ) {}
 
   @Get("ice-config")
-  async getIceConfig(@Headers("x-session-token") sessionToken: string | undefined) {
+  async getIceConfig(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("host") host: string | undefined,
+    @Headers("x-forwarded-host") forwardedHost: string | undefined
+  ) {
     try {
       const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
-      return this.realtimeService.buildIceConfig(session.userId);
+      return this.realtimeService.buildIceConfig(session.userId, {
+        requestHost: forwardedHost || host
+      });
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }

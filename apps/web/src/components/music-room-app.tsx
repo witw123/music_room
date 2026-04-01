@@ -90,6 +90,15 @@ export function MusicRoomApp({
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
+  const hostMediaSyncStateRef = useRef<{
+    inFlight: boolean;
+    lastAppliedKey: string | null;
+    pendingKey: string | null;
+  }>({
+    inFlight: false,
+    lastAppliedKey: null,
+    pendingKey: null
+  });
   const [isPending, startTransition] = useTransition();
   const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
@@ -805,6 +814,11 @@ export function MusicRoomApp({
       mediaMesh.destroy();
       mediaMeshRef.current = null;
       hostStreamRef.current = null;
+      hostMediaSyncStateRef.current = {
+        inFlight: false,
+        lastAppliedKey: null,
+        pendingKey: null
+      };
       setConnectedPeers([]);
       setMediaConnectedPeers([]);
       setMediaConnectionState("idle");
@@ -1086,29 +1100,63 @@ export function MusicRoomApp({
       return;
     }
 
-    const audio = audioRef.current;
-    if (!audio || !roomSnapshot.room.playback.currentTrackId) {
-      await mediaMeshRef.current?.syncHostPeers([], null, roomSnapshot.room.playback.mediaEpoch);
-      return;
-    }
-
+    const playback = roomSnapshot.room.playback;
     const listenerPeerIds =
       roomSnapshot.room.members
         .map((member) => member.peerId)
         .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
+    const syncKey = [
+      roomSnapshot.room.id,
+      playback.mediaEpoch,
+      playback.currentTrackId ?? "none",
+      playback.status,
+      listenerPeerIds.join(",")
+    ].join("|");
+    const syncState = hostMediaSyncStateRef.current;
 
-    const capture = captureAudioStream(audio);
-    if (!capture) {
-      setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+    if (syncState.lastAppliedKey === syncKey || syncState.pendingKey === syncKey) {
       return;
     }
 
-    hostStreamRef.current = capture;
-    await mediaMeshRef.current?.syncHostPeers(
-      listenerPeerIds,
-      capture,
-      roomSnapshot.room.playback.mediaEpoch
-    );
+    if (syncState.inFlight) {
+      syncState.pendingKey = syncKey;
+      return;
+    }
+
+    syncState.inFlight = true;
+    syncState.pendingKey = syncKey;
+
+    try {
+      const audio = audioRef.current;
+      if (!audio || !playback.currentTrackId) {
+        await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
+        syncState.lastAppliedKey = syncKey;
+        return;
+      }
+
+      const capture = captureAudioStream(audio);
+      if (!capture) {
+        setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+        return;
+      }
+
+      hostStreamRef.current = capture;
+      await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
+      syncState.lastAppliedKey = syncKey;
+    } finally {
+      const nextPendingKey = syncState.pendingKey;
+      syncState.inFlight = false;
+
+      if (nextPendingKey && nextPendingKey !== syncState.lastAppliedKey) {
+        syncState.pendingKey = null;
+        queueMicrotask(() => {
+          void syncHostMediaStream();
+        });
+        return;
+      }
+
+      syncState.pendingKey = null;
+    }
   }
 
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");

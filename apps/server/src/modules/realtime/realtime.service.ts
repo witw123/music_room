@@ -13,12 +13,12 @@ const defaultTtlSeconds = 60 * 60;
 export class RealtimeService {
   private readonly logger = new Logger(RealtimeService.name);
 
-  buildIceConfig(userId: string): IceConfigResponse {
+  buildIceConfig(userId: string, options?: { requestHost?: string | null }): IceConfigResponse {
     const ttlSeconds = parsePositiveInt(process.env.TURN_TTL_SECONDS) ?? defaultTtlSeconds;
     const stunUrl = process.env.NEXT_PUBLIC_STUN_URL?.trim() || defaultStunUrl;
     const staticIceServers = this.getStaticIceServers(stunUrl);
-    const turnEnabled = process.env.TURN_ENABLED === "true";
-    const turnHost = process.env.TURN_PUBLIC_HOST?.trim();
+    const turnEnabled = process.env.TURN_ENABLED !== "false";
+    const turnHost = resolveTurnHost(options?.requestHost);
     const turnSecret = process.env.TURN_SHARED_SECRET?.trim();
 
     if (turnEnabled && turnHost && turnSecret) {
@@ -38,7 +38,7 @@ export class RealtimeService {
 
     if (turnEnabled && (!turnHost || !turnSecret)) {
       this.logger.warn(
-        "TURN is enabled but TURN_PUBLIC_HOST or TURN_SHARED_SECRET is missing. Falling back."
+        "TURN is enabled but TURN_PUBLIC_HOST/APP_DOMAIN/request host or TURN_SHARED_SECRET is missing. Falling back."
       );
     }
 
@@ -137,4 +137,39 @@ function parsePositiveInt(value?: string | null) {
 
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function resolveTurnHost(requestHost?: string | null) {
+  const explicitHost = process.env.TURN_PUBLIC_HOST?.trim();
+  if (explicitHost) {
+    return explicitHost;
+  }
+
+  const appDomain = process.env.APP_DOMAIN?.trim();
+  if (appDomain) {
+    return appDomain.startsWith("turn.") ? appDomain : `turn.${appDomain}`;
+  }
+
+  const normalizedRequestHost = normalizeHost(requestHost);
+  if (normalizedRequestHost) {
+    return normalizedRequestHost.startsWith("turn.")
+      ? normalizedRequestHost
+      : `turn.${normalizedRequestHost}`;
+  }
+
+  return null;
+}
+
+function normalizeHost(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutPort = trimmed.replace(/:\d+$/, "");
+  return withoutPort || null;
 }

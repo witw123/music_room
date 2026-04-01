@@ -30,6 +30,38 @@ describe("RealtimeService", () => {
     );
   });
 
+  it("derives TURN host from APP_DOMAIN when TURN_PUBLIC_HOST is absent", () => {
+    delete process.env.TURN_PUBLIC_HOST;
+    process.env.APP_DOMAIN = "witw.top";
+    process.env.TURN_ENABLED = "true";
+    process.env.TURN_SHARED_SECRET = "secret";
+
+    const service = new RealtimeService();
+    const result = service.buildIceConfig("user_1");
+
+    expect(result.source).toBe("ephemeral");
+    expect(result.iceServers[1]?.urls).toEqual(
+      expect.arrayContaining(["turn:turn.witw.top:3478?transport=udp"])
+    );
+  });
+
+  it("derives TURN host from request host when explicit host and APP_DOMAIN are absent", () => {
+    delete process.env.TURN_PUBLIC_HOST;
+    delete process.env.APP_DOMAIN;
+    process.env.TURN_ENABLED = "true";
+    process.env.TURN_SHARED_SECRET = "secret";
+
+    const service = new RealtimeService();
+    const result = service.buildIceConfig("user_1", {
+      requestHost: "witw.top:443"
+    });
+
+    expect(result.source).toBe("ephemeral");
+    expect(result.iceServers[1]?.urls).toEqual(
+      expect.arrayContaining(["turn:turn.witw.top:3478?transport=udp"])
+    );
+  });
+
   it("falls back to static TURN config when shared-secret TURN is unavailable", () => {
     process.env.TURN_ENABLED = "true";
     process.env.NEXT_PUBLIC_STUN_URL = "stun:stun.example.com:3478";
