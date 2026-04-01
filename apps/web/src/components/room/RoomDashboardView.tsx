@@ -17,6 +17,7 @@ import { MembersPanel } from "./MembersPanel";
 import type { MemberTransferSummary } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
+import type { PeerDiagnosticsSnapshot, PeerRecentEvent } from "@music-room/shared";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -39,6 +40,10 @@ type RoomDashboardViewProps = {
   tracks: TrackMeta[];
   availabilitySummary: AvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
+  peerDiagnostics: PeerDiagnosticsSnapshot[];
+  peerRecentEvents: PeerRecentEvent[];
+  iceConfigSource: string;
+  iceConfigStatus: string;
   onCopyJoinCode: () => Promise<void>;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
@@ -86,6 +91,10 @@ export function RoomDashboardView({
   tracks,
   availabilitySummary,
   memberTransferSummaries,
+  peerDiagnostics,
+  peerRecentEvents,
+  iceConfigSource,
+  iceConfigStatus,
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom,
@@ -228,6 +237,10 @@ export function RoomDashboardView({
                 connectedPeersCount={connectedPeersCount}
                 mediaConnectedPeersCount={mediaConnectedPeersCount}
                 cachedTrackCount={cachedTrackCount}
+                peerDiagnostics={peerDiagnostics}
+                recentEvents={peerRecentEvents}
+                iceConfigSource={iceConfigSource}
+                iceConfigStatus={iceConfigStatus}
               />
             </div>
           ) : null}

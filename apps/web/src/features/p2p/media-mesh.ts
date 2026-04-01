@@ -9,6 +9,19 @@ type MediaMeshCallbacks = {
     state: MediaConnectionState;
     connectedPeerIds: string[];
   }) => void;
+  onIceConnectionStateChange?: (payload: {
+    peerId: string;
+    state: RTCIceConnectionState;
+  }) => void;
+  onSignal?: (payload: {
+    peerId: string;
+    direction: "sent" | "received";
+    type: PeerSignalMessage["type"];
+  }) => void;
+  onRemoteTrack?: (payload: {
+    peerId: string;
+    trackId: string;
+  }) => void;
 };
 
 type MediaPeerEntry = {
@@ -55,6 +68,11 @@ export class RoomMediaMesh {
       if (entry.connection.signalingState === "stable") {
         const offer = await entry.connection.createOffer();
         await entry.connection.setLocalDescription(offer);
+        this.callbacks.onSignal?.({
+          peerId,
+          direction: "sent",
+          type: "offer"
+        });
         this.sendSignal({
           roomId: this.roomId,
           fromPeerId: this.localPeerId,
@@ -86,6 +104,11 @@ export class RoomMediaMesh {
     const entry = this.peers.get(payload.fromPeerId) ?? this.createPeer(payload.fromPeerId, true);
 
     if (payload.type === "offer") {
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "received",
+        type: "offer"
+      });
       const remoteDescription = toSessionDescriptionInit(payload.payload);
       if (!remoteDescription) {
         return;
@@ -102,6 +125,11 @@ export class RoomMediaMesh {
       await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "sent",
+        type: "answer"
+      });
       this.sendSignal({
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
@@ -115,6 +143,11 @@ export class RoomMediaMesh {
     }
 
     if (payload.type === "answer") {
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "received",
+        type: "answer"
+      });
       const remoteDescription = toSessionDescriptionInit(payload.payload);
       if (!remoteDescription) {
         return;
@@ -130,6 +163,11 @@ export class RoomMediaMesh {
     }
 
     if (payload.type === "candidate") {
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "received",
+        type: "candidate"
+      });
       const candidate = toIceCandidateInit(payload.payload);
       if (!candidate) {
         return;
@@ -171,6 +209,11 @@ export class RoomMediaMesh {
 
       const offer = await entry.connection.createOffer();
       await entry.connection.setLocalDescription(offer);
+      this.callbacks.onSignal?.({
+        peerId,
+        direction: "sent",
+        type: "offer"
+      });
       this.sendSignal({
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
@@ -207,6 +250,11 @@ export class RoomMediaMesh {
         return;
       }
 
+      this.callbacks.onSignal?.({
+        peerId,
+        direction: "sent",
+        type: "candidate"
+      });
       this.sendSignal({
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
@@ -221,6 +269,10 @@ export class RoomMediaMesh {
     connection.ontrack = (event) => {
       const [stream] = event.streams;
       const nextStream = stream ?? new MediaStream([event.track]);
+      this.callbacks.onRemoteTrack?.({
+        peerId,
+        trackId: event.track.id
+      });
       this.callbacks.onRemoteStream(nextStream);
       event.track.onunmute = () => {
         this.callbacks.onRemoteStream(nextStream);
@@ -243,6 +295,13 @@ export class RoomMediaMesh {
           this.releasePeer(peerId, entry);
         }
       }
+    };
+
+    connection.oniceconnectionstatechange = () => {
+      this.callbacks.onIceConnectionStateChange?.({
+        peerId,
+        state: connection.iceConnectionState
+      });
     };
 
     this.peers.set(peerId, entry);

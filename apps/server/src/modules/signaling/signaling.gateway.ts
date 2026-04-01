@@ -25,6 +25,8 @@ import { RoomService } from "../room/room.service";
 const roomSnapshotChannel = "music-room:room-snapshot";
 const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
 const roomDeletedChannel = "music-room:room-deleted";
+const peerSignalChannel = "music-room:peer-signal";
+const pieceAvailabilityChannel = "music-room:piece-availability";
 
 @WebSocketGateway({
   path: "/ws/socket.io",
@@ -129,6 +131,50 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         .to(message.roomId)
         .emit("room.deleted", { roomId: message.roomId, trackIds: message.trackIds ?? [] });
     });
+
+    void this.redisService.subscribe(peerSignalChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: PeerSignalMessage;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("peer.signal", message.payload);
+    });
+
+    void this.redisService.subscribe(pieceAvailabilityChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: TrackAvailabilityAnnouncement;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      const roomAvailability = this.availabilityByRoom.get(message.roomId) ?? new Map();
+      roomAvailability.set(
+        `${message.payload.trackId}:${message.payload.ownerPeerId}`,
+        message.payload
+      );
+      this.availabilityByRoom.set(message.roomId, roomAvailability);
+      this.server.to(message.roomId).emit("piece.availability", message.payload);
+    });
   }
 
   onModuleDestroy() {
@@ -144,6 +190,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
 
     this.server.to(payload.roomId).emit("peer.signal", payload);
+    void this.redisService.publish(peerSignalChannel, {
+      sourceId: this.instanceId,
+      roomId: payload.roomId,
+      payload
+    });
     return payload;
   }
 
@@ -162,6 +213,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     roomAvailability.set(`${payload.trackId}:${payload.ownerPeerId}`, payload);
     this.availabilityByRoom.set(payload.roomId, roomAvailability);
     client.to(payload.roomId).emit("piece.availability", payload);
+    void this.redisService.publish(pieceAvailabilityChannel, {
+      sourceId: this.instanceId,
+      roomId: payload.roomId,
+      payload
+    });
     return payload;
   }
 

@@ -5,6 +5,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { PlaybackModule } from "./modules/playback/playback.module";
 import { PlaylistModule } from "./modules/playlist/playlist.module";
 import { QueueModule } from "./modules/queue/queue.module";
+import { RealtimeModule } from "./modules/realtime/realtime.module";
 import { RoomModule } from "./modules/room/room.module";
 import { SignalingModule } from "./modules/signaling/signaling.module";
 import { TrackModule } from "./modules/track/track.module";
@@ -23,10 +24,10 @@ import { RedisModule } from "./infra/redis/redis.module";
     PlaybackModule,
     PlaylistModule,
     QueueModule,
+    RealtimeModule,
     RoomModule,
     SignalingModule,
     TrackModule
   ]
 })
 export class AppModule {}
-

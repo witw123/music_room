@@ -23,6 +23,19 @@ type MeshCallbacks = {
     peerId: string;
     state: RTCPeerConnectionState;
   }) => void;
+  onIceConnectionStateChange?: (payload: {
+    peerId: string;
+    state: RTCIceConnectionState;
+  }) => void;
+  onDataChannelStateChange?: (payload: {
+    peerId: string;
+    state: RTCDataChannelState;
+  }) => void;
+  onSignal?: (payload: {
+    peerId: string;
+    direction: "sent" | "received";
+    type: PeerSignalMessage["type"];
+  }) => void;
 };
 
 type PeerEntry = {
@@ -93,6 +106,11 @@ export class P2PMesh {
     const entry = this.peers.get(payload.fromPeerId) ?? (await this.ensurePeer(payload.fromPeerId, false));
 
     if (payload.type === "offer") {
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "received",
+        type: "offer"
+      });
       const remoteDescription = toSessionDescriptionInit(payload.payload);
       if (!remoteDescription) {
         return;
@@ -109,6 +127,11 @@ export class P2PMesh {
       await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "sent",
+        type: "answer"
+      });
       this.sendSignal({
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
@@ -121,6 +144,11 @@ export class P2PMesh {
     }
 
     if (payload.type === "answer") {
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "received",
+        type: "answer"
+      });
       const remoteDescription = toSessionDescriptionInit(payload.payload);
       if (!remoteDescription) {
         return;
@@ -136,6 +164,11 @@ export class P2PMesh {
     }
 
     if (payload.type === "candidate") {
+      this.callbacks.onSignal?.({
+        peerId: payload.fromPeerId,
+        direction: "received",
+        type: "candidate"
+      });
       const candidate = toIceCandidateInit(payload.payload);
       if (!candidate) {
         return;
@@ -232,6 +265,11 @@ export class P2PMesh {
         return;
       }
 
+      this.callbacks.onSignal?.({
+        peerId,
+        direction: "sent",
+        type: "candidate"
+      });
       this.sendSignal({
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
@@ -249,6 +287,13 @@ export class P2PMesh {
       });
     };
 
+    connection.oniceconnectionstatechange = () => {
+      this.callbacks.onIceConnectionStateChange?.({
+        peerId,
+        state: connection.iceConnectionState
+      });
+    };
+
     connection.ondatachannel = (event) => {
       entry.channel = event.channel;
       this.bindChannel(peerId, entry.channel);
@@ -260,6 +305,11 @@ export class P2PMesh {
       this.bindChannel(peerId, channel);
       const offer = await connection.createOffer();
       await connection.setLocalDescription(offer);
+      this.callbacks.onSignal?.({
+        peerId,
+        direction: "sent",
+        type: "offer"
+      });
       this.sendSignal({
         roomId: this.roomId,
         fromPeerId: this.localPeerId,
@@ -276,6 +326,17 @@ export class P2PMesh {
 
   private bindChannel(peerId: string, channel: RTCDataChannel) {
     channel.binaryType = "arraybuffer";
+    this.callbacks.onDataChannelStateChange?.({
+      peerId,
+      state: channel.readyState
+    });
+
+    channel.onopen = () => {
+      this.callbacks.onDataChannelStateChange?.({
+        peerId,
+        state: channel.readyState
+      });
+    };
 
     channel.onmessage = async (event) => {
       const message = await parseIncomingMessage(event.data);
@@ -354,6 +415,10 @@ export class P2PMesh {
     };
 
     channel.onclose = () => {
+      this.callbacks.onDataChannelStateChange?.({
+        peerId,
+        state: "closed"
+      });
       this.clearPendingRequestsForPeer(peerId);
       this.callbacks.onPeerConnectionChange?.({
         peerId,

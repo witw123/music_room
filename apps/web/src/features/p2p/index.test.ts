@@ -3,7 +3,9 @@ import {
   assembleTrackFileFromPieces,
   currentTrackChunkRequestLimit,
   defaultChunkSize,
+  getStaticWebRTCIceServers,
   getMissingChunkIndexes,
+  parseIceConfigResponse,
   hashArrayBuffer,
   selectChunkSource,
   summarizeTrackAvailability,
@@ -187,5 +189,35 @@ describe("p2p helpers", () => {
     });
 
     expect(assembled).toBeNull();
+  });
+
+  it("parses a valid ice config response", () => {
+    const parsed = parseIceConfigResponse({
+      iceServers: [{ urls: "stun:stun.example.com:3478" }],
+      ttlSeconds: 3600,
+      source: "ephemeral"
+    });
+
+    expect(parsed).toEqual({
+      iceServers: [{ urls: "stun:stun.example.com:3478" }],
+      ttlSeconds: 3600,
+      source: "ephemeral"
+    });
+  });
+
+  it("keeps static env parsing available for fallback", () => {
+    process.env.NEXT_PUBLIC_STUN_URL = "stun:stun.example.com:3478";
+    process.env.NEXT_PUBLIC_TURN_URL = "turn:turn.example.com:3478";
+    process.env.NEXT_PUBLIC_TURN_USERNAME = "music-room";
+    process.env.NEXT_PUBLIC_TURN_CREDENTIAL = "secret";
+
+    expect(getStaticWebRTCIceServers()).toEqual([
+      { urls: "stun:stun.example.com:3478" },
+      {
+        urls: "turn:turn.example.com:3478",
+        username: "music-room",
+        credential: "secret"
+      }
+    ]);
   });
 });

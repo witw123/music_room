@@ -1,6 +1,7 @@
 import { apiBaseUrl } from "./api-client";
 import type {
   AuthSession,
+  IceConfigResponse,
   PlaybackSnapshot,
   Playlist,
   QueueItem,
@@ -132,6 +133,7 @@ export const musicRoomApi = {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
+  getIceConfig: () => request<IceConfigResponse>("/v1/realtime/ice-config"),
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),
   updatePlaylist: (

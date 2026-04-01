@@ -6,6 +6,8 @@ export const iceServerConfigSchema = z.object({
   credential: z.string().optional()
 });
 
+export const iceConfigSourceSchema = z.enum(["ephemeral", "static", "stun-only"]);
+
 export const roomMediaConnectionStateSchema = z.enum([
   "idle",
   "connecting",
@@ -69,6 +71,53 @@ export const p2pDataMessageSchema = z.union([
   })
 ]);
 
+export const peerRecentEventSchema = z.object({
+  id: z.string(),
+  timestamp: z.string().datetime(),
+  peerId: z.string(),
+  channelKind: z.enum(["data", "media", "system"]),
+  direction: z.enum(["sent", "received", "local"]),
+  event: z.string(),
+  summary: z.string(),
+  level: z.enum(["info", "warning", "error"]).default("info")
+});
+
+export const peerSignalStatsSchema = z.object({
+  sentOffers: z.number().int().nonnegative(),
+  receivedOffers: z.number().int().nonnegative(),
+  sentAnswers: z.number().int().nonnegative(),
+  receivedAnswers: z.number().int().nonnegative(),
+  sentCandidates: z.number().int().nonnegative(),
+  receivedCandidates: z.number().int().nonnegative()
+});
+
+export const remoteTrackStatusSchema = z.object({
+  received: z.boolean(),
+  boundToAudioElement: z.boolean(),
+  lastTrackAt: z.string().datetime().nullable(),
+  lastBoundAt: z.string().datetime().nullable(),
+  lastAudioEvent: z.enum(["playing", "waiting", "pause", "error"]).nullable()
+});
+
+export const peerDiagnosticsSnapshotSchema = z.object({
+  peerId: z.string(),
+  dataConnectionState: z.string().nullable(),
+  mediaConnectionState: z.string().nullable(),
+  dataIceState: z.string().nullable(),
+  mediaIceState: z.string().nullable(),
+  signalStats: peerSignalStatsSchema,
+  remoteTrackStatus: remoteTrackStatusSchema,
+  lastError: z.string().nullable(),
+  updatedAt: z.string().datetime(),
+  recentEvents: z.array(peerRecentEventSchema)
+});
+
+export const iceConfigResponseSchema = z.object({
+  iceServers: z.array(iceServerConfigSchema),
+  ttlSeconds: z.number().int().positive(),
+  source: iceConfigSourceSchema
+});
+
 export type TrackPieceInfo = z.infer<typeof trackPieceInfoSchema>;
 export type TrackAvailability = z.infer<typeof trackAvailabilitySchema>;
 export type TrackAvailabilityAnnouncement = z.infer<typeof trackAvailabilityAnnouncementSchema>;
@@ -76,3 +125,9 @@ export type PeerSignalMessage = z.infer<typeof peerSignalMessageSchema>;
 export type P2PDataMessage = z.infer<typeof p2pDataMessageSchema>;
 export type IceServerConfig = z.infer<typeof iceServerConfigSchema>;
 export type RoomMediaConnectionState = z.infer<typeof roomMediaConnectionStateSchema>;
+export type IceConfigSource = z.infer<typeof iceConfigSourceSchema>;
+export type PeerRecentEvent = z.infer<typeof peerRecentEventSchema>;
+export type PeerSignalStats = z.infer<typeof peerSignalStatsSchema>;
+export type RemoteTrackStatus = z.infer<typeof remoteTrackStatusSchema>;
+export type PeerDiagnosticsSnapshot = z.infer<typeof peerDiagnosticsSnapshotSchema>;
+export type IceConfigResponse = z.infer<typeof iceConfigResponseSchema>;

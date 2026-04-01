@@ -36,13 +36,16 @@ services:
       - -n
       - --log-file=stdout
       - --fingerprint
-      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SHARED_SECRET:-replace-with-a-turn-shared-secret}
       - --realm=${TURN_REALM:-localhost}
-      - --user=${NEXT_PUBLIC_TURN_USERNAME:-music-room}:${NEXT_PUBLIC_TURN_CREDENTIAL:-music-room-turn-secret}
       - --no-cli
+      - --no-multicast-peers
     ports:
       - "3478:3478"
       - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
 
   server:
     build:
@@ -61,6 +64,14 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      TURN_ENABLED: ${TURN_ENABLED:-true}
+      TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST:-localhost}
+      TURN_PORT: ${TURN_PORT:-3478}
+      TURN_TLS_PORT: ${TURN_TLS_PORT:-5349}
+      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:-replace-with-a-turn-shared-secret}
+      TURN_REALM: ${TURN_REALM:-localhost}
+      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp,tls}
+      TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-3600}
     ports:
       - "3001:3001"
     healthcheck:

@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
+  IceConfigResponse,
+  PeerDiagnosticsSnapshot,
+  PeerRecentEvent,
   Playlist,
   RoomMediaConnectionState,
   RoomSnapshot,
@@ -10,7 +13,9 @@ import type {
 } from "@music-room/shared";
 import {
   ChunkScheduler,
+  createEmptyDiagnosticsState,
   getWebRTCIceServers,
+  recordDiagnosticsEvent,
   RoomMediaMesh,
   P2PMesh
 } from "@/features/p2p";
@@ -98,6 +103,9 @@ export function MusicRoomApp({
   const [availabilityByTrack, setAvailabilityByTrack] = useState<
     Record<string, Record<string, TrackAvailabilityAnnouncement>>
   >({});
+  const [iceConfig, setIceConfig] = useState<IceConfigResponse | null>(null);
+  const [iceConfigResolved, setIceConfigResolved] = useState(false);
+  const [diagnosticsState, setDiagnosticsState] = useState(createEmptyDiagnosticsState);
   const {
     activeSession,
     hydrated,
@@ -111,12 +119,21 @@ export function MusicRoomApp({
   });
   const activeSessionRef = useRef(activeSession);
   const currentRoomRef = useRef<RoomSnapshot | null>(null);
+  const uploadedTrackIdsRef = useRef<string[]>([]);
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId;
   const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+  const peerDiagnostics = useMemo<PeerDiagnosticsSnapshot[]>(
+    () =>
+      Object.values(diagnosticsState.peers).sort((left, right) =>
+        left.peerId.localeCompare(right.peerId)
+      ),
+    [diagnosticsState.peers]
+  );
+  const peerRecentEvents = diagnosticsState.recentEvents as PeerRecentEvent[];
 
   async function refreshRoom(roomId: string) {
     const snapshot = await musicRoomApi.getRoom(roomId);
@@ -278,6 +295,74 @@ export function MusicRoomApp({
   }, [roomSnapshot]);
 
   useEffect(() => {
+    uploadedTrackIdsRef.current = Object.keys(uploadedTracks);
+  }, [uploadedTracks]);
+
+  const recordPeerDiagnostic = useCallback(
+    (input: Parameters<typeof recordDiagnosticsEvent>[1]) => {
+      setDiagnosticsState((current) => recordDiagnosticsEvent(current, input));
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !activeSession) {
+      setIceConfig(null);
+      setIceConfigResolved(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIceConfigResolved(false);
+
+    void (async () => {
+      try {
+        const nextIceConfig = await musicRoomApi.getIceConfig();
+        if (cancelled) {
+          return;
+        }
+
+        setIceConfig(nextIceConfig);
+        setIceConfigResolved(true);
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "ice-config",
+          summary: `ICE 配置来源：${nextIceConfig.source}`,
+          update: (snapshot) => ({
+            ...snapshot,
+            mediaConnectionState: nextIceConfig.source
+          })
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setIceConfig(null);
+        setIceConfigResolved(true);
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "ice-config-fallback",
+          level: "warning",
+          summary: `ICE 配置获取失败，已回退静态配置：${toUserFacingError(error)}`,
+          update: (snapshot) => ({
+            ...snapshot,
+            lastError: toUserFacingError(error)
+          })
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roomSnapshot?.room.id, activeSession?.userId, recordPeerDiagnostic]);
+
+  useEffect(() => {
     if (!statusMessage) return;
     const t = setTimeout(() => {
       setStatusMessage("");
@@ -366,7 +451,7 @@ export function MusicRoomApp({
   }, [roomSnapshot?.room.id, peerId]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id) {
+    if (!roomSnapshot?.room.id || !iceConfigResolved) {
       return;
     }
 
@@ -374,11 +459,33 @@ export function MusicRoomApp({
     socketRef.current = socket;
     const roomId = roomSnapshot.room.id;
     let presenceIntervalId: number | null = null;
-    const iceServers = getWebRTCIceServers();
+    const iceServers = getWebRTCIceServers(iceConfig);
+    const emitPeerSignal = (payload: PeerSignalMessage) => {
+      recordPeerDiagnostic({
+        peerId: payload.toPeerId,
+        channelKind: payload.channelKind,
+        direction: "sent",
+        event: payload.type,
+        summary: `向 ${payload.toPeerId} 发送 ${payload.channelKind} ${payload.type}`,
+        update: (snapshot) => ({
+          ...snapshot,
+          signalStats: {
+            ...snapshot.signalStats,
+            sentOffers:
+              snapshot.signalStats.sentOffers + (payload.type === "offer" ? 1 : 0),
+            sentAnswers:
+              snapshot.signalStats.sentAnswers + (payload.type === "answer" ? 1 : 0),
+            sentCandidates:
+              snapshot.signalStats.sentCandidates + (payload.type === "candidate" ? 1 : 0)
+          }
+        })
+      });
+      socket.emit("peer.signal", payload);
+    };
     const mesh = new P2PMesh(
       roomId,
       peerId,
-      (payload: PeerSignalMessage) => socket.emit("peer.signal", payload),
+      emitPeerSignal,
       {
         onPieceReceived: ({ trackId, chunkIndex, totalChunks, mimeType }) => {
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
@@ -390,6 +497,17 @@ export function MusicRoomApp({
           chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
         },
         onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
+          recordPeerDiagnostic({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "local",
+            event: "connection-state",
+            summary: `Data 连接状态：${state}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              dataConnectionState: state
+            })
+          });
           setConnectedPeers((current) => {
             const next = new Set(current);
 
@@ -400,6 +518,28 @@ export function MusicRoomApp({
             }
 
             return [...next];
+          });
+        },
+        onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
+          recordPeerDiagnostic({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "local",
+            event: "ice-state",
+            summary: `Data ICE 状态：${state}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              dataIceState: state
+            })
+          });
+        },
+        onDataChannelStateChange: ({ peerId: remotePeerId, state }) => {
+          recordPeerDiagnostic({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "local",
+            event: "data-channel",
+            summary: `DataChannel 状态：${state}`
           });
         }
       },
@@ -413,7 +553,7 @@ export function MusicRoomApp({
     const mediaMesh = new RoomMediaMesh(
       roomId,
       peerId,
-      (payload: PeerSignalMessage) => socket.emit("peer.signal", payload),
+      emitPeerSignal,
       iceServers,
       {
         onRemoteStream: (stream) => {
@@ -424,6 +564,21 @@ export function MusicRoomApp({
 
           if (remoteAudio.srcObject !== stream) {
             remoteAudio.srcObject = stream;
+            recordPeerDiagnostic({
+              peerId: "remote-media",
+              channelKind: "media",
+              direction: "local",
+              event: "remote-stream-bound",
+              summary: stream ? "远端媒体流已绑定到音频元素" : "远端媒体流已清空",
+              update: (snapshot) => ({
+                ...snapshot,
+                remoteTrackStatus: {
+                  ...snapshot.remoteTrackStatus,
+                  boundToAudioElement: !!stream,
+                  lastBoundAt: stream ? new Date().toISOString() : snapshot.remoteTrackStatus.lastBoundAt
+                }
+              })
+            });
           }
 
           if (stream) {
@@ -433,6 +588,17 @@ export function MusicRoomApp({
           }
         },
         onConnectionStateChange: ({ state, connectedPeerIds }) => {
+          recordPeerDiagnostic({
+            peerId: connectedPeerIds[0] ?? "remote-media",
+            channelKind: "media",
+            direction: "local",
+            event: "connection-state",
+            summary: `Media 连接状态：${state}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              mediaConnectionState: state
+            })
+          });
           setMediaConnectedPeers(connectedPeerIds);
 
           if (state === "connected") {
@@ -453,6 +619,37 @@ export function MusicRoomApp({
           if (state === "disconnected" || state === "closed") {
             setMediaConnectionState((current) => (current === "live" ? "reconnecting" : "idle"));
           }
+        },
+        onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
+          recordPeerDiagnostic({
+            peerId: remotePeerId,
+            channelKind: "media",
+            direction: "local",
+            event: "ice-state",
+            summary: `Media ICE 状态：${state}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              mediaIceState: state
+            })
+          });
+        },
+        onRemoteTrack: ({ peerId: remotePeerId, trackId }) => {
+          const now = new Date().toISOString();
+          recordPeerDiagnostic({
+            peerId: remotePeerId,
+            channelKind: "media",
+            direction: "local",
+            event: "remote-track",
+            summary: `收到远端 track ${trackId}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              remoteTrackStatus: {
+                ...snapshot.remoteTrackStatus,
+                received: true,
+                lastTrackAt: now
+              }
+            })
+          });
         }
       }
     );
@@ -491,13 +688,41 @@ export function MusicRoomApp({
       startPresenceHeartbeat();
       setStatusMessage(`已连接到房间 ${roomSnapshot.room.joinCode}。`);
     });
+    let didReplayLocalAvailability = false;
+
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
       setRoomSnapshot((current) => ({
         ...snapshot,
         playlists: snapshot.playlists.length > 0 ? snapshot.playlists : (current?.playlists ?? [])
       }));
+
+      if (!didReplayLocalAvailability) {
+        didReplayLocalAvailability = true;
+        for (const trackId of uploadedTrackIdsRef.current) {
+          void announceLocalCache(trackId);
+        }
+      }
     });
     socket.on("peer.signal", (payload: PeerSignalMessage) => {
+      recordPeerDiagnostic({
+        peerId: payload.fromPeerId,
+        channelKind: payload.channelKind,
+        direction: "received",
+        event: payload.type,
+        summary: `收到 ${payload.fromPeerId} 的 ${payload.channelKind} ${payload.type}`,
+        update: (snapshot) => ({
+          ...snapshot,
+          signalStats: {
+            ...snapshot.signalStats,
+            receivedOffers:
+              snapshot.signalStats.receivedOffers + (payload.type === "offer" ? 1 : 0),
+            receivedAnswers:
+              snapshot.signalStats.receivedAnswers + (payload.type === "answer" ? 1 : 0),
+            receivedCandidates:
+              snapshot.signalStats.receivedCandidates + (payload.type === "candidate" ? 1 : 0)
+          }
+        })
+      });
       if (payload.channelKind === "media") {
         void mediaMesh.handleSignal(payload);
         return;
@@ -536,6 +761,18 @@ export function MusicRoomApp({
       setStatusMessage("这个房间已不可用，请返回音乐房重新加入。");
     });
     socket.on("connect_error", (error) => {
+      recordPeerDiagnostic({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: "socket-connect-error",
+        level: "error",
+        summary: `实时连接失败：${toUserFacingError(error)}`,
+        update: (snapshot) => ({
+          ...snapshot,
+          lastError: toUserFacingError(error)
+        })
+      });
       setStatusMessage(`实时连接失败：${toUserFacingError(error)}`);
     });
     socket.on("disconnect", (reason) => {
@@ -570,10 +807,14 @@ export function MusicRoomApp({
   }, [
     roomSnapshot?.room.id,
     roomSnapshot?.room.joinCode,
+    iceConfig,
+    iceConfigResolved,
     peerId,
     activeSession?.userId,
     mergeLocalPieceAvailability,
     deleteUploadedTrackArtifacts,
+    announceLocalCache,
+    recordPeerDiagnostic,
     workspaceOnly,
     router
   ]);
@@ -930,6 +1171,12 @@ export function MusicRoomApp({
       : statusMessage.includes("已")
         ? "success"
         : "neutral";
+  const iceConfigStatus = iceConfig
+    ? `当前 ICE 配置来源：${iceConfig.source}，共 ${iceConfig.iceServers.length} 组服务器。`
+    : iceConfigResolved
+      ? "当前未拿到短期 TURN 凭证，已回退静态 STUN/TURN 配置。"
+      : "正在获取 ICE/TURN 配置…";
+  const iceConfigSource = iceConfig?.source ?? (iceConfigResolved ? "static-fallback" : "loading");
 
   return (
     <main className="min-h-screen bg-background relative flex flex-col pb-32">
@@ -975,6 +1222,10 @@ export function MusicRoomApp({
               tracks={roomSnapshot.tracks}
               availabilitySummary={availabilitySummary}
               memberTransferSummaries={memberTransferSummaries}
+              peerDiagnostics={peerDiagnostics}
+              peerRecentEvents={peerRecentEvents}
+              iceConfigSource={iceConfigSource}
+              iceConfigStatus={iceConfigStatus}
               onCopyJoinCode={async () => {
                 try {
                   await navigator.clipboard.writeText(roomSnapshot.room.joinCode);
@@ -1066,14 +1317,78 @@ export function MusicRoomApp({
         onLocalPlaybackReady={() => {
           void syncHostMediaStream();
         }}
-        onRemotePlaying={() => setMediaConnectionState("live")}
-        onRemoteWaiting={() => setMediaConnectionState("buffering")}
-        onRemotePause={() =>
+        onRemotePlaying={() => {
+          recordPeerDiagnostic({
+            peerId: "remote-media",
+            channelKind: "media",
+            direction: "local",
+            event: "audio-playing",
+            summary: "远端音频元素开始播放",
+            update: (snapshot) => ({
+              ...snapshot,
+              remoteTrackStatus: {
+                ...snapshot.remoteTrackStatus,
+                lastAudioEvent: "playing"
+              }
+            })
+          });
+          setMediaConnectionState("live");
+        }}
+        onRemoteWaiting={() => {
+          recordPeerDiagnostic({
+            peerId: "remote-media",
+            channelKind: "media",
+            direction: "local",
+            event: "audio-waiting",
+            summary: "远端音频元素进入缓冲",
+            update: (snapshot) => ({
+              ...snapshot,
+              remoteTrackStatus: {
+                ...snapshot.remoteTrackStatus,
+                lastAudioEvent: "waiting"
+              }
+            })
+          });
+          setMediaConnectionState("buffering");
+        }}
+        onRemotePause={() => {
+          recordPeerDiagnostic({
+            peerId: "remote-media",
+            channelKind: "media",
+            direction: "local",
+            event: "audio-pause",
+            summary: "远端音频元素暂停",
+            update: (snapshot) => ({
+              ...snapshot,
+              remoteTrackStatus: {
+                ...snapshot.remoteTrackStatus,
+                lastAudioEvent: "pause"
+              }
+            })
+          });
           setMediaConnectionState((current) =>
             roomSnapshot?.room.playback.status === "paused" ? current : "buffering"
-          )
-        }
-        onRemoteError={() => setMediaConnectionState("failed")}
+          );
+        }}
+        onRemoteError={() => {
+          recordPeerDiagnostic({
+            peerId: "remote-media",
+            channelKind: "media",
+            direction: "local",
+            event: "audio-error",
+            level: "error",
+            summary: "远端音频元素播放失败",
+            update: (snapshot) => ({
+              ...snapshot,
+              lastError: "远端音频元素播放失败",
+              remoteTrackStatus: {
+                ...snapshot.remoteTrackStatus,
+                lastAudioEvent: "error"
+              }
+            })
+          });
+          setMediaConnectionState("failed");
+        }}
       />
 
       {isPending ? (

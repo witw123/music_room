@@ -154,6 +154,50 @@ describe("SignalingGateway", () => {
     });
   });
 
+  it("forwards peer signals received from redis when they come from another instance", () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const emit = jest.fn();
+    const redisService = {
+      publish: jest.fn(),
+      subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+        handlers.set(channel, next);
+      })
+    };
+    const moduleRef = {
+      get: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+    gateway.server = {
+      to: jest.fn().mockReturnValue({ emit })
+    } as never;
+
+    gateway.afterInit();
+
+    handlers.get("music-room:peer-signal")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: {
+        roomId: "room_1",
+        fromPeerId: "peer_a",
+        toPeerId: "peer_b",
+        channelKind: "data",
+        type: "offer",
+        payload: { type: "offer", sdp: "fake" }
+      }
+    });
+
+    expect(emit).toHaveBeenCalledWith("peer.signal", expect.objectContaining({
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b"
+    }));
+  });
+
   it("broadcasts piece availability updates to the rest of the room", () => {
     const redisService = {
       publish: jest.fn(),
@@ -193,6 +237,64 @@ describe("SignalingGateway", () => {
     expect(result).toEqual(payload);
     expect(client.to).toHaveBeenCalledWith("room_1");
     expect(emit).toHaveBeenCalledWith("piece.availability", payload);
+    expect(redisService.publish).toHaveBeenCalledWith(
+      "music-room:piece-availability",
+      expect.objectContaining({
+        roomId: "room_1",
+        payload
+      })
+    );
+  });
+
+  it("publishes peer signals so they can cross server instances", () => {
+    const redisService = {
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const moduleRef = {
+      get: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+    gateway.server = {
+      to: jest.fn().mockReturnValue({
+        emit: jest.fn()
+      })
+    } as never;
+
+    const payload = {
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b",
+      channelKind: "media" as const,
+      mediaEpoch: 1,
+      type: "offer" as const,
+      payload: { type: "offer", sdp: "fake" }
+    };
+
+    const result = gateway.handleSignal(
+      {
+        data: {
+          roomId: "room_1",
+          peerId: "peer_a",
+          isRealtimeAuthenticated: true
+        }
+      } as never,
+      payload
+    );
+
+    expect(result).toEqual(payload);
+    expect(redisService.publish).toHaveBeenCalledWith(
+      "music-room:peer-signal",
+      expect.objectContaining({
+        roomId: "room_1",
+        payload
+      })
+    );
   });
 
   it("replays cached availability to a newly subscribed client", async () => {

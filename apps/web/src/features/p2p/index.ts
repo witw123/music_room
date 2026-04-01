@@ -1,5 +1,7 @@
 import {
+  iceConfigResponseSchema,
   iceServerConfigSchema,
+  type IceConfigResponse,
   type IceServerConfig,
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
@@ -11,12 +13,21 @@ export const p2pFeatureBoundary =
 export * from "./mesh";
 export * from "./media-mesh";
 export * from "./chunk-scheduler";
+export * from "./diagnostics";
 
 export const defaultChunkSize = 128 * 1024;
 export const currentTrackChunkRequestLimit = 24;
 export const upcomingTrackChunkRequestLimit = 8;
 
-export function getWebRTCIceServers(): IceServerConfig[] {
+export function getWebRTCIceServers(config?: IceConfigResponse | null): IceServerConfig[] {
+  if (config?.iceServers?.length) {
+    return config.iceServers;
+  }
+
+  return getStaticWebRTCIceServers();
+}
+
+export function getStaticWebRTCIceServers(): IceServerConfig[] {
   const rawJson = process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS;
 
   if (rawJson) {
@@ -46,6 +57,11 @@ export function getWebRTCIceServers(): IceServerConfig[] {
   }
 
   return servers;
+}
+
+export function parseIceConfigResponse(payload: unknown) {
+  const result = iceConfigResponseSchema.safeParse(payload);
+  return result.success ? result.data : null;
 }
 
 export function getMissingChunkIndexes(

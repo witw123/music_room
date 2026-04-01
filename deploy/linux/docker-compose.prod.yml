@@ -33,13 +33,16 @@ services:
       - -n
       - --log-file=stdout
       - --fingerprint
-      - --lt-cred-mech
-      - --realm=${APP_DOMAIN}
-      - --user=${NEXT_PUBLIC_TURN_USERNAME}:${NEXT_PUBLIC_TURN_CREDENTIAL}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SHARED_SECRET}
+      - --realm=${TURN_REALM}
       - --no-cli
+      - --no-multicast-peers
     ports:
       - "3478:3478"
       - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
 
   server:
     build:
@@ -58,6 +61,14 @@ services:
       REDIS_URL: ${REDIS_URL}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      TURN_ENABLED: ${TURN_ENABLED}
+      TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST}
+      TURN_PORT: ${TURN_PORT}
+      TURN_TLS_PORT: ${TURN_TLS_PORT}
+      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET}
+      TURN_REALM: ${TURN_REALM}
+      TURN_PROTOCOLS: ${TURN_PROTOCOLS}
+      TURN_TTL_SECONDS: ${TURN_TTL_SECONDS}
     expose:
       - "3001"
     healthcheck:

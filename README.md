@@ -5,50 +5,25 @@
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room 是一个面向多人同步听歌场景的音乐房应用。此项目的宗旨是实现多人本地同步播放无损音乐。
+Music Room 是一个面向多人同步听歌的协作式音乐房项目。仓库采用 Monorepo，包含 Web 前端、NestJS 服务端、桌面端、移动端，以及前后端共享类型。
 
+## 仓库结构
 
+- `apps/web`: Next.js Web 前端
+- `apps/server`: NestJS API、房间服务、WebSocket 信令
+- `apps/desktop`: Tauri 桌面端
+- `apps/mobile`: Capacitor 移动端壳
+- `packages/shared`: 前后端共享协议、类型、校验模型
 
-项目采用 Monorepo 结构，包含：
+## 功能概览
 
-- `apps/web`：官网展示页与 Web 前端
-- `apps/server`：NestJS 后端服务与实时通信
-- `apps/desktop`：Tauri 桌面应用
-- `apps/mobile`：Capacitor 移动端壳
-- `packages/shared`：前后端共享类型与协议
-
-## 下载路径
-- 桌面端与移动端安装包发布在 [GitHub Releases](https://github.com/witw123/music_room/releases)
-
-当前发布物包括：
-
-- Windows `.exe` / `.msi`
-- macOS `.dmg`
-- Linux `.AppImage` / `.deb` / `.rpm`
-- Android `.apk`
-
-## 项目特点
-
-- 支持账号体系、房间创建、邀请码加入、房间恢复
-- 支持共享播放队列、房主控制、多人同步播放
-- 支持导入本地音频文件，围绕本地音乐做协作播放
-
-
-## 适合的使用场景
-
-- 和朋友一起听同一张专辑或同一条播放列表
-- 在小型社区、社群、学习空间里做同步背景音乐
-- 围绕本地收藏音乐做共享播放，而不是依赖单一流媒体平台
-
-
-
-## 技术栈
-
-- 前端：Next.js 15、React 19、TypeScript、Tailwind CSS、Socket.IO Client
-- 后端：NestJS 11、Prisma 6、PostgreSQL、Redis、Socket.IO
-- 桌面端：Tauri 2、Rust
-- 移动端：Capacitor
-
+- 房间创建、加入、恢复与退出
+- 多人共享播放队列、房主控制与播放同步
+- 本地音频导入、曲库管理、歌单管理
+- P2P 分片缓存同步
+- WebRTC 实时音频推流
+- 成员级“连接与缓存诊断”面板
+- 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
 
 ## 快速开始
 
@@ -58,11 +33,9 @@ Music Room 是一个面向多人同步听歌场景的音乐房应用。此项目
 - pnpm 10.x
 - PostgreSQL
 - Redis
-- Rust 与 Cargo
-- Android SDK
-  仅在本地构建 Android 安装包时需要
+- Docker / Docker Compose
 
-### 安装与启动
+### 本地开发
 
 ```bash
 pnpm install
@@ -74,7 +47,7 @@ pnpm dev
 
 - Web: `http://localhost:3000`
 - Server: `http://localhost:3001`
-- Health Check: `http://localhost:3001/health`
+- Health: `http://localhost:3001/health`
 
 ### 常用命令
 
@@ -82,59 +55,100 @@ pnpm dev
 pnpm dev
 pnpm build
 pnpm typecheck
+pnpm test
 pnpm pack:desktop
 pnpm pack:mobile
 ```
 
-## 环境变量与连接
+## WebRTC / TURN 配置
 
-前端通过以下环境变量连接后端：
+前端优先请求服务端短期 ICE 配置接口：
 
-- `NEXT_PUBLIC_API_BASE_URL`
-- `NEXT_PUBLIC_WS_URL`
-- `NEXT_PUBLIC_SOCKET_PATH`
+- `GET /v1/realtime/ice-config`
 
-登录成功后返回的 `token` 会同时用于：
+返回内容包含：
 
-- REST 请求头 `x-session-token`
-- Socket.IO 握手参数 `auth.sessionToken`
+- `iceServers`
+- `ttlSeconds`
+- `source`
+  - `ephemeral`
+  - `static`
+  - `stun-only`
 
-推荐的同域部署配置：
+默认策略：
 
-```env
-NEXT_PUBLIC_API_BASE_URL=https://witw.top
-NEXT_PUBLIC_WS_URL=wss://witw.top
-NEXT_PUBLIC_SOCKET_PATH=/ws/socket.io
-CORS_ORIGINS=https://witw.top
-```
+- 前端优先使用服务端返回的短期 TURN 凭证
+- 若接口不可用，则回退到静态 `NEXT_PUBLIC_TURN_*` / `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`
+- 若 TURN 完全不可用，则只使用 STUN
 
-## 部署
+### 关键环境变量
 
-项目提供 Linux 部署模板与说明：
+服务端：
 
-- [deploy/linux](./deploy/linux)
-- [docs/deployment/deployment.md](./docs/deployment/deployment.md)
+- `TURN_ENABLED`
+- `TURN_PUBLIC_HOST`
+- `TURN_PORT`
+- `TURN_TLS_PORT`
+- `TURN_SHARED_SECRET`
+- `TURN_REALM`
+- `TURN_PROTOCOLS`
+- `TURN_TTL_SECONDS`
 
-生产环境建议使用 Nginx 做同域反向代理：
+前端 fallback：
 
-- `/` 转发到 Web 前端
-- `/v1/` 转发到 REST API
-- `/ws/socket.io` 转发到 Socket.IO
+- `NEXT_PUBLIC_STUN_URL`
+- `NEXT_PUBLIC_TURN_URL`
+- `NEXT_PUBLIC_TURN_USERNAME`
+- `NEXT_PUBLIC_TURN_CREDENTIAL`
+- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`
 
-## 目录结构
+## 连接与缓存诊断
 
-```text
-music-room/
-├─ apps/
-│  ├─ web/
-│  ├─ server/
-│  ├─ desktop/
-│  └─ mobile/
-├─ packages/
-├─ docs/
-├─ deploy/
-└─ scripts/
-```
+成员页中的“连接与缓存诊断”现在会输出：
+
+- 每个 peer 的 `offer / answer / candidate` 收发事件
+- Data / Media 的 ICE 状态与连接状态
+- 是否收到远端 `track`
+- 是否已绑定到远端音频元素
+- 远端音频元素 `playing / waiting / pause / error`
+- 最近事件流与错误摘要
+
+诊断判读原则：
+
+- 有 `offer / answer`，但没有 candidate 或 ICE 一直不 `connected`：优先检查 TURN、网络出口、防火墙
+- Media 已 `connected`，但没有 `remote track`：优先检查 host 侧媒体流注入
+- Data 正常、Media 全断：优先检查媒体协商、浏览器自动播放限制、TURN 媒体 candidate
+
+## Docker 部署
+
+本仓库提供：
+
+- 根目录开发用 `docker-compose.yml`
+- Linux 生产模板 [deploy/linux](./deploy/linux)
+- 部署文档 [docs/deployment/deployment.md](./docs/deployment/deployment.md)
+
+生产建议：
+
+- Nginx 只反代 Web / API / WebSocket
+- TURN 不经过 Nginx，直接开放端口
+- 至少开放：
+  - `3478/udp`
+  - `3478/tcp`
+  - `5349/tcp`
+- 若 coturn 在 NAT 后方，需要正确配置公网域名或 `external-ip`
+
+## 发布
+
+桌面端和移动端安装包发布在：
+
+- [GitHub Releases](https://github.com/witw123/music_room/releases)
+
+当前发布物通常包含：
+
+- Windows `.exe` / `.msi`
+- macOS `.dmg`
+- Linux `.AppImage` / `.deb` / `.rpm`
+- Android `.apk`
 
 ## License
 
