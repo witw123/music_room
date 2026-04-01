@@ -108,6 +108,7 @@ npx pnpm deploy:linux
 - `TURN_SHARED_SECRET=<replace-me>`
 - `TURN_REALM=turn.example.com`
 - `TURN_PROTOCOLS=udp,tcp,tls`
+- `TURN_EXTERNAL_IP=<your-public-ip>`
 - `TURN_TTL_SECONDS=3600`
 
 前端静态 fallback：
@@ -120,11 +121,11 @@ npx pnpm deploy:linux
 
 ### NAT 与 external-ip
 
-如果 coturn 部署在 NAT 或云厂商私网后面，必须确保 coturn 对外宣告的是公网地址。可选做法：
+如果 coturn 部署在 NAT 或云厂商私网后面，必须确保 coturn 对外宣告的是公网地址。当前模板已经支持通过 `TURN_EXTERNAL_IP` 注入 coturn 的 `--external-ip`。可选做法：
 
 - 直接用公网 IP 绑定服务器
 - 用公网域名作为 `TURN_PUBLIC_HOST`
-- 在自定义 coturn 启动参数中显式设置 `external-ip`
+- 通过 `TURN_EXTERNAL_IP=<your-public-ip>` 显式设置 coturn 的公网地址
 
 如果不处理这一步，前端即使拿到 TURN 凭证，也可能出现：
 

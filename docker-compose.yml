@@ -41,6 +41,7 @@ services:
       - --realm=${TURN_REALM:-localhost}
       - --min-port=${TURN_MIN_PORT:-49160}
       - --max-port=${TURN_MAX_PORT:-49200}
+      - --external-ip=${TURN_EXTERNAL_IP:-your-public-ip}
       - --no-cli
       - --no-multicast-peers
     ports:
@@ -77,6 +78,7 @@ services:
       TURN_REALM: ${TURN_REALM:-localhost}
       TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp,tls}
       TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-3600}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-your-public-ip}
     ports:
       - "3001:3001"
     healthcheck:
