@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type {
   IceConfigResponse,
   Playlist,
@@ -34,6 +34,9 @@ import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
+import { useTrackHydrationQueue } from "@/components/room/hooks/use-track-hydration-queue";
+import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
+import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
@@ -91,6 +94,7 @@ export function MusicRoomApp({
     typeof document === "undefined" ? true : !document.hidden
   );
   const [schedulerMode, setSchedulerMode] = useState<"normal" | "conservative" | "idle">("normal");
+  const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
   const {
     activeSession,
     hydrated,
@@ -170,6 +174,12 @@ export function MusicRoomApp({
     tracks: roomSnapshot?.tracks ?? [],
     shouldUseLocalAudio: shouldUseLocalPlayback
   });
+  const { scheduleTrackHydration, resetHydrationQueue } = useTrackHydrationQueue({
+    isPageVisible,
+    uploadedTrackIdsRef,
+    chunkSchedulerRef,
+    hydrateTrackFromPieces
+  });
   const getCurrentPlaybackPositionMs = () => {
     if (shouldUseLocalPlayback) {
       const audio = audioRef.current;
@@ -216,6 +226,25 @@ export function MusicRoomApp({
     onRoomDeleted: async (trackIds) => {
       await Promise.all(trackIds.map((trackId) => deleteUploadedTrackArtifacts(trackId)));
     }
+  });
+  const {
+    handleClearIdentity,
+    handleLeaveRoomAction,
+    handleDeleteRoomAction,
+    handleLogout
+  } = useRoomLifecycleActions({
+    workspaceOnly,
+    workspaceEntryHref,
+    authEntryHref,
+    router,
+    clearIdentity,
+    resetPlayerSurface,
+    setSuppressRoomRecovery,
+    setRoomSnapshot,
+    setPlaylists,
+    leaveRoom,
+    deleteRoom,
+    setIsNavigatingRoomExit
   });
 
   useEffect(() => {
@@ -505,7 +534,7 @@ export function MusicRoomApp({
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
           mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks);
           void announceLocalCacheRef.current(trackId, totalChunks);
-          void hydrateTrackFromPiecesWithCleanup(trackId, mimeType, totalChunks);
+          scheduleTrackHydration(trackId, mimeType, totalChunks);
         },
         onPieceRequestTimeout: ({ trackId, chunkIndex, peerId: timedOutPeerId }) => {
           chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
@@ -1022,17 +1051,25 @@ export function MusicRoomApp({
 
     const handlePlaying = () => {
       setSchedulerMode("normal");
+      setBufferHealth("healthy");
       setMediaConnectionState((current) =>
         current === "idle" && !(roomSnapshot?.room.playback.currentTrackId) ? current : "live"
       );
     };
     const handleWaiting = () => {
       setSchedulerMode("conservative");
+      setBufferHealth("low");
+      setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
+    };
+    const handleStalled = () => {
+      setSchedulerMode("conservative");
+      setBufferHealth("critical");
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
     const handlePause = () => {
       if (roomSnapshot?.room.playback.status !== "playing") {
         setSchedulerMode(isPageVisible ? "normal" : "idle");
+        setBufferHealth("healthy");
       }
     };
 
@@ -1040,8 +1077,8 @@ export function MusicRoomApp({
     remoteAudio?.addEventListener("playing", handlePlaying);
     localAudio?.addEventListener("waiting", handleWaiting);
     remoteAudio?.addEventListener("waiting", handleWaiting);
-    localAudio?.addEventListener("stalled", handleWaiting);
-    remoteAudio?.addEventListener("stalled", handleWaiting);
+    localAudio?.addEventListener("stalled", handleStalled);
+    remoteAudio?.addEventListener("stalled", handleStalled);
     localAudio?.addEventListener("pause", handlePause);
     remoteAudio?.addEventListener("pause", handlePause);
 
@@ -1050,8 +1087,8 @@ export function MusicRoomApp({
       remoteAudio?.removeEventListener("playing", handlePlaying);
       localAudio?.removeEventListener("waiting", handleWaiting);
       remoteAudio?.removeEventListener("waiting", handleWaiting);
-      localAudio?.removeEventListener("stalled", handleWaiting);
-      remoteAudio?.removeEventListener("stalled", handleWaiting);
+      localAudio?.removeEventListener("stalled", handleStalled);
+      remoteAudio?.removeEventListener("stalled", handleStalled);
       localAudio?.removeEventListener("pause", handlePause);
       remoteAudio?.removeEventListener("pause", handlePause);
     };
@@ -1117,7 +1154,13 @@ export function MusicRoomApp({
     void meshRef.current?.syncPeers(remotePeerIds);
   }, [roomSnapshot?.room.members, peerId]);
 
-  const schedulerPlaybackPositionMs = Math.floor(progressMs / 2_000) * 2_000;
+  const schedulerPlaybackPositionMs = Math.floor(progressMs / 4_000) * 4_000;
+  const playbackClockSource =
+    roomSnapshot?.room.playback.status === "playing"
+      ? shouldUseLocalPlayback
+        ? "local"
+        : "remote"
+      : "snapshot";
 
   useEffect(() => {
     chunkSchedulerRef.current?.sync({
@@ -1128,7 +1171,9 @@ export function MusicRoomApp({
       playbackPositionMs: schedulerPlaybackPositionMs,
       playbackStatus: roomSnapshot?.room.playback.status ?? null,
       pageVisible: isPageVisible,
-      mode: schedulerMode
+      mode: schedulerMode,
+      bufferHealth,
+      playbackClockSource
     });
   }, [
     availabilityByTrack,
@@ -1137,7 +1182,9 @@ export function MusicRoomApp({
     uploadedTracks,
     schedulerPlaybackPositionMs,
     isPageVisible,
-    schedulerMode
+    schedulerMode,
+    bufferHealth,
+    playbackClockSource
   ]);
 
   function resetPlayerSurface() {
@@ -1157,59 +1204,13 @@ export function MusicRoomApp({
     }
 
     hostStreamRef.current = null;
+    resetHydrationQueue();
     setProgressMs(0);
     setAudioDurationMs(0);
     setSeekDraft(null);
+    setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
-  }
-
-  function handleClearIdentity() {
-    setSuppressRoomRecovery(true);
-    resetPlayerSurface();
-    clearIdentity();
-    setRoomSnapshot(null);
-    setPlaylists([]);
-    window.localStorage.removeItem(lastRoomStorageKey);
-  }
-
-  async function handleLeaveRoomAction() {
-    setIsNavigatingRoomExit(true);
-    const didLeave = await leaveRoom();
-    if (!didLeave) {
-      setIsNavigatingRoomExit(false);
-      return;
-    }
-
-    setSuppressRoomRecovery(true);
-    if (workspaceOnly) {
-      router.push(workspaceEntryHref as Route);
-    }
-  }
-
-  async function handleDeleteRoomAction() {
-    setIsNavigatingRoomExit(true);
-    const didDelete = await deleteRoom();
-    if (!didDelete) {
-      setIsNavigatingRoomExit(false);
-      return;
-    }
-
-    setSuppressRoomRecovery(true);
-    if (workspaceOnly) {
-      router.push(workspaceEntryHref as Route);
-    }
-  }
-
-  async function handleLogout() {
-    try {
-      await musicRoomApi.logout();
-    } catch {
-      // Keep local logout behavior even if the server session is already gone.
-    }
-
-    handleClearIdentity();
-    router.replace(authEntryHref as Route);
   }
 
   async function refreshAvailableRooms() {
@@ -1236,15 +1237,6 @@ export function MusicRoomApp({
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
-  }
-
-  async function hydrateTrackFromPiecesWithCleanup(
-    trackId: string,
-    mimeType: string,
-    totalChunks: number
-  ) {
-    await hydrateTrackFromPieces(trackId, mimeType, totalChunks);
-    chunkSchedulerRef.current?.markTrackHydrated(trackId);
   }
 
   async function syncHostMediaStream() {
@@ -1312,79 +1304,35 @@ export function MusicRoomApp({
   }
 
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
-  const canDisbandRoom =
-    !!roomSnapshot &&
-    canDeleteRoom &&
-    (() => {
-      const uploaderIds = new Set(roomSnapshot.tracks.map((t) => t.ownerSessionId));
-      return !roomSnapshot.room.members.some((member) => uploaderIds.has(member.id) && !member.peerId);
-    })();
   const currentTrackDuration = audioDurationMs || currentTrack?.durationMs || 0;
   const isPlaying = roomSnapshot?.room.playback?.status === "playing";
-  const availabilitySummary =
-    roomSnapshot?.tracks.map((track) => {
-      const peers = Object.values(availabilityByTrack[track.id] ?? {});
-      const local = peers.find((peer) => peer.ownerPeerId === peerId);
-      return {
-        track,
-        peerCount: peers.length,
-        localChunkCount: local?.availableChunks.length ?? 0,
-        totalChunks: local?.totalChunks ?? peers[0]?.totalChunks ?? 0,
-        sources: peers.map((peer) => `${peer.nickname} (${peer.source})`)
-      };
-    }) ?? [];
-  const currentTrackAvailability = currentTrack
-    ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
-    : null;
-  const memberTransferSummaries = useMemo(() => {
-    if (!roomSnapshot || activeDashboardTab !== "members") {
-      return [];
-    }
-
-    return roomSnapshot.room.members.map((member) => {
-      const announcements = member.peerId
-        ? Object.values(availabilityByTrack).flatMap((trackAvailability) =>
-            Object.values(trackAvailability).filter(
-              (announcement) => announcement.ownerPeerId === member.peerId
-            )
-          )
-        : [];
-      const currentTrackAnnouncements = currentTrack
-        ? announcements.filter((announcement) => announcement.trackId === currentTrack.id)
-        : [];
-
-      return {
-        memberId: member.id,
-        announcedTrackCount: new Set(announcements.map((announcement) => announcement.trackId)).size,
-        totalChunkCount: announcements.reduce(
-          (total, announcement) => total + announcement.availableChunks.length,
-          0
-        ),
-        currentTrackChunkCount: currentTrackAnnouncements.reduce(
-          (total, announcement) => total + announcement.availableChunks.length,
-          0
-        ),
-        currentTrackTotalChunks: currentTrackAnnouncements[0]?.totalChunks ?? 0,
-        currentTrackSources: [...new Set(currentTrackAnnouncements.map((announcement) => announcement.source))]
-      };
-    });
-  }, [activeDashboardTab, availabilityByTrack, currentTrack, roomSnapshot]);
-  const statusTone =
-    statusMessage.includes("失败") || statusMessage.includes("不可用")
-      ? "warning"
-      : statusMessage.includes("已")
-        ? "success"
-        : "neutral";
-  const iceConfigStatus = iceConfig
-    ? `当前 ICE 配置来源：${iceConfig.source}，共 ${iceConfig.iceServers.length} 组服务器。`
-    : iceConfigResolved
-      ? "当前未拿到短期 TURN 凭证，已回退静态 STUN/TURN 配置。"
-      : "正在获取 ICE/TURN 配置…";
-  const iceConfigSource = iceConfig?.source ?? (iceConfigResolved ? "static-fallback" : "loading");
-  const isRoomTransitionPending =
-    workspaceOnly && !!initialRoomId && !!activeSession && !suppressRoomRecovery && !roomSnapshot;
-  const showRoomTransitionState =
-    isNavigatingRoomExit || isRecoveringRoom || isRoomTransitionPending;
+  const {
+    canDisbandRoom,
+    availabilitySummary,
+    currentTrackAvailability,
+    memberTransferSummaries,
+    statusTone,
+    iceConfigStatus,
+    iceConfigSource,
+    isRoomTransitionPending,
+    showRoomTransitionState
+  } = useRoomDerivedState({
+    roomSnapshot,
+    peerId,
+    activeDashboardTab,
+    currentTrack,
+    availabilityByTrack,
+    canDeleteRoom,
+    statusMessage,
+    iceConfig,
+    iceConfigResolved,
+    workspaceOnly,
+    initialRoomId,
+    activeSessionUserId: activeSession?.userId,
+    suppressRoomRecovery,
+    isNavigatingRoomExit,
+    isRecoveringRoom
+  });
 
   return (
     <main className="min-h-screen bg-background relative flex flex-col pb-32">

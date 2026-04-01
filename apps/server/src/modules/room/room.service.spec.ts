@@ -808,6 +808,51 @@ describe("RoomService", () => {
     );
   });
 
+  it("deduplicates repeated track registration by file hash for the same uploader", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Same",
+      artist: "Artist",
+      album: null,
+      durationMs: 180_000,
+      bitrate: null,
+      sizeBytes: 1024,
+      codec: "mp3",
+      fileHash: "same-hash",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: "Host",
+      sourceType: "local_upload"
+    });
+
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Same",
+      artist: "Artist",
+      album: null,
+      durationMs: 180_000,
+      bitrate: null,
+      sizeBytes: 1024,
+      codec: "mp3",
+      fileHash: "same-hash",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: "Host",
+      sourceType: "local_upload"
+    });
+
+    const latestSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(secondTrack.id).toBe(firstTrack.id);
+    expect(latestSnapshot.tracks.filter((track) => track.fileHash === "same-hash")).toHaveLength(1);
+  });
+
   it("allows the host to delete a room and blocks non-host members", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

@@ -5,6 +5,12 @@ import {
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import { cacheTrackPieces, getCachedPieceIndexes } from "@/lib/indexeddb";
+import {
+  assembleTrackFileFromPiecesInWorker,
+  hashArrayBufferInWorker,
+  validateTrackPiecePayloadBatchInWorker,
+  validateTrackPiecePayloadInWorker
+} from "./piece-processing-client";
 
 export const p2pFeatureBoundary =
   "P2P feature owns peer connectivity, chunk transfer, cache indexing, and source selection.";
@@ -206,17 +212,80 @@ export async function buildTrackAvailabilityFromFile(input: {
 }
 
 export async function hashArrayBuffer(buffer: ArrayBuffer) {
+  const workerResult = await hashArrayBufferInWorker(buffer);
+  if (workerResult) {
+    return workerResult;
+  }
+
+  return hashArrayBufferLocal(buffer);
+}
+
+export async function validateTrackPiecePayload(payload: ArrayBuffer, expectedHash: string) {
+  const workerResult = await validateTrackPiecePayloadInWorker(payload, expectedHash);
+  if (typeof workerResult === "boolean") {
+    return workerResult;
+  }
+
+  return (await hashArrayBufferLocal(payload)) === expectedHash;
+}
+
+export async function validateTrackPiecePayloadBatch(
+  pieces: Array<{
+    payload: ArrayBuffer;
+    expectedHash: string;
+  }>
+) {
+  const workerResult = await validateTrackPiecePayloadBatchInWorker(
+    pieces.map((piece) => ({
+      buffer: piece.payload,
+      expectedHash: piece.expectedHash
+    }))
+  );
+
+  if (workerResult) {
+    return workerResult;
+  }
+
+  return Promise.all(
+    pieces.map(async (piece) => (await hashArrayBufferLocal(piece.payload)) === piece.expectedHash)
+  );
+}
+
+export async function assembleTrackFileFromPieces(input: {
+  pieces: Array<{ chunkIndex: number; payload: ArrayBuffer }>;
+  totalChunks: number;
+  mimeType: string;
+  title: string;
+  expectedFileHash: string;
+}) {
+  const workerResult = await assembleTrackFileFromPiecesInWorker({
+    pieces: input.pieces,
+    totalChunks: input.totalChunks,
+    mimeType: input.mimeType,
+    expectedFileHash: input.expectedFileHash
+  });
+
+  if (workerResult) {
+    return {
+      blob: workerResult.blob,
+      file: new File([workerResult.blob], `${input.title}.bin`, {
+        type: input.mimeType || "audio/mpeg"
+      }),
+      fileHash: workerResult.fileHash
+    };
+  }
+
+  return assembleTrackFileFromPiecesLocal(input);
+}
+
+async function hashArrayBufferLocal(buffer: ArrayBuffer) {
   const digest = await crypto.subtle.digest("SHA-256", buffer);
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
 
-export async function validateTrackPiecePayload(payload: ArrayBuffer, expectedHash: string) {
-  return (await hashArrayBuffer(payload)) === expectedHash;
-}
-
-export async function assembleTrackFileFromPieces(input: {
+async function assembleTrackFileFromPiecesLocal(input: {
   pieces: Array<{ chunkIndex: number; payload: ArrayBuffer }>;
   totalChunks: number;
   mimeType: string;
@@ -240,7 +309,7 @@ export async function assembleTrackFileFromPieces(input: {
   });
   await yieldToMainThread();
   const fileBuffer = await blob.arrayBuffer();
-  const fileHash = await hashArrayBuffer(fileBuffer);
+  const fileHash = await hashArrayBufferLocal(fileBuffer);
 
   if (fileHash !== input.expectedFileHash) {
     return null;

@@ -54,7 +54,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message || `Request failed: ${response.status}`);
   }
 
-  return response.json() as Promise<T>;
+  if (response.status === 204) {
+    return null as T;
+  }
+
+  const rawBody = await response.text();
+  if (!rawBody.trim()) {
+    return null as T;
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return JSON.parse(rawBody) as T;
+  }
+
+  return rawBody as T;
 }
 
 export const musicRoomApi = {

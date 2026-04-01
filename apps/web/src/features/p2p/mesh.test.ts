@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cacheTrackPieces } from "@/lib/indexeddb";
 import { P2PMesh } from "./mesh";
 import { getMissingChunkIndexes, summarizeTrackAvailability } from "./index";
 
@@ -63,11 +64,16 @@ class FakeDataChannel {
 }
 
 class FakeRTCPeerConnection {
+  static instances: FakeRTCPeerConnection[] = [];
   connectionState: RTCPeerConnectionState = "connected";
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
   ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
   channel = new FakeDataChannel();
+
+  constructor() {
+    FakeRTCPeerConnection.instances.push(this);
+  }
 
   createDataChannel() {
     return this.channel as unknown as RTCDataChannel;
@@ -108,6 +114,7 @@ describe("P2PMesh", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
+    FakeRTCPeerConnection.instances = [];
   });
 
   afterEach(() => {
@@ -169,4 +176,120 @@ describe("P2PMesh", () => {
     );
     expect(sendSignalB).not.toHaveBeenCalled();
   });
+
+  it("batches received piece validation and IndexedDB writes", async () => {
+    const onPieceReceived = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived
+    });
+
+    const firstPayload = new TextEncoder().encode("piece-1").buffer;
+    const secondPayload = new TextEncoder().encode("piece-2").buffer;
+    const firstHash = await sha256Hex(firstPayload);
+    const secondHash = await sha256Hex(secondPayload);
+
+    (mesh as any).pendingIncomingPieces.push(
+      {
+        peerId: "peer_b",
+        message: buildIncomingPieceMessage({
+          trackId: "track_1",
+          chunkIndex: 0,
+          totalChunks: 2,
+          mimeType: "audio/flac",
+          pieceHash: firstHash,
+          payload: firstPayload
+        })
+      },
+      {
+        peerId: "peer_b",
+        message: buildIncomingPieceMessage({
+          trackId: "track_1",
+          chunkIndex: 1,
+          totalChunks: 2,
+          mimeType: "audio/flac",
+          pieceHash: secondHash,
+          payload: secondPayload
+        })
+      }
+    );
+
+    await (mesh as any).flushIncomingPieces();
+
+    expect(cacheTrackPieces).toHaveBeenCalledWith([
+      expect.objectContaining({
+        trackId: "track_1",
+        chunkIndex: 0,
+        hash: firstHash,
+        payload: firstPayload
+      }),
+      expect.objectContaining({
+        trackId: "track_1",
+        chunkIndex: 1,
+        hash: secondHash,
+        payload: secondPayload
+      })
+    ]);
+    expect(onPieceReceived).toHaveBeenCalledTimes(2);
+  });
 });
+
+async function sha256Hex(buffer: ArrayBuffer) {
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function buildBinaryPieceMessage(input: {
+  trackId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  mimeType: string;
+  pieceHash: string;
+  payload: ArrayBuffer;
+}) {
+  const header = {
+    kind: "send-piece" as const,
+    trackId: input.trackId,
+    chunkIndex: input.chunkIndex,
+    totalChunks: input.totalChunks,
+    mimeType: input.mimeType,
+    pieceHash: input.pieceHash
+  };
+  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const payloadBytes = new Uint8Array(input.payload);
+  const frame = new Uint8Array(4 + headerBytes.byteLength + payloadBytes.byteLength);
+
+  new DataView(frame.buffer).setUint32(0, headerBytes.byteLength, false);
+  frame.set(headerBytes, 4);
+  frame.set(payloadBytes, 4 + headerBytes.byteLength);
+
+  return frame.buffer;
+}
+
+function buildIncomingPieceMessage(input: {
+  trackId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  mimeType: string;
+  pieceHash: string;
+  payload: ArrayBuffer;
+}) {
+  return {
+    kind: "send-piece" as const,
+    trackId: input.trackId,
+    chunkIndex: input.chunkIndex,
+    totalChunks: input.totalChunks,
+    mimeType: input.mimeType,
+    pieceHash: input.pieceHash,
+    header: {
+      kind: "send-piece" as const,
+      trackId: input.trackId,
+      chunkIndex: input.chunkIndex,
+      totalChunks: input.totalChunks,
+      mimeType: input.mimeType,
+      pieceHash: input.pieceHash
+    },
+    payload: input.payload
+  };
+}

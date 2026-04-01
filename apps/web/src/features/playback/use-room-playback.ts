@@ -23,6 +23,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     typeof document === "undefined" ? true : !document.hidden
   );
   const animationFrameRef = useRef<number | null>(null);
+  const lastCommittedProgressRef = useRef(0);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -65,27 +66,34 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       return;
     }
 
+    const commitProgress = (nextProgressMs: number) => {
+      const normalizedProgressMs =
+        progressTrack.durationMs > 0
+          ? Math.min(Math.max(0, nextProgressMs), progressTrack.durationMs)
+          : Math.max(0, nextProgressMs);
+      const thresholdMs = acceptedPlayback.status === "playing" ? 48 : 120;
+
+      if (Math.abs(normalizedProgressMs - lastCommittedProgressRef.current) < thresholdMs) {
+        return;
+      }
+
+      lastCommittedProgressRef.current = normalizedProgressMs;
+      setProgressMs(normalizedProgressMs);
+    };
+
     const tick = () => {
+      const activeAudio = shouldUseLocalAudio ? localAudio : remoteAudio;
+
       if (
-        shouldUseLocalAudio &&
         acceptedPlayback.status === "playing" &&
-        localAudio &&
-        Number.isFinite(localAudio.currentTime) &&
-        localAudio.currentTime >= 0 &&
-        !localAudio.paused
+        activeAudio &&
+        Number.isFinite(activeAudio.currentTime) &&
+        activeAudio.currentTime >= 0 &&
+        !activeAudio.paused
       ) {
-        setProgressMs(Math.min(Math.floor(localAudio.currentTime * 1000), progressTrack.durationMs));
-      } else if (
-        !shouldUseLocalAudio &&
-        acceptedPlayback.status === "playing" &&
-        remoteAudio &&
-        Number.isFinite(remoteAudio.currentTime) &&
-        remoteAudio.currentTime >= 0 &&
-        !remoteAudio.paused
-      ) {
-        setProgressMs(Math.min(Math.floor(remoteAudio.currentTime * 1000), progressTrack.durationMs));
+        commitProgress(Math.floor(activeAudio.currentTime * 1000));
       } else if (seekDraft === null) {
-        setProgressMs(getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs));
+        commitProgress(getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs));
       }
     };
 
@@ -139,21 +147,19 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [remoteAudioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    if (!shouldUseLocalAudio) {
-      return;
-    }
-
-    const audio = event?.currentTarget ?? audioRef.current;
+    const eventAudio = event?.currentTarget ?? null;
+    const audio = eventAudio ?? (shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current);
     if (!audio || !Number.isFinite(audio.currentTime)) {
       return;
     }
 
     const nextProgressMs = Math.floor(audio.currentTime * 1000);
-    setProgressMs(
+    const boundedProgressMs =
       progressTrack?.durationMs && progressTrack.durationMs > 0
         ? Math.min(nextProgressMs, progressTrack.durationMs)
-        : nextProgressMs
-    );
+        : nextProgressMs;
+    lastCommittedProgressRef.current = boundedProgressMs;
+    setProgressMs(boundedProgressMs);
   }
 
   function syncDurationFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
@@ -186,6 +192,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
           ? getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs)
           : 0
       );
+      lastCommittedProgressRef.current =
+        progressTrack && acceptedPlayback
+          ? getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs)
+          : 0;
     }
     setAudioDurationMs(progressTrack?.durationMs ?? 0);
   }, [

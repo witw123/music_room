@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
 import {
   ChunkScheduler,
+  deriveTrackStreamProfile,
   getBackgroundChunks,
   getCurrentPlaybackWindowChunks,
   getUpcomingWindowChunks,
@@ -132,6 +133,26 @@ describe("chunk scheduler helpers", () => {
 
     expect(selectedPeerId).toBe("peer_host");
   });
+
+  it("classifies large flac tracks as large-lossless", () => {
+    expect(
+      deriveTrackStreamProfile({
+        id: "track_flac",
+        title: "Lossless",
+        artist: "Artist",
+        album: null,
+        durationMs: 180_000,
+        bitrate: null,
+        sizeBytes: 60 * 1024 * 1024,
+        codec: "flac",
+        fileHash: "hash-flac",
+        artworkUrl: null,
+        ownerSessionId: "host_1",
+        ownerNickname: "Host",
+        sourceType: "local_upload"
+      })
+    ).toBe("large-lossless");
+  });
 });
 
 describe("ChunkScheduler", () => {
@@ -231,5 +252,50 @@ describe("ChunkScheduler", () => {
     expect(requestPiece).toHaveBeenLastCalledWith(
       expect.objectContaining({ peerId: "peer_seed", trackId: "track_1" })
     );
+  });
+
+  it("suppresses upcoming and background requests when buffer health is low", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      maxConcurrentCurrentTrack: 3,
+      maxConcurrentUpcomingTrack: 2,
+      maxConcurrentBackgroundTrack: 2,
+      requestPiece
+    });
+
+    scheduler.sync({
+      roomSnapshot: buildRoomSnapshot(),
+      availabilityByTrack: {
+        track_1: {
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: [2, 3, 4, 5, 6],
+            totalChunks: 12
+          })
+        },
+        track_2: {
+          peer_host: buildAnnouncement({
+            trackId: "track_2",
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: [0, 1, 2, 3],
+            totalChunks: 9
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 30_000,
+      bufferHealth: "low",
+      playbackClockSource: "remote"
+    });
+
+    expect(requestPiece).toHaveBeenCalled();
+    const priorities = (requestPiece.mock.calls as unknown as Array<[{
+      priority: string;
+    }]>).map(([call]) => call.priority);
+    expect(priorities.every((priority) => priority === "current")).toBe(true);
   });
 });

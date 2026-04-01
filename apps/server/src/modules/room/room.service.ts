@@ -277,7 +277,23 @@ export class RoomService {
       id: input.id ?? `track_${randomUUID()}`
     };
 
+    const duplicateByFileHashIndex = record.tracks.findIndex(
+      (item) =>
+        item.fileHash === track.fileHash &&
+        item.ownerSessionId === track.ownerSessionId
+    );
     const existingIndex = record.tracks.findIndex((item) => item.id === track.id);
+
+    if (duplicateByFileHashIndex >= 0) {
+      const existingTrack = record.tracks[duplicateByFileHashIndex];
+      record.tracks[duplicateByFileHashIndex] = {
+        ...existingTrack,
+        ...track,
+        id: existingTrack.id
+      };
+      await this.roomRecordRepository.persistRecord(record);
+      return record.tracks[duplicateByFileHashIndex];
+    }
 
     if (existingIndex >= 0) {
       record.tracks[existingIndex] = track;

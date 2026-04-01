@@ -43,6 +43,7 @@ export function useTrackUploads(options: {
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
+  const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const nextUrls = new Map(
@@ -130,7 +131,14 @@ export function useTrackUploads(options: {
 
       if (roomSnapshot && peerId && activeSession) {
         for (const asset of cachedAssets) {
-          const availability = await buildTrackAvailabilityFromFile({
+          const availability =
+            (await buildTrackAvailabilityFromCache({
+              roomId: roomSnapshot.room.id,
+              trackId: asset.trackId,
+              peerId,
+              nickname: activeSession.nickname
+            })) ??
+            (await buildTrackAvailabilityFromFile({
             roomId: roomSnapshot.room.id,
             trackId: asset.trackId,
             fileHash: asset.fileHash,
@@ -138,7 +146,7 @@ export function useTrackUploads(options: {
             peerId,
             nickname: activeSession.nickname,
             source: "local_cache"
-          });
+            }));
           onAvailability(availability);
           emitAvailability(availability);
         }
@@ -171,20 +179,45 @@ export function useTrackUploads(options: {
 
     const nextUploads: Record<string, UploadedTrack> = {};
     const nextTracks: TrackMeta[] = [];
+    const currentTracksByHash = new Map(
+      roomSnapshot.tracks
+        .filter((track) => track.ownerSessionId === activeSession.userId)
+        .map((track) => [track.fileHash, track] as const)
+    );
 
     for (const file of Array.from(files)) {
       const objectUrl = URL.createObjectURL(file);
       const track = await buildTrackMeta(file, objectUrl, activeSession);
-      const registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
-        sessionId: activeSession.userId,
-        ...track
-      });
+      const uploadHashKey = `${activeSession.userId}:${track.fileHash}`;
+
+      if (inFlightUploadHashesRef.current.has(uploadHashKey)) {
+        URL.revokeObjectURL(objectUrl);
+        continue;
+      }
+
+      const existingTrack = currentTracksByHash.get(track.fileHash);
+      if (existingTrack) {
+        URL.revokeObjectURL(objectUrl);
+        continue;
+      }
+
+      inFlightUploadHashesRef.current.add(uploadHashKey);
+      let registered: TrackMeta;
+      try {
+        registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
+          sessionId: activeSession.userId,
+          ...track
+        });
+      } finally {
+        inFlightUploadHashesRef.current.delete(uploadHashKey);
+      }
 
       nextUploads[registered.id] = {
         file,
         objectUrl
       };
       nextTracks.push(registered);
+      currentTracksByHash.set(registered.fileHash, registered);
       await cacheTrackAsset({
         trackId: registered.id,
         fileHash: registered.fileHash,
@@ -213,7 +246,12 @@ export function useTrackUploads(options: {
       current
         ? {
             ...current,
-            tracks: [...nextTracks, ...current.tracks]
+            tracks: [
+              ...nextTracks,
+              ...current.tracks.filter(
+                (track) => !nextTracks.some((nextTrack) => nextTrack.id === track.id)
+              )
+            ]
           }
         : current
     );

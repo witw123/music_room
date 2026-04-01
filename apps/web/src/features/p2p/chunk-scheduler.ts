@@ -2,6 +2,9 @@ import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@mu
 
 export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
 export type ChunkSchedulerMode = "normal" | "conservative" | "idle";
+export type ChunkBufferHealth = "healthy" | "low" | "critical";
+export type TrackStreamProfile = "standard" | "large-lossless" | "large-compressed";
+export type PlaybackClockSource = "local" | "remote" | "snapshot";
 
 type ChunkSchedulerTrackState = {
   totalChunks: number;
@@ -19,6 +22,8 @@ type ChunkSchedulerSyncInput = {
   playbackStatus?: RoomSnapshot["room"]["playback"]["status"] | null;
   pageVisible?: boolean;
   mode?: ChunkSchedulerMode;
+  bufferHealth?: ChunkBufferHealth;
+  playbackClockSource?: PlaybackClockSource;
 };
 
 type ChunkSchedulerRequestArgs = {
@@ -40,6 +45,7 @@ type ChunkSchedulerOptions = {
   currentLookAheadMs?: number;
   upcomingPrefetchMs?: number;
   backgroundChunkBatchSize?: number;
+  minScheduleIntervalMs?: number;
   requestPiece: (args: ChunkSchedulerRequestArgs) => boolean;
 };
 
@@ -61,6 +67,8 @@ const DEFAULTS = {
   currentLookAheadMs: 20_000,
   upcomingPrefetchMs: 12_000,
   backgroundChunkBatchSize: 2
+  ,
+  minScheduleIntervalMs: 120
 } as const;
 
 export class ChunkScheduler {
@@ -72,7 +80,11 @@ export class ChunkScheduler {
   private playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null = null;
   private pageVisible = true;
   private mode: ChunkSchedulerMode = "normal";
+  private bufferHealth: ChunkBufferHealth = "healthy";
+  private playbackClockSource: PlaybackClockSource = "snapshot";
   private readonly trackStates = new Map<string, ChunkSchedulerTrackState>();
+  private lastScheduleAt = 0;
+  private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly localPeerId: string,
@@ -88,8 +100,10 @@ export class ChunkScheduler {
     this.playbackStatus = input.playbackStatus ?? this.roomSnapshot?.room.playback.status ?? null;
     this.pageVisible = input.pageVisible ?? true;
     this.mode = input.mode ?? "normal";
+    this.bufferHealth = input.bufferHealth ?? "healthy";
+    this.playbackClockSource = input.playbackClockSource ?? "snapshot";
     this.reconcileTrackStates();
-    this.schedule();
+    this.requestSchedule("normal");
   }
 
   markPieceReceived(trackId: string, chunkIndex: number, totalChunks: number) {
@@ -97,7 +111,7 @@ export class ChunkScheduler {
     state.totalChunks = Math.max(state.totalChunks, totalChunks);
     state.ownedChunks.add(chunkIndex);
     state.pendingChunks.delete(chunkIndex);
-    this.schedule();
+    this.requestSchedule("high");
   }
 
   markRequestTimeout(trackId: string, chunkIndex: number, peerId: string) {
@@ -108,7 +122,7 @@ export class ChunkScheduler {
 
     state.pendingChunks.delete(chunkIndex);
     state.cooledDownPeers.set(peerId, this.now() + this.peerCooldownMs());
-    this.schedule();
+    this.requestSchedule("normal");
   }
 
   markTrackHydrated(trackId: string) {
@@ -118,14 +132,46 @@ export class ChunkScheduler {
     }
 
     state.pendingChunks.clear();
-    this.schedule();
+    this.requestSchedule("normal");
   }
 
   getBufferedChunkCount(trackId: string) {
     return this.trackStates.get(trackId)?.ownedChunks.size ?? 0;
   }
 
-  private schedule() {
+  isTrackComplete(trackId: string, totalChunks?: number) {
+    const state = this.trackStates.get(trackId);
+    if (!state) {
+      return false;
+    }
+
+    const expectedTotalChunks = Math.max(totalChunks ?? 0, state.totalChunks);
+    return expectedTotalChunks > 0 && state.ownedChunks.size >= expectedTotalChunks;
+  }
+
+  private requestSchedule(priority: "high" | "normal" = "normal") {
+    const elapsed = this.now() - this.lastScheduleAt;
+    const minInterval = this.minScheduleIntervalMs();
+    const delay = priority === "high" ? 0 : Math.max(0, minInterval - elapsed);
+
+    if (delay === 0 && !this.scheduleTimer) {
+      this.runSchedule();
+      return;
+    }
+
+    if (this.scheduleTimer) {
+      return;
+    }
+
+    this.scheduleTimer = setTimeout(() => {
+      this.scheduleTimer = null;
+      this.runSchedule();
+    }, delay);
+  }
+
+  private runSchedule() {
+    this.lastScheduleAt = this.now();
+
     if (!this.roomSnapshot) {
       return;
     }
@@ -198,7 +244,11 @@ export class ChunkScheduler {
       return [];
     }
 
-    if (this.mode === "idle" || (!this.pageVisible && this.playbackStatus !== "playing")) {
+    if (
+      this.mode === "idle" ||
+      this.bufferHealth === "critical" && this.playbackStatus !== "playing" ||
+      (!this.pageVisible && this.playbackStatus !== "playing")
+    ) {
       return [];
     }
 
@@ -222,7 +272,11 @@ export class ChunkScheduler {
     const plans: TrackPlan[] = [];
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
-      const currentTrackProfile = getTrackStreamingProfile(currentTrack, this.mode);
+      const currentTrackProfile = getTrackStreamingProfile(
+        currentTrack,
+        this.mode,
+        this.bufferHealth
+      );
       plans.push({
         track: currentTrack,
         priority: "current",
@@ -240,6 +294,8 @@ export class ChunkScheduler {
 
     if (
       this.mode !== "conservative" &&
+      this.bufferHealth === "healthy" &&
+      this.playbackClockSource !== "snapshot" &&
       upcomingTrack &&
       !this.uploadedTrackIds.has(upcomingTrack.id)
     ) {
@@ -257,7 +313,12 @@ export class ChunkScheduler {
     }
 
     for (const track of this.roomSnapshot.tracks) {
-      if (!this.pageVisible || this.mode !== "normal") {
+      if (
+        !this.pageVisible ||
+        this.mode !== "normal" ||
+        this.bufferHealth !== "healthy" ||
+        this.playbackClockSource === "snapshot"
+      ) {
         break;
       }
 
@@ -398,28 +459,64 @@ export class ChunkScheduler {
   private backgroundChunkBatchSize() {
     return this.options.backgroundChunkBatchSize ?? DEFAULTS.backgroundChunkBatchSize;
   }
+
+  private minScheduleIntervalMs() {
+    return this.options.minScheduleIntervalMs ?? DEFAULTS.minScheduleIntervalMs;
+  }
 }
 
-function getTrackStreamingProfile(track: TrackMeta, mode: ChunkSchedulerMode) {
+export function deriveTrackStreamProfile(track: TrackMeta): TrackStreamProfile {
   const codec = track.codec?.toLowerCase() ?? "";
-  const isLargeFlac =
-    codec.includes("flac") ||
-    track.artist.toLowerCase().includes("flac") ||
-    (track.sizeBytes ?? 0) >= 40 * 1024 * 1024;
+  const sizeBytes = track.sizeBytes ?? 0;
+  const isLossless = codec.includes("flac") || codec.includes("alac") || codec.includes("wav");
 
-  if (mode === "conservative") {
+  if (isLossless && sizeBytes >= 25 * 1024 * 1024) {
+    return "large-lossless";
+  }
+
+  if (sizeBytes >= 40 * 1024 * 1024) {
+    return "large-compressed";
+  }
+
+  return "standard";
+}
+
+function getTrackStreamingProfile(
+  track: TrackMeta,
+  mode: ChunkSchedulerMode,
+  bufferHealth: ChunkBufferHealth
+) {
+  const streamProfile = deriveTrackStreamProfile(track);
+
+  if (bufferHealth === "critical") {
     return {
-      maxConcurrent: 4,
-      lookBehindMs: 8_000,
-      lookAheadMs: isLargeFlac ? 55_000 : 35_000
+      maxConcurrent: 8,
+      lookBehindMs: 4_000,
+      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 40_000
     };
   }
 
-  if (isLargeFlac) {
+  if (mode === "conservative" || bufferHealth === "low") {
     return {
       maxConcurrent: 5,
+      lookBehindMs: 8_000,
+      lookAheadMs: streamProfile === "large-lossless" ? 55_000 : 35_000
+    };
+  }
+
+  if (streamProfile === "large-lossless") {
+    return {
+      maxConcurrent: 6,
       lookBehindMs: 6_000,
-      lookAheadMs: 38_000
+      lookAheadMs: 40_000
+    };
+  }
+
+  if (streamProfile === "large-compressed") {
+    return {
+      maxConcurrent: 6,
+      lookBehindMs: 6_000,
+      lookAheadMs: 32_000
     };
   }
 
