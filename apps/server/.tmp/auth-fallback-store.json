@@ -1007,6 +1007,54 @@
       "passwordHash": "061c86d9b83725dfa45363e5264d3726:4431457104c83f551266179a6b4bc9564924e01eb8749f3b30e1925c26b240acfcdf4c9a93666aa8cbd79725169d72502a0046e201209c94c1ec0ae8970ebd89",
       "createdAt": "2026-03-31T17:26:41.467Z",
       "updatedAt": "2026-03-31T17:26:41.467Z"
+    },
+    {
+      "id": "user_e062b29c-55a7-4db2-a59f-289e7d04c6d7",
+      "username": "host-c5276257",
+      "nickname": "Host",
+      "passwordHash": "86a713c2c4e8ef00ed20fa0cad43ebaf:445fb78516b44af7aa280306d84bbb968dfad596871d2c2e20c392a21f36fa54c6be7bd63e3445c2f905c535c20420e86efb776cccab5ec6a4cf27652025b772",
+      "createdAt": "2026-04-01T04:19:18.399Z",
+      "updatedAt": "2026-04-01T04:19:18.399Z"
+    },
+    {
+      "id": "user_f964ba5a-e81b-42e0-aaf2-9699fc501541",
+      "username": "host-5b2f03a6",
+      "nickname": "Host",
+      "passwordHash": "4e575850ecafd384bb6f15003e266c40:d5dfb299a49f9072eb671790dd569bd9724e5e6d109a38d8c5d4685745f928d72727f624223927396b331269d00afe49e608cd4388501daab35bd64716812c22",
+      "createdAt": "2026-04-01T04:19:18.456Z",
+      "updatedAt": "2026-04-01T04:19:18.456Z"
+    },
+    {
+      "id": "user_26b8f755-4b27-41e3-b774-e9e9ffec6d49",
+      "username": "host-9f96a028",
+      "nickname": "Host",
+      "passwordHash": "73d2452b5e50b3f153a7022511e3f423:d405310dbce20d30e6fd59af5095f23a5f8d4c5c16228c9d8f6246bc7c5a86fab7c3ba2ee9b886ec66508ec31ec898085086df25b8c0a63cac28044ad9cb55e7",
+      "createdAt": "2026-04-01T04:19:18.511Z",
+      "updatedAt": "2026-04-01T04:19:18.511Z"
+    },
+    {
+      "id": "user_9a9a4902-f129-47dc-8e6c-abaabaae9807",
+      "username": "host-43370bd7",
+      "nickname": "Host",
+      "passwordHash": "f9095ad0ab5c91b3d83fcf24fa3490fa:ff9e6b316b23409c31a1c4ce2c42987ecb8771607730345ddbd0b64404741482bf83a17ddee98390cad651a103cf57dcd67e5bf59d6908a4e8a0eccf2e0d4dca",
+      "createdAt": "2026-04-01T04:43:05.615Z",
+      "updatedAt": "2026-04-01T04:43:05.615Z"
+    },
+    {
+      "id": "user_5ad675df-9463-4a16-9985-dbcd468bdf8e",
+      "username": "host-ca91be8d",
+      "nickname": "Host",
+      "passwordHash": "3dbe7e334f88c67c4da4de6c21170179:6a9b1a45a317682919bdea8a320de9492eda1427b8703167a590a02d8e8e932ee635fc117d901ac7f8b31dd0623948110cd375289d182485002b592c9194b3e4",
+      "createdAt": "2026-04-01T04:43:05.732Z",
+      "updatedAt": "2026-04-01T04:43:05.732Z"
+    },
+    {
+      "id": "user_f2a5bd0c-362b-439a-b94b-f4cb40fcd5ee",
+      "username": "host-1cdc3e19",
+      "nickname": "Host",
+      "passwordHash": "0b1706c18cb2430fd64419c21a51bdbd:a4681aa18547784db226391550f13ef4b97348411711568e01b2aea75e24edd17a3932fbf136848bb41ad70783b1d03b184464d7e3a028041c38f9e6f11399a8",
+      "createdAt": "2026-04-01T04:43:05.782Z",
+      "updatedAt": "2026-04-01T04:43:05.782Z"
     }
   ],
   "sessions": [
@@ -1891,6 +1939,48 @@
       "token": "_9PSDCYczmvm3i3hWzqT7t-Hux7JaPYfmzhUh-5DtyU",
       "createdAt": "2026-03-31T17:26:41.518Z",
       "expiresAt": "2026-04-30T17:26:41.518Z"
+    },
+    {
+      "id": "session_068224dd-2f39-4156-a028-703825bb4656",
+      "userId": "user_e062b29c-55a7-4db2-a59f-289e7d04c6d7",
+      "token": "3jkgVRuf3Pj45vOO0lXltmFCu7ikwx6CzTwyQsX5yLI",
+      "createdAt": "2026-04-01T04:19:18.450Z",
+      "expiresAt": "2026-05-01T04:19:18.450Z"
+    },
+    {
+      "id": "session_2df61a71-cae3-483d-a80f-7f3bdb15cbe3",
+      "userId": "user_f964ba5a-e81b-42e0-aaf2-9699fc501541",
+      "token": "OmOO6CQTezUGfIWUFXjaePPX2pLDgvdMTcRHvPTzmKs",
+      "createdAt": "2026-04-01T04:19:18.504Z",
+      "expiresAt": "2026-05-01T04:19:18.504Z"
+    },
+    {
+      "id": "session_a429829e-2d0d-4aaf-b01a-779ca4e19478",
+      "userId": "user_26b8f755-4b27-41e3-b774-e9e9ffec6d49",
+      "token": "_h-zDXCHW1_igUr4y_w0IMnKE9KnS1Oph4G6TarVMac",
+      "createdAt": "2026-04-01T04:19:18.569Z",
+      "expiresAt": "2026-05-01T04:19:18.569Z"
+    },
+    {
+      "id": "session_3e8bca7f-496a-4e78-b728-888f70c91f8c",
+      "userId": "user_9a9a4902-f129-47dc-8e6c-abaabaae9807",
+      "token": "I_QjScuI34p96TU2n9wM25luTyS37UxoItEyQxNIINQ",
+      "createdAt": "2026-04-01T04:43:05.724Z",
+      "expiresAt": "2026-05-01T04:43:05.724Z"
+    },
+    {
+      "id": "session_4f573839-7014-46e1-bed9-830149e4a7b0",
+      "userId": "user_5ad675df-9463-4a16-9985-dbcd468bdf8e",
+      "token": "XZpHrlCT69eAMuSDpjYHcb1GqBykRYpIKoaild3yHd4",
+      "createdAt": "2026-04-01T04:43:05.777Z",
+      "expiresAt": "2026-05-01T04:43:05.777Z"
+    },
+    {
+      "id": "session_a72b1e2b-f4b0-49fc-badb-47a6201b7556",
+      "userId": "user_f2a5bd0c-362b-439a-b94b-f4cb40fcd5ee",
+      "token": "0P-a5R7YToU-9vMHJrNGhB8aCFv8u0KZsSao9zDj-_A",
+      "createdAt": "2026-04-01T04:43:05.831Z",
+      "expiresAt": "2026-05-01T04:43:05.831Z"
     }
   ]
 }

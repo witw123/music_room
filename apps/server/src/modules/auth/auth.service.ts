@@ -40,9 +40,7 @@ export class AuthService {
   private readonly usersById = new Map<string, StoredUser>();
   private readonly userIdByUsername = new Map<string, string>();
   private readonly sessionsByToken = new Map<string, StoredUserSession>();
-  private readonly allowFallbackPersistence =
-    process.env.AUTH_FAKE_PERSISTENCE === "true" ||
-    (process.env.AUTH_FAKE_PERSISTENCE !== "false" && process.env.NODE_ENV !== "production");
+  private readonly allowFallbackPersistence = process.env.AUTH_FAKE_PERSISTENCE !== "false";
   private readonly fallbackStorePath = resolve(
     process.cwd(),
     process.env.AUTH_FAKE_PERSIST_PATH ?? ".tmp/auth-fallback-store.json"
