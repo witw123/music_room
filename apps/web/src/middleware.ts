@@ -9,10 +9,6 @@ import {
 const protectedClientPaths = ["/app", "/auth", "/rooms", "/room"];
 
 export function middleware(request: NextRequest) {
-  if (process.env.NODE_ENV !== "production") {
-    return NextResponse.next();
-  }
-
   const { pathname, searchParams } = request.nextUrl;
   if (!protectedClientPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
     return NextResponse.next();
@@ -22,10 +18,7 @@ export function middleware(request: NextRequest) {
   const cookiePlatform = getClientPlatformFromCookie(request.headers.get("cookie") ?? undefined);
 
   if (!clientPlatform && !cookiePlatform) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/";
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return NextResponse.next();
   }
 
   const response = NextResponse.next();
