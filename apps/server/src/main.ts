@@ -2,9 +2,11 @@ import "reflect-metadata";
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import { validateRuntimeConfig } from "./common/config/runtime-config";
 import { getCorsOrigins } from "./common/cors/get-cors-origins";
 
 async function bootstrap() {
+  validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
   app.enableCors({
     origin: getCorsOrigins(),

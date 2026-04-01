@@ -49,9 +49,7 @@ services:
       - "${TURN_MIN_PORT}-${TURN_MAX_PORT}:${TURN_MIN_PORT}-${TURN_MAX_PORT}/udp"
 
   server:
-    build:
-      context: ../..
-      dockerfile: Dockerfile.server
+    image: ${SERVER_IMAGE}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -62,7 +60,15 @@ services:
       NODE_ENV: production
       PORT: ${PORT}
       DATABASE_URL: ${DATABASE_URL}
+      REDIS_MODE: ${REDIS_MODE}
       REDIS_URL: ${REDIS_URL}
+      REDIS_SENTINELS: ${REDIS_SENTINELS}
+      REDIS_SENTINEL_MASTER_NAME: ${REDIS_SENTINEL_MASTER_NAME}
+      REDIS_SENTINEL_USERNAME: ${REDIS_SENTINEL_USERNAME}
+      REDIS_SENTINEL_PASSWORD: ${REDIS_SENTINEL_PASSWORD}
+      REDIS_USERNAME: ${REDIS_USERNAME}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: ${REDIS_DB}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS}
       TURN_ENABLED: ${TURN_ENABLED}
@@ -85,18 +91,7 @@ services:
       retries: 10
 
   web:
-    build:
-      context: ../..
-      dockerfile: Dockerfile.web
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
-        NEXT_PUBLIC_SOCKET_PATH: ${NEXT_PUBLIC_SOCKET_PATH}
-        NEXT_PUBLIC_STUN_URL: ${NEXT_PUBLIC_STUN_URL}
-        NEXT_PUBLIC_TURN_URL: ${NEXT_PUBLIC_TURN_URL}
-        NEXT_PUBLIC_TURN_USERNAME: ${NEXT_PUBLIC_TURN_USERNAME}
-        NEXT_PUBLIC_TURN_CREDENTIAL: ${NEXT_PUBLIC_TURN_CREDENTIAL}
-        NEXT_PUBLIC_WEBRTC_ICE_SERVERS: ${NEXT_PUBLIC_WEBRTC_ICE_SERVERS}
+    image: ${WEB_IMAGE}
     restart: unless-stopped
     depends_on:
       server:

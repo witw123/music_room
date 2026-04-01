@@ -12,7 +12,7 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
 
 echo "Waiting for services..."

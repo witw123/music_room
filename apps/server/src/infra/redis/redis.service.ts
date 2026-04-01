@@ -1,18 +1,14 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import Redis from "ioredis";
+import { buildRedisClientArgs, getRedisConnectionMode, type RedisConnectionMode } from "./redis.config";
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly messageHandlers = new Map<string, Set<(payload: unknown) => void>>();
-  readonly client = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-    lazyConnect: true,
-    maxRetriesPerRequest: 1
-  });
-  readonly subscriber = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-    lazyConnect: true,
-    maxRetriesPerRequest: 1
-  });
+  private readonly mode: RedisConnectionMode = getRedisConnectionMode();
+  readonly client = createRedisClient();
+  readonly subscriber = createRedisClient();
   private readonly handleSubscriberMessage = (messageChannel: string, message: string) => {
     const handlers = this.messageHandlers.get(messageChannel);
     if (!handlers?.size) {
@@ -28,6 +24,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   };
 
   async onModuleInit() {
+    this.registerLifecycleLogging(this.client, "publisher");
+    this.registerLifecycleLogging(this.subscriber, "subscriber");
     await this.connectSafely(this.client, "publisher");
     await this.connectSafely(this.subscriber, "subscriber");
     if (this.subscriber.status === "ready") {
@@ -42,6 +40,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   isAvailable() {
     return this.client.status === "ready";
+  }
+
+  getMode() {
+    return this.mode;
   }
 
   async publish(channel: string, payload: unknown) {
@@ -147,10 +149,28 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private async connectSafely(client: Redis, label: string) {
     try {
       await client.connect();
-      this.logger.log(`Redis ${label} connected`);
+      this.logger.log(`Redis ${label} connected (mode=${this.mode})`);
     } catch (error) {
       this.logger.warn(`Redis ${label} unavailable; continuing without pub/sub. ${String(error)}`);
     }
+  }
+
+  private registerLifecycleLogging(client: Redis, label: string) {
+    client.on("ready", () => {
+      this.logger.log(`Redis ${label} ready`);
+    });
+    client.on("error", (error) => {
+      this.logger.warn(`Redis ${label} error: ${String(error)}`);
+    });
+    client.on("close", () => {
+      this.logger.warn(`Redis ${label} connection closed`);
+    });
+    client.on("end", () => {
+      this.logger.warn(`Redis ${label} connection ended`);
+    });
+    client.on("reconnecting", () => {
+      this.logger.warn(`Redis ${label} reconnecting`);
+    });
   }
 
   private assertReady(client: Redis, label: string) {
@@ -160,4 +180,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     throw new Error(`Redis unavailable (${label}).`);
   }
+}
+
+function createRedisClient() {
+  const args = buildRedisClientArgs();
+  return args.length === 1 ? new Redis(args[0]) : new Redis(args[0], args[1]);
 }

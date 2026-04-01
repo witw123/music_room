@@ -29,6 +29,9 @@ export class HealthController {
       checks: {
         prisma: prismaReady ? "up" : "down",
         redis: redisReady ? "up" : "down"
+      },
+      metadata: {
+        redisMode: this.redis.getMode()
       }
     };
   }

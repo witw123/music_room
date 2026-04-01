@@ -507,6 +507,93 @@ describe("RoomService", () => {
     });
   });
 
+  it("rejects stale playback writes with a version conflict", async () => {
+    const prisma = createPrismaMock();
+    const redis = {
+      ...createRedisMock(),
+      isAvailable: jest.fn(() => true)
+    };
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Conflict",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "conflict-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id,
+      expectedVersion: 1
+    });
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "pause",
+        actorSessionId: host.id,
+        expectedVersion: 1
+      })
+    ).rejects.toThrow("Playback state version conflict.");
+  });
+
+  it("reassigns the active source when the host leaves but the current track owner stays online", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Source",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "member-source",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: memberTrack.id,
+      actorSessionId: host.id,
+      expectedVersion: 1
+    });
+    const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
+
+    expect(playback.sourceSessionId).toBe(member.id);
+    expect(roomAfterLeave.playback).toMatchObject({
+      status: "playing",
+      currentTrackId: memberTrack.id,
+      sourceSessionId: member.id,
+      sourcePeerId: "peer-member",
+      sourceTrackId: memberTrack.id
+    });
+    expect(roomAfterLeave.playback.queueVersion).toBeGreaterThan(playback.queueVersion);
+  });
+
   it("starts a different track from the beginning when play switches songs", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

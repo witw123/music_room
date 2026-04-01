@@ -292,7 +292,10 @@ describe("SignalingGateway", () => {
       "music-room:peer-signal",
       expect.objectContaining({
         roomId: "room_1",
-        payload
+        payload: expect.objectContaining({
+          ...payload,
+          sequence: expect.any(Number)
+        })
       })
     );
   });
@@ -413,5 +416,149 @@ describe("SignalingGateway", () => {
         }
       )
     ).rejects.toThrow("Unauthorized realtime request.");
+  });
+
+  it("rejects room subscriptions when redis realtime is unavailable", async () => {
+    const redisService = {
+      isAvailable: jest.fn(() => false),
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const moduleRef = {
+      get: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+
+    await expect(
+      gateway.handleRoomSubscribe(
+        {
+          handshake: { auth: { sessionToken: "token" }, headers: {} },
+          data: {},
+          join: jest.fn()
+        } as never,
+        { roomId: "room_1", sessionId: "guest_host", peerId: "peer_host" }
+      )
+    ).rejects.toThrow("Realtime sync unavailable.");
+  });
+
+  it("rejects peer signals when redis realtime is unavailable", async () => {
+    const redisService = {
+      isAvailable: jest.fn(() => false),
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const moduleRef = {
+      get: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+
+    await expect(
+      gateway.handleSignal(
+        {
+          data: {
+            roomId: "room_1",
+            peerId: "peer_a",
+            isRealtimeAuthenticated: true
+          }
+        } as never,
+        {
+          roomId: "room_1",
+          fromPeerId: "peer_a",
+          toPeerId: "peer_b",
+          channelKind: "data",
+          type: "offer",
+          payload: {}
+        }
+      )
+    ).rejects.toThrow("Realtime sync unavailable.");
+  });
+
+  it("emits a presence patch after a successful room subscribe", async () => {
+    const snapshot = {
+      room: {
+        id: "room_1",
+        hostId: "guest_host",
+        joinCode: "ABC123",
+        visibility: "private",
+        members: [
+          {
+            id: "guest_host",
+            nickname: "Host",
+            role: "host",
+            joinedAt: "2026-04-01T00:00:00.000Z",
+            peerId: "peer_host"
+          }
+        ],
+        playback: {
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "guest_host",
+          sourcePeerId: "peer_host",
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          mediaEpoch: 0
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    };
+    const redisService = {
+      isAvailable: jest.fn(() => true),
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const roomService = {
+      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
+      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
+      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
+      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+    };
+    const moduleRef = {
+      get: jest.fn().mockReturnValue(roomService)
+    };
+    const authService = createAuthServiceMock();
+    const emit = jest.fn();
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      authService as never
+    );
+    gateway.server = {
+      to: jest.fn().mockReturnValue({ emit })
+    } as never;
+
+    await gateway.handleRoomSubscribe(
+      {
+        handshake: { auth: { sessionToken: "token" }, headers: {} },
+        data: {},
+        join: jest.fn(),
+        emit: jest.fn()
+      } as never,
+      { roomId: "room_1", sessionId: "guest_host", peerId: "peer_host" }
+    );
+
+    expect(emit).toHaveBeenCalledWith(
+      "room.presence.patch",
+      expect.objectContaining({
+        roomId: "room_1",
+        members: snapshot.room.members,
+        playback: snapshot.room.playback
+      })
+    );
   });
 });

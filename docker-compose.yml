@@ -19,6 +19,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: music-room-redis
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
     volumes:
@@ -65,7 +66,15 @@ services:
       NODE_ENV: production
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-music_room}
+      REDIS_MODE: ${REDIS_MODE:-single}
       REDIS_URL: redis://redis:6379
+      REDIS_SENTINELS: ${REDIS_SENTINELS:-}
+      REDIS_SENTINEL_MASTER_NAME: ${REDIS_SENTINEL_MASTER_NAME:-}
+      REDIS_SENTINEL_USERNAME: ${REDIS_SENTINEL_USERNAME:-}
+      REDIS_SENTINEL_PASSWORD: ${REDIS_SENTINEL_PASSWORD:-}
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       TURN_ENABLED: ${TURN_ENABLED:-true}

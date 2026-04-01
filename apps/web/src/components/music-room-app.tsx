@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type {
   IceConfigResponse,
-  PeerDiagnosticsSnapshot,
-  PeerRecentEvent,
   Playlist,
   RoomMediaConnectionState,
   RoomSnapshot,
@@ -13,11 +11,11 @@ import type {
 } from "@music-room/shared";
 import {
   ChunkScheduler,
-  createEmptyDiagnosticsState,
   getWebRTCIceServers,
-  recordDiagnosticsEvent,
   RoomMediaMesh,
-  P2PMesh
+  P2PMesh,
+  useAvailabilityAnnouncements,
+  usePeerDiagnostics
 } from "@/features/p2p";
 import { shouldAcceptPlaybackSnapshot, toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -25,77 +23,21 @@ import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 import { TopBar } from "@/components/TopBar";
 import { BottomPlayer } from "@/components/BottomPlayer";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { getPlaybackEffectivePositionMs, useRoomPlayback } from "@/features/playback/use-room-playback";
+import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
+import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
-const localPlaybackSoftDriftMs = 180;
-const localPlaybackHardDriftMs = 1_200;
-const diagnosticsFlushDelayMs = 120;
-const availabilityFlushDelayMs = 90;
-
-type AvailabilityState = Record<string, Record<string, TrackAvailabilityAnnouncement>>;
-
-function upsertAvailabilityAnnouncement(
-  current: AvailabilityState,
-  announcement: TrackAvailabilityAnnouncement
-) {
-  const trackAvailability = current[announcement.trackId] ?? {};
-  const existing = trackAvailability[announcement.ownerPeerId];
-
-  if (
-    existing &&
-    existing.totalChunks === announcement.totalChunks &&
-    existing.source === announcement.source &&
-    existing.availableChunks.length === announcement.availableChunks.length &&
-    existing.availableChunks.every((chunk, index) => chunk === announcement.availableChunks[index])
-  ) {
-    return current;
-  }
-
-  return {
-    ...current,
-    [announcement.trackId]: {
-      ...trackAvailability,
-      [announcement.ownerPeerId]: announcement
-    }
-  };
-}
-
-function syncLocalPlaybackWindow(audio: HTMLAudioElement, expectedSeconds: number, isPlaying: boolean) {
-  if (!Number.isFinite(audio.currentTime)) {
-    return;
-  }
-
-  const driftMs = (expectedSeconds - audio.currentTime) * 1000;
-  const absDriftMs = Math.abs(driftMs);
-
-  if (!isPlaying || absDriftMs >= localPlaybackHardDriftMs) {
-    if (absDriftMs >= localPlaybackSoftDriftMs) {
-      audio.currentTime = Math.max(0, expectedSeconds);
-    }
-    audio.playbackRate = 1;
-    return;
-  }
-
-  if (absDriftMs <= localPlaybackSoftDriftMs) {
-    audio.playbackRate = 1;
-    return;
-  }
-
-  audio.playbackRate = driftMs > 0 ? 1.04 : 0.96;
-}
 
 type MusicRoomAppProps = {
   workspaceOnly?: boolean;
@@ -120,11 +62,6 @@ export function MusicRoomApp({
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
-  const pendingAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
-  const queuedAvailabilityRef = useRef<TrackAvailabilityAnnouncement[]>([]);
-  const availabilityFlushTimerRef = useRef<number | null>(null);
-  const queuedDiagnosticsRef = useRef<Parameters<typeof recordDiagnosticsEvent>[1][]>([]);
-  const diagnosticsFlushTimerRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
@@ -147,12 +84,8 @@ export function MusicRoomApp({
   const [isNavigatingRoomExit, setIsNavigatingRoomExit] = useState(false);
   const [mediaConnectionState, setMediaConnectionState] =
     useState<RoomMediaConnectionState>("idle");
-  const [availabilityByTrack, setAvailabilityByTrack] = useState<
-    Record<string, Record<string, TrackAvailabilityAnnouncement>>
-  >({});
   const [iceConfig, setIceConfig] = useState<IceConfigResponse | null>(null);
   const [iceConfigResolved, setIceConfigResolved] = useState(false);
-  const [diagnosticsState, setDiagnosticsState] = useState(createEmptyDiagnosticsState);
   const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "members">("queue");
   const [isPageVisible, setIsPageVisible] = useState(
     typeof document === "undefined" ? true : !document.hidden
@@ -172,117 +105,31 @@ export function MusicRoomApp({
   const activeSessionRef = useRef(activeSession);
   const currentRoomRef = useRef<RoomSnapshot | null>(null);
   const uploadedTrackIdsRef = useRef<string[]>([]);
+  const {
+    availabilityByTrack,
+    queueAvailability,
+    mergeAvailability,
+    mergeLocalPieceAvailability,
+    emitAvailability: stableEmitAvailability,
+    flushPendingAvailability
+  } = useAvailabilityAnnouncements({
+    peerId,
+    socketRef,
+    activeSessionRef,
+    currentRoomRef
+  });
+  const {
+    diagnosticsState,
+    peerDiagnostics,
+    peerRecentEvents,
+    recordPeerDiagnostic
+  } = usePeerDiagnostics();
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId;
   const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
-  const peerDiagnostics = useMemo<PeerDiagnosticsSnapshot[]>(
-    () =>
-      Object.values(diagnosticsState.peers).sort((left, right) =>
-        left.peerId.localeCompare(right.peerId)
-      ),
-    [diagnosticsState.peers]
-  );
-  const peerRecentEvents = diagnosticsState.recentEvents as PeerRecentEvent[];
-
-  const flushQueuedAvailability = useCallback(() => {
-    if (availabilityFlushTimerRef.current !== null) {
-      window.clearTimeout(availabilityFlushTimerRef.current);
-      availabilityFlushTimerRef.current = null;
-    }
-
-    if (queuedAvailabilityRef.current.length === 0) {
-      return;
-    }
-
-    const queued = queuedAvailabilityRef.current.splice(0, queuedAvailabilityRef.current.length);
-    setAvailabilityByTrack((current) =>
-      queued.reduce(
-        (state, announcement) => upsertAvailabilityAnnouncement(state, announcement),
-        current
-      )
-    );
-  }, []);
-
-  const queueAvailability = useCallback(
-    (announcement: TrackAvailabilityAnnouncement) => {
-      queuedAvailabilityRef.current.push(announcement);
-      if (availabilityFlushTimerRef.current !== null) {
-        return;
-      }
-
-      availabilityFlushTimerRef.current = window.setTimeout(() => {
-        flushQueuedAvailability();
-      }, availabilityFlushDelayMs);
-    },
-    [flushQueuedAvailability]
-  );
-
-  const mergeAvailability = useCallback(
-    (announcement: TrackAvailabilityAnnouncement) => {
-      queueAvailability(announcement);
-    },
-    [queueAvailability]
-  );
-
-  const mergeLocalPieceAvailability = useCallback(
-    (trackId: string, chunkIndex: number, totalChunks: number) => {
-      const session = activeSessionRef.current;
-      const room = currentRoomRef.current;
-
-      if (!peerId || !session || !room) {
-        return;
-      }
-
-      const queuedExisting = [...queuedAvailabilityRef.current]
-        .reverse()
-        .find(
-          (announcement) =>
-            announcement.trackId === trackId && announcement.ownerPeerId === peerId
-        );
-      const existing = availabilityByTrack[trackId]?.[peerId] ?? queuedExisting;
-      const availableChunkSet = new Set(existing?.availableChunks ?? []);
-      const nextChunkCountBefore = availableChunkSet.size;
-      availableChunkSet.add(chunkIndex);
-
-      if (
-        existing &&
-        availableChunkSet.size === nextChunkCountBefore &&
-        existing.totalChunks >= totalChunks
-      ) {
-        return;
-      }
-
-      queueAvailability({
-        roomId: room.room.id,
-        trackId,
-        ownerPeerId: peerId,
-        nickname: session.nickname,
-        totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
-        availableChunks: [...availableChunkSet].sort((left, right) => left - right),
-        source: existing?.source ?? "local_cache",
-        announcedAt: new Date().toISOString()
-      });
-    },
-    [availabilityByTrack, peerId, queueAvailability]
-  );
-
-  const stableEmitAvailability = useCallback(
-    (announcement: TrackAvailabilityAnnouncement) => {
-      const socket = socketRef.current;
-      const key = `${announcement.trackId}:${announcement.ownerPeerId}`;
-
-      if (!socket || !socket.connected) {
-        pendingAvailabilityRef.current.set(key, announcement);
-        return;
-      }
-
-      socket.emit("piece.availability", announcement);
-    },
-    []
-  );
 
   const {
     uploadedTracks,
@@ -400,19 +247,6 @@ export function MusicRoomApp({
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
-  const flushPendingAvailability = useCallback(() => {
-    const socket = socketRef.current;
-    if (!socket || !socket.connected || pendingAvailabilityRef.current.size === 0) {
-      return;
-    }
-
-    for (const announcement of pendingAvailabilityRef.current.values()) {
-      socket.emit("piece.availability", announcement);
-    }
-
-    pendingAvailabilityRef.current.clear();
-  }, []);
-
   const scheduleRemotePlaybackRetry = useCallback(
     (attempt = 0) => {
       if (remotePlaybackRetryRef.current !== null) {
@@ -451,44 +285,8 @@ export function MusicRoomApp({
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
       }
-      if (availabilityFlushTimerRef.current !== null) {
-        window.clearTimeout(availabilityFlushTimerRef.current);
-      }
-      if (diagnosticsFlushTimerRef.current !== null) {
-        window.clearTimeout(diagnosticsFlushTimerRef.current);
-      }
     };
   }, []);
-
-  const flushQueuedDiagnostics = useCallback(() => {
-    if (diagnosticsFlushTimerRef.current !== null) {
-      window.clearTimeout(diagnosticsFlushTimerRef.current);
-      diagnosticsFlushTimerRef.current = null;
-    }
-
-    if (queuedDiagnosticsRef.current.length === 0) {
-      return;
-    }
-
-    const queued = queuedDiagnosticsRef.current.splice(0, queuedDiagnosticsRef.current.length);
-    setDiagnosticsState((current) =>
-      queued.reduce((state, input) => recordDiagnosticsEvent(state, input), current)
-    );
-  }, []);
-
-  const recordPeerDiagnostic = useCallback(
-    (input: Parameters<typeof recordDiagnosticsEvent>[1]) => {
-      queuedDiagnosticsRef.current.push(input);
-      if (diagnosticsFlushTimerRef.current !== null) {
-        return;
-      }
-
-      diagnosticsFlushTimerRef.current = window.setTimeout(() => {
-        flushQueuedDiagnostics();
-      }, diagnosticsFlushDelayMs);
-    },
-    [flushQueuedDiagnostics]
-  );
 
   const applyPlaybackPatch = useCallback((playback: RoomSnapshot["room"]["playback"]) => {
     setRoomSnapshot((current) =>
@@ -1664,49 +1462,17 @@ export function MusicRoomApp({
               onTabChange={setActiveDashboardTab}
             />
           ) : showRoomTransitionState ? (
-            <section className="flex min-h-[60vh] flex-col items-center justify-center px-4 pt-12 text-center animate-fade-in">
-              <div className="mb-6 h-16 w-16 rounded-full border border-surface-border bg-surface flex items-center justify-center text-accent">
-                <div className="h-7 w-7 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-              </div>
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
-                Room transition
-              </p>
-              <h2 className="mb-3 text-2xl font-bold text-foreground">
-                {isNavigatingRoomExit ? "正在离开房间" : "正在连接房间"}
-              </h2>
-              <p className="max-w-sm text-sm leading-relaxed text-foreground-muted">
-                {isNavigatingRoomExit
-                  ? "正在返回房间列表，请稍候。"
-                  : "正在恢复房间状态并连接实时链路，请稍候。"}
-              </p>
-            </section>
+            <RoomTransitionState
+              isNavigatingRoomExit={isNavigatingRoomExit}
+              isRecoveringRoom={isRecoveringRoom || isRoomTransitionPending}
+            />
           ) : (
-            <section className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 animate-fade-in pt-12">
-              <div className="w-16 h-16 rounded-full bg-surface border border-surface-border flex items-center justify-center mb-6 text-foreground-muted">
-                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-              </div>
-              <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-foreground-muted mb-3">Room page</p>
-              <h2 className="text-2xl font-bold text-foreground mb-4">当前没有可用的房间</h2>
-              <p className="text-sm text-foreground-muted max-w-sm mb-8 leading-relaxed">
-                {activeSession
-                  ? "这个地址没有恢复到有效房间。请回到房间列表，重新创建或通过房间码加入。"
-                  : "你还没有登录。先进入登录页，再回到房间列表继续。"}
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-4">
-                <Link href={workspaceEntryHref as Route}>
-                  <Button size="lg">返回房间列表</Button>
-                </Link>
-                {activeSession ? (
-                  <Button variant="ghost" onClick={handleClearIdentity} type="button">
-                    清除当前会话状态
-                  </Button>
-                ) : (
-                  <Link href={authEntryHref as Route}>
-                    <Button variant="ghost">去登录</Button>
-                  </Link>
-                )}
-              </div>
-            </section>
+            <EmptyRoomState
+              activeSession={activeSession}
+              workspaceEntryHref={workspaceEntryHref}
+              authEntryHref={authEntryHref}
+              onClearIdentity={handleClearIdentity}
+            />
           )}
         </div>
       </div>
