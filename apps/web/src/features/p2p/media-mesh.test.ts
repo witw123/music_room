@@ -11,13 +11,10 @@ class FakeRTCPeerConnection {
   onconnectionstatechange: (() => void) | null = null;
   ontrack: ((event: RTCTrackEvent) => void) | null = null;
   closed = false;
+  addTransceiver = vi.fn(() => ({} as RTCRtpTransceiver));
 
   constructor() {
     FakeRTCPeerConnection.instances.push(this);
-  }
-
-  addTransceiver() {
-    return {} as RTCRtpTransceiver;
   }
 
   addTrack() {
@@ -109,6 +106,9 @@ describe("RoomMediaMesh", () => {
 
     const firstPeer = FakeRTCPeerConnection.instances[0];
     expect(firstPeer?.closed).toBe(false);
+    expect(firstPeer?.addTransceiver).toHaveBeenCalledWith("audio", {
+      direction: "recvonly"
+    });
 
     await mesh.handleSignal(buildOffer("peer_source_b", 1));
 
@@ -161,6 +161,9 @@ describe("RoomMediaMesh", () => {
 
     await mesh.syncHostPeers(["peer_listener"], emptyStream, 1);
     expect(sendSignal).toHaveBeenCalledTimes(0);
+
+    const firstPeer = FakeRTCPeerConnection.instances[0];
+    expect(firstPeer?.addTransceiver).not.toHaveBeenCalled();
 
     await mesh.syncHostPeers(["peer_listener"], liveStream, 1);
     expect(sendSignal).toHaveBeenCalledTimes(1);

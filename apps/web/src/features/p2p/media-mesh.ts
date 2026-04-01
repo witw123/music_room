@@ -83,7 +83,7 @@ export class RoomMediaMesh {
       this.resetForMediaEpoch(incomingMediaEpoch);
     }
 
-    const entry = this.peers.get(payload.fromPeerId) ?? this.createPeer(payload.fromPeerId);
+    const entry = this.peers.get(payload.fromPeerId) ?? this.createPeer(payload.fromPeerId, true);
 
     if (payload.type === "offer") {
       const remoteDescription = toSessionDescriptionInit(payload.payload);
@@ -155,7 +155,7 @@ export class RoomMediaMesh {
   }
 
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
-    const entry = this.peers.get(peerId) ?? this.createPeer(peerId);
+    const entry = this.peers.get(peerId) ?? this.createPeer(peerId, false);
     const streamChanged = this.attachStream(entry, localStream);
 
     if (
@@ -185,7 +185,7 @@ export class RoomMediaMesh {
     return entry;
   }
 
-  private createPeer(peerId: string) {
+  private createPeer(peerId: string, wantsIncomingAudio: boolean) {
     const connection = new RTCPeerConnection({
       iceServers: this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
     });
@@ -196,9 +196,11 @@ export class RoomMediaMesh {
       pendingCandidates: []
     };
 
-    connection.addTransceiver("audio", {
-      direction: "recvonly"
-    });
+    if (wantsIncomingAudio) {
+      connection.addTransceiver("audio", {
+        direction: "recvonly"
+      });
+    }
 
     connection.onicecandidate = (event) => {
       if (!event.candidate) {

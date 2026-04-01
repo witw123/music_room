@@ -373,6 +373,7 @@ export function MusicRoomApp({
     const socket = createRoomSocket();
     socketRef.current = socket;
     const roomId = roomSnapshot.room.id;
+    let presenceIntervalId: number | null = null;
     const iceServers = getWebRTCIceServers();
     const mesh = new P2PMesh(
       roomId,
@@ -465,8 +466,29 @@ export function MusicRoomApp({
       });
     };
 
+    const emitPresence = () => {
+      if (!activeSession?.userId || !peerId) {
+        return;
+      }
+
+      socket.emit("room.presence", {
+        roomId,
+        sessionId: activeSession.userId,
+        peerId
+      });
+    };
+
+    const startPresenceHeartbeat = () => {
+      emitPresence();
+      if (presenceIntervalId !== null) {
+        window.clearInterval(presenceIntervalId);
+      }
+      presenceIntervalId = window.setInterval(emitPresence, 10000);
+    };
+
     socket.on("connect", () => {
       subscribeToRoom();
+      startPresenceHeartbeat();
       setStatusMessage(`已连接到房间 ${roomSnapshot.room.joinCode}。`);
     });
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
@@ -517,6 +539,11 @@ export function MusicRoomApp({
       setStatusMessage(`实时连接失败：${toUserFacingError(error)}`);
     });
     socket.on("disconnect", (reason) => {
+      if (presenceIntervalId !== null) {
+        window.clearInterval(presenceIntervalId);
+        presenceIntervalId = null;
+      }
+
       if (reason === "io client disconnect") {
         return;
       }
@@ -524,6 +551,9 @@ export function MusicRoomApp({
     });
 
     return () => {
+      if (presenceIntervalId !== null) {
+        window.clearInterval(presenceIntervalId);
+      }
       socket.emit("room.unsubscribe", { roomId });
       socket.disconnect();
       socketRef.current = null;
@@ -547,27 +577,6 @@ export function MusicRoomApp({
     workspaceOnly,
     router
   ]);
-
-  useEffect(() => {
-    if (!roomSnapshot?.room.id || !activeSession?.userId || !peerId || !socketRef.current) {
-      return;
-    }
-
-    const emitPresence = () => {
-      socketRef.current?.emit("room.presence", {
-        roomId: roomSnapshot.room.id,
-        sessionId: activeSession.userId,
-        peerId
-      });
-    };
-
-    emitPresence();
-    const intervalId = window.setInterval(emitPresence, 10000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [roomSnapshot?.room.id, activeSession?.userId, peerId]);
 
   const playback = roomSnapshot?.room.playback;
 
