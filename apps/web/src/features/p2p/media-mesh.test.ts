@@ -195,4 +195,29 @@ describe("RoomMediaMesh", () => {
       mediaEpoch: 1
     });
   });
+
+  it("attaches a track when the same stream object gains audio later", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const liveTrack = { id: "track_live" } as MediaStreamTrack;
+    let audioTracks: MediaStreamTrack[] = [];
+    const stream = {
+      getAudioTracks: () => audioTracks
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+    expect(sendSignal).toHaveBeenCalledTimes(0);
+
+    audioTracks = [liveTrack];
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 1
+    });
+  });
 });

@@ -250,12 +250,13 @@ export class RoomMediaMesh {
   }
 
   private attachStream(entry: MediaPeerEntry, localStream: MediaStream | null) {
-    if (entry.stream === localStream) {
-      return false;
-    }
-
     const audioTracks = localStream?.getAudioTracks() ?? [];
     const nextTrack = audioTracks[0] ?? null;
+    const currentTrack = entry.senders[0]?.track ?? null;
+
+    if (entry.stream === localStream && currentTrack === nextTrack) {
+      return false;
+    }
 
     if (entry.senders.length === 0 && nextTrack) {
       entry.senders = [entry.connection.addTrack(nextTrack, localStream as MediaStream)];
