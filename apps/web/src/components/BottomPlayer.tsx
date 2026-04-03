@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useTransition } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 import {
   DesktopBottomPlayerLayout,
@@ -70,7 +71,9 @@ function BottomPlayerBase({
       : null;
   const effectiveProgressMs = Math.max(0, seekDraft ?? snapshotProgressMs ?? progressMs);
   const boundedProgressMs =
-    currentTrackDuration > 0 ? Math.min(effectiveProgressMs, currentTrackDuration) : effectiveProgressMs;
+    currentTrackDuration > 0
+      ? Math.min(effectiveProgressMs, currentTrackDuration)
+      : effectiveProgressMs;
   const progressRatio =
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const title = currentTrack?.title ?? "等待选择歌曲";
@@ -86,14 +89,11 @@ function BottomPlayerBase({
   const applyVolume = useCallback(
     (nextVolume: number) => {
       setVolume(nextVolume);
-
-      if (audioRef.current) {
-        audioRef.current.volume = nextVolume;
-      }
-
-      if (remoteAudioRef.current) {
-        remoteAudioRef.current.volume = nextVolume;
-      }
+      roomAudioOutput.applyVolume({
+        localAudio: audioRef.current,
+        remoteAudio: remoteAudioRef.current,
+        volume: nextVolume
+      });
     },
     [audioRef, remoteAudioRef, setVolume]
   );

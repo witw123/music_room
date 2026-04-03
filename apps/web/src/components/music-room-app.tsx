@@ -18,7 +18,11 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
-import { primePlaybackActivation } from "@/features/playback/prime-playback-activation";
+import {
+  createPlaybackStartIntent,
+  type PlaybackStartIntent
+} from "@/features/playback/playback-start-intent";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -87,6 +91,7 @@ export function MusicRoomApp({
   const [activePlaybackSource, setActivePlaybackSource] =
     useState<ProgressivePlaybackSource>("remote-stream");
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
+  const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
 
   const {
     activeSession,
@@ -161,6 +166,8 @@ export function MusicRoomApp({
       setActivePlaybackSource,
       progressiveFallbackReason,
       setProgressiveFallbackReason,
+      playbackStartIntent,
+      setPlaybackStartIntent,
       isPageVisible,
       volume,
       mediaConnectedPeersCount: mediaConnectedPeers.length,
@@ -245,6 +252,7 @@ export function MusicRoomApp({
     setMediaConnectedPeers([]);
     setActivePlaybackSource("remote-stream");
     setProgressiveFallbackReason(null);
+    setPlaybackStartIntent(null);
   }, [destroyProgressiveRuntime, resetHydrationQueue]);
 
   const getCurrentPlaybackPositionMs = useCallback(() => currentPlaybackPositionRef.current, []);
@@ -422,31 +430,71 @@ export function MusicRoomApp({
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
   }, []);
 
+  const armPlaybackStart = useCallback(
+    async (input: {
+      reason: PlaybackStartIntent["reason"];
+      trackId?: string | null;
+      queueItemId?: string | null;
+      previousTrackId?: string | null;
+    }) => {
+      setPlaybackStartIntent(
+        createPlaybackStartIntent({
+          reason: input.reason,
+          trackId: input.trackId,
+          queueItemId: input.queueItemId,
+          previousTrackId: input.previousTrackId
+        })
+      );
+      setStatusMessage("正在准备音源...");
+      await roomAudioOutput.primeOutputs({
+        localAudio: audioRef.current,
+        remoteAudio: remoteAudioRef.current
+      });
+    },
+    [setStatusMessage]
+  );
+
   const handlePlayTrack = useCallback(
     async (trackId?: string) => {
-      primePlaybackActivation();
+      await armPlaybackStart({
+        reason: trackId ? "track" : "resume-current",
+        trackId: trackId ?? roomSnapshot?.room.playback.currentTrackId ?? null
+      });
       await playTrack(trackId);
     },
-    [playTrack]
+    [armPlaybackStart, playTrack, roomSnapshot?.room.playback.currentTrackId]
   );
 
   const handlePlayQueueItem = useCallback(
     async (queueItemId: string) => {
-      primePlaybackActivation();
+      const queueTrackId =
+        roomSnapshot?.queue.find((item) => item.id === queueItemId)?.trackId ?? null;
+      await armPlaybackStart({
+        reason: "queue-item",
+        queueItemId,
+        trackId: queueTrackId,
+        previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
+      });
       await playQueueItem(queueItemId);
     },
-    [playQueueItem]
+    [armPlaybackStart, playQueueItem, roomSnapshot?.queue, roomSnapshot?.room.playback.currentTrackId]
   );
 
   const handlePrevTrack = useCallback(async () => {
-    primePlaybackActivation();
+    await armPlaybackStart({
+      reason: "prev",
+      previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
+    });
     await prevTrack();
-  }, [prevTrack]);
+  }, [armPlaybackStart, prevTrack, roomSnapshot?.room.playback.currentTrackId]);
 
   const handleNextTrack = useCallback(async () => {
-    primePlaybackActivation();
+    await armPlaybackStart({
+      reason: "next",
+      previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
+    });
     await nextTrack();
-  }, [nextTrack]);
+  }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
 
   const handleRemotePlaying = useCallback(() => {
     recordPeerDiagnostic({

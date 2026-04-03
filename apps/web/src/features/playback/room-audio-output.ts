@@ -1,0 +1,45 @@
+"use client";
+
+import {
+  roomAudioActivationManager,
+  type RoomAudioElementPlayResult
+} from "./room-audio-activation-manager";
+
+type PrimeRoomAudioOutputInput = {
+  localAudio?: HTMLAudioElement | null;
+  remoteAudio?: HTMLAudioElement | null;
+};
+
+type ApplyRoomAudioVolumeInput = {
+  localAudio?: HTMLAudioElement | null;
+  remoteAudio?: HTMLAudioElement | null;
+  volume: number;
+};
+
+export class RoomAudioOutput {
+  async primeOutputs(input: PrimeRoomAudioOutputInput) {
+    await roomAudioActivationManager.activateOutputs(input);
+  }
+
+  async playElement(
+    element: HTMLAudioElement | null | undefined
+  ): Promise<RoomAudioElementPlayResult> {
+    return roomAudioActivationManager.playElement(element);
+  }
+
+  applyVolume(input: ApplyRoomAudioVolumeInput) {
+    if (input.localAudio) {
+      input.localAudio.volume = input.volume;
+    }
+
+    if (input.remoteAudio) {
+      input.remoteAudio.volume = input.volume;
+    }
+  }
+
+  isActivated() {
+    return roomAudioActivationManager.isActivated();
+  }
+}
+
+export const roomAudioOutput = new RoomAudioOutput();

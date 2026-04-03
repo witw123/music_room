@@ -31,7 +31,7 @@ type PcmEngineSyncResult = {
   playbackPositionSeconds: number;
 };
 
-const pcmScheduleAheadSeconds = 12;
+const pcmScheduleAheadSeconds = 18;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;

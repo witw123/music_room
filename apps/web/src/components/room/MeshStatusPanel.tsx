@@ -187,6 +187,26 @@ function MeshStatusPanelBase({
                           回退原因: {peer.progressivePlaybackStatus.fallbackReason}
                         </p>
                       ) : null}
+                      {peer.progressivePlaybackStatus.pendingPlaybackIntent ? (
+                        <p className="mt-1 text-cyan-300">
+                          启动意图: {peer.progressivePlaybackStatus.pendingPlaybackIntent}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.intentMatchedSource ? (
+                        <p className="mt-1 text-emerald-300">
+                          已匹配音源: {peer.progressivePlaybackStatus.intentMatchedSource}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.lastPlayStartFailure ? (
+                        <p className="mt-1 text-red-300">
+                          最近启动失败: {peer.progressivePlaybackStatus.lastPlayStartFailure}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (
+                        <p className="mt-1 text-foreground-muted">
+                          下一首预热: {peer.progressivePlaybackStatus.nextQueueTrackPrefetch}
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
                   {peer.lastError ? (

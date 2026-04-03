@@ -312,6 +312,73 @@ describe("ChunkScheduler", () => {
     expect(priorities.every((priority) => priority === "current")).toBe(true);
   });
 
+  it("prefetches the next queued track during steady playback when the current track is comfortably buffered", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      maxConcurrentCurrentTrack: 3,
+      maxConcurrentUpcomingTrack: 3,
+      maxConcurrentPerPeer: 3,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks[0] = {
+      ...roomSnapshot.tracks[0],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    };
+    roomSnapshot.tracks[1] = {
+      ...roomSnapshot.tracks[1],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 48 * 1024 * 1024
+    };
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_member: buildAnnouncement({
+            ownerPeerId: "peer_member",
+            nickname: "Member",
+            availableChunks: Array.from({ length: 10 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          }),
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          })
+        },
+        track_2: {
+          peer_host: buildAnnouncement({
+            trackId: "track_2",
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 15_000,
+      policy: "steady",
+      bufferHealth: "healthy"
+    });
+
+    const requestedTrackIds = (requestPiece.mock.calls as unknown as Array<[{
+      trackId: string;
+      priority: string;
+    }]>).map(([call]) => `${call.trackId}:${call.priority}`);
+    expect(requestedTrackIds).toContain("track_2:upcoming");
+  });
+
   it("keeps downloading the full current FLAC once startup is satisfied and progressive local is unavailable", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {

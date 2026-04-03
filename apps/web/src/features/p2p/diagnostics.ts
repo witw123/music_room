@@ -134,7 +134,11 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       aheadBufferedMs: 0,
       schedulerPolicy: null,
       startupReady: false,
-      fallbackReason: null
+      fallbackReason: null,
+      pendingPlaybackIntent: null,
+      intentMatchedSource: null,
+      lastPlayStartFailure: null,
+      nextQueueTrackPrefetch: null
     },
     lastError: null,
     updatedAt: now,

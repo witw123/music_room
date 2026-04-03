@@ -110,7 +110,14 @@ export const progressivePlaybackStatusSchema = z.object({
     .enum(["startup", "steady", "catchup", "pause-fill", "background"])
     .nullable(),
   startupReady: z.boolean(),
-  fallbackReason: z.string().nullable()
+  fallbackReason: z.string().nullable(),
+  pendingPlaybackIntent: z.string().nullable().optional(),
+  intentMatchedSource: z
+    .enum(["remote-stream", "progressive-local", "full-local"])
+    .nullable()
+    .optional(),
+  lastPlayStartFailure: z.string().nullable().optional(),
+  nextQueueTrackPrefetch: z.string().nullable().optional()
 });
 
 export const peerDiagnosticsSnapshotSchema = z.object({
