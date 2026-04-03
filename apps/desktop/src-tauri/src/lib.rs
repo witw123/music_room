@@ -223,7 +223,7 @@ pub fn run() {
 }})();
 "#;
 
-      let _ = window.eval(&script);
+      let _ = window.eval(script);
       let _ = window.show();
     })
     .run(tauri::generate_context!())
