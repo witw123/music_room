@@ -14,7 +14,6 @@ import type {
 import { RoomStage } from "./RoomStage";
 import { TrackListSection } from "./TrackListSection";
 import { QueuePanel } from "./QueuePanel";
-import { PlaylistPanel } from "./PlaylistPanel";
 import { MembersPanel } from "./MembersPanel";
 import type { MemberTransferSummary } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
@@ -68,7 +67,7 @@ type TabId = "queue" | "library" | "members";
 
 const tabLabels: Record<TabId, string> = {
   queue: "共享队列",
-  library: "曲库与歌单",
+  library: "曲库",
   members: "成员与诊断"
 };
 
@@ -89,8 +88,8 @@ export function RoomDashboardView({
   mediaConnectionState,
   mediaConnectedPeersCount,
   cachedTrackCount,
-  playlists,
-  tracks,
+  playlists: _playlists,
+  tracks: _tracks,
   availabilitySummary,
   memberTransferSummaries,
   peerDiagnostics,
@@ -107,16 +106,15 @@ export function RoomDashboardView({
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
-  onSavePlaylistFromQueue,
-  onLoadPlaylistIntoRoom,
-  onUpdatePlaylistTitle,
-  onUpdatePlaylistTracks,
-  onDeletePlaylist,
+  onSavePlaylistFromQueue: _onSavePlaylistFromQueue,
+  onLoadPlaylistIntoRoom: _onLoadPlaylistIntoRoom,
+  onUpdatePlaylistTitle: _onUpdatePlaylistTitle,
+  onUpdatePlaylistTracks: _onUpdatePlaylistTracks,
+  onDeletePlaylist: _onDeletePlaylist,
   socket,
   onTabChange
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
-  const canCreatePlaylist = roomSnapshot.queue.length > 0;
 
   function handleTabChange(tab: TabId) {
     setActiveTab(tab);
@@ -201,20 +199,6 @@ export function RoomDashboardView({
                 onAddToQueue={onAddToQueue}
                 onDeleteTrack={onDeleteTrack}
                 onPlayTrack={onPlayTrack}
-              />
-
-              <div className="h-px w-full shrink-0 bg-white/5" />
-
-              <PlaylistPanel
-                playlists={playlists}
-                tracks={tracks}
-                activeSession={activeSession}
-                canCreatePlaylist={canCreatePlaylist}
-                onSavePlaylistFromQueue={onSavePlaylistFromQueue}
-                onLoadPlaylistIntoRoom={onLoadPlaylistIntoRoom}
-                onUpdatePlaylistTitle={onUpdatePlaylistTitle}
-                onUpdatePlaylistTracks={onUpdatePlaylistTracks}
-                onDeletePlaylist={onDeletePlaylist}
               />
             </div>
           ) : null}

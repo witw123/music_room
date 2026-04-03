@@ -223,6 +223,50 @@ describe("RoomService", () => {
       trackId: track.id,
       requestedById: member.id
     });
+
+    const roomAfterImport = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(roomAfterImport.room.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: null,
+      currentQueueItemId: null
+    });
+  });
+
+  it("keeps playback paused when the first track is only added to queue", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Queued Only",
+      artist: "Artist",
+      album: null,
+      durationMs: 100000,
+      bitrate: null,
+      fileHash: "queued-only",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const queueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+    const roomAfterQueue = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(queueItem.trackId).toBe(track.id);
+    expect(roomAfterQueue.queue).toHaveLength(1);
+    expect(roomAfterQueue.room.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: null,
+      currentQueueItemId: null
+    });
   });
 
   it("allows the host to reorder the queue and jump to a queue item", async () => {
@@ -314,6 +358,12 @@ describe("RoomService", () => {
 
     const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
     const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: firstQueueItem.id,
+      actorSessionId: host.id
+    });
 
     const nextPlayback = await roomService.updatePlayback(snapshot.room.id, {
       action: "next",

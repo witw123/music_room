@@ -352,30 +352,8 @@ export class RoomService {
     };
 
     record.queue.push(queueItem);
-
-    if (!record.room.playback.currentTrackId) {
-      try {
-        await this.updatePlayback(roomId, {
-          action: "play",
-          queueItemId: queueItem.id,
-          actorSessionId: sessionId,
-          expectedVersion: record.room.playback.queueVersion
-        });
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.includes("Track owner is not online")
-        ) {
-          this.incrementPlaybackVersion(record.room.playback);
-          await this.roomRecordRepository.persistRecord(record);
-        } else {
-          throw error;
-        }
-      }
-    } else {
-      this.incrementPlaybackVersion(record.room.playback);
-      await this.roomRecordRepository.persistRecord(record);
-    }
+    this.incrementPlaybackVersion(record.room.playback);
+    await this.roomRecordRepository.persistRecord(record);
 
     return queueItem;
   }
@@ -405,26 +383,6 @@ export class RoomService {
     );
 
     record.queue.push(...nextItems);
-
-    if (!record.room.playback.currentTrackId) {
-      try {
-        await this.updatePlayback(roomId, {
-          action: "play",
-          queueItemId: nextItems[0]?.id,
-          actorSessionId: sessionId,
-          expectedVersion: record.room.playback.queueVersion
-        });
-        return record.queue;
-      } catch (error) {
-        if (
-          !(error instanceof Error) ||
-          !error.message.includes("Track owner is not online")
-        ) {
-          throw error;
-        }
-      }
-    }
-
     this.incrementPlaybackVersion(record.room.playback);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
