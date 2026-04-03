@@ -49,11 +49,7 @@ export function isChromeOrEdgeBrowser() {
 }
 
 export function canUseProgressivePlayback() {
-  return (
-    typeof window !== "undefined" &&
-    isChromeOrEdgeBrowser() &&
-    typeof MediaSource !== "undefined"
-  );
+  return typeof window !== "undefined" && isChromeOrEdgeBrowser();
 }
 
 export function isLosslessTrack(input: { mimeType?: string | null; codec?: string | null }) {
@@ -197,11 +193,46 @@ export function getProgressiveEngineType(manifest: ProgressiveTrackManifest | nu
     return "none";
   }
 
+  if (canUseProgressivePcm(manifest)) {
+    return "pcm";
+  }
+
   if (canUseProgressiveMse(manifest.mimeType)) {
     return "mse";
   }
 
   return "none";
+}
+
+export function canUseProgressivePcm(
+  manifest: Pick<ProgressiveTrackManifest, "mimeType" | "codec"> | null | undefined
+) {
+  if (!manifest || !isFlacTrack(manifest) || !isChromeOrEdgeBrowser()) {
+    return false;
+  }
+
+  const audioContextSupported =
+    typeof window !== "undefined" &&
+    typeof (
+      window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    ) !== "undefined";
+  const webCodecsSupported =
+    typeof globalThis !== "undefined" &&
+    typeof (
+      globalThis as typeof globalThis & {
+        AudioDecoder?: unknown;
+        EncodedAudioChunk?: unknown;
+      }
+    ).AudioDecoder !== "undefined" &&
+    typeof (
+      globalThis as typeof globalThis & {
+        AudioDecoder?: unknown;
+        EncodedAudioChunk?: unknown;
+      }
+    ).EncodedAudioChunk !== "undefined";
+
+  return audioContextSupported && webCodecsSupported;
 }
 
 export function canUseProgressiveMse(mimeType: string | null | undefined) {

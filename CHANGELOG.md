@@ -83,7 +83,7 @@
 
 ### 调整
 
-- 桌面端生产模式默认加载 `https://witw.top`
+- 桌面端生产模式默认远端地址改为通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 注入
 - 桌面客户端不内置本地 Next.js runtime
 - 桌面客户端不内置本地后端服务
 

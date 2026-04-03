@@ -60,6 +60,24 @@ pnpm pack:desktop
 pnpm pack:mobile
 ```
 
+## Shell Origin Configuration
+
+- Web falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
+- Desktop and mobile shells use `MUSIC_ROOM_PUBLIC_ORIGIN` at build/package time.
+- If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, the repo keeps the placeholder `https://example.com`.
+
+Examples:
+
+```bash
+# Desktop dev / pack
+MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/desktop dev
+MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/desktop pack
+
+# Mobile shell sync / pack
+MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/mobile android:sync
+MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/mobile pack
+```
+
 ## WebRTC / TURN 配置
 
 前端优先请求服务端短期 ICE 配置接口：

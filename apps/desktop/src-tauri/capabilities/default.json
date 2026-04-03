@@ -9,8 +9,8 @@
     "urls": [
       "http://localhost:3000",
       "http://localhost:3000/*",
-      "https://witw.top",
-      "https://witw.top/*"
+      "https://example.com",
+      "https://example.com/*"
     ]
   },
   "permissions": [

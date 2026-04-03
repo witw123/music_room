@@ -311,4 +311,55 @@ describe("ChunkScheduler", () => {
     }]>).map(([call]) => call.priority);
     expect(priorities.every((priority) => priority === "current")).toBe(true);
   });
+
+  it("keeps downloading the full current FLAC once startup is satisfied and progressive local is unavailable", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      maxConcurrentCurrentTrack: 3,
+      maxConcurrentPerPeer: 3,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks[0] = {
+      ...roomSnapshot.tracks[0],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    };
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_member: buildAnnouncement({
+            ownerPeerId: "peer_member",
+            nickname: "Member",
+            availableChunks: [0, 1, 2, 3, 4, 5, 6, 7],
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          }),
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 30_000,
+      policy: "steady"
+    });
+
+    expect(requestPiece).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trackId: "track_1",
+        chunkIndex: 8,
+        priority: "current"
+      })
+    );
+  });
 });

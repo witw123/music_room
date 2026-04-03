@@ -5,8 +5,6 @@ use std::process::Command;
 use tauri::Manager;
 use url::Url;
 
-const DEV_ORIGIN: &str = "http://localhost:3000";
-const PROD_ORIGIN: &str = "https://witw.top";
 const AUDIO_EXTENSIONS: &[&str] = &["mp3", "wav", "flac", "m4a", "aac", "ogg"];
 
 #[derive(Serialize)]
@@ -166,10 +164,9 @@ pub fn run() {
       write_desktop_log
     ])
     .on_page_load(|window, _| {
-      let script = format!(
-        r#"
+      let script = r#"
 (() => {{
-  const internalOrigins = new Set({origins});
+  const internalOrigins = new Set([window.location.origin]);
   const invokeOpenExternal = (url) => {{
     const tauriCore = window.__TAURI__?.core;
     if (!tauriCore?.invoke) {{
@@ -224,9 +221,7 @@ pub fn run() {
     return originalOpen(url, target, features);
   }};
 }})();
-"#,
-        origins = serde_json::to_string(&[DEV_ORIGIN, PROD_ORIGIN]).unwrap()
-      );
+"#;
 
       let _ = window.eval(&script);
       let _ = window.show();

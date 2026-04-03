@@ -65,7 +65,7 @@ describe("RealtimeService", () => {
   it("derives turn host from APP_DOMAIN when explicit TURN host is missing", () => {
     process.env.TURN_ENABLED = "true";
     delete process.env.TURN_PUBLIC_HOST;
-    process.env.APP_DOMAIN = "witw.top";
+    process.env.APP_DOMAIN = "example.com";
     process.env.TURN_SHARED_SECRET = "turn-secret";
     const service = new RealtimeService();
 
@@ -73,7 +73,7 @@ describe("RealtimeService", () => {
 
     expect(config.source).toBe("ephemeral");
     expect(config.iceServers[1]).toMatchObject({
-      urls: expect.arrayContaining(["turn:turn.witw.top:3478?transport=udp"])
+      urls: expect.arrayContaining(["turn:turn.example.com:3478?transport=udp"])
     });
   });
 
@@ -84,7 +84,7 @@ describe("RealtimeService", () => {
     process.env.TURN_SHARED_SECRET = "turn-secret";
     const service = new RealtimeService();
 
-    const config = service.buildIceConfig("user_1", { requestHost: "witw.top:3001" });
+    const config = service.buildIceConfig("user_1", { requestHost: "example.com:3001" });
 
     expect(config.source).toBe("stun-only");
     expect(config.iceServers).toEqual([{ urls: "stun:stun.example.com:3478" }]);

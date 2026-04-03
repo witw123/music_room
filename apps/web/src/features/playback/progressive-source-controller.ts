@@ -6,14 +6,19 @@ export type ProgressiveWarmupDecision = {
   clearFallbackReason: boolean;
 };
 
+type BufferedLocalWarmupTarget = Extract<
+  ProgressivePlaybackSource,
+  "progressive-local" | "full-local"
+>;
+
 export function getInitialProgressivePlaybackSource(hasFullLocalTrack: boolean) {
   return hasFullLocalTrack ? "full-local" : ("remote-stream" satisfies ProgressivePlaybackSource);
 }
 
-export function resolveProgressiveWarmupDecision(input: {
+function resolveBufferedLocalWarmupDecision(input: {
   currentSource: ProgressivePlaybackSource;
-  engineReady: boolean;
-  startupReady: boolean;
+  targetSource: BufferedLocalWarmupTarget;
+  ready: boolean;
   fallbackReason: string | null;
   driftMs: number;
   warmupReadyAt: number | null;
@@ -32,24 +37,19 @@ export function resolveProgressiveWarmupDecision(input: {
   const switchDelayMs = input.switchDelayMs ?? 2_000;
   const maxDriftMs = input.maxDriftMs ?? 250;
   const now = input.now ?? Date.now();
-  const stableEnough =
-    input.engineReady &&
-    input.startupReady &&
-    !input.fallbackReason &&
-    input.driftMs <= maxDriftMs;
+  const stableEnough = input.ready && !input.fallbackReason && input.driftMs <= maxDriftMs;
 
   if (!stableEnough) {
     return {
-      nextSource:
-        input.currentSource === "progressive-local" ? "progressive-local" : "remote-stream",
+      nextSource: input.currentSource === input.targetSource ? input.targetSource : "remote-stream",
       nextWarmupReadyAt: null,
       clearFallbackReason: false
     } satisfies ProgressiveWarmupDecision;
   }
 
-  if (input.currentSource === "progressive-local") {
+  if (input.currentSource === input.targetSource) {
     return {
-      nextSource: "progressive-local",
+      nextSource: input.targetSource,
       nextWarmupReadyAt: input.warmupReadyAt,
       clearFallbackReason: false
     } satisfies ProgressiveWarmupDecision;
@@ -72,8 +72,54 @@ export function resolveProgressiveWarmupDecision(input: {
   }
 
   return {
-    nextSource: "progressive-local",
+    nextSource: input.targetSource,
     nextWarmupReadyAt: input.warmupReadyAt,
     clearFallbackReason: true
   } satisfies ProgressiveWarmupDecision;
+}
+
+export function resolveProgressiveWarmupDecision(input: {
+  currentSource: ProgressivePlaybackSource;
+  engineReady: boolean;
+  startupReady: boolean;
+  fallbackReason: string | null;
+  driftMs: number;
+  warmupReadyAt: number | null;
+  now?: number;
+  switchDelayMs?: number;
+  maxDriftMs?: number;
+}) {
+  return resolveBufferedLocalWarmupDecision({
+    currentSource: input.currentSource,
+    targetSource: "progressive-local",
+    ready: input.engineReady && input.startupReady,
+    fallbackReason: input.fallbackReason,
+    driftMs: input.driftMs,
+    warmupReadyAt: input.warmupReadyAt,
+    now: input.now,
+    switchDelayMs: input.switchDelayMs,
+    maxDriftMs: input.maxDriftMs
+  });
+}
+
+export function resolveFullLocalWarmupDecision(input: {
+  currentSource: ProgressivePlaybackSource;
+  localReady: boolean;
+  driftMs: number;
+  warmupReadyAt: number | null;
+  now?: number;
+  switchDelayMs?: number;
+  maxDriftMs?: number;
+}) {
+  return resolveBufferedLocalWarmupDecision({
+    currentSource: input.currentSource,
+    targetSource: "full-local",
+    ready: input.localReady,
+    fallbackReason: null,
+    driftMs: input.driftMs,
+    warmupReadyAt: input.warmupReadyAt,
+    now: input.now,
+    switchDelayMs: input.switchDelayMs,
+    maxDriftMs: input.maxDriftMs
+  });
 }

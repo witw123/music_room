@@ -39,8 +39,10 @@ import {
   type ProgressivePlaybackSource
 } from "@/features/playback/progressive-playback";
 import { ProgressiveMseEngine } from "@/features/playback/progressive-mse-engine";
+import { ProgressivePcmEngine } from "@/features/playback/progressive-pcm-engine";
 import {
   getInitialProgressivePlaybackSource,
+  resolveFullLocalWarmupDecision,
   resolveProgressiveWarmupDecision
 } from "@/features/playback/progressive-source-controller";
 import { captureAudioStream } from "@/features/upload/audio-utils";
@@ -81,9 +83,10 @@ export function MusicRoomApp({
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const progressiveEngineRef = useRef<ProgressiveMseEngine | null>(null);
+  const progressivePcmEngineRef = useRef<ProgressivePcmEngine | null>(null);
   const progressiveWarmupReadyAtRef = useRef<number | null>(null);
+  const fullLocalWarmupReadyAtRef = useRef<number | null>(null);
   const remoteHoldTimeoutRef = useRef<number | null>(null);
-  const eligibleFullLocalTrackIdRef = useRef<string | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
@@ -177,6 +180,19 @@ export function MusicRoomApp({
   });
   const announceLocalCacheRef = useRef(announceLocalCache);
   const shouldUseLocalPlayback = activePlaybackSource !== "remote-stream";
+  const getLocalPlaybackPositionMs = useCallback(() => {
+    if (activePlaybackSource !== "progressive-local") {
+      return null;
+    }
+
+    const pcmEngine = progressivePcmEngineRef.current;
+    if (!pcmEngine) {
+      return null;
+    }
+
+    const currentTimeSeconds = pcmEngine.getCurrentTimeSeconds();
+    return Number.isFinite(currentTimeSeconds) ? Math.round(currentTimeSeconds * 1000) : null;
+  }, [activePlaybackSource]);
   const {
     progressTrack,
     progressMs,
@@ -194,7 +210,8 @@ export function MusicRoomApp({
     remoteAudioRef,
     playback: roomSnapshot?.room.playback,
     tracks: roomSnapshot?.tracks ?? [],
-    shouldUseLocalAudio: shouldUseLocalPlayback
+    shouldUseLocalAudio: shouldUseLocalPlayback,
+    getLocalPlaybackPositionMs
   });
   const { scheduleTrackHydration, resetHydrationQueue } = useTrackHydrationQueue({
     isPageVisible,
@@ -215,6 +232,11 @@ export function MusicRoomApp({
   });
   const getCurrentPlaybackPositionMs = () => {
     if (shouldUseLocalPlayback) {
+      const pcmPlaybackPositionMs = getLocalPlaybackPositionMs();
+      if (pcmPlaybackPositionMs !== null) {
+        return pcmPlaybackPositionMs;
+      }
+
       const audio = audioRef.current;
       if (audio && Number.isFinite(audio.currentTime)) {
         return Math.round(audio.currentTime * 1000);
@@ -298,20 +320,19 @@ export function MusicRoomApp({
 
   useEffect(() => {
     if (!currentPlaybackTrackId) {
-      eligibleFullLocalTrackIdRef.current = null;
       setActivePlaybackSource("remote-stream");
       setProgressiveFallbackReason(null);
+      progressiveWarmupReadyAtRef.current = null;
+      fullLocalWarmupReadyAtRef.current = null;
       return;
     }
 
-    eligibleFullLocalTrackIdRef.current = uploadedTracks[currentPlaybackTrackId]
-      ? currentPlaybackTrackId
-      : null;
     setActivePlaybackSource(
       getInitialProgressivePlaybackSource(!!uploadedTracks[currentPlaybackTrackId])
     );
     setProgressiveFallbackReason(null);
     progressiveWarmupReadyAtRef.current = null;
+    fullLocalWarmupReadyAtRef.current = null;
   }, [currentPlaybackTrackId]);
 
   useEffect(() => {
@@ -381,6 +402,7 @@ export function MusicRoomApp({
         window.clearTimeout(remoteHoldTimeoutRef.current);
       }
       progressiveEngineRef.current?.destroy();
+      progressivePcmEngineRef.current?.destroy();
     };
   }, []);
 
@@ -1049,7 +1071,12 @@ export function MusicRoomApp({
     }
 
     if (!playback?.currentTrackId) {
+      progressiveEngineRef.current?.destroy();
+      progressiveEngineRef.current = null;
+      progressivePcmEngineRef.current?.destroy();
+      progressivePcmEngineRef.current = null;
       audio.pause();
+      audio.srcObject = null;
       audio.removeAttribute("src");
       audio.load();
       remoteAudioRef.current?.pause();
@@ -1060,10 +1087,14 @@ export function MusicRoomApp({
     }
 
     const remoteAudio = remoteAudioRef.current;
-    const uploaded =
-      eligibleFullLocalTrackIdRef.current === playback.currentTrackId
-        ? uploadedTracks[playback.currentTrackId]
-        : undefined;
+    const uploaded = uploadedTracks[playback.currentTrackId];
+    const shouldWarmBufferedFullLocal =
+      !!uploaded &&
+      !isCurrentSourceOwner &&
+      !progressiveEngineRef.current &&
+      !progressivePcmEngineRef.current;
+    const expectedSeconds =
+      getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
 
     if (activePlaybackSource === "full-local" && uploaded) {
       if (remoteAudio) {
@@ -1072,13 +1103,14 @@ export function MusicRoomApp({
         remoteAudio.load();
       }
 
+      if (audio.srcObject) {
+        audio.srcObject = null;
+      }
       if (audio.src !== uploaded.objectUrl) {
         audio.src = uploaded.objectUrl;
         audio.load();
       }
 
-      const expectedSeconds =
-        getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
       syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing");
 
       if (playback.status === "playing") {
@@ -1097,8 +1129,24 @@ export function MusicRoomApp({
     }
 
     if (activePlaybackSource === "progressive-local") {
-      const expectedSeconds =
-        getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
+      const pcmEngine = progressivePcmEngineRef.current;
+      if (pcmEngine) {
+        audio.muted = false;
+        void pcmEngine
+          .syncPlayback(expectedSeconds, playback.status === "playing")
+          .then((result) => {
+            if (playback.status === "playing" && !result.localReady) {
+              setProgressiveFallbackReason("buffer-underrun");
+              setActivePlaybackSource("remote-stream");
+            }
+          })
+          .catch(() => {
+            setProgressiveFallbackReason("progressive-init-failed");
+            setActivePlaybackSource("remote-stream");
+          });
+        return;
+      }
+
       audio.muted = false;
       syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing", {
         softDriftMs: 120,
@@ -1118,10 +1166,25 @@ export function MusicRoomApp({
     }
 
     if (activePlaybackSource === "remote-stream") {
-      audio.pause();
-      audio.muted = false;
-      if (!progressiveEngineRef.current) {
+      if (!shouldWarmBufferedFullLocal) {
+        audio.pause();
+        audio.muted = false;
+      }
+      if (!progressiveEngineRef.current && !progressivePcmEngineRef.current && !shouldWarmBufferedFullLocal) {
+        if (audio.srcObject) {
+          audio.srcObject = null;
+        }
         audio.removeAttribute("src");
+        audio.load();
+      } else if (
+        shouldWarmBufferedFullLocal &&
+        uploaded &&
+        audio.src !== uploaded.objectUrl
+      ) {
+        if (audio.srcObject) {
+          audio.srcObject = null;
+        }
+        audio.src = uploaded.objectUrl;
         audio.load();
       }
 
@@ -1155,6 +1218,8 @@ export function MusicRoomApp({
   ]);
 
   const currentTrack = progressTrack;
+  const currentBufferedFullLocalTrack =
+    currentTrack?.id ? uploadedTracks[currentTrack.id] ?? null : null;
   const currentTrackAvailabilityAnnouncement =
     currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null;
   const currentProgressiveManifest = buildProgressiveTrackManifest(
@@ -1162,11 +1227,6 @@ export function MusicRoomApp({
     currentTrackAvailabilityAnnouncement
   );
   const currentProgressiveEngineType = getProgressiveEngineType(currentProgressiveManifest);
-  const currentTrackAvailableChunks =
-    currentTrackAvailabilityAnnouncement?.availableChunks ?? [];
-  const currentTrackIsComplete =
-    !!currentProgressiveManifest &&
-    currentTrackAvailableChunks.length >= currentProgressiveManifest.totalChunks;
   const progressiveHealthSnapshot = buildProgressiveHealthSnapshot({
     playback: roomSnapshot?.room.playback,
     activeSource: activePlaybackSource,
@@ -1180,7 +1240,13 @@ export function MusicRoomApp({
     activePlaybackSource !== "full-local" &&
     !!currentProgressiveManifest &&
     canUseProgressivePlayback() &&
-    currentProgressiveEngineType === "mse";
+    currentProgressiveEngineType !== "none";
+  const canWarmBufferedFullLocal =
+    !isCurrentSourceOwner &&
+    activePlaybackSource !== "full-local" &&
+    activePlaybackSource !== "progressive-local" &&
+    !!currentBufferedFullLocalTrack &&
+    currentProgressiveEngineType === "none";
 
   useEffect(() => {
     const localAudio = audioRef.current;
@@ -1321,12 +1387,28 @@ export function MusicRoomApp({
     if (!canPrepareProgressiveLocal || !currentProgressiveManifest) {
       progressiveEngineRef.current?.destroy();
       progressiveEngineRef.current = null;
+      progressivePcmEngineRef.current?.destroy();
+      progressivePcmEngineRef.current = null;
       return;
     }
 
     progressiveEngineRef.current?.destroy();
-    const engine = new ProgressiveMseEngine(audio, peerId, currentProgressiveManifest);
-    progressiveEngineRef.current = engine;
+    progressiveEngineRef.current = null;
+    progressivePcmEngineRef.current?.destroy();
+    progressivePcmEngineRef.current = null;
+
+    const engine =
+      currentProgressiveEngineType === "pcm"
+        ? new ProgressivePcmEngine(audio, peerId, currentProgressiveManifest)
+        : new ProgressiveMseEngine(audio, peerId, currentProgressiveManifest);
+
+    if (engine instanceof ProgressivePcmEngine) {
+      progressivePcmEngineRef.current = engine;
+      engine.setVolume(volume);
+    } else {
+      progressiveEngineRef.current = engine;
+    }
+
     void engine
       .attach()
       .then((attached) => {
@@ -1347,6 +1429,9 @@ export function MusicRoomApp({
       if (progressiveEngineRef.current === engine) {
         progressiveEngineRef.current = null;
       }
+      if (progressivePcmEngineRef.current === engine) {
+        progressivePcmEngineRef.current = null;
+      }
       engine.destroy();
     };
   }, [
@@ -1355,24 +1440,32 @@ export function MusicRoomApp({
     currentProgressiveManifest?.mimeType,
     currentProgressiveManifest?.totalChunks,
     currentProgressiveManifest?.chunkSize,
+    currentProgressiveEngineType,
     peerId
   ]);
 
   useEffect(() => {
-    if (!progressiveEngineRef.current || !currentProgressiveManifest) {
+    if (!currentProgressiveManifest) {
       return;
     }
 
-    void progressiveEngineRef.current.sync();
+    void progressiveEngineRef.current?.sync();
+    void progressivePcmEngineRef.current?.sync();
   }, [currentProgressiveManifest?.trackId, currentTrackAvailabilityAnnouncement?.availableChunks]);
+
+  useEffect(() => {
+    progressivePcmEngineRef.current?.setVolume(volume);
+  }, [volume]);
 
   useEffect(() => {
     const playback = roomSnapshot?.room.playback;
     const audio = audioRef.current;
+    const mseEngine = progressiveEngineRef.current;
+    const pcmEngine = progressivePcmEngineRef.current;
     if (
       !playback?.currentTrackId ||
       !audio ||
-      !progressiveEngineRef.current ||
+      (!mseEngine && !pcmEngine) ||
       !currentProgressiveManifest ||
       activePlaybackSource === "full-local"
     ) {
@@ -1380,52 +1473,90 @@ export function MusicRoomApp({
       return;
     }
 
-    if (playback.status !== "playing") {
-      audio.pause();
-      audio.muted = false;
-      progressiveWarmupReadyAtRef.current = null;
-      return;
-    }
-
     const expectedSeconds =
       getEffectivePlaybackPositionMs(playback, currentProgressiveManifest.durationMs, progressiveTickAt) /
       1000;
-    const engineReady = progressiveEngineRef.current.engineStatus === "ready";
-    const startupReady =
-      progressiveHealthSnapshot.startupReady &&
-      progressiveHealthSnapshot.fallbackReason === null;
 
-    if (!engineReady || !startupReady) {
+    if (playback.status !== "playing") {
+      if (pcmEngine) {
+        void pcmEngine.syncPlayback(expectedSeconds, false);
+      }
       audio.pause();
       audio.muted = false;
       progressiveWarmupReadyAtRef.current = null;
       return;
     }
 
-    syncLocalPlaybackWindow(audio, expectedSeconds, true, {
-      softDriftMs: 120,
-      hardDriftMs: 900
-    });
-    audio.muted = activePlaybackSource !== "progressive-local";
-    void audio.play().catch(() => undefined);
+    let cancelled = false;
 
-    const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
-    const warmupDecision = resolveProgressiveWarmupDecision({
-      currentSource: activePlaybackSource,
-      engineReady,
-      startupReady: progressiveHealthSnapshot.startupReady,
-      fallbackReason: progressiveHealthSnapshot.fallbackReason,
-      driftMs,
-      warmupReadyAt: progressiveWarmupReadyAtRef.current,
-      now: Date.now()
-    });
-    progressiveWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
-    if (warmupDecision.clearFallbackReason) {
-      setProgressiveFallbackReason(null);
-    }
-    if (warmupDecision.nextSource !== activePlaybackSource) {
-      setActivePlaybackSource(warmupDecision.nextSource);
-    }
+    void (async () => {
+      const startupReady =
+        progressiveHealthSnapshot.startupReady &&
+        progressiveHealthSnapshot.fallbackReason === null;
+      let engineReady = false;
+      let localReady = false;
+      let driftMs = Number.POSITIVE_INFINITY;
+
+      if (pcmEngine) {
+        const syncResult = await pcmEngine.syncPlayback(expectedSeconds, true);
+        if (cancelled) {
+          return;
+        }
+
+        engineReady = pcmEngine.engineStatus === "ready";
+        localReady = syncResult.localReady;
+        driftMs = syncResult.driftMs;
+        audio.muted = activePlaybackSource !== "progressive-local";
+      } else if (mseEngine) {
+        engineReady = mseEngine.engineStatus === "ready";
+        localReady = engineReady;
+
+        if (engineReady && startupReady) {
+          syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+            softDriftMs: 120,
+            hardDriftMs: 900
+          });
+          audio.muted = activePlaybackSource !== "progressive-local";
+          void audio.play().catch(() => undefined);
+          driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
+        }
+      }
+
+      if (!engineReady || !startupReady || !localReady) {
+        if (pcmEngine) {
+          await pcmEngine.syncPlayback(expectedSeconds, false).catch(() => undefined);
+          if (cancelled) {
+            return;
+          }
+        } else {
+          audio.pause();
+        }
+        audio.muted = false;
+        progressiveWarmupReadyAtRef.current = null;
+        return;
+      }
+
+      const warmupDecision = resolveProgressiveWarmupDecision({
+        currentSource: activePlaybackSource,
+        engineReady: localReady,
+        startupReady: progressiveHealthSnapshot.startupReady,
+        fallbackReason: progressiveHealthSnapshot.fallbackReason,
+        driftMs,
+        warmupReadyAt: progressiveWarmupReadyAtRef.current,
+        now: Date.now()
+      });
+      progressiveWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
+      if (warmupDecision.clearFallbackReason) {
+        setProgressiveFallbackReason(null);
+      }
+      if (warmupDecision.nextSource !== activePlaybackSource) {
+        setActivePlaybackSource(warmupDecision.nextSource);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     roomSnapshot?.room.playback,
     currentProgressiveManifest,
@@ -1436,7 +1567,67 @@ export function MusicRoomApp({
   ]);
 
   useEffect(() => {
-    if (activePlaybackSource !== "progressive-local") {
+    const playback = roomSnapshot?.room.playback;
+    const audio = audioRef.current;
+    if (
+      !playback?.currentTrackId ||
+      !audio ||
+      !currentBufferedFullLocalTrack ||
+      !canWarmBufferedFullLocal
+    ) {
+      fullLocalWarmupReadyAtRef.current = null;
+      return;
+    }
+
+    if (playback.status !== "playing") {
+      audio.pause();
+      audio.muted = false;
+      fullLocalWarmupReadyAtRef.current = null;
+      return;
+    }
+
+    if (audio.srcObject) {
+      audio.srcObject = null;
+    }
+    if (audio.src !== currentBufferedFullLocalTrack.objectUrl) {
+      audio.src = currentBufferedFullLocalTrack.objectUrl;
+      audio.load();
+    }
+
+    const expectedSeconds =
+      getEffectivePlaybackPositionMs(playback, progressTrack?.durationMs ?? 0, progressiveTickAt) /
+      1000;
+    syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+      softDriftMs: 120,
+      hardDriftMs: 900
+    });
+    audio.muted = true;
+    void audio.play().catch(() => undefined);
+
+    const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+    const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
+    const warmupDecision = resolveFullLocalWarmupDecision({
+      currentSource: activePlaybackSource,
+      localReady,
+      driftMs,
+      warmupReadyAt: fullLocalWarmupReadyAtRef.current,
+      now: Date.now()
+    });
+    fullLocalWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
+    if (warmupDecision.nextSource !== activePlaybackSource) {
+      setActivePlaybackSource(warmupDecision.nextSource);
+    }
+  }, [
+    roomSnapshot?.room.playback,
+    currentBufferedFullLocalTrack?.objectUrl,
+    canWarmBufferedFullLocal,
+    activePlaybackSource,
+    progressTrack?.durationMs,
+    progressiveTickAt
+  ]);
+
+  useEffect(() => {
+    if (activePlaybackSource !== "progressive-local" && activePlaybackSource !== "full-local") {
       if (remoteHoldTimeoutRef.current !== null) {
         window.clearTimeout(remoteHoldTimeoutRef.current);
         remoteHoldTimeoutRef.current = null;
@@ -1575,6 +1766,7 @@ export function MusicRoomApp({
 
     if (localAudio) {
       localAudio.pause();
+      localAudio.srcObject = null;
       localAudio.removeAttribute("src");
       localAudio.load();
     }
@@ -1587,7 +1779,11 @@ export function MusicRoomApp({
 
     progressiveEngineRef.current?.destroy();
     progressiveEngineRef.current = null;
+    progressivePcmEngineRef.current?.destroy();
+    progressivePcmEngineRef.current = null;
     hostStreamRef.current = null;
+    progressiveWarmupReadyAtRef.current = null;
+    fullLocalWarmupReadyAtRef.current = null;
     resetHydrationQueue();
     setProgressMs(0);
     setAudioDurationMs(0);

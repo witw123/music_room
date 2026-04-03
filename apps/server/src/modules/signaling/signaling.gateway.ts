@@ -42,8 +42,10 @@ const pieceAvailabilityChannel = "music-room:piece-availability";
 })
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly instanceId = randomUUID();
+  private readonly disconnectGracePeriodMs = 25_000;
   private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
   private sequence = 0;
+  private readonly pendingDisconnectCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly availabilityByRoom = new Map<
     string,
     Map<string, TrackAvailabilityAnnouncement>
@@ -327,6 +329,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   onModuleDestroy() {
     void this.unsubscribeRoomSnapshots?.();
+    for (const timer of this.pendingDisconnectCleanupTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingDisconnectCleanupTimers.clear();
   }
 
   @SubscribeMessage("peer.signal")
@@ -416,6 +422,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     client.join(payload.roomId);
 
     try {
+      this.cancelPendingDisconnectCleanup(payload.roomId, payload.sessionId);
       await this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId);
       await this.emitLatestSnapshot(payload.roomId, payload.sessionId, client);
       this.emitAvailabilitySnapshot(payload.roomId, client);
@@ -457,6 +464,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { roomId: string }
   ) {
+    if (client.data.sessionId) {
+      this.cancelPendingDisconnectCleanup(payload.roomId, client.data.sessionId as string);
+    }
     client.leave(payload.roomId);
     if (client.data.sessionId) {
       void this.updatePeerPresence(payload.roomId, client.data.sessionId, null);
@@ -475,14 +485,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   handleDisconnect(client: Socket) {
     const roomId = client.data.roomId as string | undefined;
     const sessionId = client.data.sessionId as string | undefined;
+    const peerId = client.data.peerId as string | undefined;
 
     if (roomId && sessionId) {
-      void this.updatePeerPresence(roomId, sessionId, null);
-      const roomService = this.moduleRef.get(RoomService, { strict: false });
-      void roomService?.clearRealtimePresence(roomId, sessionId);
-    }
-    if (roomId && client.data.peerId) {
-      this.clearPeerAvailability(roomId, client.data.peerId as string);
+      this.scheduleDisconnectCleanup(roomId, sessionId, peerId);
     }
   }
 
@@ -591,6 +597,38 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     if (roomAvailability.size === 0) {
       this.availabilityByRoom.delete(roomId);
     }
+  }
+
+  private scheduleDisconnectCleanup(roomId: string, sessionId: string, peerId?: string) {
+    this.cancelPendingDisconnectCleanup(roomId, sessionId);
+    const cleanupKey = this.disconnectCleanupKey(roomId, sessionId);
+    const timeoutId = setTimeout(() => {
+      this.pendingDisconnectCleanupTimers.delete(cleanupKey);
+      void this.finalizePeerDisconnect(roomId, sessionId, peerId);
+    }, this.disconnectGracePeriodMs);
+    this.pendingDisconnectCleanupTimers.set(cleanupKey, timeoutId);
+  }
+
+  private cancelPendingDisconnectCleanup(roomId: string, sessionId: string) {
+    const cleanupKey = this.disconnectCleanupKey(roomId, sessionId);
+    const timeoutId = this.pendingDisconnectCleanupTimers.get(cleanupKey);
+    if (!timeoutId) {
+      return;
+    }
+
+    clearTimeout(timeoutId);
+    this.pendingDisconnectCleanupTimers.delete(cleanupKey);
+  }
+
+  private async finalizePeerDisconnect(roomId: string, sessionId: string, peerId?: string) {
+    await this.updatePeerPresence(roomId, sessionId, null);
+    if (peerId) {
+      this.clearPeerAvailability(roomId, peerId);
+    }
+  }
+
+  private disconnectCleanupKey(roomId: string, sessionId: string) {
+    return `${roomId}:${sessionId}`;
   }
 }
 

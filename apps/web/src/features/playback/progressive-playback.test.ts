@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildProgressiveHealthSnapshot,
   buildProgressiveTrackManifest,
+  canUseProgressivePcm,
   canUseProgressiveMse,
   getAheadBufferedMs,
   getContiguousBufferedMs,
+  getProgressiveEngineType,
   getPriorityChunkIndexes,
   isStartupReady,
   resolveSchedulerPolicy
@@ -134,6 +136,91 @@ describe("progressive playback helpers", () => {
         Object.defineProperty(globalThis, "MediaSource", {
           configurable: true,
           value: originalMediaSource
+        });
+      }
+    }
+  });
+
+  it("uses PCM progressive playback for FLAC when WebCodecs audio is available", () => {
+    const originalNavigator = globalThis.navigator;
+    const originalWindow = globalThis.window;
+    const originalAudioDecoder = (
+      globalThis as typeof globalThis & { AudioDecoder?: unknown }
+    ).AudioDecoder;
+    const originalEncodedAudioChunk = (
+      globalThis as typeof globalThis & { EncodedAudioChunk?: unknown }
+    ).EncodedAudioChunk;
+
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        userAgent:
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+      }
+    });
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        AudioContext: class {}
+      }
+    });
+    Object.defineProperty(globalThis, "AudioDecoder", {
+      configurable: true,
+      value: class {}
+    });
+    Object.defineProperty(globalThis, "EncodedAudioChunk", {
+      configurable: true,
+      value: class {}
+    });
+
+    try {
+      const manifest = {
+        trackId: "track_flac",
+        fileHash: "hash_flac",
+        mimeType: "audio/flac",
+        codec: "flac",
+        sizeBytes: 1,
+        durationMs: 1_000,
+        totalChunks: 4,
+        chunkSize: 256 * 1024
+      } as const;
+
+      expect(canUseProgressivePcm(manifest)).toBe(true);
+      expect(getProgressiveEngineType(manifest)).toBe("pcm");
+    } finally {
+      if (typeof originalNavigator === "undefined") {
+        Reflect.deleteProperty(globalThis, "navigator");
+      } else {
+        Object.defineProperty(globalThis, "navigator", {
+          configurable: true,
+          value: originalNavigator
+        });
+      }
+
+      if (typeof originalWindow === "undefined") {
+        Reflect.deleteProperty(globalThis, "window");
+      } else {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow
+        });
+      }
+
+      if (typeof originalAudioDecoder === "undefined") {
+        Reflect.deleteProperty(globalThis, "AudioDecoder");
+      } else {
+        Object.defineProperty(globalThis, "AudioDecoder", {
+          configurable: true,
+          value: originalAudioDecoder
+        });
+      }
+
+      if (typeof originalEncodedAudioChunk === "undefined") {
+        Reflect.deleteProperty(globalThis, "EncodedAudioChunk");
+      } else {
+        Object.defineProperty(globalThis, "EncodedAudioChunk", {
+          configurable: true,
+          value: originalEncodedAudioChunk
         });
       }
     }

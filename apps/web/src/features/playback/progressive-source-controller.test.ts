@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getInitialProgressivePlaybackSource,
+  resolveFullLocalWarmupDecision,
   resolveProgressiveWarmupDecision
 } from "./progressive-source-controller";
 
@@ -87,6 +88,36 @@ describe("progressive source controller", () => {
       nextSource: "remote-stream",
       nextWarmupReadyAt: null,
       clearFallbackReason: false
+    });
+  });
+
+  it("switches to full-local after a stable warmup once a full track becomes available", () => {
+    const firstDecision = resolveFullLocalWarmupDecision({
+      currentSource: "remote-stream",
+      localReady: true,
+      driftMs: 90,
+      warmupReadyAt: null,
+      now: 9_000
+    });
+
+    expect(firstDecision).toEqual({
+      nextSource: "remote-stream",
+      nextWarmupReadyAt: 9_000,
+      clearFallbackReason: false
+    });
+
+    const secondDecision = resolveFullLocalWarmupDecision({
+      currentSource: "remote-stream",
+      localReady: true,
+      driftMs: 70,
+      warmupReadyAt: firstDecision.nextWarmupReadyAt,
+      now: 11_200
+    });
+
+    expect(secondDecision).toEqual({
+      nextSource: "full-local",
+      nextWarmupReadyAt: 9_000,
+      clearFallbackReason: true
     });
   });
 });

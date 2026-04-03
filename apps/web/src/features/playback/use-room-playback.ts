@@ -10,10 +10,18 @@ type UseRoomPlaybackOptions = {
   playback: PlaybackSnapshot | null | undefined;
   tracks: TrackMeta[];
   shouldUseLocalAudio: boolean;
+  getLocalPlaybackPositionMs?: () => number | null;
 };
 
 export function useRoomPlayback(options: UseRoomPlaybackOptions) {
-  const { audioRef, remoteAudioRef, playback, tracks, shouldUseLocalAudio } = options;
+  const {
+    audioRef,
+    remoteAudioRef,
+    playback,
+    tracks,
+    shouldUseLocalAudio,
+    getLocalPlaybackPositionMs
+  } = options;
   const [progressMs, setProgressMs] = useState(0);
   const [seekDraft, setSeekDraft] = useState<number | null>(null);
   const [audioDurationMs, setAudioDurationMs] = useState(0);
@@ -83,15 +91,22 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
     const tick = () => {
       const activeAudio = shouldUseLocalAudio ? localAudio : remoteAudio;
+      const localPlaybackPositionMs =
+        shouldUseLocalAudio && typeof getLocalPlaybackPositionMs === "function"
+          ? getLocalPlaybackPositionMs()
+          : null;
 
       if (
         acceptedPlayback.status === "playing" &&
-        activeAudio &&
-        Number.isFinite(activeAudio.currentTime) &&
-        activeAudio.currentTime >= 0 &&
-        !activeAudio.paused
+        ((activeAudio &&
+          Number.isFinite(activeAudio.currentTime) &&
+          activeAudio.currentTime >= 0 &&
+          !activeAudio.paused) ||
+          localPlaybackPositionMs !== null)
       ) {
-        commitProgress(Math.floor(activeAudio.currentTime * 1000));
+        commitProgress(
+          localPlaybackPositionMs ?? Math.floor((activeAudio?.currentTime ?? 0) * 1000)
+        );
       } else if (seekDraft === null) {
         commitProgress(getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs));
       }
@@ -124,6 +139,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     acceptedPlayback?.mediaEpoch,
     progressTrack?.durationMs,
     shouldUseLocalAudio,
+    getLocalPlaybackPositionMs,
     seekDraft,
     isPageVisible
   ]);
@@ -149,11 +165,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
     const eventAudio = event?.currentTarget ?? null;
     const audio = eventAudio ?? (shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current);
-    if (!audio || !Number.isFinite(audio.currentTime)) {
+    const localPlaybackPositionMs =
+      shouldUseLocalAudio && typeof getLocalPlaybackPositionMs === "function"
+        ? getLocalPlaybackPositionMs()
+        : null;
+    if ((!audio || !Number.isFinite(audio.currentTime)) && localPlaybackPositionMs === null) {
       return;
     }
 
-    const nextProgressMs = Math.floor(audio.currentTime * 1000);
+    const nextProgressMs =
+      localPlaybackPositionMs ?? Math.floor((audio?.currentTime ?? 0) * 1000);
     const boundedProgressMs =
       progressTrack?.durationMs && progressTrack.durationMs > 0
         ? Math.min(nextProgressMs, progressTrack.durationMs)

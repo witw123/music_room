@@ -5,23 +5,23 @@ describe("runtime endpoint fallbacks", () => {
     vi.resetModules();
     vi.stubGlobal("window", {
       location: {
-        origin: "https://witw.top",
+        origin: "https://example.com",
         protocol: "https:",
-        host: "witw.top"
+        host: "example.com"
       }
     });
 
     const module = await import("./api-client");
-    expect(module.apiBaseUrl).toBe("https://witw.top");
+    expect(module.apiBaseUrl).toBe("https://example.com");
   });
 
   it("falls back to a matching same-origin websocket endpoint", async () => {
     vi.resetModules();
     vi.stubGlobal("window", {
       location: {
-        origin: "https://witw.top",
+        origin: "https://example.com",
         protocol: "https:",
-        host: "witw.top"
+        host: "example.com"
       },
       localStorage: {
         getItem: vi.fn(() => null)
@@ -29,6 +29,6 @@ describe("runtime endpoint fallbacks", () => {
     });
 
     const module = await import("./ws-client");
-    expect(module.wsBaseUrl).toBe("wss://witw.top");
+    expect(module.wsBaseUrl).toBe("wss://example.com");
   });
 });

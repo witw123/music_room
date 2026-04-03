@@ -1,6 +1,7 @@
 import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import {
   buildProgressiveTrackManifest,
+  getProgressiveEngineType,
   getPriorityChunkIndexes,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
@@ -295,6 +296,14 @@ export class ChunkScheduler {
         this.bufferHealth,
         this.policy
       );
+      const currentTrackWantedPolicy =
+        currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
+          ? this.policy === "startup"
+            ? "startup"
+            : "pause-fill"
+          : this.policy === "background"
+            ? "steady"
+            : this.policy;
       const currentTrackState = this.ensureTrackState(currentTrack.id, this.getTotalChunks(currentTrack.id));
       plans.push({
         track: currentTrack,
@@ -308,7 +317,7 @@ export class ChunkScheduler {
                 manifest: currentTrackManifest,
                 availableChunks: [...currentTrackState.ownedChunks],
                 playbackPositionMs: this.playbackPositionMs,
-                policy: this.policy === "background" ? "steady" : this.policy
+                policy: currentTrackWantedPolicy
               })
             : getCurrentPlaybackWindowChunks({
                 durationMs: currentTrack.durationMs,

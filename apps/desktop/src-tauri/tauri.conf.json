@@ -4,7 +4,7 @@
   "version": "0.2.4",
   "identifier": "top.witw.musicroom",
   "build": {
-    "frontendDist": "https://witw.top/app?client=desktop",
+    "frontendDist": "https://example.com/app?client=desktop",
     "devUrl": "http://localhost:3000/app?client=desktop"
   },
   "app": {

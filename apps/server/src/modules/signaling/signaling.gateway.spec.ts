@@ -563,4 +563,159 @@ describe("SignalingGateway", () => {
       })
     );
   });
+
+  it("keeps a disconnected member online during the reconnect grace window", async () => {
+    jest.useFakeTimers();
+    const redisService = {
+      isAvailable: jest.fn(() => true),
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const roomService = {
+      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
+      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
+      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue({
+        room: {
+          id: "room_1",
+          hostId: "guest_host",
+          joinCode: "ABC123",
+          visibility: "private",
+          members: [],
+          playback: {
+            status: "paused",
+            currentTrackId: null,
+            currentQueueItemId: null,
+            sourceSessionId: "guest_host",
+            sourcePeerId: null,
+            sourceTrackId: null,
+            positionMs: 0,
+            startedAt: null,
+            queueVersion: 1,
+            mediaEpoch: 0
+          }
+        },
+        tracks: [],
+        queue: [],
+        playlists: []
+      }),
+      getRoomSnapshot: jest.fn().mockResolvedValue({
+        room: {
+          id: "room_1",
+          hostId: "guest_host",
+          joinCode: "ABC123",
+          visibility: "private",
+          members: [],
+          playback: {
+            status: "paused",
+            currentTrackId: null,
+            currentQueueItemId: null,
+            sourceSessionId: "guest_host",
+            sourcePeerId: null,
+            sourceTrackId: null,
+            positionMs: 0,
+            startedAt: null,
+            queueVersion: 1,
+            mediaEpoch: 0
+          }
+        },
+        tracks: [],
+        queue: [],
+        playlists: []
+      })
+    };
+    const moduleRef = {
+      get: jest.fn().mockReturnValue(roomService)
+    };
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      createAuthServiceMock() as never
+    );
+
+    gateway.handleDisconnect({
+      data: {
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host"
+      }
+    } as never);
+
+    await jest.advanceTimersByTimeAsync(20_000);
+    expect(roomService.updatePeerPresence).not.toHaveBeenCalledWith("room_1", "guest_host", null);
+
+    await jest.advanceTimersByTimeAsync(6_000);
+    expect(roomService.updatePeerPresence).toHaveBeenCalledWith("room_1", "guest_host", null);
+    jest.useRealTimers();
+  });
+
+  it("cancels delayed cleanup when the same member reconnects before the grace window ends", async () => {
+    jest.useFakeTimers();
+    const snapshot = {
+      room: {
+        id: "room_1",
+        hostId: "guest_host",
+        joinCode: "ABC123",
+        visibility: "private",
+        members: [],
+        playback: {
+          status: "paused" as const,
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "guest_host",
+          sourcePeerId: null,
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          mediaEpoch: 0
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    };
+    const redisService = {
+      isAvailable: jest.fn(() => true),
+      publish: jest.fn(),
+      subscribe: jest.fn()
+    };
+    const roomService = {
+      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
+      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
+      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
+      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+    };
+    const moduleRef = {
+      get: jest.fn().mockReturnValue(roomService)
+    };
+    const gateway = new SignalingGateway(
+      redisService as never,
+      moduleRef as never,
+      createAuthServiceMock() as never
+    );
+
+    gateway.handleDisconnect({
+      data: {
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host"
+      }
+    } as never);
+
+    await gateway.handleRoomSubscribe(
+      {
+        handshake: { auth: { sessionToken: "token" }, headers: {} },
+        data: {},
+        join: jest.fn(),
+        emit: jest.fn()
+      } as never,
+      { roomId: "room_1", sessionId: "guest_host", peerId: "peer_host" }
+    );
+
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(roomService.updatePeerPresence).not.toHaveBeenCalledWith("room_1", "guest_host", null);
+    jest.useRealTimers();
+  });
 });
