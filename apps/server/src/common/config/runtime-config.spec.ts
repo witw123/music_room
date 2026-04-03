@@ -27,10 +27,22 @@ describe("validateRuntimeConfig", () => {
       validateRuntimeConfig({
         NODE_ENV: "production",
         JWT_SECRET: "super-secret-jwt",
+        TURN_PUBLIC_HOST: "turn.example.com",
         TURN_ENABLED: "true",
         TURN_SHARED_SECRET: "replace-with-a-turn-shared-secret"
       })
     ).toThrow("Invalid TURN_SHARED_SECRET for production startup.");
+  });
+
+  it("requires an explicit TURN host or app domain in production when TURN is enabled", () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: "production",
+        JWT_SECRET: "super-secret-jwt",
+        TURN_ENABLED: "true",
+        TURN_SHARED_SECRET: "super-secret-turn"
+      })
+    ).toThrow("TURN requires TURN_PUBLIC_HOST or APP_DOMAIN in production startup.");
   });
 
   it("allows valid production secrets", () => {
@@ -38,6 +50,7 @@ describe("validateRuntimeConfig", () => {
       validateRuntimeConfig({
         NODE_ENV: "production",
         JWT_SECRET: "super-secret-jwt",
+        TURN_PUBLIC_HOST: "turn.example.com",
         TURN_ENABLED: "true",
         TURN_SHARED_SECRET: "super-secret-turn"
       })

@@ -73,7 +73,7 @@ export function TrackListSection({
                   <div className="min-w-0 space-y-1">
                     <h3 className="truncate font-semibold text-foreground">{track.title}</h3>
                     <p className="truncate text-xs text-foreground-muted">
-                      {track.artist} 路 {formatDuration(track.durationMs)}
+                      {track.artist}  {formatDuration(track.durationMs)}
                     </p>
                     <p className="mt-1 text-[10px] text-foreground-muted/60">
                       <span

@@ -27,6 +27,12 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     return;
   }
 
+  const turnPublicHost = env.TURN_PUBLIC_HOST?.trim() ?? "";
+  const appDomain = env.APP_DOMAIN?.trim() ?? "";
+  if (!turnPublicHost && !appDomain) {
+    throw new Error("TURN requires TURN_PUBLIC_HOST or APP_DOMAIN in production startup.");
+  }
+
   const turnSecret = env.TURN_SHARED_SECRET?.trim() ?? "";
   if (insecureTurnSecrets.has(turnSecret.toLowerCase())) {
     throw new Error("Invalid TURN_SHARED_SECRET for production startup.");

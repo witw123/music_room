@@ -62,7 +62,22 @@ describe("RealtimeService", () => {
     });
   });
 
-  it("derives turn host from request host when explicit TURN host is missing", () => {
+  it("derives turn host from APP_DOMAIN when explicit TURN host is missing", () => {
+    process.env.TURN_ENABLED = "true";
+    delete process.env.TURN_PUBLIC_HOST;
+    process.env.APP_DOMAIN = "witw.top";
+    process.env.TURN_SHARED_SECRET = "turn-secret";
+    const service = new RealtimeService();
+
+    const config = service.buildIceConfig("user_1");
+
+    expect(config.source).toBe("ephemeral");
+    expect(config.iceServers[1]).toMatchObject({
+      urls: expect.arrayContaining(["turn:turn.witw.top:3478?transport=udp"])
+    });
+  });
+
+  it("falls back when TURN host is not explicitly configured", () => {
     process.env.TURN_ENABLED = "true";
     delete process.env.TURN_PUBLIC_HOST;
     delete process.env.APP_DOMAIN;
@@ -71,10 +86,8 @@ describe("RealtimeService", () => {
 
     const config = service.buildIceConfig("user_1", { requestHost: "witw.top:3001" });
 
-    expect(config.source).toBe("ephemeral");
-    expect(config.iceServers[1]).toMatchObject({
-      urls: expect.arrayContaining(["turn:turn.witw.top:3478?transport=udp"])
-    });
+    expect(config.source).toBe("stun-only");
+    expect(config.iceServers).toEqual([{ urls: "stun:stun.example.com:3478" }]);
   });
 
   it("falls back to static ICE servers when TURN credentials are unavailable but static TURN is configured", () => {
