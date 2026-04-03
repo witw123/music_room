@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   formatDuration,
   getOnlineMemberCount,
+  getReconnectingMemberCount,
   normalizePlaylistTitle,
   removeTracksFromUploads,
+  shouldAcceptPresenceRevision,
   shouldAcceptPlaybackSnapshot,
   shouldReplacePlaybackSnapshot,
   toUserFacingError
@@ -52,14 +54,39 @@ describe("music-room-ui helpers", () => {
           nickname: "Host",
           role: "host",
           joinedAt: new Date().toISOString(),
-          peerId: "peer-host"
+          peerId: "peer-host",
+          presenceState: "online"
         },
         {
           id: "member",
           nickname: "Member",
           role: "member",
           joinedAt: new Date().toISOString(),
-          peerId: null
+          peerId: null,
+          presenceState: "offline"
+        }
+      ])
+    ).toBe(1);
+  });
+
+  it("counts reconnecting members separately from online members", () => {
+    expect(
+      getReconnectingMemberCount([
+        {
+          id: "host",
+          nickname: "Host",
+          role: "host",
+          joinedAt: new Date().toISOString(),
+          peerId: "peer-host",
+          presenceState: "online"
+        },
+        {
+          id: "member",
+          nickname: "Member",
+          role: "member",
+          joinedAt: new Date().toISOString(),
+          peerId: null,
+          presenceState: "reconnecting"
         }
       ])
     ).toBe(1);
@@ -68,6 +95,12 @@ describe("music-room-ui helpers", () => {
   it("formats milliseconds into player-friendly timestamps", () => {
     expect(formatDuration(0)).toBe("0:00");
     expect(formatDuration(61_000)).toBe("1:01");
+  });
+
+  it("accepts only presence snapshots that are at least as new as the current revision", () => {
+    expect(shouldAcceptPresenceRevision(3, 3)).toBe(true);
+    expect(shouldAcceptPresenceRevision(3, 4)).toBe(true);
+    expect(shouldAcceptPresenceRevision(4, 3)).toBe(false);
   });
 
   it("ignores identical playback snapshots at the same version", () => {

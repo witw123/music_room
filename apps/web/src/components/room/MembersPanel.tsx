@@ -66,11 +66,23 @@ function formatCurrentTrackSources(sources: string[]) {
   return labels.join(" / ");
 }
 
-function getCurrentTrackStatus(summary: MemberTransferSummary | undefined, isOnline: boolean) {
-  if (!isOnline) {
+function getCurrentTrackStatus(
+  summary: MemberTransferSummary | undefined,
+  presenceState: RoomMember["presenceState"]
+) {
+  if (presenceState === "offline") {
     return {
       label: "离线",
-      detail: "成员离线后不会继续参与当前曲目的同步。",
+      detail: "该成员当前不参与实时播放和分片同步。",
+      progressPercent: 0,
+      tone: "warning" as const
+    };
+  }
+
+  if (presenceState === "reconnecting") {
+    return {
+      label: "重连中",
+      detail: "连接宽限期内保留成员身份，等待其实时链路恢复。",
       progressPercent: 0,
       tone: "warning" as const
     };
@@ -78,9 +90,9 @@ function getCurrentTrackStatus(summary: MemberTransferSummary | undefined, isOnl
 
   if (!summary || summary.currentTrackTotalChunks <= 0) {
     return {
-      label: summary?.announcedTrackCount ? "未缓存当前曲目" : "等待首批分片",
+      label: summary?.announcedTrackCount ? "未接管当前曲目" : "等待首批分片",
       detail: summary?.announcedTrackCount
-        ? "本地已有其他缓存，但当前曲目还没有进入本地播放路径。"
+        ? "本地已有其他缓存，但当前曲目还没形成可接管播放的前缀。"
         : "当前仍需要等待实时音频或其他成员先提供分片。",
       progressPercent: 0,
       tone: "neutral" as const
@@ -95,7 +107,7 @@ function getCurrentTrackStatus(summary: MemberTransferSummary | undefined, isOnl
   if (summary.currentTrackChunkCount >= summary.currentTrackTotalChunks) {
     return {
       label: "已完整缓存",
-      detail: `当前曲目已完整落到本地，可直接切到本地播放。`,
+      detail: "当前曲目已完整落到本地，可直接切到本地播放。",
       progressPercent: 100,
       tone: "success" as const
     };
@@ -104,7 +116,7 @@ function getCurrentTrackStatus(summary: MemberTransferSummary | undefined, isOnl
   if (summary.currentTrackChunkCount > 0) {
     return {
       label: `缓存中 ${progressPercent}%`,
-      detail: "当前曲目正在后台追赶缓存，准备切换到更稳定的本地播放。",
+      detail: "当前曲目正在补齐本地连续前缀，准备接管播放。",
       progressPercent,
       tone: progressPercent >= 50 ? ("accent" as const) : ("neutral" as const)
     };
@@ -112,7 +124,7 @@ function getCurrentTrackStatus(summary: MemberTransferSummary | undefined, isOnl
 
   return {
     label: "等待首批分片",
-    detail: "当前曲目还没进入本地缓存，暂时仍依赖实时音频。",
+    detail: "当前曲目还没进入本地缓存，暂时继续依赖实时音频。",
     progressPercent: 0,
     tone: "neutral" as const
   };
@@ -132,6 +144,30 @@ function getLibraryStatus(summary: MemberTransferSummary | undefined) {
   };
 }
 
+function getPresenceBadge(member: RoomMember) {
+  if (member.presenceState === "online") {
+    return {
+      dot: "animate-pulse bg-green-500",
+      text: "text-green-400",
+      label: "在线"
+    };
+  }
+
+  if (member.presenceState === "reconnecting") {
+    return {
+      dot: "bg-amber-400",
+      text: "text-amber-300",
+      label: "重连中"
+    };
+  }
+
+  return {
+    dot: "bg-neutral-600",
+    text: "text-foreground-muted",
+    label: "离线"
+  };
+}
+
 function MembersPanelBase({
   members,
   memberTransferSummaries = []
@@ -145,11 +181,11 @@ function MembersPanelBase({
       {members.length > 0 ? (
         members.map((member) => {
           const summary = summaryByMemberId.get(member.id);
-          const isOnline = !!member.peerId;
-          const currentTrackStatus = getCurrentTrackStatus(summary, isOnline);
+          const currentTrackStatus = getCurrentTrackStatus(summary, member.presenceState);
           const libraryStatus = getLibraryStatus(summary);
           const sourceSummary = formatCurrentTrackSources(summary?.currentTrackSources ?? []);
           const toneClasses = getToneClasses(currentTrackStatus.tone);
+          const presenceBadge = getPresenceBadge(member);
 
           return (
             <div
@@ -169,17 +205,9 @@ function MembersPanelBase({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      isOnline ? "animate-pulse bg-green-500" : "bg-neutral-600"
-                    }`}
-                  />
-                  <em
-                    className={`text-xs not-italic ${
-                      isOnline ? "text-green-400" : "text-foreground-muted"
-                    }`}
-                  >
-                    {isOnline ? "在线" : "离线"}
+                  <div className={`h-1.5 w-1.5 rounded-full ${presenceBadge.dot}`} />
+                  <em className={`text-xs not-italic ${presenceBadge.text}`}>
+                    {presenceBadge.label}
                   </em>
                 </div>
               </div>
@@ -224,10 +252,12 @@ function MembersPanelBase({
               <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
                 {sourceSummary ? (
                   <span>同步来源：{sourceSummary}</span>
-                ) : isOnline ? (
+                ) : member.presenceState === "online" ? (
                   <span>同步来源：当前还没有可用于接管播放的本地缓存。</span>
+                ) : member.presenceState === "reconnecting" ? (
+                  <span>同步来源：连接恢复后会重新评估该成员的缓存能力。</span>
                 ) : (
-                  <span>同步来源：成员离线后不会继续参与缓存分发。</span>
+                  <span>同步来源：离线成员当前不会参与缓存分发。</span>
                 )}
               </div>
             </div>

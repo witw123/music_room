@@ -37,9 +37,24 @@ function buildRoomSnapshot(): RoomSnapshot {
       joinCode: "123456",
       visibility: "private",
       members: [
-        { id: "host_1", nickname: "Host", role: "host", joinedAt: "2026-03-31T10:00:00.000Z", peerId: "peer_host" },
-        { id: "member_1", nickname: "Member", role: "member", joinedAt: "2026-03-31T10:00:00.000Z", peerId: "peer_member" }
+        {
+          id: "host_1",
+          nickname: "Host",
+          role: "host",
+          joinedAt: "2026-03-31T10:00:00.000Z",
+          peerId: "peer_host",
+          presenceState: "online"
+        },
+        {
+          id: "member_1",
+          nickname: "Member",
+          role: "member",
+          joinedAt: "2026-03-31T10:00:00.000Z",
+          peerId: "peer_member",
+          presenceState: "online"
+        }
       ],
+      presenceRevision: 1,
       playback: {
         status: "playing",
         currentTrackId: "track_1",

@@ -14,9 +14,11 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
           nickname: "Host",
           role: "host",
           joinedAt: new Date().toISOString(),
-          peerId: null
+          peerId: null,
+          presenceState: "offline"
         }
       ],
+      presenceRevision: 0,
       playback: {
         status: "paused",
         currentTrackId: null,

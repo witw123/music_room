@@ -276,6 +276,43 @@ export function useProgressiveRuntime({
     },
     [markPlaybackStartFailure, playback, playbackStartIntent, updatePlaybackStartIntent]
   );
+  const retryPendingPlaybackStart = useCallback(
+    (source: ProgressivePlaybackSource) => {
+      if (
+        !playbackStartIntent ||
+        !isPlaybackStartIntentPending(playbackStartIntent) ||
+        playback?.status !== "playing" ||
+        activePlaybackSource !== source
+      ) {
+        return;
+      }
+
+      if (source === "remote-stream") {
+        void attemptPlaybackStart(
+          remoteAudioRef.current,
+          source,
+          "娴忚鍣ㄩ樆姝簡杩滅闊抽鑷姩鎾斁锛岃鍐嶆鐐瑰嚮鎾斁缁х画銆?",
+          "remote-stream-play-blocked"
+        );
+        return;
+      }
+
+      void attemptPlaybackStart(
+        audioRef.current,
+        source,
+        "娴忚鍣ㄩ樆姝簡鏈湴闊抽鑷姩鎾斁锛岃鎵嬪姩鐐瑰嚮鎾斁鎭㈠銆?",
+        source === "full-local" ? "full-local-play-blocked" : "progressive-local-play-blocked"
+      );
+    },
+    [
+      activePlaybackSource,
+      attemptPlaybackStart,
+      audioRef,
+      playback?.status,
+      playbackStartIntent,
+      remoteAudioRef
+    ]
+  );
 
   useEffect(() => {
     if (!playback?.currentTrackId || playback.status !== "playing") {
@@ -574,6 +611,45 @@ export function useProgressiveRuntime({
     setActivePlaybackSource,
     setSchedulerMode
   ]);
+
+  useEffect(() => {
+    const localAudio = audioRef.current;
+    const remoteAudio = remoteAudioRef.current;
+    const localReadyEvents: Array<keyof HTMLMediaElementEventMap> = [
+      "loadedmetadata",
+      "canplay",
+      "playing"
+    ];
+    const remoteReadyEvents: Array<keyof HTMLMediaElementEventMap> = [
+      "loadedmetadata",
+      "canplay",
+      "playing"
+    ];
+    const handleLocalReady = () => {
+      if (activePlaybackSource === "full-local" || activePlaybackSource === "progressive-local") {
+        retryPendingPlaybackStart(activePlaybackSource);
+      }
+    };
+    const handleRemoteReady = () => {
+      retryPendingPlaybackStart("remote-stream");
+    };
+
+    for (const eventName of localReadyEvents) {
+      localAudio?.addEventListener(eventName, handleLocalReady);
+    }
+    for (const eventName of remoteReadyEvents) {
+      remoteAudio?.addEventListener(eventName, handleRemoteReady);
+    }
+
+    return () => {
+      for (const eventName of localReadyEvents) {
+        localAudio?.removeEventListener(eventName, handleLocalReady);
+      }
+      for (const eventName of remoteReadyEvents) {
+        remoteAudio?.removeEventListener(eventName, handleRemoteReady);
+      }
+    };
+  }, [activePlaybackSource, audioRef, remoteAudioRef, retryPendingPlaybackStart]);
 
   useEffect(() => {
     const nextPlayback = roomSnapshot?.room.playback;

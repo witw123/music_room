@@ -14,9 +14,11 @@ function buildSnapshot(): RoomSnapshot {
           nickname: "Host",
           role: "host",
           joinedAt: new Date().toISOString(),
-          peerId: "peer_host"
+          peerId: "peer_host",
+          presenceState: "online"
         }
       ],
+      presenceRevision: 1,
       playback: {
         status: "paused",
         currentTrackId: null,

@@ -10,6 +10,7 @@ function buildSnapshot(roomId = "room_1"): RoomSnapshot {
       joinCode: "ABC123",
       visibility: "public",
       members: [],
+      presenceRevision: 0,
       playback: {
         status: "paused",
         currentTrackId: null,

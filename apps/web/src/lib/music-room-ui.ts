@@ -34,11 +34,28 @@ export function removeTracksFromUploads<T>(
 }
 
 export function getOnlineMembers(members: RoomMember[]) {
-  return members.filter((member) => !!member.peerId);
+  return members.filter((member) => member.presenceState === "online" && !!member.peerId);
 }
 
 export function getOnlineMemberCount(members: RoomMember[]) {
   return getOnlineMembers(members).length;
+}
+
+export function getReconnectingMemberCount(members: RoomMember[]) {
+  return members.filter((member) => member.presenceState === "reconnecting").length;
+}
+
+export function getPresenceRevision(
+  room: { presenceRevision?: number } | null | undefined
+) {
+  return room?.presenceRevision ?? 0;
+}
+
+export function shouldAcceptPresenceRevision(
+  currentRevision: number | null | undefined,
+  incomingRevision: number | null | undefined
+) {
+  return (incomingRevision ?? 0) >= (currentRevision ?? 0);
 }
 
 export function getPlaybackConsistencyVersion(playback: PlaybackSnapshot | null | undefined) {

@@ -59,6 +59,10 @@ function createRedisMock() {
 }
 
 describe("RoomService", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("allows any room member to control playback and uses the track owner as source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
@@ -901,6 +905,88 @@ describe("RoomService", () => {
 
     expect(secondTrack.id).toBe(firstTrack.id);
     expect(latestSnapshot.tracks.filter((track) => track.fileHash === "same-hash")).toHaveLength(1);
+  });
+
+  it("keeps the full room roster in snapshots even when some members are offline", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    const hostEntry = nextSnapshot.room.members.find((entry) => entry.id === host.id);
+    const memberEntry = nextSnapshot.room.members.find((entry) => entry.id === member.id);
+
+    expect(nextSnapshot.room.members).toHaveLength(2);
+    expect(hostEntry).toMatchObject({
+      id: host.id,
+      peerId: "peer-host",
+      presenceState: "online"
+    });
+    expect(memberEntry).toMatchObject({
+      id: member.id,
+      peerId: null,
+      presenceState: "offline"
+    });
+  });
+
+  it("pauses playback and bumps media epoch when the active source session is replaced", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Active Source",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "active-source-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id,
+      positionMs: 3_500
+    });
+
+    const pausedPlayback = await roomService.handleDuplicateSessionReplacement(
+      snapshot.room.id,
+      host.id
+    );
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(playback.status).toBe("playing");
+    expect(pausedPlayback).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: null
+    });
+    expect(pausedPlayback.mediaEpoch).toBe(playback.mediaEpoch + 1);
+    expect(pausedPlayback.positionMs).toBe(3_500);
+    expect(nextSnapshot.room.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: null
+    });
   });
 
   it("allows the host to delete a room and blocks non-host members", async () => {

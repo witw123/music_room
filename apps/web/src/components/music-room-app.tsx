@@ -578,6 +578,8 @@ export function MusicRoomApp({
     canDisbandRoom,
     availabilitySummary,
     memberTransferSummaries,
+    visiblePeerDiagnostics,
+    visiblePeerRecentEvents,
     statusTone,
     iceConfigStatus,
     iceConfigSource,
@@ -589,6 +591,8 @@ export function MusicRoomApp({
     activeDashboardTab,
     currentTrack,
     availabilityByTrack,
+    peerDiagnostics,
+    peerRecentEvents,
     canDeleteRoom,
     statusMessage,
     iceConfig,
@@ -619,8 +623,8 @@ export function MusicRoomApp({
       cachedTrackCount={cachedTrackCount}
       availabilitySummary={availabilitySummary}
       memberTransferSummaries={memberTransferSummaries}
-      peerDiagnostics={peerDiagnostics}
-      peerRecentEvents={peerRecentEvents}
+      peerDiagnostics={visiblePeerDiagnostics}
+      peerRecentEvents={visiblePeerRecentEvents}
       iceConfigSource={iceConfigSource}
       iceConfigStatus={iceConfigStatus}
       workspaceEntryHref={workspaceEntryHref}

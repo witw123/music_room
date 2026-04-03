@@ -19,6 +19,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.queue.patch"),
   z.literal("room.presence.patch"),
   z.literal("room.library.patch"),
+  z.literal("room.session.replaced"),
   z.literal("piece.availability"),
   z.literal("peer.signal")
 ]);
@@ -48,6 +49,11 @@ export const roomDeletedPayloadSchema = z.object({
   trackIds: z.array(z.string())
 });
 
+export const roomSessionReplacedPayloadSchema = z.object({
+  roomId: z.string(),
+  reason: z.literal("duplicate-session")
+});
+
 export const roomPlaybackPatchPayloadSchema = z.object({
   roomId: z.string(),
   playback: playbackSnapshotSchema,
@@ -65,6 +71,7 @@ export const roomPresencePatchPayloadSchema = z.object({
   roomId: z.string(),
   members: roomSnapshotSchema.shape.room.shape.members,
   playback: playbackSnapshotSchema,
+  presenceRevision: z.number().int().nonnegative(),
   updatedAt: z.string().datetime()
 });
 
@@ -89,6 +96,11 @@ export const roomSnapshotMissingEventSchema = z.object({
 export const roomDeletedEventSchema = z.object({
   event: z.literal("room.deleted"),
   payload: roomDeletedPayloadSchema
+});
+
+export const roomSessionReplacedEventSchema = z.object({
+  event: z.literal("room.session.replaced"),
+  payload: roomSessionReplacedPayloadSchema
 });
 
 export const roomPlaybackPatchEventSchema = z.object({
@@ -135,6 +147,7 @@ export type RoomUnsubscribePayload = z.infer<typeof roomUnsubscribePayloadSchema
 export type RoomPresencePayload = z.infer<typeof roomPresencePayloadSchema>;
 export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPayloadSchema>;
 export type RoomDeletedPayload = z.infer<typeof roomDeletedPayloadSchema>;
+export type RoomSessionReplacedPayload = z.infer<typeof roomSessionReplacedPayloadSchema>;
 export type RoomPlaybackPatchPayload = z.infer<typeof roomPlaybackPatchPayloadSchema>;
 export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
@@ -146,6 +159,7 @@ export type ServerToClientEvents = {
   "room.snapshot": (snapshot: z.infer<typeof roomSnapshotSchema>) => void;
   "room.snapshot.missing": (payload: RoomSnapshotMissingPayload) => void;
   "room.deleted": (payload: RoomDeletedPayload) => void;
+  "room.session.replaced": (payload: RoomSessionReplacedPayload) => void;
   "room.playback.patch": (payload: RoomPlaybackPatchPayload) => void;
   "room.queue.patch": (payload: RoomQueuePatchPayload) => void;
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;

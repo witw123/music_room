@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import type { IceConfigResponse, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import type {
+  IceConfigResponse,
+  PeerDiagnosticsSnapshot,
+  PeerRecentEvent,
+  RoomSnapshot,
+  TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 
 type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
@@ -9,6 +15,8 @@ type UseRoomDerivedStateInput = {
   activeDashboardTab: "queue" | "library" | "members";
   currentTrack: RoomSnapshot["tracks"][number] | null;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  peerDiagnostics: PeerDiagnosticsSnapshot[];
+  peerRecentEvents: PeerRecentEvent[];
   canDeleteRoom: boolean;
   statusMessage: string;
   iceConfig: IceConfigResponse | null;
@@ -27,6 +35,8 @@ export function useRoomDerivedState({
   activeDashboardTab,
   currentTrack,
   availabilityByTrack,
+  peerDiagnostics,
+  peerRecentEvents,
   canDeleteRoom,
   statusMessage,
   iceConfig,
@@ -46,7 +56,7 @@ export function useRoomDerivedState({
     (() => {
       const uploaderIds = new Set(roomSnapshot.tracks.map((track) => track.ownerSessionId));
       return !roomSnapshot.room.members.some(
-        (member) => uploaderIds.has(member.id) && !member.peerId
+        (member) => uploaderIds.has(member.id) && member.presenceState !== "online"
       );
     })();
 
@@ -127,6 +137,47 @@ export function useRoomDerivedState({
     });
   }, [activeDashboardTab, availabilityByTrack, currentTrack, roomSnapshot]);
 
+  const visiblePeerDiagnostics = useMemo(() => {
+    const activePeerIds = new Set<string>(["system", "remote-media"]);
+    for (const member of roomSnapshot?.room.members ?? []) {
+      if (member.peerId) {
+        activePeerIds.add(member.peerId);
+      }
+    }
+    if (roomSnapshot?.room.playback.sourcePeerId) {
+      activePeerIds.add(roomSnapshot.room.playback.sourcePeerId);
+    }
+
+    const now = Date.now();
+    return peerDiagnostics
+      .filter((peer) => {
+        const updatedAtMs = new Date(peer.updatedAt).getTime();
+        const isFresh =
+          Number.isFinite(updatedAtMs) && now - updatedAtMs <= 45_000;
+        const hasActiveIssue =
+          !!peer.lastError ||
+          peer.dataConnectionState === "connected" ||
+          peer.mediaConnectionState === "connected" ||
+          peer.mediaConnectionState === "connecting" ||
+          peer.mediaConnectionState === "failed";
+        return activePeerIds.has(peer.peerId) || (isFresh && hasActiveIssue);
+      })
+      .sort((left, right) => {
+        const leftPriority = getDiagnosticPriority(left.peerId, roomSnapshot?.room.playback.sourcePeerId ?? null);
+        const rightPriority = getDiagnosticPriority(right.peerId, roomSnapshot?.room.playback.sourcePeerId ?? null);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+
+        return right.updatedAt.localeCompare(left.updatedAt);
+      });
+  }, [peerDiagnostics, roomSnapshot?.room.members, roomSnapshot?.room.playback.sourcePeerId]);
+
+  const visiblePeerRecentEvents = useMemo(() => {
+    const visiblePeerIds = new Set(visiblePeerDiagnostics.map((item) => item.peerId));
+    return peerRecentEvents.filter((event) => visiblePeerIds.has(event.peerId));
+  }, [peerRecentEvents, visiblePeerDiagnostics]);
+
   const statusTone =
     statusMessage.includes("失败") || statusMessage.includes("不可用")
       ? "warning"
@@ -158,10 +209,28 @@ export function useRoomDerivedState({
     availabilitySummary,
     currentTrackAvailability,
     memberTransferSummaries,
+    visiblePeerDiagnostics,
+    visiblePeerRecentEvents,
     statusTone,
     iceConfigStatus,
     iceConfigSource,
     isRoomTransitionPending,
     showRoomTransitionState
   };
+}
+
+function getDiagnosticPriority(peerId: string, sourcePeerId: string | null) {
+  if (peerId === "system") {
+    return 0;
+  }
+
+  if (peerId === sourcePeerId) {
+    return 1;
+  }
+
+  if (peerId === "remote-media") {
+    return 2;
+  }
+
+  return 3;
 }

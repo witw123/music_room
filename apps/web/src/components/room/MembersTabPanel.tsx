@@ -31,15 +31,14 @@ function MembersTabPanelBase({
   iceConfigStatus
 }: MembersTabPanelProps) {
   return (
-    <div className="animate-fade-in flex w-full flex-col gap-8">
+    <div className="animate-fade-in flex w-full flex-col gap-5">
       <MembersPanel
         members={members}
         memberTransferSummaries={memberTransferSummaries}
       />
 
-      <div className="h-px w-full shrink-0 bg-white/5" />
-
       <MeshStatusPanel
+        members={members}
         availabilitySummary={availabilitySummary}
         connectedPeersCount={connectedPeersCount}
         mediaConnectedPeersCount={mediaConnectedPeersCount}

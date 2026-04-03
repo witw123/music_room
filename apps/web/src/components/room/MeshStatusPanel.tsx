@@ -1,7 +1,12 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
-import type { PeerDiagnosticsSnapshot, PeerRecentEvent, TrackMeta } from "@music-room/shared";
+import { memo, useMemo, useState } from "react";
+import type {
+  PeerDiagnosticsSnapshot,
+  PeerRecentEvent,
+  RoomMember,
+  TrackMeta
+} from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 
 export type AvailabilityEntry = {
@@ -13,6 +18,7 @@ export type AvailabilityEntry = {
 };
 
 type MeshStatusPanelProps = {
+  members: RoomMember[];
   availabilitySummary: AvailabilityEntry[];
   connectedPeersCount: number;
   mediaConnectedPeersCount: number;
@@ -22,21 +28,6 @@ type MeshStatusPanelProps = {
   iceConfigSource: string;
   iceConfigStatus: string;
 };
-
-function formatEventLabel(event: PeerRecentEvent) {
-  const channelMap: Record<PeerRecentEvent["channelKind"], string> = {
-    data: "数据",
-    media: "音频",
-    system: "系统"
-  };
-  const directionMap: Record<PeerRecentEvent["direction"], string> = {
-    sent: "发出",
-    received: "收到",
-    local: "本地"
-  };
-
-  return `[${channelMap[event.channelKind]}/${directionMap[event.direction]}] ${event.summary}`;
-}
 
 function formatTimestamp(value: string) {
   const parsed = new Date(value);
@@ -73,17 +64,32 @@ function formatMetric(value: number | null, unit: string) {
   return `${value}${unit}`;
 }
 
+function formatEventLabel(event: PeerRecentEvent) {
+  const channelMap: Record<PeerRecentEvent["channelKind"], string> = {
+    data: "数据",
+    media: "音频",
+    system: "系统"
+  };
+  const directionMap: Record<PeerRecentEvent["direction"], string> = {
+    sent: "发出",
+    received: "收到",
+    local: "本地"
+  };
+
+  return `[${channelMap[event.channelKind]}/${directionMap[event.direction]}] ${event.summary}`;
+}
+
 function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
   if (peer.mediaCandidateType && peer.dataCandidateType) {
     if (peer.mediaCandidateType !== peer.dataCandidateType) {
-      return "媒体/数据走不同 candidate pair";
+      return "媒体和数据当前走的是不同 candidate pair";
     }
 
     if (peer.mediaCandidateType === "relay") {
-      return "媒体与数据当前都经过 relay";
+      return "媒体和数据当前都经过 relay";
     }
 
-    return "媒体与数据当前都走 direct";
+    return "媒体和数据当前都走 direct";
   }
 
   if (peer.mediaCandidateType === "relay" || peer.dataCandidateType === "relay") {
@@ -98,6 +104,7 @@ function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
 }
 
 function MeshStatusPanelBase({
+  members,
   availabilitySummary,
   connectedPeersCount,
   mediaConnectedPeersCount,
@@ -107,95 +114,88 @@ function MeshStatusPanelBase({
   iceConfigSource,
   iceConfigStatus
 }: MeshStatusPanelProps) {
-  const [isOpen, setIsOpen] = useState(true);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
-
-  useEffect(() => {
-    const updateViewport = () => {
-      setIsMobileViewport(window.innerWidth < 768);
-    };
-
-    updateViewport();
-    window.addEventListener("resize", updateViewport);
-    return () => window.removeEventListener("resize", updateViewport);
-  }, []);
-
-  useEffect(() => {
-    if (isMobileViewport) {
-      setIsOpen(false);
-    }
-  }, [isMobileViewport]);
-
-  const visiblePeerDiagnostics = useMemo(
-    () => (isMobileViewport ? peerDiagnostics.slice(0, 4) : peerDiagnostics),
-    [isMobileViewport, peerDiagnostics]
+  const [isOpen, setIsOpen] = useState(false);
+  const onlineCount = useMemo(
+    () => members.filter((member) => member.presenceState === "online").length,
+    [members]
   );
-  const visibleAvailabilitySummary = useMemo(
-    () => availabilitySummary.slice(0, isMobileViewport ? 3 : 6),
-    [availabilitySummary, isMobileViewport]
-  );
-  const visibleRecentEvents = useMemo(
-    () => recentEvents.slice(0, isMobileViewport ? 8 : 20),
-    [isMobileViewport, recentEvents]
+  const reconnectingCount = useMemo(
+    () => members.filter((member) => member.presenceState === "reconnecting").length,
+    [members]
   );
 
   return (
-    <section className="flex w-full flex-col gap-4">
-      <div
-        className="group flex cursor-pointer items-start justify-between"
-        onClick={() => setIsOpen((current) => !current)}
-      >
+    <section className="flex w-full flex-col gap-4 rounded-2xl border border-surface-border bg-surface/20 p-4">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
-            Diagnostics
+            Developer
           </p>
-          <h2 className="text-sm font-bold text-foreground transition-colors group-hover:text-accent">
-            连接与缓存诊断
-          </h2>
+          <h2 className="text-sm font-bold text-foreground">连接诊断（开发）</h2>
+          <p className="mt-1 text-xs text-foreground-muted">
+            默认只展示房间摘要，展开后再看链路细节。
+          </p>
         </div>
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-foreground-muted">
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsOpen((value) => !value)}>
           {isOpen ? "收起" : "展开"}
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono font-medium text-foreground-muted">
-        <span className="rounded border border-surface-border bg-surface px-1.5 py-0.5">
-          P2P 节点: {connectedPeersCount}
+      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono font-medium text-foreground-muted">
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
+          在线: {onlineCount}
         </span>
-        <span className="rounded border border-surface-border bg-surface px-1.5 py-0.5">
-          实时音频: {mediaConnectedPeersCount}
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
+          重连中: {reconnectingCount}
         </span>
-        <span className="rounded border border-surface-border bg-surface px-1.5 py-0.5">
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
+          Data: {connectedPeersCount}
+        </span>
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
+          Media: {mediaConnectedPeersCount}
+        </span>
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           本地缓存: {cachedTrackCount}
         </span>
-        <span className="rounded border border-surface-border bg-surface px-1.5 py-0.5">
-          曲目统计: {availabilitySummary.length}
-        </span>
-        <span className="rounded border border-surface-border bg-surface px-1.5 py-0.5">
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           ICE: {iceConfigSource}
         </span>
       </div>
 
       {isOpen ? (
-        <div className="mt-2 flex flex-col gap-3 border-t border-surface-border pt-4">
-          <div className="rounded-lg border border-surface-border bg-surface/30 p-3 text-[10px] text-foreground-muted">
+        <div className="flex flex-col gap-3 border-t border-surface-border pt-4">
+          <div className="rounded-lg border border-surface-border bg-background/30 p-3 text-xs text-foreground-muted">
             {iceConfigStatus}
           </div>
 
-          {visiblePeerDiagnostics.length ? (
+          {peerDiagnostics.length ? (
             <div className="flex flex-col gap-2">
-              {visiblePeerDiagnostics.map((peer) => (
-                <div
+              {peerDiagnostics.map((peer) => (
+                <details
                   key={peer.peerId}
-                  className="rounded-lg border border-surface-border bg-surface/30 p-3"
+                  className="rounded-lg border border-surface-border bg-background/30 px-3 py-2"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <strong className="text-xs font-semibold text-foreground">{peer.peerId}</strong>
-                    <span className="text-[10px] text-foreground-muted">
-                      {formatTimestamp(peer.updatedAt)}
-                    </span>
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-foreground-muted">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <strong className="truncate text-xs font-semibold text-foreground">
+                          {peer.peerId}
+                        </strong>
+                        <p className="mt-1 text-[10px] text-foreground-muted">
+                          {describeCandidatePath(peer) ??
+                            `数据 ${peer.dataConnectionState ?? "未知"} / 音频 ${peer.mediaConnectionState ?? "未知"}`}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[10px] text-foreground-muted">
+                        {formatTimestamp(peer.updatedAt)}
+                      </span>
+                    </div>
+                    {peer.lastError ? (
+                      <p className="mt-2 text-[10px] text-red-400">{peer.lastError}</p>
+                    ) : null}
+                  </summary>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-foreground-muted">
                     <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
                     <span>音频连接: {peer.mediaConnectionState ?? "未知"}</span>
                     <span>数据 ICE: {peer.dataIceState ?? "未知"}</span>
@@ -220,12 +220,10 @@ function MeshStatusPanelBase({
                       绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}
                     </span>
                   </div>
-                  {describeCandidatePath(peer) ? (
-                    <p className="mt-2 text-[10px] text-cyan-300">{describeCandidatePath(peer)}</p>
-                  ) : null}
+
                   {peer.progressivePlaybackStatus ? (
-                    <div className="mt-3 rounded-lg border border-surface-border bg-background/30 p-2.5 text-[10px] text-foreground-muted">
-                      <div className="mb-1 font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
+                    <div className="mt-3 rounded-lg border border-surface-border bg-black/20 p-3 text-[10px] text-foreground-muted">
+                      <div className="mb-2 font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
                         Progressive
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -272,83 +270,67 @@ function MeshStatusPanelBase({
                       ) : null}
                     </div>
                   ) : null}
-                  {peer.lastError ? (
-                    <p className="mt-2 text-[10px] text-red-400">{peer.lastError}</p>
-                  ) : null}
-                </div>
+                </details>
               ))}
             </div>
-          ) : null}
-
-          {visibleAvailabilitySummary.length ? (
-            visibleAvailabilitySummary.map(
-              ({ track, peerCount, localChunkCount, totalChunks, sources }) => (
-                <div
-                  key={track.id}
-                  className="flex flex-col gap-1 rounded-lg border border-surface-border bg-surface/30 p-3"
-                >
-                  <strong className="truncate text-xs font-semibold text-foreground">
-                    {track.title}
-                  </strong>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-foreground-muted">
-                    <span>本地缓存 {localChunkCount}/{totalChunks || 0}</span>
-                    <span>可见节点 {peerCount}</span>
-                  </div>
-                  {sources.length ? (
-                    <span className="mt-0.5 truncate text-[9px] text-foreground-muted/60">
-                      {sources.slice(0, 2).join(" / ")}
-                    </span>
-                  ) : null}
-                </div>
-              )
-            )
           ) : (
-            <div className="py-4 text-center">
-              <p className="text-[10px] text-foreground-muted/70">
-                导入曲目后，这里会显示缓存分片与连接诊断信息。
-              </p>
+            <div className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
+              当前没有可展示的活跃链路诊断。
             </div>
           )}
 
-          {visibleRecentEvents.length ? (
-            <div className="flex flex-col gap-2 border-t border-surface-border pt-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground-muted">
-                最近事件
-              </p>
-              {visibleRecentEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="rounded-lg border border-surface-border bg-background/40 px-3 py-2 text-[10px]"
-                >
-                  <div className="flex items-center justify-between gap-2 text-foreground-muted">
-                    <span>{formatTimestamp(event.timestamp)}</span>
-                    <span>{event.peerId}</span>
+          <details className="rounded-lg border border-surface-border bg-background/30 px-3 py-2">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">
+              曲目缓存摘要
+            </summary>
+            <div className="mt-3 flex flex-col gap-2">
+              {availabilitySummary.length ? (
+                availabilitySummary.map(({ track, peerCount, localChunkCount, totalChunks, sources }) => (
+                  <div
+                    key={track.id}
+                    className="rounded-lg border border-surface-border bg-black/20 p-3 text-[10px]"
+                  >
+                    <strong className="block truncate text-xs text-foreground">{track.title}</strong>
+                    <div className="mt-1 flex items-center justify-between text-foreground-muted">
+                      <span>本地缓存 {localChunkCount}/{totalChunks || 0}</span>
+                      <span>可见节点 {peerCount}</span>
+                    </div>
+                    {sources.length ? (
+                      <p className="mt-1 truncate text-foreground-muted/80">
+                        {sources.slice(0, 3).join(" / ")}
+                      </p>
+                    ) : null}
                   </div>
-                  <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-[10px] text-foreground-muted">当前还没有缓存摘要。</p>
+              )}
             </div>
-          ) : null}
+          </details>
 
-          <div className="mt-2 flex items-center justify-between border-t border-surface-border pt-3">
-            <span className="text-[10px] text-foreground-muted">
-              如果本地缓存异常，可以在这里清理后重新同步。
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 border-destructive/30 px-3 text-xs text-destructive transition-colors hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
-              onClick={async () => {
-                if (confirm("确定要清空当前设备上的本地音乐缓存吗？页面将会重新加载。")) {
-                  const { clearAllCachedTracks } = await import("@/lib/indexeddb");
-                  await clearAllCachedTracks();
-                  window.location.reload();
-                }
-              }}
-            >
-              清除本地缓存
-            </Button>
-          </div>
+          <details className="rounded-lg border border-surface-border bg-background/30 px-3 py-2">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">
+              最近事件
+            </summary>
+            <div className="mt-3 flex flex-col gap-2">
+              {recentEvents.length ? (
+                recentEvents.slice(0, 16).map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-lg border border-surface-border bg-black/20 px-3 py-2 text-[10px]"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-foreground-muted">
+                      <span>{formatTimestamp(event.timestamp)}</span>
+                      <span>{event.peerId}</span>
+                    </div>
+                    <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[10px] text-foreground-muted">当前没有最近事件。</p>
+              )}
+            </div>
+          </details>
         </div>
       ) : null}
     </section>

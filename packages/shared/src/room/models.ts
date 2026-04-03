@@ -2,12 +2,15 @@ import { z } from "zod";
 import { playbackSnapshotSchema } from "../playback/models";
 import { playlistSchema, queueItemSchema, trackMetaSchema } from "../playlist/models";
 
+export const roomPresenceStateSchema = z.enum(["online", "reconnecting", "offline"]);
+
 export const roomMemberSchema = z.object({
   id: z.string(),
   nickname: z.string(),
   role: z.enum(["host", "member"]),
   joinedAt: z.string().datetime(),
-  peerId: z.string().nullable()
+  peerId: z.string().nullable(),
+  presenceState: roomPresenceStateSchema.default("offline")
 });
 
 export const roomSchema = z.object({
@@ -16,7 +19,8 @@ export const roomSchema = z.object({
   joinCode: z.string(),
   visibility: z.enum(["private", "public"]),
   members: z.array(roomMemberSchema),
-  playback: playbackSnapshotSchema
+  playback: playbackSnapshotSchema,
+  presenceRevision: z.number().int().nonnegative().default(0)
 });
 
 export const roomSnapshotSchema = z.object({

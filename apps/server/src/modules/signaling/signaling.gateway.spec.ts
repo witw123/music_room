@@ -1,60 +1,169 @@
 import { SignalingGateway } from "./signaling.gateway";
 
+function createAuthServiceMock() {
+  return {
+    assertSessionToken: jest.fn().mockResolvedValue(undefined)
+  };
+}
+
+function createSnapshot(input?: {
+  roomId?: string;
+  sourceSessionId?: string | null;
+  sourcePeerId?: string | null;
+  members?: Array<{
+    id: string;
+    nickname: string;
+    role: "host" | "member";
+    peerId: string | null;
+    presenceState: "online" | "reconnecting" | "offline";
+  }>;
+  presenceRevision?: number;
+}) {
+  const roomId = input?.roomId ?? "room_1";
+  const sourceSessionId = input?.sourceSessionId ?? "guest_host";
+  const sourcePeerId = input?.sourcePeerId ?? null;
+  const members =
+    input?.members?.map((member) => ({
+      ...member,
+      joinedAt: "2026-04-01T00:00:00.000Z"
+    })) ?? [];
+
+  return {
+    room: {
+      id: roomId,
+      hostId: "guest_host",
+      joinCode: "ABC123",
+      visibility: "private" as const,
+      members,
+      presenceRevision: input?.presenceRevision ?? 1,
+      playback: {
+        status: "paused" as const,
+        currentTrackId: null,
+        currentQueueItemId: null,
+        sourceSessionId,
+        sourcePeerId,
+        sourceTrackId: null,
+        positionMs: 0,
+        startedAt: null,
+        queueVersion: 1,
+        mediaEpoch: 0
+      }
+    },
+    tracks: [],
+    queue: [],
+    playlists: []
+  };
+}
+
+function createRoomServiceMock(snapshot = createSnapshot()) {
+  return {
+    updatePeerPresence: jest.fn().mockResolvedValue(undefined),
+    touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
+    clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
+    getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
+    getRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
+    handleDuplicateSessionReplacement: jest.fn().mockResolvedValue(snapshot.room.playback)
+  };
+}
+
+function createRedisServiceMock(overrides?: Partial<{
+  isAvailable: () => boolean;
+  publish: jest.Mock;
+  subscribe: jest.Mock;
+}>) {
+  return {
+    isAvailable: jest.fn(() => true),
+    publish: jest.fn(),
+    subscribe: jest.fn(),
+    ...overrides
+  };
+}
+
+function createGateway(input?: {
+  roomService?: ReturnType<typeof createRoomServiceMock>;
+  redisService?: ReturnType<typeof createRedisServiceMock>;
+}) {
+  const roomService = input?.roomService ?? createRoomServiceMock();
+  const redisService = input?.redisService ?? createRedisServiceMock();
+  const moduleRef = {
+    get: jest.fn().mockReturnValue(roomService)
+  };
+  const authService = createAuthServiceMock();
+  const gateway = new SignalingGateway(
+    redisService as never,
+    moduleRef as never,
+    authService as never
+  );
+
+  return {
+    gateway,
+    roomService,
+    redisService,
+    authService,
+    moduleRef
+  };
+}
+
+function createClient(input?: Partial<{
+  id: string;
+  roomId: string;
+  sessionId: string;
+  peerId: string;
+  isRealtimeAuthenticated: boolean;
+}>) {
+  return {
+    id: input?.id ?? "socket_1",
+    handshake: { auth: { sessionToken: "token" }, headers: {} },
+    data: {
+      roomId: input?.roomId,
+      sessionId: input?.sessionId,
+      peerId: input?.peerId,
+      isRealtimeAuthenticated: input?.isRealtimeAuthenticated ?? false
+    },
+    join: jest.fn(),
+    leave: jest.fn(),
+    emit: jest.fn(),
+    to: jest.fn().mockReturnValue({ emit: jest.fn() })
+  };
+}
+
+function attachServerMock(gateway: SignalingGateway, sockets?: Map<string, ReturnType<typeof createClient>>) {
+  const emit = jest.fn();
+  gateway.server = {
+    to: jest.fn().mockReturnValue({ emit }),
+    sockets: {
+      sockets: sockets ?? new Map()
+    }
+  } as never;
+
+  return {
+    emit
+  };
+}
+
 describe("SignalingGateway", () => {
-  function createAuthServiceMock() {
-    return {
-      assertSessionToken: jest.fn().mockResolvedValue(undefined)
-    };
-  }
+  afterEach(() => {
+    jest.useRealTimers();
+  });
 
   it("emits the latest snapshot immediately after a room subscribe", async () => {
-    const snapshot = {
-      room: {
-        id: "room_1",
-        hostId: "guest_host",
-        joinCode: "ABC123",
-        visibility: "private",
-        members: [],
-        playback: {
-          status: "paused",
-          currentTrackId: null,
-          currentQueueItemId: null,
-          sourceSessionId: "guest_host",
-          sourcePeerId: null,
-          sourceTrackId: null,
-          positionMs: 0,
-          startedAt: null,
-          queueVersion: 1,
-          mediaEpoch: 0
+    const snapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: "peer_host",
+          presenceState: "online"
         }
-      },
-      tracks: [],
-      queue: [],
-      playlists: []
-    };
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    const client = {
-      handshake: { auth: { sessionToken: "token" }, headers: {} },
-      data: {},
-      join: jest.fn(),
-      emit: jest.fn()
-    };
+      ],
+      sourcePeerId: "peer_host",
+      presenceRevision: 3
+    });
+    const { gateway, roomService, authService } = createGateway({
+      roomService: createRoomServiceMock(snapshot)
+    });
+    const client = createClient();
 
     await gateway.handleRoomSubscribe(client as never, {
       roomId: "room_1",
@@ -67,37 +176,21 @@ describe("SignalingGateway", () => {
     expect(roomService.updatePeerPresence).toHaveBeenCalledWith(
       "room_1",
       "guest_host",
-      "peer_host"
+      "peer_host",
+      "online"
     );
     expect(roomService.getAccessibleRoomSnapshot).toHaveBeenCalledWith("room_1", [], "guest_host");
     expect(client.emit).toHaveBeenCalledWith("room.snapshot", snapshot);
   });
 
   it("emits room.snapshot.missing when the room no longer exists", async () => {
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockRejectedValue(new Error("missing"))
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    const client = {
-      handshake: { auth: { sessionToken: "token" }, headers: {} },
-      data: {},
-      join: jest.fn(),
-      leave: jest.fn(),
-      emit: jest.fn()
-    };
+    const { gateway } = createGateway({
+      roomService: {
+        ...createRoomServiceMock(),
+        getAccessibleRoomSnapshot: jest.fn().mockRejectedValue(new Error("missing"))
+      }
+    });
+    const client = createClient();
 
     await expect(
       gateway.handleRoomSubscribe(client as never, {
@@ -113,40 +206,26 @@ describe("SignalingGateway", () => {
 
   it("forwards room snapshots received from redis when they come from another instance", async () => {
     const handlers = new Map<string, (payload: unknown) => void>();
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
-        handlers.set(channel, next);
+    const { gateway, redisService } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
       })
-    };
-    const moduleRef = {
-      get: jest.fn()
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    gateway.server = {
-      to: jest.fn().mockReturnValue({
-        emit: jest.fn()
-      })
-    } as never;
+    });
+    attachServerMock(gateway);
 
     gateway.afterInit();
     expect(redisService.subscribe).toHaveBeenCalled();
 
-    const serverRoom = gateway.server.to("room_1");
-    const emit = serverRoom.emit as jest.Mock;
-
+    const roomEmit = (gateway.server.to("room_1").emit as jest.Mock);
     handlers.get("music-room:room-snapshot")?.({
       sourceId: "other-instance",
       roomId: "room_1",
       snapshot: { room: { id: "room_1" }, tracks: [], queue: [], playlists: [] }
     });
 
-    expect(emit).toHaveBeenCalledWith("room.snapshot", {
+    expect(roomEmit).toHaveBeenCalledWith("room.snapshot", {
       room: { id: "room_1" },
       tracks: [],
       queue: [],
@@ -156,69 +235,21 @@ describe("SignalingGateway", () => {
 
   it("forwards peer signals received from redis only to the subscribed target peer", async () => {
     const handlers = new Map<string, (payload: unknown) => void>();
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
-        handlers.set(channel, next);
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
       })
-    };
-    const roomSnapshot = {
-      room: {
-        id: "room_1",
-        hostId: "guest_host",
-        joinCode: "ABC123",
-        visibility: "private",
-        members: [],
-        playback: {
-          status: "paused" as const,
-          currentTrackId: null,
-          currentQueueItemId: null,
-          sourceSessionId: "guest_host",
-          sourcePeerId: null,
-          sourceTrackId: null,
-          positionMs: 0,
-          startedAt: null,
-          queueVersion: 1,
-          mediaEpoch: 0
-        }
-      },
-      tracks: [],
-      queue: [],
-      playlists: []
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(roomSnapshot),
-      getRoomSnapshot: jest.fn().mockResolvedValue(roomSnapshot)
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    const emit = jest.fn();
-    gateway.server = {
-      to: jest.fn().mockReturnValue({ emit })
-    } as never;
+    });
+    const { emit } = attachServerMock(gateway);
 
     gateway.afterInit();
     await gateway.handleRoomSubscribe(
-      {
-        id: "socket_peer_b",
-        handshake: { auth: { sessionToken: "token" }, headers: {} },
-        data: {},
-        join: jest.fn(),
-        emit: jest.fn()
-      } as never,
+      createClient({ id: "socket_peer_b" }) as never,
       {
         roomId: "room_1",
-        sessionId: "guest_host",
+        sessionId: "guest_b",
         peerId: "peer_b"
       }
     );
@@ -251,26 +282,14 @@ describe("SignalingGateway", () => {
   });
 
   it("broadcasts piece availability updates to the rest of the room", async () => {
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const moduleRef = {
-      get: jest.fn()
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
+    const { gateway, redisService } = createGateway();
     const emit = jest.fn();
     const client = {
-      data: {
+      ...createClient({
         roomId: "room_1",
         peerId: "peer_1",
         isRealtimeAuthenticated: true
-      },
+      }),
       to: jest.fn().mockReturnValue({ emit })
     };
     const payload = {
@@ -300,25 +319,8 @@ describe("SignalingGateway", () => {
   });
 
   it("publishes peer signals so they can cross server instances", async () => {
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const moduleRef = {
-      get: jest.fn()
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    gateway.server = {
-      to: jest.fn().mockReturnValue({
-        emit: jest.fn()
-      })
-    } as never;
-
+    const { gateway, redisService } = createGateway();
+    attachServerMock(gateway);
     const payload = {
       roomId: "room_1",
       fromPeerId: "peer_a",
@@ -330,13 +332,11 @@ describe("SignalingGateway", () => {
     };
 
     const result = await gateway.handleSignal(
-      {
-        data: {
-          roomId: "room_1",
-          peerId: "peer_a",
-          isRealtimeAuthenticated: true
-        }
-      } as never,
+      createClient({
+        roomId: "room_1",
+        peerId: "peer_a",
+        isRealtimeAuthenticated: true
+      }) as never,
       payload
     );
 
@@ -354,54 +354,15 @@ describe("SignalingGateway", () => {
   });
 
   it("replays cached availability to a newly subscribed client", async () => {
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue({
-        room: {
-          id: "room_1",
-          hostId: "guest_host",
-          joinCode: "ABC123",
-          visibility: "private",
-          members: [],
-          playback: {
-            status: "paused",
-            currentTrackId: null,
-            currentQueueItemId: null,
-            sourceSessionId: "guest_host",
-            sourcePeerId: null,
-            sourceTrackId: null,
-            positionMs: 0,
-            startedAt: null,
-            queueVersion: 1,
-            mediaEpoch: 0
-          }
-        },
-        tracks: [],
-        queue: [],
-        playlists: []
-      })
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
+    const { gateway } = createGateway();
 
     await gateway.handlePieceAvailability(
       {
-        data: {
+        ...createClient({
           roomId: "room_1",
           peerId: "peer_host",
           isRealtimeAuthenticated: true
-        },
+        }),
         to: jest.fn().mockReturnValue({ emit: jest.fn() })
       } as never,
       {
@@ -417,16 +378,10 @@ describe("SignalingGateway", () => {
       }
     );
 
-    const client = {
-      handshake: { auth: { sessionToken: "token" }, headers: {} },
-      data: {},
-      join: jest.fn(),
-      emit: jest.fn()
-    };
-
+    const client = createClient({ id: "socket_new" });
     await gateway.handleRoomSubscribe(client as never, {
       roomId: "room_1",
-      sessionId: "guest_host",
+      sessionId: "guest_new",
       peerId: "peer_guest"
     });
 
@@ -441,25 +396,11 @@ describe("SignalingGateway", () => {
   });
 
   it("rejects realtime messages from unauthenticated clients", async () => {
-    const redisService = {
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const moduleRef = {
-      get: jest.fn()
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
+    const { gateway } = createGateway();
 
     await expect(
       gateway.handleSignal(
-        {
-          data: {}
-        } as never,
+        createClient() as never,
         {
           roomId: "room_1",
           fromPeerId: "peer_a",
@@ -473,58 +414,35 @@ describe("SignalingGateway", () => {
   });
 
   it("rejects room subscriptions when redis realtime is unavailable", async () => {
-    const redisService = {
-      isAvailable: jest.fn(() => false),
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const moduleRef = {
-      get: jest.fn()
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        isAvailable: jest.fn(() => false)
+      })
+    });
 
     await expect(
-      gateway.handleRoomSubscribe(
-        {
-          handshake: { auth: { sessionToken: "token" }, headers: {} },
-          data: {},
-          join: jest.fn()
-        } as never,
-        { roomId: "room_1", sessionId: "guest_host", peerId: "peer_host" }
-      )
+      gateway.handleRoomSubscribe(createClient() as never, {
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host"
+      })
     ).rejects.toThrow("Realtime sync unavailable.");
   });
 
   it("rejects peer signals when redis realtime is unavailable", async () => {
-    const redisService = {
-      isAvailable: jest.fn(() => false),
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const moduleRef = {
-      get: jest.fn()
-    };
-    const authService = createAuthServiceMock();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        isAvailable: jest.fn(() => false)
+      })
+    });
 
     await expect(
       gateway.handleSignal(
-        {
-          data: {
-            roomId: "room_1",
-            peerId: "peer_a",
-            isRealtimeAuthenticated: true
-          }
-        } as never,
+        createClient({
+          roomId: "room_1",
+          peerId: "peer_a",
+          isRealtimeAuthenticated: true
+        }) as never,
         {
           roomId: "room_1",
           fromPeerId: "peer_a",
@@ -538,167 +456,63 @@ describe("SignalingGateway", () => {
   });
 
   it("emits a presence patch after a successful room subscribe", async () => {
-    const snapshot = {
-      room: {
-        id: "room_1",
-        hostId: "guest_host",
-        joinCode: "ABC123",
-        visibility: "private",
-        members: [
-          {
-            id: "guest_host",
-            nickname: "Host",
-            role: "host",
-            joinedAt: "2026-04-01T00:00:00.000Z",
-            peerId: "peer_host"
-          }
-        ],
-        playback: {
-          status: "paused",
-          currentTrackId: null,
-          currentQueueItemId: null,
-          sourceSessionId: "guest_host",
-          sourcePeerId: "peer_host",
-          sourceTrackId: null,
-          positionMs: 0,
-          startedAt: null,
-          queueVersion: 1,
-          mediaEpoch: 0
+    const snapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: "peer_host",
+          presenceState: "online"
         }
-      },
-      tracks: [],
-      queue: [],
-      playlists: []
-    };
-    const redisService = {
-      isAvailable: jest.fn(() => true),
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
-      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const authService = createAuthServiceMock();
-    const emit = jest.fn();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    gateway.server = {
-      to: jest.fn().mockReturnValue({ emit })
-    } as never;
+      ],
+      sourcePeerId: "peer_host",
+      presenceRevision: 4
+    });
+    const { gateway } = createGateway({
+      roomService: createRoomServiceMock(snapshot)
+    });
+    const { emit } = attachServerMock(gateway);
 
-    await gateway.handleRoomSubscribe(
-      {
-        handshake: { auth: { sessionToken: "token" }, headers: {} },
-        data: {},
-        join: jest.fn(),
-        emit: jest.fn()
-      } as never,
-      { roomId: "room_1", sessionId: "guest_host", peerId: "peer_host" }
-    );
+    await gateway.handleRoomSubscribe(createClient() as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
 
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({
         roomId: "room_1",
         members: snapshot.room.members,
-        playback: snapshot.room.playback
+        playback: snapshot.room.playback,
+        presenceRevision: 4
       })
     );
   });
 
   it("routes peer signals only to the target peer sockets on the current instance", async () => {
-    const roomSnapshot = {
-      room: {
-        id: "room_1",
-        hostId: "guest_host",
-        joinCode: "ABC123",
-        visibility: "private",
-        members: [],
-        playback: {
-          status: "paused" as const,
-          currentTrackId: null,
-          currentQueueItemId: null,
-          sourceSessionId: "guest_host",
-          sourcePeerId: null,
-          sourceTrackId: null,
-          positionMs: 0,
-          startedAt: null,
-          queueVersion: 1,
-          mediaEpoch: 0
-        }
-      },
-      tracks: [],
-      queue: [],
-      playlists: []
-    };
-    const redisService = {
-      isAvailable: jest.fn(() => true),
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(roomSnapshot),
-      getRoomSnapshot: jest.fn().mockResolvedValue(roomSnapshot)
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const authService = createAuthServiceMock();
-    const emit = jest.fn();
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      authService as never
-    );
-    gateway.server = {
-      to: jest.fn().mockReturnValue({ emit })
-    } as never;
+    const { gateway } = createGateway();
+    const { emit } = attachServerMock(gateway);
 
     await gateway.handleRoomSubscribe(
-      {
-        id: "socket_peer_a",
-        handshake: { auth: { sessionToken: "token" }, headers: {} },
-        data: {},
-        join: jest.fn(),
-        emit: jest.fn()
-      } as never,
-      { roomId: "room_1", sessionId: "guest_host", peerId: "peer_a" }
+      createClient({ id: "socket_peer_a" }) as never,
+      { roomId: "room_1", sessionId: "guest_a", peerId: "peer_a" }
     );
     await gateway.handleRoomSubscribe(
-      {
-        id: "socket_peer_b",
-        handshake: { auth: { sessionToken: "token" }, headers: {} },
-        data: {},
-        join: jest.fn(),
-        emit: jest.fn()
-      } as never,
-      { roomId: "room_1", sessionId: "guest_host", peerId: "peer_b" }
+      createClient({ id: "socket_peer_b" }) as never,
+      { roomId: "room_1", sessionId: "guest_b", peerId: "peer_b" }
     );
     (gateway.server.to as jest.Mock).mockClear();
     emit.mockClear();
 
     await gateway.handleSignal(
-      {
+      createClient({
         id: "socket_peer_a",
-        data: {
-          roomId: "room_1",
-          peerId: "peer_a",
-          isRealtimeAuthenticated: true
-        }
-      } as never,
+        roomId: "room_1",
+        peerId: "peer_a",
+        isRealtimeAuthenticated: true
+      }) as never,
       {
         roomId: "room_1",
         fromPeerId: "peer_a",
@@ -722,158 +536,123 @@ describe("SignalingGateway", () => {
     );
   });
 
-  it("keeps a disconnected member online during the reconnect grace window", async () => {
-    jest.useFakeTimers();
-    const redisService = {
-      isAvailable: jest.fn(() => true),
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue({
-        room: {
-          id: "room_1",
-          hostId: "guest_host",
-          joinCode: "ABC123",
-          visibility: "private",
-          members: [],
-          playback: {
-            status: "paused",
-            currentTrackId: null,
-            currentQueueItemId: null,
-            sourceSessionId: "guest_host",
-            sourcePeerId: null,
-            sourceTrackId: null,
-            positionMs: 0,
-            startedAt: null,
-            queueVersion: 1,
-            mediaEpoch: 0
-          }
-        },
-        tracks: [],
-        queue: [],
-        playlists: []
-      }),
-      getRoomSnapshot: jest.fn().mockResolvedValue({
-        room: {
-          id: "room_1",
-          hostId: "guest_host",
-          joinCode: "ABC123",
-          visibility: "private",
-          members: [],
-          playback: {
-            status: "paused",
-            currentTrackId: null,
-            currentQueueItemId: null,
-            sourceSessionId: "guest_host",
-            sourcePeerId: null,
-            sourceTrackId: null,
-            positionMs: 0,
-            startedAt: null,
-            queueVersion: 1,
-            mediaEpoch: 0
-          }
-        },
-        tracks: [],
-        queue: [],
-        playlists: []
-      })
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      createAuthServiceMock() as never
-    );
+  it("replaces an older socket when the same session subscribes again", async () => {
+    const snapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: "peer_host_old",
+          presenceState: "online"
+        }
+      ],
+      sourceSessionId: "guest_host",
+      sourcePeerId: "peer_host_old"
+    });
+    const roomService = createRoomServiceMock(snapshot);
+    const { gateway } = createGateway({ roomService });
+    const oldClient = createClient({
+      id: "socket_old",
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host_old",
+      isRealtimeAuthenticated: true
+    });
+    const newClient = createClient({ id: "socket_new" });
+    attachServerMock(gateway, new Map([["socket_old", oldClient]]));
 
-    gateway.handleDisconnect({
-      data: {
+    await gateway.handleRoomSubscribe(oldClient as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host_old"
+    });
+    await gateway.handleRoomSubscribe(newClient as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host_new"
+    });
+
+    expect(roomService.handleDuplicateSessionReplacement).toHaveBeenCalledWith(
+      "room_1",
+      "guest_host"
+    );
+    expect(oldClient.emit).toHaveBeenCalledWith("room.session.replaced", {
+      roomId: "room_1",
+      reason: "duplicate-session"
+    });
+    expect(oldClient.leave).toHaveBeenCalledWith("room_1");
+    expect(oldClient.data.roomId).toBeUndefined();
+    expect(oldClient.data.sessionId).toBeUndefined();
+    expect(oldClient.data.peerId).toBeUndefined();
+    expect(oldClient.data.isRealtimeAuthenticated).toBe(false);
+    expect(roomService.updatePeerPresence).toHaveBeenLastCalledWith(
+      "room_1",
+      "guest_host",
+      "peer_host_new",
+      "online"
+    );
+  });
+
+  it("keeps a disconnected member in reconnecting state during the grace window", async () => {
+    jest.useFakeTimers();
+    const { gateway, roomService } = createGateway();
+
+    gateway.handleDisconnect(
+      createClient({
         roomId: "room_1",
         sessionId: "guest_host",
-        peerId: "peer_host"
-      }
-    } as never);
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }) as never
+    );
+
+    expect(roomService.updatePeerPresence).toHaveBeenNthCalledWith(
+      1,
+      "room_1",
+      "guest_host",
+      null,
+      "reconnecting"
+    );
 
     await jest.advanceTimersByTimeAsync(20_000);
-    expect(roomService.updatePeerPresence).not.toHaveBeenCalledWith("room_1", "guest_host", null);
+    expect(roomService.updatePeerPresence).toHaveBeenCalledTimes(1);
 
     await jest.advanceTimersByTimeAsync(6_000);
-    expect(roomService.updatePeerPresence).toHaveBeenCalledWith("room_1", "guest_host", null);
-    jest.useRealTimers();
+    expect(roomService.updatePeerPresence).toHaveBeenNthCalledWith(
+      2,
+      "room_1",
+      "guest_host",
+      null,
+      "offline"
+    );
   });
 
   it("cancels delayed cleanup when the same member reconnects before the grace window ends", async () => {
     jest.useFakeTimers();
-    const snapshot = {
-      room: {
-        id: "room_1",
-        hostId: "guest_host",
-        joinCode: "ABC123",
-        visibility: "private",
-        members: [],
-        playback: {
-          status: "paused" as const,
-          currentTrackId: null,
-          currentQueueItemId: null,
-          sourceSessionId: "guest_host",
-          sourcePeerId: null,
-          sourceTrackId: null,
-          positionMs: 0,
-          startedAt: null,
-          queueVersion: 1,
-          mediaEpoch: 0
-        }
-      },
-      tracks: [],
-      queue: [],
-      playlists: []
-    };
-    const redisService = {
-      isAvailable: jest.fn(() => true),
-      publish: jest.fn(),
-      subscribe: jest.fn()
-    };
-    const roomService = {
-      updatePeerPresence: jest.fn().mockResolvedValue(undefined),
-      touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
-      getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
-      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
-    };
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const gateway = new SignalingGateway(
-      redisService as never,
-      moduleRef as never,
-      createAuthServiceMock() as never
-    );
+    const { gateway, roomService } = createGateway();
 
-    gateway.handleDisconnect({
-      data: {
+    gateway.handleDisconnect(
+      createClient({
         roomId: "room_1",
         sessionId: "guest_host",
-        peerId: "peer_host"
-      }
-    } as never);
-
-    await gateway.handleRoomSubscribe(
-      {
-        handshake: { auth: { sessionToken: "token" }, headers: {} },
-        data: {},
-        join: jest.fn(),
-        emit: jest.fn()
-      } as never,
-      { roomId: "room_1", sessionId: "guest_host", peerId: "peer_host" }
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }) as never
     );
 
+    await gateway.handleRoomSubscribe(createClient() as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+
     await jest.advanceTimersByTimeAsync(30_000);
-    expect(roomService.updatePeerPresence).not.toHaveBeenCalledWith("room_1", "guest_host", null);
-    jest.useRealTimers();
+    expect(roomService.updatePeerPresence).not.toHaveBeenCalledWith(
+      "room_1",
+      "guest_host",
+      null,
+      "offline"
+    );
   });
 });

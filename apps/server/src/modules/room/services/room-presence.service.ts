@@ -1,23 +1,38 @@
 import type { RoomMember } from "@music-room/shared";
 import { RedisService } from "../../../infra/redis/redis.service";
 
+type PresenceState = RoomMember["presenceState"];
+
+type PresenceEntry = {
+  peerId: string | null;
+  presenceState: PresenceState;
+  expiresAt: number;
+};
+
+type StoredPresenceEntry = {
+  peerId: string | null;
+  presenceState: PresenceState;
+};
+
 export class RoomPresenceService {
   constructor(
     private readonly redis: RedisService,
-    private readonly inMemoryPresence: Map<
-      string,
-      Map<string, { peerId: string; expiresAt: number }>
-    >,
+    private readonly inMemoryPresence: Map<string, Map<string, PresenceEntry>>,
     private readonly presenceTtlSeconds: number
   ) {}
 
   async touchRealtimePresence(roomId: string, sessionId: string, peerId: string) {
-    this.setInMemoryPresence(roomId, sessionId, peerId);
-    await this.redis.setString(
-      this.realtimePresenceKey(roomId, sessionId),
+    await this.setPresence(roomId, sessionId, {
       peerId,
-      this.presenceTtlSeconds
-    );
+      presenceState: "online"
+    });
+  }
+
+  async markRealtimeReconnecting(roomId: string, sessionId: string) {
+    await this.setPresence(roomId, sessionId, {
+      peerId: null,
+      presenceState: "reconnecting"
+    });
   }
 
   async clearRealtimePresence(roomId: string, sessionId: string) {
@@ -25,42 +40,99 @@ export class RoomPresenceService {
     await this.redis.delete(this.realtimePresenceKey(roomId, sessionId));
   }
 
-  async getActivePresence(roomId: string, members: RoomMember[]) {
+  async getPresenceSnapshot(roomId: string, members: RoomMember[]) {
     this.pruneExpiredInMemoryPresence(roomId);
 
-    const activePresence = new Map<string, string>();
+    const presence = new Map<string, StoredPresenceEntry>();
     const roomPresence = this.inMemoryPresence.get(roomId);
 
     for (const member of members) {
       const localPresence = roomPresence?.get(member.id);
       if (localPresence && localPresence.expiresAt > Date.now()) {
-        activePresence.set(member.id, localPresence.peerId);
+        presence.set(member.id, {
+          peerId: localPresence.peerId,
+          presenceState: localPresence.presenceState
+        });
       }
     }
 
     const redisPresence = await Promise.all(
       members.map(async (member) => ({
         memberId: member.id,
-        peerId: await this.redis.getString(this.realtimePresenceKey(roomId, member.id))
+        rawValue: await this.redis.getString(this.realtimePresenceKey(roomId, member.id))
       }))
     );
 
     for (const entry of redisPresence) {
-      if (!entry.peerId) {
+      const parsed = this.parseStoredPresence(entry.rawValue);
+      if (!parsed) {
         continue;
       }
 
-      activePresence.set(entry.memberId, entry.peerId);
-      this.setInMemoryPresence(roomId, entry.memberId, entry.peerId);
+      presence.set(entry.memberId, parsed);
+      this.setInMemoryPresence(roomId, entry.memberId, parsed);
+    }
+
+    return presence;
+  }
+
+  async getActivePresence(roomId: string, members: RoomMember[]) {
+    const presence = await this.getPresenceSnapshot(roomId, members);
+    const activePresence = new Map<string, string>();
+
+    for (const [memberId, entry] of presence.entries()) {
+      if (entry.presenceState === "online" && entry.peerId) {
+        activePresence.set(memberId, entry.peerId);
+      }
     }
 
     return activePresence;
   }
 
-  private setInMemoryPresence(roomId: string, sessionId: string, peerId: string) {
+  private async setPresence(
+    roomId: string,
+    sessionId: string,
+    entry: StoredPresenceEntry
+  ) {
+    this.setInMemoryPresence(roomId, sessionId, entry);
+    await this.redis.setString(
+      this.realtimePresenceKey(roomId, sessionId),
+      JSON.stringify(entry),
+      this.presenceTtlSeconds
+    );
+  }
+
+  private parseStoredPresence(rawValue: string | null): StoredPresenceEntry | null {
+    if (!rawValue) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(rawValue) as Partial<StoredPresenceEntry>;
+      return {
+        peerId: typeof parsed.peerId === "string" ? parsed.peerId : null,
+        presenceState:
+          parsed.presenceState === "online" ||
+          parsed.presenceState === "reconnecting" ||
+          parsed.presenceState === "offline"
+            ? parsed.presenceState
+            : typeof parsed.peerId === "string"
+              ? "online"
+              : "offline"
+      };
+    } catch {
+      return {
+        peerId: rawValue,
+        presenceState: "online"
+      };
+    }
+  }
+
+  private setInMemoryPresence(roomId: string, sessionId: string, entry: StoredPresenceEntry) {
     const roomPresence = this.inMemoryPresence.get(roomId) ?? new Map();
     roomPresence.set(sessionId, {
-      peerId,
+      peerId: entry.peerId,
+      presenceState: entry.presenceState,
       expiresAt: Date.now() + this.presenceTtlSeconds * 1000
     });
     this.inMemoryPresence.set(roomId, roomPresence);

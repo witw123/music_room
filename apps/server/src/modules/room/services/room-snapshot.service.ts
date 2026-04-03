@@ -10,22 +10,29 @@ export class RoomSnapshotService {
   ) {}
 
   async buildSnapshot(record: RoomRecord, playlists: Playlist[]): Promise<RoomSnapshot> {
-    const activePresence = await this.roomPresenceService.getActivePresence(
+    const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
       record.room.id,
       record.room.members
     );
-    const activeMembers = record.room.members
-      .map((member) => ({
+    const activePresence = new Map(
+      [...presenceSnapshot.entries()]
+        .filter(([, presence]) => presence.presenceState === "online" && !!presence.peerId)
+        .map(([memberId, presence]) => [memberId, presence.peerId as string])
+    );
+    const members = record.room.members.map((member) => {
+      const presence = presenceSnapshot.get(member.id);
+      return {
         ...member,
-        peerId: activePresence.get(member.id) ?? null
-      }))
-      .filter((member) => !!member.peerId);
+        peerId: presence?.peerId ?? null,
+        presenceState: presence?.presenceState ?? "offline"
+      };
+    });
 
     return {
       room: {
         ...record.room,
-        playback: await this.roomPlaybackService.buildPlaybackForSnapshot(record),
-        members: activeMembers
+        playback: await this.roomPlaybackService.buildPlaybackForSnapshot(record, activePresence),
+        members
       },
       tracks: record.tracks,
       queue: record.queue,

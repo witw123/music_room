@@ -99,17 +99,18 @@ export class RoomPlaybackService {
     return this.buildPlaybackForSnapshot(record);
   }
 
-  async buildPlaybackForSnapshot(record: RoomRecord) {
-    const activePresence = await this.roomPresenceService.getActivePresence(
-      record.room.id,
-      record.room.members
-    );
+  async buildPlaybackForSnapshot(record: RoomRecord, activePresence?: Map<string, string>) {
+    const resolvedPresence =
+      activePresence ??
+      (await this.roomPresenceService.getActivePresence(record.room.id, record.room.members));
+    const storedSourcePeerId = record.room.playback.sourcePeerId;
 
     return {
       ...record.room.playback,
-      sourcePeerId: record.room.playback.sourceSessionId
-        ? activePresence.get(record.room.playback.sourceSessionId) ?? null
-        : null
+      sourcePeerId:
+        record.room.playback.sourceSessionId && storedSourcePeerId
+          ? resolvedPresence.get(record.room.playback.sourceSessionId) ?? null
+          : storedSourcePeerId
     };
   }
 
@@ -125,10 +126,7 @@ export class RoomPlaybackService {
       throw new Error(`Track not found in room: ${trackId}`);
     }
 
-    const activePresence = await this.roomPresenceService.getActivePresence(
-      record.room.id,
-      record.room.members
-    );
+    const activePresence = await this.roomPresenceService.getActivePresence(record.room.id, record.room.members);
     const ownerPeerId = activePresence.get(track.ownerSessionId);
     if (!ownerPeerId) {
       throw new Error("Track owner is not online, so this song cannot be played right now.");
@@ -163,12 +161,16 @@ export class RoomPlaybackService {
     this.bumpPlaybackVersion(playback);
   }
 
-  handleSourceDeparture(record: RoomRecord, sessionId: string) {
+  async handleSourceDeparture(record: RoomRecord, sessionId: string) {
     const playback = record.room.playback;
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
       return;
     }
 
+    const activePresence = await this.roomPresenceService.getActivePresence(
+      record.room.id,
+      record.room.members
+    );
     const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
     const nextSourceSessionId =
       currentTrack &&
@@ -177,17 +179,31 @@ export class RoomPlaybackService {
         ? currentTrack.ownerSessionId
         : null;
     const nextSourcePeerId =
-      nextSourceSessionId
-        ? record.room.members.find((member) => member.id === nextSourceSessionId)?.peerId ?? null
-        : null;
+      nextSourceSessionId ? activePresence.get(nextSourceSessionId) ?? null : null;
 
-    playback.status = "paused";
-    playback.startedAt = null;
+    playback.status = nextSourcePeerId ? "playing" : "paused";
+    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
+    playback.startedAt = nextSourcePeerId ? new Date().toISOString() : null;
     playback.sourceSessionId = nextSourceSessionId;
     playback.sourcePeerId = nextSourcePeerId;
     playback.sourceTrackId = nextSourceSessionId ? playback.currentTrackId : null;
     playback.mediaEpoch += 1;
     this.bumpPlaybackVersion(playback);
+  }
+
+  pausePlaybackForSessionReplacement(record: RoomRecord, sessionId: string) {
+    const playback = record.room.playback;
+    if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
+      return false;
+    }
+
+    playback.status = "paused";
+    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
+    playback.startedAt = null;
+    playback.sourcePeerId = null;
+    playback.mediaEpoch += 1;
+    this.bumpPlaybackVersion(playback);
+    return true;
   }
 
   private async resolveSourcePeerId(record: RoomRecord, sourceSessionId: string | null) {
@@ -239,5 +255,23 @@ export class RoomPlaybackService {
     }
 
     return Math.min(normalized, track.durationMs);
+  }
+
+  private getEffectivePlaybackPositionMs(record: RoomRecord, playback: PlaybackSnapshot) {
+    if (
+      playback.status !== "playing" ||
+      !playback.currentTrackId ||
+      !playback.startedAt
+    ) {
+      return this.clampPositionMs(record, playback.currentTrackId, playback.positionMs);
+    }
+
+    const startedAtMs = new Date(playback.startedAt).getTime();
+    if (!Number.isFinite(startedAtMs)) {
+      return this.clampPositionMs(record, playback.currentTrackId, playback.positionMs);
+    }
+
+    const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+    return this.clampPositionMs(record, playback.currentTrackId, playback.positionMs + elapsedMs);
   }
 }
