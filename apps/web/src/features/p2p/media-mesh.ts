@@ -1,4 +1,5 @@
 import type { IceServerConfig, PeerSignalMessage } from "@music-room/shared";
+import { samplePeerConnectionStats, type PeerConnectionStatsSample } from "./connection-stats";
 
 type MediaConnectionState = "idle" | RTCPeerConnectionState;
 
@@ -26,6 +27,10 @@ type MediaMeshCallbacks = {
     peerId: string;
     mediaEpoch: number;
   }) => void;
+  onStatsSample?: (payload: {
+    peerId: string;
+    sample: PeerConnectionStatsSample;
+  }) => void;
 };
 
 type MediaPeerEntry = {
@@ -34,6 +39,7 @@ type MediaPeerEntry = {
   senders: RTCRtpSender[];
   pendingCandidates: RTCIceCandidateInit[];
   wantsIncomingAudio: boolean;
+  statsIntervalId: ReturnType<typeof setInterval> | null;
 };
 
 export class RoomMediaMesh {
@@ -247,8 +253,10 @@ export class RoomMediaMesh {
       stream: null,
       senders: [],
       pendingCandidates: [],
-      wantsIncomingAudio
+      wantsIncomingAudio,
+      statsIntervalId: null
     };
+    this.startStatsSampling(peerId, entry);
 
     if (wantsIncomingAudio) {
       connection.addTransceiver("audio", {
@@ -353,6 +361,7 @@ export class RoomMediaMesh {
 
   private releasePeer(peerId: string, entry: MediaPeerEntry) {
     this.peers.delete(peerId);
+    this.stopStatsSampling(entry);
     if (entry.connection.connectionState !== "closed") {
       entry.connection.close();
     }
@@ -388,6 +397,38 @@ export class RoomMediaMesh {
         }
       }
     }
+  }
+
+  private startStatsSampling(peerId: string, entry: MediaPeerEntry) {
+    if (!this.callbacks.onStatsSample || entry.statsIntervalId) {
+      return;
+    }
+
+    const emitStatsSample = async () => {
+      const sample = await samplePeerConnectionStats(entry.connection);
+      if (!sample) {
+        return;
+      }
+
+      this.callbacks.onStatsSample?.({
+        peerId,
+        sample
+      });
+    };
+
+    void emitStatsSample();
+    entry.statsIntervalId = setInterval(() => {
+      void emitStatsSample();
+    }, 2_000);
+  }
+
+  private stopStatsSampling(entry: MediaPeerEntry) {
+    if (!entry.statsIntervalId) {
+      return;
+    }
+
+    clearInterval(entry.statsIntervalId);
+    entry.statsIntervalId = null;
   }
 }
 

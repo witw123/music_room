@@ -197,6 +197,15 @@ export function useRoomRuntime({
     lastAppliedKey: null,
     pendingKey: null
   });
+  const remoteStreamTrackingRef = useRef<{
+    trackKey: string | null;
+    accumulatedMs: number;
+    segmentStartedAt: number | null;
+  }>({
+    trackKey: null,
+    accumulatedMs: 0,
+    segmentStartedAt: null
+  });
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
@@ -337,6 +346,89 @@ export function useRoomRuntime({
     }
   }, [audioRef, currentRoomRef, isCurrentSourceOwner, peerId, setStatusMessage]);
 
+  const updateDataTransportStats = useCallback(
+    (input: {
+      peerId: string;
+      sample: {
+        candidateType: string | null;
+        currentRoundTripTimeMs: number | null;
+        availableOutgoingBitrateKbps: number | null;
+      };
+    }) => {
+      recordPeerDiagnostic({
+        peerId: input.peerId,
+        channelKind: "data",
+        direction: "local",
+        event: "transport-stats",
+        summary: "Data transport stats updated",
+        recordEvent: false,
+        update: (snapshot) => ({
+          ...snapshot,
+          dataCandidateType: input.sample.candidateType ?? snapshot.dataCandidateType,
+          currentRoundTripTimeMs:
+            snapshot.currentRoundTripTimeMs ?? input.sample.currentRoundTripTimeMs,
+          availableOutgoingBitrateKbps:
+            snapshot.availableOutgoingBitrateKbps ?? input.sample.availableOutgoingBitrateKbps
+        })
+      });
+    },
+    [recordPeerDiagnostic]
+  );
+
+  const updateMediaTransportStats = useCallback(
+    (input: {
+      peerId: string;
+      sample: {
+        candidateType: string | null;
+        protocol: string | null;
+        currentRoundTripTimeMs: number | null;
+        availableOutgoingBitrateKbps: number | null;
+        packetsLost: number | null;
+        jitterMs: number | null;
+      };
+    }) => {
+      recordPeerDiagnostic({
+        peerId: input.peerId,
+        channelKind: "media",
+        direction: "local",
+        event: "transport-stats",
+        summary: "Media transport stats updated",
+        recordEvent: false,
+        update: (snapshot) => ({
+          ...snapshot,
+          mediaCandidateType: input.sample.candidateType ?? snapshot.mediaCandidateType,
+          mediaProtocol: input.sample.protocol ?? snapshot.mediaProtocol,
+          currentRoundTripTimeMs:
+            input.sample.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
+          availableOutgoingBitrateKbps:
+            input.sample.availableOutgoingBitrateKbps ??
+            snapshot.availableOutgoingBitrateKbps,
+          packetsLost: input.sample.packetsLost ?? snapshot.packetsLost,
+          jitterMs: input.sample.jitterMs ?? snapshot.jitterMs
+        })
+      });
+    },
+    [recordPeerDiagnostic]
+  );
+
+  const updateRemoteStreamTime = useCallback(
+    (timeOnRemoteStreamMs: number | null) => {
+      recordPeerDiagnostic({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: "remote-stream-time",
+        summary: "Remote stream time updated",
+        recordEvent: false,
+        update: (snapshot) => ({
+          ...snapshot,
+          timeOnRemoteStreamMs
+        })
+      });
+    },
+    [recordPeerDiagnostic]
+  );
+
   useEffect(() => {
     return () => {
       if (remotePlaybackRetryRef.current !== null) {
@@ -344,6 +436,64 @@ export function useRoomRuntime({
       }
     };
   }, []);
+
+  useEffect(() => {
+    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+    const mediaEpoch = roomSnapshot?.room.playback.mediaEpoch ?? 0;
+    const trackingKey = currentTrackId ? `${currentTrackId}:${mediaEpoch}` : null;
+    const tracking = remoteStreamTrackingRef.current;
+
+    if (tracking.trackKey !== trackingKey) {
+      tracking.trackKey = trackingKey;
+      tracking.accumulatedMs = 0;
+      tracking.segmentStartedAt = null;
+    }
+
+    if (!currentTrackId) {
+      updateRemoteStreamTime(null);
+      return;
+    }
+
+    const shouldTrackRemoteStream =
+      roomSnapshot?.room.playback.status === "playing" && activePlaybackSource === "remote-stream";
+
+    if (!shouldTrackRemoteStream) {
+      if (tracking.segmentStartedAt !== null) {
+        tracking.accumulatedMs += Date.now() - tracking.segmentStartedAt;
+        tracking.segmentStartedAt = null;
+      }
+      updateRemoteStreamTime(Math.max(0, Math.round(tracking.accumulatedMs)));
+      return;
+    }
+
+    if (tracking.segmentStartedAt === null) {
+      tracking.segmentStartedAt = Date.now();
+    }
+
+    const syncRemoteStreamTime = () => {
+      const activeSegmentMs =
+        tracking.segmentStartedAt === null ? 0 : Date.now() - tracking.segmentStartedAt;
+      updateRemoteStreamTime(Math.max(0, Math.round(tracking.accumulatedMs + activeSegmentMs)));
+    };
+
+    syncRemoteStreamTime();
+    const timerId = window.setInterval(syncRemoteStreamTime, 1_000);
+
+    return () => {
+      window.clearInterval(timerId);
+      if (tracking.segmentStartedAt !== null) {
+        tracking.accumulatedMs += Date.now() - tracking.segmentStartedAt;
+        tracking.segmentStartedAt = null;
+      }
+      updateRemoteStreamTime(Math.max(0, Math.round(tracking.accumulatedMs)));
+    };
+  }, [
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.mediaEpoch,
+    roomSnapshot?.room.playback.status,
+    activePlaybackSource,
+    updateRemoteStreamTime
+  ]);
 
   useEffect(() => {
     if (!statusMessage) {
@@ -670,6 +820,12 @@ export function useRoomRuntime({
             event: "data-channel",
             summary: `DataChannel 状态：${state}`
           });
+        },
+        onStatsSample: ({ peerId: remotePeerId, sample }) => {
+          updateDataTransportStats({
+            peerId: remotePeerId,
+            sample
+          });
         }
       },
       iceServers
@@ -795,6 +951,12 @@ export function useRoomRuntime({
             })
           });
           setMediaConnectionState("reconnecting");
+        },
+        onStatsSample: ({ peerId: remotePeerId, sample }) => {
+          updateMediaTransportStats({
+            peerId: remotePeerId,
+            sample
+          });
         }
       }
     );
@@ -1064,7 +1226,9 @@ export function useRoomRuntime({
     setRoomSnapshot,
     setIsNavigatingRoomExit,
     setSuppressRoomRecovery,
-    setStatusMessage
+    setStatusMessage,
+    updateDataTransportStats,
+    updateMediaTransportStats
   ]);
 
   useEffect(() => {

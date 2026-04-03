@@ -17,6 +17,7 @@ type DiagnosticsInput = {
   event: string;
   summary: string;
   level?: PeerRecentEvent["level"];
+  recordEvent?: boolean;
   update?: (snapshot: PeerDiagnosticsSnapshot) => PeerDiagnosticsSnapshot;
   now?: string;
 };
@@ -71,20 +72,25 @@ export function recordDiagnosticsEvent(
 ): DiagnosticsState {
   const timestamp = input.now ?? new Date().toISOString();
   const current = state.peers[input.peerId] ?? createPeerSnapshot(input.peerId, timestamp);
-  const event: PeerRecentEvent = {
-    id: `${timestamp}:${input.peerId}:${input.channelKind}:${input.event}:${Math.random().toString(36).slice(2, 8)}`,
-    timestamp,
-    peerId: input.peerId,
-    channelKind: input.channelKind,
-    direction: input.direction,
-    event: input.event,
-    summary: input.summary,
-    level: input.level ?? "info"
-  };
+  const shouldRecordEvent = input.recordEvent ?? true;
+  const event: PeerRecentEvent | null = shouldRecordEvent
+    ? {
+        id: `${timestamp}:${input.peerId}:${input.channelKind}:${input.event}:${Math.random().toString(36).slice(2, 8)}`,
+        timestamp,
+        peerId: input.peerId,
+        channelKind: input.channelKind,
+        direction: input.direction,
+        event: input.event,
+        summary: input.summary,
+        level: input.level ?? "info"
+      }
+    : null;
   const baseUpdated: PeerDiagnosticsSnapshot = {
     ...current,
     updatedAt: timestamp,
-    recentEvents: upsertRecentEvent(current.recentEvents, event, maxPeerEvents)
+    recentEvents: event
+      ? upsertRecentEvent(current.recentEvents, event, maxPeerEvents)
+      : current.recentEvents
   };
   const nextSnapshot = input.update ? input.update(baseUpdated) : baseUpdated;
 
@@ -93,7 +99,9 @@ export function recordDiagnosticsEvent(
       ...state.peers,
       [input.peerId]: nextSnapshot
     },
-    recentEvents: upsertRecentEvent(state.recentEvents, event, maxGlobalEvents)
+    recentEvents: event
+      ? upsertRecentEvent(state.recentEvents, event, maxGlobalEvents)
+      : state.recentEvents
   };
 }
 
@@ -125,6 +133,14 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     mediaConnectionState: null,
     dataIceState: null,
     mediaIceState: null,
+    dataCandidateType: null,
+    mediaCandidateType: null,
+    mediaProtocol: null,
+    currentRoundTripTimeMs: null,
+    availableOutgoingBitrateKbps: null,
+    packetsLost: null,
+    jitterMs: null,
+    timeOnRemoteStreamMs: null,
     signalStats: createEmptySignalStats(),
     remoteTrackStatus: createEmptyRemoteTrackStatus(),
     progressivePlaybackStatus: {

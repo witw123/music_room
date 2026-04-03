@@ -312,7 +312,7 @@ describe("ChunkScheduler", () => {
     expect(priorities.every((priority) => priority === "current")).toBe(true);
   });
 
-  it("keeps remote-stream playback on current-track-only fetching even when healthy", () => {
+  it("uses startup current-track fetching for remote FLAC before startup is ready", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,
@@ -367,7 +367,7 @@ describe("ChunkScheduler", () => {
       trackId: string;
       priority: string;
     }]>).map(([call]) => call);
-    expect(requests.length).toBeLessThanOrEqual(4);
+    expect(requests).toHaveLength(4);
     expect(requests.every((request) => request.trackId === "track_1")).toBe(true);
     expect(requests.every((request) => request.priority === "current")).toBe(true);
   });

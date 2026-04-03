@@ -10,6 +10,7 @@ import {
   getCachedPieceIndexes,
   getTrackPieceManifest
 } from "@/lib/indexeddb";
+import { samplePeerConnectionStats, type PeerConnectionStatsSample } from "./connection-stats";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -42,6 +43,10 @@ type MeshCallbacks = {
     direction: "sent" | "received";
     type: PeerSignalMessage["type"];
   }) => void;
+  onStatsSample?: (payload: {
+    peerId: string;
+    sample: PeerConnectionStatsSample;
+  }) => void;
 };
 
 type PeerEntry = {
@@ -50,6 +55,7 @@ type PeerEntry = {
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
   pendingCandidates: RTCIceCandidateInit[];
+  statsIntervalId: ReturnType<typeof setInterval> | null;
 };
 
 type PendingPieceRequest = {
@@ -285,8 +291,10 @@ export class P2PMesh {
       connection,
       channel: null,
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
-      pendingCandidates: []
+      pendingCandidates: [],
+      statsIntervalId: null
     };
+    this.startStatsSampling(peerId, entry);
 
     connection.onicecandidate = (event) => {
       if (!event.candidate) {
@@ -459,9 +467,42 @@ export class P2PMesh {
 
   private releasePeer(peerId: string, entry: PeerEntry) {
     this.clearPendingRequestsForPeer(peerId);
+    this.stopStatsSampling(entry);
     entry.channel?.close();
     entry.connection.close();
     this.peers.delete(peerId);
+  }
+
+  private startStatsSampling(peerId: string, entry: PeerEntry) {
+    if (!this.callbacks.onStatsSample || entry.statsIntervalId) {
+      return;
+    }
+
+    const emitStatsSample = async () => {
+      const sample = await samplePeerConnectionStats(entry.connection);
+      if (!sample) {
+        return;
+      }
+
+      this.callbacks.onStatsSample?.({
+        peerId,
+        sample
+      });
+    };
+
+    void emitStatsSample();
+    entry.statsIntervalId = setInterval(() => {
+      void emitStatsSample();
+    }, 2_000);
+  }
+
+  private stopStatsSampling(entry: PeerEntry) {
+    if (!entry.statsIntervalId) {
+      return;
+    }
+
+    clearInterval(entry.statsIntervalId);
+    entry.statsIntervalId = null;
   }
 
   private async flushPendingCandidates(entry: PeerEntry) {

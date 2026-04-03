@@ -49,6 +49,54 @@ function formatTimestamp(value: string) {
   });
 }
 
+function formatCandidateType(value: string | null) {
+  if (!value) {
+    return "未知";
+  }
+
+  if (value === "relay") {
+    return "relay";
+  }
+
+  if (value === "host" || value === "srflx" || value === "prflx") {
+    return `direct (${value})`;
+  }
+
+  return value;
+}
+
+function formatMetric(value: number | null, unit: string) {
+  if (value === null) {
+    return "未知";
+  }
+
+  return `${value}${unit}`;
+}
+
+function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
+  if (peer.mediaCandidateType && peer.dataCandidateType) {
+    if (peer.mediaCandidateType !== peer.dataCandidateType) {
+      return "媒体/数据走不同 candidate pair";
+    }
+
+    if (peer.mediaCandidateType === "relay") {
+      return "媒体与数据当前都经过 relay";
+    }
+
+    return "媒体与数据当前都走 direct";
+  }
+
+  if (peer.mediaCandidateType === "relay" || peer.dataCandidateType === "relay") {
+    return "当前至少一条链路经过 relay";
+  }
+
+  if (peer.mediaCandidateType || peer.dataCandidateType) {
+    return "当前链路已进入 direct";
+  }
+
+  return null;
+}
+
 function MeshStatusPanelBase({
   availabilitySummary,
   connectedPeersCount,
@@ -152,6 +200,13 @@ function MeshStatusPanelBase({
                     <span>音频连接: {peer.mediaConnectionState ?? "未知"}</span>
                     <span>数据 ICE: {peer.dataIceState ?? "未知"}</span>
                     <span>音频 ICE: {peer.mediaIceState ?? "未知"}</span>
+                    <span>数据候选: {formatCandidateType(peer.dataCandidateType)}</span>
+                    <span>媒体候选: {formatCandidateType(peer.mediaCandidateType)}</span>
+                    <span>媒体协议: {peer.mediaProtocol ?? "未知"}</span>
+                    <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
+                    <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>
+                    <span>丢包: {peer.packetsLost ?? "未知"}</span>
+                    <span>抖动: {formatMetric(peer.jitterMs, "ms")}</span>
                     <span>
                       发信令:
                       {` ${peer.signalStats.sentOffers}/${peer.signalStats.sentAnswers}/${peer.signalStats.sentCandidates}`}
@@ -165,6 +220,9 @@ function MeshStatusPanelBase({
                       绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}
                     </span>
                   </div>
+                  {describeCandidatePath(peer) ? (
+                    <p className="mt-2 text-[10px] text-cyan-300">{describeCandidatePath(peer)}</p>
+                  ) : null}
                   {peer.progressivePlaybackStatus ? (
                     <div className="mt-3 rounded-lg border border-surface-border bg-background/30 p-2.5 text-[10px] text-foreground-muted">
                       <div className="mb-1 font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
@@ -205,6 +263,11 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (
                         <p className="mt-1 text-foreground-muted">
                           下一首预热: {peer.progressivePlaybackStatus.nextQueueTrackPrefetch}
+                        </p>
+                      ) : null}
+                      {peer.timeOnRemoteStreamMs !== null ? (
+                        <p className="mt-1 text-foreground-muted">
+                          远端流停留: {Math.round(peer.timeOnRemoteStreamMs / 1000)}s
                         </p>
                       ) : null}
                     </div>

@@ -6,6 +6,8 @@ import {
   getProgressiveEngineType,
   getPriorityChunkIndexes,
   getTargetSteadyBufferMs,
+  isFlacTrack,
+  isStartupReady,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
 
@@ -298,21 +300,6 @@ export class ChunkScheduler {
         currentTrack,
         localAnnouncement ?? Object.values(this.availabilityByTrack[currentTrack.id] ?? {})[0] ?? null
       );
-      const currentTrackProfile = getTrackStreamingProfile(
-        currentTrack,
-        this.mode,
-        this.bufferHealth,
-        this.policy,
-        this.playbackClockSource
-      );
-      const currentTrackWantedPolicy =
-        currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
-          ? this.policy === "startup"
-            ? "startup"
-            : "pause-fill"
-          : this.policy === "background"
-            ? "steady"
-            : this.policy;
       currentTrackState = this.ensureTrackState(currentTrack.id, this.getTotalChunks(currentTrack.id));
       currentTrackAheadBufferedMs = currentTrackManifest
         ? getAheadBufferedMs({
@@ -321,6 +308,41 @@ export class ChunkScheduler {
             playbackPositionMs: this.playbackPositionMs
           })
         : 0;
+      const isCurrentTrackComplete = this.isTrackComplete(
+        currentTrack.id,
+        this.getTotalChunks(currentTrack.id)
+      );
+      const currentTrackStartupReady = currentTrackManifest
+        ? isStartupReady({
+            manifest: currentTrackManifest,
+            availableChunks: [...currentTrackState.ownedChunks],
+            playbackPositionMs: this.playbackPositionMs
+          })
+        : false;
+      const shouldUseAggressiveRemoteFlacStartup =
+        shouldPreserveRemotePlayback &&
+        !!currentTrackManifest &&
+        isFlacTrack(currentTrackManifest) &&
+        !isCurrentTrackComplete &&
+        !currentTrackStartupReady;
+      const currentTrackProfile = shouldUseAggressiveRemoteFlacStartup
+        ? getTrackStreamingProfile(currentTrack, this.mode, this.bufferHealth, "startup", "local")
+        : getTrackStreamingProfile(
+            currentTrack,
+            this.mode,
+            this.bufferHealth,
+            this.policy,
+            this.playbackClockSource
+          );
+      const currentTrackWantedPolicy = shouldUseAggressiveRemoteFlacStartup
+        ? "startup"
+        : currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
+          ? this.policy === "startup"
+            ? "startup"
+            : "pause-fill"
+          : this.policy === "background"
+            ? "steady"
+            : this.policy;
       plans.push({
         track: currentTrack,
         priority: "current",
