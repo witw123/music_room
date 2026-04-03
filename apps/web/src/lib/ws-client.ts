@@ -1,7 +1,16 @@
 import type { ClientToServerEvents, ServerToClientEvents } from "@music-room/shared";
 import { io, type Socket } from "socket.io-client";
 
-export const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001";
+function getDefaultWsBaseUrl() {
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}`;
+  }
+
+  return "ws://localhost:3001";
+}
+
+export const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL?.trim() || getDefaultWsBaseUrl();
 export const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH ?? "/ws/socket.io";
 const sessionStorageKey = "music-room-session";
 
