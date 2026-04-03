@@ -1327,7 +1327,21 @@ export function MusicRoomApp({
     progressiveEngineRef.current?.destroy();
     const engine = new ProgressiveMseEngine(audio, peerId, currentProgressiveManifest);
     progressiveEngineRef.current = engine;
-    void engine.attach().then(() => engine.sync());
+    void engine
+      .attach()
+      .then((attached) => {
+        if (!attached) {
+          setProgressiveFallbackReason("progressive-init-failed");
+          setActivePlaybackSource("remote-stream");
+          return;
+        }
+
+        return engine.sync();
+      })
+      .catch(() => {
+        setProgressiveFallbackReason("progressive-init-failed");
+        setActivePlaybackSource("remote-stream");
+      });
 
     return () => {
       if (progressiveEngineRef.current === engine) {

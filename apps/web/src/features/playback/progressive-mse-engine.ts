@@ -52,15 +52,29 @@ export class ProgressiveMseEngine {
 
   async attach() {
     if (this.status !== "idle") {
-      return;
+      return this.status === "ready";
     }
 
-    this.status = "opening";
-    this.mediaSource = new MediaSource();
-    this.objectUrl = URL.createObjectURL(this.mediaSource);
-    this.mediaSource.addEventListener("sourceopen", this.handleSourceOpen);
-    this.audio.src = this.objectUrl;
-    this.audio.load();
+    try {
+      this.status = "opening";
+      this.mediaSource = new MediaSource();
+      this.objectUrl = URL.createObjectURL(this.mediaSource);
+      this.mediaSource.addEventListener("sourceopen", this.handleSourceOpen);
+      this.audio.src = this.objectUrl;
+      this.audio.load();
+      return true;
+    } catch {
+      this.status = "failed";
+      if (this.mediaSource) {
+        this.mediaSource.removeEventListener("sourceopen", this.handleSourceOpen);
+      }
+      if (this.objectUrl) {
+        URL.revokeObjectURL(this.objectUrl);
+      }
+      this.mediaSource = null;
+      this.objectUrl = null;
+      return false;
+    }
   }
 
   async sync() {
