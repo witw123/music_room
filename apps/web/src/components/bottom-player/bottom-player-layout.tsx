@@ -79,11 +79,15 @@ export function MobileBottomPlayerLayout({
         <VinylBadge isPlaying={isPlaying} compact />
 
         <div className="min-w-0">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
-            {isPlaying ? "正在播放" : "已暂停"}
-          </p>
-          <h3 className="truncate text-sm font-semibold text-foreground">{title}</h3>
-          <p className="truncate text-[11px] text-foreground-muted">{artist}</p>
+          <div className="mb-1 flex min-h-[1.1rem] items-center">
+            <span className="inline-flex min-w-[4.5rem] items-center justify-center rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
+              {isPlaying ? "正在播放" : "已暂停"}
+            </span>
+          </div>
+          <div className="min-h-[2.1rem]">
+            <h3 className="truncate text-sm font-semibold leading-5 text-foreground">{title}</h3>
+            <p className="truncate text-[11px] leading-4 text-foreground-muted">{artist}</p>
+          </div>
         </div>
 
         <div className="col-span-2 flex items-center gap-2">
@@ -105,7 +109,7 @@ export function MobileBottomPlayerLayout({
           </span>
         </div>
 
-        <div className="col-span-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div />
 
           <div className="flex items-center justify-center gap-1">
@@ -114,7 +118,7 @@ export function MobileBottomPlayerLayout({
               size="icon"
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onPrev}
-              title="上一曲"
+              title="上一首"
               className="h-9 w-9"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -149,7 +153,7 @@ export function MobileBottomPlayerLayout({
               size="icon"
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onNext}
-              title="下一曲"
+              title="下一首"
               className="h-9 w-9"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -220,7 +224,7 @@ export function DesktopBottomPlayerLayout({
           size="icon"
           disabled={!canControlPlayback || !playbackTrackId}
           onClick={onPrev}
-          title="上一曲"
+          title="上一首"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -254,7 +258,7 @@ export function DesktopBottomPlayerLayout({
           size="icon"
           disabled={!canControlPlayback || !playbackTrackId}
           onClick={onNext}
-          title="下一曲"
+          title="下一首"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />

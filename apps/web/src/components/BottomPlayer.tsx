@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import type { AuthSession, RoomMediaConnectionState, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
@@ -75,8 +76,12 @@ export function BottomPlayer({
   const playback = roomSnapshot?.room.playback;
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const isPlaying = playback?.status === "playing";
-  const effectiveProgressMs = Math.max(0, seekDraft ?? progressMs);
   const currentTrackDuration = audioDurationMs;
+  const snapshotProgressMs =
+    playback?.currentTrackId && seekDraft === null
+      ? getPlaybackEffectivePositionMs(playback, currentTrackDuration)
+      : null;
+  const effectiveProgressMs = Math.max(0, seekDraft ?? snapshotProgressMs ?? progressMs);
   const boundedProgressMs =
     currentTrackDuration > 0 ? Math.min(effectiveProgressMs, currentTrackDuration) : effectiveProgressMs;
   const progressRatio =

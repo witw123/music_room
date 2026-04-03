@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { getPlaybackEffectivePositionMs, useRoomPlayback } from "@/features/playback/use-room-playback";
 import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
+import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
@@ -1269,6 +1270,7 @@ export function MusicRoomApp({
 
     syncState.inFlight = true;
     syncState.pendingKey = syncKey;
+    let awaitingLocalAudioTrack = false;
 
     try {
       const audio = audioRef.current;
@@ -1286,10 +1288,18 @@ export function MusicRoomApp({
 
       hostStreamRef.current = capture;
       await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
-      syncState.lastAppliedKey = syncKey;
+      awaitingLocalAudioTrack = !hasHostMediaStreamTrack(capture);
+      if (!awaitingLocalAudioTrack) {
+        syncState.lastAppliedKey = syncKey;
+      }
     } finally {
       const nextPendingKey = syncState.pendingKey;
       syncState.inFlight = false;
+
+      if (awaitingLocalAudioTrack) {
+        syncState.pendingKey = null;
+        return;
+      }
 
       if (nextPendingKey && nextPendingKey !== syncState.lastAppliedKey) {
         syncState.pendingKey = null;
