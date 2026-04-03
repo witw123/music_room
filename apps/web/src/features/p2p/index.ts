@@ -4,7 +4,12 @@ import {
   type IceServerConfig,
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
-import { cacheTrackPieces, getCachedPieceIndexes } from "@/lib/indexeddb";
+import {
+  cacheTrackPieces,
+  getCachedPieceIndexes,
+  getTrackPieceManifest,
+  upsertTrackPieceManifest
+} from "@/lib/indexeddb";
 import {
   assembleTrackFileFromPiecesInWorker,
   hashArrayBufferInWorker,
@@ -172,6 +177,10 @@ export async function buildTrackAvailabilityFromFile(input: {
   peerId: string;
   nickname: string;
   source: "live_upload" | "local_cache";
+  mimeType?: string | null;
+  codec?: string | null;
+  sizeBytes?: number | null;
+  durationMs?: number;
   chunkSize?: number;
 }): Promise<TrackAvailabilityAnnouncement> {
   const chunkSize = input.chunkSize ?? defaultChunkSize;
@@ -198,6 +207,18 @@ export async function buildTrackAvailabilityFromFile(input: {
   }
 
   const availableChunks = chunks.map((_, chunkIndex) => chunkIndex);
+  const mimeType = input.mimeType || input.file.type || "audio/mpeg";
+
+  await upsertTrackPieceManifest({
+    trackId: input.trackId,
+    fileHash: input.fileHash,
+    mimeType,
+    codec: input.codec ?? null,
+    sizeBytes: input.sizeBytes ?? input.file.size,
+    durationMs: input.durationMs ?? 0,
+    totalChunks,
+    chunkSize
+  });
 
   return {
     roomId: input.roomId,
@@ -205,6 +226,7 @@ export async function buildTrackAvailabilityFromFile(input: {
     ownerPeerId: input.peerId,
     nickname: input.nickname,
     totalChunks,
+    chunkSize,
     availableChunks,
     source: input.source,
     announcedAt: new Date().toISOString()
@@ -330,6 +352,7 @@ export async function buildTrackAvailabilityFromCache(input: {
   peerId: string;
   nickname: string;
   totalChunks?: number;
+  chunkSize?: number;
 }) {
   const availableChunks = await getCachedPieceIndexes(input.trackId, input.peerId);
 
@@ -337,12 +360,17 @@ export async function buildTrackAvailabilityFromCache(input: {
     return null;
   }
 
+  const manifest = await getTrackPieceManifest(input.trackId);
+  const totalChunks = input.totalChunks ?? manifest?.totalChunks ?? availableChunks.length;
+  const chunkSize = input.chunkSize ?? manifest?.chunkSize ?? defaultChunkSize;
+
   return {
     roomId: input.roomId,
     trackId: input.trackId,
     ownerPeerId: input.peerId,
     nickname: input.nickname,
-    totalChunks: input.totalChunks ?? availableChunks.length,
+    totalChunks,
+    chunkSize,
     availableChunks,
     source: "local_cache" as const,
     announcedAt: new Date().toISOString()

@@ -39,6 +39,7 @@ export const trackAvailabilityAnnouncementSchema = z.object({
   ownerPeerId: z.string(),
   nickname: z.string(),
   totalChunks: z.number().int().nonnegative(),
+  chunkSize: z.number().int().positive(),
   availableChunks: z.array(z.number().int().nonnegative()),
   source: z.enum(["live_upload", "local_cache"]),
   announcedAt: z.string().datetime()
@@ -65,6 +66,7 @@ export const p2pDataMessageSchema = z.union([
     trackId: z.string(),
     chunkIndex: z.number().int().nonnegative(),
     totalChunks: z.number().int().positive(),
+    chunkSize: z.number().int().positive(),
     mimeType: z.string(),
     pieceHash: z.string(),
     payloadBase64: z.string()
@@ -99,6 +101,18 @@ export const remoteTrackStatusSchema = z.object({
   lastAudioEvent: z.enum(["playing", "waiting", "pause", "error"]).nullable()
 });
 
+export const progressivePlaybackStatusSchema = z.object({
+  activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  engineType: z.enum(["none", "mse", "pcm"]).nullable(),
+  contiguousBufferedMs: z.number().int().nonnegative(),
+  aheadBufferedMs: z.number().int().nonnegative(),
+  schedulerPolicy: z
+    .enum(["startup", "steady", "catchup", "pause-fill", "background"])
+    .nullable(),
+  startupReady: z.boolean(),
+  fallbackReason: z.string().nullable()
+});
+
 export const peerDiagnosticsSnapshotSchema = z.object({
   peerId: z.string(),
   dataConnectionState: z.string().nullable(),
@@ -107,6 +121,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   mediaIceState: z.string().nullable(),
   signalStats: peerSignalStatsSchema,
   remoteTrackStatus: remoteTrackStatusSchema,
+  progressivePlaybackStatus: progressivePlaybackStatusSchema.optional(),
   lastError: z.string().nullable(),
   updatedAt: z.string().datetime(),
   recentEvents: z.array(peerRecentEventSchema)
@@ -129,5 +144,6 @@ export type IceConfigSource = z.infer<typeof iceConfigSourceSchema>;
 export type PeerRecentEvent = z.infer<typeof peerRecentEventSchema>;
 export type PeerSignalStats = z.infer<typeof peerSignalStatsSchema>;
 export type RemoteTrackStatus = z.infer<typeof remoteTrackStatusSchema>;
+export type ProgressivePlaybackStatus = z.infer<typeof progressivePlaybackStatusSchema>;
 export type PeerDiagnosticsSnapshot = z.infer<typeof peerDiagnosticsSnapshotSchema>;
 export type IceConfigResponse = z.infer<typeof iceConfigResponseSchema>;

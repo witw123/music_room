@@ -131,6 +131,7 @@ export function useTrackUploads(options: {
 
       if (roomSnapshot && peerId && activeSession) {
         for (const asset of cachedAssets) {
+          const track = roomSnapshot.tracks.find((entry) => entry.id === asset.trackId);
           const availability =
             (await buildTrackAvailabilityFromCache({
               roomId: roomSnapshot.room.id,
@@ -139,13 +140,17 @@ export function useTrackUploads(options: {
               nickname: activeSession.nickname
             })) ??
             (await buildTrackAvailabilityFromFile({
-            roomId: roomSnapshot.room.id,
-            trackId: asset.trackId,
-            fileHash: asset.fileHash,
-            file: asset.file,
-            peerId,
-            nickname: activeSession.nickname,
-            source: "local_cache"
+              roomId: roomSnapshot.room.id,
+              trackId: asset.trackId,
+              fileHash: asset.fileHash,
+              file: asset.file,
+              peerId,
+              nickname: activeSession.nickname,
+              source: "local_cache",
+              mimeType: asset.mimeType,
+              codec: track?.codec ?? null,
+              sizeBytes: track?.sizeBytes ?? asset.file.size,
+              durationMs: track?.durationMs ?? 0
             }));
           onAvailability(availability);
           emitAvailability(availability);
@@ -222,7 +227,7 @@ export function useTrackUploads(options: {
         trackId: registered.id,
         fileHash: registered.fileHash,
         title: registered.title,
-        mimeType: file.type || "audio/mpeg",
+        mimeType: registered.mimeType || file.type || "audio/mpeg",
         file
       });
 
@@ -234,7 +239,11 @@ export function useTrackUploads(options: {
           file,
           peerId,
           nickname: activeSession.nickname,
-          source: "live_upload"
+          source: "live_upload",
+          mimeType: registered.mimeType,
+          codec: registered.codec ?? null,
+          sizeBytes: registered.sizeBytes ?? file.size,
+          durationMs: registered.durationMs
         });
         onAvailability(availability);
         emitAvailability(availability);
@@ -301,7 +310,7 @@ export function useTrackUploads(options: {
     const assembled = await assembleTrackFileFromPieces({
       pieces,
       totalChunks,
-      mimeType: mimeType || "audio/mpeg",
+      mimeType: mimeType || track.mimeType || "audio/mpeg",
       title: track.title,
       expectedFileHash: track.fileHash
     });
@@ -317,7 +326,7 @@ export function useTrackUploads(options: {
       trackId,
       fileHash: track.fileHash,
       title: track.title,
-      mimeType: mimeType || "audio/mpeg",
+      mimeType: mimeType || track.mimeType || "audio/mpeg",
       file: assembled.blob
     });
 

@@ -71,7 +71,7 @@ export function useAvailabilityAnnouncements({
   );
 
   const mergeLocalPieceAvailability = useCallback(
-    (trackId: string, chunkIndex: number, totalChunks: number) => {
+    (trackId: string, chunkIndex: number, totalChunks: number, chunkSize: number) => {
       const session = activeSessionRef.current;
       const room = currentRoomRef.current;
 
@@ -104,6 +104,7 @@ export function useAvailabilityAnnouncements({
         ownerPeerId: peerId,
         nickname: session.nickname,
         totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
+        chunkSize: existing?.chunkSize ?? chunkSize,
         availableChunks: [...availableChunkSet].sort((left, right) => left - right),
         source: existing?.source ?? "local_cache",
         announcedAt: new Date().toISOString()

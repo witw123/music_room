@@ -227,6 +227,7 @@ describe("SignalingGateway", () => {
       ownerPeerId: "peer_1",
       nickname: "Host",
       totalChunks: 4,
+      chunkSize: 128 * 1024,
       availableChunks: [0, 1, 2, 3],
       source: "live_upload" as const,
       announcedAt: new Date().toISOString()
@@ -357,6 +358,7 @@ describe("SignalingGateway", () => {
         ownerPeerId: "peer_host",
         nickname: "Host",
         totalChunks: 8,
+        chunkSize: 128 * 1024,
         availableChunks: [0, 1, 2],
         source: "live_upload",
         announcedAt: new Date().toISOString()

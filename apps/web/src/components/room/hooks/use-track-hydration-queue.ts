@@ -7,6 +7,7 @@ type UseTrackHydrationQueueInput = {
   isPageVisible: boolean;
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
+  canHydrateTrack?: (trackId: string) => boolean;
   hydrateTrackFromPieces: (
     trackId: string,
     mimeType: string,
@@ -18,6 +19,7 @@ export function useTrackHydrationQueue({
   isPageVisible,
   uploadedTrackIdsRef,
   chunkSchedulerRef,
+  canHydrateTrack,
   hydrateTrackFromPieces
 }: UseTrackHydrationQueueInput) {
   const hydrationQueueRef = useRef(new Map<string, { mimeType: string; totalChunks: number }>());
@@ -79,13 +81,17 @@ export function useTrackHydrationQueue({
         return;
       }
 
+      if (canHydrateTrack && !canHydrateTrack(trackId)) {
+        return;
+      }
+
       hydrationQueueRef.current.set(trackId, {
         mimeType,
         totalChunks
       });
       drainHydrationQueue();
     },
-    [chunkSchedulerRef, drainHydrationQueue, uploadedTrackIdsRef]
+    [canHydrateTrack, chunkSchedulerRef, drainHydrationQueue, uploadedTrackIdsRef]
   );
 
   const resetHydrationQueue = useCallback(() => {

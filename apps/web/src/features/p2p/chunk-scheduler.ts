@@ -1,4 +1,9 @@
 import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import {
+  buildProgressiveTrackManifest,
+  getPriorityChunkIndexes,
+  type ProgressiveSchedulerPolicy
+} from "@/features/playback/progressive-playback";
 
 export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
 export type ChunkSchedulerMode = "normal" | "conservative" | "idle";
@@ -24,6 +29,7 @@ type ChunkSchedulerSyncInput = {
   mode?: ChunkSchedulerMode;
   bufferHealth?: ChunkBufferHealth;
   playbackClockSource?: PlaybackClockSource;
+  policy?: ProgressiveSchedulerPolicy;
 };
 
 type ChunkSchedulerRequestArgs = {
@@ -32,6 +38,7 @@ type ChunkSchedulerRequestArgs = {
   chunkIndex: number;
   totalChunks: number;
   priority: ChunkSchedulerPriority;
+  timeoutMs?: number;
 };
 
 type ChunkSchedulerOptions = {
@@ -53,8 +60,10 @@ type TrackPlan = {
   track: TrackMeta;
   priority: ChunkSchedulerPriority;
   maxConcurrent: number;
+  maxConcurrentPerPeer: number;
   preferredPeerId: string | null;
   wantedChunks: number[];
+  timeoutMs?: number;
 };
 
 const DEFAULTS = {
@@ -82,6 +91,7 @@ export class ChunkScheduler {
   private mode: ChunkSchedulerMode = "normal";
   private bufferHealth: ChunkBufferHealth = "healthy";
   private playbackClockSource: PlaybackClockSource = "snapshot";
+  private policy: ProgressiveSchedulerPolicy = "startup";
   private readonly trackStates = new Map<string, ChunkSchedulerTrackState>();
   private lastScheduleAt = 0;
   private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -102,6 +112,7 @@ export class ChunkScheduler {
     this.mode = input.mode ?? "normal";
     this.bufferHealth = input.bufferHealth ?? "healthy";
     this.playbackClockSource = input.playbackClockSource ?? "snapshot";
+    this.policy = input.policy ?? "startup";
     this.reconcileTrackStates();
     this.requestSchedule("normal");
   }
@@ -211,7 +222,7 @@ export class ChunkScheduler {
           ]),
           preferredPeerId: plan.preferredPeerId,
           peerLoads,
-          maxConcurrentPerPeer: this.maxConcurrentPerPeer()
+          maxConcurrentPerPeer: plan.maxConcurrentPerPeer
         });
 
         if (!peerId) {
@@ -223,7 +234,8 @@ export class ChunkScheduler {
           trackId: plan.track.id,
           chunkIndex,
           totalChunks: state.totalChunks,
-          priority: plan.priority
+          priority: plan.priority,
+          timeoutMs: plan.timeoutMs
         });
 
         if (!didRequest) {
@@ -246,7 +258,7 @@ export class ChunkScheduler {
 
     if (
       this.mode === "idle" ||
-      this.bufferHealth === "critical" && this.playbackStatus !== "playing" ||
+      (this.bufferHealth === "critical" && this.playbackStatus !== "playing") ||
       (!this.pageVisible && this.playbackStatus !== "playing")
     ) {
       return [];
@@ -272,76 +284,124 @@ export class ChunkScheduler {
     const plans: TrackPlan[] = [];
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
+      const localAnnouncement = this.availabilityByTrack[currentTrack.id]?.[this.localPeerId] ?? null;
+      const currentTrackManifest = buildProgressiveTrackManifest(
+        currentTrack,
+        localAnnouncement ?? Object.values(this.availabilityByTrack[currentTrack.id] ?? {})[0] ?? null
+      );
       const currentTrackProfile = getTrackStreamingProfile(
         currentTrack,
         this.mode,
-        this.bufferHealth
+        this.bufferHealth,
+        this.policy
       );
+      const currentTrackState = this.ensureTrackState(currentTrack.id, this.getTotalChunks(currentTrack.id));
       plans.push({
         track: currentTrack,
         priority: "current",
         maxConcurrent: currentTrackProfile.maxConcurrent,
+        maxConcurrentPerPeer: currentTrackProfile.maxConcurrentPerPeer,
         preferredPeerId: this.roomSnapshot.room.playback.sourcePeerId,
-        wantedChunks: getCurrentPlaybackWindowChunks({
-          durationMs: currentTrack.durationMs,
-          totalChunks: this.getTotalChunks(currentTrack.id),
-          playbackPositionMs: this.playbackPositionMs,
-          lookBehindMs: currentTrackProfile.lookBehindMs,
-          lookAheadMs: currentTrackProfile.lookAheadMs
-        })
+        wantedChunks:
+          currentTrackManifest
+            ? getPriorityChunkIndexes({
+                manifest: currentTrackManifest,
+                availableChunks: [...currentTrackState.ownedChunks],
+                playbackPositionMs: this.playbackPositionMs,
+                policy: this.policy === "background" ? "steady" : this.policy
+              })
+            : getCurrentPlaybackWindowChunks({
+                durationMs: currentTrack.durationMs,
+                totalChunks: this.getTotalChunks(currentTrack.id),
+                playbackPositionMs: this.playbackPositionMs,
+                lookBehindMs: currentTrackProfile.lookBehindMs,
+                lookAheadMs: currentTrackProfile.lookAheadMs
+              }),
+        timeoutMs: currentTrackProfile.timeoutMs
       });
     }
 
-    if (
-      this.mode !== "conservative" &&
-      this.bufferHealth === "healthy" &&
-      this.playbackClockSource !== "snapshot" &&
-      upcomingTrack &&
-      !this.uploadedTrackIds.has(upcomingTrack.id)
-    ) {
+    const isCurrentTrackComplete =
+      !!currentTrack &&
+      this.isTrackComplete(currentTrack.id, this.getTotalChunks(currentTrack.id));
+
+    if (this.policy !== "background" || !isCurrentTrackComplete) {
+      return plans.filter((plan) => plan.wantedChunks.length > 0);
+    }
+
+    const queuedTrackIds = this.roomSnapshot.queue
+      .slice(Math.max(0, currentQueueIndex + 1))
+      .map((item) => item.trackId);
+    const nextQueuedTrackId = queuedTrackIds.find((trackId) => {
+      if (this.uploadedTrackIds.has(trackId) || trackId === currentTrack?.id) {
+        return false;
+      }
+
+      return !this.isTrackComplete(trackId, this.getTotalChunks(trackId));
+    });
+    const nextQueuedTrack = nextQueuedTrackId
+      ? this.roomSnapshot.tracks.find((track) => track.id === nextQueuedTrackId) ?? null
+      : null;
+
+    if (nextQueuedTrack) {
+      const queuedManifest = buildProgressiveTrackManifest(
+        nextQueuedTrack,
+        this.availabilityByTrack[nextQueuedTrack.id]?.[this.localPeerId] ??
+          Object.values(this.availabilityByTrack[nextQueuedTrack.id] ?? {})[0] ??
+          null
+      );
+      const queuedState = this.ensureTrackState(
+        nextQueuedTrack.id,
+        this.getTotalChunks(nextQueuedTrack.id)
+      );
       plans.push({
-        track: upcomingTrack,
+        track: nextQueuedTrack,
         priority: "upcoming",
-        maxConcurrent: this.maxConcurrentUpcomingTrack(),
+        maxConcurrent: 4,
+        maxConcurrentPerPeer: 2,
         preferredPeerId: null,
-        wantedChunks: getUpcomingWindowChunks({
-          durationMs: upcomingTrack.durationMs,
-          totalChunks: this.getTotalChunks(upcomingTrack.id),
-          prefetchMs: this.upcomingPrefetchMs()
-        })
+        wantedChunks:
+          queuedManifest
+            ? getPriorityChunkIndexes({
+                manifest: queuedManifest,
+                availableChunks: [...queuedState.ownedChunks],
+                playbackPositionMs: 0,
+                policy: "startup"
+              })
+            : getUpcomingWindowChunks({
+                durationMs: nextQueuedTrack.durationMs,
+                totalChunks: this.getTotalChunks(nextQueuedTrack.id),
+                prefetchMs: this.upcomingPrefetchMs()
+              }),
+        timeoutMs: 2_500
       });
+      return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
     for (const track of this.roomSnapshot.tracks) {
-      if (
-        !this.pageVisible ||
-        this.mode !== "normal" ||
-        this.bufferHealth !== "healthy" ||
-        this.playbackClockSource === "snapshot"
-      ) {
-        break;
+      if (this.uploadedTrackIds.has(track.id) || track.id === currentTrack?.id) {
+        continue;
       }
 
-      if (
-        this.uploadedTrackIds.has(track.id) ||
-        track.id === currentTrack?.id ||
-        track.id === upcomingTrack?.id
-      ) {
+      if (this.isTrackComplete(track.id, this.getTotalChunks(track.id))) {
         continue;
       }
 
       plans.push({
         track,
         priority: "background",
-        maxConcurrent: this.maxConcurrentBackgroundTrack(),
+        maxConcurrent: 1,
+        maxConcurrentPerPeer: 1,
         preferredPeerId: null,
         wantedChunks: getBackgroundChunks({
           totalChunks: this.getTotalChunks(track.id),
           ownedChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).ownedChunks,
           pendingChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).pendingChunks,
-          batchSize: this.backgroundChunkBatchSize()
-        })
+          batchSize: 1
+        }),
+        timeoutMs: 4_000
       });
+      break;
     }
 
     return plans.filter((plan) => plan.wantedChunks.length > 0);
@@ -484,46 +544,87 @@ export function deriveTrackStreamProfile(track: TrackMeta): TrackStreamProfile {
 function getTrackStreamingProfile(
   track: TrackMeta,
   mode: ChunkSchedulerMode,
-  bufferHealth: ChunkBufferHealth
+  bufferHealth: ChunkBufferHealth,
+  policy: ProgressiveSchedulerPolicy
 ) {
   const streamProfile = deriveTrackStreamProfile(track);
+
+  if (policy === "catchup") {
+    return {
+      maxConcurrent: 12,
+      maxConcurrentPerPeer: 4,
+      lookBehindMs: 0,
+      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 40_000,
+      timeoutMs: 1_200
+    };
+  }
+
+  if (policy === "startup") {
+    return {
+      maxConcurrent: 10,
+      maxConcurrentPerPeer: 4,
+      lookBehindMs: 0,
+      lookAheadMs: streamProfile === "large-lossless" ? 30_000 : 18_000,
+      timeoutMs: 1_200
+    };
+  }
+
+  if (policy === "pause-fill") {
+    return {
+      maxConcurrent: 8,
+      maxConcurrentPerPeer: 3,
+      lookBehindMs: 0,
+      lookAheadMs: streamProfile === "large-lossless" ? 90_000 : 60_000,
+      timeoutMs: 2_000
+    };
+  }
 
   if (bufferHealth === "critical") {
     return {
       maxConcurrent: 8,
+      maxConcurrentPerPeer: 3,
       lookBehindMs: 4_000,
-      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 40_000
+      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 40_000,
+      timeoutMs: 2_000
     };
   }
 
   if (mode === "conservative" || bufferHealth === "low") {
     return {
       maxConcurrent: 5,
+      maxConcurrentPerPeer: 2,
       lookBehindMs: 8_000,
-      lookAheadMs: streamProfile === "large-lossless" ? 55_000 : 35_000
+      lookAheadMs: streamProfile === "large-lossless" ? 55_000 : 35_000,
+      timeoutMs: 2_500
     };
   }
 
   if (streamProfile === "large-lossless") {
     return {
       maxConcurrent: 6,
+      maxConcurrentPerPeer: 3,
       lookBehindMs: 6_000,
-      lookAheadMs: 40_000
+      lookAheadMs: 40_000,
+      timeoutMs: 2_500
     };
   }
 
   if (streamProfile === "large-compressed") {
     return {
       maxConcurrent: 6,
+      maxConcurrentPerPeer: 3,
       lookBehindMs: 6_000,
-      lookAheadMs: 32_000
+      lookAheadMs: 32_000,
+      timeoutMs: 2_500
     };
   }
 
   return {
     maxConcurrent: DEFAULTS.maxConcurrentCurrentTrack,
+    maxConcurrentPerPeer: 3,
     lookBehindMs: DEFAULTS.currentLookBehindMs,
-    lookAheadMs: DEFAULTS.currentLookAheadMs
+    lookAheadMs: DEFAULTS.currentLookAheadMs,
+    timeoutMs: 2_500
   };
 }
 

@@ -18,6 +18,7 @@ describe("p2p feature helpers", () => {
           ownerPeerId: "peer_local",
           nickname: "Host",
           totalChunks: 6,
+          chunkSize: 128 * 1024,
           availableChunks: [0, 1, 2],
           source: "live_upload",
           announcedAt: new Date().toISOString()
@@ -28,6 +29,7 @@ describe("p2p feature helpers", () => {
           ownerPeerId: "peer_remote",
           nickname: "Guest",
           totalChunks: 6,
+          chunkSize: 128 * 1024,
           availableChunks: [0, 1, 2, 3, 4, 5],
           source: "local_cache",
           announcedAt: new Date().toISOString()
@@ -244,6 +246,7 @@ function buildBinaryPieceMessage(input: {
   trackId: string;
   chunkIndex: number;
   totalChunks: number;
+  chunkSize?: number;
   mimeType: string;
   pieceHash: string;
   payload: ArrayBuffer;
@@ -253,6 +256,7 @@ function buildBinaryPieceMessage(input: {
     trackId: input.trackId,
     chunkIndex: input.chunkIndex,
     totalChunks: input.totalChunks,
+    chunkSize: input.chunkSize ?? input.payload.byteLength,
     mimeType: input.mimeType,
     pieceHash: input.pieceHash
   };
@@ -271,6 +275,7 @@ function buildIncomingPieceMessage(input: {
   trackId: string;
   chunkIndex: number;
   totalChunks: number;
+  chunkSize?: number;
   mimeType: string;
   pieceHash: string;
   payload: ArrayBuffer;
@@ -280,6 +285,7 @@ function buildIncomingPieceMessage(input: {
     trackId: input.trackId,
     chunkIndex: input.chunkIndex,
     totalChunks: input.totalChunks,
+    chunkSize: input.chunkSize ?? input.payload.byteLength,
     mimeType: input.mimeType,
     pieceHash: input.pieceHash,
     header: {
@@ -287,6 +293,7 @@ function buildIncomingPieceMessage(input: {
       trackId: input.trackId,
       chunkIndex: input.chunkIndex,
       totalChunks: input.totalChunks,
+      chunkSize: input.chunkSize ?? input.payload.byteLength,
       mimeType: input.mimeType,
       pieceHash: input.pieceHash
     },

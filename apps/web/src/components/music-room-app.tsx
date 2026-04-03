@@ -29,6 +29,20 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { getPlaybackEffectivePositionMs, useRoomPlayback } from "@/features/playback/use-room-playback";
 import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
 import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
+import {
+  buildProgressiveHealthSnapshot,
+  buildProgressiveTrackManifest,
+  canUseProgressivePlayback,
+  getEffectivePlaybackPositionMs,
+  getCriticalBufferThresholdMs,
+  getProgressiveEngineType,
+  type ProgressivePlaybackSource
+} from "@/features/playback/progressive-playback";
+import { ProgressiveMseEngine } from "@/features/playback/progressive-mse-engine";
+import {
+  getInitialProgressivePlaybackSource,
+  resolveProgressiveWarmupDecision
+} from "@/features/playback/progressive-source-controller";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
@@ -38,6 +52,7 @@ import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageS
 import { useTrackHydrationQueue } from "@/components/room/hooks/use-track-hydration-queue";
 import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
+import { upsertTrackPieceManifest } from "@/lib/indexeddb";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
@@ -65,6 +80,10 @@ export function MusicRoomApp({
   const meshRef = useRef<P2PMesh | null>(null);
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
+  const progressiveEngineRef = useRef<ProgressiveMseEngine | null>(null);
+  const progressiveWarmupReadyAtRef = useRef<number | null>(null);
+  const remoteHoldTimeoutRef = useRef<number | null>(null);
+  const eligibleFullLocalTrackIdRef = useRef<string | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
@@ -96,6 +115,10 @@ export function MusicRoomApp({
   );
   const [schedulerMode, setSchedulerMode] = useState<"normal" | "conservative" | "idle">("normal");
   const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
+  const [activePlaybackSource, setActivePlaybackSource] =
+    useState<ProgressivePlaybackSource>("remote-stream");
+  const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
+  const [progressiveTickAt, setProgressiveTickAt] = useState(() => Date.now());
   const {
     activeSession,
     hydrated,
@@ -124,7 +147,6 @@ export function MusicRoomApp({
     currentRoomRef
   });
   const {
-    diagnosticsState,
     peerDiagnostics,
     peerRecentEvents,
     recordPeerDiagnostic
@@ -154,8 +176,7 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability
   });
   const announceLocalCacheRef = useRef(announceLocalCache);
-  const hasLocalCurrentTrack = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
-  const shouldUseLocalPlayback = hasLocalCurrentTrack;
+  const shouldUseLocalPlayback = activePlaybackSource !== "remote-stream";
   const {
     progressTrack,
     progressMs,
@@ -179,6 +200,17 @@ export function MusicRoomApp({
     isPageVisible,
     uploadedTrackIdsRef,
     chunkSchedulerRef,
+    canHydrateTrack: (trackId) => {
+      if (trackId !== currentPlaybackTrackId) {
+        return true;
+      }
+
+      return (
+        roomSnapshot?.room.playback.status !== "playing" ||
+        progressiveSchedulerPolicy === "steady" ||
+        progressiveSchedulerPolicy === "background"
+      );
+    },
     hydrateTrackFromPieces
   });
   const getCurrentPlaybackPositionMs = () => {
@@ -265,6 +297,36 @@ export function MusicRoomApp({
   }, [announceLocalCache]);
 
   useEffect(() => {
+    if (!currentPlaybackTrackId) {
+      eligibleFullLocalTrackIdRef.current = null;
+      setActivePlaybackSource("remote-stream");
+      setProgressiveFallbackReason(null);
+      return;
+    }
+
+    eligibleFullLocalTrackIdRef.current = uploadedTracks[currentPlaybackTrackId]
+      ? currentPlaybackTrackId
+      : null;
+    setActivePlaybackSource(
+      getInitialProgressivePlaybackSource(!!uploadedTracks[currentPlaybackTrackId])
+    );
+    setProgressiveFallbackReason(null);
+    progressiveWarmupReadyAtRef.current = null;
+  }, [currentPlaybackTrackId]);
+
+  useEffect(() => {
+    if (!currentPlaybackTrackId) {
+      return;
+    }
+
+    const tick = window.setInterval(() => {
+      setProgressiveTickAt(Date.now());
+    }, 500);
+
+    return () => window.clearInterval(tick);
+  }, [currentPlaybackTrackId]);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       const nextVisible = !document.hidden;
       setIsPageVisible(nextVisible);
@@ -315,6 +377,10 @@ export function MusicRoomApp({
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
       }
+      if (remoteHoldTimeoutRef.current !== null) {
+        window.clearTimeout(remoteHoldTimeoutRef.current);
+      }
+      progressiveEngineRef.current?.destroy();
     };
   }, []);
 
@@ -531,9 +597,22 @@ export function MusicRoomApp({
       peerId,
       emitPeerSignal,
       {
-        onPieceReceived: ({ trackId, chunkIndex, totalChunks, mimeType }) => {
+        onPieceReceived: ({ trackId, chunkIndex, totalChunks, chunkSize, mimeType }) => {
+          const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
+          if (track) {
+            void upsertTrackPieceManifest({
+              trackId,
+              fileHash: track.fileHash,
+              mimeType: track.mimeType || mimeType || "audio/mpeg",
+              codec: track.codec ?? null,
+              sizeBytes: track.sizeBytes ?? null,
+              durationMs: track.durationMs,
+              totalChunks,
+              chunkSize
+            });
+          }
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
-          mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks);
+          mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks, chunkSize);
           void announceLocalCacheRef.current(trackId, totalChunks);
           scheduleTrackHydration(trackId, mimeType, totalChunks);
         },
@@ -591,8 +670,8 @@ export function MusicRoomApp({
     );
     meshRef.current = mesh;
     chunkSchedulerRef.current = new ChunkScheduler(peerId, {
-      requestPiece: ({ peerId: remotePeerId, trackId, chunkIndex, totalChunks }) =>
-        mesh.requestPiece(remotePeerId, trackId, chunkIndex, totalChunks)
+      requestPiece: ({ peerId: remotePeerId, trackId, chunkIndex, totalChunks, timeoutMs }) =>
+        mesh.requestPiece(remotePeerId, trackId, chunkIndex, totalChunks, timeoutMs)
     });
     const mediaMesh = new RoomMediaMesh(
       roomId,
@@ -981,9 +1060,12 @@ export function MusicRoomApp({
     }
 
     const remoteAudio = remoteAudioRef.current;
-    const uploaded = uploadedTracks[playback.currentTrackId];
+    const uploaded =
+      eligibleFullLocalTrackIdRef.current === playback.currentTrackId
+        ? uploadedTracks[playback.currentTrackId]
+        : undefined;
 
-    if (shouldUseLocalPlayback && uploaded) {
+    if (activePlaybackSource === "full-local" && uploaded) {
       if (remoteAudio) {
         remoteAudio.pause();
         remoteAudio.srcObject = null;
@@ -1014,12 +1096,37 @@ export function MusicRoomApp({
       return;
     }
 
-    if (!shouldUseLocalPlayback) {
+    if (activePlaybackSource === "progressive-local") {
+      const expectedSeconds =
+        getPlaybackEffectivePositionMs(playback, progressTrack?.durationMs ?? 0) / 1000;
+      audio.muted = false;
+      syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing", {
+        softDriftMs: 120,
+        hardDriftMs: 900
+      });
+
+      if (playback.status === "playing") {
+        void audio.play().catch(() => {
+          setStatusMessage("浏览器阻止了自动播放，请手动点击播放恢复。");
+        });
+      } else {
+        audio.pause();
+        audio.playbackRate = 1;
+      }
+
+      return;
+    }
+
+    if (activePlaybackSource === "remote-stream") {
       audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
+      audio.muted = false;
+      if (!progressiveEngineRef.current) {
+        audio.removeAttribute("src");
+        audio.load();
+      }
 
       if (remoteAudio) {
+        remoteAudio.muted = false;
         if (playback.status === "playing") {
           void remoteAudio.play().catch(() => {
             setStatusMessage("浏览器阻止了远端音频自动播放，请再次点击页面继续。");
@@ -1043,9 +1150,37 @@ export function MusicRoomApp({
     playback?.mediaEpoch,
     progressTrack?.durationMs,
     uploadedTracks,
-    shouldUseLocalPlayback,
+    activePlaybackSource,
     isCurrentSourceOwner
   ]);
+
+  const currentTrack = progressTrack;
+  const currentTrackAvailabilityAnnouncement =
+    currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null;
+  const currentProgressiveManifest = buildProgressiveTrackManifest(
+    currentTrack,
+    currentTrackAvailabilityAnnouncement
+  );
+  const currentProgressiveEngineType = getProgressiveEngineType(currentProgressiveManifest);
+  const currentTrackAvailableChunks =
+    currentTrackAvailabilityAnnouncement?.availableChunks ?? [];
+  const currentTrackIsComplete =
+    !!currentProgressiveManifest &&
+    currentTrackAvailableChunks.length >= currentProgressiveManifest.totalChunks;
+  const progressiveHealthSnapshot = buildProgressiveHealthSnapshot({
+    playback: roomSnapshot?.room.playback,
+    activeSource: activePlaybackSource,
+    manifest: currentProgressiveManifest,
+    localAvailability: currentTrackAvailabilityAnnouncement,
+    fallbackReason: progressiveFallbackReason
+  });
+  const progressiveSchedulerPolicy = progressiveHealthSnapshot.schedulerPolicy;
+  const canPrepareProgressiveLocal =
+    !isCurrentSourceOwner &&
+    activePlaybackSource !== "full-local" &&
+    !!currentProgressiveManifest &&
+    canUseProgressivePlayback() &&
+    currentProgressiveEngineType === "mse";
 
   useEffect(() => {
     const localAudio = audioRef.current;
@@ -1061,11 +1196,19 @@ export function MusicRoomApp({
     const handleWaiting = () => {
       setSchedulerMode("conservative");
       setBufferHealth("low");
+      if (activePlaybackSource === "progressive-local") {
+        setProgressiveFallbackReason("buffer-underrun");
+        setActivePlaybackSource("remote-stream");
+      }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
     const handleStalled = () => {
       setSchedulerMode("conservative");
       setBufferHealth("critical");
+      if (activePlaybackSource === "progressive-local") {
+        setProgressiveFallbackReason("stalled");
+        setActivePlaybackSource("remote-stream");
+      }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
     const handlePause = () => {
@@ -1073,6 +1216,21 @@ export function MusicRoomApp({
         setSchedulerMode(isPageVisible ? "normal" : "idle");
         setBufferHealth("healthy");
       }
+    };
+    const handleLocalSeeked = () => {
+      if (activePlaybackSource !== "progressive-local" || !localAudio || !currentProgressiveManifest) {
+        return;
+      }
+
+      const soughtPositionMs = Math.round(localAudio.currentTime * 1000);
+      if (soughtPositionMs <= progressiveHealthSnapshot.contiguousBufferedMs) {
+        return;
+      }
+
+      setSchedulerMode("conservative");
+      setBufferHealth("critical");
+      setProgressiveFallbackReason("seek-outside-buffer");
+      setActivePlaybackSource("remote-stream");
     };
 
     localAudio?.addEventListener("playing", handlePlaying);
@@ -1083,6 +1241,7 @@ export function MusicRoomApp({
     remoteAudio?.addEventListener("stalled", handleStalled);
     localAudio?.addEventListener("pause", handlePause);
     remoteAudio?.addEventListener("pause", handlePause);
+    localAudio?.addEventListener("seeked", handleLocalSeeked);
 
     return () => {
       localAudio?.removeEventListener("playing", handlePlaying);
@@ -1093,8 +1252,16 @@ export function MusicRoomApp({
       remoteAudio?.removeEventListener("stalled", handleStalled);
       localAudio?.removeEventListener("pause", handlePause);
       remoteAudio?.removeEventListener("pause", handlePause);
+      localAudio?.removeEventListener("seeked", handleLocalSeeked);
     };
-  }, [isPageVisible, roomSnapshot?.room.playback.currentTrackId, roomSnapshot?.room.playback.status]);
+  }, [
+    activePlaybackSource,
+    currentProgressiveManifest,
+    isPageVisible,
+    progressiveHealthSnapshot.contiguousBufferedMs,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.status
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
@@ -1113,8 +1280,6 @@ export function MusicRoomApp({
     peerId,
     mediaConnectedPeers.length
   ]);
-
-  const currentTrack = progressTrack;
 
   useEffect(() => {
     const nextPlayback = roomSnapshot?.room.playback;
@@ -1148,6 +1313,205 @@ export function MusicRoomApp({
   }, [roomSnapshot?.room.playback, isCurrentSourceOwner, mediaConnectedPeers.length, shouldUseLocalPlayback]);
 
   useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    if (!canPrepareProgressiveLocal || !currentProgressiveManifest) {
+      progressiveEngineRef.current?.destroy();
+      progressiveEngineRef.current = null;
+      return;
+    }
+
+    progressiveEngineRef.current?.destroy();
+    const engine = new ProgressiveMseEngine(audio, peerId, currentProgressiveManifest);
+    progressiveEngineRef.current = engine;
+    void engine.attach().then(() => engine.sync());
+
+    return () => {
+      if (progressiveEngineRef.current === engine) {
+        progressiveEngineRef.current = null;
+      }
+      engine.destroy();
+    };
+  }, [
+    canPrepareProgressiveLocal,
+    currentProgressiveManifest?.trackId,
+    currentProgressiveManifest?.mimeType,
+    currentProgressiveManifest?.totalChunks,
+    currentProgressiveManifest?.chunkSize,
+    peerId
+  ]);
+
+  useEffect(() => {
+    if (!progressiveEngineRef.current || !currentProgressiveManifest) {
+      return;
+    }
+
+    void progressiveEngineRef.current.sync();
+  }, [currentProgressiveManifest?.trackId, currentTrackAvailabilityAnnouncement?.availableChunks]);
+
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+    const audio = audioRef.current;
+    if (
+      !playback?.currentTrackId ||
+      !audio ||
+      !progressiveEngineRef.current ||
+      !currentProgressiveManifest ||
+      activePlaybackSource === "full-local"
+    ) {
+      progressiveWarmupReadyAtRef.current = null;
+      return;
+    }
+
+    if (playback.status !== "playing") {
+      audio.pause();
+      audio.muted = false;
+      progressiveWarmupReadyAtRef.current = null;
+      return;
+    }
+
+    const expectedSeconds =
+      getEffectivePlaybackPositionMs(playback, currentProgressiveManifest.durationMs, progressiveTickAt) /
+      1000;
+    const engineReady = progressiveEngineRef.current.engineStatus === "ready";
+    const startupReady =
+      progressiveHealthSnapshot.startupReady &&
+      progressiveHealthSnapshot.fallbackReason === null;
+
+    if (!engineReady || !startupReady) {
+      audio.pause();
+      audio.muted = false;
+      progressiveWarmupReadyAtRef.current = null;
+      return;
+    }
+
+    syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+      softDriftMs: 120,
+      hardDriftMs: 900
+    });
+    audio.muted = activePlaybackSource !== "progressive-local";
+    void audio.play().catch(() => undefined);
+
+    const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
+    const warmupDecision = resolveProgressiveWarmupDecision({
+      currentSource: activePlaybackSource,
+      engineReady,
+      startupReady: progressiveHealthSnapshot.startupReady,
+      fallbackReason: progressiveHealthSnapshot.fallbackReason,
+      driftMs,
+      warmupReadyAt: progressiveWarmupReadyAtRef.current,
+      now: Date.now()
+    });
+    progressiveWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
+    if (warmupDecision.clearFallbackReason) {
+      setProgressiveFallbackReason(null);
+    }
+    if (warmupDecision.nextSource !== activePlaybackSource) {
+      setActivePlaybackSource(warmupDecision.nextSource);
+    }
+  }, [
+    roomSnapshot?.room.playback,
+    currentProgressiveManifest,
+    activePlaybackSource,
+    progressiveHealthSnapshot.startupReady,
+    progressiveHealthSnapshot.fallbackReason,
+    progressiveTickAt
+  ]);
+
+  useEffect(() => {
+    if (activePlaybackSource !== "progressive-local") {
+      if (remoteHoldTimeoutRef.current !== null) {
+        window.clearTimeout(remoteHoldTimeoutRef.current);
+        remoteHoldTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const remoteAudio = remoteAudioRef.current;
+    if (!remoteAudio) {
+      return;
+    }
+
+    remoteAudio.muted = true;
+    if (remoteHoldTimeoutRef.current !== null) {
+      window.clearTimeout(remoteHoldTimeoutRef.current);
+    }
+
+    remoteHoldTimeoutRef.current = window.setTimeout(() => {
+      remoteAudio.pause();
+      remoteAudio.muted = false;
+      remoteHoldTimeoutRef.current = null;
+    }, 1_000);
+
+    return () => {
+      if (remoteHoldTimeoutRef.current !== null) {
+        window.clearTimeout(remoteHoldTimeoutRef.current);
+        remoteHoldTimeoutRef.current = null;
+      }
+      remoteAudio.muted = false;
+    };
+  }, [activePlaybackSource, roomSnapshot?.room.playback.currentTrackId]);
+
+  useEffect(() => {
+    if (activePlaybackSource !== "progressive-local") {
+      return;
+    }
+
+    if (progressiveHealthSnapshot.aheadBufferedMs >= getCriticalBufferThresholdMs()) {
+      return;
+    }
+
+    setProgressiveFallbackReason("seek-outside-buffer");
+    setActivePlaybackSource("remote-stream");
+  }, [activePlaybackSource, progressiveHealthSnapshot.aheadBufferedMs]);
+
+  useEffect(() => {
+    if (activePlaybackSource !== "remote-stream") {
+      return;
+    }
+
+    if (!progressiveFallbackReason || !progressiveHealthSnapshot.startupReady) {
+      return;
+    }
+
+    setProgressiveFallbackReason(null);
+  }, [activePlaybackSource, progressiveFallbackReason, progressiveHealthSnapshot.startupReady]);
+
+  useEffect(() => {
+    recordPeerDiagnostic({
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "progressive-status",
+      summary: `播放源 ${progressiveHealthSnapshot.activeSource} / 策略 ${progressiveHealthSnapshot.schedulerPolicy}`,
+      update: (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          activeSource: progressiveHealthSnapshot.activeSource,
+          engineType: progressiveHealthSnapshot.engineType,
+          contiguousBufferedMs: progressiveHealthSnapshot.contiguousBufferedMs,
+          aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+          schedulerPolicy: progressiveHealthSnapshot.schedulerPolicy,
+          startupReady: progressiveHealthSnapshot.startupReady,
+          fallbackReason: progressiveHealthSnapshot.fallbackReason
+        }
+      })
+    });
+  }, [
+    progressiveHealthSnapshot.activeSource,
+    progressiveHealthSnapshot.engineType,
+    progressiveHealthSnapshot.contiguousBufferedMs,
+    progressiveHealthSnapshot.aheadBufferedMs,
+    progressiveHealthSnapshot.schedulerPolicy,
+    progressiveHealthSnapshot.startupReady,
+    progressiveHealthSnapshot.fallbackReason,
+    recordPeerDiagnostic
+  ]);
+
+  useEffect(() => {
     const remotePeerIds =
       roomSnapshot?.room.members
         .map((member) => member.peerId)
@@ -1175,7 +1539,8 @@ export function MusicRoomApp({
       pageVisible: isPageVisible,
       mode: schedulerMode,
       bufferHealth,
-      playbackClockSource
+      playbackClockSource,
+      policy: progressiveSchedulerPolicy
     });
   }, [
     availabilityByTrack,
@@ -1186,7 +1551,8 @@ export function MusicRoomApp({
     isPageVisible,
     schedulerMode,
     bufferHealth,
-    playbackClockSource
+    playbackClockSource,
+    progressiveSchedulerPolicy
   ]);
 
   function resetPlayerSurface() {
@@ -1205,6 +1571,8 @@ export function MusicRoomApp({
       remoteAudio.load();
     }
 
+    progressiveEngineRef.current?.destroy();
+    progressiveEngineRef.current = null;
     hostStreamRef.current = null;
     resetHydrationQueue();
     setProgressMs(0);
@@ -1213,6 +1581,8 @@ export function MusicRoomApp({
     setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
+    setActivePlaybackSource("remote-stream");
+    setProgressiveFallbackReason(null);
   }
 
   async function refreshAvailableRooms() {

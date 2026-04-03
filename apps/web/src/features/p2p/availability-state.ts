@@ -12,6 +12,7 @@ export function upsertAvailabilityAnnouncement(
   if (
     existing &&
     existing.totalChunks === announcement.totalChunks &&
+    existing.chunkSize === announcement.chunkSize &&
     existing.source === announcement.source &&
     existing.availableChunks.length === announcement.availableChunks.length &&
     existing.availableChunks.every((chunk, index) => chunk === announcement.availableChunks[index])

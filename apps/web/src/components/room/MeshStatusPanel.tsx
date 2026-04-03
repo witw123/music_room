@@ -165,6 +165,30 @@ export function MeshStatusPanel({
                       绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}
                     </span>
                   </div>
+                  {peer.progressivePlaybackStatus ? (
+                    <div className="mt-3 rounded-lg border border-surface-border bg-background/30 p-2.5 text-[10px] text-foreground-muted">
+                      <div className="mb-1 font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
+                        Progressive
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <span>播放源: {peer.progressivePlaybackStatus.activeSource ?? "未启用"}</span>
+                        <span>引擎: {peer.progressivePlaybackStatus.engineType ?? "none"}</span>
+                        <span>
+                          连续缓冲: {Math.round(peer.progressivePlaybackStatus.contiguousBufferedMs / 1000)}s
+                        </span>
+                        <span>
+                          前向缓冲: {Math.round(peer.progressivePlaybackStatus.aheadBufferedMs / 1000)}s
+                        </span>
+                        <span>调度策略: {peer.progressivePlaybackStatus.schedulerPolicy ?? "未激活"}</span>
+                        <span>启动就绪: {peer.progressivePlaybackStatus.startupReady ? "是" : "否"}</span>
+                      </div>
+                      {peer.progressivePlaybackStatus.fallbackReason ? (
+                        <p className="mt-2 text-amber-300">
+                          回退原因: {peer.progressivePlaybackStatus.fallbackReason}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {peer.lastError ? (
                     <p className="mt-2 text-[10px] text-red-400">{peer.lastError}</p>
                   ) : null}

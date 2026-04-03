@@ -4,7 +4,12 @@ import {
   type P2PDataMessage,
   type PeerSignalMessage
 } from "@music-room/shared";
-import { cacheTrackPieces, getCachedPiece, getCachedPieceIndexes } from "@/lib/indexeddb";
+import {
+  cacheTrackPieces,
+  getCachedPiece,
+  getCachedPieceIndexes,
+  getTrackPieceManifest
+} from "@/lib/indexeddb";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -12,6 +17,7 @@ type MeshCallbacks = {
     trackId: string;
     chunkIndex: number;
     totalChunks: number;
+    chunkSize: number;
     mimeType: string;
   }) => void;
   onPieceRequestTimeout?: (payload: {
@@ -57,6 +63,7 @@ type PieceFrameHeader = {
   trackId: string;
   chunkIndex: number;
   totalChunks: number;
+  chunkSize: number;
   mimeType: string;
   pieceHash: string;
 };
@@ -368,6 +375,7 @@ export class P2PMesh {
           return;
         }
         const chunkIndexes = await getCachedPieceIndexes(message.trackId, this.localPeerId);
+        const manifest = await getTrackPieceManifest(message.trackId);
 
         if (channel.readyState !== "open") {
           return;
@@ -379,8 +387,9 @@ export class P2PMesh {
               kind: "send-piece",
               trackId: message.trackId,
               chunkIndex: piece.chunkIndex,
-              totalChunks: chunkIndexes.length,
-              mimeType: "audio/mpeg",
+              totalChunks: manifest?.totalChunks ?? chunkIndexes.length,
+              chunkSize: manifest?.chunkSize ?? piece.chunkSize,
+              mimeType: manifest?.mimeType || "audio/mpeg",
               pieceHash: piece.hash
             },
             piece.payload
@@ -516,6 +525,7 @@ export class P2PMesh {
           trackId: item.message.header.trackId,
           chunkIndex: item.message.header.chunkIndex,
           totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
+          chunkSize: item.message.header.chunkSize,
           mimeType: item.message.header.mimeType
         });
       }
@@ -635,6 +645,7 @@ function isPieceFrameHeader(value: unknown): value is PieceFrameHeader {
     typeof header.trackId === "string" &&
     typeof header.chunkIndex === "number" &&
     typeof header.totalChunks === "number" &&
+    typeof header.chunkSize === "number" &&
     typeof header.mimeType === "string" &&
     typeof header.pieceHash === "string"
   );

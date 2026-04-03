@@ -10,16 +10,22 @@ import {
 } from "./chunk-scheduler";
 
 function buildAnnouncement(overrides: Partial<TrackAvailabilityAnnouncement>): TrackAvailabilityAnnouncement {
-  return {
+  const announcement: TrackAvailabilityAnnouncement = {
     roomId: "room_1",
     trackId: "track_1",
     ownerPeerId: "peer_a",
     nickname: "Peer A",
     totalChunks: 12,
+    chunkSize: 128 * 1024,
     availableChunks: [0, 1, 2, 3, 4, 5],
     source: "local_cache",
     announcedAt: "2026-03-31T10:00:00.000Z",
     ...overrides
+  };
+
+  return {
+    ...announcement,
+    chunkSize: announcement.chunkSize ?? 128 * 1024
   };
 }
 
@@ -195,8 +201,12 @@ describe("ChunkScheduler", () => {
       playbackPositionMs: 30_000
     });
 
-    expect(requestPiece).toHaveBeenCalledTimes(2);
+    expect(requestPiece).toHaveBeenCalledTimes(3);
     expect(requestPiece.mock.calls.map(([call]) => call)).toEqual([
+      expect.objectContaining({
+        trackId: "track_1",
+        priority: "current"
+      }),
       expect.objectContaining({
         trackId: "track_1",
         priority: "current"
@@ -208,7 +218,8 @@ describe("ChunkScheduler", () => {
     ]);
   });
 
-  it("cools down timed-out peers before retrying on another source", () => {
+  it("cools down timed-out peers before retrying on another source", async () => {
+    vi.useFakeTimers();
     const requestPiece = vi.fn(
       (args: { peerId: string; trackId: string; chunkIndex: number; totalChunks: number; priority: string }) =>
         true
@@ -248,10 +259,12 @@ describe("ChunkScheduler", () => {
     );
 
     scheduler.markRequestTimeout("track_1", 2, "peer_host");
+    await vi.advanceTimersByTimeAsync(200);
 
-    expect(requestPiece).toHaveBeenLastCalledWith(
+    expect(requestPiece).toHaveBeenCalledWith(
       expect.objectContaining({ peerId: "peer_seed", trackId: "track_1" })
     );
+    vi.useRealTimers();
   });
 
   it("suppresses upcoming and background requests when buffer health is low", () => {

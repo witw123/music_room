@@ -20,9 +20,22 @@ type TrackPieceRecord = {
   payload: ArrayBuffer;
 };
 
+export type TrackPieceManifestRecord = {
+  trackId: string;
+  fileHash: string;
+  mimeType: string;
+  codec: string | null;
+  sizeBytes: number | null;
+  durationMs: number;
+  totalChunks: number;
+  chunkSize: number;
+  updatedAt: string;
+};
+
 export class MusicRoomDatabase extends Dexie {
   trackAssets!: Table<TrackAssetRecord, string>;
   trackPieces!: Table<TrackPieceRecord, string>;
+  trackPieceManifests!: Table<TrackPieceManifestRecord, string>;
 
   constructor() {
     super("music-room");
@@ -34,6 +47,12 @@ export class MusicRoomDatabase extends Dexie {
       trackAssets: "&trackId, fileHash, cachedAt",
       trackPieces:
         "&pieceId, trackId, peerId, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], createdAt"
+    });
+    this.version(4).stores({
+      trackAssets: "&trackId, fileHash, cachedAt",
+      trackPieces:
+        "&pieceId, trackId, peerId, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], createdAt",
+      trackPieceManifests: "&trackId, fileHash, updatedAt"
     });
   }
 }
@@ -71,6 +90,31 @@ export async function getCachedTrackAssets(trackIds: string[]) {
 
 export async function getCachedTrackAssetCount() {
   return musicRoomDatabase.trackAssets.count();
+}
+
+export async function upsertTrackPieceManifest(
+  input: Omit<TrackPieceManifestRecord, "updatedAt">
+) {
+  await musicRoomDatabase.trackPieceManifests.put({
+    ...input,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+export async function getTrackPieceManifest(trackId: string) {
+  return musicRoomDatabase.trackPieceManifests.get(trackId);
+}
+
+export async function getTrackPieceManifests(trackIds: string[]) {
+  if (trackIds.length === 0) {
+    return [];
+  }
+
+  return musicRoomDatabase.trackPieceManifests.where("trackId").anyOf(trackIds).toArray();
+}
+
+export async function deleteTrackPieceManifest(trackId: string) {
+  await musicRoomDatabase.trackPieceManifests.delete(trackId);
 }
 
 export async function cacheTrackPieces(
@@ -135,10 +179,23 @@ export async function deleteCachedPiecesForTrack(trackId: string, peerId?: strin
     : await musicRoomDatabase.trackPieces.where("trackId").equals(trackId).toArray();
 
   if (pieces.length === 0) {
+    if (!peerId) {
+      await deleteTrackPieceManifest(trackId);
+    }
     return 0;
   }
 
-  await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.trackPieces,
+    musicRoomDatabase.trackPieceManifests,
+    async () => {
+      await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
+      if (!peerId) {
+        await musicRoomDatabase.trackPieceManifests.delete(trackId);
+      }
+    }
+  );
   return pieces.length;
 }
 
@@ -153,22 +210,36 @@ export async function pruneCachedTracks(maxAssets: number, protectedTrackIds: st
     return [];
   }
 
-  await musicRoomDatabase.transaction("rw", musicRoomDatabase.trackAssets, musicRoomDatabase.trackPieces, async () => {
-    await musicRoomDatabase.trackAssets.bulkDelete(removedTrackIds);
-    for (const trackId of removedTrackIds) {
-      const pieces = await musicRoomDatabase.trackPieces.where("trackId").equals(trackId).toArray();
-      if (pieces.length > 0) {
-        await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.trackAssets,
+    musicRoomDatabase.trackPieces,
+    musicRoomDatabase.trackPieceManifests,
+    async () => {
+      await musicRoomDatabase.trackAssets.bulkDelete(removedTrackIds);
+      await musicRoomDatabase.trackPieceManifests.bulkDelete(removedTrackIds);
+      for (const trackId of removedTrackIds) {
+        const pieces = await musicRoomDatabase.trackPieces.where("trackId").equals(trackId).toArray();
+        if (pieces.length > 0) {
+          await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
+        }
       }
     }
-  });
+  );
 
   return removedTrackIds;
 }
 
 export async function clearAllCachedTracks() {
-  await musicRoomDatabase.transaction("rw", musicRoomDatabase.trackAssets, musicRoomDatabase.trackPieces, async () => {
-    await musicRoomDatabase.trackAssets.clear();
-    await musicRoomDatabase.trackPieces.clear();
-  });
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.trackAssets,
+    musicRoomDatabase.trackPieces,
+    musicRoomDatabase.trackPieceManifests,
+    async () => {
+      await musicRoomDatabase.trackAssets.clear();
+      await musicRoomDatabase.trackPieces.clear();
+      await musicRoomDatabase.trackPieceManifests.clear();
+    }
+  );
 }

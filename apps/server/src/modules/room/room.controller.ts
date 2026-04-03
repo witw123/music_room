@@ -153,6 +153,7 @@ export class RoomController {
       bitrate: number | null;
       sizeBytes?: number | null;
       codec?: string | null;
+      mimeType?: string | null;
       fileHash: string;
       artworkUrl: string | null;
       ownerSessionId?: string;

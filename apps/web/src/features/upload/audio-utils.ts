@@ -33,6 +33,7 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     bitrate: null,
     sizeBytes: file.size,
     codec,
+    mimeType: file.type || null,
     fileHash,
     artworkUrl: null,
     ownerSessionId: session.userId,

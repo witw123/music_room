@@ -37,6 +37,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_local",
           nickname: "Host",
           totalChunks: 4,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1],
           source: "live_upload",
           announcedAt: new Date().toISOString()
@@ -47,6 +48,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_remote",
           nickname: "Listener",
           totalChunks: 4,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1, 2, 3],
           source: "local_cache",
           announcedAt: new Date().toISOString()
@@ -77,6 +79,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_local",
           nickname: "Host",
           totalChunks: 8,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1],
           source: "live_upload",
           announcedAt: "2026-03-28T10:00:00.000Z"
@@ -87,6 +90,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_a",
           nickname: "Peer A",
           totalChunks: 8,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1, 2],
           source: "local_cache",
           announcedAt: "2026-03-28T10:01:00.000Z"
@@ -97,6 +101,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_b",
           nickname: "Peer B",
           totalChunks: 8,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1, 2, 3, 4],
           source: "local_cache",
           announcedAt: "2026-03-28T10:00:30.000Z"
@@ -118,6 +123,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_local",
           nickname: "Host",
           totalChunks: 8,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1],
           source: "live_upload",
           announcedAt: "2026-03-28T10:00:00.000Z"
@@ -128,6 +134,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_a",
           nickname: "Peer A",
           totalChunks: 8,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1, 2, 3, 4],
           source: "local_cache",
           announcedAt: "2026-03-28T10:01:00.000Z"
@@ -138,6 +145,7 @@ describe("p2p helpers", () => {
           ownerPeerId: "peer_b",
           nickname: "Peer B",
           totalChunks: 8,
+          chunkSize: defaultChunkSize,
           availableChunks: [0, 1, 2],
           source: "local_cache",
           announcedAt: "2026-03-28T10:00:30.000Z"
