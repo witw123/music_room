@@ -1,77 +1,101 @@
-# WebSocket 事件协议
+# WebSocket 事件
 
-最后更新：`2026-03-28`
+最后更新：`2026-04-03`
 
-## 当前状态
+## 当前事件概览
 
-- `已实现`
-  - `room.subscribe`
-  - `room.unsubscribe`
-  - `room.snapshot`
-  - `room.snapshot.missing`
-  - `peer.signal`
-- `未实现`
-  - `member.joined`
-  - `member.left`
-  - `queue.update`
-  - `playback.update`
-  - `track.announce`
-  - `piece.availability`
+### Client -> Server
 
-当前实现仍以 `room.snapshot` 全量快照广播为主，后续才会拆分为更细粒度事件。
+- `room.subscribe`
+- `room.presence`
+- `room.unsubscribe`
+- `piece.availability`
+- `peer.signal`
+- `room.chat`
 
-## 已实现事件
+### Server -> Client
 
-## `room.subscribe`
+- `room.snapshot`
+- `room.snapshot.missing`
+- `room.deleted`
+- `room.playback.patch`
+- `room.queue.patch`
+- `room.presence.patch`
+- `room.library.patch`
+- `piece.availability`
+- `peer.signal`
+- `room.chat`
 
-- 方向：Client -> Server
-- 入参：
-  - `roomId`
-- 作用：
-  - 将当前 socket 加入房间广播组
-  - 服务端会立即回推当前房间快照
+## 关键事件
 
-## `room.unsubscribe`
+### `room.subscribe`
 
 - 方向：Client -> Server
-- 入参：
-  - `roomId`
-- 作用：
-  - 将当前 socket 移出房间广播组
+- 作用：订阅房间，绑定 `roomId + sessionId + peerId`
+- 成功后会收到当前 `room.snapshot`
 
-## `room.snapshot`
+### `room.presence`
+
+- 方向：Client -> Server
+- 作用：维持在线状态和当前 `peerId`
+
+### `room.unsubscribe`
+
+- 方向：Client -> Server
+- 作用：主动退订房间
+
+### `room.snapshot`
+
+- 方向：Server -> Client
+- 载荷：`RoomSnapshot`
+- 作用：首次同步或需要整包刷新时的完整房间状态
+
+### `room.playback.patch`
 
 - 方向：Server -> Client
 - 载荷：
-  - `RoomSnapshot`
-- 作用：
-  - 广播房间最新快照
-  - 新订阅连接也会收到当前快照
+  - `roomId`
+  - `playback`
+  - `updatedAt`
+- 作用：增量更新播放状态
 
-## `room.snapshot.missing`
+### `room.queue.patch`
 
 - 方向：Server -> Client
 - 载荷：
   - `roomId`
-- 作用：
-  - 客户端订阅了一个已不存在的房间
-  - 便于前端清理本地恢复状态
+  - `queue`
+  - `playback`
+  - `updatedAt`
+- 作用：增量更新共享队列
 
-## `peer.signal`
+### `room.presence.patch`
+
+- 方向：Server -> Client
+- 作用：增量更新成员在线状态
+
+### `room.library.patch`
+
+- 方向：Server -> Client
+- 作用：增量更新曲库和相关队列状态
+
+### `peer.signal`
 
 - 方向：双向
-- 载荷：
-  - `PeerSignalMessage`
-- 作用：
-  - 为后续 WebRTC 协商预留信令通道
-- 当前限制：
-  - 已可收发，但尚未支撑真实 P2P 媒体分发
+- 作用：WebRTC offer / answer / candidate 信令
 
-## 后续会追加的事件
+### `piece.availability`
 
-- `member.joined`
-- `member.left`
-- `queue.update`
-- `playback.update`
-- `track.announce`
-- `piece.availability`
+- 方向：双向
+- 作用：广播某个 peer 当前可供分发的歌曲分片
+
+### `room.chat`
+
+- 方向：双向
+- 作用：房间聊天消息
+
+## 当前实现特点
+
+- 房间状态既有 `snapshot` 也有 patch
+- WebRTC 的 data 和 media 都通过 `peer.signal` 协商
+- 房间断线后存在重连宽限期，不会立即把成员视为离线

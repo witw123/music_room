@@ -1,157 +1,53 @@
-# 部署方案
+# 部署说明
 
-最后更新：`2026-04-01`
+最后更新：`2026-04-03`
 
-## 当前范围
+## 当前支持的部署形态
 
-当前仓库已经包含：
+### 首选：Docker Compose 生产编排
 
-- 本地开发 `docker-compose.yml`
-- Linux 生产模板 [deploy/linux/docker-compose.prod.yml](/e:/code/music_room/deploy/linux/docker-compose.prod.yml)
-- Nginx 反代配置 [music-room.conf](/e:/code/music_room/deploy/linux/nginx/music-room.conf)
-- 环境变量模板 [.env.production.example](/e:/code/music_room/deploy/linux/.env.production.example)
-- Linux 部署脚本 [deploy-linux.sh](/e:/code/music_room/scripts/deploy-linux.sh)
-- PostgreSQL、Redis、coturn、server、web 的容器编排
-- 服务端 `GET /v1/realtime/ice-config`，支持下发短期 TURN 凭证
+仓库当前提供的正式模板是：
 
-当前未覆盖：
+- [deploy/linux/docker-compose.prod.yml](/e:/code/music_room/deploy/linux/docker-compose.prod.yml)
+- [deploy/linux/.env.production.example](/e:/code/music_room/deploy/linux/.env.production.example)
+- [deploy/linux/nginx/music-room.conf](/e:/code/music_room/deploy/linux/nginx/music-room.conf)
 
-- 自动申请与续签 TLS 证书
-- 集中日志、指标、告警
-- 完整 CI/CD 发版流水线
+这套模板默认包含：
 
-## 本地容器部署
+- `postgres`
+- `redis`
+- `coturn`
+- `server`
+- `web`
+- `nginx`
 
-在仓库根目录执行：
+### 可选：宿主机直部署
 
-```bash
-docker compose up --build
-```
+项目可以直接跑在 Ubuntu 宿主机上，但仓库没有提供现成的一键 systemd 模板。你需要自己负责：
 
-默认服务：
+- `web` 进程守护
+- `server` 进程守护
+- PostgreSQL / Redis / coturn 安装与维护
+- Nginx upstream
+- 日志轮转和重启策略
 
-- Web: `http://localhost:3000`
-- Server: `http://localhost:3001`
-- Health: `http://localhost:3001/health`
-- Readiness: `http://localhost:3001/health/readiness`
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-- TURN: `localhost:3478`
-- TURNS: `localhost:5349`
+## Docker 部署步骤
 
-## Linux 生产部署
-
-### 前置条件
-
-- Ubuntu 22.04 或 Debian 12
-- Docker Engine 28+
-- Docker Compose v2
-- 已解析到服务器公网 IP 的域名
-- 已开放 HTTP 与 TURN 端口
-
-### 步骤
-
-1. 安装 Docker 与 Docker Compose。
-2. 拉取仓库到服务器。
-3. 复制 `deploy/linux/.env.production.example` 为 `deploy/linux/.env.production`。
-4. 填写数据库、Redis、JWT、域名、TURN 相关配置。
-5. 执行：
+1. 复制环境变量模板
+2. 按实际公网域名、数据库、Redis、TURN 填值
+3. 执行：
 
 ```bash
 npx pnpm deploy:linux
 ```
 
-### 生产路由
+或手动执行：
 
-- `/` 转发到 `web:3000`
-- `/v1/*` 转发到 `server:3001`
-- `/ws/*` 转发到 `server:3001`
-- `/health/*` 转发到 `server:3001`
+```bash
+docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml up -d --build
+```
 
-## TURN 部署要求
-
-### 核心原则
-
-- Web、API、WebSocket 可以走 Nginx 反代
-- TURN 不走 Nginx，浏览器会直接连 coturn
-- 必须在防火墙和云安全组中开放 TURN 端口
-
-### 建议开放端口
-
-- `3478/udp`
-- `3478/tcp`
-- `5349/tcp`
-- `TURN_MIN_PORT-TURN_MAX_PORT/udp`
-
-如果你的网络环境要求严格，也至少要保留：
-
-- `3478/udp`
-- `5349/tcp`
-- `TURN_MIN_PORT-TURN_MAX_PORT/udp`
-
-注意：`3478/5349` 只是 TURN 控制端口，真正的 relay 流量会走中继端口范围。如果这段 UDP 端口没有放行，浏览器即使拿到了 `ephemeral` TURN 凭证，也会出现：
-
-- `offer / answer / candidate` 正常
-- `ICE checking`
-- 最终 `disconnected / failed`
-
-### 环境变量
-
-服务端和 coturn 相关配置：
-
-- `TURN_ENABLED=true`
-- `TURN_PUBLIC_HOST=turn.example.com`
-- `TURN_PORT=3478`
-- `TURN_TLS_PORT=5349`
-- `TURN_MIN_PORT=49160`
-- `TURN_MAX_PORT=49200`
-- `TURN_SHARED_SECRET=<replace-me>`
-- `TURN_REALM=turn.example.com`
-- `TURN_PROTOCOLS=udp,tcp,tls`
-- `TURN_EXTERNAL_IP=<your-public-ip>`
-- `TURN_TTL_SECONDS=3600`
-
-前端静态 fallback：
-
-- `NEXT_PUBLIC_STUN_URL=stun:stun.l.google.com:19302`
-- `NEXT_PUBLIC_TURN_URL=turn:turn.example.com:3478?transport=udp`
-- `NEXT_PUBLIC_TURN_USERNAME=<optional>`
-- `NEXT_PUBLIC_TURN_CREDENTIAL=<optional>`
-- `NEXT_PUBLIC_WEBRTC_ICE_SERVERS=<optional JSON override>`
-
-### NAT 与 external-ip
-
-如果 coturn 部署在 NAT 或云厂商私网后面，必须确保 coturn 对外宣告的是公网地址。当前模板已经支持通过 `TURN_EXTERNAL_IP` 注入 coturn 的 `--external-ip`。可选做法：
-
-- 直接用公网 IP 绑定服务器
-- 用公网域名作为 `TURN_PUBLIC_HOST`
-- 通过 `TURN_EXTERNAL_IP=<your-public-ip>` 显式设置 coturn 的公网地址
-
-如果不处理这一步，前端即使拿到 TURN 凭证，也可能出现：
-
-- 有 `offer / answer`
-- 有少量 candidate
-- ICE 长时间停留在 `checking` 或 `disconnected`
-
-## 短期 TURN 凭证模式
-
-当前生产默认采用 shared-secret 模式，而不是长期静态用户名密码。
-
-服务端行为：
-
-- 登录用户访问 `GET /v1/realtime/ice-config`
-- 服务端生成 `expiryTimestamp:userId` 形式的用户名
-- 服务端使用 `TURN_SHARED_SECRET` 通过 HMAC 生成临时 credential
-- 前端将返回的 `iceServers` 直接传给 `RTCPeerConnection`
-
-回退逻辑：
-
-- 若 `TURN_SHARED_SECRET` 或 `TURN_PUBLIC_HOST` 缺失，则服务端回退到 `static` 或 `stun-only`
-- 若前端接口请求失败，则前端回退到静态 `NEXT_PUBLIC_TURN_*` 配置
-
-## 部署前检查
-
-执行：
+## 发布前检查
 
 ```bash
 npx pnpm typecheck
@@ -161,54 +57,125 @@ docker compose config
 docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml config
 ```
 
-服务启动后检查：
+启动后再执行：
 
 ```bash
 npx pnpm deploy:check
 ```
 
-`deploy:check` 至少应验证：
+## 必查健康项
 
-- Web 首页可访问
-- `GET /health`
-- `GET /health/readiness`
+至少确认这些地址是通的：
 
-## 诊断面板判读
+- `/`
+- `/app?client=desktop`
+- `/health`
+- `/health/readiness`
+- `/v1/realtime/ice-config`
 
-“连接与缓存诊断”可用于快速区分问题层级。
+如果首页能开但 `/app?client=desktop` 白屏，要优先检查：
 
-### 更像网络 / TURN 问题
+- `/_next/static/*` 是否返回 `200`
+- 当前前端 bundle 是否仍然引用旧的静态资源
+
+## 宿主机直部署注意事项
+
+### 1. 不要直接复用 Docker 版 Nginx upstream
+
+模板里的 upstream 是：
+
+```nginx
+upstream music_room_web {
+  server web:3000;
+}
+
+upstream music_room_server {
+  server server:3001;
+}
+```
+
+这只适用于 Docker 容器网络。
+
+宿主机直部署时应改成：
+
+```nginx
+upstream music_room_web {
+  server 127.0.0.1:3000;
+}
+
+upstream music_room_server {
+  server 127.0.0.1:3001;
+}
+```
+
+如果没改，Nginx 最常见的表现就是：
+
+- `502 Bad Gateway`
+
+### 2. 必须有进程守护
+
+如果你直接跑：
+
+- `pnpm --filter @music-room/web start`
+- `pnpm --filter @music-room/server start`
+
+而没有 `systemd`、`pm2` 或等价守护，进程掉了以后 Nginx 只会继续返回 `502`。
+
+### 3. 需要确认端口监听
+
+```bash
+ss -ltnp | grep -E ':3000|:3001'
+curl http://127.0.0.1:3000
+curl http://127.0.0.1:3001/health
+```
+
+## TURN / WebRTC 要求
+
+### 必要环境变量
+
+- `TURN_ENABLED=true`
+- `TURN_PUBLIC_HOST=turn.example.com`
+- `TURN_PORT=3478`
+- `TURN_TLS_PORT=5349`
+- `TURN_SHARED_SECRET=<replace-me>`
+- `TURN_REALM=turn.example.com`
+- `TURN_MIN_PORT=49160`
+- `TURN_MAX_PORT=49200`
+- `TURN_TTL_SECONDS=3600`
+
+### 必须放通的端口
+
+- `3478/udp`
+- `3478/tcp`
+- `5349/tcp`
+- `TURN_MIN_PORT-TURN_MAX_PORT/udp`
+
+### 现象判断
+
+如果房间里看到：
 
 - `offer / answer` 正常
-- candidate 很少或没有
-- ICE 一直不进入 `connected`
-- 同房在线，但 Media/Data 都未建立
+- `ICE disconnected` 或 `failed`
+- `实时音频: 0`
+- `P2P 节点: 0`
 
-### 更像媒体流注入问题
+优先检查 TURN，不要先怀疑播放器 UI。
 
-- Media 已进入 `connected`
-- 监听端没有 `received remote track`
-- 远端音频元素没有 `playing`
+## Shell Public Origin
 
-### 更像浏览器或自动播放问题
+### Web
 
-- 已收到 `remote track`
-- 已绑定音频元素
-- 但音频事件停在 `waiting`、`pause` 或 `error`
+- Web 运行时默认使用当前页面同源
+- 不再需要把生产域名硬编码进仓库
 
-## 当前部署边界
+### Desktop / Mobile
 
-当前方案已经能支撑：
+- 桌面端和移动端打包时必须提供 `MUSIC_ROOM_PUBLIC_ORIGIN`
+- 现在缺失该变量会直接构建失败
 
-- Docker 化本地开发
-- Linux 单机部署
-- WebSocket 信令
-- Redis 跨实例广播
-- 基于 shared-secret 的 TURN 凭证下发
+示例：
 
-后续建议：
-
-1. 接入 HTTPS 证书自动续签。
-2. 补齐 coturn 的公网 `external-ip` 自动化配置。
-3. 增加日志聚合、监控、告警。
-4. 增加 CI/CD 自动部署。
+```bash
+MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/desktop pack
+MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/mobile pack
+```

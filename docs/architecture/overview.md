@@ -1,65 +1,92 @@
 # 整体架构
 
-最后更新：`2026-03-28`
+最后更新：`2026-04-03`
 
-## 当前实现状态
+## 组件划分
 
-- `已完成`
-  - Web 前端、Server API、WebSocket 实时链路
-  - PostgreSQL/Prisma 持久化
-  - Redis 广播
-  - Docker Compose 本地部署
-- `部分完成`
-  - 房间状态缓存
-  - 播放同步
-- `未完成`
-  - WebRTC 音频分发
-  - IndexedDB 缓存
+### `apps/web`
 
-## 核心组件
-
-- `apps/web`
-  - 房间 UI
-  - 播放器
-  - 歌单管理
+- Next.js 15 前端
+- 提供首页、`/app` 客户端入口、房间页和播放器 UI
+- 负责：
+  - 登录注册
+  - 房间和队列交互
   - 本地音频导入
-  - WebSocket 房间订阅
-- `apps/server`
+  - WebSocket 订阅
+  - WebRTC Data / Media 建链
+  - IndexedDB 分片缓存
+  - 渐进式本地播放与诊断面板
+
+### `apps/server`
+
+- NestJS 服务端
+- 提供：
   - REST API
-  - Socket.IO Gateway
+  - Socket.IO 信令网关
   - 房间、队列、播放、歌单服务
-- `PostgreSQL`
-  - 游客会话
-  - 房间快照
-  - 歌单数据
-- `Redis`
-  - 房间快照广播
-  - 后续承接状态缓存和重连恢复
-- `WebRTC`
-  - 当前只保留协议设计和信令入口
-  - 真实媒体分片尚未落地
+  - TURN 短期 ICE 配置下发
 
-## 当前控制流
+### `packages/shared`
 
-1. 用户在 Web 创建游客身份
-2. 房主建房或成员按房间码加入
-3. 房主导入本地文件，前端提取元数据并注册到服务端
-4. 用户把曲目加入共享队列
-5. 房主控制播放、暂停、seek、下一首
-6. 服务端广播新的 `room.snapshot`
-7. 客户端根据快照更新界面和本地播放器
-8. 队列可保存成歌单，也可以重新导入房间
+- 前后端共享的 Zod schema 和类型
+- 包含：
+  - `AuthSession`
+  - `RoomSnapshot`
+  - `PlaybackSnapshot`
+  - `TrackMeta`
+  - `TrackAvailabilityAnnouncement`
+  - WebSocket payload
 
-## 目前的架构边界
+### `apps/desktop`
 
-- 服务端不存储音频文件
-- 服务端不做音频流量转发
-- 客户端当前只能播放本地已持有的文件
-- 非房主可以看房间状态，但不能控制 transport
+- Tauri 2 桌面壳
+- 打包时通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 指向生产 Web 入口
+- 不内嵌本地 Node 服务
 
-## 下一阶段架构演进
+### `apps/mobile`
 
-1. Redis 承接房间状态缓存，支持多实例恢复
-2. 将 WebSocket 快照流升级为“快照 + 明确事件”并存
-3. 接入 WebRTC DataChannel 传输分片
-4. 在浏览器端引入 IndexedDB 做分片缓存和预取
+- Capacitor Android 壳
+- 同样通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 指向生产 Web 入口
+
+## 服务依赖
+
+- PostgreSQL：账号、房间、歌单等持久化数据
+- Redis：房间 patch 广播、presence、跨实例状态协作
+- coturn：WebRTC 中继
+- Nginx：Web / API / WebSocket 反代
+
+## 当前主流程
+
+1. 用户通过 `POST /v1/auth/register` 或 `POST /v1/auth/login` 获取会话
+2. 用户创建房间或按房间码加入房间
+3. 前端拿到 `RoomSnapshot` 后建立 Socket.IO 订阅
+4. 客户端通过 `room.subscribe` 绑定 `roomId + sessionId + peerId`
+5. 服务端通过：
+   - `room.snapshot`
+   - `room.playback.patch`
+   - `room.queue.patch`
+   - `room.presence.patch`
+   - `room.library.patch`
+   广播房间变化
+6. 成员之间通过：
+   - `peer.signal`
+   - `piece.availability`
+   建立 WebRTC data / media 连接并交换分片
+7. 客户端根据缓存和浏览器能力选择播放源：
+   - `remote-stream`
+   - `progressive-local`
+   - `full-local`
+
+## 房间在线与重连
+
+- 前端会定期发送 `room.presence`
+- 服务端在线 presence TTL 当前为 `20s`
+- WebSocket 断线后有 `25s` 宽限期，期间同一成员重连会取消延迟清理
+
+## 当前 UI 状态
+
+- 房间右侧主界面当前默认是三栏：
+  - `共享队列`
+  - `曲库`
+  - `成员与诊断`
+- 歌单后端能力仍存在，但房间中的歌单区域当前已默认隐藏
