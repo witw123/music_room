@@ -18,6 +18,7 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
+import { primePlaybackActivation } from "@/features/playback/prime-playback-activation";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -407,6 +408,32 @@ export function MusicRoomApp({
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
   }, []);
 
+  const handlePlayTrack = useCallback(
+    async (trackId?: string) => {
+      primePlaybackActivation();
+      await playTrack(trackId);
+    },
+    [playTrack]
+  );
+
+  const handlePlayQueueItem = useCallback(
+    async (queueItemId: string) => {
+      primePlaybackActivation();
+      await playQueueItem(queueItemId);
+    },
+    [playQueueItem]
+  );
+
+  const handlePrevTrack = useCallback(async () => {
+    primePlaybackActivation();
+    await prevTrack();
+  }, [prevTrack]);
+
+  const handleNextTrack = useCallback(async () => {
+    primePlaybackActivation();
+    await nextTrack();
+  }, [nextTrack]);
+
   const handleRemotePlaying = useCallback(() => {
     recordPeerDiagnostic({
       peerId: "remote-media",
@@ -548,8 +575,8 @@ export function MusicRoomApp({
       onFilesSelected={handleFilesSelected}
       onAddToQueue={addToQueue}
       onDeleteTrack={deleteTrack}
-      onPlayTrack={playTrack}
-      onPlayQueueItem={playQueueItem}
+      onPlayTrack={handlePlayTrack}
+      onPlayQueueItem={handlePlayQueueItem}
       onRemoveQueueItem={removeQueueItem}
       onReorderQueue={reorderQueue}
       onTabChange={setActiveDashboardTab}
@@ -568,11 +595,11 @@ export function MusicRoomApp({
           onPlaybackBucketChange={handlePlaybackBucketChange}
           onVolumeChange={setVolume}
           getLocalPlaybackPositionMs={getLocalPlaybackPositionMs}
-          onPlay={playTrack}
+          onPlay={handlePlayTrack}
           onPause={pauseTrack}
           onSeek={seekTrack}
-          onPrev={prevTrack}
-          onNext={nextTrack}
+          onPrev={handlePrevTrack}
+          onNext={handleNextTrack}
           onEnded={handleEnded}
           onLocalPlaybackReady={handleLocalPlaybackReady}
           onRemotePlaying={handleRemotePlaying}

@@ -69,6 +69,9 @@ type UseProgressiveRuntimeResult = {
 };
 
 const progressiveRuntimeTickIntervalMs = 1_000;
+const progressiveSwitchDelayMs = 1_500;
+const fullLocalSwitchDelayMs = 1_200;
+const fullLocalMaxDriftMs = 180;
 
 export function useProgressiveRuntime({
   audioRef,
@@ -618,7 +621,8 @@ export function useProgressiveRuntime({
         fallbackReason: progressiveHealthSnapshot.fallbackReason,
         driftMs,
         warmupReadyAt: progressiveWarmupReadyAtRef.current,
-        now: Date.now()
+        now: Date.now(),
+        switchDelayMs: progressiveSwitchDelayMs
       });
       progressiveWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
       if (warmupDecision.clearFallbackReason) {
@@ -712,7 +716,9 @@ export function useProgressiveRuntime({
         localReady,
         driftMs,
         warmupReadyAt: fullLocalWarmupReadyAtRef.current,
-        now: Date.now()
+        now: Date.now(),
+        switchDelayMs: fullLocalSwitchDelayMs,
+        maxDriftMs: fullLocalMaxDriftMs
       });
       fullLocalWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
       if (warmupDecision.nextSource !== activePlaybackSource) {

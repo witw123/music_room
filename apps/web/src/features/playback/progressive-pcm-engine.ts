@@ -31,6 +31,8 @@ type PcmEngineSyncResult = {
   playbackPositionSeconds: number;
 };
 
+const pcmScheduleAheadSeconds = 12;
+
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
@@ -377,7 +379,7 @@ export class ProgressivePcmEngine {
 
     const scheduleTargetSec = Math.min(
       this.manifest.durationMs / 1000,
-      this.getCurrentTimeSeconds() + 8
+      this.getCurrentTimeSeconds() + pcmScheduleAheadSeconds
     );
 
     for (const segment of this.decodedSegments) {
