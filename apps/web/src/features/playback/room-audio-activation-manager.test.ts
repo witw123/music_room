@@ -1,0 +1,45 @@
+import { describe, expect, it, vi } from "vitest";
+import { RoomAudioActivationManager } from "./room-audio-activation-manager";
+
+function createAudioElementMock() {
+  const audio = {
+    src: "",
+    srcObject: null,
+    currentSrc: "",
+    muted: false,
+    volume: 0.72,
+    preload: "none",
+    paused: true,
+    play: vi.fn(async () => undefined),
+    pause: vi.fn(() => undefined),
+    load: vi.fn(() => undefined),
+    getAttribute: vi.fn((name: string) => (name === "src" ? audio.src : null)),
+    removeAttribute: vi.fn((name: string) => {
+      if (name === "src") {
+        audio.src = "";
+        audio.currentSrc = "";
+      }
+    })
+  };
+
+  return audio as unknown as HTMLAudioElement;
+}
+
+describe("RoomAudioActivationManager", () => {
+  it("primes empty audio elements with a silent source inside the click gesture", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+
+    await manager.activateOutputs({
+      localAudio: audio
+    });
+
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(audio.pause).toHaveBeenCalledTimes(1);
+    expect(audio.load).toHaveBeenCalledTimes(2);
+    expect(audio.removeAttribute).toHaveBeenCalledWith("src");
+    expect(audio.muted).toBe(false);
+    expect(audio.volume).toBe(0.72);
+    expect(audio.preload).toBe("none");
+  });
+});

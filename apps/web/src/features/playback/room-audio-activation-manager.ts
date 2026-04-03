@@ -1,5 +1,8 @@
 "use client";
 
+const SILENT_WAV_DATA_URI =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=";
+
 type PrimeAudioElementInput = {
   element: HTMLAudioElement | null | undefined;
 };
@@ -63,21 +66,36 @@ export class RoomAudioActivationManager {
     const hadSrc = !!element.currentSrc || !!element.getAttribute("src");
     const originalMuted = element.muted;
     const originalVolume = element.volume;
+    const originalPreload = element.preload;
     const wasPaused = element.paused;
-
-    if (!hadSrcObject && !hadSrc) {
-      return;
-    }
+    let usedSilentSource = false;
 
     try {
       element.muted = true;
       element.volume = 0;
+      element.preload = "auto";
+
+      // Prime the concrete media element inside the user gesture even before the
+      // real room audio source is attached, otherwise the later async play() can
+      // be treated as autoplay and produce "progress is moving but no sound yet".
+      if (!hadSrcObject && !hadSrc) {
+        element.src = SILENT_WAV_DATA_URI;
+        element.load();
+        usedSilentSource = true;
+      }
+
       await element.play().catch(() => undefined);
     } finally {
       if (wasPaused) {
         element.pause();
       }
 
+      if (usedSilentSource) {
+        element.removeAttribute("src");
+        element.load();
+      }
+
+      element.preload = originalPreload;
       element.muted = originalMuted;
       element.volume = originalVolume;
     }

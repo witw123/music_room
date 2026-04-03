@@ -5,7 +5,7 @@ import type { GuestSession } from "@music-room/shared";
 const capturedAudioGraphs = new WeakMap<
   HTMLAudioElement,
   {
-    context: AudioContext;
+    context: AudioContext | null;
     stream: MediaStream;
   }
 >();
@@ -85,7 +85,7 @@ export function readDuration(objectUrl: string) {
 export function captureAudioStream(audio: HTMLAudioElement) {
   const cachedGraph = capturedAudioGraphs.get(audio);
   if (cachedGraph) {
-    if (cachedGraph.context.state === "suspended") {
+    if (cachedGraph.context?.state === "suspended") {
       void cachedGraph.context.resume().catch(() => undefined);
     }
 
@@ -98,11 +98,21 @@ export function captureAudioStream(audio: HTMLAudioElement) {
   };
 
   if (typeof mediaAudio.captureStream === "function") {
-    return mediaAudio.captureStream();
+    const stream = mediaAudio.captureStream();
+    capturedAudioGraphs.set(audio, {
+      context: null,
+      stream
+    });
+    return stream;
   }
 
   if (typeof mediaAudio.mozCaptureStream === "function") {
-    return mediaAudio.mozCaptureStream();
+    const stream = mediaAudio.mozCaptureStream();
+    capturedAudioGraphs.set(audio, {
+      context: null,
+      stream
+    });
+    return stream;
   }
 
   if (typeof window !== "undefined") {
