@@ -81,7 +81,7 @@ export function TrackListSection({
                           isUploadedLocally ? "bg-green-500" : "bg-blue-500"
                         }`}
                       />
-                      {isUploadedLocally ? "已缓存并准备推流" : "房间可用"} 路 {track.ownerNickname} 上传
+                      {isUploadedLocally ? "已缓存并准备推流" : "房间可用"} {track.ownerNickname} 上传
                     </p>
                   </div>
 

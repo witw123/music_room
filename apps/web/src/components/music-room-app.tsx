@@ -155,7 +155,7 @@ export function MusicRoomApp({
   });
   const announceLocalCacheRef = useRef(announceLocalCache);
   const hasLocalCurrentTrack = !!(currentPlaybackTrackId && uploadedTracks[currentPlaybackTrackId]);
-  const shouldUseLocalPlayback = isCurrentSourceOwner && hasLocalCurrentTrack;
+  const shouldUseLocalPlayback = hasLocalCurrentTrack;
   const {
     progressTrack,
     progressMs,
@@ -983,7 +983,7 @@ export function MusicRoomApp({
     const remoteAudio = remoteAudioRef.current;
     const uploaded = uploadedTracks[playback.currentTrackId];
 
-    if (isCurrentSourceOwner && uploaded) {
+    if (shouldUseLocalPlayback && uploaded) {
       if (remoteAudio) {
         remoteAudio.pause();
         remoteAudio.srcObject = null;
@@ -1003,7 +1003,7 @@ export function MusicRoomApp({
         void audio.play().catch(() => {
           setStatusMessage("浏览器阻止了自动播放，请手动点击播放恢复。");
         });
-        setMediaConnectionState("live");
+        setMediaConnectionState(isCurrentSourceOwner ? "live" : "buffering");
       }
 
       if (playback.status === "paused") {
@@ -1014,7 +1014,7 @@ export function MusicRoomApp({
       return;
     }
 
-    if (!isCurrentSourceOwner) {
+    if (!shouldUseLocalPlayback) {
       audio.pause();
       audio.removeAttribute("src");
       audio.load();
@@ -1043,6 +1043,7 @@ export function MusicRoomApp({
     playback?.mediaEpoch,
     progressTrack?.durationMs,
     uploadedTracks,
+    shouldUseLocalPlayback,
     isCurrentSourceOwner
   ]);
 
