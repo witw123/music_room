@@ -1,7 +1,14 @@
+const webUrl = process.env.DEPLOY_CHECK_WEB_URL ?? "http://localhost:3000";
+const appUrl = process.env.DEPLOY_CHECK_APP_URL ?? `${webUrl.replace(/\/$/, "")}/app?client=desktop`;
+
 const checks = [
   {
     name: "web",
-    url: process.env.DEPLOY_CHECK_WEB_URL ?? "http://localhost:3000"
+    url: webUrl
+  },
+  {
+    name: "app",
+    url: appUrl
   },
   {
     name: "health",
@@ -12,6 +19,37 @@ const checks = [
     url: process.env.DEPLOY_CHECK_READINESS_URL ?? "http://localhost:3001/health/readiness"
   }
 ];
+
+function extractNextStaticAssetUrls(html, baseUrl) {
+  const matches = html.match(/\/_next\/static\/[^"'()\s>]+/g) ?? [];
+  return [...new Set(matches)].map((path) => new URL(path, baseUrl).toString());
+}
+
+async function checkNextStaticAssets(pageName, pageUrl, html) {
+  const assetUrls = extractNextStaticAssetUrls(html, pageUrl);
+
+  if (assetUrls.length === 0) {
+    console.log(`[${pageName}] warning: no Next static assets discovered in HTML`);
+    return false;
+  }
+
+  let hasFailure = false;
+  for (const assetUrl of assetUrls.slice(0, 12)) {
+    try {
+      const response = await fetch(assetUrl, { cache: "no-store" });
+      console.log(`[asset] ${response.status} ${assetUrl}`);
+      if (!response.ok) {
+        hasFailure = true;
+      }
+    } catch (error) {
+      hasFailure = true;
+      console.log(`[asset] failed ${assetUrl}`);
+      console.log(String(error));
+    }
+  }
+
+  return hasFailure;
+}
 
 let hasFailure = false;
 
@@ -24,6 +62,14 @@ for (const check of checks) {
 
     if (!response.ok) {
       hasFailure = true;
+      continue;
+    }
+
+    if (check.name === "web" || check.name === "app") {
+      const assetFailure = await checkNextStaticAssets(check.name, check.url, body);
+      if (assetFailure) {
+        hasFailure = true;
+      }
     }
   } catch (error) {
     hasFailure = true;
