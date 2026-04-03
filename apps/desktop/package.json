@@ -7,7 +7,7 @@
     "build": "pnpm run typecheck",
     "dev": "wait-on tcp:3000 && node scripts/run-tauri.mjs dev --no-watch",
     "typecheck": "node -e \"console.log('Tauri desktop shell does not have standalone TypeScript sources to check.')\"",
-    "pack": "pnpm run clean && node scripts/run-tauri.mjs build && node scripts/collect-bundles.mjs"
+    "pack": "pnpm run clean && node ../../scripts/require-public-origin.mjs && node scripts/run-tauri.mjs build && node scripts/collect-bundles.mjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.1",

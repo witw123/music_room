@@ -76,6 +76,13 @@ async function prepareRemoteShellConfig(publicOrigin) {
 }
 
 async function main() {
+  const isBuildCommand = args.some((arg) => arg === "build");
+  if (isBuildCommand && !process.env.MUSIC_ROOM_PUBLIC_ORIGIN) {
+    throw new Error(
+      "MUSIC_ROOM_PUBLIC_ORIGIN is required when building desktop release bundles."
+    );
+  }
+
   const publicOrigin = normalizePublicOrigin(process.env.MUSIC_ROOM_PUBLIC_ORIGIN);
   if (!process.env.MUSIC_ROOM_PUBLIC_ORIGIN) {
     console.warn(

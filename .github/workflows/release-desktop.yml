@@ -12,6 +12,8 @@ jobs:
   build_desktop:
     name: Build Desktop ${{ matrix.platform.name }}
     runs-on: ${{ matrix.platform.runner }}
+    env:
+      MUSIC_ROOM_PUBLIC_ORIGIN: ${{ vars.MUSIC_ROOM_PUBLIC_ORIGIN || secrets.MUSIC_ROOM_PUBLIC_ORIGIN }}
     strategy:
       fail-fast: false
       matrix:
@@ -63,6 +65,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate desktop remote origin
+        run: node scripts/require-public-origin.mjs
+
       - name: Build and pack desktop app
         run: pnpm --filter @music-room/desktop run pack
 
@@ -76,6 +81,8 @@ jobs:
   build_android:
     name: Build Android
     runs-on: ubuntu-latest
+    env:
+      MUSIC_ROOM_PUBLIC_ORIGIN: ${{ vars.MUSIC_ROOM_PUBLIC_ORIGIN || secrets.MUSIC_ROOM_PUBLIC_ORIGIN }}
 
     steps:
       - name: Checkout
@@ -109,6 +116,9 @@ jobs:
         run: |
           echo "ANDROID_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "ANDROID_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Validate mobile remote origin
+        run: node scripts/require-public-origin.mjs
 
       - name: Build Android APK
         env:
