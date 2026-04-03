@@ -73,8 +73,8 @@ function BottomPlayerBase({
     currentTrackDuration > 0 ? Math.min(effectiveProgressMs, currentTrackDuration) : effectiveProgressMs;
   const progressRatio =
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
-  const title = currentTrack?.title ?? "绛夊緟閫夋嫨姝屾洸";
-  const artist = currentTrack?.artist ?? "浠庢洸搴撴垨鍏变韩闃熷垪涓€夋嫨涓€棣栨瓕";
+  const title = currentTrack?.title ?? "等待选择歌曲";
+  const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
 
   const commitSeek = useCallback(() => {
     if (seekDraft !== null && canControlPlayback) {
@@ -190,7 +190,7 @@ function BottomPlayerBase({
       {isPending ? (
         <div className="animate-fade-in absolute -top-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-3 py-1 text-xs text-foreground-muted shadow-lg backdrop-blur-md">
           <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
-          鍚屾涓?..
+          同步中...
         </div>
       ) : null}
     </footer>

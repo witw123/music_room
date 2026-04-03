@@ -56,9 +56,9 @@ type RoomDashboardViewProps = {
 };
 
 const tabLabels: Record<TabId, string> = {
-  queue: "鍏变韩闃熷垪",
-  library: "鏇插簱",
-  members: "鎴愬憳涓庤瘖鏂?"
+  queue: "共享队列",
+  library: "曲库",
+  members: "成员与诊断"
 };
 
 const LibraryTabPanel = dynamic(
@@ -66,7 +66,7 @@ const LibraryTabPanel = dynamic(
   {
     loading: () => (
       <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-        姝ｅ湪鍔犺浇鏇插簱…
+        正在加载曲库…
       </div>
     )
   }
@@ -77,7 +77,7 @@ const MembersTabPanel = dynamic(
   {
     loading: () => (
       <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-        姝ｅ湪鍔犺浇鎴愬憳涓庤瘖鏂?…
+        正在加载成员与诊断…
       </div>
     )
   }

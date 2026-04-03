@@ -36,7 +36,7 @@ function TopBarBase({ activeSession, onLogout }: TopBarProps) {
           </div>
           <div className="min-w-0 leading-none">
             <span className="block truncate text-sm font-bold tracking-tight text-white">Music Room</span>
-            <span className="hidden text-[11px] text-white/45 sm:block">瀹炴椂鍗忎綔鍚瓕绌洪棿</span>
+            <span className="hidden text-[11px] text-white/45 sm:block">实时协作听歌空间</span>
           </div>
         </div>
 
@@ -49,9 +49,9 @@ function TopBarBase({ activeSession, onLogout }: TopBarProps) {
             disabled={isClearingCache}
             className="px-2 text-white/55 hover:bg-white/5 hover:text-white sm:px-3"
           >
-            <span className="sm:hidden">{isClearingCache ? "娓呯悊涓€?" : "娓呯紦瀛?"}</span>
+            <span className="sm:hidden">{isClearingCache ? "清理中..." : "清缓存"}</span>
             <span className="hidden sm:inline">
-              {isClearingCache ? "娓呯悊涓€?" : "娓呴櫎鏈湴缂撳瓨"}
+              {isClearingCache ? "清理中..." : "清除本地缓存"}
             </span>
           </Button>
 
@@ -63,7 +63,7 @@ function TopBarBase({ activeSession, onLogout }: TopBarProps) {
               type="button"
               className="px-2 text-white/55 hover:bg-white/5 hover:text-white sm:px-3"
             >
-              閫€鍑?
+              退出
             </Button>
           ) : null}
         </div>
