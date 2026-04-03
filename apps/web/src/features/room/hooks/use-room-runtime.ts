@@ -181,6 +181,7 @@ export function useRoomRuntime({
 }: UseRoomRuntimeInput): UseRoomRuntimeResult {
   const meshRef = useRef<P2PMesh | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
+  const initialRecoveryAttemptRef = useRef<string | null>(null);
   const hostStreamRef = useRef<MediaStream | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
@@ -470,11 +471,18 @@ export function useRoomRuntime({
       suppressRoomRecovery ||
       !workspaceOnly ||
       !initialRoomId ||
+      !hydrated ||
       !activeSession ||
-      roomSnapshot?.room.id === initialRoomId
+      isNavigatingRoomExit
     ) {
       return;
     }
+
+    const recoveryKey = `${activeSession.userId}:${initialRoomId}`;
+    if (initialRecoveryAttemptRef.current === recoveryKey) {
+      return;
+    }
+    initialRecoveryAttemptRef.current = recoveryKey;
 
     let cancelled = false;
     setIsRecoveringRoom(true);
@@ -484,6 +492,8 @@ export function useRoomRuntime({
         const snapshot = await musicRoomApi.recoverRoom(initialRoomId);
         if (!snapshot || cancelled) {
           if (!cancelled) {
+            setSuppressRoomRecovery(true);
+            setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
             setIsRecoveringRoom(false);
           }
           return;
@@ -518,11 +528,13 @@ export function useRoomRuntime({
   }, [
     workspaceOnly,
     initialRoomId,
+    hydrated,
     activeSession?.userId,
-    roomSnapshot?.room.id,
     suppressRoomRecovery,
+    isNavigatingRoomExit,
     refreshPlaylists,
     setIsRecoveringRoom,
+    setSuppressRoomRecovery,
     setRoomSnapshot,
     setStatusMessage
   ]);

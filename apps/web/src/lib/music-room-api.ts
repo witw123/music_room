@@ -11,6 +11,11 @@ import type {
 
 const sessionStorageKey = "music-room-session";
 
+export type QueueMutationResponse = {
+  queue: QueueItem[];
+  playback: PlaybackSnapshot;
+};
+
 function getSessionToken() {
   if (typeof window === "undefined") {
     return null;
@@ -29,6 +34,32 @@ function getSessionToken() {
   }
 }
 
+export function extractApiErrorMessage(rawBody: string) {
+  const trimmed = rawBody.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as { message?: unknown } | string;
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+
+    if (Array.isArray(parsed.message)) {
+      return parsed.message.join(", ");
+    }
+
+    if (typeof parsed.message === "string") {
+      return parsed.message;
+    }
+  } catch {
+    // Fall back to the raw response body when the backend returns plain text.
+  }
+
+  return trimmed;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -42,7 +73,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const message = await response.text();
+    const message = extractApiErrorMessage(await response.text());
     if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem(sessionStorageKey);
       window.dispatchEvent(
@@ -121,17 +152,17 @@ export const musicRoomApi = {
       method: "DELETE"
     }),
   addQueueItem: (roomId: string, payload: { trackId: string }) =>
-    request<QueueItem>(`/v1/rooms/${roomId}/queue`, {
+    request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),
   reorderQueue: (roomId: string, payload: { queueItemIds: string[] }) =>
-    request<QueueItem[]>(`/v1/rooms/${roomId}/queue/reorder`, {
+    request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/reorder`, {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
   removeQueueItem: (roomId: string, queueItemId: string) =>
-    request<QueueItem[]>(`/v1/rooms/${roomId}/queue/${queueItemId}`, {
+    request<QueueMutationResponse>(`/v1/rooms/${roomId}/queue/${queueItemId}`, {
       method: "DELETE"
     }),
   updatePlayback: (
@@ -170,7 +201,7 @@ export const musicRoomApi = {
       method: "DELETE"
     }),
   importPlaylistToRoom: (playlistId: string, payload: { roomId: string }) =>
-    request<{ ok: boolean }>(`/v1/playlists/${playlistId}/import-to-room`, {
+    request<QueueMutationResponse>(`/v1/playlists/${playlistId}/import-to-room`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),

@@ -101,14 +101,15 @@ export class PlaylistController {
     const userId = await this.getCurrentUserId(sessionToken);
     const playlist = await this.playlistService.getPlaylistForOwner(playlistId, userId);
     await this.roomService.importPlaylistToQueue(body.roomId, userId, playlist.trackIds);
-    this.signalingGateway.emitRoomSnapshot(
+    const snapshot = await this.roomService.getRoomSnapshot(
       body.roomId,
-      await this.roomService.getRoomSnapshot(
-        body.roomId,
-        await this.playlistService.listPlaylistsForRoom(body.roomId)
-      )
+      await this.playlistService.listPlaylistsForRoom(body.roomId)
     );
-    return { ok: true };
+    this.signalingGateway.emitRoomSnapshot(body.roomId, snapshot);
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
   }
 
   @Post("from-room")

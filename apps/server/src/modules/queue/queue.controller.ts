@@ -46,13 +46,16 @@ export class QueueController {
     @Body() body: { trackId: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const item = await this.roomService.addQueueItem(roomId, userId, body.trackId);
+    await this.roomService.addQueueItem(roomId, userId, body.trackId);
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitQueuePatch(roomId, {
       queue: snapshot.queue,
       playback: snapshot.room.playback
     });
-    return item;
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
   }
 
   @Delete(":queueItemId")
@@ -62,13 +65,16 @@ export class QueueController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const queue = await this.roomService.removeQueueItem(roomId, queueItemId, userId);
+    await this.roomService.removeQueueItem(roomId, queueItemId, userId);
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitQueuePatch(roomId, {
       queue: snapshot.queue,
       playback: snapshot.room.playback
     });
-    return queue;
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
   }
 
   @Patch("reorder")
@@ -78,12 +84,15 @@ export class QueueController {
     @Body() body: { queueItemIds: string[] }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const queue = await this.roomService.reorderQueue(roomId, userId, body.queueItemIds);
+    await this.roomService.reorderQueue(roomId, userId, body.queueItemIds);
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitQueuePatch(roomId, {
       queue: snapshot.queue,
       playback: snapshot.room.playback
     });
-    return queue;
+    return {
+      queue: snapshot.queue,
+      playback: snapshot.room.playback
+    };
   }
 }

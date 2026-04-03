@@ -27,6 +27,7 @@ import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { useTrackHydrationQueue } from "@/components/room/hooks/use-track-hydration-queue";
 import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
+import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
@@ -358,6 +359,19 @@ export function MusicRoomApp({
     refreshAvailableRooms,
     refreshPlaylists
   });
+
+  useEffect(() => {
+    if (!initialRoomId) {
+      return;
+    }
+
+    const handoffSnapshot = consumeRoomSnapshotHandoff(initialRoomId);
+    if (!handoffSnapshot) {
+      return;
+    }
+
+    setRoomSnapshot((current) => current ?? handoffSnapshot);
+  }, [initialRoomId]);
 
   useEffect(() => {
     if (!currentPlaybackTrackId) {

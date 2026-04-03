@@ -20,9 +20,11 @@ describe("music-room-ui helpers", () => {
     expect(toUserFacingError(new Error("Queue item not found in this room."))).toBe(
       "这首歌已经不在当前播放队列里了。"
     );
-    expect(toUserFacingError(new Error("Track owner is not online, so this song cannot be played right now."))).toBe(
-      "这首歌的上传者当前不在线，暂时无法播放。"
-    );
+    expect(
+      toUserFacingError(
+        new Error("Track owner is not online, so this song cannot be played right now.")
+      )
+    ).toBe("这首歌的上传者当前不在线，暂时无法播放。");
   });
 
   it("removes evicted uploads from the in-memory track map", () => {

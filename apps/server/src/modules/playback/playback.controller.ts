@@ -87,8 +87,38 @@ export class PlaybackController {
       this.logger.warn(
         `rejected playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} reason=${error instanceof Error ? error.message : "unknown"}`
       );
+      this.rethrowPlaybackError(error);
+    }
+  }
+
+  private rethrowPlaybackError(error: unknown): never {
+    if (error instanceof HttpException) {
       throw error;
     }
+
+    const message = error instanceof Error ? error.message : "Internal server error";
+
+    if (message.includes("Playback state version conflict")) {
+      throw new HttpException(message, HttpStatus.CONFLICT);
+    }
+
+    if (message.includes("Track owner is not online")) {
+      throw new HttpException(message, HttpStatus.CONFLICT);
+    }
+
+    if (message.includes("Queue item not found") || message.includes("Track not found")) {
+      throw new HttpException(message, HttpStatus.NOT_FOUND);
+    }
+
+    if (message.includes("Only room members can perform this action")) {
+      throw new HttpException(message, HttpStatus.FORBIDDEN);
+    }
+
+    if (message.includes("Realtime sync unavailable")) {
+      throw new ServiceUnavailableException(message);
+    }
+
+    throw error instanceof Error ? error : new Error(message);
   }
 
   private assertPlaybackRateLimit(roomId: string, userId: string, action: PlaybackAction) {
