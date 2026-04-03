@@ -9,7 +9,7 @@
     "android:sync": "cap sync android",
     "android:open": "cap open android",
     "android:gradle:debug": "node -e \"const { spawnSync } = require('node:child_process'); const path = require('node:path'); const cmd = process.platform === 'win32' ? 'gradlew.bat' : './gradlew'; const result = spawnSync(cmd, ['assembleDebug'], { cwd: path.join(process.cwd(), 'android'), stdio: 'inherit', shell: process.platform === 'win32' }); process.exit(result.status ?? 1);\"",
-    "pack": "pnpm run clean && node ../../scripts/require-public-origin.mjs && pnpm run build && pnpm run android:sync && pnpm run android:gradle:debug && node -e \"const fs = require('node:fs'); const path = require('node:path'); const pkg = require('./package.json'); const source = path.join(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'); const targetDir = path.join(process.cwd(), 'release'); fs.mkdirSync(targetDir, { recursive: true }); fs.copyFileSync(source, path.join(targetDir, `Music.Room_${pkg.version}_Android.apk`));\""
+    "pack": "pnpm run clean && node ../../scripts/require-public-origin.mjs && pnpm run build && pnpm run android:sync && pnpm run android:gradle:debug && node -e \"const fs = require('node:fs'); const path = require('node:path'); const pkg = require('./package.json'); const source = path.join(process.cwd(), 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'); const targetDir = path.join(process.cwd(), 'release'); fs.mkdirSync(targetDir, { recursive: true }); fs.copyFileSync(source, path.join(targetDir, 'Music.Room_' + pkg.version + '_Android.apk'));\""
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
