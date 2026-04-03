@@ -4,6 +4,8 @@ import {
   getOnlineMemberCount,
   normalizePlaylistTitle,
   removeTracksFromUploads,
+  shouldAcceptPlaybackSnapshot,
+  shouldReplacePlaybackSnapshot,
   toUserFacingError
 } from "./music-room-ui";
 
@@ -66,5 +68,35 @@ describe("music-room-ui helpers", () => {
   it("formats milliseconds into player-friendly timestamps", () => {
     expect(formatDuration(0)).toBe("0:00");
     expect(formatDuration(61_000)).toBe("1:01");
+  });
+
+  it("ignores identical playback snapshots at the same version", () => {
+    const current = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host_1",
+      sourcePeerId: "peer_host",
+      sourceTrackId: "track_1",
+      positionMs: 12_000,
+      startedAt: "2026-04-03T12:00:00.000Z",
+      queueVersion: 5,
+      mediaEpoch: 3
+    };
+
+    expect(shouldAcceptPlaybackSnapshot(current, { ...current })).toBe(true);
+    expect(shouldReplacePlaybackSnapshot(current, { ...current })).toBe(false);
+    expect(
+      shouldReplacePlaybackSnapshot(current, {
+        ...current,
+        sourcePeerId: "peer_host_reconnected"
+      })
+    ).toBe(true);
+    expect(
+      shouldAcceptPlaybackSnapshot(current, {
+        ...current,
+        queueVersion: 6
+      })
+    ).toBe(true);
   });
 });

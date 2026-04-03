@@ -3,7 +3,10 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AuthSession, PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { shouldAcceptPlaybackSnapshot, toUserFacingError } from "@/lib/music-room-ui";
+import {
+  shouldReplacePlaybackSnapshot,
+  toUserFacingError
+} from "@/lib/music-room-ui";
 
 type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
@@ -37,7 +40,7 @@ export function useRoomActions({
   const applyPlaybackLocally = useCallback(
     (playback: PlaybackSnapshot) => {
       setRoomSnapshot((current) =>
-        current && shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+        current && shouldReplacePlaybackSnapshot(current.room.playback, playback)
           ? {
               ...current,
               room: {
@@ -60,7 +63,7 @@ export function useRoomActions({
               queue,
               room: {
                 ...current.room,
-                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
                   ? playback
                   : current.room.playback
               }

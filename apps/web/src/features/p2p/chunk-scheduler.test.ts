@@ -312,6 +312,66 @@ describe("ChunkScheduler", () => {
     expect(priorities.every((priority) => priority === "current")).toBe(true);
   });
 
+  it("keeps remote-stream playback on current-track-only fetching even when healthy", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks[0] = {
+      ...roomSnapshot.tracks[0],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    };
+    roomSnapshot.tracks[1] = {
+      ...roomSnapshot.tracks[1],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 48 * 1024 * 1024
+    };
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          })
+        },
+        track_2: {
+          peer_host: buildAnnouncement({
+            trackId: "track_2",
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 15_000,
+      policy: "steady",
+      bufferHealth: "healthy",
+      playbackClockSource: "remote"
+    });
+
+    const requests = (requestPiece.mock.calls as unknown as Array<[{
+      trackId: string;
+      priority: string;
+    }]>).map(([call]) => call);
+    expect(requests.length).toBeLessThanOrEqual(4);
+    expect(requests.every((request) => request.trackId === "track_1")).toBe(true);
+    expect(requests.every((request) => request.priority === "current")).toBe(true);
+  });
+
   it("prefetches the next queued track during steady playback when the current track is comfortably buffered", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {

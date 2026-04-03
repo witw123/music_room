@@ -289,6 +289,8 @@ export class ChunkScheduler {
     let currentTrackManifest: ReturnType<typeof buildProgressiveTrackManifest> = null;
     let currentTrackState: ChunkSchedulerTrackState | null = null;
     let currentTrackAheadBufferedMs = 0;
+    const shouldPreserveRemotePlayback =
+      this.playbackClockSource === "remote" && this.playbackStatus === "playing";
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
       const localAnnouncement = this.availabilityByTrack[currentTrack.id]?.[this.localPeerId] ?? null;
@@ -300,7 +302,8 @@ export class ChunkScheduler {
         currentTrack,
         this.mode,
         this.bufferHealth,
-        this.policy
+        this.policy,
+        this.playbackClockSource
       );
       const currentTrackWantedPolicy =
         currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
@@ -341,6 +344,10 @@ export class ChunkScheduler {
               }),
         timeoutMs: currentTrackProfile.timeoutMs
       });
+    }
+
+    if (shouldPreserveRemotePlayback) {
+      return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
     const isCurrentTrackComplete =
@@ -582,9 +589,20 @@ function getTrackStreamingProfile(
   track: TrackMeta,
   mode: ChunkSchedulerMode,
   bufferHealth: ChunkBufferHealth,
-  policy: ProgressiveSchedulerPolicy
+  policy: ProgressiveSchedulerPolicy,
+  playbackClockSource: PlaybackClockSource
 ) {
   const streamProfile = deriveTrackStreamProfile(track);
+
+  if (playbackClockSource === "remote") {
+    return {
+      maxConcurrent: streamProfile === "large-lossless" ? 4 : 3,
+      maxConcurrentPerPeer: 1,
+      lookBehindMs: 0,
+      lookAheadMs: streamProfile === "large-lossless" ? 24_000 : 14_000,
+      timeoutMs: 3_000
+    };
+  }
 
   if (policy === "catchup") {
     return {

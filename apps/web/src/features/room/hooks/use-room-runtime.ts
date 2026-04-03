@@ -28,7 +28,11 @@ import {
   RoomMediaMesh
 } from "@/features/p2p";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import { shouldAcceptPlaybackSnapshot, toUserFacingError } from "@/lib/music-room-ui";
+import {
+  shouldAcceptPlaybackSnapshot,
+  shouldReplacePlaybackSnapshot,
+  toUserFacingError
+} from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
 import { captureAudioStream } from "@/features/upload/audio-utils";
@@ -550,7 +554,7 @@ export function useRoomRuntime({
   useEffect(() => {
     const applyPlaybackPatch = (playback: RoomSnapshot["room"]["playback"]) => {
       setRoomSnapshot((current) =>
-        current && shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+        current && shouldReplacePlaybackSnapshot(current.room.playback, playback)
           ? {
               ...current,
               room: {
@@ -871,7 +875,7 @@ export function useRoomRuntime({
               queue,
               room: {
                 ...current.room,
-                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
                   ? playback
                   : current.room.playback
               }
@@ -887,7 +891,7 @@ export function useRoomRuntime({
               room: {
                 ...current.room,
                 members,
-                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
                   ? playback
                   : current.room.playback
               }
@@ -904,7 +908,7 @@ export function useRoomRuntime({
               queue,
               room: {
                 ...current.room,
-                playback: shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+                playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
                   ? playback
                   : current.room.playback
               }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
-import { shouldAcceptPlaybackSnapshot } from "@/lib/music-room-ui";
+import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 
 const playbackProgressPollIntervalMs = 120;
 const playingProgressCommitThresholdMs = 120;
@@ -57,7 +57,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     setAcceptedPlayback((current) =>
-      shouldAcceptPlaybackSnapshot(current, playback) ? playback : current
+      shouldReplacePlaybackSnapshot(current, playback) ? playback : current
     );
   }, [playback]);
 

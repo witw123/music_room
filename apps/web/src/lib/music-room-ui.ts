@@ -45,11 +45,44 @@ export function getPlaybackConsistencyVersion(playback: PlaybackSnapshot | null 
   return playback?.queueVersion ?? 0;
 }
 
+export function isSamePlaybackSnapshot(
+  current: PlaybackSnapshot | null | undefined,
+  incoming: PlaybackSnapshot | null | undefined
+) {
+  if (current === incoming) {
+    return true;
+  }
+
+  if (!current || !incoming) {
+    return false;
+  }
+
+  return (
+    current.status === incoming.status &&
+    current.currentTrackId === incoming.currentTrackId &&
+    current.currentQueueItemId === incoming.currentQueueItemId &&
+    current.sourceSessionId === incoming.sourceSessionId &&
+    current.sourcePeerId === incoming.sourcePeerId &&
+    current.sourceTrackId === incoming.sourceTrackId &&
+    current.positionMs === incoming.positionMs &&
+    current.startedAt === incoming.startedAt &&
+    current.queueVersion === incoming.queueVersion &&
+    current.mediaEpoch === incoming.mediaEpoch
+  );
+}
+
 export function shouldAcceptPlaybackSnapshot(
   current: PlaybackSnapshot | null | undefined,
   incoming: PlaybackSnapshot | null | undefined
 ) {
   return getPlaybackConsistencyVersion(incoming) >= getPlaybackConsistencyVersion(current);
+}
+
+export function shouldReplacePlaybackSnapshot(
+  current: PlaybackSnapshot | null | undefined,
+  incoming: PlaybackSnapshot | null | undefined
+) {
+  return shouldAcceptPlaybackSnapshot(current, incoming) && !isSamePlaybackSnapshot(current, incoming);
 }
 
 export function toUserFacingError(error: unknown) {
