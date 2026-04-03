@@ -24,6 +24,40 @@ type DiagnosticsInput = {
 const maxGlobalEvents = 100;
 const maxPeerEvents = 12;
 
+function isSameEventSignature(
+  left: Pick<
+    PeerRecentEvent,
+    "peerId" | "channelKind" | "direction" | "event" | "summary" | "level"
+  >,
+  right: Pick<
+    PeerRecentEvent,
+    "peerId" | "channelKind" | "direction" | "event" | "summary" | "level"
+  >
+) {
+  return (
+    left.peerId === right.peerId &&
+    left.channelKind === right.channelKind &&
+    left.direction === right.direction &&
+    left.event === right.event &&
+    left.summary === right.summary &&
+    left.level === right.level
+  );
+}
+
+function upsertRecentEvent(
+  events: PeerRecentEvent[],
+  nextEvent: PeerRecentEvent,
+  maxEvents: number
+) {
+  const currentTop = events[0];
+
+  if (currentTop && isSameEventSignature(currentTop, nextEvent)) {
+    return [nextEvent, ...events.slice(1)];
+  }
+
+  return [nextEvent, ...events].slice(0, maxEvents);
+}
+
 export function createEmptyDiagnosticsState(): DiagnosticsState {
   return {
     peers: {},
@@ -50,7 +84,7 @@ export function recordDiagnosticsEvent(
   const baseUpdated: PeerDiagnosticsSnapshot = {
     ...current,
     updatedAt: timestamp,
-    recentEvents: [event, ...current.recentEvents].slice(0, maxPeerEvents)
+    recentEvents: upsertRecentEvent(current.recentEvents, event, maxPeerEvents)
   };
   const nextSnapshot = input.update ? input.update(baseUpdated) : baseUpdated;
 
@@ -59,7 +93,7 @@ export function recordDiagnosticsEvent(
       ...state.peers,
       [input.peerId]: nextSnapshot
     },
-    recentEvents: [event, ...state.recentEvents].slice(0, maxGlobalEvents)
+    recentEvents: upsertRecentEvent(state.recentEvents, event, maxGlobalEvents)
   };
 }
 

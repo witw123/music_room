@@ -45,4 +45,53 @@ describe("p2p diagnostics", () => {
     expect(state.peers.peer_a?.mediaConnectionState).toBe("connected");
     expect(state.peers.peer_a?.remoteTrackStatus.received).toBe(true);
   });
+
+  it("collapses consecutive duplicate diagnostics entries while keeping the latest snapshot", () => {
+    let state = recordDiagnosticsEvent(createEmptyDiagnosticsState(), {
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "progressive-status",
+      summary: "播放源 full-local / 策略 background",
+      now: "2026-04-01T00:00:00.000Z",
+      update: (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          activeSource: "full-local",
+          engineType: "pcm",
+          aheadBufferedMs: 80_000,
+          startupReady: true,
+          fallbackReason: null,
+          schedulerPolicy: "background",
+          contiguousBufferedMs: 120_000
+        }
+      })
+    });
+
+    state = recordDiagnosticsEvent(state, {
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "progressive-status",
+      summary: "播放源 full-local / 策略 background",
+      now: "2026-04-01T00:00:05.000Z",
+      update: (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          activeSource: "full-local",
+          engineType: "pcm",
+          aheadBufferedMs: 96_000,
+          startupReady: true,
+          fallbackReason: null,
+          schedulerPolicy: "background",
+          contiguousBufferedMs: 180_000
+        }
+      })
+    });
+
+    expect(state.recentEvents).toHaveLength(1);
+    expect(state.peers.system?.recentEvents).toHaveLength(1);
+    expect(state.recentEvents[0]?.timestamp).toBe("2026-04-01T00:00:05.000Z");
+    expect(state.peers.system?.progressivePlaybackStatus?.contiguousBufferedMs).toBe(180_000);
+  });
 });

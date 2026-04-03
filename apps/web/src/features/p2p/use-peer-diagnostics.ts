@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PeerDiagnosticsSnapshot, PeerRecentEvent } from "@music-room/shared";
 import { createEmptyDiagnosticsState, recordDiagnosticsEvent } from "./diagnostics";
 
-type DiagnosticsInput = Parameters<typeof recordDiagnosticsEvent>[1];
+export type PeerDiagnosticInput = Parameters<typeof recordDiagnosticsEvent>[1];
+export type PeerDiagnosticRecorder = (input: PeerDiagnosticInput) => void;
 
 export function usePeerDiagnostics(flushDelayMs = 120) {
-  const queuedDiagnosticsRef = useRef<DiagnosticsInput[]>([]);
+  const queuedDiagnosticsRef = useRef<PeerDiagnosticInput[]>([]);
   const diagnosticsFlushTimerRef = useRef<number | null>(null);
   const [diagnosticsState, setDiagnosticsState] = useState(createEmptyDiagnosticsState);
 
@@ -37,7 +38,7 @@ export function usePeerDiagnostics(flushDelayMs = 120) {
   }, []);
 
   const recordPeerDiagnostic = useCallback(
-    (input: DiagnosticsInput) => {
+    (input: PeerDiagnosticInput) => {
       queuedDiagnosticsRef.current.push(input);
       if (diagnosticsFlushTimerRef.current !== null) {
         return;

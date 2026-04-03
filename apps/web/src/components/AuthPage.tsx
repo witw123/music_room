@@ -93,7 +93,7 @@ export function AuthPage() {
 
   return (
     <main className="relative flex min-h-screen flex-col bg-[#000000] font-sans selection:bg-accent/30 selection:text-white">
-      <TopBar />
+      <TopBar activeSession={null} />
 
       <div className="relative z-10 mx-auto my-auto flex min-h-[80vh] w-full max-w-5xl flex-col items-center justify-center p-6 lg:p-12">
         <div className="relative flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-transparent lg:flex-row">

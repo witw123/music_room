@@ -79,10 +79,17 @@ type IncomingPieceBatchItem = {
   pendingRequest?: PendingPieceRequest;
 };
 
+type CachedPieceManifestHeader = {
+  totalChunks: number;
+  chunkSize: number;
+  mimeType: string;
+};
+
 export class P2PMesh {
   private readonly peers = new Map<string, PeerEntry>();
   private readonly pendingPieceRequests = new Map<string, PendingPieceRequest>();
   private readonly pendingIncomingPieces: IncomingPieceBatchItem[] = [];
+  private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
   private pieceFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private pieceFlushInFlight = false;
 
@@ -374,8 +381,30 @@ export class P2PMesh {
         if (!piece) {
           return;
         }
-        const chunkIndexes = await getCachedPieceIndexes(message.trackId, this.localPeerId);
-        const manifest = await getTrackPieceManifest(message.trackId);
+        let manifestHeader = this.pieceManifestHeaders.get(message.trackId) ?? null;
+        if (!manifestHeader) {
+          const manifest = await getTrackPieceManifest(message.trackId);
+          if (manifest) {
+            manifestHeader = {
+              totalChunks: manifest.totalChunks,
+              chunkSize: manifest.chunkSize,
+              mimeType: manifest.mimeType || "audio/mpeg"
+            };
+            this.pieceManifestHeaders.set(message.trackId, manifestHeader);
+          }
+        }
+
+        let totalChunks = manifestHeader?.totalChunks ?? 0;
+        if (totalChunks <= 0) {
+          const chunkIndexes = await getCachedPieceIndexes(message.trackId, this.localPeerId);
+          totalChunks = chunkIndexes.length;
+          manifestHeader = {
+            totalChunks,
+            chunkSize: manifestHeader?.chunkSize ?? piece.chunkSize,
+            mimeType: manifestHeader?.mimeType || "audio/mpeg"
+          };
+          this.pieceManifestHeaders.set(message.trackId, manifestHeader);
+        }
 
         if (channel.readyState !== "open") {
           return;
@@ -387,9 +416,9 @@ export class P2PMesh {
               kind: "send-piece",
               trackId: message.trackId,
               chunkIndex: piece.chunkIndex,
-              totalChunks: manifest?.totalChunks ?? chunkIndexes.length,
-              chunkSize: manifest?.chunkSize ?? piece.chunkSize,
-              mimeType: manifest?.mimeType || "audio/mpeg",
+              totalChunks,
+              chunkSize: manifestHeader?.chunkSize ?? piece.chunkSize,
+              mimeType: manifestHeader?.mimeType || "audio/mpeg",
               pieceHash: piece.hash
             },
             piece.payload
@@ -520,6 +549,12 @@ export class P2PMesh {
           });
           continue;
         }
+
+        this.pieceManifestHeaders.set(item.message.trackId, {
+          totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
+          chunkSize: item.message.header.chunkSize,
+          mimeType: item.message.header.mimeType
+        });
 
         this.callbacks.onPieceReceived({
           trackId: item.message.header.trackId,

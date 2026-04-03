@@ -1,4 +1,4 @@
-import { useEffect, useState, useTransition } from "react";
+import { memo, useEffect, useState, useTransition } from "react";
 import type {
   AuthSession,
   RoomMediaConnectionState,
@@ -65,7 +65,7 @@ function getConnectionLabel(
   }
 }
 
-export function RoomStage({
+function RoomStageBase({
   roomSnapshot,
   currentTrack,
   currentTrackDuration,
@@ -358,3 +358,5 @@ export function RoomStage({
     </section>
   );
 }
+
+export const RoomStage = memo(RoomStageBase);

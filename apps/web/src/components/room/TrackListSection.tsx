@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { memo, useTransition } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ type TrackListSectionProps = {
   onPlayTrack: (trackId: string) => Promise<void>;
 };
 
-export function TrackListSection({
+function TrackListSectionBase({
   tracks,
   uploadedTracks,
   canControlPlayback,
@@ -156,3 +156,5 @@ export function TrackListSection({
     </section>
   );
 }
+
+export const TrackListSection = memo(TrackListSectionBase);

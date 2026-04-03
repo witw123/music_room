@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { RoomMember } from "@music-room/shared";
 
 export type MemberTransferSummary = {
@@ -131,7 +132,7 @@ function getLibraryStatus(summary: MemberTransferSummary | undefined) {
   };
 }
 
-export function MembersPanel({
+function MembersPanelBase({
   members,
   memberTransferSummaries = []
 }: MembersPanelProps) {
@@ -240,3 +241,5 @@ export function MembersPanel({
     </section>
   );
 }
+
+export const MembersPanel = memo(MembersPanelBase);

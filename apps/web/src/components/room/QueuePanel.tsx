@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { memo, useMemo, useState, useTransition } from "react";
 import type { AuthSession, QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ type QueuePanelProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
 };
 
-export function QueuePanel({
+function QueuePanelBase({
   queue,
   tracks,
   currentQueueItemId,
@@ -190,3 +190,5 @@ export function QueuePanel({
     </section>
   );
 }
+
+export const QueuePanel = memo(QueuePanelBase);

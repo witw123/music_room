@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { PeerDiagnosticsSnapshot, PeerRecentEvent, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 
@@ -49,7 +49,7 @@ function formatTimestamp(value: string) {
   });
 }
 
-export function MeshStatusPanel({
+function MeshStatusPanelBase({
   availabilitySummary,
   connectedPeersCount,
   mediaConnectedPeersCount,
@@ -271,3 +271,5 @@ export function MeshStatusPanel({
     </section>
   );
 }
+
+export const MeshStatusPanel = memo(MeshStatusPanelBase);

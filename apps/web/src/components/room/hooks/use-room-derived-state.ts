@@ -72,33 +72,57 @@ export function useRoomDerivedState({
       return [];
     }
 
+    const statsByPeer = new Map<
+      string,
+      {
+        announcedTrackIds: Set<string>;
+        totalChunkCount: number;
+        currentTrackChunkCount: number;
+        currentTrackTotalChunks: number;
+        currentTrackSources: Set<string>;
+      }
+    >();
+
+    for (const trackAvailability of Object.values(availabilityByTrack)) {
+      for (const announcement of Object.values(trackAvailability)) {
+        const existing =
+          statsByPeer.get(announcement.ownerPeerId) ??
+          (() => {
+            const initial = {
+              announcedTrackIds: new Set<string>(),
+              totalChunkCount: 0,
+              currentTrackChunkCount: 0,
+              currentTrackTotalChunks: 0,
+              currentTrackSources: new Set<string>()
+            };
+            statsByPeer.set(announcement.ownerPeerId, initial);
+            return initial;
+          })();
+
+        existing.announcedTrackIds.add(announcement.trackId);
+        existing.totalChunkCount += announcement.availableChunks.length;
+
+        if (currentTrack && announcement.trackId === currentTrack.id) {
+          existing.currentTrackChunkCount += announcement.availableChunks.length;
+          existing.currentTrackTotalChunks = Math.max(
+            existing.currentTrackTotalChunks,
+            announcement.totalChunks
+          );
+          existing.currentTrackSources.add(announcement.source);
+        }
+      }
+    }
+
     return roomSnapshot.room.members.map((member) => {
-      const announcements = member.peerId
-        ? Object.values(availabilityByTrack).flatMap((trackAvailability) =>
-            Object.values(trackAvailability).filter(
-              (announcement) => announcement.ownerPeerId === member.peerId
-            )
-          )
-        : [];
-      const currentTrackAnnouncements = currentTrack
-        ? announcements.filter((announcement) => announcement.trackId === currentTrack.id)
-        : [];
+      const stats = member.peerId ? statsByPeer.get(member.peerId) : null;
 
       return {
         memberId: member.id,
-        announcedTrackCount: new Set(announcements.map((announcement) => announcement.trackId)).size,
-        totalChunkCount: announcements.reduce(
-          (total, announcement) => total + announcement.availableChunks.length,
-          0
-        ),
-        currentTrackChunkCount: currentTrackAnnouncements.reduce(
-          (total, announcement) => total + announcement.availableChunks.length,
-          0
-        ),
-        currentTrackTotalChunks: currentTrackAnnouncements[0]?.totalChunks ?? 0,
-        currentTrackSources: [
-          ...new Set(currentTrackAnnouncements.map((announcement) => announcement.source))
-        ]
+        announcedTrackCount: stats?.announcedTrackIds.size ?? 0,
+        totalChunkCount: stats?.totalChunkCount ?? 0,
+        currentTrackChunkCount: stats?.currentTrackChunkCount ?? 0,
+        currentTrackTotalChunks: stats?.currentTrackTotalChunks ?? 0,
+        currentTrackSources: [...(stats?.currentTrackSources ?? [])]
       };
     });
   }, [activeDashboardTab, availabilityByTrack, currentTrack, roomSnapshot]);

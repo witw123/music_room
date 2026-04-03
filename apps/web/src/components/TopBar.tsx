@@ -1,23 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { AuthSession } from "@music-room/shared";
-import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { Button } from "@/components/ui/button";
 import { clearMusicRoomLocalCache } from "@/lib/local-cache";
 
 type TopBarProps = {
-  activeSession?: AuthSession | null;
+  activeSession: AuthSession | null;
   onLogout?: () => void;
 };
 
-export function TopBar({ activeSession, onLogout }: TopBarProps) {
+function TopBarBase({ activeSession, onLogout }: TopBarProps) {
   const [isClearingCache, setIsClearingCache] = useState(false);
-  const { activeSession: storedSession } = useSessionIdentity({
-    sessionStorageKey: "music-room-session",
-    initialStatusMessage: ""
-  });
-  const session = activeSession === undefined ? storedSession : activeSession;
 
   async function handleClearLocalCache() {
     if (isClearingCache) {
@@ -42,7 +36,7 @@ export function TopBar({ activeSession, onLogout }: TopBarProps) {
           </div>
           <div className="min-w-0 leading-none">
             <span className="block truncate text-sm font-bold tracking-tight text-white">Music Room</span>
-            <span className="hidden text-[11px] text-white/45 sm:block">实时协作听歌空间</span>
+            <span className="hidden text-[11px] text-white/45 sm:block">瀹炴椂鍗忎綔鍚瓕绌洪棿</span>
           </div>
         </div>
 
@@ -55,11 +49,13 @@ export function TopBar({ activeSession, onLogout }: TopBarProps) {
             disabled={isClearingCache}
             className="px-2 text-white/55 hover:bg-white/5 hover:text-white sm:px-3"
           >
-            <span className="sm:hidden">{isClearingCache ? "清理中…" : "清缓存"}</span>
-            <span className="hidden sm:inline">{isClearingCache ? "清理中…" : "清除本地缓存"}</span>
+            <span className="sm:hidden">{isClearingCache ? "娓呯悊涓€?" : "娓呯紦瀛?"}</span>
+            <span className="hidden sm:inline">
+              {isClearingCache ? "娓呯悊涓€?" : "娓呴櫎鏈湴缂撳瓨"}
+            </span>
           </Button>
 
-          {session && onLogout ? (
+          {activeSession && onLogout ? (
             <Button
               variant="ghost"
               size="sm"
@@ -67,7 +63,7 @@ export function TopBar({ activeSession, onLogout }: TopBarProps) {
               type="button"
               className="px-2 text-white/55 hover:bg-white/5 hover:text-white sm:px-3"
             >
-              退出
+              閫€鍑?
             </Button>
           ) : null}
         </div>
@@ -75,3 +71,5 @@ export function TopBar({ activeSession, onLogout }: TopBarProps) {
     </header>
   );
 }
+
+export const TopBar = memo(TopBarBase);

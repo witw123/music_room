@@ -1,23 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
+import dynamic from "next/dynamic";
 import type {
   AuthSession,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
-  Playlist,
   RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
-import { TrackListSection } from "./TrackListSection";
 import { QueuePanel } from "./QueuePanel";
-import { MembersPanel } from "./MembersPanel";
 import type { MemberTransferSummary } from "./MembersPanel";
-import { MeshStatusPanel } from "./MeshStatusPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
+
+type TabId = "queue" | "library" | "members";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -36,8 +35,6 @@ type RoomDashboardViewProps = {
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
-  playlists: Playlist[];
-  tracks: TrackMeta[];
   availabilitySummary: AvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
   peerDiagnostics: PeerDiagnosticsSnapshot[];
@@ -54,24 +51,39 @@ type RoomDashboardViewProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  onSavePlaylistFromQueue: (title: string) => Promise<void>;
-  onLoadPlaylistIntoRoom: (playlistId: string) => Promise<void>;
-  onUpdatePlaylistTitle: (playlistId: string, title: string) => Promise<void>;
-  onUpdatePlaylistTracks: (playlistId: string, trackIds: string[]) => Promise<void>;
-  onDeletePlaylist: (playlistId: string) => Promise<void>;
   socket: any;
   onTabChange?: (tab: TabId) => void;
 };
 
-type TabId = "queue" | "library" | "members";
-
 const tabLabels: Record<TabId, string> = {
-  queue: "共享队列",
-  library: "曲库",
-  members: "成员与诊断"
+  queue: "鍏变韩闃熷垪",
+  library: "鏇插簱",
+  members: "鎴愬憳涓庤瘖鏂?"
 };
 
-export function RoomDashboardView({
+const LibraryTabPanel = dynamic(
+  () => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel),
+  {
+    loading: () => (
+      <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
+        姝ｅ湪鍔犺浇鏇插簱…
+      </div>
+    )
+  }
+);
+
+const MembersTabPanel = dynamic(
+  () => import("./MembersTabPanel").then((mod) => mod.MembersTabPanel),
+  {
+    loading: () => (
+      <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
+        姝ｅ湪鍔犺浇鎴愬憳涓庤瘖鏂?…
+      </div>
+    )
+  }
+);
+
+function RoomDashboardViewBase({
   roomSnapshot,
   currentTrack,
   currentTrackDuration,
@@ -88,8 +100,6 @@ export function RoomDashboardView({
   mediaConnectionState,
   mediaConnectedPeersCount,
   cachedTrackCount,
-  playlists: _playlists,
-  tracks: _tracks,
   availabilitySummary,
   memberTransferSummaries,
   peerDiagnostics,
@@ -106,20 +116,18 @@ export function RoomDashboardView({
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
-  onSavePlaylistFromQueue: _onSavePlaylistFromQueue,
-  onLoadPlaylistIntoRoom: _onLoadPlaylistIntoRoom,
-  onUpdatePlaylistTitle: _onUpdatePlaylistTitle,
-  onUpdatePlaylistTracks: _onUpdatePlaylistTracks,
-  onDeletePlaylist: _onDeletePlaylist,
   socket,
   onTabChange
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
 
-  function handleTabChange(tab: TabId) {
-    setActiveTab(tab);
-    onTabChange?.(tab);
-  }
+  const handleTabChange = useCallback(
+    (tab: TabId) => {
+      setActiveTab(tab);
+      onTabChange?.(tab);
+    },
+    [onTabChange]
+  );
 
   return (
     <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100vh-140px)] lg:min-h-0 lg:flex-row lg:overflow-hidden">
@@ -189,43 +197,36 @@ export function RoomDashboardView({
           ) : null}
 
           {activeTab === "library" ? (
-            <div className="animate-fade-in flex w-full flex-col gap-8">
-              <TrackListSection
-                tracks={roomSnapshot.tracks}
-                uploadedTracks={uploadedTracks}
-                canControlPlayback={canControlPlayback}
-                activeSession={activeSession}
-                onFilesSelected={onFilesSelected}
-                onAddToQueue={onAddToQueue}
-                onDeleteTrack={onDeleteTrack}
-                onPlayTrack={onPlayTrack}
-              />
-            </div>
+            <LibraryTabPanel
+              tracks={roomSnapshot.tracks}
+              uploadedTracks={uploadedTracks}
+              canControlPlayback={canControlPlayback}
+              activeSession={activeSession}
+              onFilesSelected={onFilesSelected}
+              onAddToQueue={onAddToQueue}
+              onDeleteTrack={onDeleteTrack}
+              onPlayTrack={onPlayTrack}
+            />
           ) : null}
 
           {activeTab === "members" ? (
-            <div className="animate-fade-in flex w-full flex-col gap-8">
-              <MembersPanel
-                members={roomSnapshot.room.members}
-                memberTransferSummaries={memberTransferSummaries}
-              />
-
-              <div className="h-px w-full shrink-0 bg-white/5" />
-
-              <MeshStatusPanel
-                availabilitySummary={availabilitySummary}
-                connectedPeersCount={connectedPeersCount}
-                mediaConnectedPeersCount={mediaConnectedPeersCount}
-                cachedTrackCount={cachedTrackCount}
-                peerDiagnostics={peerDiagnostics}
-                recentEvents={peerRecentEvents}
-                iceConfigSource={iceConfigSource}
-                iceConfigStatus={iceConfigStatus}
-              />
-            </div>
+            <MembersTabPanel
+              members={roomSnapshot.room.members}
+              memberTransferSummaries={memberTransferSummaries}
+              availabilitySummary={availabilitySummary}
+              connectedPeersCount={connectedPeersCount}
+              mediaConnectedPeersCount={mediaConnectedPeersCount}
+              cachedTrackCount={cachedTrackCount}
+              peerDiagnostics={peerDiagnostics}
+              peerRecentEvents={peerRecentEvents}
+              iceConfigSource={iceConfigSource}
+              iceConfigStatus={iceConfigStatus}
+            />
           ) : null}
         </div>
       </div>
     </div>
   );
 }
+
+export const RoomDashboardView = memo(RoomDashboardViewBase);

@@ -64,13 +64,20 @@ export function useRoomLifecycleActions({
     }
 
     setSuppressRoomRecovery(true);
+    setRoomSnapshot(null);
+    setPlaylists([]);
     if (workspaceOnly) {
       router.push(workspaceEntryHref as Route);
+      return;
     }
+
+    setIsNavigatingRoomExit(false);
   }, [
     leaveRoom,
     router,
+    setPlaylists,
     setIsNavigatingRoomExit,
+    setRoomSnapshot,
     setSuppressRoomRecovery,
     workspaceEntryHref,
     workspaceOnly
@@ -85,13 +92,20 @@ export function useRoomLifecycleActions({
     }
 
     setSuppressRoomRecovery(true);
+    setRoomSnapshot(null);
+    setPlaylists([]);
     if (workspaceOnly) {
       router.push(workspaceEntryHref as Route);
+      return;
     }
+
+    setIsNavigatingRoomExit(false);
   }, [
     deleteRoom,
     router,
+    setPlaylists,
     setIsNavigatingRoomExit,
+    setRoomSnapshot,
     setSuppressRoomRecovery,
     workspaceEntryHref,
     workspaceOnly

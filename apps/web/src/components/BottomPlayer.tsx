@@ -1,7 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
-import type { AuthSession, RoomMediaConnectionState, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import { memo, useCallback, useTransition } from "react";
+import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
 import {
   DesktopBottomPlayerLayout,
@@ -11,6 +11,8 @@ import {
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
+  playback: PlaybackSnapshot | null;
+  canControlPlayback: boolean;
   progressMs: number;
   seekDraft: number | null;
   setSeekDraft: (v: number | null) => void;
@@ -19,16 +21,7 @@ type BottomPlayerProps = {
   setVolume: (v: number) => void;
   syncProgressFromAudio: () => void;
   syncDurationFromAudio: () => void;
-  roomSnapshot: RoomSnapshot | null;
-  activeSession: AuthSession | null;
-  uploadedTracks: Record<string, { objectUrl: string }>;
   currentTrack: TrackMeta | null;
-  currentTrackAvailability: {
-    localChunkCount: number;
-    totalChunks: number;
-  } | null;
-  mediaConnectionState: RoomMediaConnectionState;
-  mediaConnectedPeersCount: number;
   onPlay: () => void;
   onPause: (positionMs?: number) => void;
   onSeek: (positionMs: number) => void;
@@ -42,9 +35,11 @@ type BottomPlayerProps = {
   onRemoteError: () => void;
 };
 
-export function BottomPlayer({
+function BottomPlayerBase({
   audioRef,
   remoteAudioRef,
+  playback,
+  canControlPlayback,
   progressMs,
   seekDraft,
   setSeekDraft,
@@ -53,13 +48,7 @@ export function BottomPlayer({
   setVolume,
   syncProgressFromAudio,
   syncDurationFromAudio,
-  roomSnapshot,
-  activeSession,
-  uploadedTracks,
   currentTrack,
-  currentTrackAvailability,
-  mediaConnectionState,
-  mediaConnectedPeersCount,
   onPlay,
   onPause,
   onSeek,
@@ -73,8 +62,6 @@ export function BottomPlayer({
   onRemoteError
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
-  const playback = roomSnapshot?.room.playback;
-  const canControlPlayback = !!activeSession && !!roomSnapshot;
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const snapshotProgressMs =
@@ -86,39 +73,42 @@ export function BottomPlayer({
     currentTrackDuration > 0 ? Math.min(effectiveProgressMs, currentTrackDuration) : effectiveProgressMs;
   const progressRatio =
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
-  const title = currentTrack?.title ?? "等待选择歌曲";
-  const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
+  const title = currentTrack?.title ?? "绛夊緟閫夋嫨姝屾洸";
+  const artist = currentTrack?.artist ?? "浠庢洸搴撴垨鍏变韩闃熷垪涓€夋嫨涓€棣栨瓕";
 
-  const commitSeek = () => {
+  const commitSeek = useCallback(() => {
     if (seekDraft !== null && canControlPlayback) {
       startTransition(() => void onSeek(seekDraft));
       setSeekDraft(null);
     }
-  };
+  }, [canControlPlayback, onSeek, seekDraft, setSeekDraft, startTransition]);
 
-  const applyVolume = (nextVolume: number) => {
-    setVolume(nextVolume);
+  const applyVolume = useCallback(
+    (nextVolume: number) => {
+      setVolume(nextVolume);
 
-    if (audioRef.current) {
-      audioRef.current.volume = nextVolume;
-    }
+      if (audioRef.current) {
+        audioRef.current.volume = nextVolume;
+      }
 
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.volume = nextVolume;
-    }
-  };
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.volume = nextVolume;
+      }
+    },
+    [audioRef, remoteAudioRef, setVolume]
+  );
 
-  const togglePlayback = () => {
+  const togglePlayback = useCallback(() => {
     startTransition(() => void (isPlaying ? onPause() : onPlay()));
-  };
+  }, [isPlaying, onPause, onPlay, startTransition]);
 
-  const playPrev = () => startTransition(() => void onPrev());
-  const playNext = () => startTransition(() => void onNext());
+  const playPrev = useCallback(() => {
+    startTransition(() => void onPrev());
+  }, [onPrev, startTransition]);
 
-  void uploadedTracks;
-  void currentTrackAvailability;
-  void mediaConnectionState;
-  void mediaConnectedPeersCount;
+  const playNext = useCallback(() => {
+    startTransition(() => void onNext());
+  }, [onNext, startTransition]);
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)+0.55rem)] lg:pt-2.5">
@@ -200,9 +190,11 @@ export function BottomPlayer({
       {isPending ? (
         <div className="animate-fade-in absolute -top-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-3 py-1 text-xs text-foreground-muted shadow-lg backdrop-blur-md">
           <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
-          同步中...
+          鍚屾涓?..
         </div>
       ) : null}
     </footer>
   );
 }
+
+export const BottomPlayer = memo(BottomPlayerBase);

@@ -1,20 +1,20 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
-import type { AuthSession, PlaybackSnapshot, Playlist, QueueItem, RoomSnapshot } from "@music-room/shared";
+import { useCallback, type Dispatch, type SetStateAction } from "react";
+import type {
+  AuthSession,
+  PlaybackSnapshot,
+  QueueItem,
+  RoomSnapshot
+} from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
-import {
-  shouldAcceptPlaybackSnapshot,
-  toUserFacingError
-} from "@/lib/music-room-ui";
+import { shouldAcceptPlaybackSnapshot, toUserFacingError } from "@/lib/music-room-ui";
 
 type UseRoomActionsOptions = {
   activeSession: AuthSession | null;
   roomSnapshot: RoomSnapshot | null;
-  progressMs: number;
   setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
-  setAvailableRooms: Dispatch<SetStateAction<RoomSnapshot[]>>;
-  setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
+  setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
   setStatusMessage: (value: string) => void;
   refreshAvailableRooms: () => Promise<void>;
   refreshPlaylists: () => Promise<void>;
@@ -39,42 +39,46 @@ function applyQueueLocally(
   );
 }
 
-export function useRoomActions(options: UseRoomActionsOptions) {
-  const {
-    activeSession,
-    roomSnapshot,
-    setRoomSnapshot,
-    setStatusMessage,
-    refreshAvailableRooms,
-    refreshPlaylists,
-    resetPlayerSurface,
-    lastRoomStorageKey,
-    getCurrentPlaybackPositionMs,
-    onTrackDeleted,
-    onRoomDeleted
-  } = options;
-
-  function applyPlaybackLocally(playback: PlaybackSnapshot) {
-    setRoomSnapshot((current) =>
-      current && shouldAcceptPlaybackSnapshot(current.room.playback, playback)
-        ? {
-            ...current,
-            room: {
-              ...current.room,
-              playback
+export function useRoomActions({
+  activeSession,
+  roomSnapshot,
+  setRoomSnapshot,
+  setSuppressRoomRecovery,
+  setStatusMessage,
+  refreshAvailableRooms,
+  refreshPlaylists,
+  resetPlayerSurface,
+  lastRoomStorageKey,
+  getCurrentPlaybackPositionMs,
+  onTrackDeleted,
+  onRoomDeleted
+}: UseRoomActionsOptions) {
+  const applyPlaybackLocally = useCallback(
+    (playback: PlaybackSnapshot) => {
+      setRoomSnapshot((current) =>
+        current && shouldAcceptPlaybackSnapshot(current.room.playback, playback)
+          ? {
+              ...current,
+              room: {
+                ...current.room,
+                playback
+              }
             }
-          }
-        : current
-    );
-  }
+          : current
+      );
+    },
+    [setRoomSnapshot]
+  );
 
-  async function leaveRoom() {
+  const leaveRoom = useCallback(async () => {
     if (!activeSession || !roomSnapshot) {
       return false;
     }
 
     try {
       await musicRoomApi.leaveRoom(roomSnapshot.room.id);
+      setSuppressRoomRecovery(true);
+      setRoomSnapshot(null);
       resetPlayerSurface();
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
@@ -84,9 +88,18 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       setStatusMessage(toUserFacingError(error));
       return false;
     }
-  }
+  }, [
+    activeSession,
+    roomSnapshot,
+    setSuppressRoomRecovery,
+    setRoomSnapshot,
+    resetPlayerSurface,
+    lastRoomStorageKey,
+    refreshAvailableRooms,
+    setStatusMessage
+  ]);
 
-  async function deleteRoom() {
+  const deleteRoom = useCallback(async () => {
     if (!activeSession || !roomSnapshot) {
       return false;
     }
@@ -94,9 +107,16 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     try {
       const trackIds = roomSnapshot.tracks.map((track) => track.id);
       await musicRoomApi.deleteRoom(roomSnapshot.room.id);
-      await onRoomDeleted?.(trackIds);
+      setSuppressRoomRecovery(true);
+      setRoomSnapshot(null);
       resetPlayerSurface();
       window.localStorage.removeItem(lastRoomStorageKey);
+      try {
+        await onRoomDeleted?.(trackIds);
+      } catch {
+        // Room deletion already succeeded on the server. Do not fail the exit flow
+        // if optional local cleanup cannot finish.
+      }
       await refreshAvailableRooms();
       setStatusMessage("房间已删除。");
       return true;
@@ -104,106 +124,144 @@ export function useRoomActions(options: UseRoomActionsOptions) {
       setStatusMessage(toUserFacingError(error));
       return false;
     }
-  }
+  }, [
+    activeSession,
+    roomSnapshot,
+    onRoomDeleted,
+    setSuppressRoomRecovery,
+    setRoomSnapshot,
+    resetPlayerSurface,
+    lastRoomStorageKey,
+    refreshAvailableRooms,
+    setStatusMessage
+  ]);
 
-  async function addToQueue(trackId: string) {
-    if (!activeSession || !roomSnapshot) {
-      return;
-    }
+  const addToQueue = useCallback(
+    async (trackId: string) => {
+      if (!activeSession || !roomSnapshot) {
+        return;
+      }
 
-    try {
-      const queueItem = await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
-      applyQueueLocally(
-        setRoomSnapshot,
-        [...roomSnapshot.queue, queueItem].map((item, index) => ({
-          ...item,
-          position: index
-        }))
-      );
-      setStatusMessage("歌曲已加入共享队列。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const queueItem = await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
+        applyQueueLocally(
+          setRoomSnapshot,
+          [...roomSnapshot.queue, queueItem].map((item, index) => ({
+            ...item,
+            position: index
+          }))
+        );
+        setStatusMessage("歌曲已加入共享队列。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [activeSession, roomSnapshot, setRoomSnapshot, setStatusMessage]
+  );
 
-  async function deleteTrack(trackId: string) {
-    if (!activeSession || !roomSnapshot) {
-      return;
-    }
+  const deleteTrack = useCallback(
+    async (trackId: string) => {
+      if (!activeSession || !roomSnapshot) {
+        return;
+      }
 
-    try {
-      await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
-      await onTrackDeleted?.(trackId);
-      setRoomSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              tracks: current.tracks.filter((track) => track.id !== trackId),
-              queue: current.queue
-                .filter((item) => item.trackId !== trackId)
-                .map((item, index) => ({ ...item, position: index }))
-            }
-          : current
-      );
-      await refreshPlaylists();
-      setStatusMessage("歌曲已从房间曲库中删除。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
+        await onTrackDeleted?.(trackId);
+        setRoomSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                tracks: current.tracks.filter((track) => track.id !== trackId),
+                queue: current.queue
+                  .filter((item) => item.trackId !== trackId)
+                  .map((item, index) => ({ ...item, position: index }))
+              }
+            : current
+        );
+        await refreshPlaylists();
+        setStatusMessage("歌曲已从房间曲库中删除。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [
+      activeSession,
+      roomSnapshot,
+      onTrackDeleted,
+      setRoomSnapshot,
+      refreshPlaylists,
+      setStatusMessage
+    ]
+  );
 
-  async function playTrack(trackId?: string) {
-    if (!roomSnapshot || !activeSession) {
-      return;
-    }
+  const playTrack = useCallback(
+    async (trackId?: string) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
 
-    try {
-      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "play",
-        trackId,
-        expectedVersion: roomSnapshot.room.playback.queueVersion
-      });
-      applyPlaybackLocally(playback);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          action: "play",
+          trackId,
+          expectedVersion: roomSnapshot.room.playback.queueVersion
+        });
+        applyPlaybackLocally(playback);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]
+  );
 
-  async function playQueueItem(queueItemId: string) {
-    if (!roomSnapshot || !activeSession) {
-      return;
-    }
+  const playQueueItem = useCallback(
+    async (queueItemId: string) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
 
-    try {
-      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "play",
-        queueItemId,
-        expectedVersion: roomSnapshot.room.playback.queueVersion
-      });
-      applyPlaybackLocally(playback);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          action: "play",
+          queueItemId,
+          expectedVersion: roomSnapshot.room.playback.queueVersion
+        });
+        applyPlaybackLocally(playback);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]
+  );
 
-  async function pauseTrack(positionMs = getCurrentPlaybackPositionMs()) {
-    if (!roomSnapshot || !activeSession) {
-      return;
-    }
+  const pauseTrack = useCallback(
+    async (positionMs = getCurrentPlaybackPositionMs()) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
 
-    try {
-      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "pause",
-        positionMs,
-        expectedVersion: roomSnapshot.room.playback.queueVersion
-      });
-      applyPlaybackLocally(playback);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          action: "pause",
+          positionMs,
+          expectedVersion: roomSnapshot.room.playback.queueVersion
+        });
+        applyPlaybackLocally(playback);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [
+      roomSnapshot,
+      activeSession,
+      getCurrentPlaybackPositionMs,
+      applyPlaybackLocally,
+      setStatusMessage
+    ]
+  );
 
-  async function prevTrack() {
+  const prevTrack = useCallback(async () => {
     if (!roomSnapshot || !activeSession || !roomSnapshot.room.playback.currentTrackId) {
       return;
     }
@@ -217,9 +275,9 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
-  }
+  }, [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]);
 
-  async function nextTrack() {
+  const nextTrack = useCallback(async () => {
     if (!roomSnapshot || !activeSession) {
       return;
     }
@@ -233,137 +291,161 @@ export function useRoomActions(options: UseRoomActionsOptions) {
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
     }
-  }
+  }, [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]);
 
-  async function savePlaylistFromQueue(title: string) {
-    if (!activeSession || !roomSnapshot) {
-      return;
-    }
+  const savePlaylistFromQueue = useCallback(
+    async (title: string) => {
+      if (!activeSession || !roomSnapshot) {
+        return;
+      }
 
-    try {
-      await musicRoomApi.createPlaylistFromRoom({
-        roomId: roomSnapshot.room.id,
-        title,
-        description: "从当前房间队列保存"
-      });
-      await refreshPlaylists();
-      setStatusMessage(`歌单“${title}”已保存。`);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        await musicRoomApi.createPlaylistFromRoom({
+          roomId: roomSnapshot.room.id,
+          title,
+          description: "从当前房间队列保存"
+        });
+        await refreshPlaylists();
+        setStatusMessage(`歌单“${title}”已保存。`);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [activeSession, roomSnapshot, refreshPlaylists, setStatusMessage]
+  );
 
-  async function updatePlaylistTitle(playlistId: string, title: string) {
-    if (!activeSession) {
-      return;
-    }
+  const updatePlaylistTitle = useCallback(
+    async (playlistId: string, title: string) => {
+      if (!activeSession) {
+        return;
+      }
 
-    try {
-      await musicRoomApi.updatePlaylist(playlistId, { title });
-      await refreshPlaylists();
-      setStatusMessage("歌单名称已更新。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        await musicRoomApi.updatePlaylist(playlistId, { title });
+        await refreshPlaylists();
+        setStatusMessage("歌单名称已更新。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [activeSession, refreshPlaylists, setStatusMessage]
+  );
 
-  async function updatePlaylistTracks(playlistId: string, trackIds: string[]) {
-    if (!activeSession) {
-      return;
-    }
+  const updatePlaylistTracks = useCallback(
+    async (playlistId: string, trackIds: string[]) => {
+      if (!activeSession) {
+        return;
+      }
 
-    try {
-      await musicRoomApi.updatePlaylist(playlistId, { trackIds });
-      await refreshPlaylists();
-      setStatusMessage("歌单曲目已更新。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        await musicRoomApi.updatePlaylist(playlistId, { trackIds });
+        await refreshPlaylists();
+        setStatusMessage("歌单曲目已更新。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [activeSession, refreshPlaylists, setStatusMessage]
+  );
 
-  async function deletePlaylist(playlistId: string) {
-    if (!activeSession) {
-      return;
-    }
+  const deletePlaylist = useCallback(
+    async (playlistId: string) => {
+      if (!activeSession) {
+        return;
+      }
 
-    try {
-      await musicRoomApi.deletePlaylist(playlistId);
-      await refreshPlaylists();
-      setStatusMessage("歌单已删除。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        await musicRoomApi.deletePlaylist(playlistId);
+        await refreshPlaylists();
+        setStatusMessage("歌单已删除。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [activeSession, refreshPlaylists, setStatusMessage]
+  );
 
-  async function loadPlaylistIntoRoom(playlistId: string) {
-    if (!activeSession || !roomSnapshot) {
-      return;
-    }
+  const loadPlaylistIntoRoom = useCallback(
+    async (playlistId: string) => {
+      if (!activeSession || !roomSnapshot) {
+        return;
+      }
 
-    try {
-      await musicRoomApi.importPlaylistToRoom(playlistId, {
-        roomId: roomSnapshot.room.id
-      });
-      setStatusMessage("歌单已加入当前房间队列。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        await musicRoomApi.importPlaylistToRoom(playlistId, {
+          roomId: roomSnapshot.room.id
+        });
+        setStatusMessage("歌单已加入当前房间队列。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [activeSession, roomSnapshot, setStatusMessage]
+  );
 
-  async function removeQueueItem(queueItemId: string) {
-    if (!roomSnapshot || !activeSession) {
-      return;
-    }
+  const removeQueueItem = useCallback(
+    async (queueItemId: string) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
 
-    try {
-      const nextQueue = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
-      applyQueueLocally(setRoomSnapshot, nextQueue);
-      setStatusMessage("歌曲已从队列中移除。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const nextQueue = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
+        applyQueueLocally(setRoomSnapshot, nextQueue);
+        setStatusMessage("歌曲已从队列中移除。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [roomSnapshot, activeSession, setRoomSnapshot, setStatusMessage]
+  );
 
-  async function reorderQueue(queueItemIds: string[]) {
-    if (!roomSnapshot || !activeSession) {
-      return;
-    }
+  const reorderQueue = useCallback(
+    async (queueItemIds: string[]) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
 
-    try {
-      const nextQueue = await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
-        queueItemIds
-      });
-      applyQueueLocally(setRoomSnapshot, nextQueue);
-      setStatusMessage("播放队列顺序已更新。");
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const nextQueue = await musicRoomApi.reorderQueue(roomSnapshot.room.id, {
+          queueItemIds
+        });
+        applyQueueLocally(setRoomSnapshot, nextQueue);
+        setStatusMessage("播放队列顺序已更新。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [roomSnapshot, activeSession, setRoomSnapshot, setStatusMessage]
+  );
 
-  async function seekTrack(positionMs: number) {
-    if (!roomSnapshot || !activeSession) {
-      return;
-    }
+  const seekTrack = useCallback(
+    async (positionMs: number) => {
+      if (!roomSnapshot || !activeSession) {
+        return;
+      }
 
-    try {
-      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "seek",
-        positionMs,
-        expectedVersion: roomSnapshot.room.playback.queueVersion
-      });
-      applyPlaybackLocally(playback);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
+      try {
+        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          action: "seek",
+          positionMs,
+          expectedVersion: roomSnapshot.room.playback.queueVersion
+        });
+        applyPlaybackLocally(playback);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]
+  );
 
-  async function handleEnded() {
+  const handleEnded = useCallback(async () => {
     if (!roomSnapshot) {
       return;
     }
 
     await nextTrack();
-  }
+  }, [roomSnapshot, nextTrack]);
 
   return {
     leaveRoom,

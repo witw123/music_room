@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEve
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldAcceptPlaybackSnapshot } from "@/lib/music-room-ui";
 
+const playbackProgressPollIntervalMs = 120;
+const playingProgressCommitThresholdMs = 120;
+const idleProgressCommitThresholdMs = 200;
+
 type UseRoomPlaybackOptions = {
   audioRef: RefObject<HTMLAudioElement | null>;
   remoteAudioRef: RefObject<HTMLAudioElement | null>;
@@ -30,7 +34,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const [isPageVisible, setIsPageVisible] = useState(
     typeof document === "undefined" ? true : !document.hidden
   );
-  const animationFrameRef = useRef<number | null>(null);
+  const progressPollTimerRef = useRef<number | null>(null);
   const lastCommittedProgressRef = useRef(0);
 
   useEffect(() => {
@@ -79,7 +83,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         progressTrack.durationMs > 0
           ? Math.min(Math.max(0, nextProgressMs), progressTrack.durationMs)
           : Math.max(0, nextProgressMs);
-      const thresholdMs = acceptedPlayback.status === "playing" ? 48 : 120;
+      const thresholdMs =
+        acceptedPlayback.status === "playing"
+          ? playingProgressCommitThresholdMs
+          : idleProgressCommitThresholdMs;
 
       if (Math.abs(normalizedProgressMs - lastCommittedProgressRef.current) < thresholdMs) {
         return;
@@ -112,21 +119,27 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       }
     };
 
-    const animate = () => {
+    const pollProgress = () => {
       tick();
-      animationFrameRef.current = window.requestAnimationFrame(animate);
+      progressPollTimerRef.current = window.setTimeout(
+        pollProgress,
+        playbackProgressPollIntervalMs
+      );
     };
 
     tick();
 
     if (acceptedPlayback.status === "playing" && seekDraft === null && isPageVisible) {
-      animationFrameRef.current = window.requestAnimationFrame(animate);
+      progressPollTimerRef.current = window.setTimeout(
+        pollProgress,
+        playbackProgressPollIntervalMs
+      );
     }
 
     return () => {
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+      if (progressPollTimerRef.current !== null) {
+        window.clearTimeout(progressPollTimerRef.current);
+        progressPollTimerRef.current = null;
       }
     };
   }, [
@@ -179,6 +192,12 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       progressTrack?.durationMs && progressTrack.durationMs > 0
         ? Math.min(nextProgressMs, progressTrack.durationMs)
         : nextProgressMs;
+    if (
+      Math.abs(boundedProgressMs - lastCommittedProgressRef.current) <
+      playingProgressCommitThresholdMs
+    ) {
+      return;
+    }
     lastCommittedProgressRef.current = boundedProgressMs;
     setProgressMs(boundedProgressMs);
   }

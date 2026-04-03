@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
-import { upsertAvailabilityAnnouncement, type AvailabilityState } from "./availability-state";
+import {
+  buildLocalPieceAvailabilityAnnouncement,
+  upsertAvailabilityAnnouncement,
+  type AvailabilityState
+} from "./availability-state";
 
 type UseAvailabilityAnnouncementsOptions = {
   peerId: string;
@@ -11,6 +15,7 @@ type UseAvailabilityAnnouncementsOptions = {
   activeSessionRef: React.MutableRefObject<AuthSession | null>;
   currentRoomRef: React.MutableRefObject<RoomSnapshot | null>;
   flushDelayMs?: number;
+  emitDelayMs?: number;
 };
 
 export function useAvailabilityAnnouncements({
@@ -18,11 +23,14 @@ export function useAvailabilityAnnouncements({
   socketRef,
   activeSessionRef,
   currentRoomRef,
-  flushDelayMs = 90
+  flushDelayMs = 90,
+  emitDelayMs = 140
 }: UseAvailabilityAnnouncementsOptions) {
   const pendingAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
+  const pendingAvailabilityEmitRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
   const queuedAvailabilityRef = useRef<TrackAvailabilityAnnouncement[]>([]);
   const availabilityFlushTimerRef = useRef<number | null>(null);
+  const availabilityEmitTimerRef = useRef<number | null>(null);
   const [availabilityByTrack, setAvailabilityByTrack] = useState<AvailabilityState>({});
   const availabilityByTrackRef = useRef<AvailabilityState>({});
 
@@ -70,6 +78,44 @@ export function useAvailabilityAnnouncements({
     [queueAvailability]
   );
 
+  const flushQueuedAvailabilityEmits = useCallback(() => {
+    if (availabilityEmitTimerRef.current !== null) {
+      window.clearTimeout(availabilityEmitTimerRef.current);
+      availabilityEmitTimerRef.current = null;
+    }
+
+    if (pendingAvailabilityEmitRef.current.size === 0) {
+      return;
+    }
+
+    const socket = socketRef.current;
+    for (const [key, announcement] of pendingAvailabilityEmitRef.current.entries()) {
+      if (!socket || !socket.connected) {
+        pendingAvailabilityRef.current.set(key, announcement);
+        continue;
+      }
+
+      socket.emit("piece.availability", announcement);
+    }
+
+    pendingAvailabilityEmitRef.current.clear();
+  }, [socketRef]);
+
+  const scheduleAvailabilityEmit = useCallback(
+    (announcement: TrackAvailabilityAnnouncement) => {
+      const key = `${announcement.trackId}:${announcement.ownerPeerId}`;
+      pendingAvailabilityEmitRef.current.set(key, announcement);
+      if (availabilityEmitTimerRef.current !== null) {
+        return;
+      }
+
+      availabilityEmitTimerRef.current = window.setTimeout(() => {
+        flushQueuedAvailabilityEmits();
+      }, emitDelayMs);
+    },
+    [emitDelayMs, flushQueuedAvailabilityEmits]
+  );
+
   const mergeLocalPieceAvailability = useCallback(
     (trackId: string, chunkIndex: number, totalChunks: number, chunkSize: number) => {
       const session = activeSessionRef.current;
@@ -79,38 +125,40 @@ export function useAvailabilityAnnouncements({
         return;
       }
 
-      const queuedExisting = [...queuedAvailabilityRef.current]
-        .reverse()
-        .find(
-          (announcement) =>
-            announcement.trackId === trackId && announcement.ownerPeerId === peerId
-        );
+      const queuedExisting =
+        [...queuedAvailabilityRef.current]
+          .reverse()
+          .find(
+            (announcement) =>
+              announcement.trackId === trackId && announcement.ownerPeerId === peerId
+          ) ??
+        [...pendingAvailabilityEmitRef.current.values()]
+          .reverse()
+          .find(
+            (announcement) =>
+              announcement.trackId === trackId && announcement.ownerPeerId === peerId
+          ) ??
+        null;
       const existing = availabilityByTrackRef.current[trackId]?.[peerId] ?? queuedExisting;
-      const availableChunkSet = new Set(existing?.availableChunks ?? []);
-      const nextChunkCountBefore = availableChunkSet.size;
-      availableChunkSet.add(chunkIndex);
-
-      if (
-        existing &&
-        availableChunkSet.size === nextChunkCountBefore &&
-        existing.totalChunks >= totalChunks
-      ) {
-        return;
-      }
-
-      queueAvailability({
+      const nextAnnouncement = buildLocalPieceAvailabilityAnnouncement({
+        existing,
         roomId: room.room.id,
         trackId,
         ownerPeerId: peerId,
         nickname: session.nickname,
-        totalChunks: Math.max(totalChunks, existing?.totalChunks ?? 0),
-        chunkSize: existing?.chunkSize ?? chunkSize,
-        availableChunks: [...availableChunkSet].sort((left, right) => left - right),
-        source: existing?.source ?? "local_cache",
-        announcedAt: new Date().toISOString()
+        chunkIndex,
+        totalChunks,
+        chunkSize
       });
+
+      if (existing === nextAnnouncement) {
+        return;
+      }
+
+      queueAvailability(nextAnnouncement);
+      scheduleAvailabilityEmit(nextAnnouncement);
     },
-    [activeSessionRef, currentRoomRef, peerId, queueAvailability]
+    [activeSessionRef, currentRoomRef, peerId, queueAvailability, scheduleAvailabilityEmit]
   );
 
   const emitAvailability = useCallback(
@@ -145,6 +193,9 @@ export function useAvailabilityAnnouncements({
     return () => {
       if (availabilityFlushTimerRef.current !== null) {
         window.clearTimeout(availabilityFlushTimerRef.current);
+      }
+      if (availabilityEmitTimerRef.current !== null) {
+        window.clearTimeout(availabilityEmitTimerRef.current);
       }
     };
   }, []);

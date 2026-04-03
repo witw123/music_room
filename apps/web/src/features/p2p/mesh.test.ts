@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cacheTrackPieces } from "@/lib/indexeddb";
+import {
+  cacheTrackPieces,
+  getCachedPiece,
+  getCachedPieceIndexes,
+  getTrackPieceManifest
+} from "@/lib/indexeddb";
 import { P2PMesh } from "./mesh";
 import { getMissingChunkIndexes, summarizeTrackAvailability } from "./index";
 
@@ -53,9 +58,9 @@ class FakeDataChannel {
   readyState: RTCDataChannelState = "open";
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
   onclose: (() => void) | null = null;
-  sentMessages: string[] = [];
+  sentMessages: unknown[] = [];
 
-  send(payload: string) {
+  send(payload: unknown) {
     this.sentMessages.push(payload);
   }
 
@@ -109,12 +114,14 @@ class FakeRTCPeerConnection {
 vi.mock("@/lib/indexeddb", () => ({
   cacheTrackPieces: vi.fn(),
   getCachedPiece: vi.fn(),
-  getCachedPieceIndexes: vi.fn(async () => [])
+  getCachedPieceIndexes: vi.fn(async () => []),
+  getTrackPieceManifest: vi.fn(async () => null)
 }));
 
 describe("P2PMesh", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.clearAllMocks();
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
     FakeRTCPeerConnection.instances = [];
   });
@@ -232,6 +239,48 @@ describe("P2PMesh", () => {
       })
     ]);
     expect(onPieceReceived).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses cached manifest metadata when serving a requested piece", async () => {
+    const piecePayload = new TextEncoder().encode("piece-1").buffer;
+    vi.mocked(getCachedPiece).mockResolvedValueOnce({
+      pieceId: "track_1:peer_a:0",
+      trackId: "track_1",
+      peerId: "peer_a",
+      chunkIndex: 0,
+      chunkSize: piecePayload.byteLength,
+      hash: await sha256Hex(piecePayload),
+      createdAt: "2026-04-03T16:30:00.000Z",
+      payload: piecePayload
+    });
+    vi.mocked(getTrackPieceManifest).mockResolvedValueOnce({
+      trackId: "track_1",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: piecePayload.byteLength,
+      durationMs: 1000,
+      totalChunks: 4,
+      chunkSize: piecePayload.byteLength,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
+    await channel?.onmessage?.({
+      data: JSON.stringify({
+        kind: "request-piece",
+        trackId: "track_1",
+        chunkIndex: 0
+      })
+    } as MessageEvent<string>);
+
+    expect(getCachedPieceIndexes).not.toHaveBeenCalled();
+    expect(channel?.sentMessages[1] ?? channel?.sentMessages[0]).toBeInstanceOf(ArrayBuffer);
   });
 });
 

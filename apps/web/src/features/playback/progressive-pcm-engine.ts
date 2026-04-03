@@ -34,6 +34,7 @@ type PcmEngineSyncResult = {
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
+  private gainNode: GainNode | null = null;
   private decoder: AudioDecoder | null = null;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
   private status: EngineStatus = "idle";
@@ -82,6 +83,12 @@ export class ProgressivePcmEngine {
 
   setVolume(nextVolume: number) {
     this.volume = nextVolume;
+    if (this.gainNode && this.audioContext) {
+      this.gainNode.gain.setValueAtTime(nextVolume, this.audioContext.currentTime);
+      this.audio.volume = 1;
+      return;
+    }
+
     this.audio.volume = nextVolume;
   }
 
@@ -99,9 +106,12 @@ export class ProgressivePcmEngine {
       }
 
       this.audioContext = new AudioContextCtor();
+      this.gainNode = this.audioContext.createGain();
+      this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
       this.destinationNode = this.audioContext.createMediaStreamDestination();
+      this.gainNode.connect(this.destinationNode);
       this.audio.srcObject = this.destinationNode.stream;
-      this.audio.volume = this.volume;
+      this.audio.volume = 1;
       return true;
     } catch {
       this.status = "failed";
@@ -238,6 +248,7 @@ export class ProgressivePcmEngine {
     void this.audioContext?.close().catch(() => undefined);
     this.audioContext = null;
     this.destinationNode = null;
+    this.gainNode = null;
     this.streamInfo = null;
     this.decodedSegments = [];
     this.parsedOffset = 0;
@@ -352,7 +363,7 @@ export class ProgressivePcmEngine {
   }
 
   private scheduleAhead(fromPositionSeconds: number) {
-    if (!this.audioContext || !this.destinationNode || !this.playing) {
+    if (!this.audioContext || !this.destinationNode || !this.gainNode || !this.playing) {
       return;
     }
 
@@ -398,7 +409,7 @@ export class ProgressivePcmEngine {
 
       const source = this.audioContext.createBufferSource();
       source.buffer = segment.buffer;
-      source.connect(this.destinationNode);
+      source.connect(this.gainNode);
 
       const scheduledSegment: ScheduledSegment = {
         source,
