@@ -150,6 +150,7 @@ function RoomDashboardViewBase({
           currentSourceOwnerNickname={currentSourceOwnerNickname}
           mediaConnectionState={mediaConnectionState}
           mediaConnectedPeersCount={mediaConnectedPeersCount}
+          iceConfigSource={iceConfigSource}
           onCopyJoinCode={onCopyJoinCode}
           onLeaveRoom={onLeaveRoom}
           onDeleteRoom={onDeleteRoom}

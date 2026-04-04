@@ -23,6 +23,7 @@ type RoomStageProps = {
   currentSourceOwnerNickname: string | null;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
+  iceConfigSource: string;
   onCopyJoinCode: () => Promise<void>;
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
@@ -33,7 +34,8 @@ function getConnectionLabel(
   mediaConnectionState: RoomMediaConnectionState,
   isSourceOwner: boolean,
   mediaConnectedPeersCount: number,
-  onlineMemberCount: number
+  onlineMemberCount: number,
+  iceConfigSource: string
 ) {
   if (isSourceOwner) {
     const listeners = Math.max(0, onlineMemberCount - 1);
@@ -43,10 +45,25 @@ function getConnectionLabel(
     }
 
     if (mediaConnectedPeersCount === 0) {
+      if (iceConfigSource === "stun-only") {
+        return `有 ${listeners} 位成员在线，但当前仅 STUN，TURN 未配置`;
+      }
+
       return `有 ${listeners} 位成员在线，实时音频尚未接通`;
     }
 
     return `已向 ${mediaConnectedPeersCount} 位成员分发实时音频`;
+  }
+
+  if (iceConfigSource === "stun-only") {
+    switch (mediaConnectionState) {
+      case "connecting":
+      case "reconnecting":
+      case "failed":
+        return "当前仅 STUN，跨网环境通常需要 TURN 才能接通实时音频";
+      default:
+        break;
+    }
   }
 
   switch (mediaConnectionState) {
@@ -77,6 +94,7 @@ function RoomStageBase({
   currentSourceOwnerNickname,
   mediaConnectionState,
   mediaConnectedPeersCount,
+  iceConfigSource,
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom,
@@ -169,7 +187,8 @@ function RoomStageBase({
                 mediaConnectionState,
                 isSourceOwner,
                 mediaConnectedPeersCount,
-                onlineMemberCount
+                onlineMemberCount,
+                iceConfigSource
               )}
             </span>
           </div>
