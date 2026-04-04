@@ -126,7 +126,7 @@ export class ProgressivePcmEngine {
   }
 
   async sync() {
-    if (this.status === "destroyed" || this.status === "failed") {
+    if (isTerminalEngineStatus(this.status)) {
       return;
     }
 
@@ -140,11 +140,7 @@ export class ProgressivePcmEngine {
       do {
         this.syncQueued = false;
         await this.performSync();
-      } while (
-        this.syncQueued &&
-        this.status !== "destroyed" &&
-        this.status !== "failed"
-      );
+      } while (this.syncQueued && !isTerminalEngineStatus(this.status));
     } finally {
       this.syncInFlight = false;
     }
@@ -588,4 +584,8 @@ function getEncodedAudioChunkCtor() {
       EncodedAudioChunk?: EncodedAudioChunkCtor;
     }
   ).EncodedAudioChunk ?? null;
+}
+
+function isTerminalEngineStatus(status: EngineStatus) {
+  return status === "destroyed" || status === "failed";
 }
