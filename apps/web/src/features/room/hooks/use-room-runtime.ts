@@ -1124,7 +1124,7 @@ export function useRoomRuntime({
       });
     };
 
-    if (!roomSnapshot?.room.id) {
+    if (!roomSnapshot?.room.id || !activeSession?.userId) {
       return;
     }
 
@@ -1648,6 +1648,7 @@ export function useRoomRuntime({
     };
   }, [
     roomSnapshot?.room.id,
+    activeSession?.userId,
     peerId,
     activeSessionRef,
     currentRoomRef,
