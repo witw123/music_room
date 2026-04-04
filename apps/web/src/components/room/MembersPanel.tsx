@@ -12,10 +12,26 @@ export type MemberTransferSummary = {
   currentTrackSources: string[];
 };
 
+export type LocalMemberPanelState = {
+  memberId: string;
+  transportLabel: string;
+  remoteStreamRateKbps: number | null;
+  latencyMs: number | null;
+  pieceDownloadRateKbps: number | null;
+  pieceUploadRateKbps: number | null;
+  playbackStatus: {
+    label: string;
+    detail: string;
+    tone: StatusTone;
+    badgeText: string;
+  };
+};
+
 type MembersPanelProps = {
   members: RoomMember[];
   memberTransferSummaries?: MemberTransferSummary[];
   peerDiagnostics?: PeerDiagnosticsSnapshot[];
+  localMemberState?: LocalMemberPanelState | null;
 };
 
 type StatusTone = "neutral" | "accent" | "success" | "warning";
@@ -257,7 +273,8 @@ function getRemoteStreamRate(peer: PeerDiagnosticsSnapshot | undefined) {
 function MembersPanelBase({
   members,
   memberTransferSummaries = [],
-  peerDiagnostics = []
+  peerDiagnostics = [],
+  localMemberState = null
 }: MembersPanelProps) {
   const summaryByMemberId = new Map(
     memberTransferSummaries.map((summary) => [summary.memberId, summary])
@@ -267,8 +284,8 @@ function MembersPanelBase({
   );
 
   return (
-    <section className="flex w-full flex-col gap-3">
-      <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-5 text-foreground-muted">
+    <section className="flex w-full flex-col gap-2.5">
+      <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
         在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
         不同成员看到的数值不一定相同。
       </div>
@@ -276,26 +293,42 @@ function MembersPanelBase({
       {members.length > 0 ? (
         members.map((member) => {
           const summary = summaryByMemberId.get(member.id);
+          const isLocalMember = localMemberState?.memberId === member.id;
           const peerDiagnosticsSnapshot = member.peerId
             ? diagnosticsByPeerId.get(member.peerId)
             : undefined;
-          const playbackStatus = getPlaybackStatus(member.presenceState, peerDiagnosticsSnapshot);
+          const playbackStatus = isLocalMember
+            ? localMemberState.playbackStatus
+            : getPlaybackStatus(member.presenceState, peerDiagnosticsSnapshot);
           const currentTrackStatus = getCurrentTrackStatus(summary, member.presenceState);
           const libraryStatus = getLibraryStatus(summary);
           const sourceSummary = formatCurrentTrackSources(summary?.currentTrackSources ?? []);
           const toneClasses = getToneClasses(currentTrackStatus.tone);
           const playbackToneClasses = getToneClasses(playbackStatus.tone);
           const presenceBadge = getPresenceBadge(member);
-          const remoteStreamRateKbps = getRemoteStreamRate(peerDiagnosticsSnapshot);
+          const remoteStreamRateKbps = isLocalMember
+            ? localMemberState.remoteStreamRateKbps
+            : getRemoteStreamRate(peerDiagnosticsSnapshot);
+          const latencyMs = isLocalMember
+            ? localMemberState.latencyMs
+            : peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null;
+          const pieceDownloadRateKbps = isLocalMember
+            ? localMemberState.pieceDownloadRateKbps
+            : peerDiagnosticsSnapshot?.pieceDownloadRateKbps ?? null;
+          const pieceUploadRateKbps = isLocalMember
+            ? localMemberState.pieceUploadRateKbps
+            : peerDiagnosticsSnapshot?.pieceUploadRateKbps ?? null;
 
           return (
             <div
               key={member.id}
-              className="flex flex-col gap-3 rounded-xl border border-surface-border bg-surface/30 p-3"
+              className="flex flex-col gap-2.5 rounded-xl border border-surface-border bg-surface/30 p-2.5"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
-                  <strong className="text-sm font-semibold text-foreground">{member.nickname}</strong>
+                  <strong className="text-[13px] font-semibold leading-none text-foreground">
+                    {member.nickname}
+                  </strong>
                   <span
                     className={`text-[10px] ${
                       member.role === "host" ? "font-bold text-accent" : "text-foreground-muted"
@@ -314,49 +347,55 @@ function MembersPanelBase({
               </div>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
-                  <span className="block text-foreground-muted">远端流链路（本端观测）</span>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-2 text-[10px] leading-4 text-foreground-muted">
+                  <span className="block text-foreground-muted">
+                    {isLocalMember ? localMemberState.transportLabel : "远端流链路（本端观测）"}
+                  </span>
+                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
                     <span>传输速度: {formatMetric(remoteStreamRateKbps, " kbps")}</span>
-                    <span>延迟: {formatMetric(peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null, "ms")}</span>
+                    <span>延迟: {formatMetric(latencyMs, "ms")}</span>
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
-                  <span className="block text-foreground-muted">分片同步（本端观测）</span>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-2 text-[10px] leading-4 text-foreground-muted">
+                  <span className="block text-foreground-muted">
+                    {isLocalMember ? "分片同步（本机汇总）" : "分片同步（本端观测）"}
+                  </span>
+                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
                     <span>
-                      下载: {formatMetric(peerDiagnosticsSnapshot?.pieceDownloadRateKbps ?? null, " kbps")}
+                      下载: {formatMetric(pieceDownloadRateKbps, " kbps")}
                     </span>
                     <span>
-                      上传: {formatMetric(peerDiagnosticsSnapshot?.pieceUploadRateKbps ?? null, " kbps")}
+                      上传: {formatMetric(pieceUploadRateKbps, " kbps")}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-lg border border-surface-border bg-background/40 px-3 py-2.5">
+              <div className="grid grid-cols-1 gap-2 xl:grid-cols-[1.05fr_1.05fr_0.9fr]">
+                <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
                   <span className="block text-[10px] text-foreground-muted">播放状态</span>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <strong className="text-sm font-semibold text-foreground">
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <strong className="text-[13px] font-semibold text-foreground">
                       {playbackStatus.label}
                     </strong>
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${playbackToneClasses.badge}`}
                     >
-                      {peerDiagnosticsSnapshot?.transportHealth ?? "未知"}
+                      {isLocalMember
+                        ? localMemberState.playbackStatus.badgeText
+                        : peerDiagnosticsSnapshot?.transportHealth ?? "未知"}
                     </span>
                   </div>
-                  <p className="mt-2 text-[10px] leading-5 text-foreground-muted">
+                  <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
                     {playbackStatus.detail}
                   </p>
                 </div>
 
-                <div className="rounded-lg border border-surface-border bg-background/40 px-3 py-2.5">
+                <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
                   <span className="block text-[10px] text-foreground-muted">当前曲目缓存</span>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <strong className="text-sm font-semibold text-foreground">
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <strong className="text-[13px] font-semibold text-foreground">
                       {currentTrackStatus.label}
                     </strong>
                     <span
@@ -367,29 +406,29 @@ function MembersPanelBase({
                         : "0/0"}
                     </span>
                   </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/6">
+                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/6">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${toneClasses.progress}`}
                       style={{ width: `${currentTrackStatus.progressPercent}%` }}
                     />
                   </div>
-                  <p className="mt-2 text-[10px] leading-5 text-foreground-muted">
+                  <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
                     {currentTrackStatus.detail}
                   </p>
                 </div>
 
-                <div className="rounded-lg border border-surface-border bg-background/40 px-3 py-2.5">
+                <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
                   <span className="block text-[10px] text-foreground-muted">本地缓存库存</span>
-                  <strong className="mt-2 block text-sm font-semibold text-foreground">
+                  <strong className="mt-1.5 block text-[13px] font-semibold text-foreground">
                     {libraryStatus.label}
                   </strong>
-                  <p className="mt-2 text-[10px] leading-5 text-foreground-muted">
+                  <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
                     {libraryStatus.detail}
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
+              <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-1.5 text-[10px] leading-4 text-foreground-muted">
                 {sourceSummary ? (
                   <span>同步来源：{sourceSummary}</span>
                 ) : playbackStatus.label === "实时音频中" ? (

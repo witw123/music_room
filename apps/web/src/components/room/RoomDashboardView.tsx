@@ -13,7 +13,7 @@ import type {
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
-import type { MemberTransferSummary } from "./MembersPanel";
+import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 
 type TabId = "queue" | "library" | "members";
@@ -37,6 +37,7 @@ type RoomDashboardViewProps = {
   cachedTrackCount: number;
   availabilitySummary: AvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
+  localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -102,6 +103,7 @@ function RoomDashboardViewBase({
   cachedTrackCount,
   availabilitySummary,
   memberTransferSummaries,
+  localMemberState,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -214,6 +216,7 @@ function RoomDashboardViewBase({
             <MembersTabPanel
               members={roomSnapshot.room.members}
               memberTransferSummaries={memberTransferSummaries}
+              localMemberState={localMemberState}
               availabilitySummary={availabilitySummary}
               connectedPeersCount={connectedPeersCount}
               mediaConnectedPeersCount={mediaConnectedPeersCount}

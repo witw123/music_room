@@ -5,9 +5,12 @@ import type {
   IceConfigResponse,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
+  RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
+import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
+import { pickActiveMediaDiagnostic } from "@/features/p2p";
 
 type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
@@ -26,6 +29,7 @@ type UseRoomDerivedStateInput = {
   workspaceOnly: boolean;
   initialRoomId: string | null;
   activeSessionUserId?: string;
+  mediaConnectionState: RoomMediaConnectionState;
   suppressRoomRecovery: boolean;
   isNavigatingRoomExit: boolean;
   isRecoveringRoom: boolean;
@@ -48,6 +52,7 @@ export function useRoomDerivedState({
   workspaceOnly,
   initialRoomId,
   activeSessionUserId,
+  mediaConnectionState,
   suppressRoomRecovery,
   isNavigatingRoomExit,
   isRecoveringRoom
@@ -88,6 +93,10 @@ export function useRoomDerivedState({
   const currentTrackAvailability = currentTrack
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
+  const activeMediaDiagnostic = useMemo(
+    () => pickActiveMediaDiagnostic(peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId ?? null),
+    [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]
+  );
 
   const memberTransferSummaries = useMemo(() => {
     if (!roomSnapshot || activeDashboardTab !== "members") {
@@ -186,6 +195,63 @@ export function useRoomDerivedState({
     return peerRecentEvents.filter((event) => visiblePeerIds.has(event.peerId));
   }, [peerRecentEvents, visiblePeerDiagnostics]);
 
+  const localMemberState = useMemo<LocalMemberPanelState | null>(() => {
+    if (!roomSnapshot || !activeSessionUserId) {
+      return null;
+    }
+
+    const localMember =
+      roomSnapshot.room.members.find((member) => member.id === activeSessionUserId) ?? null;
+    if (!localMember) {
+      return null;
+    }
+
+    const activePeerDiagnostics = peerDiagnostics.filter((peer) => activeMemberPeerIds.has(peer.peerId));
+    const totalPieceDownloadRateKbps = sumDiagnosticsValue(
+      activePeerDiagnostics,
+      "pieceDownloadRateKbps"
+    );
+    const totalPieceUploadRateKbps = sumDiagnosticsValue(
+      activePeerDiagnostics,
+      "pieceUploadRateKbps"
+    );
+    const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
+    const totalMediaSendRateKbps = sumDiagnosticsValue(activePeerDiagnostics, "mediaSendBitrateKbps");
+    const activeRemoteStreamRateKbps =
+      activeMediaDiagnostic?.mediaReceiveBitrateKbps ??
+      activeMediaDiagnostic?.mediaSendBitrateKbps ??
+      activeMediaDiagnostic?.availableOutgoingBitrateKbps ??
+      totalMediaSendRateKbps;
+    const isSourceOwner = roomSnapshot.room.playback.sourceSessionId === activeSessionUserId;
+
+    return {
+      memberId: localMember.id,
+      transportLabel: isSourceOwner ? "实时音频分发（本机汇总）" : "远端流链路（本机）",
+      remoteStreamRateKbps: activeRemoteStreamRateKbps,
+      latencyMs: averageLatencyMs,
+      pieceDownloadRateKbps: totalPieceDownloadRateKbps,
+      pieceUploadRateKbps: totalPieceUploadRateKbps,
+      playbackStatus: getLocalPlaybackStatus({
+        presenceState: localMember.presenceState,
+        mediaConnectionState,
+        isSourceOwner,
+        mediaConnectedPeersCount: countPeersWithinActiveMembers(
+          mediaConnectedPeers,
+          activeMemberPeerIds
+        ),
+        playbackStatus: roomSnapshot.room.playback.status
+      })
+    };
+  }, [
+    activeMediaDiagnostic,
+    activeMemberPeerIds,
+    activeSessionUserId,
+    mediaConnectedPeers,
+    mediaConnectionState,
+    peerDiagnostics,
+    roomSnapshot
+  ]);
+
   const statusTone =
     statusMessage.includes("失败") || statusMessage.includes("不可用")
       ? "warning"
@@ -222,6 +288,7 @@ export function useRoomDerivedState({
     availabilitySummary,
     currentTrackAvailability,
     memberTransferSummaries,
+    localMemberState,
     visiblePeerDiagnostics,
     visiblePeerRecentEvents,
     statusTone,
@@ -281,6 +348,137 @@ export function countPeersWithinActiveMembers(
   activeMemberPeerIds: Set<string>
 ) {
   return peerIds.filter((peerId) => activeMemberPeerIds.has(peerId)).length;
+}
+
+function sumDiagnosticsValue(
+  diagnostics: PeerDiagnosticsSnapshot[],
+  key:
+    | "pieceDownloadRateKbps"
+    | "pieceUploadRateKbps"
+    | "mediaSendBitrateKbps"
+) {
+  const values = diagnostics
+    .map((peer) => peer[key])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return Math.round(values.reduce((sum, value) => sum + value, 0));
+}
+
+function averageDiagnosticsValue(
+  diagnostics: PeerDiagnosticsSnapshot[],
+  key: "currentRoundTripTimeMs"
+) {
+  const values = diagnostics
+    .map((peer) => peer[key])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function getLocalPlaybackStatus(input: {
+  presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
+  mediaConnectionState: RoomMediaConnectionState;
+  isSourceOwner: boolean;
+  mediaConnectedPeersCount: number;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"];
+}): LocalMemberPanelState["playbackStatus"] {
+  if (input.presenceState === "offline") {
+    return {
+      label: "未接入音频",
+      detail: "当前成员已离线。",
+      tone: "warning",
+      badgeText: "offline"
+    };
+  }
+
+  if (input.presenceState === "reconnecting") {
+    return {
+      label: "实时音频重连中",
+      detail: "本机正在恢复实时播放链路。",
+      tone: "warning",
+      badgeText: "reconnecting"
+    };
+  }
+
+  if (input.isSourceOwner) {
+    if (input.playbackStatus !== "playing") {
+      return {
+        label: "本地待机",
+        detail: "当前还没有在向房间持续分发实时音频。",
+        tone: "neutral",
+        badgeText: "source-idle"
+      };
+    }
+
+    if (input.mediaConnectedPeersCount > 0) {
+      return {
+        label: "本地播放中",
+        detail: `当前正在向 ${input.mediaConnectedPeersCount} 位成员分发实时音频。`,
+        tone: "success",
+        badgeText: "source-live"
+      };
+    }
+
+    return {
+      label: "本地播放中",
+      detail: "当前曲目正在本机播放，等待其他成员接入实时音频。",
+      tone: "accent",
+      badgeText: "source-waiting"
+    };
+  }
+
+  switch (input.mediaConnectionState) {
+    case "live":
+      return {
+        label: "实时音频中",
+        detail: "当前已接入远端实时音频链路。",
+        tone: "success",
+        badgeText: "healthy"
+      };
+    case "buffering":
+      return {
+        label: "实时音频缓冲中",
+        detail: "已接入音频链路，正在等待播放稳定。",
+        tone: "accent",
+        badgeText: "buffering"
+      };
+    case "connecting":
+      return {
+        label: "正在连接实时音频",
+        detail: "当前正在接入房间实时音频。",
+        tone: "accent",
+        badgeText: "connecting"
+      };
+    case "reconnecting":
+      return {
+        label: "实时音频重连中",
+        detail: "链路状态正在恢复，音频可能暂时抖动。",
+        tone: "warning",
+        badgeText: "reconnecting"
+      };
+    case "failed":
+      return {
+        label: "实时音频连接失败",
+        detail: "当前实时音频链路恢复失败。",
+        tone: "warning",
+        badgeText: "failed"
+      };
+    default:
+      return {
+        label: "未接入音频",
+        detail: "当前还没有稳定的实时音频链路。",
+        tone: "neutral",
+        badgeText: "idle"
+      };
+  }
 }
 
 export function filterVisiblePeerDiagnostics(

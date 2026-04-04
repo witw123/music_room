@@ -2,12 +2,17 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, PeerRecentEvent, RoomMember } from "@music-room/shared";
-import { MembersPanel, type MemberTransferSummary } from "./MembersPanel";
+import {
+  MembersPanel,
+  type LocalMemberPanelState,
+  type MemberTransferSummary
+} from "./MembersPanel";
 import { MeshStatusPanel, type AvailabilityEntry } from "./MeshStatusPanel";
 
 type MembersTabPanelProps = {
   members: RoomMember[];
   memberTransferSummaries: MemberTransferSummary[];
+  localMemberState: LocalMemberPanelState | null;
   availabilitySummary: AvailabilityEntry[];
   connectedPeersCount: number;
   mediaConnectedPeersCount: number;
@@ -21,6 +26,7 @@ type MembersTabPanelProps = {
 function MembersTabPanelBase({
   members,
   memberTransferSummaries,
+  localMemberState,
   availabilitySummary,
   connectedPeersCount,
   mediaConnectedPeersCount,
@@ -36,6 +42,7 @@ function MembersTabPanelBase({
         members={members}
         memberTransferSummaries={memberTransferSummaries}
         peerDiagnostics={peerDiagnostics}
+        localMemberState={localMemberState}
       />
 
       <MeshStatusPanel

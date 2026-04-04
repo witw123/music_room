@@ -13,7 +13,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { TopBar } from "@/components/TopBar";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
-import type { MemberTransferSummary } from "@/components/room/MembersPanel";
+import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/room/MembersPanel";
 import type { AvailabilityEntry } from "@/components/room/MeshStatusPanel";
 
 type RoomWorkspaceProps = {
@@ -33,6 +33,7 @@ type RoomWorkspaceProps = {
   cachedTrackCount: number;
   availabilitySummary: AvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
+  localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -78,6 +79,7 @@ function RoomWorkspaceBase({
   cachedTrackCount,
   availabilitySummary,
   memberTransferSummaries,
+  localMemberState,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -157,6 +159,7 @@ function RoomWorkspaceBase({
               cachedTrackCount={cachedTrackCount}
               availabilitySummary={availabilitySummary}
               memberTransferSummaries={memberTransferSummaries}
+              localMemberState={localMemberState}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}

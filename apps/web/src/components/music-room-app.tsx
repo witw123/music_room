@@ -294,8 +294,7 @@ export function MusicRoomApp({
     nextTrack,
     removeQueueItem,
     reorderQueue,
-    seekTrack,
-    handleEnded
+    seekTrack
   } = useRoomActions({
     activeSession,
     roomSnapshot,
@@ -544,6 +543,14 @@ export function MusicRoomApp({
     await nextTrack();
   }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
 
+  const handlePlaybackEnded = useCallback(async () => {
+    await armPlaybackStart({
+      reason: "next",
+      previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
+    });
+    await nextTrack();
+  }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
+
   const handleRemotePlaying = useCallback(() => {
     recordPeerDiagnostic({
       peerId: "remote-media",
@@ -560,7 +567,15 @@ export function MusicRoomApp({
       })
     });
     setMediaConnectionState("live");
-  }, [recordPeerDiagnostic]);
+    if (isCurrentSourceOwner && activePlaybackSource === "remote-stream") {
+      void syncHostMediaStream();
+    }
+  }, [
+    activePlaybackSource,
+    isCurrentSourceOwner,
+    recordPeerDiagnostic,
+    syncHostMediaStream
+  ]);
 
   const handleRemoteWaiting = useCallback(() => {
     scheduleRemotePlaybackRetry();
@@ -628,6 +643,7 @@ export function MusicRoomApp({
     mediaConnectedPeersCount,
     availabilitySummary,
     memberTransferSummaries,
+    localMemberState,
     visiblePeerDiagnostics,
     visiblePeerRecentEvents,
     statusTone,
@@ -652,6 +668,7 @@ export function MusicRoomApp({
     workspaceOnly,
     initialRoomId,
     activeSessionUserId: activeSession?.userId,
+    mediaConnectionState,
     suppressRoomRecovery,
     isNavigatingRoomExit,
     isRecoveringRoom
@@ -675,6 +692,7 @@ export function MusicRoomApp({
       cachedTrackCount={cachedTrackCount}
       availabilitySummary={availabilitySummary}
       memberTransferSummaries={memberTransferSummaries}
+      localMemberState={localMemberState}
       peerDiagnostics={visiblePeerDiagnostics}
       peerRecentEvents={visiblePeerRecentEvents}
       iceConfigSource={iceConfigSource}
@@ -718,7 +736,7 @@ export function MusicRoomApp({
           onSeek={seekTrack}
           onPrev={handlePrevTrack}
           onNext={handleNextTrack}
-          onEnded={handleEnded}
+          onEnded={handlePlaybackEnded}
           onLocalPlaybackReady={handleLocalPlaybackReady}
           onRemotePlaying={handleRemotePlaying}
           onRemoteWaiting={handleRemoteWaiting}

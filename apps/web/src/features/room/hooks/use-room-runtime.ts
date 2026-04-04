@@ -41,6 +41,7 @@ import { captureAudioStream } from "@/features/upload/audio-utils";
 import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { resolveHostRelayAudioElement } from "@/features/room/host-relay-audio";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 
 type RoomRouter = {
@@ -628,6 +629,7 @@ export function useRoomRuntime({
       playback.mediaEpoch,
       playback.currentTrackId ?? "none",
       playback.status,
+      activePlaybackSource,
       listenerPeerIds.join(",")
     ].join("|");
     const syncState = hostMediaSyncStateRef.current;
@@ -647,21 +649,25 @@ export function useRoomRuntime({
 
     try {
       try {
-        const audio = audioRef.current;
-        if (!audio || !playback.currentTrackId) {
+        const relayAudio = resolveHostRelayAudioElement({
+          activePlaybackSource,
+          localAudio: audioRef.current,
+          remoteAudio: remoteAudioRef.current
+        });
+        if (!relayAudio || !playback.currentTrackId) {
           await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
           syncState.lastAppliedKey = syncKey;
           return;
         }
 
-        if (playback.status === "playing" && audio.paused) {
-          await roomAudioOutput.playElement(audio).catch(() => ({
+        if (playback.status === "playing" && relayAudio.paused) {
+          await roomAudioOutput.playElement(relayAudio).catch(() => ({
             ok: false,
             error: "local-host-play-rejected"
           }));
         }
 
-        const capture = captureAudioStream(audio);
+        const capture = captureAudioStream(relayAudio);
         if (!capture) {
           setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
           return;
@@ -719,11 +725,13 @@ export function useRoomRuntime({
       syncState.pendingKey = null;
     }
   }, [
+    activePlaybackSource,
     audioRef,
     clearHostMediaSyncRetry,
     currentRoomRef,
     isCurrentSourceOwner,
     peerId,
+    remoteAudioRef,
     setStatusMessage
   ]);
 
@@ -2024,6 +2032,7 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback.mediaEpoch,
     peerId,
     isCurrentSourceOwner,
+    activePlaybackSource,
     mediaConnectedPeers.length,
     syncHostMediaStream
   ]);
