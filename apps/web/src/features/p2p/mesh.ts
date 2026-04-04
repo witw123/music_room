@@ -208,7 +208,13 @@ export class P2PMesh {
         return;
       }
 
-      await entry.connection.addIceCandidate(candidate);
+      try {
+        await entry.connection.addIceCandidate(candidate);
+      } catch {
+        if (!entry.connection.remoteDescription) {
+          entry.pendingCandidates.push(candidate);
+        }
+      }
     }
   }
 
@@ -513,7 +519,13 @@ export class P2PMesh {
     const nextCandidates = [...entry.pendingCandidates];
     entry.pendingCandidates = [];
     for (const candidate of nextCandidates) {
-      await entry.connection.addIceCandidate(candidate);
+      try {
+        await entry.connection.addIceCandidate(candidate);
+      } catch {
+        if (!entry.connection.remoteDescription) {
+          entry.pendingCandidates.push(candidate);
+        }
+      }
     }
   }
 

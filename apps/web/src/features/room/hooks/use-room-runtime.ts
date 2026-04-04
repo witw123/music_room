@@ -452,6 +452,38 @@ export function useRoomRuntime({
     [recordPeerDiagnostic]
   );
 
+  const reportRealtimeFailure = useCallback(
+    (input: {
+      peerId: string;
+      channelKind: "data" | "media" | "system";
+      event: string;
+      summary: string;
+      error: unknown;
+      mediaConnectionState?: RoomMediaConnectionState;
+    }) => {
+      const message = toUserFacingError(input.error);
+      const nextSummary = `${input.summary}: ${message}`;
+
+      recordPeerDiagnostic({
+        peerId: input.peerId,
+        channelKind: input.channelKind,
+        direction: "local",
+        event: input.event,
+        level: "error",
+        summary: nextSummary,
+        update: (snapshot) => ({
+          ...snapshot,
+          lastError: nextSummary
+        })
+      });
+
+      if (input.mediaConnectionState) {
+        setMediaConnectionState(input.mediaConnectionState);
+      }
+    },
+    [recordPeerDiagnostic, setMediaConnectionState]
+  );
+
   useEffect(() => {
     return () => {
       if (remotePlaybackRetryRef.current !== null) {
@@ -791,6 +823,16 @@ export function useRoomRuntime({
         })
       });
       socket.emit("peer.signal", payload);
+    };
+    const handleSignalFailure = (payload: PeerSignalMessage, error: unknown) => {
+      reportRealtimeFailure({
+        peerId: payload.fromPeerId,
+        channelKind: payload.channelKind,
+        event: "signal-handle-failed",
+        summary: `Failed to apply ${payload.channelKind} ${payload.type} from ${payload.fromPeerId}`,
+        error,
+        mediaConnectionState: payload.channelKind === "media" ? "reconnecting" : undefined
+      });
     };
 
     const mesh = new P2PMesh(
@@ -1138,11 +1180,15 @@ export function useRoomRuntime({
         })
       });
       if (payload.channelKind === "media") {
-        void mediaMesh.handleSignal(payload);
+        void mediaMesh.handleSignal(payload).catch((error) => {
+          handleSignalFailure(payload, error);
+        });
         return;
       }
 
-      void mesh.handleSignal(payload);
+      void mesh.handleSignal(payload).catch((error) => {
+        handleSignalFailure(payload, error);
+      });
     });
     socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
       queueAvailability(announcement);
@@ -1279,7 +1325,8 @@ export function useRoomRuntime({
     setSuppressRoomRecovery,
     setStatusMessage,
     updateDataTransportStats,
-    updateMediaTransportStats
+    updateMediaTransportStats,
+    reportRealtimeFailure
   ]);
 
   useEffect(() => {
@@ -1307,8 +1354,21 @@ export function useRoomRuntime({
         .map((member) => member.peerId)
         .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
 
-    void meshRef.current?.syncPeers(remotePeerIds);
-  }, [roomSnapshot?.room.members, peerId]);
+    const syncPromise = meshRef.current?.syncPeers(remotePeerIds);
+    if (!syncPromise) {
+      return;
+    }
+
+    void syncPromise.catch((error) => {
+      reportRealtimeFailure({
+        peerId: "system",
+        channelKind: "system",
+        event: "mesh-sync-failed",
+        summary: "Failed to sync data peers",
+        error
+      });
+    });
+  }, [roomSnapshot?.room.members, peerId, reportRealtimeFailure]);
 
   const playbackClockSource = useMemo(
     () =>

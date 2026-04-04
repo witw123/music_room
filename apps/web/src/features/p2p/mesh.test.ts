@@ -73,6 +73,9 @@ class FakeDataChannel {
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
   connectionState: RTCPeerConnectionState = "connected";
+  signalingState: RTCSignalingState = "stable";
+  remoteDescription: RTCSessionDescriptionInit | null = null;
+  localDescription: RTCSessionDescriptionInit | null = null;
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
   ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
@@ -87,10 +90,18 @@ class FakeRTCPeerConnection {
   }
 
   async createOffer() {
+    this.signalingState = "have-local-offer";
     return { type: "offer" as const, sdp: "fake-offer" };
   }
 
-  async setLocalDescription() {
+  async setLocalDescription(description?: RTCSessionDescriptionInit | null) {
+    this.localDescription = description ?? null;
+    if (description?.type === "offer") {
+      this.signalingState = "have-local-offer";
+    }
+    if (description?.type === "answer") {
+      this.signalingState = "stable";
+    }
     return undefined;
   }
 
@@ -98,7 +109,14 @@ class FakeRTCPeerConnection {
     return { type: "answer" as const, sdp: "fake-answer" };
   }
 
-  async setRemoteDescription() {
+  async setRemoteDescription(description?: RTCSessionDescriptionInit | null) {
+    this.remoteDescription = description ?? null;
+    if (description?.type === "offer") {
+      this.signalingState = "have-remote-offer";
+    }
+    if (description?.type === "answer") {
+      this.signalingState = "stable";
+    }
     return undefined;
   }
 
@@ -184,6 +202,85 @@ describe("P2PMesh", () => {
       })
     );
     expect(sendSignalB).not.toHaveBeenCalled();
+  });
+
+  it("does not reject when queued ICE candidates fail during offer handling", async () => {
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await expect(
+      mesh.handleSignal({
+        roomId: "room_1",
+        fromPeerId: "peer_b",
+        toPeerId: "peer_a",
+        channelKind: "data",
+        type: "candidate",
+        payload: {
+          candidate: "candidate-1"
+        }
+      })
+    ).resolves.toBeUndefined();
+
+    const peer = FakeRTCPeerConnection.instances[0];
+    expect(peer).toBeDefined();
+
+    vi.spyOn(peer!, "addIceCandidate").mockRejectedValueOnce(new Error("candidate-race"));
+
+    await expect(
+      mesh.handleSignal({
+        roomId: "room_1",
+        fromPeerId: "peer_b",
+        toPeerId: "peer_a",
+        channelKind: "data",
+        type: "offer",
+        payload: {
+          type: "offer",
+          sdp: "fake-offer"
+        }
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not reject when applying a live ICE candidate fails", async () => {
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await expect(
+      mesh.handleSignal({
+        roomId: "room_1",
+        fromPeerId: "peer_b",
+        toPeerId: "peer_a",
+        channelKind: "data",
+        type: "offer",
+        payload: {
+          type: "offer",
+          sdp: "fake-offer"
+        }
+      })
+    ).resolves.toBeUndefined();
+
+    const peer = FakeRTCPeerConnection.instances[0];
+    expect(peer?.remoteDescription).toEqual({
+      type: "offer",
+      sdp: "fake-offer"
+    });
+
+    vi.spyOn(peer!, "addIceCandidate").mockRejectedValueOnce(new Error("candidate-race"));
+
+    await expect(
+      mesh.handleSignal({
+        roomId: "room_1",
+        fromPeerId: "peer_b",
+        toPeerId: "peer_a",
+        channelKind: "data",
+        type: "candidate",
+        payload: {
+          candidate: "candidate-2"
+        }
+      })
+    ).resolves.toBeUndefined();
   });
 
   it("batches received piece validation and IndexedDB writes", async () => {
