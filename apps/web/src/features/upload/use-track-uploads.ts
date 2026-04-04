@@ -139,7 +139,9 @@ export function useTrackUploads(options: {
               roomId: roomSnapshot.room.id,
               trackId: asset.trackId,
               peerId,
-              nickname: activeSession.nickname
+              nickname: activeSession.nickname,
+              totalChunks: track?.pieceManifest?.totalChunks,
+              chunkSize: track?.pieceManifest?.chunkSize
             })) ??
             (await buildTrackAvailabilityFromFile({
               roomId: roomSnapshot.room.id,
@@ -283,7 +285,8 @@ export function useTrackUploads(options: {
       trackId,
       peerId,
       nickname: activeSession.nickname,
-      totalChunks
+      totalChunks: totalChunks ?? track?.pieceManifest?.totalChunks,
+      chunkSize: track?.pieceManifest?.chunkSize
     });
     const uploadedTrack = uploadedTracks[trackId];
     const cachedAsset = uploadedTrack ? null : await getCachedTrackAsset(trackId);
@@ -359,6 +362,18 @@ export function useTrackUploads(options: {
         objectUrl
       }
     }));
+    const availability = await buildTrackAvailabilityFromCache({
+      roomId: roomSnapshot.room.id,
+      trackId,
+      peerId,
+      nickname: activeSession?.nickname ?? track.ownerNickname,
+      totalChunks: track.pieceManifest?.totalChunks ?? totalChunks,
+      chunkSize: track.pieceManifest?.chunkSize
+    });
+    if (availability) {
+      onAvailability(availability);
+      emitAvailability(availability);
+    }
     await trimLocalCache(roomSnapshot.tracks.map((entry) => entry.id));
     setStatusMessage(`已从房间其他成员恢复曲目 ${track.title} 的本地缓存。`);
   }

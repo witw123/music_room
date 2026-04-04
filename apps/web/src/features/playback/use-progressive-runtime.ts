@@ -16,6 +16,10 @@ import type {
   TrackAvailabilityAnnouncement,
   TrackMeta
 } from "@music-room/shared";
+import {
+  pickActiveMediaDiagnostic,
+  resolveTransportHealth
+} from "@/features/p2p";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { syncLocalPlaybackWindow } from "./playback-sync";
 import {
@@ -66,6 +70,7 @@ type UseProgressiveRuntimeInput = {
   setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
   isPageVisible: boolean;
   volume: number;
+  connectedPeersCount: number;
   mediaConnectedPeersCount: number;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -113,6 +118,7 @@ export function useProgressiveRuntime({
   setPlaybackStartIntent,
   isPageVisible,
   volume,
+  connectedPeersCount,
   mediaConnectedPeersCount,
   peerDiagnostics,
   recordPeerDiagnostic,
@@ -195,18 +201,77 @@ export function useProgressiveRuntime({
     !!currentBufferedFullLocalTrack &&
     currentProgressiveEngineType === "none";
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
-  const sourceDiagnostics = useMemo(() => {
-    const sourcePeerId = roomSnapshot?.room.playback.sourcePeerId ?? null;
-    if (!sourcePeerId) {
-      return null;
-    }
-
-    return peerDiagnostics.find((peer) => peer.peerId === sourcePeerId) ?? null;
-  }, [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]);
-  const remoteFirstLock = useMemo(
-    () => shouldEnableRemoteFirstLock({ diagnostics: sourceDiagnostics }),
+  const sourceDiagnostics = useMemo(
+    () => pickActiveMediaDiagnostic(peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId ?? null),
+    [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]
+  );
+  const sourceTransport = useMemo(
+    () => (sourceDiagnostics ? resolveTransportHealth(sourceDiagnostics) : { transportHealth: null, degradedReason: null }),
     [sourceDiagnostics]
   );
+  const remoteFirstLockReason = useMemo(() => {
+    if (mediaConnectedPeersCount > 0 && connectedPeersCount === 0) {
+      return "data-channel-not-ready";
+    }
+
+    if (sourceDiagnostics && shouldEnableRemoteFirstLock({ diagnostics: sourceDiagnostics })) {
+      if (sourceDiagnostics.mediaCandidateType === "relay") {
+        return "relay-transport";
+      }
+      if (sourceDiagnostics.mediaProtocol === "tcp") {
+        return "tcp-transport";
+      }
+      if (
+        typeof sourceDiagnostics.currentRoundTripTimeMs === "number" &&
+        sourceDiagnostics.currentRoundTripTimeMs >= 180
+      ) {
+        return "high-rtt";
+      }
+      if (
+        typeof sourceDiagnostics.availableOutgoingBitrateKbps === "number" &&
+        sourceDiagnostics.availableOutgoingBitrateKbps > 0 &&
+        sourceDiagnostics.availableOutgoingBitrateKbps <= 96
+      ) {
+        return "low-bitrate-headroom";
+      }
+      if (typeof sourceDiagnostics.packetsLost === "number" && sourceDiagnostics.packetsLost >= 80) {
+        return "high-packet-loss";
+      }
+      if (typeof sourceDiagnostics.jitterMs === "number" && sourceDiagnostics.jitterMs >= 30) {
+        return "high-jitter";
+      }
+      return "remote-transport-constrained";
+    }
+
+    if (progressiveFallbackReason === "buffer-underrun" || progressiveFallbackReason === "stalled") {
+      return progressiveFallbackReason;
+    }
+
+    if (
+      currentProgressiveManifest &&
+      currentTrackAvailabilityAnnouncement &&
+      !isProgressiveTakeoverReady()
+    ) {
+      return "local-cache-not-ready";
+    }
+
+    if (sourceTransport.transportHealth === "media-only") {
+      return sourceTransport.degradedReason ?? "data-channel-not-ready";
+    }
+
+    return null;
+  }, [
+    connectedPeersCount,
+    currentProgressiveManifest,
+    currentTrackAvailabilityAnnouncement,
+    isProgressiveTakeoverReady,
+    mediaConnectedPeersCount,
+    progressiveFallbackReason,
+    sourceDiagnostics,
+    sourceTransport.degradedReason,
+    sourceTransport.transportHealth
+  ]);
+  const remoteFirstLock = remoteFirstLockReason !== null;
   const localTakeoverCooldownMs = useMemo(
     () => Math.max(0, localTakeoverCooldownUntilRef.current - Date.now()),
     [playback?.mediaEpoch, playback?.currentTrackId, activePlaybackSource, remoteFirstLock]
@@ -289,9 +354,10 @@ export function useProgressiveRuntime({
   const isLocalTakeoverAllowed = useCallback(
     (now = Date.now()) =>
       !remoteFirstLock &&
+      connectedPeersCount > 0 &&
       now >= localTakeoverCooldownUntilRef.current &&
       mediaConnectedPeersCount > 0,
-    [mediaConnectedPeersCount, remoteFirstLock]
+    [connectedPeersCount, mediaConnectedPeersCount, remoteFirstLock]
   );
 
   const fallbackToRemoteStream = useCallback(
@@ -1222,6 +1288,7 @@ export function useProgressiveRuntime({
           lastPlayStartFailure: playbackStartIntent?.lastFailure ?? null,
           nextQueueTrackPrefetch,
           remoteFirstLock,
+          remoteFirstLockReason,
           localTakeoverCooldownMs: nextCooldownMs > 0 ? nextCooldownMs : null,
           fullLocalReady
         }
@@ -1230,6 +1297,7 @@ export function useProgressiveRuntime({
   }, [
     fullLocalReady,
     remoteFirstLock,
+    remoteFirstLockReason,
     progressiveHealthSnapshot.activeSource,
     progressiveHealthSnapshot.engineType,
     progressiveHealthSnapshot.contiguousBufferedMs,

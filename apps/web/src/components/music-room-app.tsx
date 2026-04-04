@@ -186,6 +186,7 @@ export function MusicRoomApp({
       setPlaybackStartIntent,
       isPageVisible,
       volume,
+      connectedPeersCount: connectedPeers.length,
       mediaConnectedPeersCount: mediaConnectedPeers.length,
       peerDiagnostics,
       recordPeerDiagnostic,

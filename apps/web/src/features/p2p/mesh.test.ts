@@ -300,6 +300,22 @@ describe("P2PMesh", () => {
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
   });
 
+  it("rebuilds a peer when the data channel never becomes ready", async () => {
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+
+    const firstPeer = FakeRTCPeerConnection.instances[0]!;
+    firstPeer.channel.readyState = "connecting";
+
+    await vi.advanceTimersByTimeAsync(5_500);
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+  });
+
   it("batches received piece validation and IndexedDB writes", async () => {
     const onPieceReceived = vi.fn();
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {

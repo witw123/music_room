@@ -2,6 +2,8 @@
 
 import type { GuestSession } from "@music-room/shared";
 
+const defaultTrackPieceChunkSize = 128 * 1024;
+
 const capturedAudioGraphs = new WeakMap<
   HTMLAudioElement,
   {
@@ -38,7 +40,12 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     artworkUrl: null,
     ownerSessionId: session.userId,
     ownerNickname: session.nickname,
-    sourceType: "local_upload" as const
+    sourceType: "local_upload" as const,
+    pieceManifest: {
+      totalChunks: Math.max(1, Math.ceil(file.size / defaultTrackPieceChunkSize)),
+      chunkSize: defaultTrackPieceChunkSize,
+      pieceMimeType: file.type || "audio/mpeg"
+    }
   };
 }
 

@@ -56,6 +56,26 @@ describe("progressive playback helpers", () => {
     ).toBe(30_000);
   });
 
+  it("falls back to immutable track piece manifest when availability has not arrived yet", () => {
+    const manifest = buildProgressiveTrackManifest(
+      {
+        ...track,
+        pieceManifest: {
+          totalChunks: 337,
+          chunkSize: 128 * 1024,
+          pieceMimeType: "audio/flac"
+        }
+      },
+      null
+    );
+
+    expect(manifest).toMatchObject({
+      totalChunks: 337,
+      chunkSize: 128 * 1024,
+      mimeType: "audio/flac"
+    });
+  });
+
   it("treats a long enough contiguous prefix as startup ready", () => {
     const manifest = buildProgressiveTrackManifest(track, availability);
     expect(

@@ -155,6 +155,11 @@ export class RoomController {
       ownerSessionId?: string;
       ownerNickname?: string;
       sourceType: "local_upload";
+      pieceManifest?: {
+        totalChunks: number;
+        chunkSize: number;
+        pieceMimeType: string;
+      } | null;
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);

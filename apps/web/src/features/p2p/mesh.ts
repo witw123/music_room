@@ -69,6 +69,13 @@ type PeerEntry = {
   pendingCandidates: RTCIceCandidateInit[];
   statsIntervalId: ReturnType<typeof setInterval> | null;
   statsSnapshot: PeerConnectionStatsSnapshot | null;
+  dataChannelState: RTCDataChannelState | null;
+  createdAtMs: number;
+  lastSignalProgressAtMs: number;
+  reconnectAttempts: number;
+  reconnectTimerId: ReturnType<typeof setTimeout> | null;
+  watchdogTimerId: ReturnType<typeof setTimeout> | null;
+  releasing: boolean;
 };
 
 type PendingPieceRequest = {
@@ -106,11 +113,16 @@ type CachedPieceManifestHeader = {
 
 export class P2PMesh {
   private readonly peers = new Map<string, PeerEntry>();
+  private readonly expectedPeerIds = new Set<string>();
   private readonly pendingPieceRequests = new Map<string, PendingPieceRequest>();
   private readonly pendingIncomingPieces: IncomingPieceBatchItem[] = [];
   private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
   private pieceFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private pieceFlushInFlight = false;
+  private readonly reconnectBackoffMs = [500, 1_000, 2_000, 4_000] as const;
+  private readonly dataOpenTimeoutMs = 4_000;
+  private readonly dataConnectingTimeoutMs = 6_000;
+  private readonly connectionProgressTimeoutMs = 8_000;
 
   constructor(
     private readonly roomId: string,
@@ -120,15 +132,32 @@ export class P2PMesh {
     private readonly iceServers: IceServerConfig[] = []
   ) {}
 
-  async syncPeers(remotePeerIds: string[]) {
+  async syncPeers(
+    remotePeerIds: string[],
+    options?: { forceReconnectDegraded?: boolean }
+  ) {
     const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
+    this.expectedPeerIds.clear();
+    for (const peerId of nextPeers) {
+      this.expectedPeerIds.add(peerId);
+    }
 
     for (const peerId of nextPeers) {
-      if (!this.peers.has(peerId)) {
-        // Always initiate — the other side may or may not also initiate, which is fine.
-        // ensurePeer tracks initiatorPeerId to avoid duplicate connections.
-        await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
+      const existing = this.peers.get(peerId);
+      if (
+        existing &&
+        (options?.forceReconnectDegraded || this.shouldRestartPeer(existing))
+      ) {
+        await this.recreatePeer(peerId, existing);
+        continue;
       }
+
+      if (!existing) {
+        await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
+        continue;
+      }
+
+      this.schedulePeerWatchdog(peerId, existing);
     }
 
     for (const [peerId, entry] of this.peers.entries()) {
@@ -146,6 +175,7 @@ export class P2PMesh {
     // handleSignal is for processing incoming signals — always get/create the peer
     // entry and process the signal regardless of who initiated.
     const entry = this.peers.get(payload.fromPeerId) ?? (await this.ensurePeer(payload.fromPeerId, false));
+    entry.lastSignalProgressAtMs = Date.now();
 
     if (payload.type === "offer") {
       this.callbacks.onSignal?.({
@@ -169,6 +199,7 @@ export class P2PMesh {
       await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
       await entry.connection.setLocalDescription(answer);
+      entry.lastSignalProgressAtMs = Date.now();
       this.callbacks.onSignal?.({
         peerId: payload.fromPeerId,
         direction: "sent",
@@ -202,6 +233,7 @@ export class P2PMesh {
 
       await entry.connection.setRemoteDescription(remoteDescription);
       await this.flushPendingCandidates(entry);
+      entry.lastSignalProgressAtMs = Date.now();
       return;
     }
 
@@ -223,6 +255,7 @@ export class P2PMesh {
 
       try {
         await entry.connection.addIceCandidate(candidate);
+        entry.lastSignalProgressAtMs = Date.now();
       } catch {
         if (!entry.connection.remoteDescription) {
           entry.pendingCandidates.push(candidate);
@@ -268,11 +301,12 @@ export class P2PMesh {
 
   getConnectedPeerIds() {
     return [...this.peers.entries()]
-      .filter(([, entry]) => entry.connection.connectionState === "connected")
+      .filter(([, entry]) => entry.channel?.readyState === "open")
       .map(([peerId]) => peerId);
   }
 
   destroy() {
+    this.expectedPeerIds.clear();
     for (const pendingRequest of this.pendingPieceRequests.values()) {
       clearTimeout(pendingRequest.timeoutId);
     }
@@ -319,7 +353,14 @@ export class P2PMesh {
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
       pendingCandidates: [],
       statsIntervalId: null,
-      statsSnapshot: null
+      statsSnapshot: null,
+      dataChannelState: null,
+      createdAtMs: Date.now(),
+      lastSignalProgressAtMs: Date.now(),
+      reconnectAttempts: 0,
+      reconnectTimerId: null,
+      watchdogTimerId: null,
+      releasing: false
     };
     this.startStatsSampling(peerId, entry);
 
@@ -327,6 +368,7 @@ export class P2PMesh {
       if (!event.candidate) {
         return;
       }
+      entry.lastSignalProgressAtMs = Date.now();
 
       this.callbacks.onSignal?.({
         peerId,
@@ -344,37 +386,54 @@ export class P2PMesh {
     };
 
     connection.onconnectionstatechange = () => {
+      entry.lastSignalProgressAtMs = Date.now();
       this.callbacks.onPeerConnectionChange?.({
         peerId,
         state: connection.connectionState
       });
 
-      if (
-        (connection.connectionState === "failed" || connection.connectionState === "closed") &&
-        this.peers.get(peerId) === entry
-      ) {
-        this.releasePeer(peerId, entry);
+      if (connection.connectionState === "connected" && entry.channel?.readyState === "open") {
+        entry.reconnectAttempts = 0;
+      }
+
+      if (this.peers.get(peerId) === entry) {
+        if (connection.connectionState === "failed" || connection.connectionState === "closed") {
+          if (this.expectedPeerIds.has(peerId)) {
+            this.schedulePeerReconnect(peerId, entry);
+            return;
+          }
+
+          this.releasePeer(peerId, entry);
+          return;
+        }
+
+        this.schedulePeerWatchdog(peerId, entry);
       }
     };
 
     connection.oniceconnectionstatechange = () => {
+      entry.lastSignalProgressAtMs = Date.now();
       this.callbacks.onIceConnectionStateChange?.({
         peerId,
         state: connection.iceConnectionState
       });
+      if (this.peers.get(peerId) === entry) {
+        this.schedulePeerWatchdog(peerId, entry);
+      }
     };
 
     connection.ondatachannel = (event) => {
       entry.channel = event.channel;
-      this.bindChannel(peerId, entry.channel);
+      this.bindChannel(peerId, entry, entry.channel);
     };
 
     if (shouldInitiate) {
       const channel = connection.createDataChannel("music-room-p2p");
       entry.channel = channel;
-      this.bindChannel(peerId, channel);
+      this.bindChannel(peerId, entry, channel);
       const offer = await connection.createOffer();
       await connection.setLocalDescription(offer);
+      entry.lastSignalProgressAtMs = Date.now();
       this.callbacks.onSignal?.({
         peerId,
         direction: "sent",
@@ -391,24 +450,33 @@ export class P2PMesh {
     }
 
     this.peers.set(peerId, entry);
+    this.schedulePeerWatchdog(peerId, entry);
     return entry;
   }
 
-  private bindChannel(peerId: string, channel: RTCDataChannel) {
+  private bindChannel(peerId: string, entry: PeerEntry, channel: RTCDataChannel) {
     channel.binaryType = "arraybuffer";
+    entry.dataChannelState = channel.readyState;
+    entry.lastSignalProgressAtMs = Date.now();
     this.callbacks.onDataChannelStateChange?.({
       peerId,
       state: channel.readyState
     });
+    this.schedulePeerWatchdog(peerId, entry);
 
     channel.onopen = () => {
+      entry.dataChannelState = channel.readyState;
+      entry.lastSignalProgressAtMs = Date.now();
+      entry.reconnectAttempts = 0;
       this.callbacks.onDataChannelStateChange?.({
         peerId,
         state: channel.readyState
       });
+      this.schedulePeerWatchdog(peerId, entry);
     };
 
     channel.onmessage = async (event) => {
+      entry.lastSignalProgressAtMs = Date.now();
       const message = await parseIncomingMessage(event.data);
       if (!message) {
         return;
@@ -493,6 +561,7 @@ export class P2PMesh {
     };
 
     channel.onclose = () => {
+      entry.dataChannelState = "closed";
       this.callbacks.onDataChannelStateChange?.({
         peerId,
         state: "closed"
@@ -502,17 +571,147 @@ export class P2PMesh {
         peerId,
         state: "closed"
       });
+      if (entry.releasing) {
+        return;
+      }
+      this.schedulePeerReconnect(peerId, entry);
     };
   }
 
   private releasePeer(peerId: string, entry: PeerEntry) {
+    entry.releasing = true;
     if (this.peers.get(peerId) === entry) {
       this.peers.delete(peerId);
     }
+    this.clearPeerTimers(entry);
     this.clearPendingRequestsForPeer(peerId);
     this.stopStatsSampling(entry);
     entry.channel?.close();
     entry.connection.close();
+  }
+
+  private shouldRestartPeer(entry: PeerEntry) {
+    if (entry.releasing) {
+      return false;
+    }
+
+    if (
+      entry.connection.connectionState === "failed" ||
+      entry.connection.connectionState === "closed" ||
+      entry.dataChannelState === "closed"
+    ) {
+      return true;
+    }
+
+    return this.isPeerStalled(entry, Date.now());
+  }
+
+  private isPeerStalled(entry: PeerEntry, now: number) {
+    const channelState = entry.channel?.readyState ?? null;
+    const connectionState = entry.connection.connectionState;
+
+    if (channelState === "open") {
+      return false;
+    }
+
+    if (now - entry.createdAtMs >= this.dataOpenTimeoutMs) {
+      return true;
+    }
+
+    if (
+      channelState === "connecting" &&
+      now - entry.lastSignalProgressAtMs >= this.dataConnectingTimeoutMs
+    ) {
+      return true;
+    }
+
+    if (
+      (connectionState === "new" ||
+        connectionState === "connecting" ||
+        connectionState === "disconnected") &&
+      now - entry.lastSignalProgressAtMs >= this.connectionProgressTimeoutMs
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private schedulePeerWatchdog(peerId: string, entry: PeerEntry) {
+    if (entry.releasing || !this.expectedPeerIds.has(peerId)) {
+      this.clearPeerWatchdog(entry);
+      return;
+    }
+
+    this.clearPeerWatchdog(entry);
+    entry.watchdogTimerId = setTimeout(() => {
+      if (this.peers.get(peerId) !== entry || entry.releasing || !this.expectedPeerIds.has(peerId)) {
+        return;
+      }
+
+      if (this.isPeerStalled(entry, Date.now())) {
+        this.schedulePeerReconnect(peerId, entry);
+        return;
+      }
+
+      this.schedulePeerWatchdog(peerId, entry);
+    }, 1_000);
+  }
+
+  private schedulePeerReconnect(peerId: string, entry: PeerEntry) {
+    if (entry.releasing || !this.expectedPeerIds.has(peerId)) {
+      this.releasePeer(peerId, entry);
+      return;
+    }
+
+    this.clearPeerWatchdog(entry);
+    if (entry.reconnectTimerId) {
+      return;
+    }
+
+    const delay =
+      this.reconnectBackoffMs[
+        Math.min(entry.reconnectAttempts, this.reconnectBackoffMs.length - 1)
+      ];
+    entry.reconnectAttempts += 1;
+    entry.reconnectTimerId = setTimeout(() => {
+      entry.reconnectTimerId = null;
+      if (this.peers.get(peerId) !== entry || entry.releasing || !this.expectedPeerIds.has(peerId)) {
+        return;
+      }
+
+      void this.recreatePeer(peerId, entry);
+    }, delay);
+  }
+
+  private async recreatePeer(peerId: string, entry: PeerEntry) {
+    const reconnectAttempts = entry.reconnectAttempts;
+    this.releasePeer(peerId, entry);
+    const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
+    nextEntry.reconnectAttempts = reconnectAttempts;
+  }
+
+  private clearPeerWatchdog(entry: PeerEntry) {
+    if (!entry.watchdogTimerId) {
+      return;
+    }
+
+    clearTimeout(entry.watchdogTimerId);
+    entry.watchdogTimerId = null;
+  }
+
+  private clearPeerReconnectTimer(entry: PeerEntry) {
+    if (!entry.reconnectTimerId) {
+      return;
+    }
+
+    clearTimeout(entry.reconnectTimerId);
+    entry.reconnectTimerId = null;
+  }
+
+  private clearPeerTimers(entry: PeerEntry) {
+    this.clearPeerWatchdog(entry);
+    this.clearPeerReconnectTimer(entry);
   }
 
   private startStatsSampling(peerId: string, entry: PeerEntry) {

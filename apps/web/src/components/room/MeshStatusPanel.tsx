@@ -123,6 +123,37 @@ function MeshStatusPanelBase({
     () => members.filter((member) => member.presenceState === "reconnecting").length,
     [members]
   );
+  const activePeerIds = useMemo(
+    () => new Set(members.map((member) => member.peerId).filter((peerId): peerId is string => !!peerId)),
+    [members]
+  );
+  const dataReadyCount = useMemo(
+    () =>
+      peerDiagnostics.filter(
+        (peer) => activePeerIds.has(peer.peerId) && peer.dataChannelState === "open"
+      ).length,
+    [activePeerIds, peerDiagnostics]
+  );
+  const mediaReadyCount = useMemo(
+    () =>
+      peerDiagnostics.filter(
+        (peer) =>
+          activePeerIds.has(peer.peerId) &&
+          (peer.mediaConnectionState === "connected" || peer.mediaConnectionState === "live")
+      ).length,
+    [activePeerIds, peerDiagnostics]
+  );
+  const degradedCount = useMemo(
+    () =>
+      peerDiagnostics.filter(
+        (peer) =>
+          activePeerIds.has(peer.peerId) &&
+          (peer.transportHealth === "media-only" ||
+            peer.transportHealth === "reconnecting" ||
+            peer.transportHealth === "failed")
+      ).length,
+    [activePeerIds, peerDiagnostics]
+  );
 
   return (
     <section className="flex w-full flex-col gap-4 rounded-2xl border border-surface-border bg-surface/20 p-4">
@@ -149,10 +180,13 @@ function MeshStatusPanelBase({
           重连中: {reconnectingCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          Data: {connectedPeersCount}
+          Data Ready: {dataReadyCount || connectedPeersCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          Media: {mediaConnectedPeersCount}
+          Media Ready: {mediaReadyCount || mediaConnectedPeersCount}
+        </span>
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
+          Degraded: {degradedCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           本地缓存: {cachedTrackCount}
@@ -197,9 +231,12 @@ function MeshStatusPanelBase({
 
                   <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-foreground-muted">
                     <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
+                    <span>DataChannel: {peer.dataChannelState ?? "未知"}</span>
                     <span>音频连接: {peer.mediaConnectionState ?? "未知"}</span>
                     <span>数据 ICE: {peer.dataIceState ?? "未知"}</span>
                     <span>音频 ICE: {peer.mediaIceState ?? "未知"}</span>
+                    <span>传输健康: {peer.transportHealth ?? "未知"}</span>
+                    <span>降级原因: {peer.degradedReason ?? "无"}</span>
                     <span>数据候选: {formatCandidateType(peer.dataCandidateType)}</span>
                     <span>媒体候选: {formatCandidateType(peer.mediaCandidateType)}</span>
                     <span>媒体协议: {peer.mediaProtocol ?? "未知"}</span>
@@ -223,6 +260,12 @@ function MeshStatusPanelBase({
                     <span>
                       绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}
                     </span>
+                    <span>
+                      最近 availability: {peer.lastAvailabilitySeenAt ? formatTimestamp(peer.lastAvailabilitySeenAt) : "未知"}
+                    </span>
+                    <span>
+                      最近收片: {peer.lastPieceReceivedAt ? formatTimestamp(peer.lastPieceReceivedAt) : "未知"}
+                    </span>
                   </div>
 
                   {peer.progressivePlaybackStatus ? (
@@ -243,6 +286,9 @@ function MeshStatusPanelBase({
                         <span>启动就绪: {peer.progressivePlaybackStatus.startupReady ? "是" : "否"}</span>
                         <span>
                           远端主路锁定: {peer.progressivePlaybackStatus.remoteFirstLock ? "是" : "否"}
+                        </span>
+                        <span>
+                          锁定原因: {peer.progressivePlaybackStatus.remoteFirstLockReason ?? "无"}
                         </span>
                         <span>
                           完整本地可切: {peer.progressivePlaybackStatus.fullLocalReady ? "是" : "否"}

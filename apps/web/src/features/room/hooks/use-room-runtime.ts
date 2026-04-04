@@ -13,6 +13,7 @@ import {
 import type {
   AuthSession,
   IceConfigResponse,
+  PeerDiagnosticsSnapshot,
   PeerSignalMessage,
   RoomMediaConnectionState,
   RoomSnapshot,
@@ -25,7 +26,8 @@ import {
   ChunkScheduler,
   getWebRTCIceServers,
   P2PMesh,
-  RoomMediaMesh
+  RoomMediaMesh,
+  resolveTransportHealth
 } from "@/features/p2p";
 import {
   createRoomSnapshotResyncController,
@@ -177,6 +179,13 @@ function calculatePieceTransferRateKbps(samples: PieceTransferSample[], now: num
   return Math.round((totalBytes * 8) / durationMs);
 }
 
+function withResolvedTransportHealth(snapshot: PeerDiagnosticsSnapshot): PeerDiagnosticsSnapshot {
+  return {
+    ...snapshot,
+    ...resolveTransportHealth(snapshot)
+  };
+}
+
 export function useRoomRuntime({
   workspaceOnly,
   initialRoomId,
@@ -272,6 +281,10 @@ export function useRoomRuntime({
     segmentStartedAt: null
   });
   const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
+  const dataDegradedSinceRef = useRef<number | null>(null);
+  const lastPieceReceivedAtRef = useRef<number>(Date.now());
+  const lastAvailabilityGrowthAtRef = useRef<number>(Date.now());
+  const currentTrackAvailabilityProgressRef = useRef<string | null>(null);
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
@@ -390,6 +403,28 @@ export function useRoomRuntime({
   useEffect(() => {
     recordPeerDiagnosticRef.current = recordPeerDiagnostic;
   }, [recordPeerDiagnostic]);
+
+  useEffect(() => {
+    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+    if (!currentTrackId) {
+      currentTrackAvailabilityProgressRef.current = null;
+      return;
+    }
+
+    const localAvailability = availabilityByTrack[currentTrackId]?.[peerId];
+    const nextProgressKey = [
+      currentTrackId,
+      localAvailability?.availableChunks.length ?? 0,
+      localAvailability?.totalChunks ??
+        roomSnapshot?.tracks.find((track) => track.id === currentTrackId)?.pieceManifest?.totalChunks ??
+        0
+    ].join("|");
+
+    if (currentTrackAvailabilityProgressRef.current !== nextProgressKey) {
+      currentTrackAvailabilityProgressRef.current = nextProgressKey;
+      lastAvailabilityGrowthAtRef.current = Date.now();
+    }
+  }, [availabilityByTrack, peerId, roomSnapshot?.room.playback.currentTrackId, roomSnapshot?.tracks]);
 
   const exitCurrentRoom = useCallback(
     (message: string) => {
@@ -710,14 +745,16 @@ export function useRoomRuntime({
         summary: "Data transport stats updated",
         recordEvent: false,
         update: (snapshot) => ({
-          ...snapshot,
-          dataCandidateType: input.sample.candidateType ?? snapshot.dataCandidateType,
-          currentRoundTripTimeMs:
-            snapshot.currentRoundTripTimeMs ?? input.sample.currentRoundTripTimeMs,
-          availableOutgoingBitrateKbps:
-            snapshot.availableOutgoingBitrateKbps ?? input.sample.availableOutgoingBitrateKbps,
-          pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
-          pieceUploadRateKbps: pieceTransferRates.uploadRateKbps
+          ...withResolvedTransportHealth({
+            ...snapshot,
+            dataCandidateType: input.sample.candidateType ?? snapshot.dataCandidateType,
+            currentRoundTripTimeMs:
+              snapshot.currentRoundTripTimeMs ?? input.sample.currentRoundTripTimeMs,
+            availableOutgoingBitrateKbps:
+              snapshot.availableOutgoingBitrateKbps ?? input.sample.availableOutgoingBitrateKbps,
+            pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
+            pieceUploadRateKbps: pieceTransferRates.uploadRateKbps
+          })
         })
       });
     },
@@ -746,19 +783,21 @@ export function useRoomRuntime({
         summary: "Media transport stats updated",
         recordEvent: false,
         update: (snapshot) => ({
-          ...snapshot,
-          mediaCandidateType: input.sample.candidateType ?? snapshot.mediaCandidateType,
-          mediaProtocol: input.sample.protocol ?? snapshot.mediaProtocol,
-          currentRoundTripTimeMs:
-            input.sample.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
-          availableOutgoingBitrateKbps:
-            input.sample.availableOutgoingBitrateKbps ??
-            snapshot.availableOutgoingBitrateKbps,
-          mediaReceiveBitrateKbps:
-            input.sample.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
-          mediaSendBitrateKbps: input.sample.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
-          packetsLost: input.sample.packetsLost ?? snapshot.packetsLost,
-          jitterMs: input.sample.jitterMs ?? snapshot.jitterMs
+          ...withResolvedTransportHealth({
+            ...snapshot,
+            mediaCandidateType: input.sample.candidateType ?? snapshot.mediaCandidateType,
+            mediaProtocol: input.sample.protocol ?? snapshot.mediaProtocol,
+            currentRoundTripTimeMs:
+              input.sample.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
+            availableOutgoingBitrateKbps:
+              input.sample.availableOutgoingBitrateKbps ??
+              snapshot.availableOutgoingBitrateKbps,
+            mediaReceiveBitrateKbps:
+              input.sample.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
+            mediaSendBitrateKbps: input.sample.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
+            packetsLost: input.sample.packetsLost ?? snapshot.packetsLost,
+            jitterMs: input.sample.jitterMs ?? snapshot.jitterMs
+          })
         })
       });
     },
@@ -800,9 +839,13 @@ export function useRoomRuntime({
         summary: "Piece transfer stats updated",
         recordEvent: false,
         update: (snapshot) => ({
-          ...snapshot,
-          pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
-          pieceUploadRateKbps: pieceTransferRates.uploadRateKbps
+          ...withResolvedTransportHealth({
+            ...snapshot,
+            pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
+            pieceUploadRateKbps: pieceTransferRates.uploadRateKbps,
+            lastPieceReceivedAt:
+              input.direction === "download" ? new Date().toISOString() : snapshot.lastPieceReceivedAt
+          })
         })
       });
     },
@@ -1258,6 +1301,7 @@ export function useRoomRuntime({
       emitPeerSignal,
       {
         onPieceReceived: ({ peerId: sourcePeerId, trackId, chunkIndex, totalChunks, chunkSize, mimeType, payloadBytes }) => {
+          lastPieceReceivedAtRef.current = Date.now();
           recordPieceTransferRef.current({
             peerId: sourcePeerId,
             direction: "download",
@@ -1299,21 +1343,15 @@ export function useRoomRuntime({
             event: "connection-state",
             summary: `Data 连接状态：${state}`,
             update: (snapshot) => ({
-              ...snapshot,
-              dataConnectionState: state
+              ...withResolvedTransportHealth({
+                ...snapshot,
+                dataConnectionState: state
+              })
             })
           });
-          setConnectedPeers((current) => {
-            const next = new Set(current);
-
-            if (state === "connected") {
-              next.add(remotePeerId);
-            } else if (state === "closed" || state === "failed" || state === "disconnected") {
-              next.delete(remotePeerId);
-            }
-
-            return [...next];
-          });
+          if (state === "closed" || state === "failed" || state === "disconnected") {
+            setConnectedPeers((current) => current.filter((peer) => peer !== remotePeerId));
+          }
         },
         onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
           recordPeerDiagnosticRef.current({
@@ -1323,8 +1361,10 @@ export function useRoomRuntime({
             event: "ice-state",
             summary: `Data ICE 状态：${state}`,
             update: (snapshot) => ({
-              ...snapshot,
-              dataIceState: state
+              ...withResolvedTransportHealth({
+                ...snapshot,
+                dataIceState: state
+              })
             })
           });
         },
@@ -1334,8 +1374,29 @@ export function useRoomRuntime({
             channelKind: "data",
             direction: "local",
             event: "data-channel",
-            summary: `DataChannel 状态：${state}`
+            summary: `DataChannel 状态：${state}`,
+            update: (snapshot) => ({
+              ...withResolvedTransportHealth({
+                ...snapshot,
+                dataChannelState: state
+              })
+            })
           });
+          setConnectedPeers((current) => {
+            const next = new Set(current);
+            if (state === "open") {
+              next.add(remotePeerId);
+            } else {
+              next.delete(remotePeerId);
+            }
+            return [...next];
+          });
+          if (state === "open") {
+            flushPendingAvailabilityRef.current();
+            for (const trackId of uploadedTrackIdsRef.current) {
+              void announceLocalCacheRef.current(trackId);
+            }
+          }
         },
         onStatsSample: ({ peerId: remotePeerId, sample }) => {
           updateDataTransportStatsRef.current({
@@ -1397,8 +1458,10 @@ export function useRoomRuntime({
             event: "connection-state",
             summary: `Media 连接状态：${state}`,
             update: (snapshot) => ({
-              ...snapshot,
-              mediaConnectionState: state
+              ...withResolvedTransportHealth({
+                ...snapshot,
+                mediaConnectionState: state
+              })
             })
           });
           setMediaConnectedPeers(connectedPeerIds);
@@ -1431,8 +1494,10 @@ export function useRoomRuntime({
             event: "ice-state",
             summary: `Media ICE 状态：${state}`,
             update: (snapshot) => ({
-              ...snapshot,
-              mediaIceState: state
+              ...withResolvedTransportHealth({
+                ...snapshot,
+                mediaIceState: state
+              })
             })
           });
         },
@@ -1522,6 +1587,10 @@ export function useRoomRuntime({
 
           startPresenceHeartbeat();
           resyncRealtimePeers();
+          flushPendingAvailabilityRef.current();
+          for (const trackId of uploadedTrackIdsRef.current) {
+            void announceLocalCacheRef.current(trackId);
+          }
           if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
             void syncHostMediaStreamRef.current();
           }
@@ -1537,6 +1606,9 @@ export function useRoomRuntime({
     socket.on("connect", () => {
       subscribeToRoom();
       flushPendingAvailabilityRef.current();
+      for (const trackId of uploadedTrackIdsRef.current) {
+        void announceLocalCacheRef.current(trackId);
+      }
       resyncRealtimePeers();
       if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
         void syncHostMediaStreamRef.current();
@@ -1683,6 +1755,20 @@ export function useRoomRuntime({
       if (announcement.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
         return;
       }
+      recordPeerDiagnosticRef.current({
+        peerId: announcement.ownerPeerId,
+        channelKind: "data",
+        direction: "received",
+        event: "piece-availability",
+        summary: `收到 ${announcement.ownerPeerId} 的分片公告`,
+        recordEvent: false,
+        update: (snapshot) => ({
+          ...withResolvedTransportHealth({
+            ...snapshot,
+            lastAvailabilitySeenAt: new Date().toISOString()
+          })
+        })
+      });
       queueAvailabilityRef.current(announcement);
     });
     socket.on("piece.availability.clear", ({ roomId: clearedRoomId, ownerPeerId }) => {
@@ -1911,6 +1997,19 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
+    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+    if (!currentTrackId) {
+      return;
+    }
+
+    if (!uploadedTracks[currentTrackId]) {
+      return;
+    }
+
+    void announceLocalCacheRef.current(currentTrackId);
+  }, [roomSnapshot?.room.playback.currentTrackId, uploadedTracks]);
+
+  useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
       return;
     }
@@ -1950,6 +2049,78 @@ export function useRoomRuntime({
       });
     });
   }, [roomSnapshot?.room.members, peerId, reportRealtimeFailure]);
+
+  useEffect(() => {
+    if (mediaConnectedPeers.length > 0 && connectedPeers.length === 0) {
+      if (dataDegradedSinceRef.current === null) {
+        dataDegradedSinceRef.current = Date.now();
+      }
+      return;
+    }
+
+    dataDegradedSinceRef.current = null;
+  }, [connectedPeers.length, mediaConnectedPeers.length]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !peerId || isCurrentSourceOwner) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const remotePeerIds =
+        currentRoomRef.current?.room.members
+          .map((member) => member.peerId)
+          .filter(
+            (memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId
+          ) ?? [];
+
+      if (remotePeerIds.length === 0) {
+        return;
+      }
+
+      const degradedSince = dataDegradedSinceRef.current;
+      if (degradedSince && Date.now() - degradedSince >= 6_000) {
+        void meshRef.current?.syncPeers(remotePeerIds, { forceReconnectDegraded: true }).catch((error) => {
+          reportRealtimeFailure({
+            peerId: "system",
+            channelKind: "system",
+            event: "mesh-watchdog-resync-failed",
+            summary: "Failed to recover degraded data peers",
+            error
+          });
+        });
+        dataDegradedSinceRef.current = Date.now();
+        return;
+      }
+
+      const playback = currentRoomRef.current?.room.playback;
+      if (playback?.status !== "playing" || !playback.currentTrackId) {
+        return;
+      }
+
+      const lastActivityAt = Math.max(
+        lastPieceReceivedAtRef.current,
+        lastAvailabilityGrowthAtRef.current
+      );
+      if (Date.now() - lastActivityAt < 10_000) {
+        return;
+      }
+
+      void meshRef.current?.syncPeers(remotePeerIds, { forceReconnectDegraded: true }).catch((error) => {
+        reportRealtimeFailure({
+          peerId: "system",
+          channelKind: "system",
+          event: "mesh-activity-watchdog-failed",
+          summary: "Failed to recover stalled piece sync",
+          error
+        });
+      });
+      lastPieceReceivedAtRef.current = Date.now();
+      lastAvailabilityGrowthAtRef.current = Date.now();
+    }, 2_000);
+
+    return () => window.clearInterval(intervalId);
+  }, [currentRoomRef, isCurrentSourceOwner, peerId, reportRealtimeFailure, roomSnapshot?.room.id]);
 
   const playbackClockSource = useMemo(
     () =>

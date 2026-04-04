@@ -24,6 +24,7 @@ export * from "./mesh";
 export * from "./media-mesh";
 export * from "./chunk-scheduler";
 export * from "./diagnostics";
+export * from "./transport-health";
 export * from "./availability-state";
 export * from "./use-peer-diagnostics";
 export * from "./use-availability-announcements";

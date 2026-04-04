@@ -80,7 +80,7 @@ export function useRoomDerivedState({
         track,
         peerCount: peers.length,
         localChunkCount: local?.availableChunks.length ?? 0,
-        totalChunks: local?.totalChunks ?? peers[0]?.totalChunks ?? 0,
+        totalChunks: local?.totalChunks ?? peers[0]?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0,
         sources: peers.map((entry) => `${entry.nickname} (${entry.source})`)
       };
     }) ?? [];
@@ -151,13 +151,14 @@ export function useRoomDerivedState({
 
     return roomSnapshot.room.members.map((member) => {
       const stats = statsByMember.get(member.id) ?? null;
+      const manifestTotalChunks = currentTrack?.pieceManifest?.totalChunks ?? 0;
 
       return {
         memberId: member.id,
         announcedTrackCount: stats?.announcedTrackIds.size ?? 0,
         totalChunkCount: stats?.totalChunkCount ?? 0,
         currentTrackChunkCount: stats?.currentTrackChunkCount ?? 0,
-        currentTrackTotalChunks: stats?.currentTrackTotalChunks ?? 0,
+        currentTrackTotalChunks: Math.max(stats?.currentTrackTotalChunks ?? 0, manifestTotalChunks),
         currentTrackSources: [...(stats?.currentTrackSources ?? [])]
       };
     });
@@ -287,7 +288,17 @@ export function filterVisiblePeerDiagnostics(
   activeMemberPeerIds: Set<string>,
   sourcePeerId: string | null
 ) {
-  const visiblePeerIds = new Set<string>(["system", "remote-media"]);
+  const hasConcretePeerDiagnostics = peerDiagnostics.some(
+    (peer) =>
+      activeMemberPeerIds.has(peer.peerId) &&
+      (peer.mediaConnectionState !== null ||
+        peer.dataConnectionState !== null ||
+        peer.dataChannelState !== null)
+  );
+  const visiblePeerIds = new Set<string>(["system"]);
+  if (!hasConcretePeerDiagnostics) {
+    visiblePeerIds.add("remote-media");
+  }
   for (const peerId of activeMemberPeerIds) {
     visiblePeerIds.add(peerId);
   }

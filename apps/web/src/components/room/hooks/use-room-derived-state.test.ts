@@ -116,4 +116,27 @@ describe("use-room-derived-state helpers", () => {
       )
     ).toEqual([diagnostics[0], diagnostics[1]]);
   });
+
+  it("hides the synthetic remote-media row once a real member peer has concrete diagnostics", () => {
+    const diagnostics = [
+      { peerId: "system", updatedAt: "2026-04-04T00:00:00.000Z" },
+      { peerId: "remote-media", updatedAt: "2026-04-04T00:00:01.000Z", mediaConnectionState: "connecting" },
+      {
+        peerId: "peer_host",
+        updatedAt: "2026-04-04T00:00:02.000Z",
+        mediaConnectionState: "connected",
+        dataChannelState: "open"
+      }
+    ] satisfies Array<
+      Partial<PeerDiagnosticsSnapshot> & Pick<PeerDiagnosticsSnapshot, "peerId" | "updatedAt">
+    >;
+
+    expect(
+      filterVisiblePeerDiagnostics(
+        diagnostics as PeerDiagnosticsSnapshot[],
+        new Set(["peer_host"]),
+        null
+      )
+    ).toEqual([diagnostics[0], diagnostics[2]]);
+  });
 });

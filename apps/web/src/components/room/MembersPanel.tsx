@@ -91,10 +91,10 @@ function getCurrentTrackStatus(
 
   if (!summary || summary.currentTrackTotalChunks <= 0) {
     return {
-      label: summary?.announcedTrackCount ? "未接管当前曲目" : "等待首批分片",
+      label: summary?.announcedTrackCount ? "未建立当前曲目缓存" : "未建立缓存",
       detail: summary?.announcedTrackCount
-        ? "本地已有其他缓存，但当前曲目还没形成可接管播放的前缀。"
-        : "当前仍需要等待实时音频或其他成员先提供分片。",
+        ? "本地已有其他缓存，但当前曲目还没有形成可接管播放的前缀。"
+        : "当前正在通过实时音频播放，本地缓存尚未建立。",
       progressPercent: 0,
       tone: "neutral" as const
     };
@@ -124,9 +124,70 @@ function getCurrentTrackStatus(
   }
 
   return {
-    label: "等待首批分片",
-    detail: "当前曲目还没进入本地缓存，暂时继续依赖实时音频。",
+    label: "未建立缓存",
+    detail: "当前正在通过实时音频播放，本地缓存尚未建立。",
     progressPercent: 0,
+    tone: "neutral" as const
+  };
+}
+
+function getPlaybackStatus(
+  presenceState: RoomMember["presenceState"],
+  peerDiagnostics: PeerDiagnosticsSnapshot | undefined
+) {
+  if (presenceState === "offline") {
+    return {
+      label: "未接入音频",
+      detail: "该成员已离线，不参与实时播放。",
+      tone: "warning" as const
+    };
+  }
+
+  if (presenceState === "reconnecting") {
+    return {
+      label: "实时音频重连中",
+      detail: "成员正在恢复房间实时链路。",
+      tone: "warning" as const
+    };
+  }
+
+  if (
+    peerDiagnostics?.mediaConnectionState === "connected" ||
+    peerDiagnostics?.mediaConnectionState === "live" ||
+    peerDiagnostics?.transportHealth === "media-only"
+  ) {
+    return {
+      label: "实时音频中",
+      detail:
+        peerDiagnostics?.transportHealth === "media-only"
+          ? "当前通过远端实时音频播放，分片数据通道尚未就绪。"
+          : "当前已接入远端实时音频链路。",
+      tone: "success" as const
+    };
+  }
+
+  if (
+    peerDiagnostics?.mediaConnectionState === "buffering" ||
+    peerDiagnostics?.mediaConnectionState === "connecting"
+  ) {
+    return {
+      label: "实时音频缓冲中",
+      detail: "已接入音频链路，正在等待播放稳定。",
+      tone: "accent" as const
+    };
+  }
+
+  if (peerDiagnostics?.transportHealth === "reconnecting") {
+    return {
+      label: "实时音频重连中",
+      detail: "链路状态正在恢复，音频可能暂时抖动。",
+      tone: "warning" as const
+    };
+  }
+
+  return {
+    label: "未接入音频",
+    detail: "当前还没有稳定的实时音频链路。",
     tone: "neutral" as const
   };
 }
@@ -215,14 +276,16 @@ function MembersPanelBase({
       {members.length > 0 ? (
         members.map((member) => {
           const summary = summaryByMemberId.get(member.id);
+          const peerDiagnosticsSnapshot = member.peerId
+            ? diagnosticsByPeerId.get(member.peerId)
+            : undefined;
+          const playbackStatus = getPlaybackStatus(member.presenceState, peerDiagnosticsSnapshot);
           const currentTrackStatus = getCurrentTrackStatus(summary, member.presenceState);
           const libraryStatus = getLibraryStatus(summary);
           const sourceSummary = formatCurrentTrackSources(summary?.currentTrackSources ?? []);
           const toneClasses = getToneClasses(currentTrackStatus.tone);
+          const playbackToneClasses = getToneClasses(playbackStatus.tone);
           const presenceBadge = getPresenceBadge(member);
-          const peerDiagnosticsSnapshot = member.peerId
-            ? diagnosticsByPeerId.get(member.peerId)
-            : undefined;
           const remoteStreamRateKbps = getRemoteStreamRate(peerDiagnosticsSnapshot);
 
           return (
@@ -274,7 +337,24 @@ function MembersPanelBase({
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="rounded-lg border border-surface-border bg-background/40 px-3 py-2.5">
-                  <span className="block text-[10px] text-foreground-muted">当前曲目状态</span>
+                  <span className="block text-[10px] text-foreground-muted">播放状态</span>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <strong className="text-sm font-semibold text-foreground">
+                      {playbackStatus.label}
+                    </strong>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${playbackToneClasses.badge}`}
+                    >
+                      {peerDiagnosticsSnapshot?.transportHealth ?? "未知"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-5 text-foreground-muted">
+                    {playbackStatus.detail}
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-surface-border bg-background/40 px-3 py-2.5">
+                  <span className="block text-[10px] text-foreground-muted">当前曲目缓存</span>
                   <div className="mt-2 flex items-center justify-between gap-3">
                     <strong className="text-sm font-semibold text-foreground">
                       {currentTrackStatus.label}
@@ -312,6 +392,8 @@ function MembersPanelBase({
               <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
                 {sourceSummary ? (
                   <span>同步来源：{sourceSummary}</span>
+                ) : playbackStatus.label === "实时音频中" ? (
+                  <span>同步来源：当前通过实时音频持续播放，等待本地缓存建立。</span>
                 ) : member.presenceState === "online" ? (
                   <span>同步来源：当前还没有可用于接管播放的本地缓存。</span>
                 ) : member.presenceState === "reconnecting" ? (

@@ -130,9 +130,14 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
   return {
     peerId,
     dataConnectionState: null,
+    dataChannelState: null,
     mediaConnectionState: null,
     dataIceState: null,
     mediaIceState: null,
+    transportHealth: null,
+    degradedReason: null,
+    lastAvailabilitySeenAt: null,
+    lastPieceReceivedAt: null,
     dataCandidateType: null,
     mediaCandidateType: null,
     mediaProtocol: null,
@@ -160,6 +165,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       lastPlayStartFailure: null,
       nextQueueTrackPrefetch: null,
       remoteFirstLock: false,
+      remoteFirstLockReason: null,
       localTakeoverCooldownMs: null,
       fullLocalReady: false
     },

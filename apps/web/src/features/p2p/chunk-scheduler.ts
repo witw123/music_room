@@ -529,7 +529,9 @@ export class ChunkScheduler {
       (max, announcement) => Math.max(max, announcement.totalChunks),
       0
     );
-    return Math.max(stateTotalChunks, availabilityTotalChunks);
+    const trackTotalChunks =
+      this.roomSnapshot?.tracks.find((track) => track.id === trackId)?.pieceManifest?.totalChunks ?? 0;
+    return Math.max(stateTotalChunks, availabilityTotalChunks, trackTotalChunks);
   }
 
   private pruneCooldowns() {

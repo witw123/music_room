@@ -118,19 +118,27 @@ export function buildProgressiveTrackManifest(
   track: TrackMeta | null | undefined,
   availability: TrackAvailabilityAnnouncement | null | undefined
 ): ProgressiveTrackManifest | null {
-  if (!track || !availability || availability.totalChunks <= 0 || availability.chunkSize <= 0) {
+  if (!track) {
+    return null;
+  }
+
+  const totalChunks = availability?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0;
+  const chunkSize = availability?.chunkSize ?? track.pieceManifest?.chunkSize ?? 0;
+  const mimeType = track.pieceManifest?.pieceMimeType ?? track.mimeType ?? "audio/mpeg";
+
+  if (totalChunks <= 0 || chunkSize <= 0) {
     return null;
   }
 
   return {
     trackId: track.id,
     fileHash: track.fileHash,
-    mimeType: track.mimeType || "audio/mpeg",
+    mimeType,
     codec: track.codec ?? null,
     sizeBytes: track.sizeBytes ?? null,
     durationMs: track.durationMs,
-    totalChunks: availability.totalChunks,
-    chunkSize: availability.chunkSize
+    totalChunks,
+    chunkSize
   };
 }
 

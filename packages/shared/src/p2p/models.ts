@@ -119,6 +119,7 @@ export const progressivePlaybackStatusSchema = z.object({
   lastPlayStartFailure: z.string().nullable().optional(),
   nextQueueTrackPrefetch: z.string().nullable().optional(),
   remoteFirstLock: z.boolean().optional(),
+  remoteFirstLockReason: z.string().nullable().optional(),
   localTakeoverCooldownMs: z.number().int().nonnegative().nullable().optional(),
   fullLocalReady: z.boolean().optional()
 });
@@ -126,9 +127,14 @@ export const progressivePlaybackStatusSchema = z.object({
 export const peerDiagnosticsSnapshotSchema = z.object({
   peerId: z.string(),
   dataConnectionState: z.string().nullable(),
+  dataChannelState: z.string().nullable().optional(),
   mediaConnectionState: z.string().nullable(),
   dataIceState: z.string().nullable(),
   mediaIceState: z.string().nullable(),
+  transportHealth: z.enum(["healthy", "media-only", "reconnecting", "failed"]).nullable().optional(),
+  degradedReason: z.string().nullable().optional(),
+  lastAvailabilitySeenAt: z.string().datetime().nullable().optional(),
+  lastPieceReceivedAt: z.string().datetime().nullable().optional(),
   dataCandidateType: z.string().nullable(),
   mediaCandidateType: z.string().nullable(),
   mediaProtocol: z.string().nullable(),
