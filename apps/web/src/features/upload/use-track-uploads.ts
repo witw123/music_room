@@ -260,7 +260,14 @@ export function useTrackUploads(options: {
               ...current.tracks.filter(
                 (track) => !nextTracks.some((nextTrack) => nextTrack.id === track.id)
               )
-            ]
+            ],
+            room: {
+              ...current.room,
+              playback: {
+                ...current.room.playback,
+                queueVersion: current.room.playback.queueVersion + nextTracks.length
+              }
+            }
           }
         : current
     );

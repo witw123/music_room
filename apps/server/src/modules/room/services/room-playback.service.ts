@@ -206,6 +206,25 @@ export class RoomPlaybackService {
     return true;
   }
 
+  pausePlaybackForSourceDisconnect(record: RoomRecord, sessionId: string) {
+    const playback = record.room.playback;
+    if (
+      playback.status !== "playing" ||
+      !playback.currentTrackId ||
+      playback.sourceSessionId !== sessionId
+    ) {
+      return false;
+    }
+
+    playback.status = "paused";
+    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
+    playback.startedAt = null;
+    playback.sourcePeerId = null;
+    playback.mediaEpoch += 1;
+    this.bumpPlaybackVersion(playback);
+    return true;
+  }
+
   private async resolveSourcePeerId(record: RoomRecord, sourceSessionId: string | null) {
     if (!sourceSessionId) {
       return null;

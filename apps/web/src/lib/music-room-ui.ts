@@ -177,6 +177,8 @@ export function mergeRoomSnapshot(
 
   return {
     ...incoming,
+    tracks: acceptPlayback ? incoming.tracks : current.tracks,
+    queue: acceptPlayback ? incoming.queue : current.queue,
     playlists: incoming.playlists.length > 0 ? incoming.playlists : current.playlists,
     room: {
       ...incoming.room,

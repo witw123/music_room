@@ -380,4 +380,134 @@ describe("room realtime regression", () => {
       ])
     );
   });
+
+  it("keeps join and leave presence revisions monotonic across room.snapshot and room.presence.patch", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = createFakeAuthService();
+    const roomService = new RoomService(authService as never, prisma as never, redis as never);
+    const moduleRef = {
+      get: jest.fn().mockReturnValue(roomService)
+    };
+    const signalingGateway = new SignalingGateway(
+      redis as never,
+      moduleRef as never,
+      authService as never
+    );
+    const playlistService = createPlaylistServiceMock();
+    const roomController = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never,
+      playlistService as never
+    );
+    const { events, sockets } = attachServerMock(signalingGateway);
+    const hostSession = await authService.createGuestSession("Host");
+    const memberSession = await authService.createGuestSession("Member");
+
+    const created = await roomController.createRoom(hostSession.token, {
+      visibility: "public"
+    });
+    const hostClient = createClient({
+      id: "socket_host_join_leave",
+      sessionToken: hostSession.token
+    });
+    const memberClient = createClient({
+      id: "socket_member_join_leave",
+      sessionToken: memberSession.token
+    });
+    sockets.set(hostClient.id, hostClient);
+    sockets.set(memberClient.id, memberClient);
+
+    await signalingGateway.handleRoomSubscribe(hostClient as never, {
+      roomId: created.room.id,
+      sessionId: hostSession.userId,
+      peerId: "peer_host"
+    });
+
+    await roomController.joinRoomByCode(memberSession.token, {
+      joinCode: created.room.joinCode
+    });
+
+    const joinSnapshotEvent = [...events]
+      .reverse()
+      .find(
+        (event) =>
+          event.target === created.room.id &&
+          event.event === "room.snapshot" &&
+          (event.payload as { room?: { members?: Array<{ id: string }> } }).room?.members?.some(
+            (member) => member.id === memberSession.userId
+          )
+      );
+
+    expect(joinSnapshotEvent).toBeDefined();
+    expect((joinSnapshotEvent?.payload as { room: { presenceRevision: number } }).room.presenceRevision)
+      .toBeGreaterThan(0);
+    expect(
+      (joinSnapshotEvent?.payload as {
+        room: { members: Array<{ id: string; peerId: string | null; presenceState: string }> };
+      }).room.members.find((member) => member.id === memberSession.userId)
+    ).toMatchObject({
+      id: memberSession.userId,
+      peerId: null,
+      presenceState: "offline"
+    });
+
+    await signalingGateway.handleRoomSubscribe(memberClient as never, {
+      roomId: created.room.id,
+      sessionId: memberSession.userId,
+      peerId: "peer_member"
+    });
+
+    const joinPresencePatchEvent = [...events]
+      .reverse()
+      .find(
+        (event) =>
+          event.target === created.room.id &&
+          event.event === "room.presence.patch" &&
+          (event.payload as { members?: Array<{ id: string }> }).members?.some(
+            (member) => member.id === memberSession.userId
+          )
+      );
+
+    expect(joinPresencePatchEvent).toBeDefined();
+    expect(
+      (joinPresencePatchEvent?.payload as { presenceRevision: number }).presenceRevision
+    ).toBeGreaterThan(
+      (joinSnapshotEvent?.payload as { room: { presenceRevision: number } }).room.presenceRevision
+    );
+    expect(
+      (joinPresencePatchEvent?.payload as {
+        members: Array<{ id: string; peerId: string | null; presenceState: string }>;
+      }).members.find((member) => member.id === memberSession.userId)
+    ).toMatchObject({
+      id: memberSession.userId,
+      peerId: "peer_member",
+      presenceState: "online"
+    });
+
+    await roomController.leaveRoom(created.room.id, memberSession.token);
+
+    const leaveSnapshotEvent = [...events]
+      .reverse()
+      .find(
+        (event) =>
+          event.target === created.room.id &&
+          event.event === "room.snapshot" &&
+          !(event.payload as { room?: { members?: Array<{ id: string }> } }).room?.members?.some(
+            (member) => member.id === memberSession.userId
+          )
+      );
+
+    expect(leaveSnapshotEvent).toBeDefined();
+    expect((leaveSnapshotEvent?.payload as { room: { presenceRevision: number } }).room.presenceRevision)
+      .toBeGreaterThan(
+        (joinPresencePatchEvent?.payload as { presenceRevision: number }).presenceRevision
+      );
+    expect(
+      (leaveSnapshotEvent?.payload as { room: { members: Array<{ id: string }> } }).room.members.some(
+        (member) => member.id === memberSession.userId
+      )
+    ).toBe(false);
+  });
 });

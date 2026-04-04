@@ -589,14 +589,14 @@ describe("RoomService", () => {
       action: "play",
       trackId: track.id,
       actorSessionId: host.id,
-      expectedVersion: 1
+      expectedVersion: 2
     });
 
     await expect(
       roomService.updatePlayback(snapshot.room.id, {
         action: "pause",
         actorSessionId: host.id,
-        expectedVersion: 1
+        expectedVersion: 2
       })
     ).rejects.toThrow("Playback state version conflict.");
   });
@@ -632,7 +632,7 @@ describe("RoomService", () => {
       action: "play",
       trackId: memberTrack.id,
       actorSessionId: host.id,
-      expectedVersion: 1
+      expectedVersion: 2
     });
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
 
@@ -1008,6 +1008,65 @@ describe("RoomService", () => {
       id: host.id,
       peerId: "peer-host",
       presenceState: "online"
+    });
+  });
+
+  it("pauses playback when the active source disconnects and enters reconnecting state", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Disconnect Source",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "disconnect-source-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+
+    const roomAfterDisconnect = await roomService.updatePeerPresence(
+      snapshot.room.id,
+      host.id,
+      null,
+      "reconnecting"
+    );
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(playback.status).toBe("playing");
+    expect(roomAfterDisconnect.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: null
+    });
+    expect(roomAfterDisconnect.playback.positionMs).toBeGreaterThanOrEqual(0);
+    expect(roomAfterDisconnect.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
+    expect(roomAfterDisconnect.playback.queueVersion).toBeGreaterThan(playback.queueVersion);
+    expect(nextSnapshot.room.members.find((entry) => entry.id === host.id)).toMatchObject({
+      id: host.id,
+      peerId: null,
+      presenceState: "reconnecting"
+    });
+    expect(nextSnapshot.room.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: null
     });
   });
 

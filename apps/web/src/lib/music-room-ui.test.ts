@@ -139,7 +139,7 @@ describe("music-room-ui helpers", () => {
     expect(shouldAcceptPresenceSnapshot(currentMembers, 7, incomingMembers, 6)).toBe(false);
   });
 
-  it("keeps newer playback while still applying fresher presence from a full room snapshot", () => {
+  it("keeps newer queue and playback while still applying fresher presence from a stale full room snapshot", () => {
     const current = {
       room: {
         id: "room_1",
@@ -210,8 +210,8 @@ describe("music-room-ui helpers", () => {
       currentQueueItemId: "queue_new",
       queueVersion: 8
     });
-    expect(merged.tracks).toEqual(incoming.tracks);
-    expect(merged.queue).toEqual(incoming.queue);
+    expect(merged.tracks).toEqual(current.tracks);
+    expect(merged.queue).toEqual(current.queue);
   });
 
   it("keeps equal-revision full snapshots when member presence is fresher", () => {
@@ -282,7 +282,7 @@ describe("music-room-ui helpers", () => {
     expect(merged.room.presenceRevision).toBe(6);
   });
 
-  it("applies incoming library changes even when presence and playback are unchanged", () => {
+  it("applies incoming library changes when the full snapshot carries a newer consistency version", () => {
     const current = {
       room: {
         id: "room_1",
@@ -321,7 +321,10 @@ describe("music-room-ui helpers", () => {
       room: {
         ...current.room,
         members: [...current.room.members],
-        playback: { ...current.room.playback }
+        playback: {
+          ...current.room.playback,
+          queueVersion: 5
+        }
       },
       tracks: [{ id: "track_new" }],
       queue: [{ id: "queue_new" }],
@@ -333,7 +336,137 @@ describe("music-room-ui helpers", () => {
     expect(merged.tracks).toEqual(incoming.tracks);
     expect(merged.queue).toEqual(incoming.queue);
     expect(merged.room.members).toEqual(current.room.members);
-    expect(merged.room.playback).toEqual(current.room.playback);
+    expect(merged.room.playback).toEqual(incoming.room.playback);
+  });
+
+  it("does not let a stale join snapshot overwrite a newer online presence state", () => {
+    const current = {
+      room: {
+        id: "room_1",
+        hostId: "host",
+        joinCode: "ABC123",
+        visibility: "public" as const,
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host" as const,
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online" as const
+          },
+          {
+            id: "member",
+            nickname: "Member",
+            role: "member" as const,
+            joinedAt: "2026-04-04T00:01:00.000Z",
+            peerId: "peer-member",
+            presenceState: "online" as const
+          }
+        ],
+        presenceRevision: 3,
+        playback: {
+          status: "paused" as const,
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 3,
+          mediaEpoch: 1
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    };
+    const incoming = {
+      ...current,
+      room: {
+        ...current.room,
+        members: [
+          current.room.members[0],
+          {
+            ...current.room.members[1],
+            peerId: null,
+            presenceState: "offline" as const
+          }
+        ],
+        presenceRevision: 2
+      }
+    };
+
+    const merged = mergeRoomSnapshot(current as never, incoming as never);
+
+    expect(merged.room.presenceRevision).toBe(3);
+    expect(merged.room.members[1]).toMatchObject({
+      id: "member",
+      peerId: "peer-member",
+      presenceState: "online"
+    });
+  });
+
+  it("does not let a stale pre-leave snapshot resurrect a member who already left", () => {
+    const current = {
+      room: {
+        id: "room_1",
+        hostId: "host",
+        joinCode: "ABC123",
+        visibility: "public" as const,
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host" as const,
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online" as const
+          }
+        ],
+        presenceRevision: 5,
+        playback: {
+          status: "paused" as const,
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 5,
+          mediaEpoch: 1
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    };
+    const incoming = {
+      ...current,
+      room: {
+        ...current.room,
+        members: [
+          current.room.members[0],
+          {
+            id: "member",
+            nickname: "Member",
+            role: "member" as const,
+            joinedAt: "2026-04-04T00:01:00.000Z",
+            peerId: null,
+            presenceState: "offline" as const
+          }
+        ],
+        presenceRevision: 4
+      }
+    };
+
+    const merged = mergeRoomSnapshot(current as never, incoming as never);
+
+    expect(merged.room.presenceRevision).toBe(5);
+    expect(merged.room.members).toHaveLength(1);
+    expect(merged.room.members[0]?.id).toBe("host");
   });
 
   it("replaces the snapshot when an incoming full snapshot belongs to another room", () => {

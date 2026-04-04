@@ -716,6 +716,66 @@ describe("SignalingGateway", () => {
     );
   });
 
+  it("emits a reconnecting presence patch with the latest playback after source disconnect", async () => {
+    jest.useFakeTimers();
+    const snapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: null,
+          presenceState: "reconnecting"
+        }
+      ],
+      sourceSessionId: "guest_host",
+      sourcePeerId: null,
+      presenceRevision: 6
+    });
+    snapshot.room.playback = {
+      ...snapshot.room.playback,
+      status: "paused",
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceTrackId: "track_1",
+      positionMs: 18_000,
+      queueVersion: 9,
+      mediaEpoch: 3
+    } as never;
+    const roomService = createRoomServiceMock(snapshot);
+    const { gateway } = createGateway({ roomService });
+    const { emit } = attachServerMock(gateway);
+
+    gateway.handleDisconnect(
+      createClient({
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }) as never
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(emit).toHaveBeenCalledWith(
+      "room.presence.patch",
+      expect.objectContaining({
+        roomId: "room_1",
+        members: snapshot.room.members,
+        presenceRevision: 6,
+        playback: expect.objectContaining({
+          status: "paused",
+          currentTrackId: "track_1",
+          sourceSessionId: "guest_host",
+          sourcePeerId: null,
+          queueVersion: 9
+        })
+      })
+    );
+
+    gateway.onModuleDestroy();
+  });
+
   it("cancels delayed cleanup when the same member reconnects before the grace window ends", async () => {
     jest.useFakeTimers();
     const { gateway, roomService } = createGateway();

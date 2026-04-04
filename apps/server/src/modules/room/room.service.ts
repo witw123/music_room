@@ -280,6 +280,10 @@ export class RoomService {
       await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
     }
 
+    if (presenceState !== "online") {
+      this.roomPlaybackService.pausePlaybackForSourceDisconnect(record, sessionId);
+    }
+
     this.incrementPresenceRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.room;
@@ -392,6 +396,7 @@ export class RoomService {
         ...track,
         id: existingTrack.id
       };
+      this.incrementPlaybackVersion(record.room.playback);
       await this.roomRecordRepository.persistRecord(record);
       return record.tracks[duplicateByFileHashIndex];
     }
@@ -402,6 +407,7 @@ export class RoomService {
       record.tracks.unshift(track);
     }
 
+    this.incrementPlaybackVersion(record.room.playback);
     await this.roomRecordRepository.persistRecord(record);
     return track;
   }
