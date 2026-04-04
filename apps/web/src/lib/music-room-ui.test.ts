@@ -210,7 +210,11 @@ describe("music-room-ui helpers", () => {
       currentQueueItemId: "queue_new",
       queueVersion: 8
     });
-    expect(merged.tracks).toEqual(current.tracks);
+    expect(merged.tracks).toContainEqual(
+      expect.objectContaining({
+        id: "track_old"
+      })
+    );
     expect(merged.queue).toEqual(current.queue);
   });
 
@@ -406,6 +410,63 @@ describe("music-room-ui helpers", () => {
       peerId: "peer-member",
       presenceState: "online"
     });
+  });
+
+  it("keeps active track metadata available when a stale snapshot lacks the current track", () => {
+    const current = {
+      room: {
+        id: "room_1",
+        hostId: "host",
+        joinCode: "ABC123",
+        visibility: "public" as const,
+        members: [],
+        presenceRevision: 5,
+        playback: {
+          status: "playing" as const,
+          currentTrackId: "track_live",
+          currentQueueItemId: "queue_live",
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: "track_live",
+          positionMs: 3_000,
+          startedAt: "2026-04-04T00:00:00.000Z",
+          queueVersion: 9,
+          mediaEpoch: 2
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    };
+    const incoming = {
+      room: {
+        ...current.room,
+        playback: {
+          ...current.room.playback,
+          currentTrackId: "track_live",
+          currentQueueItemId: "queue_live",
+          queueVersion: 8
+        }
+      },
+      tracks: [
+        {
+          id: "track_live",
+          title: "Recovered Track"
+        }
+      ],
+      queue: [],
+      playlists: []
+    };
+
+    const merged = mergeRoomSnapshot(current as never, incoming as never);
+
+    expect(merged.room.playback.currentTrackId).toBe("track_live");
+    expect(merged.tracks).toContainEqual(
+      expect.objectContaining({
+        id: "track_live",
+        title: "Recovered Track"
+      })
+    );
   });
 
   it("does not let a stale pre-leave snapshot resurrect a member who already left", () => {

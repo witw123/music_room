@@ -253,6 +253,8 @@ export function useRoomRuntime({
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const presenceIntervalRef = useRef<number | null>(null);
+  const presenceRepairKeyRef = useRef<string | null>(null);
+  const trackMetadataRepairKeyRef = useRef<string | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
     lastAppliedKey: string | null;
@@ -1776,6 +1778,103 @@ export function useRoomRuntime({
     peerId,
     requestRoomSnapshotResync,
     startPresenceHeartbeat
+  ]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !activeSession?.userId || !peerId) {
+      presenceRepairKeyRef.current = null;
+      return;
+    }
+
+    const localMember =
+      roomSnapshot.room.members.find((member) => member.id === activeSession.userId) ?? null;
+    if (!localMember) {
+      presenceRepairKeyRef.current = null;
+      return;
+    }
+
+    if (localMember.presenceState === "online" && localMember.peerId === peerId) {
+      presenceRepairKeyRef.current = null;
+      return;
+    }
+
+    const repairKey = [
+      roomSnapshot.room.id,
+      roomSnapshot.room.presenceRevision,
+      localMember.peerId ?? "none",
+      localMember.presenceState,
+      peerId
+    ].join("|");
+    if (presenceRepairKeyRef.current === repairKey) {
+      return;
+    }
+    presenceRepairKeyRef.current = repairKey;
+
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      return;
+    }
+
+    socket.emit(
+      "room.subscribe",
+      {
+        roomId: roomSnapshot.room.id,
+        sessionId: activeSession.userId,
+        peerId
+      },
+      (response?: { ok?: boolean }) => {
+        if (!response?.ok) {
+          return;
+        }
+
+        startPresenceHeartbeat();
+        emitPresence();
+        void requestRoomSnapshotResync("subscribe-ack", roomSnapshot.room.id);
+      }
+    );
+  }, [
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members,
+    roomSnapshot?.room.presenceRevision,
+    activeSession?.userId,
+    peerId,
+    emitPresence,
+    requestRoomSnapshotResync,
+    startPresenceHeartbeat
+  ]);
+
+  useEffect(() => {
+    const roomId = roomSnapshot?.room.id ?? null;
+    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+    const playbackQueueVersion = roomSnapshot?.room.playback.queueVersion ?? 0;
+
+    if (!roomId || !currentTrackId) {
+      trackMetadataRepairKeyRef.current = null;
+      return;
+    }
+
+    if (roomSnapshot?.tracks.some((track) => track.id === currentTrackId)) {
+      trackMetadataRepairKeyRef.current = null;
+      return;
+    }
+
+    const repairKey = [
+      roomId,
+      currentTrackId,
+      playbackQueueVersion
+    ].join("|");
+    if (trackMetadataRepairKeyRef.current === repairKey) {
+      return;
+    }
+    trackMetadataRepairKeyRef.current = repairKey;
+
+    void requestRoomSnapshotResync("subscribe-ack", roomId);
+  }, [
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.queueVersion,
+    roomSnapshot?.tracks,
+    requestRoomSnapshotResync
   ]);
 
   useEffect(() => {

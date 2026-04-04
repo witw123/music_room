@@ -174,10 +174,17 @@ export function mergeRoomSnapshot(
     current.room.playback,
     incoming.room.playback
   );
+  const nextTracks = ensurePlaybackTrackMetadata(
+    acceptPlayback ? incoming.tracks : current.tracks,
+    current.tracks,
+    incoming.tracks,
+    current.room.playback.currentTrackId,
+    incoming.room.playback.currentTrackId
+  );
 
   return {
     ...incoming,
-    tracks: acceptPlayback ? incoming.tracks : current.tracks,
+    tracks: nextTracks,
     queue: acceptPlayback ? incoming.queue : current.queue,
     playlists: incoming.playlists.length > 0 ? incoming.playlists : current.playlists,
     room: {
@@ -189,6 +196,39 @@ export function mergeRoomSnapshot(
       playback: acceptPlayback ? incoming.room.playback : current.room.playback
     }
   } satisfies RoomSnapshot;
+}
+
+function ensurePlaybackTrackMetadata(
+  preferredTracks: RoomSnapshot["tracks"],
+  currentTracks: RoomSnapshot["tracks"],
+  incomingTracks: RoomSnapshot["tracks"],
+  currentTrackId: string | null,
+  incomingTrackId: string | null
+) {
+  const nextTracks = [...preferredTracks];
+  const knownTrackIds = new Set(nextTracks.map((track) => track.id));
+  const requiredTrackIds = [currentTrackId, incomingTrackId].filter(
+    (trackId): trackId is string => !!trackId
+  );
+
+  for (const trackId of requiredTrackIds) {
+    if (knownTrackIds.has(trackId)) {
+      continue;
+    }
+
+    const fallbackTrack =
+      incomingTracks.find((track) => track.id === trackId) ??
+      currentTracks.find((track) => track.id === trackId) ??
+      null;
+    if (!fallbackTrack) {
+      continue;
+    }
+
+    nextTracks.unshift(fallbackTrack);
+    knownTrackIds.add(trackId);
+  }
+
+  return nextTracks;
 }
 
 export function toUserFacingError(error: unknown) {

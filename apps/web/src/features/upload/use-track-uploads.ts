@@ -11,6 +11,7 @@ import {
   cacheTrackAsset,
   deleteCachedTrackAsset,
   deleteCachedPiecesForTrack,
+  getCachedTrackAsset,
   getCachedTrackAssetCount,
   getCachedPiecesForTrack,
   getCachedTrackAssets,
@@ -288,13 +289,34 @@ export function useTrackUploads(options: {
       return;
     }
 
-    const availability = await buildTrackAvailabilityFromCache({
+    const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
+    const cachedAvailability = await buildTrackAvailabilityFromCache({
       roomId: roomSnapshot.room.id,
       trackId,
       peerId,
       nickname: activeSession.nickname,
       totalChunks
     });
+    const uploadedTrack = uploadedTracks[trackId];
+    const cachedAsset = uploadedTrack ? null : await getCachedTrackAsset(trackId);
+    const fallbackFile = uploadedTrack?.file ?? cachedAsset?.file ?? null;
+    const availability =
+      cachedAvailability ??
+      (fallbackFile && track
+        ? await buildTrackAvailabilityFromFile({
+            roomId: roomSnapshot.room.id,
+            trackId,
+            fileHash: track.fileHash,
+            file: fallbackFile,
+            peerId,
+            nickname: activeSession.nickname,
+            source: uploadedTrack ? "live_upload" : "local_cache",
+            mimeType: track.mimeType,
+            codec: track.codec ?? null,
+            sizeBytes: track.sizeBytes ?? fallbackFile.size,
+            durationMs: track.durationMs
+          })
+        : null);
 
     if (!availability) {
       return;
