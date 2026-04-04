@@ -22,7 +22,8 @@ export const websocketEventSchema = z.union([
   z.literal("room.session.replaced"),
   z.literal("piece.availability"),
   z.literal("piece.availability.clear"),
-  z.literal("peer.signal")
+  z.literal("peer.signal"),
+  z.literal("room.chat")
 ]);
 
 export const roomSubscribePayloadSchema = z.object({
@@ -151,6 +152,11 @@ export const roomChatPayloadSchema = z.object({
   senderName: z.string(),
   content: z.string(),
   timestamp: z.number().optional()
+});
+
+export const roomChatEventSchema = z.object({
+  event: z.literal("room.chat"),
+  payload: roomChatPayloadSchema
 });
 
 export type WebsocketEvent = z.infer<typeof websocketEventSchema>;

@@ -18,8 +18,21 @@ export type PersistedRoomRecord = {
   queue: unknown;
 };
 
+type PersistedPlayback = Partial<PlaybackSnapshot> & {
+  presenceRevision?: number;
+};
+
+export function serializePlaybackForPersistence(
+  room: Pick<Room, "playback" | "presenceRevision">
+) {
+  return {
+    ...room.playback,
+    presenceRevision: room.presenceRevision
+  };
+}
+
 export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecord {
-  const persistedPlayback = persisted.playback as Partial<PlaybackSnapshot>;
+  const persistedPlayback = persisted.playback as PersistedPlayback;
   const persistedMembers = Array.isArray(persisted.members)
     ? (persisted.members as Partial<RoomMember>[])
     : [];
@@ -49,12 +62,23 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
         queueVersion: persistedPlayback.queueVersion ?? 1,
         mediaEpoch: persistedPlayback.mediaEpoch ?? 0
       },
-      presenceRevision:
-        typeof (persisted as { presenceRevision?: number }).presenceRevision === "number"
-          ? Math.max(0, Math.floor((persisted as { presenceRevision?: number }).presenceRevision ?? 0))
-          : 0
+      presenceRevision: resolvePresenceRevision(persisted, persistedPlayback)
     },
     tracks: persisted.tracks as TrackMeta[],
     queue: persisted.queue as QueueItem[]
   };
+}
+
+function resolvePresenceRevision(
+  persisted: PersistedRoomRecord,
+  persistedPlayback: PersistedPlayback
+) {
+  const rawPresenceRevision =
+    typeof persisted.presenceRevision === "number"
+      ? persisted.presenceRevision
+      : persistedPlayback.presenceRevision;
+
+  return typeof rawPresenceRevision === "number"
+    ? Math.max(0, Math.floor(rawPresenceRevision))
+    : 0;
 }

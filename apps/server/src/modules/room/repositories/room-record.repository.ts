@@ -1,6 +1,10 @@
 import { RedisService } from "../../../infra/redis/redis.service";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
-import { deserializeRoomRecord, type RoomRecord } from "../room.types";
+import {
+  deserializeRoomRecord,
+  serializePlaybackForPersistence,
+  type RoomRecord
+} from "../room.types";
 
 export class RoomRecordRepository {
   constructor(
@@ -98,7 +102,7 @@ export class RoomRecordRepository {
         hostId: record.room.hostId,
         joinCode: record.room.joinCode,
         visibility: record.room.visibility,
-        playback: record.room.playback,
+        playback: serializePlaybackForPersistence(record.room),
         members: record.room.members,
         tracks: record.tracks,
         queue: record.queue
@@ -108,7 +112,7 @@ export class RoomRecordRepository {
         hostId: record.room.hostId,
         joinCode: record.room.joinCode,
         visibility: record.room.visibility,
-        playback: record.room.playback,
+        playback: serializePlaybackForPersistence(record.room),
         members: record.room.members,
         tracks: record.tracks,
         queue: record.queue
