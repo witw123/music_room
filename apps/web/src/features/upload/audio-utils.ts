@@ -98,39 +98,53 @@ export function captureAudioStream(audio: HTMLAudioElement) {
   };
 
   if (typeof mediaAudio.captureStream === "function") {
-    const stream = mediaAudio.captureStream();
-    capturedAudioGraphs.set(audio, {
-      context: null,
-      stream
-    });
-    return stream;
+    try {
+      const stream = mediaAudio.captureStream();
+      capturedAudioGraphs.set(audio, {
+        context: null,
+        stream
+      });
+      return stream;
+    } catch {
+      // Some embedded webviews expose captureStream but still throw synchronously.
+      // Fall through to alternate strategies instead of crashing the caller.
+    }
   }
 
   if (typeof mediaAudio.mozCaptureStream === "function") {
-    const stream = mediaAudio.mozCaptureStream();
-    capturedAudioGraphs.set(audio, {
-      context: null,
-      stream
-    });
-    return stream;
+    try {
+      const stream = mediaAudio.mozCaptureStream();
+      capturedAudioGraphs.set(audio, {
+        context: null,
+        stream
+      });
+      return stream;
+    } catch {
+      // Fall through to the AudioContext path.
+    }
   }
 
   if (typeof window !== "undefined") {
     const AudioContextCtor = window.AudioContext;
     if (AudioContextCtor) {
-      const context = new AudioContextCtor();
-      const source = context.createMediaElementSource(audio);
-      const destination = context.createMediaStreamDestination();
-      source.connect(destination);
-      source.connect(context.destination);
-      capturedAudioGraphs.set(audio, {
-        context,
-        stream: destination.stream
-      });
-      if (context.state === "suspended") {
-        void context.resume().catch(() => undefined);
+      let context: AudioContext | null = null;
+      try {
+        context = new AudioContextCtor();
+        const source = context.createMediaElementSource(audio);
+        const destination = context.createMediaStreamDestination();
+        source.connect(destination);
+        source.connect(context.destination);
+        capturedAudioGraphs.set(audio, {
+          context,
+          stream: destination.stream
+        });
+        if (context.state === "suspended") {
+          void context.resume().catch(() => undefined);
+        }
+        return destination.stream;
+      } catch {
+        void context?.close().catch(() => undefined);
       }
-      return destination.stream;
     }
   }
 

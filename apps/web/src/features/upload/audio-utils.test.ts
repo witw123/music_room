@@ -18,4 +18,14 @@ describe("captureAudioStream", () => {
     expect(second).toBe(stream);
     expect(captureStream).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back to null instead of throwing when media capture APIs fail", () => {
+    const audio = {
+      captureStream: vi.fn(() => {
+        throw new DOMException("capture failed", "InvalidStateError");
+      })
+    } as unknown as HTMLAudioElement;
+
+    expect(captureAudioStream(audio)).toBeNull();
+  });
 });

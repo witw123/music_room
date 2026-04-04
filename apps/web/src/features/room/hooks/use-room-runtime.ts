@@ -308,7 +308,8 @@ export function useRoomRuntime({
     let awaitingLocalAudioTrack = false;
 
     try {
-      const audio = audioRef.current;
+      try {
+        const audio = audioRef.current;
       if (!audio || !playback.currentTrackId) {
         await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
         syncState.lastAppliedKey = syncKey;
@@ -326,6 +327,26 @@ export function useRoomRuntime({
       awaitingLocalAudioTrack = !hasHostMediaStreamTrack(capture);
       if (!awaitingLocalAudioTrack) {
         syncState.lastAppliedKey = syncKey;
+      }
+      } catch (error) {
+        const message = toUserFacingError(error);
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "host-media-sync-failed",
+          level: "error",
+          summary: `房主实时音频同步失败：${message}`,
+          update: (snapshot) => ({
+            ...snapshot,
+            lastError: `房主实时音频同步失败：${message}`
+          })
+        });
+        setStatusMessage("房主实时音频同步失败，已停止本次推流重试。");
+        await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch).catch(
+          () => undefined
+        );
+        hostStreamRef.current = null;
       }
     } finally {
       const nextPendingKey = syncState.pendingKey;
