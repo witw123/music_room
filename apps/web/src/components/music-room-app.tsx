@@ -92,6 +92,11 @@ export function MusicRoomApp({
     useState<ProgressivePlaybackSource>("remote-stream");
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
+  const resetRealtimePeer = useCallback(() => {
+    const nextPeerId = `peer_${crypto.randomUUID()}`;
+    window.sessionStorage.setItem(peerStorageKey, nextPeerId);
+    setPeerId(nextPeerId);
+  }, []);
 
   const {
     activeSession,
@@ -290,6 +295,7 @@ export function MusicRoomApp({
     refreshAvailableRooms,
     refreshPlaylists,
     resetPlayerSurface,
+    resetRealtimePeer,
     lastRoomStorageKey,
     getCurrentPlaybackPositionMs,
     onTrackDeleted: handleTrackDeleted,
@@ -308,6 +314,7 @@ export function MusicRoomApp({
     router,
     clearIdentity,
     resetPlayerSurface,
+    resetRealtimePeer,
     setSuppressRoomRecovery,
     setRoomSnapshot,
     setPlaylists,

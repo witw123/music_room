@@ -18,6 +18,7 @@ type UseRoomActionsOptions = {
   refreshAvailableRooms: () => Promise<void>;
   refreshPlaylists: () => Promise<void>;
   resetPlayerSurface: () => void;
+  resetRealtimePeer: () => void;
   lastRoomStorageKey: string;
   getCurrentPlaybackPositionMs: () => number;
   onTrackDeleted?: (trackId: string) => Promise<void> | void;
@@ -33,6 +34,7 @@ export function useRoomActions({
   refreshAvailableRooms,
   refreshPlaylists,
   resetPlayerSurface,
+  resetRealtimePeer,
   lastRoomStorageKey,
   getCurrentPlaybackPositionMs,
   onTrackDeleted,
@@ -135,6 +137,7 @@ export function useRoomActions({
       setSuppressRoomRecovery(true);
       setRoomSnapshot(null);
       resetPlayerSurface();
+      resetRealtimePeer();
       window.localStorage.removeItem(lastRoomStorageKey);
       await refreshAvailableRooms();
       setStatusMessage("已离开房间。");
@@ -149,6 +152,7 @@ export function useRoomActions({
     setSuppressRoomRecovery,
     setRoomSnapshot,
     resetPlayerSurface,
+    resetRealtimePeer,
     lastRoomStorageKey,
     refreshAvailableRooms,
     setStatusMessage
@@ -165,6 +169,7 @@ export function useRoomActions({
       setSuppressRoomRecovery(true);
       setRoomSnapshot(null);
       resetPlayerSurface();
+      resetRealtimePeer();
       window.localStorage.removeItem(lastRoomStorageKey);
       try {
         await onRoomDeleted?.(trackIds);
@@ -186,6 +191,7 @@ export function useRoomActions({
     setSuppressRoomRecovery,
     setRoomSnapshot,
     resetPlayerSurface,
+    resetRealtimePeer,
     lastRoomStorageKey,
     refreshAvailableRooms,
     setStatusMessage

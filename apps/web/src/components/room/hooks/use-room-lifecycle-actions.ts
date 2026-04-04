@@ -18,6 +18,7 @@ type UseRoomLifecycleActionsInput = {
   router: RoomRouter;
   clearIdentity: () => void;
   resetPlayerSurface: () => void;
+  resetRealtimePeer: () => void;
   setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
   setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
   setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
@@ -33,6 +34,7 @@ export function useRoomLifecycleActions({
   router,
   clearIdentity,
   resetPlayerSurface,
+  resetRealtimePeer,
   setSuppressRoomRecovery,
   setRoomSnapshot,
   setPlaylists,
@@ -43,6 +45,7 @@ export function useRoomLifecycleActions({
   const handleClearIdentity = useCallback(() => {
     setSuppressRoomRecovery(true);
     resetPlayerSurface();
+    resetRealtimePeer();
     clearIdentity();
     setRoomSnapshot(null);
     setPlaylists([]);
@@ -50,6 +53,7 @@ export function useRoomLifecycleActions({
   }, [
     clearIdentity,
     resetPlayerSurface,
+    resetRealtimePeer,
     setPlaylists,
     setRoomSnapshot,
     setSuppressRoomRecovery
