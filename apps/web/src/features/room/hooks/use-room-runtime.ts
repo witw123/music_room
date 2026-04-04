@@ -1124,7 +1124,7 @@ export function useRoomRuntime({
       });
     };
 
-    if (!roomSnapshot?.room.id || !iceConfigResolved) {
+    if (!roomSnapshot?.room.id) {
       return;
     }
 
@@ -1649,7 +1649,6 @@ export function useRoomRuntime({
   }, [
     roomSnapshot?.room.id,
     iceConfig,
-    iceConfigResolved,
     peerId,
     activeSessionRef,
     currentRoomRef,
