@@ -88,6 +88,29 @@ describe("progressive playback helpers", () => {
     ).toBe(true);
   });
 
+  it("allows earlier hot handoff with a smaller contiguous cache window", () => {
+    const manifest = buildProgressiveTrackManifest(track, {
+      ...availability,
+      chunkSize: 96 * 1024,
+      availableChunks: [0, 1, 2, 3]
+    });
+
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 1, 2, 3],
+        playbackPositionMs: 36_000
+      })
+    ).toBe(false);
+    expect(
+      isTakeoverReady({
+        manifest,
+        availableChunks: [0, 1, 2, 3],
+        playbackPositionMs: 36_000
+      })
+    ).toBe(true);
+  });
+
   it("keeps current-track requests focused on the startup prefix", () => {
     const manifest = buildProgressiveTrackManifest(track, availability)!;
     expect(

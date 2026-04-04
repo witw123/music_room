@@ -76,7 +76,7 @@ export function getStartupWindowMs(input: { mimeType?: string | null; codec?: st
 }
 
 export function getTakeoverWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
-  return isFlacTrack(input) ? 8_000 : 6_000;
+  return isFlacTrack(input) ? 4_500 : 3_000;
 }
 
 export function getTargetSteadyBufferMs(input: { mimeType?: string | null; codec?: string | null }) {
@@ -208,7 +208,7 @@ function isProgressiveReady(
       (mode === "takeover" ? getTakeoverWindowMs(manifest) : getStartupWindowMs(manifest))
   );
   const contiguousBytes = contiguousChunkCount * manifest.chunkSize;
-  const requiredBytes = mode === "takeover" ? 768 * 1024 : 1.5 * 1024 * 1024;
+  const requiredBytes = mode === "takeover" ? 320 * 1024 : 1.5 * 1024 * 1024;
 
   return contiguousBufferedMs >= requiredBufferedMs && contiguousBytes >= requiredBytes;
 }

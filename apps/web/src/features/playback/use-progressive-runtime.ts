@@ -80,12 +80,13 @@ type UseProgressiveRuntimeResult = {
   destroyProgressiveRuntime: () => void;
 };
 
-const progressiveRuntimeTickIntervalMs = 1_000;
-const progressiveSwitchDelayMs = 900;
-const fullLocalSwitchDelayMs = 700;
-const fullLocalMaxDriftMs = 220;
-const playbackStartRetryDelayMs = 500;
-const maxPlaybackStartRetryAttempts = 6;
+const progressiveRuntimeTickIntervalMs = 350;
+const progressiveSwitchDelayMs = 260;
+const fullLocalSwitchDelayMs = 180;
+const fullLocalMaxDriftMs = 320;
+const playbackStartRetryDelayMs = 160;
+const maxPlaybackStartRetryAttempts = 18;
+const remoteAudioHoldMs = 220;
 
 export function useProgressiveRuntime({
   audioRef,
@@ -1037,7 +1038,7 @@ export function useProgressiveRuntime({
       remoteAudio.pause();
       remoteAudio.muted = false;
       remoteHoldTimeoutRef.current = null;
-    }, 1_000);
+    }, remoteAudioHoldMs);
 
     return () => {
       if (remoteHoldTimeoutRef.current !== null) {

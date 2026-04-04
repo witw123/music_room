@@ -156,6 +156,11 @@ export function useAvailabilityAnnouncements({
         return;
       }
 
+      setAvailabilityByTrack((current) => {
+        const next = upsertAvailabilityAnnouncement(current, nextAnnouncement);
+        availabilityByTrackRef.current = next;
+        return next;
+      });
       queueAvailability(nextAnnouncement);
       scheduleAvailabilityEmit(nextAnnouncement);
     },
@@ -207,7 +212,11 @@ export function useAvailabilityAnnouncements({
       }
     }
 
-    setAvailabilityByTrack((current) => removeAvailabilityAnnouncementsByPeer(current, ownerPeerId));
+    setAvailabilityByTrack((current) => {
+      const next = removeAvailabilityAnnouncementsByPeer(current, ownerPeerId);
+      availabilityByTrackRef.current = next;
+      return next;
+    });
   }, []);
 
   useEffect(() => {

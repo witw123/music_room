@@ -141,6 +141,9 @@ type PieceTransferWindow = {
 };
 
 const pieceTransferWindowMs = 8_000;
+const hostMediaSyncRetryDelayMs = 75;
+const remotePlaybackRetryDelayMs = 160;
+const maxRemotePlaybackRetryAttempts = 16;
 
 function getPieceTransferRates(
   transferWindows: Map<string, PieceTransferWindow>,
@@ -247,6 +250,7 @@ export function useRoomRuntime({
   const previousInitialRoomIdRef = useRef<string | null>(initialRoomId);
   const activeRouteRoomIdRef = useRef<string | null>(initialRoomId);
   const hostStreamRef = useRef<MediaStream | null>(null);
+  const hostMediaSyncRetryRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
@@ -291,6 +295,13 @@ export function useRoomRuntime({
     },
     [remoteAudioRef]
   );
+
+  const clearHostMediaSyncRetry = useCallback(() => {
+    if (hostMediaSyncRetryRef.current !== null) {
+      window.clearTimeout(hostMediaSyncRetryRef.current);
+      hostMediaSyncRetryRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     activeSessionRef.current = activeSession;
@@ -493,14 +504,14 @@ export function useRoomRuntime({
           return;
         }
 
-        if (attempt >= 6) {
+        if (attempt >= maxRemotePlaybackRetryAttempts) {
           setStatusMessage("远端音频连接已建立，但播放未稳定，请点击一次播放继续。");
           return;
         }
 
         remotePlaybackRetryRef.current = window.setTimeout(() => {
           scheduleRemotePlaybackRetry(attempt + 1);
-        }, 800);
+        }, remotePlaybackRetryDelayMs);
       });
     },
     [currentRoomRef, remoteAudioRef, setStatusMessage]
@@ -509,6 +520,7 @@ export function useRoomRuntime({
   const syncHostMediaStream = useCallback(async () => {
     const currentRoom = currentRoomRef.current;
     if (!currentRoom?.room.id || !peerId || !isCurrentSourceOwner) {
+      clearHostMediaSyncRetry();
       return;
     }
 
@@ -542,24 +554,32 @@ export function useRoomRuntime({
     try {
       try {
         const audio = audioRef.current;
-      if (!audio || !playback.currentTrackId) {
-        await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
-        syncState.lastAppliedKey = syncKey;
-        return;
-      }
+        if (!audio || !playback.currentTrackId) {
+          await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
+          syncState.lastAppliedKey = syncKey;
+          return;
+        }
 
-      const capture = captureAudioStream(audio);
-      if (!capture) {
-        setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
-        return;
-      }
+        if (playback.status === "playing" && audio.paused) {
+          await roomAudioOutput.playElement(audio).catch(() => ({
+            ok: false,
+            error: "local-host-play-rejected"
+          }));
+        }
 
-      hostStreamRef.current = capture;
-      await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
-      awaitingLocalAudioTrack = !hasHostMediaStreamTrack(capture);
-      if (!awaitingLocalAudioTrack) {
-        syncState.lastAppliedKey = syncKey;
-      }
+        const capture = captureAudioStream(audio);
+        if (!capture) {
+          setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+          return;
+        }
+
+        hostStreamRef.current = capture;
+        await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
+        awaitingLocalAudioTrack = !hasHostMediaStreamTrack(capture);
+        if (!awaitingLocalAudioTrack) {
+          clearHostMediaSyncRetry();
+          syncState.lastAppliedKey = syncKey;
+        }
       } catch (error) {
         const message = toUserFacingError(error);
         recordPeerDiagnostic({
@@ -585,6 +605,11 @@ export function useRoomRuntime({
       syncState.inFlight = false;
 
       if (awaitingLocalAudioTrack) {
+        clearHostMediaSyncRetry();
+        hostMediaSyncRetryRef.current = window.setTimeout(() => {
+          hostMediaSyncRetryRef.current = null;
+          void syncHostMediaStream();
+        }, hostMediaSyncRetryDelayMs);
         syncState.pendingKey = null;
         return;
       }
@@ -599,7 +624,14 @@ export function useRoomRuntime({
 
       syncState.pendingKey = null;
     }
-  }, [audioRef, currentRoomRef, isCurrentSourceOwner, peerId, setStatusMessage]);
+  }, [
+    audioRef,
+    clearHostMediaSyncRetry,
+    currentRoomRef,
+    isCurrentSourceOwner,
+    peerId,
+    setStatusMessage
+  ]);
 
   const updateDataTransportStats = useCallback(
     (input: {
@@ -1595,6 +1627,7 @@ export function useRoomRuntime({
         window.clearTimeout(remotePlaybackRetryRef.current);
         remotePlaybackRetryRef.current = null;
       }
+      clearHostMediaSyncRetry();
       socket.emit("room.unsubscribe", { roomId });
       socket.disconnect();
       socketRef.current = null;
@@ -1626,6 +1659,7 @@ export function useRoomRuntime({
     flushPendingAvailability,
     queueAvailability,
     clearAvailabilityForPeer,
+    clearHostMediaSyncRetry,
     requestRoomSnapshotResync,
     scheduleRemotePlaybackRetry,
     chunkSchedulerRef,
