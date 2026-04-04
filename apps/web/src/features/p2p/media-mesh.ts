@@ -515,9 +515,17 @@ export class RoomMediaMesh {
 
 export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSample) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  const weakLink =
+    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
+    (typeof sample.packetsLost === "number" && sample.packetsLost >= 80) ||
+    (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
   let targetMaxBitrateBps = constrainedTransport
     ? constrainedAudioMaxBitrateBps
     : bootstrapAudioMaxBitrateBps;
+
+  if (weakLink) {
+    targetMaxBitrateBps = Math.min(targetMaxBitrateBps, 48_000);
+  }
 
   if (
     typeof sample.availableOutgoingBitrateKbps === "number" &&

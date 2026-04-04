@@ -5,6 +5,7 @@ import {
   getLowBufferThresholdMs,
   getProgressiveEngineType,
   getPriorityChunkIndexes,
+  getRemoteFirstComfortBufferMs,
   getTargetSteadyBufferMs,
   isFlacTrack,
   isStartupReady,
@@ -312,7 +313,9 @@ export class ChunkScheduler {
       comfortableCurrentTrackBufferMs = currentTrackManifest
         ? Math.max(
             getLowBufferThresholdMs() * 2,
-            Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
+            this.playbackClockSource === "remote"
+              ? getRemoteFirstComfortBufferMs(currentTrackManifest)
+              : Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
           )
         : 0;
       const isCurrentTrackComplete = this.isTrackComplete(
@@ -390,6 +393,7 @@ export class ChunkScheduler {
       this.isTrackComplete(currentTrack.id, this.getTotalChunks(currentTrack.id));
     const canPrefetchUpcomingTrack =
       !!currentTrackManifest &&
+      this.playbackClockSource !== "remote" &&
       this.policy === "steady" &&
       this.playbackStatus === "playing" &&
       this.mode === "normal" &&
@@ -627,30 +631,30 @@ function getTrackStreamingProfile(
 
   if (playbackClockSource === "remote") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 4 : 3,
-      maxConcurrentPerPeer: 1,
+      maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 4 : 3,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 24_000 : 14_000,
-      timeoutMs: 3_000
+      lookAheadMs: streamProfile === "large-lossless" ? 80_000 : 48_000,
+      timeoutMs: 2_000
     };
   }
 
   if (policy === "catchup") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 14 : 12,
+      maxConcurrent: streamProfile === "large-lossless" ? 16 : 14,
       maxConcurrentPerPeer: streamProfile === "large-lossless" ? 5 : 4,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 80_000 : 40_000,
+      lookAheadMs: streamProfile === "large-lossless" ? 96_000 : 56_000,
       timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_200
     };
   }
 
   if (policy === "startup") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 12 : 10,
+      maxConcurrent: streamProfile === "large-lossless" ? 14 : 12,
       maxConcurrentPerPeer: 4,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 40_000 : 18_000,
+      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 28_000,
       timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_200
     };
   }

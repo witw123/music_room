@@ -137,7 +137,7 @@ type PieceTransferWindow = {
 
 const pieceTransferWindowMs = 8_000;
 const hostMediaSyncRetryDelayMs = 75;
-const remotePlaybackRetryDelayMs = 160;
+const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const;
 const maxRemotePlaybackRetryAttempts = 16;
 
 function getPieceTransferRates(
@@ -249,8 +249,10 @@ export function useRoomRuntime({
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const presenceIntervalRef = useRef<number | null>(null);
+  const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
   const presenceRepairKeyRef = useRef<string | null>(null);
   const trackMetadataRepairKeyRef = useRef<string | null>(null);
+  const lastRealtimeRoomEventAtRef = useRef<number>(Date.now());
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
     lastAppliedKey: string | null;
@@ -311,6 +313,13 @@ export function useRoomRuntime({
     if (presenceIntervalRef.current !== null) {
       window.clearInterval(presenceIntervalRef.current);
       presenceIntervalRef.current = null;
+    }
+  }, []);
+
+  const stopRoomSnapshotWatchdog = useCallback(() => {
+    if (roomSnapshotWatchdogIntervalRef.current !== null) {
+      window.clearInterval(roomSnapshotWatchdogIntervalRef.current);
+      roomSnapshotWatchdogIntervalRef.current = null;
     }
   }, []);
 
@@ -561,7 +570,7 @@ export function useRoomRuntime({
 
         remotePlaybackRetryRef.current = window.setTimeout(() => {
           scheduleRemotePlaybackRetry(attempt + 1);
-        }, remotePlaybackRetryDelayMs);
+        }, remotePlaybackRetryBackoffMs[Math.min(attempt, remotePlaybackRetryBackoffMs.length - 1)]);
       });
     },
     [currentRoomRef, remoteAudioRef, setStatusMessage]
@@ -891,8 +900,9 @@ export function useRoomRuntime({
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
       }
+      stopRoomSnapshotWatchdog();
     };
-  }, []);
+  }, [stopRoomSnapshotWatchdog]);
 
   useEffect(() => {
     const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
@@ -1156,6 +1166,47 @@ export function useRoomRuntime({
 
     window.localStorage.setItem(lastRoomStorageKey, roomSnapshot.room.id);
   }, [roomSnapshot?.room.id, peerId, lastRoomStorageKey]);
+
+  useEffect(() => {
+    if (
+      !roomSnapshot?.room.id ||
+      !hydrated ||
+      !activeSession?.userId ||
+      isNavigatingRoomExit ||
+      roomSnapshot.room.members.length <= 1
+    ) {
+      stopRoomSnapshotWatchdog();
+      return;
+    }
+
+    lastRealtimeRoomEventAtRef.current = Date.now();
+    stopRoomSnapshotWatchdog();
+    roomSnapshotWatchdogIntervalRef.current = window.setInterval(() => {
+      const activeRoomId = activeRouteRoomIdRef.current;
+      const socket = socketRef.current;
+      if (!activeRoomId || activeRoomId !== roomSnapshot.room.id || !socket?.connected) {
+        return;
+      }
+
+      if (Date.now() - lastRealtimeRoomEventAtRef.current < 8_000) {
+        return;
+      }
+
+      lastRealtimeRoomEventAtRef.current = Date.now();
+      void requestRoomSnapshotResyncRef.current("stale-watchdog", roomSnapshot.room.id);
+    }, 4_000);
+
+    return () => {
+      stopRoomSnapshotWatchdog();
+    };
+  }, [
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members.length,
+    hydrated,
+    activeSession?.userId,
+    isNavigatingRoomExit,
+    stopRoomSnapshotWatchdog
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !hydrated || !iceConfigResolved) {
@@ -1503,10 +1554,12 @@ export function useRoomRuntime({
         return;
       }
 
+      lastRealtimeRoomEventAtRef.current = Date.now();
       dispatchRoomStateEvent({
         type: "server-snapshot",
         snapshot
       });
+      void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
@@ -1541,6 +1594,7 @@ export function useRoomRuntime({
         return;
       }
 
+      lastRealtimeRoomEventAtRef.current = Date.now();
       dispatchRoomStateEvent({
         type: "server-queue-patch",
         roomId,
@@ -1548,12 +1602,14 @@ export function useRoomRuntime({
         playback,
         roomRevision
       });
+      void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
     });
     socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
       if (activeRouteRoomIdRef.current !== roomId) {
         return;
       }
 
+      lastRealtimeRoomEventAtRef.current = Date.now();
       dispatchRoomStateEvent({
         type: "server-presence-patch",
         roomId,
@@ -1562,6 +1618,7 @@ export function useRoomRuntime({
         presenceRevision,
         roomRevision
       });
+      void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
       resyncRealtimePeers(members);
       if (playback.sourceSessionId === activeSessionRef.current?.userId) {
         window.setTimeout(() => {
@@ -1576,6 +1633,7 @@ export function useRoomRuntime({
         return;
       }
 
+      lastRealtimeRoomEventAtRef.current = Date.now();
       dispatchRoomStateEvent({
         type: "server-library-patch",
         roomId,
@@ -1584,6 +1642,7 @@ export function useRoomRuntime({
         playback,
         roomRevision
       });
+      void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
     });
     socket.on("peer.signal", (payload) => {
       if (payload.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {

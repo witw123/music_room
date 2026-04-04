@@ -117,7 +117,10 @@ export const progressivePlaybackStatusSchema = z.object({
     .nullable()
     .optional(),
   lastPlayStartFailure: z.string().nullable().optional(),
-  nextQueueTrackPrefetch: z.string().nullable().optional()
+  nextQueueTrackPrefetch: z.string().nullable().optional(),
+  remoteFirstLock: z.boolean().optional(),
+  localTakeoverCooldownMs: z.number().int().nonnegative().nullable().optional(),
+  fullLocalReady: z.boolean().optional()
 });
 
 export const peerDiagnosticsSnapshotSchema = z.object({

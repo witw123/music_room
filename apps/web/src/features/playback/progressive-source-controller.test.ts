@@ -47,7 +47,7 @@ describe("progressive source controller", () => {
       fallbackReason: null,
       driftMs: 80,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 7_200
+      now: 13_200
     });
 
     expect(thirdDecision).toEqual({
@@ -111,7 +111,7 @@ describe("progressive source controller", () => {
       localReady: true,
       driftMs: 70,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 11_200
+      now: 17_200
     });
 
     expect(secondDecision).toEqual({

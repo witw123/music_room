@@ -3,7 +3,9 @@ import type { RoomSnapshot } from "@music-room/shared";
 export type RoomSnapshotResyncReason =
   | "socket-connect"
   | "subscribe-ack"
-  | "visibility-visible";
+  | "visibility-visible"
+  | "realtime-room-event"
+  | "stale-watchdog";
 
 type RoomSnapshotResyncControllerOptions = {
   loadSnapshot: (roomId: string) => Promise<RoomSnapshot>;

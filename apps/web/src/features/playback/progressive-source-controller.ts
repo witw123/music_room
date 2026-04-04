@@ -34,8 +34,8 @@ function resolveBufferedLocalWarmupDecision(input: {
     } satisfies ProgressiveWarmupDecision;
   }
 
-  const switchDelayMs = input.switchDelayMs ?? 2_000;
-  const maxDriftMs = input.maxDriftMs ?? 250;
+  const switchDelayMs = input.switchDelayMs ?? 8_000;
+  const maxDriftMs = input.maxDriftMs ?? 180;
   const now = input.now ?? Date.now();
   const stableEnough = input.ready && !input.fallbackReason && input.driftMs <= maxDriftMs;
 

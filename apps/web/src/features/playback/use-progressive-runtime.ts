@@ -10,6 +10,7 @@ import {
   type SetStateAction
 } from "react";
 import type {
+  PeerDiagnosticsSnapshot,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement,
@@ -21,10 +22,15 @@ import {
   buildProgressiveHealthSnapshot,
   buildProgressiveTrackManifest,
   canUseProgressivePlayback,
+  getFullLocalStableWindowMs,
+  getLocalTakeoverCooldownMs,
   getCriticalBufferThresholdMs,
   getEffectivePlaybackPositionMs,
+  getMinimumSourceResidenceMs,
   getProgressiveEngineType,
+  getRemoteFirstComfortBufferMs,
   isTakeoverReady,
+  shouldEnableRemoteFirstLock,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
 import {
@@ -61,6 +67,7 @@ type UseProgressiveRuntimeInput = {
   isPageVisible: boolean;
   volume: number;
   mediaConnectedPeersCount: number;
+  peerDiagnostics: PeerDiagnosticsSnapshot[];
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   setStatusMessage: (value: string) => void;
   setSchedulerMode: Dispatch<SetStateAction<"normal" | "conservative" | "idle">>;
@@ -81,12 +88,13 @@ type UseProgressiveRuntimeResult = {
 };
 
 const progressiveRuntimeTickIntervalMs = 350;
-const progressiveSwitchDelayMs = 260;
-const fullLocalSwitchDelayMs = 180;
-const fullLocalMaxDriftMs = 320;
+const progressiveSwitchDelayMs = getFullLocalStableWindowMs();
+const fullLocalSwitchDelayMs = getFullLocalStableWindowMs();
+const fullLocalMaxDriftMs = 180;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
-const remoteAudioHoldMs = 220;
+const remoteAudioHoldMs = 1_200;
+const enableDirectProgressiveTakeover = false;
 
 export function useProgressiveRuntime({
   audioRef,
@@ -106,6 +114,7 @@ export function useProgressiveRuntime({
   isPageVisible,
   volume,
   mediaConnectedPeersCount,
+  peerDiagnostics,
   recordPeerDiagnostic,
   setStatusMessage,
   setSchedulerMode,
@@ -118,6 +127,8 @@ export function useProgressiveRuntime({
   const fullLocalWarmupReadyAtRef = useRef<number | null>(null);
   const remoteHoldTimeoutRef = useRef<number | null>(null);
   const playbackStartRetryRef = useRef<number | null>(null);
+  const activeSourceActivatedAtRef = useRef<number>(Date.now());
+  const localTakeoverCooldownUntilRef = useRef<number>(0);
   const playback = roomSnapshot?.room.playback;
 
   const currentBufferedFullLocalTrack = useMemo(
@@ -181,10 +192,26 @@ export function useProgressiveRuntime({
   const canWarmBufferedFullLocal =
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
-    activePlaybackSource !== "progressive-local" &&
     !!currentBufferedFullLocalTrack &&
     currentProgressiveEngineType === "none";
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
+  const sourceDiagnostics = useMemo(() => {
+    const sourcePeerId = roomSnapshot?.room.playback.sourcePeerId ?? null;
+    if (!sourcePeerId) {
+      return null;
+    }
+
+    return peerDiagnostics.find((peer) => peer.peerId === sourcePeerId) ?? null;
+  }, [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]);
+  const remoteFirstLock = useMemo(
+    () => shouldEnableRemoteFirstLock({ diagnostics: sourceDiagnostics }),
+    [sourceDiagnostics]
+  );
+  const localTakeoverCooldownMs = useMemo(
+    () => Math.max(0, localTakeoverCooldownUntilRef.current - Date.now()),
+    [playback?.mediaEpoch, playback?.currentTrackId, activePlaybackSource, remoteFirstLock]
+  );
+  const fullLocalReady = !!currentBufferedFullLocalTrack;
   const nextQueueTrackPrefetch = useMemo(() => {
     if (!roomSnapshot?.queue.length) {
       return null;
@@ -240,6 +267,52 @@ export function useProgressiveRuntime({
   }, []);
 
   useEffect(() => destroyProgressiveRuntime, [destroyProgressiveRuntime]);
+
+  useEffect(() => {
+    activeSourceActivatedAtRef.current = Date.now();
+  }, [activePlaybackSource, playback?.currentTrackId, playback?.mediaEpoch]);
+
+  useEffect(() => {
+    localTakeoverCooldownUntilRef.current = 0;
+  }, [playback?.currentTrackId, playback?.mediaEpoch]);
+
+  const canExitCurrentSource = useCallback(
+    (now = Date.now()) =>
+      now - activeSourceActivatedAtRef.current >= getMinimumSourceResidenceMs(activePlaybackSource),
+    [activePlaybackSource]
+  );
+
+  const armLocalTakeoverCooldown = useCallback(() => {
+    localTakeoverCooldownUntilRef.current = Date.now() + getLocalTakeoverCooldownMs();
+  }, []);
+
+  const isLocalTakeoverAllowed = useCallback(
+    (now = Date.now()) =>
+      !remoteFirstLock &&
+      now >= localTakeoverCooldownUntilRef.current &&
+      mediaConnectedPeersCount > 0,
+    [mediaConnectedPeersCount, remoteFirstLock]
+  );
+
+  const fallbackToRemoteStream = useCallback(
+    (reason: string, options?: { force?: boolean }) => {
+      if (
+        activePlaybackSource !== "remote-stream" &&
+        (options?.force || canExitCurrentSource())
+      ) {
+        armLocalTakeoverCooldown();
+        setProgressiveFallbackReason(reason);
+        setActivePlaybackSource("remote-stream");
+      }
+    },
+    [
+      activePlaybackSource,
+      armLocalTakeoverCooldown,
+      canExitCurrentSource,
+      setActivePlaybackSource,
+      setProgressiveFallbackReason
+    ]
+  );
 
   const clearPlaybackStartRetry = useCallback(() => {
     if (playbackStartRetryRef.current !== null) {
@@ -471,8 +544,7 @@ export function useProgressiveRuntime({
           .syncPlayback(expectedSeconds, playback.status === "playing")
           .then((result) => {
             if (playback.status === "playing" && !result.localReady) {
-              setProgressiveFallbackReason("buffer-underrun");
-              setActivePlaybackSource("remote-stream");
+              fallbackToRemoteStream("buffer-underrun", { force: true });
               markPlaybackStartFailure(
                 "progressive-local-buffer-underrun",
                 "本地缓冲不足，已回退实时音频。"
@@ -485,8 +557,7 @@ export function useProgressiveRuntime({
             }
           })
           .catch(() => {
-            setProgressiveFallbackReason("progressive-init-failed");
-            setActivePlaybackSource("remote-stream");
+            fallbackToRemoteStream("progressive-init-failed", { force: true });
             markPlaybackStartFailure(
               "progressive-local-init-failed",
               "本地解码初始化失败，已回退实时音频。"
@@ -559,10 +630,9 @@ export function useProgressiveRuntime({
     isCurrentSourceOwner,
     setStatusMessage,
     setMediaConnectionState,
-    setProgressiveFallbackReason,
-    setActivePlaybackSource,
     destroyProgressiveRuntime,
     ensurePlaybackStart,
+    fallbackToRemoteStream,
     markPlaybackStartFailure,
     setPlaybackStartIntent
   ]);
@@ -581,18 +651,25 @@ export function useProgressiveRuntime({
     const handleWaiting = () => {
       setSchedulerMode("conservative");
       setBufferHealth("low");
-      if (activePlaybackSource === "progressive-local") {
-        setProgressiveFallbackReason("buffer-underrun");
-        setActivePlaybackSource("remote-stream");
+      if (
+        activePlaybackSource === "progressive-local" &&
+        progressiveHealthSnapshot.aheadBufferedMs < getCriticalBufferThresholdMs() / 2
+      ) {
+        fallbackToRemoteStream("buffer-underrun");
+      }
+      if (
+        activePlaybackSource === "full-local" &&
+        progressiveHealthSnapshot.aheadBufferedMs < getCriticalBufferThresholdMs() / 2
+      ) {
+        fallbackToRemoteStream("buffer-underrun");
       }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
     const handleStalled = () => {
       setSchedulerMode("conservative");
       setBufferHealth("critical");
-      if (activePlaybackSource === "progressive-local") {
-        setProgressiveFallbackReason("stalled");
-        setActivePlaybackSource("remote-stream");
+      if (activePlaybackSource === "progressive-local" || activePlaybackSource === "full-local") {
+        fallbackToRemoteStream("stalled", { force: true });
       }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
@@ -614,8 +691,7 @@ export function useProgressiveRuntime({
 
       setSchedulerMode("conservative");
       setBufferHealth("critical");
-      setProgressiveFallbackReason("seek-outside-buffer");
-      setActivePlaybackSource("remote-stream");
+      fallbackToRemoteStream("seek-outside-buffer", { force: true });
     };
 
     localAudio?.addEventListener("playing", handlePlaying);
@@ -644,12 +720,12 @@ export function useProgressiveRuntime({
     currentProgressiveManifest,
     isPageVisible,
     progressiveHealthSnapshot.contiguousBufferedMs,
+    progressiveHealthSnapshot.aheadBufferedMs,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.status,
+    fallbackToRemoteStream,
     setBufferHealth,
     setMediaConnectionState,
-    setProgressiveFallbackReason,
-    setActivePlaybackSource,
     setSchedulerMode
   ]);
 
@@ -765,7 +841,6 @@ export function useProgressiveRuntime({
       .then((attached) => {
         if (!attached) {
           setProgressiveFallbackReason("progressive-init-failed");
-          setActivePlaybackSource("remote-stream");
           return;
         }
 
@@ -773,7 +848,6 @@ export function useProgressiveRuntime({
       })
       .catch(() => {
         setProgressiveFallbackReason("progressive-init-failed");
-        setActivePlaybackSource("remote-stream");
       });
 
     return () => {
@@ -792,8 +866,7 @@ export function useProgressiveRuntime({
     currentProgressiveEngineType,
     peerId,
     volume,
-    setProgressiveFallbackReason,
-    setActivePlaybackSource
+    setProgressiveFallbackReason
   ]);
 
   useEffect(() => {
@@ -839,9 +912,10 @@ export function useProgressiveRuntime({
           currentProgressiveManifest.durationMs,
           Date.now()
         ) / 1000;
+      const now = Date.now();
       const activationReady =
         progressiveHealthSnapshot.fallbackReason === null &&
-        (activePlaybackSource === "remote-stream" ? isProgressiveTakeoverReady() : true);
+        (activePlaybackSource === "remote-stream" ? isProgressiveTakeoverReady(now) : true);
       let engineReady = false;
       let localReady = false;
       let driftMs = Number.POSITIVE_INFINITY;
@@ -889,6 +963,18 @@ export function useProgressiveRuntime({
         return;
       }
 
+      if (
+        !enableDirectProgressiveTakeover ||
+        !isLocalTakeoverAllowed(now) ||
+        activePlaybackSource !== "remote-stream"
+      ) {
+        progressiveWarmupReadyAtRef.current = activationReady && localReady ? now : null;
+        if (progressiveHealthSnapshot.fallbackReason && isLocalTakeoverAllowed(now)) {
+          setProgressiveFallbackReason(null);
+        }
+        return;
+      }
+
       const warmupDecision = resolveProgressiveWarmupDecision({
         currentSource: activePlaybackSource,
         engineReady: localReady,
@@ -896,7 +982,7 @@ export function useProgressiveRuntime({
         fallbackReason: progressiveHealthSnapshot.fallbackReason,
         driftMs,
         warmupReadyAt: progressiveWarmupReadyAtRef.current,
-        now: Date.now(),
+        now,
         switchDelayMs: progressiveSwitchDelayMs
       });
       progressiveWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
@@ -941,6 +1027,7 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.startupReady,
     progressiveHealthSnapshot.fallbackReason,
     isProgressiveTakeoverReady,
+    isLocalTakeoverAllowed,
     audioRef,
     setActivePlaybackSource,
     setProgressiveFallbackReason
@@ -987,12 +1074,29 @@ export function useProgressiveRuntime({
 
       const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
       const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
+      const now = Date.now();
+      const readyForFullLocal =
+        localReady &&
+        driftMs <= fullLocalMaxDriftMs &&
+        progressiveHealthSnapshot.aheadBufferedMs >=
+          getRemoteFirstComfortBufferMs(
+            currentTrack ?? {
+              mimeType: null,
+              codec: null
+            }
+          );
+
+      if (!isLocalTakeoverAllowed(now)) {
+        fullLocalWarmupReadyAtRef.current = readyForFullLocal ? now : null;
+        return;
+      }
+
       const warmupDecision = resolveFullLocalWarmupDecision({
         currentSource: activePlaybackSource,
-        localReady,
+        localReady: readyForFullLocal,
         driftMs,
         warmupReadyAt: fullLocalWarmupReadyAtRef.current,
-        now: Date.now(),
+        now,
         switchDelayMs: fullLocalSwitchDelayMs,
         maxDriftMs: fullLocalMaxDriftMs
       });
@@ -1011,6 +1115,8 @@ export function useProgressiveRuntime({
     canWarmBufferedFullLocal,
     activePlaybackSource,
     currentTrack?.durationMs,
+    progressiveHealthSnapshot.aheadBufferedMs,
+    isLocalTakeoverAllowed,
     audioRef,
     setActivePlaybackSource
   ]);
@@ -1035,7 +1141,9 @@ export function useProgressiveRuntime({
     }
 
     remoteHoldTimeoutRef.current = window.setTimeout(() => {
-      remoteAudio.pause();
+      if (activePlaybackSource === "full-local" && !remoteFirstLock) {
+        remoteAudio.pause();
+      }
       remoteAudio.muted = false;
       remoteHoldTimeoutRef.current = null;
     }, remoteAudioHoldMs);
@@ -1047,7 +1155,7 @@ export function useProgressiveRuntime({
       }
       remoteAudio.muted = false;
     };
-  }, [activePlaybackSource, roomSnapshot?.room.playback.currentTrackId, remoteAudioRef]);
+  }, [activePlaybackSource, remoteFirstLock, roomSnapshot?.room.playback.currentTrackId, remoteAudioRef]);
 
   useEffect(() => {
     if (activePlaybackSource !== "progressive-local") {
@@ -1058,13 +1166,11 @@ export function useProgressiveRuntime({
       return;
     }
 
-    setProgressiveFallbackReason("seek-outside-buffer");
-    setActivePlaybackSource("remote-stream");
+    fallbackToRemoteStream("seek-outside-buffer");
   }, [
     activePlaybackSource,
     progressiveHealthSnapshot.aheadBufferedMs,
-    setProgressiveFallbackReason,
-    setActivePlaybackSource
+    fallbackToRemoteStream
   ]);
 
   useEffect(() => {
@@ -1072,7 +1178,12 @@ export function useProgressiveRuntime({
       return;
     }
 
-    if (!progressiveFallbackReason || !isProgressiveTakeoverReady()) {
+    if (
+      !progressiveFallbackReason ||
+      remoteFirstLock ||
+      !isLocalTakeoverAllowed() ||
+      !isProgressiveTakeoverReady()
+    ) {
       return;
     }
 
@@ -1081,10 +1192,13 @@ export function useProgressiveRuntime({
     activePlaybackSource,
     progressiveFallbackReason,
     isProgressiveTakeoverReady,
+    isLocalTakeoverAllowed,
+    remoteFirstLock,
     setProgressiveFallbackReason
   ]);
 
   useEffect(() => {
+    const nextCooldownMs = Math.max(0, localTakeoverCooldownUntilRef.current - Date.now());
     recordPeerDiagnostic({
       peerId: "system",
       channelKind: "system",
@@ -1106,11 +1220,16 @@ export function useProgressiveRuntime({
             : null,
           intentMatchedSource: playbackStartIntent?.matchedSource ?? null,
           lastPlayStartFailure: playbackStartIntent?.lastFailure ?? null,
-          nextQueueTrackPrefetch
+          nextQueueTrackPrefetch,
+          remoteFirstLock,
+          localTakeoverCooldownMs: nextCooldownMs > 0 ? nextCooldownMs : null,
+          fullLocalReady
         }
       })
     });
   }, [
+    fullLocalReady,
+    remoteFirstLock,
     progressiveHealthSnapshot.activeSource,
     progressiveHealthSnapshot.engineType,
     progressiveHealthSnapshot.contiguousBufferedMs,
@@ -1121,6 +1240,7 @@ export function useProgressiveRuntime({
     pendingPlaybackIntent,
     playbackStartIntent,
     nextQueueTrackPrefetch,
+    localTakeoverCooldownMs,
     recordPeerDiagnostic
   ]);
 

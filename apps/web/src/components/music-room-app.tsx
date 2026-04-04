@@ -187,6 +187,7 @@ export function MusicRoomApp({
       isPageVisible,
       volume,
       mediaConnectedPeersCount: mediaConnectedPeers.length,
+      peerDiagnostics,
       recordPeerDiagnostic,
       setStatusMessage,
       setSchedulerMode,

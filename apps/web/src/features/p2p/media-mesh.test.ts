@@ -270,7 +270,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(64_000);
+    ).toBe(48_000);
   });
 
   it("caps sender bitrate to measured headroom on weak links", () => {

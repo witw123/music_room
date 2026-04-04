@@ -91,6 +91,29 @@ export function getCriticalBufferThresholdMs() {
   return 3_000;
 }
 
+export function getRemoteFirstComfortBufferMs(input: {
+  mimeType?: string | null;
+  codec?: string | null;
+}) {
+  return isFlacTrack(input) ? 75_000 : 36_000;
+}
+
+export function getFullLocalStableWindowMs() {
+  return 8_000;
+}
+
+export function getLocalTakeoverCooldownMs() {
+  return 12_000;
+}
+
+export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
+  if (source === "remote-stream") {
+    return 0;
+  }
+
+  return source === "full-local" ? 8_000 : 12_000;
+}
+
 export function buildProgressiveTrackManifest(
   track: TrackMeta | null | undefined,
   availability: TrackAvailabilityAnnouncement | null | undefined
@@ -389,6 +412,57 @@ export function buildProgressiveHealthSnapshot(input: {
     startupReady,
     fallbackReason: input.fallbackReason
   } satisfies ProgressiveHealthSnapshot;
+}
+
+export function shouldEnableRemoteFirstLock(input: {
+  diagnostics: {
+    mediaCandidateType: string | null;
+    mediaProtocol: string | null;
+    currentRoundTripTimeMs: number | null;
+    availableOutgoingBitrateKbps: number | null;
+    packetsLost: number | null;
+    jitterMs: number | null;
+  } | null;
+}) {
+  const diagnostics = input.diagnostics;
+  if (!diagnostics) {
+    return false;
+  }
+
+  if (diagnostics.mediaCandidateType === "relay" || diagnostics.mediaProtocol === "tcp") {
+    return true;
+  }
+
+  if (
+    typeof diagnostics.currentRoundTripTimeMs === "number" &&
+    diagnostics.currentRoundTripTimeMs >= 180
+  ) {
+    return true;
+  }
+
+  if (
+    typeof diagnostics.availableOutgoingBitrateKbps === "number" &&
+    diagnostics.availableOutgoingBitrateKbps > 0 &&
+    diagnostics.availableOutgoingBitrateKbps <= 96
+  ) {
+    return true;
+  }
+
+  if (
+    typeof diagnostics.packetsLost === "number" &&
+    diagnostics.packetsLost >= 80
+  ) {
+    return true;
+  }
+
+  if (
+    typeof diagnostics.jitterMs === "number" &&
+    diagnostics.jitterMs >= 30
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export function getPriorityChunkIndexes(input: {

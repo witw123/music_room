@@ -8,6 +8,7 @@ import {
   getContiguousBufferedMs,
   getProgressiveEngineType,
   getPriorityChunkIndexes,
+  shouldEnableRemoteFirstLock,
   isStartupReady,
   isTakeoverReady,
   resolveSchedulerPolicy
@@ -109,6 +110,47 @@ describe("progressive playback helpers", () => {
         playbackPositionMs: 36_000
       })
     ).toBe(true);
+  });
+
+  it("locks remote-first on constrained relay or weak transport diagnostics", () => {
+    expect(
+      shouldEnableRemoteFirstLock({
+        diagnostics: {
+          mediaCandidateType: "relay",
+          mediaProtocol: "udp",
+          currentRoundTripTimeMs: 70,
+          availableOutgoingBitrateKbps: 320,
+          packetsLost: 0,
+          jitterMs: 4
+        }
+      })
+    ).toBe(true);
+
+    expect(
+      shouldEnableRemoteFirstLock({
+        diagnostics: {
+          mediaCandidateType: "host",
+          mediaProtocol: "udp",
+          currentRoundTripTimeMs: 240,
+          availableOutgoingBitrateKbps: 88,
+          packetsLost: 90,
+          jitterMs: 35
+        }
+      })
+    ).toBe(true);
+
+    expect(
+      shouldEnableRemoteFirstLock({
+        diagnostics: {
+          mediaCandidateType: "host",
+          mediaProtocol: "udp",
+          currentRoundTripTimeMs: 60,
+          availableOutgoingBitrateKbps: 320,
+          packetsLost: 0,
+          jitterMs: 3
+        }
+      })
+    ).toBe(false);
   });
 
   it("keeps current-track requests focused on the startup prefix", () => {

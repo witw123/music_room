@@ -241,10 +241,21 @@ function MeshStatusPanelBase({
                         </span>
                         <span>调度策略: {peer.progressivePlaybackStatus.schedulerPolicy ?? "未激活"}</span>
                         <span>启动就绪: {peer.progressivePlaybackStatus.startupReady ? "是" : "否"}</span>
+                        <span>
+                          远端主路锁定: {peer.progressivePlaybackStatus.remoteFirstLock ? "是" : "否"}
+                        </span>
+                        <span>
+                          完整本地可切: {peer.progressivePlaybackStatus.fullLocalReady ? "是" : "否"}
+                        </span>
                       </div>
                       {peer.progressivePlaybackStatus.fallbackReason ? (
                         <p className="mt-2 text-amber-300">
                           回退原因: {peer.progressivePlaybackStatus.fallbackReason}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.localTakeoverCooldownMs ? (
+                        <p className="mt-1 text-foreground-muted">
+                          本地接管冷却: {Math.ceil(peer.progressivePlaybackStatus.localTakeoverCooldownMs / 1000)}s
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.pendingPlaybackIntent ? (

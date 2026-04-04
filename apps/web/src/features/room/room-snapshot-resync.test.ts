@@ -148,4 +148,22 @@ describe("room snapshot resync controller", () => {
     expect(loadSnapshot).toHaveBeenCalledTimes(2);
     expect(reasons).toEqual(["socket-connect", "subscribe-ack"]);
   });
+
+  it("accepts realtime event and watchdog resync reasons", async () => {
+    const reasons: RoomSnapshotResyncReason[] = [];
+    const controller = createRoomSnapshotResyncController({
+      loadSnapshot: vi.fn().mockResolvedValue(buildSnapshot("room_1")),
+      applySnapshot: vi.fn(
+        (_roomId: string, _snapshot: RoomSnapshot, reason: RoomSnapshotResyncReason) => {
+          reasons.push(reason);
+        }
+      ),
+      onError: vi.fn()
+    });
+
+    await controller.request("room_1", "realtime-room-event");
+    await controller.request("room_1", "stale-watchdog");
+
+    expect(reasons).toEqual(["realtime-room-event", "stale-watchdog"]);
+  });
 });
