@@ -737,17 +737,76 @@ describe("SignalingGateway", () => {
     );
   });
 
-  it("keeps a disconnected member in reconnecting state during the grace window", async () => {
-    jest.useFakeTimers();
+  it("ignores stale room unsubscribe events from an older socket after the session has moved", async () => {
     const { gateway, roomService } = createGateway();
+    attachServerMock(gateway);
+
+    await gateway.handleRoomSubscribe(createClient({ id: "socket_new" }) as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host_new"
+    });
+    roomService.updatePeerPresence.mockClear();
+
+    gateway.handleRoomUnsubscribe(
+      createClient({
+        id: "socket_old",
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host_old",
+        isRealtimeAuthenticated: true
+      }) as never,
+      { roomId: "room_1" }
+    );
+
+    expect(roomService.updatePeerPresence).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale disconnect events from an older socket after the session has moved", async () => {
+    const { gateway, roomService } = createGateway();
+    attachServerMock(gateway);
+
+    await gateway.handleRoomSubscribe(createClient({ id: "socket_new" }) as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host_new"
+    });
+    roomService.updatePeerPresence.mockClear();
 
     gateway.handleDisconnect(
       createClient({
+        id: "socket_old",
         roomId: "room_1",
         sessionId: "guest_host",
-        peerId: "peer_host",
+        peerId: "peer_host_old",
         isRealtimeAuthenticated: true
       }) as never
+    );
+
+    expect(roomService.updatePeerPresence).not.toHaveBeenCalled();
+  });
+
+  it("keeps a disconnected member in reconnecting state during the grace window", async () => {
+    jest.useFakeTimers();
+    const { gateway, roomService } = createGateway();
+    attachServerMock(gateway);
+    const client = createClient({
+      id: "socket_host",
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      isRealtimeAuthenticated: true
+    });
+
+    await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+    roomService.updatePeerPresence.mockClear();
+
+    gateway.handleDisconnect(
+      client as never
     );
 
     expect(roomService.updatePeerPresence).toHaveBeenNthCalledWith(
@@ -800,14 +859,23 @@ describe("SignalingGateway", () => {
     const roomService = createRoomServiceMock(snapshot);
     const { gateway } = createGateway({ roomService });
     const { emit } = attachServerMock(gateway);
+    const client = createClient({
+      id: "socket_host",
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      isRealtimeAuthenticated: true
+    });
+
+    await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+    emit.mockClear();
 
     gateway.handleDisconnect(
-      createClient({
-        roomId: "room_1",
-        sessionId: "guest_host",
-        peerId: "peer_host",
-        isRealtimeAuthenticated: true
-      }) as never
+      client as never
     );
     await Promise.resolve();
     await Promise.resolve();

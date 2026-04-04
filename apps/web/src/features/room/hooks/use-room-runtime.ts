@@ -247,6 +247,7 @@ export function useRoomRuntime({
   const meshRef = useRef<P2PMesh | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const initialRecoveryAttemptRef = useRef<string | null>(null);
+  const initialRoomSnapshotResyncKeyRef = useRef<string | null>(null);
   const previousInitialRoomIdRef = useRef<string | null>(initialRoomId);
   const activeRouteRoomIdRef = useRef<string | null>(initialRoomId);
   const hostStreamRef = useRef<MediaStream | null>(null);
@@ -278,6 +279,11 @@ export function useRoomRuntime({
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
   const resetPlayerSurfaceRef = useRef(resetPlayerSurface);
+  const queueAvailabilityRef = useRef(queueAvailability);
+  const mergeLocalPieceAvailabilityRef = useRef(mergeLocalPieceAvailability);
+  const clearAvailabilityForPeerRef = useRef(clearAvailabilityForPeer);
+  const flushPendingAvailabilityRef = useRef(flushPendingAvailability);
+  const recordPeerDiagnosticRef = useRef(recordPeerDiagnostic);
 
   const resetRemoteAudioElement = useCallback(
     (stream: MediaStream | null) => {
@@ -360,6 +366,26 @@ export function useRoomRuntime({
   useEffect(() => {
     resetPlayerSurfaceRef.current = resetPlayerSurface;
   }, [resetPlayerSurface]);
+
+  useEffect(() => {
+    queueAvailabilityRef.current = queueAvailability;
+  }, [queueAvailability]);
+
+  useEffect(() => {
+    mergeLocalPieceAvailabilityRef.current = mergeLocalPieceAvailability;
+  }, [mergeLocalPieceAvailability]);
+
+  useEffect(() => {
+    clearAvailabilityForPeerRef.current = clearAvailabilityForPeer;
+  }, [clearAvailabilityForPeer]);
+
+  useEffect(() => {
+    flushPendingAvailabilityRef.current = flushPendingAvailability;
+  }, [flushPendingAvailability]);
+
+  useEffect(() => {
+    recordPeerDiagnosticRef.current = recordPeerDiagnostic;
+  }, [recordPeerDiagnostic]);
 
   const exitCurrentRoom = useCallback(
     (message: string) => {
@@ -830,6 +856,42 @@ export function useRoomRuntime({
     [recordPeerDiagnostic, setMediaConnectionState]
   );
 
+  const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
+  const scheduleRemotePlaybackRetryRef = useRef(scheduleRemotePlaybackRetry);
+  const syncHostMediaStreamRef = useRef(syncHostMediaStream);
+  const updateDataTransportStatsRef = useRef(updateDataTransportStats);
+  const updateMediaTransportStatsRef = useRef(updateMediaTransportStats);
+  const reportRealtimeFailureRef = useRef(reportRealtimeFailure);
+  const recordPieceTransferRef = useRef(recordPieceTransfer);
+
+  useEffect(() => {
+    requestRoomSnapshotResyncRef.current = requestRoomSnapshotResync;
+  }, [requestRoomSnapshotResync]);
+
+  useEffect(() => {
+    scheduleRemotePlaybackRetryRef.current = scheduleRemotePlaybackRetry;
+  }, [scheduleRemotePlaybackRetry]);
+
+  useEffect(() => {
+    syncHostMediaStreamRef.current = syncHostMediaStream;
+  }, [syncHostMediaStream]);
+
+  useEffect(() => {
+    updateDataTransportStatsRef.current = updateDataTransportStats;
+  }, [updateDataTransportStats]);
+
+  useEffect(() => {
+    updateMediaTransportStatsRef.current = updateMediaTransportStats;
+  }, [updateMediaTransportStats]);
+
+  useEffect(() => {
+    reportRealtimeFailureRef.current = reportRealtimeFailure;
+  }, [reportRealtimeFailure]);
+
+  useEffect(() => {
+    recordPieceTransferRef.current = recordPieceTransfer;
+  }, [recordPieceTransfer]);
+
   useEffect(() => {
     return () => {
       if (remotePlaybackRetryRef.current !== null) {
@@ -1155,7 +1217,7 @@ export function useRoomRuntime({
       });
     };
 
-    if (!roomSnapshot?.room.id || !hydrated) {
+    if (!roomSnapshot?.room.id || !hydrated || !iceConfigResolved) {
       return;
     }
 
@@ -1166,7 +1228,7 @@ export function useRoomRuntime({
     pieceTransferRatesRef.current.clear();
     const iceServers = getWebRTCIceServers(iceConfig);
     const emitPeerSignal = (payload: PeerSignalMessage) => {
-      recordPeerDiagnostic({
+      recordPeerDiagnosticRef.current({
         peerId: payload.toPeerId,
         channelKind: payload.channelKind,
         direction: "sent",
@@ -1188,7 +1250,7 @@ export function useRoomRuntime({
       socket.emit("peer.signal", payload);
     };
     const handleSignalFailure = (payload: PeerSignalMessage, error: unknown) => {
-      reportRealtimeFailure({
+      reportRealtimeFailureRef.current({
         peerId: payload.fromPeerId,
         channelKind: payload.channelKind,
         event: "signal-handle-failed",
@@ -1204,7 +1266,7 @@ export function useRoomRuntime({
       emitPeerSignal,
       {
         onPieceReceived: ({ peerId: sourcePeerId, trackId, chunkIndex, totalChunks, chunkSize, mimeType, payloadBytes }) => {
-          recordPieceTransfer({
+          recordPieceTransferRef.current({
             peerId: sourcePeerId,
             direction: "download",
             bytes: payloadBytes
@@ -1224,11 +1286,11 @@ export function useRoomRuntime({
             });
           }
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
-          mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks, chunkSize);
+          mergeLocalPieceAvailabilityRef.current(trackId, chunkIndex, totalChunks, chunkSize);
           scheduleTrackHydrationRef.current(trackId, mimeType, totalChunks);
         },
         onPieceSent: ({ peerId: targetPeerId, payloadBytes }) => {
-          recordPieceTransfer({
+          recordPieceTransferRef.current({
             peerId: targetPeerId,
             direction: "upload",
             bytes: payloadBytes
@@ -1238,7 +1300,7 @@ export function useRoomRuntime({
           chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
         },
         onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "data",
             direction: "local",
@@ -1262,7 +1324,7 @@ export function useRoomRuntime({
           });
         },
         onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "data",
             direction: "local",
@@ -1275,7 +1337,7 @@ export function useRoomRuntime({
           });
         },
         onDataChannelStateChange: ({ peerId: remotePeerId, state }) => {
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "data",
             direction: "local",
@@ -1284,7 +1346,7 @@ export function useRoomRuntime({
           });
         },
         onStatsSample: ({ peerId: remotePeerId, sample }) => {
-          updateDataTransportStats({
+          updateDataTransportStatsRef.current({
             peerId: remotePeerId,
             sample
           });
@@ -1312,7 +1374,7 @@ export function useRoomRuntime({
 
           if (remoteAudio.srcObject !== stream) {
             resetRemoteAudioElement(stream);
-            recordPeerDiagnostic({
+            recordPeerDiagnosticRef.current({
               peerId: "remote-media",
               channelKind: "media",
               direction: "local",
@@ -1332,11 +1394,11 @@ export function useRoomRuntime({
           }
 
           if (stream) {
-            scheduleRemotePlaybackRetry();
+            scheduleRemotePlaybackRetryRef.current();
           }
         },
         onConnectionStateChange: ({ state, connectedPeerIds }) => {
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: connectedPeerIds[0] ?? "remote-media",
             channelKind: "media",
             direction: "local",
@@ -1351,7 +1413,7 @@ export function useRoomRuntime({
 
           if (state === "connected") {
             setMediaConnectionState("buffering");
-            scheduleRemotePlaybackRetry();
+            scheduleRemotePlaybackRetryRef.current();
             return;
           }
 
@@ -1370,7 +1432,7 @@ export function useRoomRuntime({
           }
         },
         onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "media",
             direction: "local",
@@ -1384,7 +1446,7 @@ export function useRoomRuntime({
         },
         onRemoteTrack: ({ peerId: remotePeerId, trackId }) => {
           const now = new Date().toISOString();
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "media",
             direction: "local",
@@ -1401,7 +1463,7 @@ export function useRoomRuntime({
           });
         },
         onSourcePeerFailed: ({ peerId: remotePeerId, mediaEpoch }) => {
-          recordPeerDiagnostic({
+          recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "media",
             direction: "local",
@@ -1416,7 +1478,7 @@ export function useRoomRuntime({
           setMediaConnectionState("reconnecting");
         },
         onStatsSample: ({ peerId: remotePeerId, sample }) => {
-          updateMediaTransportStats({
+          updateMediaTransportStatsRef.current({
             peerId: remotePeerId,
             sample
           });
@@ -1431,7 +1493,7 @@ export function useRoomRuntime({
         .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId);
 
       void mesh.syncPeers(remotePeerIds).catch((error) => {
-        reportRealtimeFailure({
+        reportRealtimeFailureRef.current({
           peerId: "system",
           channelKind: "system",
           event: "mesh-resync-failed",
@@ -1443,11 +1505,7 @@ export function useRoomRuntime({
 
     const subscribeToRoom = (attempt = 0) => {
       const currentSession = activeSessionRef.current;
-      if (!currentSession?.userId || !peerId) {
-        if (attempt >= 20) {
-          return;
-        }
-
+      if (!socket.connected || !currentSession?.userId || !peerId) {
         if (subscribeRetryId !== null) {
           window.clearTimeout(subscribeRetryId);
         }
@@ -1473,9 +1531,9 @@ export function useRoomRuntime({
           startPresenceHeartbeat();
           resyncRealtimePeers();
           if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
-            void syncHostMediaStream();
+            void syncHostMediaStreamRef.current();
           }
-          void requestRoomSnapshotResync("subscribe-ack", roomId);
+          void requestRoomSnapshotResyncRef.current("subscribe-ack", roomId);
         }
       );
     };
@@ -1486,12 +1544,12 @@ export function useRoomRuntime({
 
     socket.on("connect", () => {
       subscribeToRoom();
-      flushPendingAvailability();
+      flushPendingAvailabilityRef.current();
       resyncRealtimePeers();
       if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
-        void syncHostMediaStream();
+        void syncHostMediaStreamRef.current();
       }
-      void requestRoomSnapshotResync("socket-connect", roomId);
+      void requestRoomSnapshotResyncRef.current("socket-connect", roomId);
       const joinCode = currentRoomRef.current?.room.joinCode;
       if (joinCode) {
         setStatusMessage(`已连接到房间 ${joinCode}。`);
@@ -1517,12 +1575,12 @@ export function useRoomRuntime({
         }
       }
 
-      flushPendingAvailability();
+      flushPendingAvailabilityRef.current();
       resyncRealtimePeers(snapshot.room.members);
       if (snapshot.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
         window.setTimeout(() => {
           if (activeRouteRoomIdRef.current === roomId) {
-            void syncHostMediaStream();
+            void syncHostMediaStreamRef.current();
           }
         }, 0);
       }
@@ -1556,7 +1614,7 @@ export function useRoomRuntime({
       if (playback.sourceSessionId === activeSessionRef.current?.userId) {
         window.setTimeout(() => {
           if (activeRouteRoomIdRef.current === roomId) {
-            void syncHostMediaStream();
+            void syncHostMediaStreamRef.current();
           }
         }, 0);
       }
@@ -1587,7 +1645,7 @@ export function useRoomRuntime({
         return;
       }
 
-      recordPeerDiagnostic({
+      recordPeerDiagnosticRef.current({
         peerId: payload.fromPeerId,
         channelKind: payload.channelKind,
         direction: "received",
@@ -1621,13 +1679,13 @@ export function useRoomRuntime({
       if (announcement.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
         return;
       }
-      queueAvailability(announcement);
+      queueAvailabilityRef.current(announcement);
     });
     socket.on("piece.availability.clear", ({ roomId: clearedRoomId, ownerPeerId }) => {
       if (clearedRoomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
         return;
       }
-      clearAvailabilityForPeer(ownerPeerId);
+      clearAvailabilityForPeerRef.current(ownerPeerId);
     });
     socket.on("room.session.replaced", ({ roomId: replacedRoomId }) => {
       if (replacedRoomId !== roomId) {
@@ -1655,7 +1713,7 @@ export function useRoomRuntime({
       exitAndStopPresence("这个房间已不可用，请返回音乐房重新加入。");
     });
     socket.on("connect_error", (error) => {
-      recordPeerDiagnostic({
+      recordPeerDiagnosticRef.current({
         peerId: "system",
         channelKind: "system",
         direction: "local",
@@ -1721,15 +1779,7 @@ export function useRoomRuntime({
     activeSessionRef,
     currentRoomRef,
     uploadedTrackIdsRef,
-    mergeLocalPieceAvailability,
-    recordPeerDiagnostic,
-    flushPendingAvailability,
-    queueAvailability,
-    clearAvailabilityForPeer,
     clearHostMediaSyncRetry,
-    requestRoomSnapshotResync,
-    scheduleRemotePlaybackRetry,
-    syncHostMediaStream,
     startPresenceHeartbeat,
     stopPresenceHeartbeat,
     chunkSchedulerRef,
@@ -1740,44 +1790,7 @@ export function useRoomRuntime({
     setMediaConnectedPeers,
     setMediaConnectionState,
     exitCurrentRoom,
-    setStatusMessage,
-    updateDataTransportStats,
-    updateMediaTransportStats,
-    reportRealtimeFailure
-  ]);
-
-  useEffect(() => {
-    if (!roomSnapshot?.room.id || !activeSession?.userId || !peerId) {
-      return;
-    }
-
-    const socket = socketRef.current;
-    if (!socket?.connected) {
-      return;
-    }
-
-    socket.emit(
-      "room.subscribe",
-      {
-        roomId: roomSnapshot.room.id,
-        sessionId: activeSession.userId,
-        peerId
-      },
-      (response?: { ok?: boolean }) => {
-        if (!response?.ok) {
-          return;
-        }
-
-        startPresenceHeartbeat();
-        void requestRoomSnapshotResync("subscribe-ack", roomSnapshot.room.id);
-      }
-    );
-  }, [
-    roomSnapshot?.room.id,
-    activeSession?.userId,
-    peerId,
-    requestRoomSnapshotResync,
-    startPresenceHeartbeat
+    setStatusMessage
   ]);
 
   useEffect(() => {
@@ -1815,23 +1828,9 @@ export function useRoomRuntime({
       return;
     }
 
-    socket.emit(
-      "room.subscribe",
-      {
-        roomId: roomSnapshot.room.id,
-        sessionId: activeSession.userId,
-        peerId
-      },
-      (response?: { ok?: boolean }) => {
-        if (!response?.ok) {
-          return;
-        }
-
-        startPresenceHeartbeat();
-        emitPresence();
-        void requestRoomSnapshotResync("subscribe-ack", roomSnapshot.room.id);
-      }
-    );
+    startPresenceHeartbeat();
+    emitPresence();
+    void requestRoomSnapshotResync("subscribe-ack", roomSnapshot.room.id);
   }, [
     roomSnapshot?.room.id,
     roomSnapshot?.room.members,
@@ -1841,6 +1840,36 @@ export function useRoomRuntime({
     emitPresence,
     requestRoomSnapshotResync,
     startPresenceHeartbeat
+  ]);
+
+  useEffect(() => {
+    if (
+      !initialRoomId ||
+      !hydrated ||
+      !activeSession?.userId ||
+      isNavigatingRoomExit ||
+      roomSnapshot?.room.id !== initialRoomId
+    ) {
+      if (!initialRoomId || roomSnapshot?.room.id !== initialRoomId) {
+        initialRoomSnapshotResyncKeyRef.current = null;
+      }
+      return;
+    }
+
+    const resyncKey = `${activeSession.userId}:${initialRoomId}`;
+    if (initialRoomSnapshotResyncKeyRef.current === resyncKey) {
+      return;
+    }
+    initialRoomSnapshotResyncKeyRef.current = resyncKey;
+
+    void requestRoomSnapshotResync("subscribe-ack", initialRoomId);
+  }, [
+    initialRoomId,
+    hydrated,
+    activeSession?.userId,
+    isNavigatingRoomExit,
+    roomSnapshot?.room.id,
+    requestRoomSnapshotResync
   ]);
 
   useEffect(() => {

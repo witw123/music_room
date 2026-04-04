@@ -559,22 +559,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { roomId: string }
   ) {
-    this.unregisterPeerSocket(payload.roomId, client.data.peerId as string | undefined, client.id);
-    this.unregisterSessionSocket(payload.roomId, client.data.sessionId as string | undefined, client.id);
-    if (client.data.sessionId) {
-      this.cancelPendingDisconnectCleanup(payload.roomId, client.data.sessionId as string);
+    const sessionId = client.data.sessionId as string | undefined;
+    const peerId = client.data.peerId as string | undefined;
+    const isActiveSessionSocket = this.isActiveSessionSocket(payload.roomId, sessionId, client.id);
+
+    this.unregisterPeerSocket(payload.roomId, peerId, client.id);
+    this.unregisterSessionSocket(payload.roomId, sessionId, client.id);
+    if (sessionId && isActiveSessionSocket) {
+      this.cancelPendingDisconnectCleanup(payload.roomId, sessionId);
     }
     client.leave(payload.roomId);
-    if (client.data.sessionId) {
+    if (sessionId && isActiveSessionSocket) {
       void this.updatePeerPresence(
         payload.roomId,
-        client.data.sessionId,
+        sessionId,
         null,
         "offline"
       );
     }
-    if (client.data.peerId) {
-      this.clearPeerAvailability(payload.roomId, client.data.peerId);
+    if (peerId) {
+      this.clearPeerAvailability(payload.roomId, peerId);
     }
     client.data.roomId = undefined;
     client.data.sessionId = undefined;
@@ -587,10 +591,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const roomId = client.data.roomId as string | undefined;
     const sessionId = client.data.sessionId as string | undefined;
     const peerId = client.data.peerId as string | undefined;
+    const isActiveSessionSocket = this.isActiveSessionSocket(roomId, sessionId, client.id);
 
     this.unregisterPeerSocket(roomId, peerId, client.id);
     this.unregisterSessionSocket(roomId, sessionId, client.id);
-    if (roomId && sessionId) {
+    if (roomId && sessionId && isActiveSessionSocket) {
       void this.updatePeerPresence(roomId, sessionId, null, "reconnecting");
       this.scheduleDisconnectCleanup(roomId, sessionId, peerId);
     }
@@ -761,6 +766,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private async finalizePeerDisconnect(roomId: string, sessionId: string, peerId?: string) {
+    if (this.activeSessionsByRoom.get(roomId)?.has(sessionId)) {
+      return;
+    }
+
     await this.updatePeerPresence(roomId, sessionId, null, "offline");
     if (peerId) {
       this.clearPeerAvailability(roomId, peerId);
@@ -769,6 +778,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   private disconnectCleanupKey(roomId: string, sessionId: string) {
     return `${roomId}:${sessionId}`;
+  }
+
+  private isActiveSessionSocket(roomId?: string, sessionId?: string, socketId?: string) {
+    if (!roomId || !sessionId || !socketId) {
+      return false;
+    }
+
+    return this.activeSessionsByRoom.get(roomId)?.get(sessionId)?.socketId === socketId;
   }
 
   private registerPeerSocket(roomId?: string, peerId?: string, socketId?: string) {
