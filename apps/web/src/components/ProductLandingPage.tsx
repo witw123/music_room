@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomeRoomSection } from "@/components/HomeRoomSection";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { githubReleasesUrl } from "@/lib/client-shell";
@@ -161,6 +162,8 @@ export function ProductLandingPage() {
             </div>
           </div>
         </div>
+
+        <HomeRoomSection />
 
         <section className="mb-40 grid w-full grid-cols-2 gap-8 border-y border-white/5 bg-[#020202] py-12 md:grid-cols-4">
           {[
