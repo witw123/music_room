@@ -99,16 +99,16 @@ function BottomPlayerBase({
   );
 
   const togglePlayback = useCallback(() => {
-    startTransition(() => void (isPlaying ? onPause() : onPlay()));
-  }, [isPlaying, onPause, onPlay, startTransition]);
+    void (isPlaying ? onPause() : onPlay());
+  }, [isPlaying, onPause, onPlay]);
 
   const playPrev = useCallback(() => {
-    startTransition(() => void onPrev());
-  }, [onPrev, startTransition]);
+    void onPrev();
+  }, [onPrev]);
 
   const playNext = useCallback(() => {
-    startTransition(() => void onNext());
-  }, [onNext, startTransition]);
+    void onNext();
+  }, [onNext]);
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)+0.55rem)] lg:pt-2.5">

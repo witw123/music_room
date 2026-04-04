@@ -120,7 +120,7 @@ function QueuePanelBase({
                     size="sm"
                     className={isCurrent ? "pointer-events-none opacity-0" : ""}
                     disabled={!canControlPlayback || isCurrent}
-                    onClick={() => startTransition(() => void onPlayQueueItem(item.id))}
+                    onClick={() => void onPlayQueueItem(item.id)}
                     type="button"
                   >
                     播放

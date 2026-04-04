@@ -140,7 +140,7 @@ export function PlayerQueueDrawer({
                         size="icon"
                         className="w-8 h-8 hover:text-accent"
                         disabled={!canControlPlayback || isCurrent}
-                        onClick={() => startTransition(() => void onPlayQueueItem(item.id))}
+                        onClick={() => void onPlayQueueItem(item.id)}
                         title="播放"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>

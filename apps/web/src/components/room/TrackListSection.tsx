@@ -116,7 +116,7 @@ function TrackListSectionBase({
                       variant="ghost"
                       className="h-10 w-full shrink-0 px-0 hover:bg-accent/10 hover:text-accent sm:w-12"
                       disabled={!canControlPlayback}
-                      onClick={() => startTransition(() => void onPlayTrack(track.id))}
+                      onClick={() => void onPlayTrack(track.id)}
                       type="button"
                       title="立即播放"
                     >
