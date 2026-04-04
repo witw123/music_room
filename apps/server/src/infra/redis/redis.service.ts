@@ -117,8 +117,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async subscribe(channel: string, handler: (payload: unknown) => void) {
-    this.assertReady(this.subscriber, "subscriber");
-
+    // ioredis queues SUBSCRIBE commands until the lazy connection is actually ready.
     const handlers = this.messageHandlers.get(channel) ?? new Set<(payload: unknown) => void>();
     const shouldSubscribe = handlers.size === 0;
     handlers.add(handler);
@@ -148,7 +147,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   private async connectSafely(client: Redis, label: string) {
     try {
-      await client.connect();
+      if (client.status === "wait" || client.status === "close" || client.status === "end") {
+        await client.connect();
+      }
       this.logger.log(`Redis ${label} connected (mode=${this.mode})`);
     } catch (error) {
       this.logger.warn(`Redis ${label} unavailable; continuing without pub/sub. ${String(error)}`);
