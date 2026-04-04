@@ -4,6 +4,7 @@ import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { AuthSession, PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import { musicRoomApi } from "@/lib/music-room-api";
 import {
+  mergeRoomSnapshot,
   shouldReplacePlaybackSnapshot,
   toUserFacingError
 } from "@/lib/music-room-ui";
@@ -72,6 +73,56 @@ export function useRoomActions({
       );
     },
     [setRoomSnapshot]
+  );
+
+  const syncRoomSnapshot = useCallback(
+    async (roomId: string) => {
+      const snapshot = await musicRoomApi.getRoom(roomId);
+      setRoomSnapshot((current) =>
+        current?.room.id && current.room.id !== roomId
+          ? current
+          : mergeRoomSnapshot(current, snapshot)
+      );
+      return snapshot;
+    },
+    [setRoomSnapshot]
+  );
+
+  const runPlaybackMutation = useCallback(
+    async (
+      roomId: string,
+      expectedVersion: number,
+      requestPlayback: (nextExpectedVersion: number) => Promise<PlaybackSnapshot>
+    ) => {
+      let nextExpectedVersion = expectedVersion;
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const playback = await requestPlayback(nextExpectedVersion);
+          applyPlaybackLocally(playback);
+          return playback;
+        } catch (error) {
+          const isVersionConflict =
+            error instanceof Error && error.message.includes("Playback state version conflict");
+
+          if (!isVersionConflict || attempt === 1) {
+            setStatusMessage(toUserFacingError(error));
+            return null;
+          }
+
+          try {
+            const snapshot = await syncRoomSnapshot(roomId);
+            nextExpectedVersion = snapshot.room.playback.queueVersion;
+          } catch (refreshError) {
+            setStatusMessage(toUserFacingError(refreshError));
+            return null;
+          }
+        }
+      }
+
+      return null;
+    },
+    [applyPlaybackLocally, setStatusMessage, syncRoomSnapshot]
   );
 
   const leaveRoom = useCallback(async () => {
@@ -221,18 +272,18 @@ export function useRoomActions({
         return;
       }
 
-      try {
-        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-          action: "play",
-          trackId,
-          expectedVersion: roomSnapshot.room.playback.queueVersion
-        });
-        applyPlaybackLocally(playback);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
+      await runPlaybackMutation(
+        roomSnapshot.room.id,
+        roomSnapshot.room.playback.queueVersion,
+        (expectedVersion) =>
+          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "play",
+            trackId,
+            expectedVersion
+          })
+      );
     },
-    [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]
+    [roomSnapshot, activeSession, runPlaybackMutation]
   );
 
   const playQueueItem = useCallback(
@@ -241,18 +292,18 @@ export function useRoomActions({
         return;
       }
 
-      try {
-        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-          action: "play",
-          queueItemId,
-          expectedVersion: roomSnapshot.room.playback.queueVersion
-        });
-        applyPlaybackLocally(playback);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
+      await runPlaybackMutation(
+        roomSnapshot.room.id,
+        roomSnapshot.room.playback.queueVersion,
+        (expectedVersion) =>
+          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "play",
+            queueItemId,
+            expectedVersion
+          })
+      );
     },
-    [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]
+    [roomSnapshot, activeSession, runPlaybackMutation]
   );
 
   const pauseTrack = useCallback(
@@ -261,23 +312,22 @@ export function useRoomActions({
         return;
       }
 
-      try {
-        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-          action: "pause",
-          positionMs,
-          expectedVersion: roomSnapshot.room.playback.queueVersion
-        });
-        applyPlaybackLocally(playback);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
+      await runPlaybackMutation(
+        roomSnapshot.room.id,
+        roomSnapshot.room.playback.queueVersion,
+        (expectedVersion) =>
+          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "pause",
+            positionMs,
+            expectedVersion
+          })
+      );
     },
     [
       roomSnapshot,
       activeSession,
       getCurrentPlaybackPositionMs,
-      applyPlaybackLocally,
-      setStatusMessage
+      runPlaybackMutation
     ]
   );
 
@@ -286,32 +336,32 @@ export function useRoomActions({
       return;
     }
 
-    try {
-      const nextPlayback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "prev",
-        expectedVersion: roomSnapshot.room.playback.queueVersion
-      });
-      applyPlaybackLocally(nextPlayback);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }, [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]);
+    await runPlaybackMutation(
+      roomSnapshot.room.id,
+      roomSnapshot.room.playback.queueVersion,
+      (expectedVersion) =>
+        musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          action: "prev",
+          expectedVersion
+        })
+    );
+  }, [roomSnapshot, activeSession, runPlaybackMutation]);
 
   const nextTrack = useCallback(async () => {
     if (!roomSnapshot || !activeSession) {
       return;
     }
 
-    try {
-      const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-        action: "next",
-        expectedVersion: roomSnapshot.room.playback.queueVersion
-      });
-      applyPlaybackLocally(playback);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }, [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]);
+    await runPlaybackMutation(
+      roomSnapshot.room.id,
+      roomSnapshot.room.playback.queueVersion,
+      (expectedVersion) =>
+        musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+          action: "next",
+          expectedVersion
+        })
+    );
+  }, [roomSnapshot, activeSession, runPlaybackMutation]);
 
   const savePlaylistFromQueue = useCallback(
     async (title: string) => {
@@ -446,18 +496,18 @@ export function useRoomActions({
         return;
       }
 
-      try {
-        const playback = await musicRoomApi.updatePlayback(roomSnapshot.room.id, {
-          action: "seek",
-          positionMs,
-          expectedVersion: roomSnapshot.room.playback.queueVersion
-        });
-        applyPlaybackLocally(playback);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
+      await runPlaybackMutation(
+        roomSnapshot.room.id,
+        roomSnapshot.room.playback.queueVersion,
+        (expectedVersion) =>
+          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+            action: "seek",
+            positionMs,
+            expectedVersion
+          })
+      );
     },
-    [roomSnapshot, activeSession, applyPlaybackLocally, setStatusMessage]
+    [roomSnapshot, activeSession, runPlaybackMutation]
   );
 
   const handleEnded = useCallback(async () => {

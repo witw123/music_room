@@ -16,7 +16,7 @@ import {
   getCachedTrackAssets,
   pruneCachedTracks
 } from "@/lib/indexeddb";
-import { removeTracksFromUploads } from "@/lib/music-room-ui";
+import { mergeRoomSnapshot, removeTracksFromUploads } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type UploadedTrack } from "@/features/upload/audio-utils";
 
@@ -182,6 +182,7 @@ export function useTrackUploads(options: {
       return;
     }
 
+    const roomId = roomSnapshot.room.id;
     const nextUploads: Record<string, UploadedTrack> = {};
     const nextTracks: TrackMeta[] = [];
     const currentTracksByHash = new Map(
@@ -251,26 +252,30 @@ export function useTrackUploads(options: {
     }
 
     setUploadedTracks((current) => ({ ...current, ...nextUploads }));
-    setRoomSnapshot((current) =>
-      current
-        ? {
-            ...current,
-            tracks: [
-              ...nextTracks,
-              ...current.tracks.filter(
-                (track) => !nextTracks.some((nextTrack) => nextTrack.id === track.id)
-              )
-            ],
-            room: {
-              ...current.room,
-              playback: {
-                ...current.room.playback,
-                queueVersion: current.room.playback.queueVersion + nextTracks.length
+    if (nextTracks.length > 0) {
+      try {
+        const latestSnapshot = await musicRoomApi.getRoom(roomId);
+        setRoomSnapshot((current) =>
+          current?.room.id && current.room.id !== roomId
+            ? current
+            : mergeRoomSnapshot(current, latestSnapshot)
+        );
+      } catch {
+        setRoomSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                tracks: [
+                  ...nextTracks,
+                  ...current.tracks.filter(
+                    (track) => !nextTracks.some((nextTrack) => nextTrack.id === track.id)
+                  )
+                ]
               }
-            }
-          }
-        : current
-    );
+            : current
+        );
+      }
+    }
     await trimLocalCache([
       ...roomSnapshot.tracks.map((track) => track.id),
       ...Object.keys(nextUploads)
