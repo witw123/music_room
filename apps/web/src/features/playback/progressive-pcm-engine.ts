@@ -1,4 +1,4 @@
-import { getCachedPiecesForTrack } from "@/lib/indexeddb";
+import { getCachedPiece } from "@/lib/indexeddb";
 import type { ProgressiveTrackManifest } from "./progressive-playback";
 import {
   extractFlacPacketsFromBitstream,
@@ -42,7 +42,9 @@ export class ProgressivePcmEngine {
   private status: EngineStatus = "idle";
   private parsedOffset = 0;
   private nextSampleIndex = 0;
+  private contiguousChunkCount = 0;
   private contiguousByteLength = 0;
+  private contiguousBytes = new Uint8Array(0);
   private decodedSegments: DecodedSegment[] = [];
   private scheduledSegments: ScheduledSegment[] = [];
   private playing = false;
@@ -50,6 +52,8 @@ export class ProgressivePcmEngine {
   private anchorTrackTimeSec = 0;
   private anchorContextTimeSec = 0;
   private volume = 1;
+  private syncInFlight = false;
+  private syncQueued = false;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -126,57 +130,24 @@ export class ProgressivePcmEngine {
       return;
     }
 
-    const pieces = await getCachedPiecesForTrack(this.manifest.trackId, this.peerId);
-    if (pieces.length === 0) {
+    if (this.syncInFlight) {
+      this.syncQueued = true;
       return;
     }
 
-    const contiguousBytes = buildContiguousPieceBuffer(pieces);
-    if (!contiguousBytes || contiguousBytes.byteLength <= this.contiguousByteLength) {
-      return;
-    }
-
-    this.contiguousByteLength = contiguousBytes.byteLength;
-    const extraction = extractFlacPacketsFromBitstream({
-      bytes: contiguousBytes,
-      startOffset: this.parsedOffset,
-      nextSampleIndex: this.nextSampleIndex,
-      finalChunk: pieces.length >= this.manifest.totalChunks
-    });
-
-    if (!extraction.streamInfo) {
-      return;
-    }
-
-    if (!this.streamInfo) {
-      this.streamInfo = extraction.streamInfo;
-    }
-
-    const decoderReady = await this.ensureDecoder(extraction.streamInfo);
-    if (!decoderReady || !this.decoder) {
-      this.status = "failed";
-      return;
-    }
-
-    const EncodedAudioChunkCtor = getEncodedAudioChunkCtor();
-    if (!EncodedAudioChunkCtor) {
-      this.status = "failed";
-      return;
-    }
-
-    for (const packet of extraction.packets) {
-      this.decoder.decode(
-        new EncodedAudioChunkCtor({
-          type: "key",
-          timestamp: packet.timestampUs,
-          duration: packet.durationUs,
-          data: packet.data
-        })
+    this.syncInFlight = true;
+    try {
+      do {
+        this.syncQueued = false;
+        await this.performSync();
+      } while (
+        this.syncQueued &&
+        this.status !== "destroyed" &&
+        this.status !== "failed"
       );
+    } finally {
+      this.syncInFlight = false;
     }
-
-    this.parsedOffset = extraction.nextOffset;
-    this.nextSampleIndex = extraction.nextSampleIndex;
   }
 
   async syncPlayback(expectedSeconds: number, isPlaying: boolean): Promise<PcmEngineSyncResult> {
@@ -262,9 +233,13 @@ export class ProgressivePcmEngine {
     this.gainNode = null;
     this.streamInfo = null;
     this.decodedSegments = [];
+    this.contiguousChunkCount = 0;
     this.parsedOffset = 0;
     this.nextSampleIndex = 0;
     this.contiguousByteLength = 0;
+    this.contiguousBytes = new Uint8Array(0);
+    this.syncInFlight = false;
+    this.syncQueued = false;
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
@@ -325,6 +300,95 @@ export class ProgressivePcmEngine {
       this.status = "failed";
       return false;
     }
+  }
+
+  private async performSync() {
+    const appendedBytes = await this.appendAvailableContiguousPieces();
+    if (!appendedBytes) {
+      return;
+    }
+
+    const extraction = extractFlacPacketsFromBitstream({
+      bytes: this.contiguousBytes.subarray(0, this.contiguousByteLength),
+      startOffset: this.parsedOffset,
+      nextSampleIndex: this.nextSampleIndex,
+      finalChunk: this.contiguousChunkCount >= this.manifest.totalChunks
+    });
+
+    if (!extraction.streamInfo) {
+      return;
+    }
+
+    if (!this.streamInfo) {
+      this.streamInfo = extraction.streamInfo;
+    }
+
+    const decoderReady = await this.ensureDecoder(extraction.streamInfo);
+    if (!decoderReady || !this.decoder) {
+      this.status = "failed";
+      return;
+    }
+
+    const EncodedAudioChunkCtor = getEncodedAudioChunkCtor();
+    if (!EncodedAudioChunkCtor) {
+      this.status = "failed";
+      return;
+    }
+
+    for (const packet of extraction.packets) {
+      this.decoder.decode(
+        new EncodedAudioChunkCtor({
+          type: "key",
+          timestamp: packet.timestampUs,
+          duration: packet.durationUs,
+          data: packet.data
+        })
+      );
+    }
+
+    this.parsedOffset = extraction.nextOffset;
+    this.nextSampleIndex = extraction.nextSampleIndex;
+  }
+
+  private async appendAvailableContiguousPieces() {
+    let appended = false;
+
+    while (this.contiguousChunkCount < this.manifest.totalChunks) {
+      const piece = await getCachedPiece(
+        this.manifest.trackId,
+        this.peerId,
+        this.contiguousChunkCount
+      );
+      if (!piece) {
+        break;
+      }
+
+      this.appendContiguousBytes(piece.payload);
+      this.contiguousChunkCount += 1;
+      appended = true;
+    }
+
+    return appended;
+  }
+
+  private appendContiguousBytes(payload: ArrayBuffer) {
+    const nextBytes = new Uint8Array(payload);
+    const nextLength = this.contiguousByteLength + nextBytes.byteLength;
+    if (this.contiguousBytes.byteLength < nextLength) {
+      let nextCapacity = Math.max(this.contiguousBytes.byteLength, 256 * 1024);
+      while (nextCapacity < nextLength) {
+        nextCapacity *= 2;
+      }
+
+      const grownBuffer = new Uint8Array(nextCapacity);
+      if (this.contiguousByteLength > 0) {
+        grownBuffer.set(this.contiguousBytes.subarray(0, this.contiguousByteLength));
+      }
+      this.contiguousBytes = grownBuffer;
+    }
+
+    this.contiguousBytes.set(nextBytes, this.contiguousByteLength);
+    this.contiguousByteLength = nextLength;
   }
 
   private createDecodedSegment(audioData: unknown): DecodedSegment | null {
@@ -497,40 +561,6 @@ export class ProgressivePcmEngine {
       return stillActive;
     });
   }
-}
-
-function buildContiguousPieceBuffer(
-  pieces: Array<{
-    chunkIndex: number;
-    payload: ArrayBuffer;
-  }>
-) {
-  const orderedPieces = [...pieces].sort((left, right) => left.chunkIndex - right.chunkIndex);
-  const contiguousPieces: Uint8Array[] = [];
-  let expectedChunkIndex = 0;
-
-  for (const piece of orderedPieces) {
-    if (piece.chunkIndex !== expectedChunkIndex) {
-      break;
-    }
-
-    contiguousPieces.push(new Uint8Array(piece.payload.slice(0)));
-    expectedChunkIndex += 1;
-  }
-
-  if (contiguousPieces.length === 0) {
-    return null;
-  }
-
-  const totalLength = contiguousPieces.reduce((sum, piece) => sum + piece.byteLength, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const piece of contiguousPieces) {
-    result.set(piece, offset);
-    offset += piece.byteLength;
-  }
-
-  return result;
 }
 
 function getAudioContextCtor() {

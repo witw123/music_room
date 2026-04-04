@@ -282,6 +282,100 @@ describe("music-room-ui helpers", () => {
     expect(merged.room.presenceRevision).toBe(6);
   });
 
+  it("applies incoming library changes even when presence and playback are unchanged", () => {
+    const current = {
+      room: {
+        id: "room_1",
+        hostId: "host",
+        joinCode: "ABC123",
+        visibility: "public" as const,
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host" as const,
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online" as const
+          }
+        ],
+        presenceRevision: 3,
+        playback: {
+          status: "paused" as const,
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 4,
+          mediaEpoch: 1
+        }
+      },
+      tracks: [{ id: "track_old" }],
+      queue: [{ id: "queue_old" }],
+      playlists: []
+    };
+    const incoming = {
+      room: {
+        ...current.room,
+        members: [...current.room.members],
+        playback: { ...current.room.playback }
+      },
+      tracks: [{ id: "track_new" }],
+      queue: [{ id: "queue_new" }],
+      playlists: []
+    };
+
+    const merged = mergeRoomSnapshot(current as never, incoming as never);
+
+    expect(merged.tracks).toEqual(incoming.tracks);
+    expect(merged.queue).toEqual(incoming.queue);
+    expect(merged.room.members).toEqual(current.room.members);
+    expect(merged.room.playback).toEqual(current.room.playback);
+  });
+
+  it("replaces the snapshot when an incoming full snapshot belongs to another room", () => {
+    const current = {
+      room: {
+        id: "room_old",
+        hostId: "host",
+        joinCode: "OLD123",
+        visibility: "public" as const,
+        members: [],
+        presenceRevision: 2,
+        playback: {
+          status: "paused" as const,
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: "host",
+          sourcePeerId: null,
+          sourceTrackId: null,
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 2,
+          mediaEpoch: 0
+        }
+      },
+      tracks: [{ id: "track_old" }],
+      queue: [{ id: "queue_old" }],
+      playlists: []
+    };
+    const incoming = {
+      room: {
+        ...current.room,
+        id: "room_new",
+        joinCode: "NEW123"
+      },
+      tracks: [{ id: "track_new" }],
+      queue: [{ id: "queue_new" }],
+      playlists: [{ id: "playlist_new" }]
+    };
+
+    expect(mergeRoomSnapshot(current as never, incoming as never)).toEqual(incoming);
+  });
+
   it("ignores identical playback snapshots at the same version", () => {
     const current = {
       status: "playing" as const,

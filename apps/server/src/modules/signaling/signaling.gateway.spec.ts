@@ -187,6 +187,38 @@ describe("SignalingGateway", () => {
     expect(client.emit).toHaveBeenCalledWith("room.snapshot", snapshot);
   });
 
+  it("leaves the previous room and clears its presence when the same socket subscribes to another room", async () => {
+    const { gateway, roomService } = createGateway();
+    const client = createClient({
+      roomId: "room_old",
+      sessionId: "guest_host",
+      peerId: "peer_old",
+      isRealtimeAuthenticated: true
+    });
+
+    await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+
+    expect(client.leave).toHaveBeenCalledWith("room_old");
+    expect(roomService.updatePeerPresence).toHaveBeenNthCalledWith(
+      1,
+      "room_old",
+      "guest_host",
+      null,
+      "offline"
+    );
+    expect(roomService.updatePeerPresence).toHaveBeenNthCalledWith(
+      2,
+      "room_1",
+      "guest_host",
+      "peer_host",
+      "online"
+    );
+  });
+
   it("emits room.snapshot.missing when the room no longer exists", async () => {
     const { gateway } = createGateway({
       roomService: {

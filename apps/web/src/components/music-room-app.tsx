@@ -8,7 +8,7 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import { ChunkScheduler, useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { mergeRoomSnapshot, toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
@@ -378,7 +378,11 @@ export function MusicRoomApp({
       return;
     }
 
-    setRoomSnapshot((current) => current ?? handoffSnapshot);
+    setRoomSnapshot((current) =>
+      !current || current.room.id !== handoffSnapshot.room.id
+        ? handoffSnapshot
+        : mergeRoomSnapshot(current, handoffSnapshot)
+    );
   }, [initialRoomId]);
 
   useEffect(() => {

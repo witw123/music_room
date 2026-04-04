@@ -160,6 +160,10 @@ export function mergeRoomSnapshot(
     return incoming;
   }
 
+  if (current.room.id !== incoming.room.id) {
+    return incoming;
+  }
+
   const acceptPresence = shouldAcceptPresenceSnapshot(
     current.room.members,
     getPresenceRevision(current.room),
@@ -170,10 +174,6 @@ export function mergeRoomSnapshot(
     current.room.playback,
     incoming.room.playback
   );
-
-  if (!acceptPresence && !acceptPlayback) {
-    return current;
-  }
 
   return {
     ...incoming,

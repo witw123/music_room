@@ -188,6 +188,8 @@ export function useRoomRuntime({
   const meshRef = useRef<P2PMesh | null>(null);
   const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const initialRecoveryAttemptRef = useRef<string | null>(null);
+  const previousInitialRoomIdRef = useRef<string | null>(initialRoomId);
+  const activeRouteRoomIdRef = useRef<string | null>(initialRoomId);
   const hostStreamRef = useRef<MediaStream | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
@@ -240,6 +242,38 @@ export function useRoomRuntime({
   useEffect(() => {
     resetPlayerSurfaceRef.current = resetPlayerSurface;
   }, [resetPlayerSurface]);
+
+  useEffect(() => {
+    activeRouteRoomIdRef.current = initialRoomId;
+
+    if (!workspaceOnly || !initialRoomId) {
+      previousInitialRoomIdRef.current = initialRoomId;
+      return;
+    }
+
+    if (previousInitialRoomIdRef.current === initialRoomId) {
+      return;
+    }
+
+    previousInitialRoomIdRef.current = initialRoomId;
+    initialRecoveryAttemptRef.current = null;
+    setSuppressRoomRecovery(false);
+    setIsRecoveringRoom(false);
+    setIsNavigatingRoomExit(false);
+    resetPlayerSurfaceRef.current();
+
+    if (roomSnapshot?.room.id && roomSnapshot.room.id !== initialRoomId) {
+      setRoomSnapshot(null);
+    }
+  }, [
+    workspaceOnly,
+    initialRoomId,
+    roomSnapshot?.room.id,
+    setIsNavigatingRoomExit,
+    setIsRecoveringRoom,
+    setRoomSnapshot,
+    setSuppressRoomRecovery
+  ]);
 
   const scheduleRemotePlaybackRetry = useCallback(
     (attempt = 0) => {
@@ -749,8 +783,14 @@ export function useRoomRuntime({
 
   useEffect(() => {
     const applyPlaybackPatch = (playback: RoomSnapshot["room"]["playback"]) => {
+      if (activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
       setRoomSnapshot((current) =>
-        current && shouldReplacePlaybackSnapshot(current.room.playback, playback)
+        current &&
+        current.room.id === roomId &&
+        shouldReplacePlaybackSnapshot(current.room.playback, playback)
           ? {
               ...current,
               room: {
@@ -766,9 +806,14 @@ export function useRoomRuntime({
       playback: RoomSnapshot["room"]["playback"],
       presenceRevision: number
     ) => {
+      if (activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
       setRoomSnapshot((current) => {
         if (
           !current ||
+          current.room.id !== roomId ||
           !shouldAcceptPresenceSnapshot(
             current.room.members,
             getPresenceRevision(current.room),
@@ -1109,7 +1154,15 @@ export function useRoomRuntime({
     let didReplayLocalAvailability = false;
 
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
-      setRoomSnapshot((current) => mergeRoomSnapshot(current, snapshot));
+      if (snapshot.room.id !== roomId || activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
+      setRoomSnapshot((current) =>
+        current?.room.id && current.room.id !== roomId
+          ? current
+          : mergeRoomSnapshot(current, snapshot)
+      );
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
@@ -1124,8 +1177,12 @@ export function useRoomRuntime({
       applyPlaybackPatch(playback);
     });
     socket.on("room.queue.patch", ({ queue, playback }) => {
+      if (activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
       setRoomSnapshot((current) =>
-        current
+        current && current.room.id === roomId
           ? {
               ...current,
               queue,
@@ -1143,8 +1200,12 @@ export function useRoomRuntime({
       applyPresencePatch(members, playback, presenceRevision);
     });
     socket.on("room.library.patch", ({ tracks, queue, playback }) => {
+      if (activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
       setRoomSnapshot((current) =>
-        current
+        current && current.room.id === roomId
           ? {
               ...current,
               tracks,
@@ -1160,6 +1221,10 @@ export function useRoomRuntime({
       );
     });
     socket.on("peer.signal", (payload) => {
+      if (payload.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
       recordPeerDiagnostic({
         peerId: payload.fromPeerId,
         channelKind: payload.channelKind,
@@ -1191,6 +1256,9 @@ export function useRoomRuntime({
       });
     });
     socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
+      if (announcement.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
       queueAvailability(announcement);
     });
     socket.on("room.session.replaced", ({ roomId: replacedRoomId }) => {

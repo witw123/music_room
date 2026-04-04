@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PeerSignalMessage } from "@music-room/shared";
-import { RoomMediaMesh } from "./media-mesh";
+import { RoomMediaMesh, resolvePreferredAudioMaxBitrateBps } from "./media-mesh";
 
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
+  static senders: Array<{
+    replaceTrack: ReturnType<typeof vi.fn>;
+    getParameters: ReturnType<typeof vi.fn>;
+    setParameters: ReturnType<typeof vi.fn>;
+    track: MediaStreamTrack | null;
+  }> = [];
 
   connectionState: RTCPeerConnectionState = "new";
   signalingState: RTCSignalingState = "stable";
@@ -17,10 +23,17 @@ class FakeRTCPeerConnection {
     FakeRTCPeerConnection.instances.push(this);
   }
 
-  addTrack() {
-    return {
-      replaceTrack: vi.fn()
-    } as unknown as RTCRtpSender;
+  addTrack(track: MediaStreamTrack | null) {
+    const sender = {
+      track,
+      replaceTrack: vi.fn(async (nextTrack: MediaStreamTrack | null) => {
+        sender.track = nextTrack;
+      }),
+      getParameters: vi.fn(() => ({})),
+      setParameters: vi.fn(async () => undefined)
+    };
+    FakeRTCPeerConnection.senders.push(sender);
+    return sender as unknown as RTCRtpSender;
   }
 
   async createOffer() {
@@ -82,6 +95,7 @@ function buildOffer(fromPeerId: string, mediaEpoch: number): PeerSignalMessage {
 describe("RoomMediaMesh", () => {
   beforeEach(() => {
     FakeRTCPeerConnection.instances = [];
+    FakeRTCPeerConnection.senders = [];
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
   });
 
@@ -219,5 +233,54 @@ describe("RoomMediaMesh", () => {
       toPeerId: "peer_listener",
       mediaEpoch: 1
     });
+  });
+
+  it("configures outgoing audio senders for music bootstrap stability", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const liveTrack = {
+      id: "track_live",
+      contentHint: ""
+    } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [liveTrack]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+
+    const sender = FakeRTCPeerConnection.senders[0];
+    expect(sender).toBeDefined();
+    expect(liveTrack.contentHint).toBe("music");
+    expect(sender?.setParameters).toHaveBeenCalledWith({
+      encodings: [{ maxBitrate: 96_000 }]
+    });
+  });
+
+  it("reduces sender bitrate on constrained relay tcp links", () => {
+    expect(
+      resolvePreferredAudioMaxBitrateBps({
+        candidateType: "relay",
+        protocol: "tcp",
+        currentRoundTripTimeMs: 70,
+        availableOutgoingBitrateKbps: 148,
+        packetsLost: 104,
+        jitterMs: 3
+      })
+    ).toBe(64_000);
+  });
+
+  it("caps sender bitrate to measured headroom on weak links", () => {
+    expect(
+      resolvePreferredAudioMaxBitrateBps({
+        candidateType: "relay",
+        protocol: "tcp",
+        currentRoundTripTimeMs: 90,
+        availableOutgoingBitrateKbps: 90,
+        packetsLost: 20,
+        jitterMs: 4
+      })
+    ).toBe(40_500);
   });
 });

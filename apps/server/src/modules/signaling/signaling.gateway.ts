@@ -430,16 +430,29 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       throw new WsException(error instanceof Error ? error.message : "Unauthorized.");
     }
 
+    const previousRoomId = client.data.roomId as string | undefined;
+    const previousSessionId = client.data.sessionId as string | undefined;
+    const previousPeerId = client.data.peerId as string | undefined;
+
     this.unregisterPeerSocket(
-      client.data.roomId as string | undefined,
-      client.data.peerId as string | undefined,
+      previousRoomId,
+      previousPeerId,
       client.id
     );
     this.unregisterSessionSocket(
-      client.data.roomId as string | undefined,
-      client.data.sessionId as string | undefined,
+      previousRoomId,
+      previousSessionId,
       client.id
     );
+    if (previousRoomId && previousRoomId !== payload.roomId) {
+      client.leave(previousRoomId);
+      if (previousSessionId) {
+        void this.updatePeerPresence(previousRoomId, previousSessionId, null, "offline");
+      }
+      if (previousPeerId) {
+        this.clearPeerAvailability(previousRoomId, previousPeerId);
+      }
+    }
     client.data ??= {};
 
     await this.replaceExistingRoomSession(payload.roomId, payload.sessionId, client.id);

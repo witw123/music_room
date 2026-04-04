@@ -40,7 +40,12 @@ type MediaPeerEntry = {
   pendingCandidates: RTCIceCandidateInit[];
   wantsIncomingAudio: boolean;
   statsIntervalId: ReturnType<typeof setInterval> | null;
+  configuredAudioMaxBitrateBps: number | null;
 };
+
+const bootstrapAudioMaxBitrateBps = 96_000;
+const constrainedAudioMaxBitrateBps = 64_000;
+const minimumAudioMaxBitrateBps = 32_000;
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
@@ -254,7 +259,8 @@ export class RoomMediaMesh {
       senders: [],
       pendingCandidates: [],
       wantsIncomingAudio,
-      statsIntervalId: null
+      statsIntervalId: null,
+      configuredAudioMaxBitrateBps: null
     };
     this.startStatsSampling(peerId, entry);
 
@@ -344,14 +350,26 @@ export class RoomMediaMesh {
     }
 
     if (entry.senders.length === 0 && nextTrack) {
-      entry.senders = [entry.connection.addTrack(nextTrack, localStream as MediaStream)];
+      const sender = entry.connection.addTrack(nextTrack, localStream as MediaStream);
+      entry.senders = [sender];
+      void this.configureAudioSender(entry, sender, nextTrack, bootstrapAudioMaxBitrateBps);
       entry.stream = localStream;
       return true;
     }
 
     if (entry.senders.length > 0) {
       for (const sender of entry.senders) {
-        void sender.replaceTrack(nextTrack);
+        void sender
+          .replaceTrack(nextTrack)
+          .then(() =>
+            this.configureAudioSender(
+              entry,
+              sender,
+              nextTrack,
+              entry.configuredAudioMaxBitrateBps ?? bootstrapAudioMaxBitrateBps
+            )
+          )
+          .catch(() => undefined);
       }
     }
 
@@ -410,6 +428,7 @@ export class RoomMediaMesh {
         return;
       }
 
+      await this.tuneOutgoingAudio(entry, sample);
       this.callbacks.onStatsSample?.({
         peerId,
         sample
@@ -430,6 +449,81 @@ export class RoomMediaMesh {
     clearInterval(entry.statsIntervalId);
     entry.statsIntervalId = null;
   }
+
+  private async configureAudioSender(
+    entry: MediaPeerEntry,
+    sender: RTCRtpSender,
+    track: MediaStreamTrack | null,
+    maxBitrateBps: number
+  ) {
+    if (track && "contentHint" in track) {
+      try {
+        track.contentHint = "music";
+      } catch {
+        // Ignore unsupported content hints.
+      }
+    }
+
+    if (!sender.getParameters || !sender.setParameters) {
+      return;
+    }
+
+    try {
+      const parameters = sender.getParameters();
+      const nextParameters: RTCRtpSendParameters = {
+        ...parameters,
+        encodings:
+          parameters.encodings && parameters.encodings.length > 0
+            ? parameters.encodings.map((encoding) => ({
+                ...encoding,
+                maxBitrate: maxBitrateBps
+              }))
+            : [{ maxBitrate: maxBitrateBps }]
+      };
+      await sender.setParameters(nextParameters);
+      entry.configuredAudioMaxBitrateBps = maxBitrateBps;
+    } catch {
+      // Some runtimes reject sender parameter changes after negotiation; ignore and keep streaming.
+    }
+  }
+
+  private async tuneOutgoingAudio(entry: MediaPeerEntry, sample: PeerConnectionStatsSample) {
+    if (entry.senders.length === 0) {
+      return;
+    }
+
+    const nextMaxBitrateBps = resolvePreferredAudioMaxBitrateBps(sample);
+    if (entry.configuredAudioMaxBitrateBps === nextMaxBitrateBps) {
+      return;
+    }
+
+    await Promise.all(
+      entry.senders.map((sender) =>
+        this.configureAudioSender(entry, sender, sender.track, nextMaxBitrateBps)
+      )
+    );
+  }
+}
+
+export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSample) {
+  const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  let targetMaxBitrateBps = constrainedTransport
+    ? constrainedAudioMaxBitrateBps
+    : bootstrapAudioMaxBitrateBps;
+
+  if (
+    typeof sample.availableOutgoingBitrateKbps === "number" &&
+    Number.isFinite(sample.availableOutgoingBitrateKbps) &&
+    sample.availableOutgoingBitrateKbps > 0
+  ) {
+    const measuredCeilingBps = Math.floor(sample.availableOutgoingBitrateKbps * 1000 * 0.45);
+    targetMaxBitrateBps = Math.min(targetMaxBitrateBps, measuredCeilingBps);
+  }
+
+  return Math.max(
+    minimumAudioMaxBitrateBps,
+    Math.min(bootstrapAudioMaxBitrateBps, targetMaxBitrateBps)
+  );
 }
 
 function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {
