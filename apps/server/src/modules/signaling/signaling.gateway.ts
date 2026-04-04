@@ -147,6 +147,15 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     });
   }
 
+  emitPresenceSnapshot(roomId: string, snapshot: RoomSnapshot) {
+    this.emitRoomSnapshot(roomId, snapshot);
+    this.emitPresencePatch(roomId, {
+      members: snapshot.room.members,
+      playback: snapshot.room.playback,
+      presenceRevision: snapshot.room.presenceRevision
+    });
+  }
+
   emitLibraryPatch(roomId: string, payload: Omit<RoomLibraryPatchPayload, "roomId" | "updatedAt">) {
     const message: RoomLibraryPatchPayload = {
       roomId,
@@ -545,11 +554,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     );
     if (refreshResult.changed) {
       const snapshot = await roomService.getRoomSnapshot(payload.roomId, []);
-      this.emitPresencePatch(payload.roomId, {
-        members: snapshot.room.members,
-        playback: snapshot.room.playback,
-        presenceRevision: snapshot.room.presenceRevision
-      });
+      this.emitPresenceSnapshot(payload.roomId, snapshot);
     }
     return { ok: true };
   }
@@ -633,11 +638,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     try {
       await roomService.updatePeerPresence(roomId, sessionId, peerId, presenceState);
       const snapshot = await roomService.getRoomSnapshot(roomId, []);
-      this.emitPresencePatch(roomId, {
-        members: snapshot.room.members,
-        playback: snapshot.room.playback,
-        presenceRevision: snapshot.room.presenceRevision
-      });
+      this.emitPresenceSnapshot(roomId, snapshot);
     } catch {
       clientSafeNoop();
     }

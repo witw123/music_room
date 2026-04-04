@@ -571,6 +571,7 @@ describe("SignalingGateway", () => {
       peerId: "peer_host"
     });
 
+    expect(emit).toHaveBeenCalledWith("room.snapshot", snapshot);
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({
@@ -623,6 +624,7 @@ describe("SignalingGateway", () => {
       "guest_host",
       "peer_host"
     );
+    expect(emit).toHaveBeenCalledWith("room.snapshot", snapshot);
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({
@@ -880,6 +882,7 @@ describe("SignalingGateway", () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    expect(emit).toHaveBeenCalledWith("room.snapshot", snapshot);
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({

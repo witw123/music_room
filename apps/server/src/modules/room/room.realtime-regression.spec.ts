@@ -510,4 +510,95 @@ describe("room realtime regression", () => {
       )
     ).toBe(false);
   });
+
+  it("broadcasts a fresh online room snapshot when a member rejoins after leaving", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = createFakeAuthService();
+    const roomService = new RoomService(authService as never, prisma as never, redis as never);
+    const moduleRef = {
+      get: jest.fn().mockReturnValue(roomService)
+    };
+    const signalingGateway = new SignalingGateway(
+      redis as never,
+      moduleRef as never,
+      authService as never
+    );
+    const playlistService = createPlaylistServiceMock();
+    const roomController = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never,
+      playlistService as never
+    );
+    const { events, sockets } = attachServerMock(signalingGateway);
+    const hostSession = await authService.createGuestSession("Host");
+    const memberSession = await authService.createGuestSession("Member");
+
+    const created = await roomController.createRoom(hostSession.token, {
+      visibility: "public"
+    });
+    const hostClient = createClient({
+      id: "socket_host_rejoin",
+      sessionToken: hostSession.token
+    });
+    const memberClient = createClient({
+      id: "socket_member_rejoin",
+      sessionToken: memberSession.token
+    });
+    sockets.set(hostClient.id, hostClient);
+    sockets.set(memberClient.id, memberClient);
+
+    await signalingGateway.handleRoomSubscribe(hostClient as never, {
+      roomId: created.room.id,
+      sessionId: hostSession.userId,
+      peerId: "peer_host"
+    });
+
+    await roomController.joinRoomByCode(memberSession.token, {
+      joinCode: created.room.joinCode
+    });
+    await signalingGateway.handleRoomSubscribe(memberClient as never, {
+      roomId: created.room.id,
+      sessionId: memberSession.userId,
+      peerId: "peer_member"
+    });
+
+    await roomController.leaveRoom(created.room.id, memberSession.token);
+
+    const rejoined = await roomController.joinRoomByCode(memberSession.token, {
+      joinCode: created.room.joinCode
+    });
+    await signalingGateway.handleRoomSubscribe(memberClient as never, {
+      roomId: rejoined.room.id,
+      sessionId: memberSession.userId,
+      peerId: "peer_member_rejoined"
+    });
+
+    const finalSnapshotEvent = [...events]
+      .reverse()
+      .find(
+        (event) =>
+          event.target === created.room.id &&
+          event.event === "room.snapshot" &&
+          (event.payload as { room?: { members?: Array<{ id: string; peerId: string | null; presenceState: string }> } })
+            .room?.members?.some(
+              (member) =>
+                member.id === memberSession.userId &&
+                member.peerId === "peer_member_rejoined" &&
+                member.presenceState === "online"
+            )
+      );
+
+    expect(finalSnapshotEvent).toBeDefined();
+    expect(
+      (
+        finalSnapshotEvent?.payload as {
+          room: {
+            members: Array<{ id: string; peerId: string | null; presenceState: string }>;
+          };
+        }
+      ).room.members.filter((member) => member.presenceState === "online" && !!member.peerId)
+    ).toHaveLength(2);
+  });
 });
