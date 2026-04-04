@@ -219,6 +219,23 @@ export function useAvailabilityAnnouncements({
     });
   }, []);
 
+  const resetAvailabilityState = useCallback(() => {
+    if (availabilityFlushTimerRef.current !== null) {
+      window.clearTimeout(availabilityFlushTimerRef.current);
+      availabilityFlushTimerRef.current = null;
+    }
+    if (availabilityEmitTimerRef.current !== null) {
+      window.clearTimeout(availabilityEmitTimerRef.current);
+      availabilityEmitTimerRef.current = null;
+    }
+
+    queuedAvailabilityRef.current = [];
+    pendingAvailabilityRef.current.clear();
+    pendingAvailabilityEmitRef.current.clear();
+    availabilityByTrackRef.current = {};
+    setAvailabilityByTrack({});
+  }, []);
+
   useEffect(() => {
     return () => {
       if (availabilityFlushTimerRef.current !== null) {
@@ -237,6 +254,7 @@ export function useAvailabilityAnnouncements({
     mergeLocalPieceAvailability,
     emitAvailability,
     flushPendingAvailability,
-    clearAvailabilityForPeer
+    clearAvailabilityForPeer,
+    resetAvailabilityState
   };
 }

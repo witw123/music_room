@@ -112,14 +112,16 @@ export function MusicRoomApp({
     mergeLocalPieceAvailability,
     emitAvailability: stableEmitAvailability,
     flushPendingAvailability,
-    clearAvailabilityForPeer
+    clearAvailabilityForPeer,
+    resetAvailabilityState
   } = useAvailabilityAnnouncements({
     peerId,
     socketRef,
     activeSessionRef,
     currentRoomRef
   });
-  const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic } = usePeerDiagnostics();
+  const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
+    usePeerDiagnostics();
 
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
@@ -244,6 +246,8 @@ export function MusicRoomApp({
     }
 
     destroyProgressiveRuntime();
+    resetAvailabilityState();
+    resetPeerDiagnostics();
     currentPlaybackPositionRef.current = 0;
     resetHydrationQueue();
     setPlayerResetEpoch((current) => current + 1);
@@ -254,7 +258,12 @@ export function MusicRoomApp({
     setActivePlaybackSource("remote-stream");
     setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
-  }, [destroyProgressiveRuntime, resetHydrationQueue]);
+  }, [
+    destroyProgressiveRuntime,
+    resetAvailabilityState,
+    resetHydrationQueue,
+    resetPeerDiagnostics
+  ]);
 
   const getCurrentPlaybackPositionMs = useCallback(() => currentPlaybackPositionRef.current, []);
 

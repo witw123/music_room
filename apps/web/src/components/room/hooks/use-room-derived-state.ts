@@ -70,8 +70,9 @@ export function useRoomDerivedState({
 
   const availabilitySummary =
     roomSnapshot?.tracks.map((track) => {
-      const peers = filterAvailabilityAnnouncementsByActivePeers(
+      const peers = filterAvailabilityAnnouncementsByCurrentRoomPeers(
         availabilityByTrack[track.id] ?? {},
+        roomSnapshot.room.id,
         activeMemberPeerIds
       );
       const local = peers.find((entry) => entry.ownerPeerId === peerId);
@@ -109,9 +110,10 @@ export function useRoomDerivedState({
       }
     >();
 
-    for (const trackAvailability of Object.values(availabilityByTrack)) {
-      for (const announcement of filterAvailabilityAnnouncementsByActivePeers(
-        trackAvailability,
+    for (const track of roomSnapshot.tracks) {
+      for (const announcement of filterAvailabilityAnnouncementsByCurrentRoomPeers(
+        availabilityByTrack[track.id] ?? {},
+        roomSnapshot.room.id,
         activeMemberPeerIds
       )) {
         const memberId = memberIdByPeerId.get(announcement.ownerPeerId) ?? null;
@@ -133,10 +135,10 @@ export function useRoomDerivedState({
             return initial;
           })();
 
-        existing.announcedTrackIds.add(announcement.trackId);
+        existing.announcedTrackIds.add(track.id);
         existing.totalChunkCount += announcement.availableChunks.length;
 
-        if (currentTrack && announcement.trackId === currentTrack.id) {
+        if (currentTrack && track.id === currentTrack.id) {
           existing.currentTrackChunkCount += announcement.availableChunks.length;
           existing.currentTrackTotalChunks = Math.max(
             existing.currentTrackTotalChunks,
@@ -260,6 +262,17 @@ export function filterAvailabilityAnnouncementsByActivePeers(
   return Object.values(trackAvailability).filter((announcement) =>
     activeMemberPeerIds.has(announcement.ownerPeerId)
   );
+}
+
+export function filterAvailabilityAnnouncementsByCurrentRoomPeers(
+  trackAvailability: Record<string, TrackAvailabilityAnnouncement>,
+  roomId: string,
+  activeMemberPeerIds: Set<string>
+) {
+  return filterAvailabilityAnnouncementsByActivePeers(
+    trackAvailability,
+    activeMemberPeerIds
+  ).filter((announcement) => announcement.roomId === roomId);
 }
 
 export function countPeersWithinActiveMembers(

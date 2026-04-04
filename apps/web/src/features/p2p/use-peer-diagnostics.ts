@@ -51,6 +51,16 @@ export function usePeerDiagnostics(flushDelayMs = 120) {
     [flushDelayMs, flushQueuedDiagnostics]
   );
 
+  const resetPeerDiagnostics = useCallback(() => {
+    if (diagnosticsFlushTimerRef.current !== null) {
+      window.clearTimeout(diagnosticsFlushTimerRef.current);
+      diagnosticsFlushTimerRef.current = null;
+    }
+
+    queuedDiagnosticsRef.current = [];
+    setDiagnosticsState(createEmptyDiagnosticsState());
+  }, []);
+
   useEffect(() => {
     return () => {
       if (diagnosticsFlushTimerRef.current !== null) {
@@ -63,6 +73,7 @@ export function usePeerDiagnostics(flushDelayMs = 120) {
     diagnosticsState,
     peerDiagnostics,
     peerRecentEvents,
-    recordPeerDiagnostic
+    recordPeerDiagnostic,
+    resetPeerDiagnostics
   };
 }
