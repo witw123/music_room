@@ -263,11 +263,9 @@ export function HomeRoomSection() {
           ) : (
             <div className="flex h-full flex-col justify-between gap-8">
               <div>
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
-                  Web access restored
-                </p>
+                
                 <h3 className="text-2xl font-bold text-white md:text-3xl">
-                  网页端房间入口已恢复
+                  网页体验
                 </h3>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-white/55 md:text-base">
                   登录后可以直接在网页中创建房间、加入房间、恢复最近房间，再进入完整的实时音乐房。
@@ -277,7 +275,7 @@ export function HomeRoomSection() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Link href={authEntryHref as Route}>
                   <Button size="lg" className="w-full">
-                    登录后进入房间功能区
+                    房间功能区
                   </Button>
                 </Link>
                 <Link href={workspaceEntryHref as Route}>
@@ -334,10 +332,8 @@ export function HomeRoomSection() {
         <div className="rounded-[30px] border border-white/10 bg-[#050505] p-6 shadow-2xl sm:p-8">
           <div className="mb-5 flex items-end justify-between gap-3">
             <div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
-                Public rooms
-              </p>
-              <h3 className="text-2xl font-bold text-white">网页端房间大厅</h3>
+              
+              <h3 className="text-2xl font-bold text-white">房间大厅</h3>
             </div>
 
             <Link href={workspaceEntryHref as Route} className="text-sm text-accent hover:text-white">
@@ -390,10 +386,8 @@ export function HomeRoomSection() {
             )
           ) : (
             <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 text-center">
-              <p className="text-sm font-semibold text-white">登录后可查看公开房间</p>
-              <p className="mt-2 max-w-sm text-sm leading-7 text-white/45">
-                主页保留产品介绍，同时也恢复房间大厅入口。登录后这里会直接展示你可加入的房间。
-              </p>
+              <p className="text-sm font-semibold text-white">公开房间</p>
+              
             </div>
           )}
         </div>

@@ -238,10 +238,19 @@ export class ProgressivePcmEngine {
   }
 
   destroy() {
+    if (this.status === "destroyed") {
+      return;
+    }
+
     this.status = "destroyed";
     this.stopScheduledSegments();
-    this.decoder?.close?.();
+    const decoder = this.decoder;
     this.decoder = null;
+    try {
+      decoder?.close?.();
+    } catch {
+      // WebCodecs may have already closed the decoder after a fatal decode error.
+    }
     if (this.audio.srcObject === this.destinationNode?.stream) {
       this.audio.pause();
       this.audio.srcObject = null;
@@ -300,6 +309,7 @@ export class ProgressivePcmEngine {
         },
         error: () => {
           this.status = "failed";
+          this.decoder = null;
         }
       });
       decoder.configure({
