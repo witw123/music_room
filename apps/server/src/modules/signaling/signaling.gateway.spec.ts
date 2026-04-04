@@ -59,6 +59,10 @@ function createRoomServiceMock(snapshot = createSnapshot()) {
   return {
     updatePeerPresence: jest.fn().mockResolvedValue(undefined),
     touchRealtimePresence: jest.fn().mockResolvedValue(undefined),
+    refreshRealtimePresence: jest.fn().mockResolvedValue({
+      room: snapshot.room,
+      changed: false
+    }),
     clearRealtimePresence: jest.fn().mockResolvedValue(undefined),
     getAccessibleRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
     getRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
@@ -487,6 +491,58 @@ describe("SignalingGateway", () => {
         members: snapshot.room.members,
         playback: snapshot.room.playback,
         presenceRevision: 4
+      })
+    );
+  });
+
+  it("uses heartbeat presence to repair stale offline members", async () => {
+    const snapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: "peer_host",
+          presenceState: "online"
+        }
+      ],
+      sourcePeerId: "peer_host",
+      presenceRevision: 5
+    });
+    const roomService = createRoomServiceMock(snapshot);
+    roomService.refreshRealtimePresence.mockResolvedValue({
+      room: snapshot.room,
+      changed: true
+    });
+    const { gateway } = createGateway({ roomService });
+    const { emit } = attachServerMock(gateway);
+
+    await gateway.handleRoomPresence(
+      createClient({
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }) as never,
+      {
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host"
+      }
+    );
+
+    expect(roomService.refreshRealtimePresence).toHaveBeenCalledWith(
+      "room_1",
+      "guest_host",
+      "peer_host"
+    );
+    expect(emit).toHaveBeenCalledWith(
+      "room.presence.patch",
+      expect.objectContaining({
+        roomId: "room_1",
+        members: snapshot.room.members,
+        playback: snapshot.room.playback,
+        presenceRevision: 5
       })
     );
   });

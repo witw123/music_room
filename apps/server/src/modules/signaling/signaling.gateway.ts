@@ -488,7 +488,19 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       return { ok: true };
     }
 
-    await roomService.touchRealtimePresence(payload.roomId, payload.sessionId, payload.peerId);
+    const refreshResult = await roomService.refreshRealtimePresence(
+      payload.roomId,
+      payload.sessionId,
+      payload.peerId
+    );
+    if (refreshResult.changed) {
+      const snapshot = await roomService.getRoomSnapshot(payload.roomId, []);
+      this.emitPresencePatch(payload.roomId, {
+        members: snapshot.room.members,
+        playback: snapshot.room.playback,
+        presenceRevision: snapshot.room.presenceRevision
+      });
+    }
     return { ok: true };
   }
 

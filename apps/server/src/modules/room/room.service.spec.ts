@@ -937,6 +937,31 @@ describe("RoomService", () => {
     });
   });
 
+  it("repairs stale offline presence on heartbeat refresh", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+
+    const refreshed = await roomService.refreshRealtimePresence(
+      snapshot.room.id,
+      host.id,
+      "peer-host"
+    );
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(refreshed.changed).toBe(true);
+    expect(nextSnapshot.room.presenceRevision).toBe(1);
+    expect(nextSnapshot.room.members.find((entry) => entry.id === host.id)).toMatchObject({
+      id: host.id,
+      peerId: "peer-host",
+      presenceState: "online"
+    });
+  });
+
   it("pauses playback and bumps media epoch when the active source session is replaced", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

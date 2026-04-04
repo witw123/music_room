@@ -24,7 +24,7 @@ export class RoomService {
   private readonly rooms = new Map<string, RoomRecord>();
   private readonly roomCacheTtlSeconds = 60 * 60 * 12;
   private readonly sessionRecentRoomTtlSeconds = 60 * 60 * 24 * 7;
-  private readonly presenceTtlSeconds = 25;
+  private readonly presenceTtlSeconds = 60;
   private readonly roomRegistryKey = "music-room:rooms";
   private readonly inMemoryPresence = new Map<
     string,
@@ -277,6 +277,35 @@ export class RoomService {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
     await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
+  }
+
+  async refreshRealtimePresence(roomId: string, sessionId: string, peerId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
+    const presenceSnapshot = await this.roomPresenceService.getPresenceSnapshot(
+      roomId,
+      record.room.members
+    );
+    const currentPresence = presenceSnapshot.get(sessionId) ?? {
+      peerId: null,
+      presenceState: "offline" as const
+    };
+
+    if (
+      currentPresence.peerId === peerId &&
+      currentPresence.presenceState === "online"
+    ) {
+      await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
+      return {
+        room: record.room,
+        changed: false
+      };
+    }
+
+    return {
+      room: await this.updatePeerPresence(roomId, sessionId, peerId, "online"),
+      changed: true
+    };
   }
 
   async clearRealtimePresence(roomId: string, sessionId: string) {

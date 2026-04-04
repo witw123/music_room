@@ -139,18 +139,6 @@ export function HomeRoomSection() {
 
   return (
     <section className="mb-40 w-full">
-      <div className="mb-8 flex flex-col gap-4 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-accent">
-          Room Hub
-        </p>
-        <h2 className="text-3xl font-bold text-white md:text-4xl">
-          功能页
-        </h2>
-        <p className="mx-auto max-w-3xl text-sm leading-7 text-white/55 md:text-base">
-         欢迎
-        </p>
-      </div>
-
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-[30px] border border-white/10 bg-[#050505] p-6 shadow-2xl sm:p-8">
           {hydrated && activeSession ? (

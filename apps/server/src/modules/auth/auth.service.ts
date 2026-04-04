@@ -40,7 +40,7 @@ export class AuthService {
   private readonly usersById = new Map<string, StoredUser>();
   private readonly userIdByUsername = new Map<string, string>();
   private readonly sessionsByToken = new Map<string, StoredUserSession>();
-  private readonly allowFallbackPersistence = process.env.AUTH_FAKE_PERSISTENCE !== "false";
+  private readonly allowFallbackPersistence = resolveAllowFallbackPersistence();
   private readonly fallbackStorePath = resolve(
     process.cwd(),
     process.env.AUTH_FAKE_PERSIST_PATH ?? ".tmp/auth-fallback-store.json"
@@ -489,4 +489,17 @@ function verifyPassword(password: string, storedHash: string) {
   }
 
   return timingSafeEqual(actual, expected);
+}
+
+function resolveAllowFallbackPersistence() {
+  const configured = process.env.AUTH_FAKE_PERSISTENCE?.trim().toLowerCase();
+  if (configured === "true") {
+    return true;
+  }
+
+  if (configured === "false") {
+    return false;
+  }
+
+  return process.env.NODE_ENV !== "production";
 }

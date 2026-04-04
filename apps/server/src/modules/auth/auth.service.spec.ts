@@ -12,6 +12,12 @@ function createPrismaMock() {
 }
 
 describe("AuthService", () => {
+  afterEach(() => {
+    delete process.env.AUTH_FAKE_PERSISTENCE;
+    delete process.env.AUTH_FAKE_PERSIST_PATH;
+    delete process.env.NODE_ENV;
+  });
+
   it("creates a real random token instead of the placeholder value", async () => {
     const prisma = createPrismaMock();
     const service = new AuthService(prisma as never);
@@ -48,5 +54,16 @@ describe("AuthService", () => {
     const service = new AuthService(prisma as never);
 
     await expect(service.createGuestSession("   ")).rejects.toThrow("Nickname is required.");
+  });
+
+  it("disables fallback account persistence by default in production", async () => {
+    process.env.NODE_ENV = "production";
+
+    const prisma = createPrismaMock();
+    const service = new AuthService(prisma as never);
+
+    await expect(service.createGuestSession("Host")).rejects.toThrow(
+      "Account storage is temporarily unavailable. Please try again after the database is ready."
+    );
   });
 });

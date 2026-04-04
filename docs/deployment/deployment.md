@@ -73,6 +73,13 @@ npx pnpm deploy:check
 - `/health/readiness`
 - `/v1/realtime/ice-config`
 
+如果重新部署后发现“账号像被清空了一样”，优先检查两件事：
+
+- `DATABASE_URL` 指向的 PostgreSQL 是否真的可连通，并且容器卷 `postgres_data` 没被删除
+- 生产环境是否明确设置了 `AUTH_FAKE_PERSISTENCE=false`
+
+认证服务在数据库不可用时有一套开发期 fallback 存储；如果生产误用了这条路径，数据会写进容器内临时文件，容器重建后自然就没了。
+
 如果首页能开但 `/app?client=desktop` 白屏，要优先检查：
 
 - `/_next/static/*` 是否返回 `200`
