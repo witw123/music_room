@@ -66,7 +66,8 @@ describe("RoomController", () => {
       getRecentRoomSnapshotForSession: jest.fn().mockResolvedValue(snapshot)
     };
     const signalingGateway = {
-      emitRoomSnapshot: jest.fn()
+      emitRoomSnapshot: jest.fn(),
+      emitPresencePatch: jest.fn()
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
@@ -88,7 +89,8 @@ describe("RoomController", () => {
       getRecoverableRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
     };
     const signalingGateway = {
-      emitRoomSnapshot: jest.fn()
+      emitRoomSnapshot: jest.fn(),
+      emitPresencePatch: jest.fn()
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
@@ -111,7 +113,8 @@ describe("RoomController", () => {
       getRoomSnapshot: jest.fn()
     };
     const signalingGateway = {
-      emitRoomSnapshot: jest.fn()
+      emitRoomSnapshot: jest.fn(),
+      emitPresencePatch: jest.fn()
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
@@ -128,6 +131,7 @@ describe("RoomController", () => {
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.getRoomSnapshot).not.toHaveBeenCalled();
     expect(signalingGateway.emitRoomSnapshot).not.toHaveBeenCalled();
+    expect(signalingGateway.emitPresencePatch).not.toHaveBeenCalled();
   });
 
   it("emits a room snapshot after joining by code", async () => {
@@ -138,7 +142,8 @@ describe("RoomController", () => {
       getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
     };
     const signalingGateway = {
-      emitRoomSnapshot: jest.fn()
+      emitRoomSnapshot: jest.fn(),
+      emitPresencePatch: jest.fn()
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
@@ -158,6 +163,54 @@ describe("RoomController", () => {
     expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("abc123");
     expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_host");
     expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith(snapshot.room.id, snapshot);
+    expect(signalingGateway.emitPresencePatch).toHaveBeenCalledWith(snapshot.room.id, {
+      members: snapshot.room.members,
+      playback: snapshot.room.playback,
+      presenceRevision: snapshot.room.presenceRevision
+    });
+  });
+
+  it("emits room snapshot and presence patch after a member leaves an existing room", async () => {
+    const snapshot = buildSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          joinedAt: new Date().toISOString(),
+          peerId: "peer_host",
+          presenceState: "online"
+        }
+      ],
+      presenceRevision: 3
+    });
+    const roomService = {
+      leaveRoom: jest.fn().mockResolvedValue(snapshot.room),
+      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+    };
+    const signalingGateway = {
+      emitRoomSnapshot: jest.fn(),
+      emitPresencePatch: jest.fn()
+    };
+    const authService = createAuthServiceMock();
+    const playlistService = createPlaylistServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      signalingGateway as never,
+      authService as never,
+      playlistService as never
+    );
+
+    const result = await controller.leaveRoom("room_1", "token");
+
+    expect(result).toEqual(snapshot.room);
+    expect(roomService.getRoomSnapshot).toHaveBeenCalledWith("room_1", []);
+    expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith("room_1", snapshot);
+    expect(signalingGateway.emitPresencePatch).toHaveBeenCalledWith("room_1", {
+      members: snapshot.room.members,
+      playback: snapshot.room.playback,
+      presenceRevision: snapshot.room.presenceRevision
+    });
   });
 
   it("allows the host to delete a room and emits room missing", async () => {
@@ -168,6 +221,7 @@ describe("RoomController", () => {
     };
     const signalingGateway = {
       emitRoomSnapshot: jest.fn(),
+      emitPresencePatch: jest.fn(),
       emitRoomDeleted: jest.fn(),
       emitRoomMissing: jest.fn()
     };

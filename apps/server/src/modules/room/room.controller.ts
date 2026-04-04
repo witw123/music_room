@@ -8,6 +8,7 @@ import {
   Post,
   UnauthorizedException
 } from "@nestjs/common";
+import type { RoomSnapshot } from "@music-room/shared";
 import { AuthService } from "../auth/auth.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { SignalingGateway } from "../signaling/signaling.gateway";
@@ -29,6 +30,14 @@ export class RoomController {
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }
+  }
+
+  private emitRoomPresenceSnapshot(roomId: string, snapshot: RoomSnapshot) {
+    this.signalingGateway.emitPresencePatch(roomId, {
+      members: snapshot.room.members,
+      playback: snapshot.room.playback,
+      presenceRevision: snapshot.room.presenceRevision
+    });
   }
 
   @Post()
@@ -92,6 +101,7 @@ export class RoomController {
     await this.roomService.joinRoom(room.id, userId);
     const snapshot = await this.roomService.getRoomSnapshot(room.id, []);
     this.signalingGateway.emitRoomSnapshot(room.id, snapshot);
+    this.emitRoomPresenceSnapshot(room.id, snapshot);
     return snapshot;
   }
 
@@ -104,6 +114,7 @@ export class RoomController {
     const room = await this.roomService.joinRoom(roomId, userId);
     const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
     this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
+    this.emitRoomPresenceSnapshot(roomId, snapshot);
     return room;
   }
 
@@ -117,6 +128,7 @@ export class RoomController {
     if (room.members.length > 0) {
       const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
       this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
+      this.emitRoomPresenceSnapshot(roomId, snapshot);
     }
     return room;
   }
