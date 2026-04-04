@@ -386,6 +386,7 @@ export function useProgressiveRuntime({
         audio.src = uploaded.objectUrl;
         audio.load();
       }
+      audio.muted = false;
 
       syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing");
 

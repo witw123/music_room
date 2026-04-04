@@ -30,8 +30,7 @@ import {
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
   getPresenceRevision,
-  shouldAcceptPlaybackSnapshot,
-  shouldAcceptPresenceRevision,
+  mergeRoomSnapshot,
   shouldReplacePlaybackSnapshot,
   toUserFacingError
 } from "@/lib/music-room-ui";
@@ -655,16 +654,7 @@ export function useRoomRuntime({
           return;
         }
 
-        setRoomSnapshot((current) => {
-          if (
-            current &&
-            !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
-          ) {
-            return current;
-          }
-
-          return snapshot;
-        });
+        setRoomSnapshot((current) => mergeRoomSnapshot(current, snapshot));
         setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
         await refreshPlaylists();
       } catch {
@@ -1047,29 +1037,7 @@ export function useRoomRuntime({
     let didReplayLocalAvailability = false;
 
     socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
-      setRoomSnapshot((current) => {
-        if (
-          current &&
-          !shouldAcceptPresenceRevision(
-            getPresenceRevision(current.room),
-            getPresenceRevision(snapshot.room)
-          )
-        ) {
-          return current;
-        }
-
-        if (
-          current &&
-          !shouldAcceptPlaybackSnapshot(current.room.playback, snapshot.room.playback)
-        ) {
-          return current;
-        }
-
-        return {
-          ...snapshot,
-          playlists: snapshot.playlists.length > 0 ? snapshot.playlists : current?.playlists ?? []
-        };
-      });
+      setRoomSnapshot((current) => mergeRoomSnapshot(current, snapshot));
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;

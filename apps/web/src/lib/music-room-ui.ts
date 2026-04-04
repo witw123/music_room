@@ -1,6 +1,6 @@
 "use client";
 
-import type { PlaybackSnapshot, RoomMember } from "@music-room/shared";
+import type { PlaybackSnapshot, RoomMember, RoomSnapshot } from "@music-room/shared";
 
 export function formatDuration(durationMs: number) {
   if (!durationMs) {
@@ -100,6 +100,41 @@ export function shouldReplacePlaybackSnapshot(
   incoming: PlaybackSnapshot | null | undefined
 ) {
   return shouldAcceptPlaybackSnapshot(current, incoming) && !isSamePlaybackSnapshot(current, incoming);
+}
+
+export function mergeRoomSnapshot(
+  current: RoomSnapshot | null | undefined,
+  incoming: RoomSnapshot
+) {
+  if (!current) {
+    return incoming;
+  }
+
+  const acceptPresence = shouldAcceptPresenceRevision(
+    getPresenceRevision(current.room),
+    getPresenceRevision(incoming.room)
+  );
+  const acceptPlayback = shouldAcceptPlaybackSnapshot(
+    current.room.playback,
+    incoming.room.playback
+  );
+
+  if (!acceptPresence && !acceptPlayback) {
+    return current;
+  }
+
+  return {
+    ...incoming,
+    playlists: incoming.playlists.length > 0 ? incoming.playlists : current.playlists,
+    room: {
+      ...incoming.room,
+      members: acceptPresence ? incoming.room.members : current.room.members,
+      presenceRevision: acceptPresence
+        ? getPresenceRevision(incoming.room)
+        : getPresenceRevision(current.room),
+      playback: acceptPlayback ? incoming.room.playback : current.room.playback
+    }
+  } satisfies RoomSnapshot;
 }
 
 export function toUserFacingError(error: unknown) {

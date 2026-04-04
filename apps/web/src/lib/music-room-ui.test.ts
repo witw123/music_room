@@ -3,6 +3,7 @@ import {
   formatDuration,
   getOnlineMemberCount,
   getReconnectingMemberCount,
+  mergeRoomSnapshot,
   normalizePlaylistTitle,
   removeTracksFromUploads,
   shouldAcceptPresenceRevision,
@@ -101,6 +102,81 @@ describe("music-room-ui helpers", () => {
     expect(shouldAcceptPresenceRevision(3, 3)).toBe(true);
     expect(shouldAcceptPresenceRevision(3, 4)).toBe(true);
     expect(shouldAcceptPresenceRevision(4, 3)).toBe(false);
+  });
+
+  it("keeps newer playback while still applying fresher presence from a full room snapshot", () => {
+    const current = {
+      room: {
+        id: "room_1",
+        hostId: "host",
+        joinCode: "ABC123",
+        visibility: "public" as const,
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host" as const,
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: null,
+            presenceState: "offline" as const
+          }
+        ],
+        presenceRevision: 4,
+        playback: {
+          status: "playing" as const,
+          currentTrackId: "track_new",
+          currentQueueItemId: "queue_new",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_host",
+          sourceTrackId: "track_new",
+          positionMs: 2000,
+          startedAt: "2026-04-04T00:00:10.000Z",
+          queueVersion: 8,
+          mediaEpoch: 2
+        }
+      },
+      tracks: [],
+      queue: [],
+      playlists: []
+    };
+    const incoming = {
+      room: {
+        ...current.room,
+        members: [
+          {
+            ...current.room.members[0],
+            peerId: "peer_host",
+            presenceState: "online" as const
+          }
+        ],
+        presenceRevision: 5,
+        playback: {
+          ...current.room.playback,
+          currentTrackId: "track_old",
+          currentQueueItemId: "queue_old",
+          sourceTrackId: "track_old",
+          queueVersion: 7
+        }
+      },
+      tracks: [{ id: "track_old" }],
+      queue: [{ id: "queue_old" }],
+      playlists: []
+    };
+
+    const merged = mergeRoomSnapshot(current as never, incoming as never);
+
+    expect(merged.room.members[0]).toMatchObject({
+      peerId: "peer_host",
+      presenceState: "online"
+    });
+    expect(merged.room.presenceRevision).toBe(5);
+    expect(merged.room.playback).toMatchObject({
+      currentTrackId: "track_new",
+      currentQueueItemId: "queue_new",
+      queueVersion: 8
+    });
+    expect(merged.tracks).toEqual(incoming.tracks);
+    expect(merged.queue).toEqual(incoming.queue);
   });
 
   it("ignores identical playback snapshots at the same version", () => {

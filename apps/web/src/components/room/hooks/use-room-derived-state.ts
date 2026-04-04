@@ -82,7 +82,15 @@ export function useRoomDerivedState({
       return [];
     }
 
-    const statsByPeer = new Map<
+    const memberIdByNickname = new Map(
+      roomSnapshot.room.members.map((member) => [member.nickname.trim().toLowerCase(), member.id])
+    );
+    const memberIdByPeerId = new Map(
+      roomSnapshot.room.members
+        .filter((member) => !!member.peerId)
+        .map((member) => [member.peerId as string, member.id])
+    );
+    const statsByMember = new Map<
       string,
       {
         announcedTrackIds: Set<string>;
@@ -95,8 +103,16 @@ export function useRoomDerivedState({
 
     for (const trackAvailability of Object.values(availabilityByTrack)) {
       for (const announcement of Object.values(trackAvailability)) {
+        const memberId =
+          memberIdByNickname.get(announcement.nickname.trim().toLowerCase()) ??
+          memberIdByPeerId.get(announcement.ownerPeerId) ??
+          null;
+        if (!memberId) {
+          continue;
+        }
+
         const existing =
-          statsByPeer.get(announcement.ownerPeerId) ??
+          statsByMember.get(memberId) ??
           (() => {
             const initial = {
               announcedTrackIds: new Set<string>(),
@@ -105,7 +121,7 @@ export function useRoomDerivedState({
               currentTrackTotalChunks: 0,
               currentTrackSources: new Set<string>()
             };
-            statsByPeer.set(announcement.ownerPeerId, initial);
+            statsByMember.set(memberId, initial);
             return initial;
           })();
 
@@ -124,7 +140,7 @@ export function useRoomDerivedState({
     }
 
     return roomSnapshot.room.members.map((member) => {
-      const stats = member.peerId ? statsByPeer.get(member.peerId) : null;
+      const stats = statsByMember.get(member.id) ?? null;
 
       return {
         memberId: member.id,
