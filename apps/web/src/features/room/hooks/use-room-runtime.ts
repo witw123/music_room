@@ -252,6 +252,7 @@ export function useRoomRuntime({
   const hostStreamRef = useRef<MediaStream | null>(null);
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
+  const presenceIntervalRef = useRef<number | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
     lastAppliedKey: string | null;
@@ -302,6 +303,33 @@ export function useRoomRuntime({
       hostMediaSyncRetryRef.current = null;
     }
   }, []);
+
+  const stopPresenceHeartbeat = useCallback(() => {
+    if (presenceIntervalRef.current !== null) {
+      window.clearInterval(presenceIntervalRef.current);
+      presenceIntervalRef.current = null;
+    }
+  }, []);
+
+  const emitPresence = useCallback(() => {
+    const currentSession = activeSessionRef.current;
+    const currentRoomId = currentRoomRef.current?.room.id;
+    if (!currentRoomId || !currentSession?.userId || !peerId) {
+      return;
+    }
+
+    socketRef.current?.emit("room.presence", {
+      roomId: currentRoomId,
+      sessionId: currentSession.userId,
+      peerId
+    });
+  }, [activeSessionRef, currentRoomRef, peerId, socketRef]);
+
+  const startPresenceHeartbeat = useCallback(() => {
+    emitPresence();
+    stopPresenceHeartbeat();
+    presenceIntervalRef.current = window.setInterval(emitPresence, 10_000);
+  }, [emitPresence, stopPresenceHeartbeat]);
 
   useEffect(() => {
     activeSessionRef.current = activeSession;
@@ -1124,14 +1152,14 @@ export function useRoomRuntime({
       });
     };
 
-    if (!roomSnapshot?.room.id || !activeSession?.userId) {
+    if (!roomSnapshot?.room.id || !hydrated) {
       return;
     }
 
     const socket = createRoomSocket();
     socketRef.current = socket;
     const roomId = roomSnapshot.room.id;
-    let presenceIntervalId: number | null = null;
+    let subscribeRetryId: number | null = null;
     pieceTransferRatesRef.current.clear();
     const iceServers = getWebRTCIceServers(iceConfig);
     const emitPeerSignal = (payload: PeerSignalMessage) => {
@@ -1394,12 +1422,28 @@ export function useRoomRuntime({
     );
     mediaMeshRef.current = mediaMesh;
 
-    const subscribeToRoom = () => {
+    const subscribeToRoom = (attempt = 0) => {
+      const currentSession = activeSessionRef.current;
+      if (!currentSession?.userId || !peerId) {
+        if (attempt >= 20) {
+          return;
+        }
+
+        if (subscribeRetryId !== null) {
+          window.clearTimeout(subscribeRetryId);
+        }
+        subscribeRetryId = window.setTimeout(() => {
+          subscribeRetryId = null;
+          subscribeToRoom(attempt + 1);
+        }, 100);
+        return;
+      }
+
       socket.emit(
         "room.subscribe",
         {
           roomId,
-          sessionId: activeSessionRef.current?.userId,
+          sessionId: currentSession.userId,
           peerId
         },
         (response?: { ok?: boolean }) => {
@@ -1407,43 +1451,18 @@ export function useRoomRuntime({
             return;
           }
 
+          startPresenceHeartbeat();
           void requestRoomSnapshotResync("subscribe-ack", roomId);
         }
       );
     };
-
-    const emitPresence = () => {
-      const currentSession = activeSessionRef.current;
-      if (!currentSession?.userId || !peerId) {
-        return;
-      }
-
-      socket.emit("room.presence", {
-        roomId,
-        sessionId: currentSession.userId,
-        peerId
-      });
-    };
-
-    const startPresenceHeartbeat = () => {
-      emitPresence();
-      if (presenceIntervalId !== null) {
-        window.clearInterval(presenceIntervalId);
-      }
-      presenceIntervalId = window.setInterval(emitPresence, 10_000);
-    };
     const exitAndStopPresence = (message: string) => {
-      if (presenceIntervalId !== null) {
-        window.clearInterval(presenceIntervalId);
-        presenceIntervalId = null;
-      }
-
+      stopPresenceHeartbeat();
       exitCurrentRoom(message);
     };
 
     socket.on("connect", () => {
       subscribeToRoom();
-      startPresenceHeartbeat();
       flushPendingAvailability();
       void requestRoomSnapshotResync("socket-connect", roomId);
       const joinCode = currentRoomRef.current?.room.joinCode;
@@ -1608,10 +1627,7 @@ export function useRoomRuntime({
       setStatusMessage(`实时连接失败：${toUserFacingError(error)}`);
     });
     socket.on("disconnect", (reason) => {
-      if (presenceIntervalId !== null) {
-        window.clearInterval(presenceIntervalId);
-        presenceIntervalId = null;
-      }
+      stopPresenceHeartbeat();
 
       if (reason === "io client disconnect") {
         return;
@@ -1620,8 +1636,9 @@ export function useRoomRuntime({
     });
 
     return () => {
-      if (presenceIntervalId !== null) {
-        window.clearInterval(presenceIntervalId);
+      stopPresenceHeartbeat();
+      if (subscribeRetryId !== null) {
+        window.clearTimeout(subscribeRetryId);
       }
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
@@ -1648,7 +1665,7 @@ export function useRoomRuntime({
     };
   }, [
     roomSnapshot?.room.id,
-    activeSession?.userId,
+    hydrated,
     peerId,
     activeSessionRef,
     currentRoomRef,
@@ -1661,6 +1678,8 @@ export function useRoomRuntime({
     clearHostMediaSyncRetry,
     requestRoomSnapshotResync,
     scheduleRemotePlaybackRetry,
+    startPresenceHeartbeat,
+    stopPresenceHeartbeat,
     chunkSchedulerRef,
     remoteAudioRef,
     resetRemoteAudioElement,
@@ -1673,6 +1692,40 @@ export function useRoomRuntime({
     updateDataTransportStats,
     updateMediaTransportStats,
     reportRealtimeFailure
+  ]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !activeSession?.userId || !peerId) {
+      return;
+    }
+
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      return;
+    }
+
+    socket.emit(
+      "room.subscribe",
+      {
+        roomId: roomSnapshot.room.id,
+        sessionId: activeSession.userId,
+        peerId
+      },
+      (response?: { ok?: boolean }) => {
+        if (!response?.ok) {
+          return;
+        }
+
+        startPresenceHeartbeat();
+        void requestRoomSnapshotResync("subscribe-ack", roomSnapshot.room.id);
+      }
+    );
+  }, [
+    roomSnapshot?.room.id,
+    activeSession?.userId,
+    peerId,
+    requestRoomSnapshotResync,
+    startPresenceHeartbeat
   ]);
 
   useEffect(() => {
