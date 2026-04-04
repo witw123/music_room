@@ -317,68 +317,7 @@ export function HomeRoomSection() {
           )}
         </div>
 
-        <div className="rounded-[30px] border border-white/10 bg-[#050505] p-6 shadow-2xl sm:p-8">
-          <div className="mb-5 flex items-end justify-between gap-3">
-            <div>
-              
-              <h3 className="text-2xl font-bold text-white">房间大厅</h3>
-            </div>
-
-            <Link href={workspaceEntryHref as Route} className="text-sm text-accent hover:text-white">
-              查看全部
-            </Link>
-          </div>
-
-          {hydrated && activeSession ? (
-            visibleRooms.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                {visibleRooms.map((room) => {
-                  const hostNickname =
-                    room.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
-
-                  return (
-                    <button
-                      key={room.room.id}
-                      type="button"
-                      onClick={() => startTransition(() => void handleJoinRoom(room.room.joinCode))}
-                      className="flex w-full flex-col gap-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-left transition hover:border-accent/30 hover:bg-accent/10"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-mono text-sm font-bold text-accent">
-                          {room.room.joinCode}
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/50">
-                          {getOnlineMemberCount(room.room.members)} 人在线
-                        </span>
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          {hostNickname} 的房间
-                        </p>
-                        <p className="mt-1 text-xs leading-6 text-white/45">
-                          从主页直接加入，进入完整音乐房继续协作播放。
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 text-center">
-                <p className="text-sm font-semibold text-white">当前没有公开房间</p>
-                <p className="mt-2 text-sm leading-7 text-white/45">
-                  你可以直接从左侧创建一个公开房间，网页端也会同步显示。
-                </p>
-              </div>
-            )
-          ) : (
-            <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 text-center">
-              <p className="text-sm font-semibold text-white">公开房间</p>
-              
-            </div>
-          )}
-        </div>
+        
       </div>
     </section>
   );

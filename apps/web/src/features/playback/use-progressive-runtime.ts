@@ -388,7 +388,9 @@ export function useProgressiveRuntime({
       }
       audio.muted = false;
 
-      syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing");
+      syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing", {
+        allowRateCorrection: !isCurrentSourceOwner
+      });
 
       if (playback.status === "playing") {
         void attemptPlaybackStart(
