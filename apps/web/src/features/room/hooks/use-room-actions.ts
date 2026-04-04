@@ -102,6 +102,7 @@ export function useRoomActions({
         try {
           const playback = await requestPlayback(nextExpectedVersion);
           applyPlaybackLocally(playback);
+          void syncRoomSnapshot(roomId).catch(() => undefined);
           return playback;
         } catch (error) {
           const isVersionConflict =
@@ -206,6 +207,7 @@ export function useRoomActions({
       try {
         const nextState = await musicRoomApi.addQueueItem(roomSnapshot.room.id, { trackId });
         applyQueuePatchLocally(nextState.queue, nextState.playback);
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌曲已加入共享队列。");
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
@@ -256,6 +258,7 @@ export function useRoomActions({
               }
             : current
         );
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         await refreshPlaylists();
         setStatusMessage("歌曲已从房间曲库中删除。");
       } catch (error) {
@@ -452,6 +455,7 @@ export function useRoomActions({
           roomId: roomSnapshot.room.id
         });
         applyQueuePatchLocally(nextState.queue, nextState.playback);
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌单已加入当前房间队列。");
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
@@ -469,6 +473,7 @@ export function useRoomActions({
       try {
         const nextState = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
         applyQueuePatchLocally(nextState.queue, nextState.playback);
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌曲已从队列中移除。");
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
@@ -488,6 +493,7 @@ export function useRoomActions({
           queueItemIds
         });
         applyQueuePatchLocally(nextState.queue, nextState.playback);
+        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("播放队列顺序已更新。");
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
