@@ -129,6 +129,10 @@ export class RoomService {
       throw new Error("Room not found.");
     }
 
+    if (isMember && sessionId) {
+      await this.roomRecordRepository.setRecentRoomForSession(sessionId, roomId);
+    }
+
     return this.roomSnapshotService.buildSnapshot(record, playlists);
   }
 
@@ -161,10 +165,15 @@ export class RoomService {
     const roomId = await this.redis.getString(this.roomRecordRepository.sessionRecentRoomKey(sessionId));
 
     if (roomId) {
+      const snapshot = await this.getRecoverableRoomSnapshot(roomId, sessionId).catch(() => null);
+      if (snapshot) {
+        return snapshot;
+      }
+
       try {
-        return await this.getRoomSnapshot(roomId, []);
-      } catch {
         await this.redis.delete(this.roomRecordRepository.sessionRecentRoomKey(sessionId));
+      } catch {
+        // Ignore cache cleanup failures and continue with the accessible-room fallback.
       }
     }
 
@@ -182,6 +191,7 @@ export class RoomService {
       return null;
     }
 
+    await this.roomRecordRepository.setRecentRoomForSession(sessionId, roomId);
     return this.roomSnapshotService.buildSnapshot(record, []);
   }
 
@@ -195,6 +205,8 @@ export class RoomService {
       this.incrementPresenceRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
     }
+
+    await this.roomRecordRepository.setRecentRoomForSession(session.id, roomId);
 
     return record.room;
   }
@@ -340,7 +352,14 @@ export class RoomService {
     }
 
     await this.roomRecordRepository.persistRecord(record);
+    await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);
     return record.room;
+  }
+
+  async rememberRecentRoom(roomId: string, sessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
+    await this.roomRecordRepository.setRecentRoomForSession(sessionId, roomId);
   }
 
   async registerTrack(

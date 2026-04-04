@@ -173,7 +173,29 @@ export function useRoomActions({
                 tracks: current.tracks.filter((track) => track.id !== trackId),
                 queue: current.queue
                   .filter((item) => item.trackId !== trackId)
-                  .map((item, index) => ({ ...item, position: index }))
+                  .map((item, index) => ({ ...item, position: index })),
+                room: {
+                  ...current.room,
+                  playback:
+                    current.room.playback.currentTrackId === trackId
+                      ? {
+                          ...current.room.playback,
+                          status: "paused",
+                          currentTrackId: null,
+                          currentQueueItemId: null,
+                          sourceSessionId: null,
+                          sourcePeerId: null,
+                          sourceTrackId: null,
+                          positionMs: 0,
+                          startedAt: null,
+                          queueVersion: current.room.playback.queueVersion + 1,
+                          mediaEpoch: current.room.playback.mediaEpoch + 1
+                        }
+                      : {
+                          ...current.room.playback,
+                          queueVersion: current.room.playback.queueVersion + 1
+                        }
+                }
               }
             : current
         );

@@ -176,7 +176,7 @@ describe("RoomService", () => {
     });
   });
 
-  it("keeps the recent room record after a member leaves an existing room", async () => {
+  it("clears the recent room record after a member leaves an existing room", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -191,8 +191,7 @@ describe("RoomService", () => {
 
     const recentRoom = await roomService.getRecentRoomSnapshotForSession(member.id);
 
-    expect(recentRoom).not.toBeNull();
-    expect(recentRoom?.room.id).toBe(snapshot.room.id);
+    expect(recentRoom).toBeNull();
   });
 
   it("imports a playlist back into the room queue when tracks exist in the room", async () => {
@@ -770,6 +769,56 @@ describe("RoomService", () => {
     expect(restored).not.toBeNull();
     expect(restored?.room.id).toBe(snapshot.room.id);
     expect(redis.setString).toHaveBeenCalled();
+  });
+
+  it("refreshes the recent room when a member recovers an older room again", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const hostOne = await authService.createGuestSession("Host One");
+    const hostTwo = await authService.createGuestSession("Host Two");
+    const member = await authService.createGuestSession("Member");
+    const firstRoom = await roomService.createRoom(hostOne.id);
+    const secondRoom = await roomService.createRoom(hostTwo.id);
+
+    await roomService.joinRoom(firstRoom.room.id, member.id);
+    await roomService.joinRoom(secondRoom.room.id, member.id);
+
+    await roomService.getRecoverableRoomSnapshot(firstRoom.room.id, member.id);
+    const recentRoom = await roomService.getRecentRoomSnapshotForSession(member.id);
+
+    expect(recentRoom).not.toBeNull();
+    expect(recentRoom?.room.id).toBe(firstRoom.room.id);
+  });
+
+  it("drops a stale recent room when the session is no longer a member", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const firstRoom = await roomService.createRoom(host.id);
+    const secondRoom = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(firstRoom.room.id, member.id);
+    await roomService.joinRoom(secondRoom.room.id, member.id);
+    await roomService.leaveRoom(secondRoom.room.id, member.id);
+
+    await roomService.rememberRecentRoom(secondRoom.room.id, host.id);
+    await roomService.rememberRecentRoom(firstRoom.room.id, member.id);
+    await (redis as ReturnType<typeof createRedisMock>).setString(
+      "music-room:session:" + member.id + ":recent-room",
+      secondRoom.room.id
+    );
+
+    const recentRoom = await roomService.getRecentRoomSnapshotForSession(member.id);
+
+    expect(recentRoom).not.toBeNull();
+    expect(recentRoom?.room.id).toBe(firstRoom.room.id);
   });
 
   it("creates a six-character uppercase join code", async () => {

@@ -468,6 +468,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     try {
       this.cancelPendingDisconnectCleanup(payload.roomId, payload.sessionId);
       await this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId, "online");
+      await this.rememberRecentRoom(payload.roomId, payload.sessionId);
       await this.emitLatestSnapshot(payload.roomId, payload.sessionId, client);
       this.emitAvailabilitySnapshot(payload.roomId, client);
     } catch (error) {
@@ -596,6 +597,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         playback: snapshot.room.playback,
         presenceRevision: snapshot.room.presenceRevision
       });
+    } catch {
+      clientSafeNoop();
+    }
+  }
+
+  private async rememberRecentRoom(roomId: string, sessionId: string) {
+    const roomService = this.moduleRef.get(RoomService, { strict: false });
+
+    if (!roomService) {
+      return;
+    }
+
+    try {
+      await roomService.rememberRecentRoom(roomId, sessionId);
     } catch {
       clientSafeNoop();
     }

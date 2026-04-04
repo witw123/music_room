@@ -172,7 +172,10 @@ export type ServerToClientEvents = {
 };
 
 export type ClientToServerEvents = {
-  "room.subscribe": (payload: RoomSubscribePayload) => void;
+  "room.subscribe": (
+    payload: RoomSubscribePayload,
+    ack?: (payload: { ok: boolean }) => void
+  ) => void;
   "room.presence": (payload: RoomPresencePayload) => void;
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;

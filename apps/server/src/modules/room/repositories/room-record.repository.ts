@@ -184,6 +184,14 @@ export class RoomRecordRepository {
     }
   }
 
+  async setRecentRoomForSession(sessionId: string, roomId: string) {
+    await this.redis.setString(
+      this.sessionRecentRoomKey(sessionId),
+      roomId,
+      this.sessionRecentRoomTtlSeconds
+    );
+  }
+
   sessionRecentRoomKey(sessionId: string) {
     return `music-room:session:${sessionId}:recent-room`;
   }

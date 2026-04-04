@@ -27,6 +27,10 @@ import {
   P2PMesh,
   RoomMediaMesh
 } from "@/features/p2p";
+import {
+  createRoomSnapshotResyncController,
+  type RoomSnapshotResyncReason
+} from "@/features/room/room-snapshot-resync";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
   getPresenceRevision,
@@ -313,6 +317,123 @@ export function useRoomRuntime({
   useEffect(() => {
     resetPlayerSurfaceRef.current = resetPlayerSurface;
   }, [resetPlayerSurface]);
+
+  const exitCurrentRoom = useCallback(
+    (message: string) => {
+      setIsNavigatingRoomExit(true);
+      setSuppressRoomRecovery(true);
+      setRoomSnapshot(null);
+      resetPlayerSurface();
+      window.localStorage.removeItem(lastRoomStorageKey);
+      setStatusMessage(message);
+      if (workspaceOnly) {
+        router.push(workspaceEntryHref as Route);
+        return;
+      }
+
+      setIsNavigatingRoomExit(false);
+    },
+    [
+      lastRoomStorageKey,
+      resetPlayerSurface,
+      router,
+      setIsNavigatingRoomExit,
+      setRoomSnapshot,
+      setStatusMessage,
+      setSuppressRoomRecovery,
+      workspaceEntryHref,
+      workspaceOnly
+    ]
+  );
+
+  const applyResyncedRoomSnapshot = useCallback(
+    (expectedRoomId: string, snapshot: RoomSnapshot, reason: RoomSnapshotResyncReason) => {
+      if (
+        snapshot.room.id !== expectedRoomId ||
+        activeRouteRoomIdRef.current !== expectedRoomId
+      ) {
+        return;
+      }
+
+      setRoomSnapshot((current) =>
+        current?.room.id && current.room.id !== expectedRoomId
+          ? current
+          : mergeRoomSnapshot(current, snapshot)
+      );
+
+      recordPeerDiagnostic({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: "room-snapshot-resync",
+        summary: `房间状态已全量刷新（${reason}）`,
+        recordEvent: false
+      });
+    },
+    [recordPeerDiagnostic, setRoomSnapshot]
+  );
+
+  const handleRoomSnapshotResyncError = useCallback(
+    (roomId: string, reason: RoomSnapshotResyncReason, error: unknown) => {
+      if (activeRouteRoomIdRef.current !== roomId || isNavigatingRoomExit) {
+        return;
+      }
+
+      const message = toUserFacingError(error);
+      recordPeerDiagnostic({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: "room-snapshot-resync-failed",
+        level: "warning",
+        summary: `房间状态刷新失败（${reason}）：${message}`,
+        update: (snapshot) => ({
+          ...snapshot,
+          lastError: `房间状态刷新失败：${message}`
+        })
+      });
+
+      if (
+        message.includes("房间不存在") ||
+        message.includes("已经被删除") ||
+        message.includes("房间已不可用")
+      ) {
+        exitCurrentRoom("这个房间已不可用，请返回音乐房重新加入。");
+        return;
+      }
+
+      setStatusMessage(`房间状态刷新失败：${message}`);
+    },
+    [exitCurrentRoom, isNavigatingRoomExit, recordPeerDiagnostic, setStatusMessage]
+  );
+
+  const roomSnapshotResyncController = useMemo(
+    () =>
+      createRoomSnapshotResyncController({
+        loadSnapshot: (roomId: string) => musicRoomApi.getRoom(roomId),
+        applySnapshot: applyResyncedRoomSnapshot,
+        onError: handleRoomSnapshotResyncError
+      }),
+    [applyResyncedRoomSnapshot, handleRoomSnapshotResyncError]
+  );
+
+  useEffect(() => () => roomSnapshotResyncController.reset(), [roomSnapshotResyncController]);
+
+  const requestRoomSnapshotResync = useCallback(
+    async (reason: RoomSnapshotResyncReason, roomId = activeRouteRoomIdRef.current) => {
+      if (
+        !roomId ||
+        !hydrated ||
+        !activeSessionRef.current?.userId ||
+        isNavigatingRoomExit
+      ) {
+        return;
+      }
+
+      await roomSnapshotResyncController.request(roomId, reason);
+    },
+    [activeSessionRef, hydrated, isNavigatingRoomExit, roomSnapshotResyncController]
+  );
 
   useEffect(() => {
     activeRouteRoomIdRef.current = initialRoomId;
@@ -766,12 +887,16 @@ export function useRoomRuntime({
       setIsPageVisible(nextVisible);
       if (nextVisible) {
         setSchedulerMode((current) => (current === "idle" ? "normal" : current));
+        void requestRoomSnapshotResync(
+          "visibility-visible",
+          currentRoomRef.current?.room.id ?? null
+        );
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [setIsPageVisible, setSchedulerMode]);
+  }, [currentRoomRef, requestRoomSnapshotResync, setIsPageVisible, setSchedulerMode]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession) {
@@ -1236,11 +1361,21 @@ export function useRoomRuntime({
     mediaMeshRef.current = mediaMesh;
 
     const subscribeToRoom = () => {
-      socket.emit("room.subscribe", {
-        roomId,
-        sessionId: activeSessionRef.current?.userId,
-        peerId
-      });
+      socket.emit(
+        "room.subscribe",
+        {
+          roomId,
+          sessionId: activeSessionRef.current?.userId,
+          peerId
+        },
+        (response?: { ok?: boolean }) => {
+          if (!response?.ok) {
+            return;
+          }
+
+          void requestRoomSnapshotResync("subscribe-ack", roomId);
+        }
+      );
     };
 
     const emitPresence = () => {
@@ -1263,30 +1398,20 @@ export function useRoomRuntime({
       }
       presenceIntervalId = window.setInterval(emitPresence, 10_000);
     };
-    const exitCurrentRoom = (message: string) => {
+    const exitAndStopPresence = (message: string) => {
       if (presenceIntervalId !== null) {
         window.clearInterval(presenceIntervalId);
         presenceIntervalId = null;
       }
 
-      setIsNavigatingRoomExit(true);
-      setSuppressRoomRecovery(true);
-      setRoomSnapshot(null);
-      resetPlayerSurfaceRef.current();
-      window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage(message);
-      if (workspaceOnly) {
-        router.push(workspaceEntryHref as Route);
-        return;
-      }
-
-      setIsNavigatingRoomExit(false);
+      exitCurrentRoom(message);
     };
 
     socket.on("connect", () => {
       subscribeToRoom();
       startPresenceHeartbeat();
       flushPendingAvailability();
+      void requestRoomSnapshotResync("socket-connect", roomId);
       const joinCode = currentRoomRef.current?.room.joinCode;
       if (joinCode) {
         setStatusMessage(`已连接到房间 ${joinCode}。`);
@@ -1408,7 +1533,7 @@ export function useRoomRuntime({
       }
 
       socket.disconnect();
-      exitCurrentRoom("同一账号已在其他标签页或设备进入这个房间，当前页面已退出房间。");
+      exitAndStopPresence("同一账号已在其他标签页或设备进入这个房间，当前页面已退出房间。");
     });
     socket.on("room.deleted", ({ roomId: deletedRoomId, trackIds }) => {
       if (deletedRoomId !== roomId) {
@@ -1418,40 +1543,14 @@ export function useRoomRuntime({
       void Promise.allSettled(
         trackIds.map((trackId) => deleteUploadedTrackArtifactsRef.current(trackId))
       );
-      exitCurrentRoom("鎴块棿宸茶В鏁ｏ紝褰撳墠鎴块棿鐨勬瓕鍗曞拰鏈湴缂撳瓨宸叉竻鐞嗐€?");
-      return;
-      setIsNavigatingRoomExit(true);
-      setSuppressRoomRecovery(true);
-      setRoomSnapshot(null);
-      resetPlayerSurfaceRef.current();
-      window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage("房间已解散，当前房间的歌单和本地缓存已清理。");
-      if (workspaceOnly) {
-        router.push(workspaceEntryHref as Route);
-        return;
-      }
-
-      setIsNavigatingRoomExit(false);
+      exitAndStopPresence("房间已解散，当前房间的歌单和本地缓存已清理。");
     });
     socket.on("room.snapshot.missing", () => {
       if (isNavigatingRoomExit) {
         return;
       }
 
-      exitCurrentRoom("杩欎釜鎴块棿宸蹭笉鍙敤锛岃杩斿洖闊充箰鎴块噸鏂板姞鍏ャ€?");
-      return;
-      setIsNavigatingRoomExit(true);
-      setSuppressRoomRecovery(true);
-      setRoomSnapshot(null);
-      resetPlayerSurfaceRef.current();
-      window.localStorage.removeItem(lastRoomStorageKey);
-      setStatusMessage("这个房间已不可用，请返回音乐房重新加入。");
-      if (workspaceOnly) {
-        router.push(workspaceEntryHref as Route);
-        return;
-      }
-
-      setIsNavigatingRoomExit(false);
+      exitAndStopPresence("这个房间已不可用，请返回音乐房重新加入。");
     });
     socket.on("connect_error", (error) => {
       recordPeerDiagnostic({
@@ -1518,21 +1617,16 @@ export function useRoomRuntime({
     recordPeerDiagnostic,
     flushPendingAvailability,
     queueAvailability,
+    requestRoomSnapshotResync,
     scheduleRemotePlaybackRetry,
     chunkSchedulerRef,
     remoteAudioRef,
     resetRemoteAudioElement,
-    workspaceOnly,
     isNavigatingRoomExit,
-    router,
-    lastRoomStorageKey,
-    workspaceEntryHref,
     setConnectedPeers,
     setMediaConnectedPeers,
     setMediaConnectionState,
-    setRoomSnapshot,
-    setIsNavigatingRoomExit,
-    setSuppressRoomRecovery,
+    exitCurrentRoom,
     setStatusMessage,
     updateDataTransportStats,
     updateMediaTransportStats,
