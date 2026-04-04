@@ -1666,6 +1666,8 @@ export function useRoomRuntime({
   }, [
     roomSnapshot?.room.id,
     hydrated,
+    iceConfig,
+    iceConfigResolved,
     peerId,
     activeSessionRef,
     currentRoomRef,
