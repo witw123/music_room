@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import type { RoomMember } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
 
 export type MemberTransferSummary = {
   memberId: string;
@@ -15,6 +15,7 @@ export type MemberTransferSummary = {
 type MembersPanelProps = {
   members: RoomMember[];
   memberTransferSummaries?: MemberTransferSummary[];
+  peerDiagnostics?: PeerDiagnosticsSnapshot[];
 };
 
 type StatusTone = "neutral" | "accent" | "success" | "warning";
@@ -168,12 +169,40 @@ function getPresenceBadge(member: RoomMember) {
   };
 }
 
+function formatMetric(value: number | null, unit: string) {
+  if (value === null) {
+    return "未知";
+  }
+
+  return `${value}${unit}`;
+}
+
+function getRemoteStreamRate(peer: PeerDiagnosticsSnapshot | undefined) {
+  if (!peer) {
+    return null;
+  }
+
+  if (peer.mediaReceiveBitrateKbps !== null) {
+    return peer.mediaReceiveBitrateKbps;
+  }
+
+  if (peer.mediaSendBitrateKbps !== null) {
+    return peer.mediaSendBitrateKbps;
+  }
+
+  return peer.availableOutgoingBitrateKbps;
+}
+
 function MembersPanelBase({
   members,
-  memberTransferSummaries = []
+  memberTransferSummaries = [],
+  peerDiagnostics = []
 }: MembersPanelProps) {
   const summaryByMemberId = new Map(
     memberTransferSummaries.map((summary) => [summary.memberId, summary])
+  );
+  const diagnosticsByPeerId = new Map(
+    peerDiagnostics.map((snapshot) => [snapshot.peerId, snapshot])
   );
 
   return (
@@ -186,6 +215,10 @@ function MembersPanelBase({
           const sourceSummary = formatCurrentTrackSources(summary?.currentTrackSources ?? []);
           const toneClasses = getToneClasses(currentTrackStatus.tone);
           const presenceBadge = getPresenceBadge(member);
+          const peerDiagnosticsSnapshot = member.peerId
+            ? diagnosticsByPeerId.get(member.peerId)
+            : undefined;
+          const remoteStreamRateKbps = getRemoteStreamRate(peerDiagnosticsSnapshot);
 
           return (
             <div
@@ -209,6 +242,28 @@ function MembersPanelBase({
                   <em className={`text-xs not-italic ${presenceBadge.text}`}>
                     {presenceBadge.label}
                   </em>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
+                  <span className="block text-foreground-muted">远端流链路</span>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <span>传输速度: {formatMetric(remoteStreamRateKbps, " kbps")}</span>
+                    <span>延迟: {formatMetric(peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null, "ms")}</span>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
+                  <span className="block text-foreground-muted">分片同步</span>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <span>
+                      下载: {formatMetric(peerDiagnosticsSnapshot?.pieceDownloadRateKbps ?? null, " kbps")}
+                    </span>
+                    <span>
+                      上传: {formatMetric(peerDiagnosticsSnapshot?.pieceUploadRateKbps ?? null, " kbps")}
+                    </span>
+                  </div>
                 </div>
               </div>
 

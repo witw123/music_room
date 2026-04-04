@@ -504,4 +504,59 @@ describe("ChunkScheduler", () => {
       })
     );
   });
+
+  it("continues backfilling the current track once steady playback is comfortably buffered", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      maxConcurrentCurrentTrack: 3,
+      maxConcurrentPerPeer: 3,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks[0] = {
+      ...roomSnapshot.tracks[0],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    };
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_member: buildAnnouncement({
+            ownerPeerId: "peer_member",
+            nickname: "Member",
+            availableChunks: Array.from({ length: 10 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          }),
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 256 * 1024
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 15_000,
+      policy: "steady",
+      bufferHealth: "healthy"
+    });
+
+    const requestedCurrentChunks = (requestPiece.mock.calls as unknown as Array<[{
+      trackId: string;
+      chunkIndex: number;
+      priority: string;
+    }]>)
+      .map(([call]) => call)
+      .filter((call) => call.trackId === "track_1" && call.priority === "current")
+      .map((call) => call.chunkIndex);
+
+    expect(requestedCurrentChunks).toEqual(expect.arrayContaining([10, 11]));
+  });
 });

@@ -35,6 +35,7 @@ function MembersTabPanelBase({
       <MembersPanel
         members={members}
         memberTransferSummaries={memberTransferSummaries}
+        peerDiagnostics={peerDiagnostics}
       />
 
       <MeshStatusPanel

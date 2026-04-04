@@ -291,6 +291,7 @@ export class ChunkScheduler {
     let currentTrackManifest: ReturnType<typeof buildProgressiveTrackManifest> = null;
     let currentTrackState: ChunkSchedulerTrackState | null = null;
     let currentTrackAheadBufferedMs = 0;
+    let comfortableCurrentTrackBufferMs = 0;
     const shouldPreserveRemotePlayback =
       this.playbackClockSource === "remote" && this.playbackStatus === "playing";
 
@@ -307,6 +308,12 @@ export class ChunkScheduler {
             availableChunks: [...currentTrackState.ownedChunks],
             playbackPositionMs: this.playbackPositionMs
           })
+        : 0;
+      comfortableCurrentTrackBufferMs = currentTrackManifest
+        ? Math.max(
+            getLowBufferThresholdMs() * 2,
+            Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
+          )
         : 0;
       const isCurrentTrackComplete = this.isTrackComplete(
         currentTrack.id,
@@ -340,6 +347,12 @@ export class ChunkScheduler {
           ? this.policy === "startup"
             ? "startup"
             : "pause-fill"
+          : !shouldPreserveRemotePlayback &&
+              this.playbackStatus === "playing" &&
+              !isCurrentTrackComplete &&
+              currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs &&
+              (this.policy === "steady" || this.policy === "background")
+            ? "pause-fill"
           : this.policy === "background"
             ? "steady"
             : this.policy;
@@ -381,11 +394,7 @@ export class ChunkScheduler {
       this.playbackStatus === "playing" &&
       this.mode === "normal" &&
       this.bufferHealth === "healthy" &&
-      currentTrackAheadBufferedMs >=
-        Math.max(
-          getLowBufferThresholdMs() * 2,
-          Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
-        );
+      currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
 
     if (!canPrefetchUpcomingTrack && (this.policy !== "background" || !isCurrentTrackComplete)) {
       return plans.filter((plan) => plan.wantedChunks.length > 0);

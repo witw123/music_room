@@ -10,16 +10,28 @@ import {
   getCachedPieceIndexes,
   getTrackPieceManifest
 } from "@/lib/indexeddb";
-import { samplePeerConnectionStats, type PeerConnectionStatsSample } from "./connection-stats";
+import {
+  samplePeerConnectionStats,
+  type PeerConnectionStatsSample,
+  type PeerConnectionStatsSnapshot
+} from "./connection-stats";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
   onPieceReceived: (payload: {
+    peerId: string;
     trackId: string;
     chunkIndex: number;
     totalChunks: number;
     chunkSize: number;
     mimeType: string;
+    payloadBytes: number;
+  }) => void;
+  onPieceSent?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    payloadBytes: number;
   }) => void;
   onPieceRequestTimeout?: (payload: {
     trackId: string;
@@ -56,6 +68,7 @@ type PeerEntry = {
   initiatorPeerId: string | null;
   pendingCandidates: RTCIceCandidateInit[];
   statsIntervalId: ReturnType<typeof setInterval> | null;
+  statsSnapshot: PeerConnectionStatsSnapshot | null;
 };
 
 type PendingPieceRequest = {
@@ -298,7 +311,8 @@ export class P2PMesh {
       channel: null,
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
       pendingCandidates: [],
-      statsIntervalId: null
+      statsIntervalId: null,
+      statsSnapshot: null
     };
     this.startStatsSampling(peerId, entry);
 
@@ -438,6 +452,12 @@ export class P2PMesh {
             piece.payload
           )
         );
+        this.callbacks.onPieceSent?.({
+          peerId,
+          trackId: message.trackId,
+          chunkIndex: piece.chunkIndex,
+          payloadBytes: piece.payload.byteLength
+        });
         return;
       }
 
@@ -485,14 +505,15 @@ export class P2PMesh {
     }
 
     const emitStatsSample = async () => {
-      const sample = await samplePeerConnectionStats(entry.connection);
-      if (!sample) {
+      const nextStats = await samplePeerConnectionStats(entry.connection, entry.statsSnapshot);
+      if (!nextStats) {
         return;
       }
 
+      entry.statsSnapshot = nextStats.snapshot;
       this.callbacks.onStatsSample?.({
         peerId,
-        sample
+        sample: nextStats.sample
       });
     };
 
@@ -610,11 +631,13 @@ export class P2PMesh {
         });
 
         this.callbacks.onPieceReceived({
+          peerId: item.peerId,
           trackId: item.message.header.trackId,
           chunkIndex: item.message.header.chunkIndex,
           totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
           chunkSize: item.message.header.chunkSize,
-          mimeType: item.message.header.mimeType
+          mimeType: item.message.header.mimeType,
+          payloadBytes: item.message.payload.byteLength
         });
       }
     } finally {

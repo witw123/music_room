@@ -205,6 +205,10 @@ function MeshStatusPanelBase({
                     <span>媒体协议: {peer.mediaProtocol ?? "未知"}</span>
                     <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
                     <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>
+                    <span>媒体接收: {formatMetric(peer.mediaReceiveBitrateKbps, " kbps")}</span>
+                    <span>媒体发送: {formatMetric(peer.mediaSendBitrateKbps, " kbps")}</span>
+                    <span>分片下载: {formatMetric(peer.pieceDownloadRateKbps, " kbps")}</span>
+                    <span>分片上传: {formatMetric(peer.pieceUploadRateKbps, " kbps")}</span>
                     <span>丢包: {peer.packetsLost ?? "未知"}</span>
                     <span>抖动: {formatMetric(peer.jitterMs, "ms")}</span>
                     <span>

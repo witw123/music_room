@@ -265,6 +265,8 @@ describe("RoomMediaMesh", () => {
         protocol: "tcp",
         currentRoundTripTimeMs: 70,
         availableOutgoingBitrateKbps: 148,
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: null,
         packetsLost: 104,
         jitterMs: 3
       })
@@ -278,6 +280,8 @@ describe("RoomMediaMesh", () => {
         protocol: "tcp",
         currentRoundTripTimeMs: 90,
         availableOutgoingBitrateKbps: 90,
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: null,
         packetsLost: 20,
         jitterMs: 4
       })

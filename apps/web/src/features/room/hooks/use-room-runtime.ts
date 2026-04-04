@@ -125,6 +125,55 @@ type UseRoomRuntimeResult = {
   syncHostMediaStream: () => Promise<void>;
 };
 
+type PieceTransferSample = {
+  timestampMs: number;
+  bytes: number;
+};
+
+type PieceTransferWindow = {
+  downloads: PieceTransferSample[];
+  uploads: PieceTransferSample[];
+};
+
+const pieceTransferWindowMs = 8_000;
+
+function getPieceTransferRates(
+  transferWindows: Map<string, PieceTransferWindow>,
+  peerId: string,
+  now = Date.now()
+) {
+  const window = transferWindows.get(peerId);
+  if (!window) {
+    return {
+      downloadRateKbps: null,
+      uploadRateKbps: null
+    };
+  }
+
+  window.downloads = prunePieceTransferSamples(window.downloads, now);
+  window.uploads = prunePieceTransferSamples(window.uploads, now);
+
+  return {
+    downloadRateKbps: calculatePieceTransferRateKbps(window.downloads, now),
+    uploadRateKbps: calculatePieceTransferRateKbps(window.uploads, now)
+  };
+}
+
+function prunePieceTransferSamples(samples: PieceTransferSample[], now: number) {
+  return samples.filter((sample) => now - sample.timestampMs <= pieceTransferWindowMs);
+}
+
+function calculatePieceTransferRateKbps(samples: PieceTransferSample[], now: number) {
+  if (samples.length === 0) {
+    return 0;
+  }
+
+  const totalBytes = samples.reduce((sum, sample) => sum + sample.bytes, 0);
+  const oldestTimestampMs = samples[0]?.timestampMs ?? now;
+  const durationMs = Math.max(1_000, now - oldestTimestampMs);
+  return Math.round((totalBytes * 8) / durationMs);
+}
+
 export function useRoomRuntime({
   workspaceOnly,
   initialRoomId,
@@ -211,10 +260,31 @@ export function useRoomRuntime({
     accumulatedMs: 0,
     segmentStartedAt: null
   });
+  const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
   const resetPlayerSurfaceRef = useRef(resetPlayerSurface);
+
+  const resetRemoteAudioElement = useCallback(
+    (stream: MediaStream | null) => {
+      const remoteAudio = remoteAudioRef.current;
+      if (!remoteAudio) {
+        return;
+      }
+
+      remoteAudio.pause();
+      if (remoteAudio.srcObject) {
+        remoteAudio.srcObject = null;
+      }
+      remoteAudio.load();
+
+      if (stream) {
+        remoteAudio.srcObject = stream;
+      }
+    },
+    [remoteAudioRef]
+  );
 
   useEffect(() => {
     activeSessionRef.current = activeSession;
@@ -417,6 +487,7 @@ export function useRoomRuntime({
         availableOutgoingBitrateKbps: number | null;
       };
     }) => {
+      const pieceTransferRates = getPieceTransferRates(pieceTransferRatesRef.current, input.peerId);
       recordPeerDiagnostic({
         peerId: input.peerId,
         channelKind: "data",
@@ -430,7 +501,9 @@ export function useRoomRuntime({
           currentRoundTripTimeMs:
             snapshot.currentRoundTripTimeMs ?? input.sample.currentRoundTripTimeMs,
           availableOutgoingBitrateKbps:
-            snapshot.availableOutgoingBitrateKbps ?? input.sample.availableOutgoingBitrateKbps
+            snapshot.availableOutgoingBitrateKbps ?? input.sample.availableOutgoingBitrateKbps,
+          pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
+          pieceUploadRateKbps: pieceTransferRates.uploadRateKbps
         })
       });
     },
@@ -445,6 +518,8 @@ export function useRoomRuntime({
         protocol: string | null;
         currentRoundTripTimeMs: number | null;
         availableOutgoingBitrateKbps: number | null;
+        mediaReceiveBitrateKbps: number | null;
+        mediaSendBitrateKbps: number | null;
         packetsLost: number | null;
         jitterMs: number | null;
       };
@@ -465,8 +540,55 @@ export function useRoomRuntime({
           availableOutgoingBitrateKbps:
             input.sample.availableOutgoingBitrateKbps ??
             snapshot.availableOutgoingBitrateKbps,
+          mediaReceiveBitrateKbps:
+            input.sample.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
+          mediaSendBitrateKbps: input.sample.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
           packetsLost: input.sample.packetsLost ?? snapshot.packetsLost,
           jitterMs: input.sample.jitterMs ?? snapshot.jitterMs
+        })
+      });
+    },
+    [recordPeerDiagnostic]
+  );
+
+  const recordPieceTransfer = useCallback(
+    (input: {
+      peerId: string;
+      direction: "download" | "upload";
+      bytes: number;
+    }) => {
+      if (!input.peerId || input.bytes <= 0) {
+        return;
+      }
+
+      const window =
+        pieceTransferRatesRef.current.get(input.peerId) ??
+        (() => {
+          const initial: PieceTransferWindow = {
+            downloads: [],
+            uploads: []
+          };
+          pieceTransferRatesRef.current.set(input.peerId, initial);
+          return initial;
+        })();
+      const bucket = input.direction === "download" ? window.downloads : window.uploads;
+      bucket.push({
+        timestampMs: Date.now(),
+        bytes: input.bytes
+      });
+
+      const pieceTransferRates = getPieceTransferRates(pieceTransferRatesRef.current, input.peerId);
+      recordPeerDiagnostic({
+        peerId: input.peerId,
+        channelKind: "data",
+        direction: "local",
+        event: "piece-transfer-stats",
+        summary: "Piece transfer stats updated",
+        recordEvent: false,
+        update: (snapshot) => ({
+          ...snapshot,
+          pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
+          pieceUploadRateKbps: pieceTransferRates.uploadRateKbps
         })
       });
     },
@@ -851,6 +973,7 @@ export function useRoomRuntime({
     socketRef.current = socket;
     const roomId = roomSnapshot.room.id;
     let presenceIntervalId: number | null = null;
+    pieceTransferRatesRef.current.clear();
     const iceServers = getWebRTCIceServers(iceConfig);
     const emitPeerSignal = (payload: PeerSignalMessage) => {
       recordPeerDiagnostic({
@@ -890,7 +1013,12 @@ export function useRoomRuntime({
       peerId,
       emitPeerSignal,
       {
-        onPieceReceived: ({ trackId, chunkIndex, totalChunks, chunkSize, mimeType }) => {
+        onPieceReceived: ({ peerId: sourcePeerId, trackId, chunkIndex, totalChunks, chunkSize, mimeType, payloadBytes }) => {
+          recordPieceTransfer({
+            peerId: sourcePeerId,
+            direction: "download",
+            bytes: payloadBytes
+          });
           const currentTrack =
             currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
           if (currentTrack) {
@@ -908,6 +1036,13 @@ export function useRoomRuntime({
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
           mergeLocalPieceAvailability(trackId, chunkIndex, totalChunks, chunkSize);
           scheduleTrackHydrationRef.current(trackId, mimeType, totalChunks);
+        },
+        onPieceSent: ({ peerId: targetPeerId, payloadBytes }) => {
+          recordPieceTransfer({
+            peerId: targetPeerId,
+            direction: "upload",
+            bytes: payloadBytes
+          });
         },
         onPieceRequestTimeout: ({ trackId, chunkIndex, peerId: timedOutPeerId }) => {
           chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
@@ -986,7 +1121,7 @@ export function useRoomRuntime({
           }
 
           if (remoteAudio.srcObject !== stream) {
-            remoteAudio.srcObject = stream;
+            resetRemoteAudioElement(stream);
             recordPeerDiagnostic({
               peerId: "remote-media",
               channelKind: "media",
@@ -1026,6 +1161,7 @@ export function useRoomRuntime({
 
           if (state === "connected") {
             setMediaConnectionState("buffering");
+            scheduleRemotePlaybackRetry();
             return;
           }
 
@@ -1385,6 +1521,7 @@ export function useRoomRuntime({
     scheduleRemotePlaybackRetry,
     chunkSchedulerRef,
     remoteAudioRef,
+    resetRemoteAudioElement,
     workspaceOnly,
     isNavigatingRoomExit,
     router,

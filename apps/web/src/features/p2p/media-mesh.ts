@@ -1,5 +1,9 @@
 import type { IceServerConfig, PeerSignalMessage } from "@music-room/shared";
-import { samplePeerConnectionStats, type PeerConnectionStatsSample } from "./connection-stats";
+import {
+  samplePeerConnectionStats,
+  type PeerConnectionStatsSample,
+  type PeerConnectionStatsSnapshot
+} from "./connection-stats";
 
 type MediaConnectionState = "idle" | RTCPeerConnectionState;
 
@@ -41,6 +45,7 @@ type MediaPeerEntry = {
   wantsIncomingAudio: boolean;
   statsIntervalId: ReturnType<typeof setInterval> | null;
   configuredAudioMaxBitrateBps: number | null;
+  statsSnapshot: PeerConnectionStatsSnapshot | null;
 };
 
 const bootstrapAudioMaxBitrateBps = 96_000;
@@ -260,7 +265,8 @@ export class RoomMediaMesh {
       pendingCandidates: [],
       wantsIncomingAudio,
       statsIntervalId: null,
-      configuredAudioMaxBitrateBps: null
+      configuredAudioMaxBitrateBps: null,
+      statsSnapshot: null
     };
     this.startStatsSampling(peerId, entry);
 
@@ -423,11 +429,13 @@ export class RoomMediaMesh {
     }
 
     const emitStatsSample = async () => {
-      const sample = await samplePeerConnectionStats(entry.connection);
-      if (!sample) {
+      const nextStats = await samplePeerConnectionStats(entry.connection, entry.statsSnapshot);
+      if (!nextStats) {
         return;
       }
 
+      entry.statsSnapshot = nextStats.snapshot;
+      const sample = nextStats.sample;
       await this.tuneOutgoingAudio(entry, sample);
       this.callbacks.onStatsSample?.({
         peerId,
