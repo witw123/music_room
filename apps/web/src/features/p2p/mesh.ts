@@ -293,14 +293,21 @@ export class P2PMesh {
     const existing = this.peers.get(peerId);
 
     if (existing) {
+      if (
+        existing.connection.connectionState === "failed" ||
+        existing.connection.connectionState === "closed"
+      ) {
+        this.releasePeer(peerId, existing);
+      } else {
       // If an entry exists and we are the initiator, do NOT initiate again.
       // The remote peer may already be trying to connect to us.
-      if (shouldInitiate && existing.initiatorPeerId === this.localPeerId) {
+        if (shouldInitiate && existing.initiatorPeerId === this.localPeerId) {
+          return existing;
+        }
+        // If an entry exists and we are NOT the initiator, return it.
+        // handleSignal will use it to process the incoming offer/answer.
         return existing;
       }
-      // If an entry exists and we are NOT the initiator, return it.
-      // handleSignal will use it to process the incoming offer/answer.
-      return existing;
     }
 
     const connection = new RTCPeerConnection({
@@ -341,6 +348,13 @@ export class P2PMesh {
         peerId,
         state: connection.connectionState
       });
+
+      if (
+        (connection.connectionState === "failed" || connection.connectionState === "closed") &&
+        this.peers.get(peerId) === entry
+      ) {
+        this.releasePeer(peerId, entry);
+      }
     };
 
     connection.oniceconnectionstatechange = () => {
@@ -492,11 +506,13 @@ export class P2PMesh {
   }
 
   private releasePeer(peerId: string, entry: PeerEntry) {
+    if (this.peers.get(peerId) === entry) {
+      this.peers.delete(peerId);
+    }
     this.clearPendingRequestsForPeer(peerId);
     this.stopStatsSampling(entry);
     entry.channel?.close();
     entry.connection.close();
-    this.peers.delete(peerId);
   }
 
   private startStatsSampling(peerId: string, entry: PeerEntry) {

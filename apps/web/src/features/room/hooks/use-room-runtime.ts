@@ -949,6 +949,7 @@ export function useRoomRuntime({
       setIsPageVisible(nextVisible);
       if (nextVisible) {
         setSchedulerMode((current) => (current === "idle" ? "normal" : current));
+        emitPresence();
         void requestRoomSnapshotResync(
           "visibility-visible",
           currentRoomRef.current?.room.id ?? null
@@ -958,7 +959,7 @@ export function useRoomRuntime({
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [currentRoomRef, requestRoomSnapshotResync, setIsPageVisible, setSchedulerMode]);
+  }, [currentRoomRef, emitPresence, requestRoomSnapshotResync, setIsPageVisible, setSchedulerMode]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession) {
@@ -1422,6 +1423,22 @@ export function useRoomRuntime({
     );
     mediaMeshRef.current = mediaMesh;
 
+    const resyncRealtimePeers = (members = currentRoomRef.current?.room.members ?? []) => {
+      const remotePeerIds = members
+        .map((member) => member.peerId)
+        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId);
+
+      void mesh.syncPeers(remotePeerIds).catch((error) => {
+        reportRealtimeFailure({
+          peerId: "system",
+          channelKind: "system",
+          event: "mesh-resync-failed",
+          summary: "Failed to resync data peers",
+          error
+        });
+      });
+    };
+
     const subscribeToRoom = (attempt = 0) => {
       const currentSession = activeSessionRef.current;
       if (!currentSession?.userId || !peerId) {
@@ -1452,6 +1469,10 @@ export function useRoomRuntime({
           }
 
           startPresenceHeartbeat();
+          resyncRealtimePeers();
+          if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
+            void syncHostMediaStream();
+          }
           void requestRoomSnapshotResync("subscribe-ack", roomId);
         }
       );
@@ -1464,6 +1485,10 @@ export function useRoomRuntime({
     socket.on("connect", () => {
       subscribeToRoom();
       flushPendingAvailability();
+      resyncRealtimePeers();
+      if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
+        void syncHostMediaStream();
+      }
       void requestRoomSnapshotResync("socket-connect", roomId);
       const joinCode = currentRoomRef.current?.room.joinCode;
       if (joinCode) {
@@ -1491,6 +1516,14 @@ export function useRoomRuntime({
       }
 
       flushPendingAvailability();
+      resyncRealtimePeers(snapshot.room.members);
+      if (snapshot.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
+        window.setTimeout(() => {
+          if (activeRouteRoomIdRef.current === roomId) {
+            void syncHostMediaStream();
+          }
+        }, 0);
+      }
     });
     socket.on("room.playback.patch", ({ playback }) => {
       applyPlaybackPatch(playback);
@@ -1517,6 +1550,14 @@ export function useRoomRuntime({
     });
     socket.on("room.presence.patch", ({ members, playback, presenceRevision }) => {
       applyPresencePatch(members, playback, presenceRevision);
+      resyncRealtimePeers(members);
+      if (playback.sourceSessionId === activeSessionRef.current?.userId) {
+        window.setTimeout(() => {
+          if (activeRouteRoomIdRef.current === roomId) {
+            void syncHostMediaStream();
+          }
+        }, 0);
+      }
     });
     socket.on("room.library.patch", ({ tracks, queue, playback }) => {
       if (activeRouteRoomIdRef.current !== roomId) {
@@ -1628,6 +1669,12 @@ export function useRoomRuntime({
     });
     socket.on("disconnect", (reason) => {
       stopPresenceHeartbeat();
+      setConnectedPeers([]);
+      setMediaConnectedPeers([]);
+      resetRemoteAudioElement(null);
+      setMediaConnectionState(
+        currentRoomRef.current?.room.playback.status === "playing" ? "reconnecting" : "idle"
+      );
 
       if (reason === "io client disconnect") {
         return;
@@ -1680,6 +1727,7 @@ export function useRoomRuntime({
     clearHostMediaSyncRetry,
     requestRoomSnapshotResync,
     scheduleRemotePlaybackRetry,
+    syncHostMediaStream,
     startPresenceHeartbeat,
     stopPresenceHeartbeat,
     chunkSchedulerRef,
