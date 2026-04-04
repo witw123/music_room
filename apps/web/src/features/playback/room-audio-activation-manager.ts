@@ -21,7 +21,7 @@ export class RoomAudioActivationManager {
     remoteAudio?: HTMLAudioElement | null;
   }) {
     await Promise.all([
-      this.resumeSharedContext(),
+      this.resumeSharedContext().catch(() => undefined),
       this.primeAudioElement({ element: input.localAudio }),
       this.primeAudioElement({ element: input.remoteAudio })
     ]);
@@ -36,9 +36,8 @@ export class RoomAudioActivationManager {
       };
     }
 
-    await this.resumeSharedContext();
-
     try {
+      await this.resumeSharedContext();
       await element.play();
       this.activated = true;
       return {
@@ -80,19 +79,23 @@ export class RoomAudioActivationManager {
       // be treated as autoplay and produce "progress is moving but no sound yet".
       if (!hadSrcObject && !hadSrc) {
         element.src = SILENT_WAV_DATA_URI;
-        element.load();
+        this.safeCall(() => element.load());
         usedSilentSource = true;
       }
 
       await element.play().catch(() => undefined);
+    } catch {
+      // Priming is best-effort only. Some embedded webviews and custom shells
+      // throw synchronously on media mutations; callers should continue without
+      // letting playback gestures crash the whole app.
     } finally {
       if (wasPaused) {
-        element.pause();
+        this.safeCall(() => element.pause());
       }
 
       if (usedSilentSource) {
-        element.removeAttribute("src");
-        element.load();
+        this.safeCall(() => element.removeAttribute("src"));
+        this.safeCall(() => element.load());
       }
 
       element.preload = originalPreload;
@@ -132,6 +135,14 @@ export class RoomAudioActivationManager {
       return this.sharedContext;
     } catch {
       return null;
+    }
+  }
+
+  private safeCall(action: () => void) {
+    try {
+      action();
+    } catch {
+      // Ignore one-off media element failures during priming cleanup.
     }
   }
 }

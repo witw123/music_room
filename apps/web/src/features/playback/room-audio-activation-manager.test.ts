@@ -42,4 +42,18 @@ describe("RoomAudioActivationManager", () => {
     expect(audio.volume).toBe(0.72);
     expect(audio.preload).toBe("none");
   });
+
+  it("does not reject when an embedded webview throws during priming", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    audio.load = vi.fn(() => {
+      throw new DOMException("load failed", "InvalidStateError");
+    });
+
+    await expect(
+      manager.activateOutputs({
+        localAudio: audio
+      })
+    ).resolves.toBeUndefined();
+  });
 });

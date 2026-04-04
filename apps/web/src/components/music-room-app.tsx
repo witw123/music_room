@@ -446,12 +446,29 @@ export function MusicRoomApp({
         })
       );
       setStatusMessage("正在准备音源...");
-      await roomAudioOutput.primeOutputs({
-        localAudio: audioRef.current,
-        remoteAudio: remoteAudioRef.current
-      });
+      try {
+        await roomAudioOutput.primeOutputs({
+          localAudio: audioRef.current,
+          remoteAudio: remoteAudioRef.current
+        });
+      } catch (error) {
+        const message = toUserFacingError(error);
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "audio-prime-failed",
+          level: "error",
+          summary: `音频输出预激活失败：${message}`,
+          update: (snapshot) => ({
+            ...snapshot,
+            lastError: `音频输出预激活失败：${message}`
+          })
+        });
+        setStatusMessage("音频输出初始化失败，已跳过预激活并继续尝试播放。");
+      }
     },
-    [setStatusMessage]
+    [recordPeerDiagnostic, setStatusMessage]
   );
 
   const handlePlayTrack = useCallback(
