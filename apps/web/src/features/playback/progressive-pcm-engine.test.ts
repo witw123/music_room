@@ -73,6 +73,25 @@ function installFakeAudioContext() {
       };
     }
 
+    createBufferSource() {
+      return {
+        buffer: null as unknown,
+        onended: null as (() => void) | null,
+        connect() {
+          return undefined;
+        },
+        start() {
+          return undefined;
+        },
+        stop() {
+          return undefined;
+        },
+        disconnect() {
+          return undefined;
+        }
+      };
+    }
+
     close() {
       return Promise.resolve();
     }
@@ -157,13 +176,14 @@ function createAudioElement() {
   return {
     volume: 0,
     srcObject: null as MediaStream | null,
+    play: vi.fn(async () => undefined),
     pause() {
       return undefined;
     },
     load() {
       return undefined;
     }
-  } as HTMLAudioElement;
+  } as unknown as HTMLAudioElement;
 }
 
 describe("ProgressivePcmEngine", () => {
@@ -256,6 +276,32 @@ describe("ProgressivePcmEngine", () => {
       ]);
       expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(2);
       expect(Reflect.get(engine as object, "contiguousByteLength")).toBe(6);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("does not invoke the media element play path during sync playback", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0,
+          endTimeSec: 1,
+          buffer: {}
+        }
+      ]);
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(true);
+      expect(audio.play).not.toHaveBeenCalled();
     } finally {
       engine.destroy();
       audioContext.restore();

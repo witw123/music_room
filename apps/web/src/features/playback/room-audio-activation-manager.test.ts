@@ -56,4 +56,28 @@ describe("RoomAudioActivationManager", () => {
       })
     ).resolves.toBeUndefined();
   });
+
+  it("marks outputs activated after a successful play call", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+
+    await expect(manager.playElement(audio)).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+    expect(manager.isActivated()).toBe(true);
+  });
+
+  it("returns a structured failure when playback is rejected", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    audio.play = vi.fn(async () => {
+      throw new DOMException("blocked", "NotAllowedError");
+    });
+
+    await expect(manager.playElement(audio)).resolves.toEqual({
+      ok: false,
+      error: "blocked"
+    });
+  });
 });

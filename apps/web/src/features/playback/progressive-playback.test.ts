@@ -9,6 +9,7 @@ import {
   getProgressiveEngineType,
   getPriorityChunkIndexes,
   isStartupReady,
+  isTakeoverReady,
   resolveSchedulerPolicy
 } from "./progressive-playback";
 
@@ -61,6 +62,28 @@ describe("progressive playback helpers", () => {
         manifest,
         availableChunks: availability.availableChunks,
         playbackPositionMs: 20_000
+      })
+    ).toBe(true);
+  });
+
+  it("allows a shorter hot handoff window before cold startup is ready", () => {
+    const manifest = buildProgressiveTrackManifest(track, {
+      ...availability,
+      availableChunks: [0, 1, 2, 3, 4]
+    });
+
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 1, 2, 3, 4],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(false);
+    expect(
+      isTakeoverReady({
+        manifest,
+        availableChunks: [0, 1, 2, 3, 4],
+        playbackPositionMs: 40_000
       })
     ).toBe(true);
   });

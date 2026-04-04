@@ -15,7 +15,7 @@ describe("progressive source controller", () => {
     const firstDecision = resolveProgressiveWarmupDecision({
       currentSource: "remote-stream",
       engineReady: true,
-      startupReady: true,
+      activationReady: true,
       fallbackReason: null,
       driftMs: 120,
       warmupReadyAt: null,
@@ -31,7 +31,7 @@ describe("progressive source controller", () => {
     const secondDecision = resolveProgressiveWarmupDecision({
       currentSource: "remote-stream",
       engineReady: true,
-      startupReady: true,
+      activationReady: true,
       fallbackReason: null,
       driftMs: 80,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
@@ -43,7 +43,7 @@ describe("progressive source controller", () => {
     const thirdDecision = resolveProgressiveWarmupDecision({
       currentSource: "remote-stream",
       engineReady: true,
-      startupReady: true,
+      activationReady: true,
       fallbackReason: null,
       driftMs: 80,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
@@ -62,7 +62,7 @@ describe("progressive source controller", () => {
       resolveProgressiveWarmupDecision({
         currentSource: "remote-stream",
         engineReady: true,
-        startupReady: true,
+        activationReady: true,
         fallbackReason: "buffer-underrun",
         driftMs: 40,
         warmupReadyAt: 5_000,
@@ -78,7 +78,7 @@ describe("progressive source controller", () => {
       resolveProgressiveWarmupDecision({
         currentSource: "remote-stream",
         engineReady: true,
-        startupReady: true,
+        activationReady: true,
         fallbackReason: null,
         driftMs: 420,
         warmupReadyAt: 5_000,

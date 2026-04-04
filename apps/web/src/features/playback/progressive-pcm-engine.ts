@@ -195,7 +195,6 @@ export class ProgressivePcmEngine {
     }
 
     this.scheduleAhead(positionSeconds);
-    void this.audio.play().catch(() => undefined);
 
     return {
       localReady: true,

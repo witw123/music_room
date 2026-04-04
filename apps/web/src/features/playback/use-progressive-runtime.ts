@@ -24,6 +24,7 @@ import {
   getCriticalBufferThresholdMs,
   getEffectivePlaybackPositionMs,
   getProgressiveEngineType,
+  isTakeoverReady,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
 import {
@@ -83,6 +84,8 @@ const progressiveRuntimeTickIntervalMs = 1_000;
 const progressiveSwitchDelayMs = 900;
 const fullLocalSwitchDelayMs = 700;
 const fullLocalMaxDriftMs = 220;
+const playbackStartRetryDelayMs = 500;
+const maxPlaybackStartRetryAttempts = 6;
 
 export function useProgressiveRuntime({
   audioRef,
@@ -113,6 +116,7 @@ export function useProgressiveRuntime({
   const progressiveWarmupReadyAtRef = useRef<number | null>(null);
   const fullLocalWarmupReadyAtRef = useRef<number | null>(null);
   const remoteHoldTimeoutRef = useRef<number | null>(null);
+  const playbackStartRetryRef = useRef<number | null>(null);
   const playback = roomSnapshot?.room.playback;
 
   const currentBufferedFullLocalTrack = useMemo(
@@ -149,6 +153,24 @@ export function useProgressiveRuntime({
     ]
   );
   const progressiveSchedulerPolicy = progressiveHealthSnapshot.schedulerPolicy;
+  const isProgressiveTakeoverReady = useCallback(
+    (now = Date.now()) => {
+      if (!currentProgressiveManifest) {
+        return false;
+      }
+
+      return isTakeoverReady({
+        manifest: currentProgressiveManifest,
+        availableChunks: currentTrackAvailabilityAnnouncement?.availableChunks ?? [],
+        playbackPositionMs: getEffectivePlaybackPositionMs(
+          playback,
+          currentProgressiveManifest.durationMs,
+          now
+        )
+      });
+    },
+    [currentProgressiveManifest, currentTrackAvailabilityAnnouncement?.availableChunks, playback]
+  );
   const canPrepareProgressiveLocal =
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
@@ -210,9 +232,20 @@ export function useProgressiveRuntime({
       window.clearTimeout(remoteHoldTimeoutRef.current);
       remoteHoldTimeoutRef.current = null;
     }
+    if (playbackStartRetryRef.current !== null) {
+      window.clearTimeout(playbackStartRetryRef.current);
+      playbackStartRetryRef.current = null;
+    }
   }, []);
 
   useEffect(() => destroyProgressiveRuntime, [destroyProgressiveRuntime]);
+
+  const clearPlaybackStartRetry = useCallback(() => {
+    if (playbackStartRetryRef.current !== null) {
+      window.clearTimeout(playbackStartRetryRef.current);
+      playbackStartRetryRef.current = null;
+    }
+  }, []);
 
   const getLocalPlaybackPositionMs = useCallback(() => {
     if (activePlaybackSource !== "progressive-local") {
@@ -252,7 +285,10 @@ export function useProgressiveRuntime({
       element: HTMLAudioElement | null,
       source: ProgressivePlaybackSource,
       blockedMessage: string,
-      failureReason: string
+      failureReason: string,
+      options?: {
+        reportFailure?: boolean;
+      }
     ) => {
       if (!element) {
         return false;
@@ -260,6 +296,10 @@ export function useProgressiveRuntime({
 
       const playResult = await roomAudioOutput.playElement(element);
       if (!playResult.ok) {
+        if (options?.reportFailure === false) {
+          return false;
+        }
+
         const matchedIntent = doesPlaybackMatchStartIntent(playbackStartIntent, playback);
         markPlaybackStartFailure(
           failureReason,
@@ -276,38 +316,49 @@ export function useProgressiveRuntime({
     },
     [markPlaybackStartFailure, playback, playbackStartIntent, updatePlaybackStartIntent]
   );
-  const retryPendingPlaybackStart = useCallback(
-    (source: ProgressivePlaybackSource) => {
-      if (
-        !playbackStartIntent ||
-        !isPlaybackStartIntentPending(playbackStartIntent) ||
-        playback?.status !== "playing" ||
-        activePlaybackSource !== source
-      ) {
+  const ensurePlaybackStart = useCallback(
+    (source: ProgressivePlaybackSource, attempt = 0) => {
+      clearPlaybackStartRetry();
+
+      if (playback?.status !== "playing" || activePlaybackSource !== source) {
         return;
       }
 
-      if (source === "remote-stream") {
-        void attemptPlaybackStart(
-          remoteAudioRef.current,
-          source,
-          "娴忚鍣ㄩ樆姝簡杩滅闊抽鑷姩鎾斁锛岃鍐嶆鐐瑰嚮鎾斁缁х画銆?",
-          "remote-stream-play-blocked"
-        );
-        return;
-      }
+      const isRemoteSource = source === "remote-stream";
+      const targetElement = isRemoteSource ? remoteAudioRef.current : audioRef.current;
+      const blockedMessage = isRemoteSource
+        ? "浏览器阻止了远端音频自动播放，请再次点击播放继续。"
+        : "浏览器阻止了本地音频自动播放，请手动点击播放恢复。";
+      const failureReason = isRemoteSource
+        ? "remote-stream-play-blocked"
+        : source === "full-local"
+          ? "full-local-play-blocked"
+          : "progressive-local-play-blocked";
+      const pendingIntent =
+        !!playbackStartIntent && isPlaybackStartIntentPending(playbackStartIntent);
 
-      void attemptPlaybackStart(
-        audioRef.current,
-        source,
-        "娴忚鍣ㄩ樆姝簡鏈湴闊抽鑷姩鎾斁锛岃鎵嬪姩鐐瑰嚮鎾斁鎭㈠銆?",
-        source === "full-local" ? "full-local-play-blocked" : "progressive-local-play-blocked"
-      );
+      void attemptPlaybackStart(targetElement, source, blockedMessage, failureReason, {
+        reportFailure: pendingIntent || attempt >= maxPlaybackStartRetryAttempts
+      }).then((ok) => {
+        if (ok) {
+          clearPlaybackStartRetry();
+          return;
+        }
+
+        if (attempt >= maxPlaybackStartRetryAttempts) {
+          return;
+        }
+
+        playbackStartRetryRef.current = window.setTimeout(() => {
+          ensurePlaybackStart(source, attempt + 1);
+        }, playbackStartRetryDelayMs);
+      });
     },
     [
       activePlaybackSource,
       attemptPlaybackStart,
       audioRef,
+      clearPlaybackStartRetry,
       playback?.status,
       playbackStartIntent,
       remoteAudioRef
@@ -343,6 +394,12 @@ export function useProgressiveRuntime({
 
     return () => window.clearTimeout(timerId);
   }, [playbackStartIntent, setPlaybackStartIntent, setStatusMessage]);
+
+  useEffect(() => {
+    if (playback?.status !== "playing") {
+      clearPlaybackStartRetry();
+    }
+  }, [clearPlaybackStartRetry, playback?.status, playback?.currentTrackId, playback?.mediaEpoch]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -393,12 +450,7 @@ export function useProgressiveRuntime({
       });
 
       if (playback.status === "playing") {
-        void attemptPlaybackStart(
-          audio,
-          "full-local",
-          "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-          "full-local-play-blocked"
-        );
+        ensurePlaybackStart("full-local");
         setMediaConnectionState(isCurrentSourceOwner ? "live" : "buffering");
       }
 
@@ -428,12 +480,7 @@ export function useProgressiveRuntime({
             }
 
             if (playback.status === "playing" && result.localReady) {
-              void attemptPlaybackStart(
-                audio,
-                "progressive-local",
-                "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-                "progressive-local-play-blocked"
-              );
+              ensurePlaybackStart("progressive-local");
             }
           })
           .catch(() => {
@@ -454,12 +501,7 @@ export function useProgressiveRuntime({
       });
 
       if (playback.status === "playing") {
-        void attemptPlaybackStart(
-          audio,
-          "progressive-local",
-          "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-          "progressive-local-play-blocked"
-        );
+        ensurePlaybackStart("progressive-local");
       } else {
         audio.pause();
         audio.playbackRate = 1;
@@ -494,12 +536,7 @@ export function useProgressiveRuntime({
       if (remoteAudio) {
         remoteAudio.muted = false;
         if (playback.status === "playing") {
-          void attemptPlaybackStart(
-            remoteAudio,
-            "remote-stream",
-            "浏览器阻止了远端音频自动播放，请再次点击播放继续。",
-            "remote-stream-play-blocked"
-          );
+          ensurePlaybackStart("remote-stream");
         } else if (playback.status === "paused") {
           remoteAudio.pause();
         }
@@ -524,7 +561,7 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason,
     setActivePlaybackSource,
     destroyProgressiveRuntime,
-    attemptPlaybackStart,
+    ensurePlaybackStart,
     markPlaybackStartFailure,
     setPlaybackStartIntent
   ]);
@@ -630,11 +667,11 @@ export function useProgressiveRuntime({
     ];
     const handleLocalReady = () => {
       if (activePlaybackSource === "full-local" || activePlaybackSource === "progressive-local") {
-        retryPendingPlaybackStart(activePlaybackSource);
+        ensurePlaybackStart(activePlaybackSource);
       }
     };
     const handleRemoteReady = () => {
-      retryPendingPlaybackStart("remote-stream");
+      ensurePlaybackStart("remote-stream");
     };
 
     for (const eventName of localReadyEvents) {
@@ -652,7 +689,7 @@ export function useProgressiveRuntime({
         remoteAudio?.removeEventListener(eventName, handleRemoteReady);
       }
     };
-  }, [activePlaybackSource, audioRef, remoteAudioRef, retryPendingPlaybackStart]);
+  }, [activePlaybackSource, audioRef, remoteAudioRef, ensurePlaybackStart]);
 
   useEffect(() => {
     const nextPlayback = roomSnapshot?.room.playback;
@@ -801,9 +838,9 @@ export function useProgressiveRuntime({
           currentProgressiveManifest.durationMs,
           Date.now()
         ) / 1000;
-      const startupReady =
-        progressiveHealthSnapshot.startupReady &&
-        progressiveHealthSnapshot.fallbackReason === null;
+      const activationReady =
+        progressiveHealthSnapshot.fallbackReason === null &&
+        (activePlaybackSource === "remote-stream" ? isProgressiveTakeoverReady() : true);
       let engineReady = false;
       let localReady = false;
       let driftMs = Number.POSITIVE_INFINITY;
@@ -822,18 +859,22 @@ export function useProgressiveRuntime({
         engineReady = mseEngine.engineStatus === "ready";
         localReady = engineReady;
 
-        if (engineReady && startupReady) {
+        if (engineReady && (activePlaybackSource === "progressive-local" || activationReady)) {
           syncLocalPlaybackWindow(audio, expectedSeconds, true, {
             softDriftMs: 120,
             hardDriftMs: 900
           });
           audio.muted = activePlaybackSource !== "progressive-local";
-          void audio.play().catch(() => undefined);
+          void roomAudioOutput.playElement(audio);
           driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
         }
       }
 
-      if (!engineReady || !startupReady || !localReady) {
+      if (
+        !engineReady ||
+        !localReady ||
+        (activePlaybackSource === "remote-stream" && !activationReady)
+      ) {
         if (pcmEngine) {
           await pcmEngine.syncPlayback(expectedSeconds, false).catch(() => undefined);
           if (cancelled) {
@@ -850,7 +891,7 @@ export function useProgressiveRuntime({
       const warmupDecision = resolveProgressiveWarmupDecision({
         currentSource: activePlaybackSource,
         engineReady: localReady,
-        startupReady: progressiveHealthSnapshot.startupReady,
+        activationReady,
         fallbackReason: progressiveHealthSnapshot.fallbackReason,
         driftMs,
         warmupReadyAt: progressiveWarmupReadyAtRef.current,
@@ -898,6 +939,7 @@ export function useProgressiveRuntime({
     activePlaybackSource,
     progressiveHealthSnapshot.startupReady,
     progressiveHealthSnapshot.fallbackReason,
+    isProgressiveTakeoverReady,
     audioRef,
     setActivePlaybackSource,
     setProgressiveFallbackReason
@@ -940,7 +982,7 @@ export function useProgressiveRuntime({
         hardDriftMs: 900
       });
       audio.muted = true;
-      void audio.play().catch(() => undefined);
+      void roomAudioOutput.playElement(audio);
 
       const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
       const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
@@ -1029,7 +1071,7 @@ export function useProgressiveRuntime({
       return;
     }
 
-    if (!progressiveFallbackReason || !progressiveHealthSnapshot.startupReady) {
+    if (!progressiveFallbackReason || !isProgressiveTakeoverReady()) {
       return;
     }
 
@@ -1037,7 +1079,7 @@ export function useProgressiveRuntime({
   }, [
     activePlaybackSource,
     progressiveFallbackReason,
-    progressiveHealthSnapshot.startupReady,
+    isProgressiveTakeoverReady,
     setProgressiveFallbackReason
   ]);
 

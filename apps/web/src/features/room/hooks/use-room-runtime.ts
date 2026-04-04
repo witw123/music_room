@@ -40,6 +40,7 @@ import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -294,7 +295,11 @@ export function useRoomRuntime({
         return;
       }
 
-      void remoteAudio.play().catch(() => {
+      void roomAudioOutput.playElement(remoteAudio).then((result) => {
+        if (result.ok) {
+          return;
+        }
+
         if (attempt >= 6) {
           setStatusMessage("远端音频连接已建立，但播放未稳定，请点击一次播放继续。");
           return;

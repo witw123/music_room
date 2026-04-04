@@ -81,7 +81,7 @@ function resolveBufferedLocalWarmupDecision(input: {
 export function resolveProgressiveWarmupDecision(input: {
   currentSource: ProgressivePlaybackSource;
   engineReady: boolean;
-  startupReady: boolean;
+  activationReady: boolean;
   fallbackReason: string | null;
   driftMs: number;
   warmupReadyAt: number | null;
@@ -92,7 +92,7 @@ export function resolveProgressiveWarmupDecision(input: {
   return resolveBufferedLocalWarmupDecision({
     currentSource: input.currentSource,
     targetSource: "progressive-local",
-    ready: input.engineReady && input.startupReady,
+    ready: input.engineReady && input.activationReady,
     fallbackReason: input.fallbackReason,
     driftMs: input.driftMs,
     warmupReadyAt: input.warmupReadyAt,

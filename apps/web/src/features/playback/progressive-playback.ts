@@ -75,6 +75,10 @@ export function getStartupWindowMs(input: { mimeType?: string | null; codec?: st
   return isFlacTrack(input) ? 20_000 : 12_000;
 }
 
+export function getTakeoverWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
+  return isFlacTrack(input) ? 8_000 : 6_000;
+}
+
 export function getTargetSteadyBufferMs(input: { mimeType?: string | null; codec?: string | null }) {
   return isFlacTrack(input) ? 45_000 : 30_000;
 }
@@ -172,6 +176,25 @@ export function isStartupReady(input: {
   availableChunks: number[];
   playbackPositionMs: number;
 }) {
+  return isProgressiveReady(input, "startup");
+}
+
+export function isTakeoverReady(input: {
+  manifest: ProgressiveTrackManifest | null;
+  availableChunks: number[];
+  playbackPositionMs: number;
+}) {
+  return isProgressiveReady(input, "takeover");
+}
+
+function isProgressiveReady(
+  input: {
+    manifest: ProgressiveTrackManifest | null;
+    availableChunks: number[];
+    playbackPositionMs: number;
+  },
+  mode: "startup" | "takeover"
+) {
   const { manifest } = input;
   if (!manifest) {
     return false;
@@ -181,11 +204,13 @@ export function isStartupReady(input: {
   const contiguousBufferedMs = getContiguousBufferedMs(manifest, input.availableChunks);
   const requiredBufferedMs = Math.min(
     manifest.durationMs,
-    Math.max(0, input.playbackPositionMs) + getStartupWindowMs(manifest)
+    Math.max(0, input.playbackPositionMs) +
+      (mode === "takeover" ? getTakeoverWindowMs(manifest) : getStartupWindowMs(manifest))
   );
   const contiguousBytes = contiguousChunkCount * manifest.chunkSize;
+  const requiredBytes = mode === "takeover" ? 768 * 1024 : 1.5 * 1024 * 1024;
 
-  return contiguousBufferedMs >= requiredBufferedMs && contiguousBytes >= 1.5 * 1024 * 1024;
+  return contiguousBufferedMs >= requiredBufferedMs && contiguousBytes >= requiredBytes;
 }
 
 export function getProgressiveEngineType(manifest: ProgressiveTrackManifest | null): ProgressiveEngineType {
