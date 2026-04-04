@@ -58,6 +58,56 @@ export function shouldAcceptPresenceRevision(
   return (incomingRevision ?? 0) >= (currentRevision ?? 0);
 }
 
+export function areSameRoomMembers(
+  currentMembers: RoomMember[] | null | undefined,
+  incomingMembers: RoomMember[] | null | undefined
+) {
+  const current = currentMembers ?? [];
+  const incoming = incomingMembers ?? [];
+
+  if (current.length !== incoming.length) {
+    return false;
+  }
+
+  const incomingById = new Map(incoming.map((member) => [member.id, member]));
+
+  for (const member of current) {
+    const incomingMember = incomingById.get(member.id);
+    if (!incomingMember) {
+      return false;
+    }
+
+    if (
+      incomingMember.nickname !== member.nickname ||
+      incomingMember.role !== member.role ||
+      incomingMember.joinedAt !== member.joinedAt ||
+      incomingMember.peerId !== member.peerId ||
+      incomingMember.presenceState !== member.presenceState
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function shouldAcceptPresenceSnapshot(
+  currentMembers: RoomMember[] | null | undefined,
+  currentRevision: number | null | undefined,
+  incomingMembers: RoomMember[] | null | undefined,
+  incomingRevision: number | null | undefined
+) {
+  if (!shouldAcceptPresenceRevision(currentRevision, incomingRevision)) {
+    return false;
+  }
+
+  if ((incomingRevision ?? 0) > (currentRevision ?? 0)) {
+    return true;
+  }
+
+  return !areSameRoomMembers(currentMembers, incomingMembers);
+}
+
 export function getPlaybackConsistencyVersion(playback: PlaybackSnapshot | null | undefined) {
   return playback?.queueVersion ?? 0;
 }
@@ -110,8 +160,10 @@ export function mergeRoomSnapshot(
     return incoming;
   }
 
-  const acceptPresence = shouldAcceptPresenceRevision(
+  const acceptPresence = shouldAcceptPresenceSnapshot(
+    current.room.members,
     getPresenceRevision(current.room),
+    incoming.room.members,
     getPresenceRevision(incoming.room)
   );
   const acceptPlayback = shouldAcceptPlaybackSnapshot(

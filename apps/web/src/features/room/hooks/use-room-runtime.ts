@@ -31,6 +31,7 @@ import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics
 import {
   getPresenceRevision,
   mergeRoomSnapshot,
+  shouldAcceptPresenceSnapshot,
   shouldReplacePlaybackSnapshot,
   toUserFacingError
 } from "@/lib/music-room-ui";
@@ -713,7 +714,15 @@ export function useRoomRuntime({
       presenceRevision: number
     ) => {
       setRoomSnapshot((current) => {
-        if (!current || presenceRevision <= getPresenceRevision(current.room)) {
+        if (
+          !current ||
+          !shouldAcceptPresenceSnapshot(
+            current.room.members,
+            getPresenceRevision(current.room),
+            members,
+            presenceRevision
+          )
+        ) {
           return current;
         }
 
