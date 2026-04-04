@@ -105,6 +105,7 @@ type UseRoomRuntimeInput = {
     totalChunks: number,
     chunkSize: number
   ) => void;
+  clearAvailabilityForPeer: (ownerPeerId: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   uploadedTracks: Record<string, { objectUrl: string }>;
@@ -221,6 +222,7 @@ export function useRoomRuntime({
   availabilityByTrack,
   queueAvailability,
   mergeLocalPieceAvailability,
+  clearAvailabilityForPeer,
   flushPendingAvailability,
   recordPeerDiagnostic,
   uploadedTracks,
@@ -1527,6 +1529,12 @@ export function useRoomRuntime({
       }
       queueAvailability(announcement);
     });
+    socket.on("piece.availability.clear", ({ roomId: clearedRoomId, ownerPeerId }) => {
+      if (clearedRoomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+      clearAvailabilityForPeer(ownerPeerId);
+    });
     socket.on("room.session.replaced", ({ roomId: replacedRoomId }) => {
       if (replacedRoomId !== roomId) {
         return;
@@ -1617,6 +1625,7 @@ export function useRoomRuntime({
     recordPeerDiagnostic,
     flushPendingAvailability,
     queueAvailability,
+    clearAvailabilityForPeer,
     requestRoomSnapshotResync,
     scheduleRemotePlaybackRetry,
     chunkSchedulerRef,

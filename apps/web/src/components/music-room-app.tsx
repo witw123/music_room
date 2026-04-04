@@ -111,7 +111,8 @@ export function MusicRoomApp({
     mergeAvailability,
     mergeLocalPieceAvailability,
     emitAvailability: stableEmitAvailability,
-    flushPendingAvailability
+    flushPendingAvailability,
+    clearAvailabilityForPeer
   } = useAvailabilityAnnouncements({
     peerId,
     socketRef,
@@ -349,6 +350,7 @@ export function MusicRoomApp({
     availabilityByTrack,
     queueAvailability,
     mergeLocalPieceAvailability,
+    clearAvailabilityForPeer,
     flushPendingAvailability,
     recordPeerDiagnostic,
     uploadedTracks,
@@ -597,6 +599,8 @@ export function MusicRoomApp({
 
   const {
     canDisbandRoom,
+    connectedPeersCount,
+    mediaConnectedPeersCount,
     availabilitySummary,
     memberTransferSummaries,
     visiblePeerDiagnostics,
@@ -609,6 +613,8 @@ export function MusicRoomApp({
   } = useRoomDerivedState({
     roomSnapshot,
     peerId,
+    connectedPeers,
+    mediaConnectedPeers,
     activeDashboardTab,
     currentTrack,
     availabilityByTrack,
@@ -638,9 +644,9 @@ export function MusicRoomApp({
       canDisbandRoom={canDisbandRoom}
       canReorderQueue={canReorderQueue}
       uploadedTracks={uploadedTracks}
-      connectedPeersCount={connectedPeers.length}
+      connectedPeersCount={connectedPeersCount}
       mediaConnectionState={mediaConnectionState}
-      mediaConnectedPeersCount={mediaConnectedPeers.length}
+      mediaConnectedPeersCount={mediaConnectedPeersCount}
       cachedTrackCount={cachedTrackCount}
       availabilitySummary={availabilitySummary}
       memberTransferSummaries={memberTransferSummaries}

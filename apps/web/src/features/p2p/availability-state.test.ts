@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLocalPieceAvailabilityAnnouncement,
+  removeAvailabilityAnnouncementsByPeer,
   upsertAvailabilityAnnouncement
 } from "./availability-state";
 
@@ -74,5 +75,53 @@ describe("availability-state helpers", () => {
 
     const next = upsertAvailabilityAnnouncement(current, current.track_1.peer_local);
     expect(next).toBe(current);
+  });
+
+  it("removes every availability announcement owned by a cleared peer", () => {
+    const current = {
+      track_1: {
+        peer_local: {
+          roomId: "room_1",
+          trackId: "track_1",
+          ownerPeerId: "peer_local",
+          nickname: "Listener",
+          totalChunks: 8,
+          chunkSize: 128 * 1024,
+          availableChunks: [0, 1, 2],
+          source: "local_cache" as const,
+          announcedAt: "2026-04-03T16:30:00.000Z"
+        },
+        peer_remote: {
+          roomId: "room_1",
+          trackId: "track_1",
+          ownerPeerId: "peer_remote",
+          nickname: "Remote",
+          totalChunks: 8,
+          chunkSize: 128 * 1024,
+          availableChunks: [0, 1],
+          source: "live_upload" as const,
+          announcedAt: "2026-04-03T16:31:00.000Z"
+        }
+      },
+      track_2: {
+        peer_local: {
+          roomId: "room_1",
+          trackId: "track_2",
+          ownerPeerId: "peer_local",
+          nickname: "Listener",
+          totalChunks: 6,
+          chunkSize: 128 * 1024,
+          availableChunks: [0],
+          source: "local_cache" as const,
+          announcedAt: "2026-04-03T16:32:00.000Z"
+        }
+      }
+    };
+
+    expect(removeAvailabilityAnnouncementsByPeer(current, "peer_local")).toEqual({
+      track_1: {
+        peer_remote: current.track_1.peer_remote
+      }
+    });
   });
 });

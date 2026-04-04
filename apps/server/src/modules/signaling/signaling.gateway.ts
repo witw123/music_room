@@ -13,6 +13,7 @@ import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import type {
+  PieceAvailabilityClearPayload,
   PeerSignalMessage,
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
@@ -35,6 +36,7 @@ const roomPresencePatchChannel = "music-room:room-presence-patch";
 const roomLibraryPatchChannel = "music-room:room-library-patch";
 const peerSignalChannel = "music-room:peer-signal";
 const pieceAvailabilityChannel = "music-room:piece-availability";
+const pieceAvailabilityClearChannel = "music-room:piece-availability-clear";
 
 @WebSocketGateway({
   path: "/ws/socket.io",
@@ -158,6 +160,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       sourceId: this.instanceId,
       roomId,
       payload: message
+    });
+  }
+
+  private emitPieceAvailabilityClear(roomId: string, ownerPeerId: string) {
+    const payload: PieceAvailabilityClearPayload = {
+      roomId,
+      ownerPeerId,
+      updatedAt: new Date().toISOString()
+    };
+    this.server.to(roomId).emit("piece.availability.clear", payload);
+    void this.redisService.publish(pieceAvailabilityClearChannel, {
+      sourceId: this.instanceId,
+      roomId,
+      payload
     });
   }
 
@@ -338,6 +354,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       );
       this.availabilityByRoom.set(message.roomId, roomAvailability);
       this.server.to(message.roomId).emit("piece.availability", message.payload);
+    });
+
+    void this.redisService.subscribe(pieceAvailabilityClearChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: PieceAvailabilityClearPayload;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.instanceId
+      ) {
+        return;
+      }
+
+      this.removePeerAvailability(message.roomId, message.payload.ownerPeerId);
+      this.server.to(message.roomId).emit("piece.availability.clear", message.payload);
     });
   }
 
@@ -673,20 +709,34 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private clearPeerAvailability(roomId: string, peerId: string) {
-    const roomAvailability = this.availabilityByRoom.get(roomId);
-    if (!roomAvailability) {
-      return;
+    const removed = this.removePeerAvailability(roomId, peerId);
+    if (!removed) {
+      return false;
     }
 
+    this.emitPieceAvailabilityClear(roomId, peerId);
+    return true;
+  }
+
+  private removePeerAvailability(roomId: string, peerId: string) {
+    const roomAvailability = this.availabilityByRoom.get(roomId);
+    if (!roomAvailability) {
+      return false;
+    }
+
+    let removed = false;
     for (const [key, announcement] of roomAvailability.entries()) {
       if (announcement.ownerPeerId === peerId) {
         roomAvailability.delete(key);
+        removed = true;
       }
     }
 
     if (roomAvailability.size === 0) {
       this.availabilityByRoom.delete(roomId);
     }
+
+    return removed;
   }
 
   private scheduleDisconnectCleanup(roomId: string, sessionId: string, peerId?: string) {

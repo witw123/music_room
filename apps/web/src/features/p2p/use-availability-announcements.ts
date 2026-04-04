@@ -5,6 +5,7 @@ import type { AuthSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@
 import type { RoomSocket } from "@/lib/ws-client";
 import {
   buildLocalPieceAvailabilityAnnouncement,
+  removeAvailabilityAnnouncementsByPeer,
   upsertAvailabilityAnnouncement,
   type AvailabilityState
 } from "./availability-state";
@@ -189,6 +190,26 @@ export function useAvailabilityAnnouncements({
     pendingAvailabilityRef.current.clear();
   }, [socketRef]);
 
+  const clearAvailabilityForPeer = useCallback((ownerPeerId: string) => {
+    queuedAvailabilityRef.current = queuedAvailabilityRef.current.filter(
+      (announcement) => announcement.ownerPeerId !== ownerPeerId
+    );
+
+    for (const [key, announcement] of pendingAvailabilityEmitRef.current.entries()) {
+      if (announcement.ownerPeerId === ownerPeerId) {
+        pendingAvailabilityEmitRef.current.delete(key);
+      }
+    }
+
+    for (const [key, announcement] of pendingAvailabilityRef.current.entries()) {
+      if (announcement.ownerPeerId === ownerPeerId) {
+        pendingAvailabilityRef.current.delete(key);
+      }
+    }
+
+    setAvailabilityByTrack((current) => removeAvailabilityAnnouncementsByPeer(current, ownerPeerId));
+  }, []);
+
   useEffect(() => {
     return () => {
       if (availabilityFlushTimerRef.current !== null) {
@@ -206,6 +227,7 @@ export function useAvailabilityAnnouncements({
     mergeAvailability,
     mergeLocalPieceAvailability,
     emitAvailability,
-    flushPendingAvailability
+    flushPendingAvailability,
+    clearAvailabilityForPeer
   };
 }

@@ -21,6 +21,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.library.patch"),
   z.literal("room.session.replaced"),
   z.literal("piece.availability"),
+  z.literal("piece.availability.clear"),
   z.literal("peer.signal")
 ]);
 
@@ -83,6 +84,12 @@ export const roomLibraryPatchPayloadSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+export const pieceAvailabilityClearPayloadSchema = z.object({
+  roomId: z.string(),
+  ownerPeerId: z.string(),
+  updatedAt: z.string().datetime()
+});
+
 export const roomSnapshotEventSchema = z.object({
   event: z.literal("room.snapshot"),
   payload: roomSnapshotSchema
@@ -133,6 +140,11 @@ export const pieceAvailabilityEventSchema = z.object({
   payload: trackAvailabilityAnnouncementSchema
 });
 
+export const pieceAvailabilityClearEventSchema = z.object({
+  event: z.literal("piece.availability.clear"),
+  payload: pieceAvailabilityClearPayloadSchema
+});
+
 export const roomChatPayloadSchema = z.object({
   roomId: z.string(),
   senderId: z.string(),
@@ -152,6 +164,7 @@ export type RoomPlaybackPatchPayload = z.infer<typeof roomPlaybackPatchPayloadSc
 export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
+export type PieceAvailabilityClearPayload = z.infer<typeof pieceAvailabilityClearPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
 
@@ -165,6 +178,7 @@ export type ServerToClientEvents = {
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
+  "piece.availability.clear": (payload: PieceAvailabilityClearPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
   connect: () => void;

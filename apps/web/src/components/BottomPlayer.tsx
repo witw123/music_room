@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useTransition } from "react";
+import React, { memo, useCallback, useTransition } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getPlaybackEffectivePositionMs } from "@/features/playback/use-room-playback";
@@ -156,6 +156,8 @@ function BottomPlayerBase({
       <audio
         ref={audioRef}
         className="hidden"
+        autoPlay
+        playsInline
         onEnded={() => void onEnded()}
         onTimeUpdate={syncProgressFromAudio}
         onLoadedMetadata={() => {

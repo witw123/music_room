@@ -68,3 +68,29 @@ export function upsertAvailabilityAnnouncement(
     }
   };
 }
+
+export function removeAvailabilityAnnouncementsByPeer(
+  current: AvailabilityState,
+  ownerPeerId: string
+) {
+  let changed = false;
+  const nextEntries = Object.entries(current)
+    .map(([trackId, trackAvailability]) => {
+      const nextTrackAvailability = Object.fromEntries(
+        Object.entries(trackAvailability).filter(([peerId]) => peerId !== ownerPeerId)
+      );
+
+      if (Object.keys(nextTrackAvailability).length !== Object.keys(trackAvailability).length) {
+        changed = true;
+      }
+
+      return [trackId, nextTrackAvailability] as const;
+    })
+    .filter(([, trackAvailability]) => Object.keys(trackAvailability).length > 0);
+
+  if (!changed) {
+    return current;
+  }
+
+  return Object.fromEntries(nextEntries);
+}

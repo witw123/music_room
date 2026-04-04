@@ -431,6 +431,61 @@ describe("SignalingGateway", () => {
     );
   });
 
+  it("broadcasts availability clear events when a peer leaves the room", async () => {
+    const { gateway, redisService } = createGateway();
+    const { emit } = attachServerMock(gateway);
+
+    await gateway.handlePieceAvailability(
+      {
+        ...createClient({
+          roomId: "room_1",
+          peerId: "peer_host",
+          isRealtimeAuthenticated: true
+        }),
+        to: jest.fn().mockReturnValue({ emit: jest.fn() })
+      } as never,
+      {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_host",
+        nickname: "Host",
+        totalChunks: 8,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1, 2],
+        source: "live_upload",
+        announcedAt: new Date().toISOString()
+      }
+    );
+
+    gateway.handleRoomUnsubscribe(
+      createClient({
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }) as never,
+      { roomId: "room_1" }
+    );
+
+    expect(emit).toHaveBeenCalledWith(
+      "piece.availability.clear",
+      expect.objectContaining({
+        roomId: "room_1",
+        ownerPeerId: "peer_host"
+      })
+    );
+    expect(redisService.publish).toHaveBeenCalledWith(
+      "music-room:piece-availability-clear",
+      expect.objectContaining({
+        roomId: "room_1",
+        payload: expect.objectContaining({
+          roomId: "room_1",
+          ownerPeerId: "peer_host"
+        })
+      })
+    );
+  });
+
   it("rejects realtime messages from unauthenticated clients", async () => {
     const { gateway } = createGateway();
 

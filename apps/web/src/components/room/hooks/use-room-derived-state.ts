@@ -12,6 +12,8 @@ import type {
 type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   peerId: string;
+  connectedPeers: string[];
+  mediaConnectedPeers: string[];
   activeDashboardTab: "queue" | "library" | "members";
   currentTrack: RoomSnapshot["tracks"][number] | null;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
@@ -32,6 +34,8 @@ type UseRoomDerivedStateInput = {
 export function useRoomDerivedState({
   roomSnapshot,
   peerId,
+  connectedPeers,
+  mediaConnectedPeers,
   activeDashboardTab,
   currentTrack,
   availabilityByTrack,
@@ -49,6 +53,10 @@ export function useRoomDerivedState({
   isRecoveringRoom
 }: UseRoomDerivedStateInput) {
   const host = roomSnapshot?.room.members.find((member) => member.role === "host");
+  const activeMemberPeerIds = useMemo(
+    () => getActiveMemberPeerIds(roomSnapshot?.room.members ?? []),
+    [roomSnapshot?.room.members]
+  );
 
   const canDisbandRoom =
     !!roomSnapshot &&
@@ -62,7 +70,10 @@ export function useRoomDerivedState({
 
   const availabilitySummary =
     roomSnapshot?.tracks.map((track) => {
-      const peers = Object.values(availabilityByTrack[track.id] ?? {});
+      const peers = filterAvailabilityAnnouncementsByActivePeers(
+        availabilityByTrack[track.id] ?? {},
+        activeMemberPeerIds
+      );
       const local = peers.find((entry) => entry.ownerPeerId === peerId);
       return {
         track,
@@ -82,9 +93,6 @@ export function useRoomDerivedState({
       return [];
     }
 
-    const memberIdByNickname = new Map(
-      roomSnapshot.room.members.map((member) => [member.nickname.trim().toLowerCase(), member.id])
-    );
     const memberIdByPeerId = new Map(
       roomSnapshot.room.members
         .filter((member) => !!member.peerId)
@@ -102,11 +110,11 @@ export function useRoomDerivedState({
     >();
 
     for (const trackAvailability of Object.values(availabilityByTrack)) {
-      for (const announcement of Object.values(trackAvailability)) {
-        const memberId =
-          memberIdByNickname.get(announcement.nickname.trim().toLowerCase()) ??
-          memberIdByPeerId.get(announcement.ownerPeerId) ??
-          null;
+      for (const announcement of filterAvailabilityAnnouncementsByActivePeers(
+        trackAvailability,
+        activeMemberPeerIds
+      )) {
+        const memberId = memberIdByPeerId.get(announcement.ownerPeerId) ?? null;
         if (!memberId) {
           continue;
         }
@@ -151,33 +159,14 @@ export function useRoomDerivedState({
         currentTrackSources: [...(stats?.currentTrackSources ?? [])]
       };
     });
-  }, [activeDashboardTab, availabilityByTrack, currentTrack, roomSnapshot]);
+  }, [activeDashboardTab, activeMemberPeerIds, availabilityByTrack, currentTrack, roomSnapshot]);
 
   const visiblePeerDiagnostics = useMemo(() => {
-    const activePeerIds = new Set<string>(["system", "remote-media"]);
-    for (const member of roomSnapshot?.room.members ?? []) {
-      if (member.peerId) {
-        activePeerIds.add(member.peerId);
-      }
-    }
-    if (roomSnapshot?.room.playback.sourcePeerId) {
-      activePeerIds.add(roomSnapshot.room.playback.sourcePeerId);
-    }
-
-    const now = Date.now();
-    return peerDiagnostics
-      .filter((peer) => {
-        const updatedAtMs = new Date(peer.updatedAt).getTime();
-        const isFresh =
-          Number.isFinite(updatedAtMs) && now - updatedAtMs <= 45_000;
-        const hasActiveIssue =
-          !!peer.lastError ||
-          peer.dataConnectionState === "connected" ||
-          peer.mediaConnectionState === "connected" ||
-          peer.mediaConnectionState === "connecting" ||
-          peer.mediaConnectionState === "failed";
-        return activePeerIds.has(peer.peerId) || (isFresh && hasActiveIssue);
-      })
+    return filterVisiblePeerDiagnostics(
+      peerDiagnostics,
+      activeMemberPeerIds,
+      roomSnapshot?.room.playback.sourcePeerId ?? null
+    )
       .sort((left, right) => {
         const leftPriority = getDiagnosticPriority(left.peerId, roomSnapshot?.room.playback.sourcePeerId ?? null);
         const rightPriority = getDiagnosticPriority(right.peerId, roomSnapshot?.room.playback.sourcePeerId ?? null);
@@ -187,7 +176,7 @@ export function useRoomDerivedState({
 
         return right.updatedAt.localeCompare(left.updatedAt);
       });
-  }, [peerDiagnostics, roomSnapshot?.room.members, roomSnapshot?.room.playback.sourcePeerId]);
+  }, [activeMemberPeerIds, peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]);
 
   const visiblePeerRecentEvents = useMemo(() => {
     const visiblePeerIds = new Set(visiblePeerDiagnostics.map((item) => item.peerId));
@@ -222,6 +211,11 @@ export function useRoomDerivedState({
   return {
     host,
     canDisbandRoom,
+    connectedPeersCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
+    mediaConnectedPeersCount: countPeersWithinActiveMembers(
+      mediaConnectedPeers,
+      activeMemberPeerIds
+    ),
     availabilitySummary,
     currentTrackAvailability,
     memberTransferSummaries,
@@ -249,4 +243,44 @@ function getDiagnosticPriority(peerId: string, sourcePeerId: string | null) {
   }
 
   return 3;
+}
+
+export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"]) {
+  return new Set(
+    members
+      .map((member) => member.peerId)
+      .filter((memberPeerId): memberPeerId is string => !!memberPeerId)
+  );
+}
+
+export function filterAvailabilityAnnouncementsByActivePeers(
+  trackAvailability: Record<string, TrackAvailabilityAnnouncement>,
+  activeMemberPeerIds: Set<string>
+) {
+  return Object.values(trackAvailability).filter((announcement) =>
+    activeMemberPeerIds.has(announcement.ownerPeerId)
+  );
+}
+
+export function countPeersWithinActiveMembers(
+  peerIds: string[],
+  activeMemberPeerIds: Set<string>
+) {
+  return peerIds.filter((peerId) => activeMemberPeerIds.has(peerId)).length;
+}
+
+export function filterVisiblePeerDiagnostics(
+  peerDiagnostics: PeerDiagnosticsSnapshot[],
+  activeMemberPeerIds: Set<string>,
+  sourcePeerId: string | null
+) {
+  const visiblePeerIds = new Set<string>(["system", "remote-media"]);
+  for (const peerId of activeMemberPeerIds) {
+    visiblePeerIds.add(peerId);
+  }
+  if (sourcePeerId) {
+    visiblePeerIds.add(sourcePeerId);
+  }
+
+  return peerDiagnostics.filter((peer) => visiblePeerIds.has(peer.peerId));
 }
