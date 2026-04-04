@@ -10,14 +10,14 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
+import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
-import { SignalingGateway } from "../signaling/signaling.gateway";
 
 @Controller("v1/rooms/:roomId/queue")
 export class QueueController {
   constructor(
     private readonly roomService: RoomService,
-    private readonly signalingGateway: SignalingGateway,
+    private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService
   ) {}
 
@@ -47,11 +47,7 @@ export class QueueController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.roomService.addQueueItem(roomId, userId, body.trackId);
-    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitQueuePatch(roomId, {
-      queue: snapshot.queue,
-      playback: snapshot.room.playback
-    });
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
       queue: snapshot.queue,
       playback: snapshot.room.playback
@@ -66,11 +62,7 @@ export class QueueController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.roomService.removeQueueItem(roomId, queueItemId, userId);
-    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitQueuePatch(roomId, {
-      queue: snapshot.queue,
-      playback: snapshot.room.playback
-    });
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
       queue: snapshot.queue,
       playback: snapshot.room.playback
@@ -85,11 +77,7 @@ export class QueueController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.roomService.reorderQueue(roomId, userId, body.queueItemIds);
-    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitQueuePatch(roomId, {
-      queue: snapshot.queue,
-      playback: snapshot.room.playback
-    });
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(roomId);
     return {
       queue: snapshot.queue,
       playback: snapshot.room.playback

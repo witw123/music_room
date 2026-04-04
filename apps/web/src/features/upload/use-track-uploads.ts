@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import {
   assembleTrackFileFromPieces,
@@ -17,16 +17,17 @@ import {
   getCachedTrackAssets,
   pruneCachedTracks
 } from "@/lib/indexeddb";
-import { mergeRoomSnapshot, removeTracksFromUploads } from "@/lib/music-room-ui";
+import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type UploadedTrack } from "@/features/upload/audio-utils";
+import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 
 export function useTrackUploads(options: {
   maxCachedTracks: number;
   peerId: string;
   activeSession: GuestSession | null;
   roomSnapshot: RoomSnapshot | null;
-  setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
+  dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setStatusMessage: (message: string) => void;
   onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
@@ -36,7 +37,7 @@ export function useTrackUploads(options: {
     peerId,
     activeSession,
     roomSnapshot,
-    setRoomSnapshot,
+    dispatchRoomStateEvent,
     setStatusMessage,
     onAvailability,
     emitAvailability
@@ -256,25 +257,12 @@ export function useTrackUploads(options: {
     if (nextTracks.length > 0) {
       try {
         const latestSnapshot = await musicRoomApi.getRoom(roomId);
-        setRoomSnapshot((current) =>
-          current?.room.id && current.room.id !== roomId
-            ? current
-            : mergeRoomSnapshot(current, latestSnapshot)
-        );
+        dispatchRoomStateEvent({
+          type: "recover-snapshot",
+          snapshot: latestSnapshot
+        });
       } catch {
-        setRoomSnapshot((current) =>
-          current
-            ? {
-                ...current,
-                tracks: [
-                  ...nextTracks,
-                  ...current.tracks.filter(
-                    (track) => !nextTracks.some((nextTrack) => nextTrack.id === track.id)
-                  )
-                ]
-              }
-            : current
-        );
+        // Realtime snapshot or later resync remains the source of truth for shared room state.
       }
     }
     await trimLocalCache([

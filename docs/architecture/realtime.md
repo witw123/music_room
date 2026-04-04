@@ -1,6 +1,6 @@
 # 实时链路
 
-最后更新：`2026-04-03`
+最后更新：`2026-04-04`
 
 ## 角色划分
 
@@ -47,10 +47,12 @@
 
 ## 快照与 patch 的关系
 
-- `room.snapshot` 仍然是最完整的基线状态
+- `room.snapshot` 是共享房间状态的权威基线
+- `RoomSnapshot.room.roomRevision` 单调递增，用来判断整包房间状态是否比当前更新
+- 成员、在线态、host、队列、曲库变化都会伴随新的 `room.snapshot`
 - `room.playback.patch`、`room.queue.patch`、`room.presence.patch`、`room.library.patch`
-  用于减少整包快照的依赖
-- 新订阅者仍会收到当前房间快照
+  只做增量优化，不再承担唯一正确性
+- 新订阅者收到的第一份共享状态必须是已经应用本次在线态后的权威 `room.snapshot`
 
 ## 在线与断线策略
 

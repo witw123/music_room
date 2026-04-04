@@ -11,14 +11,14 @@ import {
 import type { RoomSnapshot } from "@music-room/shared";
 import { AuthService } from "../auth/auth.service";
 import { PlaylistService } from "../playlist/playlist.service";
-import { SignalingGateway } from "../signaling/signaling.gateway";
 import { RoomService } from "./room.service";
+import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 
 @Controller("v1/rooms")
 export class RoomController {
   constructor(
     private readonly roomService: RoomService,
-    private readonly signalingGateway: SignalingGateway,
+    private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService,
     private readonly playlistService: PlaylistService
   ) {}
@@ -32,14 +32,6 @@ export class RoomController {
     }
   }
 
-  private emitRoomPresenceSnapshot(roomId: string, snapshot: RoomSnapshot) {
-    this.signalingGateway.emitPresencePatch(roomId, {
-      members: snapshot.room.members,
-      playback: snapshot.room.playback,
-      presenceRevision: snapshot.room.presenceRevision
-    });
-  }
-
   @Post()
   async createRoom(
     @Headers("x-session-token") sessionToken: string | undefined,
@@ -47,7 +39,7 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const snapshot = await this.roomService.createRoom(userId, body.visibility);
-    this.signalingGateway.emitRoomSnapshot(snapshot.room.id, snapshot);
+    await this.roomRealtimePublisher.emitSnapshot(snapshot.room.id);
     return snapshot;
   }
 
@@ -99,10 +91,7 @@ export class RoomController {
     const userId = await this.getCurrentUserId(sessionToken);
     const room = await this.roomService.findRoomByJoinCode(body.joinCode);
     await this.roomService.joinRoom(room.id, userId);
-    const snapshot = await this.roomService.getRoomSnapshot(room.id, []);
-    this.signalingGateway.emitRoomSnapshot(room.id, snapshot);
-    this.emitRoomPresenceSnapshot(room.id, snapshot);
-    return snapshot;
+    return this.roomRealtimePublisher.emitTopologySnapshot(room.id);
   }
 
   @Post(":roomId/join")
@@ -111,11 +100,8 @@ export class RoomController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const room = await this.roomService.joinRoom(roomId, userId);
-    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
-    this.emitRoomPresenceSnapshot(roomId, snapshot);
-    return room;
+    await this.roomService.joinRoom(roomId, userId);
+    return this.roomRealtimePublisher.emitTopologySnapshot(roomId);
   }
 
   @Post(":roomId/leave")
@@ -126,9 +112,7 @@ export class RoomController {
     const userId = await this.getCurrentUserId(sessionToken);
     const room = await this.roomService.leaveRoom(roomId, userId);
     if (room.members.length > 0) {
-      const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-      this.signalingGateway.emitRoomSnapshot(roomId, snapshot);
-      this.emitRoomPresenceSnapshot(roomId, snapshot);
+      await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
     }
     return room;
   }
@@ -146,8 +130,8 @@ export class RoomController {
     const trackIds = snapshot.tracks.map((track) => track.id);
     await this.playlistService.deletePlaylistsForRoom(roomId);
     const result = await this.roomService.deleteRoom(roomId, userId);
-    this.signalingGateway.emitRoomDeleted(roomId, trackIds);
-    this.signalingGateway.emitRoomMissing(roomId);
+    this.roomRealtimePublisher.emitRoomDeleted(roomId, trackIds);
+    this.roomRealtimePublisher.emitRoomMissing(roomId);
     return result;
   }
 
@@ -179,12 +163,7 @@ export class RoomController {
       ownerSessionId: body.ownerSessionId ?? userId,
       ownerNickname: body.ownerNickname ?? ""
     });
-    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitLibraryPatch(roomId, {
-      tracks: snapshot.tracks,
-      queue: snapshot.queue,
-      playback: snapshot.room.playback
-    });
+    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
     return track;
   }
 
@@ -197,12 +176,7 @@ export class RoomController {
     const userId = await this.getCurrentUserId(sessionToken);
     const result = await this.roomService.removeTrack(roomId, userId, trackId);
     await this.playlistService.removeTrackFromPlaylists(trackId);
-    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
-    this.signalingGateway.emitLibraryPatch(roomId, {
-      tracks: snapshot.tracks,
-      queue: snapshot.queue,
-      playback: snapshot.room.playback
-    });
+    await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
     return result;
   }
 }

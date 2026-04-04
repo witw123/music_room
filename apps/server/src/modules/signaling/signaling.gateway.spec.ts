@@ -1,3 +1,5 @@
+import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
+import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
 import { SignalingGateway } from "./signaling.gateway";
 
 function createAuthServiceMock() {
@@ -89,13 +91,17 @@ function createGateway(input?: {
 }) {
   const roomService = input?.roomService ?? createRoomServiceMock();
   const redisService = input?.redisService ?? createRedisServiceMock();
-  const moduleRef = {
-    get: jest.fn().mockReturnValue(roomService)
-  };
+  const broadcaster = new RoomRealtimeBroadcaster(redisService as never);
+  const roomRealtimePublisher = new RoomRealtimePublisher(
+    roomService as never,
+    broadcaster as never
+  );
   const authService = createAuthServiceMock();
   const gateway = new SignalingGateway(
     redisService as never,
-    moduleRef as never,
+    roomService as never,
+    roomRealtimePublisher as never,
+    broadcaster as never,
     authService as never
   );
 
@@ -104,7 +110,8 @@ function createGateway(input?: {
     roomService,
     redisService,
     authService,
-    moduleRef
+    broadcaster,
+    roomRealtimePublisher
   };
 }
 
@@ -133,15 +140,17 @@ function createClient(input?: Partial<{
 
 function attachServerMock(gateway: SignalingGateway, sockets?: Map<string, ReturnType<typeof createClient>>) {
   const emit = jest.fn();
-  gateway.server = {
+  const server = {
     to: jest.fn().mockReturnValue({ emit }),
     sockets: {
       sockets: sockets ?? new Map()
     }
   } as never;
+  gateway.server = server;
 
   return {
-    emit
+    emit,
+    server
   };
 }
 
@@ -879,6 +888,7 @@ describe("SignalingGateway", () => {
     gateway.handleDisconnect(
       client as never
     );
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 

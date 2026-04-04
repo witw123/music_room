@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { PlaybackController } from "../playback/playback.controller";
 import { QueueController } from "../queue/queue.controller";
+import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { SignalingGateway } from "../signaling/signaling.gateway";
+import { RoomRealtimeBroadcaster } from "../signaling/room-realtime.broadcaster";
 import { RoomController } from "./room.controller";
 import { RoomService } from "./room.service";
 
@@ -158,10 +160,13 @@ function createClient(input: {
   };
 }
 
-function attachServerMock(gateway: SignalingGateway) {
+function attachServerMock(
+  gateway: SignalingGateway,
+  broadcaster: RoomRealtimeBroadcaster
+) {
   const events: Array<{ target: string; event: string; payload: unknown }> = [];
   const sockets = new Map<string, ReturnType<typeof createClient>>();
-  gateway.server = {
+  const server = {
     to: jest.fn((target: string) => ({
       emit: (event: string, payload: unknown) => {
         events.push({ target, event, payload });
@@ -171,6 +176,8 @@ function attachServerMock(gateway: SignalingGateway) {
       sockets
     }
   } as never;
+  gateway.server = server;
+  broadcaster.setServer(server);
 
   return {
     events,
@@ -178,38 +185,68 @@ function attachServerMock(gateway: SignalingGateway) {
   };
 }
 
+function createRealtimeHarness() {
+  const prisma = createPrismaMock();
+  const redis = createRedisMock();
+  const authService = createFakeAuthService();
+  const roomService = new RoomService(authService as never, prisma as never, redis as never);
+  const broadcaster = new RoomRealtimeBroadcaster(redis as never);
+  const roomRealtimePublisher = new RoomRealtimePublisher(
+    roomService as never,
+    broadcaster as never
+  );
+  const signalingGateway = new SignalingGateway(
+    redis as never,
+    roomService as never,
+    roomRealtimePublisher as never,
+    broadcaster as never,
+    authService as never
+  );
+  const playlistService = createPlaylistServiceMock();
+  const roomController = new RoomController(
+    roomService as never,
+    roomRealtimePublisher as never,
+    authService as never,
+    playlistService as never
+  );
+  const queueController = new QueueController(
+    roomService as never,
+    roomRealtimePublisher as never,
+    authService as never
+  );
+  const playbackController = new PlaybackController(
+    roomService as never,
+    roomRealtimePublisher as never,
+    authService as never
+  );
+
+  return {
+    prisma,
+    redis,
+    authService,
+    roomService,
+    broadcaster,
+    roomRealtimePublisher,
+    signalingGateway,
+    playlistService,
+    roomController,
+    queueController,
+    playbackController
+  };
+}
+
 describe("room realtime regression", () => {
   it("covers create, join, recover, realtime reconnect, room updates, leave, and delete", async () => {
-    const prisma = createPrismaMock();
-    const redis = createRedisMock();
-    const authService = createFakeAuthService();
-    const roomService = new RoomService(authService as never, prisma as never, redis as never);
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const signalingGateway = new SignalingGateway(
-      redis as never,
-      moduleRef as never,
-      authService as never
-    );
-    const playlistService = createPlaylistServiceMock();
-    const roomController = new RoomController(
-      roomService as never,
-      signalingGateway as never,
-      authService as never,
-      playlistService as never
-    );
-    const queueController = new QueueController(
-      roomService as never,
-      signalingGateway as never,
-      authService as never
-    );
-    const playbackController = new PlaybackController(
-      roomService as never,
-      signalingGateway as never,
-      authService as never
-    );
-    const { events, sockets } = attachServerMock(signalingGateway);
+    const {
+      authService,
+      roomService,
+      broadcaster,
+      signalingGateway,
+      roomController,
+      queueController,
+      playbackController
+    } = createRealtimeHarness();
+    const { events, sockets } = attachServerMock(signalingGateway, broadcaster);
     const hostSession = await authService.createGuestSession("Host");
     const memberSession = await authService.createGuestSession("Member");
 
@@ -382,26 +419,13 @@ describe("room realtime regression", () => {
   });
 
   it("keeps join and leave presence revisions monotonic across room.snapshot and room.presence.patch", async () => {
-    const prisma = createPrismaMock();
-    const redis = createRedisMock();
-    const authService = createFakeAuthService();
-    const roomService = new RoomService(authService as never, prisma as never, redis as never);
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const signalingGateway = new SignalingGateway(
-      redis as never,
-      moduleRef as never,
-      authService as never
-    );
-    const playlistService = createPlaylistServiceMock();
-    const roomController = new RoomController(
-      roomService as never,
-      signalingGateway as never,
-      authService as never,
-      playlistService as never
-    );
-    const { events, sockets } = attachServerMock(signalingGateway);
+    const {
+      authService,
+      broadcaster,
+      signalingGateway,
+      roomController
+    } = createRealtimeHarness();
+    const { events, sockets } = attachServerMock(signalingGateway, broadcaster);
     const hostSession = await authService.createGuestSession("Host");
     const memberSession = await authService.createGuestSession("Member");
 
@@ -512,26 +536,13 @@ describe("room realtime regression", () => {
   });
 
   it("broadcasts a fresh online room snapshot when a member rejoins after leaving", async () => {
-    const prisma = createPrismaMock();
-    const redis = createRedisMock();
-    const authService = createFakeAuthService();
-    const roomService = new RoomService(authService as never, prisma as never, redis as never);
-    const moduleRef = {
-      get: jest.fn().mockReturnValue(roomService)
-    };
-    const signalingGateway = new SignalingGateway(
-      redis as never,
-      moduleRef as never,
-      authService as never
-    );
-    const playlistService = createPlaylistServiceMock();
-    const roomController = new RoomController(
-      roomService as never,
-      signalingGateway as never,
-      authService as never,
-      playlistService as never
-    );
-    const { events, sockets } = attachServerMock(signalingGateway);
+    const {
+      authService,
+      broadcaster,
+      signalingGateway,
+      roomController
+    } = createRealtimeHarness();
+    const { events, sockets } = attachServerMock(signalingGateway, broadcaster);
     const hostSession = await authService.createGuestSession("Host");
     const memberSession = await authService.createGuestSession("Member");
 

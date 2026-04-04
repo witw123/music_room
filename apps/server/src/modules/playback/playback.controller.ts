@@ -11,8 +11,8 @@ import {
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
+import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
-import { SignalingGateway } from "../signaling/signaling.gateway";
 
 type PlaybackAction = "play" | "pause" | "seek" | "next" | "prev";
 
@@ -28,7 +28,7 @@ export class PlaybackController {
 
   constructor(
     private readonly roomService: RoomService,
-    private readonly signalingGateway: SignalingGateway,
+    private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService
   ) {}
 
@@ -81,7 +81,7 @@ export class PlaybackController {
       this.logger.log(
         `accepted playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} nextVersion=${playback.queueVersion}`
       );
-      this.signalingGateway.emitPlaybackPatch(roomId, { playback });
+      this.roomRealtimePublisher.emitPlaybackPatch(roomId, playback);
       return playback;
     } catch (error) {
       this.logger.warn(

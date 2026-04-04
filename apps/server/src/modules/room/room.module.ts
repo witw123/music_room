@@ -4,11 +4,12 @@ import { PlaylistModule } from "../playlist/playlist.module";
 import { SignalingModule } from "../signaling/signaling.module";
 import { RoomController } from "./room.controller";
 import { RoomService } from "./room.service";
+import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 
 @Module({
   imports: [AuthModule, forwardRef(() => PlaylistModule), SignalingModule],
   controllers: [RoomController],
-  providers: [RoomService],
-  exports: [RoomService]
+  providers: [RoomService, RoomRealtimePublisher],
+  exports: [RoomService, RoomRealtimePublisher]
 })
 export class RoomModule {}

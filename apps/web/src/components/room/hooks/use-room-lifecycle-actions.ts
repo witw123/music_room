@@ -2,9 +2,10 @@
 
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { Playlist, RoomSnapshot } from "@music-room/shared";
+import type { Playlist } from "@music-room/shared";
 import type { Route } from "next";
 import { musicRoomApi } from "@/lib/music-room-api";
+import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -20,7 +21,7 @@ type UseRoomLifecycleActionsInput = {
   resetPlayerSurface: () => void;
   resetRealtimePeer: () => void;
   setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
-  setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
+  dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
   leaveRoom: () => Promise<boolean>;
   deleteRoom: () => Promise<boolean>;
@@ -36,7 +37,7 @@ export function useRoomLifecycleActions({
   resetPlayerSurface,
   resetRealtimePeer,
   setSuppressRoomRecovery,
-  setRoomSnapshot,
+  dispatchRoomStateEvent,
   setPlaylists,
   leaveRoom,
   deleteRoom,
@@ -47,15 +48,15 @@ export function useRoomLifecycleActions({
     resetPlayerSurface();
     resetRealtimePeer();
     clearIdentity();
-    setRoomSnapshot(null);
+    dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     window.localStorage.removeItem("music-room-last-room");
   }, [
     clearIdentity,
+    dispatchRoomStateEvent,
     resetPlayerSurface,
     resetRealtimePeer,
     setPlaylists,
-    setRoomSnapshot,
     setSuppressRoomRecovery
   ]);
 
@@ -68,7 +69,7 @@ export function useRoomLifecycleActions({
     }
 
     setSuppressRoomRecovery(true);
-    setRoomSnapshot(null);
+    dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     if (workspaceOnly) {
       router.push(workspaceEntryHref as Route);
@@ -77,11 +78,11 @@ export function useRoomLifecycleActions({
 
     setIsNavigatingRoomExit(false);
   }, [
+    dispatchRoomStateEvent,
     leaveRoom,
     router,
     setPlaylists,
     setIsNavigatingRoomExit,
-    setRoomSnapshot,
     setSuppressRoomRecovery,
     workspaceEntryHref,
     workspaceOnly
@@ -96,7 +97,7 @@ export function useRoomLifecycleActions({
     }
 
     setSuppressRoomRecovery(true);
-    setRoomSnapshot(null);
+    dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     if (workspaceOnly) {
       router.push(workspaceEntryHref as Route);
@@ -105,11 +106,11 @@ export function useRoomLifecycleActions({
 
     setIsNavigatingRoomExit(false);
   }, [
+    dispatchRoomStateEvent,
     deleteRoom,
     router,
     setPlaylists,
     setIsNavigatingRoomExit,
-    setRoomSnapshot,
     setSuppressRoomRecovery,
     workspaceEntryHref,
     workspaceOnly

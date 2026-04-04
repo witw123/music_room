@@ -1,4 +1,4 @@
-import { OnModuleDestroy } from "@nestjs/common";
+import { Inject, OnModuleDestroy, forwardRef } from "@nestjs/common";
 import {
   ConnectedSocket,
   OnGatewayDisconnect,
@@ -9,8 +9,6 @@ import {
   WebSocketServer,
   WsException
 } from "@nestjs/websockets";
-import { ModuleRef } from "@nestjs/core";
-import { randomUUID } from "node:crypto";
 import type { Server, Socket } from "socket.io";
 import type {
   PieceAvailabilityClearPayload,
@@ -25,25 +23,27 @@ import type {
 import { RedisService } from "../../infra/redis/redis.service";
 import { getCorsOrigins } from "../../common/cors/get-cors-origins";
 import { AuthService } from "../auth/auth.service";
+import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
-
-const roomSnapshotChannel = "music-room:room-snapshot";
-const roomSnapshotMissingChannel = "music-room:room-snapshot-missing";
-const roomDeletedChannel = "music-room:room-deleted";
-const roomPlaybackPatchChannel = "music-room:room-playback-patch";
-const roomQueuePatchChannel = "music-room:room-queue-patch";
-const roomPresencePatchChannel = "music-room:room-presence-patch";
-const roomLibraryPatchChannel = "music-room:room-library-patch";
-const peerSignalChannel = "music-room:peer-signal";
-const pieceAvailabilityChannel = "music-room:piece-availability";
-const pieceAvailabilityClearChannel = "music-room:piece-availability-clear";
+import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
+import {
+  peerSignalChannel,
+  pieceAvailabilityChannel,
+  pieceAvailabilityClearChannel,
+  roomDeletedChannel,
+  roomLibraryPatchChannel,
+  roomPlaybackPatchChannel,
+  roomPresencePatchChannel,
+  roomQueuePatchChannel,
+  roomSnapshotChannel,
+  roomSnapshotMissingChannel
+} from "./room-realtime.channels";
 
 @WebSocketGateway({
   path: "/ws/socket.io",
   cors: { origin: getCorsOrigins(), credentials: true }
 })
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
-  private readonly instanceId = randomUUID();
   private readonly disconnectGracePeriodMs = 25_000;
   private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
   private sequence = 0;
@@ -60,7 +60,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   constructor(
     private readonly redisService: RedisService,
-    private readonly moduleRef: ModuleRef,
+    @Inject(forwardRef(() => RoomService))
+    private readonly roomService: RoomService,
+    @Inject(forwardRef(() => RoomRealtimePublisher))
+    private readonly roomRealtimePublisher: RoomRealtimePublisher,
+    private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
     private readonly authService: AuthService
   ) {}
 
@@ -68,83 +72,42 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   server!: Server;
 
   emitRoomSnapshot(roomId: string, snapshot: RoomSnapshot) {
-    this.server.to(roomId).emit("room.snapshot", snapshot);
-    void this.redisService.publish(roomSnapshotChannel, {
-      sourceId: this.instanceId,
-      roomId,
-      snapshot
-    });
+    this.ensureBroadcasterServer();
+    this.roomRealtimeBroadcaster.emitRoomSnapshot(roomId, snapshot);
   }
 
   emitRoomMissing(roomId: string) {
+    this.ensureBroadcasterServer();
     this.availabilityByRoom.delete(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
-    this.server.to(roomId).emit("room.snapshot.missing", { roomId });
-    void this.redisService.publish(roomSnapshotMissingChannel, {
-      sourceId: this.instanceId,
-      roomId
-    });
+    this.roomRealtimeBroadcaster.emitRoomMissing(roomId);
   }
 
   emitRoomDeleted(roomId: string, trackIds: string[]) {
+    this.ensureBroadcasterServer();
     this.availabilityByRoom.delete(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
-    this.server.to(roomId).emit("room.deleted", { roomId, trackIds });
-    void this.redisService.publish(roomDeletedChannel, {
-      sourceId: this.instanceId,
-      roomId,
-      trackIds
-    });
+    this.roomRealtimeBroadcaster.emitRoomDeleted(roomId, trackIds);
   }
 
   emitPlaybackPatch(roomId: string, payload: Omit<RoomPlaybackPatchPayload, "roomId" | "updatedAt">) {
-    const message: RoomPlaybackPatchPayload = {
-      roomId,
-      playback: payload.playback,
-      updatedAt: new Date().toISOString()
-    };
-    this.server.to(roomId).emit("room.playback.patch", message);
-    void this.redisService.publish(roomPlaybackPatchChannel, {
-      sourceId: this.instanceId,
-      roomId,
-      payload: message
-    });
+    this.ensureBroadcasterServer();
+    this.roomRealtimeBroadcaster.emitPlaybackPatch(roomId, payload);
   }
 
   emitQueuePatch(roomId: string, payload: Omit<RoomQueuePatchPayload, "roomId" | "updatedAt">) {
-    const message: RoomQueuePatchPayload = {
-      roomId,
-      queue: payload.queue,
-      playback: payload.playback,
-      updatedAt: new Date().toISOString()
-    };
-    this.server.to(roomId).emit("room.queue.patch", message);
-    void this.redisService.publish(roomQueuePatchChannel, {
-      sourceId: this.instanceId,
-      roomId,
-      payload: message
-    });
+    this.ensureBroadcasterServer();
+    this.roomRealtimeBroadcaster.emitQueuePatch(roomId, payload);
   }
 
   emitPresencePatch(
     roomId: string,
     payload: Omit<RoomPresencePatchPayload, "roomId" | "updatedAt">
   ) {
-    const message: RoomPresencePatchPayload = {
-      roomId,
-      members: payload.members,
-      playback: payload.playback,
-      presenceRevision: payload.presenceRevision,
-      updatedAt: new Date().toISOString()
-    };
-    this.server.to(roomId).emit("room.presence.patch", message);
-    void this.redisService.publish(roomPresencePatchChannel, {
-      sourceId: this.instanceId,
-      roomId,
-      payload: message
-    });
+    this.ensureBroadcasterServer();
+    this.roomRealtimeBroadcaster.emitPresencePatch(roomId, payload);
   }
 
   emitPresenceSnapshot(roomId: string, snapshot: RoomSnapshot) {
@@ -152,24 +115,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.emitPresencePatch(roomId, {
       members: snapshot.room.members,
       playback: snapshot.room.playback,
-      presenceRevision: snapshot.room.presenceRevision
+      presenceRevision: snapshot.room.presenceRevision,
+      roomRevision: snapshot.room.roomRevision ?? 0
     });
   }
 
   emitLibraryPatch(roomId: string, payload: Omit<RoomLibraryPatchPayload, "roomId" | "updatedAt">) {
-    const message: RoomLibraryPatchPayload = {
-      roomId,
-      tracks: payload.tracks,
-      queue: payload.queue,
-      playback: payload.playback,
-      updatedAt: new Date().toISOString()
-    };
-    this.server.to(roomId).emit("room.library.patch", message);
-    void this.redisService.publish(roomLibraryPatchChannel, {
-      sourceId: this.instanceId,
-      roomId,
-      payload: message
-    });
+    this.ensureBroadcasterServer();
+    this.roomRealtimeBroadcaster.emitLibraryPatch(roomId, payload);
   }
 
   private emitPieceAvailabilityClear(roomId: string, ownerPeerId: string) {
@@ -180,13 +133,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     };
     this.server.to(roomId).emit("piece.availability.clear", payload);
     void this.redisService.publish(pieceAvailabilityClearChannel, {
-      sourceId: this.instanceId,
+      sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId,
       payload
     });
   }
 
   afterInit() {
+    this.roomRealtimeBroadcaster.setServer(this.server);
     void this.redisService
       .subscribe(roomSnapshotChannel, (payload) => {
         const message = payload as {
@@ -199,7 +153,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           !message.roomId ||
           !message.snapshot ||
           !message.sourceId ||
-          message.sourceId === this.instanceId
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
         ) {
           return;
         }
@@ -216,7 +170,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         roomId?: string;
       };
 
-      if (!message.roomId || !message.sourceId || message.sourceId === this.instanceId) {
+      if (
+        !message.roomId ||
+        !message.sourceId ||
+        message.sourceId === this.roomRealtimeBroadcaster.instanceId
+      ) {
         return;
       }
 
@@ -233,7 +191,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         trackIds?: string[];
       };
 
-      if (!message.roomId || !message.sourceId || message.sourceId === this.instanceId) {
+      if (
+        !message.roomId ||
+        !message.sourceId ||
+        message.sourceId === this.roomRealtimeBroadcaster.instanceId
+      ) {
         return;
       }
 
@@ -253,13 +215,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       this.server.to(message.roomId).emit("room.playback.patch", message.payload);
     });
@@ -272,13 +234,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       this.server.to(message.roomId).emit("room.queue.patch", message.payload);
     });
@@ -291,13 +253,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       this.server.to(message.roomId).emit("room.presence.patch", message.payload);
     });
@@ -310,13 +272,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       this.server.to(message.roomId).emit("room.library.patch", message.payload);
     });
@@ -329,13 +291,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       this.emitPeerSignalToPeer(message.roomId, message.payload.toPeerId, message.payload);
     });
@@ -348,13 +310,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       const roomAvailability = this.availabilityByRoom.get(message.roomId) ?? new Map();
       roomAvailability.set(
@@ -373,13 +335,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       };
 
       if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.instanceId
-      ) {
-        return;
-      }
+          !message.roomId ||
+          !message.payload ||
+          !message.sourceId ||
+          message.sourceId === this.roomRealtimeBroadcaster.instanceId
+        ) {
+          return;
+        }
 
       this.removePeerAvailability(message.roomId, message.payload.ownerPeerId);
       this.server.to(message.roomId).emit("piece.availability.clear", message.payload);
@@ -412,7 +374,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.emitPeerSignalToPeer(payload.roomId, nextPayload.toPeerId, nextPayload);
     await this.redisService.publish(peerSignalChannel, {
-      sourceId: this.instanceId,
+      sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId: payload.roomId,
       payload: nextPayload
     });
@@ -436,7 +398,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.availabilityByRoom.set(payload.roomId, roomAvailability);
     client.to(payload.roomId).emit("piece.availability", payload);
     await this.redisService.publish(pieceAvailabilityChannel, {
-      sourceId: this.instanceId,
+      sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId: payload.roomId,
       payload
     });
@@ -462,6 +424,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { roomId: string; sessionId?: string; peerId?: string }
   ) {
+    this.ensureBroadcasterServer();
     this.assertRealtimeAvailable();
 
     if (!payload.sessionId || !payload.peerId) {
@@ -535,6 +498,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { roomId: string; sessionId: string; peerId: string }
   ) {
+    this.ensureBroadcasterServer();
     this.assertRealtimeClient(client, payload.roomId);
     this.assertRealtimeAvailable();
 
@@ -542,19 +506,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       throw new WsException("Presence mismatch.");
     }
 
-    const roomService = this.moduleRef.get(RoomService, { strict: false });
-    if (!roomService) {
-      return { ok: true };
-    }
-
-    const refreshResult = await roomService.refreshRealtimePresence(
+    const refreshResult = await this.roomService.refreshRealtimePresence(
       payload.roomId,
       payload.sessionId,
       payload.peerId
     );
     if (refreshResult.changed) {
-      const snapshot = await roomService.getRoomSnapshot(payload.roomId, []);
-      this.emitPresenceSnapshot(payload.roomId, snapshot);
+      await this.roomRealtimePublisher.emitTopologySnapshot(payload.roomId);
     }
     return { ok: true };
   }
@@ -607,16 +565,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private async emitLatestSnapshot(roomId: string, sessionId: string, client: Socket) {
-    const roomService = this.moduleRef.get(RoomService, { strict: false });
-
-    if (!roomService) {
-      return;
-    }
-
     try {
       client.emit(
         "room.snapshot",
-        await roomService.getAccessibleRoomSnapshot(roomId, [], sessionId)
+        await this.roomService.getAccessibleRoomSnapshot(roomId, [], sessionId)
       );
     } catch {
       client.emit("room.snapshot.missing", { roomId });
@@ -629,30 +581,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     peerId: string | null,
     presenceState: "online" | "reconnecting" | "offline"
   ) {
-    const roomService = this.moduleRef.get(RoomService, { strict: false });
-
-    if (!roomService) {
-      return;
-    }
-
+    this.ensureBroadcasterServer();
     try {
-      await roomService.updatePeerPresence(roomId, sessionId, peerId, presenceState);
-      const snapshot = await roomService.getRoomSnapshot(roomId, []);
-      this.emitPresenceSnapshot(roomId, snapshot);
+      await this.roomService.updatePeerPresence(roomId, sessionId, peerId, presenceState);
+      await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
     } catch {
       clientSafeNoop();
     }
   }
 
   private async rememberRecentRoom(roomId: string, sessionId: string) {
-    const roomService = this.moduleRef.get(RoomService, { strict: false });
-
-    if (!roomService) {
-      return;
-    }
-
     try {
-      await roomService.rememberRecentRoom(roomId, sessionId);
+      await this.roomService.rememberRecentRoom(roomId, sessionId);
     } catch {
       clientSafeNoop();
     }
@@ -781,6 +721,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return `${roomId}:${sessionId}`;
   }
 
+  private ensureBroadcasterServer() {
+    if (this.server) {
+      this.roomRealtimeBroadcaster.setServer(this.server);
+    }
+  }
+
   private isActiveSessionSocket(roomId?: string, sessionId?: string, socketId?: string) {
     if (!roomId || !sessionId || !socketId) {
       return false;
@@ -862,6 +808,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private async replaceExistingRoomSession(roomId: string, sessionId: string, nextSocketId: string) {
+    this.ensureBroadcasterServer();
     const existing = this.activeSessionsByRoom.get(roomId)?.get(sessionId);
     if (!existing || existing.socketId === nextSocketId) {
       return;
@@ -872,13 +819,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.unregisterSessionSocket(roomId, sessionId, existing.socketId);
     this.clearPeerAvailability(roomId, existing.peerId);
 
-    const roomService = this.moduleRef.get(RoomService, { strict: false });
-    if (
-      roomService &&
-      typeof (roomService as Partial<RoomService>).handleDuplicateSessionReplacement === "function"
-    ) {
-      await roomService.handleDuplicateSessionReplacement(roomId, sessionId);
-    }
+    await this.roomService.handleDuplicateSessionReplacement(roomId, sessionId);
+    await this.roomRealtimePublisher.emitSnapshot(roomId);
 
     const replacedSocket = this.server.sockets.sockets.get(existing.socketId);
     if (!replacedSocket) {

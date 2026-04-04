@@ -19,6 +19,7 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
         }
       ],
       presenceRevision: 0,
+      roomRevision: 0,
       playback: {
         status: "paused",
         currentTrackId: null,
@@ -39,6 +40,16 @@ function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
   };
 }
 
+function createRoomRealtimePublisherMock() {
+  return {
+    emitSnapshot: jest.fn(),
+    emitTopologySnapshot: jest.fn(),
+    emitRoomDeleted: jest.fn(),
+    emitRoomMissing: jest.fn(),
+    emitLibrarySnapshot: jest.fn()
+  };
+}
+
 describe("RoomController", () => {
   function createAuthServiceMock() {
     return {
@@ -56,7 +67,8 @@ describe("RoomController", () => {
   function createPlaylistServiceMock() {
     return {
       listPlaylistsForRoom: jest.fn().mockResolvedValue([]),
-      deletePlaylistsForRoom: jest.fn().mockResolvedValue(undefined)
+      deletePlaylistsForRoom: jest.fn().mockResolvedValue(undefined),
+      removeTrackFromPlaylists: jest.fn().mockResolvedValue(undefined)
     };
   }
 
@@ -65,15 +77,12 @@ describe("RoomController", () => {
     const roomService = {
       getRecentRoomSnapshotForSession: jest.fn().mockResolvedValue(snapshot)
     };
-    const signalingGateway = {
-      emitRoomSnapshot: jest.fn(),
-      emitPresencePatch: jest.fn()
-    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       authService as never,
       playlistService as never
     );
@@ -88,15 +97,12 @@ describe("RoomController", () => {
     const roomService = {
       getRecoverableRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
     };
-    const signalingGateway = {
-      emitRoomSnapshot: jest.fn(),
-      emitPresencePatch: jest.fn()
-    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       authService as never,
       playlistService as never
     );
@@ -106,21 +112,17 @@ describe("RoomController", () => {
     expect(roomService.getRecoverableRoomSnapshot).toHaveBeenCalledWith("room_1", "guest_host");
   });
 
-  it("does not emit a room snapshot after the room is deleted on leave", async () => {
+  it("does not emit a topology snapshot after the room is deleted on leave", async () => {
     const emptyRoom = buildSnapshot({ members: [] }).room;
     const roomService = {
-      leaveRoom: jest.fn().mockResolvedValue(emptyRoom),
-      getRoomSnapshot: jest.fn()
+      leaveRoom: jest.fn().mockResolvedValue(emptyRoom)
     };
-    const signalingGateway = {
-      emitRoomSnapshot: jest.fn(),
-      emitPresencePatch: jest.fn()
-    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       authService as never,
       playlistService as never
     );
@@ -129,27 +131,24 @@ describe("RoomController", () => {
 
     expect(result).toEqual(emptyRoom);
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
-    expect(roomService.getRoomSnapshot).not.toHaveBeenCalled();
-    expect(signalingGateway.emitRoomSnapshot).not.toHaveBeenCalled();
-    expect(signalingGateway.emitPresencePatch).not.toHaveBeenCalled();
+    expect(roomRealtimePublisher.emitTopologySnapshot).not.toHaveBeenCalled();
   });
 
-  it("emits a room snapshot after joining by code", async () => {
+  it("emits a topology snapshot after joining by code", async () => {
     const snapshot = buildSnapshot();
     const roomService = {
       findRoomByJoinCode: jest.fn().mockResolvedValue(snapshot.room),
-      joinRoom: jest.fn().mockResolvedValue(snapshot.room),
-      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+      joinRoom: jest.fn().mockResolvedValue(snapshot.room)
     };
-    const signalingGateway = {
-      emitRoomSnapshot: jest.fn(),
-      emitPresencePatch: jest.fn()
+    const roomRealtimePublisher = {
+      ...createRoomRealtimePublisherMock(),
+      emitTopologySnapshot: jest.fn().mockResolvedValue(snapshot)
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       authService as never,
       playlistService as never
     );
@@ -162,15 +161,10 @@ describe("RoomController", () => {
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("abc123");
     expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_host");
-    expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith(snapshot.room.id, snapshot);
-    expect(signalingGateway.emitPresencePatch).toHaveBeenCalledWith(snapshot.room.id, {
-      members: snapshot.room.members,
-      playback: snapshot.room.playback,
-      presenceRevision: snapshot.room.presenceRevision
-    });
+    expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith(snapshot.room.id);
   });
 
-  it("emits room snapshot and presence patch after a member leaves an existing room", async () => {
+  it("emits a topology snapshot after a member leaves an existing room", async () => {
     const snapshot = buildSnapshot({
       members: [
         {
@@ -182,21 +176,21 @@ describe("RoomController", () => {
           presenceState: "online"
         }
       ],
-      presenceRevision: 3
+      presenceRevision: 3,
+      roomRevision: 5
     });
     const roomService = {
-      leaveRoom: jest.fn().mockResolvedValue(snapshot.room),
-      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+      leaveRoom: jest.fn().mockResolvedValue(snapshot.room)
     };
-    const signalingGateway = {
-      emitRoomSnapshot: jest.fn(),
-      emitPresencePatch: jest.fn()
+    const roomRealtimePublisher = {
+      ...createRoomRealtimePublisherMock(),
+      emitTopologySnapshot: jest.fn().mockResolvedValue(snapshot)
     };
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       authService as never,
       playlistService as never
     );
@@ -204,13 +198,7 @@ describe("RoomController", () => {
     const result = await controller.leaveRoom("room_1", "token");
 
     expect(result).toEqual(snapshot.room);
-    expect(roomService.getRoomSnapshot).toHaveBeenCalledWith("room_1", []);
-    expect(signalingGateway.emitRoomSnapshot).toHaveBeenCalledWith("room_1", snapshot);
-    expect(signalingGateway.emitPresencePatch).toHaveBeenCalledWith("room_1", {
-      members: snapshot.room.members,
-      playback: snapshot.room.playback,
-      presenceRevision: snapshot.room.presenceRevision
-    });
+    expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith("room_1");
   });
 
   it("allows the host to delete a room and emits room missing", async () => {
@@ -219,17 +207,12 @@ describe("RoomController", () => {
       getRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
       deleteRoom: jest.fn().mockResolvedValue({ ok: true })
     };
-    const signalingGateway = {
-      emitRoomSnapshot: jest.fn(),
-      emitPresencePatch: jest.fn(),
-      emitRoomDeleted: jest.fn(),
-      emitRoomMissing: jest.fn()
-    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
     const authService = createAuthServiceMock();
     const playlistService = createPlaylistServiceMock();
     const controller = new RoomController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       authService as never,
       playlistService as never
     );
@@ -242,7 +225,7 @@ describe("RoomController", () => {
     expect(playlistService.listPlaylistsForRoom).toHaveBeenCalledWith("room_1");
     expect(playlistService.deletePlaylistsForRoom).toHaveBeenCalledWith("room_1");
     expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
-    expect(signalingGateway.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);
-    expect(signalingGateway.emitRoomMissing).toHaveBeenCalledWith("room_1");
+    expect(roomRealtimePublisher.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);
+    expect(roomRealtimePublisher.emitRoomMissing).toHaveBeenCalledWith("room_1");
   });
 });

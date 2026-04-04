@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   IceConfigResponse,
   Playlist,
@@ -8,7 +8,7 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import { ChunkScheduler, useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
-import { mergeRoomSnapshot, toUserFacingError } from "@/lib/music-room-ui";
+import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
@@ -32,6 +32,10 @@ import { useTrackHydrationQueue } from "@/components/room/hooks/use-track-hydrat
 import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
+import {
+  initialRoomStateStore,
+  roomStateReducer
+} from "@/features/room/room-state-reducer";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
@@ -62,7 +66,11 @@ export function MusicRoomApp({
   const currentRoomRef = useRef<RoomSnapshot | null>(null);
   const uploadedTrackIdsRef = useRef<string[]>([]);
 
-  const [roomSnapshot, setRoomSnapshot] = useState<RoomSnapshot | null>(null);
+  const [roomState, dispatchRoomStateEvent] = useReducer(
+    roomStateReducer,
+    initialRoomStateStore
+  );
+  const roomSnapshot = roomState.snapshot;
   const [, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [, setPlaylists] = useState<Playlist[]>([]);
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
@@ -154,7 +162,7 @@ export function MusicRoomApp({
     peerId,
     activeSession,
     roomSnapshot,
-    setRoomSnapshot,
+    dispatchRoomStateEvent,
     setStatusMessage,
     onAvailability: mergeAvailability,
     emitAvailability: stableEmitAvailability
@@ -289,7 +297,7 @@ export function MusicRoomApp({
   } = useRoomActions({
     activeSession,
     roomSnapshot,
-    setRoomSnapshot,
+    dispatchRoomStateEvent,
     setSuppressRoomRecovery,
     setStatusMessage,
     refreshAvailableRooms,
@@ -316,7 +324,7 @@ export function MusicRoomApp({
     resetPlayerSurface,
     resetRealtimePeer,
     setSuppressRoomRecovery,
-    setRoomSnapshot,
+    dispatchRoomStateEvent,
     setPlaylists,
     leaveRoom,
     deleteRoom,
@@ -336,7 +344,7 @@ export function MusicRoomApp({
     activeSessionRef,
     refreshSession,
     roomSnapshot,
-    setRoomSnapshot,
+    dispatchRoomStateEvent,
     currentRoomRef,
     peerId,
     setPeerId,
@@ -396,11 +404,10 @@ export function MusicRoomApp({
       return;
     }
 
-    setRoomSnapshot((current) =>
-      !current || current.room.id !== handoffSnapshot.room.id
-        ? handoffSnapshot
-        : mergeRoomSnapshot(current, handoffSnapshot)
-    );
+    dispatchRoomStateEvent({
+      type: "bootstrap-handoff",
+      snapshot: handoffSnapshot
+    });
   }, [initialRoomId]);
 
   useEffect(() => {

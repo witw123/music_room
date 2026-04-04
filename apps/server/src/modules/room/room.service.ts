@@ -79,6 +79,7 @@ export class RoomService {
       visibility,
       members: [this.buildMember(hostSession, "host")],
       presenceRevision: 0,
+      roomRevision: 0,
       playback: {
         status: "paused",
         currentTrackId: null,
@@ -203,6 +204,7 @@ export class RoomService {
     if (!record.room.members.some((member) => member.id === session.id)) {
       record.room.members.push(this.buildMember(session, "member"));
       this.incrementPresenceRevision(record.room);
+      this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
     }
 
@@ -285,6 +287,7 @@ export class RoomService {
     }
 
     this.incrementPresenceRevision(record.room);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.room;
   }
@@ -348,6 +351,7 @@ export class RoomService {
       this.incrementPlaybackVersion(record.room.playback);
     }
     this.incrementPresenceRevision(record.room);
+    this.incrementRoomRevision(record.room);
 
     if (record.room.members.length === 0) {
       await this.roomRecordRepository.deleteRecord(record);
@@ -397,6 +401,7 @@ export class RoomService {
         id: existingTrack.id
       };
       this.incrementPlaybackVersion(record.room.playback);
+      this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
       return record.tracks[duplicateByFileHashIndex];
     }
@@ -408,6 +413,7 @@ export class RoomService {
     }
 
     this.incrementPlaybackVersion(record.room.playback);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return track;
   }
@@ -436,6 +442,7 @@ export class RoomService {
       record.room.playback.queueVersion += 1;
     }
 
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return { ok: true };
   }
@@ -460,6 +467,7 @@ export class RoomService {
 
     record.queue.push(queueItem);
     this.incrementPlaybackVersion(record.room.playback);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
 
     return queueItem;
@@ -473,6 +481,7 @@ export class RoomService {
       return record.room.playback;
     }
 
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.room.playback;
   }
@@ -503,6 +512,7 @@ export class RoomService {
 
     record.queue.push(...nextItems);
     this.incrementPlaybackVersion(record.room.playback);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
   }
@@ -523,6 +533,7 @@ export class RoomService {
       .map((item, index) => ({ ...item, position: index }));
 
     if (removed && record.room.playback.currentQueueItemId === removed.id) {
+      this.incrementRoomRevision(record.room);
       const nextItem = record.queue[removed.position] ?? record.queue[removed.position - 1] ?? null;
       if (nextItem) {
         await this.updatePlayback(roomId, {
@@ -537,6 +548,7 @@ export class RoomService {
     }
 
     this.incrementPlaybackVersion(record.room.playback);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
   }
@@ -564,6 +576,7 @@ export class RoomService {
 
     record.queue = nextQueue;
     this.incrementPlaybackVersion(record.room.playback);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
   }
@@ -674,5 +687,9 @@ export class RoomService {
 
   private incrementPresenceRevision(room: Room) {
     room.presenceRevision += 1;
+  }
+
+  private incrementRoomRevision(room: Room) {
+    room.roomRevision = (room.roomRevision ?? 0) + 1;
   }
 }

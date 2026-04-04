@@ -9,6 +9,7 @@ describe("room.types persistence helpers", () => {
     expect(
       serializePlaybackForPersistence({
         presenceRevision: 7,
+        roomRevision: 11,
         playback: {
           status: "paused",
           currentTrackId: null,
@@ -25,7 +26,8 @@ describe("room.types persistence helpers", () => {
     ).toMatchObject({
       queueVersion: 3,
       mediaEpoch: 1,
-      presenceRevision: 7
+      presenceRevision: 7,
+      roomRevision: 11
     });
   });
 
@@ -46,7 +48,8 @@ describe("room.types persistence helpers", () => {
         startedAt: null,
         queueVersion: 2,
         mediaEpoch: 0,
-        presenceRevision: 5
+        presenceRevision: 5,
+        roomRevision: 9
       },
       members: [],
       tracks: [],
@@ -54,5 +57,6 @@ describe("room.types persistence helpers", () => {
     } satisfies PersistedRoomRecord);
 
     expect(record.room.presenceRevision).toBe(5);
+    expect(record.room.roomRevision).toBe(9);
   });
 });

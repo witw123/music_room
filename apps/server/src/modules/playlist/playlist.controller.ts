@@ -12,7 +12,7 @@ import {
   forwardRef
 } from "@nestjs/common";
 import { AuthService } from "../auth/auth.service";
-import { SignalingGateway } from "../signaling/signaling.gateway";
+import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
 import { PlaylistService } from "./playlist.service";
 
@@ -21,7 +21,7 @@ export class PlaylistController {
   constructor(
     private readonly playlistService: PlaylistService,
     @Inject(forwardRef(() => RoomService)) private readonly roomService: RoomService,
-    private readonly signalingGateway: SignalingGateway,
+    private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService
   ) {}
 
@@ -101,11 +101,10 @@ export class PlaylistController {
     const userId = await this.getCurrentUserId(sessionToken);
     const playlist = await this.playlistService.getPlaylistForOwner(playlistId, userId);
     await this.roomService.importPlaylistToQueue(body.roomId, userId, playlist.trackIds);
-    const snapshot = await this.roomService.getRoomSnapshot(
+    const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(
       body.roomId,
       await this.playlistService.listPlaylistsForRoom(body.roomId)
     );
-    this.signalingGateway.emitRoomSnapshot(body.roomId, snapshot);
     return {
       queue: snapshot.queue,
       playback: snapshot.room.playback
@@ -127,12 +126,9 @@ export class PlaylistController {
       ...body,
       ownerId: userId
     });
-    this.signalingGateway.emitRoomSnapshot(
+    await this.roomRealtimePublisher.emitSnapshot(
       body.roomId,
-      await this.roomService.getRoomSnapshot(
-        body.roomId,
-        await this.playlistService.listPlaylistsForRoom(body.roomId)
-      )
+      await this.playlistService.listPlaylistsForRoom(body.roomId)
     );
     return playlist;
   }

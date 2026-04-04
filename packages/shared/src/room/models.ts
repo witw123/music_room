@@ -20,7 +20,8 @@ export const roomSchema = z.object({
   visibility: z.enum(["private", "public"]),
   members: z.array(roomMemberSchema),
   playback: playbackSnapshotSchema,
-  presenceRevision: z.number().int().nonnegative().default(0)
+  presenceRevision: z.number().int().nonnegative().default(0),
+  roomRevision: z.number().int().nonnegative().default(0).optional()
 });
 
 export const roomSnapshotSchema = z.object({

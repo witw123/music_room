@@ -1,6 +1,6 @@
 # WebSocket 事件
 
-最后更新：`2026-04-03`
+最后更新：`2026-04-04`
 
 ## 当前事件概览
 
@@ -32,7 +32,7 @@
 
 - 方向：Client -> Server
 - 作用：订阅房间，绑定 `roomId + sessionId + peerId`
-- 成功后会收到当前 `room.snapshot`
+- 成功后会收到当前权威 `room.snapshot`
 
 ### `room.presence`
 
@@ -49,6 +49,8 @@
 - 方向：Server -> Client
 - 载荷：`RoomSnapshot`
 - 作用：首次同步或需要整包刷新时的完整房间状态
+- `RoomSnapshot.room.roomRevision` 是整包共享房间状态版本号
+- 客户端应优先用 `roomRevision` 判断是否接受新的完整快照
 
 ### `room.playback.patch`
 
@@ -66,17 +68,30 @@
   - `roomId`
   - `queue`
   - `playback`
+  - `roomRevision`
   - `updatedAt`
 - 作用：增量更新共享队列
 
 ### `room.presence.patch`
 
 - 方向：Server -> Client
+- 载荷：
+  - `roomId`
+  - `members`
+  - `playback`
+  - `presenceRevision`
+  - `roomRevision`
 - 作用：增量更新成员在线状态
 
 ### `room.library.patch`
 
 - 方向：Server -> Client
+- 载荷：
+  - `roomId`
+  - `tracks`
+  - `queue`
+  - `playback`
+  - `roomRevision`
 - 作用：增量更新曲库和相关队列状态
 
 ### `peer.signal`
@@ -96,6 +111,8 @@
 
 ## 当前实现特点
 
-- 房间状态既有 `snapshot` 也有 patch
+- `room.snapshot` 是共享房间状态的权威基线
+- room topology / presence / queue / library 变化都会伴随新的 `room.snapshot`
+- patch 只做增量优化，不再单独承担正确性
 - WebRTC 的 data 和 media 都通过 `peer.signal` 协商
 - 房间断线后存在重连宽限期，不会立即把成员视为离线

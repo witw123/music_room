@@ -64,15 +64,14 @@ describe("QueueController", () => {
   it("returns queue and playback after adding an item", async () => {
     const snapshot = buildSnapshot();
     const roomService = {
-      addQueueItem: jest.fn().mockResolvedValue(snapshot.queue[0]),
-      getRoomSnapshot: jest.fn().mockResolvedValue(snapshot)
+      addQueueItem: jest.fn().mockResolvedValue(snapshot.queue[0])
     };
-    const signalingGateway = {
-      emitQueuePatch: jest.fn()
+    const roomRealtimePublisher = {
+      emitQueueSnapshot: jest.fn().mockResolvedValue(snapshot)
     };
     const controller = new QueueController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       createAuthServiceMock() as never
     );
 
@@ -86,9 +85,6 @@ describe("QueueController", () => {
     });
 
     expect(roomService.addQueueItem).toHaveBeenCalledWith("room_1", "guest_host", "track_1");
-    expect(signalingGateway.emitQueuePatch).toHaveBeenCalledWith("room_1", {
-      queue: snapshot.queue,
-      playback: snapshot.room.playback
-    });
+    expect(roomRealtimePublisher.emitQueueSnapshot).toHaveBeenCalledWith("room_1");
   });
 });

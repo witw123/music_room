@@ -29,7 +29,8 @@ describe("roomSnapshotSchema", () => {
           startedAt: null,
           queueVersion: 1,
           mediaEpoch: 0
-        }
+        },
+        roomRevision: 0
       },
       tracks: [],
       queue: [],

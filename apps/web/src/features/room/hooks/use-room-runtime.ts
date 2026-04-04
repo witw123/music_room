@@ -32,19 +32,14 @@ import {
   type RoomSnapshotResyncReason
 } from "@/features/room/room-snapshot-resync";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import {
-  getPresenceRevision,
-  mergeRoomSnapshot,
-  shouldAcceptPresenceSnapshot,
-  shouldReplacePlaybackSnapshot,
-  toUserFacingError
-} from "@/lib/music-room-ui";
+import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -64,7 +59,7 @@ type UseRoomRuntimeInput = {
   activeSessionRef: MutableRefObject<AuthSession | null>;
   refreshSession: () => Promise<unknown>;
   roomSnapshot: RoomSnapshot | null;
-  setRoomSnapshot: Dispatch<SetStateAction<RoomSnapshot | null>>;
+  dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   peerId: string;
   setPeerId: Dispatch<SetStateAction<string>>;
@@ -195,7 +190,7 @@ export function useRoomRuntime({
   activeSessionRef,
   refreshSession,
   roomSnapshot,
-  setRoomSnapshot,
+  dispatchRoomStateEvent,
   currentRoomRef,
   peerId,
   setPeerId,
@@ -391,7 +386,7 @@ export function useRoomRuntime({
     (message: string) => {
       setIsNavigatingRoomExit(true);
       setSuppressRoomRecovery(true);
-      setRoomSnapshot(null);
+      dispatchRoomStateEvent({ type: "local-reset" });
       resetPlayerSurface();
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage(message);
@@ -406,8 +401,8 @@ export function useRoomRuntime({
       lastRoomStorageKey,
       resetPlayerSurface,
       router,
+      dispatchRoomStateEvent,
       setIsNavigatingRoomExit,
-      setRoomSnapshot,
       setStatusMessage,
       setSuppressRoomRecovery,
       workspaceEntryHref,
@@ -424,11 +419,10 @@ export function useRoomRuntime({
         return;
       }
 
-      setRoomSnapshot((current) =>
-        current?.room.id && current.room.id !== expectedRoomId
-          ? current
-          : mergeRoomSnapshot(current, snapshot)
-      );
+      dispatchRoomStateEvent({
+        type: "recover-snapshot",
+        snapshot
+      });
 
       recordPeerDiagnostic({
         peerId: "system",
@@ -439,7 +433,7 @@ export function useRoomRuntime({
         recordEvent: false
       });
     },
-    [recordPeerDiagnostic, setRoomSnapshot]
+    [dispatchRoomStateEvent, recordPeerDiagnostic]
   );
 
   const handleRoomSnapshotResyncError = useCallback(
@@ -524,15 +518,15 @@ export function useRoomRuntime({
     resetPlayerSurfaceRef.current();
 
     if (roomSnapshot?.room.id && roomSnapshot.room.id !== initialRoomId) {
-      setRoomSnapshot(null);
+      dispatchRoomStateEvent({ type: "local-reset" });
     }
   }, [
+    dispatchRoomStateEvent,
     workspaceOnly,
     initialRoomId,
     roomSnapshot?.room.id,
     setIsNavigatingRoomExit,
     setIsRecoveringRoom,
-    setRoomSnapshot,
     setSuppressRoomRecovery
   ]);
 
@@ -1121,7 +1115,10 @@ export function useRoomRuntime({
           return;
         }
 
-        setRoomSnapshot((current) => mergeRoomSnapshot(current, snapshot));
+        dispatchRoomStateEvent({
+          type: "recover-snapshot",
+          snapshot
+        });
         setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
         await refreshPlaylists();
       } catch {
@@ -1146,9 +1143,9 @@ export function useRoomRuntime({
     suppressRoomRecovery,
     isNavigatingRoomExit,
     refreshPlaylists,
+    dispatchRoomStateEvent,
     setIsRecoveringRoom,
     setSuppressRoomRecovery,
-    setRoomSnapshot,
     setStatusMessage
   ]);
 
@@ -1161,62 +1158,6 @@ export function useRoomRuntime({
   }, [roomSnapshot?.room.id, peerId, lastRoomStorageKey]);
 
   useEffect(() => {
-    const applyPlaybackPatch = (playback: RoomSnapshot["room"]["playback"]) => {
-      if (activeRouteRoomIdRef.current !== roomId) {
-        return;
-      }
-
-      setRoomSnapshot((current) =>
-        current &&
-        current.room.id === roomId &&
-        shouldReplacePlaybackSnapshot(current.room.playback, playback)
-          ? {
-              ...current,
-              room: {
-                ...current.room,
-                playback
-              }
-            }
-          : current
-      );
-    };
-    const applyPresencePatch = (
-      members: RoomSnapshot["room"]["members"],
-      playback: RoomSnapshot["room"]["playback"],
-      presenceRevision: number
-    ) => {
-      if (activeRouteRoomIdRef.current !== roomId) {
-        return;
-      }
-
-      setRoomSnapshot((current) => {
-        if (
-          !current ||
-          current.room.id !== roomId ||
-          !shouldAcceptPresenceSnapshot(
-            current.room.members,
-            getPresenceRevision(current.room),
-            members,
-            presenceRevision
-          )
-        ) {
-          return current;
-        }
-
-        return {
-          ...current,
-          room: {
-            ...current.room,
-            members,
-            presenceRevision,
-            playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
-              ? playback
-              : current.room.playback
-          }
-        };
-      });
-    };
-
     if (!roomSnapshot?.room.id || !hydrated || !iceConfigResolved) {
       return;
     }
@@ -1562,11 +1503,10 @@ export function useRoomRuntime({
         return;
       }
 
-      setRoomSnapshot((current) =>
-        current?.room.id && current.room.id !== roomId
-          ? current
-          : mergeRoomSnapshot(current, snapshot)
-      );
+      dispatchRoomStateEvent({
+        type: "server-snapshot",
+        snapshot
+      });
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
@@ -1586,30 +1526,42 @@ export function useRoomRuntime({
       }
     });
     socket.on("room.playback.patch", ({ playback }) => {
-      applyPlaybackPatch(playback);
-    });
-    socket.on("room.queue.patch", ({ queue, playback }) => {
       if (activeRouteRoomIdRef.current !== roomId) {
         return;
       }
 
-      setRoomSnapshot((current) =>
-        current && current.room.id === roomId
-          ? {
-              ...current,
-              queue,
-              room: {
-                ...current.room,
-                playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
-                  ? playback
-                  : current.room.playback
-              }
-            }
-          : current
-      );
+      dispatchRoomStateEvent({
+        type: "server-playback-patch",
+        roomId,
+        playback
+      });
     });
-    socket.on("room.presence.patch", ({ members, playback, presenceRevision }) => {
-      applyPresencePatch(members, playback, presenceRevision);
+    socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
+      if (activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
+      dispatchRoomStateEvent({
+        type: "server-queue-patch",
+        roomId,
+        queue,
+        playback,
+        roomRevision
+      });
+    });
+    socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
+      if (activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
+      dispatchRoomStateEvent({
+        type: "server-presence-patch",
+        roomId,
+        members,
+        playback,
+        presenceRevision,
+        roomRevision
+      });
       resyncRealtimePeers(members);
       if (playback.sourceSessionId === activeSessionRef.current?.userId) {
         window.setTimeout(() => {
@@ -1619,26 +1571,19 @@ export function useRoomRuntime({
         }, 0);
       }
     });
-    socket.on("room.library.patch", ({ tracks, queue, playback }) => {
+    socket.on("room.library.patch", ({ tracks, queue, playback, roomRevision }) => {
       if (activeRouteRoomIdRef.current !== roomId) {
         return;
       }
 
-      setRoomSnapshot((current) =>
-        current && current.room.id === roomId
-          ? {
-              ...current,
-              tracks,
-              queue,
-              room: {
-                ...current.room,
-                playback: shouldReplacePlaybackSnapshot(current.room.playback, playback)
-                  ? playback
-                  : current.room.playback
-              }
-            }
-          : current
-      );
+      dispatchRoomStateEvent({
+        type: "server-library-patch",
+        roomId,
+        tracks,
+        queue,
+        playback,
+        roomRevision
+      });
     });
     socket.on("peer.signal", (payload) => {
       if (payload.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {

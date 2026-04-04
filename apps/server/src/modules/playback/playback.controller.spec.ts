@@ -20,12 +20,12 @@ describe("PlaybackController", () => {
       isRealtimeAvailable: jest.fn().mockReturnValue(true),
       updatePlayback: jest.fn().mockRejectedValue(new Error("Playback state version conflict."))
     };
-    const signalingGateway = {
+    const roomRealtimePublisher = {
       emitPlaybackPatch: jest.fn()
     };
     const controller = new PlaybackController(
       roomService as never,
-      signalingGateway as never,
+      roomRealtimePublisher as never,
       createAuthServiceMock() as never
     );
 

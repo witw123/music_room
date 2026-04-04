@@ -66,6 +66,7 @@ export const roomQueuePatchPayloadSchema = z.object({
   roomId: z.string(),
   queue: z.array(queueItemSchema),
   playback: playbackSnapshotSchema,
+  roomRevision: z.number().int().nonnegative().optional(),
   updatedAt: z.string().datetime()
 });
 
@@ -74,6 +75,7 @@ export const roomPresencePatchPayloadSchema = z.object({
   members: roomSnapshotSchema.shape.room.shape.members,
   playback: playbackSnapshotSchema,
   presenceRevision: z.number().int().nonnegative(),
+  roomRevision: z.number().int().nonnegative().optional(),
   updatedAt: z.string().datetime()
 });
 
@@ -82,6 +84,7 @@ export const roomLibraryPatchPayloadSchema = z.object({
   tracks: z.array(trackMetaSchema),
   queue: z.array(queueItemSchema),
   playback: playbackSnapshotSchema,
+  roomRevision: z.number().int().nonnegative().optional(),
   updatedAt: z.string().datetime()
 });
 
