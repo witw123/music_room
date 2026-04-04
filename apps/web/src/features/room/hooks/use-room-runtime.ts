@@ -1648,7 +1648,6 @@ export function useRoomRuntime({
     };
   }, [
     roomSnapshot?.room.id,
-    iceConfig,
     peerId,
     activeSessionRef,
     currentRoomRef,

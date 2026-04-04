@@ -207,6 +207,11 @@ function MembersPanelBase({
 
   return (
     <section className="flex w-full flex-col gap-3">
+      <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-5 text-foreground-muted">
+        在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
+        不同成员看到的数值不一定相同。
+      </div>
+
       {members.length > 0 ? (
         members.map((member) => {
           const summary = summaryByMemberId.get(member.id);
@@ -247,7 +252,7 @@ function MembersPanelBase({
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
-                  <span className="block text-foreground-muted">远端流链路</span>
+                  <span className="block text-foreground-muted">远端流链路（本端观测）</span>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <span>传输速度: {formatMetric(remoteStreamRateKbps, " kbps")}</span>
                     <span>延迟: {formatMetric(peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null, "ms")}</span>
@@ -255,7 +260,7 @@ function MembersPanelBase({
                 </div>
 
                 <div className="rounded-lg border border-surface-border bg-background/30 px-3 py-2 text-[10px] text-foreground-muted">
-                  <span className="block text-foreground-muted">分片同步</span>
+                  <span className="block text-foreground-muted">分片同步（本端观测）</span>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <span>
                       下载: {formatMetric(peerDiagnosticsSnapshot?.pieceDownloadRateKbps ?? null, " kbps")}
