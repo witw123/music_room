@@ -15,10 +15,18 @@ export type MemberTransferSummary = {
 export type LocalMemberPanelState = {
   memberId: string;
   transportLabel: string;
-  remoteStreamRateKbps: number | null;
-  latencyMs: number | null;
-  pieceDownloadRateKbps: number | null;
-  pieceUploadRateKbps: number | null;
+  transportSummary: {
+    totalRateKbps: number | null;
+    receiveRateKbps: number | null;
+    sendRateKbps: number | null;
+    latencyMs: number | null;
+    sampleAgeMs: number | null;
+  };
+  pieceSummary: {
+    downloadRateKbps: number | null;
+    uploadRateKbps: number | null;
+    sampleAgeMs: number | null;
+  };
   playbackStatus: {
     label: string;
     detail: string;
@@ -254,6 +262,30 @@ function formatMetric(value: number | null, unit: string) {
   return `${value}${unit}`;
 }
 
+function formatPreciseMetric(
+  value: number | null,
+  unit: string,
+  sampleAgeMs: number | null = null
+) {
+  if (value === null) {
+    return "未知";
+  }
+
+  const rendered = Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value).toString();
+  const staleSuffix =
+    sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
+  return `${rendered}${unit}${staleSuffix}`;
+}
+
+function formatSampleAge(sampleAgeMs: number | null) {
+  if (sampleAgeMs === null) {
+    return "暂无样本";
+  }
+
+  const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
+  return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
+}
+
 function getRemoteStreamRate(peer: PeerDiagnosticsSnapshot | undefined) {
   if (!peer) {
     return null;
@@ -307,16 +339,16 @@ function MembersPanelBase({
           const playbackToneClasses = getToneClasses(playbackStatus.tone);
           const presenceBadge = getPresenceBadge(member);
           const remoteStreamRateKbps = isLocalMember
-            ? localMemberState.remoteStreamRateKbps
+            ? localMemberState.transportSummary.totalRateKbps
             : getRemoteStreamRate(peerDiagnosticsSnapshot);
           const latencyMs = isLocalMember
-            ? localMemberState.latencyMs
+            ? localMemberState.transportSummary.latencyMs
             : peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null;
           const pieceDownloadRateKbps = isLocalMember
-            ? localMemberState.pieceDownloadRateKbps
+            ? localMemberState.pieceSummary.downloadRateKbps
             : peerDiagnosticsSnapshot?.pieceDownloadRateKbps ?? null;
           const pieceUploadRateKbps = isLocalMember
-            ? localMemberState.pieceUploadRateKbps
+            ? localMemberState.pieceSummary.uploadRateKbps
             : peerDiagnosticsSnapshot?.pieceUploadRateKbps ?? null;
 
           return (
@@ -351,10 +383,52 @@ function MembersPanelBase({
                   <span className="block text-foreground-muted">
                     {isLocalMember ? localMemberState.transportLabel : "远端流链路（本端观测）"}
                   </span>
-                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-                    <span>传输速度: {formatMetric(remoteStreamRateKbps, " kbps")}</span>
-                    <span>延迟: {formatMetric(latencyMs, "ms")}</span>
-                  </div>
+                  {isLocalMember ? (
+                    <>
+                      <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
+                        <span>
+                          总传输:{" "}
+                          {formatPreciseMetric(
+                            localMemberState.transportSummary.totalRateKbps,
+                            " kbps",
+                            localMemberState.transportSummary.sampleAgeMs
+                          )}
+                        </span>
+                        <span>
+                          延迟:{" "}
+                          {formatPreciseMetric(
+                            localMemberState.transportSummary.latencyMs,
+                            "ms",
+                            localMemberState.transportSummary.sampleAgeMs
+                          )}
+                        </span>
+                        <span>
+                          接收:{" "}
+                          {formatPreciseMetric(
+                            localMemberState.transportSummary.receiveRateKbps,
+                            " kbps",
+                            localMemberState.transportSummary.sampleAgeMs
+                          )}
+                        </span>
+                        <span>
+                          发送:{" "}
+                          {formatPreciseMetric(
+                            localMemberState.transportSummary.sendRateKbps,
+                            " kbps",
+                            localMemberState.transportSummary.sampleAgeMs
+                          )}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] text-foreground-muted/80">
+                        最近样本：{formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}
+                      </p>
+                    </>
+                  ) : (
+                    <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
+                      <span>传输速度: {formatMetric(remoteStreamRateKbps, " kbps")}</span>
+                      <span>延迟: {formatMetric(latencyMs, "ms")}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-2 text-[10px] leading-4 text-foreground-muted">
@@ -363,12 +437,31 @@ function MembersPanelBase({
                   </span>
                   <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
                     <span>
-                      下载: {formatMetric(pieceDownloadRateKbps, " kbps")}
+                      下载:{" "}
+                      {isLocalMember
+                        ? formatPreciseMetric(
+                            localMemberState.pieceSummary.downloadRateKbps,
+                            " kbps",
+                            localMemberState.pieceSummary.sampleAgeMs
+                          )
+                        : formatMetric(pieceDownloadRateKbps, " kbps")}
                     </span>
                     <span>
-                      上传: {formatMetric(pieceUploadRateKbps, " kbps")}
+                      上传:{" "}
+                      {isLocalMember
+                        ? formatPreciseMetric(
+                            localMemberState.pieceSummary.uploadRateKbps,
+                            " kbps",
+                            localMemberState.pieceSummary.sampleAgeMs
+                          )
+                        : formatMetric(pieceUploadRateKbps, " kbps")}
                     </span>
                   </div>
+                  {isLocalMember ? (
+                    <p className="mt-1 text-[10px] text-foreground-muted/80">
+                      最近样本：{formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

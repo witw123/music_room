@@ -111,9 +111,7 @@ export class RoomController {
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const room = await this.roomService.leaveRoom(roomId, userId);
-    if (room.members.length > 0) {
-      await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
-    }
+    await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
     return room;
   }
 

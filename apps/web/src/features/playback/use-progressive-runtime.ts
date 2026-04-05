@@ -35,6 +35,7 @@ import {
   getRemoteFirstComfortBufferMs,
   isTakeoverReady,
   shouldEnableRemoteFirstLock,
+  type ProgressiveSchedulerPolicy,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
 import {
@@ -81,13 +82,7 @@ type UseProgressiveRuntimeInput = {
 };
 
 type UseProgressiveRuntimeResult = {
-  progressiveSchedulerPolicy:
-    | "startup"
-    | "steady"
-    | "catchup"
-    | "pause-fill"
-    | "background"
-    | null;
+  progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
   getLocalPlaybackPositionMs: () => number | null;
   destroyProgressiveRuntime: () => void;
 };
@@ -153,6 +148,27 @@ export function useProgressiveRuntime({
     () => getProgressiveEngineType(currentProgressiveManifest),
     [currentProgressiveManifest]
   );
+  const activeMemberPeerIds = useMemo(
+    () =>
+      new Set(
+        roomSnapshot?.room.members
+          .map((member) => member.peerId)
+          .filter((memberPeerId): memberPeerId is string => !!memberPeerId) ?? []
+      ),
+    [roomSnapshot?.room.members]
+  );
+  const aggregatePieceDownloadRateKbps = useMemo(() => {
+    const values = peerDiagnostics
+      .filter((snapshot) => activeMemberPeerIds.has(snapshot.peerId))
+      .map((snapshot) => snapshot.pieceDownloadRateKbps)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+    if (values.length === 0) {
+      return null;
+    }
+
+    return Math.round(values.reduce((sum, value) => sum + value, 0));
+  }, [activeMemberPeerIds, peerDiagnostics]);
   const progressiveHealthSnapshot = useMemo(
     () =>
       buildProgressiveHealthSnapshot({
@@ -160,14 +176,16 @@ export function useProgressiveRuntime({
         activeSource: activePlaybackSource,
         manifest: currentProgressiveManifest,
         localAvailability: currentTrackAvailabilityAnnouncement,
-        fallbackReason: progressiveFallbackReason
+        fallbackReason: progressiveFallbackReason,
+        currentPieceDownloadRateKbps: aggregatePieceDownloadRateKbps
       }),
     [
       playback,
       activePlaybackSource,
       currentProgressiveManifest,
       currentTrackAvailabilityAnnouncement,
-      progressiveFallbackReason
+      progressiveFallbackReason,
+      aggregatePieceDownloadRateKbps
     ]
   );
   const progressiveSchedulerPolicy = progressiveHealthSnapshot.schedulerPolicy;
@@ -248,6 +266,17 @@ export function useProgressiveRuntime({
     }
 
     if (
+      progressiveHealthSnapshot.schedulerPolicy === "outrun-recovery" ||
+      (progressiveHealthSnapshot.estimatedFillTimeMs !== null &&
+        progressiveHealthSnapshot.remainingPlaybackMs !== null &&
+        progressiveHealthSnapshot.remainingPlaybackMs > 0 &&
+        progressiveHealthSnapshot.estimatedFillTimeMs >=
+          progressiveHealthSnapshot.remainingPlaybackMs)
+    ) {
+      return "cache-outrun-risk";
+    }
+
+    if (
       currentProgressiveManifest &&
       currentTrackAvailabilityAnnouncement &&
       !isProgressiveTakeoverReady()
@@ -267,6 +296,9 @@ export function useProgressiveRuntime({
     isProgressiveTakeoverReady,
     mediaConnectedPeersCount,
     progressiveFallbackReason,
+    progressiveHealthSnapshot.estimatedFillTimeMs,
+    progressiveHealthSnapshot.remainingPlaybackMs,
+    progressiveHealthSnapshot.schedulerPolicy,
     sourceDiagnostics,
     sourceTransport.degradedReason,
     sourceTransport.transportHealth
@@ -1281,6 +1313,8 @@ export function useProgressiveRuntime({
           schedulerPolicy: progressiveHealthSnapshot.schedulerPolicy,
           startupReady: progressiveHealthSnapshot.startupReady,
           fallbackReason: progressiveHealthSnapshot.fallbackReason,
+          estimatedFillTimeMs: progressiveHealthSnapshot.estimatedFillTimeMs,
+          remainingPlaybackMs: progressiveHealthSnapshot.remainingPlaybackMs,
           pendingPlaybackIntent: pendingPlaybackIntent
             ? getPlaybackStartIntentLabel(playbackStartIntent)
             : null,
@@ -1305,6 +1339,8 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.schedulerPolicy,
     progressiveHealthSnapshot.startupReady,
     progressiveHealthSnapshot.fallbackReason,
+    progressiveHealthSnapshot.estimatedFillTimeMs,
+    progressiveHealthSnapshot.remainingPlaybackMs,
     pendingPlaybackIntent,
     playbackStartIntent,
     nextQueueTrackPrefetch,

@@ -107,10 +107,12 @@ export const progressivePlaybackStatusSchema = z.object({
   contiguousBufferedMs: z.number().int().nonnegative(),
   aheadBufferedMs: z.number().int().nonnegative(),
   schedulerPolicy: z
-    .enum(["startup", "steady", "catchup", "pause-fill", "background"])
+    .enum(["startup", "steady", "catchup", "outrun-recovery", "pause-fill", "background"])
     .nullable(),
   startupReady: z.boolean(),
   fallbackReason: z.string().nullable(),
+  estimatedFillTimeMs: z.number().int().nonnegative().nullable().optional(),
+  remainingPlaybackMs: z.number().int().nonnegative().nullable().optional(),
   pendingPlaybackIntent: z.string().nullable().optional(),
   intentMatchedSource: z
     .enum(["remote-stream", "progressive-local", "full-local"])

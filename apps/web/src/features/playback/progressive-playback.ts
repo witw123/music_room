@@ -11,6 +11,7 @@ export type ProgressiveSchedulerPolicy =
   | "startup"
   | "steady"
   | "catchup"
+  | "outrun-recovery"
   | "pause-fill"
   | "background";
 
@@ -33,7 +34,11 @@ export type ProgressiveHealthSnapshot = {
   schedulerPolicy: ProgressiveSchedulerPolicy;
   startupReady: boolean;
   fallbackReason: string | null;
+  estimatedFillTimeMs: number | null;
+  remainingPlaybackMs: number | null;
 };
+
+const outrunRecoverySafetyFactor = 0.92;
 
 export function isChromeOrEdgeBrowser() {
   if (typeof navigator === "undefined") {
@@ -96,6 +101,10 @@ export function getRemoteFirstComfortBufferMs(input: {
   codec?: string | null;
 }) {
   return isFlacTrack(input) ? 75_000 : 36_000;
+}
+
+export function getOutrunRecoverySafetyFactor() {
+  return outrunRecoverySafetyFactor;
 }
 
 export function getFullLocalStableWindowMs() {
@@ -338,6 +347,7 @@ export function resolveSchedulerPolicy(input: {
   availableChunks: number[];
   fallbackReason: string | null;
   currentTrackComplete: boolean;
+  currentPieceDownloadRateKbps?: number | null;
 }) {
   const playback = input.playback;
   if (!playback?.currentTrackId || !input.manifest) {
@@ -358,6 +368,17 @@ export function resolveSchedulerPolicy(input: {
     availableChunks: input.availableChunks,
     playbackPositionMs: positionMs
   });
+  const remainingPlaybackMs = Math.max(0, input.manifest.durationMs - positionMs);
+  const estimatedFillTimeMs = estimateTrackFillTimeMs({
+    manifest: input.manifest,
+    availableChunks: input.availableChunks,
+    downloadRateKbps: input.currentPieceDownloadRateKbps ?? null
+  });
+  const hasOutrunRisk =
+    !input.currentTrackComplete &&
+    remainingPlaybackMs > 0 &&
+    estimatedFillTimeMs !== null &&
+    estimatedFillTimeMs >= remainingPlaybackMs * getOutrunRecoverySafetyFactor();
 
   if (!input.currentTrackComplete) {
     if (!isStartupReady({
@@ -372,6 +393,10 @@ export function resolveSchedulerPolicy(input: {
       return "catchup" satisfies ProgressiveSchedulerPolicy;
     }
 
+    if (hasOutrunRisk) {
+      return "outrun-recovery" satisfies ProgressiveSchedulerPolicy;
+    }
+
     return "steady" satisfies ProgressiveSchedulerPolicy;
   }
 
@@ -384,12 +409,22 @@ export function buildProgressiveHealthSnapshot(input: {
   manifest: ProgressiveTrackManifest | null;
   localAvailability: TrackAvailabilityAnnouncement | null | undefined;
   fallbackReason: string | null;
+  currentPieceDownloadRateKbps?: number | null;
 }) {
   const availableChunks = input.localAvailability?.availableChunks ?? [];
   const playbackPositionMs = getEffectivePlaybackPositionMs(
     input.playback,
     input.manifest?.durationMs ?? 0
   );
+  const remainingPlaybackMs =
+    input.manifest && input.playback?.currentTrackId
+      ? Math.max(0, input.manifest.durationMs - playbackPositionMs)
+      : null;
+  const estimatedFillTimeMs = estimateTrackFillTimeMs({
+    manifest: input.manifest,
+    availableChunks,
+    downloadRateKbps: input.currentPieceDownloadRateKbps ?? null
+  });
   const startupReady = isStartupReady({
     manifest: input.manifest,
     availableChunks,
@@ -404,7 +439,8 @@ export function buildProgressiveHealthSnapshot(input: {
     manifest: input.manifest,
     availableChunks,
     fallbackReason: input.fallbackReason,
-    currentTrackComplete
+    currentTrackComplete,
+    currentPieceDownloadRateKbps: input.currentPieceDownloadRateKbps ?? null
   });
 
   return {
@@ -418,8 +454,37 @@ export function buildProgressiveHealthSnapshot(input: {
     }),
     schedulerPolicy,
     startupReady,
-    fallbackReason: input.fallbackReason
+    fallbackReason: input.fallbackReason,
+    estimatedFillTimeMs,
+    remainingPlaybackMs
   } satisfies ProgressiveHealthSnapshot;
+}
+
+export function estimateTrackFillTimeMs(input: {
+  manifest: ProgressiveTrackManifest | null;
+  availableChunks: number[];
+  downloadRateKbps: number | null;
+}) {
+  if (!input.manifest) {
+    return null;
+  }
+
+  const ownedChunkCount = new Set(input.availableChunks).size;
+  const missingChunkCount = Math.max(0, input.manifest.totalChunks - ownedChunkCount);
+  if (missingChunkCount === 0) {
+    return 0;
+  }
+
+  if (
+    input.downloadRateKbps === null ||
+    !Number.isFinite(input.downloadRateKbps) ||
+    input.downloadRateKbps <= 0
+  ) {
+    return null;
+  }
+
+  const missingBits = missingChunkCount * input.manifest.chunkSize * 8;
+  return Math.ceil(missingBits / (input.downloadRateKbps * 1000) * 1000);
 }
 
 export function shouldEnableRemoteFirstLock(input: {
@@ -492,6 +557,8 @@ export function getPriorityChunkIndexes(input: {
   const targetPositionMs =
     policy === "pause-fill"
       ? manifest.durationMs
+      : policy === "outrun-recovery"
+        ? manifest.durationMs
       : policy === "steady" || policy === "background"
         ? steadyEndPositionMs
         : startupEndPositionMs;

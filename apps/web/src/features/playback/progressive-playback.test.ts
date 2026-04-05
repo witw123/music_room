@@ -225,6 +225,56 @@ describe("progressive playback helpers", () => {
     ).toBe("background");
   });
 
+  it("switches into outrun-recovery when fill time is slower than the remaining playback window", () => {
+    const outrunChunks = Array.from({ length: 17 }, (_, index) => index);
+    const manifest = buildProgressiveTrackManifest(track, {
+      ...availability,
+      totalChunks: 24,
+      availableChunks: outrunChunks
+    });
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host_1",
+      sourcePeerId: "peer_host",
+      sourceTrackId: "track_1",
+      positionMs: 70_000,
+      startedAt: null,
+      queueVersion: 1,
+      mediaEpoch: 1
+    };
+
+    expect(
+      resolveSchedulerPolicy({
+        playback,
+        activeSource: "remote-stream",
+        manifest,
+        availableChunks: outrunChunks,
+        fallbackReason: null,
+        currentTrackComplete: false,
+        currentPieceDownloadRateKbps: 280
+      })
+    ).toBe("outrun-recovery");
+
+    const health = buildProgressiveHealthSnapshot({
+      playback,
+      activeSource: "remote-stream",
+      manifest,
+      localAvailability: {
+        ...availability,
+        totalChunks: 24,
+        availableChunks: outrunChunks
+      },
+      fallbackReason: null,
+      currentPieceDownloadRateKbps: 280
+    });
+
+    expect(health.schedulerPolicy).toBe("outrun-recovery");
+    expect(health.estimatedFillTimeMs).not.toBeNull();
+    expect(health.remainingPlaybackMs).toBe(50_000);
+  });
+
   it("only enables MSE progressive playback for stream-safe mime types", () => {
     const originalMediaSource = globalThis.MediaSource;
     Object.defineProperty(globalThis, "MediaSource", {

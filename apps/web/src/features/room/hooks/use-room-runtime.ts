@@ -40,6 +40,7 @@ import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { resolveHostRelayAudioElement } from "@/features/room/host-relay-audio";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -88,11 +89,7 @@ type UseRoomRuntimeInput = {
   bufferHealth: "healthy" | "low" | "critical";
   activePlaybackSource: ProgressivePlaybackSource;
   progressiveSchedulerPolicy:
-    | "startup"
-    | "steady"
-    | "catchup"
-    | "pause-fill"
-    | "background"
+    | ProgressiveSchedulerPolicy
     | null;
   isCurrentSourceOwner: boolean;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
@@ -177,7 +174,7 @@ function calculatePieceTransferRateKbps(samples: PieceTransferSample[], now: num
   const totalBytes = samples.reduce((sum, sample) => sum + sample.bytes, 0);
   const oldestTimestampMs = samples[0]?.timestampMs ?? now;
   const durationMs = Math.max(1_000, now - oldestTimestampMs);
-  return Math.round((totalBytes * 8) / durationMs);
+  return Math.round(((totalBytes * 8) / durationMs) * 10) / 10;
 }
 
 function withResolvedTransportHealth(snapshot: PeerDiagnosticsSnapshot): PeerDiagnosticsSnapshot {
@@ -757,9 +754,10 @@ export function useRoomRuntime({
             ...snapshot,
             dataCandidateType: input.sample.candidateType ?? snapshot.dataCandidateType,
             currentRoundTripTimeMs:
-              snapshot.currentRoundTripTimeMs ?? input.sample.currentRoundTripTimeMs,
+              input.sample.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
             availableOutgoingBitrateKbps:
-              snapshot.availableOutgoingBitrateKbps ?? input.sample.availableOutgoingBitrateKbps,
+              input.sample.availableOutgoingBitrateKbps ??
+              snapshot.availableOutgoingBitrateKbps,
             pieceDownloadRateKbps: pieceTransferRates.downloadRateKbps,
             pieceUploadRateKbps: pieceTransferRates.uploadRateKbps
           })

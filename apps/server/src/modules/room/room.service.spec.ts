@@ -154,7 +154,7 @@ describe("RoomService", () => {
     ).resolves.toEqual([]);
   });
 
-  it("promotes the next member to host when the host leaves", async () => {
+  it("keeps the host record offline and preserves host ownership when the host leaves", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -168,11 +168,29 @@ describe("RoomService", () => {
     await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
 
-    expect(roomAfterLeave.hostId).toBe(member.id);
-    expect(roomAfterLeave.members).toHaveLength(1);
-    expect(roomAfterLeave.members[0]).toMatchObject({
-      id: member.id,
-      role: "host"
+    expect(roomAfterLeave.hostId).toBe(host.id);
+    expect(roomAfterLeave.members).toHaveLength(2);
+    expect(roomAfterLeave.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: host.id,
+          role: "host"
+        }),
+        expect.objectContaining({
+          id: member.id,
+          role: "member"
+        })
+      ])
+    );
+
+    const snapshotAfterLeave = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(
+      snapshotAfterLeave.room.members.find((trackedMember) => trackedMember.id === host.id)
+    ).toMatchObject({
+      id: host.id,
+      role: "host",
+      presenceState: "offline",
+      peerId: null
     });
   });
 
@@ -192,6 +210,30 @@ describe("RoomService", () => {
     const recentRoom = await roomService.getRecentRoomSnapshotForSession(member.id);
 
     expect(recentRoom).toBeNull();
+  });
+
+  it("keeps the room recoverable when the last active member leaves and only the offline host remains", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.leaveRoom(snapshot.room.id, member.id);
+
+    const recovered = await roomService.getRecoverableRoomSnapshot(snapshot.room.id, host.id);
+    expect(recovered).not.toBeNull();
+    expect(recovered?.room.hostId).toBe(host.id);
+    expect(recovered?.room.members).toHaveLength(1);
+    expect(recovered?.room.members[0]).toMatchObject({
+      id: host.id,
+      role: "host",
+      presenceState: "offline"
+    });
   });
 
   it("imports a playlist back into the room queue when tracks exist in the room", async () => {
@@ -637,6 +679,19 @@ describe("RoomService", () => {
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
 
     expect(playback.sourceSessionId).toBe(member.id);
+    expect(roomAfterLeave.hostId).toBe(host.id);
+    expect(roomAfterLeave.members).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: host.id,
+          role: "host"
+        }),
+        expect.objectContaining({
+          id: member.id,
+          role: "member"
+        })
+      ])
+    );
     expect(roomAfterLeave.playback).toMatchObject({
       status: "playing",
       currentTrackId: memberTrack.id,
@@ -644,7 +699,7 @@ describe("RoomService", () => {
       sourcePeerId: "peer-member",
       sourceTrackId: memberTrack.id
     });
-    expect(roomAfterLeave.playback.queueVersion).toBeGreaterThan(playback.queueVersion);
+    expect(roomAfterLeave.playback.queueVersion).toBe(playback.queueVersion);
   });
 
   it("starts a different track from the beginning when play switches songs", async () => {

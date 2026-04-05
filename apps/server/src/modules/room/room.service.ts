@@ -333,31 +333,17 @@ export class RoomService {
 
   async leaveRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
     const leavingHost = record.room.hostId === sessionId;
-    record.room.members = record.room.members.filter((member) => member.id !== sessionId);
     await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
 
-    if (leavingHost && record.room.members.length > 0) {
-      const [nextHost, ...members] = record.room.members;
-      record.room.hostId = nextHost.id;
-      record.room.members = [
-        { ...nextHost, role: "host" },
-        ...members.map((member) => ({ ...member, role: "member" as const }))
-      ];
+    if (!leavingHost) {
+      record.room.members = record.room.members.filter((member) => member.id !== sessionId);
     }
 
     await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
-    if (leavingHost) {
-      this.incrementPlaybackVersion(record.room.playback);
-    }
     this.incrementPresenceRevision(record.room);
     this.incrementRoomRevision(record.room);
-
-    if (record.room.members.length === 0) {
-      await this.roomRecordRepository.deleteRecord(record);
-      await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);
-      return record.room;
-    }
 
     await this.roomRecordRepository.persistRecord(record);
     await this.roomRecordRepository.clearRecentRoomForSessionIfMatching(sessionId, roomId);

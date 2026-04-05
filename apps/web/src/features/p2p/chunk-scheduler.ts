@@ -293,6 +293,7 @@ export class ChunkScheduler {
     let currentTrackState: ChunkSchedulerTrackState | null = null;
     let currentTrackAheadBufferedMs = 0;
     let comfortableCurrentTrackBufferMs = 0;
+    const shouldEnterOutrunRecovery = this.policy === "outrun-recovery";
     const shouldPreserveRemotePlayback =
       this.playbackClockSource === "remote" && this.playbackStatus === "playing";
 
@@ -341,11 +342,13 @@ export class ChunkScheduler {
             currentTrack,
             this.mode,
             this.bufferHealth,
-            this.policy,
+            shouldEnterOutrunRecovery ? "outrun-recovery" : this.policy,
             this.playbackClockSource
           );
       const currentTrackWantedPolicy = shouldUseAggressiveRemoteFlacStartup
         ? "startup"
+        : shouldEnterOutrunRecovery
+          ? "outrun-recovery"
         : currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
           ? this.policy === "startup"
             ? "startup"
@@ -393,6 +396,7 @@ export class ChunkScheduler {
       this.isTrackComplete(currentTrack.id, this.getTotalChunks(currentTrack.id));
     const canPrefetchUpcomingTrack =
       !!currentTrackManifest &&
+      !shouldEnterOutrunRecovery &&
       this.playbackClockSource !== "remote" &&
       this.policy === "steady" &&
       this.playbackStatus === "playing" &&
@@ -632,12 +636,31 @@ function getTrackStreamingProfile(
   const streamProfile = deriveTrackStreamProfile(track);
 
   if (playbackClockSource === "remote") {
+    if (policy === "outrun-recovery") {
+      return {
+        maxConcurrent: streamProfile === "large-lossless" ? 18 : 16,
+        maxConcurrentPerPeer: streamProfile === "large-lossless" ? 6 : 5,
+        lookBehindMs: 0,
+        lookAheadMs: streamProfile === "large-lossless" ? 160_000 : 96_000,
+        timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
+      };
+    }
     return {
       maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
       maxConcurrentPerPeer: streamProfile === "large-lossless" ? 4 : 3,
       lookBehindMs: 0,
       lookAheadMs: streamProfile === "large-lossless" ? 80_000 : 48_000,
       timeoutMs: 2_000
+    };
+  }
+
+  if (policy === "outrun-recovery") {
+    return {
+      maxConcurrent: streamProfile === "large-lossless" ? 18 : 16,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 6 : 5,
+      lookBehindMs: 0,
+      lookAheadMs: streamProfile === "large-lossless" ? 180_000 : 110_000,
+      timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
     };
   }
 

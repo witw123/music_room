@@ -51,6 +51,7 @@ function MembersTabPanelBase({
         connectedPeersCount={connectedPeersCount}
         mediaConnectedPeersCount={mediaConnectedPeersCount}
         cachedTrackCount={cachedTrackCount}
+        localMemberState={localMemberState}
         peerDiagnostics={peerDiagnostics}
         recentEvents={peerRecentEvents}
         iceConfigSource={iceConfigSource}

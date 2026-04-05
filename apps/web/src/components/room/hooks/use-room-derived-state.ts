@@ -217,20 +217,63 @@ export function useRoomDerivedState({
     );
     const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
     const totalMediaSendRateKbps = sumDiagnosticsValue(activePeerDiagnostics, "mediaSendBitrateKbps");
-    const activeRemoteStreamRateKbps =
+    const totalMediaReceiveRateKbps = sumDiagnosticsValue(
+      activePeerDiagnostics,
+      "mediaReceiveBitrateKbps"
+    );
+    const effectiveMediaReceiveRateKbps =
+      totalMediaReceiveRateKbps ??
       activeMediaDiagnostic?.mediaReceiveBitrateKbps ??
+      (activeMediaDiagnostic?.mediaSendBitrateKbps === null
+        ? activeMediaDiagnostic?.availableOutgoingBitrateKbps ?? null
+        : null);
+    const effectiveMediaSendRateKbps =
+      totalMediaSendRateKbps ??
       activeMediaDiagnostic?.mediaSendBitrateKbps ??
-      activeMediaDiagnostic?.availableOutgoingBitrateKbps ??
-      totalMediaSendRateKbps;
+      null;
+    const hasTransportMetricSample = hasDiagnosticsMetricSample(activePeerDiagnostics, [
+      "mediaReceiveBitrateKbps",
+      "mediaSendBitrateKbps",
+      "availableOutgoingBitrateKbps",
+      "currentRoundTripTimeMs"
+    ]);
+    const hasPieceMetricSample = hasPieceTransferSample(activePeerDiagnostics);
     const isSourceOwner = roomSnapshot.room.playback.sourceSessionId === activeSessionUserId;
+    const transportSampleAgeMs = getLatestMetricSampleAgeMs(
+      activePeerDiagnostics,
+      [
+        "mediaReceiveBitrateKbps",
+        "mediaSendBitrateKbps",
+        "availableOutgoingBitrateKbps",
+        "currentRoundTripTimeMs"
+      ]
+    );
+    const pieceSampleAgeMs = getLatestPieceSampleAgeMs(activePeerDiagnostics);
+    const normalizedMediaReceiveRateKbps =
+      effectiveMediaReceiveRateKbps ?? (hasTransportMetricSample ? 0 : null);
+    const normalizedMediaSendRateKbps =
+      effectiveMediaSendRateKbps ?? (hasTransportMetricSample ? 0 : null);
+    const normalizedPieceDownloadRateKbps =
+      totalPieceDownloadRateKbps ?? (hasPieceMetricSample ? 0 : null);
+    const normalizedPieceUploadRateKbps =
+      totalPieceUploadRateKbps ?? (hasPieceMetricSample ? 0 : null);
 
     return {
       memberId: localMember.id,
       transportLabel: isSourceOwner ? "实时音频分发（本机汇总）" : "远端流链路（本机）",
-      remoteStreamRateKbps: activeRemoteStreamRateKbps,
-      latencyMs: averageLatencyMs,
-      pieceDownloadRateKbps: totalPieceDownloadRateKbps,
-      pieceUploadRateKbps: totalPieceUploadRateKbps,
+      transportSummary: {
+        totalRateKbps:
+          sumNullableNumbers(normalizedMediaReceiveRateKbps, normalizedMediaSendRateKbps),
+        receiveRateKbps: normalizedMediaReceiveRateKbps,
+        sendRateKbps: normalizedMediaSendRateKbps,
+        latencyMs: averageLatencyMs,
+        sampleAgeMs: transportSampleAgeMs
+      },
+      pieceSummary: {
+        downloadRateKbps: normalizedPieceDownloadRateKbps,
+        uploadRateKbps: normalizedPieceUploadRateKbps,
+        sampleAgeMs: pieceSampleAgeMs
+      },
       playbackStatus: getLocalPlaybackStatus({
         presenceState: localMember.presenceState,
         mediaConnectionState,
@@ -356,6 +399,7 @@ function sumDiagnosticsValue(
     | "pieceDownloadRateKbps"
     | "pieceUploadRateKbps"
     | "mediaSendBitrateKbps"
+    | "mediaReceiveBitrateKbps"
 ) {
   const values = diagnostics
     .map((peer) => peer[key])
@@ -365,7 +409,19 @@ function sumDiagnosticsValue(
     return null;
   }
 
-  return Math.round(values.reduce((sum, value) => sum + value, 0));
+  return Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10;
+}
+
+function sumNullableNumbers(...values: Array<number | null>) {
+  const numbers = values.filter(
+    (value): value is number => typeof value === "number" && Number.isFinite(value)
+  );
+
+  if (numbers.length === 0) {
+    return null;
+  }
+
+  return Math.round(numbers.reduce((sum, value) => sum + value, 0) * 10) / 10;
 }
 
 function averageDiagnosticsValue(
@@ -380,7 +436,83 @@ function averageDiagnosticsValue(
     return null;
   }
 
-  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+function getLatestMetricSampleAgeMs(
+  diagnostics: PeerDiagnosticsSnapshot[],
+  keys: Array<
+    | "availableOutgoingBitrateKbps"
+    | "mediaReceiveBitrateKbps"
+    | "mediaSendBitrateKbps"
+    | "currentRoundTripTimeMs"
+  >,
+  now = Date.now()
+) {
+  const latestTimestampMs = diagnostics.reduce<number | null>((latest, diagnostic) => {
+    const hasMetric = keys.some(
+      (key) => typeof diagnostic[key] === "number" && Number.isFinite(diagnostic[key])
+    );
+    if (!hasMetric) {
+      return latest;
+    }
+
+    const timestampMs = new Date(diagnostic.updatedAt).getTime();
+    if (!Number.isFinite(timestampMs)) {
+      return latest;
+    }
+
+    return latest === null ? timestampMs : Math.max(latest, timestampMs);
+  }, null);
+
+  return latestTimestampMs === null ? null : Math.max(0, now - latestTimestampMs);
+}
+
+function hasDiagnosticsMetricSample(
+  diagnostics: PeerDiagnosticsSnapshot[],
+  keys: Array<
+    | "availableOutgoingBitrateKbps"
+    | "mediaReceiveBitrateKbps"
+    | "mediaSendBitrateKbps"
+    | "currentRoundTripTimeMs"
+  >
+) {
+  return diagnostics.some((diagnostic) =>
+    keys.some((key) => typeof diagnostic[key] === "number" && Number.isFinite(diagnostic[key]))
+  );
+}
+
+function getLatestPieceSampleAgeMs(diagnostics: PeerDiagnosticsSnapshot[], now = Date.now()) {
+  const latestTimestampMs = diagnostics.reduce<number | null>((latest, diagnostic) => {
+    const candidateTimestamps = [
+      diagnostic.lastPieceReceivedAt,
+      typeof diagnostic.pieceDownloadRateKbps === "number" ||
+      typeof diagnostic.pieceUploadRateKbps === "number"
+        ? diagnostic.updatedAt
+        : null
+    ]
+      .filter((value): value is string => !!value)
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value));
+
+    if (candidateTimestamps.length === 0) {
+      return latest;
+    }
+
+    const diagnosticLatest = Math.max(...candidateTimestamps);
+    return latest === null ? diagnosticLatest : Math.max(latest, diagnosticLatest);
+  }, null);
+
+  return latestTimestampMs === null ? null : Math.max(0, now - latestTimestampMs);
+}
+
+function hasPieceTransferSample(diagnostics: PeerDiagnosticsSnapshot[]) {
+  return diagnostics.some(
+    (diagnostic) =>
+      typeof diagnostic.pieceDownloadRateKbps === "number" ||
+      typeof diagnostic.pieceUploadRateKbps === "number" ||
+      !!diagnostic.lastPieceReceivedAt
+  );
 }
 
 function getLocalPlaybackStatus(input: {

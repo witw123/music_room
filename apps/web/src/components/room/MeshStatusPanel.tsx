@@ -8,6 +8,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import type { LocalMemberPanelState } from "./MembersPanel";
 
 export type AvailabilityEntry = {
   track: TrackMeta;
@@ -23,6 +24,7 @@ type MeshStatusPanelProps = {
   connectedPeersCount: number;
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
+  localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   recentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -62,6 +64,30 @@ function formatMetric(value: number | null, unit: string) {
   }
 
   return `${value}${unit}`;
+}
+
+function formatPreciseMetric(
+  value: number | null,
+  unit: string,
+  sampleAgeMs: number | null = null
+) {
+  if (value === null) {
+    return "未知";
+  }
+
+  const rendered = Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value).toString();
+  const staleSuffix =
+    sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
+  return `${rendered}${unit}${staleSuffix}`;
+}
+
+function formatSampleAge(sampleAgeMs: number | null) {
+  if (sampleAgeMs === null) {
+    return "暂无样本";
+  }
+
+  const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
+  return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
 }
 
 function formatEventLabel(event: PeerRecentEvent) {
@@ -109,6 +135,7 @@ function MeshStatusPanelBase({
   connectedPeersCount,
   mediaConnectedPeersCount,
   cachedTrackCount,
+  localMemberState,
   peerDiagnostics,
   recentEvents,
   iceConfigSource,
@@ -201,6 +228,66 @@ function MeshStatusPanelBase({
           <div className="rounded-lg border border-surface-border bg-background/30 p-3 text-xs text-foreground-muted">
             {iceConfigStatus}
           </div>
+
+          {localMemberState ? (
+            <div className="rounded-lg border border-surface-border bg-background/30 p-3 text-[10px] text-foreground-muted">
+              <div className="mb-2 font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
+                本机传输摘要
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <span>链路: {localMemberState.transportLabel}</span>
+                <span>样本: {formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}</span>
+                <span>
+                  总传输:{" "}
+                  {formatPreciseMetric(
+                    localMemberState.transportSummary.totalRateKbps,
+                    " kbps",
+                    localMemberState.transportSummary.sampleAgeMs
+                  )}
+                </span>
+                <span>
+                  延迟:{" "}
+                  {formatPreciseMetric(
+                    localMemberState.transportSummary.latencyMs,
+                    "ms",
+                    localMemberState.transportSummary.sampleAgeMs
+                  )}
+                </span>
+                <span>
+                  接收:{" "}
+                  {formatPreciseMetric(
+                    localMemberState.transportSummary.receiveRateKbps,
+                    " kbps",
+                    localMemberState.transportSummary.sampleAgeMs
+                  )}
+                </span>
+                <span>
+                  发送:{" "}
+                  {formatPreciseMetric(
+                    localMemberState.transportSummary.sendRateKbps,
+                    " kbps",
+                    localMemberState.transportSummary.sampleAgeMs
+                  )}
+                </span>
+                <span>
+                  分片下载:{" "}
+                  {formatPreciseMetric(
+                    localMemberState.pieceSummary.downloadRateKbps,
+                    " kbps",
+                    localMemberState.pieceSummary.sampleAgeMs
+                  )}
+                </span>
+                <span>
+                  分片上传:{" "}
+                  {formatPreciseMetric(
+                    localMemberState.pieceSummary.uploadRateKbps,
+                    " kbps",
+                    localMemberState.pieceSummary.sampleAgeMs
+                  )}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {peerDiagnostics.length ? (
             <div className="flex flex-col gap-2">

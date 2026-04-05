@@ -1,6 +1,6 @@
 # 播放同步
 
-最后更新：`2026-04-03`
+最后更新：`2026-04-05`
 
 ## 权威模型
 
@@ -30,8 +30,8 @@
 
 ### `progressive-local`
 
-- 一边收分片，一边本地播放
-- Chromium 浏览器优先启用
+- 主要承担后台预热和缓存增长
+- 默认不再作为短时间内必然接管的主播放路径
 - 当前实现：
   - MP3：MSE
   - FLAC：PCM / WebCodecs + AudioContext
@@ -44,20 +44,21 @@
 
 ## 选源原则
 
-当前选源不是“只要有流就一直听流”，而是：
+当前选源不是“尽快切本地”，而是：
 
 1. 先用 `remote-stream` 保证秒开
-2. 本地连续缓冲达到启动门槛后，切到 `progressive-local`
-3. 当前曲目完整缓存后，切到 `full-local`
-4. 如果本地缓冲掉到危险阈值以下，或 seek 到未缓冲区域，再回退到 `remote-stream`
+2. `progressive-local` 继续在后台补当前曲目，不抢主路
+3. 当前曲目完整缓存、链路稳定且没有追赶风险时，才切到 `full-local`
+4. 如果出现 `buffer-underrun`、`stalled`、data 未 ready 或当前曲目缓存速度追不上播放进度，保持 `remote-stream`
 
 ## 分片调度策略
 
-当前调度器包含五种策略：
+当前调度器包含六种策略：
 
 - `startup`
 - `steady`
 - `catchup`
+- `outrun-recovery`
 - `pause-fill`
 - `background`
 
@@ -65,6 +66,8 @@
 
 - 当前曲目绝对优先
 - 在当前曲目未完整前，不给其它曲目分配主要带宽
+- 当预测“当前曲目缓存速度追不上剩余播放时长”时，会进入 `outrun-recovery`
+- `outrun-recovery` 下只补当前曲目，暂停下一首和后台预取
 - 当前曲目完整后，才开始后台预取其它曲目
 
 ## 与队列版本的关系
@@ -84,6 +87,9 @@
 - `调度策略`
 - `启动就绪`
 - `fallbackReason`
+- `estimatedFillTimeMs`
+- `remainingPlaybackMs`
+- `remoteFirstLockReason`
 
 当你看到：
 

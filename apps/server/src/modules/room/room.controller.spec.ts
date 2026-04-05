@@ -112,7 +112,7 @@ describe("RoomController", () => {
     expect(roomService.getRecoverableRoomSnapshot).toHaveBeenCalledWith("room_1", "guest_host");
   });
 
-  it("does not emit a topology snapshot after the room is deleted on leave", async () => {
+  it("emits a topology snapshot after leave even when only the offline host remains", async () => {
     const emptyRoom = buildSnapshot({ members: [] }).room;
     const roomService = {
       leaveRoom: jest.fn().mockResolvedValue(emptyRoom)
@@ -131,7 +131,7 @@ describe("RoomController", () => {
 
     expect(result).toEqual(emptyRoom);
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
-    expect(roomRealtimePublisher.emitTopologySnapshot).not.toHaveBeenCalled();
+    expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith("room_1");
   });
 
   it("emits a topology snapshot after joining by code", async () => {
