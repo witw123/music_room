@@ -98,7 +98,15 @@ export const remoteTrackStatusSchema = z.object({
   boundToAudioElement: z.boolean(),
   lastTrackAt: z.string().datetime().nullable(),
   lastBoundAt: z.string().datetime().nullable(),
-  lastAudioEvent: z.enum(["playing", "waiting", "pause", "error"]).nullable()
+  lastAudioEvent: z.enum(["playing", "waiting", "pause", "error"]).nullable(),
+  audioPaused: z.boolean().nullable().optional(),
+  audioMuted: z.boolean().nullable().optional(),
+  audioReadyState: z.number().int().min(0).max(4).nullable().optional(),
+  hasSrcObject: z.boolean().nullable().optional(),
+  currentSrc: z.string().nullable().optional(),
+  lastPlayAttemptAt: z.string().datetime().nullable().optional(),
+  lastPlayAttemptResult: z.enum(["ok", "rejected"]).nullable().optional(),
+  lastPlayAttemptError: z.string().nullable().optional()
 });
 
 export const progressivePlaybackStatusSchema = z.object({

@@ -78,6 +78,22 @@ function formatDurationMs(value: number | null) {
   return `${(value / 1000).toFixed(1)}s`;
 }
 
+function formatMediaReadyState(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+
+  const labels = [
+    "0 HAVE_NOTHING",
+    "1 HAVE_METADATA",
+    "2 HAVE_CURRENT_DATA",
+    "3 HAVE_FUTURE_DATA",
+    "4 HAVE_ENOUGH_DATA"
+  ] as const;
+
+  return labels[value] ?? `${value}`;
+}
+
 function formatPreciseMetric(
   value: number | null,
   unit: string,
@@ -372,6 +388,36 @@ function MeshStatusPanelBase({
                       绑定音频元素: {peer.remoteTrackStatus.boundToAudioElement ? "是" : "否"}
                     </span>
                     <span>
+                      远端音频 paused:{" "}
+                      {peer.remoteTrackStatus.audioPaused === null ||
+                      typeof peer.remoteTrackStatus.audioPaused === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.audioPaused
+                          ? "是"
+                          : "否"}
+                    </span>
+                    <span>
+                      远端音频 muted:{" "}
+                      {peer.remoteTrackStatus.audioMuted === null ||
+                      typeof peer.remoteTrackStatus.audioMuted === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.audioMuted
+                          ? "是"
+                          : "否"}
+                    </span>
+                    <span>
+                      远端 readyState: {formatMediaReadyState(peer.remoteTrackStatus.audioReadyState)}
+                    </span>
+                    <span>
+                      远端 srcObject:{" "}
+                      {peer.remoteTrackStatus.hasSrcObject === null ||
+                      typeof peer.remoteTrackStatus.hasSrcObject === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.hasSrcObject
+                          ? "有"
+                          : "无"}
+                    </span>
+                    <span>
                       最近 availability: {peer.lastAvailabilitySeenAt ? formatTimestamp(peer.lastAvailabilitySeenAt) : "未知"}
                     </span>
                     <span>
@@ -509,6 +555,20 @@ function MeshStatusPanelBase({
                         <p className="mt-1 text-foreground-muted">
                           最近稳播:{" "}
                           {formatTimestamp(peer.progressivePlaybackStatus.lastStablePlaybackAt)}
+                        </p>
+                      ) : null}
+                      {peer.remoteTrackStatus.lastPlayAttemptAt ? (
+                        <p className="mt-1 text-foreground-muted">
+                          最近远端 play(): {peer.remoteTrackStatus.lastPlayAttemptResult ?? "未知"} ·{" "}
+                          {formatTimestamp(peer.remoteTrackStatus.lastPlayAttemptAt)}
+                          {peer.remoteTrackStatus.lastPlayAttemptError
+                            ? ` · ${peer.remoteTrackStatus.lastPlayAttemptError}`
+                            : ""}
+                        </p>
+                      ) : null}
+                      {peer.remoteTrackStatus.currentSrc ? (
+                        <p className="mt-1 truncate text-foreground-muted">
+                          远端 currentSrc: {peer.remoteTrackStatus.currentSrc}
                         </p>
                       ) : null}
                       {peer.timeOnRemoteStreamMs !== null ? (

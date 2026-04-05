@@ -122,7 +122,15 @@ export function createEmptyRemoteTrackStatus(): RemoteTrackStatus {
     boundToAudioElement: false,
     lastTrackAt: null,
     lastBoundAt: null,
-    lastAudioEvent: null
+    lastAudioEvent: null,
+    audioPaused: null,
+    audioMuted: null,
+    audioReadyState: null,
+    hasSrcObject: null,
+    currentSrc: null,
+    lastPlayAttemptAt: null,
+    lastPlayAttemptResult: null,
+    lastPlayAttemptError: null
   };
 }
 

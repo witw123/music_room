@@ -663,6 +663,27 @@ export function MusicRoomApp({
     await nextTrack();
   }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
 
+  const getRemoteAudioDiagnostics = useCallback(() => {
+    const remoteAudio = remoteAudioRef.current;
+    if (!remoteAudio) {
+      return {
+        audioPaused: null,
+        audioMuted: null,
+        audioReadyState: null,
+        hasSrcObject: null,
+        currentSrc: null
+      };
+    }
+
+    return {
+      audioPaused: remoteAudio.paused,
+      audioMuted: remoteAudio.muted,
+      audioReadyState: remoteAudio.readyState,
+      hasSrcObject: !!remoteAudio.srcObject,
+      currentSrc: remoteAudio.currentSrc || null
+    };
+  }, [remoteAudioRef]);
+
   const handleRemotePlaying = useCallback(() => {
     recordPeerDiagnostic({
       peerId: "remote-media",
@@ -674,6 +695,7 @@ export function MusicRoomApp({
         ...snapshot,
         remoteTrackStatus: {
           ...snapshot.remoteTrackStatus,
+          ...getRemoteAudioDiagnostics(),
           lastAudioEvent: "playing"
         }
       })
@@ -686,6 +708,7 @@ export function MusicRoomApp({
     activePlaybackSource,
     ensureSourcePlaybackStarted,
     isCurrentSourceOwner,
+    getRemoteAudioDiagnostics,
     recordPeerDiagnostic
   ]);
 
@@ -701,12 +724,13 @@ export function MusicRoomApp({
         ...snapshot,
         remoteTrackStatus: {
           ...snapshot.remoteTrackStatus,
+          ...getRemoteAudioDiagnostics(),
           lastAudioEvent: "waiting"
         }
       })
     });
     setMediaConnectionState("buffering");
-  }, [recordPeerDiagnostic, scheduleRemotePlaybackRetry]);
+  }, [getRemoteAudioDiagnostics, recordPeerDiagnostic, scheduleRemotePlaybackRetry]);
 
   const handleRemotePause = useCallback(() => {
     scheduleRemotePlaybackRetry();
@@ -720,6 +744,7 @@ export function MusicRoomApp({
         ...snapshot,
         remoteTrackStatus: {
           ...snapshot.remoteTrackStatus,
+          ...getRemoteAudioDiagnostics(),
           lastAudioEvent: "pause"
         }
       })
@@ -727,7 +752,12 @@ export function MusicRoomApp({
     setMediaConnectionState((current) =>
       roomSnapshot?.room.playback.status === "paused" ? current : "buffering"
     );
-  }, [recordPeerDiagnostic, roomSnapshot?.room.playback.status, scheduleRemotePlaybackRetry]);
+  }, [
+    getRemoteAudioDiagnostics,
+    recordPeerDiagnostic,
+    roomSnapshot?.room.playback.status,
+    scheduleRemotePlaybackRetry
+  ]);
 
   const handleRemoteError = useCallback(() => {
     recordPeerDiagnostic({
@@ -742,12 +772,13 @@ export function MusicRoomApp({
         lastError: "远端音频元素播放失败",
         remoteTrackStatus: {
           ...snapshot.remoteTrackStatus,
+          ...getRemoteAudioDiagnostics(),
           lastAudioEvent: "error"
         }
       })
     });
     setMediaConnectionState("failed");
-  }, [recordPeerDiagnostic]);
+  }, [getRemoteAudioDiagnostics, recordPeerDiagnostic]);
 
   const {
     canDisbandRoom,

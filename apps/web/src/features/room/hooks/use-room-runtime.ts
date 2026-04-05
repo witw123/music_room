@@ -332,6 +332,27 @@ export function useRoomRuntime({
     }
   }, []);
 
+  const getRemoteAudioDiagnostics = useCallback(() => {
+    const remoteAudio = remoteAudioRef.current;
+    if (!remoteAudio) {
+      return {
+        audioPaused: null,
+        audioMuted: null,
+        audioReadyState: null,
+        hasSrcObject: null,
+        currentSrc: null
+      };
+    }
+
+    return {
+      audioPaused: remoteAudio.paused,
+      audioMuted: remoteAudio.muted,
+      audioReadyState: remoteAudio.readyState,
+      hasSrcObject: !!remoteAudio.srcObject,
+      currentSrc: remoteAudio.currentSrc || null
+    };
+  }, [remoteAudioRef]);
+
   const resetRemoteAudioElement = useCallback(
     (stream: MediaStream | null, options?: { deferNullReset?: boolean }) => {
       const remoteAudio = remoteAudioRef.current;
@@ -348,6 +369,21 @@ export function useRoomRuntime({
           }
           remoteAudio.srcObject = stream;
         }
+        recordPeerDiagnosticRef.current({
+          peerId: "remote-media",
+          channelKind: "media",
+          direction: "local",
+          event: "remote-audio-element-state",
+          summary: "远端音频元素已绑定新流",
+          recordEvent: false,
+          update: (snapshot) => ({
+            ...snapshot,
+            remoteTrackStatus: {
+              ...snapshot.remoteTrackStatus,
+              ...getRemoteAudioDiagnostics()
+            }
+          })
+        });
         return;
       }
 
@@ -358,6 +394,21 @@ export function useRoomRuntime({
         }
         remoteAudio.load();
         remoteStreamClearTimeoutRef.current = null;
+        recordPeerDiagnosticRef.current({
+          peerId: "remote-media",
+          channelKind: "media",
+          direction: "local",
+          event: "remote-audio-element-state",
+          summary: "远端音频元素已清空媒体流",
+          recordEvent: false,
+          update: (snapshot) => ({
+            ...snapshot,
+            remoteTrackStatus: {
+              ...snapshot.remoteTrackStatus,
+              ...getRemoteAudioDiagnostics()
+            }
+          })
+        });
       };
 
       if (options?.deferNullReset && remoteAudio.srcObject) {
@@ -372,7 +423,7 @@ export function useRoomRuntime({
       clearPendingRemoteStreamClear();
       clearStream();
     },
-    [clearPendingRemoteStreamClear, remoteAudioRef]
+    [clearPendingRemoteStreamClear, getRemoteAudioDiagnostics, remoteAudioRef]
   );
 
   const clearHostMediaSyncRetry = useCallback(() => {
@@ -780,6 +831,26 @@ export function useRoomRuntime({
       }
 
       void roomAudioOutput.playElement(remoteAudio).then((result) => {
+        const now = new Date().toISOString();
+        recordPeerDiagnosticRef.current({
+          peerId: "remote-media",
+          channelKind: "media",
+          direction: "local",
+          event: "remote-play-attempt",
+          summary: result.ok ? "远端音频自动拉起成功" : `远端音频自动拉起失败：${result.error ?? "未知错误"}`,
+          recordEvent: !result.ok,
+          level: result.ok ? "info" : "warning",
+          update: (snapshot) => ({
+            ...snapshot,
+            remoteTrackStatus: {
+              ...snapshot.remoteTrackStatus,
+              ...getRemoteAudioDiagnostics(),
+              lastPlayAttemptAt: now,
+              lastPlayAttemptResult: result.ok ? "ok" : "rejected",
+              lastPlayAttemptError: result.ok ? null : result.error ?? "play-rejected"
+            }
+          })
+        });
         if (result.ok) {
           return;
         }
@@ -794,7 +865,7 @@ export function useRoomRuntime({
         }, remotePlaybackRetryBackoffMs[Math.min(attempt, remotePlaybackRetryBackoffMs.length - 1)]);
       });
     },
-    [currentRoomRef, remoteAudioRef, setStatusMessage]
+    [currentRoomRef, getRemoteAudioDiagnostics, remoteAudioRef, setStatusMessage]
   );
 
   const syncHostMediaStream = useCallback(async () => {
