@@ -283,7 +283,7 @@ describe("RoomMediaMesh", () => {
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
     expect(sender?.setParameters).toHaveBeenCalledWith({
-      encodings: [{ maxBitrate: 160_000 }]
+      encodings: [{ maxBitrate: 192_000 }]
     });
   });
 
@@ -300,7 +300,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(72_000);
+    ).toBe(80_000);
   });
 
   it("caps sender bitrate to measured headroom on weak links", () => {
@@ -316,7 +316,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 20,
         jitterMs: 4
       })
-    ).toBe(62_999);
+    ).toBe(70_200);
   });
 
   it("prefers a stronger receiver jitter target on constrained links", () => {
@@ -364,6 +364,6 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBe(160_000);
+    ).toBe(192_000);
   });
 });

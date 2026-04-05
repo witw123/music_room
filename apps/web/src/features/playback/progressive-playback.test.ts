@@ -247,7 +247,12 @@ describe("progressive playback helpers", () => {
 
   it("switches into outrun-recovery when fill time is slower than the remaining playback window", () => {
     const outrunChunks = Array.from({ length: 17 }, (_, index) => index);
-    const manifest = buildProgressiveTrackManifest(track, {
+    const manifest = buildProgressiveTrackManifest({
+      ...track,
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    }, {
       ...availability,
       totalChunks: 24,
       availableChunks: outrunChunks
@@ -259,7 +264,7 @@ describe("progressive playback helpers", () => {
       sourceSessionId: "host_1",
       sourcePeerId: "peer_host",
       sourceTrackId: "track_1",
-      positionMs: 70_000,
+      positionMs: 60_000,
       startedAt: null,
       queueVersion: 1,
       playbackRevision: 1,
@@ -274,7 +279,7 @@ describe("progressive playback helpers", () => {
         availableChunks: outrunChunks,
         fallbackReason: null,
         currentTrackComplete: false,
-        currentPieceDownloadRateKbps: 280
+        currentPieceDownloadRateKbps: 20
       })
     ).toBe("outrun-recovery");
 
@@ -288,12 +293,12 @@ describe("progressive playback helpers", () => {
         availableChunks: outrunChunks
       },
       fallbackReason: null,
-      currentPieceDownloadRateKbps: 280
+      currentPieceDownloadRateKbps: 20
     });
 
     expect(health.schedulerPolicy).toBe("outrun-recovery");
     expect(health.estimatedFillTimeMs).not.toBeNull();
-    expect(health.remainingPlaybackMs).toBe(50_000);
+    expect(health.remainingPlaybackMs).toBe(60_000);
   });
 
   it("only enables MSE progressive playback for stream-safe mime types", () => {

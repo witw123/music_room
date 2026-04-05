@@ -42,7 +42,7 @@ function getPlaybackRiskWindowMs(input: { mimeType?: string | null; codec?: stri
   return Math.max(getTakeoverWindowMs(input), getRemoteFirstComfortBufferMs(input));
 }
 
-const outrunRecoverySafetyFactor = 0.92;
+const outrunRecoverySafetyFactor = 0.8;
 
 export function isChromeOrEdgeBrowser() {
   if (typeof navigator === "undefined") {
@@ -104,7 +104,7 @@ export function getRemoteFirstComfortBufferMs(input: {
   mimeType?: string | null;
   codec?: string | null;
 }) {
-  return isFlacTrack(input) ? 48_000 : 20_000;
+  return isFlacTrack(input) ? 32_000 : 14_000;
 }
 
 export function getOutrunRecoverySafetyFactor() {

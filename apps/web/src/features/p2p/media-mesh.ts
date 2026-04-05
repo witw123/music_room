@@ -50,11 +50,11 @@ type MediaPeerEntry = {
   statsSnapshot: PeerConnectionStatsSnapshot | null;
 };
 
-const directAudioMaxBitrateBps = 160_000;
-const constrainedAudioMaxBitrateBps = 112_000;
-const relayAudioMaxBitrateBps = 72_000;
-const weakLinkAudioMaxBitrateBps = 48_000;
-const minimumAudioMaxBitrateBps = 32_000;
+const directAudioMaxBitrateBps = 192_000;
+const constrainedAudioMaxBitrateBps = 144_000;
+const relayAudioMaxBitrateBps = 80_000;
+const weakLinkAudioMaxBitrateBps = 56_000;
+const minimumAudioMaxBitrateBps = 40_000;
 const stableReceiverJitterTargetMs = 320;
 const constrainedReceiverJitterTargetMs = 480;
 const weakLinkReceiverJitterTargetMs = 560;
@@ -620,7 +620,7 @@ export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSa
     Number.isFinite(sample.availableOutgoingBitrateKbps) &&
     sample.availableOutgoingBitrateKbps > 0
   ) {
-    const headroomRatio = constrainedTransport ? 0.7 : 0.8;
+    const headroomRatio = constrainedTransport ? 0.78 : 0.88;
     const measuredCeilingBps = Math.floor(
       sample.availableOutgoingBitrateKbps * 1000 * headroomRatio
     );
