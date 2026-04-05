@@ -2,10 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PeerSignalMessage } from "@music-room/shared";
 import {
   RoomMediaMesh,
-  normalizeAudioBitrateBps,
   resolvePreferredAudioMaxBitrateBps,
-  resolvePreferredReceiverJitterTargetMs,
-  shouldRetuneConfiguredAudioBitrate
+  resolvePreferredReceiverJitterTargetMs
 } from "./media-mesh";
 
 class FakeRTCPeerConnection {
@@ -425,15 +423,5 @@ describe("RoomMediaMesh", () => {
         jitterMs: 4
       })
     ).toBe(192_000);
-  });
-
-  it("normalizes audio bitrate tuning to stable 4 kbps steps", () => {
-    expect(normalizeAudioBitrateBps(70_200)).toBe(68_000);
-    expect(normalizeAudioBitrateBps(191_999)).toBe(188_000);
-  });
-
-  it("skips tiny bitrate retunes that would only add churn", () => {
-    expect(shouldRetuneConfiguredAudioBitrate(80_000, 72_000)).toBe(false);
-    expect(shouldRetuneConfiguredAudioBitrate(80_000, 64_000)).toBe(true);
   });
 });

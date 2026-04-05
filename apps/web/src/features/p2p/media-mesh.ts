@@ -585,8 +585,8 @@ export class RoomMediaMesh {
       return;
     }
 
-    const nextMaxBitrateBps = normalizeAudioBitrateBps(resolvePreferredAudioMaxBitrateBps(sample));
-    if (!shouldRetuneConfiguredAudioBitrate(entry.configuredAudioMaxBitrateBps, nextMaxBitrateBps)) {
+    const nextMaxBitrateBps = resolvePreferredAudioMaxBitrateBps(sample);
+    if (entry.configuredAudioMaxBitrateBps === nextMaxBitrateBps) {
       return;
     }
 
@@ -709,26 +709,6 @@ export function resolvePreferredReceiverJitterTargetMs(sample: PeerConnectionSta
   }
 
   return stableReceiverJitterTargetMs;
-}
-
-export function normalizeAudioBitrateBps(bitrateBps: number) {
-  const normalized = Math.floor(bitrateBps / 4_000) * 4_000;
-  return Math.max(minimumAudioMaxBitrateBps, Math.min(directAudioMaxBitrateBps, normalized));
-}
-
-export function shouldRetuneConfiguredAudioBitrate(
-  currentBitrateBps: number | null,
-  nextBitrateBps: number
-) {
-  if (currentBitrateBps === null) {
-    return true;
-  }
-
-  if (currentBitrateBps === nextBitrateBps) {
-    return false;
-  }
-
-  return Math.abs(currentBitrateBps - nextBitrateBps) >= 12_000;
 }
 
 function getAudioCodecCapabilities() {
