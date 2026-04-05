@@ -1136,6 +1136,7 @@ export function useRoomRuntime({
       try {
         const relayAudio = resolveHostRelayAudioElement({
           activePlaybackSource,
+          preferLocalAudio: true,
           localAudio: audioRef.current,
           remoteAudio: remoteAudioRef.current
         });
@@ -1372,6 +1373,7 @@ export function useRoomRuntime({
 
     const relayAudio = resolveHostRelayAudioElement({
       activePlaybackSource,
+      preferLocalAudio: true,
       localAudio: audioRef.current,
       remoteAudio: remoteAudioRef.current
     });

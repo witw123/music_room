@@ -18,6 +18,18 @@ export function getInitialProgressivePlaybackSource(hasFullLocalTrack: boolean) 
   return hasFullLocalTrack ? "full-local" : ("remote-stream" satisfies ProgressivePlaybackSource);
 }
 
+export function shouldForceSourceOwnerLocalPlayback(input: {
+  isCurrentSourceOwner: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  hasFullLocalTrack: boolean;
+}) {
+  return (
+    input.isCurrentSourceOwner &&
+    input.hasFullLocalTrack &&
+    input.activePlaybackSource === "remote-stream"
+  );
+}
+
 function resolveBufferedLocalWarmupDecision(input: {
   currentSource: ProgressivePlaybackSource;
   targetSource: BufferedLocalWarmupTarget;

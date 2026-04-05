@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getInitialProgressivePlaybackSource,
+  shouldForceSourceOwnerLocalPlayback,
   resolveFullLocalWarmupDecision,
   resolveProgressiveWarmupDecision
 } from "./progressive-source-controller";
@@ -12,6 +13,23 @@ describe("progressive source controller", () => {
   it("prefers full-local when the track is already cached in full", () => {
     expect(getInitialProgressivePlaybackSource(true)).toBe("full-local");
     expect(getInitialProgressivePlaybackSource(false)).toBe("remote-stream");
+  });
+
+  it("forces source owners with a full local track out of remote-stream mode", () => {
+    expect(
+      shouldForceSourceOwnerLocalPlayback({
+        isCurrentSourceOwner: true,
+        activePlaybackSource: "remote-stream",
+        hasFullLocalTrack: true
+      })
+    ).toBe(true);
+    expect(
+      shouldForceSourceOwnerLocalPlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "remote-stream",
+        hasFullLocalTrack: true
+      })
+    ).toBe(false);
   });
 
   it("requires a stable warmup window before switching to progressive local", () => {

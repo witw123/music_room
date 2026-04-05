@@ -27,4 +27,18 @@ describe("host relay audio", () => {
       })
     ).toBe(localAudio);
   });
+
+  it("can force source-owner relay capture to stay on the local audio element", () => {
+    const localAudio = { id: "local" } as HTMLAudioElement;
+    const remoteAudio = { id: "remote" } as HTMLAudioElement;
+
+    expect(
+      resolveHostRelayAudioElement({
+        activePlaybackSource: "remote-stream",
+        preferLocalAudio: true,
+        localAudio,
+        remoteAudio
+      })
+    ).toBe(localAudio);
+  });
 });

@@ -52,7 +52,8 @@ import { ProgressivePcmEngine } from "./progressive-pcm-engine";
 import { roomAudioOutput } from "./room-audio-output";
 import {
   resolveFullLocalWarmupDecision,
-  resolveProgressiveWarmupDecision
+  resolveProgressiveWarmupDecision,
+  shouldForceSourceOwnerLocalPlayback
 } from "./progressive-source-controller";
 
 type UseProgressiveRuntimeInput = {
@@ -197,6 +198,15 @@ export function useProgressiveRuntime({
   const currentBufferedFullLocalTrack = useMemo(
     () => (currentTrack?.id ? uploadedTracks[currentTrack.id] ?? null : null),
     [currentTrack?.id, uploadedTracks]
+  );
+  const forceSourceOwnerLocalPlayback = useMemo(
+    () =>
+      shouldForceSourceOwnerLocalPlayback({
+        isCurrentSourceOwner,
+        activePlaybackSource,
+        hasFullLocalTrack: !!currentBufferedFullLocalTrack
+      }),
+    [activePlaybackSource, currentBufferedFullLocalTrack, isCurrentSourceOwner]
   );
   const currentTrackAvailabilityAnnouncement = useMemo(
     () => (currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null),
@@ -549,6 +559,14 @@ export function useProgressiveRuntime({
   }, [activePlaybackSource, playback?.currentTrackId, playbackRevision]);
 
   useEffect(() => {
+    if (!forceSourceOwnerLocalPlayback) {
+      return;
+    }
+
+    setActivePlaybackSource("full-local");
+  }, [forceSourceOwnerLocalPlayback, setActivePlaybackSource]);
+
+  useEffect(() => {
     localTakeoverCooldownUntilRef.current = 0;
   }, [playback?.currentTrackId, playbackRevision]);
 
@@ -875,7 +893,7 @@ export function useProgressiveRuntime({
     const expectedSeconds =
       getEffectivePlaybackPositionMs(playback, currentTrack?.durationMs ?? 0, Date.now()) / 1000;
 
-    if (activePlaybackSource === "full-local" && uploaded) {
+    if ((activePlaybackSource === "full-local" || forceSourceOwnerLocalPlayback) && uploaded) {
       if (remoteAudio) {
         remoteAudio.pause();
         remoteAudio.srcObject = null;
@@ -955,7 +973,7 @@ export function useProgressiveRuntime({
       return;
     }
 
-    if (activePlaybackSource === "remote-stream") {
+    if (activePlaybackSource === "remote-stream" && !forceSourceOwnerLocalPlayback) {
       if (!shouldWarmBufferedFullLocal) {
         audio.pause();
         audio.muted = false;
@@ -1001,6 +1019,7 @@ export function useProgressiveRuntime({
     currentTrack?.durationMs,
     uploadedTracks,
     activePlaybackSource,
+    forceSourceOwnerLocalPlayback,
     isCurrentSourceOwner,
     setStatusMessage,
     setMediaConnectionState,
