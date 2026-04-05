@@ -858,6 +858,7 @@ export function useRoomRuntime({
 
         const currentTrackObjectUrl = uploadedTracks[playback.currentTrackId]?.objectUrl ?? null;
         if (
+          playback.status === "playing" &&
           !isHostRelayAudioReadyForCapture({
             activePlaybackSource,
             relayAudio,
@@ -987,10 +988,15 @@ export function useRoomRuntime({
         return;
       }
 
-      if (blockedUntilSourcePlaybackReady) {
-        syncState.pendingKey = null;
-        return;
-      }
+        if (blockedUntilSourcePlaybackReady) {
+          clearHostMediaSyncRetry();
+          hostMediaSyncRetryRef.current = window.setTimeout(() => {
+            hostMediaSyncRetryRef.current = null;
+            void syncHostMediaStream();
+          }, hostMediaSyncRetryDelayMs);
+          syncState.pendingKey = null;
+          return;
+        }
 
       if (nextPendingKey && nextPendingKey !== syncState.lastAppliedKey) {
         syncState.pendingKey = null;
