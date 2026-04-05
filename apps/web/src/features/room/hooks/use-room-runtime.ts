@@ -935,16 +935,11 @@ export function useRoomRuntime({
       return;
     }
 
-    updateSourceStartState("starting");
-    const playResult = await roomAudioOutput.playElement(relayAudio);
-    if (!playResult.ok) {
-      updateSourceStartState("failed", {
-        error: playResult.error ?? "play-rejected",
-        summary: `音源端本机音频启动失败：${playResult.error ?? "play-rejected"}`,
-        recordEvent: true,
-        level: "error"
+    const isElementPlaying = !relayAudio.paused && relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+    if (!isElementPlaying) {
+      updateSourceStartState("starting", {
+        summary: "音源端已解锁，正在等待本机音频真正起播"
       });
-      setStatusMessage("音源端正在等待本机音频启动，请在音源设备上任意点击一次。");
       return;
     }
 
@@ -2303,7 +2298,11 @@ export function useRoomRuntime({
       return;
     }
 
-    if (!audioUnlocked || roomSnapshot.room.playback.status !== "playing") {
+    if (
+      !audioUnlocked ||
+      roomSnapshot.room.playback.status !== "playing" ||
+      sourceStartState !== "live"
+    ) {
       return;
     }
 
@@ -2320,6 +2319,7 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback.mediaEpoch,
     activePlaybackSource,
     mediaConnectedPeers.length,
+    sourceStartState,
     syncHostMediaStream
   ]);
 
