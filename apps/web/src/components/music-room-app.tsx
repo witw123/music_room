@@ -140,6 +140,13 @@ export function MusicRoomApp({
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
     !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId;
+  const playbackTransitionKey = roomSnapshot?.room.playback.currentTrackId
+    ? [
+        roomSnapshot.room.playback.currentTrackId,
+        roomSnapshot.room.playback.queueVersion,
+        roomSnapshot.room.playback.mediaEpoch
+      ].join(":")
+    : null;
   const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
   const currentTrack = useMemo(
     () =>
@@ -412,7 +419,7 @@ export function MusicRoomApp({
       isCurrentSourceOwner && hasFullLocalTrack ? "full-local" : "remote-stream"
     );
     setProgressiveFallbackReason(null);
-  }, [currentPlaybackTrackId, isCurrentSourceOwner, uploadedTracks]);
+  }, [playbackTransitionKey, currentPlaybackTrackId, isCurrentSourceOwner]);
 
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {
@@ -462,7 +469,9 @@ export function MusicRoomApp({
           reason: input.reason,
           trackId: input.trackId,
           queueItemId: input.queueItemId,
-          previousTrackId: input.previousTrackId
+          previousTrackId: input.previousTrackId,
+          previousQueueVersion: roomSnapshot?.room.playback.queueVersion ?? null,
+          previousMediaEpoch: roomSnapshot?.room.playback.mediaEpoch ?? null
         })
       );
       setStatusMessage("正在准备音源...");

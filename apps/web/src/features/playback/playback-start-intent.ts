@@ -14,6 +14,8 @@ export type PlaybackStartIntent = {
   trackId: string | null;
   queueItemId: string | null;
   previousTrackId: string | null;
+  previousQueueVersion: number | null;
+  previousMediaEpoch: number | null;
   armedAt: number;
   expiresAt: number;
   consumedAt: number | null;
@@ -26,6 +28,8 @@ type CreatePlaybackStartIntentInput = {
   trackId?: string | null;
   queueItemId?: string | null;
   previousTrackId?: string | null;
+  previousQueueVersion?: number | null;
+  previousMediaEpoch?: number | null;
   now?: number;
   ttlMs?: number;
 };
@@ -50,6 +54,8 @@ export function createPlaybackStartIntent(
     trackId: input.trackId ?? null,
     queueItemId: input.queueItemId ?? null,
     previousTrackId: input.previousTrackId ?? null,
+    previousQueueVersion: input.previousQueueVersion ?? null,
+    previousMediaEpoch: input.previousMediaEpoch ?? null,
     armedAt,
     expiresAt: armedAt + (input.ttlMs ?? defaultPlaybackStartIntentTtlMs),
     consumedAt: null,
@@ -77,6 +83,22 @@ export function doesPlaybackMatchStartIntent(
   const activeIntent = intent as PlaybackStartIntent;
 
   if (playback.status !== "playing") {
+    return false;
+  }
+
+  if (
+    activeIntent.previousQueueVersion !== null &&
+    playback.queueVersion <= activeIntent.previousQueueVersion
+  ) {
+    return false;
+  }
+
+  if (
+    activeIntent.previousMediaEpoch !== null &&
+    activeIntent.trackId !== null &&
+    playback.currentTrackId === activeIntent.trackId &&
+    playback.mediaEpoch < activeIntent.previousMediaEpoch
+  ) {
     return false;
   }
 

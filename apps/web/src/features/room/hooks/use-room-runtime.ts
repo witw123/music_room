@@ -38,7 +38,10 @@ import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
 import { captureAudioStream } from "@/features/upload/audio-utils";
-import { hasHostMediaStreamTrack } from "@/features/playback/host-media-sync";
+import {
+  hasHostMediaStreamTrack,
+  shouldDeferHostMediaStreamSync
+} from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
@@ -137,6 +140,7 @@ type PieceTransferWindow = {
 
 const pieceTransferWindowMs = 12_000;
 const hostMediaSyncRetryDelayMs = 75;
+const remoteStreamSwapGraceMs = 900;
 const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const;
 const maxRemotePlaybackRetryAttempts = 16;
 
@@ -254,6 +258,7 @@ export function useRoomRuntime({
   const hostStreamRef = useRef<MediaStream | null>(null);
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const remotePlaybackRetryRef = useRef<number | null>(null);
+  const remoteStreamClearTimeoutRef = useRef<number | null>(null);
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
   const presenceRepairKeyRef = useRef<string | null>(null);
@@ -292,24 +297,50 @@ export function useRoomRuntime({
   const flushPendingAvailabilityRef = useRef(flushPendingAvailability);
   const recordPeerDiagnosticRef = useRef(recordPeerDiagnostic);
 
+  const clearPendingRemoteStreamClear = useCallback(() => {
+    if (remoteStreamClearTimeoutRef.current !== null) {
+      window.clearTimeout(remoteStreamClearTimeoutRef.current);
+      remoteStreamClearTimeoutRef.current = null;
+    }
+  }, []);
+
   const resetRemoteAudioElement = useCallback(
-    (stream: MediaStream | null) => {
+    (stream: MediaStream | null, options?: { deferNullReset?: boolean }) => {
       const remoteAudio = remoteAudioRef.current;
       if (!remoteAudio) {
         return;
       }
 
-      remoteAudio.pause();
-      if (remoteAudio.srcObject) {
-        remoteAudio.srcObject = null;
-      }
-      remoteAudio.load();
-
       if (stream) {
-        remoteAudio.srcObject = stream;
+        clearPendingRemoteStreamClear();
+        if (remoteAudio.srcObject !== stream) {
+          remoteAudio.srcObject = stream;
+        }
+        return;
       }
+
+      const clearStream = () => {
+        remoteAudio.pause();
+        if (remoteAudio.srcObject) {
+          remoteAudio.srcObject = null;
+        }
+        remoteAudio.load();
+        remoteStreamClearTimeoutRef.current = null;
+      };
+
+      if (options?.deferNullReset && remoteAudio.srcObject) {
+        clearPendingRemoteStreamClear();
+        remoteStreamClearTimeoutRef.current = window.setTimeout(
+          clearStream,
+          remoteStreamSwapGraceMs
+        );
+        return;
+      }
+
+      clearPendingRemoteStreamClear();
+      clearStream();
     },
-    [remoteAudioRef]
+    [clearPendingRemoteStreamClear, remoteAudioRef]
   );
 
   const clearHostMediaSyncRetry = useCallback(() => {
@@ -669,6 +700,17 @@ export function useRoomRuntime({
           return;
         }
 
+        if (
+          shouldDeferHostMediaStreamSync({
+            stream: capture,
+            listenerPeerCount: listenerPeerIds.length,
+            playbackStatus: playback.status === "playing" ? "playing" : "idle"
+          })
+        ) {
+          awaitingLocalAudioTrack = true;
+          return;
+        }
+
         hostStreamRef.current = capture;
         await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
         awaitingLocalAudioTrack = !hasHostMediaStreamTrack(capture);
@@ -934,6 +976,13 @@ export function useRoomRuntime({
   useEffect(() => {
     syncHostMediaStreamRef.current = syncHostMediaStream;
   }, [syncHostMediaStream]);
+
+  useEffect(
+    () => () => {
+      clearPendingRemoteStreamClear();
+    },
+    [clearPendingRemoteStreamClear]
+  );
 
   useEffect(() => {
     updateDataTransportStatsRef.current = updateDataTransportStats;
@@ -1439,7 +1488,10 @@ export function useRoomRuntime({
           }
 
           if (remoteAudio.srcObject !== stream) {
-            resetRemoteAudioElement(stream);
+            resetRemoteAudioElement(stream, {
+              deferNullReset:
+                !stream && currentRoomRef.current?.room.playback.status === "playing"
+            });
             recordPeerDiagnosticRef.current({
               peerId: "remote-media",
               channelKind: "media",

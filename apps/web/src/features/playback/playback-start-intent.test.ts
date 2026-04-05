@@ -26,6 +26,8 @@ describe("playback start intent helpers", () => {
       reason: "queue-item",
       queueItemId: "queue_2",
       trackId: "track_2",
+      previousQueueVersion: 1,
+      previousMediaEpoch: 1,
       now: 1_000
     });
 
@@ -37,6 +39,8 @@ describe("playback start intent helpers", () => {
     const intent = createPlaybackStartIntent({
       reason: "next",
       previousTrackId: "track_1",
+      previousQueueVersion: 1,
+      previousMediaEpoch: 1,
       now: 1_000
     });
 
@@ -44,6 +48,28 @@ describe("playback start intent helpers", () => {
       doesPlaybackMatchStartIntent(intent, { ...playingPlayback, currentTrackId: "track_1" }, 1_500)
     ).toBe(false);
     expect(doesPlaybackMatchStartIntent(intent, playingPlayback, 1_500)).toBe(true);
+  });
+
+  it("does not consume the intent against a stale playback version", () => {
+    const intent = createPlaybackStartIntent({
+      reason: "track",
+      trackId: "track_2",
+      previousQueueVersion: 2,
+      previousMediaEpoch: 2,
+      now: 1_000
+    });
+
+    expect(doesPlaybackMatchStartIntent(intent, playingPlayback, 1_500)).toBe(false);
+    expect(
+      doesPlaybackMatchStartIntent(
+        intent,
+        {
+          ...playingPlayback,
+          queueVersion: 3
+        },
+        1_500
+      )
+    ).toBe(true);
   });
 
   it("records matched source and failures without clearing the intent immediately", () => {

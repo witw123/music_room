@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { hasHostMediaStreamTrack } from "./host-media-sync";
+import {
+  hasHostMediaStreamTrack,
+  shouldDeferHostMediaStreamSync
+} from "./host-media-sync";
 
 describe("hasHostMediaStreamTrack", () => {
   it("returns false when the captured host stream has no audio track yet", () => {
@@ -16,5 +19,40 @@ describe("hasHostMediaStreamTrack", () => {
     } as unknown as MediaStream;
 
     expect(hasHostMediaStreamTrack(stream)).toBe(true);
+  });
+
+  it("defers host relay sync while the next captured stream has no audio track yet", () => {
+    const stream = {
+      getAudioTracks: () => []
+    } as unknown as MediaStream;
+
+    expect(
+      shouldDeferHostMediaStreamSync({
+        stream,
+        listenerPeerCount: 1,
+        playbackStatus: "playing"
+      })
+    ).toBe(true);
+  });
+
+  it("does not defer host relay sync when there are no listeners or playback is idle", () => {
+    const stream = {
+      getAudioTracks: () => []
+    } as unknown as MediaStream;
+
+    expect(
+      shouldDeferHostMediaStreamSync({
+        stream,
+        listenerPeerCount: 0,
+        playbackStatus: "playing"
+      })
+    ).toBe(false);
+    expect(
+      shouldDeferHostMediaStreamSync({
+        stream,
+        listenerPeerCount: 1,
+        playbackStatus: "idle"
+      })
+    ).toBe(false);
   });
 });
