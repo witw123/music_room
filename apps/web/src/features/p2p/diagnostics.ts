@@ -144,6 +144,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     currentRoundTripTimeMs: null,
     availableOutgoingBitrateKbps: null,
     targetAudioBitrateKbps: null,
+    packetLossRate: null,
     receiverJitterTargetMs: null,
     startupBufferMs: null,
     lastStablePlaybackAt: null,
@@ -177,6 +178,8 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       fullLocalReady: false,
       fullLocalEligible: false,
       fullLocalBlockedReason: null,
+      progressiveLocalEligible: false,
+      progressiveLocalBlockedReason: null,
       startupBufferMs: null,
       lastStablePlaybackAt: null
     },

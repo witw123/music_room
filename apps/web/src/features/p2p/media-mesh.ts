@@ -593,11 +593,17 @@ export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSa
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
   const severeWeakLink =
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
-    (typeof sample.packetsLost === "number" && sample.packetsLost >= 120) ||
+    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 8) ||
+    (typeof sample.packetsLost === "number" &&
+      sample.packetLossRate === null &&
+      sample.packetsLost >= 120) ||
     (typeof sample.jitterMs === "number" && sample.jitterMs >= 45);
   const weakLink =
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
-    (typeof sample.packetsLost === "number" && sample.packetsLost >= 80) ||
+    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 6) ||
+    (typeof sample.packetsLost === "number" &&
+      sample.packetLossRate === null &&
+      sample.packetsLost >= 80) ||
     (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
   let targetMaxBitrateBps = directAudioMaxBitrateBps;
 
@@ -631,7 +637,10 @@ export function resolvePreferredReceiverJitterTargetMs(sample: PeerConnectionSta
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
   const weakLink =
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
-    (typeof sample.packetsLost === "number" && sample.packetsLost >= 80) ||
+    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 6) ||
+    (typeof sample.packetsLost === "number" &&
+      sample.packetLossRate === null &&
+      sample.packetsLost >= 80) ||
     (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
 
   if (weakLink) {

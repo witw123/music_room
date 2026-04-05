@@ -352,6 +352,12 @@ function MeshStatusPanelBase({
                     <span>分片下载: {formatMetric(peer.pieceDownloadRateKbps, " kbps")}</span>
                     <span>分片上传: {formatMetric(peer.pieceUploadRateKbps, " kbps")}</span>
                     <span>丢包: {peer.packetsLost ?? "未知"}</span>
+                    <span>
+                      丢包率:{" "}
+                      {peer.packetLossRate === null || typeof peer.packetLossRate === "undefined"
+                        ? "未知"
+                        : `${peer.packetLossRate.toFixed(1)}%`}
+                    </span>
                     <span>抖动: {formatMetric(peer.jitterMs, "ms")}</span>
                     <span>
                       发信令:
@@ -402,6 +408,10 @@ function MeshStatusPanelBase({
                           完整本地可切: {peer.progressivePlaybackStatus.fullLocalReady ? "是" : "否"}
                         </span>
                         <span>
+                          渐进本地可切:{" "}
+                          {peer.progressivePlaybackStatus.progressiveLocalEligible ? "是" : "否"}
+                        </span>
+                        <span>
                           本地接管资格: {peer.progressivePlaybackStatus.fullLocalEligible ? "是" : "否"}
                         </span>
                         <span>
@@ -426,6 +436,12 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.fullLocalBlockedReason ? (
                         <p className="mt-2 text-amber-300">
                           禁止切本地: {peer.progressivePlaybackStatus.fullLocalBlockedReason}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.progressiveLocalBlockedReason ? (
+                        <p className="mt-2 text-amber-300">
+                          禁止切渐进本地:{" "}
+                          {peer.progressivePlaybackStatus.progressiveLocalBlockedReason}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.fallbackReason ? (

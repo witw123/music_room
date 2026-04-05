@@ -493,6 +493,7 @@ export function shouldEnableRemoteFirstLock(input: {
     mediaProtocol: string | null;
     currentRoundTripTimeMs: number | null;
     availableOutgoingBitrateKbps: number | null;
+    packetLossRate?: number | null;
     packetsLost: number | null;
     jitterMs: number | null;
   } | null;
@@ -510,6 +511,13 @@ export function shouldEnableRemoteFirstLock(input: {
   }
 
   if (
+    typeof diagnostics.packetLossRate === "number" &&
+    diagnostics.packetLossRate >= 8
+  ) {
+    return true;
+  }
+
+  if (
     typeof diagnostics.availableOutgoingBitrateKbps === "number" &&
     diagnostics.availableOutgoingBitrateKbps > 0 &&
     diagnostics.availableOutgoingBitrateKbps <= 72
@@ -519,6 +527,7 @@ export function shouldEnableRemoteFirstLock(input: {
 
   if (
     typeof diagnostics.packetsLost === "number" &&
+    diagnostics.packetLossRate === null &&
     diagnostics.packetsLost >= 120
   ) {
     return true;

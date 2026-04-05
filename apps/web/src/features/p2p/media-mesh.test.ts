@@ -296,6 +296,7 @@ describe("RoomMediaMesh", () => {
         availableOutgoingBitrateKbps: 148,
         mediaReceiveBitrateKbps: null,
         mediaSendBitrateKbps: null,
+        packetLossRate: 1.4,
         packetsLost: 104,
         jitterMs: 3
       })
@@ -311,6 +312,7 @@ describe("RoomMediaMesh", () => {
         availableOutgoingBitrateKbps: 90,
         mediaReceiveBitrateKbps: null,
         mediaSendBitrateKbps: null,
+        packetLossRate: 2.6,
         packetsLost: 20,
         jitterMs: 4
       })
@@ -326,6 +328,7 @@ describe("RoomMediaMesh", () => {
         availableOutgoingBitrateKbps: 220,
         mediaReceiveBitrateKbps: null,
         mediaSendBitrateKbps: 65,
+        packetLossRate: 1.2,
         packetsLost: 0,
         jitterMs: 4
       })
@@ -341,9 +344,26 @@ describe("RoomMediaMesh", () => {
         availableOutgoingBitrateKbps: 320,
         mediaReceiveBitrateKbps: 128,
         mediaSendBitrateKbps: 96,
+        packetLossRate: 8.5,
         packetsLost: 120,
         jitterMs: 34
       })
     ).toBe(560);
+  });
+
+  it("does not keep audio in weak-link mode on high cumulative loss when the short window is healthy", () => {
+    expect(
+      resolvePreferredAudioMaxBitrateBps({
+        candidateType: "host",
+        protocol: "udp",
+        currentRoundTripTimeMs: 72,
+        availableOutgoingBitrateKbps: 320,
+        mediaReceiveBitrateKbps: 96,
+        mediaSendBitrateKbps: 96,
+        packetLossRate: 0.7,
+        packetsLost: 520,
+        jitterMs: 4
+      })
+    ).toBe(160_000);
   });
 });

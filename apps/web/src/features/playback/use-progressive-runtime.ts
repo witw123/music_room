@@ -94,7 +94,7 @@ const fullLocalMaxDriftMs = 180;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteAudioHoldMs = 1_200;
-const enableDirectProgressiveTakeover = false;
+const enableDirectProgressiveTakeover = true;
 const stableRemoteStartupBufferMs = 220;
 const constrainedRemoteStartupBufferMs = 320;
 const weakRemoteStartupBufferMs = 420;
@@ -252,7 +252,17 @@ export function useProgressiveRuntime({
       ) {
         return "low-bitrate-headroom";
       }
-      if (typeof sourceDiagnostics.packetsLost === "number" && sourceDiagnostics.packetsLost >= 120) {
+      if (
+        typeof sourceDiagnostics.packetLossRate === "number" &&
+        sourceDiagnostics.packetLossRate >= 8
+      ) {
+        return "high-packet-loss-rate";
+      }
+      if (
+        typeof sourceDiagnostics.packetsLost === "number" &&
+        sourceDiagnostics.packetLossRate === null &&
+        sourceDiagnostics.packetsLost >= 120
+      ) {
         return "high-packet-loss";
       }
       if (typeof sourceDiagnostics.jitterMs === "number" && sourceDiagnostics.jitterMs >= 45) {
@@ -304,7 +314,11 @@ export function useProgressiveRuntime({
     const weakLink =
       (typeof sourceDiagnostics.currentRoundTripTimeMs === "number" &&
         sourceDiagnostics.currentRoundTripTimeMs >= 180) ||
-      (typeof sourceDiagnostics.packetsLost === "number" && sourceDiagnostics.packetsLost >= 80) ||
+      (typeof sourceDiagnostics.packetLossRate === "number" &&
+        sourceDiagnostics.packetLossRate >= 6) ||
+      (typeof sourceDiagnostics.packetsLost === "number" &&
+        sourceDiagnostics.packetLossRate === null &&
+        sourceDiagnostics.packetsLost >= 80) ||
       (typeof sourceDiagnostics.jitterMs === "number" && sourceDiagnostics.jitterMs >= 30);
 
     if (weakLink) {
@@ -340,9 +354,9 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.estimatedFillTimeMs,
     progressiveHealthSnapshot.remainingPlaybackMs
   ]);
-  const fullLocalBlockedReason = useMemo(() => {
-    if (!currentBufferedFullLocalTrack) {
-      return "track-not-fully-cached";
+  const progressiveLocalBlockedReason = useMemo(() => {
+    if (!currentProgressiveManifest || currentProgressiveEngineType === "none") {
+      return "progressive-engine-unavailable";
     }
 
     if (playback?.status !== "playing") {
@@ -357,10 +371,6 @@ export function useProgressiveRuntime({
       return progressiveFallbackReason;
     }
 
-    if (bufferSafetyMarginMs !== null && bufferSafetyMarginMs <= 0) {
-      return "cache-outrun-risk";
-    }
-
     if (localTakeoverCooldownMs > 0) {
       return "takeover-cooldown";
     }
@@ -373,17 +383,41 @@ export function useProgressiveRuntime({
       return "media-not-ready";
     }
 
+    if (
+      aggregatePieceDownloadRateKbps === null ||
+      !Number.isFinite(aggregatePieceDownloadRateKbps) ||
+      aggregatePieceDownloadRateKbps <= 0
+    ) {
+      return "piece-download-not-ready";
+    }
+
+    if (!isProgressiveTakeoverReady()) {
+      return "local-prefix-not-ready";
+    }
+
     return null;
   }, [
-    bufferSafetyMarginMs,
+    aggregatePieceDownloadRateKbps,
     connectedPeersCount,
-    currentBufferedFullLocalTrack,
+    currentProgressiveEngineType,
+    currentProgressiveManifest,
+    isProgressiveTakeoverReady,
     localTakeoverCooldownMs,
     mediaConnectedPeersCount,
     playback?.status,
     progressiveFallbackReason,
     remoteFirstLock,
     remoteFirstLockReason
+  ]);
+  const progressiveLocalEligible = progressiveLocalBlockedReason === null;
+  const fullLocalBlockedReason = useMemo(() => {
+    if (!currentBufferedFullLocalTrack) {
+      return "track-not-fully-cached";
+    }
+
+    return null;
+  }, [
+    currentBufferedFullLocalTrack
   ]);
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
   const nextQueueTrackPrefetch = useMemo(() => {
@@ -1199,7 +1233,7 @@ export function useProgressiveRuntime({
         ) / 1000;
       const now = Date.now();
       const activationReady =
-        progressiveHealthSnapshot.fallbackReason === null &&
+        progressiveLocalBlockedReason === null &&
         (activePlaybackSource === "remote-stream" ? isProgressiveTakeoverReady(now) : true);
       let engineReady = false;
       let localReady = false;
@@ -1255,7 +1289,7 @@ export function useProgressiveRuntime({
         activePlaybackSource !== "remote-stream"
       ) {
         progressiveWarmupReadyAtRef.current = activationReady && localReady ? now : null;
-        if (progressiveHealthSnapshot.fallbackReason && isLocalTakeoverAllowed(now)) {
+        if (progressiveFallbackReason && isLocalTakeoverAllowed(now)) {
           setProgressiveFallbackReason(null);
         }
         return;
@@ -1265,7 +1299,7 @@ export function useProgressiveRuntime({
         currentSource: activePlaybackSource,
         engineReady: localReady,
         activationReady,
-        fallbackReason: progressiveHealthSnapshot.fallbackReason,
+        fallbackReason: progressiveLocalBlockedReason,
         driftMs,
         warmupReadyAt: progressiveWarmupReadyAtRef.current,
         now,
@@ -1311,10 +1345,11 @@ export function useProgressiveRuntime({
     currentProgressiveManifest,
     activePlaybackSource,
     progressiveHealthSnapshot.startupReady,
-    progressiveHealthSnapshot.fallbackReason,
+    progressiveLocalBlockedReason,
     isProgressiveTakeoverReady,
     isLocalTakeoverAllowed,
     audioRef,
+    progressiveFallbackReason,
     setActivePlaybackSource,
     setProgressiveFallbackReason
   ]);
@@ -1407,6 +1442,70 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.aheadBufferedMs,
     isLocalTakeoverAllowed,
     audioRef,
+    setActivePlaybackSource
+  ]);
+
+  useEffect(() => {
+    const playbackState = roomSnapshot?.room.playback;
+    if (
+      !playbackState?.currentTrackId ||
+      !currentBufferedFullLocalTrack ||
+      currentProgressiveEngineType === "none" ||
+      activePlaybackSource !== "progressive-local"
+    ) {
+      return;
+    }
+
+    if (playbackState.status !== "playing") {
+      fullLocalWarmupReadyAtRef.current = null;
+      return;
+    }
+
+    const comfortBufferMs = getRemoteFirstComfortBufferMs(
+      currentTrack ?? {
+        mimeType: null,
+        codec: null
+      }
+    );
+
+    const syncUpgrade = () => {
+      const now = Date.now();
+      const readyForFullLocal =
+        fullLocalBlockedReason === null &&
+        isLocalTakeoverAllowed(now) &&
+        progressiveHealthSnapshot.aheadBufferedMs >= comfortBufferMs;
+
+      if (!readyForFullLocal) {
+        fullLocalWarmupReadyAtRef.current = null;
+        return;
+      }
+
+      if (fullLocalWarmupReadyAtRef.current === null) {
+        fullLocalWarmupReadyAtRef.current = now;
+        return;
+      }
+
+      if (now - fullLocalWarmupReadyAtRef.current < fullLocalSwitchDelayMs) {
+        return;
+      }
+
+      if (activePlaybackSource === "progressive-local") {
+        setActivePlaybackSource("full-local");
+      }
+    };
+
+    syncUpgrade();
+    const timerId = window.setInterval(syncUpgrade, progressiveRuntimeTickIntervalMs);
+    return () => window.clearInterval(timerId);
+  }, [
+    roomSnapshot?.room.playback,
+    currentBufferedFullLocalTrack,
+    currentProgressiveEngineType,
+    activePlaybackSource,
+    currentTrack,
+    fullLocalBlockedReason,
+    isLocalTakeoverAllowed,
+    progressiveHealthSnapshot.aheadBufferedMs,
     setActivePlaybackSource
   ]);
 
@@ -1516,6 +1615,8 @@ export function useProgressiveRuntime({
           remoteFirstLock,
           remoteFirstLockReason,
           localTakeoverCooldownMs: nextCooldownMs > 0 ? nextCooldownMs : null,
+          progressiveLocalEligible,
+          progressiveLocalBlockedReason,
           fullLocalReady,
           fullLocalEligible,
           fullLocalBlockedReason,
@@ -1529,6 +1630,8 @@ export function useProgressiveRuntime({
     fullLocalReady,
     fullLocalEligible,
     fullLocalBlockedReason,
+    progressiveLocalEligible,
+    progressiveLocalBlockedReason,
     remoteFirstLock,
     remoteFirstLockReason,
     progressiveHealthSnapshot.activeSource,

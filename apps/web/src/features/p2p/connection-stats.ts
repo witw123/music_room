@@ -6,6 +6,7 @@ export type PeerConnectionStatsSample = {
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
   targetAudioBitrateKbps?: number | null;
+  packetLossRate?: number | null;
   receiverJitterTargetMs?: number | null;
   mediaReceiveBitrateKbps: number | null;
   mediaSendBitrateKbps: number | null;
@@ -18,6 +19,8 @@ export type PeerConnectionStatsSnapshot = {
   inboundAudioTimestampMs: number | null;
   outboundAudioBytes: number | null;
   outboundAudioTimestampMs: number | null;
+  packetsLost: number | null;
+  packetsTotal: number | null;
 };
 
 export async function samplePeerConnectionStats(
@@ -55,6 +58,14 @@ export async function samplePeerConnectionStats(
     const outboundAudioBytes = getNumber(outboundAudio, "bytesSent");
     const inboundAudioTimestampMs = getTimestampMs(inboundAudio);
     const outboundAudioTimestampMs = getTimestampMs(outboundAudio);
+    const lossCounters =
+      resolvePacketLossCounters(inboundAudio, remoteInboundAudio, outboundAudio) ?? null;
+    const packetLossRate = calculatePacketLossRate({
+      currentLost: lossCounters?.lost ?? null,
+      currentTotal: lossCounters?.total ?? null,
+      previousLost: previousSnapshot?.packetsLost ?? null,
+      previousTotal: previousSnapshot?.packetsTotal ?? null
+    });
 
     return {
       sample: {
@@ -85,15 +96,17 @@ export async function samplePeerConnectionStats(
           previousBytes: previousSnapshot?.outboundAudioBytes ?? null,
           previousTimestampMs: previousSnapshot?.outboundAudioTimestampMs ?? null
         }),
-        packetsLost:
-          getInt(inboundAudio, "packetsLost") ?? getInt(remoteInboundAudio, "packetsLost"),
+        packetsLost: lossCounters?.lost ?? null,
+        packetLossRate,
         jitterMs: toMilliseconds(getNumber(inboundAudio, "jitter"))
       },
       snapshot: {
         inboundAudioBytes,
         inboundAudioTimestampMs,
         outboundAudioBytes,
-        outboundAudioTimestampMs
+        outboundAudioTimestampMs,
+        packetsLost: lossCounters?.lost ?? null,
+        packetsTotal: lossCounters?.total ?? null
       }
     };
   } catch {
@@ -206,4 +219,55 @@ function toBitrateKbps(input: {
   }
 
   return Math.round((byteDelta * 8) / timeDeltaMs);
+}
+
+function resolvePacketLossCounters(
+  inboundAudio: StatsRecord | null,
+  remoteInboundAudio: StatsRecord | null,
+  outboundAudio: StatsRecord | null
+) {
+  const inboundLost = getInt(inboundAudio, "packetsLost");
+  const inboundReceived = getInt(inboundAudio, "packetsReceived");
+  if (inboundLost !== null && inboundReceived !== null) {
+    return {
+      lost: inboundLost,
+      total: inboundLost + inboundReceived
+    };
+  }
+
+  const remoteLost = getInt(remoteInboundAudio, "packetsLost");
+  const remoteReceived =
+    getInt(remoteInboundAudio, "packetsReceived") ?? getInt(outboundAudio, "packetsSent");
+  if (remoteLost !== null && remoteReceived !== null) {
+    return {
+      lost: remoteLost,
+      total: remoteLost + remoteReceived
+    };
+  }
+
+  return null;
+}
+
+function calculatePacketLossRate(input: {
+  currentLost: number | null;
+  currentTotal: number | null;
+  previousLost: number | null;
+  previousTotal: number | null;
+}) {
+  if (
+    input.currentLost === null ||
+    input.currentTotal === null ||
+    input.previousLost === null ||
+    input.previousTotal === null
+  ) {
+    return null;
+  }
+
+  const lostDelta = input.currentLost - input.previousLost;
+  const totalDelta = input.currentTotal - input.previousTotal;
+  if (lostDelta < 0 || totalDelta <= 0) {
+    return null;
+  }
+
+  return Math.round((Math.min(1, lostDelta / totalDelta) * 100) * 10) / 10;
 }

@@ -135,7 +135,7 @@ type PieceTransferWindow = {
   uploads: PieceTransferSample[];
 };
 
-const pieceTransferWindowMs = 8_000;
+const pieceTransferWindowMs = 12_000;
 const hostMediaSyncRetryDelayMs = 75;
 const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const;
 const maxRemotePlaybackRetryAttempts = 16;
@@ -172,8 +172,7 @@ function calculatePieceTransferRateKbps(samples: PieceTransferSample[], now: num
   }
 
   const totalBytes = samples.reduce((sum, sample) => sum + sample.bytes, 0);
-  const oldestTimestampMs = samples[0]?.timestampMs ?? now;
-  const durationMs = Math.max(1_000, now - oldestTimestampMs);
+  const durationMs = pieceTransferWindowMs;
   return Math.round(((totalBytes * 8) / durationMs) * 10) / 10;
 }
 
@@ -776,6 +775,7 @@ export function useRoomRuntime({
         currentRoundTripTimeMs: number | null;
         availableOutgoingBitrateKbps: number | null;
         targetAudioBitrateKbps?: number | null;
+        packetLossRate?: number | null;
         receiverJitterTargetMs?: number | null;
         mediaReceiveBitrateKbps: number | null;
         mediaSendBitrateKbps: number | null;
@@ -802,6 +802,7 @@ export function useRoomRuntime({
               snapshot.availableOutgoingBitrateKbps,
             targetAudioBitrateKbps:
               input.sample.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
+            packetLossRate: input.sample.packetLossRate ?? snapshot.packetLossRate,
             receiverJitterTargetMs:
               input.sample.receiverJitterTargetMs ?? snapshot.receiverJitterTargetMs,
             mediaReceiveBitrateKbps:

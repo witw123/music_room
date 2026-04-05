@@ -140,6 +140,7 @@ describe("progressive playback helpers", () => {
           mediaProtocol: "udp",
           currentRoundTripTimeMs: 70,
           availableOutgoingBitrateKbps: 320,
+          packetLossRate: 1.2,
           packetsLost: 0,
           jitterMs: 4
         }
@@ -153,6 +154,7 @@ describe("progressive playback helpers", () => {
           mediaProtocol: "udp",
           currentRoundTripTimeMs: 240,
           availableOutgoingBitrateKbps: 64,
+          packetLossRate: 8.3,
           packetsLost: 130,
           jitterMs: 48
         }
@@ -166,8 +168,25 @@ describe("progressive playback helpers", () => {
           mediaProtocol: "udp",
           currentRoundTripTimeMs: 60,
           availableOutgoingBitrateKbps: 320,
+          packetLossRate: 1.1,
           packetsLost: 0,
           jitterMs: 3
+        }
+      })
+    ).toBe(false);
+  });
+
+  it("does not treat cumulative packetsLost as a weak-link signal when short-window loss is healthy", () => {
+    expect(
+      shouldEnableRemoteFirstLock({
+        diagnostics: {
+          mediaCandidateType: "host",
+          mediaProtocol: "udp",
+          currentRoundTripTimeMs: 72,
+          availableOutgoingBitrateKbps: 420,
+          packetLossRate: 0.8,
+          packetsLost: 640,
+          jitterMs: 6
         }
       })
     ).toBe(false);

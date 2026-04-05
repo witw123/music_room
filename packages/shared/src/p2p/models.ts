@@ -127,6 +127,8 @@ export const progressivePlaybackStatusSchema = z.object({
   fullLocalReady: z.boolean().optional(),
   fullLocalEligible: z.boolean().optional(),
   fullLocalBlockedReason: z.string().nullable().optional(),
+  progressiveLocalEligible: z.boolean().optional(),
+  progressiveLocalBlockedReason: z.string().nullable().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });
@@ -148,6 +150,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   currentRoundTripTimeMs: z.number().nonnegative().nullable(),
   availableOutgoingBitrateKbps: z.number().nonnegative().nullable(),
   targetAudioBitrateKbps: z.number().nonnegative().nullable().optional(),
+  packetLossRate: z.number().nonnegative().nullable().optional(),
   receiverJitterTargetMs: z.number().nonnegative().nullable().optional(),
   startupBufferMs: z.number().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional(),
