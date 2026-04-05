@@ -22,7 +22,7 @@ describe("p2p helpers", () => {
   });
 
   it("uses conservative chunk sizing and wider fetch windows for larger tracks", () => {
-    expect(defaultChunkSize).toBe(128 * 1024);
+    expect(defaultChunkSize).toBe(64 * 1024);
     expect(currentTrackChunkRequestLimit).toBe(24);
     expect(upcomingTrackChunkRequestLimit).toBe(8);
   });

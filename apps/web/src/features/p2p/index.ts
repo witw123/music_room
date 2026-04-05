@@ -29,7 +29,7 @@ export * from "./availability-state";
 export * from "./use-peer-diagnostics";
 export * from "./use-availability-announcements";
 
-export const defaultChunkSize = 128 * 1024;
+export const defaultChunkSize = 64 * 1024;
 export const currentTrackChunkRequestLimit = 24;
 export const upcomingTrackChunkRequestLimit = 8;
 const piecePersistenceBatchSize = 8;

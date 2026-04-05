@@ -199,17 +199,7 @@ export function MusicRoomApp({
     isPageVisible,
     uploadedTrackIdsRef,
     chunkSchedulerRef,
-    canHydrateTrack: (trackId) => {
-      if (trackId !== currentPlaybackTrackId) {
-        return true;
-      }
-
-      return (
-        roomSnapshot?.room.playback.status !== "playing" ||
-        progressiveSchedulerPolicy === "steady" ||
-        progressiveSchedulerPolicy === "background"
-      );
-    },
+    canHydrateTrack: () => true,
     hydrateTrackFromPieces
   });
 

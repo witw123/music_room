@@ -2,7 +2,7 @@
 
 import type { GuestSession } from "@music-room/shared";
 
-const defaultTrackPieceChunkSize = 128 * 1024;
+const defaultTrackPieceChunkSize = 64 * 1024;
 
 const capturedAudioGraphs = new WeakMap<
   HTMLAudioElement,

@@ -428,7 +428,9 @@ export class P2PMesh {
     };
 
     if (shouldInitiate) {
-      const channel = connection.createDataChannel("music-room-p2p");
+      const channel = connection.createDataChannel("music-room-p2p", {
+        ordered: false
+      });
       entry.channel = channel;
       this.bindChannel(peerId, entry, channel);
       const offer = await connection.createOffer();
