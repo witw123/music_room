@@ -399,6 +399,12 @@ function MeshStatusPanelBase({
                         <span>调度策略: {peer.progressivePlaybackStatus.schedulerPolicy ?? "未激活"}</span>
                         <span>启动就绪: {peer.progressivePlaybackStatus.startupReady ? "是" : "否"}</span>
                         <span>
+                          音频已解锁: {peer.progressivePlaybackStatus.audioUnlocked ? "是" : "否"}
+                        </span>
+                        <span>
+                          音源启动状态: {peer.progressivePlaybackStatus.sourceStartState ?? "未知"}
+                        </span>
+                        <span>
                           启动缓冲: {formatDurationMs(peer.progressivePlaybackStatus.startupBufferMs ?? null)}
                         </span>
                         <span>
@@ -470,6 +476,11 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.lastPlayStartFailure ? (
                         <p className="mt-1 text-red-300">
                           最近启动失败: {peer.progressivePlaybackStatus.lastPlayStartFailure}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.lastSourceStartError ? (
+                        <p className="mt-1 text-red-300">
+                          音源启动错误: {peer.progressivePlaybackStatus.lastSourceStartError}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (

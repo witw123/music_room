@@ -14,6 +14,9 @@ export type MemberTransferSummary = {
 
 export type LocalMemberPanelState = {
   memberId: string;
+  audioUnlocked: boolean;
+  sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
+  lastSourceStartError: string | null;
   transportLabel: string;
   transportSummary: {
     totalRateKbps: number | null;

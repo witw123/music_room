@@ -33,6 +33,7 @@ import {
   createRoomSnapshotResyncController,
   type RoomSnapshotResyncReason
 } from "@/features/room/room-snapshot-resync";
+import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -95,6 +96,14 @@ type UseRoomRuntimeInput = {
     | ProgressiveSchedulerPolicy
     | null;
   isCurrentSourceOwner: boolean;
+  audioUnlocked: boolean;
+  setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
+  sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
+  setSourceStartState: Dispatch<
+    SetStateAction<"idle" | "awaiting-unlock" | "starting" | "live" | "failed">
+  >;
+  lastSourceStartError: string | null;
+  setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   mergeLocalPieceAvailability: (
@@ -126,6 +135,7 @@ type UseRoomRuntimeInput = {
 type UseRoomRuntimeResult = {
   scheduleRemotePlaybackRetry: (attempt?: number) => void;
   syncHostMediaStream: () => Promise<void>;
+  ensureSourcePlaybackStarted: () => Promise<void>;
 };
 
 type PieceTransferSample = {
@@ -227,6 +237,12 @@ export function useRoomRuntime({
   activePlaybackSource,
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
+  audioUnlocked,
+  setAudioUnlocked,
+  sourceStartState,
+  setSourceStartState,
+  lastSourceStartError,
+  setLastSourceStartError,
   availabilityByTrack,
   queueAvailability,
   mergeLocalPieceAvailability,
@@ -287,6 +303,12 @@ export function useRoomRuntime({
   const lastPieceReceivedAtRef = useRef<number>(Date.now());
   const lastAvailabilityGrowthAtRef = useRef<number>(Date.now());
   const currentTrackAvailabilityProgressRef = useRef<string | null>(null);
+  const audioUnlockedRef = useRef(audioUnlocked);
+  const setAudioUnlockedRef = useRef(setAudioUnlocked);
+  const sourceStartStateRef = useRef(sourceStartState);
+  const setSourceStartStateRef = useRef(setSourceStartState);
+  const lastSourceStartErrorRef = useRef(lastSourceStartError);
+  const setLastSourceStartErrorRef = useRef(setLastSourceStartError);
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
@@ -350,6 +372,52 @@ export function useRoomRuntime({
     }
   }, []);
 
+  const updateSourceStartState = useCallback(
+    (
+      nextState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed",
+      options?: { error?: string | null; recordEvent?: boolean; summary?: string; level?: "info" | "warning" | "error" }
+    ) => {
+      setSourceStartStateRef.current(nextState);
+      sourceStartStateRef.current = nextState;
+      const nextError = options?.error ?? null;
+      setLastSourceStartErrorRef.current(nextError);
+      lastSourceStartErrorRef.current = nextError;
+      recordPeerDiagnosticRef.current({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: `source-start-${nextState}`,
+        summary:
+          options?.summary ??
+          (nextState === "awaiting-unlock"
+            ? "音源端等待本机音频解锁"
+            : nextState === "starting"
+              ? "音源端正在启动本地音频"
+              : nextState === "live"
+                ? "音源端已开始稳定分发"
+                : nextState === "failed"
+                  ? "音源端本机音频启动失败"
+                  : "音源端处于待机状态"),
+        level: options?.level ?? (nextState === "failed" ? "error" : "info"),
+        recordEvent: options?.recordEvent ?? false,
+        update: (snapshot) => ({
+          ...snapshot,
+          lastError: nextState === "failed" && nextError ? `音源端启动失败：${nextError}` : snapshot.lastError,
+          progressivePlaybackStatus: {
+            ...(
+              snapshot.progressivePlaybackStatus ??
+              createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+            ),
+            audioUnlocked: audioUnlockedRef.current,
+            sourceStartState: nextState,
+            lastSourceStartError: nextError
+          }
+        })
+      });
+    },
+    []
+  );
+
   const stopPresenceHeartbeat = useCallback(() => {
     if (presenceIntervalRef.current !== null) {
       window.clearInterval(presenceIntervalRef.current);
@@ -395,6 +463,53 @@ export function useRoomRuntime({
   useEffect(() => {
     uploadedTrackIdsRef.current = uploadedTrackIds;
   }, [uploadedTrackIds, uploadedTrackIdsRef]);
+
+  useEffect(() => {
+    audioUnlockedRef.current = audioUnlocked;
+  }, [audioUnlocked]);
+
+  useEffect(() => {
+    setAudioUnlockedRef.current = setAudioUnlocked;
+  }, [setAudioUnlocked]);
+
+  useEffect(() => {
+    sourceStartStateRef.current = sourceStartState;
+  }, [sourceStartState]);
+
+  useEffect(() => {
+    setSourceStartStateRef.current = setSourceStartState;
+  }, [setSourceStartState]);
+
+  useEffect(() => {
+    lastSourceStartErrorRef.current = lastSourceStartError;
+  }, [lastSourceStartError]);
+
+  useEffect(() => {
+    setLastSourceStartErrorRef.current = setLastSourceStartError;
+  }, [setLastSourceStartError]);
+
+  useEffect(() => {
+    recordPeerDiagnosticRef.current({
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "audio-unlock-state",
+      summary: audioUnlocked ? "房间音频已解锁" : "房间音频尚未解锁",
+      recordEvent: false,
+      update: (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          ...(
+            snapshot.progressivePlaybackStatus ??
+            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+          ),
+          audioUnlocked,
+          sourceStartState: sourceStartStateRef.current,
+          lastSourceStartError: lastSourceStartErrorRef.current
+        }
+      })
+    });
+  }, [audioUnlocked]);
 
   useEffect(() => {
     announceLocalCacheRef.current = announceLocalCache;
@@ -673,6 +788,7 @@ export function useRoomRuntime({
     syncState.inFlight = true;
     syncState.pendingKey = syncKey;
     let awaitingLocalAudioTrack = false;
+    let blockedUntilSourcePlaybackReady = false;
 
     try {
       try {
@@ -688,10 +804,8 @@ export function useRoomRuntime({
         }
 
         if (playback.status === "playing" && relayAudio.paused) {
-          await roomAudioOutput.playElement(relayAudio).catch(() => ({
-            ok: false,
-            error: "local-host-play-rejected"
-          }));
+          blockedUntilSourcePlaybackReady = true;
+          return;
         }
 
         const capture = captureAudioStream(relayAudio);
@@ -752,6 +866,11 @@ export function useRoomRuntime({
         return;
       }
 
+      if (blockedUntilSourcePlaybackReady) {
+        syncState.pendingKey = null;
+        return;
+      }
+
       if (nextPendingKey && nextPendingKey !== syncState.lastAppliedKey) {
         syncState.pendingKey = null;
         queueMicrotask(() => {
@@ -771,6 +890,83 @@ export function useRoomRuntime({
     peerId,
     remoteAudioRef,
     setStatusMessage
+  ]);
+
+  const ensureSourcePlaybackStarted = useCallback(async () => {
+    const currentRoom = currentRoomRef.current;
+    if (!currentRoom?.room.id || !peerId || !isCurrentSourceOwner) {
+      updateSourceStartState("idle");
+      return;
+    }
+
+    const playback = currentRoom.room.playback;
+    if (playback.status !== "playing" || !playback.currentTrackId) {
+      updateSourceStartState("idle");
+      await syncHostMediaStream();
+      return;
+    }
+
+    if (!audioUnlockedRef.current && !roomAudioOutput.isActivated()) {
+      updateSourceStartState("awaiting-unlock", {
+        summary: "音源端等待本机任意交互后自动启动",
+        level: "warning"
+      });
+      return;
+    }
+
+    if (!audioUnlockedRef.current && roomAudioOutput.isActivated()) {
+      setAudioUnlockedRef.current(true);
+      audioUnlockedRef.current = true;
+    }
+
+    const relayAudio = resolveHostRelayAudioElement({
+      activePlaybackSource,
+      localAudio: audioRef.current,
+      remoteAudio: remoteAudioRef.current
+    });
+
+    if (!relayAudio) {
+      updateSourceStartState("failed", {
+        error: "missing-source-audio-element",
+        summary: "音源端缺少可用的本地音频元素",
+        recordEvent: true,
+        level: "error"
+      });
+      return;
+    }
+
+    updateSourceStartState("starting");
+    const playResult = await roomAudioOutput.playElement(relayAudio);
+    if (!playResult.ok) {
+      updateSourceStartState("failed", {
+        error: playResult.error ?? "play-rejected",
+        summary: `音源端本机音频启动失败：${playResult.error ?? "play-rejected"}`,
+        recordEvent: true,
+        level: "error"
+      });
+      setStatusMessage("音源端正在等待本机音频启动，请在音源设备上任意点击一次。");
+      return;
+    }
+
+    if (!audioUnlockedRef.current) {
+      setAudioUnlockedRef.current(true);
+      audioUnlockedRef.current = true;
+    }
+
+    setLastSourceStartErrorRef.current(null);
+    lastSourceStartErrorRef.current = null;
+    await syncHostMediaStream();
+    updateSourceStartState("live");
+  }, [
+    activePlaybackSource,
+    audioRef,
+    currentRoomRef,
+    isCurrentSourceOwner,
+    peerId,
+    remoteAudioRef,
+    setStatusMessage,
+    syncHostMediaStream,
+    updateSourceStartState
   ]);
 
   const updateDataTransportStats = useCallback(
@@ -960,6 +1156,7 @@ export function useRoomRuntime({
   const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
   const scheduleRemotePlaybackRetryRef = useRef(scheduleRemotePlaybackRetry);
   const syncHostMediaStreamRef = useRef(syncHostMediaStream);
+  const ensureSourcePlaybackStartedRef = useRef(ensureSourcePlaybackStarted);
   const updateDataTransportStatsRef = useRef(updateDataTransportStats);
   const updateMediaTransportStatsRef = useRef(updateMediaTransportStats);
   const reportRealtimeFailureRef = useRef(reportRealtimeFailure);
@@ -976,6 +1173,10 @@ export function useRoomRuntime({
   useEffect(() => {
     syncHostMediaStreamRef.current = syncHostMediaStream;
   }, [syncHostMediaStream]);
+
+  useEffect(() => {
+    ensureSourcePlaybackStartedRef.current = ensureSourcePlaybackStarted;
+  }, [ensureSourcePlaybackStarted]);
 
   useEffect(
     () => () => {
@@ -1657,7 +1858,7 @@ export function useRoomRuntime({
             void announceLocalCacheRef.current(trackId);
           }
           if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
-            void syncHostMediaStreamRef.current();
+            void ensureSourcePlaybackStartedRef.current();
           }
           void requestRoomSnapshotResyncRef.current("subscribe-ack", roomId);
         }
@@ -1676,7 +1877,7 @@ export function useRoomRuntime({
       }
       resyncRealtimePeers();
       if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
-        void syncHostMediaStreamRef.current();
+        void ensureSourcePlaybackStartedRef.current();
       }
       void requestRoomSnapshotResyncRef.current("socket-connect", roomId);
       const joinCode = currentRoomRef.current?.room.joinCode;
@@ -1710,7 +1911,7 @@ export function useRoomRuntime({
       if (snapshot.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
         window.setTimeout(() => {
           if (activeRouteRoomIdRef.current === roomId) {
-            void syncHostMediaStreamRef.current();
+            void ensureSourcePlaybackStartedRef.current();
           }
         }, 0);
       }
@@ -1760,7 +1961,7 @@ export function useRoomRuntime({
       if (playback.sourceSessionId === activeSessionRef.current?.userId) {
         window.setTimeout(() => {
           if (activeRouteRoomIdRef.current === roomId) {
-            void syncHostMediaStreamRef.current();
+            void ensureSourcePlaybackStartedRef.current();
           }
         }, 0);
       }
@@ -2076,19 +2277,47 @@ export function useRoomRuntime({
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
+      updateSourceStartState("idle");
+      return;
+    }
+
+    void ensureSourcePlaybackStarted();
+  }, [
+    audioUnlocked,
+    ensureSourcePlaybackStarted,
+    isCurrentSourceOwner,
+    peerId,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.mediaEpoch,
+    roomSnapshot?.room.playback.sourceSessionId,
+    roomSnapshot?.room.playback.status,
+    updateSourceStartState,
+    activePlaybackSource,
+    mediaConnectedPeers.length
+  ]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
+      return;
+    }
+
+    if (!audioUnlocked || roomSnapshot.room.playback.status !== "playing") {
       return;
     }
 
     void syncHostMediaStream();
   }, [
+    audioUnlocked,
+    isCurrentSourceOwner,
+    peerId,
     roomSnapshot?.room.id,
     roomSnapshot?.room.members,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.status,
     roomSnapshot?.room.playback.sourceSessionId,
     roomSnapshot?.room.playback.mediaEpoch,
-    peerId,
-    isCurrentSourceOwner,
     activePlaybackSource,
     mediaConnectedPeers.length,
     syncHostMediaStream
@@ -2228,6 +2457,7 @@ export function useRoomRuntime({
 
   return {
     scheduleRemotePlaybackRetry,
-    syncHostMediaStream
+    syncHostMediaStream,
+    ensureSourcePlaybackStarted
   };
 }

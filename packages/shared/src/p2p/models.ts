@@ -103,6 +103,12 @@ export const remoteTrackStatusSchema = z.object({
 
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  audioUnlocked: z.boolean().optional(),
+  sourceStartState: z
+    .enum(["idle", "awaiting-unlock", "starting", "live", "failed"])
+    .nullable()
+    .optional(),
+  lastSourceStartError: z.string().nullable().optional(),
   transportGovernorMode: z
     .enum(["bootstrap", "segment-catchup", "local-primary", "emergency-fallback"])
     .nullable()

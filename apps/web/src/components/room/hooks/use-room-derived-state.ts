@@ -30,6 +30,9 @@ type UseRoomDerivedStateInput = {
   initialRoomId: string | null;
   activeSessionUserId?: string;
   mediaConnectionState: RoomMediaConnectionState;
+  audioUnlocked: boolean;
+  sourceStartState: LocalMemberPanelState["sourceStartState"];
+  lastSourceStartError: string | null;
   suppressRoomRecovery: boolean;
   isNavigatingRoomExit: boolean;
   isRecoveringRoom: boolean;
@@ -53,6 +56,9 @@ export function useRoomDerivedState({
   initialRoomId,
   activeSessionUserId,
   mediaConnectionState,
+  audioUnlocked,
+  sourceStartState,
+  lastSourceStartError,
   suppressRoomRecovery,
   isNavigatingRoomExit,
   isRecoveringRoom
@@ -260,6 +266,9 @@ export function useRoomDerivedState({
 
     return {
       memberId: localMember.id,
+      audioUnlocked,
+      sourceStartState,
+      lastSourceStartError,
       transportLabel: isSourceOwner ? "实时音频分发（本机汇总）" : "远端流链路（本机）",
       transportSummary: {
         totalRateKbps:
@@ -278,6 +287,9 @@ export function useRoomDerivedState({
         presenceState: localMember.presenceState,
         mediaConnectionState,
         isSourceOwner,
+        audioUnlocked,
+        sourceStartState,
+        lastSourceStartError,
         mediaConnectedPeersCount: countPeersWithinActiveMembers(
           mediaConnectedPeers,
           activeMemberPeerIds
@@ -289,10 +301,13 @@ export function useRoomDerivedState({
     activeMediaDiagnostic,
     activeMemberPeerIds,
     activeSessionUserId,
+    audioUnlocked,
+    lastSourceStartError,
     mediaConnectedPeers,
     mediaConnectionState,
     peerDiagnostics,
-    roomSnapshot
+    roomSnapshot,
+    sourceStartState
   ]);
 
   const statusTone =
@@ -519,6 +534,9 @@ function getLocalPlaybackStatus(input: {
   presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
   mediaConnectionState: RoomMediaConnectionState;
   isSourceOwner: boolean;
+  audioUnlocked: boolean;
+  sourceStartState: LocalMemberPanelState["sourceStartState"];
+  lastSourceStartError: string | null;
   mediaConnectedPeersCount: number;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
 }): LocalMemberPanelState["playbackStatus"] {
@@ -547,6 +565,35 @@ function getLocalPlaybackStatus(input: {
         detail: "当前还没有在向房间持续分发实时音频。",
         tone: "neutral",
         badgeText: "source-idle"
+      };
+    }
+
+    if (input.sourceStartState === "awaiting-unlock" || !input.audioUnlocked) {
+      return {
+        label: "等待本机音频启动",
+        detail: "当前设备尚未完成本机音频解锁，下一次任意交互后会自动开始实时分发。",
+        tone: "warning",
+        badgeText: "source-awaiting-unlock"
+      };
+    }
+
+    if (input.sourceStartState === "starting") {
+      return {
+        label: "正在启动实时分发",
+        detail: "本机已解锁，正在拉起本地音频并同步给房间。",
+        tone: "accent",
+        badgeText: "source-starting"
+      };
+    }
+
+    if (input.sourceStartState === "failed") {
+      return {
+        label: "本机音频启动失败",
+        detail: input.lastSourceStartError
+          ? `本机音频启动被阻止：${input.lastSourceStartError}`
+          : "当前未能拉起本机音频输出，等待下一次交互后自动重试。",
+        tone: "warning",
+        badgeText: "source-failed"
       };
     }
 

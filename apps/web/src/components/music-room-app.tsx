@@ -8,6 +8,7 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import { ChunkScheduler, useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
+import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -100,6 +101,11 @@ export function MusicRoomApp({
     useState<ProgressivePlaybackSource>("remote-stream");
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(() => roomAudioOutput.isActivated());
+  const [sourceStartState, setSourceStartState] = useState<
+    "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
+  >("idle");
+  const [lastSourceStartError, setLastSourceStartError] = useState<string | null>(null);
   const resetRealtimePeer = useCallback(() => {
     const nextPeerId = `peer_${crypto.randomUUID()}`;
     window.sessionStorage.setItem(peerStorageKey, nextPeerId);
@@ -329,7 +335,7 @@ export function MusicRoomApp({
     setIsNavigatingRoomExit
   });
 
-  const { scheduleRemotePlaybackRetry, syncHostMediaStream } = useRoomRuntime({
+  const { scheduleRemotePlaybackRetry, ensureSourcePlaybackStarted } = useRoomRuntime({
     workspaceOnly,
     initialRoomId,
     hydrated,
@@ -366,31 +372,37 @@ export function MusicRoomApp({
     setSchedulerMode,
     schedulerPlaybackBucketMs,
     bufferHealth,
-    activePlaybackSource,
-    progressiveSchedulerPolicy,
-    isCurrentSourceOwner,
-    availabilityByTrack,
-    queueAvailability,
-    mergeLocalPieceAvailability,
-    clearAvailabilityForPeer,
-    flushPendingAvailability,
-    recordPeerDiagnostic,
-    uploadedTracks,
-    uploadedTrackIds: Object.keys(uploadedTracks),
-    uploadedTrackIdsRef,
-    announceLocalCache,
-    deleteUploadedTrackArtifacts,
-    scheduleTrackHydration,
-    audioRef,
-    remoteAudioRef,
-    socketRef,
-    chunkSchedulerRef,
-    resetPlayerSurface,
-    setStatusMessage,
-    statusMessage,
-    refreshAvailableRooms,
-    refreshPlaylists
-  });
+      activePlaybackSource,
+      progressiveSchedulerPolicy,
+      isCurrentSourceOwner,
+      audioUnlocked,
+      setAudioUnlocked,
+      sourceStartState,
+      setSourceStartState,
+      lastSourceStartError,
+      setLastSourceStartError,
+      availabilityByTrack,
+      queueAvailability,
+      mergeLocalPieceAvailability,
+      clearAvailabilityForPeer,
+      flushPendingAvailability,
+      recordPeerDiagnostic,
+      uploadedTracks,
+      uploadedTrackIds: Object.keys(uploadedTracks),
+      uploadedTrackIdsRef,
+      announceLocalCache,
+      deleteUploadedTrackArtifacts,
+      scheduleTrackHydration,
+      audioRef,
+      remoteAudioRef,
+      socketRef,
+      chunkSchedulerRef,
+      resetPlayerSurface,
+      setStatusMessage,
+      statusMessage,
+      refreshAvailableRooms,
+      refreshPlaylists
+    });
 
   useEffect(() => {
     if (!initialRoomId) {
@@ -448,9 +460,74 @@ export function MusicRoomApp({
     }
   }, [roomSnapshot, setStatusMessage]);
 
+  const ensureRoomAudioUnlocked = useCallback(
+    async (reason: string) => {
+      if (roomAudioOutput.isActivated()) {
+        setAudioUnlocked(true);
+        setLastSourceStartError(null);
+        return true;
+      }
+
+      try {
+        await roomAudioOutput.primeOutputs({
+          localAudio: audioRef.current,
+          remoteAudio: remoteAudioRef.current
+        });
+        setAudioUnlocked(true);
+        setLastSourceStartError(null);
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "audio-unlocked",
+          summary: `房间音频已解锁：${reason}`,
+          recordEvent: false,
+          update: (snapshot) => ({
+            ...snapshot,
+            progressivePlaybackStatus: {
+              ...(
+                snapshot.progressivePlaybackStatus ??
+                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+              ),
+              audioUnlocked: true,
+              lastSourceStartError: null
+            }
+          })
+        });
+        return true;
+      } catch (error) {
+        const message = toUserFacingError(error);
+        setAudioUnlocked(roomAudioOutput.isActivated());
+        setLastSourceStartError(message);
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "audio-unlock-failed",
+          level: "error",
+          summary: `房间音频解锁失败：${message}`,
+          update: (snapshot) => ({
+            ...snapshot,
+            lastError: `房间音频解锁失败：${message}`,
+            progressivePlaybackStatus: {
+              ...(
+                snapshot.progressivePlaybackStatus ??
+                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+              ),
+              audioUnlocked: roomAudioOutput.isActivated(),
+              lastSourceStartError: message
+            }
+          })
+        });
+        return false;
+      }
+    },
+    [recordPeerDiagnostic]
+  );
+
   const handleLocalPlaybackReady = useCallback(() => {
-    void syncHostMediaStream();
-  }, [syncHostMediaStream]);
+    void ensureSourcePlaybackStarted();
+  }, [ensureSourcePlaybackStarted]);
 
   const handlePlaybackPositionChange = useCallback((positionMs: number) => {
     currentPlaybackPositionRef.current = positionMs;
@@ -483,10 +560,7 @@ export function MusicRoomApp({
       );
       setStatusMessage("正在准备音源...");
       try {
-        await roomAudioOutput.primeOutputs({
-          localAudio: audioRef.current,
-          remoteAudio: remoteAudioRef.current
-        });
+        await ensureRoomAudioUnlocked(`playback-intent:${input.reason}`);
       } catch (error) {
         const message = toUserFacingError(error);
         recordPeerDiagnostic({
@@ -504,8 +578,34 @@ export function MusicRoomApp({
         setStatusMessage("音频输出初始化失败，已跳过预激活并继续尝试播放。");
       }
     },
-    [recordPeerDiagnostic, setStatusMessage]
+    [ensureRoomAudioUnlocked, recordPeerDiagnostic, setStatusMessage]
   );
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || audioUnlocked) {
+      return;
+    }
+
+    const handleFirstInteraction = () => {
+      void ensureRoomAudioUnlocked("natural-room-interaction");
+    };
+
+    window.addEventListener("pointerdown", handleFirstInteraction, {
+      capture: true,
+      passive: true
+    });
+    window.addEventListener("touchstart", handleFirstInteraction, {
+      capture: true,
+      passive: true
+    });
+    window.addEventListener("keydown", handleFirstInteraction, true);
+
+    return () => {
+      window.removeEventListener("pointerdown", handleFirstInteraction, true);
+      window.removeEventListener("touchstart", handleFirstInteraction, true);
+      window.removeEventListener("keydown", handleFirstInteraction, true);
+    };
+  }, [audioUnlocked, ensureRoomAudioUnlocked, roomSnapshot?.room.id]);
 
   const handlePlayTrack = useCallback(
     async (trackId?: string) => {
@@ -574,13 +674,13 @@ export function MusicRoomApp({
     });
     setMediaConnectionState("live");
     if (isCurrentSourceOwner && activePlaybackSource === "remote-stream") {
-      void syncHostMediaStream();
+      void ensureSourcePlaybackStarted();
     }
   }, [
     activePlaybackSource,
+    ensureSourcePlaybackStarted,
     isCurrentSourceOwner,
-    recordPeerDiagnostic,
-    syncHostMediaStream
+    recordPeerDiagnostic
   ]);
 
   const handleRemoteWaiting = useCallback(() => {
@@ -675,6 +775,9 @@ export function MusicRoomApp({
     initialRoomId,
     activeSessionUserId: activeSession?.userId,
     mediaConnectionState,
+    audioUnlocked,
+    sourceStartState,
+    lastSourceStartError,
     suppressRoomRecovery,
     isNavigatingRoomExit,
     isRecoveringRoom
