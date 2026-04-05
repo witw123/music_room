@@ -29,6 +29,7 @@ function buildSnapshot(): RoomSnapshot {
         positionMs: 0,
         startedAt: null,
         queueVersion: 2,
+        playbackRevision: 2,
         mediaEpoch: 0
       }
     },

@@ -109,7 +109,7 @@ export function shouldAcceptPresenceSnapshot(
 }
 
 export function getPlaybackConsistencyVersion(playback: PlaybackSnapshot | null | undefined) {
-  return playback?.queueVersion ?? 0;
+  return playback?.playbackRevision ?? playback?.queueVersion ?? 0;
 }
 
 export function isSamePlaybackSnapshot(
@@ -134,6 +134,7 @@ export function isSamePlaybackSnapshot(
     current.positionMs === incoming.positionMs &&
     current.startedAt === incoming.startedAt &&
     current.queueVersion === incoming.queueVersion &&
+    current.playbackRevision === incoming.playbackRevision &&
     current.mediaEpoch === incoming.mediaEpoch
   );
 }
@@ -174,8 +175,10 @@ export function mergeRoomSnapshot(
     current.room.playback,
     incoming.room.playback
   );
+  const acceptRoomTopology =
+    (incoming.room.roomRevision ?? 0) >= (current.room.roomRevision ?? 0);
   const nextTracks = ensurePlaybackTrackMetadata(
-    acceptPlayback ? incoming.tracks : current.tracks,
+    acceptRoomTopology ? incoming.tracks : current.tracks,
     current.tracks,
     incoming.tracks,
     current.room.playback.currentTrackId,
@@ -185,10 +188,13 @@ export function mergeRoomSnapshot(
   return {
     ...incoming,
     tracks: nextTracks,
-    queue: acceptPlayback ? incoming.queue : current.queue,
+    queue: acceptRoomTopology ? incoming.queue : current.queue,
     playlists: incoming.playlists.length > 0 ? incoming.playlists : current.playlists,
     room: {
       ...incoming.room,
+      roomRevision: acceptRoomTopology
+        ? incoming.room.roomRevision ?? current.room.roomRevision ?? 0
+        : current.room.roomRevision ?? 0,
       members: acceptPresence ? incoming.room.members : current.room.members,
       presenceRevision: acceptPresence
         ? getPresenceRevision(incoming.room)

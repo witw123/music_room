@@ -192,7 +192,7 @@ describe("progressive playback helpers", () => {
     ).toBe(false);
   });
 
-  it("keeps current-track requests focused on the startup prefix", () => {
+  it("focuses current-track startup requests around the active playback window", () => {
     const manifest = buildProgressiveTrackManifest(track, availability)!;
     expect(
       getPriorityChunkIndexes({
@@ -201,7 +201,7 @@ describe("progressive playback helpers", () => {
         playbackPositionMs: 40_000,
         policy: "startup"
       }).slice(0, 4)
-    ).toEqual([2, 3, 4, 5]);
+    ).toEqual([4, 5]);
   });
 
   it("moves from startup to background once the current track is complete", () => {
@@ -216,6 +216,7 @@ describe("progressive playback helpers", () => {
       positionMs: 10_000,
       startedAt: null,
       queueVersion: 1,
+      playbackRevision: 1,
       mediaEpoch: 1
     };
 
@@ -261,6 +262,7 @@ describe("progressive playback helpers", () => {
       positionMs: 70_000,
       startedAt: null,
       queueVersion: 1,
+      playbackRevision: 1,
       mediaEpoch: 1
     };
 

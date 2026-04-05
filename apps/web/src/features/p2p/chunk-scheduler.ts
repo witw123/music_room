@@ -374,7 +374,9 @@ export class ChunkScheduler {
                 manifest: currentTrackManifest,
                 availableChunks: [...currentTrackState.ownedChunks],
                 playbackPositionMs: this.playbackPositionMs,
-                policy: currentTrackWantedPolicy
+                policy: currentTrackWantedPolicy,
+                lookBehindMs: currentTrackProfile.lookBehindMs,
+                lookAheadMs: currentTrackProfile.lookAheadMs
               })
             : getCurrentPlaybackWindowChunks({
                 durationMs: currentTrack.durationMs,
@@ -445,7 +447,9 @@ export class ChunkScheduler {
                 manifest: queuedManifest,
                 availableChunks: [...queuedState.ownedChunks],
                 playbackPositionMs: 0,
-                policy: "startup"
+                policy: "startup",
+                lookBehindMs: 0,
+                lookAheadMs: this.upcomingPrefetchMs()
               })
             : getUpcomingWindowChunks({
                 durationMs: nextQueuedTrack.durationMs,

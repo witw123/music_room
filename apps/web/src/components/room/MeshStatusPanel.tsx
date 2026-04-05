@@ -386,6 +386,9 @@ function MeshStatusPanelBase({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <span>播放源: {peer.progressivePlaybackStatus.activeSource ?? "未启用"}</span>
+                        <span>
+                          Governor: {peer.progressivePlaybackStatus.transportGovernorMode ?? "未激活"}
+                        </span>
                         <span>引擎: {peer.progressivePlaybackStatus.engineType ?? "none"}</span>
                         <span>
                           连续缓冲: {Math.round(peer.progressivePlaybackStatus.contiguousBufferedMs / 1000)}s

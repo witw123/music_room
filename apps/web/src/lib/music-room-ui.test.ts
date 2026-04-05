@@ -139,7 +139,7 @@ describe("music-room-ui helpers", () => {
     expect(shouldAcceptPresenceSnapshot(currentMembers, 7, incomingMembers, 6)).toBe(false);
   });
 
-  it("keeps newer queue and playback while still applying fresher presence from a stale full room snapshot", () => {
+  it("applies fresher topology while still preserving newer playback from an older full room snapshot", () => {
     const current = {
       room: {
         id: "room_1",
@@ -215,7 +215,7 @@ describe("music-room-ui helpers", () => {
         id: "track_old"
       })
     );
-    expect(merged.queue).toEqual(current.queue);
+    expect(merged.queue).toEqual(incoming.queue);
   });
 
   it("keeps equal-revision full snapshots when member presence is fresher", () => {
@@ -581,6 +581,7 @@ describe("music-room-ui helpers", () => {
       positionMs: 12_000,
       startedAt: "2026-04-03T12:00:00.000Z",
       queueVersion: 5,
+      playbackRevision: 5,
       mediaEpoch: 3
     };
 
@@ -595,7 +596,32 @@ describe("music-room-ui helpers", () => {
     expect(
       shouldAcceptPlaybackSnapshot(current, {
         ...current,
-        queueVersion: 6
+        queueVersion: 6,
+        playbackRevision: 6
+      })
+    ).toBe(true);
+  });
+
+  it("prefers playbackRevision over queueVersion when ordering playback snapshots", () => {
+    const current = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host_1",
+      sourcePeerId: "peer_host",
+      sourceTrackId: "track_1",
+      positionMs: 12_000,
+      startedAt: "2026-04-03T12:00:00.000Z",
+      queueVersion: 9,
+      playbackRevision: 9,
+      mediaEpoch: 3
+    };
+
+    expect(
+      shouldAcceptPlaybackSnapshot(current, {
+        ...current,
+        queueVersion: 8,
+        playbackRevision: 10
       })
     ).toBe(true);
   });

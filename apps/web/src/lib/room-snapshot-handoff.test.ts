@@ -21,6 +21,7 @@ function buildSnapshot(roomId = "room_1"): RoomSnapshot {
         positionMs: 0,
         startedAt: null,
         queueVersion: 1,
+        playbackRevision: 1,
         mediaEpoch: 0
       }
     },

@@ -65,6 +65,7 @@ function buildRoomSnapshot(): RoomSnapshot {
         positionMs: 30_000,
         startedAt: "2026-03-31T10:00:00.000Z",
         queueVersion: 1,
+        playbackRevision: 1,
         mediaEpoch: 1
       }
     },
@@ -273,7 +274,7 @@ describe("ChunkScheduler", () => {
       expect.objectContaining({ peerId: "peer_host", trackId: "track_1" })
     );
 
-    scheduler.markRequestTimeout("track_1", 2, "peer_host");
+    scheduler.markRequestTimeout("track_1", 3, "peer_host");
     await vi.advanceTimersByTimeAsync(200);
 
     expect(requestPiece).toHaveBeenCalledWith(

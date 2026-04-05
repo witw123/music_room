@@ -58,6 +58,30 @@ function createRedisMock() {
   };
 }
 
+function createSignalingGatewayMock() {
+  const availabilityByRoom = new Map<string, Map<string, unknown[]>>();
+  return {
+    setTrackAvailability(roomId: string, trackId: string, announcements: unknown[]) {
+      const roomAvailability = availabilityByRoom.get(roomId) ?? new Map<string, unknown[]>();
+      roomAvailability.set(trackId, announcements);
+      availabilityByRoom.set(roomId, roomAvailability);
+    },
+    getTrackAvailabilityAnnouncements(roomId: string, trackId: string) {
+      return (availabilityByRoom.get(roomId)?.get(trackId) ?? []) as Array<{
+        roomId: string;
+        trackId: string;
+        ownerPeerId: string;
+        nickname: string;
+        totalChunks: number;
+        chunkSize: number;
+        availableChunks: number[];
+        source: "live_upload" | "local_cache";
+        announcedAt: string;
+      }>;
+    }
+  };
+}
+
 describe("RoomService", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -533,6 +557,73 @@ describe("RoomService", () => {
         actorSessionId: host.id
       })
     ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
+  });
+
+  it("allows playback from an online cached peer when the uploader is offline", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const signalingGateway = createSignalingGatewayMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(
+      authService,
+      prisma as never,
+      redis as never,
+      signalingGateway as never
+    );
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "member-track-cache-failover",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    signalingGateway.setTrackAvailability(snapshot.room.id, memberTrack.id, [
+      {
+        roomId: snapshot.room.id,
+        trackId: memberTrack.id,
+        ownerPeerId: "peer-host",
+        nickname: host.nickname,
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1, 2, 3],
+        source: "local_cache",
+        announcedAt: new Date().toISOString()
+      }
+    ]);
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: memberTrack.id,
+        actorSessionId: host.id
+      })
+    ).resolves.toMatchObject({
+      status: "playing",
+      currentTrackId: memberTrack.id,
+      sourceSessionId: host.id,
+      sourcePeerId: "peer-host"
+    });
   });
 
   it("keeps playback snapshot consistent when a member pauses and seeks", async () => {
@@ -1112,6 +1203,9 @@ describe("RoomService", () => {
     expect(roomAfterDisconnect.playback.positionMs).toBeGreaterThanOrEqual(0);
     expect(roomAfterDisconnect.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
     expect(roomAfterDisconnect.playback.queueVersion).toBeGreaterThan(playback.queueVersion);
+    expect(roomAfterDisconnect.playback.playbackRevision).toBeGreaterThan(
+      playback.playbackRevision
+    );
     expect(nextSnapshot.room.members.find((entry) => entry.id === host.id)).toMatchObject({
       id: host.id,
       peerId: null,
@@ -1122,6 +1216,87 @@ describe("RoomService", () => {
       currentTrackId: track.id,
       sourceSessionId: host.id,
       sourcePeerId: null
+    });
+  });
+
+  it("re-elects an online cached peer when the current source disconnects", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const signalingGateway = createSignalingGatewayMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(
+      authService,
+      prisma as never,
+      redis as never,
+      signalingGateway as never
+    );
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Disconnect Source",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "disconnect-source-reselect",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 6,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    signalingGateway.setTrackAvailability(snapshot.room.id, track.id, [
+      {
+        roomId: snapshot.room.id,
+        trackId: track.id,
+        ownerPeerId: "peer-member",
+        nickname: member.nickname,
+        totalChunks: 6,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1, 2, 3, 4, 5],
+        source: "local_cache",
+        announcedAt: new Date().toISOString()
+      }
+    ]);
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+
+    const roomAfterDisconnect = await roomService.updatePeerPresence(
+      snapshot.room.id,
+      host.id,
+      null,
+      "reconnecting"
+    );
+    const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(playback.status).toBe("playing");
+    expect(roomAfterDisconnect.playback).toMatchObject({
+      status: "playing",
+      currentTrackId: track.id,
+      sourceSessionId: member.id,
+      sourcePeerId: "peer-member",
+      sourceTrackId: track.id
+    });
+    expect(roomAfterDisconnect.playback.playbackRevision).toBeGreaterThan(playback.playbackRevision);
+    expect(nextSnapshot.room.playback).toMatchObject({
+      status: "playing",
+      currentTrackId: track.id,
+      sourceSessionId: member.id,
+      sourcePeerId: "peer-member"
     });
   });
 
@@ -1168,6 +1343,7 @@ describe("RoomService", () => {
       sourcePeerId: null
     });
     expect(pausedPlayback.mediaEpoch).toBe(playback.mediaEpoch + 1);
+    expect(pausedPlayback.playbackRevision).toBeGreaterThan(playback.playbackRevision);
     expect(pausedPlayback.positionMs).toBe(3_500);
     expect(nextSnapshot.room.playback).toMatchObject({
       status: "paused",

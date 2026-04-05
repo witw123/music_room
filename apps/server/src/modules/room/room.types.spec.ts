@@ -20,11 +20,13 @@ describe("room.types persistence helpers", () => {
           positionMs: 0,
           startedAt: null,
           queueVersion: 3,
+          playbackRevision: 3,
           mediaEpoch: 1
         }
       })
     ).toMatchObject({
       queueVersion: 3,
+      playbackRevision: 3,
       mediaEpoch: 1,
       presenceRevision: 7,
       roomRevision: 11
@@ -47,6 +49,7 @@ describe("room.types persistence helpers", () => {
         positionMs: 0,
         startedAt: null,
         queueVersion: 2,
+        playbackRevision: 2,
         mediaEpoch: 0,
         presenceRevision: 5,
         roomRevision: 9
@@ -58,5 +61,6 @@ describe("room.types persistence helpers", () => {
 
     expect(record.room.presenceRevision).toBe(5);
     expect(record.room.roomRevision).toBe(9);
+    expect(record.room.playback.playbackRevision).toBe(2);
   });
 });

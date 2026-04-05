@@ -17,6 +17,7 @@ const playingPlayback = {
   positionMs: 2_000,
   startedAt: "2026-04-03T09:00:00.000Z",
   queueVersion: 2,
+  playbackRevision: 2,
   mediaEpoch: 2
 };
 
@@ -26,6 +27,7 @@ describe("playback start intent helpers", () => {
       reason: "queue-item",
       queueItemId: "queue_2",
       trackId: "track_2",
+      targetPlaybackRevision: 2,
       previousQueueVersion: 1,
       previousMediaEpoch: 1,
       now: 1_000
@@ -39,6 +41,7 @@ describe("playback start intent helpers", () => {
     const intent = createPlaybackStartIntent({
       reason: "next",
       previousTrackId: "track_1",
+      targetPlaybackRevision: 2,
       previousQueueVersion: 1,
       previousMediaEpoch: 1,
       now: 1_000
@@ -54,6 +57,7 @@ describe("playback start intent helpers", () => {
     const intent = createPlaybackStartIntent({
       reason: "track",
       trackId: "track_2",
+      targetPlaybackRevision: 3,
       previousQueueVersion: 2,
       previousMediaEpoch: 2,
       now: 1_000
@@ -65,7 +69,8 @@ describe("playback start intent helpers", () => {
         intent,
         {
           ...playingPlayback,
-          queueVersion: 3
+          queueVersion: 3,
+          playbackRevision: 3
         },
         1_500
       )

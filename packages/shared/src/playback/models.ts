@@ -10,6 +10,7 @@ export const playbackSnapshotSchema = z.object({
   positionMs: z.number().int().nonnegative(),
   startedAt: z.string().datetime().nullable(),
   queueVersion: z.number().int().positive(),
+  playbackRevision: z.number().int().positive().default(1),
   mediaEpoch: z.number().int().nonnegative()
 });
 

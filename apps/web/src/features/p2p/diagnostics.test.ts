@@ -58,6 +58,7 @@ describe("p2p diagnostics", () => {
         ...snapshot,
         progressivePlaybackStatus: {
           activeSource: "full-local",
+          transportGovernorMode: "local-primary",
           engineType: "pcm",
           aheadBufferedMs: 80_000,
           startupReady: true,
@@ -79,6 +80,7 @@ describe("p2p diagnostics", () => {
         ...snapshot,
         progressivePlaybackStatus: {
           activeSource: "full-local",
+          transportGovernorMode: "local-primary",
           engineType: "pcm",
           aheadBufferedMs: 96_000,
           startupReady: true,

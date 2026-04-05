@@ -38,6 +38,10 @@ export type ProgressiveHealthSnapshot = {
   remainingPlaybackMs: number | null;
 };
 
+function getPlaybackRiskWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
+  return Math.max(getTakeoverWindowMs(input), getRemoteFirstComfortBufferMs(input));
+}
+
 const outrunRecoverySafetyFactor = 0.92;
 
 export function isChromeOrEdgeBrowser() {
@@ -177,6 +181,72 @@ export function chunkIndexToPositionMs(
   }
 
   return Math.floor((chunkIndex / manifest.totalChunks) * manifest.durationMs);
+}
+
+function getChunkIndexForPositionMs(
+  manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">,
+  positionMs: number
+) {
+  if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    manifest.totalChunks - 1,
+    Math.max(0, Math.floor((Math.max(0, positionMs) / manifest.durationMs) * manifest.totalChunks))
+  );
+}
+
+function getPlaybackWindowChunkIndexes(input: {
+  manifest: ProgressiveTrackManifest;
+  playbackPositionMs: number;
+  lookBehindMs: number;
+  lookAheadMs: number;
+}) {
+  const { manifest, playbackPositionMs, lookBehindMs, lookAheadMs } = input;
+  const currentChunkIndex = getChunkIndexForPositionMs(manifest, playbackPositionMs);
+  const startPositionMs = Math.max(0, playbackPositionMs - Math.max(0, lookBehindMs));
+  const endPositionMs = Math.min(
+    manifest.durationMs,
+    Math.max(0, playbackPositionMs) + Math.max(0, lookAheadMs)
+  );
+  const startChunkIndex = getChunkIndexForPositionMs(manifest, startPositionMs);
+  const endChunkIndex = Math.max(
+    currentChunkIndex,
+    getChunkIndexForPositionMs(manifest, endPositionMs)
+  );
+
+  return {
+    currentChunkIndex,
+    startChunkIndex,
+    endChunkIndex
+  };
+}
+
+function appendMissingChunks(
+  target: number[],
+  owned: Set<number>,
+  seen: Set<number>,
+  from: number,
+  to: number,
+  step: 1 | -1
+) {
+  if (step === 1) {
+    for (let chunkIndex = from; chunkIndex <= to; chunkIndex += 1) {
+      if (!owned.has(chunkIndex) && !seen.has(chunkIndex)) {
+        seen.add(chunkIndex);
+        target.push(chunkIndex);
+      }
+    }
+    return;
+  }
+
+  for (let chunkIndex = from; chunkIndex >= to; chunkIndex -= 1) {
+    if (!owned.has(chunkIndex) && !seen.has(chunkIndex)) {
+      seen.add(chunkIndex);
+      target.push(chunkIndex);
+    }
+  }
 }
 
 export function getContiguousBufferedMs(
@@ -372,13 +442,17 @@ export function resolveSchedulerPolicy(input: {
   const estimatedFillTimeMs = estimateTrackFillTimeMs({
     manifest: input.manifest,
     availableChunks: input.availableChunks,
-    downloadRateKbps: input.currentPieceDownloadRateKbps ?? null
+    downloadRateKbps: input.currentPieceDownloadRateKbps ?? null,
+    playbackPositionMs: positionMs,
+    lookBehindMs: 4_000,
+    lookAheadMs: getPlaybackRiskWindowMs(input.manifest)
   });
   const hasOutrunRisk =
     !input.currentTrackComplete &&
-    remainingPlaybackMs > 0 &&
     estimatedFillTimeMs !== null &&
-    estimatedFillTimeMs >= remainingPlaybackMs * getOutrunRecoverySafetyFactor();
+    (aheadBufferedMs <= getCriticalBufferThresholdMs() ||
+      estimatedFillTimeMs >=
+        Math.max(aheadBufferedMs, getCriticalBufferThresholdMs()) * getOutrunRecoverySafetyFactor());
 
   if (!input.currentTrackComplete) {
     if (!isStartupReady({
@@ -423,7 +497,10 @@ export function buildProgressiveHealthSnapshot(input: {
   const estimatedFillTimeMs = estimateTrackFillTimeMs({
     manifest: input.manifest,
     availableChunks,
-    downloadRateKbps: input.currentPieceDownloadRateKbps ?? null
+    downloadRateKbps: input.currentPieceDownloadRateKbps ?? null,
+    playbackPositionMs,
+    lookBehindMs: 4_000,
+    lookAheadMs: input.manifest ? getPlaybackRiskWindowMs(input.manifest) : 0
   });
   const startupReady = isStartupReady({
     manifest: input.manifest,
@@ -464,13 +541,28 @@ export function estimateTrackFillTimeMs(input: {
   manifest: ProgressiveTrackManifest | null;
   availableChunks: number[];
   downloadRateKbps: number | null;
+  playbackPositionMs?: number | null;
+  lookBehindMs?: number;
+  lookAheadMs?: number;
 }) {
   if (!input.manifest) {
     return null;
   }
 
-  const ownedChunkCount = new Set(input.availableChunks).size;
-  const missingChunkCount = Math.max(0, input.manifest.totalChunks - ownedChunkCount);
+  const owned = new Set(input.availableChunks);
+  const missingChunkIndexes =
+    typeof input.playbackPositionMs === "number" &&
+    typeof input.lookAheadMs === "number"
+      ? getPriorityChunkIndexes({
+          manifest: input.manifest,
+          availableChunks: input.availableChunks,
+          playbackPositionMs: input.playbackPositionMs,
+          policy: "startup",
+          lookBehindMs: input.lookBehindMs ?? 0,
+          lookAheadMs: input.lookAheadMs
+        })
+      : [...Array(input.manifest.totalChunks).keys()].filter((chunkIndex) => !owned.has(chunkIndex));
+  const missingChunkCount = missingChunkIndexes.length;
   if (missingChunkCount === 0) {
     return 0;
   }
@@ -526,14 +618,6 @@ export function shouldEnableRemoteFirstLock(input: {
   }
 
   if (
-    typeof diagnostics.packetsLost === "number" &&
-    diagnostics.packetLossRate === null &&
-    diagnostics.packetsLost >= 120
-  ) {
-    return true;
-  }
-
-  if (
     typeof diagnostics.jitterMs === "number" &&
     diagnostics.jitterMs >= 45
   ) {
@@ -548,43 +632,41 @@ export function getPriorityChunkIndexes(input: {
   availableChunks: number[];
   playbackPositionMs: number;
   policy: ProgressiveSchedulerPolicy;
+  lookBehindMs?: number;
+  lookAheadMs?: number;
 }) {
   const { manifest, playbackPositionMs, policy } = input;
   const owned = new Set(input.availableChunks);
-  const startupEndPositionMs = Math.min(
-    manifest.durationMs,
-    Math.max(0, playbackPositionMs) + getStartupWindowMs(manifest)
-  );
-  const steadyEndPositionMs = Math.min(
-    manifest.durationMs,
-    Math.max(0, playbackPositionMs) + getTargetSteadyBufferMs(manifest)
-  );
-  const targetPositionMs =
-    policy === "pause-fill"
+  const wantedChunks: number[] = [];
+  const seen = new Set<number>();
+  const derivedLookBehindMs =
+    input.lookBehindMs ??
+    (policy === "steady" || policy === "background" ? 8_000 : 0);
+  const derivedLookAheadMs =
+    input.lookAheadMs ??
+    (policy === "pause-fill"
       ? manifest.durationMs
       : policy === "outrun-recovery"
-        ? manifest.durationMs
-      : policy === "steady" || policy === "background"
-        ? steadyEndPositionMs
-        : startupEndPositionMs;
-  const targetChunkIndex = Math.min(
-    manifest.totalChunks - 1,
-    Math.max(0, Math.ceil((targetPositionMs / Math.max(manifest.durationMs, 1)) * manifest.totalChunks) - 1)
-  );
+        ? Math.max(getRemoteFirstComfortBufferMs(manifest), getTargetSteadyBufferMs(manifest) * 2)
+        : policy === "steady" || policy === "background"
+          ? getTargetSteadyBufferMs(manifest)
+          : getStartupWindowMs(manifest));
+  const { currentChunkIndex, startChunkIndex, endChunkIndex } = getPlaybackWindowChunkIndexes({
+    manifest,
+    playbackPositionMs,
+    lookBehindMs: derivedLookBehindMs,
+    lookAheadMs: derivedLookAheadMs
+  });
 
-  const wantedChunks: number[] = [];
-  for (let chunkIndex = 0; chunkIndex <= targetChunkIndex; chunkIndex += 1) {
-    if (!owned.has(chunkIndex)) {
-      wantedChunks.push(chunkIndex);
-    }
+  appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex, endChunkIndex, 1);
+  appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex - 1, startChunkIndex, -1);
+
+  if (policy === "outrun-recovery" || policy === "pause-fill") {
+    appendMissingChunks(wantedChunks, owned, seen, endChunkIndex + 1, manifest.totalChunks - 1, 1);
   }
 
   if (policy === "pause-fill") {
-    for (let chunkIndex = targetChunkIndex + 1; chunkIndex < manifest.totalChunks; chunkIndex += 1) {
-      if (!owned.has(chunkIndex)) {
-        wantedChunks.push(chunkIndex);
-      }
-    }
+    appendMissingChunks(wantedChunks, owned, seen, startChunkIndex - 1, 0, -1);
   }
 
   return wantedChunks;

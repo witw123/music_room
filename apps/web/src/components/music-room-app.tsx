@@ -21,6 +21,7 @@ import {
   createPlaybackStartIntent,
   type PlaybackStartIntent
 } from "@/features/playback/playback-start-intent";
+import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
@@ -143,7 +144,7 @@ export function MusicRoomApp({
   const playbackTransitionKey = roomSnapshot?.room.playback.currentTrackId
     ? [
         roomSnapshot.room.playback.currentTrackId,
-        roomSnapshot.room.playback.queueVersion,
+        roomSnapshot.room.playback.playbackRevision ?? roomSnapshot.room.playback.queueVersion,
         roomSnapshot.room.playback.mediaEpoch
       ].join(":")
     : null;
@@ -416,7 +417,9 @@ export function MusicRoomApp({
 
     const hasFullLocalTrack = !!uploadedTracks[currentPlaybackTrackId];
     setActivePlaybackSource(
-      isCurrentSourceOwner && hasFullLocalTrack ? "full-local" : "remote-stream"
+      isCurrentSourceOwner
+        ? getInitialProgressivePlaybackSource(hasFullLocalTrack)
+        : "remote-stream"
     );
     setProgressiveFallbackReason(null);
   }, [playbackTransitionKey, currentPlaybackTrackId, isCurrentSourceOwner]);
@@ -470,6 +473,10 @@ export function MusicRoomApp({
           trackId: input.trackId,
           queueItemId: input.queueItemId,
           previousTrackId: input.previousTrackId,
+          targetPlaybackRevision:
+            (roomSnapshot?.room.playback.playbackRevision ??
+              roomSnapshot?.room.playback.queueVersion ??
+              0) + 1,
           previousQueueVersion: roomSnapshot?.room.playback.queueVersion ?? null,
           previousMediaEpoch: roomSnapshot?.room.playback.mediaEpoch ?? null
         })

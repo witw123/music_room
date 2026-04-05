@@ -7,7 +7,7 @@ import { RoomService } from "./room.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 
 @Module({
-  imports: [AuthModule, forwardRef(() => PlaylistModule), SignalingModule],
+  imports: [AuthModule, forwardRef(() => PlaylistModule), forwardRef(() => SignalingModule)],
   controllers: [RoomController],
   providers: [RoomService, RoomRealtimePublisher],
   exports: [RoomService, RoomRealtimePublisher]

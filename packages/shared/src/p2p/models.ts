@@ -103,6 +103,10 @@ export const remoteTrackStatusSchema = z.object({
 
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  transportGovernorMode: z
+    .enum(["bootstrap", "segment-catchup", "local-primary", "emergency-fallback"])
+    .nullable()
+    .optional(),
   engineType: z.enum(["none", "mse", "pcm"]).nullable(),
   contiguousBufferedMs: z.number().int().nonnegative(),
   aheadBufferedMs: z.number().int().nonnegative(),

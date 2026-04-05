@@ -159,6 +159,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     remoteTrackStatus: createEmptyRemoteTrackStatus(),
     progressivePlaybackStatus: {
       activeSource: null,
+      transportGovernorMode: null,
       engineType: null,
       contiguousBufferedMs: 0,
       aheadBufferedMs: 0,

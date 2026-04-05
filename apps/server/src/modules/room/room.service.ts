@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional, forwardRef } from "@nestjs/common";
 import { randomBytes, randomUUID } from "node:crypto";
 import type {
   PlaybackSnapshot,
@@ -13,6 +13,7 @@ import type {
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
+import { SignalingGateway } from "../signaling/signaling.gateway";
 import { type RoomRecord } from "./room.types";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPresenceService } from "./services/room-presence.service";
@@ -45,7 +46,10 @@ export class RoomService {
   constructor(
     private readonly authService: AuthService,
     private readonly prisma: PrismaService,
-    private readonly redis: RedisService
+    private readonly redis: RedisService,
+    @Optional()
+    @Inject(forwardRef(() => SignalingGateway))
+    private readonly signalingGateway?: SignalingGateway
   ) {
     this.roomRecordRepository = new RoomRecordRepository(
       this.rooms,
@@ -60,7 +64,10 @@ export class RoomService {
       this.inMemoryPresence,
       this.presenceTtlSeconds
     );
-    this.roomPlaybackService = new RoomPlaybackService(this.roomPresenceService);
+    this.roomPlaybackService = new RoomPlaybackService(
+      this.roomPresenceService,
+      this.signalingGateway
+    );
     this.roomSnapshotService = new RoomSnapshotService(
       this.roomPresenceService,
       this.roomPlaybackService
@@ -90,6 +97,7 @@ export class RoomService {
         positionMs: 0,
         startedAt: null,
         queueVersion: 1,
+        playbackRevision: 1,
         mediaEpoch: 0
       }
     };
@@ -283,7 +291,7 @@ export class RoomService {
     }
 
     if (presenceState !== "online") {
-      this.roomPlaybackService.pausePlaybackForSourceDisconnect(record, sessionId);
+      await this.roomPlaybackService.handleSourceAvailabilityLoss(record, sessionId);
     }
 
     this.incrementPresenceRevision(record.room);
@@ -669,6 +677,7 @@ export class RoomService {
 
   private incrementPlaybackVersion(playback: PlaybackSnapshot) {
     playback.queueVersion += 1;
+    playback.playbackRevision += 1;
   }
 
   private incrementPresenceRevision(room: Room) {

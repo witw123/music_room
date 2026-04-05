@@ -125,6 +125,15 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.roomRealtimeBroadcaster.emitLibraryPatch(roomId, payload);
   }
 
+  getTrackAvailabilityAnnouncements(roomId: string, trackId: string) {
+    const roomAvailability = this.availabilityByRoom.get(roomId);
+    if (!roomAvailability) {
+      return [];
+    }
+
+    return [...roomAvailability.values()].filter((announcement) => announcement.trackId === trackId);
+  }
+
   private emitPieceAvailabilityClear(roomId: string, ownerPeerId: string) {
     const payload: PieceAvailabilityClearPayload = {
       roomId,
