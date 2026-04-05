@@ -47,9 +47,6 @@ type MediaPeerEntry = {
   receiver: RTCRtpReceiver | null;
   pendingCandidates: RTCIceCandidateInit[];
   wantsIncomingAudio: boolean;
-  needsOffer: boolean;
-  makingOffer: boolean;
-  offerAttempt: number;
   statsIntervalId: ReturnType<typeof setInterval> | null;
   configuredAudioMaxBitrateBps: number | null;
   configuredReceiverJitterTargetMs: number | null;
@@ -102,8 +99,24 @@ export class RoomMediaMesh {
     this.latestLocalStream = localStream;
     for (const [peerId, entry] of this.peers.entries()) {
       this.attachStream(entry, localStream);
-      entry.needsOffer = true;
-      await this.flushPendingOffer(peerId, entry);
+      if (entry.connection.signalingState === "stable") {
+        const offer = await entry.connection.createOffer();
+        await entry.connection.setLocalDescription(offer);
+        this.callbacks.onSignal?.({
+          peerId,
+          direction: "sent",
+          type: "offer"
+        });
+        this.sendSignal({
+          roomId: this.roomId,
+          fromPeerId: this.localPeerId,
+          toPeerId: peerId,
+          channelKind: "media",
+          mediaEpoch: this.currentMediaEpoch,
+          type: "offer",
+          payload: offer as unknown as Record<string, unknown>
+        });
+      }
     }
   }
 
@@ -124,7 +137,7 @@ export class RoomMediaMesh {
 
     const localStream = this.latestLocalStream;
     const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
-    let entry =
+    const entry =
       this.peers.get(payload.fromPeerId) ??
       this.createPeer(payload.fromPeerId, !hasOutgoingTrack);
 
@@ -139,7 +152,12 @@ export class RoomMediaMesh {
         return;
       }
 
-      entry = await this.preparePeerForIncomingOffer(payload.fromPeerId, entry, localStream);
+      if (
+        entry.connection.signalingState !== "stable" &&
+        entry.connection.signalingState !== "have-local-offer"
+      ) {
+        return;
+      }
 
       if (hasOutgoingTrack) {
         this.attachStream(entry, localStream);
@@ -162,7 +180,6 @@ export class RoomMediaMesh {
         type: "answer",
         payload: answer as unknown as Record<string, unknown>
       });
-      await this.flushPendingOffer(payload.fromPeerId, entry);
       return;
     }
 
@@ -183,7 +200,6 @@ export class RoomMediaMesh {
 
       await entry.connection.setRemoteDescription(remoteDescription);
       await this.flushPendingCandidates(entry);
-      await this.flushPendingOffer(payload.fromPeerId, entry);
       return;
     }
 
@@ -265,105 +281,28 @@ export class RoomMediaMesh {
         entry.connection.connectionState === "failed");
 
     if (
+      entry.connection.signalingState !== "stable" ||
       (!shouldOfferForRecvOnly && !shouldOfferForOutgoingTrack)
     ) {
       return;
     }
 
-    entry.needsOffer = true;
-    await this.flushPendingOffer(peerId, entry);
-  }
-
-  private async preparePeerForIncomingOffer(
-    peerId: string,
-    entry: MediaPeerEntry,
-    localStream: MediaStream | null
-  ) {
-    entry.offerAttempt += 1;
-    entry.makingOffer = false;
-
-    if (entry.connection.signalingState === "stable") {
-      return entry;
-    }
-
-    if (entry.connection.signalingState === "have-local-offer") {
-      try {
-        await entry.connection.setLocalDescription({ type: "rollback" });
-        return entry;
-      } catch {
-        // Fall through and recreate the peer if rollback is unavailable.
-      }
-    }
-
-    const wantsIncomingAudio = entry.wantsIncomingAudio;
-    this.releasePeer(peerId, entry);
-    const recreatedEntry = this.createPeer(peerId, wantsIncomingAudio);
-    if (localStream) {
-      this.attachStream(recreatedEntry, localStream);
-    }
-    return recreatedEntry;
-  }
-
-  private async sendOffer(peerId: string, entry: MediaPeerEntry) {
-    if (
-      this.peers.get(peerId) !== entry ||
-      entry.connection.signalingState !== "stable" ||
-      entry.makingOffer
-    ) {
-      return;
-    }
-
-    const offerAttempt = ++entry.offerAttempt;
-    entry.needsOffer = false;
-    entry.makingOffer = true;
-
-    try {
-      const offer = await entry.connection.createOffer();
-      if (
-        this.peers.get(peerId) !== entry ||
-        entry.offerAttempt !== offerAttempt ||
-        entry.connection.signalingState !== "stable"
-      ) {
-        return;
-      }
-
-      await entry.connection.setLocalDescription(offer);
-      if (this.peers.get(peerId) !== entry || entry.offerAttempt !== offerAttempt) {
-        return;
-      }
-
-      this.callbacks.onSignal?.({
-        peerId,
-        direction: "sent",
-        type: "offer"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "media",
-        mediaEpoch: this.currentMediaEpoch,
-        type: "offer",
-        payload: offer as unknown as Record<string, unknown>
-      });
-    } finally {
-      if (this.peers.get(peerId) === entry) {
-        entry.makingOffer = false;
-      }
-    }
-  }
-
-  private async flushPendingOffer(peerId: string, entry: MediaPeerEntry) {
-    if (
-      !entry.needsOffer ||
-      this.peers.get(peerId) !== entry ||
-      entry.connection.signalingState !== "stable" ||
-      entry.makingOffer
-    ) {
-      return;
-    }
-
-    await this.sendOffer(peerId, entry);
+    const offer = await entry.connection.createOffer();
+    await entry.connection.setLocalDescription(offer);
+    this.callbacks.onSignal?.({
+      peerId,
+      direction: "sent",
+      type: "offer"
+    });
+    this.sendSignal({
+      roomId: this.roomId,
+      fromPeerId: this.localPeerId,
+      toPeerId: peerId,
+      channelKind: "media",
+      mediaEpoch: this.currentMediaEpoch,
+      type: "offer",
+      payload: offer as unknown as Record<string, unknown>
+    });
   }
 
   private createPeer(peerId: string, wantsIncomingAudio: boolean) {
@@ -377,9 +316,6 @@ export class RoomMediaMesh {
       receiver: null,
       pendingCandidates: [],
       wantsIncomingAudio,
-      needsOffer: false,
-      makingOffer: false,
-      offerAttempt: 0,
       statsIntervalId: null,
       configuredAudioMaxBitrateBps: null,
       configuredReceiverJitterTargetMs: null,
