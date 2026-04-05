@@ -126,6 +126,16 @@ export function captureAudioStream(
   }
 
   if (options?.forceRefresh && cachedGraph) {
+    if (cachedGraph.mode === "audio-context") {
+      // Browsers only allow one MediaElementSourceNode per HTMLMediaElement.
+      // Recreating the graph for the same audio element can throw
+      // InvalidStateError and break host relay audio after a track switch.
+      if (cachedGraph.context?.state === "suspended") {
+        void cachedGraph.context.resume().catch(() => undefined);
+      }
+      return cachedGraph.stream;
+    }
+
     disposeCapturedAudioGraph(cachedGraph);
     capturedAudioGraphs.delete(audio);
   }

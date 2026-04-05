@@ -98,4 +98,51 @@ describe("captureAudioStream", () => {
 
     (globalThis as { window?: unknown }).window = previousWindow;
   });
+
+  it("reuses the existing audio-context capture graph when forceRefresh is requested", () => {
+    const destinationStream = {
+      getAudioTracks: () => [{ id: "context-track" }],
+      getTracks: () => [{ id: "context-track", stop: vi.fn() }]
+    } as unknown as MediaStream;
+    const resume = vi.fn().mockResolvedValue(undefined);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const connect = vi.fn();
+    const createMediaElementSource = vi.fn(() => ({ connect }));
+    const createMediaStreamDestination = vi.fn(() => ({
+      stream: destinationStream
+    }));
+
+    const previousWindow = (globalThis as { window?: unknown }).window;
+    const testWindow = {
+      AudioContext: vi.fn().mockImplementation(() => ({
+        state: "running",
+        resume,
+        close,
+        createMediaElementSource,
+        createMediaStreamDestination,
+        destination: {}
+      }))
+    } as unknown as Window;
+    (globalThis as { window?: unknown }).window = testWindow;
+
+    const audio = {
+      captureStream: vi.fn(() => ({
+        getAudioTracks: () => [{ id: "native-track" }],
+        getTracks: () => [{ id: "native-track", stop: vi.fn() }]
+      }))
+    } as unknown as HTMLAudioElement;
+
+    const first = captureAudioStream(audio, { preferAudioContext: true });
+    const refreshed = captureAudioStream(audio, {
+      forceRefresh: true,
+      preferAudioContext: true
+    });
+
+    expect(first).toBe(destinationStream);
+    expect(refreshed).toBe(destinationStream);
+    expect(createMediaElementSource).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+
+    (globalThis as { window?: unknown }).window = previousWindow;
+  });
 });
