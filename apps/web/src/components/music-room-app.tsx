@@ -146,7 +146,8 @@ export function MusicRoomApp({
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
   const isCurrentSourceOwner =
-    !!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId;
+    (!!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId) ||
+    (!!peerId && roomSnapshot?.room.playback.sourcePeerId === peerId);
   const playbackTransitionKey = roomSnapshot?.room.playback.currentTrackId
     ? [
         roomSnapshot.room.playback.currentTrackId,
@@ -162,7 +163,6 @@ export function MusicRoomApp({
         : null,
     [currentPlaybackTrackId, roomSnapshot?.tracks]
   );
-
   const {
     uploadedTracks,
     cachedTrackCount,
@@ -180,6 +180,10 @@ export function MusicRoomApp({
     onAvailability: mergeAvailability,
     emitAvailability: stableEmitAvailability
   });
+  const hasFullLocalTrack = useMemo(
+    () => (currentPlaybackTrackId ? !!uploadedTracks[currentPlaybackTrackId] : false),
+    [currentPlaybackTrackId, uploadedTracks]
+  );
 
   const {
     progressiveSchedulerPolicy,
@@ -433,14 +437,13 @@ export function MusicRoomApp({
       return;
     }
 
-    const hasFullLocalTrack = !!uploadedTracks[currentPlaybackTrackId];
     setActivePlaybackSource(
       isCurrentSourceOwner
         ? getInitialProgressivePlaybackSource(hasFullLocalTrack)
         : "remote-stream"
     );
     setProgressiveFallbackReason(null);
-  }, [playbackTransitionKey, currentPlaybackTrackId, isCurrentSourceOwner]);
+  }, [playbackTransitionKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);
 
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {

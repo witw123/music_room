@@ -530,6 +530,23 @@ export function useProgressiveRuntime({
     availabilityByTrack,
     peerId
   ]);
+  const sourceOwnerIdentity = useMemo(
+    () => ({
+      currentSessionUserId:
+        roomSnapshot?.room.members.find((member) => member.peerId === peerId)?.id ?? null,
+      playbackSourceSessionId: roomSnapshot?.room.playback.sourceSessionId ?? null,
+      currentPeerId: peerId || null,
+      playbackSourcePeerId: roomSnapshot?.room.playback.sourcePeerId ?? null,
+      isSourceOwner: isCurrentSourceOwner
+    }),
+    [
+      isCurrentSourceOwner,
+      peerId,
+      roomSnapshot?.room.members,
+      roomSnapshot?.room.playback.sourcePeerId,
+      roomSnapshot?.room.playback.sourceSessionId
+    ]
+  );
 
   const destroyProgressiveRuntime = useCallback(() => {
     progressiveEngineRef.current?.destroy();
@@ -1749,6 +1766,11 @@ export function useProgressiveRuntime({
           fullLocalReady,
           fullLocalEligible,
           fullLocalBlockedReason,
+          currentSessionUserId: sourceOwnerIdentity.currentSessionUserId,
+          playbackSourceSessionId: sourceOwnerIdentity.playbackSourceSessionId,
+          currentPeerId: sourceOwnerIdentity.currentPeerId,
+          playbackSourcePeerId: sourceOwnerIdentity.playbackSourcePeerId,
+          isSourceOwner: sourceOwnerIdentity.isSourceOwner,
           startupBufferMs,
           lastStablePlaybackAt: lastStablePlaybackAtRef.current
         }
@@ -1759,6 +1781,7 @@ export function useProgressiveRuntime({
     fullLocalReady,
     fullLocalEligible,
     fullLocalBlockedReason,
+    sourceOwnerIdentity,
     progressiveLocalEligible,
     progressiveLocalBlockedReason,
     remoteFirstLock,

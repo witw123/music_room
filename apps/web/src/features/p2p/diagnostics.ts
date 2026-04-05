@@ -210,6 +210,11 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       hostCaptureTrackEnabled: null,
       hostCaptureTrackReadyState: null,
       hostCaptureTrackCount: null,
+      currentSessionUserId: null,
+      playbackSourceSessionId: null,
+      currentPeerId: null,
+      playbackSourcePeerId: null,
+      isSourceOwner: false,
       startupBufferMs: null,
       lastStablePlaybackAt: null
     },

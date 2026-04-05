@@ -497,6 +497,21 @@ function MeshStatusPanelBase({
                         <span>调度策略: {peer.progressivePlaybackStatus.schedulerPolicy ?? "未激活"}</span>
                         <span>启动就绪: {peer.progressivePlaybackStatus.startupReady ? "是" : "否"}</span>
                         <span>
+                          当前会话: {peer.progressivePlaybackStatus.currentSessionUserId ?? "未知"}
+                        </span>
+                        <span>
+                          音源会话: {peer.progressivePlaybackStatus.playbackSourceSessionId ?? "未知"}
+                        </span>
+                        <span>
+                          当前 Peer: {peer.progressivePlaybackStatus.currentPeerId ?? "未知"}
+                        </span>
+                        <span>
+                          音源 Peer: {peer.progressivePlaybackStatus.playbackSourcePeerId ?? "未知"}
+                        </span>
+                        <span>
+                          本机是否音源: {peer.progressivePlaybackStatus.isSourceOwner ? "是" : "否"}
+                        </span>
+                        <span>
                           音频已解锁: {peer.progressivePlaybackStatus.audioUnlocked ? "是" : "否"}
                         </span>
                         <span>

@@ -165,6 +165,11 @@ export const progressivePlaybackStatusSchema = z.object({
   hostCaptureTrackEnabled: z.boolean().nullable().optional(),
   hostCaptureTrackReadyState: z.enum(["live", "ended"]).nullable().optional(),
   hostCaptureTrackCount: z.number().int().nonnegative().nullable().optional(),
+  currentSessionUserId: z.string().nullable().optional(),
+  playbackSourceSessionId: z.string().nullable().optional(),
+  currentPeerId: z.string().nullable().optional(),
+  playbackSourcePeerId: z.string().nullable().optional(),
+  isSourceOwner: z.boolean().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });
