@@ -96,6 +96,7 @@ const fullLocalMaxDriftMs = 180;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteAudioHoldMs = 1_200;
+const remoteStartupGatePollMs = 120;
 const enableDirectProgressiveTakeover = true;
 const stableRemoteStartupBufferMs = 220;
 const constrainedRemoteStartupBufferMs = 320;
@@ -653,6 +654,9 @@ export function useProgressiveRuntime({
     if (remoteAudio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
       remoteStartupReadyAtRef.current = null;
       remoteAudio.muted = true;
+      remoteStartupBufferTimerRef.current = window.setTimeout(() => {
+        scheduleRemoteStartupGate();
+      }, remoteStartupGatePollMs);
       return;
     }
 
