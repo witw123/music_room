@@ -4,13 +4,13 @@ import type { GuestSession } from "@music-room/shared";
 
 const defaultTrackPieceChunkSize = 64 * 1024;
 
-const capturedAudioGraphs = new WeakMap<
-  HTMLAudioElement,
-  {
-    context: AudioContext | null;
-    stream: MediaStream;
-  }
->();
+type CapturedAudioGraph = {
+  context: AudioContext | null;
+  stream: MediaStream;
+  mode: "native" | "audio-context";
+};
+
+const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 
 export type UploadedTrack = {
   file: File;
@@ -89,9 +89,33 @@ export function readDuration(objectUrl: string) {
   });
 }
 
-export function captureAudioStream(audio: HTMLAudioElement) {
+function disposeCapturedAudioGraph(graph: CapturedAudioGraph | undefined) {
+  if (!graph) {
+    return;
+  }
+
+  for (const track of graph.stream.getTracks()) {
+    try {
+      track.stop();
+    } catch {
+      // Ignore stale track shutdown errors.
+    }
+  }
+
+  void graph.context?.close().catch(() => undefined);
+}
+
+export function captureAudioStream(
+  audio: HTMLAudioElement,
+  options?: { forceRefresh?: boolean; preferAudioContext?: boolean }
+) {
   const cachedGraph = capturedAudioGraphs.get(audio);
-  if (cachedGraph) {
+  const shouldReuseCachedGraph =
+    !!cachedGraph &&
+    !options?.forceRefresh &&
+    (!options?.preferAudioContext || cachedGraph.mode === "audio-context");
+
+  if (shouldReuseCachedGraph && cachedGraph) {
     if (cachedGraph.context?.state === "suspended") {
       void cachedGraph.context.resume().catch(() => undefined);
     }
@@ -99,17 +123,23 @@ export function captureAudioStream(audio: HTMLAudioElement) {
     return cachedGraph.stream;
   }
 
+  if (options?.forceRefresh && cachedGraph) {
+    disposeCapturedAudioGraph(cachedGraph);
+    capturedAudioGraphs.delete(audio);
+  }
+
   const mediaAudio = audio as HTMLAudioElement & {
     captureStream?: () => MediaStream;
     mozCaptureStream?: () => MediaStream;
   };
 
-  if (typeof mediaAudio.captureStream === "function") {
+  if (!options?.preferAudioContext && typeof mediaAudio.captureStream === "function") {
     try {
       const stream = mediaAudio.captureStream();
       capturedAudioGraphs.set(audio, {
         context: null,
-        stream
+        stream,
+        mode: "native"
       });
       return stream;
     } catch {
@@ -118,12 +148,13 @@ export function captureAudioStream(audio: HTMLAudioElement) {
     }
   }
 
-  if (typeof mediaAudio.mozCaptureStream === "function") {
+  if (!options?.preferAudioContext && typeof mediaAudio.mozCaptureStream === "function") {
     try {
       const stream = mediaAudio.mozCaptureStream();
       capturedAudioGraphs.set(audio, {
         context: null,
-        stream
+        stream,
+        mode: "native"
       });
       return stream;
     } catch {
@@ -143,7 +174,8 @@ export function captureAudioStream(audio: HTMLAudioElement) {
         source.connect(context.destination);
         capturedAudioGraphs.set(audio, {
           context,
-          stream: destination.stream
+          stream: destination.stream,
+          mode: "audio-context"
         });
         if (context.state === "suspended") {
           void context.resume().catch(() => undefined);

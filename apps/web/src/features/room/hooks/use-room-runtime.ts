@@ -808,7 +808,27 @@ export function useRoomRuntime({
           return;
         }
 
-        const capture = captureAudioStream(relayAudio);
+        const preferAudioContextCapture = activePlaybackSource !== "remote-stream";
+        let capture = captureAudioStream(relayAudio, {
+          preferAudioContext: preferAudioContextCapture
+        });
+        if (!capture) {
+          setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+          return;
+        }
+
+        if (
+          playback.status === "playing" &&
+          !relayAudio.paused &&
+          relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          !hasHostMediaStreamTrack(capture)
+        ) {
+          capture = captureAudioStream(relayAudio, {
+            forceRefresh: true,
+            preferAudioContext: preferAudioContextCapture
+          });
+        }
+
         if (!capture) {
           setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
           return;
