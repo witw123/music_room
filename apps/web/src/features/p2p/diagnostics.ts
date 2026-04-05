@@ -139,7 +139,17 @@ export function createEmptyRemoteTrackStatus(): RemoteTrackStatus {
     audioVolume: null,
     lastPlayAttemptAt: null,
     lastPlayAttemptResult: null,
-    lastPlayAttemptError: null
+    lastPlayAttemptError: null,
+    currentGeneration: null,
+    boundGeneration: null,
+    playingGeneration: null,
+    recoveryStage: "idle",
+    restartAttempt: null,
+    publishGeneration: null,
+    attachedTrackId: null,
+    negotiatedTrackId: null,
+    makingOffer: null,
+    signalingState: null
   };
 }
 
@@ -211,6 +221,14 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       hostCaptureTrackEnabled: null,
       hostCaptureTrackReadyState: null,
       hostCaptureTrackCount: null,
+      publishGeneration: null,
+      hostPublishKey: null,
+      hostPublishStage: "idle",
+      hostPublishedListenerSet: null,
+      attachedTrackId: null,
+      negotiatedTrackId: null,
+      makingOffer: null,
+      signalingState: null,
       currentSessionUserId: null,
       playbackSourceSessionId: null,
       currentPeerId: null,

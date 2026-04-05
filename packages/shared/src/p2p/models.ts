@@ -115,7 +115,27 @@ export const remoteTrackStatusSchema = z.object({
   audioVolume: z.number().min(0).max(1).nullable().optional(),
   lastPlayAttemptAt: z.string().datetime().nullable().optional(),
   lastPlayAttemptResult: z.enum(["ok", "rejected"]).nullable().optional(),
-  lastPlayAttemptError: z.string().nullable().optional()
+  lastPlayAttemptError: z.string().nullable().optional(),
+  currentGeneration: z.string().nullable().optional(),
+  boundGeneration: z.string().nullable().optional(),
+  playingGeneration: z.string().nullable().optional(),
+  recoveryStage: z
+    .enum([
+      "idle",
+      "waiting-track",
+      "rebind-element",
+      "retry-play",
+      "rebind-and-play",
+      "restart-peer"
+    ])
+    .nullable()
+    .optional(),
+  restartAttempt: z.number().int().nonnegative().nullable().optional(),
+  publishGeneration: z.number().int().nonnegative().nullable().optional(),
+  attachedTrackId: z.string().nullable().optional(),
+  negotiatedTrackId: z.string().nullable().optional(),
+  makingOffer: z.boolean().nullable().optional(),
+  signalingState: z.string().nullable().optional()
 });
 
 export const progressivePlaybackStatusSchema = z.object({
@@ -166,6 +186,17 @@ export const progressivePlaybackStatusSchema = z.object({
   hostCaptureTrackEnabled: z.boolean().nullable().optional(),
   hostCaptureTrackReadyState: z.enum(["live", "ended"]).nullable().optional(),
   hostCaptureTrackCount: z.number().int().nonnegative().nullable().optional(),
+  publishGeneration: z.number().int().nonnegative().nullable().optional(),
+  hostPublishKey: z.string().nullable().optional(),
+  hostPublishStage: z
+    .enum(["idle", "waiting-source-audio", "capture-ready", "published"])
+    .nullable()
+    .optional(),
+  hostPublishedListenerSet: z.string().nullable().optional(),
+  attachedTrackId: z.string().nullable().optional(),
+  negotiatedTrackId: z.string().nullable().optional(),
+  makingOffer: z.boolean().nullable().optional(),
+  signalingState: z.string().nullable().optional(),
   currentSessionUserId: z.string().nullable().optional(),
   playbackSourceSessionId: z.string().nullable().optional(),
   currentPeerId: z.string().nullable().optional(),

@@ -20,9 +20,12 @@ class FakeRTCPeerConnection {
     };
     setCodecPreferences: ReturnType<typeof vi.fn>;
   }> = [];
+  static nextReplaceTrackPromise: Promise<void> | null = null;
 
   connectionState: RTCPeerConnectionState = "new";
   signalingState: RTCSignalingState = "stable";
+  localDescriptions: Array<RTCSessionDescriptionInit | null | undefined> = [];
+  remoteDescriptions: RTCSessionDescriptionInit[] = [];
   onicecandidate: ((event: RTCPeerConnectionIceEvent) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
   ontrack: ((event: RTCTrackEvent) => void) | null = null;
@@ -46,6 +49,10 @@ class FakeRTCPeerConnection {
     const sender = {
       track,
       replaceTrack: vi.fn(async (nextTrack: MediaStreamTrack | null) => {
+        if (FakeRTCPeerConnection.nextReplaceTrackPromise) {
+          await FakeRTCPeerConnection.nextReplaceTrackPromise;
+          FakeRTCPeerConnection.nextReplaceTrackPromise = null;
+        }
         sender.track = nextTrack;
       }),
       getParameters: vi.fn(() => ({})),
@@ -61,11 +68,16 @@ class FakeRTCPeerConnection {
   }
 
   async setLocalDescription(description?: RTCSessionDescriptionInit | null) {
+    this.localDescriptions.push(description);
     if (description?.type === "offer") {
       this.signalingState = "have-local-offer";
     }
 
     if (description?.type === "answer") {
+      this.signalingState = "stable";
+    }
+
+    if (description?.type === "rollback") {
       this.signalingState = "stable";
     }
   }
@@ -75,6 +87,7 @@ class FakeRTCPeerConnection {
   }
 
   async setRemoteDescription(description: RTCSessionDescriptionInit) {
+    this.remoteDescriptions.push(description);
     if (description.type === "offer") {
       this.signalingState = "have-remote-offer";
       return;
@@ -116,6 +129,7 @@ describe("RoomMediaMesh", () => {
     FakeRTCPeerConnection.instances = [];
     FakeRTCPeerConnection.senders = [];
     FakeRTCPeerConnection.transceivers = [];
+    FakeRTCPeerConnection.nextReplaceTrackPromise = null;
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
     vi.stubGlobal("RTCRtpReceiver", {
       getCapabilities: vi.fn(() => ({
@@ -246,6 +260,167 @@ describe("RoomMediaMesh", () => {
       toPeerId: "peer_listener",
       mediaEpoch: 2
     });
+  });
+
+  it("waits for replaceTrack to finish before answering after a host-side track switch", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const initialTrack = { id: "track_initial" } as MediaStreamTrack;
+    const switchedTrack = { id: "track_switched" } as MediaStreamTrack;
+    const initialStream = {
+      getAudioTracks: () => [initialTrack]
+    } as unknown as MediaStream;
+    const switchedStream = {
+      getAudioTracks: () => [switchedTrack]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers([], initialStream, 2);
+    await mesh.handleSignal({
+      roomId: "room_1",
+      fromPeerId: "peer_listener",
+      toPeerId: "peer_source",
+      channelKind: "media",
+      mediaEpoch: 2,
+      type: "offer",
+      payload: {
+        type: "offer",
+        sdp: "listener-offer-before-switch"
+      }
+    });
+    sendSignal.mockClear();
+    (mesh as unknown as { latestLocalStream: MediaStream | null }).latestLocalStream = switchedStream;
+
+    let resolveReplaceTrack!: () => void;
+    FakeRTCPeerConnection.nextReplaceTrackPromise = new Promise<void>((resolve) => {
+      resolveReplaceTrack = resolve;
+    });
+
+    const pendingAnswer = mesh.handleSignal({
+      roomId: "room_1",
+      fromPeerId: "peer_listener",
+      toPeerId: "peer_source",
+      channelKind: "media",
+      mediaEpoch: 2,
+      type: "offer",
+      payload: {
+        type: "offer",
+        sdp: "listener-offer-after-track-switch"
+      }
+    });
+
+    await Promise.resolve();
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    resolveReplaceTrack();
+    await pendingAnswer;
+
+    expect(FakeRTCPeerConnection.senders[0]?.track).toMatchObject({ id: "track_switched" });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "answer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 2
+    });
+  });
+
+  it("rolls back a polite listener peer before accepting a colliding offer", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+    await mesh.restartPeer("peer_source_a");
+    sendSignal.mockClear();
+
+    const collisionPeer = FakeRTCPeerConnection.instances[1];
+    expect(collisionPeer?.signalingState).toBe("have-local-offer");
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+
+    expect(collisionPeer?.localDescriptions.some((description) => description?.type === "rollback")).toBe(true);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "answer",
+      toPeerId: "peer_source_a",
+      mediaEpoch: 1
+    });
+  });
+
+  it("ignores a colliding offer on an impolite source peer", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const stream = {
+      getAudioTracks: () => [{ id: "track_live" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+    sendSignal.mockClear();
+
+    const sourcePeer = FakeRTCPeerConnection.instances[0];
+    expect(sourcePeer?.signalingState).toBe("have-local-offer");
+
+    await mesh.handleSignal({
+      roomId: "room_1",
+      fromPeerId: "peer_listener",
+      toPeerId: "peer_source",
+      channelKind: "media",
+      mediaEpoch: 1,
+      type: "offer",
+      payload: {
+        type: "offer",
+        sdp: "colliding-offer"
+      }
+    });
+
+    expect(sourcePeer?.remoteDescriptions).toHaveLength(0);
+    expect(sendSignal).toHaveBeenCalledTimes(0);
+  });
+
+  it("flushes a pending restart after the current offer/answer round stabilizes", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const initialTrack = { id: "track_initial" } as MediaStreamTrack;
+    const switchedTrack = { id: "track_switched" } as MediaStreamTrack;
+    const initialStream = {
+      getAudioTracks: () => [initialTrack]
+    } as unknown as MediaStream;
+    const switchedStream = {
+      getAudioTracks: () => [switchedTrack]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], initialStream, 1);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await mesh.updateLocalStream(switchedStream);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await mesh.handleSignal({
+      roomId: "room_1",
+      fromPeerId: "peer_listener",
+      toPeerId: "peer_source",
+      channelKind: "media",
+      mediaEpoch: 1,
+      type: "answer",
+      payload: {
+        type: "answer",
+        sdp: "listener-answer"
+      }
+    });
+
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(sendSignal.mock.calls[1]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 1
+    });
+    expect(FakeRTCPeerConnection.senders[0]?.track).toMatchObject({ id: "track_switched" });
   });
 
   it("does not tear down peers on transient disconnected state", async () => {

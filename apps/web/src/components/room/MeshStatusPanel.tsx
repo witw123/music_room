@@ -445,6 +445,9 @@ function MeshStatusPanelBase({
                       最近收片: {peer.lastPieceReceivedAt ? formatTimestamp(peer.lastPieceReceivedAt) : "未知"}
                     </span>
                     <span>当前曲目: {peer.remoteTrackStatus.currentTrackId ?? "未知"}</span>
+                    <span>当前 generation: {peer.remoteTrackStatus.currentGeneration ?? "未知"}</span>
+                    <span>已绑定 generation: {peer.remoteTrackStatus.boundGeneration ?? "未知"}</span>
+                    <span>已播放 generation: {peer.remoteTrackStatus.playingGeneration ?? "未知"}</span>
                     <span>远端 Track: {peer.remoteTrackStatus.trackId ?? "未知"}</span>
                     <span>
                       远端 Track muted:{" "}
@@ -468,6 +471,14 @@ function MeshStatusPanelBase({
                       远端 Track state: {peer.remoteTrackStatus.trackReadyState ?? "未知"}
                     </span>
                     <span>播放源 Peer: {peer.remoteTrackStatus.sourcePeerId ?? "未知"}</span>
+                    <span>恢复阶段: {peer.remoteTrackStatus.recoveryStage ?? "未知"}</span>
+                    <span>
+                      重启尝试:{" "}
+                      {peer.remoteTrackStatus.restartAttempt === null ||
+                      typeof peer.remoteTrackStatus.restartAttempt === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.restartAttempt}
+                    </span>
                     <span>
                       mediaEpoch:{" "}
                       {peer.remoteTrackStatus.mediaEpoch === null ||
@@ -475,6 +486,25 @@ function MeshStatusPanelBase({
                         ? "未知"
                         : peer.remoteTrackStatus.mediaEpoch}
                     </span>
+                    <span>
+                      发布代次:{" "}
+                      {peer.remoteTrackStatus.publishGeneration === null ||
+                      typeof peer.remoteTrackStatus.publishGeneration === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.publishGeneration}
+                    </span>
+                    <span>attached Track: {peer.remoteTrackStatus.attachedTrackId ?? "未知"}</span>
+                    <span>negotiated Track: {peer.remoteTrackStatus.negotiatedTrackId ?? "未知"}</span>
+                    <span>
+                      makingOffer:{" "}
+                      {peer.remoteTrackStatus.makingOffer === null ||
+                      typeof peer.remoteTrackStatus.makingOffer === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.makingOffer
+                          ? "是"
+                          : "否"}
+                    </span>
+                    <span>signalingState: {peer.remoteTrackStatus.signalingState ?? "未知"}</span>
                   </div>
 
                   {peer.progressivePlaybackStatus ? (
@@ -698,6 +728,43 @@ function MeshStatusPanelBase({
                       peer.progressivePlaybackStatus.hostCaptureTrackCount !== undefined ? (
                         <p className="mt-1 text-foreground-muted">
                           捕获音轨数: {peer.progressivePlaybackStatus.hostCaptureTrackCount}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.publishGeneration !== null &&
+                      peer.progressivePlaybackStatus.publishGeneration !== undefined ? (
+                        <p className="mt-1 text-foreground-muted">
+                          publishGeneration: {peer.progressivePlaybackStatus.publishGeneration}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostPublishKey ? (
+                        <p className="mt-1 truncate text-foreground-muted">
+                          发布键: {peer.progressivePlaybackStatus.hostPublishKey}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostPublishStage ? (
+                        <p className="mt-1 text-foreground-muted">
+                          发布阶段: {peer.progressivePlaybackStatus.hostPublishStage}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostPublishedListenerSet ? (
+                        <p className="mt-1 text-foreground-muted">
+                          已发布监听集合: {peer.progressivePlaybackStatus.hostPublishedListenerSet}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.attachedTrackId ? (
+                        <p className="mt-1 text-foreground-muted">
+                          attached Track: {peer.progressivePlaybackStatus.attachedTrackId}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.negotiatedTrackId ? (
+                        <p className="mt-1 text-foreground-muted">
+                          negotiated Track: {peer.progressivePlaybackStatus.negotiatedTrackId}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.signalingState ? (
+                        <p className="mt-1 text-foreground-muted">
+                          signalingState: {peer.progressivePlaybackStatus.signalingState}
+                          {peer.progressivePlaybackStatus.makingOffer ? " · making-offer" : ""}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.localAudioCurrentSrc ? (

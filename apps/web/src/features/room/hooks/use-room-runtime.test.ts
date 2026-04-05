@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveListenerMediaRecoveryReason } from "./use-room-runtime";
+import {
+  resolveListenerMediaRecoveryAction,
+  resolveListenerMediaRecoveryReason
+} from "./use-room-runtime";
 
 describe("resolveListenerMediaRecoveryReason", () => {
   const traceKey = "track_a|3|peer_source|peer_listener";
@@ -92,5 +95,39 @@ describe("resolveListenerMediaRecoveryReason", () => {
         remoteTrackReadyState: "live"
       })
     ).toBeNull();
+  });
+
+  it("rebinds before restarting when track arrived but the element was not rebound yet", () => {
+    expect(
+      resolveListenerMediaRecoveryAction({
+        reason: "track-received-but-not-bound",
+        bindAttempts: 0,
+        playAttempts: 0
+      })
+    ).toBe("rebind-element");
+    expect(
+      resolveListenerMediaRecoveryAction({
+        reason: "track-received-but-not-bound",
+        bindAttempts: 2,
+        playAttempts: 0
+      })
+    ).toBe("restart-peer");
+  });
+
+  it("retries play once before escalating to a peer restart", () => {
+    expect(
+      resolveListenerMediaRecoveryAction({
+        reason: "bound-but-not-playing",
+        bindAttempts: 1,
+        playAttempts: 0
+      })
+    ).toBe("retry-play");
+    expect(
+      resolveListenerMediaRecoveryAction({
+        reason: "bound-but-not-playing",
+        bindAttempts: 1,
+        playAttempts: 2
+      })
+    ).toBe("restart-peer");
   });
 });
