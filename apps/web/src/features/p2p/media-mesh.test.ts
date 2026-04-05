@@ -341,7 +341,7 @@ describe("RoomMediaMesh", () => {
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
     expect(sender?.setParameters).toHaveBeenCalledWith({
-      encodings: [{ maxBitrate: 192_000 }]
+      encodings: [{ maxBitrate: 224_000 }]
     });
   });
 
@@ -358,7 +358,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(80_000);
+    ).toBe(112_000);
   });
 
   it("caps sender bitrate to measured headroom on weak links", () => {
@@ -390,7 +390,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 0,
         jitterMs: 4
       })
-    ).toBe(480);
+    ).toBe(360);
   });
 
   it("prefers the strongest receiver jitter target on weak links", () => {
@@ -406,7 +406,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 120,
         jitterMs: 34
       })
-    ).toBe(560);
+    ).toBe(520);
   });
 
   it("does not keep audio in weak-link mode on high cumulative loss when the short window is healthy", () => {
@@ -422,6 +422,44 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBe(192_000);
+    ).toBe(224_000);
+  });
+
+  it("keeps the existing bitrate when the new target is only a tiny step away", () => {
+    expect(
+      resolvePreferredAudioMaxBitrateBps(
+        {
+          candidateType: "relay",
+          protocol: "tcp",
+          currentRoundTripTimeMs: 90,
+          availableOutgoingBitrateKbps: 150,
+          mediaReceiveBitrateKbps: null,
+          mediaSendBitrateKbps: null,
+          packetLossRate: 1.4,
+          packetsLost: 12,
+          jitterMs: 4
+        },
+        112_000
+      )
+    ).toBe(112_000);
+  });
+
+  it("keeps the existing jitter target when the new recommendation is within hysteresis", () => {
+    expect(
+      resolvePreferredReceiverJitterTargetMs(
+        {
+          candidateType: "relay",
+          protocol: "tcp",
+          currentRoundTripTimeMs: 80,
+          availableOutgoingBitrateKbps: 220,
+          mediaReceiveBitrateKbps: null,
+          mediaSendBitrateKbps: 96,
+          packetLossRate: 1.2,
+          packetsLost: 0,
+          jitterMs: 4
+        },
+        320
+      )
+    ).toBe(320);
   });
 });

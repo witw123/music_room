@@ -455,7 +455,7 @@ describe("ChunkScheduler", () => {
     expect(requestedTrackIds).toContain("track_2:upcoming");
   });
 
-  it("does not prefetch the next queued track while remote-stream is still the playback clock source", () => {
+  it("allows a weak next-track prefetch once remote-stream playback is comfortably buffered", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,

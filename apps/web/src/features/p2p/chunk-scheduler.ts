@@ -405,8 +405,20 @@ export class ChunkScheduler {
       this.mode === "normal" &&
       this.bufferHealth === "healthy" &&
       currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
+    const canWeakPrefetchUpcomingTrackOnRemote =
+      !!currentTrackManifest &&
+      shouldPreserveRemotePlayback &&
+      !shouldEnterOutrunRecovery &&
+      this.policy === "steady" &&
+      this.mode === "normal" &&
+      this.bufferHealth === "healthy" &&
+      currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
 
-    if (!canPrefetchUpcomingTrack && (this.policy !== "background" || !isCurrentTrackComplete)) {
+    if (
+      !canPrefetchUpcomingTrack &&
+      !canWeakPrefetchUpcomingTrackOnRemote &&
+      (this.policy !== "background" || !isCurrentTrackComplete)
+    ) {
       return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
@@ -438,8 +450,8 @@ export class ChunkScheduler {
       plans.push({
         track: nextQueuedTrack,
         priority: "upcoming",
-        maxConcurrent: this.policy === "background" ? 4 : 3,
-        maxConcurrentPerPeer: this.policy === "background" ? 2 : 3,
+        maxConcurrent: shouldPreserveRemotePlayback ? 1 : this.policy === "background" ? 4 : 3,
+        maxConcurrentPerPeer: shouldPreserveRemotePlayback ? 1 : this.policy === "background" ? 2 : 3,
         preferredPeerId: null,
         wantedChunks:
           queuedManifest
@@ -456,8 +468,11 @@ export class ChunkScheduler {
                 totalChunks: this.getTotalChunks(nextQueuedTrack.id),
                 prefetchMs: this.upcomingPrefetchMs()
               }),
-        timeoutMs: this.policy === "background" ? 2_500 : 1_800
+        timeoutMs: shouldPreserveRemotePlayback ? 2_200 : this.policy === "background" ? 2_500 : 1_800
       });
+      if (shouldPreserveRemotePlayback) {
+        return plans.filter((plan) => plan.wantedChunks.length > 0);
+      }
       return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
@@ -644,36 +659,36 @@ function getTrackStreamingProfile(
     if (policy === "outrun-recovery") {
       if (remoteBootstrapConservative) {
         return {
-          maxConcurrent: streamProfile === "large-lossless" ? 12 : 10,
+          maxConcurrent: streamProfile === "large-lossless" ? 14 : 12,
           maxConcurrentPerPeer: 3,
           lookBehindMs: 0,
           lookAheadMs: streamProfile === "large-lossless" ? 120_000 : 72_000,
-          timeoutMs: 1_200
+          timeoutMs: 1_500
         };
       }
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 30 : 24,
+        maxConcurrent: streamProfile === "large-lossless" ? 32 : 26,
         maxConcurrentPerPeer: streamProfile === "large-lossless" ? 10 : 8,
         lookBehindMs: 0,
         lookAheadMs: streamProfile === "large-lossless" ? 320_000 : 180_000,
-        timeoutMs: streamProfile === "large-lossless" ? 700 : 800
+        timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_100
       };
     }
     if (remoteBootstrapConservative) {
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
+        maxConcurrent: streamProfile === "large-lossless" ? 10 : 8,
         maxConcurrentPerPeer: 2,
         lookBehindMs: 0,
         lookAheadMs: streamProfile === "large-lossless" ? 72_000 : 42_000,
-        timeoutMs: 1_600
+        timeoutMs: 1_900
       };
     }
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 20 : 16,
+      maxConcurrent: streamProfile === "large-lossless" ? 24 : 18,
       maxConcurrentPerPeer: streamProfile === "large-lossless" ? 7 : 6,
       lookBehindMs: 0,
       lookAheadMs: streamProfile === "large-lossless" ? 160_000 : 96_000,
-      timeoutMs: 1_300
+      timeoutMs: 1_500
     };
   }
 

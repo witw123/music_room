@@ -176,6 +176,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     remoteTrackStatus: createEmptyRemoteTrackStatus(),
     progressivePlaybackStatus: {
       activeSource: null,
+      shadowWarmupActive: false,
       audioUnlocked: false,
       sourceStartState: "idle",
       lastSourceStartError: null,
@@ -222,6 +223,13 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       localAudioCurrentSrc: null,
       localAudioHasSrcObject: null,
       startupBufferMs: null,
+      comfortBufferedMs: null,
+      averageDriftMs: null,
+      maxDriftMs: null,
+      waitingEventsLast30s: null,
+      stalledEventsLast30s: null,
+      audioBitrateTier: null,
+      receiverJitterTier: null,
       lastStablePlaybackAt: null
     },
     lastError: null,

@@ -120,6 +120,7 @@ export const remoteTrackStatusSchema = z.object({
 
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  shadowWarmupActive: z.boolean().optional(),
   audioUnlocked: z.boolean().optional(),
   sourceStartState: z
     .enum(["idle", "awaiting-unlock", "starting", "live", "failed"])
@@ -177,6 +178,13 @@ export const progressivePlaybackStatusSchema = z.object({
   localAudioCurrentSrc: z.string().nullable().optional(),
   localAudioHasSrcObject: z.boolean().nullable().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
+  comfortBufferedMs: z.number().int().nonnegative().nullable().optional(),
+  averageDriftMs: z.number().nonnegative().nullable().optional(),
+  maxDriftMs: z.number().nonnegative().nullable().optional(),
+  waitingEventsLast30s: z.number().int().nonnegative().nullable().optional(),
+  stalledEventsLast30s: z.number().int().nonnegative().nullable().optional(),
+  audioBitrateTier: z.enum(["high", "medium", "low"]).nullable().optional(),
+  receiverJitterTier: z.enum(["low", "medium", "high"]).nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });
 

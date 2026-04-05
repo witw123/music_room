@@ -53,14 +53,15 @@ type MediaPeerEntry = {
   statsSnapshot: PeerConnectionStatsSnapshot | null;
 };
 
-const directAudioMaxBitrateBps = 192_000;
-const constrainedAudioMaxBitrateBps = 144_000;
-const relayAudioMaxBitrateBps = 80_000;
-const weakLinkAudioMaxBitrateBps = 56_000;
-const minimumAudioMaxBitrateBps = 40_000;
-const stableReceiverJitterTargetMs = 320;
-const constrainedReceiverJitterTargetMs = 480;
-const weakLinkReceiverJitterTargetMs = 560;
+const directAudioMaxBitrateBps = 224_000;
+const constrainedAudioMaxBitrateBps = 176_000;
+const relayAudioMaxBitrateBps = 112_000;
+const weakLinkAudioMaxBitrateBps = 72_000;
+const minimumAudioMaxBitrateBps = 48_000;
+const stableReceiverJitterTargetMs = 280;
+const constrainedReceiverJitterTargetMs = 360;
+const weakLinkReceiverJitterTargetMs = 520;
+const audioRetuneStepBps = 24_000;
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
@@ -505,7 +506,10 @@ export class RoomMediaMesh {
 
       entry.statsSnapshot = nextStats.snapshot;
       const sample = nextStats.sample;
-      const receiverJitterTargetMs = resolvePreferredReceiverJitterTargetMs(sample);
+      const receiverJitterTargetMs = resolvePreferredReceiverJitterTargetMs(
+        sample,
+        entry.configuredReceiverJitterTargetMs
+      );
       this.configureReceiverJitterBuffer(entry, receiverJitterTargetMs);
       await this.tuneOutgoingAudio(entry, sample);
       this.callbacks.onStatsSample?.({
@@ -585,7 +589,10 @@ export class RoomMediaMesh {
       return;
     }
 
-    const nextMaxBitrateBps = resolvePreferredAudioMaxBitrateBps(sample);
+    const nextMaxBitrateBps = resolvePreferredAudioMaxBitrateBps(
+      sample,
+      entry.configuredAudioMaxBitrateBps
+    );
     if (entry.configuredAudioMaxBitrateBps === nextMaxBitrateBps) {
       return;
     }
@@ -646,7 +653,10 @@ export class RoomMediaMesh {
   }
 }
 
-export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSample) {
+export function resolvePreferredAudioMaxBitrateBps(
+  sample: PeerConnectionStatsSample,
+  currentConfiguredBitrateBps: number | null = null
+) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
   const severeWeakLink =
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
@@ -684,13 +694,25 @@ export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSa
     targetMaxBitrateBps = Math.min(targetMaxBitrateBps, measuredCeilingBps);
   }
 
-  return Math.max(
+  const nextTargetBps = Math.max(
     minimumAudioMaxBitrateBps,
     Math.min(directAudioMaxBitrateBps, targetMaxBitrateBps)
   );
+
+  if (
+    currentConfiguredBitrateBps !== null &&
+    Math.abs(currentConfiguredBitrateBps - nextTargetBps) < audioRetuneStepBps
+  ) {
+    return currentConfiguredBitrateBps;
+  }
+
+  return nextTargetBps;
 }
 
-export function resolvePreferredReceiverJitterTargetMs(sample: PeerConnectionStatsSample) {
+export function resolvePreferredReceiverJitterTargetMs(
+  sample: PeerConnectionStatsSample,
+  currentConfiguredTargetMs: number | null = null
+) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
   const weakLink =
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
@@ -700,15 +722,22 @@ export function resolvePreferredReceiverJitterTargetMs(sample: PeerConnectionSta
       sample.packetsLost >= 80) ||
     (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
 
+  let nextTargetMs = stableReceiverJitterTargetMs;
+
   if (weakLink) {
-    return weakLinkReceiverJitterTargetMs;
+    nextTargetMs = weakLinkReceiverJitterTargetMs;
+  } else if (constrainedTransport) {
+    nextTargetMs = constrainedReceiverJitterTargetMs;
   }
 
-  if (constrainedTransport) {
-    return constrainedReceiverJitterTargetMs;
+  if (
+    currentConfiguredTargetMs !== null &&
+    Math.abs(currentConfiguredTargetMs - nextTargetMs) < 80
+  ) {
+    return currentConfiguredTargetMs;
   }
 
-  return stableReceiverJitterTargetMs;
+  return nextTargetMs;
 }
 
 function getAudioCodecCapabilities() {

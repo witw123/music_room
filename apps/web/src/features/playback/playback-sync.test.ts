@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { syncLocalPlaybackWindow } from "./playback-sync";
+import { resolveContinuousPlaybackRate, syncLocalPlaybackWindow } from "./playback-sync";
 
 describe("syncLocalPlaybackWindow", () => {
   it("uses playbackRate correction by default for moderate drift", () => {
@@ -14,7 +14,7 @@ describe("syncLocalPlaybackWindow", () => {
     });
 
     expect(audio.currentTime).toBe(10);
-    expect(audio.playbackRate).toBe(1.04);
+    expect(audio.playbackRate).toBeCloseTo(1.018, 3);
   });
 
   it("disables rate correction when requested and leaves moderate drift untouched", () => {
@@ -79,5 +79,49 @@ describe("syncLocalPlaybackWindow", () => {
 
     expect(audio.currentTime).toBe(10.28);
     expect(audio.playbackRate).toBe(1);
+  });
+
+  it("uses a narrow audible correction band for remote follow mode", () => {
+    const audio = {
+      currentTime: 10,
+      playbackRate: 1
+    } as HTMLAudioElement;
+
+    syncLocalPlaybackWindow(audio, 10.28, true, {
+      softDriftMs: 120,
+      hardDriftMs: 1_200,
+      correctionMode: "audible-remote-follow"
+    });
+
+    expect(audio.currentTime).toBe(10);
+    expect(audio.playbackRate).toBeCloseTo(1.012, 3);
+  });
+
+  it("snaps audible follow modes once drift exceeds the hard threshold", () => {
+    const audio = {
+      currentTime: 10,
+      playbackRate: 1
+    } as HTMLAudioElement;
+
+    const result = syncLocalPlaybackWindow(audio, 11.6, true, {
+      softDriftMs: 120,
+      hardDriftMs: 900,
+      correctionMode: "audible-local-follow"
+    });
+
+    expect(audio.currentTime).toBe(11.6);
+    expect(audio.playbackRate).toBe(1);
+    expect(result.didSeek).toBe(true);
+  });
+
+  it("derives small continuous playback-rate deltas from drift", () => {
+    expect(resolveContinuousPlaybackRate({ driftMs: 20, maxRateDelta: 0.015 })).toBeCloseTo(
+      1.005,
+      3
+    );
+    expect(resolveContinuousPlaybackRate({ driftMs: -60, maxRateDelta: 0.015 })).toBeCloseTo(
+      0.985,
+      3
+    );
   });
 });

@@ -557,6 +557,10 @@ function MeshStatusPanelBase({
                           启动缓冲: {formatDurationMs(peer.progressivePlaybackStatus.startupBufferMs ?? null)}
                         </span>
                         <span>
+                          舒适缓冲:{" "}
+                          {formatDurationMs(peer.progressivePlaybackStatus.comfortBufferedMs ?? null)}
+                        </span>
+                        <span>
                           捕获模式: {peer.progressivePlaybackStatus.hostCaptureMode ?? "未知"}
                         </span>
                         <span>
@@ -595,6 +599,31 @@ function MeshStatusPanelBase({
                           {formatDurationMs(
                             peer.progressivePlaybackStatus.bufferSafetyMarginMs ?? null
                           )}
+                        </span>
+                        <span>
+                          影子预热: {peer.progressivePlaybackStatus.shadowWarmupActive ? "是" : "否"}
+                        </span>
+                        <span>
+                          平均漂移:{" "}
+                          {formatDurationMs(peer.progressivePlaybackStatus.averageDriftMs ?? null)}
+                        </span>
+                        <span>
+                          最大漂移:{" "}
+                          {formatDurationMs(peer.progressivePlaybackStatus.maxDriftMs ?? null)}
+                        </span>
+                        <span>
+                          waiting(30s):{" "}
+                          {peer.progressivePlaybackStatus.waitingEventsLast30s ?? "未知"}
+                        </span>
+                        <span>
+                          stalled(30s):{" "}
+                          {peer.progressivePlaybackStatus.stalledEventsLast30s ?? "未知"}
+                        </span>
+                        <span>
+                          音频档位: {peer.progressivePlaybackStatus.audioBitrateTier ?? "未知"}
+                        </span>
+                        <span>
+                          抖动档位: {peer.progressivePlaybackStatus.receiverJitterTier ?? "未知"}
                         </span>
                       </div>
                       {peer.progressivePlaybackStatus.fullLocalBlockedReason ? (
