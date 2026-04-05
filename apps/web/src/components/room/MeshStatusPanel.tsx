@@ -512,6 +512,42 @@ function MeshStatusPanelBase({
                           本机是否音源: {peer.progressivePlaybackStatus.isSourceOwner ? "是" : "否"}
                         </span>
                         <span>
+                          本地音频 paused:{" "}
+                          {peer.progressivePlaybackStatus.localAudioPaused === null ||
+                          typeof peer.progressivePlaybackStatus.localAudioPaused === "undefined"
+                            ? "未知"
+                            : peer.progressivePlaybackStatus.localAudioPaused
+                              ? "是"
+                              : "否"}
+                        </span>
+                        <span>
+                          本地音频 muted:{" "}
+                          {peer.progressivePlaybackStatus.localAudioMuted === null ||
+                          typeof peer.progressivePlaybackStatus.localAudioMuted === "undefined"
+                            ? "未知"
+                            : peer.progressivePlaybackStatus.localAudioMuted
+                              ? "是"
+                              : "否"}
+                        </span>
+                        <span>
+                          本地音量:{" "}
+                          {typeof peer.progressivePlaybackStatus.localAudioVolume === "number"
+                            ? peer.progressivePlaybackStatus.localAudioVolume.toFixed(2)
+                            : "未知"}
+                        </span>
+                        <span>
+                          本地 readyState: {formatMediaReadyState(peer.progressivePlaybackStatus.localAudioReadyState)}
+                        </span>
+                        <span>
+                          本地 srcObject:{" "}
+                          {peer.progressivePlaybackStatus.localAudioHasSrcObject === null ||
+                          typeof peer.progressivePlaybackStatus.localAudioHasSrcObject === "undefined"
+                            ? "未知"
+                            : peer.progressivePlaybackStatus.localAudioHasSrcObject
+                              ? "有"
+                              : "无"}
+                        </span>
+                        <span>
                           音频已解锁: {peer.progressivePlaybackStatus.audioUnlocked ? "是" : "否"}
                         </span>
                         <span>
@@ -633,6 +669,11 @@ function MeshStatusPanelBase({
                       peer.progressivePlaybackStatus.hostCaptureTrackCount !== undefined ? (
                         <p className="mt-1 text-foreground-muted">
                           捕获音轨数: {peer.progressivePlaybackStatus.hostCaptureTrackCount}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.localAudioCurrentSrc ? (
+                        <p className="mt-1 truncate text-foreground-muted">
+                          本地 currentSrc: {peer.progressivePlaybackStatus.localAudioCurrentSrc}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (

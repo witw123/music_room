@@ -215,6 +215,12 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       currentPeerId: null,
       playbackSourcePeerId: null,
       isSourceOwner: false,
+      localAudioPaused: null,
+      localAudioMuted: null,
+      localAudioVolume: null,
+      localAudioReadyState: null,
+      localAudioCurrentSrc: null,
+      localAudioHasSrcObject: null,
       startupBufferMs: null,
       lastStablePlaybackAt: null
     },

@@ -65,6 +65,7 @@ const weakLinkReceiverJitterTargetMs = 560;
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
   private currentMediaEpoch = 0;
+  private latestLocalStream: MediaStream | null = null;
 
   constructor(
     private readonly roomId: string,
@@ -75,6 +76,7 @@ export class RoomMediaMesh {
   ) {}
 
   async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null, mediaEpoch = 0) {
+    this.latestLocalStream = localStream;
     if (this.currentMediaEpoch !== mediaEpoch) {
       this.resetForMediaEpoch(mediaEpoch);
     }
@@ -94,6 +96,7 @@ export class RoomMediaMesh {
   }
 
   async updateLocalStream(localStream: MediaStream | null) {
+    this.latestLocalStream = localStream;
     for (const [peerId, entry] of this.peers.entries()) {
       this.attachStream(entry, localStream);
       if (entry.connection.signalingState === "stable") {
@@ -132,7 +135,11 @@ export class RoomMediaMesh {
       this.resetForMediaEpoch(incomingMediaEpoch);
     }
 
-    const entry = this.peers.get(payload.fromPeerId) ?? this.createPeer(payload.fromPeerId, true);
+    const localStream = this.latestLocalStream;
+    const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
+    const entry =
+      this.peers.get(payload.fromPeerId) ??
+      this.createPeer(payload.fromPeerId, !hasOutgoingTrack);
 
     if (payload.type === "offer") {
       this.callbacks.onSignal?.({
@@ -152,6 +159,9 @@ export class RoomMediaMesh {
         return;
       }
 
+      if (hasOutgoingTrack) {
+        this.attachStream(entry, localStream);
+      }
       await entry.connection.setRemoteDescription(remoteDescription);
       await this.flushPendingCandidates(entry);
       const answer = await entry.connection.createAnswer();
@@ -230,15 +240,18 @@ export class RoomMediaMesh {
   }
 
   async restartPeer(peerId: string, localStream: MediaStream | null = null) {
+    const effectiveLocalStream = localStream ?? this.latestLocalStream;
     const existingEntry = this.peers.get(peerId);
-    const wantsIncomingAudio = existingEntry?.wantsIncomingAudio ?? !localStream;
+    const wantsIncomingAudio =
+      existingEntry?.wantsIncomingAudio ??
+      !(effectiveLocalStream && effectiveLocalStream.getAudioTracks().length > 0);
     if (existingEntry) {
       this.releasePeer(peerId, existingEntry);
     }
 
     const entry = this.createPeer(peerId, wantsIncomingAudio);
-    const streamChanged = this.attachStream(entry, localStream);
-    await this.maybeSendOffer(peerId, entry, localStream, true, streamChanged);
+    const streamChanged = this.attachStream(entry, effectiveLocalStream);
+    await this.maybeSendOffer(peerId, entry, effectiveLocalStream, true, streamChanged);
     return entry;
   }
 

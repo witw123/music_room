@@ -170,6 +170,12 @@ export const progressivePlaybackStatusSchema = z.object({
   currentPeerId: z.string().nullable().optional(),
   playbackSourcePeerId: z.string().nullable().optional(),
   isSourceOwner: z.boolean().optional(),
+  localAudioPaused: z.boolean().nullable().optional(),
+  localAudioMuted: z.boolean().nullable().optional(),
+  localAudioVolume: z.number().min(0).max(1).nullable().optional(),
+  localAudioReadyState: z.number().int().min(0).max(4).nullable().optional(),
+  localAudioCurrentSrc: z.string().nullable().optional(),
+  localAudioHasSrcObject: z.boolean().nullable().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });

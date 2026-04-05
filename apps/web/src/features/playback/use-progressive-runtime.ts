@@ -99,6 +99,7 @@ const maxPlaybackStartRetryAttempts = 18;
 const remoteAudioHoldMs = 1_200;
 const remoteStartupGatePollMs = 120;
 const enableDirectProgressiveTakeover = true;
+const enableListenerLocalTakeover = false;
 const stableRemoteStartupBufferMs = 220;
 const constrainedRemoteStartupBufferMs = 320;
 const weakRemoteStartupBufferMs = 420;
@@ -280,12 +281,14 @@ export function useProgressiveRuntime({
     [currentProgressiveManifest, currentTrackAvailabilityAnnouncement?.availableChunks, playback]
   );
   const canPrepareProgressiveLocal =
+    enableListenerLocalTakeover &&
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
     !!currentProgressiveManifest &&
     canUseProgressivePlayback() &&
     currentProgressiveEngineType !== "none";
   const canWarmBufferedFullLocal =
+    enableListenerLocalTakeover &&
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
     !!currentBufferedFullLocalTrack &&
@@ -547,6 +550,28 @@ export function useProgressiveRuntime({
       roomSnapshot?.room.playback.sourceSessionId
     ]
   );
+  const localAudioDiagnostics = useMemo(() => {
+    const localAudio = audioRef.current;
+    if (!localAudio) {
+      return {
+        localAudioPaused: null,
+        localAudioMuted: null,
+        localAudioVolume: null,
+        localAudioReadyState: null,
+        localAudioCurrentSrc: null,
+        localAudioHasSrcObject: null
+      };
+    }
+
+    return {
+      localAudioPaused: localAudio.paused,
+      localAudioMuted: localAudio.muted,
+      localAudioVolume: localAudio.volume,
+      localAudioReadyState: localAudio.readyState,
+      localAudioCurrentSrc: localAudio.currentSrc || null,
+      localAudioHasSrcObject: !!localAudio.srcObject
+    };
+  }, [audioRef, playbackRevision, activePlaybackSource, playback?.currentTrackId, playback?.status]);
 
   const destroyProgressiveRuntime = useCallback(() => {
     progressiveEngineRef.current?.destroy();
@@ -599,12 +624,21 @@ export function useProgressiveRuntime({
 
   const isLocalTakeoverAllowed = useCallback(
     (now = Date.now()) =>
+      enableListenerLocalTakeover &&
       !remoteFirstLock &&
       connectedPeersCount > 0 &&
       now >= localTakeoverCooldownUntilRef.current &&
       mediaConnectedPeersCount > 0,
     [connectedPeersCount, mediaConnectedPeersCount, remoteFirstLock]
   );
+
+  useEffect(() => {
+    if (enableListenerLocalTakeover || isCurrentSourceOwner || activePlaybackSource === "remote-stream") {
+      return;
+    }
+
+    setActivePlaybackSource("remote-stream");
+  }, [activePlaybackSource, isCurrentSourceOwner, setActivePlaybackSource]);
 
   const transitionPlaybackSource = useCallback(
     (
@@ -1771,6 +1805,12 @@ export function useProgressiveRuntime({
           currentPeerId: sourceOwnerIdentity.currentPeerId,
           playbackSourcePeerId: sourceOwnerIdentity.playbackSourcePeerId,
           isSourceOwner: sourceOwnerIdentity.isSourceOwner,
+          localAudioPaused: localAudioDiagnostics.localAudioPaused,
+          localAudioMuted: localAudioDiagnostics.localAudioMuted,
+          localAudioVolume: localAudioDiagnostics.localAudioVolume,
+          localAudioReadyState: localAudioDiagnostics.localAudioReadyState,
+          localAudioCurrentSrc: localAudioDiagnostics.localAudioCurrentSrc,
+          localAudioHasSrcObject: localAudioDiagnostics.localAudioHasSrcObject,
           startupBufferMs,
           lastStablePlaybackAt: lastStablePlaybackAtRef.current
         }
@@ -1781,6 +1821,7 @@ export function useProgressiveRuntime({
     fullLocalReady,
     fullLocalEligible,
     fullLocalBlockedReason,
+    localAudioDiagnostics,
     sourceOwnerIdentity,
     progressiveLocalEligible,
     progressiveLocalBlockedReason,

@@ -215,6 +215,39 @@ describe("RoomMediaMesh", () => {
     });
   });
 
+  it("attaches the latest host audio track before answering a listener-initiated offer", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const stream = {
+      getAudioTracks: () => [{ id: "track_live" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers([], stream, 2);
+    await mesh.handleSignal({
+      roomId: "room_1",
+      fromPeerId: "peer_listener",
+      toPeerId: "peer_source",
+      channelKind: "media",
+      mediaEpoch: 2,
+      type: "offer",
+      payload: {
+        type: "offer",
+        sdp: "listener-offer"
+      }
+    });
+
+    expect(FakeRTCPeerConnection.senders).toHaveLength(1);
+    expect(FakeRTCPeerConnection.senders[0]?.track).toMatchObject({ id: "track_live" });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "answer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 2
+    });
+  });
+
   it("does not tear down peers on transient disconnected state", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
