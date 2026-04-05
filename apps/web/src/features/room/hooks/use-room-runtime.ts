@@ -342,6 +342,10 @@ export function useRoomRuntime({
       if (stream) {
         clearPendingRemoteStreamClear();
         if (remoteAudio.srcObject !== stream) {
+          remoteAudio.pause();
+          if (remoteAudio.srcObject) {
+            remoteAudio.srcObject = null;
+          }
           remoteAudio.srcObject = stream;
         }
         return;
