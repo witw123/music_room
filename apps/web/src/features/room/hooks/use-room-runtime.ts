@@ -860,7 +860,7 @@ export function useRoomRuntime({
           return;
         }
 
-        const preferAudioContextCapture = activePlaybackSource !== "remote-stream";
+        const preferAudioContextCapture = getCapturedAudioStreamMode(relayAudio) === "audio-context";
         let usedForcedRefresh = shouldForceCaptureRefresh;
         let capture = captureAudioStream(relayAudio, {
           forceRefresh: shouldForceCaptureRefresh,
