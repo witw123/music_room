@@ -50,8 +50,10 @@ type MediaPeerEntry = {
   statsSnapshot: PeerConnectionStatsSnapshot | null;
 };
 
-const bootstrapAudioMaxBitrateBps = 96_000;
-const constrainedAudioMaxBitrateBps = 64_000;
+const directAudioMaxBitrateBps = 160_000;
+const constrainedAudioMaxBitrateBps = 112_000;
+const relayAudioMaxBitrateBps = 72_000;
+const weakLinkAudioMaxBitrateBps = 48_000;
 const minimumAudioMaxBitrateBps = 32_000;
 const stableReceiverJitterTargetMs = 320;
 const constrainedReceiverJitterTargetMs = 480;
@@ -368,7 +370,7 @@ export class RoomMediaMesh {
     if (entry.senders.length === 0 && nextTrack) {
       const sender = entry.connection.addTrack(nextTrack, localStream as MediaStream);
       entry.senders = [sender];
-      void this.configureAudioSender(entry, sender, nextTrack, bootstrapAudioMaxBitrateBps);
+      void this.configureAudioSender(entry, sender, nextTrack, directAudioMaxBitrateBps);
       entry.stream = localStream;
       return true;
     }
@@ -382,7 +384,7 @@ export class RoomMediaMesh {
               entry,
               sender,
               nextTrack,
-              entry.configuredAudioMaxBitrateBps ?? bootstrapAudioMaxBitrateBps
+              entry.configuredAudioMaxBitrateBps ?? directAudioMaxBitrateBps
             )
           )
           .catch(() => undefined);
@@ -453,6 +455,10 @@ export class RoomMediaMesh {
         peerId,
         sample: {
           ...sample,
+          targetAudioBitrateKbps:
+            entry.configuredAudioMaxBitrateBps !== null
+              ? Math.round(entry.configuredAudioMaxBitrateBps / 1000)
+              : null,
           receiverJitterTargetMs: entry.configuredReceiverJitterTargetMs
         }
       });
@@ -585,16 +591,22 @@ export class RoomMediaMesh {
 
 export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSample) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  const severeWeakLink =
+    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
+    (typeof sample.packetsLost === "number" && sample.packetsLost >= 120) ||
+    (typeof sample.jitterMs === "number" && sample.jitterMs >= 45);
   const weakLink =
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
     (typeof sample.packetsLost === "number" && sample.packetsLost >= 80) ||
     (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
-  let targetMaxBitrateBps = constrainedTransport
-    ? constrainedAudioMaxBitrateBps
-    : bootstrapAudioMaxBitrateBps;
+  let targetMaxBitrateBps = directAudioMaxBitrateBps;
 
-  if (weakLink) {
-    targetMaxBitrateBps = Math.min(targetMaxBitrateBps, 48_000);
+  if (severeWeakLink) {
+    targetMaxBitrateBps = weakLinkAudioMaxBitrateBps;
+  } else if (constrainedTransport) {
+    targetMaxBitrateBps = relayAudioMaxBitrateBps;
+  } else if (weakLink) {
+    targetMaxBitrateBps = constrainedAudioMaxBitrateBps;
   }
 
   if (
@@ -602,13 +614,16 @@ export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSa
     Number.isFinite(sample.availableOutgoingBitrateKbps) &&
     sample.availableOutgoingBitrateKbps > 0
   ) {
-    const measuredCeilingBps = Math.floor(sample.availableOutgoingBitrateKbps * 1000 * 0.45);
+    const headroomRatio = constrainedTransport ? 0.7 : 0.8;
+    const measuredCeilingBps = Math.floor(
+      sample.availableOutgoingBitrateKbps * 1000 * headroomRatio
+    );
     targetMaxBitrateBps = Math.min(targetMaxBitrateBps, measuredCeilingBps);
   }
 
   return Math.max(
     minimumAudioMaxBitrateBps,
-    Math.min(bootstrapAudioMaxBitrateBps, targetMaxBitrateBps)
+    Math.min(directAudioMaxBitrateBps, targetMaxBitrateBps)
   );
 }
 

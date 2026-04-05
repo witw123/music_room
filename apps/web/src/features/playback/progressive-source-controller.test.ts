@@ -4,8 +4,11 @@ import {
   resolveFullLocalWarmupDecision,
   resolveProgressiveWarmupDecision
 } from "./progressive-source-controller";
+import { getFullLocalStableWindowMs } from "./progressive-playback";
 
 describe("progressive source controller", () => {
+  const stableWindowMs = getFullLocalStableWindowMs();
+
   it("prefers full-local when the track is already cached in full", () => {
     expect(getInitialProgressivePlaybackSource(true)).toBe("full-local");
     expect(getInitialProgressivePlaybackSource(false)).toBe("remote-stream");
@@ -47,7 +50,7 @@ describe("progressive source controller", () => {
       fallbackReason: null,
       driftMs: 80,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 13_200
+      now: 5_000 + stableWindowMs + 200
     });
 
     expect(thirdDecision).toEqual({
@@ -111,7 +114,7 @@ describe("progressive source controller", () => {
       localReady: true,
       driftMs: 70,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 17_200
+      now: 9_000 + stableWindowMs + 200
     });
 
     expect(secondDecision).toEqual({

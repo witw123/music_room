@@ -75,16 +75,16 @@ type TrackPlan = {
 
 const DEFAULTS = {
   peerCooldownMs: 5_000,
-  maxConcurrentCurrentTrack: 6,
+  maxConcurrentCurrentTrack: 10,
   maxConcurrentUpcomingTrack: 2,
   maxConcurrentBackgroundTrack: 1,
-  maxConcurrentPerPeer: 3,
+  maxConcurrentPerPeer: 4,
   currentLookBehindMs: 5_000,
-  currentLookAheadMs: 20_000,
+  currentLookAheadMs: 36_000,
   upcomingPrefetchMs: 12_000,
   backgroundChunkBatchSize: 2
   ,
-  minScheduleIntervalMs: 120
+  minScheduleIntervalMs: 60
 } as const;
 
 export class ChunkScheduler {
@@ -638,108 +638,108 @@ function getTrackStreamingProfile(
   if (playbackClockSource === "remote") {
     if (policy === "outrun-recovery") {
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 18 : 16,
-        maxConcurrentPerPeer: streamProfile === "large-lossless" ? 6 : 5,
+        maxConcurrent: streamProfile === "large-lossless" ? 24 : 20,
+        maxConcurrentPerPeer: streamProfile === "large-lossless" ? 8 : 6,
         lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 160_000 : 96_000,
-        timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
+        lookAheadMs: streamProfile === "large-lossless" ? 240_000 : 140_000,
+        timeoutMs: streamProfile === "large-lossless" ? 800 : 900
       };
     }
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 4 : 3,
+      maxConcurrent: streamProfile === "large-lossless" ? 14 : 12,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 5 : 4,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 80_000 : 48_000,
-      timeoutMs: 2_000
+      lookAheadMs: streamProfile === "large-lossless" ? 120_000 : 72_000,
+      timeoutMs: 1_600
     };
   }
 
   if (policy === "outrun-recovery") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 18 : 16,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 6 : 5,
+      maxConcurrent: streamProfile === "large-lossless" ? 24 : 20,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 8 : 6,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 180_000 : 110_000,
-      timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
+      lookAheadMs: streamProfile === "large-lossless" ? 260_000 : 150_000,
+      timeoutMs: streamProfile === "large-lossless" ? 800 : 900
     };
   }
 
   if (policy === "catchup") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 16 : 14,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 5 : 4,
+      maxConcurrent: streamProfile === "large-lossless" ? 20 : 18,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 6 : 5,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 96_000 : 56_000,
-      timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_200
+      lookAheadMs: streamProfile === "large-lossless" ? 128_000 : 80_000,
+      timeoutMs: streamProfile === "large-lossless" ? 900 : 1_100
     };
   }
 
   if (policy === "startup") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 14 : 12,
-      maxConcurrentPerPeer: 4,
+      maxConcurrent: streamProfile === "large-lossless" ? 18 : 16,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 6 : 5,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 28_000,
-      timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_200
+      lookAheadMs: streamProfile === "large-lossless" ? 96_000 : 48_000,
+      timeoutMs: streamProfile === "large-lossless" ? 900 : 1_100
     };
   }
 
   if (policy === "pause-fill") {
     return {
-      maxConcurrent: 8,
-      maxConcurrentPerPeer: 3,
+      maxConcurrent: 12,
+      maxConcurrentPerPeer: 4,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 90_000 : 60_000,
-      timeoutMs: 2_000
+      lookAheadMs: streamProfile === "large-lossless" ? 140_000 : 88_000,
+      timeoutMs: 1_600
     };
   }
 
   if (bufferHealth === "critical") {
     return {
-      maxConcurrent: 8,
-      maxConcurrentPerPeer: 3,
+      maxConcurrent: 12,
+      maxConcurrentPerPeer: 4,
       lookBehindMs: 4_000,
-      lookAheadMs: streamProfile === "large-lossless" ? 60_000 : 40_000,
-      timeoutMs: 2_000
+      lookAheadMs: streamProfile === "large-lossless" ? 88_000 : 56_000,
+      timeoutMs: 1_700
     };
   }
 
   if (mode === "conservative" || bufferHealth === "low") {
     return {
-      maxConcurrent: 5,
-      maxConcurrentPerPeer: 2,
+      maxConcurrent: 8,
+      maxConcurrentPerPeer: 3,
       lookBehindMs: 8_000,
-      lookAheadMs: streamProfile === "large-lossless" ? 55_000 : 35_000,
-      timeoutMs: 2_500
+      lookAheadMs: streamProfile === "large-lossless" ? 72_000 : 44_000,
+      timeoutMs: 2_000
     };
   }
 
   if (streamProfile === "large-lossless") {
     return {
-      maxConcurrent: 7,
-      maxConcurrentPerPeer: 3,
+      maxConcurrent: 10,
+      maxConcurrentPerPeer: 4,
       lookBehindMs: 6_000,
-      lookAheadMs: 60_000,
-      timeoutMs: 2_200
+      lookAheadMs: 88_000,
+      timeoutMs: 1_800
     };
   }
 
   if (streamProfile === "large-compressed") {
     return {
-      maxConcurrent: 6,
-      maxConcurrentPerPeer: 3,
+      maxConcurrent: 9,
+      maxConcurrentPerPeer: 4,
       lookBehindMs: 6_000,
-      lookAheadMs: 32_000,
-      timeoutMs: 2_500
+      lookAheadMs: 52_000,
+      timeoutMs: 2_000
     };
   }
 
   return {
     maxConcurrent: DEFAULTS.maxConcurrentCurrentTrack,
-    maxConcurrentPerPeer: 3,
+    maxConcurrentPerPeer: 4,
     lookBehindMs: DEFAULTS.currentLookBehindMs,
     lookAheadMs: DEFAULTS.currentLookAheadMs,
-    timeoutMs: 2_500
+    timeoutMs: 2_000
   };
 }
 

@@ -144,7 +144,7 @@ describe("progressive playback helpers", () => {
           jitterMs: 4
         }
       })
-    ).toBe(true);
+    ).toBe(false);
 
     expect(
       shouldEnableRemoteFirstLock({
@@ -152,9 +152,9 @@ describe("progressive playback helpers", () => {
           mediaCandidateType: "host",
           mediaProtocol: "udp",
           currentRoundTripTimeMs: 240,
-          availableOutgoingBitrateKbps: 88,
-          packetsLost: 90,
-          jitterMs: 35
+          availableOutgoingBitrateKbps: 64,
+          packetsLost: 130,
+          jitterMs: 48
         }
       })
     ).toBe(true);

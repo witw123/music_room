@@ -95,9 +95,9 @@ const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteAudioHoldMs = 1_200;
 const enableDirectProgressiveTakeover = false;
-const stableRemoteStartupBufferMs = 320;
-const constrainedRemoteStartupBufferMs = 480;
-const weakRemoteStartupBufferMs = 560;
+const stableRemoteStartupBufferMs = 220;
+const constrainedRemoteStartupBufferMs = 320;
+const weakRemoteStartupBufferMs = 420;
 
 export function useProgressiveRuntime({
   audioRef,
@@ -239,29 +239,23 @@ export function useProgressiveRuntime({
     }
 
     if (sourceDiagnostics && shouldEnableRemoteFirstLock({ diagnostics: sourceDiagnostics })) {
-      if (sourceDiagnostics.mediaCandidateType === "relay") {
-        return "relay-transport";
-      }
-      if (sourceDiagnostics.mediaProtocol === "tcp") {
-        return "tcp-transport";
-      }
       if (
         typeof sourceDiagnostics.currentRoundTripTimeMs === "number" &&
-        sourceDiagnostics.currentRoundTripTimeMs >= 180
+        sourceDiagnostics.currentRoundTripTimeMs >= 220
       ) {
         return "high-rtt";
       }
       if (
         typeof sourceDiagnostics.availableOutgoingBitrateKbps === "number" &&
         sourceDiagnostics.availableOutgoingBitrateKbps > 0 &&
-        sourceDiagnostics.availableOutgoingBitrateKbps <= 96
+        sourceDiagnostics.availableOutgoingBitrateKbps <= 72
       ) {
         return "low-bitrate-headroom";
       }
-      if (typeof sourceDiagnostics.packetsLost === "number" && sourceDiagnostics.packetsLost >= 80) {
+      if (typeof sourceDiagnostics.packetsLost === "number" && sourceDiagnostics.packetsLost >= 120) {
         return "high-packet-loss";
       }
-      if (typeof sourceDiagnostics.jitterMs === "number" && sourceDiagnostics.jitterMs >= 30) {
+      if (typeof sourceDiagnostics.jitterMs === "number" && sourceDiagnostics.jitterMs >= 45) {
         return "high-jitter";
       }
       return "remote-transport-constrained";
@@ -280,14 +274,6 @@ export function useProgressiveRuntime({
           progressiveHealthSnapshot.remainingPlaybackMs)
     ) {
       return "cache-outrun-risk";
-    }
-
-    if (
-      currentProgressiveManifest &&
-      currentTrackAvailabilityAnnouncement &&
-      !isProgressiveTakeoverReady()
-    ) {
-      return "local-cache-not-ready";
     }
 
     if (sourceTransport.transportHealth === "media-only") {

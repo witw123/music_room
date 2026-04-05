@@ -147,6 +147,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   mediaProtocol: z.string().nullable(),
   currentRoundTripTimeMs: z.number().nonnegative().nullable(),
   availableOutgoingBitrateKbps: z.number().nonnegative().nullable(),
+  targetAudioBitrateKbps: z.number().nonnegative().nullable().optional(),
   receiverJitterTargetMs: z.number().nonnegative().nullable().optional(),
   startupBufferMs: z.number().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional(),

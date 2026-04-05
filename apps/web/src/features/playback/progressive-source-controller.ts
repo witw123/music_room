@@ -1,4 +1,7 @@
-import type { ProgressivePlaybackSource } from "./progressive-playback";
+import {
+  getFullLocalStableWindowMs,
+  type ProgressivePlaybackSource
+} from "./progressive-playback";
 
 export type ProgressiveWarmupDecision = {
   nextSource: ProgressivePlaybackSource;
@@ -34,7 +37,7 @@ function resolveBufferedLocalWarmupDecision(input: {
     } satisfies ProgressiveWarmupDecision;
   }
 
-  const switchDelayMs = input.switchDelayMs ?? 8_000;
+  const switchDelayMs = input.switchDelayMs ?? getFullLocalStableWindowMs();
   const maxDriftMs = input.maxDriftMs ?? 180;
   const now = input.now ?? Date.now();
   const stableEnough = input.ready && !input.fallbackReason && input.driftMs <= maxDriftMs;

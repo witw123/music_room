@@ -775,6 +775,7 @@ export function useRoomRuntime({
         protocol: string | null;
         currentRoundTripTimeMs: number | null;
         availableOutgoingBitrateKbps: number | null;
+        targetAudioBitrateKbps?: number | null;
         receiverJitterTargetMs?: number | null;
         mediaReceiveBitrateKbps: number | null;
         mediaSendBitrateKbps: number | null;
@@ -799,6 +800,8 @@ export function useRoomRuntime({
             availableOutgoingBitrateKbps:
               input.sample.availableOutgoingBitrateKbps ??
               snapshot.availableOutgoingBitrateKbps,
+            targetAudioBitrateKbps:
+              input.sample.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
             receiverJitterTargetMs:
               input.sample.receiverJitterTargetMs ?? snapshot.receiverJitterTargetMs,
             mediaReceiveBitrateKbps:

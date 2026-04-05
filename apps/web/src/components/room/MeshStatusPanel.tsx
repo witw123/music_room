@@ -341,6 +341,9 @@ function MeshStatusPanelBase({
                     <span>媒体协议: {peer.mediaProtocol ?? "未知"}</span>
                     <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
                     <span>
+                      目标音频码率: {formatMetric(peer.targetAudioBitrateKbps ?? null, " kbps")}
+                    </span>
+                    <span>
                       接收抖动缓冲目标: {formatDurationMs(peer.receiverJitterTargetMs ?? null)}
                     </span>
                     <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>

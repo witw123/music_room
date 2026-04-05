@@ -100,7 +100,7 @@ export function getRemoteFirstComfortBufferMs(input: {
   mimeType?: string | null;
   codec?: string | null;
 }) {
-  return isFlacTrack(input) ? 75_000 : 36_000;
+  return isFlacTrack(input) ? 48_000 : 20_000;
 }
 
 export function getOutrunRecoverySafetyFactor() {
@@ -108,11 +108,11 @@ export function getOutrunRecoverySafetyFactor() {
 }
 
 export function getFullLocalStableWindowMs() {
-  return 8_000;
+  return 3_500;
 }
 
 export function getLocalTakeoverCooldownMs() {
-  return 12_000;
+  return 6_000;
 }
 
 export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
@@ -120,7 +120,7 @@ export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
     return 0;
   }
 
-  return source === "full-local" ? 8_000 : 12_000;
+  return source === "full-local" ? 3_500 : 6_000;
 }
 
 export function buildProgressiveTrackManifest(
@@ -502,13 +502,9 @@ export function shouldEnableRemoteFirstLock(input: {
     return false;
   }
 
-  if (diagnostics.mediaCandidateType === "relay" || diagnostics.mediaProtocol === "tcp") {
-    return true;
-  }
-
   if (
     typeof diagnostics.currentRoundTripTimeMs === "number" &&
-    diagnostics.currentRoundTripTimeMs >= 180
+    diagnostics.currentRoundTripTimeMs >= 220
   ) {
     return true;
   }
@@ -516,21 +512,21 @@ export function shouldEnableRemoteFirstLock(input: {
   if (
     typeof diagnostics.availableOutgoingBitrateKbps === "number" &&
     diagnostics.availableOutgoingBitrateKbps > 0 &&
-    diagnostics.availableOutgoingBitrateKbps <= 96
+    diagnostics.availableOutgoingBitrateKbps <= 72
   ) {
     return true;
   }
 
   if (
     typeof diagnostics.packetsLost === "number" &&
-    diagnostics.packetsLost >= 80
+    diagnostics.packetsLost >= 120
   ) {
     return true;
   }
 
   if (
     typeof diagnostics.jitterMs === "number" &&
-    diagnostics.jitterMs >= 30
+    diagnostics.jitterMs >= 45
   ) {
     return true;
   }
