@@ -408,6 +408,12 @@ function MeshStatusPanelBase({
                           启动缓冲: {formatDurationMs(peer.progressivePlaybackStatus.startupBufferMs ?? null)}
                         </span>
                         <span>
+                          捕获模式: {peer.progressivePlaybackStatus.hostCaptureMode ?? "未知"}
+                        </span>
+                        <span>
+                          强制刷新捕获: {peer.progressivePlaybackStatus.hostCaptureForcedRefresh ? "是" : "否"}
+                        </span>
+                        <span>
                           远端主路锁定: {peer.progressivePlaybackStatus.remoteFirstLock ? "是" : "否"}
                         </span>
                         <span>
@@ -481,6 +487,17 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.lastSourceStartError ? (
                         <p className="mt-1 text-red-300">
                           音源启动错误: {peer.progressivePlaybackStatus.lastSourceStartError}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostCaptureRefreshKey ? (
+                        <p className="mt-1 text-foreground-muted">
+                          捕获刷新键: {peer.progressivePlaybackStatus.hostCaptureRefreshKey}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostCaptureMediaEpoch !== null &&
+                      peer.progressivePlaybackStatus.hostCaptureMediaEpoch !== undefined ? (
+                        <p className="mt-1 text-foreground-muted">
+                          捕获 mediaEpoch: {peer.progressivePlaybackStatus.hostCaptureMediaEpoch}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (

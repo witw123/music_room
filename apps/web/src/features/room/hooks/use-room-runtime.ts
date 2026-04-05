@@ -38,8 +38,9 @@ import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
-import { captureAudioStream } from "@/features/upload/audio-utils";
+import { captureAudioStream, getCapturedAudioStreamMode } from "@/features/upload/audio-utils";
 import {
+  resolveHostCaptureRefresh,
   hasHostMediaStreamTrack,
   shouldDeferHostMediaStreamSync
 } from "@/features/playback/host-media-sync";
@@ -286,10 +287,12 @@ export function useRoomRuntime({
     inFlight: boolean;
     lastAppliedKey: string | null;
     pendingKey: string | null;
+    lastCaptureRefreshKey: string | null;
   }>({
     inFlight: false,
     lastAppliedKey: null,
-    pendingKey: null
+    pendingKey: null,
+    lastCaptureRefreshKey: null
   });
   const remoteStreamTrackingRef = useRef<{
     trackKey: string | null;
@@ -413,6 +416,39 @@ export function useRoomRuntime({
             audioUnlocked: audioUnlockedRef.current,
             sourceStartState: nextState,
             lastSourceStartError: nextError
+          }
+        })
+      });
+    },
+    []
+  );
+
+  const updateHostCaptureDiagnostics = useCallback(
+    (input: {
+      refreshKey: string | null;
+      forcedRefresh: boolean;
+      captureMode: "native" | "audio-context" | null;
+      mediaEpoch: number | null;
+      summary: string;
+    }) => {
+      recordPeerDiagnosticRef.current({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: "host-capture-state",
+        summary: input.summary,
+        recordEvent: false,
+        update: (snapshot) => ({
+          ...snapshot,
+          progressivePlaybackStatus: {
+            ...(
+              snapshot.progressivePlaybackStatus ??
+              createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+            ),
+            hostCaptureRefreshKey: input.refreshKey,
+            hostCaptureForcedRefresh: input.forcedRefresh,
+            hostCaptureMode: input.captureMode,
+            hostCaptureMediaEpoch: input.mediaEpoch
           }
         })
       });
@@ -777,6 +813,12 @@ export function useRoomRuntime({
       listenerPeerIds.join(",")
     ].join("|");
     const syncState = hostMediaSyncStateRef.current;
+    const { captureRefreshKey, forceRefresh: shouldForceCaptureRefresh } = resolveHostCaptureRefresh({
+      currentTrackId: playback.currentTrackId,
+      mediaEpoch: playback.mediaEpoch,
+      activePlaybackSource,
+      lastCaptureRefreshKey: syncState.lastCaptureRefreshKey
+    });
 
     if (syncState.lastAppliedKey === syncKey || syncState.pendingKey === syncKey) {
       return;
@@ -800,6 +842,14 @@ export function useRoomRuntime({
           remoteAudio: remoteAudioRef.current
         });
         if (!relayAudio || !playback.currentTrackId) {
+          syncState.lastCaptureRefreshKey = null;
+          updateHostCaptureDiagnostics({
+            refreshKey: null,
+            forcedRefresh: false,
+            captureMode: null,
+            mediaEpoch: null,
+            summary: "房主推流已停止"
+          });
           await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
           syncState.lastAppliedKey = syncKey;
           return;
@@ -811,10 +861,19 @@ export function useRoomRuntime({
         }
 
         const preferAudioContextCapture = activePlaybackSource !== "remote-stream";
+        let usedForcedRefresh = shouldForceCaptureRefresh;
         let capture = captureAudioStream(relayAudio, {
+          forceRefresh: shouldForceCaptureRefresh,
           preferAudioContext: preferAudioContextCapture
         });
         if (!capture) {
+          updateHostCaptureDiagnostics({
+            refreshKey: captureRefreshKey,
+            forcedRefresh: usedForcedRefresh,
+            captureMode: getCapturedAudioStreamMode(relayAudio),
+            mediaEpoch: playback.mediaEpoch,
+            summary: "房主推流捕获失败，未能生成音频流"
+          });
           setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
           return;
         }
@@ -825,6 +884,7 @@ export function useRoomRuntime({
           relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
           !hasHostMediaStreamTrack(capture)
         ) {
+          usedForcedRefresh = true;
           capture = captureAudioStream(relayAudio, {
             forceRefresh: true,
             preferAudioContext: preferAudioContextCapture
@@ -832,9 +892,27 @@ export function useRoomRuntime({
         }
 
         if (!capture) {
+          updateHostCaptureDiagnostics({
+            refreshKey: captureRefreshKey,
+            forcedRefresh: usedForcedRefresh,
+            captureMode: getCapturedAudioStreamMode(relayAudio),
+            mediaEpoch: playback.mediaEpoch,
+            summary: "房主推流刷新后仍未拿到音频流"
+          });
           setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
           return;
         }
+
+        syncState.lastCaptureRefreshKey = captureRefreshKey;
+        updateHostCaptureDiagnostics({
+          refreshKey: captureRefreshKey,
+          forcedRefresh: usedForcedRefresh,
+          captureMode: getCapturedAudioStreamMode(relayAudio),
+          mediaEpoch: playback.mediaEpoch,
+          summary: usedForcedRefresh
+            ? "房主推流已刷新捕获链路"
+            : "房主推流复用现有捕获链路"
+        });
 
         if (
           shouldDeferHostMediaStreamSync({
@@ -873,6 +951,7 @@ export function useRoomRuntime({
           () => undefined
         );
         hostStreamRef.current = null;
+        syncState.lastCaptureRefreshKey = null;
       }
     } finally {
       const nextPendingKey = syncState.pendingKey;
@@ -911,7 +990,8 @@ export function useRoomRuntime({
     isCurrentSourceOwner,
     peerId,
     remoteAudioRef,
-    setStatusMessage
+    setStatusMessage,
+    updateHostCaptureDiagnostics
   ]);
 
   const ensureSourcePlaybackStarted = useCallback(async () => {
@@ -2137,7 +2217,8 @@ export function useRoomRuntime({
       hostMediaSyncStateRef.current = {
         inFlight: false,
         lastAppliedKey: null,
-        pendingKey: null
+        pendingKey: null,
+        lastCaptureRefreshKey: null
       };
       setConnectedPeers([]);
       setMediaConnectedPeers([]);

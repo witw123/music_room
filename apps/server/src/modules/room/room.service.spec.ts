@@ -851,7 +851,7 @@ describe("RoomService", () => {
     });
   });
 
-  it("keeps the same media epoch when switching tracks owned by the same online source", async () => {
+  it("bumps the media epoch when switching tracks owned by the same online source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -898,7 +898,58 @@ describe("RoomService", () => {
       actorSessionId: host.id
     });
 
-    expect(secondPlayback.mediaEpoch).toBe(firstPlayback.mediaEpoch);
+    expect(secondPlayback.mediaEpoch).toBe(firstPlayback.mediaEpoch + 1);
+  });
+
+  it("keeps the same media epoch for pause, seek, and resume on the same source track", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Stable Epoch",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "stable-epoch-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playing = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: member.id
+    });
+    const paused = await roomService.updatePlayback(snapshot.room.id, {
+      action: "pause",
+      actorSessionId: member.id,
+      positionMs: 5000
+    });
+    const seeked = await roomService.updatePlayback(snapshot.room.id, {
+      action: "seek",
+      actorSessionId: member.id,
+      positionMs: 20000
+    });
+    const resumed = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      actorSessionId: member.id
+    });
+
+    expect(paused.mediaEpoch).toBe(playing.mediaEpoch);
+    expect(seeked.mediaEpoch).toBe(playing.mediaEpoch);
+    expect(resumed.mediaEpoch).toBe(playing.mediaEpoch);
   });
 
   it("restores the recent active room for a session from redis", async () => {

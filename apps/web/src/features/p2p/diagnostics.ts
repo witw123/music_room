@@ -184,6 +184,10 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       fullLocalBlockedReason: null,
       progressiveLocalEligible: false,
       progressiveLocalBlockedReason: null,
+      hostCaptureRefreshKey: null,
+      hostCaptureForcedRefresh: false,
+      hostCaptureMode: null,
+      hostCaptureMediaEpoch: null,
       startupBufferMs: null,
       lastStablePlaybackAt: null
     },

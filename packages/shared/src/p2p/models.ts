@@ -139,6 +139,10 @@ export const progressivePlaybackStatusSchema = z.object({
   fullLocalBlockedReason: z.string().nullable().optional(),
   progressiveLocalEligible: z.boolean().optional(),
   progressiveLocalBlockedReason: z.string().nullable().optional(),
+  hostCaptureRefreshKey: z.string().nullable().optional(),
+  hostCaptureForcedRefresh: z.boolean().optional(),
+  hostCaptureMode: z.enum(["native", "audio-context"]).nullable().optional(),
+  hostCaptureMediaEpoch: z.number().int().nonnegative().nullable().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });

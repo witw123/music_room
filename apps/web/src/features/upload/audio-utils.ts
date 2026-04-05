@@ -17,6 +17,8 @@ export type UploadedTrack = {
   objectUrl: string;
 };
 
+export type CapturedAudioStreamMode = CapturedAudioGraph["mode"];
+
 export async function buildTrackMeta(file: File, objectUrl: string, session: GuestSession) {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);
@@ -188,4 +190,8 @@ export function captureAudioStream(
   }
 
   return null;
+}
+
+export function getCapturedAudioStreamMode(audio: HTMLAudioElement) {
+  return capturedAudioGraphs.get(audio)?.mode ?? null;
 }

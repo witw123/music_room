@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { captureAudioStream } from "./audio-utils";
+import { captureAudioStream, getCapturedAudioStreamMode } from "./audio-utils";
 
 describe("captureAudioStream", () => {
   it("reuses the native captureStream result for the same audio element", () => {
@@ -17,6 +17,7 @@ describe("captureAudioStream", () => {
     expect(first).toBe(stream);
     expect(second).toBe(stream);
     expect(captureStream).toHaveBeenCalledTimes(1);
+    expect(getCapturedAudioStreamMode(audio)).toBe("native");
   });
 
   it("falls back to null instead of throwing when media capture APIs fail", () => {
@@ -93,6 +94,7 @@ describe("captureAudioStream", () => {
     expect(stream).toBe(destinationStream);
     expect(captureStream).not.toHaveBeenCalled();
     expect(createMediaElementSource).toHaveBeenCalledWith(audio);
+    expect(getCapturedAudioStreamMode(audio)).toBe("audio-context");
 
     (globalThis as { window?: unknown }).window = previousWindow;
   });

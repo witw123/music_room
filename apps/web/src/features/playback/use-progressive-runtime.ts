@@ -20,6 +20,7 @@ import {
   pickActiveMediaDiagnostic,
   resolveTransportHealth
 } from "@/features/p2p";
+import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { syncLocalPlaybackWindow } from "./playback-sync";
 import {
@@ -1693,6 +1694,10 @@ export function useProgressiveRuntime({
       update: (snapshot) => ({
         ...snapshot,
         progressivePlaybackStatus: {
+          ...(
+            snapshot.progressivePlaybackStatus ??
+            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+          ),
           activeSource: progressiveHealthSnapshot.activeSource,
           transportGovernorMode,
           engineType: progressiveHealthSnapshot.engineType,

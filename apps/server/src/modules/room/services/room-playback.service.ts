@@ -149,6 +149,7 @@ export class RoomPlaybackService {
       throw new Error("Track owner is not online, so this song cannot be played right now.");
     }
 
+    const isTrackSwitch = playback.currentTrackId !== trackId;
     const isSwitchingSource =
       playback.sourceSessionId !== sourceCandidate.sessionId ||
       playback.sourcePeerId !== sourceCandidate.peerId;
@@ -161,7 +162,7 @@ export class RoomPlaybackService {
     playback.sourceTrackId = trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
     playback.startedAt = new Date().toISOString();
-    if (isSwitchingSource) {
+    if (isTrackSwitch || isSwitchingSource) {
       playback.mediaEpoch += 1;
     }
   }
