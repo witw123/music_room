@@ -5,6 +5,7 @@ export type PeerConnectionStatsSample = {
   protocol: string | null;
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
+  receiverJitterTargetMs?: number | null;
   mediaReceiveBitrateKbps: number | null;
   mediaSendBitrateKbps: number | null;
   packetsLost: number | null;

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PeerSignalMessage } from "@music-room/shared";
-import { RoomMediaMesh, resolvePreferredAudioMaxBitrateBps } from "./media-mesh";
+import {
+  RoomMediaMesh,
+  resolvePreferredAudioMaxBitrateBps,
+  resolvePreferredReceiverJitterTargetMs
+} from "./media-mesh";
 
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
@@ -10,6 +14,12 @@ class FakeRTCPeerConnection {
     setParameters: ReturnType<typeof vi.fn>;
     track: MediaStreamTrack | null;
   }> = [];
+  static transceivers: Array<{
+    receiver: {
+      jitterBufferTarget?: number;
+    };
+    setCodecPreferences: ReturnType<typeof vi.fn>;
+  }> = [];
 
   connectionState: RTCPeerConnectionState = "new";
   signalingState: RTCSignalingState = "stable";
@@ -17,7 +27,16 @@ class FakeRTCPeerConnection {
   onconnectionstatechange: (() => void) | null = null;
   ontrack: ((event: RTCTrackEvent) => void) | null = null;
   closed = false;
-  addTransceiver = vi.fn(() => ({} as RTCRtpTransceiver));
+  addTransceiver = vi.fn(() => {
+    const transceiver = {
+      receiver: {
+        jitterBufferTarget: undefined as number | undefined
+      },
+      setCodecPreferences: vi.fn()
+    };
+    FakeRTCPeerConnection.transceivers.push(transceiver);
+    return transceiver as unknown as RTCRtpTransceiver;
+  });
 
   constructor() {
     FakeRTCPeerConnection.instances.push(this);
@@ -96,7 +115,16 @@ describe("RoomMediaMesh", () => {
   beforeEach(() => {
     FakeRTCPeerConnection.instances = [];
     FakeRTCPeerConnection.senders = [];
+    FakeRTCPeerConnection.transceivers = [];
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
+    vi.stubGlobal("RTCRtpReceiver", {
+      getCapabilities: vi.fn(() => ({
+        codecs: [
+          { mimeType: "audio/opus" },
+          { mimeType: "audio/PCMU" }
+        ]
+      }))
+    });
   });
 
   afterEach(() => {
@@ -123,6 +151,7 @@ describe("RoomMediaMesh", () => {
     expect(firstPeer?.addTransceiver).toHaveBeenCalledWith("audio", {
       direction: "recvonly"
     });
+    expect(FakeRTCPeerConnection.transceivers[0]?.setCodecPreferences).toHaveBeenCalledTimes(1);
 
     await mesh.handleSignal(buildOffer("peer_source_b", 1));
 
@@ -286,5 +315,35 @@ describe("RoomMediaMesh", () => {
         jitterMs: 4
       })
     ).toBe(40_500);
+  });
+
+  it("prefers a stronger receiver jitter target on constrained links", () => {
+    expect(
+      resolvePreferredReceiverJitterTargetMs({
+        candidateType: "relay",
+        protocol: "tcp",
+        currentRoundTripTimeMs: 62,
+        availableOutgoingBitrateKbps: 220,
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: 65,
+        packetsLost: 0,
+        jitterMs: 4
+      })
+    ).toBe(480);
+  });
+
+  it("prefers the strongest receiver jitter target on weak links", () => {
+    expect(
+      resolvePreferredReceiverJitterTargetMs({
+        candidateType: "host",
+        protocol: "udp",
+        currentRoundTripTimeMs: 210,
+        availableOutgoingBitrateKbps: 320,
+        mediaReceiveBitrateKbps: 128,
+        mediaSendBitrateKbps: 96,
+        packetsLost: 120,
+        jitterMs: 34
+      })
+    ).toBe(560);
   });
 });

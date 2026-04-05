@@ -16,7 +16,6 @@ import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
-import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
 import {
   createPlaybackStartIntent,
@@ -418,11 +417,12 @@ export function MusicRoomApp({
       return;
     }
 
+    const hasFullLocalTrack = !!uploadedTracks[currentPlaybackTrackId];
     setActivePlaybackSource(
-      getInitialProgressivePlaybackSource(!!uploadedTracks[currentPlaybackTrackId])
+      isCurrentSourceOwner && hasFullLocalTrack ? "full-local" : "remote-stream"
     );
     setProgressiveFallbackReason(null);
-  }, [currentPlaybackTrackId, uploadedTracks]);
+  }, [currentPlaybackTrackId, isCurrentSourceOwner, uploadedTracks]);
 
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {

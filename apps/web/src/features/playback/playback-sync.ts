@@ -6,6 +6,7 @@ export function syncLocalPlaybackWindow(
     softDriftMs?: number;
     hardDriftMs?: number;
     allowRateCorrection?: boolean;
+    correctionMode?: "rate" | "seek-only" | "muted-warmup";
   }
 ) {
   if (!Number.isFinite(audio.currentTime)) {
@@ -15,10 +16,11 @@ export function syncLocalPlaybackWindow(
   const softDriftMs = options?.softDriftMs ?? 180;
   const hardDriftMs = options?.hardDriftMs ?? 1_200;
   const allowRateCorrection = options?.allowRateCorrection ?? true;
+  const correctionMode = options?.correctionMode ?? (allowRateCorrection ? "rate" : "seek-only");
   const driftMs = (expectedSeconds - audio.currentTime) * 1000;
   const absDriftMs = Math.abs(driftMs);
 
-  if (!allowRateCorrection) {
+  if (correctionMode === "muted-warmup") {
     if (absDriftMs >= softDriftMs) {
       audio.currentTime = Math.max(0, expectedSeconds);
     }
@@ -26,8 +28,8 @@ export function syncLocalPlaybackWindow(
     return;
   }
 
-  if (!isPlaying || absDriftMs >= hardDriftMs) {
-    if (absDriftMs >= softDriftMs) {
+  if (correctionMode === "seek-only" || !allowRateCorrection) {
+    if (!isPlaying || absDriftMs >= hardDriftMs) {
       audio.currentTime = Math.max(0, expectedSeconds);
     }
     audio.playbackRate = 1;

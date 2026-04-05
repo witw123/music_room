@@ -41,16 +41,21 @@ type MediaPeerEntry = {
   connection: RTCPeerConnection;
   stream: MediaStream | null;
   senders: RTCRtpSender[];
+  receiver: RTCRtpReceiver | null;
   pendingCandidates: RTCIceCandidateInit[];
   wantsIncomingAudio: boolean;
   statsIntervalId: ReturnType<typeof setInterval> | null;
   configuredAudioMaxBitrateBps: number | null;
+  configuredReceiverJitterTargetMs: number | null;
   statsSnapshot: PeerConnectionStatsSnapshot | null;
 };
 
 const bootstrapAudioMaxBitrateBps = 96_000;
 const constrainedAudioMaxBitrateBps = 64_000;
 const minimumAudioMaxBitrateBps = 32_000;
+const stableReceiverJitterTargetMs = 320;
+const constrainedReceiverJitterTargetMs = 480;
+const weakLinkReceiverJitterTargetMs = 560;
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
@@ -262,18 +267,23 @@ export class RoomMediaMesh {
       connection,
       stream: null,
       senders: [],
+      receiver: null,
       pendingCandidates: [],
       wantsIncomingAudio,
       statsIntervalId: null,
       configuredAudioMaxBitrateBps: null,
+      configuredReceiverJitterTargetMs: null,
       statsSnapshot: null
     };
     this.startStatsSampling(peerId, entry);
 
     if (wantsIncomingAudio) {
-      connection.addTransceiver("audio", {
+      const transceiver = connection.addTransceiver("audio", {
         direction: "recvonly"
       });
+      entry.receiver = transceiver.receiver ?? null;
+      this.configureAudioTransceiverCodecPreferences(transceiver);
+      this.configureReceiverJitterBuffer(entry, stableReceiverJitterTargetMs);
     }
 
     connection.onicecandidate = (event) => {
@@ -436,10 +446,15 @@ export class RoomMediaMesh {
 
       entry.statsSnapshot = nextStats.snapshot;
       const sample = nextStats.sample;
+      const receiverJitterTargetMs = resolvePreferredReceiverJitterTargetMs(sample);
+      this.configureReceiverJitterBuffer(entry, receiverJitterTargetMs);
       await this.tuneOutgoingAudio(entry, sample);
       this.callbacks.onStatsSample?.({
         peerId,
-        sample
+        sample: {
+          ...sample,
+          receiverJitterTargetMs: entry.configuredReceiverJitterTargetMs
+        }
       });
     };
 
@@ -484,9 +499,16 @@ export class RoomMediaMesh {
           parameters.encodings && parameters.encodings.length > 0
             ? parameters.encodings.map((encoding) => ({
                 ...encoding,
-                maxBitrate: maxBitrateBps
+                maxBitrate: maxBitrateBps,
+                ...(hasEncodingDtxFlag(encoding)
+                  ? { dtx: "disabled" as "disabled" | "enabled" }
+                  : {})
               }))
-            : [{ maxBitrate: maxBitrateBps }]
+            : [
+                {
+                  maxBitrate: maxBitrateBps
+                } satisfies RTCRtpEncodingParameters
+              ]
       };
       await sender.setParameters(nextParameters);
       entry.configuredAudioMaxBitrateBps = maxBitrateBps;
@@ -510,6 +532,54 @@ export class RoomMediaMesh {
         this.configureAudioSender(entry, sender, sender.track, nextMaxBitrateBps)
       )
     );
+  }
+
+  private configureReceiverJitterBuffer(entry: MediaPeerEntry, targetMs: number) {
+    if (!entry.receiver) {
+      return;
+    }
+
+    const receiverWithTarget = entry.receiver as RTCRtpReceiver & {
+      jitterBufferTarget?: number;
+    };
+    if (typeof receiverWithTarget.jitterBufferTarget === "undefined") {
+      return;
+    }
+
+    if (entry.configuredReceiverJitterTargetMs === targetMs) {
+      return;
+    }
+
+    try {
+      receiverWithTarget.jitterBufferTarget = targetMs / 1000;
+      entry.configuredReceiverJitterTargetMs = targetMs;
+    } catch {
+      // Ignore unsupported setter failures and keep using browser defaults.
+    }
+  }
+
+  private configureAudioTransceiverCodecPreferences(transceiver: RTCRtpTransceiver) {
+    const codecCapabilities = getAudioCodecCapabilities();
+    if (!codecCapabilities || typeof transceiver.setCodecPreferences !== "function") {
+      return;
+    }
+
+    const opusCodecs = codecCapabilities.filter((codec) =>
+      codec.mimeType.toLowerCase() === "audio/opus"
+    );
+    if (opusCodecs.length === 0) {
+      return;
+    }
+
+    const remaining = codecCapabilities.filter(
+      (codec) => codec.mimeType.toLowerCase() !== "audio/opus"
+    );
+
+    try {
+      transceiver.setCodecPreferences([...opusCodecs, ...remaining]);
+    } catch {
+      // Ignore codec preference failures and keep browser negotiation defaults.
+    }
   }
 }
 
@@ -540,6 +610,38 @@ export function resolvePreferredAudioMaxBitrateBps(sample: PeerConnectionStatsSa
     minimumAudioMaxBitrateBps,
     Math.min(bootstrapAudioMaxBitrateBps, targetMaxBitrateBps)
   );
+}
+
+export function resolvePreferredReceiverJitterTargetMs(sample: PeerConnectionStatsSample) {
+  const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  const weakLink =
+    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
+    (typeof sample.packetsLost === "number" && sample.packetsLost >= 80) ||
+    (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
+
+  if (weakLink) {
+    return weakLinkReceiverJitterTargetMs;
+  }
+
+  if (constrainedTransport) {
+    return constrainedReceiverJitterTargetMs;
+  }
+
+  return stableReceiverJitterTargetMs;
+}
+
+function getAudioCodecCapabilities() {
+  const receiverCtor = globalThis.RTCRtpReceiver as
+    | (typeof RTCRtpReceiver & {
+        getCapabilities?: (kind: "audio") => RTCRtpCapabilities | null;
+      })
+    | undefined;
+
+  return receiverCtor?.getCapabilities?.("audio")?.codecs ?? null;
+}
+
+function hasEncodingDtxFlag(encoding: RTCRtpEncodingParameters) {
+  return "dtx" in (encoding as RTCRtpEncodingParameters & { dtx?: unknown });
 }
 
 function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {

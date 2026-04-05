@@ -66,6 +66,18 @@ function formatMetric(value: number | null, unit: string) {
   return `${value}${unit}`;
 }
 
+function formatDurationMs(value: number | null) {
+  if (value === null) {
+    return "未知";
+  }
+
+  if (Math.abs(value) < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+
+  return `${(value / 1000).toFixed(1)}s`;
+}
+
 function formatPreciseMetric(
   value: number | null,
   unit: string,
@@ -328,6 +340,9 @@ function MeshStatusPanelBase({
                     <span>媒体候选: {formatCandidateType(peer.mediaCandidateType)}</span>
                     <span>媒体协议: {peer.mediaProtocol ?? "未知"}</span>
                     <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
+                    <span>
+                      接收抖动缓冲目标: {formatDurationMs(peer.receiverJitterTargetMs ?? null)}
+                    </span>
                     <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>
                     <span>媒体接收: {formatMetric(peer.mediaReceiveBitrateKbps, " kbps")}</span>
                     <span>媒体发送: {formatMetric(peer.mediaSendBitrateKbps, " kbps")}</span>
@@ -372,6 +387,9 @@ function MeshStatusPanelBase({
                         <span>调度策略: {peer.progressivePlaybackStatus.schedulerPolicy ?? "未激活"}</span>
                         <span>启动就绪: {peer.progressivePlaybackStatus.startupReady ? "是" : "否"}</span>
                         <span>
+                          启动缓冲: {formatDurationMs(peer.progressivePlaybackStatus.startupBufferMs ?? null)}
+                        </span>
+                        <span>
                           远端主路锁定: {peer.progressivePlaybackStatus.remoteFirstLock ? "是" : "否"}
                         </span>
                         <span>
@@ -380,7 +398,33 @@ function MeshStatusPanelBase({
                         <span>
                           完整本地可切: {peer.progressivePlaybackStatus.fullLocalReady ? "是" : "否"}
                         </span>
+                        <span>
+                          本地接管资格: {peer.progressivePlaybackStatus.fullLocalEligible ? "是" : "否"}
+                        </span>
+                        <span>
+                          缓存填充耗时:{" "}
+                          {formatDurationMs(
+                            peer.progressivePlaybackStatus.estimatedFillTimeMs ?? null
+                          )}
+                        </span>
+                        <span>
+                          剩余播放时长:{" "}
+                          {formatDurationMs(
+                            peer.progressivePlaybackStatus.remainingPlaybackMs ?? null
+                          )}
+                        </span>
+                        <span>
+                          安全余量:{" "}
+                          {formatDurationMs(
+                            peer.progressivePlaybackStatus.bufferSafetyMarginMs ?? null
+                          )}
+                        </span>
                       </div>
+                      {peer.progressivePlaybackStatus.fullLocalBlockedReason ? (
+                        <p className="mt-2 text-amber-300">
+                          禁止切本地: {peer.progressivePlaybackStatus.fullLocalBlockedReason}
+                        </p>
+                      ) : null}
                       {peer.progressivePlaybackStatus.fallbackReason ? (
                         <p className="mt-2 text-amber-300">
                           回退原因: {peer.progressivePlaybackStatus.fallbackReason}
@@ -409,6 +453,12 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (
                         <p className="mt-1 text-foreground-muted">
                           下一首预热: {peer.progressivePlaybackStatus.nextQueueTrackPrefetch}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.lastStablePlaybackAt ? (
+                        <p className="mt-1 text-foreground-muted">
+                          最近稳播:{" "}
+                          {formatTimestamp(peer.progressivePlaybackStatus.lastStablePlaybackAt)}
                         </p>
                       ) : null}
                       {peer.timeOnRemoteStreamMs !== null ? (

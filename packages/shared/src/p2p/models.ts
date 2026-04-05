@@ -113,6 +113,7 @@ export const progressivePlaybackStatusSchema = z.object({
   fallbackReason: z.string().nullable(),
   estimatedFillTimeMs: z.number().int().nonnegative().nullable().optional(),
   remainingPlaybackMs: z.number().int().nonnegative().nullable().optional(),
+  bufferSafetyMarginMs: z.number().int().nullable().optional(),
   pendingPlaybackIntent: z.string().nullable().optional(),
   intentMatchedSource: z
     .enum(["remote-stream", "progressive-local", "full-local"])
@@ -123,7 +124,11 @@ export const progressivePlaybackStatusSchema = z.object({
   remoteFirstLock: z.boolean().optional(),
   remoteFirstLockReason: z.string().nullable().optional(),
   localTakeoverCooldownMs: z.number().int().nonnegative().nullable().optional(),
-  fullLocalReady: z.boolean().optional()
+  fullLocalReady: z.boolean().optional(),
+  fullLocalEligible: z.boolean().optional(),
+  fullLocalBlockedReason: z.string().nullable().optional(),
+  startupBufferMs: z.number().int().nonnegative().nullable().optional(),
+  lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });
 
 export const peerDiagnosticsSnapshotSchema = z.object({
@@ -142,6 +147,9 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   mediaProtocol: z.string().nullable(),
   currentRoundTripTimeMs: z.number().nonnegative().nullable(),
   availableOutgoingBitrateKbps: z.number().nonnegative().nullable(),
+  receiverJitterTargetMs: z.number().nonnegative().nullable().optional(),
+  startupBufferMs: z.number().nonnegative().nullable().optional(),
+  lastStablePlaybackAt: z.string().datetime().nullable().optional(),
   mediaReceiveBitrateKbps: z.number().nonnegative().nullable(),
   mediaSendBitrateKbps: z.number().nonnegative().nullable(),
   pieceDownloadRateKbps: z.number().nonnegative().nullable(),
