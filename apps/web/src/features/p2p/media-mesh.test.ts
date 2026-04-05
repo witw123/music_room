@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PeerSignalMessage } from "@music-room/shared";
 import {
   RoomMediaMesh,
+  normalizeAudioBitrateBps,
   resolvePreferredAudioMaxBitrateBps,
-  resolvePreferredReceiverJitterTargetMs
+  resolvePreferredReceiverJitterTargetMs,
+  shouldRetuneConfiguredAudioBitrate
 } from "./media-mesh";
 
 class FakeRTCPeerConnection {
@@ -56,7 +58,6 @@ class FakeRTCPeerConnection {
   }
 
   async createOffer() {
-    this.signalingState = "have-local-offer";
     return { type: "offer" as const, sdp: "fake-offer" };
   }
 
@@ -66,6 +67,10 @@ class FakeRTCPeerConnection {
     }
 
     if (description?.type === "answer") {
+      this.signalingState = "stable";
+    }
+
+    if (description?.type === "rollback") {
       this.signalingState = "stable";
     }
   }
@@ -107,6 +112,25 @@ function buildOffer(fromPeerId: string, mediaEpoch: number): PeerSignalMessage {
     payload: {
       type: "offer",
       sdp: `offer-${fromPeerId}-${mediaEpoch}`
+    }
+  };
+}
+
+function buildAnswer(
+  fromPeerId: string,
+  mediaEpoch: number,
+  toPeerId = "peer_listener"
+): PeerSignalMessage {
+  return {
+    roomId: "room_1",
+    fromPeerId,
+    toPeerId,
+    channelKind: "media",
+    mediaEpoch,
+    type: "answer",
+    payload: {
+      type: "answer",
+      sdp: `answer-${fromPeerId}-${mediaEpoch}`
     }
   };
 }
@@ -245,6 +269,60 @@ describe("RoomMediaMesh", () => {
       type: "answer",
       toPeerId: "peer_listener",
       mediaEpoch: 2
+    });
+  });
+
+  it("rolls back a local offer when a competing remote offer arrives", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await mesh.restartPeer("peer_source_a");
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(sendSignal).toHaveBeenCalledTimes(3);
+    expect(sendSignal.mock.calls[2]?.[0]).toMatchObject({
+      type: "answer",
+      toPeerId: "peer_source_a",
+      mediaEpoch: 1
+    });
+  });
+
+  it("flushes a queued renegotiation once the current offer cycle reaches stable", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const firstTrack = { id: "track_1" } as MediaStreamTrack;
+    const nextTrack = { id: "track_2" } as MediaStreamTrack;
+
+    await mesh.syncHostPeers(
+      ["peer_listener"],
+      {
+        getAudioTracks: () => [firstTrack]
+      } as unknown as MediaStream,
+      1
+    );
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await mesh.updateLocalStream({
+      getAudioTracks: () => [nextTrack]
+    } as unknown as MediaStream);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await mesh.handleSignal(buildAnswer("peer_listener", 1, "peer_source"));
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(sendSignal.mock.calls[1]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 1
     });
   });
 
@@ -423,5 +501,15 @@ describe("RoomMediaMesh", () => {
         jitterMs: 4
       })
     ).toBe(192_000);
+  });
+
+  it("normalizes audio bitrate tuning to stable 4 kbps steps", () => {
+    expect(normalizeAudioBitrateBps(70_200)).toBe(68_000);
+    expect(normalizeAudioBitrateBps(191_999)).toBe(188_000);
+  });
+
+  it("skips tiny bitrate retunes that would only add churn", () => {
+    expect(shouldRetuneConfiguredAudioBitrate(80_000, 72_000)).toBe(false);
+    expect(shouldRetuneConfiguredAudioBitrate(80_000, 64_000)).toBe(true);
   });
 });
