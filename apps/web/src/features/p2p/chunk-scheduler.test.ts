@@ -523,6 +523,50 @@ describe("ChunkScheduler", () => {
     expect(requestedTrackIds.every((item) => item === "track_1:current")).toBe(true);
   });
 
+  it("throttles current-track requests during remote bootstrap to preserve media bandwidth", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks[0] = {
+      ...roomSnapshot.tracks[0],
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    };
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 24 }, (_, index) => index),
+            totalChunks: 24,
+            chunkSize: 256 * 1024
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 15_000,
+      policy: "startup",
+      bufferHealth: "healthy",
+      playbackClockSource: "remote",
+      mode: "conservative"
+    });
+
+    expect(requestPiece.mock.calls.length).toBeLessThanOrEqual(7);
+    const requestedTrackIds = (requestPiece.mock.calls as unknown as Array<[{
+      trackId: string;
+      priority: string;
+    }]>).map(([call]) => `${call.trackId}:${call.priority}`);
+    expect(requestedTrackIds.every((item) => item === "track_1:current")).toBe(true);
+  });
+
   it("suppresses next-track prefetch while outrun-recovery is active", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {

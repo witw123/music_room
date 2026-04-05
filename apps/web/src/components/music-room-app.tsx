@@ -181,7 +181,12 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability
   });
 
-  const { progressiveSchedulerPolicy, getLocalPlaybackPositionMs, destroyProgressiveRuntime } =
+  const {
+    progressiveSchedulerPolicy,
+    transportGovernorMode,
+    getLocalPlaybackPositionMs,
+    destroyProgressiveRuntime
+  } =
     useProgressiveRuntime({
       audioRef,
       remoteAudioRef,
@@ -368,10 +373,11 @@ export function MusicRoomApp({
     setMediaConnectionState,
     isPageVisible,
     setIsPageVisible,
-    schedulerMode,
-    setSchedulerMode,
-    schedulerPlaybackBucketMs,
-    bufferHealth,
+      schedulerMode,
+      setSchedulerMode,
+      schedulerPlaybackBucketMs,
+      bufferHealth,
+      transportGovernorMode,
       activePlaybackSource,
       progressiveSchedulerPolicy,
       isCurrentSourceOwner,

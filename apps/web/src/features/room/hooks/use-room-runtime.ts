@@ -91,6 +91,7 @@ type UseRoomRuntimeInput = {
   setSchedulerMode: Dispatch<SetStateAction<"normal" | "conservative" | "idle">>;
   schedulerPlaybackBucketMs: number;
   bufferHealth: "healthy" | "low" | "critical";
+  transportGovernorMode: "bootstrap" | "segment-catchup" | "local-primary" | "emergency-fallback";
   activePlaybackSource: ProgressivePlaybackSource;
   progressiveSchedulerPolicy:
     | ProgressiveSchedulerPolicy
@@ -234,6 +235,7 @@ export function useRoomRuntime({
   setSchedulerMode,
   schedulerPlaybackBucketMs,
   bufferHealth,
+  transportGovernorMode,
   activePlaybackSource,
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
@@ -2448,6 +2450,13 @@ export function useRoomRuntime({
   );
 
   useEffect(() => {
+    const effectiveSchedulerMode =
+      playbackClockSource === "remote" && transportGovernorMode === "bootstrap"
+        ? schedulerMode === "idle"
+          ? "idle"
+          : "conservative"
+        : schedulerMode;
+
     chunkSchedulerRef.current?.sync({
       roomSnapshot,
       availabilityByTrack,
@@ -2456,7 +2465,7 @@ export function useRoomRuntime({
       playbackPositionMs: schedulerPlaybackBucketMs,
       playbackStatus: roomSnapshot?.room.playback.status ?? null,
       pageVisible: isPageVisible,
-      mode: schedulerMode,
+      mode: effectiveSchedulerMode,
       bufferHealth,
       playbackClockSource,
       policy: progressiveSchedulerPolicy ?? "startup"
@@ -2470,6 +2479,7 @@ export function useRoomRuntime({
     isPageVisible,
     schedulerMode,
     bufferHealth,
+    transportGovernorMode,
     playbackClockSource,
     progressiveSchedulerPolicy,
     chunkSchedulerRef

@@ -640,13 +640,32 @@ function getTrackStreamingProfile(
   const streamProfile = deriveTrackStreamProfile(track);
 
   if (playbackClockSource === "remote") {
+    const remoteBootstrapConservative = mode === "conservative" || bufferHealth !== "healthy";
     if (policy === "outrun-recovery") {
+      if (remoteBootstrapConservative) {
+        return {
+          maxConcurrent: streamProfile === "large-lossless" ? 12 : 10,
+          maxConcurrentPerPeer: 3,
+          lookBehindMs: 0,
+          lookAheadMs: streamProfile === "large-lossless" ? 120_000 : 72_000,
+          timeoutMs: 1_200
+        };
+      }
       return {
         maxConcurrent: streamProfile === "large-lossless" ? 30 : 24,
         maxConcurrentPerPeer: streamProfile === "large-lossless" ? 10 : 8,
         lookBehindMs: 0,
         lookAheadMs: streamProfile === "large-lossless" ? 320_000 : 180_000,
         timeoutMs: streamProfile === "large-lossless" ? 700 : 800
+      };
+    }
+    if (remoteBootstrapConservative) {
+      return {
+        maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
+        maxConcurrentPerPeer: 2,
+        lookBehindMs: 0,
+        lookAheadMs: streamProfile === "large-lossless" ? 72_000 : 42_000,
+        timeoutMs: 1_600
       };
     }
     return {

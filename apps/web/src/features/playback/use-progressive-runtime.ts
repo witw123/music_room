@@ -83,6 +83,7 @@ type UseProgressiveRuntimeInput = {
 
 type UseProgressiveRuntimeResult = {
   progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
+  transportGovernorMode: "bootstrap" | "segment-catchup" | "local-primary" | "emergency-fallback";
   getLocalPlaybackPositionMs: () => number | null;
   destroyProgressiveRuntime: () => void;
 };
@@ -1751,6 +1752,7 @@ export function useProgressiveRuntime({
 
   return {
     progressiveSchedulerPolicy,
+    transportGovernorMode,
     getLocalPlaybackPositionMs,
     destroyProgressiveRuntime
   };
