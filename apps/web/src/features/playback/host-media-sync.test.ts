@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildHostCaptureRefreshKey,
   hasHostMediaStreamTrack,
+  isHostRelayAudioReadyForCapture,
   resolveHostCaptureRefresh,
   shouldDeferHostMediaStreamSync
 } from "./host-media-sync";
@@ -106,5 +107,42 @@ describe("hasHostMediaStreamTrack", () => {
       captureRefreshKey: "track_2|5|full-local",
       forceRefresh: false
     });
+  });
+
+  it("waits for the full-local audio element to switch to the current track before capture", () => {
+    expect(
+      isHostRelayAudioReadyForCapture({
+        activePlaybackSource: "full-local",
+        relayAudio: {
+          currentSrc: "blob:track-a",
+          src: "blob:track-a"
+        } as Pick<HTMLAudioElement, "currentSrc" | "src">,
+        currentTrackObjectUrl: "blob:track-b"
+      })
+    ).toBe(false);
+
+    expect(
+      isHostRelayAudioReadyForCapture({
+        activePlaybackSource: "full-local",
+        relayAudio: {
+          currentSrc: "blob:track-b",
+          src: "blob:track-b"
+        } as Pick<HTMLAudioElement, "currentSrc" | "src">,
+        currentTrackObjectUrl: "blob:track-b"
+      })
+    ).toBe(true);
+  });
+
+  it("does not block capture binding checks for remote-stream playback", () => {
+    expect(
+      isHostRelayAudioReadyForCapture({
+        activePlaybackSource: "remote-stream",
+        relayAudio: {
+          currentSrc: "",
+          src: ""
+        } as Pick<HTMLAudioElement, "currentSrc" | "src">,
+        currentTrackObjectUrl: "blob:track-b"
+      })
+    ).toBe(true);
   });
 });

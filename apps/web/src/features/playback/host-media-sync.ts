@@ -30,6 +30,19 @@ export function resolveHostCaptureRefresh(input: {
   };
 }
 
+export function isHostRelayAudioReadyForCapture(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  relayAudio: Pick<HTMLAudioElement, "currentSrc" | "src">;
+  currentTrackObjectUrl: string | null | undefined;
+}) {
+  if (input.activePlaybackSource !== "full-local" || !input.currentTrackObjectUrl) {
+    return true;
+  }
+
+  const currentMediaSrc = input.relayAudio.currentSrc || input.relayAudio.src || null;
+  return currentMediaSrc === input.currentTrackObjectUrl;
+}
+
 export function shouldDeferHostMediaStreamSync(input: {
   stream: MediaStream | null | undefined;
   listenerPeerCount: number;

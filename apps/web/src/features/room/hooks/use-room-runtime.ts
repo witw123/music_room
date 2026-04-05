@@ -42,6 +42,7 @@ import { captureAudioStream, getCapturedAudioStreamMode } from "@/features/uploa
 import {
   resolveHostCaptureRefresh,
   hasHostMediaStreamTrack,
+  isHostRelayAudioReadyForCapture,
   shouldDeferHostMediaStreamSync
 } from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
@@ -855,6 +856,25 @@ export function useRoomRuntime({
           return;
         }
 
+        const currentTrackObjectUrl = uploadedTracks[playback.currentTrackId]?.objectUrl ?? null;
+        if (
+          !isHostRelayAudioReadyForCapture({
+            activePlaybackSource,
+            relayAudio,
+            currentTrackObjectUrl
+          })
+        ) {
+          blockedUntilSourcePlaybackReady = true;
+          updateHostCaptureDiagnostics({
+            refreshKey: captureRefreshKey,
+            forcedRefresh: false,
+            captureMode: getCapturedAudioStreamMode(relayAudio),
+            mediaEpoch: playback.mediaEpoch,
+            summary: "房主推流等待本地音频切到当前曲目"
+          });
+          return;
+        }
+
         if (playback.status === "playing" && relayAudio.paused) {
           blockedUntilSourcePlaybackReady = true;
           return;
@@ -991,6 +1011,7 @@ export function useRoomRuntime({
     peerId,
     remoteAudioRef,
     setStatusMessage,
+    uploadedTracks,
     updateHostCaptureDiagnostics
   ]);
 
