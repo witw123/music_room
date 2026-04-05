@@ -14,7 +14,10 @@ describe("resolveListenerMediaRecoveryReason", () => {
         lastPlayAttemptResult: null,
         lastPlayingTraceKey: null,
         remoteAudioPaused: null,
-        hasBoundSrcObject: false
+        hasBoundSrcObject: false,
+        remoteTrackMuted: null,
+        remoteTrackEnabled: null,
+        remoteTrackReadyState: null
       })
     ).toBe("connected-but-no-track");
   });
@@ -29,7 +32,10 @@ describe("resolveListenerMediaRecoveryReason", () => {
         lastPlayAttemptResult: null,
         lastPlayingTraceKey: null,
         remoteAudioPaused: null,
-        hasBoundSrcObject: false
+        hasBoundSrcObject: false,
+        remoteTrackMuted: null,
+        remoteTrackEnabled: null,
+        remoteTrackReadyState: null
       })
     ).toBe("track-received-but-not-bound");
   });
@@ -44,9 +50,30 @@ describe("resolveListenerMediaRecoveryReason", () => {
         lastPlayAttemptResult: "rejected",
         lastPlayingTraceKey: null,
         remoteAudioPaused: true,
-        hasBoundSrcObject: true
+        hasBoundSrcObject: true,
+        remoteTrackMuted: false,
+        remoteTrackEnabled: true,
+        remoteTrackReadyState: "live"
       })
     ).toBe("bound-but-not-playing");
+  });
+
+  it("requests recovery when the bound remote track is muted or ended", () => {
+    expect(
+      resolveListenerMediaRecoveryReason({
+        traceKey,
+        lastTrackTraceKey: traceKey,
+        lastBoundTraceKey: traceKey,
+        lastPlayAttemptTraceKey: traceKey,
+        lastPlayAttemptResult: "ok",
+        lastPlayingTraceKey: traceKey,
+        remoteAudioPaused: false,
+        hasBoundSrcObject: true,
+        remoteTrackMuted: true,
+        remoteTrackEnabled: true,
+        remoteTrackReadyState: "live"
+      })
+    ).toBe("bound-but-muted-track");
   });
 
   it("does not request recovery after the current trace has already entered playing", () => {
@@ -59,7 +86,10 @@ describe("resolveListenerMediaRecoveryReason", () => {
         lastPlayAttemptResult: "ok",
         lastPlayingTraceKey: traceKey,
         remoteAudioPaused: false,
-        hasBoundSrcObject: true
+        hasBoundSrcObject: true,
+        remoteTrackMuted: false,
+        remoteTrackEnabled: true,
+        remoteTrackReadyState: "live"
       })
     ).toBeNull();
   });

@@ -103,11 +103,16 @@ export const remoteTrackStatusSchema = z.object({
   mediaEpoch: z.number().int().nonnegative().nullable().optional(),
   sourcePeerId: z.string().nullable().optional(),
   traceKey: z.string().nullable().optional(),
+  trackId: z.string().nullable().optional(),
+  trackMuted: z.boolean().nullable().optional(),
+  trackEnabled: z.boolean().nullable().optional(),
+  trackReadyState: z.enum(["live", "ended"]).nullable().optional(),
   audioPaused: z.boolean().nullable().optional(),
   audioMuted: z.boolean().nullable().optional(),
   audioReadyState: z.number().int().min(0).max(4).nullable().optional(),
   hasSrcObject: z.boolean().nullable().optional(),
   currentSrc: z.string().nullable().optional(),
+  audioVolume: z.number().min(0).max(1).nullable().optional(),
   lastPlayAttemptAt: z.string().datetime().nullable().optional(),
   lastPlayAttemptResult: z.enum(["ok", "rejected"]).nullable().optional(),
   lastPlayAttemptError: z.string().nullable().optional()
@@ -155,6 +160,11 @@ export const progressivePlaybackStatusSchema = z.object({
   hostCaptureForcedRefresh: z.boolean().optional(),
   hostCaptureMode: z.enum(["native", "audio-context"]).nullable().optional(),
   hostCaptureMediaEpoch: z.number().int().nonnegative().nullable().optional(),
+  hostCaptureTrackId: z.string().nullable().optional(),
+  hostCaptureTrackMuted: z.boolean().nullable().optional(),
+  hostCaptureTrackEnabled: z.boolean().nullable().optional(),
+  hostCaptureTrackReadyState: z.enum(["live", "ended"]).nullable().optional(),
+  hostCaptureTrackCount: z.number().int().nonnegative().nullable().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHostCaptureRefreshKey,
+  getHostMediaStreamTrackState,
   hasHostMediaStreamTrack,
+  hasUsableHostMediaStreamTrack,
   isHostRelayAudioReadyForCapture,
   resolveHostCaptureRefresh,
   shouldDeferHostMediaStreamSync
@@ -24,6 +26,53 @@ describe("hasHostMediaStreamTrack", () => {
     expect(hasHostMediaStreamTrack(stream)).toBe(true);
   });
 
+  it("describes the primary captured host track state", () => {
+    const stream = {
+      getAudioTracks: () => [
+        {
+          id: "track_1",
+          muted: false,
+          enabled: true,
+          readyState: "live"
+        }
+      ]
+    } as unknown as MediaStream;
+
+    expect(getHostMediaStreamTrackState(stream)).toEqual({
+      trackCount: 1,
+      trackId: "track_1",
+      trackMuted: false,
+      trackEnabled: true,
+      trackReadyState: "live"
+    });
+  });
+
+  it("treats muted or ended captured host tracks as unusable", () => {
+    const mutedStream = {
+      getAudioTracks: () => [
+        {
+          id: "track_1",
+          muted: true,
+          enabled: true,
+          readyState: "live"
+        }
+      ]
+    } as unknown as MediaStream;
+    const endedStream = {
+      getAudioTracks: () => [
+        {
+          id: "track_2",
+          muted: false,
+          enabled: true,
+          readyState: "ended"
+        }
+      ]
+    } as unknown as MediaStream;
+
+    expect(hasUsableHostMediaStreamTrack(mutedStream)).toBe(false);
+    expect(hasUsableHostMediaStreamTrack(endedStream)).toBe(false);
+  });
+
   it("defers host relay sync while the next captured stream has no audio track yet", () => {
     const stream = {
       getAudioTracks: () => []
@@ -40,7 +89,14 @@ describe("hasHostMediaStreamTrack", () => {
 
   it("does not defer host relay sync when there are no listeners or playback is idle", () => {
     const stream = {
-      getAudioTracks: () => []
+      getAudioTracks: () => [
+        {
+          id: "track_1",
+          muted: false,
+          enabled: true,
+          readyState: "live"
+        }
+      ]
     } as unknown as MediaStream;
 
     expect(

@@ -424,6 +424,12 @@ function MeshStatusPanelBase({
                       远端 readyState: {formatMediaReadyState(peer.remoteTrackStatus.audioReadyState)}
                     </span>
                     <span>
+                      远端音量:{" "}
+                      {typeof peer.remoteTrackStatus.audioVolume === "number"
+                        ? peer.remoteTrackStatus.audioVolume.toFixed(2)
+                        : "未知"}
+                    </span>
+                    <span>
                       远端 srcObject:{" "}
                       {peer.remoteTrackStatus.hasSrcObject === null ||
                       typeof peer.remoteTrackStatus.hasSrcObject === "undefined"
@@ -439,6 +445,28 @@ function MeshStatusPanelBase({
                       最近收片: {peer.lastPieceReceivedAt ? formatTimestamp(peer.lastPieceReceivedAt) : "未知"}
                     </span>
                     <span>当前曲目: {peer.remoteTrackStatus.currentTrackId ?? "未知"}</span>
+                    <span>远端 Track: {peer.remoteTrackStatus.trackId ?? "未知"}</span>
+                    <span>
+                      远端 Track muted:{" "}
+                      {peer.remoteTrackStatus.trackMuted === null ||
+                      typeof peer.remoteTrackStatus.trackMuted === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.trackMuted
+                          ? "是"
+                          : "否"}
+                    </span>
+                    <span>
+                      远端 Track enabled:{" "}
+                      {peer.remoteTrackStatus.trackEnabled === null ||
+                      typeof peer.remoteTrackStatus.trackEnabled === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.trackEnabled
+                          ? "是"
+                          : "否"}
+                    </span>
+                    <span>
+                      远端 Track state: {peer.remoteTrackStatus.trackReadyState ?? "未知"}
+                    </span>
                     <span>播放源 Peer: {peer.remoteTrackStatus.sourcePeerId ?? "未知"}</span>
                     <span>
                       mediaEpoch:{" "}
@@ -568,6 +596,28 @@ function MeshStatusPanelBase({
                       peer.progressivePlaybackStatus.hostCaptureMediaEpoch !== undefined ? (
                         <p className="mt-1 text-foreground-muted">
                           捕获 mediaEpoch: {peer.progressivePlaybackStatus.hostCaptureMediaEpoch}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostCaptureTrackId ? (
+                        <p className="mt-1 text-foreground-muted">
+                          捕获 Track: {peer.progressivePlaybackStatus.hostCaptureTrackId}
+                          {peer.progressivePlaybackStatus.hostCaptureTrackMuted !== null &&
+                          peer.progressivePlaybackStatus.hostCaptureTrackMuted !== undefined
+                            ? ` · muted=${peer.progressivePlaybackStatus.hostCaptureTrackMuted ? "yes" : "no"}`
+                            : ""}
+                          {peer.progressivePlaybackStatus.hostCaptureTrackEnabled !== null &&
+                          peer.progressivePlaybackStatus.hostCaptureTrackEnabled !== undefined
+                            ? ` · enabled=${peer.progressivePlaybackStatus.hostCaptureTrackEnabled ? "yes" : "no"}`
+                            : ""}
+                          {peer.progressivePlaybackStatus.hostCaptureTrackReadyState
+                            ? ` · state=${peer.progressivePlaybackStatus.hostCaptureTrackReadyState}`
+                            : ""}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostCaptureTrackCount !== null &&
+                      peer.progressivePlaybackStatus.hostCaptureTrackCount !== undefined ? (
+                        <p className="mt-1 text-foreground-muted">
+                          捕获音轨数: {peer.progressivePlaybackStatus.hostCaptureTrackCount}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.nextQueueTrackPrefetch ? (

@@ -152,7 +152,10 @@ describe("use-room-derived-state helpers", () => {
           lastBoundAt: null,
           lastAudioEvent: "playing",
           hasSrcObject: true,
-          audioPaused: false
+          audioPaused: false,
+          trackMuted: false,
+          trackEnabled: true,
+          trackReadyState: "live"
         }
       } as PeerDiagnosticsSnapshot)
     ).toBe(true);
@@ -167,7 +170,28 @@ describe("use-room-derived-state helpers", () => {
           lastBoundAt: null,
           lastAudioEvent: "playing",
           hasSrcObject: true,
-          audioPaused: false
+          audioPaused: false,
+          trackMuted: false,
+          trackEnabled: true,
+          trackReadyState: "live"
+        }
+      } as PeerDiagnosticsSnapshot)
+    ).toBe(false);
+
+    expect(
+      isRemoteMediaPlaybackReady({
+        peerId: "remote-media",
+        remoteTrackStatus: {
+          received: true,
+          boundToAudioElement: true,
+          lastTrackAt: null,
+          lastBoundAt: null,
+          lastAudioEvent: "playing",
+          hasSrcObject: true,
+          audioPaused: false,
+          trackMuted: true,
+          trackEnabled: true,
+          trackReadyState: "live"
         }
       } as PeerDiagnosticsSnapshot)
     ).toBe(false);

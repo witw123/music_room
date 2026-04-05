@@ -41,7 +41,8 @@ import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
 import { captureAudioStream, getCapturedAudioStreamMode } from "@/features/upload/audio-utils";
 import {
   resolveHostCaptureRefresh,
-  hasHostMediaStreamTrack,
+  hasUsableHostMediaStreamTrack,
+  getHostMediaStreamTrackState,
   isHostRelayAudioReadyForCapture,
   shouldDeferHostMediaStreamSync
 } from "@/features/playback/host-media-sync";
@@ -162,7 +163,8 @@ const listenerMediaRecoveryCooldownMs = 3_000;
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
   | "track-received-but-not-bound"
-  | "bound-but-not-playing";
+  | "bound-but-not-playing"
+  | "bound-but-muted-track";
 
 export function resolveListenerMediaRecoveryReason(input: {
   traceKey: string;
@@ -173,17 +175,28 @@ export function resolveListenerMediaRecoveryReason(input: {
   lastPlayingTraceKey: string | null;
   remoteAudioPaused: boolean | null;
   hasBoundSrcObject: boolean;
+  remoteTrackMuted: boolean | null;
+  remoteTrackEnabled: boolean | null;
+  remoteTrackReadyState: MediaStreamTrackState | null;
 }): ListenerMediaRecoveryReason | null {
-  if (input.lastPlayingTraceKey === input.traceKey) {
-    return null;
-  }
-
   if (input.lastTrackTraceKey !== input.traceKey) {
     return "connected-but-no-track";
   }
 
   if (input.lastBoundTraceKey !== input.traceKey || !input.hasBoundSrcObject) {
     return "track-received-but-not-bound";
+  }
+
+  if (
+    input.remoteTrackMuted === true ||
+    input.remoteTrackEnabled === false ||
+    input.remoteTrackReadyState === "ended"
+  ) {
+    return "bound-but-muted-track";
+  }
+
+  if (input.lastPlayingTraceKey === input.traceKey) {
+    return null;
   }
 
   if (
@@ -409,16 +422,32 @@ export function useRoomRuntime({
         audioMuted: null,
         audioReadyState: null,
         hasSrcObject: null,
-        currentSrc: null
+        currentSrc: null,
+        audioVolume: null,
+        trackId: null,
+        trackMuted: null,
+        trackEnabled: null,
+        trackReadyState: null
       };
     }
+
+    const audioTracks =
+      typeof (remoteAudio.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
+        ? (remoteAudio.srcObject as MediaStream).getAudioTracks()
+        : [];
+    const primaryTrack = audioTracks[0] ?? null;
 
     return {
       audioPaused: remoteAudio.paused,
       audioMuted: remoteAudio.muted,
       audioReadyState: remoteAudio.readyState,
       hasSrcObject: !!remoteAudio.srcObject,
-      currentSrc: remoteAudio.currentSrc || null
+      currentSrc: remoteAudio.currentSrc || null,
+      audioVolume: remoteAudio.volume,
+      trackId: primaryTrack?.id ?? null,
+      trackMuted: primaryTrack?.muted ?? null,
+      trackEnabled: primaryTrack?.enabled ?? null,
+      trackReadyState: primaryTrack?.readyState ?? null
     };
   }, [remoteAudioRef]);
 
@@ -658,6 +687,7 @@ export function useRoomRuntime({
       forcedRefresh: boolean;
       captureMode: "native" | "audio-context" | null;
       mediaEpoch: number | null;
+      captureTrackState?: ReturnType<typeof getHostMediaStreamTrackState> | null;
       summary: string;
     }) => {
       recordPeerDiagnosticRef.current({
@@ -677,7 +707,12 @@ export function useRoomRuntime({
             hostCaptureRefreshKey: input.refreshKey,
             hostCaptureForcedRefresh: input.forcedRefresh,
             hostCaptureMode: input.captureMode,
-            hostCaptureMediaEpoch: input.mediaEpoch
+            hostCaptureMediaEpoch: input.mediaEpoch,
+            hostCaptureTrackId: input.captureTrackState?.trackId ?? null,
+            hostCaptureTrackMuted: input.captureTrackState?.trackMuted ?? null,
+            hostCaptureTrackEnabled: input.captureTrackState?.trackEnabled ?? null,
+            hostCaptureTrackReadyState: input.captureTrackState?.trackReadyState ?? null,
+            hostCaptureTrackCount: input.captureTrackState?.trackCount ?? null
           }
         })
       });
@@ -1111,6 +1146,7 @@ export function useRoomRuntime({
             forcedRefresh: false,
             captureMode: null,
             mediaEpoch: null,
+            captureTrackState: null,
             summary: "房主推流已停止"
           });
           await mediaMeshRef.current?.syncHostPeers([], null, playback.mediaEpoch);
@@ -1133,6 +1169,7 @@ export function useRoomRuntime({
             forcedRefresh: false,
             captureMode: getCapturedAudioStreamMode(relayAudio),
             mediaEpoch: playback.mediaEpoch,
+            captureTrackState: null,
             summary: "房主推流等待本地音频切到当前曲目"
           });
           return;
@@ -1155,7 +1192,36 @@ export function useRoomRuntime({
             forcedRefresh: usedForcedRefresh,
             captureMode: getCapturedAudioStreamMode(relayAudio),
             mediaEpoch: playback.mediaEpoch,
+            captureTrackState: null,
             summary: "房主推流捕获失败，未能生成音频流"
+          });
+          setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+          return;
+        }
+
+        let captureTrackState = getHostMediaStreamTrackState(capture);
+        if (
+          playback.status === "playing" &&
+          !relayAudio.paused &&
+          relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          !hasUsableHostMediaStreamTrack(capture)
+        ) {
+          usedForcedRefresh = true;
+          capture = captureAudioStream(relayAudio, {
+            forceRefresh: true,
+            preferAudioContext: preferAudioContextCapture
+          });
+          captureTrackState = getHostMediaStreamTrackState(capture);
+        }
+
+        if (!capture) {
+          updateHostCaptureDiagnostics({
+            refreshKey: captureRefreshKey,
+            forcedRefresh: usedForcedRefresh,
+            captureMode: getCapturedAudioStreamMode(relayAudio),
+            mediaEpoch: playback.mediaEpoch,
+            captureTrackState: null,
+            summary: "房主推流刷新后仍未拿到音频流"
           });
           setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
           return;
@@ -1165,24 +1231,17 @@ export function useRoomRuntime({
           playback.status === "playing" &&
           !relayAudio.paused &&
           relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-          !hasHostMediaStreamTrack(capture)
+          !hasUsableHostMediaStreamTrack(capture)
         ) {
-          usedForcedRefresh = true;
-          capture = captureAudioStream(relayAudio, {
-            forceRefresh: true,
-            preferAudioContext: preferAudioContextCapture
-          });
-        }
-
-        if (!capture) {
           updateHostCaptureDiagnostics({
             refreshKey: captureRefreshKey,
             forcedRefresh: usedForcedRefresh,
             captureMode: getCapturedAudioStreamMode(relayAudio),
             mediaEpoch: playback.mediaEpoch,
-            summary: "房主推流刷新后仍未拿到音频流"
+            captureTrackState,
+            summary: "房主推流拿到的捕获音轨不可用，等待浏览器恢复音轨"
           });
-          setStatusMessage("当前浏览器不支持音频直播推送，请使用最新版 Chrome 或 Edge。");
+          awaitingLocalAudioTrack = true;
           return;
         }
 
@@ -1192,6 +1251,7 @@ export function useRoomRuntime({
           forcedRefresh: usedForcedRefresh,
           captureMode: getCapturedAudioStreamMode(relayAudio),
           mediaEpoch: playback.mediaEpoch,
+          captureTrackState,
           summary: usedForcedRefresh
             ? "房主推流已刷新捕获链路"
             : "房主推流复用现有捕获链路"
@@ -1210,7 +1270,7 @@ export function useRoomRuntime({
 
         hostStreamRef.current = capture;
         await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
-        awaitingLocalAudioTrack = !hasHostMediaStreamTrack(capture);
+        awaitingLocalAudioTrack = !hasUsableHostMediaStreamTrack(capture);
         if (!awaitingLocalAudioTrack) {
           clearHostMediaSyncRetry();
           syncState.lastAppliedKey = syncKey;
@@ -1463,7 +1523,19 @@ export function useRoomRuntime({
         lastPlayAttemptResult: lifecycle.lastPlayAttemptResult,
         lastPlayingTraceKey: lifecycle.lastPlayingTraceKey,
         remoteAudioPaused: remoteAudio?.paused ?? null,
-        hasBoundSrcObject: !!remoteAudio?.srcObject
+        hasBoundSrcObject: !!remoteAudio?.srcObject,
+        remoteTrackMuted:
+          typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
+            ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0]?.muted ?? null)
+            : null,
+        remoteTrackEnabled:
+          typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
+            ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0]?.enabled ?? null)
+            : null,
+        remoteTrackReadyState:
+          typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
+            ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0]?.readyState ?? null)
+            : null
       });
       if (!reason) {
         return;
@@ -2348,7 +2420,13 @@ export function useRoomRuntime({
             })
           });
         },
-        onRemoteTrack: ({ peerId: remotePeerId, trackId }) => {
+        onRemoteTrack: ({
+          peerId: remotePeerId,
+          trackId,
+          trackMuted,
+          trackEnabled,
+          trackReadyState
+        }) => {
           const now = new Date().toISOString();
           const traceContext = getRemoteMediaTraceContext(remotePeerId);
           listenerMediaLifecycleRef.current.lastTrackTraceKey = traceContext.traceKey;
@@ -2365,6 +2443,10 @@ export function useRoomRuntime({
               remoteTrackStatus: {
                 ...snapshot.remoteTrackStatus,
                 ...traceContext,
+                trackId,
+                trackMuted,
+                trackEnabled,
+                trackReadyState,
                 received: true,
                 lastTrackAt: now
               }
@@ -2374,12 +2456,16 @@ export function useRoomRuntime({
             `成员端收到远端 track ${trackId}`,
             (snapshot) => ({
               ...snapshot,
-              remoteTrackStatus: {
-                ...snapshot.remoteTrackStatus,
-                ...traceContext,
-                received: true,
-                lastTrackAt: now
-              }
+               remoteTrackStatus: {
+                 ...snapshot.remoteTrackStatus,
+                 ...traceContext,
+                 trackId,
+                 trackMuted,
+                 trackEnabled,
+                 trackReadyState,
+                 received: true,
+                 lastTrackAt: now
+               }
             }),
             {
               event: "remote-track"

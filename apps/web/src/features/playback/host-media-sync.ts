@@ -4,6 +4,29 @@ export function hasHostMediaStreamTrack(stream: MediaStream | null | undefined) 
   return !!stream && stream.getAudioTracks().length > 0;
 }
 
+export function getHostMediaStreamTrackState(stream: MediaStream | null | undefined) {
+  const audioTracks = stream?.getAudioTracks() ?? [];
+  const primaryTrack = audioTracks[0] ?? null;
+
+  return {
+    trackCount: audioTracks.length,
+    trackId: primaryTrack?.id ?? null,
+    trackMuted: primaryTrack?.muted ?? null,
+    trackEnabled: primaryTrack?.enabled ?? null,
+    trackReadyState: primaryTrack?.readyState ?? null
+  };
+}
+
+export function hasUsableHostMediaStreamTrack(stream: MediaStream | null | undefined) {
+  const state = getHostMediaStreamTrackState(stream);
+  return (
+    state.trackCount > 0 &&
+    state.trackEnabled !== false &&
+    state.trackMuted !== true &&
+    state.trackReadyState === "live"
+  );
+}
+
 export function buildHostCaptureRefreshKey(input: {
   currentTrackId: string | null | undefined;
   mediaEpoch: number;
@@ -51,6 +74,6 @@ export function shouldDeferHostMediaStreamSync(input: {
   return (
     input.playbackStatus === "playing" &&
     input.listenerPeerCount > 0 &&
-    !hasHostMediaStreamTrack(input.stream)
+    !hasUsableHostMediaStreamTrack(input.stream)
   );
 }

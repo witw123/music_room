@@ -714,6 +714,9 @@ export function isRemoteMediaPlaybackReady(peer: PeerDiagnosticsSnapshot | null 
     status.boundToAudioElement &&
     status.hasSrcObject === true &&
     status.audioPaused === false &&
+    status.trackMuted !== true &&
+    status.trackEnabled !== false &&
+    status.trackReadyState !== "ended" &&
     (status.lastAudioEvent === "playing" || status.lastPlayAttemptResult === "ok")
   );
 }

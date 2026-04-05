@@ -26,6 +26,9 @@ type MediaMeshCallbacks = {
   onRemoteTrack?: (payload: {
     peerId: string;
     trackId: string;
+    trackMuted: boolean;
+    trackEnabled: boolean;
+    trackReadyState: MediaStreamTrackState;
   }) => void;
   onSourcePeerFailed?: (payload: {
     peerId: string;
@@ -340,13 +343,26 @@ export class RoomMediaMesh {
     connection.ontrack = (event) => {
       const [stream] = event.streams;
       const nextStream = stream ?? new MediaStream([event.track]);
-      this.callbacks.onRemoteTrack?.({
-        peerId,
-        trackId: event.track.id
-      });
+      const emitRemoteTrackState = () => {
+        this.callbacks.onRemoteTrack?.({
+          peerId,
+          trackId: event.track.id,
+          trackMuted: event.track.muted,
+          trackEnabled: event.track.enabled,
+          trackReadyState: event.track.readyState
+        });
+      };
+      emitRemoteTrackState();
       this.callbacks.onRemoteStream(nextStream);
       event.track.onunmute = () => {
+        emitRemoteTrackState();
         this.callbacks.onRemoteStream(nextStream);
+      };
+      event.track.onmute = () => {
+        emitRemoteTrackState();
+      };
+      event.track.onended = () => {
+        emitRemoteTrackState();
       };
     };
 
