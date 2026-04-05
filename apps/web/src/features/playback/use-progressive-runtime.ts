@@ -98,7 +98,7 @@ const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteStartupGatePollMs = 120;
 const enableDirectProgressiveTakeover = true;
-const enableListenerLocalTakeover = true;
+const enableListenerLocalTakeover = false;
 const stableRemoteStartupBufferMs = 220;
 const constrainedRemoteStartupBufferMs = 320;
 const weakRemoteStartupBufferMs = 420;
@@ -257,6 +257,21 @@ export function resolveAudioQualityTier(input: {
     audioBitrateTier,
     receiverJitterTier
   } as const;
+}
+
+export function shouldPreferLocalTakeover(input: {
+  remoteFirstLock: boolean;
+  progressiveFallbackReason: string | null | undefined;
+}) {
+  if (input.remoteFirstLock) {
+    return false;
+  }
+
+  return (
+    input.progressiveFallbackReason === "buffer-underrun" ||
+    input.progressiveFallbackReason === "stalled" ||
+    input.progressiveFallbackReason === "seek-outside-buffer"
+  );
 }
 
 function resolveTransportGovernorMode(input: {
@@ -843,10 +858,10 @@ export function useProgressiveRuntime({
 
   const prefersLocalTakeover = useMemo(
     () =>
-      remoteFirstLock ||
-      progressiveFallbackReason === "buffer-underrun" ||
-      progressiveFallbackReason === "stalled" ||
-      progressiveFallbackReason === "seek-outside-buffer",
+      shouldPreferLocalTakeover({
+        remoteFirstLock,
+        progressiveFallbackReason
+      }),
     [progressiveFallbackReason, remoteFirstLock]
   );
 

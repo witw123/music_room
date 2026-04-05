@@ -4,6 +4,7 @@ import {
   resolveAudioQualityTier,
   resolveRemoteAudioHoldDurationMs,
   resolveRemoteStartupGateState,
+  shouldPreferLocalTakeover,
   shouldPollRemoteStartupGate
 } from "./use-progressive-runtime";
 
@@ -112,5 +113,29 @@ describe("shouldPollRemoteStartupGate", () => {
       audioBitrateTier: "high",
       receiverJitterTier: "low"
     });
+  });
+
+  it("does not prefer listener local takeover while remote-first lock is active", () => {
+    expect(
+      shouldPreferLocalTakeover({
+        remoteFirstLock: true,
+        progressiveFallbackReason: "stalled"
+      })
+    ).toBe(false);
+  });
+
+  it("prefers listener local takeover only for explicit local fallback reasons", () => {
+    expect(
+      shouldPreferLocalTakeover({
+        remoteFirstLock: false,
+        progressiveFallbackReason: "buffer-underrun"
+      })
+    ).toBe(true);
+    expect(
+      shouldPreferLocalTakeover({
+        remoteFirstLock: false,
+        progressiveFallbackReason: null
+      })
+    ).toBe(false);
   });
 });
