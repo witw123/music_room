@@ -68,6 +68,10 @@ export function useRoomDerivedState({
     () => getActiveMemberPeerIds(roomSnapshot?.room.members ?? []),
     [roomSnapshot?.room.members]
   );
+  const remoteMediaDiagnostic = useMemo(
+    () => peerDiagnostics.find((peer) => peer.peerId === "remote-media") ?? null,
+    [peerDiagnostics]
+  );
 
   const canDisbandRoom =
     !!roomSnapshot &&
@@ -294,7 +298,10 @@ export function useRoomDerivedState({
           mediaConnectedPeers,
           activeMemberPeerIds
         ),
-        playbackStatus: roomSnapshot.room.playback.status
+        playbackStatus: roomSnapshot.room.playback.status,
+        remoteMediaPlaybackReady: isRemoteMediaPlaybackReady(remoteMediaDiagnostic),
+        remoteTrackReceived: !!remoteMediaDiagnostic?.remoteTrackStatus.received,
+        remoteTrackBound: !!remoteMediaDiagnostic?.remoteTrackStatus.boundToAudioElement
       })
     };
   }, [
@@ -306,6 +313,7 @@ export function useRoomDerivedState({
     mediaConnectedPeers,
     mediaConnectionState,
     peerDiagnostics,
+    remoteMediaDiagnostic,
     roomSnapshot,
     sourceStartState
   ]);
@@ -539,6 +547,9 @@ function getLocalPlaybackStatus(input: {
   lastSourceStartError: string | null;
   mediaConnectedPeersCount: number;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
+  remoteMediaPlaybackReady: boolean;
+  remoteTrackReceived: boolean;
+  remoteTrackBound: boolean;
 }): LocalMemberPanelState["playbackStatus"] {
   if (input.presenceState === "offline") {
     return {
@@ -616,18 +627,42 @@ function getLocalPlaybackStatus(input: {
 
   switch (input.mediaConnectionState) {
     case "live":
-      return {
-        label: "实时音频中",
-        detail: "当前已接入远端实时音频链路。",
-        tone: "success",
-        badgeText: "healthy"
-      };
-    case "buffering":
+      if (input.remoteMediaPlaybackReady) {
+        return {
+          label: "实时音频中",
+          detail: "当前已接入远端实时音频链路。",
+          tone: "success",
+          badgeText: "healthy"
+        };
+      }
       return {
         label: "实时音频缓冲中",
-        detail: "已接入音频链路，正在等待播放稳定。",
+        detail: "链路已连接，但远端音频元素尚未进入实际播放。",
         tone: "accent",
         badgeText: "buffering"
+      };
+    case "buffering":
+      if (input.remoteMediaPlaybackReady) {
+        return {
+          label: "实时音频中",
+          detail: "当前已接入远端实时音频链路。",
+          tone: "success",
+          badgeText: "healthy"
+        };
+      }
+      if (input.remoteTrackReceived || input.remoteTrackBound) {
+        return {
+          label: "实时音频缓冲中",
+          detail: "已收到远端媒体，正在等待音频元素进入播放。",
+          tone: "accent",
+          badgeText: "buffering"
+        };
+      }
+      return {
+        label: "正在连接实时音频",
+        detail: "实时链路已建立，正在等待远端音频轨到达。",
+        tone: "accent",
+        badgeText: "connecting"
       };
     case "connecting":
       return {
@@ -651,6 +686,14 @@ function getLocalPlaybackStatus(input: {
         badgeText: "failed"
       };
     default:
+      if (input.remoteMediaPlaybackReady) {
+        return {
+          label: "实时音频中",
+          detail: "当前已接入远端实时音频链路。",
+          tone: "success",
+          badgeText: "healthy"
+        };
+      }
       return {
         label: "未接入音频",
         detail: "当前还没有稳定的实时音频链路。",
@@ -660,22 +703,27 @@ function getLocalPlaybackStatus(input: {
   }
 }
 
+export function isRemoteMediaPlaybackReady(peer: PeerDiagnosticsSnapshot | null | undefined) {
+  if (!peer || peer.peerId !== "remote-media") {
+    return false;
+  }
+
+  const status = peer.remoteTrackStatus;
+  return (
+    status.received &&
+    status.boundToAudioElement &&
+    status.hasSrcObject === true &&
+    status.audioPaused === false &&
+    (status.lastAudioEvent === "playing" || status.lastPlayAttemptResult === "ok")
+  );
+}
+
 export function filterVisiblePeerDiagnostics(
   peerDiagnostics: PeerDiagnosticsSnapshot[],
   activeMemberPeerIds: Set<string>,
   sourcePeerId: string | null
 ) {
-  const hasConcretePeerDiagnostics = peerDiagnostics.some(
-    (peer) =>
-      activeMemberPeerIds.has(peer.peerId) &&
-      (peer.mediaConnectionState !== null ||
-        peer.dataConnectionState !== null ||
-        peer.dataChannelState !== null)
-  );
-  const visiblePeerIds = new Set<string>(["system"]);
-  if (!hasConcretePeerDiagnostics) {
-    visiblePeerIds.add("remote-media");
-  }
+  const visiblePeerIds = new Set<string>(["system", "remote-media"]);
   for (const peerId of activeMemberPeerIds) {
     visiblePeerIds.add(peerId);
   }

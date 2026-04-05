@@ -8,6 +8,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { isRemoteMediaPlaybackReady } from "@/components/room/hooks/use-room-derived-state";
 import type { LocalMemberPanelState } from "./MembersPanel";
 
 export type AvailabilityEntry = {
@@ -190,12 +191,26 @@ function MeshStatusPanelBase({
     [activePeerIds, peerDiagnostics]
   );
   const mediaReadyCount = useMemo(
-    () =>
-      peerDiagnostics.filter(
+    () => {
+      const remoteMediaDiagnostic =
+        peerDiagnostics.find((peer) => peer.peerId === "remote-media") ?? null;
+      const hasConcreteRemoteMedia =
+        !!remoteMediaDiagnostic &&
+        (remoteMediaDiagnostic.remoteTrackStatus.currentTrackId !== null ||
+          remoteMediaDiagnostic.remoteTrackStatus.received ||
+          remoteMediaDiagnostic.remoteTrackStatus.boundToAudioElement ||
+          remoteMediaDiagnostic.remoteTrackStatus.hasSrcObject !== null ||
+          remoteMediaDiagnostic.mediaConnectionState !== null);
+      if (hasConcreteRemoteMedia) {
+        return isRemoteMediaPlaybackReady(remoteMediaDiagnostic) ? 1 : 0;
+      }
+
+      return peerDiagnostics.filter(
         (peer) =>
           activePeerIds.has(peer.peerId) &&
           (peer.mediaConnectionState === "connected" || peer.mediaConnectionState === "live")
-      ).length,
+      ).length;
+    },
     [activePeerIds, peerDiagnostics]
   );
   const degradedCount = useMemo(
@@ -423,6 +438,15 @@ function MeshStatusPanelBase({
                     <span>
                       最近收片: {peer.lastPieceReceivedAt ? formatTimestamp(peer.lastPieceReceivedAt) : "未知"}
                     </span>
+                    <span>当前曲目: {peer.remoteTrackStatus.currentTrackId ?? "未知"}</span>
+                    <span>播放源 Peer: {peer.remoteTrackStatus.sourcePeerId ?? "未知"}</span>
+                    <span>
+                      mediaEpoch:{" "}
+                      {peer.remoteTrackStatus.mediaEpoch === null ||
+                      typeof peer.remoteTrackStatus.mediaEpoch === "undefined"
+                        ? "未知"
+                        : peer.remoteTrackStatus.mediaEpoch}
+                    </span>
                   </div>
 
                   {peer.progressivePlaybackStatus ? (
@@ -569,6 +593,11 @@ function MeshStatusPanelBase({
                       {peer.remoteTrackStatus.currentSrc ? (
                         <p className="mt-1 truncate text-foreground-muted">
                           远端 currentSrc: {peer.remoteTrackStatus.currentSrc}
+                        </p>
+                      ) : null}
+                      {peer.remoteTrackStatus.traceKey ? (
+                        <p className="mt-1 truncate text-foreground-muted">
+                          播放 trace: {peer.remoteTrackStatus.traceKey}
                         </p>
                       ) : null}
                       {peer.timeOnRemoteStreamMs !== null ? (

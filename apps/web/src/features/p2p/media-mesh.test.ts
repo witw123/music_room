@@ -190,6 +190,31 @@ describe("RoomMediaMesh", () => {
     expect(sendSignal).toHaveBeenCalledTimes(2);
   });
 
+  it("can proactively restart a recvonly listener peer and send a fresh offer", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "answer",
+      toPeerId: "peer_source_a",
+      mediaEpoch: 1
+    });
+
+    await mesh.restartPeer("peer_source_a");
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(sendSignal).toHaveBeenCalledTimes(2);
+    expect(sendSignal.mock.calls[1]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_source_a",
+      mediaEpoch: 1
+    });
+  });
+
   it("does not tear down peers on transient disconnected state", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {

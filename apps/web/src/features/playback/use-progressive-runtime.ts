@@ -101,6 +101,19 @@ const enableDirectProgressiveTakeover = true;
 const stableRemoteStartupBufferMs = 220;
 const constrainedRemoteStartupBufferMs = 320;
 const weakRemoteStartupBufferMs = 420;
+const haveCurrentDataReadyState = 2;
+
+export function shouldPollRemoteStartupGate(
+  activePlaybackSource: ProgressivePlaybackSource,
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined,
+  readyState: number
+) {
+  return (
+    activePlaybackSource === "remote-stream" &&
+    playbackStatus === "playing" &&
+    readyState < haveCurrentDataReadyState
+  );
+}
 
 function resolveTransportGovernorMode(input: {
   activePlaybackSource: ProgressivePlaybackSource;
@@ -651,35 +664,25 @@ export function useProgressiveRuntime({
       return;
     }
 
-    if (remoteAudio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (shouldPollRemoteStartupGate(activePlaybackSource, playback?.status, remoteAudio.readyState)) {
       remoteStartupReadyAtRef.current = null;
-      remoteAudio.muted = true;
+      remoteAudio.muted = false;
       remoteStartupBufferTimerRef.current = window.setTimeout(() => {
         scheduleRemoteStartupGate();
       }, remoteStartupGatePollMs);
       return;
     }
 
-    const readyAt = remoteStartupReadyAtRef.current ?? Date.now();
-    remoteStartupReadyAtRef.current = readyAt;
-    const elapsedMs = Date.now() - readyAt;
-
-    if (elapsedMs >= startupBufferMs) {
-      remoteAudio.muted = false;
+    remoteAudio.muted = false;
+    if (!remoteAudio.paused) {
+      remoteStartupReadyAtRef.current = remoteStartupReadyAtRef.current ?? Date.now();
       lastStablePlaybackAtRef.current = new Date().toISOString();
-      return;
     }
-
-    remoteAudio.muted = true;
-    remoteStartupBufferTimerRef.current = window.setTimeout(() => {
-      scheduleRemoteStartupGate();
-    }, startupBufferMs - elapsedMs);
   }, [
     activePlaybackSource,
     clearRemoteStartupBufferTimer,
     playback?.status,
-    remoteAudioRef,
-    startupBufferMs
+    remoteAudioRef
   ]);
 
   const getLocalPlaybackPositionMs = useCallback(() => {

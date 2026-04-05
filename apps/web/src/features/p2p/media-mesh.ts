@@ -226,39 +226,67 @@ export class RoomMediaMesh {
     this.resetForMediaEpoch(this.currentMediaEpoch);
   }
 
+  async restartPeer(peerId: string, localStream: MediaStream | null = null) {
+    const existingEntry = this.peers.get(peerId);
+    const wantsIncomingAudio = existingEntry?.wantsIncomingAudio ?? !localStream;
+    if (existingEntry) {
+      this.releasePeer(peerId, existingEntry);
+    }
+
+    const entry = this.createPeer(peerId, wantsIncomingAudio);
+    const streamChanged = this.attachStream(entry, localStream);
+    await this.maybeSendOffer(peerId, entry, localStream, true, streamChanged);
+    return entry;
+  }
+
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
     const entry = this.peers.get(peerId) ?? this.createPeer(peerId, false);
     const streamChanged = this.attachStream(entry, localStream);
+    await this.maybeSendOffer(peerId, entry, localStream, initiateOffer, streamChanged);
 
-    if (
-      entry.connection.signalingState === "stable" &&
-      localStream &&
-      localStream.getAudioTracks().length > 0 &&
+    return entry;
+  }
+
+  private async maybeSendOffer(
+    peerId: string,
+    entry: MediaPeerEntry,
+    localStream: MediaStream | null,
+    initiateOffer: boolean,
+    streamChanged: boolean
+  ) {
+    const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
+    const shouldOfferForRecvOnly = entry.wantsIncomingAudio && initiateOffer;
+    const shouldOfferForOutgoingTrack =
+      hasOutgoingTrack &&
       (initiateOffer ||
         streamChanged ||
         entry.connection.connectionState === "new" ||
         entry.connection.connectionState === "disconnected" ||
-        entry.connection.connectionState === "failed")
+        entry.connection.connectionState === "failed");
+
+    if (
+      entry.connection.signalingState !== "stable" ||
+      (!shouldOfferForRecvOnly && !shouldOfferForOutgoingTrack)
     ) {
-      const offer = await entry.connection.createOffer();
-      await entry.connection.setLocalDescription(offer);
-      this.callbacks.onSignal?.({
-        peerId,
-        direction: "sent",
-        type: "offer"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "media",
-        mediaEpoch: this.currentMediaEpoch,
-        type: "offer",
-        payload: offer as unknown as Record<string, unknown>
-      });
+      return;
     }
 
-    return entry;
+    const offer = await entry.connection.createOffer();
+    await entry.connection.setLocalDescription(offer);
+    this.callbacks.onSignal?.({
+      peerId,
+      direction: "sent",
+      type: "offer"
+    });
+    this.sendSignal({
+      roomId: this.roomId,
+      fromPeerId: this.localPeerId,
+      toPeerId: peerId,
+      channelKind: "media",
+      mediaEpoch: this.currentMediaEpoch,
+      type: "offer",
+      payload: offer as unknown as Record<string, unknown>
+    });
   }
 
   private createPeer(peerId: string, wantsIncomingAudio: boolean) {

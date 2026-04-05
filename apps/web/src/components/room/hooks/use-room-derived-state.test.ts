@@ -5,7 +5,8 @@ import {
   filterAvailabilityAnnouncementsByActivePeers,
   filterAvailabilityAnnouncementsByCurrentRoomPeers,
   filterVisiblePeerDiagnostics,
-  getActiveMemberPeerIds
+  getActiveMemberPeerIds,
+  isRemoteMediaPlaybackReady
 } from "./use-room-derived-state";
 
 describe("use-room-derived-state helpers", () => {
@@ -117,7 +118,7 @@ describe("use-room-derived-state helpers", () => {
     ).toEqual([diagnostics[0], diagnostics[1]]);
   });
 
-  it("hides the synthetic remote-media row once a real member peer has concrete diagnostics", () => {
+  it("keeps the synthetic remote-media row visible alongside real member peer diagnostics", () => {
     const diagnostics = [
       { peerId: "system", updatedAt: "2026-04-04T00:00:00.000Z" },
       { peerId: "remote-media", updatedAt: "2026-04-04T00:00:01.000Z", mediaConnectionState: "connecting" },
@@ -137,6 +138,38 @@ describe("use-room-derived-state helpers", () => {
         new Set(["peer_host"]),
         null
       )
-    ).toEqual([diagnostics[0], diagnostics[2]]);
+    ).toEqual([diagnostics[0], diagnostics[1], diagnostics[2]]);
+  });
+
+  it("only marks remote-media as ready after track, bind, and playback all succeed", () => {
+    expect(
+      isRemoteMediaPlaybackReady({
+        peerId: "remote-media",
+        remoteTrackStatus: {
+          received: true,
+          boundToAudioElement: true,
+          lastTrackAt: null,
+          lastBoundAt: null,
+          lastAudioEvent: "playing",
+          hasSrcObject: true,
+          audioPaused: false
+        }
+      } as PeerDiagnosticsSnapshot)
+    ).toBe(true);
+
+    expect(
+      isRemoteMediaPlaybackReady({
+        peerId: "remote-media",
+        remoteTrackStatus: {
+          received: false,
+          boundToAudioElement: true,
+          lastTrackAt: null,
+          lastBoundAt: null,
+          lastAudioEvent: "playing",
+          hasSrcObject: true,
+          audioPaused: false
+        }
+      } as PeerDiagnosticsSnapshot)
+    ).toBe(false);
   });
 });
