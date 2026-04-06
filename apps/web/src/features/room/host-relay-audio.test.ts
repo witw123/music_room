@@ -28,16 +28,14 @@ describe("host relay audio", () => {
     ).toBe(localAudio);
   });
 
-  it("can force source-owner relay capture to stay on the local audio element", () => {
+  it("falls back to the local audio element when remote-stream has no bound remote element", () => {
     const localAudio = { id: "local" } as HTMLAudioElement;
-    const remoteAudio = { id: "remote" } as HTMLAudioElement;
 
     expect(
       resolveHostRelayAudioElement({
         activePlaybackSource: "remote-stream",
-        preferLocalAudio: true,
         localAudio,
-        remoteAudio
+        remoteAudio: null
       })
     ).toBe(localAudio);
   });
