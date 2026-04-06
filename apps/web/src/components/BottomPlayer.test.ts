@@ -23,4 +23,11 @@ describe("BottomPlayer source", () => {
     expect(layoutSource).toContain('w-[5.4rem]');
     expect(layoutSource).toContain('w-[44px]');
   });
+
+  it("prioritizes the live display clock over the playback snapshot", () => {
+    const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("seekDraft ?? progressMs");
+    expect(source).not.toContain("seekDraft ?? snapshotProgressMs ?? progressMs");
+  });
 });

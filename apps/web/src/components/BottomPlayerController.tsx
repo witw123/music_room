@@ -76,6 +76,7 @@ function BottomPlayerControllerBase({
     playback,
     tracks: roomSnapshot?.tracks ?? [],
     shouldUseLocalAudio,
+    activePlaybackSource,
     getLocalPlaybackPositionMs
   });
 
