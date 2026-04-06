@@ -226,9 +226,11 @@ export function resolveRemoteStartupGateState(input: {
   hasSrcObject: boolean;
   stableSinceMs: number | null;
   startupBufferMs: number;
+  muteDuringGate?: boolean;
   now?: number;
   lastWaitingAtMs?: number | null;
 }) {
+  const muteDuringGate = input.muteDuringGate ?? true;
   if (input.activePlaybackSource !== "remote-stream" || input.playbackStatus !== "playing") {
     return {
       shouldPoll: false,
@@ -241,7 +243,7 @@ export function resolveRemoteStartupGateState(input: {
   if (!input.hasSrcObject || input.readyState < haveCurrentDataReadyState || input.paused) {
     return {
       shouldPoll: true,
-      shouldMute: false,
+      shouldMute: muteDuringGate,
       nextStableSinceMs: null
     };
   }
@@ -254,7 +256,7 @@ export function resolveRemoteStartupGateState(input: {
 
   return {
     shouldPoll: !gateMatured,
-    shouldMute: !gateMatured,
+    shouldMute: muteDuringGate && !gateMatured,
     nextStableSinceMs
   };
 }
@@ -497,6 +499,7 @@ export function useProgressiveRuntime({
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
   const remoteStartupReadyAtRef = useRef<number | null>(null);
+  const remotePlaybackEstablishedRef = useRef(false);
   const lastStablePlaybackAtRef = useRef<string | null>(null);
   const waitingEventTimestampsRef = useRef<number[]>([]);
   const stalledEventTimestampsRef = useRef<number[]>([]);
@@ -1021,6 +1024,7 @@ export function useProgressiveRuntime({
       playbackStartRetryRef.current = null;
     }
     remoteStartupReadyAtRef.current = null;
+    remotePlaybackEstablishedRef.current = false;
     lastRemoteWaitingAtRef.current = null;
     waitingEventTimestampsRef.current = [];
     stalledEventTimestampsRef.current = [];
@@ -1051,6 +1055,7 @@ export function useProgressiveRuntime({
     progressiveWarmupReadyAtRef.current = null;
     fullLocalWarmupReadyAtRef.current = null;
     remoteStartupReadyAtRef.current = null;
+    remotePlaybackEstablishedRef.current = false;
     lastRemoteWaitingAtRef.current = null;
     if (remoteHoldTimeoutRef.current !== null) {
       window.clearTimeout(remoteHoldTimeoutRef.current);
@@ -1256,6 +1261,7 @@ export function useProgressiveRuntime({
       hasSrcObject: !!remoteAudio.srcObject,
       stableSinceMs: remoteStartupReadyAtRef.current,
       startupBufferMs: effectiveStartupBufferMs,
+      muteDuringGate: !remotePlaybackEstablishedRef.current,
       lastWaitingAtMs: lastRemoteWaitingAtRef.current
     });
 
@@ -1270,6 +1276,7 @@ export function useProgressiveRuntime({
     }
 
     if (!remoteAudio.paused) {
+      remotePlaybackEstablishedRef.current = true;
       lastStablePlaybackAtRef.current = new Date().toISOString();
       markContinuousPlaybackStarted();
     }

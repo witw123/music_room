@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveAudibleClockSample,
+  resolveAudibleClockContinuitySample,
   resolveDisplayClockProgress,
   type DisplayClockSource
 } from "./use-room-playback";
@@ -246,5 +247,50 @@ describe("resolveDisplayClockProgress", () => {
     expect(result.progressMs).toBe(33_000);
     expect(result.source).toBe("room-fallback");
     expect(result.displayDriftMs).toBe(0);
+  });
+});
+
+describe("resolveAudibleClockContinuitySample", () => {
+  it("bridges short remote clock gaps without falling back immediately", () => {
+    const previousContinuity = {
+      sample: {
+        progressMs: 42_000,
+        source: "remote-audible" as const
+      },
+      observedAtMs: 1_000
+    };
+
+    const result = resolveAudibleClockContinuitySample({
+      audibleClockSample: null,
+      previousContinuity,
+      playbackStatus: "playing",
+      now: 1_600
+    });
+
+    expect(result.sample).toEqual({
+      progressMs: 42_600,
+      source: "remote-audible"
+    });
+    expect(result.continuityState).toBe(previousContinuity);
+  });
+
+  it("falls back once the audible clock gap is too long", () => {
+    const previousContinuity = {
+      sample: {
+        progressMs: 42_000,
+        source: "remote-audible" as const
+      },
+      observedAtMs: 1_000
+    };
+
+    const result = resolveAudibleClockContinuitySample({
+      audibleClockSample: null,
+      previousContinuity,
+      playbackStatus: "playing",
+      now: 2_500
+    });
+
+    expect(result.sample).toBeNull();
+    expect(result.continuityState).toBeNull();
   });
 });

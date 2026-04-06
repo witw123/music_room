@@ -76,6 +76,27 @@ describe("shouldPollRemoteStartupGate", () => {
     });
   });
 
+  it("keeps recovery polling active without remuting an already established remote stream", () => {
+    expect(
+      resolveRemoteStartupGateState({
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        readyState: 1,
+        paused: false,
+        hasSrcObject: true,
+        stableSinceMs: 1_000,
+        startupBufferMs: 320,
+        muteDuringGate: false,
+        now: 1_200,
+        lastWaitingAtMs: 1_150
+      })
+    ).toEqual({
+      shouldPoll: true,
+      shouldMute: false,
+      nextStableSinceMs: null
+    });
+  });
+
   it("restarts the startup gate after a recent waiting event", () => {
     expect(
       resolveRemoteStartupGateState({

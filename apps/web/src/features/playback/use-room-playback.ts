@@ -14,9 +14,10 @@ const displayClockHardSnapDriftMs = 560;
 const displayClockRoomNudgeFactor = 0.35;
 const displayClockTransitionWindowMs = 260;
 const displayClockHardSnapSamples = 2;
-const remoteAudibleAnchorResetDriftMs = 2_000;
+const remoteAudibleAnchorResetDriftMs = 3_500;
 const remoteAudibleAnchorBacktrackToleranceSeconds = 0.25;
 const monotonicProgressBacktrackToleranceMs = 180;
+const audibleClockMissingGraceMs = 1_200;
 
 export type DisplayClockSource = "remote-audible" | "local-audible" | "room-fallback";
 
@@ -48,6 +49,11 @@ type DisplayClockTransitionState = {
   anchorAudibleMs: number;
   anchorAtMs: number;
   hardDriftSamples: number;
+};
+
+type AudibleClockContinuityState = {
+  sample: AudibleClockSample;
+  observedAtMs: number;
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -285,6 +291,45 @@ export function resolveDisplayClockProgress(input: {
   };
 }
 
+export function resolveAudibleClockContinuitySample(input: {
+  audibleClockSample: AudibleClockSample | null;
+  previousContinuity: AudibleClockContinuityState | null;
+  playbackStatus: PlaybackSnapshot["status"] | null | undefined;
+  now?: number;
+}) {
+  const now = input.now ?? Date.now();
+  if (input.audibleClockSample) {
+    return {
+      sample: input.audibleClockSample,
+      continuityState: {
+        sample: input.audibleClockSample,
+        observedAtMs: now
+      } satisfies AudibleClockContinuityState
+    };
+  }
+
+  if (
+    input.playbackStatus === "playing" &&
+    input.previousContinuity &&
+    now - input.previousContinuity.observedAtMs <= audibleClockMissingGraceMs
+  ) {
+    return {
+      sample: {
+        source: input.previousContinuity.sample.source,
+        progressMs:
+          input.previousContinuity.sample.progressMs +
+          Math.max(0, now - input.previousContinuity.observedAtMs)
+      },
+      continuityState: input.previousContinuity
+    };
+  }
+
+  return {
+    sample: null,
+    continuityState: null
+  };
+}
+
 export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const {
     audioRef,
@@ -309,6 +354,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const lastCommittedProgressRef = useRef(0);
   const lastCommittedSessionKeyRef = useRef("no-playback");
   const audibleClockAnchorRef = useRef<AudibleClockAnchorState | null>(null);
+  const audibleClockContinuityRef = useRef<AudibleClockContinuityState | null>(null);
   const displayClockTransitionRef = useRef<DisplayClockTransitionState>({
     source: "room-fallback",
     anchorDisplayMs: 0,
@@ -366,6 +412,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         hardDriftSamples: 0
       };
       audibleClockAnchorRef.current = null;
+      audibleClockContinuityRef.current = null;
       return;
     }
 
@@ -426,8 +473,15 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
             })
           : { sample: null, nextAnchor: null };
       audibleClockAnchorRef.current = audibleClockResolution.nextAnchor;
-      const nextDisplayClock = resolveDisplayClockProgress({
+      const continuityResolution = resolveAudibleClockContinuitySample({
         audibleClockSample: audibleClockResolution.sample,
+        previousContinuity: audibleClockContinuityRef.current,
+        playbackStatus: acceptedPlayback.status,
+        now: Date.now()
+      });
+      audibleClockContinuityRef.current = continuityResolution.continuityState;
+      const nextDisplayClock = resolveDisplayClockProgress({
+        audibleClockSample: continuityResolution.sample,
         roomClockMs,
         durationMs: progressTrack.durationMs,
         previousDisplayMs: lastCommittedProgressRef.current,
@@ -537,8 +591,15 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
           })
         : { sample: null, nextAnchor: null };
     audibleClockAnchorRef.current = audibleClockResolution.nextAnchor;
-    const nextDisplayClock = resolveDisplayClockProgress({
+    const continuityResolution = resolveAudibleClockContinuitySample({
       audibleClockSample: audibleClockResolution.sample,
+      previousContinuity: audibleClockContinuityRef.current,
+      playbackStatus: acceptedPlayback.status,
+      now: Date.now()
+    });
+    audibleClockContinuityRef.current = continuityResolution.continuityState;
+    const nextDisplayClock = resolveDisplayClockProgress({
+      audibleClockSample: continuityResolution.sample,
       roomClockMs,
       durationMs: progressTrack.durationMs,
       previousDisplayMs: lastCommittedProgressRef.current,
@@ -619,6 +680,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         hardDriftSamples: 0
       };
       audibleClockAnchorRef.current = null;
+      audibleClockContinuityRef.current = null;
     }
     setAudioDurationMs(progressTrack?.durationMs ?? 0);
   }, [

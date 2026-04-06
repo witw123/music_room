@@ -86,6 +86,8 @@ const DEFAULTS = {
   ,
   minScheduleIntervalMs: 35
 } as const;
+const remotePrefetchComfortMultiplier = 1.5;
+const remotePrefetchComfortFloorMs = 12_000;
 
 export class ChunkScheduler {
   private roomSnapshot: RoomSnapshot | null = null;
@@ -293,6 +295,7 @@ export class ChunkScheduler {
     let currentTrackState: ChunkSchedulerTrackState | null = null;
     let currentTrackAheadBufferedMs = 0;
     let comfortableCurrentTrackBufferMs = 0;
+    let remotePrefetchReadyBufferedMs = 0;
     const shouldEnterOutrunRecovery = this.policy === "outrun-recovery";
     const shouldPreserveRemotePlayback =
       this.playbackClockSource === "remote" && this.playbackStatus === "playing";
@@ -319,6 +322,10 @@ export class ChunkScheduler {
               : Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
           )
         : 0;
+      remotePrefetchReadyBufferedMs = Math.max(
+        comfortableCurrentTrackBufferMs + remotePrefetchComfortFloorMs,
+        Math.round(comfortableCurrentTrackBufferMs * remotePrefetchComfortMultiplier)
+      );
       const isCurrentTrackComplete = this.isTrackComplete(
         currentTrack.id,
         this.getTotalChunks(currentTrack.id)
@@ -355,7 +362,10 @@ export class ChunkScheduler {
             : "pause-fill"
           : this.playbackStatus === "playing" &&
               !isCurrentTrackComplete &&
-              currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs &&
+              currentTrackAheadBufferedMs >=
+                (shouldPreserveRemotePlayback
+                  ? remotePrefetchReadyBufferedMs
+                  : comfortableCurrentTrackBufferMs) &&
               (this.policy === "steady" || this.policy === "background")
             ? "pause-fill"
           : this.policy === "background"
@@ -407,7 +417,7 @@ export class ChunkScheduler {
       this.policy === "steady" &&
       this.mode === "normal" &&
       this.bufferHealth === "healthy" &&
-      currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
+      currentTrackAheadBufferedMs >= remotePrefetchReadyBufferedMs;
 
     if (
       !canPrefetchUpcomingTrack &&
@@ -490,7 +500,7 @@ export class ChunkScheduler {
       shouldPreserveRemotePlayback &&
       this.mode === "normal" &&
       this.bufferHealth === "healthy" &&
-      currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
+      currentTrackAheadBufferedMs >= remotePrefetchReadyBufferedMs;
 
     if (
       (this.policy !== "background" && !canBackgroundPrefetchOnRemote) ||
