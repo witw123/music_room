@@ -87,6 +87,12 @@ type UseProgressiveRuntimeResult = {
   progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
   transportGovernorMode: "bootstrap" | "segment-catchup" | "local-primary" | "emergency-fallback";
   getLocalPlaybackPositionMs: () => number | null;
+  getHostRelayStream: () => MediaStream | null;
+  getHostRelayClockState: () => {
+    mediaTimeMs: number;
+    bufferedAheadMs: number;
+    playoutState: "playing" | "buffering" | "paused";
+  } | null;
   destroyProgressiveRuntime: () => void;
 };
 
@@ -1371,6 +1377,28 @@ export function useProgressiveRuntime({
     const currentTimeSeconds = pcmEngine.getCurrentTimeSeconds();
     return Number.isFinite(currentTimeSeconds) ? Math.round(currentTimeSeconds * 1000) : null;
   }, [activePlaybackSource]);
+
+  const getHostRelayStream = useCallback(() => {
+    return progressivePcmEngineRef.current?.getOutputStream() ?? null;
+  }, []);
+
+  const getHostRelayClockState = useCallback(() => {
+    const pcmEngine = progressivePcmEngineRef.current;
+    if (!pcmEngine) {
+      return null;
+    }
+
+    const currentTimeSeconds = pcmEngine.getCurrentTimeSeconds();
+    if (!Number.isFinite(currentTimeSeconds)) {
+      return null;
+    }
+
+    return {
+      mediaTimeMs: Math.max(0, Math.round(currentTimeSeconds * 1000)),
+      bufferedAheadMs: Math.max(0, pcmEngine.getBufferedAheadMs()),
+      playoutState: pcmEngine.getPlayoutState()
+    };
+  }, []);
 
   const updatePlaybackStartIntent = useCallback(
     (updater: (current: PlaybackStartIntent) => PlaybackStartIntent) => {
@@ -2678,6 +2706,8 @@ export function useProgressiveRuntime({
     progressiveSchedulerPolicy,
     transportGovernorMode,
     getLocalPlaybackPositionMs,
+    getHostRelayStream,
+    getHostRelayClockState,
     destroyProgressiveRuntime
   };
 }

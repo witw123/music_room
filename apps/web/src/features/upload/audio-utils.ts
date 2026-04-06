@@ -47,6 +47,11 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
       totalChunks: Math.max(1, Math.ceil(file.size / defaultTrackPieceChunkSize)),
       chunkSize: defaultTrackPieceChunkSize,
       pieceMimeType: file.type || "audio/mpeg"
+    },
+    relayManifest: {
+      totalChunks: Math.max(1, Math.ceil(file.size / defaultTrackPieceChunkSize)),
+      chunkSize: defaultTrackPieceChunkSize,
+      pieceMimeType: file.type || "audio/mpeg"
     }
   };
 }

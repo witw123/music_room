@@ -34,6 +34,8 @@ export function buildLocalPieceAvailabilityAnnouncement(input: {
     trackId: input.trackId,
     ownerPeerId: input.ownerPeerId,
     nickname: input.nickname,
+    assetKind: existing?.assetKind ?? "relay",
+    assetHash: existing?.assetHash ?? input.trackId,
     totalChunks: nextTotalChunks,
     chunkSize: nextChunkSize,
     availableChunks: [...availableChunkSet].sort((left, right) => left - right),

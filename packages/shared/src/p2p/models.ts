@@ -38,6 +38,8 @@ export const trackAvailabilityAnnouncementSchema = z.object({
   trackId: z.string(),
   ownerPeerId: z.string(),
   nickname: z.string(),
+  assetKind: z.enum(["relay", "original"]).optional(),
+  assetHash: z.string().optional(),
   totalChunks: z.number().int().nonnegative(),
   chunkSize: z.number().int().positive(),
   availableChunks: z.array(z.number().int().nonnegative()),

@@ -105,6 +105,12 @@ type UseRoomRuntimeInput = {
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
   getLocalPlaybackPositionMs?: () => number | null;
+  getHostRelayStream?: () => MediaStream | null;
+  getHostRelayClockState?: () => {
+    mediaTimeMs: number;
+    bufferedAheadMs: number;
+    playoutState: "playing" | "buffering" | "paused";
+  } | null;
   setAuthoritativeMediaClock: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
@@ -411,6 +417,8 @@ export function useRoomRuntime({
   isCurrentSourceOwner,
   audioUnlocked,
   getLocalPlaybackPositionMs,
+  getHostRelayStream,
+  getHostRelayClockState,
   setAuthoritativeMediaClock,
   setAudioUnlocked,
   sourceStartState,
@@ -1559,7 +1567,9 @@ export function useRoomRuntime({
           localAudio: audioRef.current,
           remoteAudio: remoteAudioRef.current
         });
-        if (!relayAudio || !playback.currentTrackId) {
+        const directRelayStream =
+          typeof getHostRelayStream === "function" ? getHostRelayStream() : null;
+        if ((!relayAudio && !directRelayStream) || !playback.currentTrackId) {
           syncState.lastCaptureRefreshKey = null;
           syncState.lastPublishKey = null;
           syncState.stage = "idle";
@@ -1582,7 +1592,9 @@ export function useRoomRuntime({
 
         const currentTrackObjectUrl = uploadedTracks[playback.currentTrackId]?.objectUrl ?? null;
         if (
+          !directRelayStream &&
           playback.status === "playing" &&
+          relayAudio &&
           !isHostRelayAudioReadyForCapture({
             activePlaybackSource,
             relayAudio,
@@ -1594,7 +1606,7 @@ export function useRoomRuntime({
           updateHostCaptureDiagnostics({
             refreshKey: captureRefreshKey,
             forcedRefresh: false,
-            captureMode: getCapturedAudioStreamMode(relayAudio),
+            captureMode: relayAudio ? getCapturedAudioStreamMode(relayAudio) : null,
             mediaEpoch: playback.mediaEpoch,
             captureTrackState: null,
             publishGeneration: syncState.publishGeneration,
@@ -1606,24 +1618,26 @@ export function useRoomRuntime({
           return;
         }
 
-        if (playback.status === "playing" && relayAudio.paused) {
+        if (!directRelayStream && playback.status === "playing" && relayAudio?.paused) {
           blockedUntilSourcePlaybackReady = true;
           syncState.stage = "waiting-source-audio";
           return;
         }
 
-        const preferAudioContextCapture = getCapturedAudioStreamMode(relayAudio) === "audio-context";
+        const preferAudioContextCapture = true;
         let usedForcedRefresh = shouldForceCaptureRefresh || forceResync;
-        let capture = captureAudioStream(relayAudio, {
-          forceRefresh: usedForcedRefresh,
-          preferAudioContext: preferAudioContextCapture
-        });
+        let capture =
+          directRelayStream ??
+          captureAudioStream(relayAudio!, {
+            forceRefresh: usedForcedRefresh,
+            preferAudioContext: preferAudioContextCapture
+          });
         if (!capture) {
           syncState.stage = "waiting-source-audio";
           updateHostCaptureDiagnostics({
             refreshKey: captureRefreshKey,
             forcedRefresh: usedForcedRefresh,
-            captureMode: getCapturedAudioStreamMode(relayAudio),
+            captureMode: relayAudio ? getCapturedAudioStreamMode(relayAudio) : null,
             mediaEpoch: playback.mediaEpoch,
             captureTrackState: null,
             publishGeneration: syncState.publishGeneration,
@@ -1639,14 +1653,16 @@ export function useRoomRuntime({
         let captureTrackState = getHostMediaStreamTrackState(capture);
         if (
           playback.status === "playing" &&
-          isAudioElementEffectivelyPlaying(relayAudio) &&
+          (directRelayStream || isAudioElementEffectivelyPlaying(relayAudio)) &&
           !hasUsableHostMediaStreamTrack(capture)
         ) {
           usedForcedRefresh = true;
-          capture = captureAudioStream(relayAudio, {
-            forceRefresh: true,
-            preferAudioContext: preferAudioContextCapture
-          });
+          capture =
+            directRelayStream ??
+            captureAudioStream(relayAudio!, {
+              forceRefresh: true,
+              preferAudioContext: preferAudioContextCapture
+            });
           captureTrackState = getHostMediaStreamTrackState(capture);
         }
 
@@ -1655,7 +1671,7 @@ export function useRoomRuntime({
           updateHostCaptureDiagnostics({
             refreshKey: captureRefreshKey,
             forcedRefresh: usedForcedRefresh,
-            captureMode: getCapturedAudioStreamMode(relayAudio),
+            captureMode: relayAudio ? getCapturedAudioStreamMode(relayAudio) : null,
             mediaEpoch: playback.mediaEpoch,
             captureTrackState: null,
             publishGeneration: syncState.publishGeneration,
@@ -1670,14 +1686,14 @@ export function useRoomRuntime({
 
         if (
           playback.status === "playing" &&
-          isAudioElementEffectivelyPlaying(relayAudio) &&
+          (directRelayStream || isAudioElementEffectivelyPlaying(relayAudio)) &&
           !hasUsableHostMediaStreamTrack(capture)
         ) {
           syncState.stage = "waiting-source-audio";
           updateHostCaptureDiagnostics({
             refreshKey: captureRefreshKey,
             forcedRefresh: usedForcedRefresh,
-            captureMode: getCapturedAudioStreamMode(relayAudio),
+            captureMode: relayAudio ? getCapturedAudioStreamMode(relayAudio) : null,
             mediaEpoch: playback.mediaEpoch,
             captureTrackState,
             publishGeneration: syncState.publishGeneration,
@@ -1702,7 +1718,7 @@ export function useRoomRuntime({
         updateHostCaptureDiagnostics({
           refreshKey: captureRefreshKey,
           forcedRefresh: usedForcedRefresh,
-          captureMode: getCapturedAudioStreamMode(relayAudio),
+          captureMode: relayAudio ? getCapturedAudioStreamMode(relayAudio) : null,
           mediaEpoch: playback.mediaEpoch,
           captureTrackState,
           publishGeneration: syncState.publishGeneration,
@@ -1737,7 +1753,7 @@ export function useRoomRuntime({
         updateHostCaptureDiagnostics({
           refreshKey: captureRefreshKey,
           forcedRefresh: usedForcedRefresh,
-          captureMode: getCapturedAudioStreamMode(relayAudio),
+          captureMode: relayAudio ? getCapturedAudioStreamMode(relayAudio) : null,
           mediaEpoch: playback.mediaEpoch,
           captureTrackState,
           publishGeneration: syncState.publishGeneration,
@@ -1815,6 +1831,7 @@ export function useRoomRuntime({
       audioRef,
       clearHostMediaSyncRetry,
       currentRoomRef,
+      getHostRelayStream,
       isCurrentSourceOwner,
       peerId,
       remoteAudioRef,
@@ -1936,16 +1953,18 @@ export function useRoomRuntime({
         localAudio: audioRef.current,
         remoteAudio: remoteAudioRef.current
       });
-      if (!relayAudio) {
+      const relayClockState =
+        typeof getHostRelayClockState === "function" ? getHostRelayClockState() : null;
+      if (!relayAudio && !relayClockState) {
         return;
       }
-
       const localPlaybackPositionMs =
-        activePlaybackSource !== "remote-stream" && typeof getLocalPlaybackPositionMs === "function"
+        relayClockState?.mediaTimeMs ??
+        (activePlaybackSource !== "remote-stream" && typeof getLocalPlaybackPositionMs === "function"
           ? getLocalPlaybackPositionMs()
-          : null;
+          : null);
       const fallbackMediaTimeMs =
-        Number.isFinite(relayAudio.currentTime) && relayAudio.currentTime >= 0
+        relayAudio && Number.isFinite(relayAudio.currentTime) && relayAudio.currentTime >= 0
           ? Math.round(relayAudio.currentTime * 1000)
           : null;
       const mediaTimeMs =
@@ -1957,21 +1976,27 @@ export function useRoomRuntime({
       }
 
       const playbackRate =
-        Number.isFinite(relayAudio.playbackRate) && relayAudio.playbackRate > 0
+        relayAudio && Number.isFinite(relayAudio.playbackRate) && relayAudio.playbackRate > 0
           ? relayAudio.playbackRate
           : 1;
       const advancing =
-        latestPlayback.status === "playing" &&
-        (activePlaybackSource !== "remote-stream"
-          ? typeof localPlaybackPositionMs === "number" || isAudioElementEffectivelyPlaying(relayAudio)
-          : isAudioElementEffectivelyPlaying(relayAudio));
+        relayClockState
+          ? relayClockState.playoutState === "playing"
+          : latestPlayback.status === "playing" &&
+            (activePlaybackSource !== "remote-stream"
+              ? typeof localPlaybackPositionMs === "number" ||
+                isAudioElementEffectivelyPlaying(relayAudio)
+              : isAudioElementEffectivelyPlaying(relayAudio));
       const payload: RoomMediaClockPayload = {
         roomId,
         mediaEpoch: latestPlayback.mediaEpoch,
         sourcePeerId: peerId,
+        relayGeneration: hostMediaSyncStateRef.current.publishGeneration,
         mediaTimeMs,
         playbackRate,
         advancing,
+        playoutState: relayClockState?.playoutState ?? (advancing ? "playing" : latestPlayback.status),
+        bufferedAheadMs: relayClockState?.bufferedAheadMs ?? 0,
         sequence: ++hostMediaClockSequenceRef.current,
         emittedAt: new Date().toISOString()
       };
@@ -1995,6 +2020,7 @@ export function useRoomRuntime({
     activePlaybackSource,
     audioRef,
     currentRoomRef,
+    getHostRelayClockState,
     getLocalPlaybackPositionMs,
     isCurrentSourceOwner,
     peerId,

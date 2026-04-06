@@ -183,6 +183,8 @@ export async function buildTrackAvailabilityFromFile(input: {
   sizeBytes?: number | null;
   durationMs?: number;
   chunkSize?: number;
+  assetKind?: "relay" | "original";
+  assetHash?: string;
 }): Promise<TrackAvailabilityAnnouncement> {
   const chunkSize = input.chunkSize ?? defaultChunkSize;
   const totalChunks = Math.max(1, Math.ceil(input.file.size / chunkSize));
@@ -226,6 +228,8 @@ export async function buildTrackAvailabilityFromFile(input: {
     trackId: input.trackId,
     ownerPeerId: input.peerId,
     nickname: input.nickname,
+    assetKind: input.assetKind ?? "relay",
+    assetHash: input.assetHash ?? input.fileHash,
     totalChunks,
     chunkSize,
     availableChunks,
@@ -354,6 +358,8 @@ export async function buildTrackAvailabilityFromCache(input: {
   nickname: string;
   totalChunks?: number;
   chunkSize?: number;
+  assetKind?: "relay" | "original";
+  assetHash?: string;
 }) {
   const availableChunks = await getCachedPieceIndexes(input.trackId, input.peerId);
 
@@ -370,6 +376,8 @@ export async function buildTrackAvailabilityFromCache(input: {
     trackId: input.trackId,
     ownerPeerId: input.peerId,
     nickname: input.nickname,
+    assetKind: input.assetKind ?? "relay",
+    assetHash: input.assetHash ?? manifest?.fileHash ?? input.trackId,
     totalChunks,
     chunkSize,
     availableChunks,

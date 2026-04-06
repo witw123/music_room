@@ -135,9 +135,10 @@ export function buildProgressiveTrackManifest(
     return null;
   }
 
-  const totalChunks = availability?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0;
-  const chunkSize = availability?.chunkSize ?? track.pieceManifest?.chunkSize ?? 0;
-  const mimeType = track.pieceManifest?.pieceMimeType ?? track.mimeType ?? "audio/mpeg";
+  const preferredManifest = track.relayManifest ?? track.pieceManifest ?? null;
+  const totalChunks = availability?.totalChunks ?? preferredManifest?.totalChunks ?? 0;
+  const chunkSize = availability?.chunkSize ?? preferredManifest?.chunkSize ?? 0;
+  const mimeType = preferredManifest?.pieceMimeType ?? track.mimeType ?? "audio/mpeg";
 
   if (totalChunks <= 0 || chunkSize <= 0) {
     return null;

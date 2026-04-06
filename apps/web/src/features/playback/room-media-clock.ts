@@ -15,7 +15,8 @@ export function getRoomMediaClockProgressMs(
   }
 
   const elapsedMs = Math.max(0, now - clock.receivedAtMs);
-  if (!clock.advancing) {
+  const advancing = clock.playoutState === "playing" ? true : clock.advancing;
+  if (!advancing) {
     return clock.mediaTimeMs;
   }
 

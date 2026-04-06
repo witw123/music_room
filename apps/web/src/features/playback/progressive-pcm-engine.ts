@@ -31,6 +31,8 @@ type PcmEngineSyncResult = {
   playbackPositionSeconds: number;
 };
 
+export type PcmEnginePlayoutState = "playing" | "buffering" | "paused";
+
 const pcmScheduleAheadSeconds = 18;
 
 export class ProgressivePcmEngine {
@@ -76,6 +78,18 @@ export class ProgressivePcmEngine {
 
     const elapsed = Math.max(0, this.audioContext.currentTime - this.anchorContextTimeSec);
     return this.anchorTrackTimeSec + elapsed;
+  }
+
+  getOutputStream() {
+    return this.destinationNode?.stream ?? null;
+  }
+
+  getPlayoutState(): PcmEnginePlayoutState {
+    if (!this.playing) {
+      return "paused";
+    }
+
+    return this.getBufferedAheadMs() > 0 ? "playing" : "buffering";
   }
 
   getBufferedAheadMs(positionSeconds = this.getCurrentTimeSeconds()) {

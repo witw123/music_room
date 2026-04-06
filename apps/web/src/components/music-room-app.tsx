@@ -193,6 +193,8 @@ export function MusicRoomApp({
     progressiveSchedulerPolicy,
     transportGovernorMode,
     getLocalPlaybackPositionMs,
+    getHostRelayStream,
+    getHostRelayClockState,
     destroyProgressiveRuntime
   } =
     useProgressiveRuntime({
@@ -392,6 +394,8 @@ export function MusicRoomApp({
     isCurrentSourceOwner,
     audioUnlocked,
     getLocalPlaybackPositionMs,
+    getHostRelayStream,
+    getHostRelayClockState,
     setAuthoritativeMediaClock,
     setAudioUnlocked,
     sourceStartState,

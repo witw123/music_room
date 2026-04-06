@@ -21,7 +21,8 @@ export const trackMetaSchema = z.object({
   ownerSessionId: z.string(),
   ownerNickname: z.string(),
   sourceType: z.literal("local_upload"),
-  pieceManifest: trackPieceManifestSchema.nullable().optional()
+  pieceManifest: trackPieceManifestSchema.nullable().optional(),
+  relayManifest: trackPieceManifestSchema.nullable().optional()
 });
 
 export const queueItemSchema = z.object({

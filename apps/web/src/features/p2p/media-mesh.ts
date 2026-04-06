@@ -78,9 +78,9 @@ const constrainedAudioMaxBitrateBps = 208_000;
 const relayAudioMaxBitrateBps = 144_000;
 const weakLinkAudioMaxBitrateBps = 96_000;
 const minimumAudioMaxBitrateBps = 64_000;
-const stableReceiverJitterTargetMs = 320;
-const constrainedReceiverJitterTargetMs = 420;
-const weakLinkReceiverJitterTargetMs = 620;
+const stableReceiverJitterTargetMs = 380;
+const constrainedReceiverJitterTargetMs = 560;
+const weakLinkReceiverJitterTargetMs = 820;
 const audioRetuneStepBps = 32_000;
 const receiverJitterRetuneHysteresisMs = 120;
 

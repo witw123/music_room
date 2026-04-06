@@ -158,6 +158,11 @@ export class RoomController {
         chunkSize: number;
         pieceMimeType: string;
       } | null;
+      relayManifest?: {
+        totalChunks: number;
+        chunkSize: number;
+        pieceMimeType: string;
+      } | null;
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
