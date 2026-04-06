@@ -210,6 +210,41 @@ export function resolveDisplayClockProgress(input: {
     anchoredAudibleMs + (audibleProgressMs - anchoredAudibleMs) * transitionRatio;
   const roomDriftMs = roomClockMs - nextProgressMs;
   const absoluteRoomDriftMs = Math.abs(roomDriftMs);
+  const isRemoteAudible = input.audibleClockSample.source === "remote-audible";
+
+  if (isRemoteAudible) {
+    if (absoluteRoomDriftMs >= displayClockHardSnapDriftMs) {
+      const hardDriftSamples = nextTransitionState.hardDriftSamples + 1;
+      if (hardDriftSamples >= displayClockHardSnapSamples) {
+        nextProgressMs = roomClockMs;
+        nextTransitionState = {
+          source: input.audibleClockSample.source,
+          anchorDisplayMs: roomClockMs,
+          anchorAudibleMs: audibleProgressMs,
+          anchorAtMs: now,
+          hardDriftSamples: 0
+        };
+      } else {
+        nextTransitionState = {
+          ...nextTransitionState,
+          hardDriftSamples
+        };
+      }
+    } else {
+      nextTransitionState = {
+        ...nextTransitionState,
+        hardDriftSamples: 0
+      };
+    }
+
+    const boundedProgressMs = clampProgressMs(Math.round(nextProgressMs), input.durationMs);
+    return {
+      progressMs: boundedProgressMs,
+      source: input.audibleClockSample.source,
+      displayDriftMs: Math.round(roomClockMs - boundedProgressMs),
+      transitionState: nextTransitionState
+    };
+  }
 
   if (absoluteRoomDriftMs < displayClockIgnoreDriftMs) {
     nextTransitionState = {

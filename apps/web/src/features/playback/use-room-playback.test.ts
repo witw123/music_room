@@ -143,6 +143,31 @@ describe("resolveDisplayClockProgress", () => {
     const result = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 20_000,
+        source: "local-audible"
+      },
+      roomClockMs: 20_240,
+      durationMs: 240_000,
+      previousDisplayMs: 20_000,
+      previousSource: "local-audible",
+      transitionState: {
+        source: "local-audible",
+        anchorDisplayMs: 20_000,
+        anchorAudibleMs: 20_000,
+        anchorAtMs: 1_000,
+        hardDriftSamples: 0
+      },
+      now: 1_120
+    });
+
+    expect(result.progressMs).toBeGreaterThan(20_000);
+    expect(result.progressMs).toBeLessThan(20_240);
+    expect(result.source).toBe("local-audible");
+  });
+
+  it("keeps remote audible playback monotonic under moderate room drift", () => {
+    const result = resolveDisplayClockProgress({
+      audibleClockSample: {
+        progressMs: 20_000,
         source: remoteSource
       },
       roomClockMs: 20_240,
@@ -159,8 +184,7 @@ describe("resolveDisplayClockProgress", () => {
       now: 1_120
     });
 
-    expect(result.progressMs).toBeGreaterThan(20_000);
-    expect(result.progressMs).toBeLessThan(20_240);
+    expect(result.progressMs).toBe(20_000);
     expect(result.source).toBe("remote-audible");
   });
 

@@ -169,7 +169,8 @@ export function MusicRoomApp({
     handleFilesSelected: handleTrackFilesSelected,
     announceLocalCache,
     hydrateTrackFromPieces,
-    deleteUploadedTrackArtifacts
+    deleteUploadedTrackArtifacts,
+    deleteRoomTrackArtifacts
   } = useTrackUploads({
     maxCachedTracks,
     peerId,
@@ -250,9 +251,9 @@ export function MusicRoomApp({
   );
   const handleRoomDeleted = useCallback(
     async (trackIds: string[]) => {
-      await Promise.all(trackIds.map((trackId) => deleteUploadedTrackArtifacts(trackId)));
+      await deleteRoomTrackArtifacts(trackIds);
     },
-    [deleteUploadedTrackArtifacts]
+    [deleteRoomTrackArtifacts]
   );
 
   const resetPlayerSurface = useCallback(() => {
@@ -402,6 +403,7 @@ export function MusicRoomApp({
       uploadedTrackIdsRef,
       announceLocalCache,
       deleteUploadedTrackArtifacts,
+      deleteRoomTrackArtifacts,
       scheduleTrackHydration,
       audioRef,
       remoteAudioRef,

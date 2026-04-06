@@ -83,6 +83,14 @@ export async function deleteCachedTrackAsset(trackId: string) {
   await musicRoomDatabase.trackAssets.delete(trackId);
 }
 
+export async function deleteCachedTrackAssets(trackIds: string[]) {
+  if (trackIds.length === 0) {
+    return;
+  }
+
+  await musicRoomDatabase.trackAssets.bulkDelete(trackIds);
+}
+
 export async function getCachedTrackAssets(trackIds: string[]) {
   if (trackIds.length === 0) {
     return [];
@@ -180,6 +188,23 @@ export async function deleteTrackPieceManifest(trackId: string) {
   await musicRoomDatabase.trackPieceManifests.delete(trackId);
 }
 
+export async function deleteTrackPieceManifests(trackIds: string[]) {
+  if (trackIds.length === 0) {
+    return;
+  }
+
+  for (const trackId of trackIds) {
+    queuedManifestUpserts.delete(trackId);
+    const timerId = queuedManifestTimers.get(trackId);
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+      queuedManifestTimers.delete(trackId);
+    }
+  }
+
+  await musicRoomDatabase.trackPieceManifests.bulkDelete(trackIds);
+}
+
 export async function cacheTrackPieces(
   pieces: Array<{
     pieceId: string;
@@ -259,6 +284,39 @@ export async function deleteCachedPiecesForTrack(trackId: string, peerId?: strin
       }
     }
   );
+  return pieces.length;
+}
+
+export async function deleteCachedPiecesForTracks(trackIds: string[]) {
+  const uniqueTrackIds = [...new Set(trackIds.filter(Boolean))];
+  if (uniqueTrackIds.length === 0) {
+    return 0;
+  }
+
+  const pieces = await musicRoomDatabase.trackPieces.where("trackId").anyOf(uniqueTrackIds).toArray();
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.trackAssets,
+    musicRoomDatabase.trackPieces,
+    musicRoomDatabase.trackPieceManifests,
+    async () => {
+      await musicRoomDatabase.trackAssets.bulkDelete(uniqueTrackIds);
+      await musicRoomDatabase.trackPieceManifests.bulkDelete(uniqueTrackIds);
+      if (pieces.length > 0) {
+        await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
+      }
+    }
+  );
+
+  for (const trackId of uniqueTrackIds) {
+    queuedManifestUpserts.delete(trackId);
+    const timerId = queuedManifestTimers.get(trackId);
+    if (timerId !== undefined) {
+      window.clearTimeout(timerId);
+      queuedManifestTimers.delete(trackId);
+    }
+  }
+
   return pieces.length;
 }
 

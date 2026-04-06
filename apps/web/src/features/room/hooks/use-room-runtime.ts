@@ -124,6 +124,7 @@ type UseRoomRuntimeInput = {
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   announceLocalCache: (trackId: string) => Promise<void>;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
+  deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   scheduleTrackHydration: (trackId: string, mimeType: string, totalChunks: number) => void;
   audioRef: RefObject<HTMLAudioElement | null>;
   remoteAudioRef: RefObject<HTMLAudioElement | null>;
@@ -400,6 +401,7 @@ export function useRoomRuntime({
   uploadedTrackIdsRef,
   announceLocalCache,
   deleteUploadedTrackArtifacts,
+  deleteRoomTrackArtifacts,
   scheduleTrackHydration,
   audioRef,
   remoteAudioRef,
@@ -514,6 +516,7 @@ export function useRoomRuntime({
   const setLastSourceStartErrorRef = useRef(setLastSourceStartError);
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
+  const deleteRoomTrackArtifactsRef = useRef(deleteRoomTrackArtifacts);
   const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
   const resetPlayerSurfaceRef = useRef(resetPlayerSurface);
   const queueAvailabilityRef = useRef(queueAvailability);
@@ -1004,6 +1007,10 @@ export function useRoomRuntime({
   useEffect(() => {
     deleteUploadedTrackArtifactsRef.current = deleteUploadedTrackArtifacts;
   }, [deleteUploadedTrackArtifacts]);
+
+  useEffect(() => {
+    deleteRoomTrackArtifactsRef.current = deleteRoomTrackArtifacts;
+  }, [deleteRoomTrackArtifacts]);
 
   useEffect(() => {
     scheduleTrackHydrationRef.current = scheduleTrackHydration;
@@ -3260,9 +3267,11 @@ export function useRoomRuntime({
         return;
       }
 
-      void Promise.allSettled(
-        trackIds.map((trackId) => deleteUploadedTrackArtifactsRef.current(trackId))
-      );
+      const roomTrackIds =
+        trackIds.length > 0
+          ? trackIds
+          : (currentRoomRef.current?.tracks.map((track) => track.id) ?? []);
+      void Promise.resolve(deleteRoomTrackArtifactsRef.current(roomTrackIds));
       exitAndStopPresence("房间已解散，当前房间的歌单和本地缓存已清理。");
     });
     socket.on("room.snapshot.missing", () => {

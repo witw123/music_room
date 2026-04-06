@@ -9,8 +9,8 @@ import {
 } from "@/features/p2p";
 import {
   cacheTrackAsset,
-  deleteCachedTrackAsset,
   deleteCachedPiecesForTrack,
+  deleteCachedPiecesForTracks,
   getCachedTrackAsset,
   getCachedTrackAssetCount,
   getCachedPiecesForTrack,
@@ -379,9 +379,19 @@ export function useTrackUploads(options: {
   }
 
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
-    await deleteCachedTrackAsset(trackId);
     await deleteCachedPiecesForTrack(trackId);
     setUploadedTracks((current) => removeTracksFromUploads(current, [trackId]));
+    setCachedTrackCount(await getCachedTrackAssetCount());
+  }, []);
+
+  const deleteRoomTrackArtifacts = useCallback(async (trackIds: string[]) => {
+    const uniqueTrackIds = [...new Set(trackIds.filter(Boolean))];
+    if (uniqueTrackIds.length === 0) {
+      return;
+    }
+
+    await deleteCachedPiecesForTracks(uniqueTrackIds);
+    setUploadedTracks((current) => removeTracksFromUploads(current, uniqueTrackIds));
     setCachedTrackCount(await getCachedTrackAssetCount());
   }, []);
 
@@ -393,6 +403,7 @@ export function useTrackUploads(options: {
     announceLocalCache,
     hydrateTrackFromPieces,
     trimLocalCache,
-    deleteUploadedTrackArtifacts
+    deleteUploadedTrackArtifacts,
+    deleteRoomTrackArtifacts
   };
 }
