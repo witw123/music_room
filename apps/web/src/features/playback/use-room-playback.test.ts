@@ -140,7 +140,7 @@ describe("resolveDisplayClockProgress", () => {
     expect(result.displayDriftMs).toBe(60);
   });
 
-  it("smooths the UI toward the room clock for moderate drift without hard jumping", () => {
+  it("keeps local audible playback glued to the audible clock under moderate room drift", () => {
     const result = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 20_000,
@@ -160,8 +160,7 @@ describe("resolveDisplayClockProgress", () => {
       now: 1_120
     });
 
-    expect(result.progressMs).toBeGreaterThan(20_000);
-    expect(result.progressMs).toBeLessThan(20_240);
+    expect(result.progressMs).toBe(20_000);
     expect(result.source).toBe("local-audible");
   });
 
@@ -187,6 +186,44 @@ describe("resolveDisplayClockProgress", () => {
 
     expect(result.progressMs).toBe(20_000);
     expect(result.source).toBe("remote-audible");
+  });
+
+  it("re-anchors to the room clock only after repeated severe drift", () => {
+    const firstFrame = resolveDisplayClockProgress({
+      audibleClockSample: {
+        progressMs: 20_000,
+        source: remoteSource
+      },
+      roomClockMs: 21_800,
+      durationMs: 240_000,
+      previousDisplayMs: 20_000,
+      previousSource: remoteSource,
+      transitionState: {
+        source: remoteSource,
+        anchorDisplayMs: 20_000,
+        anchorAudibleMs: 20_000,
+        anchorAtMs: 1_000,
+        hardDriftSamples: 0
+      },
+      now: 1_120
+    });
+
+    const secondFrame = resolveDisplayClockProgress({
+      audibleClockSample: {
+        progressMs: 20_120,
+        source: remoteSource
+      },
+      roomClockMs: 21_920,
+      durationMs: 240_000,
+      previousDisplayMs: firstFrame.progressMs,
+      previousSource: firstFrame.source,
+      transitionState: firstFrame.transitionState,
+      now: 1_240
+    });
+
+    expect(firstFrame.progressMs).toBe(20_000);
+    expect(secondFrame.progressMs).toBe(21_920);
+    expect(secondFrame.displayDriftMs).toBe(0);
   });
 
   it("keeps source switches continuous before converging to the new audible clock", () => {

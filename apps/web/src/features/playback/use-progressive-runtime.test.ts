@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
   resolveAudioQualityTier,
+  resolveMediaElementPlaybackRole,
   shouldBlockFullLocalHandoffForRecentRemoteRecovery,
   shouldEnableFullLocalHandoff,
   resolvePlaybackRecoveryStage,
@@ -25,6 +26,30 @@ describe("shouldPollRemoteStartupGate", () => {
   it("does not poll outside active remote-stream playback", () => {
     expect(shouldPollRemoteStartupGate("full-local", "playing", 0)).toBe(false);
     expect(shouldPollRemoteStartupGate("remote-stream", "paused", 0)).toBe(false);
+  });
+
+  it("classifies shadow warmup events separately from the audible source", () => {
+    expect(
+      resolveMediaElementPlaybackRole({
+        target: "local",
+        activePlaybackSource: "remote-stream",
+        shadowWarmupActive: true
+      })
+    ).toBe("shadow-local");
+    expect(
+      resolveMediaElementPlaybackRole({
+        target: "remote",
+        activePlaybackSource: "remote-stream",
+        shadowWarmupActive: true
+      })
+    ).toBe("audible-remote");
+    expect(
+      resolveMediaElementPlaybackRole({
+        target: "remote",
+        activePlaybackSource: "full-local",
+        shadowWarmupActive: false
+      })
+    ).toBe("inactive");
   });
 
   it("uses a larger startup gate on weak constrained links", () => {

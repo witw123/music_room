@@ -124,6 +124,12 @@ export type PlaybackRecoveryStage =
   | "audible-local-fallback"
   | "remote-recovery";
 
+export type MediaElementPlaybackRole =
+  | "audible-local"
+  | "audible-remote"
+  | "shadow-local"
+  | "inactive";
+
 export type SchedulerBudgetTier = "critical" | "protected" | "comfort" | "expanded";
 
 export function shouldPollRemoteStartupGate(
@@ -399,6 +405,26 @@ export function resolvePlaybackRecoveryStage(input: {
   }
 
   return "steady" as const;
+}
+
+export function resolveMediaElementPlaybackRole(input: {
+  target: "local" | "remote";
+  activePlaybackSource: ProgressivePlaybackSource;
+  shadowWarmupActive: boolean;
+}) {
+  if (input.target === "local") {
+    if (input.activePlaybackSource === "remote-stream") {
+      return input.shadowWarmupActive ? ("shadow-local" as const) : ("inactive" as const);
+    }
+
+    return "audible-local" as const;
+  }
+
+  if (input.activePlaybackSource === "remote-stream") {
+    return "audible-remote" as const;
+  }
+
+  return "inactive" as const;
 }
 
 export function resolveSchedulerBudgetTier(input: {
@@ -1666,11 +1692,39 @@ export function useProgressiveRuntime({
   useEffect(() => {
     const localAudio = audioRef.current;
     const remoteAudio = remoteAudioRef.current;
+    const resolveEventRole = (target: EventTarget | null) => {
+      if (target === localAudio) {
+        return resolveMediaElementPlaybackRole({
+          target: "local",
+          activePlaybackSource,
+          shadowWarmupActive
+        });
+      }
 
-    const handlePlaying = () => {
+      if (target === remoteAudio) {
+        return resolveMediaElementPlaybackRole({
+          target: "remote",
+          activePlaybackSource,
+          shadowWarmupActive
+        });
+      }
+
+      return "inactive" as const;
+    };
+    const clearWarmupReadiness = () => {
+      progressiveWarmupReadyAtRef.current = null;
+      fullLocalWarmupReadyAtRef.current = null;
+    };
+
+    const handlePlaying = (event: Event) => {
+      const role = resolveEventRole(event.currentTarget);
+      if (role === "shadow-local" || role === "inactive") {
+        return;
+      }
+
       setSchedulerMode("normal");
       setBufferHealth("healthy");
-      if (activePlaybackSource === "remote-stream") {
+      if (role === "audible-remote") {
         scheduleRemoteStartupGate();
         setMediaConnectionState((current) =>
           current === "idle" && !roomSnapshot?.room.playback.currentTrackId
@@ -1687,7 +1741,17 @@ export function useProgressiveRuntime({
         current === "idle" && !roomSnapshot?.room.playback.currentTrackId ? current : "live"
       );
     };
-    const handleWaiting = () => {
+    const handleWaiting = (event: Event) => {
+      const role = resolveEventRole(event.currentTarget);
+      if (role === "shadow-local") {
+        clearWarmupReadiness();
+        return;
+      }
+
+      if (role === "inactive") {
+        return;
+      }
+
       const now = Date.now();
       markContinuousPlaybackInterrupted(now);
       lastRemoteWaitingAtRef.current = now;
@@ -1696,16 +1760,18 @@ export function useProgressiveRuntime({
       clearRemoteStartupBufferTimer();
       setSchedulerMode("conservative");
       setBufferHealth("low");
-      if (activePlaybackSource === "remote-stream" && !isCurrentSourceOwner) {
+      if (role === "audible-remote" && !isCurrentSourceOwner) {
         setProgressiveFallbackReason((current) => current ?? "buffer-underrun");
       }
       if (
+        role === "audible-local" &&
         activePlaybackSource === "progressive-local" &&
         progressiveHealthSnapshot.aheadBufferedMs < getCriticalBufferThresholdMs() / 2
       ) {
         fallbackToRemoteStream("buffer-underrun");
       }
       if (
+        role === "audible-local" &&
         activePlaybackSource === "full-local" &&
         progressiveHealthSnapshot.aheadBufferedMs < getCriticalBufferThresholdMs() / 2
       ) {
@@ -1713,7 +1779,17 @@ export function useProgressiveRuntime({
       }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
-    const handleStalled = () => {
+    const handleStalled = (event: Event) => {
+      const role = resolveEventRole(event.currentTarget);
+      if (role === "shadow-local") {
+        clearWarmupReadiness();
+        return;
+      }
+
+      if (role === "inactive") {
+        return;
+      }
+
       const now = Date.now();
       markContinuousPlaybackInterrupted(now);
       lastRemoteWaitingAtRef.current = now;
@@ -1722,15 +1798,25 @@ export function useProgressiveRuntime({
       clearRemoteStartupBufferTimer();
       setSchedulerMode("conservative");
       setBufferHealth("critical");
-      if (activePlaybackSource === "remote-stream" && !isCurrentSourceOwner) {
+      if (role === "audible-remote" && !isCurrentSourceOwner) {
         setProgressiveFallbackReason("stalled");
       }
-      if (activePlaybackSource === "progressive-local" || activePlaybackSource === "full-local") {
+      if (role === "audible-local") {
         fallbackToRemoteStream("stalled", { force: true });
       }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
-    const handlePause = () => {
+    const handlePause = (event: Event) => {
+      const role = resolveEventRole(event.currentTarget);
+      if (role === "shadow-local") {
+        clearWarmupReadiness();
+        return;
+      }
+
+      if (role === "inactive") {
+        return;
+      }
+
       markContinuousPlaybackInterrupted();
       remoteStartupReadyAtRef.current = null;
       clearRemoteStartupBufferTimer();

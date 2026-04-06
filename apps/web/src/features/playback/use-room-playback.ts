@@ -6,12 +6,9 @@ import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 import type { ProgressivePlaybackSource } from "./progressive-playback";
 
 const playbackProgressPollIntervalMs = 120;
-const playingProgressCommitThresholdMs = 50;
+const playingProgressCommitThresholdMs = 80;
 const idleProgressCommitThresholdMs = 120;
-const displayClockIgnoreDriftMs = 120;
-const displayClockSmoothDriftMs = 280;
-const displayClockHardSnapDriftMs = 560;
-const displayClockRoomNudgeFactor = 0.35;
+const displayClockHardSnapDriftMs = 1_500;
 const displayClockTransitionWindowMs = 260;
 const displayClockHardSnapSamples = 2;
 const remoteAudibleAnchorResetDriftMs = 3_500;
@@ -216,60 +213,8 @@ export function resolveDisplayClockProgress(input: {
     anchoredAudibleMs + (audibleProgressMs - anchoredAudibleMs) * transitionRatio;
   const roomDriftMs = roomClockMs - nextProgressMs;
   const absoluteRoomDriftMs = Math.abs(roomDriftMs);
-  const isRemoteAudible = input.audibleClockSample.source === "remote-audible";
 
-  if (isRemoteAudible) {
-    if (absoluteRoomDriftMs >= displayClockHardSnapDriftMs) {
-      const hardDriftSamples = nextTransitionState.hardDriftSamples + 1;
-      if (hardDriftSamples >= displayClockHardSnapSamples) {
-        nextProgressMs = roomClockMs;
-        nextTransitionState = {
-          source: input.audibleClockSample.source,
-          anchorDisplayMs: roomClockMs,
-          anchorAudibleMs: audibleProgressMs,
-          anchorAtMs: now,
-          hardDriftSamples: 0
-        };
-      } else {
-        nextTransitionState = {
-          ...nextTransitionState,
-          hardDriftSamples
-        };
-      }
-    } else if (absoluteRoomDriftMs > displayClockSmoothDriftMs) {
-      nextProgressMs += roomDriftMs * displayClockRoomNudgeFactor * 0.4;
-      nextTransitionState = {
-        ...nextTransitionState,
-        hardDriftSamples: 0
-      };
-    } else {
-      nextTransitionState = {
-        ...nextTransitionState,
-        hardDriftSamples: 0
-      };
-    }
-
-    const boundedProgressMs = clampProgressMs(Math.round(nextProgressMs), input.durationMs);
-    return {
-      progressMs: boundedProgressMs,
-      source: input.audibleClockSample.source,
-      displayDriftMs: Math.round(roomClockMs - boundedProgressMs),
-      transitionState: nextTransitionState
-    };
-  }
-
-  if (absoluteRoomDriftMs < displayClockIgnoreDriftMs) {
-    nextTransitionState = {
-      ...nextTransitionState,
-      hardDriftSamples: 0
-    };
-  } else if (absoluteRoomDriftMs < displayClockSmoothDriftMs) {
-    nextProgressMs += roomDriftMs * displayClockRoomNudgeFactor;
-    nextTransitionState = {
-      ...nextTransitionState,
-      hardDriftSamples: 0
-    };
-  } else if (absoluteRoomDriftMs >= displayClockHardSnapDriftMs) {
+  if (absoluteRoomDriftMs >= displayClockHardSnapDriftMs) {
     const hardDriftSamples = nextTransitionState.hardDriftSamples + 1;
     if (hardDriftSamples >= displayClockHardSnapSamples) {
       nextProgressMs = roomClockMs;
@@ -286,6 +231,11 @@ export function resolveDisplayClockProgress(input: {
         hardDriftSamples
       };
     }
+  } else {
+    nextTransitionState = {
+      ...nextTransitionState,
+      hardDriftSamples: 0
+    };
   }
 
   const boundedProgressMs = clampProgressMs(Math.round(nextProgressMs), input.durationMs);

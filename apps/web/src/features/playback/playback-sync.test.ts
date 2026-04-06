@@ -116,6 +116,24 @@ describe("syncLocalPlaybackWindow", () => {
     expect(result.didSeek).toBe(true);
   });
 
+  it("uses a narrow playbackRate window for audible local follow before hard drift", () => {
+    const audio = {
+      currentTime: 10,
+      playbackRate: 1
+    } as HTMLAudioElement;
+
+    const result = syncLocalPlaybackWindow(audio, 10.2, true, {
+      softDriftMs: 120,
+      hardDriftMs: 900,
+      correctionMode: "audible-local-follow"
+    });
+
+    expect(audio.currentTime).toBe(10);
+    expect(audio.playbackRate).toBeGreaterThan(1);
+    expect(audio.playbackRate).toBeLessThanOrEqual(1.006);
+    expect(result.didSeek).toBe(false);
+  });
+
   it("derives small continuous playback-rate deltas from drift", () => {
     expect(resolveContinuousPlaybackRate({ driftMs: 20, maxRateDelta: 0.015 })).toBeCloseTo(
       1,
@@ -132,13 +150,13 @@ describe("syncLocalPlaybackWindow", () => {
     expect(resolveContinuousPlaybackRate({ driftMs: -180, maxRateDelta: 0.006 })).toBeCloseTo(0.994, 3);
   });
 
-  it("keeps audible local follow at fixed rate until hard drift requires a seek", () => {
+  it("keeps audible local follow at fixed rate for tiny drift", () => {
     const audio = {
       currentTime: 10,
       playbackRate: 1
     } as HTMLAudioElement;
 
-    const result = syncLocalPlaybackWindow(audio, 10.28, true, {
+    const result = syncLocalPlaybackWindow(audio, 10.03, true, {
       softDriftMs: 120,
       hardDriftMs: 900,
       correctionMode: "audible-local-follow"

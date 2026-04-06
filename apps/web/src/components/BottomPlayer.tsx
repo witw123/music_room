@@ -154,7 +154,6 @@ function BottomPlayerBase({
         autoPlay
         playsInline
         onEnded={() => void onEnded()}
-        onTimeUpdate={syncProgressFromAudio}
         onLoadedMetadata={() => {
           syncDurationFromAudio();
           syncProgressFromAudio();
@@ -174,13 +173,21 @@ function BottomPlayerBase({
         className="hidden"
         autoPlay
         playsInline
-        onLoadedMetadata={syncDurationFromAudio}
+        onLoadedMetadata={() => {
+          syncDurationFromAudio();
+          syncProgressFromAudio();
+        }}
         onDurationChange={syncDurationFromAudio}
-        onPlaying={onRemotePlaying}
+        onPlaying={() => {
+          syncProgressFromAudio();
+          onRemotePlaying();
+        }}
         onWaiting={onRemoteWaiting}
-        onPause={onRemotePause}
+        onPause={() => {
+          syncProgressFromAudio();
+          onRemotePause();
+        }}
         onSeeked={syncProgressFromAudio}
-        onTimeUpdate={syncProgressFromAudio}
         onError={onRemoteError}
       />
 

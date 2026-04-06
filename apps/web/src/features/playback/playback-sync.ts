@@ -71,6 +71,8 @@ export function syncLocalPlaybackWindow(
   const correctionMode = options?.correctionMode ?? (allowRateCorrection ? "rate" : "seek-only");
   const disableAudibleRateCorrection =
     correctionMode === "audible-remote-follow" || correctionMode === "audible-local-follow";
+  const audibleLocalSoftDriftMs = 40;
+  const audibleLocalHardDriftMs = 450;
   const driftMs = (expectedSeconds - audio.currentTime) * 1000;
   const absDriftMs = Math.abs(driftMs);
   let didSeek = false;
@@ -89,6 +91,42 @@ export function syncLocalPlaybackWindow(
   }
 
   if (correctionMode === "seek-only" || !allowRateCorrection || disableAudibleRateCorrection) {
+    if (correctionMode === "audible-local-follow") {
+      if (!isPlaying || absDriftMs >= audibleLocalHardDriftMs) {
+        audio.currentTime = Math.max(0, expectedSeconds);
+        didSeek = true;
+        audio.playbackRate = 1;
+        return {
+          driftMs,
+          playbackRate: audio.playbackRate,
+          didSeek
+        };
+      }
+
+      if (absDriftMs <= audibleLocalSoftDriftMs) {
+        audio.playbackRate = 1;
+        return {
+          driftMs,
+          playbackRate: audio.playbackRate,
+          didSeek
+        };
+      }
+
+      const boundedPlaybackRate = resolveContinuousPlaybackRate({
+        driftMs,
+        maxRateDelta: 0.006
+      });
+      audio.playbackRate = Math.max(
+        minimumAudibleRate,
+        Math.min(maximumAudibleRate, boundedPlaybackRate)
+      );
+      return {
+        driftMs,
+        playbackRate: audio.playbackRate,
+        didSeek
+      };
+    }
+
     if (!isPlaying || absDriftMs >= hardDriftMs) {
       audio.currentTime = Math.max(0, expectedSeconds);
       didSeek = true;
