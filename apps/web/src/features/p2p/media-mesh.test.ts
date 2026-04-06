@@ -557,11 +557,27 @@ describe("RoomMediaMesh", () => {
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
     expect(sender?.setParameters).toHaveBeenCalledWith({
-      encodings: [{ maxBitrate: 256_000 }]
+      encodings: [{ maxBitrate: 320_000 }]
     });
   });
 
-  it("reduces sender bitrate on constrained relay tcp links", () => {
+  it("keeps healthy relay tcp links above the old 144kbps cap", () => {
+    expect(
+      resolvePreferredAudioMaxBitrateBps({
+        candidateType: "relay",
+        protocol: "tcp",
+        currentRoundTripTimeMs: 70,
+        availableOutgoingBitrateKbps: 420,
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: null,
+        packetLossRate: 1.4,
+        packetsLost: 12,
+        jitterMs: 3
+      })
+    ).toBe(256_000);
+  });
+
+  it("reduces sender bitrate against measured headroom on constrained relay tcp links", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -574,7 +590,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(121_360);
+    ).toBe(133_200);
   });
 
   it("caps sender bitrate to measured headroom on weak links", () => {
@@ -590,7 +606,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 20,
         jitterMs: 4
       })
-    ).toBe(73_800);
+    ).toBe(96_000);
   });
 
   it("prefers a stronger receiver jitter target on constrained links", () => {
@@ -606,7 +622,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 0,
         jitterMs: 4
       })
-    ).toBe(420);
+    ).toBe(220);
   });
 
   it("prefers the strongest receiver jitter target on weak links", () => {
@@ -622,7 +638,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 120,
         jitterMs: 34
       })
-    ).toBe(620);
+    ).toBe(320);
   });
 
   it("does not keep audio in weak-link mode on high cumulative loss when the short window is healthy", () => {
@@ -638,7 +654,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBe(256_000);
+    ).toBe(288_000);
   });
 
   it("keeps the existing bitrate when the new target is only a tiny step away", () => {
@@ -674,8 +690,8 @@ describe("RoomMediaMesh", () => {
           packetsLost: 0,
           jitterMs: 4
         },
-        360
+        260
       )
-    ).toBe(360);
+    ).toBe(260);
   });
 });

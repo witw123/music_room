@@ -124,6 +124,8 @@ export class P2PMesh {
   private readonly dataOpenTimeoutMs = 8_000;
   private readonly dataConnectingTimeoutMs = 12_000;
   private readonly connectionProgressTimeoutMs = 15_000;
+  private readonly activeStatsSamplingIntervalMs = 1_000;
+  private readonly steadyStatsSamplingIntervalMs = 5_000;
   private statsSamplingMode: "off" | "steady" | "active" = "active";
 
   constructor(
@@ -760,7 +762,10 @@ export class P2PMesh {
     };
 
     void emitStatsSample();
-    const samplingIntervalMs = this.statsSamplingMode === "steady" ? 10_000 : 2_000;
+    const samplingIntervalMs =
+      this.statsSamplingMode === "steady"
+        ? this.steadyStatsSamplingIntervalMs
+        : this.activeStatsSamplingIntervalMs;
     entry.statsIntervalId = setInterval(() => {
       void emitStatsSample();
     }, samplingIntervalMs);

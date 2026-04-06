@@ -169,10 +169,15 @@ const hostMediaSyncRetryDelayMs = 75;
 const hostCaptureHealthCheckIntervalMs = 2_000;
 const hostCaptureRefreshCooldownMs = 1_200;
 const remoteStreamSwapGraceMs = 900;
-const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const;
-const maxRemotePlaybackRetryAttempts = 16;
-const listenerMediaRecoveryDelayMs = 1_400;
-const listenerMediaRecoveryCooldownMs = 3_000;
+const remotePlaybackRetryBackoffMs = [120, 240, 400] as const;
+const maxRemotePlaybackRetryAttempts = 3;
+const listenerSoftRecoveryDelayMs = 350;
+const listenerHardRecoveryDelayMs = 1_200;
+const listenerSoftRecoveryCooldownMs = 800;
+const listenerHardRecoveryCooldownMs = 3_000;
+const listenerMediaSupervisorIntervalMs = 150;
+const steadyRoomMediaClockEmitIntervalMs = 120;
+const recoveryRoomMediaClockEmitIntervalMs = 60;
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
 const stalledPieceSyncRecoveryThresholdMs = 20_000;
@@ -281,6 +286,37 @@ export function resolveListenerMediaRecoveryAction(input: {
   return input.bindAttempts + input.playAttempts >= 2
     ? ("restart-peer" satisfies ListenerMediaRecoveryAction)
     : ("rebind-and-play" satisfies ListenerMediaRecoveryAction);
+}
+
+function resolveListenerRecoveryDelayMs(input: {
+  progressGapMs: number | null;
+  remoteTrackReadyState: MediaStreamTrackState | null;
+}) {
+  if (input.remoteTrackReadyState === "ended") {
+    return listenerHardRecoveryDelayMs;
+  }
+
+  if (typeof input.progressGapMs !== "number" || !Number.isFinite(input.progressGapMs)) {
+    return listenerSoftRecoveryDelayMs;
+  }
+
+  return input.progressGapMs >= listenerHardRecoveryDelayMs
+    ? listenerHardRecoveryDelayMs
+    : listenerSoftRecoveryDelayMs;
+}
+
+function resolveRoomMediaClockEmitIntervalMs(input: {
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"];
+  sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
+  relayPlayoutState: "playing" | "buffering" | "paused" | null;
+}) {
+  if (input.playbackStatus !== "playing" || input.sourceStartState !== "live") {
+    return recoveryRoomMediaClockEmitIntervalMs;
+  }
+
+  return input.relayPlayoutState === "buffering"
+    ? recoveryRoomMediaClockEmitIntervalMs
+    : steadyRoomMediaClockEmitIntervalMs;
 }
 
 export function shouldForcePieceSyncRecovery(input: {
@@ -502,12 +538,18 @@ export function useRoomRuntime({
     lastPlayAttemptResult: "ok" | "rejected" | null;
     lastPlayAttemptError: string | null;
     lastPlayingTraceKey: string | null;
-    lastRecoveryTraceKey: string | null;
-    lastRecoveryAt: number | null;
+    lastSoftRecoveryTraceKey: string | null;
+    lastSoftRecoveryAt: number | null;
+    lastHardRecoveryTraceKey: string | null;
+    lastHardRecoveryAt: number | null;
     latestStream: MediaStream | null;
     currentGeneration: string | null;
+    generationStartedAt: number | null;
     boundGeneration: string | null;
     playingGeneration: string | null;
+    lastPlayoutProgressAt: number | null;
+    lastTransportProgressAt: number | null;
+    lastObservedRemoteCurrentTimeMs: number | null;
     recoveryStage:
       | "idle"
       | "waiting-track"
@@ -526,12 +568,18 @@ export function useRoomRuntime({
     lastPlayAttemptResult: null,
     lastPlayAttemptError: null,
     lastPlayingTraceKey: null,
-    lastRecoveryTraceKey: null,
-    lastRecoveryAt: null,
+    lastSoftRecoveryTraceKey: null,
+    lastSoftRecoveryAt: null,
+    lastHardRecoveryTraceKey: null,
+    lastHardRecoveryAt: null,
     latestStream: null,
     currentGeneration: null,
+    generationStartedAt: null,
     boundGeneration: null,
     playingGeneration: null,
+    lastPlayoutProgressAt: null,
+    lastTransportProgressAt: null,
+    lastObservedRemoteCurrentTimeMs: null,
     recoveryStage: "idle",
     restartAttempt: 0,
     bindAttempts: 0,
@@ -669,6 +717,11 @@ export function useRoomRuntime({
         listenerMediaLifecycleRef.current.lastPlayingTraceKey = traceContext.traceKey;
         listenerMediaLifecycleRef.current.playingGeneration = listenerMediaLifecycleRef.current.currentGeneration;
         listenerMediaLifecycleRef.current.recoveryStage = "idle";
+        listenerMediaLifecycleRef.current.lastPlayoutProgressAt = Date.now();
+        listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs =
+          Number.isFinite(remoteAudio.currentTime) && remoteAudio.currentTime >= 0
+            ? Math.round(remoteAudio.currentTime * 1000)
+            : listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs;
         clearListenerMediaRecovery();
       }
       updateRemoteMediaDiagnostic(
@@ -1273,6 +1326,18 @@ export function useRoomRuntime({
         return;
       }
 
+      const lastProgressAt = Math.max(
+        listenerMediaLifecycleRef.current.generationStartedAt ?? 0,
+        listenerMediaLifecycleRef.current.lastPlayoutProgressAt ?? 0,
+        listenerMediaLifecycleRef.current.lastTransportProgressAt ?? 0
+      );
+      const progressGapMs = lastProgressAt > 0 ? Date.now() - lastProgressAt : null;
+      const remoteTrackReadyState = getRemoteAudioDiagnostics().trackReadyState;
+      const recoveryDelayMs = resolveListenerRecoveryDelayMs({
+        progressGapMs,
+        remoteTrackReadyState
+      });
+
       listenerMediaRecoveryTimeoutRef.current = window.setTimeout(() => {
         const lifecycle = listenerMediaLifecycleRef.current;
         const latestPlayback = currentRoomRef.current?.room.playback;
@@ -1286,6 +1351,17 @@ export function useRoomRuntime({
           return;
         }
 
+        const now = Date.now();
+        const latestProgressAt = Math.max(
+          lifecycle.generationStartedAt ?? 0,
+          lifecycle.lastPlayoutProgressAt ?? 0,
+          lifecycle.lastTransportProgressAt ?? 0
+        );
+        const latestProgressGapMs = latestProgressAt > 0 ? now - latestProgressAt : null;
+        const remoteTrack =
+          typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
+            ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0] ?? null)
+            : null;
         const reason = resolveListenerMediaRecoveryReason({
           traceKey: expectedGeneration,
           lastTrackTraceKey: lifecycle.lastTrackTraceKey,
@@ -1295,39 +1371,71 @@ export function useRoomRuntime({
           lastPlayingTraceKey: lifecycle.lastPlayingTraceKey,
           remoteAudioPaused: remoteAudio?.paused ?? null,
           hasBoundSrcObject: !!remoteAudio?.srcObject,
-          remoteTrackMuted:
-            typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
-              ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0]?.muted ?? null)
-              : null,
-          remoteTrackEnabled:
-            typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
-              ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0]?.enabled ?? null)
-              : null,
-          remoteTrackReadyState:
-            typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
-              ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0]?.readyState ?? null)
-              : null
+          remoteTrackMuted: remoteTrack?.muted ?? null,
+          remoteTrackEnabled: remoteTrack?.enabled ?? null,
+          remoteTrackReadyState: remoteTrack?.readyState ?? null
         });
-        const action = resolveListenerMediaRecoveryAction({
-          reason,
-          bindAttempts: lifecycle.bindAttempts,
-          playAttempts: lifecycle.playAttempts
-        });
-        if (!action) {
-          lifecycle.recoveryStage = "idle";
-          return;
-        }
+        const hardRecoveryRequired =
+          remoteTrack?.readyState === "ended" ||
+          (typeof latestProgressGapMs === "number" &&
+            latestProgressGapMs >= listenerHardRecoveryDelayMs);
         if (
-          lifecycle.lastRecoveryTraceKey === expectedGeneration &&
-          lifecycle.lastRecoveryAt !== null &&
-          Date.now() - lifecycle.lastRecoveryAt < listenerMediaRecoveryCooldownMs
+          reason === "connected-but-no-track" &&
+          !hardRecoveryRequired
         ) {
           armListenerMediaRecoveryRef.current(expectedGeneration);
           return;
         }
 
-        lifecycle.lastRecoveryTraceKey = expectedGeneration;
-        lifecycle.lastRecoveryAt = Date.now();
+        if (
+          reason &&
+          !hardRecoveryRequired &&
+          typeof latestProgressGapMs === "number" &&
+          latestProgressGapMs < listenerSoftRecoveryDelayMs
+        ) {
+          armListenerMediaRecoveryRef.current(expectedGeneration);
+          return;
+        }
+
+        const action = hardRecoveryRequired
+          ? ("restart-peer" satisfies ListenerMediaRecoveryAction)
+          : resolveListenerMediaRecoveryAction({
+              reason,
+              bindAttempts: lifecycle.bindAttempts,
+              playAttempts: lifecycle.playAttempts
+            });
+        if (!action) {
+          lifecycle.recoveryStage = "idle";
+          return;
+        }
+        const lastRecoveryTraceKey =
+          action === "restart-peer"
+            ? lifecycle.lastHardRecoveryTraceKey
+            : lifecycle.lastSoftRecoveryTraceKey;
+        const lastRecoveryAt =
+          action === "restart-peer"
+            ? lifecycle.lastHardRecoveryAt
+            : lifecycle.lastSoftRecoveryAt;
+        const recoveryCooldownMs =
+          action === "restart-peer"
+            ? listenerHardRecoveryCooldownMs
+            : listenerSoftRecoveryCooldownMs;
+        if (
+          lastRecoveryTraceKey === expectedGeneration &&
+          lastRecoveryAt !== null &&
+          now - lastRecoveryAt < recoveryCooldownMs
+        ) {
+          armListenerMediaRecoveryRef.current(expectedGeneration);
+          return;
+        }
+
+        if (action === "restart-peer") {
+          lifecycle.lastHardRecoveryTraceKey = expectedGeneration;
+          lifecycle.lastHardRecoveryAt = now;
+        } else {
+          lifecycle.lastSoftRecoveryTraceKey = expectedGeneration;
+          lifecycle.lastSoftRecoveryAt = now;
+        }
         lifecycle.recoveryStage =
           action === "restart-peer"
             ? "restart-peer"
@@ -1407,7 +1515,7 @@ export function useRoomRuntime({
         }
 
         armListenerMediaRecoveryRef.current(expectedGeneration);
-      }, listenerMediaRecoveryDelayMs);
+      }, recoveryDelayMs);
     },
     [
       activePlaybackSource,
@@ -1457,6 +1565,11 @@ export function useRoomRuntime({
         if (result.ok) {
           listenerMediaLifecycleRef.current.playingGeneration = generation;
           listenerMediaLifecycleRef.current.recoveryStage = "idle";
+          listenerMediaLifecycleRef.current.lastPlayoutProgressAt = Date.now();
+          listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs =
+            Number.isFinite(remoteAudio.currentTime) && remoteAudio.currentTime >= 0
+              ? Math.round(remoteAudio.currentTime * 1000)
+              : listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs;
         }
         updateRemoteMediaDiagnostic(
           result.ok ? "远端音频自动拉起成功" : `远端音频自动拉起失败：${result.error ?? "未知错误"}`,
@@ -2001,20 +2114,51 @@ export function useRoomRuntime({
         emittedAt: new Date().toISOString()
       };
       socket.emit("room.media.clock", payload);
-      setAuthoritativeMediaClock({
-        ...payload,
-        receivedAtMs: Date.now()
+      setAuthoritativeMediaClock((current) => {
+        if (
+          current &&
+          current.mediaEpoch === payload.mediaEpoch &&
+          current.sourcePeerId === payload.sourcePeerId &&
+          current.relayGeneration > payload.relayGeneration
+        ) {
+          return current;
+        }
+
+        if (
+          current &&
+          current.mediaEpoch === payload.mediaEpoch &&
+          current.sourcePeerId === payload.sourcePeerId &&
+          current.relayGeneration === payload.relayGeneration &&
+          current.sequence > payload.sequence
+        ) {
+          return current;
+        }
+
+        return {
+          ...payload,
+          receivedAtMs: Date.now()
+        };
       });
     };
 
     emitRoomMediaClock();
-    const timerId = window.setInterval(
-      emitRoomMediaClock,
-      playback.status === "playing" && sourceStartState === "live" ? 500 : 250
-    );
+    let timerId = 0;
+    const scheduleNextEmit = () => {
+      const relayClockState =
+        typeof getHostRelayClockState === "function" ? getHostRelayClockState() : null;
+      timerId = window.setTimeout(() => {
+        emitRoomMediaClock();
+        scheduleNextEmit();
+      }, resolveRoomMediaClockEmitIntervalMs({
+        playbackStatus: playback.status,
+        sourceStartState,
+        relayPlayoutState: relayClockState?.playoutState ?? null
+      }));
+    };
+    scheduleNextEmit();
 
     return () => {
-      window.clearInterval(timerId);
+      window.clearTimeout(timerId);
     };
   }, [
     activePlaybackSource,
@@ -2059,10 +2203,18 @@ export function useRoomRuntime({
     lifecycle.lastPlayAttemptResult = null;
     lifecycle.lastPlayAttemptError = null;
     lifecycle.lastPlayingTraceKey = null;
+    lifecycle.lastSoftRecoveryTraceKey = null;
+    lifecycle.lastSoftRecoveryAt = null;
+    lifecycle.lastHardRecoveryTraceKey = null;
+    lifecycle.lastHardRecoveryAt = null;
     lifecycle.latestStream = null;
     lifecycle.currentGeneration = traceContext.traceKey;
+    lifecycle.generationStartedAt = traceContext.traceKey ? Date.now() : null;
     lifecycle.boundGeneration = null;
     lifecycle.playingGeneration = null;
+    lifecycle.lastPlayoutProgressAt = null;
+    lifecycle.lastTransportProgressAt = null;
+    lifecycle.lastObservedRemoteCurrentTimeMs = null;
     lifecycle.recoveryStage = traceContext.traceKey ? "waiting-track" : "idle";
     lifecycle.restartAttempt = 0;
     lifecycle.bindAttempts = 0;
@@ -2144,6 +2296,52 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback.status
   ]);
 
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+    if (
+      !roomSnapshot?.room.id ||
+      !peerId ||
+      isCurrentSourceOwner ||
+      activePlaybackSource !== "remote-stream" ||
+      playback?.status !== "playing"
+    ) {
+      listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs = null;
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      const remoteAudio = remoteAudioRef.current;
+      if (!remoteAudio?.srcObject || remoteAudio.paused) {
+        return;
+      }
+
+      const currentTimeMs =
+        Number.isFinite(remoteAudio.currentTime) && remoteAudio.currentTime >= 0
+          ? Math.round(remoteAudio.currentTime * 1000)
+          : null;
+      if (currentTimeMs === null) {
+        return;
+      }
+
+      const previousTimeMs = listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs;
+      listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs = currentTimeMs;
+      if (previousTimeMs === null || currentTimeMs > previousTimeMs + 20) {
+        listenerMediaLifecycleRef.current.lastPlayoutProgressAt = Date.now();
+      }
+    }, listenerMediaSupervisorIntervalMs);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [
+    activePlaybackSource,
+    isCurrentSourceOwner,
+    peerId,
+    remoteAudioRef,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback.status
+  ]);
+
   const updateDataTransportStats = useCallback(
     (input: {
       peerId: string;
@@ -2196,6 +2394,15 @@ export function useRoomRuntime({
         jitterMs: number | null;
       };
     }) => {
+      const currentPlayback = currentRoomRef.current?.room.playback;
+      if (
+        currentPlayback?.sourcePeerId === input.peerId &&
+        typeof input.sample.mediaReceiveBitrateKbps === "number" &&
+        input.sample.mediaReceiveBitrateKbps > 0
+      ) {
+        listenerMediaLifecycleRef.current.lastTransportProgressAt = Date.now();
+      }
+
       recordPeerDiagnostic({
         peerId: input.peerId,
         channelKind: "media",
@@ -2227,7 +2434,7 @@ export function useRoomRuntime({
         })
       });
     },
-    [recordPeerDiagnostic]
+    [currentRoomRef, recordPeerDiagnostic]
   );
 
   const recordPieceTransfer = useCallback(
@@ -3379,9 +3586,30 @@ export function useRoomRuntime({
         return;
       }
 
-      setAuthoritativeMediaClock({
-        ...payload,
-        receivedAtMs: Date.now()
+      setAuthoritativeMediaClock((current) => {
+        if (
+          current &&
+          current.mediaEpoch === payload.mediaEpoch &&
+          current.sourcePeerId === payload.sourcePeerId &&
+          current.relayGeneration > payload.relayGeneration
+        ) {
+          return current;
+        }
+
+        if (
+          current &&
+          current.mediaEpoch === payload.mediaEpoch &&
+          current.sourcePeerId === payload.sourcePeerId &&
+          current.relayGeneration === payload.relayGeneration &&
+          current.sequence > payload.sequence
+        ) {
+          return current;
+        }
+
+        return {
+          ...payload,
+          receivedAtMs: Date.now()
+        };
       });
     });
     socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {

@@ -71,18 +71,24 @@ type MediaPeerEntry = {
   isPolite: boolean;
   released: boolean;
   operationChain: Promise<void>;
+  weakReceiverWindowCount: number;
+  healthyReceiverWindowCount: number;
 };
 
-const directAudioMaxBitrateBps = 256_000;
-const constrainedAudioMaxBitrateBps = 208_000;
-const relayAudioMaxBitrateBps = 144_000;
-const weakLinkAudioMaxBitrateBps = 96_000;
-const minimumAudioMaxBitrateBps = 64_000;
-const stableReceiverJitterTargetMs = 380;
-const constrainedReceiverJitterTargetMs = 560;
-const weakLinkReceiverJitterTargetMs = 820;
+const directAudioMaxBitrateBps = 320_000;
+const constrainedAudioMaxBitrateBps = 256_000;
+const relayAudioMaxBitrateBps = 256_000;
+const weakLinkAudioMaxBitrateBps = 128_000;
+const minimumAudioMaxBitrateBps = 96_000;
+const stableReceiverJitterTargetMs = 120;
+const constrainedReceiverJitterTargetMs = 220;
+const weakLinkReceiverJitterTargetMs = 320;
 const audioRetuneStepBps = 32_000;
-const receiverJitterRetuneHysteresisMs = 120;
+const receiverJitterRetuneHysteresisMs = 80;
+const activeStatsSamplingIntervalMs = 1_000;
+const steadyStatsSamplingIntervalMs = 5_000;
+const receiverJitterWeakUpgradeWindowCount = 2;
+const receiverJitterHealthyDowngradeWindowCount = 3;
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
@@ -382,7 +388,9 @@ export class RoomMediaMesh {
       pendingRestart: false,
       isPolite: wantsIncomingAudio,
       released: false,
-      operationChain: Promise.resolve()
+      operationChain: Promise.resolve(),
+      weakReceiverWindowCount: 0,
+      healthyReceiverWindowCount: 0
     };
     this.startStatsSampling(peerId, entry);
 
@@ -670,10 +678,7 @@ export class RoomMediaMesh {
 
       entry.statsSnapshot = nextStats.snapshot;
       const sample = nextStats.sample;
-      const receiverJitterTargetMs = resolvePreferredReceiverJitterTargetMs(
-        sample,
-        entry.configuredReceiverJitterTargetMs
-      );
+      const receiverJitterTargetMs = this.resolveReceiverJitterTargetMs(entry, sample);
       this.configureReceiverJitterBuffer(entry, receiverJitterTargetMs);
       await this.tuneOutgoingAudio(entry, sample);
       this.callbacks.onStatsSample?.({
@@ -690,7 +695,10 @@ export class RoomMediaMesh {
     };
 
     void emitStatsSample();
-    const samplingIntervalMs = this.statsSamplingMode === "steady" ? 10_000 : 2_000;
+    const samplingIntervalMs =
+      this.statsSamplingMode === "steady"
+        ? steadyStatsSamplingIntervalMs
+        : activeStatsSamplingIntervalMs;
     entry.statsIntervalId = setInterval(() => {
       void emitStatsSample();
     }, samplingIntervalMs);
@@ -816,6 +824,52 @@ export class RoomMediaMesh {
       // Ignore codec preference failures and keep browser negotiation defaults.
     }
   }
+
+  private resolveReceiverJitterTargetMs(
+    entry: MediaPeerEntry,
+    sample: PeerConnectionStatsSample
+  ) {
+    const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+    const severeWeakLink = isSevereWeakLink(sample);
+    const weakLink = severeWeakLink || isWeakLink(sample);
+    const currentTargetMs = entry.configuredReceiverJitterTargetMs;
+
+    if (weakLink) {
+      entry.weakReceiverWindowCount += 1;
+      entry.healthyReceiverWindowCount = 0;
+    } else {
+      entry.healthyReceiverWindowCount += 1;
+      entry.weakReceiverWindowCount = 0;
+    }
+
+    if (
+      weakLink &&
+      (severeWeakLink ||
+        currentTargetMs === weakLinkReceiverJitterTargetMs ||
+        entry.weakReceiverWindowCount >= receiverJitterWeakUpgradeWindowCount)
+    ) {
+      return weakLinkReceiverJitterTargetMs;
+    }
+
+    if (
+      currentTargetMs === weakLinkReceiverJitterTargetMs &&
+      entry.healthyReceiverWindowCount < receiverJitterHealthyDowngradeWindowCount
+    ) {
+      return currentTargetMs;
+    }
+
+    if (
+      currentTargetMs === constrainedReceiverJitterTargetMs &&
+      !constrainedTransport &&
+      entry.healthyReceiverWindowCount < receiverJitterHealthyDowngradeWindowCount
+    ) {
+      return currentTargetMs;
+    }
+
+    return constrainedTransport
+      ? constrainedReceiverJitterTargetMs
+      : stableReceiverJitterTargetMs;
+  }
 }
 
 export function resolvePreferredAudioMaxBitrateBps(
@@ -823,30 +877,18 @@ export function resolvePreferredAudioMaxBitrateBps(
   currentConfiguredBitrateBps: number | null = null
 ) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
-  const severeWeakLink =
-    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
-    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 8) ||
-    (typeof sample.packetsLost === "number" &&
-      sample.packetLossRate === null &&
-      sample.packetsLost >= 120) ||
-    (typeof sample.jitterMs === "number" && sample.jitterMs >= 45);
-  const weakLink =
-    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
-    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 6) ||
-    (typeof sample.packetsLost === "number" &&
-      sample.packetLossRate === null &&
-      sample.packetsLost >= 80) ||
-    (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
+  const severeWeakLink = isSevereWeakLink(sample);
+  const weakLink = severeWeakLink || isWeakLink(sample);
   let targetMaxBitrateBps = directAudioMaxBitrateBps;
 
   if (severeWeakLink) {
     targetMaxBitrateBps = weakLinkAudioMaxBitrateBps;
-  } else if (weakLink && constrainedTransport) {
-    targetMaxBitrateBps = Math.min(relayAudioMaxBitrateBps, constrainedAudioMaxBitrateBps);
+  } else if (weakLink) {
+    targetMaxBitrateBps = constrainedTransport
+      ? weakLinkAudioMaxBitrateBps
+      : constrainedAudioMaxBitrateBps;
   } else if (constrainedTransport) {
     targetMaxBitrateBps = relayAudioMaxBitrateBps;
-  } else if (weakLink) {
-    targetMaxBitrateBps = constrainedAudioMaxBitrateBps;
   }
 
   if (
@@ -854,7 +896,7 @@ export function resolvePreferredAudioMaxBitrateBps(
     Number.isFinite(sample.availableOutgoingBitrateKbps) &&
     sample.availableOutgoingBitrateKbps > 0
   ) {
-    const headroomRatio = constrainedTransport ? 0.82 : 0.9;
+    const headroomRatio = 0.9;
     const measuredCeilingBps = Math.floor(
       sample.availableOutgoingBitrateKbps * 1000 * headroomRatio
     );
@@ -881,21 +923,8 @@ export function resolvePreferredReceiverJitterTargetMs(
   currentConfiguredTargetMs: number | null = null
 ) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
-  const severeWeakLink =
-    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
-    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 8) ||
-    (typeof sample.packetsLost === "number" &&
-      sample.packetLossRate === null &&
-      sample.packetsLost >= 120) ||
-    (typeof sample.jitterMs === "number" && sample.jitterMs >= 45);
-  const weakLink =
-    severeWeakLink ||
-    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
-    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 6) ||
-    (typeof sample.packetsLost === "number" &&
-      sample.packetLossRate === null &&
-      sample.packetsLost >= 80) ||
-    (typeof sample.jitterMs === "number" && sample.jitterMs >= 30);
+  const severeWeakLink = isSevereWeakLink(sample);
+  const weakLink = severeWeakLink || isWeakLink(sample);
 
   let nextTargetMs = stableReceiverJitterTargetMs;
 
@@ -913,6 +942,28 @@ export function resolvePreferredReceiverJitterTargetMs(
   }
 
   return nextTargetMs;
+}
+
+function isSevereWeakLink(sample: PeerConnectionStatsSample) {
+  return (
+    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
+    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 8) ||
+    (typeof sample.packetsLost === "number" &&
+      sample.packetLossRate === null &&
+      sample.packetsLost >= 120) ||
+    (typeof sample.jitterMs === "number" && sample.jitterMs >= 45)
+  );
+}
+
+function isWeakLink(sample: PeerConnectionStatsSample) {
+  return (
+    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
+    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 6) ||
+    (typeof sample.packetsLost === "number" &&
+      sample.packetLossRate === null &&
+      sample.packetsLost >= 80) ||
+    (typeof sample.jitterMs === "number" && sample.jitterMs >= 30)
+  );
 }
 
 function getAudioCodecCapabilities() {

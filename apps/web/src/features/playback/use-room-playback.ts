@@ -9,16 +9,17 @@ import {
   type ReceivedRoomMediaClock
 } from "./room-media-clock";
 
-const playbackProgressPollIntervalMs = 500;
-const hiddenPlaybackProgressPollIntervalMs = 2_000;
+const playbackProgressPollIntervalMs = 150;
+const hiddenPlaybackProgressPollIntervalMs = 1_000;
 const playingProgressCommitThresholdMs = 80;
 const idleProgressCommitThresholdMs = 120;
-const displayClockTransitionWindowMs = 180;
+const displayClockTransitionWindowMs = 100;
 const remoteAudibleAnchorResetDriftMs = 3_500;
 const remoteAudibleAnchorBacktrackToleranceSeconds = 0.25;
 const monotonicProgressBacktrackToleranceMs = 180;
-const audibleClockFreezeWindowMs = 600;
-const authoritativeClockFreshnessMs = 2_500;
+const audibleClockFreezeWindowMs = 150;
+const audibleClockFallbackGraceMs = 1_500;
+const authoritativeClockFreshnessMs = 600;
 
 export type DisplayClockSource =
   | "remote-audible"
@@ -210,20 +211,37 @@ export function resolveDisplayClockProgress(input: {
 
   let targetSource: DisplayClockSource = "room-fallback";
   let targetProgressMs = roomClockMs;
+  const continuityAgeMs = input.previousContinuity ? now - input.previousContinuity.observedAtMs : null;
+  const localAudibleSample =
+    input.audibleClockSample?.source === "local-audible" ? input.audibleClockSample : null;
+  const remoteAudibleSample =
+    input.audibleClockSample?.source === "remote-audible" ? input.audibleClockSample : null;
 
-  if (input.audibleClockSample) {
-    targetSource = input.audibleClockSample.source;
-    targetProgressMs = clampProgressMs(input.audibleClockSample.progressMs, input.durationMs);
+  if (localAudibleSample) {
+    targetSource = localAudibleSample.source;
+    targetProgressMs = clampProgressMs(localAudibleSample.progressMs, input.durationMs);
   } else if (
     input.playbackStatus === "playing" &&
     input.previousContinuity &&
-    now - input.previousContinuity.observedAtMs <= audibleClockFreezeWindowMs
+    continuityAgeMs !== null &&
+    continuityAgeMs <= audibleClockFreezeWindowMs
   ) {
     targetSource = input.previousContinuity.sample.source;
     targetProgressMs = clampProgressMs(input.previousContinuity.sample.progressMs, input.durationMs);
   } else if (input.authoritativeClockSample) {
     targetSource = input.authoritativeClockSample.source;
     targetProgressMs = clampProgressMs(input.authoritativeClockSample.progressMs, input.durationMs);
+  } else if (remoteAudibleSample) {
+    targetSource = remoteAudibleSample.source;
+    targetProgressMs = clampProgressMs(remoteAudibleSample.progressMs, input.durationMs);
+  } else if (
+    input.playbackStatus === "playing" &&
+    input.previousContinuity &&
+    continuityAgeMs !== null &&
+    continuityAgeMs <= audibleClockFallbackGraceMs
+  ) {
+    targetSource = input.previousContinuity.sample.source;
+    targetProgressMs = clampProgressMs(input.previousContinuity.sample.progressMs, input.durationMs);
   }
 
   let nextTransitionState = input.transitionState;

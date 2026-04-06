@@ -64,7 +64,7 @@ describe("shouldPollRemoteStartupGate", () => {
         },
         hasRecentStablePlayback: false
       })
-    ).toBeGreaterThanOrEqual(420);
+    ).toBe(320);
   });
 
   it("fades startup buffering down after recent stable playback", () => {
@@ -79,7 +79,7 @@ describe("shouldPollRemoteStartupGate", () => {
         },
         hasRecentStablePlayback: true
       })
-    ).toBe(400);
+    ).toBe(160);
   });
 
   it("holds the remote audio element muted until the startup window matures", () => {

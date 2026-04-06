@@ -96,20 +96,20 @@ type UseProgressiveRuntimeResult = {
   destroyProgressiveRuntime: () => void;
 };
 
-const progressiveRuntimeTickIntervalMs = 500;
+const progressiveRuntimeTickIntervalMs = 150;
 const progressiveSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalMaxDriftMs = 180;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
-const remoteStartupGatePollMs = 120;
+const remoteStartupGatePollMs = 60;
 const enableDirectProgressiveTakeover = true;
 const enableListenerShadowWarmup = false;
 const enableListenerLocalTakeover = false;
-const stableRemoteStartupBufferMs = 320;
-const constrainedRemoteStartupBufferMs = 480;
-const weakRemoteStartupBufferMs = 680;
-const maximumAdaptiveStartupBufferMs = 900;
+const stableRemoteStartupBufferMs = 120;
+const constrainedRemoteStartupBufferMs = 200;
+const weakRemoteStartupBufferMs = 320;
+const maximumAdaptiveStartupBufferMs = 450;
 const haveCurrentDataReadyState = 2;
 const playbackQualityWindowMs = 30_000;
 const stablePlaybackGraceWindowMs = 12_000;
@@ -185,7 +185,7 @@ export function resolveAdaptiveStartupBufferMs(input: {
 
   let startupBufferMs = stableRemoteStartupBufferMs;
   if (severeWeakLink) {
-    startupBufferMs = weakRemoteStartupBufferMs + 140;
+    startupBufferMs = maximumAdaptiveStartupBufferMs;
   } else if (weakLink) {
     startupBufferMs = weakRemoteStartupBufferMs;
   } else if (constrainedTransport) {
@@ -193,7 +193,7 @@ export function resolveAdaptiveStartupBufferMs(input: {
   }
 
   if (input.hasRecentStablePlayback) {
-    startupBufferMs = Math.max(260, startupBufferMs - 80);
+    startupBufferMs = Math.max(stableRemoteStartupBufferMs, startupBufferMs - 40);
   }
 
   return Math.min(maximumAdaptiveStartupBufferMs, startupBufferMs);
