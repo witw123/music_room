@@ -607,10 +607,6 @@ function MeshStatusPanelBase({
                           完整本地可切: {peer.progressivePlaybackStatus.fullLocalReady ? "是" : "否"}
                         </span>
                         <span>
-                          完整本地预热:{" "}
-                          {peer.progressivePlaybackStatus.fullLocalWarmupReady ? "是" : "否"}
-                        </span>
-                        <span>
                           渐进本地可切:{" "}
                           {peer.progressivePlaybackStatus.progressiveLocalEligible ? "是" : "否"}
                         </span>
@@ -662,16 +658,6 @@ function MeshStatusPanelBase({
                           {peer.progressivePlaybackStatus.audibleLocalFallbackActive ? "是" : "否"}
                         </span>
                         <span>
-                          handoff 阶段: {peer.progressivePlaybackStatus.handoffStage ?? "未知"}
-                        </span>
-                        <span>
-                          远端稳播窗口:{" "}
-                          {formatDurationMs(peer.progressivePlaybackStatus.remoteStablePlaybackMs ?? null)}
-                        </span>
-                        <span>
-                          本地对齐样本: {peer.progressivePlaybackStatus.localAlignedSamples ?? "未知"}
-                        </span>
-                        <span>
                           连续播放(30s):{" "}
                           {formatDurationMs(
                             peer.progressivePlaybackStatus.maxContinuousPlaybackMsLast30s ?? null
@@ -690,23 +676,6 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.fullLocalBlockedReason ? (
                         <p className="mt-2 text-amber-300">
                           禁止切本地: {peer.progressivePlaybackStatus.fullLocalBlockedReason}
-                        </p>
-                      ) : null}
-                      {peer.progressivePlaybackStatus.fullLocalStableSince ? (
-                        <p className="mt-1 text-foreground-muted">
-                          full-local 稳定起点:{" "}
-                          {formatTimestamp(peer.progressivePlaybackStatus.fullLocalStableSince)}
-                        </p>
-                      ) : null}
-                      {peer.progressivePlaybackStatus.handoffStartedAt ? (
-                        <p className="mt-1 text-foreground-muted">
-                          handoff 开始: {formatTimestamp(peer.progressivePlaybackStatus.handoffStartedAt)}
-                          {peer.progressivePlaybackStatus.handoffTimedOut ? " · timeout" : ""}
-                        </p>
-                      ) : null}
-                      {peer.progressivePlaybackStatus.fullLocalSwitchBlockedReason ? (
-                        <p className="mt-1 text-foreground-muted">
-                          handoff 阻塞: {peer.progressivePlaybackStatus.fullLocalSwitchBlockedReason}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.progressiveLocalBlockedReason ? (

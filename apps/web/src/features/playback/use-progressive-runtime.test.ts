@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
   resolveAudioQualityTier,
-  resolveFullLocalSwitchBlockedReason,
   shouldEnableFullLocalHandoff,
   resolvePlaybackRecoveryStage,
   resolveRemoteAudioHoldDurationMs,
@@ -226,13 +225,7 @@ describe("shouldPollRemoteStartupGate", () => {
         startupGatePending: false,
         localReady: true,
         driftMs: 80,
-        cooldownMs: 0,
-        remoteStablePlaybackMs: 4_500,
-        minimumRemoteStablePlaybackMs: 3_500,
-        localAlignedSamples: 4,
-        minimumLocalAlignedSamples: 4,
-        remainingPlaybackMs: 48_000,
-        minimumRemainingPlaybackMs: 12_000
+        cooldownMs: 0
       })
     ).toBe(true);
   });
@@ -245,92 +238,8 @@ describe("shouldPollRemoteStartupGate", () => {
         startupGatePending: true,
         localReady: true,
         driftMs: 80,
-        cooldownMs: 0,
-        remoteStablePlaybackMs: 4_500,
-        minimumRemoteStablePlaybackMs: 3_500,
-        localAlignedSamples: 4,
-        minimumLocalAlignedSamples: 4,
-        remainingPlaybackMs: 48_000,
-        minimumRemainingPlaybackMs: 12_000
+        cooldownMs: 0
       })
     ).toBe(false);
-  });
-
-  it("keeps full-local handoff blocked until remote playback has been stable for the full window", () => {
-    expect(
-      shouldEnableFullLocalHandoff({
-        activePlaybackSource: "remote-stream",
-        playbackRecoveryStage: "steady",
-        startupGatePending: false,
-        localReady: true,
-        driftMs: 80,
-        cooldownMs: 0,
-        remoteStablePlaybackMs: 1_800,
-        minimumRemoteStablePlaybackMs: 3_500,
-        localAlignedSamples: 4,
-        minimumLocalAlignedSamples: 4,
-        remainingPlaybackMs: 48_000,
-        minimumRemainingPlaybackMs: 12_000
-      })
-    ).toBe(false);
-  });
-
-  it("keeps full-local handoff blocked until local alignment has converged across several samples", () => {
-    expect(
-      shouldEnableFullLocalHandoff({
-        activePlaybackSource: "remote-stream",
-        playbackRecoveryStage: "steady",
-        startupGatePending: false,
-        localReady: true,
-        driftMs: 80,
-        cooldownMs: 0,
-        remoteStablePlaybackMs: 4_500,
-        minimumRemoteStablePlaybackMs: 3_500,
-        localAlignedSamples: 2,
-        minimumLocalAlignedSamples: 4,
-        remainingPlaybackMs: 48_000,
-        minimumRemainingPlaybackMs: 12_000
-      })
-    ).toBe(false);
-  });
-
-  it("reports the specific full-local block reason while the remote path is still stabilizing", () => {
-    expect(
-      resolveFullLocalSwitchBlockedReason({
-        hasFullLocalTrack: true,
-        playbackStatus: "playing",
-        localReady: true,
-        driftMs: 80,
-        startupGatePending: false,
-        playbackRecoveryStage: "steady",
-        cooldownMs: 0,
-        remoteStablePlaybackMs: 1_500,
-        minimumRemoteStablePlaybackMs: 3_500,
-        localAlignedSamples: 4,
-        minimumLocalAlignedSamples: 4,
-        remainingPlaybackMs: 48_000,
-        minimumRemainingPlaybackMs: 12_000
-      })
-    ).toBe("remote-stability-window");
-  });
-
-  it("blocks full-local near the end of the track so the player stays on the remote path", () => {
-    expect(
-      resolveFullLocalSwitchBlockedReason({
-        hasFullLocalTrack: true,
-        playbackStatus: "playing",
-        localReady: true,
-        driftMs: 80,
-        startupGatePending: false,
-        playbackRecoveryStage: "steady",
-        cooldownMs: 0,
-        remoteStablePlaybackMs: 4_500,
-        minimumRemoteStablePlaybackMs: 3_500,
-        localAlignedSamples: 4,
-        minimumLocalAlignedSamples: 4,
-        remainingPlaybackMs: 6_000,
-        minimumRemainingPlaybackMs: 12_000
-      })
-    ).toBe("remaining-window-too-short");
   });
 });
