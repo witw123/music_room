@@ -173,8 +173,11 @@ export const progressivePlaybackStatusSchema = z.object({
   remoteFirstLockReason: z.string().nullable().optional(),
   localTakeoverCooldownMs: z.number().int().nonnegative().nullable().optional(),
   fullLocalReady: z.boolean().optional(),
+  fullLocalWarmupReady: z.boolean().optional(),
   fullLocalEligible: z.boolean().optional(),
   fullLocalBlockedReason: z.string().nullable().optional(),
+  fullLocalStableSince: z.string().datetime().nullable().optional(),
+  fullLocalSwitchBlockedReason: z.string().nullable().optional(),
   progressiveLocalEligible: z.boolean().optional(),
   progressiveLocalBlockedReason: z.string().nullable().optional(),
   hostCaptureRefreshKey: z.string().nullable().optional(),
@@ -228,6 +231,14 @@ export const progressivePlaybackStatusSchema = z.object({
     .nullable()
     .optional(),
   audibleLocalFallbackActive: z.boolean().optional(),
+  handoffStage: z
+    .enum(["idle", "warming-full-local", "handoff-to-full-local", "full-local-live"])
+    .nullable()
+    .optional(),
+  handoffStartedAt: z.string().datetime().nullable().optional(),
+  handoffTimedOut: z.boolean().optional(),
+  remoteStablePlaybackMs: z.number().int().nonnegative().nullable().optional(),
+  localAlignedSamples: z.number().int().nonnegative().nullable().optional(),
   maxContinuousPlaybackMsLast30s: z.number().int().nonnegative().nullable().optional(),
   schedulerBudgetTier: z.enum(["critical", "protected", "comfort", "expanded"]).nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()

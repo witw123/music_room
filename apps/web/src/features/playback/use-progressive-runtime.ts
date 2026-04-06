@@ -93,7 +93,11 @@ type UseProgressiveRuntimeResult = {
 const progressiveRuntimeTickIntervalMs = 350;
 const progressiveSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalSwitchDelayMs = getFullLocalStableWindowMs();
-const fullLocalMaxDriftMs = 180;
+const fullLocalWarmupMaxDriftMs = 180;
+const fullLocalSwitchMaxDriftMs = 120;
+const fullLocalAlignedSampleThreshold = 4;
+const fullLocalHandoffTimeoutMs = 2_200;
+const fullLocalTailGuardFloorMs = 12_000;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteStartupGatePollMs = 120;
@@ -123,6 +127,11 @@ export type PlaybackRecoveryStage =
   | "remote-recovery";
 
 export type SchedulerBudgetTier = "critical" | "protected" | "comfort" | "expanded";
+export type FullLocalHandoffStage =
+  | "idle"
+  | "warming-full-local"
+  | "handoff-to-full-local"
+  | "full-local-live";
 
 export function shouldPollRemoteStartupGate(
   activePlaybackSource: ProgressivePlaybackSource,
@@ -323,6 +332,12 @@ export function shouldEnableFullLocalHandoff(input: {
   localReady: boolean;
   driftMs: number;
   cooldownMs: number;
+  remoteStablePlaybackMs?: number;
+  minimumRemoteStablePlaybackMs?: number;
+  localAlignedSamples?: number;
+  minimumLocalAlignedSamples?: number;
+  remainingPlaybackMs?: number | null;
+  minimumRemainingPlaybackMs?: number;
 }) {
   if (
     input.activePlaybackSource !== "remote-stream" &&
@@ -336,7 +351,7 @@ export function shouldEnableFullLocalHandoff(input: {
     return false;
   }
 
-  if (Math.abs(input.driftMs) > fullLocalMaxDriftMs) {
+  if (Math.abs(input.driftMs) > fullLocalSwitchMaxDriftMs) {
     return false;
   }
 
@@ -348,7 +363,101 @@ export function shouldEnableFullLocalHandoff(input: {
     return false;
   }
 
-  return input.playbackRecoveryStage !== "startup-buffering";
+  if (input.playbackRecoveryStage !== "steady") {
+    return false;
+  }
+
+  if (
+    typeof input.minimumRemoteStablePlaybackMs === "number" &&
+    input.minimumRemoteStablePlaybackMs > 0 &&
+    (typeof input.remoteStablePlaybackMs !== "number" ||
+      input.remoteStablePlaybackMs < input.minimumRemoteStablePlaybackMs)
+  ) {
+    return false;
+  }
+
+  if (
+    typeof input.minimumLocalAlignedSamples === "number" &&
+    input.minimumLocalAlignedSamples > 0 &&
+    (typeof input.localAlignedSamples !== "number" ||
+      input.localAlignedSamples < input.minimumLocalAlignedSamples)
+  ) {
+    return false;
+  }
+
+  if (
+    typeof input.minimumRemainingPlaybackMs === "number" &&
+    input.minimumRemainingPlaybackMs > 0 &&
+    typeof input.remainingPlaybackMs === "number" &&
+    Number.isFinite(input.remainingPlaybackMs) &&
+    input.remainingPlaybackMs < input.minimumRemainingPlaybackMs
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export function resolveFullLocalSwitchBlockedReason(input: {
+  hasFullLocalTrack: boolean;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  localReady: boolean;
+  driftMs: number;
+  startupGatePending: boolean;
+  playbackRecoveryStage: PlaybackRecoveryStage;
+  cooldownMs: number;
+  remoteStablePlaybackMs: number;
+  minimumRemoteStablePlaybackMs: number;
+  localAlignedSamples: number;
+  minimumLocalAlignedSamples: number;
+  remainingPlaybackMs: number | null;
+  minimumRemainingPlaybackMs: number;
+}) {
+  if (!input.hasFullLocalTrack) {
+    return "track-not-fully-cached";
+  }
+
+  if (input.playbackStatus !== "playing") {
+    return "playback-paused";
+  }
+
+  if (
+    typeof input.remainingPlaybackMs === "number" &&
+    Number.isFinite(input.remainingPlaybackMs) &&
+    input.remainingPlaybackMs < input.minimumRemainingPlaybackMs
+  ) {
+    return "remaining-window-too-short";
+  }
+
+  if (input.startupGatePending || input.playbackRecoveryStage === "startup-buffering") {
+    return "remote-startup-buffering";
+  }
+
+  if (input.playbackRecoveryStage !== "steady") {
+    return "remote-not-stable";
+  }
+
+  if (input.cooldownMs > 0) {
+    return "takeover-cooldown";
+  }
+
+  if (!input.localReady) {
+    return "full-local-not-ready";
+  }
+
+  if (!Number.isFinite(input.driftMs) || Math.abs(input.driftMs) > fullLocalWarmupMaxDriftMs) {
+    return "local-drift-too-high";
+  }
+
+  if (input.localAlignedSamples < input.minimumLocalAlignedSamples) {
+    return "local-alignment-not-converged";
+  }
+
+  if (input.remoteStablePlaybackMs < input.minimumRemoteStablePlaybackMs) {
+    return "remote-stability-window";
+  }
+
+  return null;
 }
 
 export function resolvePlaybackRecoveryStage(input: {
@@ -491,12 +600,18 @@ export function useProgressiveRuntime({
   const progressivePcmEngineRef = useRef<ProgressivePcmEngine | null>(null);
   const progressiveWarmupReadyAtRef = useRef<number | null>(null);
   const fullLocalWarmupReadyAtRef = useRef<number | null>(null);
+  const fullLocalStableSinceRef = useRef<number | null>(null);
+  const fullLocalAlignedSamplesRef = useRef(0);
+  const fullLocalHandoffStageRef = useRef<FullLocalHandoffStage>("idle");
+  const fullLocalHandoffStartedAtRef = useRef<number | null>(null);
+  const fullLocalHandoffTimedOutRef = useRef(false);
   const remoteHoldTimeoutRef = useRef<number | null>(null);
   const remoteStartupBufferTimerRef = useRef<number | null>(null);
   const playbackStartRetryRef = useRef<number | null>(null);
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
   const remoteStartupReadyAtRef = useRef<number | null>(null);
+  const remoteStableSinceRef = useRef<number | null>(null);
   const lastStablePlaybackAtRef = useRef<string | null>(null);
   const waitingEventTimestampsRef = useRef<number[]>([]);
   const stalledEventTimestampsRef = useRef<number[]>([]);
@@ -690,6 +805,23 @@ export function useProgressiveRuntime({
     () => Math.max(0, localTakeoverCooldownUntilRef.current - Date.now()),
     [playbackRevision, playback?.currentTrackId, activePlaybackSource, remoteFirstLock]
   );
+  const fullLocalWarmupReady =
+    !!currentBufferedFullLocalTrack &&
+    !!audioRef.current &&
+    audioRef.current.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA;
+  const fullLocalMinimumRemainingMs = useMemo(
+    () =>
+      Math.max(
+        fullLocalTailGuardFloorMs,
+        getRemoteFirstComfortBufferMs(
+          currentTrack ?? {
+            mimeType: null,
+            codec: null
+          }
+        )
+      ),
+    [currentTrack]
+  );
   const fullLocalReady = !!currentBufferedFullLocalTrack;
   const bufferSafetyMarginMs = useMemo(() => {
     if (progressiveHealthSnapshot.estimatedFillTimeMs === null) {
@@ -757,16 +889,6 @@ export function useProgressiveRuntime({
     remoteFirstLockReason
   ]);
   const progressiveLocalEligible = progressiveLocalBlockedReason === null;
-  const fullLocalBlockedReason = useMemo(() => {
-    if (!currentBufferedFullLocalTrack) {
-      return "track-not-fully-cached";
-    }
-
-    return null;
-  }, [
-    currentBufferedFullLocalTrack
-  ]);
-  const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
   const transportGovernorMode = useMemo(
     () =>
       resolveTransportGovernorMode({
@@ -1018,6 +1140,11 @@ export function useProgressiveRuntime({
     progressivePcmEngineRef.current = null;
     progressiveWarmupReadyAtRef.current = null;
     fullLocalWarmupReadyAtRef.current = null;
+    fullLocalStableSinceRef.current = null;
+    fullLocalAlignedSamplesRef.current = 0;
+    fullLocalHandoffStageRef.current = "idle";
+    fullLocalHandoffStartedAtRef.current = null;
+    fullLocalHandoffTimedOutRef.current = false;
     if (remoteHoldTimeoutRef.current !== null) {
       window.clearTimeout(remoteHoldTimeoutRef.current);
       remoteHoldTimeoutRef.current = null;
@@ -1031,6 +1158,7 @@ export function useProgressiveRuntime({
       playbackStartRetryRef.current = null;
     }
     remoteStartupReadyAtRef.current = null;
+    remoteStableSinceRef.current = null;
     lastRemoteWaitingAtRef.current = null;
     waitingEventTimestampsRef.current = [];
     stalledEventTimestampsRef.current = [];
@@ -1060,7 +1188,13 @@ export function useProgressiveRuntime({
   useEffect(() => {
     progressiveWarmupReadyAtRef.current = null;
     fullLocalWarmupReadyAtRef.current = null;
+    fullLocalStableSinceRef.current = null;
+    fullLocalAlignedSamplesRef.current = 0;
+    fullLocalHandoffStageRef.current = "idle";
+    fullLocalHandoffStartedAtRef.current = null;
+    fullLocalHandoffTimedOutRef.current = false;
     remoteStartupReadyAtRef.current = null;
+    remoteStableSinceRef.current = null;
     lastRemoteWaitingAtRef.current = null;
     if (remoteHoldTimeoutRef.current !== null) {
       window.clearTimeout(remoteHoldTimeoutRef.current);
@@ -1129,6 +1263,62 @@ export function useProgressiveRuntime({
       startupGatePending
     ]
   );
+  useEffect(() => {
+    const now = Date.now();
+    const remoteStable =
+      activePlaybackSource === "remote-stream" &&
+      playback?.status === "playing" &&
+      playbackRecoveryStage === "steady" &&
+      !startupGatePending &&
+      playbackQualityMetrics.waitingEventsLast30s === 0 &&
+      playbackQualityMetrics.stalledEventsLast30s === 0;
+
+    if (remoteStable) {
+      if (remoteStableSinceRef.current === null) {
+        remoteStableSinceRef.current = now;
+      }
+    } else {
+      remoteStableSinceRef.current = null;
+    }
+
+    if (activePlaybackSource === "full-local") {
+      fullLocalHandoffStageRef.current = "full-local-live";
+      fullLocalHandoffTimedOutRef.current = false;
+      if (fullLocalHandoffStartedAtRef.current === null) {
+        fullLocalHandoffStartedAtRef.current = now;
+      }
+    } else if (
+      fullLocalHandoffStageRef.current === "full-local-live" ||
+      fullLocalHandoffStageRef.current === "handoff-to-full-local"
+    ) {
+      fullLocalHandoffStageRef.current = "idle";
+      fullLocalHandoffStartedAtRef.current = null;
+      fullLocalHandoffTimedOutRef.current = false;
+    }
+  }, [
+    activePlaybackSource,
+    playback?.status,
+    playbackQualityMetrics.stalledEventsLast30s,
+    playbackQualityMetrics.waitingEventsLast30s,
+    playbackRecoveryStage,
+    startupGatePending
+  ]);
+  const remoteStablePlaybackMs = useMemo(() => {
+    if (remoteStableSinceRef.current === null) {
+      return 0;
+    }
+
+    return Math.max(0, Date.now() - remoteStableSinceRef.current);
+  }, [
+    activePlaybackSource,
+    playback?.currentTrackId,
+    playback?.status,
+    playbackRecoveryStage,
+    playbackQualityMetrics.stalledEventsLast30s,
+    playbackQualityMetrics.waitingEventsLast30s,
+    playbackRevision,
+    startupGatePending
+  ]);
   const schedulerBudgetTier = useMemo(
     () =>
       resolveSchedulerBudgetTier({
@@ -1148,6 +1338,41 @@ export function useProgressiveRuntime({
       playbackRecoveryStage
     ]
   );
+  const fullLocalBlockedReason = useMemo(
+    () =>
+      resolveFullLocalSwitchBlockedReason({
+        hasFullLocalTrack: !!currentBufferedFullLocalTrack,
+        playbackStatus: playback?.status,
+        localReady: fullLocalWarmupReady,
+        driftMs: playbackQualityMetrics.averageDriftMs ?? Number.POSITIVE_INFINITY,
+        startupGatePending,
+        playbackRecoveryStage,
+        cooldownMs: localTakeoverCooldownMs,
+        remoteStablePlaybackMs,
+        minimumRemoteStablePlaybackMs: fullLocalSwitchDelayMs,
+        localAlignedSamples: fullLocalAlignedSamplesRef.current,
+        minimumLocalAlignedSamples: fullLocalAlignedSampleThreshold,
+        remainingPlaybackMs: progressiveHealthSnapshot.remainingPlaybackMs,
+        minimumRemainingPlaybackMs: fullLocalMinimumRemainingMs
+      }),
+    [
+      currentBufferedFullLocalTrack,
+      fullLocalMinimumRemainingMs,
+      fullLocalWarmupReady,
+      localTakeoverCooldownMs,
+      playback?.status,
+      playbackQualityMetrics.averageDriftMs,
+      playbackRecoveryStage,
+      progressiveHealthSnapshot.remainingPlaybackMs,
+      remoteStablePlaybackMs,
+      startupGatePending
+    ]
+  );
+  const fullLocalEligible =
+    fullLocalReady &&
+    fullLocalBlockedReason === null &&
+    fullLocalAlignedSamplesRef.current >= fullLocalAlignedSampleThreshold &&
+    remoteStablePlaybackMs >= fullLocalSwitchDelayMs;
 
   useEffect(() => {
     if (enableListenerLocalTakeover || isCurrentSourceOwner || activePlaybackSource === "remote-stream") {
@@ -2172,6 +2397,11 @@ export function useProgressiveRuntime({
       !canWarmBufferedFullLocal
     ) {
       fullLocalWarmupReadyAtRef.current = null;
+      fullLocalStableSinceRef.current = null;
+      fullLocalAlignedSamplesRef.current = 0;
+      fullLocalHandoffStageRef.current = "idle";
+      fullLocalHandoffStartedAtRef.current = null;
+      fullLocalHandoffTimedOutRef.current = false;
       return;
     }
 
@@ -2180,6 +2410,11 @@ export function useProgressiveRuntime({
         audio.pause();
         audio.muted = false;
         fullLocalWarmupReadyAtRef.current = null;
+        fullLocalStableSinceRef.current = null;
+        fullLocalAlignedSamplesRef.current = 0;
+        fullLocalHandoffStageRef.current = "idle";
+        fullLocalHandoffStartedAtRef.current = null;
+        fullLocalHandoffTimedOutRef.current = false;
         return;
       }
 
@@ -2202,20 +2437,45 @@ export function useProgressiveRuntime({
       audio.muted = true;
       void roomAudioOutput.playElement(audio);
 
-      const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+      const localReady = audio.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA;
       const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
       const now = Date.now();
+      const currentRemoteStablePlaybackMs =
+        remoteStableSinceRef.current === null ? 0 : Math.max(0, now - remoteStableSinceRef.current);
+      if (driftMs <= fullLocalSwitchMaxDriftMs) {
+        fullLocalAlignedSamplesRef.current += 1;
+      } else {
+        fullLocalAlignedSamplesRef.current = 0;
+      }
+
+      const minimumRemainingPlaybackMs = Math.max(
+        fullLocalTailGuardFloorMs,
+        getRemoteFirstComfortBufferMs(
+          currentTrack ?? {
+            mimeType: null,
+            codec: null
+          }
+        )
+      );
+      const handoffBlockedReason = resolveFullLocalSwitchBlockedReason({
+        hasFullLocalTrack: true,
+        playbackStatus: playbackState.status,
+        localReady,
+        driftMs,
+        startupGatePending,
+        playbackRecoveryStage,
+        cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now),
+        remoteStablePlaybackMs: currentRemoteStablePlaybackMs,
+        minimumRemoteStablePlaybackMs: fullLocalSwitchDelayMs,
+        localAlignedSamples: fullLocalAlignedSamplesRef.current,
+        minimumLocalAlignedSamples: fullLocalAlignedSampleThreshold,
+        remainingPlaybackMs: progressiveHealthSnapshot.remainingPlaybackMs,
+        minimumRemainingPlaybackMs
+      });
       const readyForFullLocal =
         localReady &&
-        driftMs <= fullLocalMaxDriftMs &&
-        fullLocalBlockedReason === null &&
-        progressiveHealthSnapshot.aheadBufferedMs >=
-          getRemoteFirstComfortBufferMs(
-            currentTrack ?? {
-              mimeType: null,
-              codec: null
-            }
-          );
+        driftMs <= fullLocalSwitchMaxDriftMs &&
+        handoffBlockedReason === null;
 
       const shouldAttemptFullLocalHandoff = shouldEnableFullLocalHandoff({
         activePlaybackSource,
@@ -2223,12 +2483,26 @@ export function useProgressiveRuntime({
         startupGatePending,
         localReady: readyForFullLocal,
         driftMs,
-        cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
+        cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now),
+        remoteStablePlaybackMs: currentRemoteStablePlaybackMs,
+        minimumRemoteStablePlaybackMs: fullLocalSwitchDelayMs,
+        localAlignedSamples: fullLocalAlignedSamplesRef.current,
+        minimumLocalAlignedSamples: fullLocalAlignedSampleThreshold,
+        remainingPlaybackMs: progressiveHealthSnapshot.remainingPlaybackMs,
+        minimumRemainingPlaybackMs
       });
 
       if (!isLocalTakeoverAllowed(now) || !shouldAttemptFullLocalHandoff) {
-        fullLocalWarmupReadyAtRef.current = readyForFullLocal ? now : null;
+        fullLocalWarmupReadyAtRef.current = null;
+        fullLocalStableSinceRef.current = null;
+        fullLocalHandoffStartedAtRef.current = null;
+        fullLocalHandoffTimedOutRef.current = false;
+        fullLocalHandoffStageRef.current = localReady ? "warming-full-local" : "idle";
         return;
+      }
+
+      if (fullLocalStableSinceRef.current === null) {
+        fullLocalStableSinceRef.current = now;
       }
 
       const warmupDecision = resolveFullLocalWarmupDecision({
@@ -2238,13 +2512,32 @@ export function useProgressiveRuntime({
         warmupReadyAt: fullLocalWarmupReadyAtRef.current,
         now,
         switchDelayMs: fullLocalSwitchDelayMs,
-        maxDriftMs: fullLocalMaxDriftMs
+        maxDriftMs: fullLocalSwitchMaxDriftMs
       });
       fullLocalWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
       if (warmupDecision.nextSource !== activePlaybackSource) {
-        transitionPlaybackSource(warmupDecision.nextSource, {
+        const transitioned = transitionPlaybackSource(warmupDecision.nextSource, {
           clearFallbackReason: warmupDecision.clearFallbackReason
         });
+        if (transitioned && warmupDecision.nextSource === "full-local") {
+          fullLocalHandoffStageRef.current = "handoff-to-full-local";
+          fullLocalHandoffStartedAtRef.current = now;
+          fullLocalHandoffTimedOutRef.current = false;
+        }
+      } else {
+        fullLocalHandoffStageRef.current =
+          warmupDecision.nextWarmupReadyAt === null ? "warming-full-local" : "handoff-to-full-local";
+        if (fullLocalHandoffStageRef.current === "handoff-to-full-local") {
+          if (fullLocalHandoffStartedAtRef.current === null) {
+            fullLocalHandoffStartedAtRef.current = now;
+          } else {
+            fullLocalHandoffTimedOutRef.current =
+              now - fullLocalHandoffStartedAtRef.current >= fullLocalHandoffTimeoutMs;
+          }
+        } else {
+          fullLocalHandoffStartedAtRef.current = null;
+          fullLocalHandoffTimedOutRef.current = false;
+        }
       }
     };
 
@@ -2256,14 +2549,10 @@ export function useProgressiveRuntime({
     currentBufferedFullLocalTrack?.objectUrl,
     canWarmBufferedFullLocal,
     activePlaybackSource,
-    currentTrack?.durationMs,
-    fullLocalBlockedReason,
-    progressiveHealthSnapshot.aheadBufferedMs,
+    currentTrack,
+    progressiveHealthSnapshot.remainingPlaybackMs,
     isLocalTakeoverAllowed,
-    playbackQualityMetrics.stalledEventsLast30s,
-    playbackQualityMetrics.waitingEventsLast30s,
     playbackRecoveryStage,
-    remoteFirstLock,
     startupGatePending,
     audioRef,
     transitionPlaybackSource
@@ -2473,8 +2762,14 @@ export function useProgressiveRuntime({
           progressiveLocalEligible,
           progressiveLocalBlockedReason,
           fullLocalReady,
+          fullLocalWarmupReady,
           fullLocalEligible,
           fullLocalBlockedReason,
+          fullLocalStableSince:
+            fullLocalStableSinceRef.current === null
+              ? null
+              : new Date(fullLocalStableSinceRef.current).toISOString(),
+          fullLocalSwitchBlockedReason: fullLocalBlockedReason,
           currentSessionUserId: sourceOwnerIdentity.currentSessionUserId,
           playbackSourceSessionId: sourceOwnerIdentity.playbackSourceSessionId,
           currentPeerId: sourceOwnerIdentity.currentPeerId,
@@ -2497,6 +2792,15 @@ export function useProgressiveRuntime({
           shadowWarmupActive,
           playbackRecoveryStage,
           audibleLocalFallbackActive,
+          handoffStage: fullLocalHandoffStageRef.current,
+          handoffStartedAt:
+            fullLocalHandoffStartedAtRef.current === null
+              ? null
+              : new Date(fullLocalHandoffStartedAtRef.current).toISOString(),
+          handoffTimedOut: fullLocalHandoffTimedOutRef.current,
+          remoteStablePlaybackMs: remoteStablePlaybackMs > 0 ? remoteStablePlaybackMs : null,
+          localAlignedSamples:
+            fullLocalAlignedSamplesRef.current > 0 ? fullLocalAlignedSamplesRef.current : null,
           maxContinuousPlaybackMsLast30s: playbackQualityMetrics.maxContinuousPlaybackMsLast30s,
           schedulerBudgetTier,
           lastStablePlaybackAt: lastStablePlaybackAtRef.current
@@ -2508,6 +2812,7 @@ export function useProgressiveRuntime({
     bufferSafetyMarginMs,
     playbackQualityMetrics,
     fullLocalReady,
+    fullLocalWarmupReady,
     fullLocalEligible,
     fullLocalBlockedReason,
     localAudioDiagnostics,
@@ -2529,6 +2834,7 @@ export function useProgressiveRuntime({
     playbackRecoveryStage,
     audibleLocalFallbackActive,
     shadowWarmupActive,
+    remoteStablePlaybackMs,
     sourceDiagnostics?.receiverJitterTargetMs,
     sourceDiagnostics?.targetAudioBitrateKbps,
     pendingPlaybackIntent,
