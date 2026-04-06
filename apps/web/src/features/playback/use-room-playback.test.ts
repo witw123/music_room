@@ -188,8 +188,8 @@ describe("resolveDisplayClockProgress", () => {
     expect(result.source).toBe("remote-audible");
   });
 
-  it("prefers the authority clock over remote element time when both are present", () => {
-    const firstFrame = resolveDisplayClockProgress({
+  it("prefers the remote audible clock over the authority clock when both are present", () => {
+    const result = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 20_000,
         source: remoteSource
@@ -212,26 +212,8 @@ describe("resolveDisplayClockProgress", () => {
       now: 1_200
     });
 
-    const settledFrame = resolveDisplayClockProgress({
-      audibleClockSample: {
-        progressMs: 20_000,
-        source: remoteSource
-      },
-      authoritativeClockSample: {
-        progressMs: 20_320,
-        source: "authority-clock"
-      },
-      roomClockMs: 20_240,
-      durationMs: 240_000,
-      previousDisplayMs: firstFrame.progressMs,
-      previousSource: firstFrame.source,
-      transitionState: firstFrame.transitionState,
-      now: 1_320
-    });
-
-    expect(firstFrame.progressMs).toBe(20_000);
-    expect(settledFrame.progressMs).toBe(20_320);
-    expect(settledFrame.source).toBe("authority-clock");
+    expect(result.progressMs).toBe(20_000);
+    expect(result.source).toBe("remote-audible");
   });
 
   it("keeps following the audible clock even under severe room-clock drift", () => {

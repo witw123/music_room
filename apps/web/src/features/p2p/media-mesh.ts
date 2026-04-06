@@ -50,6 +50,10 @@ type MediaMeshCallbacks = {
   }) => void;
 };
 
+type MediaMeshOptions = {
+  resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;
+};
+
 type MediaPeerEntry = {
   connection: RTCPeerConnection;
   stream: MediaStream | null;
@@ -95,14 +99,18 @@ export class RoomMediaMesh {
   private currentMediaEpoch = 0;
   private latestLocalStream: MediaStream | null = null;
   private statsSamplingMode: "off" | "steady" | "active" = "active";
+  private readonly resolveConnectionConfig?: MediaMeshOptions["resolveConnectionConfig"];
 
   constructor(
     private readonly roomId: string,
     private readonly localPeerId: string,
     private readonly sendSignal: (payload: PeerSignalMessage) => void,
     private readonly iceServers: IceServerConfig[],
-    private readonly callbacks: MediaMeshCallbacks
-  ) {}
+    private readonly callbacks: MediaMeshCallbacks,
+    options: MediaMeshOptions = {}
+  ) {
+    this.resolveConnectionConfig = options.resolveConnectionConfig;
+  }
 
   async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null, mediaEpoch = 0) {
     this.latestLocalStream = localStream;
@@ -302,6 +310,24 @@ export class RoomMediaMesh {
     return entry;
   }
 
+  async restartIce(peerId: string, localStream: MediaStream | null = null) {
+    const entry = this.peers.get(peerId);
+    if (!entry || entry.released) {
+      return null;
+    }
+
+    const effectiveLocalStream = localStream ?? this.latestLocalStream;
+    return this.enqueuePeerOperation(entry, async () => {
+      if (entry.released) {
+        return null;
+      }
+
+      const streamChanged = await this.attachStream(entry, effectiveLocalStream);
+      await this.maybeSendOffer(peerId, entry, effectiveLocalStream, true, streamChanged, true);
+      return entry;
+    });
+  }
+
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
     const entry = this.peers.get(peerId) ?? this.createPeer(peerId, false);
     await this.enqueuePeerOperation(entry, async () => {
@@ -317,7 +343,8 @@ export class RoomMediaMesh {
     entry: MediaPeerEntry,
     localStream: MediaStream | null,
     initiateOffer: boolean,
-    streamChanged: boolean
+    streamChanged: boolean,
+    forceIceRestart = false
   ) {
     const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
     const shouldOfferForRecvOnly = entry.wantsIncomingAudio && initiateOffer;
@@ -342,7 +369,7 @@ export class RoomMediaMesh {
     entry.makingOffer = true;
     this.emitPeerRuntimeState(peerId, entry);
     try {
-      const offer = await entry.connection.createOffer();
+      const offer = await entry.connection.createOffer(forceIceRestart ? { iceRestart: true } : undefined);
       await entry.connection.setLocalDescription(offer);
       this.callbacks.onSignal?.({
         peerId,
@@ -365,9 +392,7 @@ export class RoomMediaMesh {
   }
 
   private createPeer(peerId: string, wantsIncomingAudio: boolean) {
-    const connection = new RTCPeerConnection({
-      iceServers: this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+    const connection = new RTCPeerConnection(this.buildConnectionConfig(peerId));
     const entry: MediaPeerEntry = {
       connection,
       stream: null,
@@ -659,6 +684,14 @@ export class RoomMediaMesh {
       }
     }
     return this.localPeerId;
+  }
+
+  private buildConnectionConfig(peerId: string): RTCConfiguration {
+    return {
+      iceServers:
+        this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }],
+      ...(this.resolveConnectionConfig?.(peerId) ?? {})
+    };
   }
 
   private startStatsSampling(peerId: string, entry: MediaPeerEntry) {

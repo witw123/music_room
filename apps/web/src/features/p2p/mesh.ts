@@ -59,6 +59,15 @@ type MeshCallbacks = {
     peerId: string;
     sample: PeerConnectionStatsSample;
   }) => void;
+  onPeerStalled?: (payload: {
+    peerId: string;
+    reason: "watchdog-timeout" | "connection-failed" | "data-channel-closed";
+  }) => void;
+};
+
+type MeshOptions = {
+  autoReconnect?: boolean;
+  resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;
 };
 
 type PeerEntry = {
@@ -127,14 +136,20 @@ export class P2PMesh {
   private readonly activeStatsSamplingIntervalMs = 1_000;
   private readonly steadyStatsSamplingIntervalMs = 5_000;
   private statsSamplingMode: "off" | "steady" | "active" = "active";
+  private readonly autoReconnect: boolean;
+  private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
 
   constructor(
     private readonly roomId: string,
     private readonly localPeerId: string,
     private readonly sendSignal: (payload: PeerSignalMessage) => void,
     private readonly callbacks: MeshCallbacks,
-    private readonly iceServers: IceServerConfig[] = []
-  ) {}
+    private readonly iceServers: IceServerConfig[] = [],
+    options: MeshOptions = {}
+  ) {
+    this.autoReconnect = options.autoReconnect ?? true;
+    this.resolveConnectionConfig = options.resolveConnectionConfig;
+  }
 
   async syncPeers(
     remotePeerIds: string[],
@@ -327,6 +342,49 @@ export class P2PMesh {
       .map(([peerId]) => peerId);
   }
 
+  async restartPeer(peerId: string) {
+    const entry = this.peers.get(peerId);
+    if (!entry) {
+      if (!this.expectedPeerIds.has(peerId)) {
+        return null;
+      }
+      return this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
+    }
+
+    return this.recreatePeer(peerId, entry);
+  }
+
+  async restartIce(peerId: string) {
+    const entry = this.peers.get(peerId);
+    if (!entry || entry.releasing) {
+      return null;
+    }
+
+    return this.enqueuePeerOperation(entry, async () => {
+      if (entry.releasing || entry.connection.signalingState !== "stable") {
+        return null;
+      }
+
+      const offer = await entry.connection.createOffer({ iceRestart: true });
+      await entry.connection.setLocalDescription(offer);
+      entry.lastSignalProgressAtMs = Date.now();
+      this.callbacks.onSignal?.({
+        peerId,
+        direction: "sent",
+        type: "offer"
+      });
+      this.sendSignal({
+        roomId: this.roomId,
+        fromPeerId: this.localPeerId,
+        toPeerId: peerId,
+        channelKind: "data",
+        type: "offer",
+        payload: offer as unknown as Record<string, unknown>
+      });
+      return entry;
+    });
+  }
+
   destroy() {
     this.expectedPeerIds.clear();
     for (const pendingRequest of this.pendingPieceRequests.values()) {
@@ -366,9 +424,7 @@ export class P2PMesh {
       }
     }
 
-    const connection = new RTCPeerConnection({
-      iceServers: this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+    const connection = new RTCPeerConnection(this.buildConnectionConfig(peerId));
     const entry: PeerEntry = {
       connection,
       channel: null,
@@ -422,7 +478,13 @@ export class P2PMesh {
       if (this.peers.get(peerId) === entry) {
         if (connection.connectionState === "failed" || connection.connectionState === "closed") {
           if (this.expectedPeerIds.has(peerId)) {
-            this.schedulePeerReconnect(peerId, entry);
+            this.callbacks.onPeerStalled?.({
+              peerId,
+              reason: "connection-failed"
+            });
+            if (this.autoReconnect) {
+              this.schedulePeerReconnect(peerId, entry);
+            }
             return;
           }
 
@@ -599,7 +661,13 @@ export class P2PMesh {
       if (entry.releasing) {
         return;
       }
-      this.schedulePeerReconnect(peerId, entry);
+      this.callbacks.onPeerStalled?.({
+        peerId,
+        reason: "data-channel-closed"
+      });
+      if (this.autoReconnect) {
+        this.schedulePeerReconnect(peerId, entry);
+      }
     };
   }
 
@@ -675,7 +743,13 @@ export class P2PMesh {
       }
 
       if (this.isPeerStalled(entry, Date.now())) {
-        this.schedulePeerReconnect(peerId, entry);
+        this.callbacks.onPeerStalled?.({
+          peerId,
+          reason: "watchdog-timeout"
+        });
+        if (this.autoReconnect) {
+          this.schedulePeerReconnect(peerId, entry);
+        }
         return;
       }
 
@@ -714,6 +788,15 @@ export class P2PMesh {
     this.releasePeer(peerId, entry);
     const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
     nextEntry.reconnectAttempts = reconnectAttempts;
+    return nextEntry;
+  }
+
+  private buildConnectionConfig(peerId: string): RTCConfiguration {
+    return {
+      iceServers:
+        this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }],
+      ...(this.resolveConnectionConfig?.(peerId) ?? {})
+    };
   }
 
   private clearPeerWatchdog(entry: PeerEntry) {

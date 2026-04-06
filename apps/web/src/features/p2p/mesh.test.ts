@@ -353,6 +353,60 @@ describe("P2PMesh", () => {
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
   });
 
+  it("does not auto-recreate stalled peers when autoReconnect is disabled", async () => {
+    const onPeerStalled = vi.fn();
+    const mesh = new P2PMesh(
+      "room_1",
+      "peer_a",
+      vi.fn(),
+      {
+        onPieceReceived: vi.fn(),
+        onPeerStalled
+      },
+      [],
+      {
+        autoReconnect: false
+      }
+    );
+
+    await mesh.syncPeers(["peer_b"]);
+    const firstPeer = FakeRTCPeerConnection.instances[0]!;
+    firstPeer.channel.readyState = "connecting";
+
+    await vi.advanceTimersByTimeAsync(10_500);
+
+    expect(onPeerStalled).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      reason: "watchdog-timeout"
+    });
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+  });
+
+  it("can proactively restart ICE without recreating the peer", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", sendSignal, {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const firstPeer = FakeRTCPeerConnection.instances[0]!;
+
+    await mesh.restartIce("peer_b");
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(sendSignal).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "offer",
+        toPeerId: "peer_b",
+        channelKind: "data"
+      })
+    );
+    expect(firstPeer.localDescription).toMatchObject({
+      type: "offer",
+      sdp: "fake-offer"
+    });
+  });
+
   it("batches received piece validation and IndexedDB writes", async () => {
     const onPieceReceived = vi.fn();
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {

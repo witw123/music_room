@@ -220,6 +220,9 @@ export function resolveDisplayClockProgress(input: {
   if (localAudibleSample) {
     targetSource = localAudibleSample.source;
     targetProgressMs = clampProgressMs(localAudibleSample.progressMs, input.durationMs);
+  } else if (remoteAudibleSample) {
+    targetSource = remoteAudibleSample.source;
+    targetProgressMs = clampProgressMs(remoteAudibleSample.progressMs, input.durationMs);
   } else if (
     input.playbackStatus === "playing" &&
     input.previousContinuity &&
@@ -231,9 +234,6 @@ export function resolveDisplayClockProgress(input: {
   } else if (input.authoritativeClockSample) {
     targetSource = input.authoritativeClockSample.source;
     targetProgressMs = clampProgressMs(input.authoritativeClockSample.progressMs, input.durationMs);
-  } else if (remoteAudibleSample) {
-    targetSource = remoteAudibleSample.source;
-    targetProgressMs = clampProgressMs(remoteAudibleSample.progressMs, input.durationMs);
   } else if (
     input.playbackStatus === "playing" &&
     input.previousContinuity &&

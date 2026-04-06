@@ -236,6 +236,26 @@ describe("RoomMediaMesh", () => {
     });
   });
 
+  it("can restart ICE on an existing listener peer without recreating it", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+    sendSignal.mockClear();
+
+    await mesh.restartIce("peer_source_a");
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_source_a",
+      mediaEpoch: 1
+    });
+  });
+
   it("attaches the latest host audio track before answering a listener-initiated offer", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {

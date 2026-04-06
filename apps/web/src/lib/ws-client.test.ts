@@ -27,7 +27,7 @@ describe("createRoomSocket", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses websocket-only transport without transport fallback", async () => {
+  it("enables websocket first with polling fallback and tighter reconnect cadence", async () => {
     const { createRoomSocket } = await import("./ws-client");
 
     createRoomSocket();
@@ -35,11 +35,12 @@ describe("createRoomSocket", () => {
     expect(ioMock).toHaveBeenCalledWith(
       "wss://music.example.com",
       expect.objectContaining({
-        transports: ["websocket"],
+        transports: ["websocket", "polling"],
         auth: { sessionToken: "session-token" },
-        reconnection: true
+        reconnection: true,
+        reconnectionDelay: 800,
+        reconnectionDelayMax: 8000
       })
     );
-    expect(ioMock.mock.calls[0]?.[1]).not.toHaveProperty("tryAllTransports");
   });
 });

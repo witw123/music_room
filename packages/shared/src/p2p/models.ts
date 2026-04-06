@@ -243,6 +243,15 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   dataIceState: z.string().nullable(),
   mediaIceState: z.string().nullable(),
   transportHealth: z.enum(["healthy", "media-only", "reconnecting", "failed"]).nullable().optional(),
+  transportScore: z.enum(["healthy", "degraded", "unstable", "failed"]).nullable().optional(),
+  stableTransportKind: z.enum(["direct", "relay"]).nullable().optional(),
+  lastFailureReason: z.string().nullable().optional(),
+  lastRecoveryAction: z
+    .enum(["soft", "ice-restart", "hard-recreate", "full-resubscribe"])
+    .nullable()
+    .optional(),
+  iceRestartCount: z.number().int().nonnegative().nullable().optional(),
+  hardRecreateCount: z.number().int().nonnegative().nullable().optional(),
   degradedReason: z.string().nullable().optional(),
   lastAvailabilitySeenAt: z.string().datetime().nullable().optional(),
   lastPieceReceivedAt: z.string().datetime().nullable().optional(),

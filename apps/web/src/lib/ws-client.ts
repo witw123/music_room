@@ -39,13 +39,11 @@ export function createRoomSocket() {
   return io(baseUrl, {
     path: socketPath,
     auth: sessionToken ? { sessionToken } : undefined,
-    transports: ["websocket"],
-    // Exponential backoff capped at 30s instead of 4s to avoid
-    // hammering the server during prolonged outages.
+    transports: ["websocket", "polling"],
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 30000
+    reconnectionDelay: 800,
+    reconnectionDelayMax: 8000
   }) as RoomSocket;
 }
 
