@@ -180,6 +180,7 @@ function BottomPlayerBase({
         onWaiting={onRemoteWaiting}
         onPause={onRemotePause}
         onSeeked={syncProgressFromAudio}
+        onTimeUpdate={syncProgressFromAudio}
         onError={onRemoteError}
       />
 

@@ -583,17 +583,18 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       return;
     }
 
+    const currentSessionKey = getPlaybackClockSessionKey(currentPlayback);
+    const selectedAudio = shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current;
+
     if (
-      activePlaybackSource === "remote-stream" &&
-      event?.currentTarget &&
-      event.currentTarget === audioRef.current
+      event?.type === "timeupdate" &&
+      event.currentTarget &&
+      event.currentTarget !== selectedAudio
     ) {
       return;
     }
 
     const now = Date.now();
-    const currentSessionKey = getPlaybackClockSessionKey(currentPlayback);
-    const selectedAudio = shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current;
     const eventAudio = event?.currentTarget ?? null;
     const preferredAudio = eventAudio === selectedAudio ? eventAudio : selectedAudio;
     const localAudio = audioRef.current;

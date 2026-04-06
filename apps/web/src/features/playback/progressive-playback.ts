@@ -58,7 +58,7 @@ export function isChromeOrEdgeBrowser() {
 }
 
 export function canUseProgressivePlayback() {
-  return typeof window !== "undefined" && isChromeOrEdgeBrowser();
+  return typeof window !== "undefined";
 }
 
 export function isLosslessTrack(input: { mimeType?: string | null; codec?: string | null }) {
