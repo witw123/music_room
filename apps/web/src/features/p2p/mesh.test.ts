@@ -72,6 +72,7 @@ class FakeDataChannel {
 
 class FakeRTCPeerConnection {
   static instances: FakeRTCPeerConnection[] = [];
+  static nextRemoteDescriptionError: Error | null = null;
   connectionState: RTCPeerConnectionState = "connected";
   signalingState: RTCSignalingState = "stable";
   remoteDescription: RTCSessionDescriptionInit | null = null;
@@ -110,6 +111,11 @@ class FakeRTCPeerConnection {
   }
 
   async setRemoteDescription(description?: RTCSessionDescriptionInit | null) {
+    if (description?.type === "answer" && FakeRTCPeerConnection.nextRemoteDescriptionError) {
+      const error = FakeRTCPeerConnection.nextRemoteDescriptionError;
+      FakeRTCPeerConnection.nextRemoteDescriptionError = null;
+      throw error;
+    }
     this.remoteDescription = description ?? null;
     if (description?.type === "offer") {
       this.signalingState = "have-remote-offer";
@@ -142,6 +148,7 @@ describe("P2PMesh", () => {
     vi.clearAllMocks();
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
     FakeRTCPeerConnection.instances = [];
+    FakeRTCPeerConnection.nextRemoteDescriptionError = null;
   });
 
   afterEach(() => {
@@ -298,6 +305,36 @@ describe("P2PMesh", () => {
     await mesh.syncPeers(["peer_b"]);
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+  });
+
+  it("ignores a stale data answer once the peer has already returned to stable", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", sendSignal, {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const peer = FakeRTCPeerConnection.instances[0]!;
+    expect(peer.signalingState).toBe("have-local-offer");
+
+    peer.signalingState = "stable";
+    FakeRTCPeerConnection.nextRemoteDescriptionError = new Error(
+      "Failed to set remote answer sdp: Called in wrong state: stable"
+    );
+
+    await expect(
+      mesh.handleSignal({
+        roomId: "room_1",
+        fromPeerId: "peer_b",
+        toPeerId: "peer_a",
+        channelKind: "data",
+        type: "answer",
+        payload: {
+          type: "answer",
+          sdp: "stale-answer"
+        }
+      })
+    ).resolves.toBeUndefined();
   });
 
   it("rebuilds a peer when the data channel never becomes ready", async () => {

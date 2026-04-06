@@ -21,6 +21,7 @@ class FakeRTCPeerConnection {
     setCodecPreferences: ReturnType<typeof vi.fn>;
   }> = [];
   static nextReplaceTrackPromise: Promise<void> | null = null;
+  static nextRemoteDescriptionError: Error | null = null;
 
   connectionState: RTCPeerConnectionState = "new";
   signalingState: RTCSignalingState = "stable";
@@ -87,6 +88,11 @@ class FakeRTCPeerConnection {
   }
 
   async setRemoteDescription(description: RTCSessionDescriptionInit) {
+    if (description.type === "answer" && FakeRTCPeerConnection.nextRemoteDescriptionError) {
+      const error = FakeRTCPeerConnection.nextRemoteDescriptionError;
+      FakeRTCPeerConnection.nextRemoteDescriptionError = null;
+      throw error;
+    }
     this.remoteDescriptions.push(description);
     if (description.type === "offer") {
       this.signalingState = "have-remote-offer";
@@ -130,6 +136,7 @@ describe("RoomMediaMesh", () => {
     FakeRTCPeerConnection.senders = [];
     FakeRTCPeerConnection.transceivers = [];
     FakeRTCPeerConnection.nextReplaceTrackPromise = null;
+    FakeRTCPeerConnection.nextRemoteDescriptionError = null;
     vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
     vi.stubGlobal("RTCRtpReceiver", {
       getCapabilities: vi.fn(() => ({
@@ -421,6 +428,40 @@ describe("RoomMediaMesh", () => {
       mediaEpoch: 1
     });
     expect(FakeRTCPeerConnection.senders[0]?.track).toMatchObject({ id: "track_switched" });
+  });
+
+  it("ignores a stale media answer once the peer has already returned to stable", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const stream = {
+      getAudioTracks: () => [{ id: "track_live" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+    const peer = FakeRTCPeerConnection.instances[0]!;
+    expect(peer.signalingState).toBe("have-local-offer");
+
+    peer.signalingState = "stable";
+    FakeRTCPeerConnection.nextRemoteDescriptionError = new Error(
+      "Failed to set remote answer sdp: Called in wrong state: stable"
+    );
+
+    await expect(
+      mesh.handleSignal({
+        roomId: "room_1",
+        fromPeerId: "peer_listener",
+        toPeerId: "peer_source",
+        channelKind: "media",
+        mediaEpoch: 1,
+        type: "answer",
+        payload: {
+          type: "answer",
+          sdp: "stale-answer"
+        }
+      })
+    ).resolves.toBeUndefined();
   });
 
   it("does not tear down peers on transient disconnected state", async () => {

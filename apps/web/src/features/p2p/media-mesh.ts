@@ -593,6 +593,14 @@ export class RoomMediaMesh {
     try {
       await entry.connection.setRemoteDescription(remoteDescription);
       entry.ignoreOffer = false;
+    } catch (error) {
+      if (
+        remoteDescription.type === "answer" &&
+        this.shouldIgnoreStaleAnswerError(entry, error)
+      ) {
+        return;
+      }
+      throw error;
     } finally {
       if (remoteDescription.type === "answer") {
         entry.isSettingRemoteAnswerPending = false;
@@ -611,6 +619,16 @@ export class RoomMediaMesh {
     this.emitPeerRuntimeState(peerId, entry);
     const streamChanged = await this.attachStream(entry, localStream);
     await this.maybeSendOffer(peerId, entry, localStream, true, streamChanged);
+  }
+
+  private shouldIgnoreStaleAnswerError(entry: MediaPeerEntry, error: unknown) {
+    if (entry.connection.signalingState === "have-local-offer") {
+      return false;
+    }
+
+    const message =
+      error instanceof Error ? error.message : typeof error === "string" ? error : "";
+    return /wrong state:\s*stable/i.test(message) || /Called in wrong state:\s*stable/i.test(message);
   }
 
   private getPeerIdForEntry(entry: MediaPeerEntry) {

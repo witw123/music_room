@@ -76,6 +76,7 @@ type PeerEntry = {
   reconnectTimerId: ReturnType<typeof setTimeout> | null;
   watchdogTimerId: ReturnType<typeof setTimeout> | null;
   releasing: boolean;
+  operationChain: Promise<void>;
 };
 
 type PendingPieceRequest = {
@@ -178,89 +179,95 @@ export class P2PMesh {
     entry.lastSignalProgressAtMs = Date.now();
 
     if (payload.type === "offer") {
-      this.callbacks.onSignal?.({
-        peerId: payload.fromPeerId,
-        direction: "received",
-        type: "offer"
-      });
-      const remoteDescription = toSessionDescriptionInit(payload.payload);
-      if (!remoteDescription) {
-        return;
-      }
+      await this.enqueuePeerOperation(entry, async () => {
+        this.callbacks.onSignal?.({
+          peerId: payload.fromPeerId,
+          direction: "received",
+          type: "offer"
+        });
+        const remoteDescription = toSessionDescriptionInit(payload.payload);
+        if (!remoteDescription) {
+          return;
+        }
 
-      if (
-        entry.connection.signalingState !== "stable" &&
-        entry.connection.signalingState !== "have-local-offer"
-      ) {
-        return;
-      }
+        if (
+          entry.connection.signalingState !== "stable" &&
+          entry.connection.signalingState !== "have-local-offer"
+        ) {
+          return;
+        }
 
-      await entry.connection.setRemoteDescription(remoteDescription);
-      await this.flushPendingCandidates(entry);
-      const answer = await entry.connection.createAnswer();
-      await entry.connection.setLocalDescription(answer);
-      entry.lastSignalProgressAtMs = Date.now();
-      this.callbacks.onSignal?.({
-        peerId: payload.fromPeerId,
-        direction: "sent",
-        type: "answer"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: payload.fromPeerId,
-        channelKind: "data",
-        type: "answer",
-        payload: answer as unknown as Record<string, unknown>
+        await this.applyRemoteDescription(entry, remoteDescription);
+        await this.flushPendingCandidates(entry);
+        const answer = await entry.connection.createAnswer();
+        await entry.connection.setLocalDescription(answer);
+        entry.lastSignalProgressAtMs = Date.now();
+        this.callbacks.onSignal?.({
+          peerId: payload.fromPeerId,
+          direction: "sent",
+          type: "answer"
+        });
+        this.sendSignal({
+          roomId: this.roomId,
+          fromPeerId: this.localPeerId,
+          toPeerId: payload.fromPeerId,
+          channelKind: "data",
+          type: "answer",
+          payload: answer as unknown as Record<string, unknown>
+        });
       });
       return;
     }
 
     if (payload.type === "answer") {
-      this.callbacks.onSignal?.({
-        peerId: payload.fromPeerId,
-        direction: "received",
-        type: "answer"
+      await this.enqueuePeerOperation(entry, async () => {
+        this.callbacks.onSignal?.({
+          peerId: payload.fromPeerId,
+          direction: "received",
+          type: "answer"
+        });
+        const remoteDescription = toSessionDescriptionInit(payload.payload);
+        if (!remoteDescription) {
+          return;
+        }
+
+        if (entry.connection.signalingState !== "have-local-offer") {
+          return;
+        }
+
+        await this.applyRemoteDescription(entry, remoteDescription);
+        await this.flushPendingCandidates(entry);
+        entry.lastSignalProgressAtMs = Date.now();
       });
-      const remoteDescription = toSessionDescriptionInit(payload.payload);
-      if (!remoteDescription) {
-        return;
-      }
-
-      if (entry.connection.signalingState !== "have-local-offer") {
-        return;
-      }
-
-      await entry.connection.setRemoteDescription(remoteDescription);
-      await this.flushPendingCandidates(entry);
-      entry.lastSignalProgressAtMs = Date.now();
       return;
     }
 
     if (payload.type === "candidate") {
-      this.callbacks.onSignal?.({
-        peerId: payload.fromPeerId,
-        direction: "received",
-        type: "candidate"
-      });
-      const candidate = toIceCandidateInit(payload.payload);
-      if (!candidate) {
-        return;
-      }
+      await this.enqueuePeerOperation(entry, async () => {
+        this.callbacks.onSignal?.({
+          peerId: payload.fromPeerId,
+          direction: "received",
+          type: "candidate"
+        });
+        const candidate = toIceCandidateInit(payload.payload);
+        if (!candidate) {
+          return;
+        }
 
-      if (!entry.connection.remoteDescription) {
-        entry.pendingCandidates.push(candidate);
-        return;
-      }
-
-      try {
-        await entry.connection.addIceCandidate(candidate);
-        entry.lastSignalProgressAtMs = Date.now();
-      } catch {
         if (!entry.connection.remoteDescription) {
           entry.pendingCandidates.push(candidate);
+          return;
         }
-      }
+
+        try {
+          await entry.connection.addIceCandidate(candidate);
+          entry.lastSignalProgressAtMs = Date.now();
+        } catch {
+          if (!entry.connection.remoteDescription) {
+            entry.pendingCandidates.push(candidate);
+          }
+        }
+      });
     }
   }
 
@@ -360,7 +367,8 @@ export class P2PMesh {
       reconnectAttempts: 0,
       reconnectTimerId: null,
       watchdogTimerId: null,
-      releasing: false
+      releasing: false,
+      operationChain: Promise.resolve()
     };
     this.startStatsSampling(peerId, entry);
 
@@ -765,6 +773,49 @@ export class P2PMesh {
         }
       }
     }
+  }
+
+  private enqueuePeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {
+    const run = entry.operationChain
+      .catch(() => undefined)
+      .then(async () => {
+        if (entry.releasing) {
+          return undefined as T;
+        }
+        return task();
+      });
+    entry.operationChain = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
+  private async applyRemoteDescription(
+    entry: PeerEntry,
+    remoteDescription: RTCSessionDescriptionInit
+  ) {
+    try {
+      await entry.connection.setRemoteDescription(remoteDescription);
+    } catch (error) {
+      if (
+        remoteDescription.type === "answer" &&
+        this.shouldIgnoreStaleAnswerError(entry, error)
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private shouldIgnoreStaleAnswerError(entry: PeerEntry, error: unknown) {
+    if (entry.connection.signalingState === "have-local-offer") {
+      return false;
+    }
+
+    const message =
+      error instanceof Error ? error.message : typeof error === "string" ? error : "";
+    return /wrong state:\s*stable/i.test(message) || /Called in wrong state:\s*stable/i.test(message);
   }
 
   private clearPendingRequestsForPeer(peerId: string) {
