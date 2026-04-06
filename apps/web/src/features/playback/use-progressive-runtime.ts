@@ -98,7 +98,8 @@ const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteStartupGatePollMs = 120;
 const enableDirectProgressiveTakeover = true;
-const enableListenerLocalTakeover = true;
+const enableListenerShadowWarmup = true;
+const enableListenerLocalTakeover = false;
 const stableRemoteStartupBufferMs = 320;
 const constrainedRemoteStartupBufferMs = 480;
 const weakRemoteStartupBufferMs = 680;
@@ -874,7 +875,7 @@ export function useProgressiveRuntime({
     };
   }, [audioRef, playbackRevision, activePlaybackSource, playback?.currentTrackId, playback?.status]);
   const shadowWarmupActive =
-    enableListenerLocalTakeover &&
+    enableListenerShadowWarmup &&
     !isCurrentSourceOwner &&
     activePlaybackSource === "remote-stream" &&
     (!!currentBufferedFullLocalTrack ||
@@ -1178,12 +1179,16 @@ export function useProgressiveRuntime({
       return "track-not-fully-cached";
     }
 
+    if (!isCurrentSourceOwner && !enableListenerLocalTakeover) {
+      return "listener-handoff-disabled";
+    }
+
     if (startupGatePending) {
       return "remote-recovery-window";
     }
 
     return null;
-  }, [currentBufferedFullLocalTrack, startupGatePending]);
+  }, [currentBufferedFullLocalTrack, isCurrentSourceOwner, startupGatePending]);
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
 
   useEffect(() => {

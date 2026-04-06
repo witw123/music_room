@@ -284,4 +284,17 @@ describe("shouldPollRemoteStartupGate", () => {
       })
     ).toBe(true);
   });
+
+  it("keeps the low-level full-local handoff predicate independent from listener policy", () => {
+    expect(
+      shouldEnableFullLocalHandoff({
+        activePlaybackSource: "remote-stream",
+        playbackRecoveryStage: "steady",
+        startupGatePending: false,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(true);
+  });
 });
