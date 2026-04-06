@@ -11,12 +11,23 @@ describe("resolveAudibleClockSample", () => {
       resolveAudibleClockSample({
         activePlaybackSource: "remote-stream",
         shouldUseLocalAudio: false,
+        playbackSessionKey: "track-a|3|9|started|playing",
+        roomClockMs: 42_250,
         remoteAudioCurrentTimeSeconds: 42.25,
-        remoteAudioPaused: false
+        remoteAudioPaused: false,
+        previousAnchor: null
       })
     ).toEqual({
-      progressMs: 42_250,
-      source: "remote-audible"
+      sample: {
+        progressMs: 42_250,
+        source: "remote-audible"
+      },
+      nextAnchor: {
+        source: "remote-audible",
+        sessionKey: "track-a|3|9|started|playing",
+        anchorRoomClockMs: 42_250,
+        anchorMediaTimeSeconds: 42.25
+      }
     });
   });
 
@@ -30,8 +41,72 @@ describe("resolveAudibleClockSample", () => {
         localAudioPaused: false
       })
     ).toEqual({
-      progressMs: 18_420,
-      source: "local-audible"
+      sample: {
+        progressMs: 18_420,
+        source: "local-audible"
+      },
+      nextAnchor: null
+    });
+  });
+
+  it("maps a newly joined remote stream onto the current room timeline", () => {
+    const joined = resolveAudibleClockSample({
+      activePlaybackSource: "remote-stream",
+      shouldUseLocalAudio: false,
+      playbackSessionKey: "track-b|7|11|started|playing",
+      roomClockMs: 96_000,
+      remoteAudioCurrentTimeSeconds: 0.2,
+      remoteAudioPaused: false,
+      previousAnchor: null
+    });
+
+    const advanced = resolveAudibleClockSample({
+      activePlaybackSource: "remote-stream",
+      shouldUseLocalAudio: false,
+      playbackSessionKey: "track-b|7|11|started|playing",
+      roomClockMs: 97_450,
+      remoteAudioCurrentTimeSeconds: 1.65,
+      remoteAudioPaused: false,
+      previousAnchor: joined.nextAnchor
+    });
+
+    expect(joined.sample).toEqual({
+      progressMs: 96_000,
+      source: "remote-audible"
+    });
+    expect(advanced.sample).toEqual({
+      progressMs: 97_450,
+      source: "remote-audible"
+    });
+  });
+
+  it("re-anchors the remote stream after a rejoin resets the media element clock", () => {
+    const previousAnchor = {
+      source: "remote-audible" as const,
+      sessionKey: "track-c|9|14|started|playing",
+      anchorRoomClockMs: 120_000,
+      anchorMediaTimeSeconds: 8.4
+    };
+
+    const result = resolveAudibleClockSample({
+      activePlaybackSource: "remote-stream",
+      shouldUseLocalAudio: false,
+      playbackSessionKey: "track-c|9|14|started|playing",
+      roomClockMs: 131_500,
+      remoteAudioCurrentTimeSeconds: 0.1,
+      remoteAudioPaused: false,
+      previousAnchor
+    });
+
+    expect(result.sample).toEqual({
+      progressMs: 131_500,
+      source: "remote-audible"
+    });
+    expect(result.nextAnchor).toEqual({
+      source: "remote-audible",
+      sessionKey: "track-c|9|14|started|playing",
+      anchorRoomClockMs: 131_500,
+      anchorMediaTimeSeconds: 0.1
     });
   });
 });
@@ -70,7 +145,7 @@ describe("resolveDisplayClockProgress", () => {
         progressMs: 20_000,
         source: remoteSource
       },
-      roomClockMs: 20_300,
+      roomClockMs: 20_240,
       durationMs: 240_000,
       previousDisplayMs: 20_000,
       previousSource: remoteSource,
@@ -85,7 +160,7 @@ describe("resolveDisplayClockProgress", () => {
     });
 
     expect(result.progressMs).toBeGreaterThan(20_000);
-    expect(result.progressMs).toBeLessThan(20_300);
+    expect(result.progressMs).toBeLessThan(20_240);
     expect(result.source).toBe("remote-audible");
   });
 
