@@ -7,7 +7,17 @@ import { createEmptyDiagnosticsState, recordDiagnosticsEvent } from "./diagnosti
 export type PeerDiagnosticInput = Parameters<typeof recordDiagnosticsEvent>[1];
 export type PeerDiagnosticRecorder = (input: PeerDiagnosticInput) => void;
 
-export function usePeerDiagnostics(flushDelayMs = 120) {
+type UsePeerDiagnosticsOptions = {
+  highFrequencyEnabled?: boolean;
+  highFrequencyFlushDelayMs?: number;
+  lowFrequencyFlushDelayMs?: number;
+};
+
+export function usePeerDiagnostics(options: UsePeerDiagnosticsOptions = {}) {
+  const highFrequencyEnabled = options.highFrequencyEnabled ?? false;
+  const highFrequencyFlushDelayMs = options.highFrequencyFlushDelayMs ?? 120;
+  const lowFrequencyFlushDelayMs = options.lowFrequencyFlushDelayMs ?? 1_200;
+  const flushDelayMs = highFrequencyEnabled ? highFrequencyFlushDelayMs : lowFrequencyFlushDelayMs;
   const queuedDiagnosticsRef = useRef<PeerDiagnosticInput[]>([]);
   const diagnosticsFlushTimerRef = useRef<number | null>(null);
   const [diagnosticsState, setDiagnosticsState] = useState(createEmptyDiagnosticsState);
@@ -50,6 +60,26 @@ export function usePeerDiagnostics(flushDelayMs = 120) {
     },
     [flushDelayMs, flushQueuedDiagnostics]
   );
+
+  useEffect(() => {
+    if (queuedDiagnosticsRef.current.length === 0) {
+      return;
+    }
+
+    if (diagnosticsFlushTimerRef.current !== null) {
+      window.clearTimeout(diagnosticsFlushTimerRef.current);
+      diagnosticsFlushTimerRef.current = null;
+    }
+
+    if (highFrequencyEnabled) {
+      flushQueuedDiagnostics();
+      return;
+    }
+
+    diagnosticsFlushTimerRef.current = window.setTimeout(() => {
+      flushQueuedDiagnostics();
+    }, flushDelayMs);
+  }, [flushDelayMs, flushQueuedDiagnostics, highFrequencyEnabled]);
 
   const resetPeerDiagnostics = useCallback(() => {
     if (diagnosticsFlushTimerRef.current !== null) {

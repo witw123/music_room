@@ -186,6 +186,10 @@ const listenerHardRecoveryDelayMs = 1_200;
 const listenerSoftRecoveryCooldownMs = 800;
 const listenerHardRecoveryCooldownMs = 3_000;
 const listenerMediaSupervisorIntervalMs = 150;
+const connectionSupervisorForegroundIntervalMs = 500;
+const connectionSupervisorBackgroundIntervalMs = 2_000;
+const connectionSupervisorIceRestartNoProgressMs = 1_800;
+const connectionSupervisorHardRecreateNoProgressMs = 6_000;
 const steadyRoomMediaClockEmitIntervalMs = 120;
 const recoveryRoomMediaClockEmitIntervalMs = 60;
 const subscribeAckTimeoutMs = 4_000;
@@ -2606,16 +2610,31 @@ export function useRoomRuntime({
     channelKind: "data" | "media" | "system",
     nextState: PeerConnectionSupervisorState
   ) {
+    const previousState = connectionSupervisorStatesRef.current.get(peerId) ?? null;
     connectionSupervisorStatesRef.current.set(peerId, nextState);
-    recordPeerDiagnostic({
-      peerId,
-      channelKind,
-      direction: "local",
-      event: "connection-supervisor",
-      summary: `Connection supervisor: ${nextState.transportScore} / ${nextState.recoveryStage}`,
-      recordEvent: false,
-      update: (snapshot) => withSupervisorDiagnosticPatch(snapshot, nextState)
-    });
+    const previousPatch = previousState ? toSupervisorDiagnosticPatch(previousState) : null;
+    const nextPatch = toSupervisorDiagnosticPatch(nextState);
+    const patchChanged =
+      !previousPatch ||
+      previousPatch.transportScore !== nextPatch.transportScore ||
+      previousPatch.stableTransportKind !== nextPatch.stableTransportKind ||
+      previousPatch.lastFailureReason !== nextPatch.lastFailureReason ||
+      previousPatch.lastRecoveryAction !== nextPatch.lastRecoveryAction ||
+      previousPatch.iceRestartCount !== nextPatch.iceRestartCount ||
+      previousPatch.hardRecreateCount !== nextPatch.hardRecreateCount ||
+      previousState?.recoveryStage !== nextState.recoveryStage;
+
+    if (patchChanged) {
+      recordPeerDiagnostic({
+        peerId,
+        channelKind,
+        direction: "local",
+        event: "connection-supervisor",
+        summary: `Connection supervisor: ${nextState.transportScore} / ${nextState.recoveryStage}`,
+        recordEvent: false,
+        update: (snapshot) => withSupervisorDiagnosticPatch(snapshot, nextState)
+      });
+    }
     return nextState;
   }
 
@@ -2776,7 +2795,9 @@ export function useRoomRuntime({
       return;
     }
 
-    const tickIntervalMs = isPageVisible ? 250 : 1_000;
+    const tickIntervalMs = isPageVisible
+      ? connectionSupervisorForegroundIntervalMs
+      : connectionSupervisorBackgroundIntervalMs;
     const timerId = window.setInterval(() => {
       const currentRoom = currentRoomRef.current;
       if (!currentRoom?.room.id) {
@@ -2811,10 +2832,6 @@ export function useRoomRuntime({
           isSourcePeer && sourceLifecycle.lastTransportProgressAt !== null
             ? now - sourceLifecycle.lastTransportProgressAt
             : null;
-        const noPlayoutProgressMs =
-          isSourcePeer && sourceLifecycle.lastPlayoutProgressAt !== null
-            ? now - sourceLifecycle.lastPlayoutProgressAt
-            : null;
         const needsHardRecovery =
           nextState.mediaConnectionState === "failed" ||
           nextState.mediaConnectionState === "closed" ||
@@ -2827,7 +2844,7 @@ export function useRoomRuntime({
             playback.status === "playing" &&
             activePlaybackSource === "remote-stream" &&
             typeof noTransportProgressMs === "number" &&
-            noTransportProgressMs >= 4_000);
+            noTransportProgressMs >= connectionSupervisorHardRecreateNoProgressMs);
 
         if (
           needsHardRecovery &&
@@ -2871,14 +2888,22 @@ export function useRoomRuntime({
           continue;
         }
 
+        const hasIceRestartFailureSignal =
+          nextState.transportScore === "failed" ||
+          (nextState.transportScore === "unstable" &&
+            typeof noTransportProgressMs === "number" &&
+            noTransportProgressMs >= connectionSupervisorIceRestartNoProgressMs) ||
+          nextState.mediaIceState === "disconnected" ||
+          nextState.dataIceState === "disconnected" ||
+          nextState.mediaConnectionState === "disconnected" ||
+          nextState.dataConnectionState === "disconnected" ||
+          nextState.lastFailureReason === "ice-failed";
+        const sourcePeerAllowsIceRestart =
+          !isSourcePeer ||
+          typeof noTransportProgressMs !== "number" ||
+          noTransportProgressMs >= connectionSupervisorIceRestartNoProgressMs;
         const needsIceRestart =
-          !needsHardRecovery &&
-          (nextState.transportScore === "unstable" ||
-            nextState.mediaIceState === "disconnected" ||
-            nextState.dataIceState === "disconnected" ||
-            nextState.mediaConnectionState === "disconnected" ||
-            nextState.dataConnectionState === "disconnected" ||
-            nextState.lastFailureReason === "ice-failed");
+          !needsHardRecovery && hasIceRestartFailureSignal && sourcePeerAllowsIceRestart;
 
         if (
           needsIceRestart &&
@@ -2918,42 +2943,6 @@ export function useRoomRuntime({
               });
             });
           }
-          continue;
-        }
-
-        const needsSoftRecovery =
-          isSourcePeer &&
-          !isCurrentSourceOwner &&
-          activePlaybackSource === "remote-stream" &&
-          playback.status === "playing" &&
-          mediaConnectedPeers.includes(remotePeerId) &&
-          typeof noPlayoutProgressMs === "number" &&
-          noPlayoutProgressMs >= listenerSoftRecoveryDelayMs &&
-          noPlayoutProgressMs < 4_000;
-
-        if (
-          needsSoftRecovery &&
-          canRunRecoveryAction({
-            state: nextState,
-            action: "soft",
-            generation: sourceGeneration
-          })
-        ) {
-          nextState = markRecoveryAction({
-            state: nextState,
-            action: "soft",
-            generation: sourceGeneration,
-            failureReason: "playout-stalled"
-          });
-          commitConnectionSupervisorState(remotePeerId, "media", nextState);
-
-          if (sourceLifecycle.latestStream) {
-            resetRemoteAudioElement(sourceLifecycle.latestStream, {
-              generation: sourceGeneration,
-              reason: "connection-supervisor"
-            });
-          }
-          scheduleRemotePlaybackRetryRef.current(0, sourceGeneration);
           continue;
         }
 
@@ -3006,9 +2995,7 @@ export function useRoomRuntime({
     ensureConnectionSupervisorState,
     isCurrentSourceOwner,
     isPageVisible,
-    mediaConnectedPeers,
     peerId,
-    resetRemoteAudioElement,
     roomSnapshot?.room.id,
     setMediaConnectionState
   ]);

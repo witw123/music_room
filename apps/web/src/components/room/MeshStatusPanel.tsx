@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
@@ -30,6 +30,7 @@ type MeshStatusPanelProps = {
   recentEvents: PeerRecentEvent[];
   iceConfigSource: string;
   iceConfigStatus: string;
+  onVisibilityChange?: (open: boolean) => void;
 };
 
 function formatTimestamp(value: string) {
@@ -168,9 +169,19 @@ function MeshStatusPanelBase({
   peerDiagnostics,
   recentEvents,
   iceConfigSource,
-  iceConfigStatus
+  iceConfigStatus,
+  onVisibilityChange
 }: MeshStatusPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
+  useEffect(() => {
+    onVisibilityChange?.(isOpen);
+  }, [isOpen, onVisibilityChange]);
+  useEffect(
+    () => () => {
+      onVisibilityChange?.(false);
+    },
+    [onVisibilityChange]
+  );
   const onlineCount = useMemo(
     () => members.filter((member) => member.presenceState === "online").length,
     [members]

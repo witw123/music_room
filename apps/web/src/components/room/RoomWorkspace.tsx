@@ -57,6 +57,7 @@ type RoomWorkspaceProps = {
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   onTabChange: (tab: "queue" | "library" | "members") => void;
+  onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
   isSyncPending: boolean;
   playerSlot: ReactNode;
@@ -103,6 +104,7 @@ function RoomWorkspaceBase({
   onRemoveQueueItem,
   onReorderQueue,
   onTabChange,
+  onDiagnosticsVisibilityChange,
   socket,
   isSyncPending,
   playerSlot
@@ -176,6 +178,7 @@ function RoomWorkspaceBase({
               onReorderQueue={onReorderQueue}
               socket={socket}
               onTabChange={onTabChange}
+              onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
             />
           ) : showRoomTransitionState ? (
             <RoomTransitionState

@@ -88,6 +88,7 @@ export function MusicRoomApp({
   const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "members">(
     "queue"
   );
+  const [isDiagnosticsPanelOpen, setIsDiagnosticsPanelOpen] = useState(false);
   const [isPageVisible, setIsPageVisible] = useState(
     typeof document === "undefined" ? true : !document.hidden
   );
@@ -143,7 +144,9 @@ export function MusicRoomApp({
     currentRoomRef
   });
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
-    usePeerDiagnostics();
+    usePeerDiagnostics({
+      highFrequencyEnabled: activeDashboardTab === "members" && isDiagnosticsPanelOpen
+    });
 
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
@@ -877,6 +880,7 @@ export function MusicRoomApp({
       onRemoveQueueItem={removeQueueItem}
       onReorderQueue={reorderQueue}
       onTabChange={setActiveDashboardTab}
+      onDiagnosticsVisibilityChange={setIsDiagnosticsPanelOpen}
       socket={socketRef.current}
       isSyncPending={false}
       playerSlot={

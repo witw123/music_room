@@ -54,6 +54,7 @@ type RoomDashboardViewProps = {
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
   socket: any;
   onTabChange?: (tab: TabId) => void;
+  onDiagnosticsVisibilityChange?: (open: boolean) => void;
 };
 
 const tabLabels: Record<TabId, string> = {
@@ -119,16 +120,20 @@ function RoomDashboardViewBase({
   onRemoveQueueItem,
   onReorderQueue,
   socket,
-  onTabChange
+  onTabChange,
+  onDiagnosticsVisibilityChange
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
 
   const handleTabChange = useCallback(
     (tab: TabId) => {
       setActiveTab(tab);
+      if (tab !== "members") {
+        onDiagnosticsVisibilityChange?.(false);
+      }
       onTabChange?.(tab);
     },
-    [onTabChange]
+    [onDiagnosticsVisibilityChange, onTabChange]
   );
 
   return (
@@ -225,6 +230,7 @@ function RoomDashboardViewBase({
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}
               iceConfigStatus={iceConfigStatus}
+              onDiagnosticsVisibilityChange={onDiagnosticsVisibilityChange}
             />
           ) : null}
         </div>

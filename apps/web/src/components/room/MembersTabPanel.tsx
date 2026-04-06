@@ -21,6 +21,7 @@ type MembersTabPanelProps = {
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
   iceConfigStatus: string;
+  onDiagnosticsVisibilityChange?: (open: boolean) => void;
 };
 
 function MembersTabPanelBase({
@@ -34,7 +35,8 @@ function MembersTabPanelBase({
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
-  iceConfigStatus
+  iceConfigStatus,
+  onDiagnosticsVisibilityChange
 }: MembersTabPanelProps) {
   return (
     <div className="animate-fade-in flex w-full flex-col gap-5">
@@ -56,6 +58,7 @@ function MembersTabPanelBase({
         recentEvents={peerRecentEvents}
         iceConfigSource={iceConfigSource}
         iceConfigStatus={iceConfigStatus}
+        onVisibilityChange={onDiagnosticsVisibilityChange}
       />
     </div>
   );
