@@ -178,6 +178,24 @@ type ListenerMediaRecoveryAction =
 
 type HostPublishStage = "idle" | "waiting-source-audio" | "capture-ready" | "published";
 
+export function shouldRedirectRoomRouteToAuth(input: {
+  workspaceOnly: boolean;
+  initialRoomId: string | null;
+  hydrated: boolean;
+  hasActiveSession: boolean;
+  isNavigatingRoomExit: boolean;
+  suppressRoomRecovery: boolean;
+}) {
+  return (
+    input.workspaceOnly &&
+    Boolean(input.initialRoomId) &&
+    input.hydrated &&
+    !input.hasActiveSession &&
+    !input.isNavigatingRoomExit &&
+    !input.suppressRoomRecovery
+  );
+}
+
 export function resolveListenerMediaRecoveryReason(input: {
   traceKey: string;
   lastTrackTraceKey: string | null;
@@ -1071,7 +1089,7 @@ export function useRoomRuntime({
       window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage(message);
       if (workspaceOnly) {
-        router.push(workspaceEntryHref as Route);
+        router.replace(workspaceEntryHref as Route);
         return;
       }
 
@@ -2285,12 +2303,30 @@ export function useRoomRuntime({
   }, [activeSession, refreshSession]);
 
   useEffect(() => {
-    if (!workspaceOnly || !initialRoomId || !hydrated || activeSession) {
+    if (
+      !shouldRedirectRoomRouteToAuth({
+        workspaceOnly,
+        initialRoomId,
+        hydrated,
+        hasActiveSession: Boolean(activeSession),
+        isNavigatingRoomExit,
+        suppressRoomRecovery
+      })
+    ) {
       return;
     }
 
     router.replace(authEntryHref as Route);
-  }, [workspaceOnly, initialRoomId, hydrated, activeSession, router, authEntryHref]);
+  }, [
+    workspaceOnly,
+    initialRoomId,
+    hydrated,
+    activeSession,
+    isNavigatingRoomExit,
+    suppressRoomRecovery,
+    router,
+    authEntryHref
+  ]);
 
   useEffect(() => {
     const storedPeerId = window.sessionStorage.getItem(peerStorageKey);

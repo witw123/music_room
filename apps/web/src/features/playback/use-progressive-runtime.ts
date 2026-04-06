@@ -106,6 +106,7 @@ const maximumAdaptiveStartupBufferMs = 900;
 const haveCurrentDataReadyState = 2;
 const playbackQualityWindowMs = 30_000;
 const stablePlaybackGraceWindowMs = 12_000;
+const remoteStartupRecoveryGraceFloorMs = 1_200;
 const shortRemoteAudioHoldMs = 260;
 const steadyRemoteAudioHoldMs = 420;
 const recoveryRemoteAudioHoldMs = 680;
@@ -286,6 +287,20 @@ export function resolveAudioQualityTier(input: {
     audioBitrateTier,
     receiverJitterTier
   } as const;
+}
+
+export function shouldBlockFullLocalHandoffForRecentRemoteRecovery(input: {
+  lastRemoteWaitingAtMs: number | null;
+  startupBufferMs: number;
+  now?: number;
+}) {
+  if (typeof input.lastRemoteWaitingAtMs !== "number") {
+    return false;
+  }
+
+  const now = input.now ?? Date.now();
+  const recoveryWindowMs = Math.max(remoteStartupRecoveryGraceFloorMs, input.startupBufferMs);
+  return now - input.lastRemoteWaitingAtMs < recoveryWindowMs;
 }
 
 export function shouldEnableAudibleLocalFallback(input: {
@@ -1097,12 +1112,26 @@ export function useProgressiveRuntime({
     (progressiveFallbackReason === "buffer-underrun" ||
       progressiveFallbackReason === "stalled" ||
       progressiveFallbackReason === "seek-outside-buffer");
+  const recentRemoteRecoveryPending = useMemo(
+    () =>
+      shouldBlockFullLocalHandoffForRecentRemoteRecovery({
+        lastRemoteWaitingAtMs: lastRemoteWaitingAtRef.current,
+        startupBufferMs: effectiveStartupBufferMs
+      }),
+    [
+      activePlaybackSource,
+      effectiveStartupBufferMs,
+      playback?.currentTrackId,
+      playback?.status,
+      playbackQualityMetrics.stalledEventsLast30s,
+      playbackQualityMetrics.waitingEventsLast30s,
+      playbackRevision
+    ]
+  );
   const startupGatePending =
     activePlaybackSource === "remote-stream" &&
     playback?.status === "playing" &&
-    (remoteStartupReadyAtRef.current === null ||
-      playbackQualityMetrics.waitingEventsLast30s > 0 ||
-      playbackQualityMetrics.stalledEventsLast30s > 0);
+    (remoteStartupReadyAtRef.current === null || recentRemoteRecoveryPending);
   const playbackRecoveryStage = useMemo(
     () =>
       resolvePlaybackRecoveryStage({
@@ -1117,6 +1146,7 @@ export function useProgressiveRuntime({
     [
       activePlaybackSource,
       audibleLocalFallbackActive,
+      recentRemoteRecoveryPending,
       playback?.status,
       playbackQualityMetrics.stalledEventsLast30s,
       playbackQualityMetrics.waitingEventsLast30s,
@@ -1148,8 +1178,12 @@ export function useProgressiveRuntime({
       return "track-not-fully-cached";
     }
 
+    if (startupGatePending) {
+      return "remote-recovery-window";
+    }
+
     return null;
-  }, [currentBufferedFullLocalTrack]);
+  }, [currentBufferedFullLocalTrack, startupGatePending]);
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
 
   useEffect(() => {

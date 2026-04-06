@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
   resolveAudioQualityTier,
+  shouldBlockFullLocalHandoffForRecentRemoteRecovery,
   shouldEnableFullLocalHandoff,
   resolvePlaybackRecoveryStage,
   resolveRemoteAudioHoldDurationMs,
@@ -262,5 +263,25 @@ describe("shouldPollRemoteStartupGate", () => {
         cooldownMs: 0
       })
     ).toBe(false);
+  });
+
+  it("does not keep full-local handoff blocked after an old waiting event has aged out", () => {
+    expect(
+      shouldBlockFullLocalHandoffForRecentRemoteRecovery({
+        lastRemoteWaitingAtMs: 1_000,
+        startupBufferMs: 680,
+        now: 3_000
+      })
+    ).toBe(false);
+  });
+
+  it("still blocks full-local handoff during the short post-waiting recovery window", () => {
+    expect(
+      shouldBlockFullLocalHandoffForRecentRemoteRecovery({
+        lastRemoteWaitingAtMs: 1_000,
+        startupBufferMs: 680,
+        now: 1_900
+      })
+    ).toBe(true);
   });
 });

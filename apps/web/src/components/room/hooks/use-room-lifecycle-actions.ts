@@ -72,7 +72,7 @@ export function useRoomLifecycleActions({
     dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     if (workspaceOnly) {
-      router.push(workspaceEntryHref as Route);
+      router.replace(workspaceEntryHref as Route);
       return;
     }
 
@@ -100,7 +100,7 @@ export function useRoomLifecycleActions({
     dispatchRoomStateEvent({ type: "local-reset" });
     setPlaylists([]);
     if (workspaceOnly) {
-      router.push(workspaceEntryHref as Route);
+      router.replace(workspaceEntryHref as Route);
       return;
     }
 

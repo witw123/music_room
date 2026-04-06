@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveListenerMediaRecoveryAction,
   resolveListenerMediaRecoveryReason,
+  shouldRedirectRoomRouteToAuth,
   shouldForcePieceSyncRecovery
 } from "./use-room-runtime";
 
@@ -175,6 +176,34 @@ describe("shouldForcePieceSyncRecovery", () => {
         totalChunks: 120,
         lastPieceActivityAtMs: 0,
         now: 25_000
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldRedirectRoomRouteToAuth", () => {
+  it("redirects to auth only for an unauthenticated room route outside an exit flow", () => {
+    expect(
+      shouldRedirectRoomRouteToAuth({
+        workspaceOnly: true,
+        initialRoomId: "room_123",
+        hydrated: true,
+        hasActiveSession: false,
+        isNavigatingRoomExit: false,
+        suppressRoomRecovery: false
+      })
+    ).toBe(true);
+  });
+
+  it("does not redirect to auth while the room is exiting back to workspace home", () => {
+    expect(
+      shouldRedirectRoomRouteToAuth({
+        workspaceOnly: true,
+        initialRoomId: "room_123",
+        hydrated: true,
+        hasActiveSession: false,
+        isNavigatingRoomExit: true,
+        suppressRoomRecovery: true
       })
     ).toBe(false);
   });
