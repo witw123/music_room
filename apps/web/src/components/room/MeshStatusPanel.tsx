@@ -337,7 +337,7 @@ function MeshStatusPanelBase({
               {peerDiagnostics.map((peer) => (
                 <details
                   key={peer.peerId}
-                  className="rounded-lg border border-surface-border bg-background/30 px-3 py-2"
+                  className="overflow-hidden rounded-lg border border-surface-border bg-background/30 px-3 py-2"
                 >
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-center justify-between gap-3">
@@ -359,7 +359,8 @@ function MeshStatusPanelBase({
                     ) : null}
                   </summary>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-foreground-muted">
+                  <div className="mt-3 max-h-[min(65vh,42rem)] overflow-y-auto pr-2 [scrollbar-gutter:stable]">
+                    <div className="grid grid-cols-1 gap-2 text-[10px] text-foreground-muted sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-all">
                     <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
                     <span>DataChannel: {peer.dataChannelState ?? "未知"}</span>
                     <span>音频连接: {peer.mediaConnectionState ?? "未知"}</span>
@@ -505,14 +506,14 @@ function MeshStatusPanelBase({
                           : "否"}
                     </span>
                     <span>signalingState: {peer.remoteTrackStatus.signalingState ?? "未知"}</span>
-                  </div>
+                    </div>
 
                   {peer.progressivePlaybackStatus ? (
-                    <div className="mt-3 rounded-lg border border-surface-border bg-black/20 p-3 text-[10px] text-foreground-muted">
+                    <div className="mt-3 rounded-lg border border-surface-border bg-black/20 p-3 text-[10px] text-foreground-muted [&_p]:break-all">
                       <div className="mb-2 font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
                         Progressive
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-all">
                         <span>播放源: {peer.progressivePlaybackStatus.activeSource ?? "未启用"}</span>
                         <span>
                           Governor: {peer.progressivePlaybackStatus.transportGovernorMode ?? "未激活"}
@@ -753,7 +754,7 @@ function MeshStatusPanelBase({
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.hostPublishKey ? (
-                        <p className="mt-1 truncate text-foreground-muted">
+                        <p className="mt-1 text-foreground-muted">
                           发布键: {peer.progressivePlaybackStatus.hostPublishKey}
                         </p>
                       ) : null}
@@ -784,7 +785,7 @@ function MeshStatusPanelBase({
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.localAudioCurrentSrc ? (
-                        <p className="mt-1 truncate text-foreground-muted">
+                        <p className="mt-1 text-foreground-muted">
                           本地 currentSrc: {peer.progressivePlaybackStatus.localAudioCurrentSrc}
                         </p>
                       ) : null}
@@ -809,12 +810,12 @@ function MeshStatusPanelBase({
                         </p>
                       ) : null}
                       {peer.remoteTrackStatus.currentSrc ? (
-                        <p className="mt-1 truncate text-foreground-muted">
+                        <p className="mt-1 text-foreground-muted">
                           远端 currentSrc: {peer.remoteTrackStatus.currentSrc}
                         </p>
                       ) : null}
                       {peer.remoteTrackStatus.traceKey ? (
-                        <p className="mt-1 truncate text-foreground-muted">
+                        <p className="mt-1 text-foreground-muted">
                           播放 trace: {peer.remoteTrackStatus.traceKey}
                         </p>
                       ) : null}
@@ -825,6 +826,7 @@ function MeshStatusPanelBase({
                       ) : null}
                     </div>
                   ) : null}
+                  </div>
                 </details>
               ))}
             </div>
