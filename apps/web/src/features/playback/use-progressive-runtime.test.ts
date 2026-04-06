@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
   resolveAudioQualityTier,
+  shouldEnableFullLocalHandoff,
   resolvePlaybackRecoveryStage,
   resolveRemoteAudioHoldDurationMs,
   resolveRemoteStartupGateState,
@@ -214,5 +215,31 @@ describe("shouldPollRemoteStartupGate", () => {
         playbackRecoveryStage: "degraded"
       })
     ).toBe("protected");
+  });
+
+  it("allows a listener to hand off from remote-stream to full-local once the full cache is ready", () => {
+    expect(
+      shouldEnableFullLocalHandoff({
+        activePlaybackSource: "remote-stream",
+        playbackRecoveryStage: "steady",
+        startupGatePending: false,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(true);
+  });
+
+  it("keeps full-local handoff blocked until remote startup buffering is over", () => {
+    expect(
+      shouldEnableFullLocalHandoff({
+        activePlaybackSource: "remote-stream",
+        playbackRecoveryStage: "startup-buffering",
+        startupGatePending: true,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(false);
   });
 });

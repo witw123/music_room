@@ -316,6 +316,41 @@ export function shouldEnableAudibleLocalFallback(input: {
   );
 }
 
+export function shouldEnableFullLocalHandoff(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackRecoveryStage: PlaybackRecoveryStage;
+  startupGatePending: boolean;
+  localReady: boolean;
+  driftMs: number;
+  cooldownMs: number;
+}) {
+  if (
+    input.activePlaybackSource !== "remote-stream" &&
+    input.activePlaybackSource !== "progressive-local" &&
+    input.activePlaybackSource !== "full-local"
+  ) {
+    return false;
+  }
+
+  if (!input.localReady || input.cooldownMs > 0 || !Number.isFinite(input.driftMs)) {
+    return false;
+  }
+
+  if (Math.abs(input.driftMs) > fullLocalMaxDriftMs) {
+    return false;
+  }
+
+  if (input.activePlaybackSource === "full-local") {
+    return true;
+  }
+
+  if (input.startupGatePending) {
+    return false;
+  }
+
+  return input.playbackRecoveryStage !== "startup-buffering";
+}
+
 export function resolvePlaybackRecoveryStage(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
@@ -557,18 +592,15 @@ export function useProgressiveRuntime({
     [currentProgressiveManifest, currentTrackAvailabilityAnnouncement?.availableChunks, playback]
   );
   const canPrepareProgressiveLocal =
-    enableListenerLocalTakeover &&
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
     !!currentProgressiveManifest &&
     canUseProgressivePlayback() &&
     currentProgressiveEngineType !== "none";
   const canWarmBufferedFullLocal =
-    enableListenerLocalTakeover &&
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
-    !!currentBufferedFullLocalTrack &&
-    currentProgressiveEngineType === "none";
+    !!currentBufferedFullLocalTrack;
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
   const sourceDiagnostics = useMemo(
     () => pickActiveMediaDiagnostic(peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId ?? null),
@@ -2018,16 +2050,17 @@ export function useProgressiveRuntime({
       }
 
       const shouldAttemptTakeover =
-        activePlaybackSource !== "remote-stream" ||
-        shouldEnableAudibleLocalFallback({
-          activePlaybackSource,
-          remoteFirstLock,
-          waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
-          stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-          localReady,
-          driftMs,
-          cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
-        });
+        isCurrentSourceOwner &&
+        (activePlaybackSource !== "remote-stream" ||
+          shouldEnableAudibleLocalFallback({
+            activePlaybackSource,
+            remoteFirstLock,
+            waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
+            stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
+            localReady,
+            driftMs,
+            cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
+          }));
       const takeoverBlockedReason = shouldAttemptTakeover ? null : progressiveLocalBlockedReason;
 
       if (
@@ -2184,17 +2217,16 @@ export function useProgressiveRuntime({
             }
           );
 
-      const shouldAttemptFullLocalFallback = shouldEnableAudibleLocalFallback({
+      const shouldAttemptFullLocalHandoff = shouldEnableFullLocalHandoff({
         activePlaybackSource,
-        remoteFirstLock,
-        waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
-        stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
+        playbackRecoveryStage,
+        startupGatePending,
         localReady: readyForFullLocal,
         driftMs,
         cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
       });
 
-      if (!isLocalTakeoverAllowed(now) || !shouldAttemptFullLocalFallback) {
+      if (!isLocalTakeoverAllowed(now) || !shouldAttemptFullLocalHandoff) {
         fullLocalWarmupReadyAtRef.current = readyForFullLocal ? now : null;
         return;
       }
@@ -2230,7 +2262,9 @@ export function useProgressiveRuntime({
     isLocalTakeoverAllowed,
     playbackQualityMetrics.stalledEventsLast30s,
     playbackQualityMetrics.waitingEventsLast30s,
+    playbackRecoveryStage,
     remoteFirstLock,
+    startupGatePending,
     audioRef,
     transitionPlaybackSource
   ]);
