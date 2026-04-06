@@ -174,7 +174,6 @@ function BottomPlayerBase({
         className="hidden"
         autoPlay
         playsInline
-        onTimeUpdate={syncProgressFromAudio}
         onLoadedMetadata={syncDurationFromAudio}
         onDurationChange={syncDurationFromAudio}
         onPlaying={onRemotePlaying}

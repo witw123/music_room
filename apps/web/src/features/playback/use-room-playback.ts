@@ -6,8 +6,8 @@ import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 import type { ProgressivePlaybackSource } from "./progressive-playback";
 
 const playbackProgressPollIntervalMs = 120;
-const playingProgressCommitThresholdMs = 120;
-const idleProgressCommitThresholdMs = 200;
+const playingProgressCommitThresholdMs = 50;
+const idleProgressCommitThresholdMs = 120;
 const displayClockIgnoreDriftMs = 120;
 const displayClockSmoothDriftMs = 280;
 const displayClockHardSnapDriftMs = 560;
@@ -362,6 +362,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     anchorAtMs: 0,
     hardDriftSamples: 0
   });
+  const acceptedPlaybackRef = useRef<PlaybackSnapshot | null>(null);
+  acceptedPlaybackRef.current = acceptedPlayback;
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -416,16 +418,18 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       return;
     }
 
-    const currentSessionKey = getPlaybackClockSessionKey(acceptedPlayback);
     const commitProgress = (
+      currentPlayback: PlaybackSnapshot,
+      durationMs: number,
       nextProgressMs: number,
       nextSource: DisplayClockSource,
       nextDriftMs: number
     ) => {
-      let normalizedProgressMs = clampProgressMs(nextProgressMs, progressTrack.durationMs);
+      const currentSessionKey = getPlaybackClockSessionKey(currentPlayback);
+      let normalizedProgressMs = clampProgressMs(nextProgressMs, durationMs);
       const sameSession = lastCommittedSessionKeyRef.current === currentSessionKey;
       if (
-        acceptedPlayback.status === "playing" &&
+        currentPlayback.status === "playing" &&
         sameSession &&
         nextSource !== "room-fallback" &&
         normalizedProgressMs < lastCommittedProgressRef.current &&
@@ -435,7 +439,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         normalizedProgressMs = lastCommittedProgressRef.current;
       }
       const thresholdMs =
-        acceptedPlayback.status === "playing"
+        currentPlayback.status === "playing"
           ? playingProgressCommitThresholdMs
           : idleProgressCommitThresholdMs;
 
@@ -455,13 +459,19 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     };
 
     const tick = () => {
-      const roomClockMs = getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs);
+      const currentPlayback = acceptedPlaybackRef.current;
+      if (!currentPlayback || !progressTrack) {
+        return;
+      }
+
+      const now = Date.now();
+      const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
       const audibleClockResolution =
-        acceptedPlayback.status === "playing"
+        currentPlayback.status === "playing"
           ? resolveAudibleClockSample({
               activePlaybackSource,
               shouldUseLocalAudio,
-              playbackSessionKey: getPlaybackClockSessionKey(acceptedPlayback),
+              playbackSessionKey: getPlaybackClockSessionKey(currentPlayback),
               roomClockMs,
               localAudioCurrentTimeSeconds: localAudio?.currentTime ?? null,
               localAudioPaused: localAudio?.paused ?? null,
@@ -476,8 +486,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       const continuityResolution = resolveAudibleClockContinuitySample({
         audibleClockSample: audibleClockResolution.sample,
         previousContinuity: audibleClockContinuityRef.current,
-        playbackStatus: acceptedPlayback.status,
-        now: Date.now()
+        playbackStatus: currentPlayback.status,
+        now
       });
       audibleClockContinuityRef.current = continuityResolution.continuityState;
       const nextDisplayClock = resolveDisplayClockProgress({
@@ -487,13 +497,15 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         previousDisplayMs: lastCommittedProgressRef.current,
         previousSource: displayClockTransitionRef.current.source,
         transitionState: displayClockTransitionRef.current,
-        now: Date.now()
+        now
       });
 
       displayClockTransitionRef.current = nextDisplayClock.transitionState;
 
       if (seekDraft === null || nextDisplayClock.source !== "room-fallback") {
         commitProgress(
+          currentPlayback,
+          progressTrack.durationMs,
           nextDisplayClock.progressMs,
           nextDisplayClock.source,
           nextDisplayClock.displayDriftMs
@@ -529,8 +541,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     remoteAudioRef,
     acceptedPlayback?.status,
     acceptedPlayback?.currentTrackId,
-    acceptedPlayback?.positionMs,
-    acceptedPlayback?.startedAt,
     acceptedPlayback?.mediaEpoch,
     progressTrack?.durationMs,
     shouldUseLocalAudio,
@@ -559,23 +569,25 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [remoteAudioRef, volume]);
 
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
-    if (!acceptedPlayback || !progressTrack) {
+    const currentPlayback = acceptedPlaybackRef.current;
+    if (!currentPlayback || !progressTrack) {
       return;
     }
 
-    const currentSessionKey = getPlaybackClockSessionKey(acceptedPlayback);
+    const now = Date.now();
+    const currentSessionKey = getPlaybackClockSessionKey(currentPlayback);
     const selectedAudio = shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current;
     const eventAudio = event?.currentTarget ?? null;
     const preferredAudio = eventAudio === selectedAudio ? eventAudio : selectedAudio;
     const localAudio = audioRef.current;
     const remoteAudio = remoteAudioRef.current;
-    const roomClockMs = getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs);
+    const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
     const audibleClockResolution =
-      acceptedPlayback.status === "playing"
+      currentPlayback.status === "playing"
         ? resolveAudibleClockSample({
             activePlaybackSource,
             shouldUseLocalAudio,
-            playbackSessionKey: getPlaybackClockSessionKey(acceptedPlayback),
+            playbackSessionKey: getPlaybackClockSessionKey(currentPlayback),
             roomClockMs,
             localAudioCurrentTimeSeconds:
               shouldUseLocalAudio && preferredAudio ? preferredAudio.currentTime : localAudio?.currentTime ?? null,
@@ -594,8 +606,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     const continuityResolution = resolveAudibleClockContinuitySample({
       audibleClockSample: audibleClockResolution.sample,
       previousContinuity: audibleClockContinuityRef.current,
-      playbackStatus: acceptedPlayback.status,
-      now: Date.now()
+      playbackStatus: currentPlayback.status,
+      now
     });
     audibleClockContinuityRef.current = continuityResolution.continuityState;
     const nextDisplayClock = resolveDisplayClockProgress({
@@ -605,7 +617,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       previousDisplayMs: lastCommittedProgressRef.current,
       previousSource: displayClockTransitionRef.current.source,
       transitionState: displayClockTransitionRef.current,
-      now: Date.now()
+      now
     });
     displayClockTransitionRef.current = nextDisplayClock.transitionState;
     setDisplayClockSource((current) =>
@@ -617,7 +629,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     let nextProgressMs = nextDisplayClock.progressMs;
     const sameSession = lastCommittedSessionKeyRef.current === currentSessionKey;
     if (
-      acceptedPlayback.status === "playing" &&
+      currentPlayback.status === "playing" &&
       sameSession &&
       nextDisplayClock.source !== "room-fallback" &&
       nextProgressMs < lastCommittedProgressRef.current &&
@@ -657,38 +669,32 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }
 
   useEffect(() => {
-    const trackChanged = progressTrack?.id !== acceptedPlayback?.currentTrackId;
-    if (trackChanged) {
-      setSeekDraft(null);
-    }
+    setSeekDraft(null);
 
-    if (seekDraft === null) {
-      const nextProgressMs =
-        progressTrack && acceptedPlayback
-          ? getPlaybackEffectivePositionMs(acceptedPlayback, progressTrack.durationMs)
-          : 0;
-      setProgressMs(nextProgressMs);
-      setDisplayClockSource("room-fallback");
-      setDisplayDriftMs(0);
-      lastCommittedProgressRef.current = nextProgressMs;
-      lastCommittedSessionKeyRef.current = getPlaybackClockSessionKey(acceptedPlayback);
-      displayClockTransitionRef.current = {
-        source: "room-fallback",
-        anchorDisplayMs: nextProgressMs,
-        anchorAudibleMs: nextProgressMs,
-        anchorAtMs: Date.now(),
-        hardDriftSamples: 0
-      };
-      audibleClockAnchorRef.current = null;
-      audibleClockContinuityRef.current = null;
-    }
+    const currentPlayback = acceptedPlaybackRef.current;
+    const nextProgressMs =
+      progressTrack && currentPlayback
+        ? getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs)
+        : 0;
+    setProgressMs(nextProgressMs);
+    setDisplayClockSource("room-fallback");
+    setDisplayDriftMs(0);
+    lastCommittedProgressRef.current = nextProgressMs;
+    lastCommittedSessionKeyRef.current = getPlaybackClockSessionKey(currentPlayback);
+    displayClockTransitionRef.current = {
+      source: "room-fallback",
+      anchorDisplayMs: nextProgressMs,
+      anchorAudibleMs: nextProgressMs,
+      anchorAtMs: Date.now(),
+      hardDriftSamples: 0
+    };
+    audibleClockAnchorRef.current = null;
+    audibleClockContinuityRef.current = null;
     setAudioDurationMs(progressTrack?.durationMs ?? 0);
   }, [
     progressTrack?.id,
     progressTrack?.durationMs,
-    acceptedPlayback,
-    seekDraft,
-    setSeekDraft
+    acceptedPlayback?.mediaEpoch
   ]);
 
   return {
