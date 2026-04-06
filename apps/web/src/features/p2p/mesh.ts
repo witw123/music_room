@@ -124,6 +124,7 @@ export class P2PMesh {
   private readonly dataOpenTimeoutMs = 8_000;
   private readonly dataConnectingTimeoutMs = 12_000;
   private readonly connectionProgressTimeoutMs = 15_000;
+  private statsSamplingMode: "off" | "steady" | "active" = "active";
 
   constructor(
     private readonly roomId: string,
@@ -268,6 +269,18 @@ export class P2PMesh {
           }
         }
       });
+    }
+  }
+
+  setStatsSamplingMode(mode: "off" | "steady" | "active") {
+    if (this.statsSamplingMode === mode) {
+      return;
+    }
+
+    this.statsSamplingMode = mode;
+    for (const [peerId, entry] of this.peers.entries()) {
+      this.stopStatsSampling(entry);
+      this.startStatsSampling(peerId, entry);
     }
   }
 
@@ -725,7 +738,11 @@ export class P2PMesh {
   }
 
   private startStatsSampling(peerId: string, entry: PeerEntry) {
-    if (!this.callbacks.onStatsSample || entry.statsIntervalId) {
+    if (
+      !this.callbacks.onStatsSample ||
+      entry.statsIntervalId ||
+      this.statsSamplingMode === "off"
+    ) {
       return;
     }
 
@@ -743,9 +760,10 @@ export class P2PMesh {
     };
 
     void emitStatsSample();
+    const samplingIntervalMs = this.statsSamplingMode === "steady" ? 10_000 : 2_000;
     entry.statsIntervalId = setInterval(() => {
       void emitStatsSample();
-    }, 2_000);
+    }, samplingIntervalMs);
   }
 
   private stopStatsSampling(entry: PeerEntry) {

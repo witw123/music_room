@@ -3,6 +3,7 @@
 import { memo, useEffect } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { BottomPlayer } from "@/components/BottomPlayer";
+import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
@@ -13,6 +14,7 @@ type BottomPlayerControllerProps = {
   activeSession: AuthSession | null;
   currentTrack: TrackMeta | null;
   activePlaybackSource: ProgressivePlaybackSource;
+  authoritativeMediaClock: ReceivedRoomMediaClock | null;
   resetEpoch: number;
   onPlaybackPositionChange: (positionMs: number) => void;
   onPlaybackBucketChange: (bucketMs: number) => void;
@@ -38,6 +40,7 @@ function BottomPlayerControllerBase({
   activeSession,
   currentTrack,
   activePlaybackSource,
+  authoritativeMediaClock,
   resetEpoch,
   onPlaybackPositionChange,
   onPlaybackBucketChange,
@@ -77,6 +80,7 @@ function BottomPlayerControllerBase({
     tracks: roomSnapshot?.tracks ?? [],
     shouldUseLocalAudio,
     activePlaybackSource,
+    authoritativeMediaClock,
     getLocalPlaybackPositionMs
   });
 

@@ -27,6 +27,7 @@ import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
+import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { useTrackHydrationQueue } from "@/components/room/hooks/use-track-hydration-queue";
@@ -101,6 +102,8 @@ export function MusicRoomApp({
     useState<ProgressivePlaybackSource>("remote-stream");
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
+  const [authoritativeMediaClock, setAuthoritativeMediaClock] =
+    useState<ReceivedRoomMediaClock | null>(null);
   const [audioUnlocked, setAudioUnlocked] = useState(() => roomAudioOutput.isActivated());
   const [sourceStartState, setSourceStartState] = useState<
     "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
@@ -286,6 +289,7 @@ export function MusicRoomApp({
     setActivePlaybackSource("remote-stream");
     setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
+    setAuthoritativeMediaClock(null);
   }, [
     destroyProgressiveRuntime,
     resetAvailabilityState,
@@ -378,43 +382,45 @@ export function MusicRoomApp({
     setMediaConnectionState,
     isPageVisible,
     setIsPageVisible,
-      schedulerMode,
-      setSchedulerMode,
-      schedulerPlaybackBucketMs,
-      bufferHealth,
-      transportGovernorMode,
-      activePlaybackSource,
-      progressiveSchedulerPolicy,
-      isCurrentSourceOwner,
-      audioUnlocked,
-      setAudioUnlocked,
-      sourceStartState,
-      setSourceStartState,
-      lastSourceStartError,
-      setLastSourceStartError,
-      availabilityByTrack,
-      queueAvailability,
-      mergeLocalPieceAvailability,
-      clearAvailabilityForPeer,
-      flushPendingAvailability,
-      recordPeerDiagnostic,
-      uploadedTracks,
-      uploadedTrackIds: Object.keys(uploadedTracks),
-      uploadedTrackIdsRef,
-      announceLocalCache,
-      deleteUploadedTrackArtifacts,
-      deleteRoomTrackArtifacts,
-      scheduleTrackHydration,
-      audioRef,
-      remoteAudioRef,
-      socketRef,
-      chunkSchedulerRef,
-      resetPlayerSurface,
-      setStatusMessage,
-      statusMessage,
-      refreshAvailableRooms,
-      refreshPlaylists
-    });
+    schedulerMode,
+    setSchedulerMode,
+    schedulerPlaybackBucketMs,
+    bufferHealth,
+    transportGovernorMode,
+    activePlaybackSource,
+    progressiveSchedulerPolicy,
+    isCurrentSourceOwner,
+    audioUnlocked,
+    getLocalPlaybackPositionMs,
+    setAuthoritativeMediaClock,
+    setAudioUnlocked,
+    sourceStartState,
+    setSourceStartState,
+    lastSourceStartError,
+    setLastSourceStartError,
+    availabilityByTrack,
+    queueAvailability,
+    mergeLocalPieceAvailability,
+    clearAvailabilityForPeer,
+    flushPendingAvailability,
+    recordPeerDiagnostic,
+    uploadedTracks,
+    uploadedTrackIds: Object.keys(uploadedTracks),
+    uploadedTrackIdsRef,
+    announceLocalCache,
+    deleteUploadedTrackArtifacts,
+    deleteRoomTrackArtifacts,
+    scheduleTrackHydration,
+    audioRef,
+    remoteAudioRef,
+    socketRef,
+    chunkSchedulerRef,
+    resetPlayerSurface,
+    setStatusMessage,
+    statusMessage,
+    refreshAvailableRooms,
+    refreshPlaylists
+  });
 
   useEffect(() => {
     if (!initialRoomId) {
@@ -877,6 +883,7 @@ export function MusicRoomApp({
           activeSession={activeSession}
           currentTrack={currentTrack}
           activePlaybackSource={activePlaybackSource}
+          authoritativeMediaClock={authoritativeMediaClock}
           resetEpoch={playerResetEpoch}
           onPlaybackPositionChange={handlePlaybackPositionChange}
           onPlaybackBucketChange={handlePlaybackBucketChange}

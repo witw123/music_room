@@ -88,6 +88,7 @@ export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
   private currentMediaEpoch = 0;
   private latestLocalStream: MediaStream | null = null;
+  private statsSamplingMode: "off" | "steady" | "active" = "active";
 
   constructor(
     private readonly roomId: string,
@@ -263,6 +264,18 @@ export class RoomMediaMesh {
 
   destroy() {
     this.resetForMediaEpoch(this.currentMediaEpoch);
+  }
+
+  setStatsSamplingMode(mode: "off" | "steady" | "active") {
+    if (this.statsSamplingMode === mode) {
+      return;
+    }
+
+    this.statsSamplingMode = mode;
+    for (const [peerId, entry] of this.peers.entries()) {
+      this.stopStatsSampling(entry);
+      this.startStatsSampling(peerId, entry);
+    }
   }
 
   async restartPeer(peerId: string, localStream: MediaStream | null = null) {
@@ -641,7 +654,11 @@ export class RoomMediaMesh {
   }
 
   private startStatsSampling(peerId: string, entry: MediaPeerEntry) {
-    if (!this.callbacks.onStatsSample || entry.statsIntervalId) {
+    if (
+      !this.callbacks.onStatsSample ||
+      entry.statsIntervalId ||
+      this.statsSamplingMode === "off"
+    ) {
       return;
     }
 
@@ -673,9 +690,10 @@ export class RoomMediaMesh {
     };
 
     void emitStatsSample();
+    const samplingIntervalMs = this.statsSamplingMode === "steady" ? 10_000 : 2_000;
     entry.statsIntervalId = setInterval(() => {
       void emitStatsSample();
-    }, 2_000);
+    }, samplingIntervalMs);
   }
 
   private stopStatsSampling(entry: MediaPeerEntry) {

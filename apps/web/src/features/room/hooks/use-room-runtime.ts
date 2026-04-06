@@ -15,6 +15,7 @@ import type {
   IceConfigResponse,
   PeerDiagnosticsSnapshot,
   PeerSignalMessage,
+  RoomMediaClockPayload,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
@@ -49,6 +50,7 @@ import {
 } from "@/features/playback/host-media-sync";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
+import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { resolveHostRelayAudioElement } from "@/features/room/host-relay-audio";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -102,6 +104,8 @@ type UseRoomRuntimeInput = {
     | null;
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
+  getLocalPlaybackPositionMs?: () => number | null;
+  setAuthoritativeMediaClock: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
   setSourceStartState: Dispatch<
@@ -156,7 +160,7 @@ type PieceTransferWindow = {
 
 const pieceTransferWindowMs = 12_000;
 const hostMediaSyncRetryDelayMs = 75;
-const hostCaptureHealthCheckIntervalMs = 500;
+const hostCaptureHealthCheckIntervalMs = 2_000;
 const hostCaptureRefreshCooldownMs = 1_200;
 const remoteStreamSwapGraceMs = 900;
 const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const;
@@ -406,6 +410,8 @@ export function useRoomRuntime({
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
   audioUnlocked,
+  getLocalPlaybackPositionMs,
+  setAuthoritativeMediaClock,
   setAudioUnlocked,
   sourceStartState,
   setSourceStartState,
@@ -524,6 +530,7 @@ export function useRoomRuntime({
     playAttempts: 0
   });
   const listenerMediaRecoveryTimeoutRef = useRef<number | null>(null);
+  const hostMediaClockSequenceRef = useRef(0);
   const armListenerMediaRecoveryRef = useRef<(generation?: string | null) => void>(() => undefined);
   const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
   const dataDegradedSinceRef = useRef<number | null>(null);
@@ -970,6 +977,15 @@ export function useRoomRuntime({
   useEffect(() => {
     currentRoomRef.current = roomSnapshot;
   }, [roomSnapshot, currentRoomRef]);
+
+  useEffect(() => {
+    if (roomSnapshot?.room.id) {
+      return;
+    }
+
+    hostMediaClockSequenceRef.current = 0;
+    setAuthoritativeMediaClock(null);
+  }, [roomSnapshot?.room.id, setAuthoritativeMediaClock]);
 
   useEffect(() => {
     uploadedTrackIdsRef.current = uploadedTrackIds;
@@ -1881,6 +1897,117 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
+    const roomId = roomSnapshot?.room.id;
+    const playback = roomSnapshot?.room.playback;
+    if (
+      !roomId ||
+      !playback?.currentTrackId ||
+      !peerId ||
+      !isCurrentSourceOwner ||
+      playback.sourcePeerId !== peerId
+    ) {
+      hostMediaClockSequenceRef.current = 0;
+      return;
+    }
+
+    const listenerPeerIds =
+      roomSnapshot.room.members
+        .map((member) => member.peerId)
+        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
+    if (listenerPeerIds.length === 0) {
+      return;
+    }
+
+    const emitRoomMediaClock = () => {
+      const latestRoom = currentRoomRef.current;
+      const socket = socketRef.current;
+      const latestPlayback = latestRoom?.room.playback;
+      if (
+        !socket?.connected ||
+        activeRouteRoomIdRef.current !== roomId ||
+        !latestPlayback?.currentTrackId ||
+        latestPlayback.sourcePeerId !== peerId
+      ) {
+        return;
+      }
+
+      const relayAudio = resolveHostRelayAudioElement({
+        activePlaybackSource,
+        localAudio: audioRef.current,
+        remoteAudio: remoteAudioRef.current
+      });
+      if (!relayAudio) {
+        return;
+      }
+
+      const localPlaybackPositionMs =
+        activePlaybackSource !== "remote-stream" && typeof getLocalPlaybackPositionMs === "function"
+          ? getLocalPlaybackPositionMs()
+          : null;
+      const fallbackMediaTimeMs =
+        Number.isFinite(relayAudio.currentTime) && relayAudio.currentTime >= 0
+          ? Math.round(relayAudio.currentTime * 1000)
+          : null;
+      const mediaTimeMs =
+        typeof localPlaybackPositionMs === "number" && Number.isFinite(localPlaybackPositionMs)
+          ? Math.max(0, Math.round(localPlaybackPositionMs))
+          : fallbackMediaTimeMs;
+      if (mediaTimeMs === null) {
+        return;
+      }
+
+      const playbackRate =
+        Number.isFinite(relayAudio.playbackRate) && relayAudio.playbackRate > 0
+          ? relayAudio.playbackRate
+          : 1;
+      const advancing =
+        latestPlayback.status === "playing" &&
+        (activePlaybackSource !== "remote-stream"
+          ? typeof localPlaybackPositionMs === "number" || isAudioElementEffectivelyPlaying(relayAudio)
+          : isAudioElementEffectivelyPlaying(relayAudio));
+      const payload: RoomMediaClockPayload = {
+        roomId,
+        mediaEpoch: latestPlayback.mediaEpoch,
+        sourcePeerId: peerId,
+        mediaTimeMs,
+        playbackRate,
+        advancing,
+        sequence: ++hostMediaClockSequenceRef.current,
+        emittedAt: new Date().toISOString()
+      };
+      socket.emit("room.media.clock", payload);
+      setAuthoritativeMediaClock({
+        ...payload,
+        receivedAtMs: Date.now()
+      });
+    };
+
+    emitRoomMediaClock();
+    const timerId = window.setInterval(
+      emitRoomMediaClock,
+      playback.status === "playing" && sourceStartState === "live" ? 500 : 250
+    );
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [
+    activePlaybackSource,
+    audioRef,
+    currentRoomRef,
+    getLocalPlaybackPositionMs,
+    isCurrentSourceOwner,
+    peerId,
+    remoteAudioRef,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members,
+    roomSnapshot?.room.playback,
+    setAuthoritativeMediaClock,
+    socketRef,
+    sourceStartState
+  ]);
+
+  useEffect(() => {
     const playback = roomSnapshot?.room.playback;
     const traceContext =
       !isCurrentSourceOwner &&
@@ -2222,6 +2349,34 @@ export function useRoomRuntime({
   useEffect(() => {
     recordPieceTransferRef.current = recordPieceTransfer;
   }, [recordPieceTransfer]);
+
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+    const hasActiveTrack = !!playback?.currentTrackId;
+    const isPlaying = playback?.status === "playing";
+    const mediaStatsMode =
+      !hasActiveTrack || (!isPageVisible && !isPlaying)
+        ? "off"
+        : isCurrentSourceOwner || activePlaybackSource !== "remote-stream" || bufferHealth !== "healthy"
+          ? "active"
+          : "steady";
+    const dataStatsMode =
+      !hasActiveTrack || (!isPageVisible && !isPlaying)
+        ? "off"
+        : bufferHealth !== "healthy"
+          ? "active"
+          : "steady";
+
+    mediaMeshRef.current?.setStatsSamplingMode(mediaStatsMode);
+    meshRef.current?.setStatsSamplingMode(dataStatsMode);
+  }, [
+    activePlaybackSource,
+    bufferHealth,
+    isCurrentSourceOwner,
+    isPageVisible,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.status
+  ]);
 
   useEffect(() => {
     return () => {
@@ -2724,6 +2879,13 @@ export function useRoomRuntime({
       iceServers
     );
     meshRef.current = mesh;
+    mesh.setStatsSamplingMode(
+      !roomSnapshot?.room.playback.currentTrackId || (!isPageVisible && roomSnapshot?.room.playback.status !== "playing")
+        ? "off"
+        : bufferHealth !== "healthy"
+          ? "active"
+          : "steady"
+    );
     chunkSchedulerRef.current = new ChunkScheduler(peerId, {
       requestPiece: ({ peerId: remotePeerId, trackId, chunkIndex, totalChunks, timeoutMs }) =>
         mesh.requestPiece(remotePeerId, trackId, chunkIndex, totalChunks, timeoutMs)
@@ -3019,6 +3181,13 @@ export function useRoomRuntime({
       }
     );
     mediaMeshRef.current = mediaMesh;
+    mediaMesh.setStatsSamplingMode(
+      !roomSnapshot?.room.playback.currentTrackId || (!isPageVisible && roomSnapshot?.room.playback.status !== "playing")
+        ? "off"
+        : isCurrentSourceOwner || activePlaybackSource !== "remote-stream" || bufferHealth !== "healthy"
+          ? "active"
+          : "steady"
+    );
 
     const resyncRealtimePeers = (members = currentRoomRef.current?.room.members ?? []) => {
       const remotePeerIds = members
@@ -3168,6 +3337,25 @@ export function useRoomRuntime({
         type: "server-playback-patch",
         roomId,
         playback
+      });
+    });
+    socket.on("room.media.clock", (payload: RoomMediaClockPayload) => {
+      if (payload.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+
+      const currentPlayback = currentRoomRef.current?.room.playback;
+      if (
+        !currentPlayback ||
+        payload.mediaEpoch !== currentPlayback.mediaEpoch ||
+        (currentPlayback.sourcePeerId && payload.sourcePeerId !== currentPlayback.sourcePeerId)
+      ) {
+        return;
+      }
+
+      setAuthoritativeMediaClock({
+        ...payload,
+        receivedAtMs: Date.now()
       });
     });
     socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
@@ -3344,6 +3532,7 @@ export function useRoomRuntime({
       stopPresenceHeartbeat();
       setConnectedPeers([]);
       setMediaConnectedPeers([]);
+      setAuthoritativeMediaClock(null);
       resetRemoteAudioElement(null);
       setMediaConnectionState(
         currentRoomRef.current?.room.playback.status === "playing" ? "reconnecting" : "idle"
@@ -3386,6 +3575,7 @@ export function useRoomRuntime({
       };
       setConnectedPeers([]);
       setMediaConnectedPeers([]);
+      setAuthoritativeMediaClock(null);
       setMediaConnectionState("idle");
     };
   }, [
@@ -3409,6 +3599,7 @@ export function useRoomRuntime({
     isNavigatingRoomExit,
     setConnectedPeers,
     setMediaConnectedPeers,
+    setAuthoritativeMediaClock,
     setMediaConnectionState,
     exitCurrentRoom,
     setStatusMessage,
@@ -3690,7 +3881,7 @@ export function useRoomRuntime({
   }, [connectedPeers.length, mediaConnectedPeers.length]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !peerId || isCurrentSourceOwner) {
+    if (!roomSnapshot?.room.id || !peerId || isCurrentSourceOwner || bufferHealth === "healthy") {
       return;
     }
 
@@ -3725,7 +3916,7 @@ export function useRoomRuntime({
         activePlaybackSource === "remote-stream" &&
         playback?.status === "playing" &&
         !!currentTrackId &&
-        (bufferHealth !== "healthy" || totalChunks <= 0 || localAvailableChunks < totalChunks);
+        (totalChunks <= 0 || localAvailableChunks < totalChunks);
 
       if (remotePeerIds.length === 0) {
         return;

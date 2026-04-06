@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useCallback, useTransition } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
@@ -35,6 +35,12 @@ type BottomPlayerProps = {
   onRemoteError: () => void;
 };
 
+function clampProgressMs(progressMs: number, durationMs: number) {
+  return durationMs > 0
+    ? Math.min(Math.max(0, progressMs), durationMs)
+    : Math.max(0, progressMs);
+}
+
 function BottomPlayerBase({
   audioRef,
   remoteAudioRef,
@@ -62,9 +68,14 @@ function BottomPlayerBase({
   onRemoteError
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
+  const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
+  const progressAnchorRef = useRef({
+    progressMs,
+    receivedAtMs: Date.now()
+  });
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
-  const effectiveProgressMs = Math.max(0, seekDraft ?? progressMs);
+  const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
   const boundedProgressMs =
     currentTrackDuration > 0
       ? Math.min(effectiveProgressMs, currentTrackDuration)
@@ -73,6 +84,41 @@ function BottomPlayerBase({
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
+
+  useEffect(() => {
+    progressAnchorRef.current = {
+      progressMs,
+      receivedAtMs: Date.now()
+    };
+
+    if (seekDraft !== null || !isPlaying) {
+      setRenderedProgressMs(clampProgressMs(progressMs, currentTrackDuration));
+    }
+  }, [currentTrackDuration, isPlaying, progressMs, seekDraft]);
+
+  useEffect(() => {
+    if (seekDraft !== null || !isPlaying) {
+      return;
+    }
+
+    let frameId = 0;
+    const render = () => {
+      const elapsedMs = Math.max(0, Date.now() - progressAnchorRef.current.receivedAtMs);
+      const nextProgressMs = clampProgressMs(
+        progressAnchorRef.current.progressMs + elapsedMs,
+        currentTrackDuration
+      );
+      setRenderedProgressMs((current) =>
+        Math.abs(current - nextProgressMs) >= 16 ? nextProgressMs : current
+      );
+      frameId = window.requestAnimationFrame(render);
+    };
+
+    frameId = window.requestAnimationFrame(render);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [currentTrackDuration, isPlaying, seekDraft]);
 
   const commitSeek = useCallback(() => {
     if (seekDraft !== null && canControlPlayback) {

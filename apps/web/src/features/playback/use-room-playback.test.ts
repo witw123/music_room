@@ -188,7 +188,7 @@ describe("resolveDisplayClockProgress", () => {
     expect(result.source).toBe("remote-audible");
   });
 
-  it("re-anchors to the room clock only after repeated severe drift", () => {
+  it("keeps following the audible clock even under severe room-clock drift", () => {
     const firstFrame = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 20_000,
@@ -222,8 +222,8 @@ describe("resolveDisplayClockProgress", () => {
     });
 
     expect(firstFrame.progressMs).toBe(20_000);
-    expect(secondFrame.progressMs).toBe(21_920);
-    expect(secondFrame.displayDriftMs).toBe(0);
+    expect(secondFrame.progressMs).toBe(20_120);
+    expect(secondFrame.displayDriftMs).toBe(1_800);
   });
 
   it("keeps source switches continuous before converging to the new audible clock", () => {
@@ -281,14 +281,14 @@ describe("resolveDisplayClockProgress", () => {
       now: 3_100
     });
 
-    expect(result.progressMs).toBe(33_000);
+    expect(result.progressMs).toBe(32_500);
     expect(result.source).toBe("room-fallback");
-    expect(result.displayDriftMs).toBe(0);
+    expect(result.displayDriftMs).toBe(500);
   });
 });
 
 describe("resolveAudibleClockContinuitySample", () => {
-  it("bridges short remote clock gaps without falling back immediately", () => {
+  it("retains the last audible anchor during short remote clock gaps", () => {
     const previousContinuity = {
       sample: {
         progressMs: 42_000,
@@ -304,14 +304,11 @@ describe("resolveAudibleClockContinuitySample", () => {
       now: 1_600
     });
 
-    expect(result.sample).toEqual({
-      progressMs: 42_600,
-      source: "remote-audible"
-    });
+    expect(result.sample).toBeNull();
     expect(result.continuityState).toBe(previousContinuity);
   });
 
-  it("falls back once the audible clock gap is too long", () => {
+  it("keeps continuity metadata while playback is still active", () => {
     const previousContinuity = {
       sample: {
         progressMs: 42_000,
@@ -328,6 +325,6 @@ describe("resolveAudibleClockContinuitySample", () => {
     });
 
     expect(result.sample).toBeNull();
-    expect(result.continuityState).toBeNull();
+    expect(result.continuityState).toBe(previousContinuity);
   });
 });

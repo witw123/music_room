@@ -90,7 +90,7 @@ type UseProgressiveRuntimeResult = {
   destroyProgressiveRuntime: () => void;
 };
 
-const progressiveRuntimeTickIntervalMs = 350;
+const progressiveRuntimeTickIntervalMs = 500;
 const progressiveSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalMaxDriftMs = 180;
@@ -98,7 +98,7 @@ const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteStartupGatePollMs = 120;
 const enableDirectProgressiveTakeover = true;
-const enableListenerShadowWarmup = true;
+const enableListenerShadowWarmup = false;
 const enableListenerLocalTakeover = false;
 const stableRemoteStartupBufferMs = 320;
 const constrainedRemoteStartupBufferMs = 480;

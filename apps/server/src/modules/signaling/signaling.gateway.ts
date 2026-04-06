@@ -13,6 +13,7 @@ import type { Server, Socket } from "socket.io";
 import type {
   PieceAvailabilityClearPayload,
   PeerSignalMessage,
+  RoomMediaClockPayload,
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
   RoomPresencePatchPayload,
@@ -32,6 +33,7 @@ import {
   pieceAvailabilityClearChannel,
   roomDeletedChannel,
   roomLibraryPatchChannel,
+  roomMediaClockChannel,
   roomPlaybackPatchChannel,
   roomPresencePatchChannel,
   roomQueuePatchChannel,
@@ -292,6 +294,25 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.server.to(message.roomId).emit("room.library.patch", message.payload);
     });
 
+    void this.redisService.subscribe(roomMediaClockChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: RoomMediaClockPayload;
+      };
+
+      if (
+        !message.roomId ||
+        !message.payload ||
+        !message.sourceId ||
+        message.sourceId === this.roomRealtimeBroadcaster.instanceId
+      ) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.media.clock", message.payload);
+    });
+
     void this.redisService.subscribe(peerSignalChannel, (payload) => {
       const message = payload as {
         sourceId?: string;
@@ -425,6 +446,27 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     // Usually we broadcast to all in room except sender, and sender updates their own state, 
     // or just broadcast to everyone. Socket.io's `client.to(room).emit` broadcasts to everyone ELSE.
     client.to(payload.roomId).emit("room.chat", payload);
+    return payload;
+  }
+
+  @SubscribeMessage("room.media.clock")
+  async handleRoomMediaClock(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: RoomMediaClockPayload
+  ) {
+    this.assertRealtimeClient(client, payload.roomId);
+    this.assertRealtimeAvailable();
+
+    if (client.data.peerId !== payload.sourcePeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+
+    this.server.to(payload.roomId).emit("room.media.clock", payload);
+    await this.redisService.publish(roomMediaClockChannel, {
+      sourceId: this.roomRealtimeBroadcaster.instanceId,
+      roomId: payload.roomId,
+      payload
+    });
     return payload;
   }
 

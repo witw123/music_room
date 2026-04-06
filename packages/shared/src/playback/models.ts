@@ -14,4 +14,16 @@ export const playbackSnapshotSchema = z.object({
   mediaEpoch: z.number().int().nonnegative()
 });
 
+export const roomMediaClockPayloadSchema = z.object({
+  roomId: z.string(),
+  mediaEpoch: z.number().int().nonnegative(),
+  sourcePeerId: z.string(),
+  mediaTimeMs: z.number().int().nonnegative(),
+  playbackRate: z.number().positive(),
+  advancing: z.boolean(),
+  sequence: z.number().int().nonnegative(),
+  emittedAt: z.string().datetime()
+});
+
 export type PlaybackSnapshot = z.infer<typeof playbackSnapshotSchema>;
+export type RoomMediaClockPayload = z.infer<typeof roomMediaClockPayloadSchema>;
