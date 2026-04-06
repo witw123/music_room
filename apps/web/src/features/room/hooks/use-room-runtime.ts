@@ -43,6 +43,7 @@ import {
   resolveHostCaptureRefresh,
   hasUsableHostMediaStreamTrack,
   getHostMediaStreamTrackState,
+  isAudioElementEffectivelyPlaying,
   isHostRelayAudioReadyForCapture,
   shouldDeferHostMediaStreamSync
 } from "@/features/playback/host-media-sync";
@@ -1616,8 +1617,7 @@ export function useRoomRuntime({
         let captureTrackState = getHostMediaStreamTrackState(capture);
         if (
           playback.status === "playing" &&
-          !relayAudio.paused &&
-          relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          isAudioElementEffectivelyPlaying(relayAudio) &&
           !hasUsableHostMediaStreamTrack(capture)
         ) {
           usedForcedRefresh = true;
@@ -1648,8 +1648,7 @@ export function useRoomRuntime({
 
         if (
           playback.status === "playing" &&
-          !relayAudio.paused &&
-          relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          isAudioElementEffectivelyPlaying(relayAudio) &&
           !hasUsableHostMediaStreamTrack(capture)
         ) {
           syncState.stage = "waiting-source-audio";
@@ -1843,7 +1842,7 @@ export function useRoomRuntime({
       return;
     }
 
-    const isElementPlaying = !relayAudio.paused && relayAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+    const isElementPlaying = isAudioElementEffectivelyPlaying(relayAudio);
     if (!isElementPlaying) {
       updateSourceStartState("starting", {
         summary: "音源端已解锁，正在等待本机音频真正起播"

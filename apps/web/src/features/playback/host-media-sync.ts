@@ -66,6 +66,23 @@ export function isHostRelayAudioReadyForCapture(input: {
   return currentMediaSrc === input.currentTrackObjectUrl;
 }
 
+export function isAudioElementEffectivelyPlaying(
+  audio:
+    | Pick<HTMLAudioElement, "paused" | "readyState" | "srcObject">
+    | null
+    | undefined
+) {
+  if (!audio || audio.paused) {
+    return false;
+  }
+
+  if (audio.srcObject) {
+    return true;
+  }
+
+  return audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+}
+
 export function shouldDeferHostMediaStreamSync(input: {
   stream: MediaStream | null | undefined;
   listenerPeerCount: number;

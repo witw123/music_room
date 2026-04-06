@@ -4,6 +4,7 @@ import {
   getHostMediaStreamTrackState,
   hasHostMediaStreamTrack,
   hasUsableHostMediaStreamTrack,
+  isAudioElementEffectivelyPlaying,
   isHostRelayAudioReadyForCapture,
   resolveHostCaptureRefresh,
   shouldDeferHostMediaStreamSync
@@ -200,5 +201,22 @@ describe("hasHostMediaStreamTrack", () => {
         currentTrackObjectUrl: "blob:track-b"
       })
     ).toBe(true);
+  });
+
+  it("treats srcObject-backed audio as effectively playing even when readyState is low", () => {
+    expect(
+      isAudioElementEffectivelyPlaying({
+        paused: false,
+        readyState: 0,
+        srcObject: {} as MediaStream
+      })
+    ).toBe(true);
+    expect(
+      isAudioElementEffectivelyPlaying({
+        paused: true,
+        readyState: 4,
+        srcObject: {} as MediaStream
+      })
+    ).toBe(false);
   });
 });
