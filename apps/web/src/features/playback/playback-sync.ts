@@ -7,7 +7,18 @@ export function resolveContinuousPlaybackRate(input: {
   driftMs: number;
   maxRateDelta: number;
 }) {
-  const normalizedDelta = Math.min(input.maxRateDelta, Math.abs(input.driftMs) / 4000);
+  const absoluteDriftMs = Math.abs(input.driftMs);
+  let normalizedDelta = 0;
+
+  if (absoluteDriftMs >= 320) {
+    normalizedDelta = absoluteDriftMs / 4000;
+  } else if (absoluteDriftMs >= 120) {
+    normalizedDelta = absoluteDriftMs / 10_000;
+  } else if (absoluteDriftMs >= 35) {
+    normalizedDelta = absoluteDriftMs / 16_000;
+  }
+
+  normalizedDelta = Math.min(input.maxRateDelta, normalizedDelta);
   const direction = input.driftMs >= 0 ? 1 : -1;
   return 1 + direction * normalizedDelta;
 }

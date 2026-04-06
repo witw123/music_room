@@ -73,15 +73,16 @@ type MediaPeerEntry = {
   operationChain: Promise<void>;
 };
 
-const directAudioMaxBitrateBps = 224_000;
-const constrainedAudioMaxBitrateBps = 176_000;
-const relayAudioMaxBitrateBps = 112_000;
-const weakLinkAudioMaxBitrateBps = 72_000;
-const minimumAudioMaxBitrateBps = 48_000;
-const stableReceiverJitterTargetMs = 280;
-const constrainedReceiverJitterTargetMs = 360;
-const weakLinkReceiverJitterTargetMs = 520;
-const audioRetuneStepBps = 24_000;
+const directAudioMaxBitrateBps = 256_000;
+const constrainedAudioMaxBitrateBps = 208_000;
+const relayAudioMaxBitrateBps = 144_000;
+const weakLinkAudioMaxBitrateBps = 96_000;
+const minimumAudioMaxBitrateBps = 64_000;
+const stableReceiverJitterTargetMs = 320;
+const constrainedReceiverJitterTargetMs = 420;
+const weakLinkReceiverJitterTargetMs = 620;
+const audioRetuneStepBps = 32_000;
+const receiverJitterRetuneHysteresisMs = 120;
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
@@ -804,6 +805,8 @@ export function resolvePreferredAudioMaxBitrateBps(
 
   if (severeWeakLink) {
     targetMaxBitrateBps = weakLinkAudioMaxBitrateBps;
+  } else if (weakLink && constrainedTransport) {
+    targetMaxBitrateBps = Math.min(relayAudioMaxBitrateBps, constrainedAudioMaxBitrateBps);
   } else if (constrainedTransport) {
     targetMaxBitrateBps = relayAudioMaxBitrateBps;
   } else if (weakLink) {
@@ -815,7 +818,7 @@ export function resolvePreferredAudioMaxBitrateBps(
     Number.isFinite(sample.availableOutgoingBitrateKbps) &&
     sample.availableOutgoingBitrateKbps > 0
   ) {
-    const headroomRatio = constrainedTransport ? 0.78 : 0.88;
+    const headroomRatio = constrainedTransport ? 0.82 : 0.9;
     const measuredCeilingBps = Math.floor(
       sample.availableOutgoingBitrateKbps * 1000 * headroomRatio
     );
@@ -842,7 +845,15 @@ export function resolvePreferredReceiverJitterTargetMs(
   currentConfiguredTargetMs: number | null = null
 ) {
   const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  const severeWeakLink =
+    (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 220) ||
+    (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 8) ||
+    (typeof sample.packetsLost === "number" &&
+      sample.packetLossRate === null &&
+      sample.packetsLost >= 120) ||
+    (typeof sample.jitterMs === "number" && sample.jitterMs >= 45);
   const weakLink =
+    severeWeakLink ||
     (typeof sample.currentRoundTripTimeMs === "number" && sample.currentRoundTripTimeMs >= 180) ||
     (typeof sample.packetLossRate === "number" && sample.packetLossRate >= 6) ||
     (typeof sample.packetsLost === "number" &&
@@ -852,7 +863,7 @@ export function resolvePreferredReceiverJitterTargetMs(
 
   let nextTargetMs = stableReceiverJitterTargetMs;
 
-  if (weakLink) {
+  if (severeWeakLink || weakLink) {
     nextTargetMs = weakLinkReceiverJitterTargetMs;
   } else if (constrainedTransport) {
     nextTargetMs = constrainedReceiverJitterTargetMs;
@@ -860,7 +871,7 @@ export function resolvePreferredReceiverJitterTargetMs(
 
   if (
     currentConfiguredTargetMs !== null &&
-    Math.abs(currentConfiguredTargetMs - nextTargetMs) < 80
+    Math.abs(currentConfiguredTargetMs - nextTargetMs) < receiverJitterRetuneHysteresisMs
   ) {
     return currentConfiguredTargetMs;
   }

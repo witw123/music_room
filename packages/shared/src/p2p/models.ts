@@ -216,6 +216,20 @@ export const progressivePlaybackStatusSchema = z.object({
   stalledEventsLast30s: z.number().int().nonnegative().nullable().optional(),
   audioBitrateTier: z.enum(["high", "medium", "low"]).nullable().optional(),
   receiverJitterTier: z.enum(["low", "medium", "high"]).nullable().optional(),
+  playbackRecoveryStage: z
+    .enum([
+      "startup-buffering",
+      "steady",
+      "degraded",
+      "shadow-catchup",
+      "audible-local-fallback",
+      "remote-recovery"
+    ])
+    .nullable()
+    .optional(),
+  audibleLocalFallbackActive: z.boolean().optional(),
+  maxContinuousPlaybackMsLast30s: z.number().int().nonnegative().nullable().optional(),
+  schedulerBudgetTier: z.enum(["critical", "protected", "comfort", "expanded"]).nullable().optional(),
   lastStablePlaybackAt: z.string().datetime().nullable().optional()
 });
 

@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
   resolveAudioQualityTier,
+  resolvePlaybackRecoveryStage,
   resolveRemoteAudioHoldDurationMs,
   resolveRemoteStartupGateState,
+  resolveSchedulerBudgetTier,
+  shouldEnableAudibleLocalFallback,
   shouldPreferLocalTakeover,
   shouldPollRemoteStartupGate
 } from "./use-progressive-runtime";
@@ -49,7 +52,7 @@ describe("shouldPollRemoteStartupGate", () => {
         },
         hasRecentStablePlayback: true
       })
-    ).toBeLessThan(320);
+    ).toBe(400);
   });
 
   it("holds the remote audio element muted until the startup window matures", () => {
@@ -137,5 +140,79 @@ describe("shouldPollRemoteStartupGate", () => {
         progressiveFallbackReason: null
       })
     ).toBe(false);
+  });
+
+  it("requires repeated remote degradation before enabling audible local fallback", () => {
+    expect(
+      shouldEnableAudibleLocalFallback({
+        activePlaybackSource: "remote-stream",
+        remoteFirstLock: false,
+        waitingEventsLast30s: 1,
+        stalledEventsLast30s: 0,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(false);
+    expect(
+      shouldEnableAudibleLocalFallback({
+        activePlaybackSource: "remote-stream",
+        remoteFirstLock: false,
+        waitingEventsLast30s: 2,
+        stalledEventsLast30s: 0,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(true);
+  });
+
+  it("keeps remote-first lock from switching locally until degradation is persistent", () => {
+    expect(
+      shouldEnableAudibleLocalFallback({
+        activePlaybackSource: "remote-stream",
+        remoteFirstLock: true,
+        waitingEventsLast30s: 2,
+        stalledEventsLast30s: 0,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(false);
+    expect(
+      shouldEnableAudibleLocalFallback({
+        activePlaybackSource: "remote-stream",
+        remoteFirstLock: true,
+        waitingEventsLast30s: 3,
+        stalledEventsLast30s: 0,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(true);
+  });
+
+  it("reports shadow catchup while remote playback is degraded but warming locally", () => {
+    expect(
+      resolvePlaybackRecoveryStage({
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        startupGatePending: false,
+        waitingEventsLast30s: 2,
+        stalledEventsLast30s: 0,
+        shadowWarmupActive: true,
+        audibleLocalFallbackActive: false
+      })
+    ).toBe("shadow-catchup");
+  });
+
+  it("maps degraded remote playback to a protected scheduler budget", () => {
+    expect(
+      resolveSchedulerBudgetTier({
+        bufferHealth: "low",
+        activePlaybackSource: "remote-stream",
+        playbackRecoveryStage: "degraded"
+      })
+    ).toBe("protected");
   });
 });

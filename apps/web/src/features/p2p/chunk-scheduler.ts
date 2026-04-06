@@ -353,8 +353,7 @@ export class ChunkScheduler {
           ? this.policy === "startup"
             ? "startup"
             : "pause-fill"
-          : !shouldPreserveRemotePlayback &&
-              this.playbackStatus === "playing" &&
+          : this.playbackStatus === "playing" &&
               !isCurrentTrackComplete &&
               currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs &&
               (this.policy === "steady" || this.policy === "background")
@@ -387,10 +386,6 @@ export class ChunkScheduler {
               }),
         timeoutMs: currentTrackProfile.timeoutMs
       });
-    }
-
-    if (shouldPreserveRemotePlayback) {
-      return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
     const isCurrentTrackComplete =
@@ -450,8 +445,20 @@ export class ChunkScheduler {
       plans.push({
         track: nextQueuedTrack,
         priority: "upcoming",
-        maxConcurrent: shouldPreserveRemotePlayback ? 1 : this.policy === "background" ? 4 : 3,
-        maxConcurrentPerPeer: shouldPreserveRemotePlayback ? 1 : this.policy === "background" ? 2 : 3,
+        maxConcurrent: shouldPreserveRemotePlayback
+          ? this.bufferHealth === "healthy" && this.mode === "normal"
+            ? 2
+            : 1
+          : this.policy === "background"
+            ? 4
+            : 3,
+        maxConcurrentPerPeer: shouldPreserveRemotePlayback
+          ? this.bufferHealth === "healthy" && this.mode === "normal"
+            ? 3
+            : 1
+          : this.policy === "background"
+            ? 2
+            : 3,
         preferredPeerId: null,
         wantedChunks:
           queuedManifest
@@ -468,15 +475,27 @@ export class ChunkScheduler {
                 totalChunks: this.getTotalChunks(nextQueuedTrack.id),
                 prefetchMs: this.upcomingPrefetchMs()
               }),
-        timeoutMs: shouldPreserveRemotePlayback ? 2_200 : this.policy === "background" ? 2_500 : 1_800
+        timeoutMs: shouldPreserveRemotePlayback
+          ? this.bufferHealth === "healthy"
+            ? 2_600
+            : 3_000
+          : this.policy === "background"
+            ? 2_500
+            : 1_800
       });
-      if (shouldPreserveRemotePlayback) {
-        return plans.filter((plan) => plan.wantedChunks.length > 0);
-      }
       return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
-    if (this.policy !== "background" || !isCurrentTrackComplete) {
+    const canBackgroundPrefetchOnRemote =
+      shouldPreserveRemotePlayback &&
+      this.mode === "normal" &&
+      this.bufferHealth === "healthy" &&
+      currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
+
+    if (
+      (this.policy !== "background" && !canBackgroundPrefetchOnRemote) ||
+      !isCurrentTrackComplete
+    ) {
       return plans.filter((plan) => plan.wantedChunks.length > 0);
     }
 
@@ -499,9 +518,9 @@ export class ChunkScheduler {
           totalChunks: this.getTotalChunks(track.id),
           ownedChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).ownedChunks,
           pendingChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).pendingChunks,
-          batchSize: 1
+          batchSize: shouldPreserveRemotePlayback ? 1 : this.backgroundChunkBatchSize()
         }),
-        timeoutMs: 4_000
+        timeoutMs: shouldPreserveRemotePlayback ? 4_500 : 4_000
       });
       break;
     }

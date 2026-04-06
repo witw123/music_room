@@ -248,6 +248,10 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       stalledEventsLast30s: null,
       audioBitrateTier: null,
       receiverJitterTier: null,
+      playbackRecoveryStage: null,
+      audibleLocalFallbackActive: false,
+      maxContinuousPlaybackMsLast30s: null,
+      schedulerBudgetTier: null,
       lastStablePlaybackAt: null
     },
     lastError: null,

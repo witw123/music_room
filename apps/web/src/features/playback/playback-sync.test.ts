@@ -116,11 +116,22 @@ describe("syncLocalPlaybackWindow", () => {
 
   it("derives small continuous playback-rate deltas from drift", () => {
     expect(resolveContinuousPlaybackRate({ driftMs: 20, maxRateDelta: 0.015 })).toBeCloseTo(
-      1.005,
+      1,
       3
     );
     expect(resolveContinuousPlaybackRate({ driftMs: -60, maxRateDelta: 0.015 })).toBeCloseTo(
-      0.985,
+      0.996,
+      3
+    );
+  });
+
+  it("uses smaller continuous rate deltas for medium drift in audible follow modes", () => {
+    expect(resolveContinuousPlaybackRate({ driftMs: 180, maxRateDelta: 0.015 })).toBeCloseTo(
+      1.015,
+      3
+    );
+    expect(resolveContinuousPlaybackRate({ driftMs: -180, maxRateDelta: 0.012 })).toBeCloseTo(
+      0.988,
       3
     );
   });

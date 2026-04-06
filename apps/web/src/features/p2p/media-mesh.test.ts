@@ -516,7 +516,7 @@ describe("RoomMediaMesh", () => {
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
     expect(sender?.setParameters).toHaveBeenCalledWith({
-      encodings: [{ maxBitrate: 224_000 }]
+      encodings: [{ maxBitrate: 256_000 }]
     });
   });
 
@@ -533,7 +533,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(112_000);
+    ).toBe(121_360);
   });
 
   it("caps sender bitrate to measured headroom on weak links", () => {
@@ -549,7 +549,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 20,
         jitterMs: 4
       })
-    ).toBe(70_200);
+    ).toBe(73_800);
   });
 
   it("prefers a stronger receiver jitter target on constrained links", () => {
@@ -565,7 +565,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 0,
         jitterMs: 4
       })
-    ).toBe(360);
+    ).toBe(420);
   });
 
   it("prefers the strongest receiver jitter target on weak links", () => {
@@ -581,7 +581,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 120,
         jitterMs: 34
       })
-    ).toBe(520);
+    ).toBe(620);
   });
 
   it("does not keep audio in weak-link mode on high cumulative loss when the short window is healthy", () => {
@@ -597,7 +597,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBe(224_000);
+    ).toBe(256_000);
   });
 
   it("keeps the existing bitrate when the new target is only a tiny step away", () => {
@@ -614,9 +614,9 @@ describe("RoomMediaMesh", () => {
           packetsLost: 12,
           jitterMs: 4
         },
-        112_000
+        144_000
       )
-    ).toBe(112_000);
+    ).toBe(144_000);
   });
 
   it("keeps the existing jitter target when the new recommendation is within hysteresis", () => {
@@ -633,8 +633,8 @@ describe("RoomMediaMesh", () => {
           packetsLost: 0,
           jitterMs: 4
         },
-        320
+        360
       )
-    ).toBe(320);
+    ).toBe(360);
   });
 });

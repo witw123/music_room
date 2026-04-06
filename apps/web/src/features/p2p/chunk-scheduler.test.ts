@@ -418,7 +418,7 @@ describe("ChunkScheduler", () => {
           peer_member: buildAnnouncement({
             ownerPeerId: "peer_member",
             nickname: "Member",
-            availableChunks: Array.from({ length: 10 }, (_, index) => index),
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
             totalChunks: 12,
             chunkSize: 256 * 1024
           }),
@@ -520,7 +520,7 @@ describe("ChunkScheduler", () => {
       trackId: string;
       priority: string;
     }]>).map(([call]) => `${call.trackId}:${call.priority}`);
-    expect(requestedTrackIds.every((item) => item === "track_1:current")).toBe(true);
+    expect(requestedTrackIds).toContain("track_2:upcoming");
   });
 
   it("throttles current-track requests during remote bootstrap to preserve media bandwidth", () => {

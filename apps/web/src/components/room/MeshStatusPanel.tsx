@@ -650,6 +650,22 @@ function MeshStatusPanelBase({
                           {peer.progressivePlaybackStatus.stalledEventsLast30s ?? "未知"}
                         </span>
                         <span>
+                          恢复阶段: {peer.progressivePlaybackStatus.playbackRecoveryStage ?? "未知"}
+                        </span>
+                        <span>
+                          可听本地兜底:{" "}
+                          {peer.progressivePlaybackStatus.audibleLocalFallbackActive ? "是" : "否"}
+                        </span>
+                        <span>
+                          连续播放(30s):{" "}
+                          {formatDurationMs(
+                            peer.progressivePlaybackStatus.maxContinuousPlaybackMsLast30s ?? null
+                          )}
+                        </span>
+                        <span>
+                          调度预算: {peer.progressivePlaybackStatus.schedulerBudgetTier ?? "未知"}
+                        </span>
+                        <span>
                           音频档位: {peer.progressivePlaybackStatus.audioBitrateTier ?? "未知"}
                         </span>
                         <span>
