@@ -324,7 +324,7 @@ describe("resolveAudibleClockContinuitySample", () => {
       audibleClockSample: null,
       previousContinuity,
       playbackStatus: "playing",
-      now: 2_500
+      now: 4_500
     });
 
     expect(result.sample).toBeNull();

@@ -14,7 +14,7 @@ const displayClockHardSnapSamples = 2;
 const remoteAudibleAnchorResetDriftMs = 3_500;
 const remoteAudibleAnchorBacktrackToleranceSeconds = 0.25;
 const monotonicProgressBacktrackToleranceMs = 180;
-const audibleClockMissingGraceMs = 1_200;
+const audibleClockMissingGraceMs = 3_000;
 
 export type DisplayClockSource = "remote-audible" | "local-audible" | "room-fallback";
 
