@@ -52,6 +52,12 @@ export type RoomSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 function normalizeSocketBaseUrl(rawUrl: string, configuredPath: string) {
   try {
     const parsed = new URL(rawUrl);
+    if (parsed.protocol === "ws:") {
+      parsed.protocol = "http:";
+    } else if (parsed.protocol === "wss:") {
+      parsed.protocol = "https:";
+    }
+
     if (
       parsed.pathname !== "/" &&
       configuredPath.startsWith(parsed.pathname.endsWith("/") ? parsed.pathname.slice(0, -1) : parsed.pathname)
@@ -64,6 +70,9 @@ function normalizeSocketBaseUrl(rawUrl: string, configuredPath: string) {
 
     return parsed.toString().replace(/\/$/, "");
   } catch {
-    return rawUrl.replace(/\/$/, "");
+    return rawUrl
+      .replace(/^wss:/i, "https:")
+      .replace(/^ws:/i, "http:")
+      .replace(/\/$/, "");
   }
 }

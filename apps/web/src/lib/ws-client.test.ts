@@ -33,7 +33,7 @@ describe("createRoomSocket", () => {
     createRoomSocket();
 
     expect(ioMock).toHaveBeenCalledWith(
-      "wss://music.example.com",
+      "https://music.example.com",
       expect.objectContaining({
         transports: ["websocket", "polling"],
         auth: { sessionToken: "session-token" },
@@ -42,5 +42,20 @@ describe("createRoomSocket", () => {
         reconnectionDelayMax: 8000
       })
     );
+  });
+
+  it("converts env-provided websocket origins to http origins for socket.io fallback transports", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WS_URL", "wss://realtime.example.com/ws");
+    const { createRoomSocket } = await import("./ws-client");
+
+    createRoomSocket();
+
+    expect(ioMock).toHaveBeenCalledWith(
+      "https://realtime.example.com",
+      expect.objectContaining({
+        path: "/ws/socket.io"
+      })
+    );
+    vi.unstubAllEnvs();
   });
 });
