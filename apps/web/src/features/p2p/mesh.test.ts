@@ -348,7 +348,7 @@ describe("P2PMesh", () => {
     const firstPeer = FakeRTCPeerConnection.instances[0]!;
     firstPeer.channel.readyState = "connecting";
 
-    await vi.advanceTimersByTimeAsync(5_500);
+    await vi.advanceTimersByTimeAsync(10_500);
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
   });

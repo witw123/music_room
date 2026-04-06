@@ -120,10 +120,10 @@ export class P2PMesh {
   private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
   private pieceFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private pieceFlushInFlight = false;
-  private readonly reconnectBackoffMs = [500, 1_000, 2_000, 4_000] as const;
-  private readonly dataOpenTimeoutMs = 4_000;
-  private readonly dataConnectingTimeoutMs = 6_000;
-  private readonly connectionProgressTimeoutMs = 8_000;
+  private readonly reconnectBackoffMs = [1_000, 2_000, 4_000, 8_000] as const;
+  private readonly dataOpenTimeoutMs = 8_000;
+  private readonly dataConnectingTimeoutMs = 12_000;
+  private readonly connectionProgressTimeoutMs = 15_000;
 
   constructor(
     private readonly roomId: string,

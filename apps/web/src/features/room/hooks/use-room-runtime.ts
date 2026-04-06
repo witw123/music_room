@@ -161,6 +161,7 @@ const listenerMediaRecoveryDelayMs = 1_400;
 const listenerMediaRecoveryCooldownMs = 3_000;
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
+const stalledPieceSyncRecoveryThresholdMs = 20_000;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
@@ -248,6 +249,33 @@ export function resolveListenerMediaRecoveryAction(input: {
   return input.bindAttempts + input.playAttempts >= 2
     ? ("restart-peer" satisfies ListenerMediaRecoveryAction)
     : ("rebind-and-play" satisfies ListenerMediaRecoveryAction);
+}
+
+export function shouldForcePieceSyncRecovery(input: {
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  currentTrackId: string | null;
+  activePlaybackSource: ProgressivePlaybackSource;
+  bufferHealth: "healthy" | "low" | "critical";
+  localAvailableChunks: number;
+  totalChunks: number;
+  lastPieceActivityAtMs: number;
+  now?: number;
+}) {
+  if (
+    input.playbackStatus !== "playing" ||
+    !input.currentTrackId ||
+    input.activePlaybackSource !== "remote-stream"
+  ) {
+    return false;
+  }
+
+  const totalChunks = Math.max(0, input.totalChunks);
+  const fullyBuffered = totalChunks > 0 && input.localAvailableChunks >= totalChunks;
+  if (fullyBuffered || input.bufferHealth === "healthy") {
+    return false;
+  }
+
+  return (input.now ?? Date.now()) - input.lastPieceActivityAtMs >= stalledPieceSyncRecoveryThresholdMs;
 }
 
 function getPieceTransferRates(
@@ -3558,13 +3586,38 @@ export function useRoomRuntime({
           .filter(
             (memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId
           ) ?? [];
+      const playback = currentRoomRef.current?.room.playback;
+      const currentTrackId = playback?.currentTrackId ?? null;
+      const localAvailability = currentTrackId ? availabilityByTrack[currentTrackId]?.[peerId] : null;
+      const totalChunks =
+        localAvailability?.totalChunks ??
+        currentRoomRef.current?.tracks.find((track) => track.id === currentTrackId)?.pieceManifest?.totalChunks ??
+        0;
+      const localAvailableChunks = localAvailability?.availableChunks.length ?? 0;
+      const shouldRecoverPieceSync = shouldForcePieceSyncRecovery({
+        playbackStatus: playback?.status,
+        currentTrackId,
+        activePlaybackSource,
+        bufferHealth,
+        localAvailableChunks,
+        totalChunks,
+        lastPieceActivityAtMs: Math.max(
+          lastPieceReceivedAtRef.current,
+          lastAvailabilityGrowthAtRef.current
+        )
+      });
+      const shouldRecoverDataPeers =
+        activePlaybackSource === "remote-stream" &&
+        playback?.status === "playing" &&
+        !!currentTrackId &&
+        (bufferHealth !== "healthy" || totalChunks <= 0 || localAvailableChunks < totalChunks);
 
       if (remotePeerIds.length === 0) {
         return;
       }
 
       const degradedSince = dataDegradedSinceRef.current;
-      if (degradedSince && Date.now() - degradedSince >= 6_000) {
+      if (degradedSince && shouldRecoverDataPeers && Date.now() - degradedSince >= 6_000) {
         void meshRef.current?.syncPeers(remotePeerIds, { forceReconnectDegraded: true }).catch((error) => {
           reportRealtimeFailure({
             peerId: "system",
@@ -3577,17 +3630,7 @@ export function useRoomRuntime({
         dataDegradedSinceRef.current = Date.now();
         return;
       }
-
-      const playback = currentRoomRef.current?.room.playback;
-      if (playback?.status !== "playing" || !playback.currentTrackId) {
-        return;
-      }
-
-      const lastActivityAt = Math.max(
-        lastPieceReceivedAtRef.current,
-        lastAvailabilityGrowthAtRef.current
-      );
-      if (Date.now() - lastActivityAt < 10_000) {
+      if (!shouldRecoverPieceSync) {
         return;
       }
 
@@ -3605,7 +3648,16 @@ export function useRoomRuntime({
     }, 2_000);
 
     return () => window.clearInterval(intervalId);
-  }, [currentRoomRef, isCurrentSourceOwner, peerId, reportRealtimeFailure, roomSnapshot?.room.id]);
+  }, [
+    activePlaybackSource,
+    availabilityByTrack,
+    bufferHealth,
+    currentRoomRef,
+    isCurrentSourceOwner,
+    peerId,
+    reportRealtimeFailure,
+    roomSnapshot?.room.id
+  ]);
 
   const playbackClockSource = useMemo(
     () =>

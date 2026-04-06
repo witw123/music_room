@@ -81,10 +81,11 @@ describe("syncLocalPlaybackWindow", () => {
     expect(audio.playbackRate).toBe(1);
   });
 
-  it("uses a narrow audible correction band for remote follow mode", () => {
+  it("keeps audible remote follow at fixed pitch and rate for moderate drift", () => {
     const audio = {
       currentTime: 10,
-      playbackRate: 1
+      playbackRate: 1,
+      preservesPitch: false
     } as HTMLAudioElement;
 
     syncLocalPlaybackWindow(audio, 10.28, true, {
@@ -94,7 +95,8 @@ describe("syncLocalPlaybackWindow", () => {
     });
 
     expect(audio.currentTime).toBe(10);
-    expect(audio.playbackRate).toBeCloseTo(1.012, 3);
+    expect(audio.playbackRate).toBe(1);
+    expect((audio as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch).toBe(true);
   });
 
   it("snaps audible follow modes once drift exceeds the hard threshold", () => {
@@ -125,14 +127,25 @@ describe("syncLocalPlaybackWindow", () => {
     );
   });
 
-  it("uses smaller continuous rate deltas for medium drift in audible follow modes", () => {
-    expect(resolveContinuousPlaybackRate({ driftMs: 180, maxRateDelta: 0.015 })).toBeCloseTo(
-      1.015,
-      3
-    );
-    expect(resolveContinuousPlaybackRate({ driftMs: -180, maxRateDelta: 0.012 })).toBeCloseTo(
-      0.988,
-      3
-    );
+  it("still computes continuous rate deltas for non-audible correction modes", () => {
+    expect(resolveContinuousPlaybackRate({ driftMs: 180, maxRateDelta: 0.008 })).toBeCloseTo(1.008, 3);
+    expect(resolveContinuousPlaybackRate({ driftMs: -180, maxRateDelta: 0.006 })).toBeCloseTo(0.994, 3);
+  });
+
+  it("keeps audible local follow at fixed rate until hard drift requires a seek", () => {
+    const audio = {
+      currentTime: 10,
+      playbackRate: 1
+    } as HTMLAudioElement;
+
+    const result = syncLocalPlaybackWindow(audio, 10.28, true, {
+      softDriftMs: 120,
+      hardDriftMs: 900,
+      correctionMode: "audible-local-follow"
+    });
+
+    expect(audio.currentTime).toBe(10);
+    expect(audio.playbackRate).toBe(1);
+    expect(result.didSeek).toBe(false);
   });
 });

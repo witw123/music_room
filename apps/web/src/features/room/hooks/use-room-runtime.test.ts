@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveListenerMediaRecoveryAction,
-  resolveListenerMediaRecoveryReason
+  resolveListenerMediaRecoveryReason,
+  shouldForcePieceSyncRecovery
 } from "./use-room-runtime";
 
 describe("resolveListenerMediaRecoveryReason", () => {
@@ -129,5 +130,52 @@ describe("resolveListenerMediaRecoveryReason", () => {
         playAttempts: 2
       })
     ).toBe("restart-peer");
+  });
+});
+
+describe("shouldForcePieceSyncRecovery", () => {
+  it("does not force data peer recovery during steady remote playback when the current track is fully buffered", () => {
+    expect(
+      shouldForcePieceSyncRecovery({
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        activePlaybackSource: "remote-stream",
+        bufferHealth: "healthy",
+        localAvailableChunks: 120,
+        totalChunks: 120,
+        lastPieceActivityAtMs: 0,
+        now: 60_000
+      })
+    ).toBe(false);
+  });
+
+  it("forces data peer recovery only when remote playback is active, buffering is incomplete, and inactivity is prolonged", () => {
+    expect(
+      shouldForcePieceSyncRecovery({
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        activePlaybackSource: "remote-stream",
+        bufferHealth: "critical",
+        localAvailableChunks: 24,
+        totalChunks: 120,
+        lastPieceActivityAtMs: 0,
+        now: 25_000
+      })
+    ).toBe(true);
+  });
+
+  it("does not force data peer recovery for local playback sources", () => {
+    expect(
+      shouldForcePieceSyncRecovery({
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        activePlaybackSource: "full-local",
+        bufferHealth: "critical",
+        localAvailableChunks: 24,
+        totalChunks: 120,
+        lastPieceActivityAtMs: 0,
+        now: 25_000
+      })
+    ).toBe(false);
   });
 });
