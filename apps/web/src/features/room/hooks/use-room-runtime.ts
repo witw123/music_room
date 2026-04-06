@@ -159,6 +159,8 @@ const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const
 const maxRemotePlaybackRetryAttempts = 16;
 const listenerMediaRecoveryDelayMs = 1_400;
 const listenerMediaRecoveryCooldownMs = 3_000;
+const subscribeAckTimeoutMs = 4_000;
+const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
@@ -2482,6 +2484,7 @@ export function useRoomRuntime({
     socketRef.current = socket;
     const roomId = roomSnapshot.room.id;
     let subscribeRetryId: number | null = null;
+    let subscribeAckTimeoutId: number | null = null;
     pieceTransferRatesRef.current.clear();
     const iceServers = getWebRTCIceServers(iceConfig);
     const emitPeerSignal = (payload: PeerSignalMessage) => {
@@ -2954,18 +2957,45 @@ export function useRoomRuntime({
       });
     };
 
+    const clearSubscribeRetry = () => {
+      if (subscribeRetryId !== null) {
+        window.clearTimeout(subscribeRetryId);
+        subscribeRetryId = null;
+      }
+      if (subscribeAckTimeoutId !== null) {
+        window.clearTimeout(subscribeAckTimeoutId);
+        subscribeAckTimeoutId = null;
+      }
+    };
+
+    const scheduleSubscribeRetry = (attempt: number) => {
+      if (subscribeRetryId !== null) {
+        return;
+      }
+
+      const delay =
+        subscribeRetryBackoffMs[Math.min(attempt, subscribeRetryBackoffMs.length - 1)] ??
+        subscribeRetryBackoffMs[subscribeRetryBackoffMs.length - 1];
+      subscribeRetryId = window.setTimeout(() => {
+        subscribeRetryId = null;
+        subscribeToRoom(attempt);
+      }, delay);
+    };
+
     const subscribeToRoom = (attempt = 0) => {
       const currentSession = activeSessionRef.current;
       if (!socket.connected || !currentSession?.userId || !peerId) {
-        if (subscribeRetryId !== null) {
-          window.clearTimeout(subscribeRetryId);
-        }
-        subscribeRetryId = window.setTimeout(() => {
-          subscribeRetryId = null;
-          subscribeToRoom(attempt + 1);
-        }, 100);
+        scheduleSubscribeRetry(attempt + 1);
         return;
       }
+
+      if (subscribeAckTimeoutId !== null) {
+        window.clearTimeout(subscribeAckTimeoutId);
+      }
+      subscribeAckTimeoutId = window.setTimeout(() => {
+        subscribeAckTimeoutId = null;
+        scheduleSubscribeRetry(attempt + 1);
+      }, subscribeAckTimeoutMs);
 
       socket.emit(
         "room.subscribe",
@@ -2975,10 +3005,16 @@ export function useRoomRuntime({
           peerId
         },
         (response?: { ok?: boolean }) => {
+          if (subscribeAckTimeoutId !== null) {
+            window.clearTimeout(subscribeAckTimeoutId);
+            subscribeAckTimeoutId = null;
+          }
           if (!response?.ok) {
+            scheduleSubscribeRetry(attempt + 1);
             return;
           }
 
+          clearSubscribeRetry();
           startPresenceHeartbeat();
           resyncRealtimePeers();
           flushPendingAvailabilityRef.current();
@@ -3240,9 +3276,7 @@ export function useRoomRuntime({
 
     return () => {
       stopPresenceHeartbeat();
-      if (subscribeRetryId !== null) {
-        window.clearTimeout(subscribeRetryId);
-      }
+      clearSubscribeRetry();
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
         remotePlaybackRetryRef.current = null;

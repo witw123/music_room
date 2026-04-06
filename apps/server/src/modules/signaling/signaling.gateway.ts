@@ -472,7 +472,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
     client.data ??= {};
 
-    await this.replaceExistingRoomSession(payload.roomId, payload.sessionId, client.id);
+    await this.replaceExistingRoomSession(
+      payload.roomId,
+      payload.sessionId,
+      payload.peerId,
+      client.id
+    );
 
     client.data.roomId = payload.roomId;
     client.data.sessionId = payload.sessionId;
@@ -816,7 +821,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
   }
 
-  private async replaceExistingRoomSession(roomId: string, sessionId: string, nextSocketId: string) {
+  private async replaceExistingRoomSession(
+    roomId: string,
+    sessionId: string,
+    nextPeerId: string,
+    nextSocketId: string
+  ) {
     this.ensureBroadcasterServer();
     const existing = this.activeSessionsByRoom.get(roomId)?.get(sessionId);
     if (!existing || existing.socketId === nextSocketId) {
@@ -826,12 +836,25 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.cancelPendingDisconnectCleanup(roomId, sessionId);
     this.unregisterPeerSocket(roomId, existing.peerId, existing.socketId);
     this.unregisterSessionSocket(roomId, sessionId, existing.socketId);
+
+    const replacedSocket = this.server.sockets.sockets.get(existing.socketId);
+    const isSeamlessReconnect = existing.peerId === nextPeerId;
+    if (isSeamlessReconnect) {
+      if (replacedSocket) {
+        replacedSocket.leave(roomId);
+        replacedSocket.data.roomId = undefined;
+        replacedSocket.data.sessionId = undefined;
+        replacedSocket.data.peerId = undefined;
+        replacedSocket.data.isRealtimeAuthenticated = false;
+      }
+      return;
+    }
+
     this.clearPeerAvailability(roomId, existing.peerId);
 
     await this.roomService.handleDuplicateSessionReplacement(roomId, sessionId);
     await this.roomRealtimePublisher.emitSnapshot(roomId);
 
-    const replacedSocket = this.server.sockets.sockets.get(existing.socketId);
     if (!replacedSocket) {
       return;
     }

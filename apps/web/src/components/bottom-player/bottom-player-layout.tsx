@@ -34,7 +34,7 @@ export function VinylBadge({
   return (
     <div className={`relative flex ${shellSize} shrink-0 items-center justify-center`}>
       <div
-        className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-all duration-700 ${
+        className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-transform duration-700 will-change-transform ${
           isPlaying ? "animate-spin-slow" : ""
         }`}
       >
@@ -75,12 +75,12 @@ export function MobileBottomPlayerLayout({
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5">
+      <div className="grid min-h-[6.75rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5">
         <VinylBadge isPlaying={isPlaying} compact />
 
         <div className="min-w-0">
           <div className="mb-1 flex min-h-[1.1rem] items-center">
-            <span className="inline-flex min-w-[4.5rem] items-center justify-center rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
+            <span className="inline-flex w-[5.4rem] shrink-0 items-center justify-center rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.2em] text-accent">
               {isPlaying ? "正在播放" : "已暂停"}
             </span>
           </div>
@@ -91,7 +91,7 @@ export function MobileBottomPlayerLayout({
         </div>
 
         <div className="col-span-2 flex items-center gap-2">
-          <span className="min-w-[36px] text-right text-[11px] tabular-nums text-foreground-muted">
+          <span className="w-[44px] shrink-0 text-right text-[11px] tabular-nums text-foreground-muted">
             {formatDuration(boundedProgressMs)}
           </span>
           <div className="flex-1">
@@ -104,12 +104,12 @@ export function MobileBottomPlayerLayout({
               onTouchEnd={commitSeek}
             />
           </div>
-          <span className="min-w-[36px] text-[11px] tabular-nums text-foreground-muted">
+          <span className="w-[44px] shrink-0 text-[11px] tabular-nums text-foreground-muted">
             {formatDuration(currentTrackDuration)}
           </span>
         </div>
 
-        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="col-span-2 grid min-h-[2.75rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div />
 
           <div className="flex items-center justify-center gap-1">
@@ -119,7 +119,7 @@ export function MobileBottomPlayerLayout({
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onPrev}
               title="上一首"
-              className="h-9 w-9"
+              className="h-9 w-9 shrink-0"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
@@ -127,7 +127,7 @@ export function MobileBottomPlayerLayout({
             </Button>
 
             <button
-              className={`inline-grid h-10 w-10 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+              className={`inline-grid h-10 w-10 shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow,background-color,color] duration-200 will-change-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                 canControlPlayback
                   ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
                   : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
@@ -154,7 +154,7 @@ export function MobileBottomPlayerLayout({
               disabled={!canControlPlayback || !playbackTrackId}
               onClick={onNext}
               title="下一首"
-              className="h-9 w-9"
+              className="h-9 w-9 shrink-0"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M6 18l8.5-6L6 6zm10-12v12h2V6z" />
@@ -162,7 +162,7 @@ export function MobileBottomPlayerLayout({
             </Button>
           </div>
 
-          <div className="flex min-w-[96px] items-center justify-end gap-2">
+          <div className="flex min-w-[104px] items-center justify-end gap-2">
             <span className="text-foreground-muted">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.14v7.72A4.49 4.49 0 0016.5 12zM14 3.23v2.06a6.51 6.51 0 010 13.42v2.06A8.51 8.51 0 0014 3.23z" />

@@ -797,6 +797,59 @@ describe("SignalingGateway", () => {
     expect(roomService.updatePeerPresence).not.toHaveBeenCalled();
   });
 
+  it("treats same-peer resubscribe as seamless reconnect instead of duplicate-session replacement", async () => {
+    const snapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: "peer_host",
+          presenceState: "online"
+        }
+      ],
+      sourceSessionId: "guest_host",
+      sourcePeerId: "peer_host"
+    });
+    const roomService = createRoomServiceMock(snapshot);
+    const { gateway } = createGateway({ roomService });
+    const oldClient = createClient({
+      id: "socket_old",
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      isRealtimeAuthenticated: true
+    });
+    const newClient = createClient({ id: "socket_new" });
+    attachServerMock(gateway, new Map([["socket_old", oldClient]]));
+
+    await gateway.handleRoomSubscribe(oldClient as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+    roomService.handleDuplicateSessionReplacement.mockClear();
+
+    await gateway.handleRoomSubscribe(newClient as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+
+    expect(roomService.handleDuplicateSessionReplacement).not.toHaveBeenCalled();
+    expect(oldClient.emit).not.toHaveBeenCalledWith(
+      "room.session.replaced",
+      expect.anything()
+    );
+    expect(oldClient.leave).toHaveBeenCalledWith("room_1");
+    expect(roomService.updatePeerPresence).toHaveBeenLastCalledWith(
+      "room_1",
+      "guest_host",
+      "peer_host",
+      "online"
+    );
+  });
+
   it("keeps a disconnected member in reconnecting state during the grace window", async () => {
     jest.useFakeTimers();
     const { gateway, roomService } = createGateway();
