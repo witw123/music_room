@@ -156,6 +156,8 @@ type PieceTransferWindow = {
 
 const pieceTransferWindowMs = 12_000;
 const hostMediaSyncRetryDelayMs = 75;
+const hostCaptureHealthCheckIntervalMs = 500;
+const hostCaptureRefreshCooldownMs = 1_200;
 const remoteStreamSwapGraceMs = 900;
 const remotePlaybackRetryBackoffMs = [160, 320, 520, 800, 1_200, 1_600] as const;
 const maxRemotePlaybackRetryAttempts = 16;
@@ -440,6 +442,7 @@ export function useRoomRuntime({
   const activeRouteRoomIdRef = useRef<string | null>(initialRoomId);
   const hostStreamRef = useRef<MediaStream | null>(null);
   const hostMediaSyncRetryRef = useRef<number | null>(null);
+  const lastHostCaptureRefreshAtRef = useRef<number>(0);
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const remoteStreamClearTimeoutRef = useRef<number | null>(null);
   const presenceIntervalRef = useRef<number | null>(null);
@@ -1486,50 +1489,54 @@ export function useRoomRuntime({
     armListenerMediaRecoveryRef.current = armListenerMediaRecovery;
   }, [armListenerMediaRecovery]);
 
-  const syncHostMediaStream = useCallback(async () => {
-    const currentRoom = currentRoomRef.current;
-    if (!currentRoom?.room.id || !peerId || !isCurrentSourceOwner) {
-      clearHostMediaSyncRetry();
-      return;
-    }
+  const syncHostMediaStream = useCallback(
+    async (options?: { forceResync?: boolean; reason?: string }) => {
+      const forceResync = options?.forceResync ?? false;
+      const currentRoom = currentRoomRef.current;
+      if (!currentRoom?.room.id || !peerId || !isCurrentSourceOwner) {
+        clearHostMediaSyncRetry();
+        return;
+      }
 
-    const playback = currentRoom.room.playback;
-    const listenerPeerIds =
-      currentRoom.room.members
-        .map((member) => member.peerId)
-        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
-    const syncKey = [
-      currentRoom.room.id,
-      playback.mediaEpoch,
-      playback.currentTrackId ?? "none",
-      playback.status,
-      activePlaybackSource,
-      listenerPeerIds.join(",")
-    ].join("|");
-    const syncState = hostMediaSyncStateRef.current;
-    const listenerSetHash = [...listenerPeerIds].sort().join(",");
-    const { captureRefreshKey, forceRefresh: shouldForceCaptureRefresh } = resolveHostCaptureRefresh({
-      currentTrackId: playback.currentTrackId,
-      mediaEpoch: playback.mediaEpoch,
-      activePlaybackSource,
-      lastCaptureRefreshKey: syncState.lastCaptureRefreshKey
-    });
+      const playback = currentRoom.room.playback;
+      const listenerPeerIds =
+        currentRoom.room.members
+          .map((member) => member.peerId)
+          .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
+      const syncKey = [
+        currentRoom.room.id,
+        playback.mediaEpoch,
+        playback.currentTrackId ?? "none",
+        playback.status,
+        activePlaybackSource,
+        listenerPeerIds.join(",")
+      ].join("|");
+      const syncState = hostMediaSyncStateRef.current;
+      const listenerSetHash = [...listenerPeerIds].sort().join(",");
+      const { captureRefreshKey, forceRefresh: shouldForceCaptureRefresh } = resolveHostCaptureRefresh({
+        currentTrackId: playback.currentTrackId,
+        mediaEpoch: playback.mediaEpoch,
+        activePlaybackSource,
+        lastCaptureRefreshKey: syncState.lastCaptureRefreshKey
+      });
 
-    if (syncState.lastAppliedKey === syncKey || syncState.pendingKey === syncKey) {
-      return;
-    }
+      if (
+        !forceResync &&
+        (syncState.lastAppliedKey === syncKey || syncState.pendingKey === syncKey)
+      ) {
+        return;
+      }
 
-    if (syncState.inFlight) {
+      if (syncState.inFlight) {
+        syncState.pendingKey = syncKey;
+        return;
+      }
+
+      syncState.inFlight = true;
       syncState.pendingKey = syncKey;
-      return;
-    }
+      let awaitingLocalAudioTrack = false;
+      let blockedUntilSourcePlaybackReady = false;
 
-    syncState.inFlight = true;
-    syncState.pendingKey = syncKey;
-    let awaitingLocalAudioTrack = false;
-    let blockedUntilSourcePlaybackReady = false;
-
-    try {
       try {
         const relayAudio = resolveHostRelayAudioElement({
           activePlaybackSource,
@@ -1590,9 +1597,9 @@ export function useRoomRuntime({
         }
 
         const preferAudioContextCapture = getCapturedAudioStreamMode(relayAudio) === "audio-context";
-        let usedForcedRefresh = shouldForceCaptureRefresh;
+        let usedForcedRefresh = shouldForceCaptureRefresh || forceResync;
         let capture = captureAudioStream(relayAudio, {
-          forceRefresh: shouldForceCaptureRefresh,
+          forceRefresh: usedForcedRefresh,
           preferAudioContext: preferAudioContextCapture
         });
         if (!capture) {
@@ -1687,7 +1694,7 @@ export function useRoomRuntime({
           publishStage: syncState.stage,
           publishedListenerSet: listenerSetHash,
           summary: usedForcedRefresh
-            ? "房主推流已刷新捕获链路"
+            ? `房主推流已刷新捕获链路${options?.reason ? `：${options.reason}` : ""}`
             : "房主推流复用现有捕获链路"
         });
 
@@ -1703,6 +1710,7 @@ export function useRoomRuntime({
         }
 
         hostStreamRef.current = capture;
+        lastHostCaptureRefreshAtRef.current = Date.now();
         await mediaMeshRef.current?.syncHostPeers(listenerPeerIds, capture, playback.mediaEpoch);
         if (publishKey && publishKey !== syncState.lastPublishKey) {
           syncState.publishGeneration += 1;
@@ -1746,23 +1754,24 @@ export function useRoomRuntime({
           () => undefined
         );
         hostStreamRef.current = null;
+        lastHostCaptureRefreshAtRef.current = 0;
         syncState.lastCaptureRefreshKey = null;
         syncState.lastPublishKey = null;
         syncState.stage = "idle";
       }
-    } finally {
-      const nextPendingKey = syncState.pendingKey;
-      syncState.inFlight = false;
+      finally {
+        const nextPendingKey = syncState.pendingKey;
+        syncState.inFlight = false;
 
-      if (awaitingLocalAudioTrack) {
-        clearHostMediaSyncRetry();
-        hostMediaSyncRetryRef.current = window.setTimeout(() => {
-          hostMediaSyncRetryRef.current = null;
-          void syncHostMediaStream();
-        }, hostMediaSyncRetryDelayMs);
-        syncState.pendingKey = null;
-        return;
-      }
+        if (awaitingLocalAudioTrack) {
+          clearHostMediaSyncRetry();
+          hostMediaSyncRetryRef.current = window.setTimeout(() => {
+            hostMediaSyncRetryRef.current = null;
+            void syncHostMediaStream();
+          }, hostMediaSyncRetryDelayMs);
+          syncState.pendingKey = null;
+          return;
+        }
 
         if (blockedUntilSourcePlaybackReady) {
           clearHostMediaSyncRetry();
@@ -1774,28 +1783,30 @@ export function useRoomRuntime({
           return;
         }
 
-      if (nextPendingKey && nextPendingKey !== syncState.lastAppliedKey) {
-        syncState.pendingKey = null;
-        queueMicrotask(() => {
-          void syncHostMediaStream();
-        });
-        return;
-      }
+        if (nextPendingKey && nextPendingKey !== syncState.lastAppliedKey) {
+          syncState.pendingKey = null;
+          queueMicrotask(() => {
+            void syncHostMediaStream();
+          });
+          return;
+        }
 
-      syncState.pendingKey = null;
-    }
-  }, [
-    activePlaybackSource,
-    audioRef,
-    clearHostMediaSyncRetry,
-    currentRoomRef,
-    isCurrentSourceOwner,
-    peerId,
-    remoteAudioRef,
-    setStatusMessage,
-    uploadedTracks,
-    updateHostCaptureDiagnostics
-  ]);
+        syncState.pendingKey = null;
+      }
+    },
+    [
+      activePlaybackSource,
+      audioRef,
+      clearHostMediaSyncRetry,
+      currentRoomRef,
+      isCurrentSourceOwner,
+      peerId,
+      remoteAudioRef,
+      setStatusMessage,
+      uploadedTracks,
+      updateHostCaptureDiagnostics
+    ]
+  );
 
   const ensureSourcePlaybackStarted = useCallback(async () => {
     const currentRoom = currentRoomRef.current;
@@ -3579,6 +3590,68 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback.mediaEpoch,
     activePlaybackSource,
     mediaConnectedPeers.length,
+    sourceStartState,
+    syncHostMediaStream
+  ]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
+      lastHostCaptureRefreshAtRef.current = 0;
+      return;
+    }
+
+    if (
+      !audioUnlocked ||
+      sourceStartState !== "live" ||
+      roomSnapshot.room.playback.status !== "playing" ||
+      !roomSnapshot.room.playback.currentTrackId
+    ) {
+      lastHostCaptureRefreshAtRef.current = 0;
+      return;
+    }
+
+    const listenerPeerCount =
+      roomSnapshot.room.members.filter((member) => !!member.peerId && member.peerId !== peerId).length;
+    if (listenerPeerCount <= 0) {
+      lastHostCaptureRefreshAtRef.current = 0;
+      return;
+    }
+
+    const ensureHealthyHostCapture = () => {
+      if (hasUsableHostMediaStreamTrack(hostStreamRef.current)) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastHostCaptureRefreshAtRef.current < hostCaptureRefreshCooldownMs) {
+        return;
+      }
+
+      lastHostCaptureRefreshAtRef.current = now;
+      void syncHostMediaStream({
+        forceResync: true,
+        reason: "capture-track-degraded"
+      });
+    };
+
+    ensureHealthyHostCapture();
+    const timerId = window.setInterval(
+      ensureHealthyHostCapture,
+      hostCaptureHealthCheckIntervalMs
+    );
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [
+    audioUnlocked,
+    isCurrentSourceOwner,
+    peerId,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.mediaEpoch,
+    roomSnapshot?.room.playback.status,
     sourceStartState,
     syncHostMediaStream
   ]);

@@ -290,7 +290,7 @@ export class RoomService {
       await this.roomPresenceService.clearRealtimePresence(roomId, sessionId);
     }
 
-    if (presenceState !== "online") {
+    if (presenceState === "offline") {
       await this.roomPlaybackService.handleSourceAvailabilityLoss(record, sessionId);
     }
 

@@ -1208,7 +1208,7 @@ describe("RoomService", () => {
     });
   });
 
-  it("pauses playback when the active source disconnects and enters reconnecting state", async () => {
+  it("keeps playback running while the active source is reconnecting", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -1246,31 +1246,29 @@ describe("RoomService", () => {
 
     expect(playback.status).toBe("playing");
     expect(roomAfterDisconnect.playback).toMatchObject({
-      status: "paused",
+      status: "playing",
       currentTrackId: track.id,
       sourceSessionId: host.id,
-      sourcePeerId: null
+      sourcePeerId: "peer-host"
     });
     expect(roomAfterDisconnect.playback.positionMs).toBeGreaterThanOrEqual(0);
-    expect(roomAfterDisconnect.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
-    expect(roomAfterDisconnect.playback.queueVersion).toBeGreaterThan(playback.queueVersion);
-    expect(roomAfterDisconnect.playback.playbackRevision).toBeGreaterThan(
-      playback.playbackRevision
-    );
+    expect(roomAfterDisconnect.playback.mediaEpoch).toBe(playback.mediaEpoch);
+    expect(roomAfterDisconnect.playback.queueVersion).toBe(playback.queueVersion);
+    expect(roomAfterDisconnect.playback.playbackRevision).toBe(playback.playbackRevision);
     expect(nextSnapshot.room.members.find((entry) => entry.id === host.id)).toMatchObject({
       id: host.id,
       peerId: null,
       presenceState: "reconnecting"
     });
     expect(nextSnapshot.room.playback).toMatchObject({
-      status: "paused",
+      status: "playing",
       currentTrackId: track.id,
       sourceSessionId: host.id,
-      sourcePeerId: null
+      sourcePeerId: "peer-host"
     });
   });
 
-  it("re-elects an online cached peer when the current source disconnects", async () => {
+  it("re-elects an online cached peer when the current source goes offline", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const signalingGateway = createSignalingGatewayMock();
@@ -1330,7 +1328,7 @@ describe("RoomService", () => {
       snapshot.room.id,
       host.id,
       null,
-      "reconnecting"
+      "offline"
     );
     const nextSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
 

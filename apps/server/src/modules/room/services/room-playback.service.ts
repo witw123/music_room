@@ -127,7 +127,7 @@ export class RoomPlaybackService {
       ...record.room.playback,
       sourcePeerId:
         record.room.playback.sourceSessionId && storedSourcePeerId
-          ? resolvedPresence.get(record.room.playback.sourceSessionId) ?? null
+          ? resolvedPresence.get(record.room.playback.sourceSessionId) ?? storedSourcePeerId
           : storedSourcePeerId
     };
   }
