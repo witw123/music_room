@@ -59,6 +59,22 @@ function clampProgressMs(progressMs: number, durationMs: number) {
     : Math.max(0, progressMs);
 }
 
+function isRemoteAudioClockUnavailable(audio: HTMLAudioElement | null | undefined) {
+  if (!audio) {
+    return null;
+  }
+
+  if (audio.paused) {
+    return true;
+  }
+
+  if (audio.srcObject) {
+    return false;
+  }
+
+  return audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
+}
+
 export function resolveAudibleClockSample(input: {
   activePlaybackSource?: ProgressivePlaybackSource;
   shouldUseLocalAudio: boolean;
@@ -422,9 +438,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
       const now = Date.now();
       const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
-      const remoteAudioBuffering = remoteAudio
-        ? (remoteAudio.paused || remoteAudio.readyState < 2)
-        : null;
+      const remoteAudioBuffering = isRemoteAudioClockUnavailable(remoteAudio);
       const audibleClockResolution =
         currentPlayback.status === "playing"
           ? resolveAudibleClockSample({
@@ -549,9 +563,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     const preferredAudio = eventAudio === selectedAudio ? eventAudio : selectedAudio;
     const localAudio = audioRef.current;
     const remoteAudio = remoteAudioRef.current;
-    const remoteAudioBuffering = remoteAudio
-      ? (remoteAudio.paused || remoteAudio.readyState < 2)
-      : null;
+    const remoteAudioBuffering = isRemoteAudioClockUnavailable(remoteAudio);
     const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
     const audibleClockResolution =
       currentPlayback.status === "playing"
@@ -568,7 +580,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
               !shouldUseLocalAudio && preferredAudio ? preferredAudio.currentTime : remoteAudio?.currentTime ?? null,
             remoteAudioPaused:
               !shouldUseLocalAudio && preferredAudio
-                ? (preferredAudio.paused || preferredAudio.readyState < 2)
+                ? isRemoteAudioClockUnavailable(preferredAudio)
                 : remoteAudioBuffering,
             localPlaybackPositionMs:
               typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null,

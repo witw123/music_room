@@ -248,7 +248,11 @@ export function resolveRemoteStartupGateState(input: {
   }
 
   const now = input.now ?? Date.now();
-  if (!input.hasSrcObject || input.readyState < haveCurrentDataReadyState || input.paused) {
+  const hasPlayableRemoteSource =
+    input.hasSrcObject &&
+    !input.paused &&
+    (input.readyState >= haveCurrentDataReadyState || input.hasSrcObject);
+  if (!hasPlayableRemoteSource) {
     return {
       shouldPoll: true,
       shouldMute: muteDuringGate,
@@ -2004,7 +2008,7 @@ export function useProgressiveRuntime({
           remoteAudio &&
           Number.isFinite(remoteAudio.currentTime) &&
           !remoteAudio.paused &&
-          remoteAudio.readyState >= haveCurrentDataReadyState
+          (remoteAudio.readyState >= haveCurrentDataReadyState || !!remoteAudio.srcObject)
         ) {
           observedSeconds = remoteAudio.currentTime;
         }

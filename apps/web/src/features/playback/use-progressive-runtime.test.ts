@@ -119,7 +119,27 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toEqual({
       shouldPoll: true,
       shouldMute: false,
-      nextStableSinceMs: null
+      nextStableSinceMs: 1_200
+    });
+  });
+
+  it("does not keep a bound remote MediaStream muted forever just because readyState stays low", () => {
+    expect(
+      resolveRemoteStartupGateState({
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        readyState: 1,
+        paused: false,
+        hasSrcObject: true,
+        stableSinceMs: 1_000,
+        startupBufferMs: 320,
+        now: 1_400,
+        lastWaitingAtMs: null
+      })
+    ).toEqual({
+      shouldPoll: false,
+      shouldMute: false,
+      nextStableSinceMs: 1_000
     });
   });
 
