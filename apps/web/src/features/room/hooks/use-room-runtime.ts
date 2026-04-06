@@ -4335,7 +4335,6 @@ export function useRoomRuntime({
     setMediaConnectionState,
     exitCurrentRoom,
     setStatusMessage,
-    updateConnectionSupervisorSignalState,
     updateRemoteMediaDiagnostic
   ]);
 
