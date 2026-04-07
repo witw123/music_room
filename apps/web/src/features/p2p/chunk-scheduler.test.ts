@@ -150,6 +150,8 @@ describe("chunk scheduler helpers", () => {
       excludedPeerIds: new Set(["peer_local"]),
       preferredPeerId: "peer_host",
       peerLoads: new Map(),
+      peerInFlightBytes: new Map(),
+      chunkSize: 128 * 1024,
       maxConcurrentPerPeer: 3
     });
 

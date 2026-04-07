@@ -113,10 +113,10 @@ describe("resolveListenerMediaRecoveryReason", () => {
         bindAttempts: 2,
         playAttempts: 0
       })
-    ).toBe("restart-peer");
+    ).toBe("rebind-element");
   });
 
-  it("retries play once before escalating to a peer restart", () => {
+  it("retries play instead of escalating to a peer restart", () => {
     expect(
       resolveListenerMediaRecoveryAction({
         reason: "bound-but-not-playing",
@@ -130,7 +130,7 @@ describe("resolveListenerMediaRecoveryReason", () => {
         bindAttempts: 1,
         playAttempts: 2
       })
-    ).toBe("restart-peer");
+    ).toBe("retry-play");
   });
 });
 

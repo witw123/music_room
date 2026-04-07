@@ -57,7 +57,11 @@ describe("p2p feature helpers", () => {
 class FakeDataChannel {
   readyState: RTCDataChannelState = "open";
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
+  onbufferedamountlow: (() => void) | null = null;
+  bufferedAmount = 0;
+  bufferedAmountLowThreshold = 0;
   sentMessages: unknown[] = [];
 
   send(payload: unknown) {
@@ -444,6 +448,7 @@ describe("P2PMesh", () => {
     );
 
     await (mesh as any).flushIncomingPieces();
+    await (mesh as any).piecePersistChain;
 
     expect(cacheTrackPieces).toHaveBeenCalledWith([
       expect.objectContaining({

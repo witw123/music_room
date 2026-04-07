@@ -23,18 +23,71 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   }
 
   const turnEnabled = env.TURN_ENABLED !== "false";
+  const hasStaticTurnConfig = hasStaticTurnIceConfig(env);
   if (!turnEnabled) {
+    if (!hasStaticTurnConfig) {
+      throw new Error("TURN is required for production startup.");
+    }
     return;
   }
 
   const turnPublicHost = env.TURN_PUBLIC_HOST?.trim() ?? "";
   const appDomain = env.APP_DOMAIN?.trim() ?? "";
+  const turnSecret = env.TURN_SHARED_SECRET?.trim() ?? "";
+  const hasEphemeralTurnConfig = (!!turnPublicHost || !!appDomain) && !!turnSecret;
+  if (hasEphemeralTurnConfig) {
+    if (insecureTurnSecrets.has(turnSecret.toLowerCase())) {
+      throw new Error("Invalid TURN_SHARED_SECRET for production startup.");
+    }
+    return;
+  }
+
+  if (hasStaticTurnConfig) {
+    return;
+  }
+
   if (!turnPublicHost && !appDomain) {
     throw new Error("TURN requires TURN_PUBLIC_HOST or APP_DOMAIN in production startup.");
   }
 
-  const turnSecret = env.TURN_SHARED_SECRET?.trim() ?? "";
-  if (insecureTurnSecrets.has(turnSecret.toLowerCase())) {
-    throw new Error("Invalid TURN_SHARED_SECRET for production startup.");
+  throw new Error("TURN requires TURN_SHARED_SECRET in production startup.");
+}
+
+function hasStaticTurnIceConfig(env: NodeJS.ProcessEnv) {
+  const directTurnUrl = env.NEXT_PUBLIC_TURN_URL?.trim() ?? "";
+  if (isTurnUrl(directTurnUrl)) {
+    return true;
   }
+
+  const rawJson = env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS?.trim() ?? "";
+  if (!rawJson) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(rawJson) as unknown;
+    if (!Array.isArray(parsed)) {
+      return false;
+    }
+
+    return parsed.some((server) => {
+      if (!server || typeof server !== "object" || !("urls" in server)) {
+        return false;
+      }
+
+      const urls = (server as { urls?: unknown }).urls;
+      if (typeof urls === "string") {
+        return isTurnUrl(urls);
+      }
+
+      return Array.isArray(urls) && urls.some((value) => typeof value === "string" && isTurnUrl(value));
+    });
+  } catch {
+    return false;
+  }
+}
+
+function isTurnUrl(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("turn:") || normalized.startsWith("turns:");
 }

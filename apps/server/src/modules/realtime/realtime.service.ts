@@ -17,6 +17,7 @@ export class RealtimeService {
     const ttlSeconds = parsePositiveInt(process.env.TURN_TTL_SECONDS) ?? defaultTtlSeconds;
     const stunUrl = process.env.NEXT_PUBLIC_STUN_URL?.trim() || defaultStunUrl;
     const staticIceServers = this.getStaticIceServers(stunUrl);
+    const hasStaticTurn = hasTurnIceServer(staticIceServers);
     const turnEnabled = process.env.TURN_ENABLED !== "false";
     const turnHost = resolveTurnHost();
     const turnSecret = process.env.TURN_SHARED_SECRET?.trim();
@@ -42,12 +43,16 @@ export class RealtimeService {
       );
     }
 
-    if (staticIceServers.length > 1) {
+    if (hasStaticTurn) {
       return iceConfigResponseSchema.parse({
         iceServers: staticIceServers,
         ttlSeconds,
         source: "static"
       });
+    }
+
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("TURN is required to build ICE config in production.");
     }
 
     return iceConfigResponseSchema.parse({
@@ -151,4 +156,11 @@ function resolveTurnHost() {
   }
 
   return null;
+}
+
+function hasTurnIceServer(iceServers: IceServerConfig[]) {
+  return iceServers.some((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return urls.some((value) => value.startsWith("turn:") || value.startsWith("turns:"));
+  });
 }

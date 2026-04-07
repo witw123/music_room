@@ -21,7 +21,7 @@ export type PlaybackClockSource = "local" | "remote" | "snapshot";
 type ChunkSchedulerTrackState = {
   totalChunks: number;
   ownedChunks: Set<number>;
-  pendingChunks: Map<number, { peerId: string; requestedAt: number }>;
+  pendingChunks: Map<number, { peerId: string; requestedAt: number; chunkSize: number; timeoutMs: number }>;
   cooledDownPeers: Map<string, number>;
 };
 
@@ -42,10 +42,18 @@ type ChunkSchedulerSyncInput = {
 type ChunkSchedulerRequestArgs = {
   peerId: string;
   trackId: string;
-  chunkIndex: number;
+  chunkIndexes: number[];
   totalChunks: number;
   priority: ChunkSchedulerPriority;
   timeoutMs?: number;
+};
+
+type PeerRequestWindow = {
+  currentRoundTripTimeMs?: number | null;
+  downloadRateKbps?: number | null;
+  candidateType?: string | null;
+  protocol?: string | null;
+  transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
 };
 
 type ChunkSchedulerOptions = {
@@ -60,7 +68,20 @@ type ChunkSchedulerOptions = {
   upcomingPrefetchMs?: number;
   backgroundChunkBatchSize?: number;
   minScheduleIntervalMs?: number;
-  requestPiece: (args: ChunkSchedulerRequestArgs) => boolean;
+  requestPiece?: (args: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    totalChunks: number;
+    priority: ChunkSchedulerPriority;
+    timeoutMs?: number;
+  }) => boolean;
+  requestPieces?: (args: ChunkSchedulerRequestArgs) => boolean;
+  resolvePeerRequestWindow?: (
+    peerId: string,
+    trackId: string,
+    priority: ChunkSchedulerPriority
+  ) => PeerRequestWindow | null | undefined;
 };
 
 type TrackPlan = {
@@ -70,6 +91,7 @@ type TrackPlan = {
   maxConcurrentPerPeer: number;
   preferredPeerId: string | null;
   wantedChunks: number[];
+  chunkSize: number;
   timeoutMs?: number;
 };
 
@@ -140,8 +162,9 @@ export class ChunkScheduler {
       return;
     }
 
+    const timeoutMs = state.pendingChunks.get(chunkIndex)?.timeoutMs ?? this.resolvePeerCooldownMs(3_000);
     state.pendingChunks.delete(chunkIndex);
-    state.cooledDownPeers.set(peerId, this.now() + this.peerCooldownMs());
+    state.cooledDownPeers.set(peerId, this.now() + this.resolvePeerCooldownMs(timeoutMs));
     this.requestSchedule("normal");
   }
 
@@ -198,6 +221,7 @@ export class ChunkScheduler {
 
     this.pruneCooldowns();
     const peerLoads = this.buildPeerLoadMap();
+    const peerInFlightBytes = this.buildPeerInFlightByteMap();
 
     for (const plan of this.buildTrackPlans()) {
       const state = this.ensureTrackState(plan.track.id, this.getTotalChunks(plan.track.id));
@@ -231,31 +255,66 @@ export class ChunkScheduler {
           ]),
           preferredPeerId: plan.preferredPeerId,
           peerLoads,
-          maxConcurrentPerPeer: plan.maxConcurrentPerPeer
+          peerInFlightBytes,
+          chunkSize: plan.chunkSize,
+          maxConcurrentPerPeer: plan.maxConcurrentPerPeer,
+          resolvePeerMaxInFlightBytes: (candidatePeerId) =>
+            this.resolvePeerMaxInFlightBytes(candidatePeerId, plan.track.id, plan.priority)
         });
 
         if (!peerId) {
           continue;
         }
 
-        const didRequest = this.options.requestPiece({
-          peerId,
+        const timeoutMs = this.resolvePieceTimeoutMs(peerId, plan.track.id, plan.priority, plan.timeoutMs);
+        const batchChunkIndexes = this.buildBatchChunkIndexes({
+          state,
           trackId: plan.track.id,
-          chunkIndex,
-          totalChunks: state.totalChunks,
           priority: plan.priority,
-          timeoutMs: plan.timeoutMs
+          peerId,
+          chunkSize: plan.chunkSize,
+          wantedChunks: plan.wantedChunks,
+          startChunkIndex: chunkIndex,
+          maxConcurrent: plan.maxConcurrent,
+          activeTrackRequests: state.pendingChunks.size
         });
+        const didRequest = this.options.requestPiece
+          ? batchChunkIndexes.every((requestedChunkIndex) =>
+              this.options.requestPiece?.({
+                peerId,
+                trackId: plan.track.id,
+                chunkIndex: requestedChunkIndex,
+                totalChunks: state.totalChunks,
+                priority: plan.priority,
+                timeoutMs
+              }) !== false
+            )
+          : this.options.requestPieces?.({
+              peerId,
+              trackId: plan.track.id,
+              chunkIndexes: batchChunkIndexes,
+              totalChunks: state.totalChunks,
+              priority: plan.priority,
+              timeoutMs
+            }) ?? false;
 
         if (!didRequest) {
           continue;
         }
 
-        state.pendingChunks.set(chunkIndex, {
+        for (const requestedChunkIndex of batchChunkIndexes) {
+          state.pendingChunks.set(requestedChunkIndex, {
+            peerId,
+            requestedAt: this.now(),
+            chunkSize: plan.chunkSize,
+            timeoutMs
+          });
+        }
+        peerLoads.set(peerId, (peerLoads.get(peerId) ?? 0) + batchChunkIndexes.length);
+        peerInFlightBytes.set(
           peerId,
-          requestedAt: this.now()
-        });
-        peerLoads.set(peerId, (peerLoads.get(peerId) ?? 0) + 1);
+          (peerInFlightBytes.get(peerId) ?? 0) + batchChunkIndexes.length * plan.chunkSize
+        );
       }
     }
   }
@@ -377,6 +436,7 @@ export class ChunkScheduler {
         maxConcurrent: currentTrackProfile.maxConcurrent,
         maxConcurrentPerPeer: currentTrackProfile.maxConcurrentPerPeer,
         preferredPeerId: this.roomSnapshot.room.playback.sourcePeerId,
+        chunkSize: currentTrackManifest?.chunkSize ?? this.getTrackChunkSize(currentTrack.id),
         wantedChunks:
           currentTrackManifest
             ? getPriorityChunkIndexes({
@@ -470,6 +530,7 @@ export class ChunkScheduler {
             ? 2
             : 3,
         preferredPeerId: null,
+        chunkSize: queuedManifest?.chunkSize ?? this.getTrackChunkSize(nextQueuedTrack.id),
         wantedChunks:
           queuedManifest
             ? getPriorityChunkIndexes({
@@ -524,6 +585,7 @@ export class ChunkScheduler {
         maxConcurrent: 1,
         maxConcurrentPerPeer: 1,
         preferredPeerId: null,
+        chunkSize: this.getTrackChunkSize(track.id),
         wantedChunks: getBackgroundChunks({
           totalChunks: this.getTotalChunks(track.id),
           ownedChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).ownedChunks,
@@ -586,6 +648,16 @@ export class ChunkScheduler {
     return Math.max(stateTotalChunks, availabilityTotalChunks, trackTotalChunks);
   }
 
+  private getTrackChunkSize(trackId: string) {
+    const availabilityChunkSize = Object.values(this.availabilityByTrack[trackId] ?? {}).reduce(
+      (max, announcement) => Math.max(max, announcement.chunkSize),
+      0
+    );
+    const trackChunkSize =
+      this.roomSnapshot?.tracks.find((track) => track.id === trackId)?.pieceManifest?.chunkSize ?? 0;
+    return Math.max(availabilityChunkSize, trackChunkSize, 128 * 1024);
+  }
+
   private pruneCooldowns() {
     const now = this.now();
 
@@ -613,12 +685,31 @@ export class ChunkScheduler {
     return peerLoads;
   }
 
+  private buildPeerInFlightByteMap() {
+    const peerInFlightBytes = new Map<string, number>();
+
+    for (const state of this.trackStates.values()) {
+      for (const pendingRequest of state.pendingChunks.values()) {
+        peerInFlightBytes.set(
+          pendingRequest.peerId,
+          (peerInFlightBytes.get(pendingRequest.peerId) ?? 0) + pendingRequest.chunkSize
+        );
+      }
+    }
+
+    return peerInFlightBytes;
+  }
+
   private now() {
     return this.options.now?.() ?? Date.now();
   }
 
   private peerCooldownMs() {
     return this.options.peerCooldownMs ?? DEFAULTS.peerCooldownMs;
+  }
+
+  private resolvePeerCooldownMs(timeoutMs: number) {
+    return Math.min(8_000, Math.max(this.peerCooldownMs(), Math.round(timeoutMs * 1.5)));
   }
 
   private maxConcurrentCurrentTrack() {
@@ -655,6 +746,115 @@ export class ChunkScheduler {
 
   private minScheduleIntervalMs() {
     return this.options.minScheduleIntervalMs ?? DEFAULTS.minScheduleIntervalMs;
+  }
+
+  private resolvePeerRequestWindow(
+    peerId: string,
+    trackId: string,
+    priority: ChunkSchedulerPriority
+  ) {
+    return this.options.resolvePeerRequestWindow?.(peerId, trackId, priority) ?? null;
+  }
+
+  private resolvePeerMaxInFlightBytes(
+    peerId: string,
+    trackId: string,
+    priority: ChunkSchedulerPriority
+  ) {
+    const window = this.resolvePeerRequestWindow(peerId, trackId, priority);
+    if (!window) {
+      return 1024 * 1024;
+    }
+
+    const constrainedTransport =
+      window.protocol === "tcp" || window.candidateType === "relay";
+    if (window.transportScore === "failed" || window.transportScore === "unstable") {
+      return 512 * 1024;
+    }
+
+    if (constrainedTransport) {
+      return 768 * 1024;
+    }
+
+    if (window.transportScore === "degraded") {
+      return 1024 * 1024;
+    }
+
+    if ((window.downloadRateKbps ?? 0) >= 4_000) {
+      return 4 * 1024 * 1024;
+    }
+
+    if ((window.downloadRateKbps ?? 0) >= 1_500) {
+      return 2 * 1024 * 1024;
+    }
+
+    return 1024 * 1024;
+  }
+
+  private resolvePieceTimeoutMs(
+    peerId: string,
+    trackId: string,
+    priority: ChunkSchedulerPriority,
+    fallbackTimeoutMs?: number
+  ) {
+    const window = this.resolvePeerRequestWindow(peerId, trackId, priority);
+    const rttMs = Math.max(0, Math.round(window?.currentRoundTripTimeMs ?? 0));
+    const adaptiveFloor = Math.max(fallbackTimeoutMs ?? 0, 3_000, rttMs * 6);
+    return Math.min(10_000, Math.max(3_000, adaptiveFloor));
+  }
+
+  private buildBatchChunkIndexes(input: {
+    state: ChunkSchedulerTrackState;
+    trackId: string;
+    priority: ChunkSchedulerPriority;
+    peerId: string;
+    chunkSize: number;
+    wantedChunks: number[];
+    startChunkIndex: number;
+    maxConcurrent: number;
+    activeTrackRequests: number;
+  }) {
+    const window = this.resolvePeerRequestWindow(input.peerId, input.trackId, input.priority);
+    const constrainedTransport =
+      window?.protocol === "tcp" ||
+      window?.candidateType === "relay" ||
+      window?.transportScore === "degraded" ||
+      window?.transportScore === "unstable";
+    const maxBatchSize = constrainedTransport ? 2 : 4;
+    const remainingSlots = Math.max(1, input.maxConcurrent - input.activeTrackRequests);
+    const resolvedBatchSize = Math.max(1, Math.min(maxBatchSize, remainingSlots));
+    const availability = Object.values(this.availabilityByTrack[input.trackId] ?? {}).find(
+      (announcement) => announcement.ownerPeerId === input.peerId
+    );
+    const availableChunks = new Set(availability?.availableChunks ?? []);
+    const batch = [input.startChunkIndex];
+
+    for (const candidateChunkIndex of input.wantedChunks) {
+      if (batch.length >= resolvedBatchSize) {
+        break;
+      }
+
+      if (candidateChunkIndex <= input.startChunkIndex) {
+        continue;
+      }
+
+      const previousChunkIndex = batch[batch.length - 1] ?? input.startChunkIndex;
+      if (candidateChunkIndex !== previousChunkIndex + 1) {
+        break;
+      }
+
+      if (
+        input.state.ownedChunks.has(candidateChunkIndex) ||
+        input.state.pendingChunks.has(candidateChunkIndex) ||
+        !availableChunks.has(candidateChunkIndex)
+      ) {
+        break;
+      }
+
+      batch.push(candidateChunkIndex);
+    }
+
+    return batch;
   }
 }
 
@@ -879,7 +1079,10 @@ export function selectChunkPeer(input: {
   excludedPeerIds: Set<string>;
   preferredPeerId: string | null;
   peerLoads: Map<string, number>;
+  peerInFlightBytes: Map<string, number>;
+  chunkSize: number;
   maxConcurrentPerPeer: number;
+  resolvePeerMaxInFlightBytes?: (peerId: string) => number;
 }) {
   const {
     announcements,
@@ -888,7 +1091,10 @@ export function selectChunkPeer(input: {
     excludedPeerIds,
     preferredPeerId,
     peerLoads,
-    maxConcurrentPerPeer
+    peerInFlightBytes,
+    chunkSize,
+    maxConcurrentPerPeer,
+    resolvePeerMaxInFlightBytes
   } = input;
 
   const candidates = announcements.filter(
@@ -896,7 +1102,19 @@ export function selectChunkPeer(input: {
       announcement.availableChunks.includes(chunkIndex) &&
       connectedPeerIds.has(announcement.ownerPeerId) &&
       !excludedPeerIds.has(announcement.ownerPeerId) &&
-      (peerLoads.get(announcement.ownerPeerId) ?? 0) < maxConcurrentPerPeer
+      (peerLoads.get(announcement.ownerPeerId) ?? 0) <
+        Math.max(
+          1,
+          Math.min(
+            maxConcurrentPerPeer,
+            Math.floor(
+              (resolvePeerMaxInFlightBytes?.(announcement.ownerPeerId) ?? Number.MAX_SAFE_INTEGER) /
+                Math.max(1, chunkSize)
+            )
+          )
+        ) &&
+      (peerInFlightBytes.get(announcement.ownerPeerId) ?? 0) <
+        (resolvePeerMaxInFlightBytes?.(announcement.ownerPeerId) ?? Number.MAX_SAFE_INTEGER)
   );
 
   if (candidates.length === 0) {
@@ -915,6 +1133,13 @@ export function selectChunkPeer(input: {
       (peerLoads.get(left.ownerPeerId) ?? 0) - (peerLoads.get(right.ownerPeerId) ?? 0);
     if (loadDifference !== 0) {
       return loadDifference;
+    }
+
+    const inFlightDifference =
+      (peerInFlightBytes.get(left.ownerPeerId) ?? 0) -
+      (peerInFlightBytes.get(right.ownerPeerId) ?? 0);
+    if (inFlightDifference !== 0) {
+      return inFlightDifference;
     }
 
     const chunkDifference = right.availableChunks.length - left.availableChunks.length;

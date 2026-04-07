@@ -64,7 +64,14 @@ export const p2pDataMessageSchema = z.union([
     chunkIndex: z.number().int().nonnegative()
   }),
   z.object({
+    kind: z.literal("request-pieces"),
+    requestId: z.string(),
+    trackId: z.string(),
+    chunkIndexes: z.array(z.number().int().nonnegative()).min(1)
+  }),
+  z.object({
     kind: z.literal("send-piece"),
+    requestId: z.string().optional(),
     trackId: z.string(),
     chunkIndex: z.number().int().nonnegative(),
     totalChunks: z.number().int().positive(),
@@ -255,6 +262,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   degradedReason: z.string().nullable().optional(),
   lastAvailabilitySeenAt: z.string().datetime().nullable().optional(),
   lastPieceReceivedAt: z.string().datetime().nullable().optional(),
+  iceConfigSource: iceConfigSourceSchema.nullable().optional(),
   dataCandidateType: z.string().nullable(),
   mediaCandidateType: z.string().nullable(),
   mediaProtocol: z.string().nullable(),
@@ -269,6 +277,12 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   mediaSendBitrateKbps: z.number().nonnegative().nullable(),
   pieceDownloadRateKbps: z.number().nonnegative().nullable(),
   pieceUploadRateKbps: z.number().nonnegative().nullable(),
+  pieceRttMsP50: z.number().nonnegative().nullable().optional(),
+  pieceRttMsP95: z.number().nonnegative().nullable().optional(),
+  pieceTimeoutRate: z.number().min(0).max(100).nullable().optional(),
+  dataBufferedAmountBytes: z.number().int().nonnegative().nullable().optional(),
+  recoverySuppressedReason: z.string().nullable().optional(),
+  zeroProgressMs: z.number().int().nonnegative().nullable().optional(),
   packetsLost: z.number().int().nullable(),
   jitterMs: z.number().nonnegative().nullable(),
   timeOnRemoteStreamMs: z.number().int().nonnegative().nullable(),

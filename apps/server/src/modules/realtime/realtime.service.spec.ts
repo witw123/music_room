@@ -133,6 +133,20 @@ describe("RealtimeService", () => {
     });
   });
 
+  it("rejects stun-only ICE config in production", () => {
+    process.env.NODE_ENV = "production";
+    process.env.TURN_ENABLED = "true";
+    delete process.env.TURN_PUBLIC_HOST;
+    delete process.env.APP_DOMAIN;
+    delete process.env.TURN_SHARED_SECRET;
+    delete process.env.NEXT_PUBLIC_TURN_URL;
+    const service = new RealtimeService();
+
+    expect(() => service.buildIceConfig("user_1")).toThrow(
+      "TURN is required to build ICE config in production."
+    );
+  });
+
   it("returns static ICE servers when TURN is disabled but explicit static servers exist", () => {
     process.env.TURN_ENABLED = "false";
     process.env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS = JSON.stringify([

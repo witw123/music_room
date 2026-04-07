@@ -657,15 +657,29 @@ export function useProgressiveRuntime({
     activePlaybackSource !== "full-local" &&
     !!currentBufferedFullLocalTrack;
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
+  const systemDiagnostics = useMemo(
+    () => peerDiagnostics.find((snapshot) => snapshot.peerId === "system") ?? null,
+    [peerDiagnostics]
+  );
   const sourceDiagnostics = useMemo(
     () => pickActiveMediaDiagnostic(peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId ?? null),
     [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]
+  );
+  const degradedIceMode = useMemo(
+    () =>
+      (roomSnapshot?.room.members.length ?? 0) > 1 &&
+      systemDiagnostics?.iceConfigSource === "stun-only",
+    [roomSnapshot?.room.members.length, systemDiagnostics?.iceConfigSource]
   );
   const sourceTransport = useMemo(
     () => (sourceDiagnostics ? resolveTransportHealth(sourceDiagnostics) : { transportHealth: null, degradedReason: null }),
     [sourceDiagnostics]
   );
   const remoteFirstLockReason = useMemo(() => {
+    if (degradedIceMode) {
+      return "stun-only-ice";
+    }
+
     if (mediaConnectedPeersCount > 0 && connectedPeersCount === 0) {
       return "data-channel-not-ready";
     }
@@ -726,6 +740,7 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.estimatedFillTimeMs,
     progressiveHealthSnapshot.remainingPlaybackMs,
     progressiveHealthSnapshot.schedulerPolicy,
+    degradedIceMode,
     sourceDiagnostics,
     sourceTransport.degradedReason,
     sourceTransport.transportHealth

@@ -30,10 +30,10 @@ export * from "./availability-state";
 export * from "./use-peer-diagnostics";
 export * from "./use-availability-announcements";
 
-export const defaultChunkSize = 64 * 1024;
+export const defaultChunkSize = 128 * 1024;
 export const currentTrackChunkRequestLimit = 24;
 export const upcomingTrackChunkRequestLimit = 8;
-const piecePersistenceBatchSize = 8;
+const piecePersistenceBatchSize = 16;
 
 export function getWebRTCIceServers(config?: IceConfigResponse | null): IceServerConfig[] {
   if (config?.iceServers?.length) {
@@ -187,7 +187,7 @@ export async function buildTrackAvailabilityFromFile(input: {
   assetKind?: "relay" | "original";
   assetHash?: string;
 }): Promise<TrackAvailabilityAnnouncement> {
-  const chunkSize = input.chunkSize ?? defaultChunkSize;
+  const chunkSize = input.chunkSize ?? resolvePreferredChunkSize(input);
   const totalChunks = Math.max(1, Math.ceil(input.file.size / chunkSize));
   const chunks = await splitBlobIntoChunks(input.file, chunkSize);
   const pieces = [];
@@ -237,6 +237,32 @@ export async function buildTrackAvailabilityFromFile(input: {
     source: input.source,
     announcedAt: new Date().toISOString()
   };
+}
+
+function resolvePreferredChunkSize(input: {
+  file: Blob;
+  codec?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+}) {
+  const sizeBytes = input.sizeBytes ?? input.file.size;
+  const codec = `${input.codec ?? ""} ${input.mimeType ?? input.file.type ?? ""}`.toLowerCase();
+  const isLargeLossless =
+    (codec.includes("flac") || codec.includes("alac") || codec.includes("wav")) &&
+    sizeBytes >= 25 * 1024 * 1024;
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    return 64 * 1024;
+  }
+
+  if (isLargeLossless) {
+    return 256 * 1024;
+  }
+
+  return defaultChunkSize;
 }
 
 export async function hashArrayBuffer(buffer: ArrayBuffer) {
