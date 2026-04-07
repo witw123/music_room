@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { captureAudioStream, getCapturedAudioStreamMode } from "./audio-utils";
+import { buildTrackMeta, captureAudioStream, getCapturedAudioStreamMode } from "./audio-utils";
 
 describe("captureAudioStream", () => {
   it("reuses the native captureStream result for the same audio element", () => {
@@ -146,3 +146,84 @@ describe("captureAudioStream", () => {
     (globalThis as { window?: unknown }).window = previousWindow;
   });
 });
+
+describe("buildTrackMeta", () => {
+  it("uses canonical 128KB manifests for standard uploads", async () => {
+    const restoreCreateElement = mockAudioMetadataElement(12.3);
+    const file = new File([new Uint8Array(300 * 1024)], "demo.mp3", { type: "audio/mpeg" });
+
+    try {
+      const meta = await buildTrackMeta(file, "blob:demo", {
+        userId: "host_1",
+        nickname: "Host"
+      } as never);
+
+      expect(meta.durationMs).toBe(12_300);
+      expect(meta.pieceManifest).toMatchObject({
+        totalChunks: 3,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      });
+      expect(meta.relayManifest).toEqual(meta.pieceManifest);
+    } finally {
+      restoreCreateElement();
+    }
+  });
+
+  it("uses canonical 256KB manifests for large lossless uploads", async () => {
+    const restoreCreateElement = mockAudioMetadataElement(18.5);
+    const file = new File([new Uint8Array(26 * 1024 * 1024)], "demo.flac", {
+      type: "audio/flac"
+    });
+
+    try {
+      const meta = await buildTrackMeta(file, "blob:demo-flac", {
+        userId: "host_1",
+        nickname: "Host"
+      } as never);
+
+      expect(meta.durationMs).toBe(18_500);
+      expect(meta.pieceManifest).toMatchObject({
+        totalChunks: 104,
+        chunkSize: 256 * 1024,
+        pieceMimeType: "audio/flac"
+      });
+      expect(meta.relayManifest).toEqual(meta.pieceManifest);
+    } finally {
+      restoreCreateElement();
+    }
+  });
+});
+
+function mockAudioMetadataElement(durationSeconds: number) {
+  const previousDocument = (globalThis as { document?: unknown }).document;
+  const documentMock = {
+    createElement: vi.fn((tagName: string) => {
+      if (tagName !== "audio") {
+        throw new Error(`Unexpected element request: ${tagName}`);
+      }
+
+      const audio = {
+        preload: "metadata",
+        src: "",
+        duration: durationSeconds,
+        currentTime: 0,
+        pause: vi.fn(),
+        removeAttribute: vi.fn(),
+        load() {
+          this.onloadedmetadata?.();
+        },
+        onloadedmetadata: null as null | (() => void),
+        ontimeupdate: null as null | (() => void),
+        onerror: null as null | (() => void)
+      };
+
+      return audio as unknown as HTMLAudioElement;
+    })
+  };
+  (globalThis as { document?: unknown }).document = documentMock;
+
+  return () => {
+    (globalThis as { document?: unknown }).document = previousDocument;
+  };
+}

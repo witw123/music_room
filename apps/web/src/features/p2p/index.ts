@@ -2,7 +2,8 @@ import {
   iceServerConfigSchema,
   type IceConfigResponse,
   type IceServerConfig,
-  type TrackAvailabilityAnnouncement
+  type TrackAvailabilityAnnouncement,
+  type TrackMeta
 } from "@music-room/shared";
 import {
   cacheTrackPieces,
@@ -34,6 +35,13 @@ export const defaultChunkSize = 128 * 1024;
 export const currentTrackChunkRequestLimit = 24;
 export const upcomingTrackChunkRequestLimit = 8;
 const piecePersistenceBatchSize = 16;
+
+export type ResolvedTrackPieceManifest = {
+  totalChunks: number;
+  chunkSize: number;
+  pieceMimeType: string;
+  source: "cache" | "availability" | "snapshot" | "computed";
+};
 
 export function getWebRTCIceServers(config?: IceConfigResponse | null): IceServerConfig[] {
   if (config?.iceServers?.length) {
@@ -129,7 +137,8 @@ export function summarizeTrackAvailability(
   localPeerId: string
 ) {
   const local = announcements.find((announcement) => announcement.ownerPeerId === localPeerId);
-  const totalChunks = local?.totalChunks ?? announcements[0]?.totalChunks ?? 0;
+  const canonicalAvailability = selectCanonicalTrackAvailabilityAnnouncement(announcements);
+  const totalChunks = canonicalAvailability?.totalChunks ?? local?.totalChunks ?? 0;
   const localChunkCount = local?.availableChunks.length ?? 0;
 
   return {
@@ -183,12 +192,31 @@ export async function buildTrackAvailabilityFromFile(input: {
   codec?: string | null;
   sizeBytes?: number | null;
   durationMs?: number;
+  totalChunks?: number;
   chunkSize?: number;
   assetKind?: "relay" | "original";
   assetHash?: string;
 }): Promise<TrackAvailabilityAnnouncement> {
-  const chunkSize = input.chunkSize ?? resolvePreferredChunkSize(input);
-  const totalChunks = Math.max(1, Math.ceil(input.file.size / chunkSize));
+  const manifest = resolveTrackPieceManifest({
+    availability:
+      typeof input.totalChunks === "number" && typeof input.chunkSize === "number"
+        ? {
+            totalChunks: input.totalChunks,
+            chunkSize: input.chunkSize
+          }
+        : null,
+    file: input.file,
+    mimeType: input.mimeType,
+    codec: input.codec,
+    sizeBytes: input.sizeBytes ?? input.file.size
+  }) ?? {
+    totalChunks: Math.max(1, Math.ceil(input.file.size / defaultChunkSize)),
+    chunkSize: defaultChunkSize,
+    pieceMimeType: input.mimeType || input.file.type || "audio/mpeg",
+    source: "computed" as const
+  };
+  const chunkSize = manifest.chunkSize;
+  const totalChunks = manifest.totalChunks;
   const chunks = await splitBlobIntoChunks(input.file, chunkSize);
   const pieces = [];
 
@@ -211,7 +239,7 @@ export async function buildTrackAvailabilityFromFile(input: {
   }
 
   const availableChunks = chunks.map((_, chunkIndex) => chunkIndex);
-  const mimeType = input.mimeType || input.file.type || "audio/mpeg";
+  const mimeType = manifest.pieceMimeType;
 
   await upsertTrackPieceManifest({
     trackId: input.trackId,
@@ -239,30 +267,154 @@ export async function buildTrackAvailabilityFromFile(input: {
   };
 }
 
-function resolvePreferredChunkSize(input: {
-  file: Blob;
+export function resolveCanonicalChunkSize(input: {
+  file?: Blob | null;
   codec?: string | null;
   mimeType?: string | null;
   sizeBytes?: number | null;
 }) {
-  const sizeBytes = input.sizeBytes ?? input.file.size;
-  const codec = `${input.codec ?? ""} ${input.mimeType ?? input.file.type ?? ""}`.toLowerCase();
+  const sizeBytes = input.sizeBytes ?? input.file?.size ?? 0;
+  const codec = `${input.codec ?? ""} ${input.mimeType ?? input.file?.type ?? ""}`.toLowerCase();
   const isLargeLossless =
     (codec.includes("flac") || codec.includes("alac") || codec.includes("wav")) &&
     sizeBytes >= 25 * 1024 * 1024;
-  const isMobile =
-    typeof navigator !== "undefined" &&
-    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-
-  if (isMobile) {
-    return 64 * 1024;
-  }
 
   if (isLargeLossless) {
     return 256 * 1024;
   }
 
   return defaultChunkSize;
+}
+
+export function buildCanonicalTrackPieceManifest(input: {
+  file?: Blob | null;
+  codec?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+}): Omit<ResolvedTrackPieceManifest, "source"> {
+  const sizeBytes = Math.max(0, input.sizeBytes ?? input.file?.size ?? 0);
+  const chunkSize = resolveCanonicalChunkSize(input);
+  return {
+    totalChunks: Math.max(1, Math.ceil(Math.max(1, sizeBytes) / chunkSize)),
+    chunkSize,
+    pieceMimeType: input.mimeType || input.file?.type || "audio/mpeg"
+  };
+}
+
+export function selectCanonicalTrackAvailabilityAnnouncement(
+  announcements: TrackAvailabilityAnnouncement[]
+) {
+  const candidates = announcements.filter(
+    (announcement) => announcement.totalChunks > 0 && announcement.chunkSize > 0
+  );
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return [...candidates].sort((left, right) => {
+    const chunkSizeDifference = right.chunkSize - left.chunkSize;
+    if (chunkSizeDifference !== 0) {
+      return chunkSizeDifference;
+    }
+
+    const totalChunkDifference = left.totalChunks - right.totalChunks;
+    if (totalChunkDifference !== 0) {
+      return totalChunkDifference;
+    }
+
+    return new Date(right.announcedAt).getTime() - new Date(left.announcedAt).getTime();
+  })[0];
+}
+
+export function resolveTrackPieceManifest(input: {
+  track?: TrackMeta | null;
+  availability?: Pick<TrackAvailabilityAnnouncement, "totalChunks" | "chunkSize"> | null;
+  cacheManifest?: {
+    totalChunks: number;
+    chunkSize: number;
+    mimeType?: string | null;
+    pieceMimeType?: string | null;
+  } | null;
+  file?: Blob | null;
+  codec?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+}): ResolvedTrackPieceManifest | null {
+  const cacheManifest = input.cacheManifest;
+  if (
+    cacheManifest &&
+    cacheManifest.totalChunks > 0 &&
+    cacheManifest.chunkSize > 0
+  ) {
+    return {
+      totalChunks: cacheManifest.totalChunks,
+      chunkSize: cacheManifest.chunkSize,
+      pieceMimeType:
+        cacheManifest.pieceMimeType ??
+        cacheManifest.mimeType ??
+        input.track?.pieceManifest?.pieceMimeType ??
+        input.track?.relayManifest?.pieceMimeType ??
+        input.track?.mimeType ??
+        input.mimeType ??
+        input.file?.type ??
+        "audio/mpeg",
+      source: "cache"
+    };
+  }
+
+  if (
+    input.availability &&
+    input.availability.totalChunks > 0 &&
+    input.availability.chunkSize > 0
+  ) {
+    return {
+      totalChunks: input.availability.totalChunks,
+      chunkSize: input.availability.chunkSize,
+      pieceMimeType:
+        input.track?.relayManifest?.pieceMimeType ??
+        input.track?.pieceManifest?.pieceMimeType ??
+        input.track?.mimeType ??
+        input.mimeType ??
+        input.file?.type ??
+        "audio/mpeg",
+      source: "availability"
+    };
+  }
+
+  const snapshotManifest = input.track?.relayManifest ?? input.track?.pieceManifest ?? null;
+  if (
+    snapshotManifest &&
+    snapshotManifest.totalChunks > 0 &&
+    snapshotManifest.chunkSize > 0
+  ) {
+    return {
+      totalChunks: snapshotManifest.totalChunks,
+      chunkSize: snapshotManifest.chunkSize,
+      pieceMimeType:
+        snapshotManifest.pieceMimeType ??
+        input.track?.mimeType ??
+        input.mimeType ??
+        input.file?.type ??
+        "audio/mpeg",
+      source: "snapshot"
+    };
+  }
+
+  const computed = buildCanonicalTrackPieceManifest({
+    file: input.file,
+    codec: input.codec ?? input.track?.codec ?? null,
+    mimeType: input.mimeType ?? input.track?.mimeType ?? null,
+    sizeBytes: input.sizeBytes ?? input.track?.sizeBytes ?? null
+  });
+  if (computed.totalChunks <= 0 || computed.chunkSize <= 0) {
+    return null;
+  }
+
+  return {
+    ...computed,
+    source: "computed"
+  };
 }
 
 export async function hashArrayBuffer(buffer: ArrayBuffer) {
@@ -395,8 +547,18 @@ export async function buildTrackAvailabilityFromCache(input: {
   }
 
   const manifest = await getTrackPieceManifest(input.trackId);
-  const totalChunks = input.totalChunks ?? manifest?.totalChunks ?? availableChunks.length;
-  const chunkSize = input.chunkSize ?? manifest?.chunkSize ?? defaultChunkSize;
+  const resolvedManifest = resolveTrackPieceManifest({
+    cacheManifest: manifest,
+    availability:
+      typeof input.totalChunks === "number" && typeof input.chunkSize === "number"
+        ? {
+            totalChunks: input.totalChunks,
+            chunkSize: input.chunkSize
+          }
+        : null
+  });
+  const totalChunks = resolvedManifest?.totalChunks ?? availableChunks.length;
+  const chunkSize = resolvedManifest?.chunkSize ?? defaultChunkSize;
 
   return {
     roomId: input.roomId,

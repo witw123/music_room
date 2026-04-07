@@ -1,8 +1,7 @@
 "use client";
 
 import type { GuestSession } from "@music-room/shared";
-
-const defaultTrackPieceChunkSize = 64 * 1024;
+import { buildCanonicalTrackPieceManifest } from "@/features/p2p";
 
 type CapturedAudioGraph = {
   context: AudioContext | null;
@@ -28,6 +27,12 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
   const durationMs = await readDuration(objectUrl);
   const title = file.name.replace(/\.[^/.]+$/, "");
   const codec = file.type.split("/")[1]?.trim() || null;
+  const pieceManifest = buildCanonicalTrackPieceManifest({
+    file,
+    codec,
+    mimeType: file.type || null,
+    sizeBytes: file.size
+  });
 
   return {
     title,
@@ -44,14 +49,12 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     ownerNickname: session.nickname,
     sourceType: "local_upload" as const,
     pieceManifest: {
-      totalChunks: Math.max(1, Math.ceil(file.size / defaultTrackPieceChunkSize)),
-      chunkSize: defaultTrackPieceChunkSize,
-      pieceMimeType: file.type || "audio/mpeg"
+      ...pieceManifest,
+      pieceMimeType: pieceManifest.pieceMimeType
     },
     relayManifest: {
-      totalChunks: Math.max(1, Math.ceil(file.size / defaultTrackPieceChunkSize)),
-      chunkSize: defaultTrackPieceChunkSize,
-      pieceMimeType: file.type || "audio/mpeg"
+      ...pieceManifest,
+      pieceMimeType: pieceManifest.pieceMimeType
     }
   };
 }

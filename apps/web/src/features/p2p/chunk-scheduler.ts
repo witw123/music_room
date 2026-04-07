@@ -639,23 +639,66 @@ export class ChunkScheduler {
 
   private getTotalChunks(trackId: string) {
     const stateTotalChunks = this.trackStates.get(trackId)?.totalChunks ?? 0;
-    const availabilityTotalChunks = Object.values(this.availabilityByTrack[trackId] ?? {}).reduce(
-      (max, announcement) => Math.max(max, announcement.totalChunks),
-      0
-    );
-    const trackTotalChunks =
-      this.roomSnapshot?.tracks.find((track) => track.id === trackId)?.pieceManifest?.totalChunks ?? 0;
-    return Math.max(stateTotalChunks, availabilityTotalChunks, trackTotalChunks);
+    const availabilityTotalChunks = this.getCanonicalTrackAvailability(trackId)?.totalChunks ?? 0;
+    const trackTotalChunks = this.getSnapshotTrackManifest(trackId)?.totalChunks ?? 0;
+
+    if (availabilityTotalChunks > 0) {
+      return availabilityTotalChunks;
+    }
+
+    if (stateTotalChunks > 0) {
+      return stateTotalChunks;
+    }
+
+    return trackTotalChunks;
   }
 
   private getTrackChunkSize(trackId: string) {
-    const availabilityChunkSize = Object.values(this.availabilityByTrack[trackId] ?? {}).reduce(
-      (max, announcement) => Math.max(max, announcement.chunkSize),
-      0
+    const availabilityChunkSize = this.getCanonicalTrackAvailability(trackId)?.chunkSize ?? 0;
+    const trackChunkSize = this.getSnapshotTrackManifest(trackId)?.chunkSize ?? 0;
+
+    if (availabilityChunkSize > 0) {
+      return availabilityChunkSize;
+    }
+
+    if (trackChunkSize > 0) {
+      return trackChunkSize;
+    }
+
+    return 128 * 1024;
+  }
+
+  private getCanonicalTrackAvailability(trackId: string) {
+    const roomId = this.roomSnapshot?.room.id ?? null;
+    const candidates = Object.values(this.availabilityByTrack[trackId] ?? {}).filter(
+      (announcement) =>
+        announcement.totalChunks > 0 &&
+        announcement.chunkSize > 0 &&
+        (!roomId || announcement.roomId === roomId)
     );
-    const trackChunkSize =
-      this.roomSnapshot?.tracks.find((track) => track.id === trackId)?.pieceManifest?.chunkSize ?? 0;
-    return Math.max(availabilityChunkSize, trackChunkSize, 128 * 1024);
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    return [...candidates].sort((left, right) => {
+      const chunkSizeDifference = right.chunkSize - left.chunkSize;
+      if (chunkSizeDifference !== 0) {
+        return chunkSizeDifference;
+      }
+
+      const totalChunkDifference = left.totalChunks - right.totalChunks;
+      if (totalChunkDifference !== 0) {
+        return totalChunkDifference;
+      }
+
+      return new Date(right.announcedAt).getTime() - new Date(left.announcedAt).getTime();
+    })[0];
+  }
+
+  private getSnapshotTrackManifest(trackId: string) {
+    const track = this.roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
+    return track?.relayManifest ?? track?.pieceManifest ?? null;
   }
 
   private pruneCooldowns() {

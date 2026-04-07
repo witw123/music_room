@@ -129,15 +129,18 @@ export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
 
 export function buildProgressiveTrackManifest(
   track: TrackMeta | null | undefined,
-  availability: TrackAvailabilityAnnouncement | null | undefined
+  availability: TrackAvailabilityAnnouncement | null | undefined,
+  manifestHint?: Pick<TrackAvailabilityAnnouncement, "totalChunks" | "chunkSize"> | null
 ): ProgressiveTrackManifest | null {
   if (!track) {
     return null;
   }
 
   const preferredManifest = track.relayManifest ?? track.pieceManifest ?? null;
-  const totalChunks = availability?.totalChunks ?? preferredManifest?.totalChunks ?? 0;
-  const chunkSize = availability?.chunkSize ?? preferredManifest?.chunkSize ?? 0;
+  const totalChunks =
+    availability?.totalChunks ?? manifestHint?.totalChunks ?? preferredManifest?.totalChunks ?? 0;
+  const chunkSize =
+    availability?.chunkSize ?? manifestHint?.chunkSize ?? preferredManifest?.chunkSize ?? 0;
   const mimeType = preferredManifest?.pieceMimeType ?? track.mimeType ?? "audio/mpeg";
 
   if (totalChunks <= 0 || chunkSize <= 0) {

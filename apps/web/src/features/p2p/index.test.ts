@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleTrackFileFromPieces,
+  buildCanonicalTrackPieceManifest,
   currentTrackChunkRequestLimit,
   defaultChunkSize,
   getStaticWebRTCIceServers,
   getMissingChunkIndexes,
   parseIceConfigResponse,
   hashArrayBuffer,
+  selectCanonicalTrackAvailabilityAnnouncement,
   selectChunkSource,
   summarizeTrackAvailability,
   upcomingTrackChunkRequestLimit
@@ -22,9 +24,36 @@ describe("p2p helpers", () => {
   });
 
   it("uses conservative chunk sizing and wider fetch windows for larger tracks", () => {
-    expect(defaultChunkSize).toBe(64 * 1024);
+    expect(defaultChunkSize).toBe(128 * 1024);
     expect(currentTrackChunkRequestLimit).toBe(24);
     expect(upcomingTrackChunkRequestLimit).toBe(8);
+  });
+
+  it("builds device-independent canonical manifests for standard and large lossless tracks", () => {
+    expect(
+      buildCanonicalTrackPieceManifest({
+        file: new Blob([new Uint8Array(512 * 1024)], { type: "audio/mpeg" }),
+        mimeType: "audio/mpeg",
+        codec: "mpeg",
+        sizeBytes: 512 * 1024
+      })
+    ).toMatchObject({
+      chunkSize: 128 * 1024,
+      totalChunks: 4,
+      pieceMimeType: "audio/mpeg"
+    });
+
+    expect(
+      buildCanonicalTrackPieceManifest({
+        file: new Blob([new Uint8Array(26 * 1024 * 1024)], { type: "audio/flac" }),
+        mimeType: "audio/flac",
+        codec: "flac",
+        sizeBytes: 26 * 1024 * 1024
+      })
+    ).toMatchObject({
+      chunkSize: 256 * 1024,
+      totalChunks: 104
+    });
   });
 
   it("summarizes local chunk progress and source count", () => {
@@ -157,6 +186,39 @@ describe("p2p helpers", () => {
     );
 
     expect(selected?.ownerPeerId).toBe("peer_b");
+  });
+
+  it("prefers runtime availability with larger chunk geometry when resolving canonical manifest", () => {
+    const selected = selectCanonicalTrackAvailabilityAnnouncement([
+      {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_old",
+        nickname: "Old",
+        totalChunks: 673,
+        chunkSize: 64 * 1024,
+        availableChunks: [0, 1, 2],
+        source: "local_cache",
+        announcedAt: "2026-04-07T10:00:00.000Z"
+      },
+      {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_new",
+        nickname: "New",
+        totalChunks: 169,
+        chunkSize: 256 * 1024,
+        availableChunks: [0, 1, 2],
+        source: "local_cache",
+        announcedAt: "2026-04-07T10:00:01.000Z"
+      }
+    ]);
+
+    expect(selected).toMatchObject({
+      ownerPeerId: "peer_new",
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    });
   });
 
   it("assembles a complete track only when the final file hash matches", async () => {

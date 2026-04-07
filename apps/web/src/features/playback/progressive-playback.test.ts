@@ -76,6 +76,30 @@ describe("progressive playback helpers", () => {
     });
   });
 
+  it("prefers canonical availability hints over stale snapshot manifests", () => {
+    const manifest = buildProgressiveTrackManifest(
+      {
+        ...track,
+        pieceManifest: {
+          totalChunks: 673,
+          chunkSize: 64 * 1024,
+          pieceMimeType: "audio/flac"
+        }
+      },
+      null,
+      {
+        totalChunks: 169,
+        chunkSize: 256 * 1024
+      }
+    );
+
+    expect(manifest).toMatchObject({
+      totalChunks: 169,
+      chunkSize: 256 * 1024,
+      mimeType: "audio/flac"
+    });
+  });
+
   it("treats a long enough contiguous prefix as startup ready", () => {
     const manifest = buildProgressiveTrackManifest(track, availability);
     expect(

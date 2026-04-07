@@ -10,7 +10,11 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
-import { pickActiveMediaDiagnostic } from "@/features/p2p";
+import {
+  pickActiveMediaDiagnostic,
+  resolveTrackPieceManifest,
+  selectCanonicalTrackAvailabilityAnnouncement
+} from "@/features/p2p";
 
 type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
@@ -91,11 +95,17 @@ export function useRoomDerivedState({
         activeMemberPeerIds
       );
       const local = peers.find((entry) => entry.ownerPeerId === peerId);
+      const manifest = resolveCurrentRoomTrackManifest(
+        track,
+        availabilityByTrack[track.id] ?? {},
+        roomSnapshot.room.id,
+        activeMemberPeerIds
+      );
       return {
         track,
         peerCount: peers.length,
         localChunkCount: local?.availableChunks.length ?? 0,
-        totalChunks: local?.totalChunks ?? peers[0]?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0,
+        totalChunks: manifest?.totalChunks ?? 0,
         sources: peers.map((entry) => `${entry.nickname} (${entry.source})`)
       };
     }) ?? [];
@@ -118,6 +128,14 @@ export function useRoomDerivedState({
         .filter((member) => !!member.peerId)
         .map((member) => [member.peerId as string, member.id])
     );
+    const currentTrackManifest = currentTrack
+      ? resolveCurrentRoomTrackManifest(
+          currentTrack,
+          availabilityByTrack[currentTrack.id] ?? {},
+          roomSnapshot.room.id,
+          activeMemberPeerIds
+        )
+      : null;
     const statsByMember = new Map<
       string,
       {
@@ -170,14 +188,14 @@ export function useRoomDerivedState({
 
     return roomSnapshot.room.members.map((member) => {
       const stats = statsByMember.get(member.id) ?? null;
-      const manifestTotalChunks = currentTrack?.pieceManifest?.totalChunks ?? 0;
+      const manifestTotalChunks = currentTrackManifest?.totalChunks ?? 0;
 
       return {
         memberId: member.id,
         announcedTrackCount: stats?.announcedTrackIds.size ?? 0,
         totalChunkCount: stats?.totalChunkCount ?? 0,
         currentTrackChunkCount: stats?.currentTrackChunkCount ?? 0,
-        currentTrackTotalChunks: Math.max(stats?.currentTrackTotalChunks ?? 0, manifestTotalChunks),
+        currentTrackTotalChunks: manifestTotalChunks || (stats?.currentTrackTotalChunks ?? 0),
         currentTrackSources: [...(stats?.currentTrackSources ?? [])]
       };
     });
@@ -407,6 +425,24 @@ export function filterAvailabilityAnnouncementsByCurrentRoomPeers(
     trackAvailability,
     activeMemberPeerIds
   ).filter((announcement) => announcement.roomId === roomId);
+}
+
+export function resolveCurrentRoomTrackManifest(
+  track: RoomSnapshot["tracks"][number] | null | undefined,
+  trackAvailability: Record<string, TrackAvailabilityAnnouncement>,
+  roomId: string,
+  activeMemberPeerIds: Set<string>
+) {
+  const announcements = filterAvailabilityAnnouncementsByCurrentRoomPeers(
+    trackAvailability,
+    roomId,
+    activeMemberPeerIds
+  );
+
+  return resolveTrackPieceManifest({
+    track,
+    availability: selectCanonicalTrackAvailabilityAnnouncement(announcements)
+  });
 }
 
 export function countPeersWithinActiveMembers(

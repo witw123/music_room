@@ -18,7 +18,8 @@ import type {
 } from "@music-room/shared";
 import {
   pickActiveMediaDiagnostic,
-  resolveTransportHealth
+  resolveTransportHealth,
+  selectCanonicalTrackAvailabilityAnnouncement
 } from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
@@ -575,18 +576,6 @@ export function useProgressiveRuntime({
       }),
     [activePlaybackSource, currentBufferedFullLocalTrack, isCurrentSourceOwner]
   );
-  const currentTrackAvailabilityAnnouncement = useMemo(
-    () => (currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null),
-    [availabilityByTrack, currentTrack?.id, peerId]
-  );
-  const currentProgressiveManifest = useMemo(
-    () => buildProgressiveTrackManifest(currentTrack, currentTrackAvailabilityAnnouncement),
-    [currentTrack, currentTrackAvailabilityAnnouncement]
-  );
-  const currentProgressiveEngineType = useMemo(
-    () => getProgressiveEngineType(currentProgressiveManifest),
-    [currentProgressiveManifest]
-  );
   const activeMemberPeerIds = useMemo(
     () =>
       new Set(
@@ -595,6 +584,44 @@ export function useProgressiveRuntime({
           .filter((memberPeerId): memberPeerId is string => !!memberPeerId) ?? []
       ),
     [roomSnapshot?.room.members]
+  );
+  const currentTrackAvailabilityAnnouncement = useMemo(
+    () => (currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null),
+    [availabilityByTrack, currentTrack?.id, peerId]
+  );
+  const currentTrackAvailabilityManifestHint = useMemo(() => {
+    if (!currentTrack?.id || !roomSnapshot) {
+      return currentTrackAvailabilityAnnouncement;
+    }
+
+    return (
+      selectCanonicalTrackAvailabilityAnnouncement(
+        Object.values(availabilityByTrack[currentTrack.id] ?? {}).filter(
+          (announcement) =>
+            announcement.roomId === roomSnapshot.room.id &&
+            activeMemberPeerIds.has(announcement.ownerPeerId)
+        )
+      ) ?? currentTrackAvailabilityAnnouncement
+    );
+  }, [
+    activeMemberPeerIds,
+    availabilityByTrack,
+    currentTrack?.id,
+    currentTrackAvailabilityAnnouncement,
+    roomSnapshot
+  ]);
+  const currentProgressiveManifest = useMemo(
+    () =>
+      buildProgressiveTrackManifest(
+        currentTrack,
+        currentTrackAvailabilityAnnouncement,
+        currentTrackAvailabilityManifestHint
+      ),
+    [currentTrack, currentTrackAvailabilityAnnouncement, currentTrackAvailabilityManifestHint]
+  );
+  const currentProgressiveEngineType = useMemo(
+    () => getProgressiveEngineType(currentProgressiveManifest),
+    [currentProgressiveManifest]
   );
   const aggregatePieceDownloadRateKbps = useMemo(() => {
     const values = peerDiagnostics

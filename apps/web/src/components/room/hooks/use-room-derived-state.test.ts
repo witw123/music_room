@@ -6,7 +6,8 @@ import {
   filterAvailabilityAnnouncementsByCurrentRoomPeers,
   filterVisiblePeerDiagnostics,
   getActiveMemberPeerIds,
-  isRemoteMediaPlaybackReady
+  isRemoteMediaPlaybackReady,
+  resolveCurrentRoomTrackManifest
 } from "./use-room-derived-state";
 
 describe("use-room-derived-state helpers", () => {
@@ -98,6 +99,55 @@ describe("use-room-derived-state helpers", () => {
     expect(
       filterAvailabilityAnnouncementsByCurrentRoomPeers(trackAvailability, "room_1", activePeerIds)
     ).toEqual([trackAvailability.peer_host_room_1]);
+  });
+
+  it("prefers current-room availability geometry over stale snapshot piece manifests", () => {
+    const activePeerIds = new Set(["peer_host"]);
+
+    expect(
+      resolveCurrentRoomTrackManifest(
+        {
+          id: "track_1",
+          title: "Track",
+          artist: "Artist",
+          album: null,
+          durationMs: 120_000,
+          bitrate: null,
+          sizeBytes: 43_000_000,
+          codec: "flac",
+          mimeType: "audio/flac",
+          fileHash: "hash_1",
+          artworkUrl: null,
+          ownerSessionId: "host",
+          ownerNickname: "Host",
+          sourceType: "local_upload",
+          pieceManifest: {
+            totalChunks: 673,
+            chunkSize: 64 * 1024,
+            pieceMimeType: "audio/flac"
+          }
+        },
+        {
+          peer_host: {
+            roomId: "room_1",
+            trackId: "track_1",
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            totalChunks: 169,
+            chunkSize: 256 * 1024,
+            availableChunks: [0, 1, 2],
+            source: "local_cache",
+            announcedAt: "2026-04-07T00:00:00.000Z"
+          }
+        },
+        "room_1",
+        activePeerIds
+      )
+    ).toMatchObject({
+      totalChunks: 169,
+      chunkSize: 256 * 1024,
+      source: "availability"
+    });
   });
 
   it("hides diagnostics from peers that have already left the room", () => {

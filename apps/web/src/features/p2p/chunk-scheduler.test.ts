@@ -158,6 +158,43 @@ describe("chunk scheduler helpers", () => {
     expect(selectedPeerId).toBe("peer_host");
   });
 
+  it("prefers canonical availability totals over stale snapshot piece manifests when scheduling", () => {
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks[0] = {
+      ...roomSnapshot.tracks[0],
+      pieceManifest: {
+        totalChunks: 673,
+        chunkSize: 64 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    };
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      requestPiece: vi.fn(() => true)
+    });
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            totalChunks: 169,
+            chunkSize: 256 * 1024,
+            availableChunks: [0]
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 30_000
+    });
+
+    expect((scheduler as unknown as { getTotalChunks: (trackId: string) => number }).getTotalChunks("track_1")).toBe(169);
+    expect((scheduler as unknown as { getTrackChunkSize: (trackId: string) => number }).getTrackChunkSize("track_1")).toBe(256 * 1024);
+  });
+
   it("classifies large flac tracks as large-lossless", () => {
     expect(
       deriveTrackStreamProfile({

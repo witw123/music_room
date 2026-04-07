@@ -34,7 +34,9 @@ import {
   P2PMesh,
   recordPeerPlayoutProgress,
   resetRecoveryStage,
+  resolveTrackPieceManifest,
   resolvePreferredIceTransportPolicy,
+  selectCanonicalTrackAvailabilityAnnouncement,
   RoomMediaMesh,
   resolveTransportHealth,
   toSupervisorDiagnosticPatch,
@@ -363,6 +365,40 @@ export function shouldForcePieceSyncRecovery(input: {
   }
 
   return (input.now ?? Date.now()) - input.lastPieceActivityAtMs >= stalledPieceSyncRecoveryThresholdMs;
+}
+
+function resolveCurrentRoomTrackTotalChunks(input: {
+  trackId: string | null;
+  roomSnapshot: RoomSnapshot | null;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+}) {
+  if (!input.trackId) {
+    return 0;
+  }
+
+  const roomId = input.roomSnapshot?.room.id ?? null;
+  const activeMemberPeerIds = new Set(
+    input.roomSnapshot?.room.members
+      .map((member) => member.peerId)
+      .filter((peerId): peerId is string => !!peerId) ?? []
+  );
+  const track = input.roomSnapshot?.tracks.find((entry) => entry.id === input.trackId) ?? null;
+  const availability = selectCanonicalTrackAvailabilityAnnouncement(
+    Object.values(input.availabilityByTrack[input.trackId] ?? {}).filter(
+      (announcement) =>
+        announcement.totalChunks > 0 &&
+        announcement.chunkSize > 0 &&
+        (!roomId || announcement.roomId === roomId) &&
+        activeMemberPeerIds.has(announcement.ownerPeerId)
+    )
+  );
+
+  return (
+    resolveTrackPieceManifest({
+      track,
+      availability
+    })?.totalChunks ?? 0
+  );
 }
 
 function getPeerMedianRttMs(state: PeerConnectionSupervisorState | null | undefined) {
@@ -1306,12 +1342,15 @@ export function useRoomRuntime({
     }
 
     const localAvailability = availabilityByTrack[currentTrackId]?.[peerId];
+    const totalChunks = resolveCurrentRoomTrackTotalChunks({
+      trackId: currentTrackId,
+      roomSnapshot,
+      availabilityByTrack
+    });
     const nextProgressKey = [
       currentTrackId,
       localAvailability?.availableChunks.length ?? 0,
-      localAvailability?.totalChunks ??
-        roomSnapshot?.tracks.find((track) => track.id === currentTrackId)?.pieceManifest?.totalChunks ??
-        0
+      totalChunks
     ].join("|");
 
     if (currentTrackAvailabilityProgressRef.current !== nextProgressKey) {
@@ -4904,10 +4943,11 @@ export function useRoomRuntime({
       const playback = currentRoomRef.current?.room.playback;
       const currentTrackId = playback?.currentTrackId ?? null;
       const localAvailability = currentTrackId ? availabilityByTrack[currentTrackId]?.[peerId] : null;
-      const totalChunks =
-        localAvailability?.totalChunks ??
-        currentRoomRef.current?.tracks.find((track) => track.id === currentTrackId)?.pieceManifest?.totalChunks ??
-        0;
+      const totalChunks = resolveCurrentRoomTrackTotalChunks({
+        trackId: currentTrackId,
+        roomSnapshot: currentRoomRef.current,
+        availabilityByTrack
+      });
       const localAvailableChunks = localAvailability?.availableChunks.length ?? 0;
       const shouldRecoverPieceSync = shouldForcePieceSyncRecovery({
         playbackStatus: playback?.status,
