@@ -112,7 +112,7 @@ export function getOutrunRecoverySafetyFactor() {
 }
 
 export function getFullLocalStableWindowMs() {
-  return 3_500;
+  return 800;
 }
 
 export function getLocalTakeoverCooldownMs() {

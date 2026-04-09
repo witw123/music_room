@@ -129,31 +129,6 @@ export function AuthPage() {
 
           <div className="flex flex-1 flex-col justify-center bg-[#000000] p-8 lg:p-16">
             <div className="mx-auto w-full max-w-sm">
-              <div className="mb-10 flex w-full max-w-[240px] rounded-lg border border-white/5 bg-white/5 p-1">
-                <button
-                  className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
-                    mode === "login"
-                      ? "border border-white/10 bg-[#111] text-white shadow-sm"
-                      : "text-white/50 hover:text-white"
-                  }`}
-                  onClick={() => setMode("login")}
-                  type="button"
-                >
-                  登录
-                </button>
-                <button
-                  className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
-                    mode === "register"
-                      ? "border border-white/10 bg-[#111] text-white shadow-sm"
-                      : "text-white/50 hover:text-white"
-                  }`}
-                  onClick={() => setMode("register")}
-                  type="button"
-                >
-                  注册
-                </button>
-              </div>
-
               <div className="mb-8">
                 <h2 className="mb-2 text-2xl font-bold text-white">
                   {mode === "login" ? "登录音乐房" : "创建账号"}

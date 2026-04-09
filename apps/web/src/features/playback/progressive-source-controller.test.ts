@@ -56,7 +56,7 @@ describe("progressive source controller", () => {
       fallbackReason: null,
       driftMs: 80,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 6_200
+      now: 5_000 + stableWindowMs - 100
     });
 
     expect(secondDecision.nextSource).toBe("remote-stream");

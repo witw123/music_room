@@ -15,9 +15,11 @@ type UsePeerDiagnosticsOptions = {
 
 export function usePeerDiagnostics(options: UsePeerDiagnosticsOptions = {}) {
   const highFrequencyEnabled = options.highFrequencyEnabled ?? false;
-  const highFrequencyFlushDelayMs = options.highFrequencyFlushDelayMs ?? 120;
+  const highFrequencyFlushDelayMs = options.highFrequencyFlushDelayMs ?? 240;
   const lowFrequencyFlushDelayMs = options.lowFrequencyFlushDelayMs ?? 1_200;
   const flushDelayMs = highFrequencyEnabled ? highFrequencyFlushDelayMs : lowFrequencyFlushDelayMs;
+  const highFrequencyEnabledRef = useRef(highFrequencyEnabled);
+  const flushDelayMsRef = useRef(flushDelayMs);
   const queuedDiagnosticsRef = useRef<PeerDiagnosticInput[]>([]);
   const diagnosticsFlushTimerRef = useRef<number | null>(null);
   const [diagnosticsState, setDiagnosticsState] = useState(createEmptyDiagnosticsState);
@@ -56,10 +58,15 @@ export function usePeerDiagnostics(options: UsePeerDiagnosticsOptions = {}) {
 
       diagnosticsFlushTimerRef.current = window.setTimeout(() => {
         flushQueuedDiagnostics();
-      }, flushDelayMs);
+      }, flushDelayMsRef.current);
     },
-    [flushDelayMs, flushQueuedDiagnostics]
+    [flushQueuedDiagnostics]
   );
+
+  useEffect(() => {
+    highFrequencyEnabledRef.current = highFrequencyEnabled;
+    flushDelayMsRef.current = flushDelayMs;
+  }, [flushDelayMs, highFrequencyEnabled]);
 
   useEffect(() => {
     if (queuedDiagnosticsRef.current.length === 0) {
@@ -71,14 +78,14 @@ export function usePeerDiagnostics(options: UsePeerDiagnosticsOptions = {}) {
       diagnosticsFlushTimerRef.current = null;
     }
 
-    if (highFrequencyEnabled) {
+    if (highFrequencyEnabledRef.current) {
       flushQueuedDiagnostics();
       return;
     }
 
     diagnosticsFlushTimerRef.current = window.setTimeout(() => {
       flushQueuedDiagnostics();
-    }, flushDelayMs);
+    }, flushDelayMsRef.current);
   }, [flushDelayMs, flushQueuedDiagnostics, highFrequencyEnabled]);
 
   const resetPeerDiagnostics = useCallback(() => {

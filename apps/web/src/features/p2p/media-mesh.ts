@@ -79,11 +79,11 @@ type MediaPeerEntry = {
   healthyReceiverWindowCount: number;
 };
 
-const directAudioMaxBitrateBps = 320_000;
-const constrainedAudioMaxBitrateBps = 256_000;
-const relayAudioMaxBitrateBps = 256_000;
-const weakLinkAudioMaxBitrateBps = 128_000;
-const minimumAudioMaxBitrateBps = 96_000;
+const directAudioMaxBitrateBps = 510_000;
+const constrainedAudioMaxBitrateBps = 384_000;
+const relayAudioMaxBitrateBps = 384_000;
+const weakLinkAudioMaxBitrateBps = 224_000;
+const minimumAudioMaxBitrateBps = 128_000;
 const stableReceiverJitterTargetMs = 120;
 const constrainedReceiverJitterTargetMs = 220;
 const weakLinkReceiverJitterTargetMs = 320;
@@ -93,6 +93,83 @@ const activeStatsSamplingIntervalMs = 1_000;
 const steadyStatsSamplingIntervalMs = 5_000;
 const receiverJitterWeakUpgradeWindowCount = 2;
 const receiverJitterHealthyDowngradeWindowCount = 3;
+const opusMusicMaxAverageBitrateBps = 510_000;
+
+export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
+  if (!sdp) {
+    return sdp ?? "";
+  }
+
+  const lines = sdp.split(/\r\n|\n/);
+  const opusPayloadTypes = new Set<string>();
+  for (const line of lines) {
+    const match = /^a=rtpmap:(\d+)\s+opus\/48000(?:\/2)?$/i.exec(line.trim());
+    if (match?.[1]) {
+      opusPayloadTypes.add(match[1]);
+    }
+  }
+
+  if (opusPayloadTypes.size === 0) {
+    return sdp;
+  }
+
+  const tunedLines: string[] = [];
+  const seenFmtp = new Set<string>();
+  for (const line of lines) {
+    tunedLines.push(line);
+
+    const rtpMapMatch = /^a=rtpmap:(\d+)\s+opus\/48000(?:\/2)?$/i.exec(line.trim());
+    if (rtpMapMatch?.[1] && opusPayloadTypes.has(rtpMapMatch[1]) && !seenFmtp.has(rtpMapMatch[1])) {
+      const hasExistingFmtp = lines.some((candidate) =>
+        new RegExp(`^a=fmtp:${rtpMapMatch[1]}\\s`, "i").test(candidate.trim())
+      );
+      if (!hasExistingFmtp) {
+        tunedLines.push(
+          `a=fmtp:${rtpMapMatch[1]} maxaveragebitrate=${opusMusicMaxAverageBitrateBps};stereo=1;sprop-stereo=1;cbr=1;usedtx=0`
+        );
+        seenFmtp.add(rtpMapMatch[1]);
+      }
+      continue;
+    }
+
+    const fmtpMatch = /^a=fmtp:(\d+)\s+(.+)$/i.exec(line.trim());
+    if (!fmtpMatch?.[1] || !opusPayloadTypes.has(fmtpMatch[1])) {
+      continue;
+    }
+
+    const params = fmtpMatch[2]
+      .split(";")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const paramMap = new Map<string, string>();
+    for (const entry of params) {
+      const [rawKey, rawValue = ""] = entry.split("=");
+      paramMap.set(rawKey.trim().toLowerCase(), rawValue.trim());
+    }
+    paramMap.set("maxaveragebitrate", `${opusMusicMaxAverageBitrateBps}`);
+    paramMap.set("stereo", "1");
+    paramMap.set("sprop-stereo", "1");
+    paramMap.set("cbr", "1");
+    paramMap.set("usedtx", "0");
+    tunedLines[tunedLines.length - 1] =
+      `a=fmtp:${fmtpMatch[1]} ` +
+      [...paramMap.entries()].map(([key, value]) => `${key}=${value}`).join(";");
+    seenFmtp.add(fmtpMatch[1]);
+  }
+
+  return tunedLines.join("\r\n");
+}
+
+function tuneSessionDescriptionForMusic<T extends RTCSessionDescriptionInit>(description: T): T {
+  if (!description.sdp) {
+    return description;
+  }
+
+  return {
+    ...description,
+    sdp: tuneOpusSdpForMusic(description.sdp)
+  };
+}
 
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
@@ -194,7 +271,7 @@ export class RoomMediaMesh {
         }
         await this.applyRemoteDescription(entry, remoteDescription);
         await this.flushPendingCandidates(entry);
-        const answer = await entry.connection.createAnswer();
+        const answer = tuneSessionDescriptionForMusic(await entry.connection.createAnswer());
         await entry.connection.setLocalDescription(answer);
         entry.negotiatedTrackId = entry.attachedTrackId;
         this.emitPeerRuntimeState(payload.fromPeerId, entry);
@@ -369,7 +446,9 @@ export class RoomMediaMesh {
     entry.makingOffer = true;
     this.emitPeerRuntimeState(peerId, entry);
     try {
-      const offer = await entry.connection.createOffer(forceIceRestart ? { iceRestart: true } : undefined);
+      const offer = tuneSessionDescriptionForMusic(
+        await entry.connection.createOffer(forceIceRestart ? { iceRestart: true } : undefined)
+      );
       await entry.connection.setLocalDescription(offer);
       this.callbacks.onSignal?.({
         peerId,
@@ -929,7 +1008,7 @@ export function resolvePreferredAudioMaxBitrateBps(
     Number.isFinite(sample.availableOutgoingBitrateKbps) &&
     sample.availableOutgoingBitrateKbps > 0
   ) {
-    const headroomRatio = 0.9;
+    const headroomRatio = 0.94;
     const measuredCeilingBps = Math.floor(
       sample.availableOutgoingBitrateKbps * 1000 * headroomRatio
     );

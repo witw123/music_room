@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, useTransition } from "react";
+import { memo, useCallback, useMemo, useRef, useState, useTransition } from "react";
 import type { AuthSession, QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -33,33 +33,83 @@ function QueuePanelBase({
   onAddToQueue
 }: QueuePanelProps) {
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
+  const [dropTargetQueueItemId, setDropTargetQueueItemId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const pointerDragRef = useRef<{
+    pointerId: number;
+    queueItemId: string;
+    targetQueueItemId: string;
+  } | null>(null);
 
   const quickQueueTracks = useMemo(
     () => tracks.filter((track) => !queue.some((item) => item.trackId === track.id)).slice(0, 3),
     [queue, tracks]
   );
 
-  async function handleDrop(targetQueueItemId: string) {
-    if (!draggingQueueItemId || draggingQueueItemId === targetQueueItemId || !canReorderQueue) {
+  const commitReorder = useCallback(
+    async (sourceQueueItemId: string | null, targetQueueItemId: string) => {
+      if (!sourceQueueItemId || sourceQueueItemId === targetQueueItemId || !canReorderQueue) {
+        setDraggingQueueItemId(null);
+        setDropTargetQueueItemId(null);
+        return;
+      }
+
+      const reorderedIds = [...queue.map((item) => item.id)];
+      const fromIndex = reorderedIds.indexOf(sourceQueueItemId);
+      const toIndex = reorderedIds.indexOf(targetQueueItemId);
+
+      if (fromIndex < 0 || toIndex < 0) {
+        setDraggingQueueItemId(null);
+        setDropTargetQueueItemId(null);
+        return;
+      }
+
+      reorderedIds.splice(fromIndex, 1);
+      reorderedIds.splice(toIndex, 0, sourceQueueItemId);
       setDraggingQueueItemId(null);
+      setDropTargetQueueItemId(null);
+      startTransition(() => void onReorderQueue(reorderedIds));
+    },
+    [canReorderQueue, onReorderQueue, queue, startTransition]
+  );
+
+  const finishPointerDrag = useCallback(() => {
+    const activeDrag = pointerDragRef.current;
+    pointerDragRef.current = null;
+    if (!activeDrag) {
+      setDraggingQueueItemId(null);
+      setDropTargetQueueItemId(null);
       return;
     }
 
-    const reorderedIds = [...queue.map((item) => item.id)];
-    const fromIndex = reorderedIds.indexOf(draggingQueueItemId);
-    const toIndex = reorderedIds.indexOf(targetQueueItemId);
+    void commitReorder(activeDrag.queueItemId, activeDrag.targetQueueItemId);
+  }, [commitReorder]);
 
-    if (fromIndex < 0 || toIndex < 0) {
-      setDraggingQueueItemId(null);
-      return;
-    }
-
-    reorderedIds.splice(fromIndex, 1);
-    reorderedIds.splice(toIndex, 0, draggingQueueItemId);
+  const cancelPointerDrag = useCallback(() => {
+    pointerDragRef.current = null;
     setDraggingQueueItemId(null);
-    await onReorderQueue(reorderedIds);
-  }
+    setDropTargetQueueItemId(null);
+  }, []);
+
+  const updatePointerDragTarget = useCallback(
+    (clientX: number, clientY: number) => {
+      const activeDrag = pointerDragRef.current;
+      if (!activeDrag) {
+        return;
+      }
+
+      const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+      const targetQueueItemId =
+        element?.closest<HTMLElement>("[data-queue-item-id]")?.dataset.queueItemId ??
+        activeDrag.queueItemId;
+      if (targetQueueItemId === activeDrag.targetQueueItemId) {
+        return;
+      }
+      activeDrag.targetQueueItemId = targetQueueItemId;
+      setDropTargetQueueItemId(targetQueueItemId);
+    },
+    []
+  );
 
   return (
     <section className="relative flex h-full w-full flex-col gap-6 pb-10">
@@ -71,29 +121,95 @@ function QueuePanelBase({
             const canRemoveQueueItem =
               !!activeSession &&
               (hostId === activeSession.userId || item.requestedById === activeSession.userId);
+            const isDropTarget =
+              dropTargetQueueItemId === item.id && draggingQueueItemId !== null && draggingQueueItemId !== item.id;
 
             return (
               <article
                 key={item.id}
+                data-queue-item-id={item.id}
                 className={`flex flex-col gap-4 rounded-2xl border p-4 transition-all sm:flex-row sm:items-center ${
                   isCurrent
                     ? "border-accent/30 bg-accent/10 shadow-[0_0_15px_rgba(139,92,246,0.1)]"
                     : "border-surface-border bg-surface/50 hover:border-surface-hover hover:bg-surface"
-                } ${draggingQueueItemId === item.id ? "scale-95 opacity-40" : ""}`}
+                } ${draggingQueueItemId === item.id ? "scale-95 opacity-40" : ""} ${
+                  isDropTarget ? "border-accent/60 ring-1 ring-accent/40" : ""
+                }`}
                 draggable={canReorderQueue}
-                onDragStart={() => setDraggingQueueItemId(item.id)}
+                onDragStart={() => {
+                  setDraggingQueueItemId(item.id);
+                  setDropTargetQueueItemId(item.id);
+                }}
                 onDragOver={(event) => {
                   if (canReorderQueue) {
                     event.preventDefault();
+                    setDropTargetQueueItemId(item.id);
                   }
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  void handleDrop(item.id);
+                  void commitReorder(draggingQueueItemId, item.id);
                 }}
-                onDragEnd={() => setDraggingQueueItemId(null)}
+                onDragEnd={() => {
+                  setDraggingQueueItemId(null);
+                  setDropTargetQueueItemId(null);
+                }}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-4">
+                  <button
+                    type="button"
+                    aria-label={`拖拽调整 ${track?.title ?? "队列歌曲"} 的顺序`}
+                    className={`inline-flex h-10 w-10 shrink-0 touch-none items-center justify-center rounded-xl border border-surface-border/80 bg-background/40 text-foreground-muted transition hover:border-accent/50 hover:text-accent ${
+                      canReorderQueue ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-50"
+                    }`}
+                    disabled={!canReorderQueue}
+                    onPointerDown={(event) => {
+                      if (!canReorderQueue || event.button !== 0) {
+                        return;
+                      }
+                      pointerDragRef.current = {
+                        pointerId: event.pointerId,
+                        queueItemId: item.id,
+                        targetQueueItemId: item.id
+                      };
+                      setDraggingQueueItemId(item.id);
+                      setDropTargetQueueItemId(item.id);
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerMove={(event) => {
+                      if (pointerDragRef.current?.pointerId !== event.pointerId) {
+                        return;
+                      }
+                      updatePointerDragTarget(event.clientX, event.clientY);
+                    }}
+                    onPointerUp={(event) => {
+                      if (pointerDragRef.current?.pointerId !== event.pointerId) {
+                        return;
+                      }
+                      finishPointerDrag();
+                    }}
+                    onPointerCancel={(event) => {
+                      if (pointerDragRef.current?.pointerId !== event.pointerId) {
+                        return;
+                      }
+                      cancelPointerDrag();
+                    }}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <circle cx="5" cy="4" r="1.1" />
+                      <circle cx="11" cy="4" r="1.1" />
+                      <circle cx="5" cy="8" r="1.1" />
+                      <circle cx="11" cy="8" r="1.1" />
+                      <circle cx="5" cy="12" r="1.1" />
+                      <circle cx="11" cy="12" r="1.1" />
+                    </svg>
+                  </button>
                   <span
                     className={`hidden w-6 text-sm font-mono font-bold sm:block ${
                       isCurrent ? "text-accent" : "text-foreground-muted/50"
