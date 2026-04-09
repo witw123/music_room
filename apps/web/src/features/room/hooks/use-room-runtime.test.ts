@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveListenerMediaRecoveryAction,
   resolveListenerMediaRecoveryReason,
+  shouldResumeRemotePlaybackAfterAudioUnlock,
   shouldRedirectRoomRouteToAuth,
   shouldForcePieceSyncRecovery
 } from "./use-room-runtime";
@@ -176,6 +177,72 @@ describe("shouldForcePieceSyncRecovery", () => {
         totalChunks: 120,
         lastPieceActivityAtMs: 0,
         now: 25_000
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
+  it("resumes listener remote playback once audio is unlocked and a paused remote stream is already bound", () => {
+    expect(
+      shouldResumeRemotePlaybackAfterAudioUnlock({
+        audioUnlocked: true,
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        hasRemoteSrcObject: true,
+        remoteAudioPaused: true
+      })
+    ).toBe(true);
+  });
+
+  it("does not resume when the listener is already audibly playing", () => {
+    expect(
+      shouldResumeRemotePlaybackAfterAudioUnlock({
+        audioUnlocked: true,
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        hasRemoteSrcObject: true,
+        remoteAudioPaused: false
+      })
+    ).toBe(false);
+  });
+
+  it("does not resume for local playback, room hosts, or missing bound streams", () => {
+    expect(
+      shouldResumeRemotePlaybackAfterAudioUnlock({
+        audioUnlocked: true,
+        isCurrentSourceOwner: true,
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        hasRemoteSrcObject: true,
+        remoteAudioPaused: true
+      })
+    ).toBe(false);
+    expect(
+      shouldResumeRemotePlaybackAfterAudioUnlock({
+        audioUnlocked: true,
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        hasRemoteSrcObject: true,
+        remoteAudioPaused: true
+      })
+    ).toBe(false);
+    expect(
+      shouldResumeRemotePlaybackAfterAudioUnlock({
+        audioUnlocked: true,
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        currentTrackId: "track_a",
+        hasRemoteSrcObject: false,
+        remoteAudioPaused: true
       })
     ).toBe(false);
   });

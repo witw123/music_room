@@ -367,6 +367,26 @@ export function shouldForcePieceSyncRecovery(input: {
   return (input.now ?? Date.now()) - input.lastPieceActivityAtMs >= stalledPieceSyncRecoveryThresholdMs;
 }
 
+export function shouldResumeRemotePlaybackAfterAudioUnlock(input: {
+  audioUnlocked: boolean;
+  isCurrentSourceOwner: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  currentTrackId: string | null;
+  hasRemoteSrcObject: boolean;
+  remoteAudioPaused: boolean | null;
+}) {
+  return (
+    input.audioUnlocked &&
+    !input.isCurrentSourceOwner &&
+    input.activePlaybackSource === "remote-stream" &&
+    input.playbackStatus === "playing" &&
+    !!input.currentTrackId &&
+    input.hasRemoteSrcObject &&
+    input.remoteAudioPaused !== false
+  );
+}
+
 function resolveCurrentRoomTrackTotalChunks(input: {
   trackId: string | null;
   roomSnapshot: RoomSnapshot | null;
@@ -620,6 +640,7 @@ export function useRoomRuntime({
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const lastHostCaptureRefreshAtRef = useRef<number>(0);
   const remotePlaybackRetryRef = useRef<number | null>(null);
+  const remotePlaybackResumeAfterUnlockKeyRef = useRef<string | null>(null);
   const remoteStreamClearTimeoutRef = useRef<number | null>(null);
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
@@ -4779,6 +4800,71 @@ export function useRoomRuntime({
 
     void announceLocalCacheRef.current(currentTrackId);
   }, [roomSnapshot?.room.playback.currentTrackId, uploadedTracks]);
+
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+    const remoteAudio = remoteAudioRef.current;
+    const generation = listenerMediaLifecycleRef.current.currentGeneration;
+    const shouldResume = shouldResumeRemotePlaybackAfterAudioUnlock({
+      audioUnlocked,
+      isCurrentSourceOwner,
+      activePlaybackSource,
+      playbackStatus: playback?.status,
+      currentTrackId: playback?.currentTrackId ?? null,
+      hasRemoteSrcObject: !!remoteAudio?.srcObject,
+      remoteAudioPaused: remoteAudio?.paused ?? null
+    });
+
+    if (!shouldResume || !generation || listenerMediaLifecycleRef.current.currentGeneration !== generation) {
+      remotePlaybackResumeAfterUnlockKeyRef.current = null;
+      return;
+    }
+
+    const resumeKey = [
+      roomSnapshot?.room.id ?? "room",
+      playback?.currentTrackId ?? "track",
+      playback?.mediaEpoch ?? 0,
+      generation
+    ].join("|");
+    if (remotePlaybackResumeAfterUnlockKeyRef.current === resumeKey) {
+      return;
+    }
+    remotePlaybackResumeAfterUnlockKeyRef.current = resumeKey;
+
+    updateRemoteMediaDiagnostic(
+      "房间音频解锁后重新拉起远端播放",
+      (snapshot) => ({
+        ...snapshot,
+        mediaConnectionState: "buffering",
+        remoteTrackStatus: {
+          ...snapshot.remoteTrackStatus,
+          ...getRemoteMediaTraceContext(playback?.sourcePeerId ?? null),
+          ...getRemoteAudioDiagnostics(),
+          currentGeneration: listenerMediaLifecycleRef.current.currentGeneration,
+          boundGeneration: listenerMediaLifecycleRef.current.boundGeneration,
+          playingGeneration: listenerMediaLifecycleRef.current.playingGeneration,
+          recoveryStage: listenerMediaLifecycleRef.current.recoveryStage,
+          restartAttempt: listenerMediaLifecycleRef.current.restartAttempt
+        }
+      }),
+      {
+        event: "remote-play-after-unlock",
+        recordEvent: false
+      }
+    );
+    scheduleRemotePlaybackRetry(0, generation);
+  }, [
+    activePlaybackSource,
+    audioUnlocked,
+    getRemoteAudioDiagnostics,
+    getRemoteMediaTraceContext,
+    isCurrentSourceOwner,
+    remoteAudioRef,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback,
+    scheduleRemotePlaybackRetry,
+    updateRemoteMediaDiagnostic
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
