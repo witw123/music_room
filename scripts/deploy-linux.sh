@@ -12,6 +12,30 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+APP_DOMAIN_VALUE="$(grep '^APP_DOMAIN=' "$ENV_FILE" | cut -d '=' -f2-)"
+API_BASE_URL_VALUE="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)"
+WS_BASE_URL_VALUE="$(grep '^NEXT_PUBLIC_WS_URL=' "$ENV_FILE" | cut -d '=' -f2-)"
+
+if [ -z "$APP_DOMAIN_VALUE" ] || [ -z "$API_BASE_URL_VALUE" ] || [ -z "$WS_BASE_URL_VALUE" ]; then
+  echo "APP_DOMAIN, NEXT_PUBLIC_API_BASE_URL and NEXT_PUBLIC_WS_URL must be set in $ENV_FILE"
+  exit 1
+fi
+
+EXPECTED_API_BASE_URL="https://$APP_DOMAIN_VALUE"
+EXPECTED_WS_BASE_URL="wss://$APP_DOMAIN_VALUE"
+
+if [ "$API_BASE_URL_VALUE" != "$EXPECTED_API_BASE_URL" ]; then
+  echo "NEXT_PUBLIC_API_BASE_URL must be $EXPECTED_API_BASE_URL for production deployments."
+  echo "Current value: $API_BASE_URL_VALUE"
+  exit 1
+fi
+
+if [ "$WS_BASE_URL_VALUE" != "$EXPECTED_WS_BASE_URL" ]; then
+  echo "NEXT_PUBLIC_WS_URL must be $EXPECTED_WS_BASE_URL for production deployments."
+  echo "Current value: $WS_BASE_URL_VALUE"
+  exit 1
+fi
+
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
 

@@ -27,7 +27,7 @@ describe("BottomPlayer source", () => {
   it("prioritizes the live display clock over the playback snapshot", () => {
     const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("seekDraft ?? progressMs");
+    expect(source).toContain("seekDraft ?? renderedProgressMs");
     expect(source).not.toContain("seekDraft ?? snapshotProgressMs ?? progressMs");
   });
 });

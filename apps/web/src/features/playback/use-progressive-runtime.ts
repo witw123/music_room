@@ -1527,6 +1527,9 @@ export function useProgressiveRuntime({
         }
 
         if (attempt >= maxPlaybackStartRetryAttempts) {
+          if (!isRemoteSource && !isCurrentSourceOwner) {
+            fallbackToRemoteStream(failureReason, { force: true });
+          }
           return;
         }
 
@@ -1540,6 +1543,8 @@ export function useProgressiveRuntime({
       attemptPlaybackStart,
       audioRef,
       clearPlaybackStartRetry,
+      fallbackToRemoteStream,
+      isCurrentSourceOwner,
       playback?.status,
       playbackStartIntent,
       remoteAudioRef
@@ -2011,7 +2016,16 @@ export function useProgressiveRuntime({
     }
 
     if (activePlaybackSource !== "remote-stream") {
-      setMediaConnectionState(nextPlayback.status === "playing" ? "live" : "idle");
+      const localAudio = audioRef.current;
+      const localPlaybackReady =
+        !!localAudio &&
+        !localAudio.paused &&
+        (localAudio.readyState >= haveCurrentDataReadyState ||
+          !!localAudio.srcObject ||
+          !!localAudio.currentSrc);
+      setMediaConnectionState(
+        nextPlayback.status === "playing" ? (localPlaybackReady ? "live" : "buffering") : "idle"
+      );
       return;
     }
 
@@ -2028,6 +2042,7 @@ export function useProgressiveRuntime({
       return mediaConnectedPeersCount > 0 ? "buffering" : "connecting";
     });
   }, [
+    audioRef,
     roomSnapshot?.room.playback,
     isCurrentSourceOwner,
     mediaConnectedPeersCount,
