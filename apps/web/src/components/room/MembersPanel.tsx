@@ -162,6 +162,10 @@ function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
   peerDiagnostics: PeerDiagnosticsSnapshot | undefined
 ) {
+  const recoveryPhase = peerDiagnostics?.progressivePlaybackStatus?.recoveryPhase ?? null;
+  const fullLocalRecoveryActive =
+    peerDiagnostics?.progressivePlaybackStatus?.fullLocalRecoveryActive ?? false;
+
   if (presenceState === "offline") {
     return {
       label: "未接入音频",
@@ -175,6 +179,38 @@ function getPlaybackStatus(
       label: "实时音频重连中",
       detail: "成员正在恢复房间实时链路。",
       tone: "warning" as const
+    };
+  }
+
+  if (fullLocalRecoveryActive && recoveryPhase === "playing-local-fallback") {
+    return {
+      label: "本地缓存已接管",
+      detail: "当前曲目已切到本地缓存播放，实时链路在后台继续恢复。",
+      tone: "success" as const
+    };
+  }
+
+  if (recoveryPhase === "joining" || recoveryPhase === "resyncing") {
+    return {
+      label: "同步房间状态中",
+      detail: "已进入房间，正在同步当前播放状态和成员拓扑。",
+      tone: "accent" as const
+    };
+  }
+
+  if (recoveryPhase === "bootstrapping-data") {
+    return {
+      label: "同步数据链路中",
+      detail: "当前曲目和来源已确认，正在恢复分片数据通道。",
+      tone: "accent" as const
+    };
+  }
+
+  if (recoveryPhase === "bootstrapping-media") {
+    return {
+      label: "连接实时音频中",
+      detail: "当前曲目和来源已确认，正在拉起远端实时音频。",
+      tone: "accent" as const
     };
   }
 

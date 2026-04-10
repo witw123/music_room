@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveListenerMediaRecoveryAction,
   resolveListenerMediaRecoveryReason,
+  shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldResumeRemotePlaybackAfterAudioUnlock,
   shouldRedirectRoomRouteToAuth,
   shouldForcePieceSyncRecovery
@@ -245,6 +246,35 @@ describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
         remoteAudioPaused: true
       })
     ).toBe(false);
+  });
+});
+
+describe("shouldAcceptIncomingPeerSignalRecoveryGeneration", () => {
+  it("accepts signals when the payload generation matches the current recovery generation", () => {
+    expect(
+      shouldAcceptIncomingPeerSignalRecoveryGeneration({
+        payloadRecoveryGeneration: 7,
+        currentRecoveryGeneration: 7
+      })
+    ).toBe(true);
+  });
+
+  it("drops stale signals from an older recovery generation", () => {
+    expect(
+      shouldAcceptIncomingPeerSignalRecoveryGeneration({
+        payloadRecoveryGeneration: 6,
+        currentRecoveryGeneration: 7
+      })
+    ).toBe(false);
+  });
+
+  it("keeps rollout-compatible signals that do not carry a recovery generation yet", () => {
+    expect(
+      shouldAcceptIncomingPeerSignalRecoveryGeneration({
+        payloadRecoveryGeneration: undefined,
+        currentRecoveryGeneration: 7
+      })
+    ).toBe(true);
   });
 });
 

@@ -100,6 +100,82 @@ function applyEvents(...events: Parameters<typeof roomStateReducer>[1][]) {
 }
 
 describe("roomStateReducer", () => {
+  it("applies subscribe bootstrap playback and minimal topology before the authoritative snapshot arrives", () => {
+    const initial = createRoomSnapshot({
+      room: {
+        roomRevision: 3,
+        presenceRevision: 3,
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host",
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online"
+          },
+          {
+            id: "member",
+            nickname: "Member",
+            role: "member",
+            joinedAt: "2026-04-04T00:01:00.000Z",
+            peerId: null,
+            presenceState: "offline"
+          }
+        ]
+      }
+    });
+
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: initial
+      },
+      {
+        type: "subscribe-bootstrap",
+        roomId: "room_1",
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host",
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online"
+          },
+          {
+            id: "member",
+            nickname: "Member",
+            role: "member",
+            joinedAt: "2026-04-04T00:01:00.000Z",
+            peerId: "peer-member",
+            presenceState: "online"
+          }
+        ],
+        playback: createPlaybackSnapshot({
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          positionMs: 32_000,
+          startedAt: "2026-04-04T00:02:00.000Z",
+          queueVersion: 2,
+          playbackRevision: 2,
+          mediaEpoch: 2
+        }),
+        presenceRevision: 4,
+        roomRevision: 4
+      }
+    );
+
+    expect(state.snapshot?.room.playback.status).toBe("playing");
+    expect(state.snapshot?.room.playback.positionMs).toBe(32_000);
+    expect(state.snapshot?.room.members[1]?.peerId).toBe("peer-member");
+    expect(state.snapshot?.room.presenceRevision).toBe(4);
+    expect(state.snapshot?.room.roomRevision).toBe(4);
+  });
+
   it("uses bootstrap handoff as placeholder but lets the first authoritative snapshot replace it", () => {
     const bootstrap = createRoomSnapshot({
       room: {

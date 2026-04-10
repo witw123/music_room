@@ -72,6 +72,25 @@ type UseProgressiveRuntimeInput = {
   setProgressiveFallbackReason: Dispatch<SetStateAction<string | null>>;
   playbackStartIntent: PlaybackStartIntent | null;
   setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
+  audioUnlocked: boolean;
+  roomRecoveryState: {
+    phase:
+      | "joining"
+      | "resyncing"
+      | "bootstrapping-data"
+      | "bootstrapping-media"
+      | "playing-local-fallback"
+      | "steady";
+    mode: "late-join" | "rejoin" | "steady";
+    generation: number | null;
+    bootstrapStartedAt: string | null;
+    bootstrapSourcePeerId: string | null;
+    pendingSnapshot: boolean;
+    pendingData: boolean;
+    pendingMedia: boolean;
+    listenerBootstrapAttempts: number | null;
+    fullLocalRecoveryActive: boolean;
+  };
   isPageVisible: boolean;
   volume: number;
   connectedPeersCount: number;
@@ -148,6 +167,32 @@ export function shouldPollRemoteStartupGate(
     activePlaybackSource === "remote-stream" &&
     playbackStatus === "playing" &&
     readyState < haveCurrentDataReadyState
+  );
+}
+
+export function shouldPreferImmediateFullLocalRecovery(input: {
+  isCurrentSourceOwner: boolean;
+  audioUnlocked: boolean;
+  hasBufferedFullLocalTrack: boolean;
+  fullLocalRecoveryActive: boolean;
+  recoveryPhase:
+    | "joining"
+    | "resyncing"
+    | "bootstrapping-data"
+    | "bootstrapping-media"
+    | "playing-local-fallback"
+    | "steady";
+  recoveryMode: "late-join" | "rejoin" | "steady";
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+}) {
+  return (
+    !input.isCurrentSourceOwner &&
+    input.audioUnlocked &&
+    input.hasBufferedFullLocalTrack &&
+    input.fullLocalRecoveryActive &&
+    input.recoveryPhase !== "steady" &&
+    input.recoveryMode !== "steady" &&
+    input.playbackStatus === "playing"
   );
 }
 
@@ -531,6 +576,8 @@ export function useProgressiveRuntime({
   setProgressiveFallbackReason,
   playbackStartIntent,
   setPlaybackStartIntent,
+  audioUnlocked,
+  roomRecoveryState,
   isPageVisible,
   volume,
   connectedPeersCount,
@@ -1177,13 +1224,24 @@ export function useProgressiveRuntime({
     localTakeoverCooldownUntilRef.current = Date.now() + getLocalTakeoverCooldownMs();
   }, []);
 
+  const immediateFullLocalRecoveryEligible =
+    shouldPreferImmediateFullLocalRecovery({
+      isCurrentSourceOwner,
+      audioUnlocked,
+      hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
+      fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive,
+      recoveryPhase: roomRecoveryState.phase,
+      recoveryMode: roomRecoveryState.mode,
+      playbackStatus: playback?.status
+    });
+
   const isLocalTakeoverAllowed = useCallback(
     (now = Date.now()) =>
       enableListenerLocalTakeover &&
-      connectedPeersCount > 0 &&
       now >= localTakeoverCooldownUntilRef.current &&
-      mediaConnectedPeersCount > 0,
-    [connectedPeersCount, mediaConnectedPeersCount]
+      (immediateFullLocalRecoveryEligible ||
+        (connectedPeersCount > 0 && mediaConnectedPeersCount > 0)),
+    [connectedPeersCount, immediateFullLocalRecoveryEligible, mediaConnectedPeersCount]
   );
   const audibleLocalFallbackActive =
     !isCurrentSourceOwner &&
@@ -1261,12 +1319,17 @@ export function useProgressiveRuntime({
       return "listener-handoff-disabled";
     }
 
-    if (startupGatePending) {
+    if (startupGatePending && !roomRecoveryState.fullLocalRecoveryActive) {
       return "remote-recovery-window";
     }
 
     return null;
-  }, [currentBufferedFullLocalTrack, isCurrentSourceOwner, startupGatePending]);
+  }, [
+    currentBufferedFullLocalTrack,
+    isCurrentSourceOwner,
+    roomRecoveryState.fullLocalRecoveryActive,
+    startupGatePending
+  ]);
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
 
   useEffect(() => {
@@ -1276,6 +1339,25 @@ export function useProgressiveRuntime({
 
     setActivePlaybackSource("remote-stream");
   }, [activePlaybackSource, isCurrentSourceOwner, setActivePlaybackSource]);
+
+  useEffect(() => {
+    if (
+      !immediateFullLocalRecoveryEligible ||
+      activePlaybackSource === "full-local" ||
+      !currentBufferedFullLocalTrack
+    ) {
+      return;
+    }
+
+    setActivePlaybackSource("full-local");
+    setProgressiveFallbackReason(null);
+  }, [
+    activePlaybackSource,
+    currentBufferedFullLocalTrack,
+    immediateFullLocalRecoveryEligible,
+    setActivePlaybackSource,
+    setProgressiveFallbackReason
+  ]);
 
   const transitionPlaybackSource = useCallback(
     (
@@ -2670,6 +2752,17 @@ export function useProgressiveRuntime({
             createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
           ),
           activeSource: progressiveHealthSnapshot.activeSource,
+          recoveryPhase: roomRecoveryState.phase,
+          recoveryMode: roomRecoveryState.mode,
+          recoveryGeneration: roomRecoveryState.generation,
+          bootstrapSourcePeerId: roomRecoveryState.bootstrapSourcePeerId,
+          bootstrapStartedAt: roomRecoveryState.bootstrapStartedAt,
+          pendingSnapshot: roomRecoveryState.pendingSnapshot,
+          pendingData: roomRecoveryState.pendingData,
+          pendingMedia: roomRecoveryState.pendingMedia,
+          listenerBootstrapAttempts: roomRecoveryState.listenerBootstrapAttempts,
+          fullLocalRecoveryActive:
+            roomRecoveryState.fullLocalRecoveryActive || immediateFullLocalRecoveryEligible,
           transportGovernorMode,
           engineType: progressiveHealthSnapshot.engineType,
           contiguousBufferedMs: progressiveHealthSnapshot.contiguousBufferedMs,
@@ -2729,6 +2822,7 @@ export function useProgressiveRuntime({
     fullLocalReady,
     fullLocalEligible,
     fullLocalBlockedReason,
+    immediateFullLocalRecoveryEligible,
     localAudioDiagnostics,
     sourceOwnerIdentity,
     progressiveLocalEligible,
@@ -2754,6 +2848,16 @@ export function useProgressiveRuntime({
     playbackStartIntent,
     nextQueueTrackPrefetch,
     localTakeoverCooldownMs,
+    roomRecoveryState.bootstrapSourcePeerId,
+    roomRecoveryState.bootstrapStartedAt,
+    roomRecoveryState.fullLocalRecoveryActive,
+    roomRecoveryState.generation,
+    roomRecoveryState.listenerBootstrapAttempts,
+    roomRecoveryState.mode,
+    roomRecoveryState.pendingData,
+    roomRecoveryState.pendingMedia,
+    roomRecoveryState.pendingSnapshot,
+    roomRecoveryState.phase,
     schedulerBudgetTier,
     transportGovernorMode,
     recordPeerDiagnostic

@@ -16,6 +16,14 @@ export type RoomStateEvent =
       snapshot: RoomSnapshot;
     }
   | {
+      type: "subscribe-bootstrap";
+      roomId: string;
+      members: RoomMember[];
+      playback: PlaybackSnapshot;
+      presenceRevision: number;
+      roomRevision: number;
+    }
+  | {
       type: "recover-snapshot" | "server-snapshot";
       snapshot: RoomSnapshot;
     }
@@ -168,6 +176,44 @@ export function roomStateReducer(
       return {
         snapshot: normalizeSnapshot(current.snapshot, event.snapshot),
         source: "bootstrap"
+      };
+    }
+
+    case "subscribe-bootstrap": {
+      const snapshot = current.snapshot;
+      if (!snapshot || snapshot.room.id !== event.roomId) {
+        return current;
+      }
+
+      const currentRoomRevision = getRoomRevision(snapshot);
+      const currentPresenceRevision = snapshot.room.presenceRevision ?? 0;
+      const shouldApplyPresence = event.presenceRevision >= currentPresenceRevision;
+      const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+        ? event.playback
+        : snapshot.room.playback;
+
+      if (
+        !shouldApplyPresence &&
+        nextPlayback === snapshot.room.playback &&
+        event.roomRevision <= currentRoomRevision
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        snapshot: {
+          ...snapshot,
+          room: {
+            ...snapshot.room,
+            members: shouldApplyPresence ? event.members : snapshot.room.members,
+            presenceRevision: shouldApplyPresence
+              ? Math.max(currentPresenceRevision, event.presenceRevision)
+              : currentPresenceRevision,
+            roomRevision: Math.max(currentRoomRevision, event.roomRevision),
+            playback: nextPlayback
+          }
+        }
       };
     }
 

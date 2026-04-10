@@ -43,6 +43,29 @@ const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 const maxCachedTracks = 24;
 
+type RoomRecoveryPhase =
+  | "joining"
+  | "resyncing"
+  | "bootstrapping-data"
+  | "bootstrapping-media"
+  | "playing-local-fallback"
+  | "steady";
+
+type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
+
+type RoomRecoveryState = {
+  phase: RoomRecoveryPhase;
+  mode: RoomRecoveryMode;
+  generation: number | null;
+  bootstrapStartedAt: string | null;
+  bootstrapSourcePeerId: string | null;
+  pendingSnapshot: boolean;
+  pendingData: boolean;
+  pendingMedia: boolean;
+  listenerBootstrapAttempts: number | null;
+  fullLocalRecoveryActive: boolean;
+};
+
 type MusicRoomAppProps = {
   workspaceOnly?: boolean;
   initialRoomId?: string | null;
@@ -110,6 +133,18 @@ export function MusicRoomApp({
     "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
   >("idle");
   const [lastSourceStartError, setLastSourceStartError] = useState<string | null>(null);
+  const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>({
+    phase: "joining",
+    mode: "steady",
+    generation: null,
+    bootstrapStartedAt: null,
+    bootstrapSourcePeerId: null,
+    pendingSnapshot: false,
+    pendingData: false,
+    pendingMedia: false,
+    listenerBootstrapAttempts: null,
+    fullLocalRecoveryActive: false
+  });
   const resetRealtimePeer = useCallback(() => {
     const nextPeerId = `peer_${crypto.randomUUID()}`;
     window.sessionStorage.setItem(peerStorageKey, nextPeerId);
@@ -215,6 +250,8 @@ export function MusicRoomApp({
       setProgressiveFallbackReason,
       playbackStartIntent,
       setPlaybackStartIntent,
+      audioUnlocked,
+      roomRecoveryState,
       isPageVisible,
       volume,
       connectedPeersCount: connectedPeers.length,
@@ -295,6 +332,18 @@ export function MusicRoomApp({
     setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
     setAuthoritativeMediaClock(null);
+    setRoomRecoveryState({
+      phase: "joining",
+      mode: "steady",
+      generation: null,
+      bootstrapStartedAt: null,
+      bootstrapSourcePeerId: null,
+      pendingSnapshot: false,
+      pendingData: false,
+      pendingMedia: false,
+      listenerBootstrapAttempts: null,
+      fullLocalRecoveryActive: false
+    });
   }, [
     destroyProgressiveRuntime,
     resetAvailabilityState,
@@ -384,6 +433,7 @@ export function MusicRoomApp({
     setIceConfig,
     iceConfigResolved,
     setIceConfigResolved,
+    mediaConnectionState,
     setMediaConnectionState,
     isPageVisible,
     setIsPageVisible,
@@ -401,6 +451,8 @@ export function MusicRoomApp({
     getHostRelayClockState,
     setAuthoritativeMediaClock,
     setAudioUnlocked,
+    roomRecoveryState,
+    setRoomRecoveryState,
     sourceStartState,
     setSourceStartState,
     lastSourceStartError,

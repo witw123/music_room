@@ -53,6 +53,7 @@ export const peerSignalMessageSchema = z.object({
   toPeerId: z.string(),
   channelKind: z.enum(["data", "media"]),
   mediaEpoch: z.number().int().nonnegative().optional(),
+  recoveryGeneration: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
 });
@@ -149,6 +150,26 @@ export const remoteTrackStatusSchema = z.object({
 
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  recoveryPhase: z
+    .enum([
+      "joining",
+      "resyncing",
+      "bootstrapping-data",
+      "bootstrapping-media",
+      "playing-local-fallback",
+      "steady"
+    ])
+    .nullable()
+    .optional(),
+  recoveryMode: z.enum(["late-join", "rejoin", "steady"]).nullable().optional(),
+  recoveryGeneration: z.number().int().nonnegative().nullable().optional(),
+  bootstrapSourcePeerId: z.string().nullable().optional(),
+  bootstrapStartedAt: z.string().datetime().nullable().optional(),
+  pendingSnapshot: z.boolean().optional(),
+  pendingData: z.boolean().optional(),
+  pendingMedia: z.boolean().optional(),
+  listenerBootstrapAttempts: z.number().int().nonnegative().nullable().optional(),
+  fullLocalRecoveryActive: z.boolean().optional(),
   shadowWarmupActive: z.boolean().optional(),
   audioUnlocked: z.boolean().optional(),
   sourceStartState: z

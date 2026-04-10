@@ -33,6 +33,28 @@ export const roomSubscribePayloadSchema = z.object({
   peerId: z.string().optional()
 });
 
+export const roomSubscribeBootstrapMemberSchema = z.object({
+  id: z.string(),
+  peerId: z.string().nullable(),
+  presenceState: roomSnapshotSchema.shape.room.shape.members.element.shape.presenceState,
+  role: roomSnapshotSchema.shape.room.shape.members.element.shape.role
+});
+
+export const roomSubscribeAckPayloadSchema = z.object({
+  ok: z.boolean(),
+  serverNow: z.string().datetime().optional(),
+  recoveryGeneration: z.number().int().nonnegative().optional(),
+  bootstrap: z
+    .object({
+      roomId: z.string(),
+      roomRevision: z.number().int().nonnegative(),
+      presenceRevision: z.number().int().nonnegative(),
+      playback: playbackSnapshotSchema,
+      members: z.array(roomSubscribeBootstrapMemberSchema)
+    })
+    .optional()
+});
+
 export const roomUnsubscribePayloadSchema = z.object({
   roomId: z.string()
 });
@@ -170,6 +192,8 @@ export const roomChatEventSchema = z.object({
 
 export type WebsocketEvent = z.infer<typeof websocketEventSchema>;
 export type RoomSubscribePayload = z.infer<typeof roomSubscribePayloadSchema>;
+export type RoomSubscribeBootstrapMember = z.infer<typeof roomSubscribeBootstrapMemberSchema>;
+export type RoomSubscribeAckPayload = z.infer<typeof roomSubscribeAckPayloadSchema>;
 export type RoomUnsubscribePayload = z.infer<typeof roomUnsubscribePayloadSchema>;
 export type RoomPresencePayload = z.infer<typeof roomPresencePayloadSchema>;
 export type RoomSnapshotMissingPayload = z.infer<typeof roomSnapshotMissingPayloadSchema>;
@@ -205,7 +229,7 @@ export type ServerToClientEvents = {
 export type ClientToServerEvents = {
   "room.subscribe": (
     payload: RoomSubscribePayload,
-    ack?: (payload: { ok: boolean }) => void
+    ack?: (payload: RoomSubscribeAckPayload) => void
   ) => void;
   "room.presence": (payload: RoomPresencePayload) => void;
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;

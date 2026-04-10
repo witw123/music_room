@@ -160,6 +160,7 @@ describe("SignalingGateway", () => {
   });
 
   it("emits the latest snapshot immediately after a room subscribe", async () => {
+    jest.useFakeTimers();
     const snapshot = createSnapshot({
       members: [
         {
@@ -178,11 +179,12 @@ describe("SignalingGateway", () => {
     });
     const client = createClient();
 
-    await gateway.handleRoomSubscribe(client as never, {
+    const response = await gateway.handleRoomSubscribe(client as never, {
       roomId: "room_1",
       sessionId: "guest_host",
       peerId: "peer_host"
     });
+    jest.runAllTimers();
 
     expect(client.join).toHaveBeenCalledWith("room_1");
     expect(authService.assertSessionToken).toHaveBeenCalledWith("guest_host", "token");
@@ -193,6 +195,25 @@ describe("SignalingGateway", () => {
       "online"
     );
     expect(roomService.getAccessibleRoomSnapshot).toHaveBeenCalledWith("room_1", [], "guest_host");
+    expect(response).toEqual({
+      ok: true,
+      serverNow: expect.any(String),
+      recoveryGeneration: expect.any(Number),
+      bootstrap: {
+        roomId: "room_1",
+        roomRevision: 0,
+        presenceRevision: 3,
+        playback: snapshot.room.playback,
+        members: [
+          {
+            id: "guest_host",
+            peerId: "peer_host",
+            presenceState: "online",
+            role: "host"
+          }
+        ]
+      }
+    });
     expect(client.emit).toHaveBeenCalledWith("room.snapshot", snapshot);
   });
 
@@ -243,7 +264,7 @@ describe("SignalingGateway", () => {
         sessionId: "guest_host",
         peerId: "peer_host"
       })
-    ).resolves.toEqual({ ok: true });
+    ).resolves.toEqual({ ok: false });
 
     expect(client.emit).toHaveBeenCalledWith("room.snapshot.missing", { roomId: "room_404" });
     expect(client.leave).not.toHaveBeenCalled();
@@ -686,6 +707,107 @@ describe("SignalingGateway", () => {
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
         type: "offer"
+      })
+    );
+  });
+
+  it("queues peer signals until the target peer subscribes, then flushes them with the active recovery generation", async () => {
+    jest.useFakeTimers();
+    const { gateway } = createGateway();
+    const { emit } = attachServerMock(gateway);
+
+    await gateway.handleRoomSubscribe(
+      createClient({ id: "socket_peer_a" }) as never,
+      { roomId: "room_1", sessionId: "guest_a", peerId: "peer_a" }
+    );
+    jest.runAllTimers();
+    (gateway.server.to as jest.Mock).mockClear();
+    emit.mockClear();
+
+    await gateway.handleSignal(
+      createClient({
+        id: "socket_peer_a",
+        roomId: "room_1",
+        peerId: "peer_a",
+        isRealtimeAuthenticated: true
+      }) as never,
+      {
+        roomId: "room_1",
+        fromPeerId: "peer_a",
+        toPeerId: "peer_b",
+        channelKind: "data",
+        type: "offer",
+        payload: { type: "offer", sdp: "fake" }
+      }
+    );
+
+    expect(emit).not.toHaveBeenCalledWith("peer.signal", expect.anything());
+
+    const subscribeResult = await gateway.handleRoomSubscribe(
+      createClient({ id: "socket_peer_b" }) as never,
+      { roomId: "room_1", sessionId: "guest_b", peerId: "peer_b" }
+    );
+    jest.runAllTimers();
+
+    expect(subscribeResult).toEqual(
+      expect.objectContaining({
+        ok: true,
+        recoveryGeneration: expect.any(Number)
+      })
+    );
+    expect(gateway.server.to).toHaveBeenCalledWith("socket_peer_b");
+    expect(emit).toHaveBeenCalledWith(
+      "peer.signal",
+      expect.objectContaining({
+        fromPeerId: "peer_a",
+        toPeerId: "peer_b",
+        recoveryGeneration: subscribeResult.recoveryGeneration
+      })
+    );
+  });
+
+  it("drops expired queued peer signals instead of replaying them after a late subscribe", async () => {
+    jest.useFakeTimers();
+    const { gateway } = createGateway();
+    const { emit } = attachServerMock(gateway);
+
+    await gateway.handleRoomSubscribe(
+      createClient({ id: "socket_peer_a" }) as never,
+      { roomId: "room_1", sessionId: "guest_a", peerId: "peer_a" }
+    );
+    jest.runAllTimers();
+    (gateway.server.to as jest.Mock).mockClear();
+    emit.mockClear();
+
+    await gateway.handleSignal(
+      createClient({
+        id: "socket_peer_a",
+        roomId: "room_1",
+        peerId: "peer_a",
+        isRealtimeAuthenticated: true
+      }) as never,
+      {
+        roomId: "room_1",
+        fromPeerId: "peer_a",
+        toPeerId: "peer_b",
+        channelKind: "data",
+        type: "offer",
+        payload: { type: "offer", sdp: "fake" }
+      }
+    );
+    jest.advanceTimersByTime(10_001);
+
+    await gateway.handleRoomSubscribe(
+      createClient({ id: "socket_peer_b" }) as never,
+      { roomId: "room_1", sessionId: "guest_b", peerId: "peer_b" }
+    );
+    jest.runAllTimers();
+
+    expect(emit).not.toHaveBeenCalledWith(
+      "peer.signal",
+      expect.objectContaining({
+        fromPeerId: "peer_a",
+        toPeerId: "peer_b"
       })
     );
   });

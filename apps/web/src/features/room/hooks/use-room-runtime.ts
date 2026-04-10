@@ -17,6 +17,7 @@ import type {
   PeerSignalMessage,
   RoomMediaClockPayload,
   RoomMediaConnectionState,
+  RoomSubscribeAckPayload,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
@@ -102,6 +103,7 @@ type UseRoomRuntimeInput = {
   setIceConfig: Dispatch<SetStateAction<IceConfigResponse | null>>;
   iceConfigResolved: boolean;
   setIceConfigResolved: Dispatch<SetStateAction<boolean>>;
+  mediaConnectionState: RoomMediaConnectionState;
   setMediaConnectionState: Dispatch<SetStateAction<RoomMediaConnectionState>>;
   isPageVisible: boolean;
   setIsPageVisible: Dispatch<SetStateAction<boolean>>;
@@ -125,6 +127,44 @@ type UseRoomRuntimeInput = {
   } | null;
   setAuthoritativeMediaClock: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
+  roomRecoveryState: {
+    phase:
+      | "joining"
+      | "resyncing"
+      | "bootstrapping-data"
+      | "bootstrapping-media"
+      | "playing-local-fallback"
+      | "steady";
+    mode: "late-join" | "rejoin" | "steady";
+    generation: number | null;
+    bootstrapStartedAt: string | null;
+    bootstrapSourcePeerId: string | null;
+    pendingSnapshot: boolean;
+    pendingData: boolean;
+    pendingMedia: boolean;
+    listenerBootstrapAttempts: number | null;
+    fullLocalRecoveryActive: boolean;
+  };
+  setRoomRecoveryState: Dispatch<
+    SetStateAction<{
+      phase:
+        | "joining"
+        | "resyncing"
+        | "bootstrapping-data"
+        | "bootstrapping-media"
+        | "playing-local-fallback"
+        | "steady";
+      mode: "late-join" | "rejoin" | "steady";
+      generation: number | null;
+      bootstrapStartedAt: string | null;
+      bootstrapSourcePeerId: string | null;
+      pendingSnapshot: boolean;
+      pendingData: boolean;
+      pendingMedia: boolean;
+      listenerBootstrapAttempts: number | null;
+      fullLocalRecoveryActive: boolean;
+    }>
+  >;
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
   setSourceStartState: Dispatch<
     SetStateAction<"idle" | "awaiting-unlock" | "starting" | "live" | "failed">
@@ -387,6 +427,20 @@ export function shouldResumeRemotePlaybackAfterAudioUnlock(input: {
   );
 }
 
+export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
+  payloadRecoveryGeneration: number | null | undefined;
+  currentRecoveryGeneration: number | null;
+}) {
+  if (
+    typeof input.payloadRecoveryGeneration !== "number" ||
+    input.currentRecoveryGeneration === null
+  ) {
+    return true;
+  }
+
+  return input.payloadRecoveryGeneration === input.currentRecoveryGeneration;
+}
+
 function resolveCurrentRoomTrackTotalChunks(input: {
   trackId: string | null;
   roomSnapshot: RoomSnapshot | null;
@@ -585,6 +639,7 @@ export function useRoomRuntime({
   setIceConfig,
   iceConfigResolved,
   setIceConfigResolved,
+  mediaConnectionState,
   setMediaConnectionState,
   isPageVisible,
   setIsPageVisible,
@@ -602,6 +657,8 @@ export function useRoomRuntime({
   getHostRelayClockState,
   setAuthoritativeMediaClock,
   setAudioUnlocked,
+  roomRecoveryState,
+  setRoomRecoveryState,
   sourceStartState,
   setSourceStartState,
   lastSourceStartError,
@@ -644,10 +701,27 @@ export function useRoomRuntime({
   const remoteStreamClearTimeoutRef = useRef<number | null>(null);
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
+  const recoveryWatchdogIntervalRef = useRef<number | null>(null);
   const resubscribeRoomRef = useRef<(() => void) | null>(null);
+  const recoveryGenerationRef = useRef<number | null>(roomRecoveryState.generation);
+  const lastSubscribeAckAtRef = useRef<number | null>(null);
+  const latestSubscribeBootstrapRef = useRef<RoomSubscribeAckPayload["bootstrap"] | null>(null);
+  const recoveryModeRef = useRef<"late-join" | "rejoin" | "steady">("steady");
+  const recoveryWatchdogActionsRef = useRef<{
+    snapshotResyncKey: string | null;
+    dataRestartKey: string | null;
+    mediaRestartKey: string | null;
+    fullResubscribeKey: string | null;
+  }>({
+    snapshotResyncKey: null,
+    dataRestartKey: null,
+    mediaRestartKey: null,
+    fullResubscribeKey: null
+  });
   const presenceRepairKeyRef = useRef<string | null>(null);
   const trackMetadataRepairKeyRef = useRef<string | null>(null);
   const lastRealtimeRoomEventAtRef = useRef<number>(Date.now());
+  const lastListenerBootstrapKeyRef = useRef<string | null>(null);
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
     lastAppliedKey: string | null;
@@ -1227,6 +1301,13 @@ export function useRoomRuntime({
     }
   }, []);
 
+  const stopRecoveryWatchdog = useCallback(() => {
+    if (recoveryWatchdogIntervalRef.current !== null) {
+      window.clearInterval(recoveryWatchdogIntervalRef.current);
+      recoveryWatchdogIntervalRef.current = null;
+    }
+  }, []);
+
   const emitPresence = useCallback(() => {
     const currentSession = activeSessionRef.current;
     const currentRoomId = currentRoomRef.current?.room.id;
@@ -1254,6 +1335,41 @@ export function useRoomRuntime({
   useEffect(() => {
     currentRoomRef.current = roomSnapshot;
   }, [roomSnapshot, currentRoomRef]);
+
+  useEffect(() => {
+    recoveryGenerationRef.current = roomRecoveryState.generation;
+    recoveryModeRef.current = roomRecoveryState.mode;
+  }, [roomRecoveryState.generation, roomRecoveryState.mode]);
+
+  useEffect(() => {
+    recordPeerDiagnosticRef.current({
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "room-recovery-state",
+      summary: `恢复阶段 ${roomRecoveryState.phase}`,
+      recordEvent: false,
+      update: (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          ...(
+            snapshot.progressivePlaybackStatus ??
+            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+          ),
+          recoveryPhase: roomRecoveryState.phase,
+          recoveryMode: roomRecoveryState.mode,
+          recoveryGeneration: roomRecoveryState.generation,
+          bootstrapStartedAt: roomRecoveryState.bootstrapStartedAt,
+          bootstrapSourcePeerId: roomRecoveryState.bootstrapSourcePeerId,
+          pendingSnapshot: roomRecoveryState.pendingSnapshot,
+          pendingData: roomRecoveryState.pendingData,
+          pendingMedia: roomRecoveryState.pendingMedia,
+          listenerBootstrapAttempts: roomRecoveryState.listenerBootstrapAttempts,
+          fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive
+        }
+      })
+    });
+  }, [roomRecoveryState]);
 
   useEffect(() => {
     if (roomSnapshot?.room.id) {
@@ -1494,6 +1610,65 @@ export function useRoomRuntime({
       await roomSnapshotResyncController.request(roomId, reason);
     },
     [activeSessionRef, hydrated, isNavigatingRoomExit, roomSnapshotResyncController]
+  );
+
+  const applySubscribeBootstrap = useCallback(
+    (ack: RoomSubscribeAckPayload) => {
+      if (!ack.bootstrap || ack.bootstrap.roomId !== activeRouteRoomIdRef.current) {
+        return;
+      }
+
+      latestSubscribeBootstrapRef.current = ack.bootstrap;
+      lastSubscribeAckAtRef.current = Date.now();
+      const nextRecoveryMode =
+        recoveryGenerationRef.current === null ? "late-join" : "rejoin";
+      recoveryGenerationRef.current = ack.recoveryGeneration ?? null;
+      recoveryModeRef.current = nextRecoveryMode;
+
+      const currentMembers = currentRoomRef.current?.room.members ?? [];
+      const mergedMembers = ack.bootstrap.members.map((member) => {
+        const existing = currentMembers.find((entry) => entry.id === member.id);
+        return {
+          id: member.id,
+          nickname: existing?.nickname ?? (member.role === "host" ? "房主" : "成员"),
+          role: member.role,
+          joinedAt: existing?.joinedAt ?? new Date().toISOString(),
+          peerId: member.peerId ?? null,
+          presenceState: member.presenceState
+        };
+      });
+
+      dispatchRoomStateEvent({
+        type: "subscribe-bootstrap",
+        roomId: ack.bootstrap.roomId,
+        members: mergedMembers,
+        playback: ack.bootstrap.playback,
+        presenceRevision: ack.bootstrap.presenceRevision,
+        roomRevision: ack.bootstrap.roomRevision
+      });
+
+      const currentTrackId = ack.bootstrap.playback.currentTrackId ?? null;
+      const hasFullLocalTrack = !!(currentTrackId && uploadedTracks[currentTrackId]);
+      setRoomRecoveryState((current) => ({
+        ...current,
+        phase: hasFullLocalTrack && audioUnlocked ? "playing-local-fallback" : "resyncing",
+        mode: nextRecoveryMode,
+        generation: ack.recoveryGeneration ?? null,
+        bootstrapStartedAt: ack.serverNow ?? new Date().toISOString(),
+        bootstrapSourcePeerId: ack.bootstrap?.playback.sourcePeerId ?? null,
+        pendingSnapshot: true,
+        pendingData: !hasFullLocalTrack,
+        pendingMedia: !hasFullLocalTrack,
+        listenerBootstrapAttempts: current.listenerBootstrapAttempts ?? 0,
+        fullLocalRecoveryActive: hasFullLocalTrack
+      }));
+    },
+    [
+      audioUnlocked,
+      dispatchRoomStateEvent,
+      setRoomRecoveryState,
+      uploadedTracks
+    ]
   );
 
   useEffect(() => {
@@ -4220,7 +4395,9 @@ export function useRoomRuntime({
           : "steady"
     );
 
-    const resyncRealtimePeers = (members = currentRoomRef.current?.room.members ?? []) => {
+    const resyncRealtimePeers = (
+      members: Array<{ peerId: string | null }> = currentRoomRef.current?.room.members ?? []
+    ) => {
       const remotePeerIds = members
         .map((member) => member.peerId)
         .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId);
@@ -4268,6 +4445,19 @@ export function useRoomRuntime({
         return;
       }
 
+      setRoomRecoveryState((current) => ({
+        ...current,
+        phase: "joining",
+        mode: current.generation === null ? "late-join" : "rejoin",
+        pendingSnapshot: true,
+        pendingData: true,
+        pendingMedia: true,
+        bootstrapStartedAt: null,
+        bootstrapSourcePeerId: null,
+        listenerBootstrapAttempts: 0,
+        fullLocalRecoveryActive: false
+      }));
+
       if (subscribeAckTimeoutId !== null) {
         window.clearTimeout(subscribeAckTimeoutId);
       }
@@ -4283,7 +4473,7 @@ export function useRoomRuntime({
           sessionId: currentSession.userId,
           peerId
         },
-        (response?: { ok?: boolean }) => {
+        (response?: RoomSubscribeAckPayload) => {
           if (subscribeAckTimeoutId !== null) {
             window.clearTimeout(subscribeAckTimeoutId);
             subscribeAckTimeoutId = null;
@@ -4294,8 +4484,9 @@ export function useRoomRuntime({
           }
 
           clearSubscribeRetry();
+          applySubscribeBootstrap(response);
           startPresenceHeartbeat();
-          resyncRealtimePeers();
+          resyncRealtimePeers(response.bootstrap?.members ?? undefined);
           flushPendingAvailabilityRef.current();
           for (const trackId of uploadedTrackIdsRef.current) {
             void announceLocalCacheRef.current(trackId);
@@ -4348,6 +4539,11 @@ export function useRoomRuntime({
         type: "server-snapshot",
         snapshot
       });
+      setRoomRecoveryState((current) => ({
+        ...current,
+        phase: current.fullLocalRecoveryActive ? "playing-local-fallback" : "resyncing",
+        pendingSnapshot: false
+      }));
       void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
 
       if (!didReplayLocalAvailability) {
@@ -4478,6 +4674,24 @@ export function useRoomRuntime({
         return;
       }
 
+      if (
+        !shouldAcceptIncomingPeerSignalRecoveryGeneration({
+          payloadRecoveryGeneration: payload.recoveryGeneration,
+          currentRecoveryGeneration: recoveryGenerationRef.current
+        })
+      ) {
+        recordPeerDiagnosticRef.current({
+          peerId: payload.fromPeerId,
+          channelKind: payload.channelKind,
+          direction: "received",
+          event: "stale-signal-dropped",
+          summary: `丢弃旧恢复代次信令 ${payload.recoveryGeneration}`,
+          level: "warning",
+          recordEvent: false
+        });
+        return;
+      }
+
       const traceContext =
         payload.channelKind === "media" ? getRemoteMediaTraceContext(payload.fromPeerId) : null;
       recordPeerDiagnosticRef.current({
@@ -4590,6 +4804,7 @@ export function useRoomRuntime({
     });
     socket.on("disconnect", (reason) => {
       stopPresenceHeartbeat();
+      stopRecoveryWatchdog();
       setConnectedPeers([]);
       setMediaConnectedPeers([]);
       setAuthoritativeMediaClock(null);
@@ -4597,6 +4812,14 @@ export function useRoomRuntime({
       setMediaConnectionState(
         currentRoomRef.current?.room.playback.status === "playing" ? "reconnecting" : "idle"
       );
+      setRoomRecoveryState((current) => ({
+        ...current,
+        phase: current.fullLocalRecoveryActive ? "playing-local-fallback" : "joining",
+        mode: current.generation === null ? current.mode : "rejoin",
+        pendingSnapshot: true,
+        pendingData: true,
+        pendingMedia: !current.fullLocalRecoveryActive
+      }));
 
       if (reason === "io client disconnect") {
         return;
@@ -4606,6 +4829,7 @@ export function useRoomRuntime({
 
     return () => {
       stopPresenceHeartbeat();
+      stopRecoveryWatchdog();
       clearSubscribeRetry();
       if (remotePlaybackRetryRef.current !== null) {
         window.clearTimeout(remotePlaybackRetryRef.current);
@@ -4645,8 +4869,22 @@ export function useRoomRuntime({
       setMediaConnectedPeers([]);
       setAuthoritativeMediaClock(null);
       setMediaConnectionState("idle");
+      setRoomRecoveryState((current) => ({
+        ...current,
+        phase: "joining",
+        mode: "steady",
+        generation: null,
+        bootstrapStartedAt: null,
+        bootstrapSourcePeerId: null,
+        pendingSnapshot: false,
+        pendingData: false,
+        pendingMedia: false,
+        listenerBootstrapAttempts: null,
+        fullLocalRecoveryActive: false
+      }));
     };
   }, [
+    applySubscribeBootstrap,
     roomSnapshot?.room.id,
     hydrated,
     iceConfig,
@@ -4657,6 +4895,7 @@ export function useRoomRuntime({
     uploadedTrackIdsRef,
     clearHostMediaSyncRetry,
     clearListenerMediaRecovery,
+    stopRecoveryWatchdog,
     startPresenceHeartbeat,
     stopPresenceHeartbeat,
     chunkSchedulerRef,
@@ -4670,9 +4909,174 @@ export function useRoomRuntime({
     setMediaConnectedPeers,
     setAuthoritativeMediaClock,
     setMediaConnectionState,
+    setRoomRecoveryState,
     exitCurrentRoom,
     setStatusMessage,
     updateRemoteMediaDiagnostic
+  ]);
+
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback ?? null;
+    const currentTrackId = playback?.currentTrackId ?? null;
+    const sourcePeerId = playback?.sourcePeerId ?? null;
+    const hasFullLocalTrack = !!(currentTrackId && uploadedTracks[currentTrackId]);
+    const dataReady = !!(sourcePeerId && connectedPeers.includes(sourcePeerId));
+    const mediaReady =
+      !!(sourcePeerId && mediaConnectedPeers.includes(sourcePeerId)) || mediaConnectionState === "live";
+
+    if (
+      !roomSnapshot?.room.id ||
+      !playback ||
+      !playback.currentTrackId ||
+      !roomRecoveryState.generation ||
+      isCurrentSourceOwner
+    ) {
+      stopRecoveryWatchdog();
+      recoveryWatchdogActionsRef.current = {
+        snapshotResyncKey: null,
+        dataRestartKey: null,
+        mediaRestartKey: null,
+        fullResubscribeKey: null
+      };
+      return;
+    }
+
+    setRoomRecoveryState((current) => {
+      const nextPhase =
+        current.fullLocalRecoveryActive && hasFullLocalTrack
+          ? "playing-local-fallback"
+          : current.pendingSnapshot
+            ? "resyncing"
+            : !dataReady
+              ? "bootstrapping-data"
+              : !mediaReady
+                ? "bootstrapping-media"
+                : "steady";
+      const nextFullLocalRecoveryActive = current.fullLocalRecoveryActive || hasFullLocalTrack;
+      if (
+        current.phase === nextPhase &&
+        current.pendingData === !dataReady &&
+        current.pendingMedia === !mediaReady &&
+        current.fullLocalRecoveryActive === nextFullLocalRecoveryActive
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        phase: nextPhase,
+        pendingData: !dataReady,
+        pendingMedia: !mediaReady,
+        fullLocalRecoveryActive: nextFullLocalRecoveryActive
+      };
+    });
+
+    if (playback.status !== "playing" || lastSubscribeAckAtRef.current === null) {
+      stopRecoveryWatchdog();
+      return;
+    }
+
+    stopRecoveryWatchdog();
+    recoveryWatchdogIntervalRef.current = window.setInterval(() => {
+      const ackAt = lastSubscribeAckAtRef.current;
+      const currentPlayback = currentRoomRef.current?.room.playback;
+      const latestTrackId = currentPlayback?.currentTrackId ?? null;
+      const latestSourcePeerId = currentPlayback?.sourcePeerId ?? null;
+      const latestGeneration = recoveryGenerationRef.current;
+      if (!ackAt || !currentPlayback || !latestTrackId || !latestSourcePeerId || latestGeneration === null) {
+        return;
+      }
+
+      const now = Date.now();
+      const ageMs = now - ackAt;
+      const recoveryKey = [
+        roomSnapshot.room.id,
+        latestTrackId,
+        currentPlayback.mediaEpoch,
+        latestGeneration,
+        latestSourcePeerId
+      ].join("|");
+      const latestHasFullLocalTrack = !!uploadedTracks[latestTrackId];
+      const latestDataReady = connectedPeers.includes(latestSourcePeerId);
+      const latestMediaReady =
+        mediaConnectedPeers.includes(latestSourcePeerId) || mediaConnectionState === "live";
+
+      if (roomRecoveryState.pendingSnapshot && ageMs >= 1_500) {
+        const snapshotResyncKey = `${recoveryKey}|snapshot`;
+        if (recoveryWatchdogActionsRef.current.snapshotResyncKey !== snapshotResyncKey) {
+          recoveryWatchdogActionsRef.current.snapshotResyncKey = snapshotResyncKey;
+          void requestRoomSnapshotResyncRef.current("subscribe-ack", roomSnapshot.room.id);
+        }
+      }
+
+      if (!latestDataReady && ageMs >= 2_500) {
+        const dataRestartKey = `${recoveryKey}|data`;
+        if (recoveryWatchdogActionsRef.current.dataRestartKey !== dataRestartKey) {
+          recoveryWatchdogActionsRef.current.dataRestartKey = dataRestartKey;
+          setRoomRecoveryState((current) => ({
+            ...current,
+            phase: "bootstrapping-data",
+            listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
+          }));
+          void meshRef.current?.restartPeer(latestSourcePeerId);
+        }
+      }
+
+      if (!latestMediaReady && ageMs >= 3_000) {
+        if (latestHasFullLocalTrack) {
+          setRoomRecoveryState((current) => ({
+            ...current,
+            phase: "playing-local-fallback",
+            fullLocalRecoveryActive: true,
+            pendingMedia: true
+          }));
+        } else {
+          const mediaRestartKey = `${recoveryKey}|media`;
+          if (recoveryWatchdogActionsRef.current.mediaRestartKey !== mediaRestartKey) {
+            recoveryWatchdogActionsRef.current.mediaRestartKey = mediaRestartKey;
+            setRoomRecoveryState((current) => ({
+              ...current,
+              phase: "bootstrapping-media",
+              listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
+            }));
+            void mediaMeshRef.current?.restartPeer(latestSourcePeerId);
+          }
+        }
+      }
+
+      if (!latestDataReady && !latestMediaReady && ageMs >= 8_000) {
+        const fullResubscribeKey = `${recoveryKey}|resubscribe`;
+        if (recoveryWatchdogActionsRef.current.fullResubscribeKey !== fullResubscribeKey) {
+          recoveryWatchdogActionsRef.current.fullResubscribeKey = fullResubscribeKey;
+          setRoomRecoveryState((current) => ({
+            ...current,
+            phase: latestHasFullLocalTrack ? "playing-local-fallback" : "resyncing",
+            pendingSnapshot: true,
+            listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
+          }));
+          resubscribeRoomRef.current?.();
+          void meshRef.current?.restartPeer(latestSourcePeerId);
+          void mediaMeshRef.current?.restartPeer(latestSourcePeerId);
+        }
+      }
+    }, 250);
+
+    return () => {
+      stopRecoveryWatchdog();
+    };
+  }, [
+    connectedPeers,
+    isCurrentSourceOwner,
+    mediaConnectedPeers,
+    mediaConnectionState,
+    roomRecoveryState.fullLocalRecoveryActive,
+    roomRecoveryState.generation,
+    roomRecoveryState.pendingSnapshot,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback,
+    setRoomRecoveryState,
+    stopRecoveryWatchdog,
+    uploadedTracks
   ]);
 
   useEffect(() => {
@@ -4917,6 +5321,68 @@ export function useRoomRuntime({
     mediaConnectedPeers.length,
     sourceStartState,
     syncHostMediaStream
+  ]);
+
+  useEffect(() => {
+    if (
+      !roomSnapshot?.room.id ||
+      !peerId ||
+      !isCurrentSourceOwner ||
+      !audioUnlocked ||
+      roomSnapshot.room.playback.status !== "playing" ||
+      sourceStartState !== "live"
+    ) {
+      lastListenerBootstrapKeyRef.current = null;
+      return;
+    }
+
+    const listenerPeerIds = roomSnapshot.room.members
+      .filter((member) => !!member.peerId && member.peerId !== peerId)
+      .map((member) => member.peerId as string)
+      .sort();
+    if (listenerPeerIds.length === 0) {
+      lastListenerBootstrapKeyRef.current = null;
+      return;
+    }
+
+    const bootstrapKey = [
+      roomSnapshot.room.id,
+      roomSnapshot.room.playback.mediaEpoch,
+      roomSnapshot.room.presenceRevision,
+      ...listenerPeerIds
+    ].join("|");
+    if (lastListenerBootstrapKeyRef.current === bootstrapKey) {
+      return;
+    }
+    lastListenerBootstrapKeyRef.current = bootstrapKey;
+
+    const timerIds = [0, 800, 2400].map((delayMs) =>
+      window.setTimeout(() => {
+        if (activeRouteRoomIdRef.current !== roomSnapshot.room.id) {
+          return;
+        }
+        void syncHostMediaStreamRef.current();
+        for (const listenerPeerId of listenerPeerIds) {
+          void mediaMeshRef.current?.restartPeer(listenerPeerId, hostStreamRef.current);
+        }
+      }, delayMs)
+    );
+
+    return () => {
+      for (const timerId of timerIds) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [
+    audioUnlocked,
+    isCurrentSourceOwner,
+    peerId,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.members,
+    roomSnapshot?.room.playback.mediaEpoch,
+    roomSnapshot?.room.playback.status,
+    roomSnapshot?.room.presenceRevision,
+    sourceStartState
   ]);
 
   useEffect(() => {

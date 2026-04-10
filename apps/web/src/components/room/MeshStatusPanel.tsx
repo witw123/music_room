@@ -526,6 +526,24 @@ function MeshStatusPanelBase({
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-all">
                         <span>播放源: {peer.progressivePlaybackStatus.activeSource ?? "未启用"}</span>
+                        <span>恢复阶段: {peer.progressivePlaybackStatus.recoveryPhase ?? "未知"}</span>
+                        <span>恢复模式: {peer.progressivePlaybackStatus.recoveryMode ?? "未知"}</span>
+                        <span>恢复代次: {peer.progressivePlaybackStatus.recoveryGeneration ?? "未知"}</span>
+                        <span>
+                          Bootstrap 音源:{" "}
+                          {peer.progressivePlaybackStatus.bootstrapSourcePeerId ?? "未知"}
+                        </span>
+                        <span>等待快照: {peer.progressivePlaybackStatus.pendingSnapshot ? "是" : "否"}</span>
+                        <span>等待 Data: {peer.progressivePlaybackStatus.pendingData ? "是" : "否"}</span>
+                        <span>等待 Media: {peer.progressivePlaybackStatus.pendingMedia ? "是" : "否"}</span>
+                        <span>
+                          本地恢复接管:{" "}
+                          {peer.progressivePlaybackStatus.fullLocalRecoveryActive ? "是" : "否"}
+                        </span>
+                        <span>
+                          Listener bootstrap 尝试:{" "}
+                          {peer.progressivePlaybackStatus.listenerBootstrapAttempts ?? "未知"}
+                        </span>
                         <span>
                           Governor: {peer.progressivePlaybackStatus.transportGovernorMode ?? "未激活"}
                         </span>
@@ -809,6 +827,12 @@ function MeshStatusPanelBase({
                         <p className="mt-1 text-foreground-muted">
                           最近稳播:{" "}
                           {formatTimestamp(peer.progressivePlaybackStatus.lastStablePlaybackAt)}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.bootstrapStartedAt ? (
+                        <p className="mt-1 text-foreground-muted">
+                          Bootstrap 开始:{" "}
+                          {formatTimestamp(peer.progressivePlaybackStatus.bootstrapStartedAt)}
                         </p>
                       ) : null}
                       {peer.remoteTrackStatus.lastPlayAttemptAt ? (

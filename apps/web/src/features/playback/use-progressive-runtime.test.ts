@@ -5,6 +5,7 @@ import {
   resolveMediaElementPlaybackRole,
   shouldBlockFullLocalHandoffForRecentRemoteRecovery,
   shouldEnableFullLocalHandoff,
+  shouldPreferImmediateFullLocalRecovery,
   resolvePlaybackRecoveryStage,
   resolveRemoteAudioHoldDurationMs,
   resolveRemoteStartupGateState,
@@ -191,6 +192,56 @@ describe("shouldPollRemoteStartupGate", () => {
       shouldPreferLocalTakeover({
         remoteFirstLock: true,
         progressiveFallbackReason: "stalled"
+      })
+    ).toBe(false);
+  });
+
+  it("prefers immediate full-local recovery for late-join or rejoin when the full cache is already ready", () => {
+    expect(
+      shouldPreferImmediateFullLocalRecovery({
+        isCurrentSourceOwner: false,
+        audioUnlocked: true,
+        hasBufferedFullLocalTrack: true,
+        fullLocalRecoveryActive: true,
+        recoveryPhase: "resyncing",
+        recoveryMode: "rejoin",
+        playbackStatus: "playing"
+      })
+    ).toBe(true);
+  });
+
+  it("does not prefer immediate full-local recovery when the member is still locked, lacks a full cache, or is already steady", () => {
+    expect(
+      shouldPreferImmediateFullLocalRecovery({
+        isCurrentSourceOwner: false,
+        audioUnlocked: false,
+        hasBufferedFullLocalTrack: true,
+        fullLocalRecoveryActive: true,
+        recoveryPhase: "resyncing",
+        recoveryMode: "late-join",
+        playbackStatus: "playing"
+      })
+    ).toBe(false);
+    expect(
+      shouldPreferImmediateFullLocalRecovery({
+        isCurrentSourceOwner: false,
+        audioUnlocked: true,
+        hasBufferedFullLocalTrack: false,
+        fullLocalRecoveryActive: true,
+        recoveryPhase: "bootstrapping-media",
+        recoveryMode: "rejoin",
+        playbackStatus: "playing"
+      })
+    ).toBe(false);
+    expect(
+      shouldPreferImmediateFullLocalRecovery({
+        isCurrentSourceOwner: false,
+        audioUnlocked: true,
+        hasBufferedFullLocalTrack: true,
+        fullLocalRecoveryActive: true,
+        recoveryPhase: "steady",
+        recoveryMode: "steady",
+        playbackStatus: "playing"
       })
     ).toBe(false);
   });

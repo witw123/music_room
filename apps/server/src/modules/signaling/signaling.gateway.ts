@@ -13,6 +13,7 @@ import type { Server, Socket } from "socket.io";
 import type {
   PieceAvailabilityClearPayload,
   PeerSignalMessage,
+  RoomSubscribeAckPayload,
   RoomMediaClockPayload,
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
@@ -41,14 +42,22 @@ import {
   roomSnapshotMissingChannel
 } from "./room-realtime.channels";
 
+type PendingPeerSignal = {
+  payload: PeerSignalMessage;
+  expiresAtMs: number;
+};
+
 @WebSocketGateway({
   path: "/ws/socket.io",
   cors: { origin: getCorsOrigins(), credentials: true }
 })
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly disconnectGracePeriodMs = 25_000;
+  private readonly pendingPeerSignalTtlMs = 10_000;
+  private readonly pendingPeerSignalLimit = 64;
   private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
   private sequence = 0;
+  private recoveryGenerationSequence = 0;
   private readonly pendingDisconnectCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly availabilityByRoom = new Map<
     string,
@@ -59,6 +68,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     string,
     Map<string, { socketId: string; peerId: string }>
   >();
+  private readonly recoveryGenerationByRoomSession = new Map<string, number>();
+  private readonly recoveryGenerationByRoomPeer = new Map<string, Map<string, number>>();
+  private readonly pendingPeerSignalsByRoomPeer = new Map<string, PendingPeerSignal[]>();
 
   constructor(
     private readonly redisService: RedisService,
@@ -83,6 +95,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.availabilityByRoom.delete(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
+    this.clearRoomRecoveryState(roomId);
     this.roomRealtimeBroadcaster.emitRoomMissing(roomId);
   }
 
@@ -91,6 +104,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.availabilityByRoom.delete(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
+    this.clearRoomRecoveryState(roomId);
     this.roomRealtimeBroadcaster.emitRoomDeleted(roomId, trackIds);
   }
 
@@ -192,6 +206,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.availabilityByRoom.delete(message.roomId);
       this.peerSocketsByRoom.delete(message.roomId);
       this.activeSessionsByRoom.delete(message.roomId);
+      this.clearRoomRecoveryState(message.roomId);
       this.server.to(message.roomId).emit("room.snapshot.missing", { roomId: message.roomId });
     });
 
@@ -213,6 +228,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.availabilityByRoom.delete(message.roomId);
       this.peerSocketsByRoom.delete(message.roomId);
       this.activeSessionsByRoom.delete(message.roomId);
+      this.clearRoomRecoveryState(message.roomId);
       this.server
         .to(message.roomId)
         .emit("room.deleted", { roomId: message.roomId, trackIds: message.trackIds ?? [] });
@@ -386,6 +402,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.pendingDisconnectCleanupTimers.clear();
     this.peerSocketsByRoom.clear();
     this.activeSessionsByRoom.clear();
+    this.pendingPeerSignalsByRoomPeer.clear();
+    this.recoveryGenerationByRoomSession.clear();
+    this.recoveryGenerationByRoomPeer.clear();
   }
 
   @SubscribeMessage("peer.signal")
@@ -399,7 +418,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     const nextPayload = {
       ...payload,
-      sequence: (payload as PeerSignalMessage & { sequence?: number }).sequence ?? this.nextSequence()
+      sequence: (payload as PeerSignalMessage & { sequence?: number }).sequence ?? this.nextSequence(),
+      recoveryGeneration:
+        payload.recoveryGeneration ?? this.resolvePeerRecoveryGeneration(payload.roomId, payload.toPeerId)
     } as PeerSignalMessage;
 
     this.emitPeerSignalToPeer(payload.roomId, nextPayload.toPeerId, nextPayload);
@@ -526,6 +547,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     client.data.peerId = payload.peerId;
     client.data.isRealtimeAuthenticated = true;
     client.join(payload.roomId);
+    const recoveryGeneration = this.registerRecoveryGeneration(
+      payload.roomId,
+      payload.sessionId,
+      payload.peerId
+    );
     this.registerPeerSocket(payload.roomId, payload.peerId, client.id);
     this.registerSessionSocket(payload.roomId, payload.sessionId, payload.peerId, client.id);
 
@@ -533,11 +559,24 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.cancelPendingDisconnectCleanup(payload.roomId, payload.sessionId);
       await this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId, "online");
       await this.rememberRecentRoom(payload.roomId, payload.sessionId);
-      await this.emitLatestSnapshot(payload.roomId, payload.sessionId, client);
+      let snapshot: RoomSnapshot;
+      try {
+        snapshot = await this.roomService.getAccessibleRoomSnapshot(payload.roomId, [], payload.sessionId);
+      } catch {
+        client.emit("room.snapshot.missing", { roomId: payload.roomId });
+        return { ok: false };
+      }
+      setTimeout(() => {
+        client.emit("room.snapshot", snapshot);
+      }, 0);
       this.emitAvailabilitySnapshot(payload.roomId, client);
+      this.flushPendingPeerSignals(payload.roomId, payload.peerId);
+      return this.buildSubscribeAck(snapshot, recoveryGeneration);
     } catch (error) {
       this.unregisterPeerSocket(payload.roomId, payload.peerId, client.id);
       this.unregisterSessionSocket(payload.roomId, payload.sessionId, client.id);
+      this.clearPendingPeerSignals(payload.roomId, payload.peerId);
+      this.clearRecoveryGeneration(payload.roomId, payload.sessionId, payload.peerId);
       client.leave(payload.roomId);
       client.data.roomId = undefined;
       client.data.sessionId = undefined;
@@ -545,8 +584,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       client.data.isRealtimeAuthenticated = false;
       throw new WsException(error instanceof Error ? error.message : "Unauthorized.");
     }
-
-    return { ok: true };
   }
 
   @SubscribeMessage("room.presence")
@@ -598,7 +635,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
     if (peerId) {
       this.clearPeerAvailability(payload.roomId, peerId);
+      this.clearPendingPeerSignals(payload.roomId, peerId);
     }
+    this.clearRecoveryGeneration(payload.roomId, sessionId, peerId);
     client.data.roomId = undefined;
     client.data.sessionId = undefined;
     client.data.peerId = undefined;
@@ -688,6 +727,134 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return this.sequence;
   }
 
+  private nextRecoveryGeneration() {
+    this.recoveryGenerationSequence += 1;
+    return this.recoveryGenerationSequence;
+  }
+
+  private recoverySessionKey(roomId: string, sessionId: string) {
+    return `${roomId}:${sessionId}`;
+  }
+
+  private roomPeerKey(roomId: string, peerId: string) {
+    return `${roomId}:${peerId}`;
+  }
+
+  private getOrCreateRoomPeerRecoveryMap(roomId: string) {
+    const current = this.recoveryGenerationByRoomPeer.get(roomId);
+    if (current) {
+      return current;
+    }
+
+    const next = new Map<string, number>();
+    this.recoveryGenerationByRoomPeer.set(roomId, next);
+    return next;
+  }
+
+  private registerRecoveryGeneration(roomId: string, sessionId: string, peerId: string) {
+    const nextGeneration = this.nextRecoveryGeneration();
+    this.recoveryGenerationByRoomSession.set(this.recoverySessionKey(roomId, sessionId), nextGeneration);
+    this.getOrCreateRoomPeerRecoveryMap(roomId).set(peerId, nextGeneration);
+    return nextGeneration;
+  }
+
+  private clearRecoveryGeneration(roomId?: string, sessionId?: string, peerId?: string) {
+    if (roomId && sessionId) {
+      this.recoveryGenerationByRoomSession.delete(this.recoverySessionKey(roomId, sessionId));
+    }
+
+    if (roomId && peerId) {
+      const roomPeers = this.recoveryGenerationByRoomPeer.get(roomId);
+      roomPeers?.delete(peerId);
+      if (roomPeers && roomPeers.size === 0) {
+        this.recoveryGenerationByRoomPeer.delete(roomId);
+      }
+    }
+  }
+
+  private resolvePeerRecoveryGeneration(roomId: string, peerId: string) {
+    return this.recoveryGenerationByRoomPeer.get(roomId)?.get(peerId);
+  }
+
+  private buildSubscribeAck(snapshot: RoomSnapshot, recoveryGeneration: number): RoomSubscribeAckPayload {
+    return {
+      ok: true,
+      serverNow: new Date().toISOString(),
+      recoveryGeneration,
+      bootstrap: {
+        roomId: snapshot.room.id,
+        roomRevision: snapshot.room.roomRevision ?? 0,
+        presenceRevision: snapshot.room.presenceRevision ?? 0,
+        playback: snapshot.room.playback,
+        members: snapshot.room.members.map((member) => ({
+          id: member.id,
+          peerId: member.peerId ?? null,
+          presenceState: member.presenceState,
+          role: member.role
+        }))
+      }
+    };
+  }
+
+  private queuePeerSignal(roomId: string, peerId: string, payload: PeerSignalMessage) {
+    const key = this.roomPeerKey(roomId, peerId);
+    const now = Date.now();
+    const queued = (this.pendingPeerSignalsByRoomPeer.get(key) ?? []).filter(
+      (entry) => entry.expiresAtMs > now
+    );
+    queued.push({
+      payload,
+      expiresAtMs: now + this.pendingPeerSignalTtlMs
+    });
+    if (queued.length > this.pendingPeerSignalLimit) {
+      queued.splice(0, queued.length - this.pendingPeerSignalLimit);
+    }
+    this.pendingPeerSignalsByRoomPeer.set(key, queued);
+  }
+
+  private flushPendingPeerSignals(roomId: string, peerId: string) {
+    const key = this.roomPeerKey(roomId, peerId);
+    const queued = this.pendingPeerSignalsByRoomPeer.get(key);
+    if (!queued?.length) {
+      return;
+    }
+
+    const now = Date.now();
+    this.pendingPeerSignalsByRoomPeer.delete(key);
+    for (const entry of queued) {
+      if (entry.expiresAtMs <= now) {
+        continue;
+      }
+
+      this.emitPeerSignalToPeer(roomId, peerId, entry.payload);
+    }
+  }
+
+  private clearPendingPeerSignals(roomId?: string, peerId?: string) {
+    if (roomId && peerId) {
+      this.pendingPeerSignalsByRoomPeer.delete(this.roomPeerKey(roomId, peerId));
+      return;
+    }
+
+    if (roomId) {
+      for (const key of this.pendingPeerSignalsByRoomPeer.keys()) {
+        if (key.startsWith(`${roomId}:`)) {
+          this.pendingPeerSignalsByRoomPeer.delete(key);
+        }
+      }
+    }
+  }
+
+  private clearRoomRecoveryState(roomId: string) {
+    this.clearPendingPeerSignals(roomId);
+    this.recoveryGenerationByRoomPeer.delete(roomId);
+    for (const key of [...this.recoveryGenerationByRoomSession.keys()]) {
+      if (key.startsWith(`${roomId}:`)) {
+        this.recoveryGenerationByRoomSession.delete(key);
+      }
+    }
+  }
+
   private emitAvailabilitySnapshot(roomId: string, client: Socket) {
     const roomAvailability = this.availabilityByRoom.get(roomId);
     if (!roomAvailability) {
@@ -702,11 +869,20 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private emitPeerSignalToPeer(roomId: string, peerId: string, payload: PeerSignalMessage) {
     const socketIds = this.peerSocketsByRoom.get(roomId)?.get(peerId);
     if (!socketIds?.size) {
+      this.queuePeerSignal(roomId, peerId, payload);
       return;
     }
 
+    const recoveryGeneration = this.resolvePeerRecoveryGeneration(roomId, peerId);
+    const nextPayload =
+      typeof recoveryGeneration === "number"
+        ? {
+            ...payload,
+            recoveryGeneration
+          }
+        : payload;
     for (const socketId of socketIds) {
-      this.server.to(socketId).emit("peer.signal", payload);
+      this.server.to(socketId).emit("peer.signal", nextPayload);
     }
   }
 
@@ -770,7 +946,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     await this.updatePeerPresence(roomId, sessionId, null, "offline");
     if (peerId) {
       this.clearPeerAvailability(roomId, peerId);
+      this.clearPendingPeerSignals(roomId, peerId);
     }
+    this.clearRecoveryGeneration(roomId, sessionId, peerId);
   }
 
   private disconnectCleanupKey(roomId: string, sessionId: string) {
@@ -801,6 +979,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     peerSockets.add(socketId);
     roomPeers.set(peerId, peerSockets);
     this.peerSocketsByRoom.set(roomId, roomPeers);
+    this.flushPendingPeerSignals(roomId, peerId);
   }
 
   private unregisterPeerSocket(roomId?: string, peerId?: string, socketId?: string) {
@@ -878,6 +1057,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.cancelPendingDisconnectCleanup(roomId, sessionId);
     this.unregisterPeerSocket(roomId, existing.peerId, existing.socketId);
     this.unregisterSessionSocket(roomId, sessionId, existing.socketId);
+    this.clearRecoveryGeneration(roomId, sessionId, existing.peerId);
 
     const replacedSocket = this.server.sockets.sockets.get(existing.socketId);
     const isSeamlessReconnect = existing.peerId === nextPeerId;
