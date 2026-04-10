@@ -159,7 +159,7 @@ function QueuePanelBase({
                   <button
                     type="button"
                     aria-label={`拖拽调整 ${track?.title ?? "队列歌曲"} 的顺序`}
-                    className={`inline-flex h-10 w-10 shrink-0 touch-none items-center justify-center rounded-xl border border-surface-border/80 bg-background/40 text-foreground-muted transition hover:border-accent/50 hover:text-accent ${
+                    className={`inline-flex h-10 w-10 shrink-0 touch-none items-center justify-center rounded-xl bg-background/40 text-foreground-muted transition hover:text-accent ${
                       canReorderQueue ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-50"
                     }`}
                     disabled={!canReorderQueue}

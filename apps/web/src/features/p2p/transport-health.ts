@@ -15,23 +15,38 @@ export function isMediaConnectionReady(
 export function resolveTransportHealth(
   snapshot: Pick<
     PeerDiagnosticsSnapshot,
-    "dataConnectionState" | "dataChannelState" | "mediaConnectionState" | "mediaIceState"
+    | "dataConnectionState"
+    | "dataChannelState"
+    | "mediaConnectionState"
+    | "mediaIceState"
+    | "recoveryActionLevel"
+    | "audibleSource"
+    | "bufferingWhileAudible"
   >
 ) {
   const dataReady = isDataChannelReady(snapshot);
   const mediaReady = isMediaConnectionReady(snapshot);
+  const audible = snapshot.audibleSource !== null || snapshot.bufferingWhileAudible === true;
   const failed =
     snapshot.dataConnectionState === "failed" ||
     snapshot.mediaConnectionState === "failed" ||
     snapshot.dataConnectionState === "closed" ||
     snapshot.mediaConnectionState === "closed";
+  const degraded =
+    snapshot.mediaConnectionState === "buffering" ||
+    snapshot.mediaIceState === "checking" ||
+    (snapshot.mediaConnectionState === "connecting" && audible) ||
+    (snapshot.dataConnectionState === "connecting" && audible) ||
+    snapshot.bufferingWhileAudible === true;
   const reconnecting =
     snapshot.dataConnectionState === "connecting" ||
     snapshot.dataConnectionState === "disconnected" ||
     snapshot.mediaConnectionState === "connecting" ||
-    snapshot.mediaConnectionState === "disconnected" ||
-    snapshot.mediaConnectionState === "buffering" ||
-    snapshot.mediaIceState === "checking";
+    snapshot.mediaConnectionState === "disconnected";
+  const recoveryActionLevel = snapshot.recoveryActionLevel ?? "observe";
+  const hardRecoveryActive =
+    recoveryActionLevel === "hard-reconnect" || recoveryActionLevel === "full-resubscribe";
+  const anyRecoveryActive = recoveryActionLevel !== "observe";
 
   if (mediaReady && !dataReady) {
     return {
@@ -47,10 +62,32 @@ export function resolveTransportHealth(
     };
   }
 
+  if (anyRecoveryActive) {
+    return {
+      transportHealth: hardRecoveryActive && !audible ? ("reconnecting" as const) : ("recovering" as const),
+      degradedReason:
+        recoveryActionLevel === "full-resubscribe"
+          ? "full-resubscribe"
+          : recoveryActionLevel === "hard-reconnect"
+            ? "hard-reconnect"
+            : recoveryActionLevel === "peer-restart"
+            ? "peer-restart"
+              : "soft-media-retry"
+    };
+  }
+
+  if (degraded) {
+    return {
+      transportHealth: "degraded" as const,
+      degradedReason:
+        snapshot.mediaIceState === "checking" ? "ice-checking" : "transport-buffering"
+    };
+  }
+
   if (reconnecting && (!mediaReady || !dataReady)) {
     return {
-      transportHealth: "reconnecting" as const,
-      degradedReason: "transport-reconnecting"
+      transportHealth: audible ? ("degraded" as const) : ("reconnecting" as const),
+      degradedReason: audible ? "transport-degraded" : "transport-reconnecting"
     };
   }
 

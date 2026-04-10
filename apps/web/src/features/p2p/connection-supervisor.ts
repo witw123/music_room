@@ -366,6 +366,16 @@ export function toSupervisorDiagnosticPatch(state: PeerConnectionSupervisorState
     stableTransportKind: state.stableTransportKind,
     lastFailureReason: state.lastFailureReason,
     lastRecoveryAction: state.lastRecoveryAction,
+    recoveryActionLevel:
+      state.recoveryStage === "soft"
+        ? ("soft-media-retry" as const)
+        : state.recoveryStage === "ice-restart"
+          ? ("peer-restart" as const)
+          : state.recoveryStage === "hard-recreate"
+            ? ("hard-reconnect" as const)
+            : state.recoveryStage === "full-resubscribe"
+              ? ("full-resubscribe" as const)
+              : ("observe" as const),
     iceRestartCount: state.iceRestartCount,
     hardRecreateCount: state.hardRecreateCount
   } as const;

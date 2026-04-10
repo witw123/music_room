@@ -122,7 +122,8 @@ describe("connection-supervisor", () => {
     expect(state.stableTransportKind).toBe("relay");
     expect(toSupervisorDiagnosticPatch(state)).toMatchObject({
       stableTransportKind: "relay",
-      lastRecoveryAction: "hard-recreate"
+      lastRecoveryAction: "hard-recreate",
+      recoveryActionLevel: "hard-reconnect"
     });
   });
 

@@ -270,12 +270,19 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   mediaConnectionState: z.string().nullable(),
   dataIceState: z.string().nullable(),
   mediaIceState: z.string().nullable(),
-  transportHealth: z.enum(["healthy", "media-only", "reconnecting", "failed"]).nullable().optional(),
+  transportHealth: z
+    .enum(["healthy", "media-only", "degraded", "recovering", "reconnecting", "failed"])
+    .nullable()
+    .optional(),
   transportScore: z.enum(["healthy", "degraded", "unstable", "failed"]).nullable().optional(),
   stableTransportKind: z.enum(["direct", "relay"]).nullable().optional(),
   lastFailureReason: z.string().nullable().optional(),
   lastRecoveryAction: z
     .enum(["soft", "ice-restart", "hard-recreate", "full-resubscribe"])
+    .nullable()
+    .optional(),
+  recoveryActionLevel: z
+    .enum(["observe", "soft-media-retry", "peer-restart", "hard-reconnect", "full-resubscribe"])
     .nullable()
     .optional(),
   iceRestartCount: z.number().int().nonnegative().nullable().optional(),
@@ -302,8 +309,14 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   pieceRttMsP95: z.number().nonnegative().nullable().optional(),
   pieceTimeoutRate: z.number().min(0).max(100).nullable().optional(),
   dataBufferedAmountBytes: z.number().int().nonnegative().nullable().optional(),
+  lastAudibleProgressAt: z.string().datetime().nullable().optional(),
+  lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),
+  lastDataActivityAt: z.string().datetime().nullable().optional(),
+  audibleSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable().optional(),
+  bufferingWhileAudible: z.boolean().optional(),
   recoverySuppressedReason: z.string().nullable().optional(),
   zeroProgressMs: z.number().int().nonnegative().nullable().optional(),
+  consecutiveNoProgressMs: z.number().int().nonnegative().nullable().optional(),
   packetsLost: z.number().int().nullable(),
   jitterMs: z.number().nonnegative().nullable(),
   timeOnRemoteStreamMs: z.number().int().nonnegative().nullable(),

@@ -214,6 +214,22 @@ function getPlaybackStatus(
     };
   }
 
+  if (peerDiagnostics?.transportHealth === "degraded") {
+    return {
+      label: "播放中，链路波动",
+      detail: "当前仍在持续播放，检测到短时缓冲或 ICE 检查，暂不升级为硬重连。",
+      tone: "accent" as const
+    };
+  }
+
+  if (peerDiagnostics?.transportHealth === "recovering") {
+    return {
+      label: "后台恢复实时音频中",
+      detail: "当前可听源优先保持，实时链路正在后台恢复。",
+      tone: "accent" as const
+    };
+  }
+
   if (
     peerDiagnostics?.mediaConnectionState === "connected" ||
     peerDiagnostics?.mediaConnectionState === "live" ||

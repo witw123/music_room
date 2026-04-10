@@ -230,6 +230,8 @@ function MeshStatusPanelBase({
         (peer) =>
           activePeerIds.has(peer.peerId) &&
           (peer.transportHealth === "media-only" ||
+            peer.transportHealth === "degraded" ||
+            peer.transportHealth === "recovering" ||
             peer.transportHealth === "reconnecting" ||
             peer.transportHealth === "failed")
       ).length,
@@ -378,6 +380,7 @@ function MeshStatusPanelBase({
                     <span>数据 ICE: {peer.dataIceState ?? "未知"}</span>
                     <span>音频 ICE: {peer.mediaIceState ?? "未知"}</span>
                     <span>传输健康: {peer.transportHealth ?? "未知"}</span>
+                    <span>恢复级别: {peer.recoveryActionLevel ?? "observe"}</span>
                     <span>降级原因: {peer.degradedReason ?? "无"}</span>
                     <span>数据候选: {formatCandidateType(peer.dataCandidateType)}</span>
                     <span>媒体候选: {formatCandidateType(peer.mediaCandidateType)}</span>
@@ -456,6 +459,20 @@ function MeshStatusPanelBase({
                     <span>
                       最近收片: {peer.lastPieceReceivedAt ? formatTimestamp(peer.lastPieceReceivedAt) : "未知"}
                     </span>
+                    <span>
+                      最近可听推进: {peer.lastAudibleProgressAt ? formatTimestamp(peer.lastAudibleProgressAt) : "未知"}
+                    </span>
+                    <span>
+                      最近媒体样本推进:{" "}
+                      {peer.lastMediaStatsProgressAt ? formatTimestamp(peer.lastMediaStatsProgressAt) : "未知"}
+                    </span>
+                    <span>
+                      最近数据活动: {peer.lastDataActivityAt ? formatTimestamp(peer.lastDataActivityAt) : "未知"}
+                    </span>
+                    <span>可听源: {peer.audibleSource ?? "无"}</span>
+                    <span>可听时缓冲: {peer.bufferingWhileAudible ? "是" : "否"}</span>
+                    <span>连续无进展: {formatDurationMs(peer.consecutiveNoProgressMs ?? null)}</span>
+                    <span>恢复抑制: {peer.recoverySuppressedReason ?? "无"}</span>
                     <span>当前曲目: {peer.remoteTrackStatus.currentTrackId ?? "未知"}</span>
                     <span>当前 generation: {peer.remoteTrackStatus.currentGeneration ?? "未知"}</span>
                     <span>已绑定 generation: {peer.remoteTrackStatus.boundGeneration ?? "未知"}</span>
