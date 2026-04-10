@@ -10,6 +10,7 @@ import {
   resolveMediaDiagnosticPeerId,
   resolvePeerConnectionNoProgressMs,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
+  shouldManagePublishedMediaTransport,
   shouldResumeRemotePlaybackAfterAudioUnlock,
   shouldRedirectRoomRouteToAuth,
   shouldForcePieceSyncRecovery
@@ -332,6 +333,45 @@ describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
         currentTrackId: "track_a",
         hasRemoteSrcObject: false,
         remoteAudioPaused: true
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldManagePublishedMediaTransport", () => {
+  it("allows media publish management only for the current source owner", () => {
+    expect(
+      shouldManagePublishedMediaTransport({
+        roomId: "room_a",
+        peerId: "peer_source",
+        isCurrentSourceOwner: true
+      })
+    ).toBe(true);
+  });
+
+  it("blocks media publish management for room hosts that are not the current source owner", () => {
+    expect(
+      shouldManagePublishedMediaTransport({
+        roomId: "room_a",
+        peerId: "peer_host",
+        isCurrentSourceOwner: false
+      })
+    ).toBe(false);
+  });
+
+  it("blocks media publish management when room or peer identity is missing", () => {
+    expect(
+      shouldManagePublishedMediaTransport({
+        roomId: null,
+        peerId: "peer_source",
+        isCurrentSourceOwner: true
+      })
+    ).toBe(false);
+    expect(
+      shouldManagePublishedMediaTransport({
+        roomId: "room_a",
+        peerId: null,
+        isCurrentSourceOwner: true
       })
     ).toBe(false);
   });

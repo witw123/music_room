@@ -470,6 +470,14 @@ export function shouldResumeRemotePlaybackAfterAudioUnlock(input: {
   );
 }
 
+export function shouldManagePublishedMediaTransport(input: {
+  roomId: string | null | undefined;
+  peerId: string | null | undefined;
+  isCurrentSourceOwner: boolean;
+}) {
+  return !!input.roomId && !!input.peerId && input.isCurrentSourceOwner;
+}
+
 export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
   payloadRecoveryGeneration: number | null | undefined;
   currentRecoveryGeneration: number | null;
@@ -2461,9 +2469,17 @@ export function useRoomRuntime({
     async (options?: { forceResync?: boolean; reason?: string; preferPublishedTrack?: boolean }) => {
       const forceResync = options?.forceResync ?? false;
       const currentRoom = currentRoomRef.current;
-      const currentSessionUserId = activeSessionRef.current?.userId ?? null;
-      const isLocalRoomHost = currentRoom?.room.hostId === currentSessionUserId;
-      if (!currentRoom?.room.id || !peerId || (!isCurrentSourceOwner && !isLocalRoomHost)) {
+      if (
+        !shouldManagePublishedMediaTransport({
+          roomId: currentRoom?.room.id,
+          peerId,
+          isCurrentSourceOwner
+        })
+      ) {
+        clearHostMediaSyncRetry();
+        return;
+      }
+      if (!currentRoom) {
         clearHostMediaSyncRetry();
         return;
       }
@@ -6220,16 +6236,22 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !peerId) {
+    const room = roomSnapshot?.room;
+    if (
+      !shouldManagePublishedMediaTransport({
+        roomId: room?.id,
+        peerId,
+        isCurrentSourceOwner
+      })
+    ) {
       return;
     }
 
-    const isLocalRoomHost = roomSnapshot.room.hostId === activeSession?.userId;
-    if (!isCurrentSourceOwner && !isLocalRoomHost) {
+    if (!room) {
       return;
     }
 
-    const listenerPeerIds = roomSnapshot.room.members
+    const listenerPeerIds = room.members
       .filter((member) => !!member.peerId && member.peerId !== peerId)
       .map((member) => member.peerId as string);
     if (listenerPeerIds.length === 0) {
@@ -6237,7 +6259,7 @@ export function useRoomRuntime({
     }
 
     void ensureMediaTransportConnectedRef.current({
-      preferPublishedTrack: roomSnapshot.room.playback.status === "playing" && isCurrentSourceOwner
+      preferPublishedTrack: room.playback.status === "playing" && isCurrentSourceOwner
     });
   }, [
     activeSession?.userId,
