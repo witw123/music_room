@@ -196,10 +196,45 @@ describe("connection-supervisor", () => {
       mediaIceState: "failed"
     });
     expect(state.lastFailureReason).toBe("ice-failed");
+    expect(state.unhealthySignalStateStartedAtMs).toBe(Date.now());
 
     vi.advanceTimersByTime(500);
     state = recordPeerPlayoutProgress(state);
     expect(state.lastPlayoutProgressAtMs).toBe(Date.now());
+  });
+
+  it("keeps the first unhealthy signal timestamp while checking continues", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_b",
+      now: Date.now()
+    });
+
+    state = notePeerSignalState({
+      state,
+      mediaConnectionState: "connecting",
+      mediaIceState: "checking",
+      now: Date.now()
+    });
+    const firstUnhealthyAt = state.unhealthySignalStateStartedAtMs;
+    vi.advanceTimersByTime(5_000);
+    state = notePeerSignalState({
+      state,
+      mediaConnectionState: "connecting",
+      mediaIceState: "checking",
+      now: Date.now()
+    });
+
+    expect(state.unhealthySignalStateStartedAtMs).toBe(firstUnhealthyAt);
+
+    state = notePeerSignalState({
+      state,
+      mediaConnectionState: "connected",
+      mediaIceState: "connected",
+      now: Date.now()
+    });
+
+    expect(state.unhealthySignalStateStartedAtMs).toBeNull();
   });
 
   it("treats send-only media progress as transport progress for the source peer", () => {

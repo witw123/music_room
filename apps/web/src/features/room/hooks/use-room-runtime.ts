@@ -536,7 +536,7 @@ export function resolvePeerConnectionNoProgressMs(
     return Math.max(0, now - latestProgressAt);
   }
 
-  return Math.max(0, now - state.lastSignalStateAtMs);
+  return Math.max(0, now - (state.unhealthySignalStateStartedAtMs ?? state.lastSignalStateAtMs));
 }
 
 export function resolveMediaDiagnosticPeerId(input: {

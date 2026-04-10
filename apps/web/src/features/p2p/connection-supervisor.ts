@@ -54,6 +54,7 @@ export type PeerConnectionSupervisorState = {
   dataIceState: string | null;
   mediaIceState: string | null;
   lastSignalStateAtMs: number;
+  unhealthySignalStateStartedAtMs: number | null;
   lastTransportProgressAtMs: number | null;
   lastPlayoutProgressAtMs: number | null;
   samples: SupervisorSample[];
@@ -122,6 +123,7 @@ export function createPeerConnectionSupervisorState(input: {
     dataIceState: null,
     mediaIceState: null,
     lastSignalStateAtMs: now,
+    unhealthySignalStateStartedAtMs: null,
     lastTransportProgressAtMs: null,
     lastPlayoutProgressAtMs: null,
     samples: [],
@@ -142,15 +144,22 @@ export function createPeerConnectionSupervisorState(input: {
 export function notePeerSignalState(input: NoteSignalStateInput) {
   const now = input.now ?? Date.now();
   const lastFailureReason = resolveLastFailureReason(input);
-
-  return {
-    ...input.state,
+  const nextSignalState = {
     dataChannelState: input.dataChannelState ?? input.state.dataChannelState,
     dataConnectionState: input.dataConnectionState ?? input.state.dataConnectionState,
     mediaConnectionState: input.mediaConnectionState ?? input.state.mediaConnectionState,
     dataIceState: input.dataIceState ?? input.state.dataIceState,
-    mediaIceState: input.mediaIceState ?? input.state.mediaIceState,
+    mediaIceState: input.mediaIceState ?? input.state.mediaIceState
+  };
+  const unhealthySignalStateStartedAtMs = isUnhealthySignalState(nextSignalState)
+    ? input.state.unhealthySignalStateStartedAtMs ?? now
+    : null;
+
+  return {
+    ...input.state,
+    ...nextSignalState,
     lastSignalStateAtMs: now,
+    unhealthySignalStateStartedAtMs,
     lastFailureReason
   };
 }
@@ -489,6 +498,26 @@ function resolveLastFailureReason(input: NoteSignalStateInput) {
   }
 
   return input.state.lastFailureReason;
+}
+
+function isUnhealthySignalState(
+  state: Pick<
+    PeerConnectionSupervisorState,
+    | "dataChannelState"
+    | "dataConnectionState"
+    | "mediaConnectionState"
+    | "dataIceState"
+    | "mediaIceState"
+  >
+) {
+  const hardStates = new Set(["checking", "connecting", "disconnected", "failed", "closed"]);
+  return (
+    hardStates.has(state.dataChannelState ?? "") ||
+    hardStates.has(state.dataConnectionState ?? "") ||
+    hardStates.has(state.mediaConnectionState ?? "") ||
+    hardStates.has(state.dataIceState ?? "") ||
+    hardStates.has(state.mediaIceState ?? "")
+  );
 }
 
 function loadStableTransportKind(roomId: string, peerId: string, now: number) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createPeerConnectionSupervisorState,
+  notePeerSignalState,
   recordPeerPlayoutProgress
 } from "@/features/p2p";
 import {
@@ -209,6 +210,28 @@ describe("resolvePeerConnectionNoProgressMs", () => {
     state = recordPeerPlayoutProgress(state, 7_000);
 
     expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(2_500);
+  });
+
+  it("does not reset stalled checking duration on repeated signaling activity", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_source",
+      now: 1_000
+    });
+    state = notePeerSignalState({
+      state,
+      mediaConnectionState: "connecting",
+      mediaIceState: "checking",
+      now: 2_000
+    });
+    state = notePeerSignalState({
+      state,
+      mediaConnectionState: "connecting",
+      mediaIceState: "checking",
+      now: 7_000
+    });
+
+    expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(7_500);
   });
 });
 
