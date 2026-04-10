@@ -524,6 +524,50 @@ function resolveHardRecreateNoProgressMs(state: PeerConnectionSupervisorState | 
   return Math.max(connectionSupervisorHardRecreateNoProgressFloorMs, Math.round(rttMs * 8));
 }
 
+export function resolvePeerConnectionNoProgressMs(
+  state: PeerConnectionSupervisorState,
+  now = Date.now()
+) {
+  const latestProgressAt = Math.max(
+    state.lastTransportProgressAtMs ?? 0,
+    state.lastPlayoutProgressAtMs ?? 0
+  );
+  if (latestProgressAt > 0) {
+    return Math.max(0, now - latestProgressAt);
+  }
+
+  return Math.max(0, now - state.lastSignalStateAtMs);
+}
+
+export function resolveMediaDiagnosticPeerId(input: {
+  remotePeerId: string | null | undefined;
+  connectedPeerIds: string[];
+  currentSourcePeerId: string | null | undefined;
+}) {
+  return (
+    input.remotePeerId ||
+    input.connectedPeerIds[0] ||
+    input.currentSourcePeerId ||
+    "remote-media"
+  );
+}
+
+function getSourceRecoveryActionRank(action: SourceRecoveryCoordinatorState["action"]) {
+  if (action === "ice-restart") {
+    return 1;
+  }
+
+  if (action === "hard-recreate") {
+    return 2;
+  }
+
+  if (action === "full-resubscribe") {
+    return 3;
+  }
+
+  return 0;
+}
+
 function prunePieceRequestSamples(samples: PieceRequestSample[], now: number) {
   return samples.filter((sample) => now - sample.timestampMs <= pieceTransferWindowMs);
 }
@@ -904,7 +948,15 @@ export function useRoomRuntime({
 
       const current = sourceRecoveryCoordinatorRef.current;
       if (current.actionKey && current.actionKey === actionKey && current.action) {
-        return false;
+        const currentRank = getSourceRecoveryActionRank(current.action);
+        const nextRank = getSourceRecoveryActionRank(action);
+        const canEscalate =
+          nextRank > currentRank &&
+          (current.startedAtMs === null ||
+            Date.now() - current.startedAtMs >= listenerHardRecoveryCooldownMs);
+        if (!canEscalate) {
+          return false;
+        }
       }
 
       sourceRecoveryCoordinatorRef.current = {
@@ -3488,7 +3540,7 @@ export function useRoomRuntime({
         const consecutiveNoProgressMs = isSourcePeer
           ? sourceContinuity?.consecutiveNoProgressMs ??
             resolveConsecutiveNoProgressMs(noTransportProgressMs, noAudibleProgressMs)
-          : null;
+          : resolvePeerConnectionNoProgressMs(nextState, now);
         const sourceRecoverySuppressedReason = isSourcePeer
           ? resolveSourceRecoverySuppressedReason(now)
           : null;
@@ -3532,6 +3584,10 @@ export function useRoomRuntime({
           nextState.mediaConnectionState === "failed" ||
           nextState.mediaConnectionState === "closed" ||
           nextState.mediaIceState === "failed" ||
+          ((nextState.mediaConnectionState === "connecting" ||
+            nextState.mediaIceState === "checking") &&
+            typeof consecutiveNoProgressMs === "number" &&
+            consecutiveNoProgressMs >= hardRecreateNoProgressMs) ||
           (isSourcePeer &&
             playback.status === "playing" &&
             activePlaybackSource === "remote-stream" &&
@@ -3549,6 +3605,10 @@ export function useRoomRuntime({
         const hasMediaIceRestartFailureSignal =
           (nextState.transportScore === "failed" && hasMediaHardRecoverySignal) ||
           (nextState.transportScore === "unstable" &&
+            typeof consecutiveNoProgressMs === "number" &&
+            consecutiveNoProgressMs >= iceRestartNoProgressMs) ||
+          ((nextState.mediaConnectionState === "connecting" ||
+            nextState.mediaIceState === "checking") &&
             typeof consecutiveNoProgressMs === "number" &&
             consecutiveNoProgressMs >= iceRestartNoProgressMs) ||
           nextState.mediaIceState === "disconnected" ||
@@ -3575,15 +3635,16 @@ export function useRoomRuntime({
         });
 
         if (needsIceRestart && canAttemptIceRestart) {
+          const recoveryChannel = hasMediaIceRestartFailureSignal ? "media" : "data";
           nextState = markRecoveryAction({
             state: nextState,
             action: "ice-restart",
             generation: sourceGeneration,
             failureReason: nextState.lastFailureReason ?? "ice-restart-required"
           });
-          commitConnectionSupervisorState(remotePeerId, isSourcePeer ? "media" : "data", nextState);
+          commitConnectionSupervisorState(remotePeerId, recoveryChannel, nextState);
 
-          if (isSourcePeer) {
+          if (recoveryChannel === "media") {
             if (
               !beginSourceHardRecoveryAction(
                 remotePeerId,
@@ -3619,7 +3680,10 @@ export function useRoomRuntime({
         }
 
         const hardRecoveryWindowSatisfied =
-          nextState.consecutiveUnstableWindows >= 2 || nextState.transportScore === "failed";
+          nextState.consecutiveUnstableWindows >= 2 ||
+          nextState.transportScore === "failed" ||
+          (typeof consecutiveNoProgressMs === "number" &&
+            consecutiveNoProgressMs >= hardRecreateNoProgressMs);
         const needsHardRecovery =
           hasHardRecoverySignal &&
           hardRecoveryWindowSatisfied &&
@@ -3634,15 +3698,16 @@ export function useRoomRuntime({
             generation: sourceGeneration
           })
         ) {
+          const recoveryChannel = hasMediaHardRecoverySignal ? "media" : "data";
           nextState = markRecoveryAction({
             state: nextState,
             action: "hard-recreate",
             generation: sourceGeneration,
             failureReason: nextState.lastFailureReason ?? "peer-stalled"
           });
-          commitConnectionSupervisorState(remotePeerId, isSourcePeer ? "media" : "data", nextState);
+          commitConnectionSupervisorState(remotePeerId, recoveryChannel, nextState);
 
-          if (isSourcePeer) {
+          if (recoveryChannel === "media") {
             if (
               !beginSourceHardRecoveryAction(
                 remotePeerId,
@@ -3652,8 +3717,10 @@ export function useRoomRuntime({
             ) {
               continue;
             }
-            setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
-            void mediaMeshRef.current?.restartPeer(remotePeerId).catch((error) => {
+            if (isSourcePeer) {
+              setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
+            }
+            void mediaMeshRef.current?.restartPeer(remotePeerId, hostStreamRef.current).catch((error) => {
               clearSourceHardRecoveryAction(remotePeerId, playback.mediaEpoch);
               reportRealtimeFailureRef.current({
                 peerId: remotePeerId,
@@ -4510,9 +4577,13 @@ export function useRoomRuntime({
             );
           }
         },
-        onConnectionStateChange: ({ state, connectedPeerIds }) => {
+        onConnectionStateChange: ({ peerId: remotePeerId, state, connectedPeerIds }) => {
           const currentSourcePeerId = currentRoomRef.current?.room.playback.sourcePeerId ?? null;
-          const diagnosticPeerId = connectedPeerIds[0] ?? currentSourcePeerId ?? "remote-media";
+          const diagnosticPeerId = resolveMediaDiagnosticPeerId({
+            remotePeerId,
+            connectedPeerIds,
+            currentSourcePeerId
+          });
           const supervisorState =
             diagnosticPeerId !== "remote-media"
               ? updateConnectionSupervisorSignalState({

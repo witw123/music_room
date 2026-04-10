@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPeerConnectionSupervisorState,
+  recordPeerPlayoutProgress
+} from "@/features/p2p";
+import {
   resolveListenerMediaRecoveryAction,
   resolveListenerMediaRecoveryReason,
+  resolveMediaDiagnosticPeerId,
+  resolvePeerConnectionNoProgressMs,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldResumeRemotePlaybackAfterAudioUnlock,
   shouldRedirectRoomRouteToAuth,
@@ -180,6 +186,65 @@ describe("shouldForcePieceSyncRecovery", () => {
         now: 25_000
       })
     ).toBe(false);
+  });
+});
+
+describe("resolvePeerConnectionNoProgressMs", () => {
+  it("tracks stalled host-to-listener media peers even when the listener is not the playback source", () => {
+    const state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_listener",
+      now: 1_000
+    });
+
+    expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(8_500);
+  });
+
+  it("uses recent transport or playout progress before falling back to signal state age", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_source",
+      now: 1_000
+    });
+    state = recordPeerPlayoutProgress(state, 7_000);
+
+    expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(2_500);
+  });
+});
+
+describe("resolveMediaDiagnosticPeerId", () => {
+  it("uses the media mesh callback peer before falling back to the playback source", () => {
+    expect(
+      resolveMediaDiagnosticPeerId({
+        remotePeerId: "peer_listener",
+        connectedPeerIds: [],
+        currentSourcePeerId: "peer_source"
+      })
+    ).toBe("peer_listener");
+  });
+
+  it("falls back to connected peers, then source peer, then the synthetic remote row", () => {
+    expect(
+      resolveMediaDiagnosticPeerId({
+        remotePeerId: null,
+        connectedPeerIds: ["peer_connected"],
+        currentSourcePeerId: "peer_source"
+      })
+    ).toBe("peer_connected");
+    expect(
+      resolveMediaDiagnosticPeerId({
+        remotePeerId: null,
+        connectedPeerIds: [],
+        currentSourcePeerId: "peer_source"
+      })
+    ).toBe("peer_source");
+    expect(
+      resolveMediaDiagnosticPeerId({
+        remotePeerId: null,
+        connectedPeerIds: [],
+        currentSourcePeerId: null
+      })
+    ).toBe("remote-media");
   });
 });
 
