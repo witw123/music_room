@@ -940,6 +940,7 @@ export function useRoomRuntime({
   const setSourceStartStateRef = useRef(setSourceStartState);
   const lastSourceStartErrorRef = useRef(lastSourceStartError);
   const setLastSourceStartErrorRef = useRef(setLastSourceStartError);
+  const manualCacheTrackIdsRef = useRef(manualCacheTrackIds);
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const deleteRoomTrackArtifactsRef = useRef(deleteRoomTrackArtifacts);
@@ -1857,6 +1858,10 @@ export function useRoomRuntime({
   useEffect(() => {
     uploadedTrackIdsRef.current = uploadedTrackIds;
   }, [uploadedTrackIds, uploadedTrackIdsRef]);
+
+  useEffect(() => {
+    manualCacheTrackIdsRef.current = manualCacheTrackIds;
+  }, [manualCacheTrackIds]);
 
   useEffect(() => {
     audioUnlockedRef.current = audioUnlocked;
@@ -4717,7 +4722,10 @@ export function useRoomRuntime({
               durationMs: requestRttMs
             });
           }
-          if (!enableManualTrackCaching) {
+          const shouldProcessPieceForCache =
+            enablePlaybackCacheTakeover ||
+            manualCacheTrackIdsRef.current.includes(trackId);
+          if (!shouldProcessPieceForCache) {
             return;
           }
           markManualCacheTrackDownloading(trackId);
@@ -6697,7 +6705,7 @@ export function useRoomRuntime({
   );
 
   useEffect(() => {
-    if (!enableManualTrackCaching && !enablePlaybackCacheTakeover) {
+    if (!enablePlaybackCacheTakeover && manualCacheTrackIds.length === 0) {
       return;
     }
 
@@ -6719,7 +6727,7 @@ export function useRoomRuntime({
       mode: effectiveSchedulerMode,
       bufferHealth,
       playbackClockSource,
-      manualTrackIds: manualCacheTrackIds,
+      manualTrackIds: enableManualTrackCaching ? manualCacheTrackIds : [],
       policy: progressiveSchedulerPolicy ?? "startup"
     });
   }, [
