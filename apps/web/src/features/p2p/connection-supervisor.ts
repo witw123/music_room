@@ -22,6 +22,7 @@ type SupervisorSample = {
   packetLossRate: number | null;
   jitterMs: number | null;
   mediaReceiveBitrateKbps: number | null;
+  mediaSendBitrateKbps: number | null;
   dataChannelState: string | null;
   dataConnectionState: string | null;
   mediaConnectionState: string | null;
@@ -165,6 +166,7 @@ export function observePeerTransport(input: ObserveTransportInput) {
     packetLossRate: input.sample.packetLossRate ?? null,
     jitterMs: input.sample.jitterMs,
     mediaReceiveBitrateKbps: input.sample.mediaReceiveBitrateKbps,
+    mediaSendBitrateKbps: input.sample.mediaSendBitrateKbps,
     dataChannelState: input.diagnostics?.dataChannelState ?? null,
     dataConnectionState: input.diagnostics?.dataConnectionState ?? null,
     mediaConnectionState: input.diagnostics?.mediaConnectionState ?? null,
@@ -250,7 +252,10 @@ export function observePeerTransport(input: ObserveTransportInput) {
     consecutiveUnstableWindows,
     consecutiveHealthyWindows,
     lastTransportProgressAtMs:
-      typeof input.sample.mediaReceiveBitrateKbps === "number" && input.sample.mediaReceiveBitrateKbps > 0
+      (typeof input.sample.mediaReceiveBitrateKbps === "number" &&
+        input.sample.mediaReceiveBitrateKbps > 0) ||
+      (typeof input.sample.mediaSendBitrateKbps === "number" &&
+        input.sample.mediaSendBitrateKbps > 0)
         ? now
         : input.state.lastTransportProgressAtMs
   };
@@ -417,6 +422,7 @@ function classifyTransportWindow(samples: SupervisorSample[]): PeerTransportScor
   const averageReceiveBitrateKbps = averageOf(
     samples.map((sample) => sample.mediaReceiveBitrateKbps)
   );
+  const averageSendBitrateKbps = averageOf(samples.map((sample) => sample.mediaSendBitrateKbps));
   const averageDataOpenRatio =
     samples.filter((sample) => sample.dataChannelState === "open").length / samples.length;
   const checkingRatio =
@@ -432,7 +438,9 @@ function classifyTransportWindow(samples: SupervisorSample[]): PeerTransportScor
     (typeof averageRttMs === "number" && averageRttMs >= 220) ||
     (typeof averageLossRate === "number" && averageLossRate >= 8) ||
     (typeof averageJitterMs === "number" && averageJitterMs >= 45) ||
-    (typeof averageReceiveBitrateKbps === "number" && averageReceiveBitrateKbps <= 4) ||
+    (typeof averageReceiveBitrateKbps === "number" &&
+      averageReceiveBitrateKbps <= 4 &&
+      !(typeof averageSendBitrateKbps === "number" && averageSendBitrateKbps > 4)) ||
     checkingRatio >= 0.75
   ) {
     return "unstable";

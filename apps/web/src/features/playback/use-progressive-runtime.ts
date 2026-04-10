@@ -191,7 +191,6 @@ export function shouldPreferImmediateFullLocalRecovery(input: {
     input.hasBufferedFullLocalTrack &&
     input.fullLocalRecoveryActive &&
     input.recoveryPhase !== "steady" &&
-    input.recoveryMode !== "steady" &&
     input.playbackStatus === "playing"
   );
 }

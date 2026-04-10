@@ -185,4 +185,44 @@ describe("connection-supervisor", () => {
     state = recordPeerPlayoutProgress(state);
     expect(state.lastPlayoutProgressAtMs).toBe(Date.now());
   });
+
+  it("treats send-only media progress as transport progress for the source peer", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_listener"
+    });
+    const sendOnlySample = {
+      candidateType: "host",
+      protocol: "udp",
+      currentRoundTripTimeMs: 28,
+      availableOutgoingBitrateKbps: 1_200,
+      mediaReceiveBitrateKbps: 0,
+      mediaSendBitrateKbps: 510,
+      packetsLost: 0,
+      packetLossRate: 0,
+      jitterMs: 2
+    };
+    const diagnostics = {
+      dataChannelState: "open",
+      dataConnectionState: "connected",
+      mediaConnectionState: "connected",
+      dataIceState: "connected",
+      mediaIceState: "connected"
+    } as const;
+
+    state = observePeerTransport({
+      state,
+      sample: sendOnlySample,
+      diagnostics
+    });
+    vi.advanceTimersByTime(1_000);
+    state = observePeerTransport({
+      state,
+      sample: sendOnlySample,
+      diagnostics
+    });
+
+    expect(state.transportScore).toBe("healthy");
+    expect(state.lastTransportProgressAtMs).toBe(Date.now());
+  });
 });

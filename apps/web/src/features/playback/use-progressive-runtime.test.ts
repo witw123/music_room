@@ -210,6 +210,20 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(true);
   });
 
+  it("allows full-local recovery after a steady member is moved back into fallback recovery", () => {
+    expect(
+      shouldPreferImmediateFullLocalRecovery({
+        isCurrentSourceOwner: false,
+        audioUnlocked: true,
+        hasBufferedFullLocalTrack: true,
+        fullLocalRecoveryActive: true,
+        recoveryPhase: "playing-local-fallback",
+        recoveryMode: "steady",
+        playbackStatus: "playing"
+      })
+    ).toBe(true);
+  });
+
   it("does not prefer immediate full-local recovery when the member is still locked, lacks a full cache, or is already steady", () => {
     expect(
       shouldPreferImmediateFullLocalRecovery({
