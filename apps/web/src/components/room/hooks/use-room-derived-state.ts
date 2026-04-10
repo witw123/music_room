@@ -21,7 +21,7 @@ type UseRoomDerivedStateInput = {
   peerId: string;
   connectedPeers: string[];
   mediaConnectedPeers: string[];
-  activeDashboardTab: "queue" | "library" | "members";
+  activeDashboardTab: "queue" | "library" | "cache" | "members";
   currentTrack: RoomSnapshot["tracks"][number] | null;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   peerDiagnostics: PeerDiagnosticsSnapshot[];

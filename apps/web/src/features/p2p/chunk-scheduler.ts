@@ -30,6 +30,7 @@ type ChunkSchedulerSyncInput = {
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   connectedPeerIds: string[];
   uploadedTrackIds: string[];
+  manualTrackIds?: string[];
   playbackPositionMs: number;
   playbackStatus?: RoomSnapshot["room"]["playback"]["status"] | null;
   pageVisible?: boolean;
@@ -116,6 +117,7 @@ export class ChunkScheduler {
   private availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> = {};
   private connectedPeerIds = new Set<string>();
   private uploadedTrackIds = new Set<string>();
+  private manualTrackIds = new Set<string>();
   private playbackPositionMs = 0;
   private playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null = null;
   private pageVisible = true;
@@ -137,6 +139,7 @@ export class ChunkScheduler {
     this.availabilityByTrack = input.availabilityByTrack;
     this.connectedPeerIds = new Set(input.connectedPeerIds);
     this.uploadedTrackIds = new Set(input.uploadedTrackIds);
+    this.manualTrackIds = new Set(input.manualTrackIds ?? []);
     this.playbackPositionMs = input.playbackPositionMs;
     this.playbackStatus = input.playbackStatus ?? this.roomSnapshot?.room.playback.status ?? null;
     this.pageVisible = input.pageVisible ?? true;
@@ -324,12 +327,14 @@ export class ChunkScheduler {
       return [];
     }
 
+    const manualPlans = this.buildManualTrackPlans();
+
     if (
       this.mode === "idle" ||
       (this.bufferHealth === "critical" && this.playbackStatus !== "playing") ||
-      (!this.pageVisible && this.playbackStatus !== "playing")
+      (!this.pageVisible && this.playbackStatus !== "playing" && manualPlans.length === 0)
     ) {
-      return [];
+      return manualPlans;
     }
 
     const currentTrack = this.roomSnapshot.tracks.find(
@@ -484,7 +489,9 @@ export class ChunkScheduler {
       !canWeakPrefetchUpcomingTrackOnRemote &&
       (this.policy !== "background" || !isCurrentTrackComplete)
     ) {
-      return plans.filter((plan) => plan.wantedChunks.length > 0);
+      return dedupeTrackPlans([...plans, ...manualPlans]).filter(
+        (plan) => plan.wantedChunks.length > 0
+      );
     }
 
     const queuedTrackIds = this.roomSnapshot.queue
@@ -567,7 +574,9 @@ export class ChunkScheduler {
       (this.policy !== "background" && !canBackgroundPrefetchOnRemote) ||
       !isCurrentTrackComplete
     ) {
-      return plans.filter((plan) => plan.wantedChunks.length > 0);
+      return dedupeTrackPlans([...plans, ...manualPlans]).filter(
+        (plan) => plan.wantedChunks.length > 0
+      );
     }
 
     for (const track of this.roomSnapshot.tracks) {
@@ -597,7 +606,52 @@ export class ChunkScheduler {
       break;
     }
 
-    return plans.filter((plan) => plan.wantedChunks.length > 0);
+    return dedupeTrackPlans([...plans, ...manualPlans]).filter(
+      (plan) => plan.wantedChunks.length > 0
+    );
+  }
+
+  private buildManualTrackPlans() {
+    if (!this.roomSnapshot || this.manualTrackIds.size === 0) {
+      return [] as TrackPlan[];
+    }
+
+    const plans: TrackPlan[] = [];
+    for (const trackId of this.manualTrackIds) {
+      if (this.uploadedTrackIds.has(trackId)) {
+        continue;
+      }
+
+      const track = this.roomSnapshot.tracks.find((entry) => entry.id === trackId);
+      if (!track || this.isTrackComplete(track.id, this.getTotalChunks(track.id))) {
+        continue;
+      }
+
+      const manifest = buildProgressiveTrackManifest(
+        track,
+        this.availabilityByTrack[track.id]?.[this.localPeerId] ??
+          Object.values(this.availabilityByTrack[track.id] ?? {})[0] ??
+          null
+      );
+      const state = this.ensureTrackState(track.id, this.getTotalChunks(track.id));
+      plans.push({
+        track,
+        priority: "background",
+        maxConcurrent: 2,
+        maxConcurrentPerPeer: 2,
+        preferredPeerId: null,
+        chunkSize: manifest?.chunkSize ?? this.getTrackChunkSize(track.id),
+        wantedChunks: getBackgroundChunks({
+          totalChunks: this.getTotalChunks(track.id),
+          ownedChunks: state.ownedChunks,
+          pendingChunks: state.pendingChunks,
+          batchSize: 4
+        }),
+        timeoutMs: 4_000
+      });
+    }
+
+    return plans;
   }
 
   private reconcileTrackStates() {
@@ -1194,6 +1248,17 @@ export function selectChunkPeer(input: {
   });
 
   return candidates[0]?.ownerPeerId ?? null;
+}
+
+function dedupeTrackPlans(plans: TrackPlan[]) {
+  const seenTrackIds = new Set<string>();
+  return plans.filter((plan) => {
+    if (seenTrackIds.has(plan.track.id)) {
+      return false;
+    }
+    seenTrackIds.add(plan.track.id);
+    return true;
+  });
 }
 
 function range(start: number, end: number) {

@@ -15,7 +15,8 @@ import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageS
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/room/MembersPanel";
 import type { AvailabilityEntry } from "@/components/room/MeshStatusPanel";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
+import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -32,6 +33,8 @@ type RoomWorkspaceProps = {
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
+  cacheLibraryTracks: CachedLibraryTrack[];
+  manualCacheTasks: Record<string, ManualCacheTask>;
   availabilitySummary: AvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
@@ -54,10 +57,14 @@ type RoomWorkspaceProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
+  onStartManualCacheDownload: (trackId: string) => Promise<void>;
+  onPlayCachedLibraryTrackToRoom: (fileHash: string) => Promise<void>;
+  onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
+  onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  onTabChange: (tab: "queue" | "library" | "members") => void;
+  onTabChange: (tab: "queue" | "library" | "cache" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
   isSyncPending: boolean;
@@ -79,6 +86,8 @@ function RoomWorkspaceBase({
   mediaConnectionState,
   mediaConnectedPeersCount,
   cachedTrackCount,
+  cacheLibraryTracks,
+  manualCacheTasks,
   availabilitySummary,
   memberTransferSummaries,
   localMemberState,
@@ -101,6 +110,10 @@ function RoomWorkspaceBase({
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
+  onStartManualCacheDownload,
+  onPlayCachedLibraryTrackToRoom,
+  onExportCachedLibraryTrack,
+  onDeleteCachedLibraryTrack,
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
@@ -160,6 +173,8 @@ function RoomWorkspaceBase({
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}
               cachedTrackCount={cachedTrackCount}
+              cacheLibraryTracks={cacheLibraryTracks}
+              manualCacheTasks={manualCacheTasks}
               availabilitySummary={availabilitySummary}
               memberTransferSummaries={memberTransferSummaries}
               localMemberState={localMemberState}
@@ -174,6 +189,10 @@ function RoomWorkspaceBase({
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
+              onStartManualCacheDownload={onStartManualCacheDownload}
+              onPlayCachedLibraryTrackToRoom={onPlayCachedLibraryTrackToRoom}
+              onExportCachedLibraryTrack={onExportCachedLibraryTrack}
+              onDeleteCachedLibraryTrack={onDeleteCachedLibraryTrack}
               onPlayQueueItem={onPlayQueueItem}
               onRemoveQueueItem={onRemoveQueueItem}
               onReorderQueue={onReorderQueue}

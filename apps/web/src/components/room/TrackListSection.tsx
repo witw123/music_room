@@ -5,7 +5,7 @@ import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import {
-  enableTrackCaching,
+  enablePlaybackCacheTakeover,
   isCacheBackedUploadedTrack
 } from "@/features/playback/track-cache-policy";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
@@ -13,6 +13,7 @@ import type { UploadedTrack } from "@/features/upload/audio-utils";
 type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
+  cachedLibraryFileHashes: string[];
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
@@ -24,6 +25,7 @@ type TrackListSectionProps = {
 function TrackListSectionBase({
   tracks,
   uploadedTracks,
+  cachedLibraryFileHashes,
   canControlPlayback,
   activeSession,
   onFilesSelected,
@@ -71,6 +73,7 @@ function TrackListSectionBase({
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
               const isCacheBacked = isCacheBackedUploadedTrack(uploadedTrack);
+              const isInCacheLibrary = cachedLibraryFileHashes.includes(track.fileHash);
 
               return (
                 <article
@@ -89,13 +92,17 @@ function TrackListSectionBase({
                             ? isCacheBacked
                               ? "bg-amber-500"
                               : "bg-green-500"
+                            : isInCacheLibrary
+                              ? "bg-emerald-500"
                             : "bg-blue-500"
                         }`}
                       />
                       {isUploadedLocally
-                        ? isCacheBacked && !enableTrackCaching
+                        ? isCacheBacked && !enablePlaybackCacheTakeover
                           ? "历史缓存已暂停使用"
                           : "本地上传源可直接播放"
+                        : isInCacheLibrary
+                          ? "已缓存到个人库"
                         : "房间可用"}{" "}
                       {track.ownerNickname} 上传
                     </p>

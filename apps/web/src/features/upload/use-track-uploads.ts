@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
 import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import {
   assembleTrackFileFromPieces,
@@ -12,20 +12,40 @@ import {
 } from "@/features/p2p";
 import {
   cacheTrackAsset,
-  getTrackPieceManifest,
+  deleteCachedLibraryTrack as deleteCachedLibraryTrackRecord,
   deleteCachedPiecesForTrack,
   deleteCachedPiecesForTracks,
-  getCachedTrackAsset,
-  getCachedTrackAssetCount,
+  getCachedLibraryTrackCount,
   getCachedPiecesForTrack,
-  getCachedTrackAssets,
-  pruneCachedTracks
+  getCachedTrackAsset,
+  getTrackPieceManifest,
+  listCachedLibraryTracks,
+  upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { buildTrackMeta, type UploadedTrack } from "@/features/upload/audio-utils";
+import {
+  buildTrackMeta,
+  type CachedLibraryTrack,
+  type UploadedTrack
+} from "@/features/upload/audio-utils";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
-import { enableTrackCaching } from "@/features/playback/track-cache-policy";
+import { enableManualTrackCaching } from "@/features/playback/track-cache-policy";
+
+export type ManualCacheTaskStatus =
+  | "idle"
+  | "queued"
+  | "downloading"
+  | "assembling"
+  | "ready"
+  | "failed";
+
+export type ManualCacheTask = {
+  trackId: string;
+  status: ManualCacheTaskStatus;
+  updatedAt: string;
+  errorMessage: string | null;
+};
 
 export function useTrackUploads(options: {
   maxCachedTracks: number;
@@ -38,7 +58,6 @@ export function useTrackUploads(options: {
   emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
 }) {
   const {
-    maxCachedTracks,
     peerId,
     activeSession,
     roomSnapshot,
@@ -49,8 +68,63 @@ export function useTrackUploads(options: {
   } = options;
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
+  const [cacheLibraryTracks, setCacheLibraryTracks] = useState<CachedLibraryTrack[]>([]);
+  const [manualCacheTasks, setManualCacheTasks] = useState<Record<string, ManualCacheTask>>({});
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
+  const cacheLibraryUrlsRef = useRef<Map<string, string>>(new Map());
+  const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
+
+  const manualCacheTrackIds = useMemo(
+    () =>
+      Object.values(manualCacheTasks)
+        .filter((task) =>
+          task.status === "queued" ||
+          task.status === "downloading" ||
+          task.status === "assembling"
+        )
+        .map((task) => task.trackId),
+    [manualCacheTasks]
+  );
+
+  const refreshCacheLibrary = useCallback(async () => {
+    const records = await listCachedLibraryTracks();
+    const nextUrlMap = new Map<string, string>();
+    const nextTracks: CachedLibraryTrack[] = records.map((record) => {
+      const existingUrl = cacheLibraryUrlsRef.current.get(record.fileHash);
+      const objectUrl = existingUrl ?? URL.createObjectURL(record.file);
+      nextUrlMap.set(record.fileHash, objectUrl);
+      return {
+        fileHash: record.fileHash,
+        title: record.title,
+        artist: record.artist,
+        mimeType: record.mimeType,
+        durationMs: record.durationMs,
+        sizeBytes: record.sizeBytes,
+        cachedAt: record.cachedAt,
+        sourceTrackIds: record.sourceTrackIds,
+        sourceRoomIds: record.sourceRoomIds,
+        lastSourceTrackId: record.lastSourceTrackId,
+        lastSourceRoomId: record.lastSourceRoomId,
+        lastOwnerNickname: record.lastOwnerNickname,
+        objectUrl,
+        file: toCachedLibraryFile(record)
+      };
+    });
+
+    for (const [fileHash, objectUrl] of cacheLibraryUrlsRef.current.entries()) {
+      if (!nextUrlMap.has(fileHash)) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    cacheLibraryUrlsRef.current = nextUrlMap;
+    cacheLibraryTracksRef.current = new Map(
+      nextTracks.map((track) => [track.fileHash, track] as const)
+    );
+    setCacheLibraryTracks(nextTracks);
+    setCachedTrackCount(await getCachedLibraryTrackCount());
+  }, []);
 
   useEffect(() => {
     const nextUrls = new Map(
@@ -67,162 +141,82 @@ export function useTrackUploads(options: {
   }, [uploadedTracks]);
 
   useEffect(() => {
+    void refreshCacheLibrary();
+  }, [refreshCacheLibrary]);
+
+  useEffect(() => {
     return () => {
       for (const objectUrl of uploadedTrackUrlsRef.current.values()) {
         URL.revokeObjectURL(objectUrl);
       }
       uploadedTrackUrlsRef.current.clear();
+      for (const objectUrl of cacheLibraryUrlsRef.current.values()) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      cacheLibraryUrlsRef.current.clear();
+      cacheLibraryTracksRef.current.clear();
     };
   }, []);
 
-  useEffect(() => {
-    if (!roomSnapshot) {
-      return;
-    }
-
-    void trimLocalCache(roomSnapshot.tracks.map((track) => track.id));
-  }, [roomSnapshot?.tracks]);
-
-  useEffect(() => {
-    if (!roomSnapshot?.tracks.length) {
-      setCachedTrackCount(0);
-      return;
-    }
-
-    let disposed = false;
-
-    const restoreCachedAssets = async () => {
-      if (!enableTrackCaching) {
-        const nextCount = await getCachedTrackAssetCount();
-        if (!disposed) {
-          setCachedTrackCount(nextCount);
-        }
-        return;
-      }
-
-      const uploadedTrackIds = new Set(uploadedTrackUrlsRef.current.keys());
-      const uncachedTrackIds = roomSnapshot.tracks
-        .filter((track) => !uploadedTrackIds.has(track.id))
-        .map((track) => track.id);
-
-      if (uncachedTrackIds.length === 0) {
-        if (!disposed) {
-          setCachedTrackCount(uploadedTrackIds.size);
-        }
-        return;
-      }
-
-      const cachedAssets = await getCachedTrackAssets(uncachedTrackIds);
-      if (disposed || cachedAssets.length === 0) {
-        if (!disposed) {
-          setCachedTrackCount(uploadedTrackIds.size);
-        }
-        return;
-      }
-
-      setUploadedTracks((current) => {
-        let didAdd = false;
-        const next = { ...current };
-        for (const asset of cachedAssets) {
-          if (!next[asset.trackId]) {
-            next[asset.trackId] = {
-              file: new File([asset.file], `${asset.title}.bin`, {
-                type: asset.mimeType || "audio/mpeg"
-              }),
-              objectUrl: URL.createObjectURL(asset.file),
-              origin: "restored-cache"
-            };
-            didAdd = true;
-          }
-        }
-
-        if (!didAdd) {
-          setCachedTrackCount(Object.keys(current).length);
-          return current;
-        }
-
-        setCachedTrackCount(Object.keys(next).length);
-        return next;
+  async function syncRoomSnapshot(roomId: string) {
+    try {
+      const latestSnapshot = await musicRoomApi.getRoom(roomId);
+      dispatchRoomStateEvent({
+        type: "recover-snapshot",
+        snapshot: latestSnapshot
       });
-
-      if (roomSnapshot && peerId && activeSession) {
-        for (const asset of cachedAssets) {
-          const track = roomSnapshot.tracks.find((entry) => entry.id === asset.trackId);
-          const cachedPieceManifest = (await getTrackPieceManifest(asset.trackId)) ?? null;
-          const canonicalManifest = buildCanonicalTrackPieceManifest({
-            file: asset.file,
-            mimeType: asset.mimeType,
-            codec: track?.codec ?? null,
-            sizeBytes: track?.sizeBytes ?? asset.file.size
-          });
-          const shouldRebuildCachedPieces =
-            !!cachedPieceManifest &&
-            hasManifestGeometryMismatch(cachedPieceManifest, canonicalManifest);
-          if (shouldRebuildCachedPieces) {
-            await deleteCachedPiecesForTrack(asset.trackId);
-          }
-
-          const availability =
-            shouldRebuildCachedPieces
-              ? await buildTrackAvailabilityFromFile({
-                  roomId: roomSnapshot.room.id,
-                  trackId: asset.trackId,
-                  fileHash: asset.fileHash,
-                  file: asset.file,
-                  peerId,
-                  nickname: activeSession.nickname,
-                  source: "local_cache",
-                  mimeType: asset.mimeType,
-                  codec: track?.codec ?? null,
-                  sizeBytes: track?.sizeBytes ?? asset.file.size,
-                  durationMs: track?.durationMs ?? 0,
-                  totalChunks: canonicalManifest.totalChunks,
-                  chunkSize: canonicalManifest.chunkSize
-                })
-              : ((await buildTrackAvailabilityFromCache({
-                  roomId: roomSnapshot.room.id,
-                  trackId: asset.trackId,
-                  peerId,
-                  nickname: activeSession.nickname
-                })) ??
-                  (await buildTrackAvailabilityFromFile({
-                    roomId: roomSnapshot.room.id,
-                    trackId: asset.trackId,
-                    fileHash: asset.fileHash,
-                    file: asset.file,
-                    peerId,
-                    nickname: activeSession.nickname,
-                    source: "local_cache",
-                    mimeType: asset.mimeType,
-                    codec: track?.codec ?? null,
-                    sizeBytes: track?.sizeBytes ?? asset.file.size,
-                    durationMs: track?.durationMs ?? 0,
-                    totalChunks: canonicalManifest.totalChunks,
-                    chunkSize: canonicalManifest.chunkSize
-                  })));
-          onAvailability(availability);
-          emitAvailability(availability);
-        }
-      }
-    };
-
-    void restoreCachedAssets();
-
-    return () => {
-      disposed = true;
-    };
-  }, [roomSnapshot, peerId, activeSession, onAvailability, emitAvailability]);
-
-  async function trimLocalCache(protectedTrackIds: string[]) {
-    const removedTrackIds = await pruneCachedTracks(maxCachedTracks, protectedTrackIds);
-    const nextCount = await getCachedTrackAssetCount();
-    setCachedTrackCount(nextCount);
-
-    if (removedTrackIds.length === 0) {
-      return;
+    } catch {
+      // Later snapshot resync remains the source of truth.
     }
+  }
 
-    setUploadedTracks((current) => removeTracksFromUploads(current, removedTrackIds));
+  function updateManualCacheTask(
+    trackId: string,
+    status: ManualCacheTaskStatus,
+    errorMessage: string | null = null
+  ) {
+    setManualCacheTasks((current) => ({
+      ...current,
+      [trackId]: {
+        trackId,
+        status,
+        updatedAt: new Date().toISOString(),
+        errorMessage
+      }
+    }));
+  }
+
+  async function persistTrackIntoLibrary(input: {
+    track: Pick<
+      TrackMeta,
+      | "id"
+      | "title"
+      | "artist"
+      | "mimeType"
+      | "durationMs"
+      | "sizeBytes"
+      | "fileHash"
+      | "ownerNickname"
+    >;
+    roomId: string;
+    file: File | Blob;
+  }) {
+    const file = input.file instanceof File ? input.file : toCachedLibraryFileFromBlob(input.file, input.track);
+    await upsertCachedLibraryTrack({
+      fileHash: input.track.fileHash,
+      title: input.track.title,
+      artist: input.track.artist ?? "未知艺术家",
+      mimeType: input.track.mimeType || file.type || "audio/mpeg",
+      durationMs: input.track.durationMs,
+      sizeBytes: input.track.sizeBytes ?? file.size,
+      file,
+      sourceTrackIds: [input.track.id],
+      sourceRoomIds: [input.roomId],
+      lastSourceTrackId: input.track.id,
+      lastSourceRoomId: input.roomId,
+      lastOwnerNickname: input.track.ownerNickname ?? null
+    });
+    await refreshCacheLibrary();
   }
 
   async function handleFilesSelected(files: FileList | File[] | null) {
@@ -258,7 +252,7 @@ export function useTrackUploads(options: {
       inFlightUploadHashesRef.current.add(uploadHashKey);
       let registered: TrackMeta;
       try {
-        registered = await musicRoomApi.registerTrack(roomSnapshot.room.id, {
+        registered = await musicRoomApi.registerTrack(roomId, {
           sessionId: activeSession.userId,
           ...track
         });
@@ -273,7 +267,8 @@ export function useTrackUploads(options: {
       };
       nextTracks.push(registered);
       currentTracksByHash.set(registered.fileHash, registered);
-      if (enableTrackCaching) {
+
+      if (enableManualTrackCaching) {
         await cacheTrackAsset({
           trackId: registered.id,
           fileHash: registered.fileHash,
@@ -281,11 +276,16 @@ export function useTrackUploads(options: {
           mimeType: registered.mimeType || file.type || "audio/mpeg",
           file
         });
+        await persistTrackIntoLibrary({
+          track: registered,
+          roomId,
+          file
+        });
       }
 
-      if (enableTrackCaching && peerId) {
+      if (enableManualTrackCaching && peerId) {
         const availability = await buildTrackAvailabilityFromFile({
-          roomId: roomSnapshot.room.id,
+          roomId,
           trackId: registered.id,
           fileHash: registered.fileHash,
           file,
@@ -306,25 +306,61 @@ export function useTrackUploads(options: {
 
     setUploadedTracks((current) => ({ ...current, ...nextUploads }));
     if (nextTracks.length > 0) {
-      try {
-        const latestSnapshot = await musicRoomApi.getRoom(roomId);
-        dispatchRoomStateEvent({
-          type: "recover-snapshot",
-          snapshot: latestSnapshot
-        });
-      } catch {
-        // Realtime snapshot or later resync remains the source of truth for shared room state.
-      }
+      await syncRoomSnapshot(roomId);
     }
-    await trimLocalCache([
-      ...roomSnapshot.tracks.map((track) => track.id),
-      ...Object.keys(nextUploads)
-    ]);
     setStatusMessage(`${Object.keys(nextUploads).length} 首本地歌曲已导入房间曲库。`);
   }
 
+  async function startManualCacheDownload(trackId: string) {
+    if (!enableManualTrackCaching || !roomSnapshot) {
+      return;
+    }
+
+    const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
+    if (!track) {
+      return;
+    }
+
+    if (cacheLibraryTracksRef.current.has(track.fileHash)) {
+      updateManualCacheTask(trackId, "ready");
+      return;
+    }
+
+    const cachedAsset = await getCachedTrackAsset(trackId);
+    if (cachedAsset) {
+      await persistTrackIntoLibrary({
+        track,
+        roomId: roomSnapshot.room.id,
+        file: cachedAsset.file
+      });
+      updateManualCacheTask(trackId, "ready");
+      return;
+    }
+
+    updateManualCacheTask(trackId, "downloading");
+    setStatusMessage(`已开始缓存《${track.title}》。`);
+  }
+
+  function markManualCacheTrackDownloading(trackId: string) {
+    setManualCacheTasks((current) => {
+      const existing = current[trackId];
+      if (!existing || existing.status === "assembling" || existing.status === "ready") {
+        return current;
+      }
+
+      return {
+        ...current,
+        [trackId]: {
+          ...existing,
+          status: "downloading",
+          updatedAt: new Date().toISOString()
+        }
+      };
+    });
+  }
+
   async function announceLocalCache(trackId: string, totalChunks?: number) {
-    if (!enableTrackCaching) {
+    if (!enableManualTrackCaching) {
       return;
     }
 
@@ -358,6 +394,10 @@ export function useTrackUploads(options: {
       peerId,
       nickname: activeSession.nickname
     });
+    const source =
+      uploadedTrack && (uploadedTrack.origin === "live-upload" || uploadedTrack.origin === "cache-library")
+        ? "live_upload"
+        : "local_cache";
     const availability =
       (!shouldRebuildCachedPieces ? cachedAvailability : null) ??
       (fallbackFile && track
@@ -368,7 +408,7 @@ export function useTrackUploads(options: {
             file: fallbackFile,
             peerId,
             nickname: activeSession.nickname,
-            source: uploadedTrack ? "live_upload" : "local_cache",
+            source,
             mimeType: track.mimeType,
             codec: track.codec ?? null,
             sizeBytes: track.sizeBytes ?? fallbackFile.size,
@@ -387,11 +427,7 @@ export function useTrackUploads(options: {
   }
 
   async function hydrateTrackFromPieces(trackId: string, mimeType: string, totalChunks: number) {
-    if (!enableTrackCaching) {
-      return;
-    }
-
-    if (!roomSnapshot) {
+    if (!enableManualTrackCaching || !roomSnapshot) {
       return;
     }
 
@@ -403,9 +439,11 @@ export function useTrackUploads(options: {
     }
 
     const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
-    if (!track || uploadedTracks[trackId]) {
+    if (!track) {
       return;
     }
+
+    updateManualCacheTask(trackId, "assembling");
 
     const assembled = await assembleTrackFileFromPieces({
       pieces,
@@ -416,11 +454,10 @@ export function useTrackUploads(options: {
     });
 
     if (!assembled) {
-      setStatusMessage(`曲目 ${track.title} 的下载分片不完整或校验失败。`);
+      updateManualCacheTask(trackId, "failed", "文件组装失败");
+      setStatusMessage(`曲目 ${track.title} 的缓存组装失败。`);
       return;
     }
-
-    const objectUrl = URL.createObjectURL(assembled.blob);
 
     await cacheTrackAsset({
       trackId,
@@ -430,65 +467,19 @@ export function useTrackUploads(options: {
       file: assembled.blob
     });
 
-    setUploadedTracks((current) => ({
-      ...current,
-      [trackId]: {
-        file: assembled.file,
-        objectUrl,
-        origin: "hydrated-cache"
-      }
-    }));
-    const canonicalManifest = buildCanonicalTrackPieceManifest({
-      file: assembled.file,
-      mimeType: mimeType || track.mimeType || "audio/mpeg",
-      codec: track.codec ?? null,
-      sizeBytes: track.sizeBytes ?? assembled.file.size
+    await persistTrackIntoLibrary({
+      track,
+      roomId: roomSnapshot.room.id,
+      file: assembled.file
     });
-    const shouldRebuildHydratedPieces =
-      !!cachedPieceManifest &&
-      hasManifestGeometryMismatch(cachedPieceManifest, canonicalManifest);
-    if (shouldRebuildHydratedPieces) {
-      await deleteCachedPiecesForTrack(trackId);
-    }
 
-    const availability =
-      (!shouldRebuildHydratedPieces
-        ? await buildTrackAvailabilityFromCache({
-            roomId: roomSnapshot.room.id,
-            trackId,
-            peerId,
-            nickname: activeSession?.nickname ?? track.ownerNickname
-          })
-        : null) ??
-      (peerId
-        ? await buildTrackAvailabilityFromFile({
-            roomId: roomSnapshot.room.id,
-            trackId,
-            fileHash: track.fileHash,
-            file: assembled.file,
-            peerId,
-            nickname: activeSession?.nickname ?? track.ownerNickname,
-            source: "local_cache",
-            mimeType: mimeType || track.mimeType || "audio/mpeg",
-            codec: track.codec ?? null,
-            sizeBytes: track.sizeBytes ?? assembled.file.size,
-            durationMs: track.durationMs,
-            totalChunks: canonicalManifest.totalChunks,
-            chunkSize: canonicalManifest.chunkSize
-          })
-        : null);
-    if (availability) {
-      onAvailability(availability);
-      emitAvailability(availability);
-    }
-    await trimLocalCache(roomSnapshot.tracks.map((entry) => entry.id));
-    setStatusMessage(`已从房间其他成员恢复曲目 ${track.title} 的本地缓存。`);
+    updateManualCacheTask(trackId, "ready");
+    setStatusMessage(`已缓存《${track.title}》。`);
   }
 
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
     await deleteCachedPiecesForTrack(trackId);
     setUploadedTracks((current) => removeTracksFromUploads(current, [trackId]));
-    setCachedTrackCount(await getCachedTrackAssetCount());
   }, []);
 
   const deleteRoomTrackArtifacts = useCallback(async (trackIds: string[]) => {
@@ -499,19 +490,122 @@ export function useTrackUploads(options: {
 
     await deleteCachedPiecesForTracks(uniqueTrackIds);
     setUploadedTracks((current) => removeTracksFromUploads(current, uniqueTrackIds));
-    setCachedTrackCount(await getCachedTrackAssetCount());
+    setManualCacheTasks((current) => {
+      const next = { ...current };
+      for (const trackId of uniqueTrackIds) {
+        delete next[trackId];
+      }
+      return next;
+    });
   }, []);
+
+  async function deleteCachedLibraryTrackEntry(fileHash: string) {
+    const record = await deleteCachedLibraryTrackRecord(fileHash);
+    if (record?.sourceTrackIds.length) {
+      await deleteCachedPiecesForTracks(record.sourceTrackIds);
+    }
+    await refreshCacheLibrary();
+  }
+
+  async function exportCachedLibraryTrack(fileHash: string) {
+    const cachedTrack = cacheLibraryTracksRef.current.get(fileHash);
+    if (!cachedTrack) {
+      return;
+    }
+
+    const downloadUrl = URL.createObjectURL(cachedTrack.file);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = buildCachedLibraryFileName(cachedTrack);
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+  }
+
+  async function importCachedLibraryTrackToRoom(fileHash: string) {
+    if (!activeSession || !roomSnapshot) {
+      return null;
+    }
+
+    const cachedTrack = cacheLibraryTracksRef.current.get(fileHash);
+    if (!cachedTrack) {
+      return null;
+    }
+
+    const roomId = roomSnapshot.room.id;
+    const existingTrack =
+      roomSnapshot.tracks.find(
+        (track) =>
+          track.ownerSessionId === activeSession.userId &&
+          track.fileHash === fileHash
+      ) ?? null;
+
+    let registeredTrack = existingTrack;
+    if (!registeredTrack) {
+      const tempObjectUrl = URL.createObjectURL(cachedTrack.file);
+      try {
+        const trackMeta = await buildTrackMeta(cachedTrack.file, tempObjectUrl, activeSession);
+        registeredTrack = await musicRoomApi.registerTrack(roomId, {
+          sessionId: activeSession.userId,
+          ...trackMeta
+        });
+      } finally {
+        URL.revokeObjectURL(tempObjectUrl);
+      }
+      await syncRoomSnapshot(roomId);
+    }
+
+    const uploadedObjectUrl = URL.createObjectURL(cachedTrack.file);
+    setUploadedTracks((current) => ({
+      ...current,
+      [registeredTrack.id]: {
+        file: cachedTrack.file,
+        objectUrl: uploadedObjectUrl,
+        origin: "cache-library"
+      }
+    }));
+
+    if (enableManualTrackCaching && peerId) {
+      const availability = await buildTrackAvailabilityFromFile({
+        roomId,
+        trackId: registeredTrack.id,
+        fileHash: registeredTrack.fileHash,
+        file: cachedTrack.file,
+        peerId,
+        nickname: activeSession.nickname,
+        source: "live_upload",
+        mimeType: registeredTrack.mimeType,
+        codec: registeredTrack.codec ?? null,
+        sizeBytes: registeredTrack.sizeBytes ?? cachedTrack.file.size,
+        durationMs: registeredTrack.durationMs,
+        totalChunks: registeredTrack.pieceManifest?.totalChunks,
+        chunkSize: registeredTrack.pieceManifest?.chunkSize
+      });
+      onAvailability(availability);
+      emitAvailability(availability);
+    }
+
+    return registeredTrack.id;
+  }
 
   return {
     uploadedTracks,
     setUploadedTracks,
     cachedTrackCount,
+    cacheLibraryTracks,
+    manualCacheTasks,
+    manualCacheTrackIds,
     handleFilesSelected,
+    startManualCacheDownload,
+    markManualCacheTrackDownloading,
     announceLocalCache,
     hydrateTrackFromPieces,
-    trimLocalCache,
     deleteUploadedTrackArtifacts,
-    deleteRoomTrackArtifacts
+    deleteRoomTrackArtifacts,
+    deleteCachedLibraryTrackEntry,
+    exportCachedLibraryTrack,
+    importCachedLibraryTrackToRoom
   };
 }
 
@@ -578,4 +672,65 @@ function resolveCanonicalTrackManifest(input: {
     codec: input.track?.codec ?? null,
     sizeBytes: input.track?.sizeBytes ?? input.fallbackFile?.size ?? null
   });
+}
+
+function toCachedLibraryFile(input: {
+  file: Blob;
+  title: string;
+  mimeType: string;
+  fileHash: string;
+}) {
+  if (input.file instanceof File) {
+    return input.file;
+  }
+
+  return new File([input.file], buildCachedLibraryFileName(input), {
+    type: input.mimeType || "audio/mpeg"
+  });
+}
+
+function toCachedLibraryFileFromBlob(
+  file: Blob,
+  track: Pick<TrackMeta, "title" | "mimeType" | "fileHash">
+) {
+  return toCachedLibraryFile({
+    file,
+    title: track.title,
+    mimeType: track.mimeType || file.type || "audio/mpeg",
+    fileHash: track.fileHash
+  });
+}
+
+function buildCachedLibraryFileName(input: {
+  title: string;
+  mimeType: string;
+  fileHash: string;
+}) {
+  const baseName = sanitizeFileName(input.title) || input.fileHash;
+  const extension = inferFileExtension(input.mimeType);
+  return extension ? `${baseName}.${extension}` : baseName;
+}
+
+function inferFileExtension(mimeType: string | null | undefined) {
+  switch ((mimeType ?? "").toLowerCase()) {
+    case "audio/mpeg":
+    case "audio/mp3":
+      return "mp3";
+    case "audio/flac":
+      return "flac";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav";
+    case "audio/mp4":
+    case "audio/aac":
+      return "m4a";
+    case "audio/ogg":
+      return "ogg";
+    default:
+      return "";
+  }
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]+/g, " ").trim();
 }

@@ -2,10 +2,12 @@
 
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
-export const enableTrackCaching = false;
+export const enablePlaybackCacheTakeover = false;
+export const enableManualTrackCaching = true;
+export const enableTrackCaching = enablePlaybackCacheTakeover;
 
 export function isCacheBackedUploadedTrack(track: UploadedTrack | null | undefined) {
-  return !!track && track.origin !== "live-upload";
+  return !!track && track.origin !== "live-upload" && track.origin !== "cache-library";
 }
 
 export function canUseUploadedTrackForPlayback(track: UploadedTrack | null | undefined) {
@@ -13,7 +15,11 @@ export function canUseUploadedTrackForPlayback(track: UploadedTrack | null | und
     return false;
   }
 
-  return track.origin === "live-upload" || enableTrackCaching;
+  return (
+    track.origin === "live-upload" ||
+    track.origin === "cache-library" ||
+    enablePlaybackCacheTakeover
+  );
 }
 
 export function getPlayableUploadedTrack(track: UploadedTrack | null | undefined) {

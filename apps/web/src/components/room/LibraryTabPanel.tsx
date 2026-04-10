@@ -3,11 +3,12 @@
 import { memo } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { TrackListSection } from "./TrackListSection";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 
 type LibraryTabPanelProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
+  cacheLibraryTracks: CachedLibraryTrack[];
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
@@ -19,7 +20,10 @@ type LibraryTabPanelProps = {
 function LibraryTabPanelBase(props: LibraryTabPanelProps) {
   return (
     <div className="animate-fade-in flex w-full flex-col gap-8">
-      <TrackListSection {...props} />
+      <TrackListSection
+        {...props}
+        cachedLibraryFileHashes={props.cacheLibraryTracks.map((track) => track.fileHash)}
+      />
     </div>
   );
 }

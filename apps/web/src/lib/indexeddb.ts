@@ -20,6 +20,22 @@ type TrackPieceRecord = {
   payload: ArrayBuffer;
 };
 
+export type CachedLibraryTrackRecord = {
+  fileHash: string;
+  title: string;
+  artist: string;
+  mimeType: string;
+  durationMs: number;
+  sizeBytes: number;
+  file: Blob;
+  cachedAt: string;
+  sourceTrackIds: string[];
+  sourceRoomIds: string[];
+  lastSourceTrackId: string | null;
+  lastSourceRoomId: string | null;
+  lastOwnerNickname: string | null;
+};
+
 export type TrackPieceManifestRecord = {
   trackId: string;
   fileHash: string;
@@ -36,6 +52,7 @@ export class MusicRoomDatabase extends Dexie {
   trackAssets!: Table<TrackAssetRecord, string>;
   trackPieces!: Table<TrackPieceRecord, string>;
   trackPieceManifests!: Table<TrackPieceManifestRecord, string>;
+  cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
 
   constructor() {
     super("music-room");
@@ -53,6 +70,13 @@ export class MusicRoomDatabase extends Dexie {
       trackPieces:
         "&pieceId, trackId, peerId, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], createdAt",
       trackPieceManifests: "&trackId, fileHash, updatedAt"
+    });
+    this.version(5).stores({
+      trackAssets: "&trackId, fileHash, cachedAt",
+      trackPieces:
+        "&pieceId, trackId, peerId, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], createdAt",
+      trackPieceManifests: "&trackId, fileHash, updatedAt",
+      cachedTrackLibrary: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds"
     });
   }
 }
@@ -101,6 +125,44 @@ export async function getCachedTrackAssets(trackIds: string[]) {
 
 export async function getCachedTrackAssetCount() {
   return musicRoomDatabase.trackAssets.count();
+}
+
+export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRecord, "cachedAt"> & {
+  cachedAt?: string;
+}) {
+  const existing = await musicRoomDatabase.cachedTrackLibrary.get(input.fileHash);
+  const mergedTrackIds = new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds]);
+  const mergedRoomIds = new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds]);
+
+  await musicRoomDatabase.cachedTrackLibrary.put({
+    ...existing,
+    ...input,
+    cachedAt: input.cachedAt ?? existing?.cachedAt ?? new Date().toISOString(),
+    sourceTrackIds: [...mergedTrackIds],
+    sourceRoomIds: [...mergedRoomIds]
+  });
+}
+
+export async function listCachedLibraryTracks() {
+  return musicRoomDatabase.cachedTrackLibrary.orderBy("cachedAt").reverse().toArray();
+}
+
+export async function getCachedLibraryTrack(fileHash: string) {
+  return musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+}
+
+export async function getCachedLibraryTrackCount() {
+  return musicRoomDatabase.cachedTrackLibrary.count();
+}
+
+export async function deleteCachedLibraryTrack(fileHash: string) {
+  const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+  if (!record) {
+    return null;
+  }
+
+  await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
+  return record;
 }
 
 export async function upsertTrackPieceManifest(
@@ -363,10 +425,12 @@ export async function clearAllCachedTracks() {
     musicRoomDatabase.trackAssets,
     musicRoomDatabase.trackPieces,
     musicRoomDatabase.trackPieceManifests,
+    musicRoomDatabase.cachedTrackLibrary,
     async () => {
       await musicRoomDatabase.trackAssets.clear();
       await musicRoomDatabase.trackPieces.clear();
       await musicRoomDatabase.trackPieceManifests.clear();
+      await musicRoomDatabase.cachedTrackLibrary.clear();
     }
   );
 }

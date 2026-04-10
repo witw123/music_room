@@ -63,6 +63,8 @@ import {
 } from "@/features/playback/host-media-sync";
 import {
   canUseUploadedTrackForPlayback,
+  enableManualTrackCaching,
+  enablePlaybackCacheTakeover,
   enableTrackCaching
 } from "@/features/playback/track-cache-policy";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
@@ -202,7 +204,9 @@ type UseRoomRuntimeInput = {
   uploadedTracks: Record<string, UploadedTrack>;
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
+  manualCacheTrackIds: string[];
   announceLocalCache: (trackId: string) => Promise<void>;
+  markManualCacheTrackDownloading: (trackId: string) => void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   scheduleTrackHydration: (trackId: string, mimeType: string, totalChunks: number) => void;
@@ -768,7 +772,9 @@ export function useRoomRuntime({
   uploadedTracks,
   uploadedTrackIds,
   uploadedTrackIdsRef,
+  manualCacheTrackIds,
   announceLocalCache,
+  markManualCacheTrackDownloading,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
   scheduleTrackHydration,
@@ -4711,9 +4717,10 @@ export function useRoomRuntime({
               durationMs: requestRttMs
             });
           }
-          if (!enableTrackCaching) {
+          if (!enableManualTrackCaching) {
             return;
           }
+          markManualCacheTrackDownloading(trackId);
           const currentTrack =
             currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
           if (currentTrack) {
@@ -6690,7 +6697,7 @@ export function useRoomRuntime({
   );
 
   useEffect(() => {
-    if (!enableTrackCaching) {
+    if (!enableManualTrackCaching && !enablePlaybackCacheTakeover) {
       return;
     }
 
@@ -6712,11 +6719,13 @@ export function useRoomRuntime({
       mode: effectiveSchedulerMode,
       bufferHealth,
       playbackClockSource,
+      manualTrackIds: manualCacheTrackIds,
       policy: progressiveSchedulerPolicy ?? "startup"
     });
   }, [
     availabilityByTrack,
     connectedPeers,
+    manualCacheTrackIds,
     uploadedTracks,
     roomSnapshot,
     schedulerPlaybackBucketMs,

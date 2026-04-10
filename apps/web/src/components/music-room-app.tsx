@@ -110,7 +110,7 @@ export function MusicRoomApp({
     useState<RoomMediaConnectionState>("idle");
   const [iceConfig, setIceConfig] = useState<IceConfigResponse | null>(null);
   const [iceConfigResolved, setIceConfigResolved] = useState(false);
-  const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "members">(
+  const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "cache" | "members">(
     "queue"
   );
   const [isDiagnosticsPanelOpen, setIsDiagnosticsPanelOpen] = useState(false);
@@ -210,11 +210,19 @@ export function MusicRoomApp({
   const {
     uploadedTracks,
     cachedTrackCount,
+    cacheLibraryTracks,
+    manualCacheTasks,
+    manualCacheTrackIds,
     handleFilesSelected: handleTrackFilesSelected,
+    startManualCacheDownload,
+    markManualCacheTrackDownloading,
     announceLocalCache,
     hydrateTrackFromPieces,
     deleteUploadedTrackArtifacts,
-    deleteRoomTrackArtifacts
+    deleteRoomTrackArtifacts,
+    deleteCachedLibraryTrackEntry,
+    exportCachedLibraryTrack,
+    importCachedLibraryTrackToRoom
   } = useTrackUploads({
     maxCachedTracks,
     peerId,
@@ -472,7 +480,9 @@ export function MusicRoomApp({
     uploadedTracks,
     uploadedTrackIds: Object.keys(uploadedTracks),
     uploadedTrackIdsRef,
+    manualCacheTrackIds,
     announceLocalCache,
+    markManualCacheTrackDownloading,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     scheduleTrackHydration,
@@ -527,6 +537,40 @@ export function MusicRoomApp({
       }
     },
     [handleTrackFilesSelected, setStatusMessage]
+  );
+
+  const handleStartManualCacheDownload = useCallback(
+    async (trackId: string) => {
+      try {
+        await startManualCacheDownload(trackId);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [setStatusMessage, startManualCacheDownload]
+  );
+
+  const handleDeleteCachedLibraryTrack = useCallback(
+    async (fileHash: string) => {
+      try {
+        await deleteCachedLibraryTrackEntry(fileHash);
+        setStatusMessage("已从我的缓存库移除歌曲。");
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [deleteCachedLibraryTrackEntry, setStatusMessage]
+  );
+
+  const handleExportCachedLibraryTrack = useCallback(
+    async (fileHash: string) => {
+      try {
+        await exportCachedLibraryTrack(fileHash);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [exportCachedLibraryTrack, setStatusMessage]
   );
 
   const handleCopyJoinCode = useCallback(async () => {
@@ -698,6 +742,21 @@ export function MusicRoomApp({
       await playTrack(trackId);
     },
     [armPlaybackStart, playTrack, roomSnapshot?.room.playback.currentTrackId]
+  );
+
+  const handlePlayCachedLibraryTrackToRoom = useCallback(
+    async (fileHash: string) => {
+      try {
+        const trackId = await importCachedLibraryTrackToRoom(fileHash);
+        if (!trackId) {
+          return;
+        }
+        await handlePlayTrack(trackId);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [handlePlayTrack, importCachedLibraryTrackToRoom, setStatusMessage]
   );
 
   const handlePlayQueueItem = useCallback(
@@ -952,6 +1011,8 @@ export function MusicRoomApp({
         mediaConnectionState={mediaConnectionState}
         mediaConnectedPeersCount={mediaConnectedPeersCount}
         cachedTrackCount={cachedTrackCount}
+        cacheLibraryTracks={cacheLibraryTracks}
+        manualCacheTasks={manualCacheTasks}
         availabilitySummary={availabilitySummary}
         memberTransferSummaries={memberTransferSummaries}
         localMemberState={localMemberState}
@@ -974,6 +1035,10 @@ export function MusicRoomApp({
         onAddToQueue={addToQueue}
         onDeleteTrack={deleteTrack}
         onPlayTrack={handlePlayTrack}
+        onStartManualCacheDownload={handleStartManualCacheDownload}
+        onPlayCachedLibraryTrackToRoom={handlePlayCachedLibraryTrackToRoom}
+        onExportCachedLibraryTrack={handleExportCachedLibraryTrack}
+        onDeleteCachedLibraryTrack={handleDeleteCachedLibraryTrack}
         onPlayQueueItem={handlePlayQueueItem}
         onRemoveQueueItem={removeQueueItem}
         onReorderQueue={reorderQueue}

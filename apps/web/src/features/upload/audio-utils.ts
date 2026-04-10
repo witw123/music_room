@@ -17,7 +17,28 @@ export type UploadedTrack = {
   origin: UploadedTrackOrigin;
 };
 
-export type UploadedTrackOrigin = "live-upload" | "restored-cache" | "hydrated-cache";
+export type UploadedTrackOrigin =
+  | "live-upload"
+  | "restored-cache"
+  | "hydrated-cache"
+  | "cache-library";
+
+export type CachedLibraryTrack = {
+  fileHash: string;
+  title: string;
+  artist: string;
+  mimeType: string;
+  durationMs: number;
+  sizeBytes: number;
+  cachedAt: string;
+  sourceTrackIds: string[];
+  sourceRoomIds: string[];
+  lastSourceTrackId: string | null;
+  lastSourceRoomId: string | null;
+  lastOwnerNickname: string | null;
+  objectUrl: string;
+  file: File;
+};
 
 export type CapturedAudioStreamMode = CapturedAudioGraph["mode"];
 

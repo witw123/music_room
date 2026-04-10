@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   canUseUploadedTrackForPlayback,
-  enableTrackCaching,
+  enableManualTrackCaching,
+  enablePlaybackCacheTakeover,
   getPlayableUploadedTrack,
   isCacheBackedUploadedTrack
 } from "./track-cache-policy";
 
 describe("track-cache-policy", () => {
   it("keeps cache-backed assets disabled while caching is paused", () => {
-    expect(enableTrackCaching).toBe(false);
+    expect(enablePlaybackCacheTakeover).toBe(false);
+    expect(enableManualTrackCaching).toBe(true);
     expect(
       canUseUploadedTrackForPlayback({
         file: new File(["cache"], "cache.mp3", { type: "audio/mpeg" }),
@@ -49,6 +51,13 @@ describe("track-cache-policy", () => {
         file: new File(["live"], "live.mp3", { type: "audio/mpeg" }),
         objectUrl: "blob:live",
         origin: "live-upload"
+      })
+    ).toBe(false);
+    expect(
+      isCacheBackedUploadedTrack({
+        file: new File(["cache"], "cache.mp3", { type: "audio/mpeg" }),
+        objectUrl: "blob:cache",
+        origin: "cache-library"
       })
     ).toBe(false);
   });
