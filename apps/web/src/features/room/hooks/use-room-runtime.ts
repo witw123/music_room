@@ -272,6 +272,7 @@ const recoverySoftRetryThresholdMs = 5_000;
 const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
 const recoveryFullResubscribeThresholdMs = 15_000;
+const listenerBootstrapGraceMs = 1_800;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
@@ -828,6 +829,7 @@ export function useRoomRuntime({
   const lastRealtimeRoomEventAtRef = useRef<number>(Date.now());
   const lastDataActivityAtRef = useRef<number | null>(null);
   const lastListenerBootstrapKeyRef = useRef<string | null>(null);
+  const missingListenerSinceRef = useRef<Map<string, number>>(new Map());
   const hostMediaSyncStateRef = useRef<{
     inFlight: boolean;
     lastAppliedKey: string | null;
@@ -1780,8 +1782,20 @@ export function useRoomRuntime({
       mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
       hostMediaSyncStateRef.current.lastAppliedKey = null;
       hostMediaSyncStateRef.current.pendingKey = null;
+      missingListenerSinceRef.current.clear();
+      lastListenerBootstrapKeyRef.current = null;
     }
   }, [bumpMediaTransportEpoch, roomSnapshot?.room.id, roomSnapshot?.room.playback.sourcePeerId]);
+
+  useEffect(() => {
+    missingListenerSinceRef.current.clear();
+    lastListenerBootstrapKeyRef.current = null;
+  }, [
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.mediaEpoch,
+    roomSnapshot?.room.playback.sourcePeerId
+  ]);
 
   useEffect(() => {
     recoveryGenerationRef.current = roomRecoveryState.generation;
@@ -4040,12 +4054,16 @@ export function useRoomRuntime({
             nextState.mediaIceState === "checking") &&
             typeof consecutiveNoProgressMs === "number" &&
             consecutiveNoProgressMs >= iceRestartNoProgressMs) ||
-          nextState.mediaIceState === "disconnected" ||
-          nextState.mediaConnectionState === "disconnected" ||
+          ((nextState.mediaIceState === "disconnected" ||
+            nextState.mediaConnectionState === "disconnected") &&
+            typeof consecutiveNoProgressMs === "number" &&
+            consecutiveNoProgressMs >= iceRestartNoProgressMs) ||
           (nextState.lastFailureReason === "ice-failed" && nextState.mediaIceState === "failed");
         const hasDataIceRestartFailureSignal =
-          nextState.dataIceState === "disconnected" ||
-          nextState.dataConnectionState === "disconnected" ||
+          ((nextState.dataIceState === "disconnected" ||
+            nextState.dataConnectionState === "disconnected") &&
+            typeof consecutiveNoProgressMs === "number" &&
+            consecutiveNoProgressMs >= iceRestartNoProgressMs) ||
           nextState.lastFailureReason === "data-failed";
         const hasIceRestartFailureSignal = isSourcePeer
           ? hasMediaIceRestartFailureSignal
@@ -5119,7 +5137,7 @@ export function useRoomRuntime({
           setMediaConnectedPeers(connectedPeerIds);
 
           if (state === "connected") {
-            setMediaConnectionState("buffering");
+            setMediaConnectionState((current) => (current === "live" ? current : "buffering"));
             armListenerMediaRecoveryRef.current(listenerMediaLifecycleRef.current.currentGeneration);
             scheduleRemotePlaybackRetryRef.current(
               0,
@@ -5129,7 +5147,9 @@ export function useRoomRuntime({
           }
 
           if (state === "connecting" || state === "new") {
-            setMediaConnectionState("connecting");
+            setMediaConnectionState((current) =>
+              current === "live" || current === "buffering" ? current : "connecting"
+            );
             return;
           }
 
@@ -6290,8 +6310,7 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback.sourceSessionId,
     roomSnapshot?.room.playback.status,
     updateSourceStartState,
-    activePlaybackSource,
-    mediaConnectedPeers.length
+    activePlaybackSource
   ]);
 
   useEffect(() => {
@@ -6319,7 +6338,6 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback.sourceSessionId,
     roomSnapshot?.room.playback.mediaEpoch,
     activePlaybackSource,
-    mediaConnectedPeers.length,
     sourceStartState,
     syncHostMediaStream
   ]);
@@ -6346,10 +6364,29 @@ export function useRoomRuntime({
       return;
     }
 
-    const missingListenerPeerIds = listenerPeerIds.filter(
-      (listenerPeerId) => !mediaConnectedPeers.includes(listenerPeerId)
-    );
-    if (missingListenerPeerIds.length === 0) {
+    const now = Date.now();
+    const connectedPeerSet = new Set(mediaConnectedPeers);
+    for (const listenerPeerId of listenerPeerIds) {
+      if (connectedPeerSet.has(listenerPeerId)) {
+        missingListenerSinceRef.current.delete(listenerPeerId);
+      } else if (!missingListenerSinceRef.current.has(listenerPeerId)) {
+        missingListenerSinceRef.current.set(listenerPeerId, now);
+      }
+    }
+    for (const trackedPeerId of [...missingListenerSinceRef.current.keys()]) {
+      if (!listenerPeerIds.includes(trackedPeerId)) {
+        missingListenerSinceRef.current.delete(trackedPeerId);
+      }
+    }
+
+    const stableMissingListenerPeerIds = listenerPeerIds.filter((listenerPeerId) => {
+      if (connectedPeerSet.has(listenerPeerId)) {
+        return false;
+      }
+      const missingSince = missingListenerSinceRef.current.get(listenerPeerId);
+      return typeof missingSince === "number" && now - missingSince >= listenerBootstrapGraceMs;
+    });
+    if (stableMissingListenerPeerIds.length === 0) {
       lastListenerBootstrapKeyRef.current = null;
       return;
     }
@@ -6359,7 +6396,7 @@ export function useRoomRuntime({
       roomSnapshot.room.playback.mediaEpoch,
       mediaTransportEpochRef.current,
       roomSnapshot.room.presenceRevision,
-      ...missingListenerPeerIds
+      ...stableMissingListenerPeerIds
     ].join("|");
     if (lastListenerBootstrapKeyRef.current === bootstrapKey) {
       return;
@@ -6388,7 +6425,7 @@ export function useRoomRuntime({
           summary: `房主定向补发实时音频协商，第 ${attempt} 次`
         });
         void syncHostMediaStreamRef.current({ forceResync: true, reason: "listener-bootstrap" });
-        for (const listenerPeerId of missingListenerPeerIds) {
+        for (const listenerPeerId of stableMissingListenerPeerIds) {
           void mediaMeshRef.current?.restartPublishingPeer(listenerPeerId, hostStreamRef.current);
         }
       }, delayMs)
