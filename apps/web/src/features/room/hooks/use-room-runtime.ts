@@ -269,7 +269,8 @@ const stalledPieceSyncRecoveryThresholdMs = 20_000;
 const recentAudibleProgressGraceMs = 2_500;
 const recoveryBootstrapGraceMs = 5_000;
 const recoverySoftRetryThresholdMs = 5_000;
-const recoveryPeerRestartThresholdMs = 8_000;
+const recoveryMediaRestartThresholdMs = 4_000;
+const recoveryDataRestartThresholdMs = 8_000;
 const recoveryFullResubscribeThresholdMs = 15_000;
 
 type ListenerMediaRecoveryReason =
@@ -782,6 +783,9 @@ export function useRoomRuntime({
   const hostStreamRef = useRef<MediaStream | null>(null);
   const silentPrewarmHandleRef = useRef<SilentPrewarmHandle | null>(null);
   const mediaTransportEpochRef = useRef(0);
+  const transportResetReasonRef = useRef<"source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none">(
+    "none"
+  );
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const lastHostCaptureRefreshAtRef = useRef<number>(0);
   const remotePlaybackRetryRef = useRef<number | null>(null);
@@ -1469,10 +1473,16 @@ export function useRoomRuntime({
     silentPrewarmHandleRef.current = null;
   }, []);
 
-  const bumpMediaTransportEpoch = useCallback(() => {
-    mediaTransportEpochRef.current += 1;
-    return mediaTransportEpochRef.current;
-  }, []);
+  const bumpMediaTransportEpoch = useCallback(
+    (
+      reason: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none" = "explicit-hard-reset"
+    ) => {
+      transportResetReasonRef.current = reason;
+      mediaTransportEpochRef.current += 1;
+      return mediaTransportEpochRef.current;
+    },
+    []
+  );
 
   const updateSourceStartState = useCallback(
     (
@@ -1512,7 +1522,16 @@ export function useRoomRuntime({
             ),
             audioUnlocked: audioUnlockedRef.current,
             sourceStartState: nextState,
-            lastSourceStartError: nextError
+            lastSourceStartError: nextError,
+            hostPublishingReady: nextState === "live",
+            mediaBootstrapState:
+              nextState === "live"
+                ? "steady"
+                : nextState === "starting"
+                  ? "bootstrapping"
+                  : nextState === "failed"
+                    ? "failed"
+                    : snapshot.progressivePlaybackStatus?.mediaBootstrapState ?? "idle"
           }
         })
       });
@@ -1535,6 +1554,11 @@ export function useRoomRuntime({
       hostPublishFailureReason?: string | null;
       resolvedPublishElement?: ResolvedPublishElement | null;
       resolvedPublishStreamKind?: ResolvedPublishStreamKind | null;
+      mediaBootstrapState?: "idle" | "bootstrapping" | "recovering" | "failed" | "steady" | null;
+      mediaFailureReason?: string | null;
+      transportResetReason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none" | null;
+      hostPublishingReady?: boolean;
+      listenerRecoveryAttempt?: number | null;
       dataRequiredForPlayback?: boolean;
       firstTransportConnectedAt?: string | null;
       firstAudibleAt?: string | null;
@@ -1601,6 +1625,26 @@ export function useRoomRuntime({
               input.resolvedPublishStreamKind ??
               snapshot.progressivePlaybackStatus?.resolvedPublishStreamKind ??
               "none",
+            mediaBootstrapState:
+              input.mediaBootstrapState ??
+              snapshot.progressivePlaybackStatus?.mediaBootstrapState ??
+              "idle",
+            mediaFailureReason:
+              input.mediaFailureReason ??
+              snapshot.progressivePlaybackStatus?.mediaFailureReason ??
+              null,
+            transportResetReason:
+              input.transportResetReason ??
+              snapshot.progressivePlaybackStatus?.transportResetReason ??
+              transportResetReasonRef.current,
+            hostPublishingReady:
+              input.hostPublishingReady ??
+              snapshot.progressivePlaybackStatus?.hostPublishingReady ??
+              false,
+            listenerRecoveryAttempt:
+              input.listenerRecoveryAttempt ??
+              snapshot.progressivePlaybackStatus?.listenerRecoveryAttempt ??
+              null,
             dataRequiredForPlayback:
               input.dataRequiredForPlayback ??
               snapshot.progressivePlaybackStatus?.dataRequiredForPlayback ??
@@ -1699,7 +1743,7 @@ export function useRoomRuntime({
 
     if (mediaTransportOwnerKeyRef.current !== ownerKey) {
       mediaTransportOwnerKeyRef.current = ownerKey;
-      const nextTransportEpoch = bumpMediaTransportEpoch();
+      const nextTransportEpoch = bumpMediaTransportEpoch("source-changed");
       mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
       hostMediaSyncStateRef.current.lastAppliedKey = null;
       hostMediaSyncStateRef.current.pendingKey = null;
@@ -1741,6 +1785,7 @@ export function useRoomRuntime({
           pendingMedia: roomRecoveryState.pendingMedia,
           dataRequiredForPlayback: enableTrackCaching,
           listenerBootstrapAttempts: roomRecoveryState.listenerBootstrapAttempts,
+          listenerRecoveryAttempt: roomRecoveryState.listenerBootstrapAttempts,
           fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive
         }
       })
@@ -2455,6 +2500,10 @@ export function useRoomRuntime({
             hostPublishFailureReason: null,
             resolvedPublishElement: "none",
             resolvedPublishStreamKind: "none",
+            mediaBootstrapState: "idle",
+            mediaFailureReason: null,
+            transportResetReason: transportResetReasonRef.current,
+            hostPublishingReady: false,
             dataRequiredForPlayback: enableTrackCaching,
             captureTrackState: null,
             publishGeneration: syncState.publishGeneration,
@@ -2590,6 +2639,10 @@ export function useRoomRuntime({
               hostPublishFailureReason: "silent-prewarm-creation-failed",
               resolvedPublishElement,
               resolvedPublishStreamKind,
+              mediaBootstrapState: "failed",
+              mediaFailureReason: "peer-closed-before-stream",
+              transportResetReason: transportResetReasonRef.current,
+              hostPublishingReady: false,
               dataRequiredForPlayback: enableTrackCaching,
               captureTrackState,
               publishGeneration: syncState.publishGeneration,
@@ -2688,6 +2741,17 @@ export function useRoomRuntime({
           hostPublishFailureReason,
           resolvedPublishElement,
           resolvedPublishStreamKind,
+          mediaBootstrapState:
+            publishedTrackKind === "host-capture" || publishedTrackKind === "relay-stream"
+              ? "steady"
+              : blockedUntilSourcePlaybackReady
+                ? "recovering"
+                : "bootstrapping",
+          mediaFailureReason:
+            blockedUntilSourcePlaybackReady ? hostPublishFailureReason ?? "no-playout-progress" : null,
+          transportResetReason: transportResetReasonRef.current,
+          hostPublishingReady:
+            publishedTrackKind === "host-capture" || publishedTrackKind === "relay-stream",
           dataRequiredForPlayback: enableTrackCaching,
           captureTrackState,
           publishGeneration: syncState.publishGeneration,
@@ -2742,6 +2806,10 @@ export function useRoomRuntime({
           hostPublishFailureReason: message,
           resolvedPublishElement: "none",
           resolvedPublishStreamKind: "none",
+          mediaBootstrapState: "failed",
+          mediaFailureReason: "no-playout-progress",
+          transportResetReason: transportResetReasonRef.current,
+          hostPublishingReady: false,
           dataRequiredForPlayback: enableTrackCaching,
           captureTrackState: null,
           publishGeneration: syncState.publishGeneration,
@@ -3890,9 +3958,11 @@ export function useRoomRuntime({
           });
         }
         const hasMediaHardRecoverySignal =
-          nextState.mediaConnectionState === "failed" ||
-          nextState.mediaConnectionState === "closed" ||
           nextState.mediaIceState === "failed" ||
+          (((nextState.mediaConnectionState === "failed" ||
+            nextState.mediaConnectionState === "closed") &&
+            typeof consecutiveNoProgressMs === "number" &&
+            consecutiveNoProgressMs >= hardRecreateNoProgressMs)) ||
           ((nextState.mediaConnectionState === "connecting" ||
             nextState.mediaIceState === "checking") &&
             typeof consecutiveNoProgressMs === "number" &&
@@ -3910,10 +3980,7 @@ export function useRoomRuntime({
         const hasHardRecoverySignal = isSourcePeer
           ? hasMediaHardRecoverySignal
           : hasMediaHardRecoverySignal || hasDataHardRecoverySignal;
-        const hasImmediateMediaHardRecoverySignal =
-          nextState.mediaConnectionState === "failed" ||
-          nextState.mediaConnectionState === "closed" ||
-          nextState.mediaIceState === "failed";
+        const hasImmediateMediaHardRecoverySignal = nextState.mediaIceState === "failed";
         const hasImmediateDataHardRecoverySignal =
           nextState.dataConnectionState === "failed" ||
           nextState.dataConnectionState === "closed" ||
@@ -4041,8 +4108,6 @@ export function useRoomRuntime({
             if (isSourcePeer) {
               setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
             }
-            const nextTransportEpoch = bumpMediaTransportEpoch();
-            mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
             void mediaMeshRef.current?.restartPeer(remotePeerId, hostStreamRef.current).catch((error) => {
               clearSourceHardRecoveryAction(remotePeerId, playback.mediaEpoch);
               reportRealtimeFailureRef.current({
@@ -4915,7 +4980,12 @@ export function useRoomRuntime({
             );
           }
         },
-        onConnectionStateChange: ({ peerId: remotePeerId, state, connectedPeerIds }) => {
+        onConnectionStateChange: ({
+          peerId: remotePeerId,
+          state,
+          connectedPeerIds,
+          recoverableFailure
+        }) => {
           const currentSourcePeerId = currentRoomRef.current?.room.playback.sourcePeerId ?? null;
           const diagnosticPeerId = resolveMediaDiagnosticPeerId({
             remotePeerId,
@@ -4948,12 +5018,30 @@ export function useRoomRuntime({
                   snapshot.progressivePlaybackStatus ??
                   createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
                 ),
+                mediaBootstrapState:
+                  state === "connected"
+                    ? "steady"
+                    : state === "connecting" || state === "new"
+                      ? "bootstrapping"
+                      : recoverableFailure || state === "disconnected"
+                        ? "recovering"
+                        : state === "failed" || state === "closed"
+                          ? "failed"
+                          : snapshot.progressivePlaybackStatus?.mediaBootstrapState ?? "idle",
+                mediaFailureReason:
+                  state === "disconnected"
+                    ? "ice-disconnected-grace"
+                    : state === "closed" && recoverableFailure
+                      ? "peer-closed-before-stream"
+                      : state === "failed" && recoverableFailure
+                        ? "no-playout-progress"
+                        : snapshot.progressivePlaybackStatus?.mediaFailureReason ?? null,
                 mediaTransportState:
                   state === "connected"
                     ? "connected"
                     : state === "failed" || state === "closed"
                       ? "failed"
-                      : state === "connecting" || state === "new"
+                    : state === "connecting" || state === "new"
                         ? "prewarming"
                         : snapshot.progressivePlaybackStatus?.mediaTransportState ?? "idle",
                 transportEpoch: mediaTransportEpochRef.current,
@@ -4990,7 +5078,7 @@ export function useRoomRuntime({
 
           if (state === "disconnected" || state === "closed") {
             setMediaConnectionState((current) =>
-              current === "live" || current === "buffering"
+              recoverableFailure || current === "live" || current === "buffering"
                 ? resolveSoftRecoveryMediaState("reconnecting")
                 : "idle"
             );
@@ -5560,7 +5648,7 @@ export function useRoomRuntime({
     socket.on("disconnect", (reason) => {
       stopPresenceHeartbeat();
       stopRecoveryWatchdog();
-      bumpMediaTransportEpoch();
+      bumpMediaTransportEpoch("socket-reconnect");
       hostMediaSyncStateRef.current.lastAppliedKey = null;
       hostMediaSyncStateRef.current.pendingKey = null;
       setConnectedPeers([]);
@@ -5691,7 +5779,7 @@ export function useRoomRuntime({
       (lastSubscribeAckAtRef.current !== null ? Date.now() - lastSubscribeAckAtRef.current : null);
     const remoteMediaStillProtected =
       continuity.audibleSource === "remote-stream" &&
-      (mediaNoProgressMs === null || mediaNoProgressMs < recoveryPeerRestartThresholdMs);
+      (mediaNoProgressMs === null || mediaNoProgressMs < recoveryMediaRestartThresholdMs);
     const mediaReady =
       !!(sourcePeerId && mediaConnectedPeers.includes(sourcePeerId)) ||
       mediaConnectionState === "live" ||
@@ -5783,7 +5871,7 @@ export function useRoomRuntime({
         continuity.audibleSource === "progressive-local" ||
         continuity.audibleSource === "full-local" ||
         (continuity.audibleSource === "remote-stream" &&
-          noProgressMs < recoveryPeerRestartThresholdMs);
+          noProgressMs < recoveryMediaRestartThresholdMs);
       const latestMediaReady =
         mediaConnectedPeers.includes(latestSourcePeerId) ||
         mediaConnectionState === "live" ||
@@ -5814,7 +5902,7 @@ export function useRoomRuntime({
         }
       }
 
-      if (!latestDataReady && noDataProgressMs >= recoveryPeerRestartThresholdMs) {
+      if (!latestDataReady && noDataProgressMs >= recoveryDataRestartThresholdMs) {
         const dataRestartKey = `${recoveryKey}|data`;
         if (recoveryWatchdogActionsRef.current.dataRestartKey !== dataRestartKey) {
           recoveryWatchdogActionsRef.current.dataRestartKey = dataRestartKey;
@@ -5827,7 +5915,7 @@ export function useRoomRuntime({
         }
       }
 
-      if (!latestMediaReady && noProgressMs >= recoveryPeerRestartThresholdMs) {
+      if (!latestMediaReady && noProgressMs >= recoveryMediaRestartThresholdMs) {
         if (latestHasFullLocalTrack) {
           setRoomRecoveryState((current) => ({
             ...current,
@@ -5868,7 +5956,7 @@ export function useRoomRuntime({
           }));
           resubscribeRoomRef.current?.();
           void meshRef.current?.restartPeer(latestSourcePeerId);
-          const nextTransportEpoch = bumpMediaTransportEpoch();
+          const nextTransportEpoch = bumpMediaTransportEpoch("explicit-hard-reset");
           mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
           void mediaMeshRef.current?.restartPeer(latestSourcePeerId);
         }

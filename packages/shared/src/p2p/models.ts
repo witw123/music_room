@@ -172,6 +172,17 @@ export const progressivePlaybackStatusSchema = z.object({
     .enum(["audio-element-capture", "pcm-relay-stream", "silent-prewarm", "none"])
     .nullable()
     .optional(),
+  mediaBootstrapState: z
+    .enum(["idle", "bootstrapping", "recovering", "failed", "steady"])
+    .nullable()
+    .optional(),
+  mediaFailureReason: z.string().nullable().optional(),
+  transportResetReason: z
+    .enum(["source-changed", "socket-reconnect", "explicit-hard-reset", "none"])
+    .nullable()
+    .optional(),
+  hostPublishingReady: z.boolean().optional(),
+  listenerRecoveryAttempt: z.number().int().nonnegative().nullable().optional(),
   dataRequiredForPlayback: z.boolean().optional(),
   firstAudibleAt: z.string().datetime().nullable().optional(),
   firstTransportConnectedAt: z.string().datetime().nullable().optional(),

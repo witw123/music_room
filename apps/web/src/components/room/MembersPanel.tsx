@@ -191,6 +191,8 @@ function getPlaybackStatus(
     peerDiagnostics?.progressivePlaybackStatus?.hostPublishReadiness ?? null;
   const hostPublishFailureReason =
     peerDiagnostics?.progressivePlaybackStatus?.hostPublishFailureReason ?? null;
+  const mediaFailureReason =
+    peerDiagnostics?.progressivePlaybackStatus?.mediaFailureReason ?? null;
 
   if (presenceState === "offline") {
     return {
@@ -325,7 +327,9 @@ function getPlaybackStatus(
 
   return {
     label: "未接入音频",
-    detail: "当前还没有稳定的实时音频链路。",
+    detail: mediaFailureReason
+      ? `当前还没有稳定的实时音频链路：${mediaFailureReason}`
+      : "当前还没有稳定的实时音频链路。",
     tone: "neutral" as const
   };
 }

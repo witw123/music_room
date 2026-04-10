@@ -655,7 +655,10 @@ function getLocalPlaybackStatus(input: {
 
     return {
       label: "本地播放中",
-      detail: "当前曲目正在本机播放，等待其他成员接入实时音频。",
+      detail:
+        input.sourceStartState === "live"
+          ? "当前真实音轨已发布，等待其他成员接入实时音频。"
+          : "当前曲目正在本机播放，等待其他成员接入实时音频。",
       tone: "accent",
       badgeText: "source-waiting"
     };

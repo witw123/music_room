@@ -568,6 +568,18 @@ function MeshStatusPanelBase({
                         <span>
                           解析流类型: {peer.progressivePlaybackStatus.resolvedPublishStreamKind ?? "未知"}
                         </span>
+                        <span>
+                          Media bootstrap: {peer.progressivePlaybackStatus.mediaBootstrapState ?? "未知"}
+                        </span>
+                        <span>
+                          发布是否就绪: {peer.progressivePlaybackStatus.hostPublishingReady ? "是" : "否"}
+                        </span>
+                        <span>
+                          传输重置原因: {peer.progressivePlaybackStatus.transportResetReason ?? "未知"}
+                        </span>
+                        <span>
+                          Listener 恢复尝试: {peer.progressivePlaybackStatus.listenerRecoveryAttempt ?? "未知"}
+                        </span>
                         <span>恢复阶段: {peer.progressivePlaybackStatus.recoveryPhase ?? "未知"}</span>
                         <span>恢复模式: {peer.progressivePlaybackStatus.recoveryMode ?? "未知"}</span>
                         <span>恢复代次: {peer.progressivePlaybackStatus.recoveryGeneration ?? "未知"}</span>

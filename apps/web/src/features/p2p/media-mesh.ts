@@ -24,6 +24,7 @@ type MediaMeshCallbacks = {
     peerId: string;
     state: MediaConnectionState;
     connectedPeerIds: string[];
+    recoverableFailure?: boolean;
   }) => void;
   onIceConnectionStateChange?: (payload: {
     peerId: string;
@@ -73,6 +74,7 @@ type MediaPeerEntry = {
   isSettingRemoteAnswerPending: boolean;
   ignoreOffer: boolean;
   pendingRestart: boolean;
+  recoverableFailure: boolean;
   isPolite: boolean;
   released: boolean;
   operationChain: Promise<void>;
@@ -395,7 +397,7 @@ export class RoomMediaMesh {
       existingEntry?.wantsIncomingAudio ??
       !(effectiveLocalStream && effectiveLocalStream.getAudioTracks().length > 0);
     if (existingEntry) {
-      this.releasePeer(peerId, existingEntry);
+      this.releasePeer(peerId, existingEntry, { explicit: true });
     }
 
     const entry = this.createPeer(peerId, wantsIncomingAudio);
@@ -408,7 +410,12 @@ export class RoomMediaMesh {
 
   async restartIce(peerId: string, localStream: MediaStream | null = null) {
     const entry = this.peers.get(peerId);
-    if (!entry || entry.released) {
+    if (
+      !entry ||
+      entry.released ||
+      entry.connection.connectionState === "closed" ||
+      entry.connection.connectionState === "failed"
+    ) {
       return null;
     }
 
@@ -425,6 +432,16 @@ export class RoomMediaMesh {
   }
 
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
+    const existingEntry = this.peers.get(peerId);
+    const shouldRecreatePeer =
+      !!existingEntry &&
+      !existingEntry.released &&
+      (existingEntry.connection.connectionState === "closed" ||
+        existingEntry.connection.connectionState === "failed" ||
+        existingEntry.recoverableFailure);
+    if (existingEntry && shouldRecreatePeer) {
+      this.releasePeer(peerId, existingEntry, { explicit: true });
+    }
     const entry = this.peers.get(peerId) ?? this.createPeer(peerId, false);
     await this.enqueuePeerOperation(entry, async () => {
       const streamChanged = await this.attachStream(entry, localStream);
@@ -510,6 +527,7 @@ export class RoomMediaMesh {
       isSettingRemoteAnswerPending: false,
       ignoreOffer: false,
       pendingRestart: false,
+      recoverableFailure: false,
       isPolite: wantsIncomingAudio,
       released: false,
       operationChain: Promise.resolve(),
@@ -577,32 +595,37 @@ export class RoomMediaMesh {
 
     connection.onconnectionstatechange = () => {
       this.emitPeerRuntimeState(peerId, entry);
-      this.callbacks.onConnectionStateChange?.({
-        peerId,
-        state: connection.connectionState,
-        connectedPeerIds: this.getConnectedPeerIds()
-      });
 
       if (entry.released) {
         return;
       }
 
       if (connection.connectionState === "failed" || connection.connectionState === "closed") {
+        entry.pendingRestart = true;
+        entry.recoverableFailure = true;
+        this.emitPeerRuntimeState(peerId, entry);
+        this.callbacks.onConnectionStateChange?.({
+          peerId,
+          state: connection.connectionState,
+          connectedPeerIds: this.getConnectedPeerIds(),
+          recoverableFailure: true
+        });
         if (entry.wantsIncomingAudio) {
           this.callbacks.onSourcePeerFailed?.({
             peerId,
             mediaEpoch: this.currentMediaEpoch
           });
         }
-
-        if (entry.stream) {
-          this.callbacks.onRemoteStream(null);
-        }
-
-        if (this.peers.get(peerId) === entry) {
-          this.releasePeer(peerId, entry);
-        }
+        return;
       }
+
+      entry.recoverableFailure = false;
+      this.callbacks.onConnectionStateChange?.({
+        peerId,
+        state: connection.connectionState,
+        connectedPeerIds: this.getConnectedPeerIds(),
+        recoverableFailure: false
+      });
     };
 
     connection.oniceconnectionstatechange = () => {
@@ -657,8 +680,15 @@ export class RoomMediaMesh {
     return true;
   }
 
-  private releasePeer(peerId: string, entry: MediaPeerEntry) {
+  private releasePeer(
+    peerId: string,
+    entry: MediaPeerEntry,
+    options?: {
+      explicit?: boolean;
+    }
+  ) {
     entry.released = true;
+    entry.recoverableFailure = false;
     this.stopStatsSampling(entry);
     if (entry.connection.connectionState !== "closed") {
       entry.connection.close();
@@ -667,7 +697,8 @@ export class RoomMediaMesh {
     this.callbacks.onConnectionStateChange?.({
       peerId,
       state: "closed",
-      connectedPeerIds: this.getConnectedPeerIds()
+      connectedPeerIds: this.getConnectedPeerIds(),
+      recoverableFailure: options?.explicit ? false : undefined
     });
   }
 

@@ -189,10 +189,12 @@ describe("RoomMediaMesh", () => {
     expect(onRemoteStream).toHaveBeenCalledWith(null);
   });
 
-  it("releases failed peer connections so they can be renegotiated", async () => {
+  it("marks failed peer connections as recoverable and recreates them on the next targeted sync", async () => {
     const sendSignal = vi.fn();
+    const onConnectionStateChange = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
-      onRemoteStream: vi.fn()
+      onRemoteStream: vi.fn(),
+      onConnectionStateChange
     });
     const stream = {
       getAudioTracks: () => [{ id: "track_1" }]
@@ -206,11 +208,19 @@ describe("RoomMediaMesh", () => {
 
     firstPeer!.connectionState = "failed";
     firstPeer!.onconnectionstatechange?.();
-    expect(firstPeer!.closed).toBe(true);
+
+    expect(firstPeer!.closed).toBe(false);
+    expect(onConnectionStateChange).toHaveBeenLastCalledWith({
+      peerId: "peer_listener",
+      state: "failed",
+      connectedPeerIds: [],
+      recoverableFailure: true
+    });
 
     await mesh.syncHostPeers(["peer_listener"], stream, 1);
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(firstPeer!.closed).toBe(true);
     expect(sendSignal).toHaveBeenCalledTimes(2);
   });
 
