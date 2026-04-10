@@ -13,6 +13,7 @@ import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
+import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
@@ -133,6 +134,7 @@ export function MusicRoomApp({
     "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
   >("idle");
   const [lastSourceStartError, setLastSourceStartError] = useState<string | null>(null);
+  const [audioBlockedOverlay, setAudioBlockedOverlay] = useState(false);
   const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>({
     phase: "joining",
     mode: "steady",
@@ -890,78 +892,119 @@ export function MusicRoomApp({
     isRecoveringRoom
   });
 
+  // Show audio unlock overlay when playback is active but audio is blocked (listener only).
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+    if (
+      !audioUnlocked &&
+      !isCurrentSourceOwner &&
+      playback?.status === "playing" &&
+      playback.currentTrackId
+    ) {
+      const timer = window.setTimeout(() => {
+        if (!roomAudioOutput.isActivated()) {
+          setAudioBlockedOverlay(true);
+        }
+      }, 1500);
+      return () => window.clearTimeout(timer);
+    }
+
+    setAudioBlockedOverlay(false);
+  }, [
+    audioUnlocked,
+    isCurrentSourceOwner,
+    roomSnapshot?.room.playback?.status,
+    roomSnapshot?.room.playback?.currentTrackId
+  ]);
+
+  const handleAudioUnlock = useCallback(async () => {
+    setAudioBlockedOverlay(false);
+    await roomAudioOutput.primeOutputs({
+      localAudio: audioRef.current,
+      remoteAudio: remoteAudioRef.current
+    });
+    setAudioUnlocked(true);
+    setStatusMessage("");
+  }, [audioRef, remoteAudioRef, setAudioUnlocked, setStatusMessage]);
+
   return (
-    <RoomWorkspace
-      activeSession={activeSession}
-      statusMessage={statusMessage}
-      statusTone={statusTone}
-      roomSnapshot={roomSnapshot}
-      currentTrack={currentTrack}
-      canControlPlayback={canControlPlayback}
-      canDeleteRoom={canDeleteRoom}
-      canDisbandRoom={canDisbandRoom}
-      canReorderQueue={canReorderQueue}
-      uploadedTracks={uploadedTracks}
-      connectedPeersCount={connectedPeersCount}
-      mediaConnectionState={mediaConnectionState}
-      mediaConnectedPeersCount={mediaConnectedPeersCount}
-      cachedTrackCount={cachedTrackCount}
-      availabilitySummary={availabilitySummary}
-      memberTransferSummaries={memberTransferSummaries}
-      localMemberState={localMemberState}
-      peerDiagnostics={visiblePeerDiagnostics}
-      peerRecentEvents={visiblePeerRecentEvents}
-      iceConfigSource={iceConfigSource}
-      iceConfigStatus={iceConfigStatus}
-      workspaceEntryHref={workspaceEntryHref}
-      authEntryHref={authEntryHref}
-      showRoomTransitionState={showRoomTransitionState}
-      isNavigatingRoomExit={isNavigatingRoomExit}
-      isRecoveringRoom={isRecoveringRoom}
-      isRoomTransitionPending={isRoomTransitionPending}
-      onLogout={handleLogout}
-      onClearIdentity={handleClearIdentity}
-      onCopyJoinCode={handleCopyJoinCode}
-      onLeaveRoom={handleLeaveRoomAction}
-      onDeleteRoom={handleDeleteRoomAction}
-      onFilesSelected={handleFilesSelected}
-      onAddToQueue={addToQueue}
-      onDeleteTrack={deleteTrack}
-      onPlayTrack={handlePlayTrack}
-      onPlayQueueItem={handlePlayQueueItem}
-      onRemoveQueueItem={removeQueueItem}
-      onReorderQueue={reorderQueue}
-      onTabChange={setActiveDashboardTab}
-      onDiagnosticsVisibilityChange={setIsDiagnosticsPanelOpen}
-      socket={socketRef.current}
-      isSyncPending={false}
-      playerSlot={
-        <BottomPlayerController
-          audioRef={audioRef}
-          remoteAudioRef={remoteAudioRef}
-          roomSnapshot={roomSnapshot}
-          activeSession={activeSession}
-          currentTrack={currentTrack}
-          activePlaybackSource={activePlaybackSource}
-          authoritativeMediaClock={authoritativeMediaClock}
-          resetEpoch={playerResetEpoch}
-          onPlaybackPositionChange={handlePlaybackPositionChange}
-          onPlaybackBucketChange={handlePlaybackBucketChange}
-          onVolumeChange={setVolume}
-          getLocalPlaybackPositionMs={getLocalPlaybackPositionMs}
-          onPlay={handlePlayTrack}
-          onPause={pauseTrack}
-          onSeek={seekTrack}
-          onPrev={handlePrevTrack}
-          onNext={handleNextTrack}
-          onEnded={handlePlaybackEnded}
-          onLocalPlaybackReady={handleLocalPlaybackReady}
-          onRemotePlaying={handleRemotePlaying}
-          onRemoteWaiting={handleRemoteWaiting}
-          onRemotePause={handleRemotePause}
-          onRemoteError={handleRemoteError}
-        />
-      }
-    />
+    <>
+      <AudioUnlockOverlay
+        visible={audioBlockedOverlay}
+        onUnlock={handleAudioUnlock}
+      />
+      <RoomWorkspace
+        activeSession={activeSession}
+        statusMessage={statusMessage}
+        statusTone={statusTone}
+        roomSnapshot={roomSnapshot}
+        currentTrack={currentTrack}
+        canControlPlayback={canControlPlayback}
+        canDeleteRoom={canDeleteRoom}
+        canDisbandRoom={canDisbandRoom}
+        canReorderQueue={canReorderQueue}
+        uploadedTracks={uploadedTracks}
+        connectedPeersCount={connectedPeersCount}
+        mediaConnectionState={mediaConnectionState}
+        mediaConnectedPeersCount={mediaConnectedPeersCount}
+        cachedTrackCount={cachedTrackCount}
+        availabilitySummary={availabilitySummary}
+        memberTransferSummaries={memberTransferSummaries}
+        localMemberState={localMemberState}
+        peerDiagnostics={visiblePeerDiagnostics}
+        peerRecentEvents={visiblePeerRecentEvents}
+        iceConfigSource={iceConfigSource}
+        iceConfigStatus={iceConfigStatus}
+        workspaceEntryHref={workspaceEntryHref}
+        authEntryHref={authEntryHref}
+        showRoomTransitionState={showRoomTransitionState}
+        isNavigatingRoomExit={isNavigatingRoomExit}
+        isRecoveringRoom={isRecoveringRoom}
+        isRoomTransitionPending={isRoomTransitionPending}
+        onLogout={handleLogout}
+        onClearIdentity={handleClearIdentity}
+        onCopyJoinCode={handleCopyJoinCode}
+        onLeaveRoom={handleLeaveRoomAction}
+        onDeleteRoom={handleDeleteRoomAction}
+        onFilesSelected={handleFilesSelected}
+        onAddToQueue={addToQueue}
+        onDeleteTrack={deleteTrack}
+        onPlayTrack={handlePlayTrack}
+        onPlayQueueItem={handlePlayQueueItem}
+        onRemoveQueueItem={removeQueueItem}
+        onReorderQueue={reorderQueue}
+        onTabChange={setActiveDashboardTab}
+        onDiagnosticsVisibilityChange={setIsDiagnosticsPanelOpen}
+        socket={socketRef.current}
+        isSyncPending={false}
+        playerSlot={
+          <BottomPlayerController
+            audioRef={audioRef}
+            remoteAudioRef={remoteAudioRef}
+            roomSnapshot={roomSnapshot}
+            activeSession={activeSession}
+            currentTrack={currentTrack}
+            activePlaybackSource={activePlaybackSource}
+            authoritativeMediaClock={authoritativeMediaClock}
+            resetEpoch={playerResetEpoch}
+            onPlaybackPositionChange={handlePlaybackPositionChange}
+            onPlaybackBucketChange={handlePlaybackBucketChange}
+            onVolumeChange={setVolume}
+            getLocalPlaybackPositionMs={getLocalPlaybackPositionMs}
+            onPlay={handlePlayTrack}
+            onPause={pauseTrack}
+            onSeek={seekTrack}
+            onPrev={handlePrevTrack}
+            onNext={handleNextTrack}
+            onEnded={handlePlaybackEnded}
+            onLocalPlaybackReady={handleLocalPlaybackReady}
+            onRemotePlaying={handleRemotePlaying}
+            onRemoteWaiting={handleRemoteWaiting}
+            onRemotePause={handleRemotePause}
+            onRemoteError={handleRemoteError}
+          />
+        }
+      />
+    </>
   );
 }

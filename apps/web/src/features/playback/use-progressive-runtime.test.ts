@@ -83,85 +83,78 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(80);
   });
 
-  it("holds the remote audio element muted until the startup window matures", () => {
-    expect(
-      resolveRemoteStartupGateState({
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        readyState: 4,
-        paused: false,
-        hasSrcObject: true,
-        stableSinceMs: 1_000,
-        startupBufferMs: 320,
-        now: 1_200,
-        lastWaitingAtMs: null
-      })
-    ).toEqual({
-      shouldPoll: true,
-      shouldMute: true,
-      nextStableSinceMs: 1_000
+  it("ramps volume up during the startup gate window instead of hard-muting", () => {
+    const result = resolveRemoteStartupGateState({
+      activePlaybackSource: "remote-stream",
+      playbackStatus: "playing",
+      readyState: 4,
+      paused: false,
+      hasSrcObject: true,
+      stableSinceMs: 1_000,
+      startupBufferMs: 320,
+      now: 1_200,
+      lastWaitingAtMs: null
     });
+    expect(result.shouldPoll).toBe(true);
+    expect(result.shouldMute).toBe(false);
+    expect(result.nextStableSinceMs).toBe(1_000);
+    expect(result.volumeRamp).toBeGreaterThan(0.2);
+    expect(result.volumeRamp).toBeLessThan(1.0);
   });
 
   it("keeps recovery polling active without remuting an already established remote stream", () => {
-    expect(
-      resolveRemoteStartupGateState({
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        readyState: 1,
-        paused: false,
-        hasSrcObject: true,
-        stableSinceMs: 1_000,
-        startupBufferMs: 320,
-        muteDuringGate: false,
-        now: 1_200,
-        lastWaitingAtMs: 1_150
-      })
-    ).toEqual({
-      shouldPoll: true,
-      shouldMute: false,
-      nextStableSinceMs: 1_200
+    const result = resolveRemoteStartupGateState({
+      activePlaybackSource: "remote-stream",
+      playbackStatus: "playing",
+      readyState: 1,
+      paused: false,
+      hasSrcObject: true,
+      stableSinceMs: 1_000,
+      startupBufferMs: 320,
+      muteDuringGate: false,
+      now: 1_200,
+      lastWaitingAtMs: 1_150
     });
+    expect(result.shouldPoll).toBe(true);
+    expect(result.shouldMute).toBe(false);
+    expect(result.nextStableSinceMs).toBe(1_200);
+    expect(result.volumeRamp).toBeDefined();
   });
 
   it("does not keep a bound remote MediaStream muted forever just because readyState stays low", () => {
-    expect(
-      resolveRemoteStartupGateState({
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        readyState: 1,
-        paused: false,
-        hasSrcObject: true,
-        stableSinceMs: 1_000,
-        startupBufferMs: 320,
-        now: 1_400,
-        lastWaitingAtMs: null
-      })
-    ).toEqual({
-      shouldPoll: false,
-      shouldMute: false,
-      nextStableSinceMs: 1_000
+    const result = resolveRemoteStartupGateState({
+      activePlaybackSource: "remote-stream",
+      playbackStatus: "playing",
+      readyState: 1,
+      paused: false,
+      hasSrcObject: true,
+      stableSinceMs: 1_000,
+      startupBufferMs: 320,
+      now: 1_400,
+      lastWaitingAtMs: null
     });
+    expect(result.shouldPoll).toBe(false);
+    expect(result.shouldMute).toBe(false);
+    expect(result.nextStableSinceMs).toBe(1_000);
+    expect(result.volumeRamp).toBe(1.0);
   });
 
-  it("restarts the startup gate after a recent waiting event", () => {
-    expect(
-      resolveRemoteStartupGateState({
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        readyState: 4,
-        paused: false,
-        hasSrcObject: true,
-        stableSinceMs: 1_000,
-        startupBufferMs: 320,
-        now: 1_500,
-        lastWaitingAtMs: 1_400
-      })
-    ).toEqual({
-      shouldPoll: true,
-      shouldMute: true,
-      nextStableSinceMs: 1_500
+  it("restarts the startup gate after a recent waiting event with low volume ramp", () => {
+    const result = resolveRemoteStartupGateState({
+      activePlaybackSource: "remote-stream",
+      playbackStatus: "playing",
+      readyState: 4,
+      paused: false,
+      hasSrcObject: true,
+      stableSinceMs: 1_000,
+      startupBufferMs: 320,
+      now: 1_500,
+      lastWaitingAtMs: 1_400
     });
+    expect(result.shouldPoll).toBe(true);
+    expect(result.shouldMute).toBe(false);
+    expect(result.nextStableSinceMs).toBe(1_500);
+    expect(result.volumeRamp).toBe(0.3);
   });
 
   it("uses a longer remote hold when the path is recovering", () => {

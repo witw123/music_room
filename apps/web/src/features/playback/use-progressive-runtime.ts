@@ -289,11 +289,11 @@ export function resolveRemoteStartupGateState(input: {
   now?: number;
   lastWaitingAtMs?: number | null;
 }) {
-  const muteDuringGate = input.muteDuringGate ?? true;
   if (input.activePlaybackSource !== "remote-stream" || input.playbackStatus !== "playing") {
     return {
       shouldPoll: false,
       shouldMute: false,
+      volumeRamp: 1.0,
       nextStableSinceMs: null
     };
   }
@@ -306,7 +306,8 @@ export function resolveRemoteStartupGateState(input: {
   if (!hasPlayableRemoteSource) {
     return {
       shouldPoll: true,
-      shouldMute: muteDuringGate,
+      shouldMute: false,
+      volumeRamp: 0.15,
       nextStableSinceMs: null
     };
   }
@@ -317,9 +318,14 @@ export function resolveRemoteStartupGateState(input: {
     waitingRecently || input.stableSinceMs === null ? now : input.stableSinceMs;
   const gateMatured = now - nextStableSinceMs >= input.startupBufferMs;
 
+  const volumeRamp = gateMatured
+    ? 1.0
+    : Math.min(1.0, 0.3 + 0.7 * ((now - nextStableSinceMs) / Math.max(1, input.startupBufferMs)));
+
   return {
     shouldPoll: !gateMatured,
-    shouldMute: muteDuringGate && !gateMatured,
+    shouldMute: false,
+    volumeRamp,
     nextStableSinceMs
   };
 }
@@ -1464,7 +1470,9 @@ export function useProgressiveRuntime({
     });
 
     remoteStartupReadyAtRef.current = gateState.nextStableSinceMs;
-    remoteAudio.muted = gateState.shouldMute;
+    // Never hard-mute; use volume ramping to avoid silence during gate
+    remoteAudio.muted = false;
+    remoteAudio.volume = volume * gateState.volumeRamp;
 
     if (gateState.shouldPoll) {
       remoteStartupBufferTimerRef.current = window.setTimeout(() => {
@@ -1484,7 +1492,8 @@ export function useProgressiveRuntime({
     effectiveStartupBufferMs,
     markContinuousPlaybackStarted,
     playback?.status,
-    remoteAudioRef
+    remoteAudioRef,
+    volume
   ]);
 
   const getLocalPlaybackPositionMs = useCallback(() => {
@@ -2141,6 +2150,7 @@ export function useProgressiveRuntime({
       clearRemoteStartupBufferTimer();
       remoteStartupReadyAtRef.current = null;
       remoteAudio.muted = false;
+      remoteAudio.volume = volume;
       return;
     }
 
