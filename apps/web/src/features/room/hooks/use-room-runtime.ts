@@ -67,13 +67,21 @@ import {
 } from "@/features/playback/track-cache-policy";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
+import { shouldForceSourceOwnerLocalPlayback } from "@/features/playback/progressive-source-controller";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   createSilentPrewarmHandle,
   type SilentPrewarmHandle
 } from "@/features/playback/silent-prewarm-stream";
-import { resolveHostRelayAudioElement } from "@/features/room/host-relay-audio";
+import {
+  resolveHostPublishSource,
+  type HostPublishReadiness,
+  type HostPublishSourceTarget,
+  type HostPublishTrackKind,
+  type ResolvedPublishElement,
+  type ResolvedPublishStreamKind
+} from "@/features/room/host-relay-audio";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
@@ -277,7 +285,7 @@ type ListenerMediaRecoveryAction =
 
 type HostPublishStage = "idle" | "waiting-source-audio" | "capture-ready" | "published";
 type MediaTransportState = "idle" | "prewarming" | "connected" | "publishing" | "failed";
-type HostPublishedTrackKind = "silent-prewarm" | "host-capture" | "none";
+type HostPublishedTrackKind = HostPublishTrackKind | "none";
 
 export function shouldRedirectRoomRouteToAuth(input: {
   workspaceOnly: boolean;
@@ -1522,6 +1530,11 @@ export function useRoomRuntime({
       mediaTransportState?: MediaTransportState | null;
       usingSilentPrewarmTrack?: boolean;
       publishedTrackKind?: HostPublishedTrackKind | null;
+      hostPublishSource?: HostPublishSourceTarget | null;
+      hostPublishReadiness?: HostPublishReadiness | null;
+      hostPublishFailureReason?: string | null;
+      resolvedPublishElement?: ResolvedPublishElement | null;
+      resolvedPublishStreamKind?: ResolvedPublishStreamKind | null;
       dataRequiredForPlayback?: boolean;
       firstTransportConnectedAt?: string | null;
       firstAudibleAt?: string | null;
@@ -1567,6 +1580,26 @@ export function useRoomRuntime({
             publishedTrackKind:
               input.publishedTrackKind ??
               snapshot.progressivePlaybackStatus?.publishedTrackKind ??
+              "none",
+            hostPublishSource:
+              input.hostPublishSource ??
+              snapshot.progressivePlaybackStatus?.hostPublishSource ??
+              "none",
+            hostPublishReadiness:
+              input.hostPublishReadiness ??
+              snapshot.progressivePlaybackStatus?.hostPublishReadiness ??
+              "idle",
+            hostPublishFailureReason:
+              input.hostPublishFailureReason ??
+              snapshot.progressivePlaybackStatus?.hostPublishFailureReason ??
+              null,
+            resolvedPublishElement:
+              input.resolvedPublishElement ??
+              snapshot.progressivePlaybackStatus?.resolvedPublishElement ??
+              "none",
+            resolvedPublishStreamKind:
+              input.resolvedPublishStreamKind ??
+              snapshot.progressivePlaybackStatus?.resolvedPublishStreamKind ??
               "none",
             dataRequiredForPlayback:
               input.dataRequiredForPlayback ??
@@ -2417,6 +2450,11 @@ export function useRoomRuntime({
             mediaTransportState: "idle",
             usingSilentPrewarmTrack: false,
             publishedTrackKind: "none",
+            hostPublishSource: "none",
+            hostPublishReadiness: "idle",
+            hostPublishFailureReason: null,
+            resolvedPublishElement: "none",
+            resolvedPublishStreamKind: "none",
             dataRequiredForPlayback: enableTrackCaching,
             captureTrackState: null,
             publishGeneration: syncState.publishGeneration,
@@ -2430,11 +2468,6 @@ export function useRoomRuntime({
           return;
         }
 
-        const relayAudio = resolveHostRelayAudioElement({
-          activePlaybackSource,
-          localAudio: audioRef.current,
-          remoteAudio: remoteAudioRef.current
-        });
         const directRelayStream =
           typeof getHostRelayStream === "function" ? getHostRelayStream() : null;
         const shouldPublishCurrentTrack =
@@ -2447,7 +2480,23 @@ export function useRoomRuntime({
           playback.currentTrackId && canUseUploadedTrackForPlayback(uploadedTracks[playback.currentTrackId] ?? null)
             ? uploadedTracks[playback.currentTrackId] ?? null
             : null;
+        const hasPlayableLiveUpload = !!currentTrackUpload;
+        const forceSourceOwnerLocalPublish = shouldForceSourceOwnerLocalPlayback({
+          isCurrentSourceOwner,
+          activePlaybackSource,
+          hasFullLocalTrack: hasPlayableLiveUpload
+        });
         const currentTrackObjectUrl = currentTrackUpload?.objectUrl ?? null;
+        const publishSource = resolveHostPublishSource({
+          activePlaybackSource,
+          isCurrentSourceOwner,
+          forceSourceOwnerLocalPlayback: forceSourceOwnerLocalPublish,
+          localAudio: audioRef.current,
+          remoteAudio: remoteAudioRef.current,
+          hostRelayStream: directRelayStream,
+          hasPlayableLiveUpload
+        });
+        const relayAudio = publishSource.audioElement;
 
         let usedForcedRefresh = shouldForceCaptureRefresh || forceResync;
         let selectedStream: MediaStream | null = null;
@@ -2457,28 +2506,38 @@ export function useRoomRuntime({
         let mediaTransportState: MediaTransportState = "connected";
         let publishedTrackKind: HostPublishedTrackKind = "none";
         let usingSilentPrewarmTrack = false;
+        let hostPublishSource: HostPublishSourceTarget = publishSource.publishTarget;
+        let hostPublishReadiness: HostPublishReadiness = publishSource.readiness;
+        let hostPublishFailureReason = publishSource.reason;
+        let resolvedPublishElement: ResolvedPublishElement = publishSource.resolvedPublishElement;
+        let resolvedPublishStreamKind: ResolvedPublishStreamKind =
+          publishSource.resolvedPublishStreamKind;
 
-        if (shouldPublishCurrentTrack && !directRelayStream && relayAudio && relayAudio.paused) {
-          blockedUntilSourcePlaybackReady = true;
+        if (shouldPublishCurrentTrack && hostPublishReadiness !== "ready") {
+          awaitingLocalAudioTrack = hostPublishReadiness === "awaiting-audio";
+          blockedUntilSourcePlaybackReady = hostPublishReadiness !== "failed";
         }
 
         if (
           shouldPublishCurrentTrack &&
-          !directRelayStream &&
+          !blockedUntilSourcePlaybackReady &&
+          publishSource.publishTarget === "local-audio" &&
           relayAudio &&
           !isHostRelayAudioReadyForCapture({
-            activePlaybackSource,
+            activePlaybackSource: "full-local",
             relayAudio,
             currentTrackObjectUrl
           })
         ) {
           blockedUntilSourcePlaybackReady = true;
+          hostPublishReadiness = "awaiting-audio";
+          hostPublishFailureReason = "local-audio-not-ready-for-capture";
         }
 
-        if (shouldPublishCurrentTrack && !blockedUntilSourcePlaybackReady && (directRelayStream || relayAudio)) {
+        if (shouldPublishCurrentTrack && !blockedUntilSourcePlaybackReady && (publishSource.stream || relayAudio)) {
           const preferAudioContextCapture = true;
           let capture =
-            directRelayStream ??
+            publishSource.stream ??
             captureAudioStream(relayAudio!, {
               forceRefresh: usedForcedRefresh,
               preferAudioContext: preferAudioContextCapture
@@ -2487,12 +2546,12 @@ export function useRoomRuntime({
 
           if (
             playback.status === "playing" &&
-            (directRelayStream || isAudioElementEffectivelyPlaying(relayAudio)) &&
+            (publishSource.stream || isAudioElementEffectivelyPlaying(relayAudio)) &&
             !hasUsableHostMediaStreamTrack(capture)
           ) {
             usedForcedRefresh = true;
             capture =
-              directRelayStream ??
+              publishSource.stream ??
               captureAudioStream(relayAudio!, {
                 forceRefresh: true,
                 preferAudioContext: preferAudioContextCapture
@@ -2502,11 +2561,14 @@ export function useRoomRuntime({
 
           if (capture && hasUsableHostMediaStreamTrack(capture)) {
             selectedStream = capture;
-            publishedTrackKind = "host-capture";
+            publishedTrackKind = publishSource.trackKind;
             mediaTransportState = "publishing";
+            hostPublishReadiness = "ready";
           } else {
             awaitingLocalAudioTrack = true;
             blockedUntilSourcePlaybackReady = true;
+            hostPublishReadiness = "awaiting-audio";
+            hostPublishFailureReason = `${publishSource.publishTarget}-capture-track-unavailable`;
           }
         }
 
@@ -2523,6 +2585,11 @@ export function useRoomRuntime({
               mediaTransportState: "failed",
               usingSilentPrewarmTrack: false,
               publishedTrackKind: "none",
+              hostPublishSource,
+              hostPublishReadiness: "failed",
+              hostPublishFailureReason: "silent-prewarm-creation-failed",
+              resolvedPublishElement,
+              resolvedPublishStreamKind,
               dataRequiredForPlayback: enableTrackCaching,
               captureTrackState,
               publishGeneration: syncState.publishGeneration,
@@ -2540,6 +2607,7 @@ export function useRoomRuntime({
           usingSilentPrewarmTrack = true;
           publishedTrackKind = "silent-prewarm";
           mediaTransportState = "prewarming";
+          resolvedPublishStreamKind = "silent-prewarm";
           syncState.stage = blockedUntilSourcePlaybackReady ? "waiting-source-audio" : "capture-ready";
           publishKey = [
             currentRoom.room.id,
@@ -2578,6 +2646,7 @@ export function useRoomRuntime({
             usingSilentPrewarmTrack = true;
             publishedTrackKind = "silent-prewarm";
             mediaTransportState = "prewarming";
+            resolvedPublishStreamKind = "silent-prewarm";
             syncState.stage = "waiting-source-audio";
             publishKey = [
               currentRoom.room.id,
@@ -2614,6 +2683,11 @@ export function useRoomRuntime({
           mediaTransportState,
           usingSilentPrewarmTrack,
           publishedTrackKind,
+          hostPublishSource,
+          hostPublishReadiness,
+          hostPublishFailureReason,
+          resolvedPublishElement,
+          resolvedPublishStreamKind,
           dataRequiredForPlayback: enableTrackCaching,
           captureTrackState,
           publishGeneration: syncState.publishGeneration,
@@ -2621,10 +2695,10 @@ export function useRoomRuntime({
           publishStage: syncState.stage,
           publishedListenerSet: listenerSetHash,
           summary:
-            publishedTrackKind === "host-capture"
+            publishedTrackKind === "host-capture" || publishedTrackKind === "relay-stream"
               ? "房主真实音轨已发布到当前监听集合"
               : blockedUntilSourcePlaybackReady
-                ? "房主媒体链路已预热，等待真实音轨切入"
+                ? `房主媒体链路已预热，等待真实音轨切入：${hostPublishFailureReason ?? hostPublishSource}`
                 : "房主媒体链路已预连，当前使用静音预热轨保持连接"
         });
 
@@ -2663,6 +2737,11 @@ export function useRoomRuntime({
           mediaTransportState: "failed",
           usingSilentPrewarmTrack: false,
           publishedTrackKind: "none",
+          hostPublishSource: "none",
+          hostPublishReadiness: "failed",
+          hostPublishFailureReason: message,
+          resolvedPublishElement: "none",
+          resolvedPublishStreamKind: "none",
           dataRequiredForPlayback: enableTrackCaching,
           captureTrackState: null,
           publishGeneration: syncState.publishGeneration,
@@ -2759,16 +2838,30 @@ export function useRoomRuntime({
       audioUnlockedRef.current = true;
     }
 
-    const relayAudio = resolveHostRelayAudioElement({
+    const currentTrackUpload =
+      playback.currentTrackId && canUseUploadedTrackForPlayback(uploadedTracks[playback.currentTrackId] ?? null)
+        ? uploadedTracks[playback.currentTrackId] ?? null
+        : null;
+    const directRelayStream =
+      typeof getHostRelayStream === "function" ? getHostRelayStream() : null;
+    const publishSource = resolveHostPublishSource({
       activePlaybackSource,
+      isCurrentSourceOwner,
+      forceSourceOwnerLocalPlayback: shouldForceSourceOwnerLocalPlayback({
+        isCurrentSourceOwner,
+        activePlaybackSource,
+        hasFullLocalTrack: !!currentTrackUpload
+      }),
       localAudio: audioRef.current,
-      remoteAudio: remoteAudioRef.current
+      remoteAudio: remoteAudioRef.current,
+      hostRelayStream: directRelayStream,
+      hasPlayableLiveUpload: !!currentTrackUpload
     });
 
-    if (!relayAudio) {
+    if (publishSource.publishTarget === "none") {
       updateSourceStartState("failed", {
-        error: "missing-source-audio-element",
-        summary: "音源端缺少可用的本地音频元素",
+        error: publishSource.reason ?? "missing-publish-source",
+        summary: "音源端缺少可用的真实发布源",
         recordEvent: true,
         level: "error"
       });
@@ -2778,10 +2871,28 @@ export function useRoomRuntime({
       return;
     }
 
-    const isElementPlaying = isAudioElementEffectivelyPlaying(relayAudio);
+    if (publishSource.readiness !== "ready") {
+      const nextSummary =
+        publishSource.readiness === "failed"
+          ? `音源端已起播，但发布源不可用：${publishSource.reason ?? publishSource.publishTarget}`
+          : `音源端已解锁，等待真实发布源就绪：${publishSource.reason ?? publishSource.publishTarget}`;
+      updateSourceStartState(publishSource.readiness === "failed" ? "failed" : "starting", {
+        error: publishSource.readiness === "failed" ? publishSource.reason ?? "publish-source-failed" : null,
+        summary: nextSummary,
+        recordEvent: publishSource.readiness === "failed",
+        level: publishSource.readiness === "failed" ? "error" : "warning"
+      });
+      await ensureMediaTransportConnected({
+        preferPublishedTrack: publishSource.readiness !== "failed"
+      });
+      return;
+    }
+
+    const publishAudio = publishSource.audioElement;
+    const isElementPlaying = publishAudio ? isAudioElementEffectivelyPlaying(publishAudio) : true;
     if (!isElementPlaying) {
       updateSourceStartState("starting", {
-        summary: "音源端已解锁，正在等待本机音频真正起播"
+        summary: `音源端已解锁，正在等待${publishSource.publishTarget}真正起播`
       });
       await ensureMediaTransportConnected({
         preferPublishedTrack: false
@@ -2812,9 +2923,11 @@ export function useRoomRuntime({
     audioRef,
     currentRoomRef,
     ensureMediaTransportConnected,
+    getHostRelayStream,
     isCurrentSourceOwner,
     peerId,
     remoteAudioRef,
+    uploadedTracks,
     updateSourceStartState
   ]);
 
@@ -2853,13 +2966,30 @@ export function useRoomRuntime({
         return;
       }
 
-      const relayAudio = resolveHostRelayAudioElement({
-        activePlaybackSource,
-        localAudio: audioRef.current,
-        remoteAudio: remoteAudioRef.current
-      });
       const relayClockState =
         typeof getHostRelayClockState === "function" ? getHostRelayClockState() : null;
+      const publishSource = resolveHostPublishSource({
+        activePlaybackSource,
+        isCurrentSourceOwner,
+        forceSourceOwnerLocalPlayback: shouldForceSourceOwnerLocalPlayback({
+          isCurrentSourceOwner,
+          activePlaybackSource,
+          hasFullLocalTrack:
+            !!(
+              latestPlayback.currentTrackId &&
+              canUseUploadedTrackForPlayback(uploadedTracks[latestPlayback.currentTrackId] ?? null)
+            )
+        }),
+        localAudio: audioRef.current,
+        remoteAudio: remoteAudioRef.current,
+        hostRelayStream: typeof getHostRelayStream === "function" ? getHostRelayStream() : null,
+        hasPlayableLiveUpload:
+          !!(
+            latestPlayback.currentTrackId &&
+            canUseUploadedTrackForPlayback(uploadedTracks[latestPlayback.currentTrackId] ?? null)
+          )
+      });
+      const relayAudio = publishSource.audioElement;
       if (!relayAudio && !relayClockState) {
         return;
       }
@@ -2957,6 +3087,7 @@ export function useRoomRuntime({
     audioRef,
     currentRoomRef,
     getHostRelayClockState,
+    getHostRelayStream,
     getLocalPlaybackPositionMs,
     isCurrentSourceOwner,
     peerId,
@@ -2966,7 +3097,8 @@ export function useRoomRuntime({
     roomSnapshot?.room.playback,
     setAuthoritativeMediaClock,
     socketRef,
-    sourceStartState
+    sourceStartState,
+    uploadedTracks
   ]);
 
   useEffect(() => {

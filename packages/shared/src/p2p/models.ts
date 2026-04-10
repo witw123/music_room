@@ -157,7 +157,21 @@ export const progressivePlaybackStatusSchema = z.object({
     .optional(),
   transportEpoch: z.number().int().nonnegative().nullable().optional(),
   usingSilentPrewarmTrack: z.boolean().optional(),
-  publishedTrackKind: z.enum(["silent-prewarm", "host-capture", "none"]).nullable().optional(),
+  publishedTrackKind: z
+    .enum(["silent-prewarm", "host-capture", "relay-stream", "none"])
+    .nullable()
+    .optional(),
+  hostPublishSource: z
+    .enum(["local-audio", "remote-audio", "pcm-relay-stream", "silent-prewarm", "none"])
+    .nullable()
+    .optional(),
+  hostPublishReadiness: z.enum(["idle", "awaiting-audio", "ready", "failed"]).nullable().optional(),
+  hostPublishFailureReason: z.string().nullable().optional(),
+  resolvedPublishElement: z.enum(["local-audio", "remote-audio", "none"]).nullable().optional(),
+  resolvedPublishStreamKind: z
+    .enum(["audio-element-capture", "pcm-relay-stream", "silent-prewarm", "none"])
+    .nullable()
+    .optional(),
   dataRequiredForPlayback: z.boolean().optional(),
   firstAudibleAt: z.string().datetime().nullable().optional(),
   firstTransportConnectedAt: z.string().datetime().nullable().optional(),

@@ -556,6 +556,18 @@ function MeshStatusPanelBase({
                         <span>
                           发布轨类型: {peer.progressivePlaybackStatus.publishedTrackKind ?? "未知"}
                         </span>
+                        <span>
+                          发布源: {peer.progressivePlaybackStatus.hostPublishSource ?? "未知"}
+                        </span>
+                        <span>
+                          发布就绪: {peer.progressivePlaybackStatus.hostPublishReadiness ?? "未知"}
+                        </span>
+                        <span>
+                          解析元素: {peer.progressivePlaybackStatus.resolvedPublishElement ?? "未知"}
+                        </span>
+                        <span>
+                          解析流类型: {peer.progressivePlaybackStatus.resolvedPublishStreamKind ?? "未知"}
+                        </span>
                         <span>恢复阶段: {peer.progressivePlaybackStatus.recoveryPhase ?? "未知"}</span>
                         <span>恢复模式: {peer.progressivePlaybackStatus.recoveryMode ?? "未知"}</span>
                         <span>恢复代次: {peer.progressivePlaybackStatus.recoveryGeneration ?? "未知"}</span>
@@ -775,6 +787,11 @@ function MeshStatusPanelBase({
                       {peer.progressivePlaybackStatus.lastSourceStartError ? (
                         <p className="mt-1 text-red-300">
                           音源启动错误: {peer.progressivePlaybackStatus.lastSourceStartError}
+                        </p>
+                      ) : null}
+                      {peer.progressivePlaybackStatus.hostPublishFailureReason ? (
+                        <p className="mt-1 text-amber-300">
+                          发布源异常: {peer.progressivePlaybackStatus.hostPublishFailureReason}
                         </p>
                       ) : null}
                       {peer.progressivePlaybackStatus.hostCaptureRefreshKey ? (

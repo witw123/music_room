@@ -183,6 +183,14 @@ function getPlaybackStatus(
     peerDiagnostics?.progressivePlaybackStatus?.mediaTransportState ?? null;
   const publishedTrackKind =
     peerDiagnostics?.progressivePlaybackStatus?.publishedTrackKind ?? null;
+  const sourceStartState =
+    peerDiagnostics?.progressivePlaybackStatus?.sourceStartState ?? null;
+  const hostPublishSource =
+    peerDiagnostics?.progressivePlaybackStatus?.hostPublishSource ?? null;
+  const hostPublishReadiness =
+    peerDiagnostics?.progressivePlaybackStatus?.hostPublishReadiness ?? null;
+  const hostPublishFailureReason =
+    peerDiagnostics?.progressivePlaybackStatus?.hostPublishFailureReason ?? null;
 
   if (presenceState === "offline") {
     return {
@@ -228,7 +236,8 @@ function getPlaybackStatus(
     if (
       !enableTrackCaching &&
       (mediaTransportState === "connected" || mediaTransportState === "prewarming") &&
-      publishedTrackKind !== "host-capture"
+      publishedTrackKind !== "host-capture" &&
+      publishedTrackKind !== "relay-stream"
     ) {
       return {
         label: "音频链路已接入",
@@ -240,6 +249,27 @@ function getPlaybackStatus(
       label: "连接实时音频中",
       detail: "当前曲目和来源已确认，正在拉起远端实时音频。",
       tone: "accent" as const
+    };
+  }
+
+  if (sourceStartState === "starting") {
+    return {
+      label: "正在启动实时分发",
+      detail:
+        hostPublishReadiness === "awaiting-audio"
+          ? `实时链路已预热，等待真实发布源就绪：${hostPublishSource ?? "未知"}`
+          : "本机已解锁，正在拉起本地音频并同步给房间。",
+      tone: "accent" as const
+    };
+  }
+
+  if (sourceStartState === "failed") {
+    return {
+      label: "实时分发启动失败",
+      detail: hostPublishFailureReason
+        ? `真实发布源异常：${hostPublishFailureReason}`
+        : "当前还没有可用于实时分发的真实音频源。",
+      tone: "warning" as const
     };
   }
 
