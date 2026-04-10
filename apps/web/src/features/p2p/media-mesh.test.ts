@@ -116,13 +116,14 @@ class FakeRTCPeerConnection {
   }
 }
 
-function buildOffer(fromPeerId: string, mediaEpoch: number): PeerSignalMessage {
+function buildOffer(fromPeerId: string, mediaEpoch: number, transportEpoch?: number): PeerSignalMessage {
   return {
     roomId: "room_1",
     fromPeerId,
     toPeerId: "peer_listener",
     channelKind: "media",
     mediaEpoch,
+    transportEpoch,
     type: "offer",
     payload: {
       type: "offer",
@@ -153,14 +154,14 @@ describe("RoomMediaMesh", () => {
     vi.unstubAllGlobals();
   });
 
-  it("accepts a newer media epoch and tears down the previous peer session", async () => {
+  it("accepts a newer transport epoch and tears down the previous peer session", async () => {
     const sendSignal = vi.fn();
     const onRemoteStream = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
       onRemoteStream
     });
 
-    await mesh.handleSignal(buildOffer("peer_source_a", 0));
+    await mesh.handleSignal(buildOffer("peer_source_a", 0, 0));
     expect(sendSignal).toHaveBeenCalledTimes(1);
     expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
       type: "answer",
@@ -175,14 +176,15 @@ describe("RoomMediaMesh", () => {
     });
     expect(FakeRTCPeerConnection.transceivers[0]?.setCodecPreferences).toHaveBeenCalledTimes(1);
 
-    await mesh.handleSignal(buildOffer("peer_source_b", 1));
+    await mesh.handleSignal(buildOffer("peer_source_b", 1, 1));
 
     expect(firstPeer?.closed).toBe(true);
     expect(sendSignal).toHaveBeenCalledTimes(2);
     expect(sendSignal.mock.calls[1]?.[0]).toMatchObject({
       type: "answer",
       toPeerId: "peer_source_b",
-      mediaEpoch: 1
+      mediaEpoch: 1,
+      transportEpoch: 1
     });
     expect(onRemoteStream).toHaveBeenCalledWith(null);
   });
@@ -210,6 +212,56 @@ describe("RoomMediaMesh", () => {
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
     expect(sendSignal).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the existing transport alive when only mediaEpoch changes", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const track = { id: "track_1" };
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1, 0);
+    const firstPeer = FakeRTCPeerConnection.instances[0]!;
+    firstPeer.signalingState = "stable";
+    firstPeer.connectionState = "connected";
+    sendSignal.mockClear();
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 2, 0);
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(firstPeer.closed).toBe(false);
+    expect(sendSignal).toHaveBeenCalledTimes(0);
+  });
+
+  it("rebuilds the media transport when transportEpoch changes", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const stream = {
+      getAudioTracks: () => [{ id: "track_1" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1, 0);
+    const firstPeer = FakeRTCPeerConnection.instances[0]!;
+    firstPeer.signalingState = "stable";
+    firstPeer.connectionState = "connected";
+    sendSignal.mockClear();
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 2, 1);
+
+    expect(firstPeer.closed).toBe(true);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      transportEpoch: 1
+    });
   });
 
   it("can proactively restart a recvonly listener peer and send a fresh offer", async () => {

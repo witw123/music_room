@@ -179,6 +179,10 @@ function getPlaybackStatus(
   const recoveryPhase = peerDiagnostics?.progressivePlaybackStatus?.recoveryPhase ?? null;
   const fullLocalRecoveryActive =
     peerDiagnostics?.progressivePlaybackStatus?.fullLocalRecoveryActive ?? false;
+  const mediaTransportState =
+    peerDiagnostics?.progressivePlaybackStatus?.mediaTransportState ?? null;
+  const publishedTrackKind =
+    peerDiagnostics?.progressivePlaybackStatus?.publishedTrackKind ?? null;
 
   if (presenceState === "offline") {
     return {
@@ -221,6 +225,17 @@ function getPlaybackStatus(
   }
 
   if (recoveryPhase === "bootstrapping-media") {
+    if (
+      !enableTrackCaching &&
+      (mediaTransportState === "connected" || mediaTransportState === "prewarming") &&
+      publishedTrackKind !== "host-capture"
+    ) {
+      return {
+        label: "音频链路已接入",
+        detail: "实时音频传输已预连，正在等待房主发布当前音轨。",
+        tone: "accent" as const
+      };
+    }
     return {
       label: "连接实时音频中",
       detail: "当前曲目和来源已确认，正在拉起远端实时音频。",

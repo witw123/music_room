@@ -206,6 +206,13 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     remoteTrackStatus: createEmptyRemoteTrackStatus(),
     progressivePlaybackStatus: {
       activeSource: null,
+      mediaTransportState: "idle",
+      transportEpoch: null,
+      usingSilentPrewarmTrack: false,
+      publishedTrackKind: "none",
+      dataRequiredForPlayback: true,
+      firstAudibleAt: null,
+      firstTransportConnectedAt: null,
       recoveryPhase: null,
       recoveryMode: null,
       recoveryGeneration: null,

@@ -11,6 +11,7 @@ type MediaMeshCallbacks = {
   onRemoteStream: (stream: MediaStream | null) => void;
   onPeerRuntimeState?: (payload: {
     peerId: string;
+    transportEpoch: number;
     publishGeneration: number;
     attachedTrackId: string | null;
     negotiatedTrackId: string | null;
@@ -174,6 +175,7 @@ function tuneSessionDescriptionForMusic<T extends RTCSessionDescriptionInit>(des
 export class RoomMediaMesh {
   private readonly peers = new Map<string, MediaPeerEntry>();
   private currentMediaEpoch = 0;
+  private currentTransportEpoch = 0;
   private latestLocalStream: MediaStream | null = null;
   private statsSamplingMode: "off" | "steady" | "active" = "active";
   private readonly resolveConnectionConfig?: MediaMeshOptions["resolveConnectionConfig"];
@@ -189,10 +191,16 @@ export class RoomMediaMesh {
     this.resolveConnectionConfig = options.resolveConnectionConfig;
   }
 
-  async syncHostPeers(remotePeerIds: string[], localStream: MediaStream | null, mediaEpoch = 0) {
+  async syncHostPeers(
+    remotePeerIds: string[],
+    localStream: MediaStream | null,
+    mediaEpoch = 0,
+    transportEpoch = this.currentTransportEpoch
+  ) {
     this.latestLocalStream = localStream;
-    if (this.currentMediaEpoch !== mediaEpoch) {
-      this.resetForMediaEpoch(mediaEpoch);
+    this.currentMediaEpoch = mediaEpoch;
+    if (this.currentTransportEpoch !== transportEpoch) {
+      this.resetTransportState(transportEpoch);
     }
 
     const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
@@ -225,14 +233,16 @@ export class RoomMediaMesh {
     }
 
     const incomingMediaEpoch = payload.mediaEpoch ?? 0;
+    const incomingTransportEpoch = payload.transportEpoch ?? 0;
 
-    if (incomingMediaEpoch < this.currentMediaEpoch) {
+    if (incomingTransportEpoch < this.currentTransportEpoch) {
       return;
     }
 
-    if (incomingMediaEpoch > this.currentMediaEpoch) {
-      this.resetForMediaEpoch(incomingMediaEpoch);
+    if (incomingTransportEpoch > this.currentTransportEpoch) {
+      this.resetTransportState(incomingTransportEpoch);
     }
+    this.currentMediaEpoch = Math.max(this.currentMediaEpoch, incomingMediaEpoch);
 
     const localStream = this.latestLocalStream;
     const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
@@ -286,6 +296,7 @@ export class RoomMediaMesh {
           toPeerId: payload.fromPeerId,
           channelKind: "media",
           mediaEpoch: this.currentMediaEpoch,
+          transportEpoch: this.currentTransportEpoch,
           type: "answer",
           payload: answer as unknown as Record<string, unknown>
         });
@@ -354,7 +365,15 @@ export class RoomMediaMesh {
   }
 
   destroy() {
-    this.resetForMediaEpoch(this.currentMediaEpoch);
+    this.resetTransportState(this.currentTransportEpoch);
+  }
+
+  setTransportEpoch(transportEpoch: number) {
+    if (transportEpoch === this.currentTransportEpoch) {
+      return;
+    }
+
+    this.resetTransportState(transportEpoch);
   }
 
   setStatsSamplingMode(mode: "off" | "steady" | "active") {
@@ -461,6 +480,7 @@ export class RoomMediaMesh {
         toPeerId: peerId,
         channelKind: "media",
         mediaEpoch: this.currentMediaEpoch,
+        transportEpoch: this.currentTransportEpoch,
         type: "offer",
         payload: offer as unknown as Record<string, unknown>
       });
@@ -523,6 +543,7 @@ export class RoomMediaMesh {
         toPeerId: peerId,
         channelKind: "media",
         mediaEpoch: this.currentMediaEpoch,
+        transportEpoch: this.currentTransportEpoch,
         type: "candidate",
         payload: event.candidate.toJSON() as unknown as Record<string, unknown>
       });
@@ -650,8 +671,8 @@ export class RoomMediaMesh {
     });
   }
 
-  private resetForMediaEpoch(nextMediaEpoch: number) {
-    this.currentMediaEpoch = nextMediaEpoch;
+  private resetTransportState(nextTransportEpoch: number) {
+    this.currentTransportEpoch = nextTransportEpoch;
     for (const [peerId, entry] of this.peers.entries()) {
       this.releasePeer(peerId, entry);
     }
@@ -680,6 +701,7 @@ export class RoomMediaMesh {
   private emitPeerRuntimeState(peerId: string, entry: MediaPeerEntry) {
     this.callbacks.onPeerRuntimeState?.({
       peerId,
+      transportEpoch: this.currentTransportEpoch,
       publishGeneration: entry.publishGeneration,
       attachedTrackId: entry.attachedTrackId,
       negotiatedTrackId: entry.negotiatedTrackId,

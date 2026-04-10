@@ -53,6 +53,7 @@ export const peerSignalMessageSchema = z.object({
   toPeerId: z.string(),
   channelKind: z.enum(["data", "media"]),
   mediaEpoch: z.number().int().nonnegative().optional(),
+  transportEpoch: z.number().int().nonnegative().optional(),
   recoveryGeneration: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
@@ -150,6 +151,16 @@ export const remoteTrackStatusSchema = z.object({
 
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  mediaTransportState: z
+    .enum(["idle", "prewarming", "connected", "publishing", "failed"])
+    .nullable()
+    .optional(),
+  transportEpoch: z.number().int().nonnegative().nullable().optional(),
+  usingSilentPrewarmTrack: z.boolean().optional(),
+  publishedTrackKind: z.enum(["silent-prewarm", "host-capture", "none"]).nullable().optional(),
+  dataRequiredForPlayback: z.boolean().optional(),
+  firstAudibleAt: z.string().datetime().nullable().optional(),
+  firstTransportConnectedAt: z.string().datetime().nullable().optional(),
   recoveryPhase: z
     .enum([
       "joining",

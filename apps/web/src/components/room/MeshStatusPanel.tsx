@@ -544,6 +544,18 @@ function MeshStatusPanelBase({
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 [&_span]:min-w-0 [&_span]:break-all">
                         <span>播放源: {peer.progressivePlaybackStatus.activeSource ?? "未启用"}</span>
+                        <span>
+                          传输状态: {peer.progressivePlaybackStatus.mediaTransportState ?? "未知"}
+                        </span>
+                        <span>
+                          传输代次: {peer.progressivePlaybackStatus.transportEpoch ?? "未知"}
+                        </span>
+                        <span>
+                          预热轨: {peer.progressivePlaybackStatus.usingSilentPrewarmTrack ? "是" : "否"}
+                        </span>
+                        <span>
+                          发布轨类型: {peer.progressivePlaybackStatus.publishedTrackKind ?? "未知"}
+                        </span>
                         <span>恢复阶段: {peer.progressivePlaybackStatus.recoveryPhase ?? "未知"}</span>
                         <span>恢复模式: {peer.progressivePlaybackStatus.recoveryMode ?? "未知"}</span>
                         <span>恢复代次: {peer.progressivePlaybackStatus.recoveryGeneration ?? "未知"}</span>
@@ -554,6 +566,10 @@ function MeshStatusPanelBase({
                         <span>等待快照: {peer.progressivePlaybackStatus.pendingSnapshot ? "是" : "否"}</span>
                         <span>等待 Data: {peer.progressivePlaybackStatus.pendingData ? "是" : "否"}</span>
                         <span>等待 Media: {peer.progressivePlaybackStatus.pendingMedia ? "是" : "否"}</span>
+                        <span>
+                          播放是否依赖 Data:{" "}
+                          {peer.progressivePlaybackStatus.dataRequiredForPlayback ? "是" : "否"}
+                        </span>
                         <span>
                           本地恢复接管:{" "}
                           {peer.progressivePlaybackStatus.fullLocalRecoveryActive ? "是" : "否"}
