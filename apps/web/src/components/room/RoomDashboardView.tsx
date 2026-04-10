@@ -15,6 +15,7 @@ import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type TabId = "queue" | "library" | "members";
 
@@ -30,7 +31,7 @@ type RoomDashboardViewProps = {
   canDisbandRoom: boolean;
   canReorderQueue: boolean;
   currentSourceOwnerNickname: string | null;
-  uploadedTracks: Record<string, { objectUrl: string }>;
+  uploadedTracks: Record<string, UploadedTrack>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;

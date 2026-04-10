@@ -9,6 +9,7 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { isRemoteMediaPlaybackReady } from "@/components/room/hooks/use-room-derived-state";
+import { enableTrackCaching } from "@/features/playback/track-cache-policy";
 import type { LocalMemberPanelState } from "./MembersPanel";
 
 export type AvailabilityEntry = {
@@ -272,7 +273,7 @@ function MeshStatusPanelBase({
           Degraded: {degradedCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          本地缓存: {cachedTrackCount}
+          {enableTrackCaching ? `本地缓存: ${cachedTrackCount}` : "缓存: 已暂停"}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           ICE: {iceConfigSource}
@@ -893,7 +894,11 @@ function MeshStatusPanelBase({
               曲目缓存摘要
             </summary>
             <div className="mt-3 flex flex-col gap-2">
-              {availabilitySummary.length ? (
+              {!enableTrackCaching ? (
+                <p className="text-[10px] text-foreground-muted">
+                  缓存功能已暂停，当前不参与分片同步或本地接管。
+                </p>
+              ) : availabilitySummary.length ? (
                 availabilitySummary.map(({ track, peerCount, localChunkCount, totalChunks, sources }) => (
                   <div
                     key={track.id}

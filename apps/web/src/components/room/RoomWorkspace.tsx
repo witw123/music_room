@@ -15,6 +15,7 @@ import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageS
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/room/MembersPanel";
 import type { AvailabilityEntry } from "@/components/room/MeshStatusPanel";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -26,7 +27,7 @@ type RoomWorkspaceProps = {
   canDeleteRoom: boolean;
   canDisbandRoom: boolean;
   canReorderQueue: boolean;
-  uploadedTracks: Record<string, { objectUrl: string }>;
+  uploadedTracks: Record<string, UploadedTrack>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;

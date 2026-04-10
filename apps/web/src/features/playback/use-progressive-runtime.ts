@@ -56,6 +56,11 @@ import {
   resolveProgressiveWarmupDecision,
   shouldForceSourceOwnerLocalPlayback
 } from "./progressive-source-controller";
+import {
+  enableTrackCaching,
+  getPlayableUploadedTrack
+} from "./track-cache-policy";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type UseProgressiveRuntimeInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -64,7 +69,7 @@ type UseProgressiveRuntimeInput = {
   currentTrack: TrackMeta | null;
   peerId: string;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
-  uploadedTracks: Record<string, { objectUrl: string }>;
+  uploadedTracks: Record<string, UploadedTrack>;
   isCurrentSourceOwner: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
   setActivePlaybackSource: Dispatch<SetStateAction<ProgressivePlaybackSource>>;
@@ -123,9 +128,9 @@ const fullLocalMaxDriftMs = 180;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteStartupGatePollMs = 60;
-const enableDirectProgressiveTakeover = true;
+const enableDirectProgressiveTakeover = enableTrackCaching;
 const enableListenerShadowWarmup = false;
-const enableListenerLocalTakeover = true;
+const enableListenerLocalTakeover = enableTrackCaching;
 const stableRemoteStartupBufferMs = 60;
 const constrainedRemoteStartupBufferMs = 120;
 const weakRemoteStartupBufferMs = 180;
@@ -616,7 +621,10 @@ export function useProgressiveRuntime({
   const playbackRevision = playback?.playbackRevision ?? playback?.queueVersion ?? 0;
 
   const currentBufferedFullLocalTrack = useMemo(
-    () => (currentTrack?.id ? uploadedTracks[currentTrack.id] ?? null : null),
+    () =>
+      currentTrack?.id
+        ? getPlayableUploadedTrack(uploadedTracks[currentTrack.id] ?? null)
+        : null,
     [currentTrack?.id, uploadedTracks]
   );
   const forceSourceOwnerLocalPlayback = useMemo(
@@ -726,6 +734,7 @@ export function useProgressiveRuntime({
     [currentProgressiveManifest, currentTrackAvailabilityAnnouncement?.availableChunks, playback]
   );
   const canPrepareProgressiveLocal =
+    enableTrackCaching &&
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
     !!currentProgressiveManifest &&
@@ -1704,7 +1713,7 @@ export function useProgressiveRuntime({
     }
 
     const remoteAudio = remoteAudioRef.current;
-    const uploaded = uploadedTracks[playback.currentTrackId];
+    const uploaded = getPlayableUploadedTrack(uploadedTracks[playback.currentTrackId] ?? null);
     const shouldWarmBufferedFullLocal =
       !!uploaded &&
       !isCurrentSourceOwner &&

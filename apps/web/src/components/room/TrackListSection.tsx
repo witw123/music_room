@@ -4,10 +4,15 @@ import { memo, useTransition } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
+import {
+  enableTrackCaching,
+  isCacheBackedUploadedTrack
+} from "@/features/playback/track-cache-policy";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
-  uploadedTracks: Record<string, { objectUrl: string }>;
+  uploadedTracks: Record<string, UploadedTrack>;
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
@@ -63,7 +68,9 @@ function TrackListSectionBase({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {tracks.map((track) => {
               const isMine = track.ownerSessionId === activeSession?.userId;
-              const isUploadedLocally = !!uploadedTracks[track.id];
+              const uploadedTrack = uploadedTracks[track.id] ?? null;
+              const isUploadedLocally = !!uploadedTrack;
+              const isCacheBacked = isCacheBackedUploadedTrack(uploadedTrack);
 
               return (
                 <article
@@ -78,10 +85,19 @@ function TrackListSectionBase({
                     <p className="mt-1 text-[10px] text-foreground-muted/60">
                       <span
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
-                          isUploadedLocally ? "bg-green-500" : "bg-blue-500"
+                          isUploadedLocally
+                            ? isCacheBacked
+                              ? "bg-amber-500"
+                              : "bg-green-500"
+                            : "bg-blue-500"
                         }`}
                       />
-                      {isUploadedLocally ? "已缓存并准备推流" : "房间可用"} {track.ownerNickname} 上传
+                      {isUploadedLocally
+                        ? isCacheBacked && !enableTrackCaching
+                          ? "历史缓存已暂停使用"
+                          : "本地上传源可直接播放"
+                        : "房间可用"}{" "}
+                      {track.ownerNickname} 上传
                     </p>
                   </div>
 

@@ -61,12 +61,17 @@ import {
   isHostRelayAudioReadyForCapture,
   shouldDeferHostMediaStreamSync
 } from "@/features/playback/host-media-sync";
+import {
+  canUseUploadedTrackForPlayback,
+  enableTrackCaching
+} from "@/features/playback/track-cache-policy";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { resolveHostRelayAudioElement } from "@/features/room/host-relay-audio";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -182,7 +187,7 @@ type UseRoomRuntimeInput = {
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
-  uploadedTracks: Record<string, { objectUrl: string }>;
+  uploadedTracks: Record<string, UploadedTrack>;
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   announceLocalCache: (trackId: string) => Promise<void>;
@@ -1897,7 +1902,8 @@ export function useRoomRuntime({
       });
 
       const currentTrackId = ack.bootstrap.playback.currentTrackId ?? null;
-      const hasFullLocalTrack = !!(currentTrackId && uploadedTracks[currentTrackId]);
+      const hasFullLocalTrack =
+        enableTrackCaching && !!(currentTrackId && uploadedTracks[currentTrackId]);
       setRoomRecoveryState((current) => ({
         ...current,
         phase: hasFullLocalTrack && audioUnlocked ? "playing-local-fallback" : "resyncing",
@@ -2325,7 +2331,12 @@ export function useRoomRuntime({
           return;
         }
 
-        const currentTrackObjectUrl = uploadedTracks[playback.currentTrackId]?.objectUrl ?? null;
+        const currentTrackUpload = canUseUploadedTrackForPlayback(
+          uploadedTracks[playback.currentTrackId] ?? null
+        )
+          ? uploadedTracks[playback.currentTrackId] ?? null
+          : null;
+        const currentTrackObjectUrl = currentTrackUpload?.objectUrl ?? null;
         if (
           !directRelayStream &&
           playback.status === "playing" &&
@@ -4272,6 +4283,9 @@ export function useRoomRuntime({
               durationMs: requestRttMs
             });
           }
+          if (!enableTrackCaching) {
+            return;
+          }
           const currentTrack =
             currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
           if (currentTrack) {
@@ -4387,8 +4401,10 @@ export function useRoomRuntime({
           });
           if (state === "open") {
             flushPendingAvailabilityRef.current();
-            for (const trackId of uploadedTrackIdsRef.current) {
-              void announceLocalCacheRef.current(trackId);
+            if (enableTrackCaching) {
+              for (const trackId of uploadedTrackIdsRef.current) {
+                void announceLocalCacheRef.current(trackId);
+              }
             }
           }
         },
@@ -4883,8 +4899,10 @@ export function useRoomRuntime({
           startPresenceHeartbeat();
           resyncRealtimePeers(response.bootstrap?.members ?? undefined);
           flushPendingAvailabilityRef.current();
-          for (const trackId of uploadedTrackIdsRef.current) {
-            void announceLocalCacheRef.current(trackId);
+          if (enableTrackCaching) {
+            for (const trackId of uploadedTrackIdsRef.current) {
+              void announceLocalCacheRef.current(trackId);
+            }
           }
           if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
             void ensureSourcePlaybackStartedRef.current();
@@ -4909,8 +4927,10 @@ export function useRoomRuntime({
     socket.on("connect", () => {
       subscribeToRoom();
       flushPendingAvailabilityRef.current();
-      for (const trackId of uploadedTrackIdsRef.current) {
-        void announceLocalCacheRef.current(trackId);
+      if (enableTrackCaching) {
+        for (const trackId of uploadedTrackIdsRef.current) {
+          void announceLocalCacheRef.current(trackId);
+        }
       }
       resyncRealtimePeers();
       if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
@@ -4936,15 +4956,20 @@ export function useRoomRuntime({
       });
       setRoomRecoveryState((current) => ({
         ...current,
-        phase: current.fullLocalRecoveryActive ? "playing-local-fallback" : "resyncing",
+        phase:
+          enableTrackCaching && current.fullLocalRecoveryActive
+            ? "playing-local-fallback"
+            : "resyncing",
         pendingSnapshot: false
       }));
       void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
-        for (const trackId of uploadedTrackIdsRef.current) {
-          void announceLocalCacheRef.current(trackId);
+        if (enableTrackCaching) {
+          for (const trackId of uploadedTrackIdsRef.current) {
+            void announceLocalCacheRef.current(trackId);
+          }
         }
       }
 
@@ -5133,6 +5158,9 @@ export function useRoomRuntime({
       if (announcement.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
         return;
       }
+      if (!enableTrackCaching) {
+        return;
+      }
       recordPeerDiagnosticRef.current({
         peerId: announcement.ownerPeerId,
         channelKind: "data",
@@ -5151,6 +5179,9 @@ export function useRoomRuntime({
     });
     socket.on("piece.availability.clear", ({ roomId: clearedRoomId, ownerPeerId }) => {
       if (clearedRoomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
+        return;
+      }
+      if (!enableTrackCaching) {
         return;
       }
       clearAvailabilityForPeerRef.current(ownerPeerId);
@@ -5211,11 +5242,14 @@ export function useRoomRuntime({
       );
       setRoomRecoveryState((current) => ({
         ...current,
-        phase: current.fullLocalRecoveryActive ? "playing-local-fallback" : "joining",
+        phase:
+          enableTrackCaching && current.fullLocalRecoveryActive
+            ? "playing-local-fallback"
+            : "joining",
         mode: current.generation === null ? current.mode : "rejoin",
         pendingSnapshot: true,
         pendingData: true,
-        pendingMedia: !current.fullLocalRecoveryActive
+        pendingMedia: !(enableTrackCaching && current.fullLocalRecoveryActive)
       }));
 
       if (reason === "io client disconnect") {
@@ -5316,7 +5350,8 @@ export function useRoomRuntime({
     const playback = roomSnapshot?.room.playback ?? null;
     const currentTrackId = playback?.currentTrackId ?? null;
     const sourcePeerId = playback?.sourcePeerId ?? null;
-    const hasFullLocalTrack = !!(currentTrackId && uploadedTracks[currentTrackId]);
+    const hasFullLocalTrack =
+      enableTrackCaching && !!(currentTrackId && uploadedTracks[currentTrackId]);
     const dataReady = !!(sourcePeerId && connectedPeers.includes(sourcePeerId));
     const continuity = resolveSourceContinuityState();
     const mediaNoProgressMs =
@@ -5352,7 +5387,7 @@ export function useRoomRuntime({
 
     setRoomRecoveryState((current) => {
       const nextPhase =
-        current.fullLocalRecoveryActive && hasFullLocalTrack
+        enableTrackCaching && current.fullLocalRecoveryActive && hasFullLocalTrack
           ? "playing-local-fallback"
           : current.pendingSnapshot
             ? "resyncing"
@@ -5361,7 +5396,8 @@ export function useRoomRuntime({
               : !mediaReady
                 ? "bootstrapping-media"
                 : "steady";
-      const nextFullLocalRecoveryActive = current.fullLocalRecoveryActive || hasFullLocalTrack;
+      const nextFullLocalRecoveryActive =
+        enableTrackCaching && (current.fullLocalRecoveryActive || hasFullLocalTrack);
       if (
         current.phase === nextPhase &&
         current.pendingData === !dataReady &&
@@ -5405,7 +5441,7 @@ export function useRoomRuntime({
         latestGeneration,
         latestSourcePeerId
       ].join("|");
-      const latestHasFullLocalTrack = !!uploadedTracks[latestTrackId];
+      const latestHasFullLocalTrack = enableTrackCaching && !!uploadedTracks[latestTrackId];
       const latestDataReady = connectedPeers.includes(latestSourcePeerId);
       const continuity = resolveSourceContinuityState(now);
       const noProgressMs = continuity.consecutiveNoProgressMs ?? ageMs;
@@ -5639,7 +5675,7 @@ export function useRoomRuntime({
 
   useEffect(() => {
     const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
-    if (!currentTrackId) {
+    if (!enableTrackCaching || !currentTrackId) {
       return;
     }
 
@@ -6070,6 +6106,10 @@ export function useRoomRuntime({
   );
 
   useEffect(() => {
+    if (!enableTrackCaching) {
+      return;
+    }
+
     const effectiveSchedulerMode =
       playbackClockSource === "remote" && transportGovernorMode === "bootstrap"
         ? schedulerMode === "idle"

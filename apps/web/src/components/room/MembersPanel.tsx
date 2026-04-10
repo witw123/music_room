@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
+import { enableTrackCaching } from "@/features/playback/track-cache-policy";
 
 export type MemberTransferSummary = {
   memberId: string;
@@ -73,6 +74,10 @@ function getToneClasses(tone: StatusTone) {
 }
 
 function formatCurrentTrackSources(sources: string[]) {
+  if (!enableTrackCaching) {
+    return null;
+  }
+
   const labels = [...new Set(sources)]
     .map((source) => {
       if (source === "live_upload") {
@@ -98,6 +103,15 @@ function getCurrentTrackStatus(
   summary: MemberTransferSummary | undefined,
   presenceState: RoomMember["presenceState"]
 ) {
+  if (!enableTrackCaching) {
+    return {
+      label: "缓存已暂停",
+      detail: "当前版本已暂停本地缓存接管与分片同步。",
+      progressPercent: 0,
+      tone: "neutral" as const
+    };
+  }
+
   if (presenceState === "offline") {
     return {
       label: "离线",
@@ -272,6 +286,13 @@ function getPlaybackStatus(
 }
 
 function getLibraryStatus(summary: MemberTransferSummary | undefined) {
+  if (!enableTrackCaching) {
+    return {
+      label: "缓存已暂停使用",
+      detail: "历史本地缓存当前不会参与播放或同步。"
+    };
+  }
+
   if (!summary || summary.announcedTrackCount <= 0) {
     return {
       label: "暂无本地缓存",
@@ -375,6 +396,7 @@ function MembersPanelBase({
       <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
         在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
         不同成员看到的数值不一定相同。
+        {!enableTrackCaching ? " 当前版本已暂停缓存接管和分片同步。" : ""}
       </div>
 
       {members.length > 0 ? (
@@ -577,7 +599,9 @@ function MembersPanelBase({
               </div>
 
               <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-1.5 text-[10px] leading-4 text-foreground-muted">
-                {sourceSummary ? (
+                {!enableTrackCaching ? (
+                  <span>同步来源：当前只使用实时音频或原上传源，本地缓存已暂停。</span>
+                ) : sourceSummary ? (
                   <span>同步来源：{sourceSummary}</span>
                 ) : playbackStatus.label === "实时音频中" ? (
                   <span>同步来源：当前通过实时音频持续播放，等待本地缓存建立。</span>

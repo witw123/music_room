@@ -25,6 +25,7 @@ import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { buildTrackMeta, type UploadedTrack } from "@/features/upload/audio-utils";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
+import { enableTrackCaching } from "@/features/playback/track-cache-policy";
 
 export function useTrackUploads(options: {
   maxCachedTracks: number;
@@ -91,6 +92,14 @@ export function useTrackUploads(options: {
     let disposed = false;
 
     const restoreCachedAssets = async () => {
+      if (!enableTrackCaching) {
+        const nextCount = await getCachedTrackAssetCount();
+        if (!disposed) {
+          setCachedTrackCount(nextCount);
+        }
+        return;
+      }
+
       const uploadedTrackIds = new Set(uploadedTrackUrlsRef.current.keys());
       const uncachedTrackIds = roomSnapshot.tracks
         .filter((track) => !uploadedTrackIds.has(track.id))
@@ -120,7 +129,8 @@ export function useTrackUploads(options: {
               file: new File([asset.file], `${asset.title}.bin`, {
                 type: asset.mimeType || "audio/mpeg"
               }),
-              objectUrl: URL.createObjectURL(asset.file)
+              objectUrl: URL.createObjectURL(asset.file),
+              origin: "restored-cache"
             };
             didAdd = true;
           }
@@ -258,19 +268,22 @@ export function useTrackUploads(options: {
 
       nextUploads[registered.id] = {
         file,
-        objectUrl
+        objectUrl,
+        origin: "live-upload"
       };
       nextTracks.push(registered);
       currentTracksByHash.set(registered.fileHash, registered);
-      await cacheTrackAsset({
-        trackId: registered.id,
-        fileHash: registered.fileHash,
-        title: registered.title,
-        mimeType: registered.mimeType || file.type || "audio/mpeg",
-        file
-      });
+      if (enableTrackCaching) {
+        await cacheTrackAsset({
+          trackId: registered.id,
+          fileHash: registered.fileHash,
+          title: registered.title,
+          mimeType: registered.mimeType || file.type || "audio/mpeg",
+          file
+        });
+      }
 
-      if (peerId) {
+      if (enableTrackCaching && peerId) {
         const availability = await buildTrackAvailabilityFromFile({
           roomId: roomSnapshot.room.id,
           trackId: registered.id,
@@ -311,6 +324,10 @@ export function useTrackUploads(options: {
   }
 
   async function announceLocalCache(trackId: string, totalChunks?: number) {
+    if (!enableTrackCaching) {
+      return;
+    }
+
     if (!roomSnapshot || !activeSession || !peerId) {
       return;
     }
@@ -370,6 +387,10 @@ export function useTrackUploads(options: {
   }
 
   async function hydrateTrackFromPieces(trackId: string, mimeType: string, totalChunks: number) {
+    if (!enableTrackCaching) {
+      return;
+    }
+
     if (!roomSnapshot) {
       return;
     }
@@ -413,7 +434,8 @@ export function useTrackUploads(options: {
       ...current,
       [trackId]: {
         file: assembled.file,
-        objectUrl
+        objectUrl,
+        origin: "hydrated-cache"
       }
     }));
     const canonicalManifest = buildCanonicalTrackPieceManifest({

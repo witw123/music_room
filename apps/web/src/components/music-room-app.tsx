@@ -25,6 +25,7 @@ import {
 } from "@/features/playback/playback-start-intent";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { canUseUploadedTrackForPlayback } from "@/features/playback/track-cache-policy";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -225,7 +226,10 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability
   });
   const hasFullLocalTrack = useMemo(
-    () => (currentPlaybackTrackId ? !!uploadedTracks[currentPlaybackTrackId] : false),
+    () =>
+      currentPlaybackTrackId
+        ? canUseUploadedTrackForPlayback(uploadedTracks[currentPlaybackTrackId] ?? null)
+        : false,
     [currentPlaybackTrackId, uploadedTracks]
   );
 

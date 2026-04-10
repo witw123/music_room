@@ -3,10 +3,11 @@
 import { memo } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { TrackListSection } from "./TrackListSection";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type LibraryTabPanelProps = {
   tracks: TrackMeta[];
-  uploadedTracks: Record<string, { objectUrl: string }>;
+  uploadedTracks: Record<string, UploadedTrack>;
   canControlPlayback: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
