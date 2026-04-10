@@ -2547,6 +2547,7 @@ export function useRoomRuntime({
             listenerSetHash,
             "silent-prewarm"
           ].join("|");
+          syncState.pendingKey = publishKey;
         } else {
           syncState.stage = "published";
           publishKey = buildHostPublishKey({
@@ -2556,6 +2557,7 @@ export function useRoomRuntime({
             captureTrackId: captureTrackState?.trackId ?? null,
             listenerPeerIds
           });
+          syncState.pendingKey = publishKey;
         }
 
         if (
@@ -2583,6 +2585,7 @@ export function useRoomRuntime({
               listenerSetHash,
               "silent-prewarm"
             ].join("|");
+            syncState.pendingKey = publishKey;
           }
         }
 
