@@ -1009,7 +1009,7 @@ export function useRoomRuntime({
         !!remoteAudio &&
         !!remoteStream &&
         remoteAudio.paused === false &&
-        (remoteAudio.readyState >= 2 || hasLiveRemoteTrack);
+        remoteAudio.readyState >= 2;
       const hasRecentPlayoutProgress =
         listenerMediaLifecycleRef.current.lastPlayoutProgressAt !== null &&
         now - listenerMediaLifecycleRef.current.lastPlayoutProgressAt <=
@@ -1045,10 +1045,7 @@ export function useRoomRuntime({
         activePlaybackSource === "remote-stream" &&
         (() => {
           const remoteContinuity = resolveRemoteAudioContinuityState(now);
-          return (
-            remoteContinuity.hasPlayableRemoteElement ||
-            remoteContinuity.hasRecentRemoteProgress
-          );
+          return remoteContinuity.hasRecentRemoteProgress;
         })()
       ) {
         return "remote-stream";
@@ -1871,6 +1868,11 @@ export function useRoomRuntime({
         recoveryGenerationRef.current === null ? "late-join" : "rejoin";
       recoveryGenerationRef.current = ack.recoveryGeneration ?? null;
       recoveryModeRef.current = nextRecoveryMode;
+      sourceRecoveryCoordinatorRef.current = {
+        actionKey: null,
+        action: null,
+        startedAtMs: null
+      };
 
       const currentMembers = currentRoomRef.current?.room.members ?? [];
       const mergedMembers = ack.bootstrap.members.map((member) => {
@@ -3601,6 +3603,18 @@ export function useRoomRuntime({
         const hasHardRecoverySignal = isSourcePeer
           ? hasMediaHardRecoverySignal
           : hasMediaHardRecoverySignal || hasDataHardRecoverySignal;
+        const hasImmediateMediaHardRecoverySignal =
+          nextState.mediaConnectionState === "failed" ||
+          nextState.mediaConnectionState === "closed" ||
+          nextState.mediaIceState === "failed";
+        const hasImmediateDataHardRecoverySignal =
+          nextState.dataConnectionState === "failed" ||
+          nextState.dataConnectionState === "closed" ||
+          nextState.dataIceState === "failed" ||
+          nextState.dataChannelState === "closed";
+        const hasImmediateHardRecoverySignal = isSourcePeer
+          ? hasImmediateMediaHardRecoverySignal
+          : hasImmediateMediaHardRecoverySignal || hasImmediateDataHardRecoverySignal;
 
         const hasMediaIceRestartFailureSignal =
           (nextState.transportScore === "failed" && hasMediaHardRecoverySignal) ||
@@ -3680,6 +3694,7 @@ export function useRoomRuntime({
         }
 
         const hardRecoveryWindowSatisfied =
+          hasImmediateHardRecoverySignal ||
           nextState.consecutiveUnstableWindows >= 2 ||
           nextState.transportScore === "failed" ||
           (typeof consecutiveNoProgressMs === "number" &&
@@ -3687,7 +3702,7 @@ export function useRoomRuntime({
         const needsHardRecovery =
           hasHardRecoverySignal &&
           hardRecoveryWindowSatisfied &&
-          !sourceRecoverySuppressedReason;
+          (!sourceRecoverySuppressedReason || hasImmediateHardRecoverySignal);
 
         if (
           needsHardRecovery &&
@@ -4728,6 +4743,15 @@ export function useRoomRuntime({
             mediaConnectionState: "failed",
             lastFailureReason: "media-failed"
           });
+          if (currentRoomRef.current?.room.playback.sourcePeerId === remotePeerId) {
+            listenerMediaLifecycleRef.current.latestStream = null;
+            listenerMediaLifecycleRef.current.boundGeneration = null;
+            listenerMediaLifecycleRef.current.lastBoundTraceKey = null;
+            resetRemoteAudioElement(null, {
+              generation: listenerMediaLifecycleRef.current.currentGeneration,
+              reason: "source-peer-failed"
+            });
+          }
           recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
             channelKind: "media",
