@@ -127,6 +127,22 @@ describe("connection-supervisor", () => {
     });
   });
 
+  it("switches to relay preference on the first hard recreate for a stuck peer", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_b"
+    });
+
+    state = markRecoveryAction({
+      state,
+      action: "hard-recreate",
+      failureReason: "ice-checking-stalled"
+    });
+
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
+    expect(state.preferredTransportKind).toBe("relay");
+  });
+
   it("tracks budgets per recovery stage and generation", () => {
     let state = createPeerConnectionSupervisorState({
       roomId: "room_1",

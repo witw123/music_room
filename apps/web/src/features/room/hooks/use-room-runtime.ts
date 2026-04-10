@@ -3687,7 +3687,6 @@ export function useRoomRuntime({
         const needsHardRecovery =
           hasHardRecoverySignal &&
           hardRecoveryWindowSatisfied &&
-          !canAttemptIceRestart &&
           !sourceRecoverySuppressedReason;
 
         if (

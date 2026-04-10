@@ -345,11 +345,13 @@ export function markRecoveryAction(input: {
         ? input.state.hardRecreateCount + 1
         : input.state.hardRecreateCount,
     preferredTransportKind:
-      input.action === "ice-restart" || input.action === "hard-recreate"
-        ? input.state.iceRestartCount + input.state.hardRecreateCount + 1 >= 2
+      input.action === "hard-recreate" || input.action === "full-resubscribe"
+        ? "relay"
+        : input.action === "ice-restart"
+          ? input.state.iceRestartCount + input.state.hardRecreateCount + 1 >= 2
           ? "relay"
           : input.state.preferredTransportKind
-        : input.state.preferredTransportKind,
+          : input.state.preferredTransportKind,
     recoveryBudget: nextBudget
   };
 }
