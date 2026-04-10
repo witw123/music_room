@@ -183,6 +183,14 @@ export const progressivePlaybackStatusSchema = z.object({
     .optional(),
   hostPublishingReady: z.boolean().optional(),
   listenerRecoveryAttempt: z.number().int().nonnegative().nullable().optional(),
+  mediaNegotiationRole: z.enum(["publisher", "listener"]).nullable().optional(),
+  listenerAwaitingPublisherOffer: z.boolean().optional(),
+  lastIgnoredOfferReason: z
+    .enum(["offer-collision", "stale-generation", "wrong-role", "none"])
+    .nullable()
+    .optional(),
+  publisherBootstrapRequestedAt: z.string().datetime().nullable().optional(),
+  publisherBootstrapAttempts: z.number().int().nonnegative().nullable().optional(),
   dataRequiredForPlayback: z.boolean().optional(),
   firstAudibleAt: z.string().datetime().nullable().optional(),
   firstTransportConnectedAt: z.string().datetime().nullable().optional(),

@@ -32,6 +32,7 @@ class FakeRTCPeerConnection {
   onconnectionstatechange: (() => void) | null = null;
   ontrack: ((event: RTCTrackEvent) => void) | null = null;
   closed = false;
+  restartIce = vi.fn();
   addTransceiver = vi.fn(() => {
     const transceiver = {
       receiver: {
@@ -274,7 +275,30 @@ describe("RoomMediaMesh", () => {
     });
   });
 
-  it("can proactively restart a recvonly listener peer and send a fresh offer", async () => {
+  it("can proactively restart a publishing peer and send a fresh offer", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+    const stream = {
+      getAudioTracks: () => [{ id: "track_live" }]
+    } as unknown as MediaStream;
+
+    await mesh.syncHostPeers(["peer_listener"], stream, 1);
+    sendSignal.mockClear();
+
+    await mesh.restartPublishingPeer("peer_listener", stream);
+
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 1
+    });
+  });
+
+  it("resets a recvonly listener peer and waits for a publisher offer instead of sending one", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
       onRemoteStream: vi.fn()
@@ -287,19 +311,15 @@ describe("RoomMediaMesh", () => {
       toPeerId: "peer_source_a",
       mediaEpoch: 1
     });
+    sendSignal.mockClear();
 
-    await mesh.restartPeer("peer_source_a");
+    await mesh.resetListenerPeer("peer_source_a");
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(2);
-    expect(sendSignal).toHaveBeenCalledTimes(2);
-    expect(sendSignal.mock.calls[1]?.[0]).toMatchObject({
-      type: "offer",
-      toPeerId: "peer_source_a",
-      mediaEpoch: 1
-    });
+    expect(sendSignal).toHaveBeenCalledTimes(0);
   });
 
-  it("can restart ICE on an existing listener peer without recreating it", async () => {
+  it("can restart ICE on an existing listener peer without sending a fresh offer", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
       onRemoteStream: vi.fn()
@@ -308,15 +328,11 @@ describe("RoomMediaMesh", () => {
     await mesh.handleSignal(buildOffer("peer_source_a", 1));
     sendSignal.mockClear();
 
-    await mesh.restartIce("peer_source_a");
+    await mesh.restartListenerIce("peer_source_a");
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(1);
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
-      type: "offer",
-      toPeerId: "peer_source_a",
-      mediaEpoch: 1
-    });
+    expect(FakeRTCPeerConnection.instances[0]?.restartIce).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(0);
   });
 
   it("attaches the latest host audio track before answering a listener-initiated offer", async () => {
@@ -415,22 +431,22 @@ describe("RoomMediaMesh", () => {
     });
   });
 
-  it("rolls back a polite listener peer before accepting a colliding offer", async () => {
+  it("accepts a repeated publisher offer after listener reset without creating a local collision", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
       onRemoteStream: vi.fn()
     });
 
     await mesh.handleSignal(buildOffer("peer_source_a", 1));
-    await mesh.restartPeer("peer_source_a");
+    await mesh.resetListenerPeer("peer_source_a");
     sendSignal.mockClear();
 
     const collisionPeer = FakeRTCPeerConnection.instances[1];
-    expect(collisionPeer?.signalingState).toBe("have-local-offer");
+    expect(collisionPeer?.signalingState).toBe("stable");
 
     await mesh.handleSignal(buildOffer("peer_source_a", 1));
 
-    expect(collisionPeer?.localDescriptions.some((description) => description?.type === "rollback")).toBe(true);
+    expect(collisionPeer?.localDescriptions.some((description) => description?.type === "rollback")).toBe(false);
     expect(sendSignal).toHaveBeenCalledTimes(1);
     expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
       type: "answer",

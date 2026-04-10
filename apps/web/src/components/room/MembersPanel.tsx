@@ -193,6 +193,8 @@ function getPlaybackStatus(
     peerDiagnostics?.progressivePlaybackStatus?.hostPublishFailureReason ?? null;
   const mediaFailureReason =
     peerDiagnostics?.progressivePlaybackStatus?.mediaFailureReason ?? null;
+  const listenerAwaitingPublisherOffer =
+    peerDiagnostics?.progressivePlaybackStatus?.listenerAwaitingPublisherOffer ?? false;
 
   if (presenceState === "offline") {
     return {
@@ -272,6 +274,14 @@ function getPlaybackStatus(
         ? `真实发布源异常：${hostPublishFailureReason}`
         : "当前还没有可用于实时分发的真实音频源。",
       tone: "warning" as const
+    };
+  }
+
+  if (listenerAwaitingPublisherOffer) {
+    return {
+      label: "等待房主重发音频",
+      detail: "本端已重置监听链路，正在等待房主重新发起实时音频协商。",
+      tone: "accent" as const
     };
   }
 

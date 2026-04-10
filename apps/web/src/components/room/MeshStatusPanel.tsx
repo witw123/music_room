@@ -580,6 +580,21 @@ function MeshStatusPanelBase({
                         <span>
                           Listener 恢复尝试: {peer.progressivePlaybackStatus.listenerRecoveryAttempt ?? "未知"}
                         </span>
+                        <span>
+                          协商角色: {peer.progressivePlaybackStatus.mediaNegotiationRole ?? "未知"}
+                        </span>
+                        <span>
+                          等待房主 Offer: {peer.progressivePlaybackStatus.listenerAwaitingPublisherOffer ? "是" : "否"}
+                        </span>
+                        <span>
+                          最近忽略原因: {peer.progressivePlaybackStatus.lastIgnoredOfferReason ?? "未知"}
+                        </span>
+                        <span>
+                          Publisher 补发开始: {peer.progressivePlaybackStatus.publisherBootstrapRequestedAt ?? "未知"}
+                        </span>
+                        <span>
+                          Publisher 补发次数: {peer.progressivePlaybackStatus.publisherBootstrapAttempts ?? "未知"}
+                        </span>
                         <span>恢复阶段: {peer.progressivePlaybackStatus.recoveryPhase ?? "未知"}</span>
                         <span>恢复模式: {peer.progressivePlaybackStatus.recoveryMode ?? "未知"}</span>
                         <span>恢复代次: {peer.progressivePlaybackStatus.recoveryGeneration ?? "未知"}</span>

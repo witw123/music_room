@@ -12,6 +12,7 @@ type MediaMeshCallbacks = {
   onPeerRuntimeState?: (payload: {
     peerId: string;
     transportEpoch: number;
+    negotiationRole: "publisher" | "listener";
     publishGeneration: number;
     attachedTrackId: string | null;
     negotiatedTrackId: string | null;
@@ -19,6 +20,8 @@ type MediaMeshCallbacks = {
     signalingState: RTCSignalingState;
     pendingRestart: boolean;
     ignoreOffer: boolean;
+    listenerAwaitingPublisherOffer: boolean;
+    lastIgnoredOfferReason: "offer-collision" | "stale-generation" | "wrong-role" | "none";
   }) => void;
   onConnectionStateChange?: (payload: {
     peerId: string;
@@ -63,6 +66,7 @@ type MediaPeerEntry = {
   receiver: RTCRtpReceiver | null;
   pendingCandidates: RTCIceCandidateInit[];
   wantsIncomingAudio: boolean;
+  negotiationRole: "publisher" | "listener";
   statsIntervalId: ReturnType<typeof setInterval> | null;
   configuredAudioMaxBitrateBps: number | null;
   configuredReceiverJitterTargetMs: number | null;
@@ -75,6 +79,8 @@ type MediaPeerEntry = {
   ignoreOffer: boolean;
   pendingRestart: boolean;
   recoverableFailure: boolean;
+  listenerAwaitingPublisherOffer: boolean;
+  lastIgnoredOfferReason: "offer-collision" | "stale-generation" | "wrong-role" | "none";
   isPolite: boolean;
   released: boolean;
   operationChain: Promise<void>;
@@ -238,6 +244,11 @@ export class RoomMediaMesh {
     const incomingTransportEpoch = payload.transportEpoch ?? 0;
 
     if (incomingTransportEpoch < this.currentTransportEpoch) {
+      const staleEntry = this.peers.get(payload.fromPeerId);
+      if (staleEntry) {
+        staleEntry.lastIgnoredOfferReason = "stale-generation";
+        this.emitPeerRuntimeState(payload.fromPeerId, staleEntry);
+      }
       return;
     }
 
@@ -248,9 +259,14 @@ export class RoomMediaMesh {
 
     const localStream = this.latestLocalStream;
     const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
+    const expectedNegotiationRole = hasOutgoingTrack ? "publisher" : "listener";
+    const existingEntry = this.peers.get(payload.fromPeerId);
+    if (existingEntry && existingEntry.negotiationRole !== expectedNegotiationRole) {
+      this.releasePeer(payload.fromPeerId, existingEntry, { explicit: true });
+    }
     const entry =
       this.peers.get(payload.fromPeerId) ??
-      this.createPeer(payload.fromPeerId, !hasOutgoingTrack);
+      this.createPeer(payload.fromPeerId, !hasOutgoingTrack, expectedNegotiationRole);
 
     if (payload.type === "offer") {
       await this.enqueuePeerOperation(entry, async () => {
@@ -269,6 +285,10 @@ export class RoomMediaMesh {
           (entry.connection.signalingState === "stable" || entry.isSettingRemoteAnswerPending);
         const offerCollision = !readyForOffer;
         entry.ignoreOffer = !entry.isPolite && offerCollision;
+        entry.lastIgnoredOfferReason = entry.ignoreOffer ? "offer-collision" : "none";
+        if (!entry.ignoreOffer) {
+          entry.listenerAwaitingPublisherOffer = false;
+        }
         this.emitPeerRuntimeState(payload.fromPeerId, entry);
         if (entry.ignoreOffer) {
           return;
@@ -391,16 +411,17 @@ export class RoomMediaMesh {
   }
 
   async restartPeer(peerId: string, localStream: MediaStream | null = null) {
+    return this.restartPublishingPeer(peerId, localStream);
+  }
+
+  async restartPublishingPeer(peerId: string, localStream: MediaStream | null = null) {
     const effectiveLocalStream = localStream ?? this.latestLocalStream;
     const existingEntry = this.peers.get(peerId);
-    const wantsIncomingAudio =
-      existingEntry?.wantsIncomingAudio ??
-      !(effectiveLocalStream && effectiveLocalStream.getAudioTracks().length > 0);
     if (existingEntry) {
       this.releasePeer(peerId, existingEntry, { explicit: true });
     }
 
-    const entry = this.createPeer(peerId, wantsIncomingAudio);
+    const entry = this.createPeer(peerId, false, "publisher");
     await this.enqueuePeerOperation(entry, async () => {
       const streamChanged = await this.attachStream(entry, effectiveLocalStream);
       await this.maybeSendOffer(peerId, entry, effectiveLocalStream, true, streamChanged);
@@ -409,6 +430,15 @@ export class RoomMediaMesh {
   }
 
   async restartIce(peerId: string, localStream: MediaStream | null = null) {
+    const entry = this.peers.get(peerId);
+    if (entry?.negotiationRole === "listener") {
+      return this.restartListenerIce(peerId);
+    }
+
+    return this.restartPublishingIce(peerId, localStream);
+  }
+
+  async restartPublishingIce(peerId: string, localStream: MediaStream | null = null) {
     const entry = this.peers.get(peerId);
     if (
       !entry ||
@@ -431,6 +461,46 @@ export class RoomMediaMesh {
     });
   }
 
+  async restartListenerIce(peerId: string) {
+    const entry = this.peers.get(peerId);
+    if (
+      !entry ||
+      entry.released ||
+      entry.negotiationRole !== "listener" ||
+      entry.connection.connectionState === "closed" ||
+      entry.connection.connectionState === "failed"
+    ) {
+      return null;
+    }
+
+    return this.enqueuePeerOperation(entry, async () => {
+      if (entry.released) {
+        return null;
+      }
+
+      entry.listenerAwaitingPublisherOffer = true;
+      entry.lastIgnoredOfferReason = "wrong-role";
+      entry.pendingRestart = false;
+      if (typeof entry.connection.restartIce === "function") {
+        entry.connection.restartIce();
+      }
+      this.emitPeerRuntimeState(peerId, entry);
+      return entry;
+    });
+  }
+
+  async resetListenerPeer(peerId: string) {
+    const existingEntry = this.peers.get(peerId);
+    if (existingEntry) {
+      this.releasePeer(peerId, existingEntry, { explicit: true });
+    }
+
+    return this.createPeer(peerId, true, "listener", {
+      awaitingPublisherOffer: true,
+      lastIgnoredOfferReason: "wrong-role"
+    });
+  }
+
   private async ensurePeer(peerId: string, localStream: MediaStream | null, initiateOffer: boolean) {
     const existingEntry = this.peers.get(peerId);
     const shouldRecreatePeer =
@@ -438,11 +508,12 @@ export class RoomMediaMesh {
       !existingEntry.released &&
       (existingEntry.connection.connectionState === "closed" ||
         existingEntry.connection.connectionState === "failed" ||
+        existingEntry.negotiationRole !== "publisher" ||
         existingEntry.recoverableFailure);
     if (existingEntry && shouldRecreatePeer) {
       this.releasePeer(peerId, existingEntry, { explicit: true });
     }
-    const entry = this.peers.get(peerId) ?? this.createPeer(peerId, false);
+    const entry = this.peers.get(peerId) ?? this.createPeer(peerId, false, "publisher");
     await this.enqueuePeerOperation(entry, async () => {
       const streamChanged = await this.attachStream(entry, localStream);
       await this.maybeSendOffer(peerId, entry, localStream, initiateOffer, streamChanged);
@@ -459,6 +530,16 @@ export class RoomMediaMesh {
     streamChanged: boolean,
     forceIceRestart = false
   ) {
+    if (entry.negotiationRole !== "publisher") {
+      entry.listenerAwaitingPublisherOffer = true;
+      if (initiateOffer || forceIceRestart) {
+        entry.lastIgnoredOfferReason = "wrong-role";
+      }
+      entry.pendingRestart = false;
+      this.emitPeerRuntimeState(peerId, entry);
+      return;
+    }
+
     const hasOutgoingTrack = !!localStream && localStream.getAudioTracks().length > 0;
     const shouldOfferForRecvOnly = entry.wantsIncomingAudio && initiateOffer;
     const shouldOfferForOutgoingTrack =
@@ -473,11 +554,14 @@ export class RoomMediaMesh {
       entry.connection.signalingState !== "stable" ||
       (!shouldOfferForRecvOnly && !shouldOfferForOutgoingTrack)
     ) {
+      entry.listenerAwaitingPublisherOffer = false;
       entry.pendingRestart = shouldOfferForRecvOnly || shouldOfferForOutgoingTrack;
       this.emitPeerRuntimeState(peerId, entry);
       return;
     }
 
+    entry.listenerAwaitingPublisherOffer = false;
+    entry.lastIgnoredOfferReason = "none";
     entry.pendingRestart = false;
     entry.makingOffer = true;
     this.emitPeerRuntimeState(peerId, entry);
@@ -507,7 +591,15 @@ export class RoomMediaMesh {
     }
   }
 
-  private createPeer(peerId: string, wantsIncomingAudio: boolean) {
+  private createPeer(
+    peerId: string,
+    wantsIncomingAudio: boolean,
+    negotiationRole: "publisher" | "listener",
+    options?: {
+      awaitingPublisherOffer?: boolean;
+      lastIgnoredOfferReason?: "offer-collision" | "stale-generation" | "wrong-role" | "none";
+    }
+  ) {
     const connection = new RTCPeerConnection(this.buildConnectionConfig(peerId));
     const entry: MediaPeerEntry = {
       connection,
@@ -516,6 +608,7 @@ export class RoomMediaMesh {
       receiver: null,
       pendingCandidates: [],
       wantsIncomingAudio,
+      negotiationRole,
       statsIntervalId: null,
       configuredAudioMaxBitrateBps: null,
       configuredReceiverJitterTargetMs: null,
@@ -528,6 +621,8 @@ export class RoomMediaMesh {
       ignoreOffer: false,
       pendingRestart: false,
       recoverableFailure: false,
+      listenerAwaitingPublisherOffer: options?.awaitingPublisherOffer ?? false,
+      lastIgnoredOfferReason: options?.lastIgnoredOfferReason ?? "none",
       isPolite: wantsIncomingAudio,
       released: false,
       operationChain: Promise.resolve(),
@@ -570,6 +665,9 @@ export class RoomMediaMesh {
     connection.ontrack = (event) => {
       const [stream] = event.streams;
       const nextStream = stream ?? new MediaStream([event.track]);
+      entry.listenerAwaitingPublisherOffer = false;
+      entry.lastIgnoredOfferReason = "none";
+      this.emitPeerRuntimeState(peerId, entry);
       const emitRemoteTrackState = () => {
         this.callbacks.onRemoteTrack?.({
           peerId,
@@ -603,6 +701,7 @@ export class RoomMediaMesh {
       if (connection.connectionState === "failed" || connection.connectionState === "closed") {
         entry.pendingRestart = true;
         entry.recoverableFailure = true;
+        entry.listenerAwaitingPublisherOffer = entry.negotiationRole === "listener";
         this.emitPeerRuntimeState(peerId, entry);
         this.callbacks.onConnectionStateChange?.({
           peerId,
@@ -733,13 +832,16 @@ export class RoomMediaMesh {
     this.callbacks.onPeerRuntimeState?.({
       peerId,
       transportEpoch: this.currentTransportEpoch,
+      negotiationRole: entry.negotiationRole,
       publishGeneration: entry.publishGeneration,
       attachedTrackId: entry.attachedTrackId,
       negotiatedTrackId: entry.negotiatedTrackId,
       makingOffer: entry.makingOffer,
       signalingState: entry.connection.signalingState,
       pendingRestart: entry.pendingRestart,
-      ignoreOffer: entry.ignoreOffer
+      ignoreOffer: entry.ignoreOffer,
+      listenerAwaitingPublisherOffer: entry.listenerAwaitingPublisherOffer,
+      lastIgnoredOfferReason: entry.lastIgnoredOfferReason
     });
   }
 
@@ -771,6 +873,7 @@ export class RoomMediaMesh {
     try {
       await entry.connection.setRemoteDescription(remoteDescription);
       entry.ignoreOffer = false;
+      entry.lastIgnoredOfferReason = "none";
     } catch (error) {
       if (
         remoteDescription.type === "answer" &&

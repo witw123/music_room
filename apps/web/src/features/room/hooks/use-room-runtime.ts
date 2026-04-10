@@ -1559,6 +1559,11 @@ export function useRoomRuntime({
       transportResetReason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none" | null;
       hostPublishingReady?: boolean;
       listenerRecoveryAttempt?: number | null;
+      mediaNegotiationRole?: "publisher" | "listener" | null;
+      listenerAwaitingPublisherOffer?: boolean;
+      lastIgnoredOfferReason?: "offer-collision" | "stale-generation" | "wrong-role" | "none" | null;
+      publisherBootstrapRequestedAt?: string | null;
+      publisherBootstrapAttempts?: number | null;
       dataRequiredForPlayback?: boolean;
       firstTransportConnectedAt?: string | null;
       firstAudibleAt?: string | null;
@@ -1644,6 +1649,26 @@ export function useRoomRuntime({
             listenerRecoveryAttempt:
               input.listenerRecoveryAttempt ??
               snapshot.progressivePlaybackStatus?.listenerRecoveryAttempt ??
+              null,
+            mediaNegotiationRole:
+              input.mediaNegotiationRole ??
+              snapshot.progressivePlaybackStatus?.mediaNegotiationRole ??
+              null,
+            listenerAwaitingPublisherOffer:
+              input.listenerAwaitingPublisherOffer ??
+              snapshot.progressivePlaybackStatus?.listenerAwaitingPublisherOffer ??
+              false,
+            lastIgnoredOfferReason:
+              input.lastIgnoredOfferReason ??
+              snapshot.progressivePlaybackStatus?.lastIgnoredOfferReason ??
+              "none",
+            publisherBootstrapRequestedAt:
+              input.publisherBootstrapRequestedAt ??
+              snapshot.progressivePlaybackStatus?.publisherBootstrapRequestedAt ??
+              null,
+            publisherBootstrapAttempts:
+              input.publisherBootstrapAttempts ??
+              snapshot.progressivePlaybackStatus?.publisherBootstrapAttempts ??
               null,
             dataRequiredForPlayback:
               input.dataRequiredForPlayback ??
@@ -4042,7 +4067,10 @@ export function useRoomRuntime({
             ) {
               continue;
             }
-            void mediaMeshRef.current?.restartIce(remotePeerId).catch((error) => {
+            const restartPromise = isSourcePeer
+              ? mediaMeshRef.current?.restartListenerIce(remotePeerId)
+              : mediaMeshRef.current?.restartPublishingIce(remotePeerId, hostStreamRef.current);
+            void restartPromise?.catch((error) => {
               clearSourceHardRecoveryAction(remotePeerId, playback.mediaEpoch);
               reportRealtimeFailureRef.current({
                 peerId: remotePeerId,
@@ -4108,7 +4136,10 @@ export function useRoomRuntime({
             if (isSourcePeer) {
               setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
             }
-            void mediaMeshRef.current?.restartPeer(remotePeerId, hostStreamRef.current).catch((error) => {
+            const recreatePromise = isSourcePeer
+              ? mediaMeshRef.current?.resetListenerPeer(remotePeerId)
+              : mediaMeshRef.current?.restartPublishingPeer(remotePeerId, hostStreamRef.current);
+            void recreatePromise?.catch((error) => {
               clearSourceHardRecoveryAction(remotePeerId, playback.mediaEpoch);
               reportRealtimeFailureRef.current({
                 peerId: remotePeerId,
@@ -4832,13 +4863,16 @@ export function useRoomRuntime({
         onPeerRuntimeState: ({
           peerId: remotePeerId,
           transportEpoch,
+          negotiationRole,
           publishGeneration,
           attachedTrackId,
           negotiatedTrackId,
           makingOffer,
           signalingState,
           pendingRestart,
-          ignoreOffer
+          ignoreOffer,
+          listenerAwaitingPublisherOffer,
+          lastIgnoredOfferReason
         }) => {
           recordPeerDiagnosticRef.current({
             peerId: remotePeerId,
@@ -4863,6 +4897,9 @@ export function useRoomRuntime({
                   createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
                 ),
                 transportEpoch,
+                mediaNegotiationRole: negotiationRole,
+                listenerAwaitingPublisherOffer,
+                lastIgnoredOfferReason,
                 publishGeneration,
                 attachedTrackId,
                 negotiatedTrackId,
@@ -4870,7 +4907,9 @@ export function useRoomRuntime({
                 signalingState
               },
               lastError: ignoreOffer
-                ? "媒体 offer 冲突已被忽略"
+                ? `媒体 offer 已被忽略：${lastIgnoredOfferReason}`
+                : listenerAwaitingPublisherOffer
+                  ? "等待房主重新发起音频协商"
                 : pendingRestart
                   ? "媒体协商等待当前轮完成后重启"
                   : snapshot.lastError
@@ -4892,6 +4931,9 @@ export function useRoomRuntime({
                     createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
                   ),
                   transportEpoch,
+                  mediaNegotiationRole: negotiationRole,
+                  listenerAwaitingPublisherOffer,
+                  lastIgnoredOfferReason,
                   publishGeneration,
                   attachedTrackId,
                   negotiatedTrackId,
@@ -4913,6 +4955,7 @@ export function useRoomRuntime({
                   negotiatedTrackId,
                   makingOffer,
                   signalingState,
+                  listenerAwaitingPublisherOffer,
                   currentGeneration: listenerMediaLifecycleRef.current.currentGeneration,
                   boundGeneration: listenerMediaLifecycleRef.current.boundGeneration,
                   playingGeneration: listenerMediaLifecycleRef.current.playingGeneration,
@@ -4921,10 +4964,13 @@ export function useRoomRuntime({
                 },
                 progressivePlaybackStatus: {
                   ...(
-                    snapshot.progressivePlaybackStatus ??
+                  snapshot.progressivePlaybackStatus ??
                     createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
                   ),
-                  transportEpoch
+                  transportEpoch,
+                  mediaNegotiationRole: negotiationRole,
+                  listenerAwaitingPublisherOffer,
+                  lastIgnoredOfferReason
                 }
               }),
               {
@@ -5932,7 +5978,7 @@ export function useRoomRuntime({
               phase: "bootstrapping-media",
               listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
             }));
-            void mediaMeshRef.current?.restartPeer(latestSourcePeerId);
+            void mediaMeshRef.current?.restartListenerIce(latestSourcePeerId);
           }
         }
       }
@@ -5958,7 +6004,7 @@ export function useRoomRuntime({
           void meshRef.current?.restartPeer(latestSourcePeerId);
           const nextTransportEpoch = bumpMediaTransportEpoch("explicit-hard-reset");
           mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
-          void mediaMeshRef.current?.restartPeer(latestSourcePeerId);
+          void mediaMeshRef.current?.resetListenerPeer(latestSourcePeerId);
         }
       }
     }, 500);
@@ -6278,25 +6324,50 @@ export function useRoomRuntime({
       return;
     }
 
+    const missingListenerPeerIds = listenerPeerIds.filter(
+      (listenerPeerId) => !mediaConnectedPeers.includes(listenerPeerId)
+    );
+    if (missingListenerPeerIds.length === 0) {
+      lastListenerBootstrapKeyRef.current = null;
+      return;
+    }
+
     const bootstrapKey = [
       roomSnapshot.room.id,
       roomSnapshot.room.playback.mediaEpoch,
+      mediaTransportEpochRef.current,
       roomSnapshot.room.presenceRevision,
-      ...listenerPeerIds
+      ...missingListenerPeerIds
     ].join("|");
     if (lastListenerBootstrapKeyRef.current === bootstrapKey) {
       return;
     }
     lastListenerBootstrapKeyRef.current = bootstrapKey;
 
-    const timerIds = [0, 800, 2400].map((delayMs) =>
+    const retryPlan = [
+      { delayMs: 0, attempt: 1 },
+      { delayMs: 800, attempt: 2 },
+      { delayMs: 2400, attempt: 3 }
+    ];
+    const timerIds = retryPlan.map(({ delayMs, attempt }) =>
       window.setTimeout(() => {
         if (activeRouteRoomIdRef.current !== roomSnapshot.room.id) {
           return;
         }
-        void syncHostMediaStreamRef.current();
-        for (const listenerPeerId of listenerPeerIds) {
-          void mediaMeshRef.current?.restartPeer(listenerPeerId, hostStreamRef.current);
+        const requestedAt = new Date().toISOString();
+        updateHostCaptureDiagnostics({
+          refreshKey: hostMediaSyncStateRef.current.lastCaptureRefreshKey,
+          forcedRefresh: true,
+          captureMode: null,
+          mediaEpoch: roomSnapshot.room.playback.mediaEpoch,
+          transportEpoch: mediaTransportEpochRef.current,
+          publisherBootstrapRequestedAt: requestedAt,
+          publisherBootstrapAttempts: attempt,
+          summary: `房主定向补发实时音频协商，第 ${attempt} 次`
+        });
+        void syncHostMediaStreamRef.current({ forceResync: true, reason: "listener-bootstrap" });
+        for (const listenerPeerId of missingListenerPeerIds) {
+          void mediaMeshRef.current?.restartPublishingPeer(listenerPeerId, hostStreamRef.current);
         }
       }, delayMs)
     );
@@ -6311,11 +6382,13 @@ export function useRoomRuntime({
     isCurrentSourceOwner,
     peerId,
     roomSnapshot?.room.id,
+    mediaConnectedPeers,
     roomSnapshot?.room.members,
     roomSnapshot?.room.playback.mediaEpoch,
     roomSnapshot?.room.playback.status,
     roomSnapshot?.room.presenceRevision,
-    sourceStartState
+    sourceStartState,
+    updateHostCaptureDiagnostics
   ]);
 
   useEffect(() => {
