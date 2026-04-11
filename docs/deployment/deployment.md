@@ -183,6 +183,6 @@ curl http://127.0.0.1:3001/health
 示例：
 
 ```bash
-MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/desktop pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://music.example.com pnpm --filter @music-room/mobile pack
+MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop pack
+MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile pack
 ```

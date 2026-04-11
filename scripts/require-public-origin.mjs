@@ -30,4 +30,11 @@ if (parsedOrigin.hostname === "example.com") {
   process.exit(1);
 }
 
+if (parsedOrigin.hostname !== "musicroom.witw.top") {
+  console.error(
+    `[release] MUSIC_ROOM_PUBLIC_ORIGIN must point to musicroom.witw.top for packaged clients. Current: ${parsedOrigin.origin}`
+  );
+  process.exit(1);
+}
+
 console.log(`[release] Using MUSIC_ROOM_PUBLIC_ORIGIN=${parsedOrigin.origin}`);
