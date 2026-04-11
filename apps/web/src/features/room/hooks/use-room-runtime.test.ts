@@ -12,9 +12,10 @@ import {
   shouldKickSourcePlaybackFromRealtimeEvent,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldManagePublishedMediaTransport,
+  shouldReannounceManualCacheAvailability,
+  shouldRecoverManualCacheDataPeers,
   shouldResumeRemotePlaybackAfterAudioUnlock,
   shouldRedirectRoomRouteToAuth,
-  shouldForcePieceSyncRecovery
 } from "./use-room-runtime";
 
 describe("resolveListenerMediaRecoveryReason", () => {
@@ -145,48 +146,96 @@ describe("resolveListenerMediaRecoveryReason", () => {
   });
 });
 
-describe("shouldForcePieceSyncRecovery", () => {
-  it("does not force data peer recovery during steady remote playback when the current track is fully buffered", () => {
+describe("shouldReannounceManualCacheAvailability", () => {
+  it("re-announces uploaded tracks when listeners are present and the broadcast key changed", () => {
     expect(
-      shouldForcePieceSyncRecovery({
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        activePlaybackSource: "remote-stream",
-        bufferHealth: "healthy",
-        localAvailableChunks: 120,
-        totalChunks: 120,
-        lastPieceActivityAtMs: 0,
-        now: 60_000
+      shouldReannounceManualCacheAvailability({
+        enableManualTrackCaching: true,
+        roomId: "room_1",
+        roomListenerCount: 2,
+        uploadedTrackIds: ["track_b", "track_a"],
+        lastBroadcastKey: null
       })
-    ).toBe(false);
+    ).toBe("room_1|2|track_a,track_b");
   });
 
-  it("forces data peer recovery only when remote playback is active, buffering is incomplete, and inactivity is prolonged", () => {
+  it("does not re-announce when nothing relevant changed", () => {
     expect(
-      shouldForcePieceSyncRecovery({
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        activePlaybackSource: "remote-stream",
-        bufferHealth: "critical",
-        localAvailableChunks: 24,
-        totalChunks: 120,
-        lastPieceActivityAtMs: 0,
-        now: 25_000
+      shouldReannounceManualCacheAvailability({
+        enableManualTrackCaching: true,
+        roomId: "room_1",
+        roomListenerCount: 2,
+        uploadedTrackIds: ["track_a", "track_b"],
+        lastBroadcastKey: "room_1|2|track_a,track_b"
+      })
+    ).toBeNull();
+  });
+});
+
+describe("shouldRecoverManualCacheDataPeers", () => {
+  it("requests data peer recovery when a manual cache task has no connected remote peers", () => {
+    expect(
+      shouldRecoverManualCacheDataPeers({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        remotePeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        availabilityByTrack: {},
+        localPeerId: "peer_local"
       })
     ).toBe(true);
   });
 
-  it("does not force data peer recovery for local playback sources", () => {
+  it("requests recovery when the task still has no remote availability owners", () => {
     expect(
-      shouldForcePieceSyncRecovery({
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        activePlaybackSource: "full-local",
-        bufferHealth: "critical",
-        localAvailableChunks: 24,
-        totalChunks: 120,
-        lastPieceActivityAtMs: 0,
-        now: 25_000
+      shouldRecoverManualCacheDataPeers({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        remotePeerIds: ["peer_owner"],
+        connectedPeerIds: ["peer_owner"],
+        availabilityByTrack: {
+          track_a: {
+            peer_local: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_local",
+              nickname: "me",
+              availableChunks: [0],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "local_cache",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local"
+      })
+    ).toBe(true);
+  });
+
+  it("does not request recovery once a connected remote owner advertises the manual cache track", () => {
+    expect(
+      shouldRecoverManualCacheDataPeers({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        remotePeerIds: ["peer_owner"],
+        connectedPeerIds: ["peer_owner"],
+        availabilityByTrack: {
+          track_a: {
+            peer_owner: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_owner",
+              nickname: "owner",
+              availableChunks: [0, 1],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local"
       })
     ).toBe(false);
   });

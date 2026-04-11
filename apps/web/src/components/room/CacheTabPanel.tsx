@@ -95,9 +95,9 @@ function CacheTabPanelBase({
               return (
                 <article
                   key={track.id}
-                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4"
+                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:flex-row lg:items-center lg:justify-between"
                 >
-                  <div className="space-y-1">
+                  <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
@@ -137,7 +137,7 @@ function CacheTabPanelBase({
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
                     {task?.status === "queued" || task?.status === "downloading" ? (
                       <Button
                         variant="ghost"

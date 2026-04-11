@@ -428,33 +428,6 @@ function resolveConsecutiveNoProgressMs(...values: Array<number | null>) {
   return Math.max(0, Math.round(Math.min(...definedValues)));
 }
 
-export function shouldForcePieceSyncRecovery(input: {
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  currentTrackId: string | null;
-  activePlaybackSource: ProgressivePlaybackSource;
-  bufferHealth: "healthy" | "low" | "critical";
-  localAvailableChunks: number;
-  totalChunks: number;
-  lastPieceActivityAtMs: number;
-  now?: number;
-}) {
-  if (
-    input.playbackStatus !== "playing" ||
-    !input.currentTrackId ||
-    input.activePlaybackSource !== "remote-stream"
-  ) {
-    return false;
-  }
-
-  const totalChunks = Math.max(0, input.totalChunks);
-  const fullyBuffered = totalChunks > 0 && input.localAvailableChunks >= totalChunks;
-  if (fullyBuffered || input.bufferHealth === "healthy") {
-    return false;
-  }
-
-  return (input.now ?? Date.now()) - input.lastPieceActivityAtMs >= stalledPieceSyncRecoveryThresholdMs;
-}
-
 export function shouldResumeRemotePlaybackAfterAudioUnlock(input: {
   audioUnlocked: boolean;
   isCurrentSourceOwner: boolean;
@@ -481,6 +454,62 @@ export function shouldManagePublishedMediaTransport(input: {
   isCurrentSourceOwner: boolean;
 }) {
   return !!input.roomId && !!input.peerId && input.isCurrentSourceOwner;
+}
+
+export function shouldReannounceManualCacheAvailability(input: {
+  enableManualTrackCaching: boolean;
+  roomId: string | null | undefined;
+  roomListenerCount: number;
+  uploadedTrackIds: string[];
+  lastBroadcastKey: string | null;
+}) {
+  if (!input.enableManualTrackCaching || !input.roomId || input.roomListenerCount <= 0) {
+    return null;
+  }
+
+  const sortedTrackIds = [...input.uploadedTrackIds].filter(Boolean).sort();
+  if (sortedTrackIds.length === 0) {
+    return null;
+  }
+
+  const nextKey = [input.roomId, input.roomListenerCount, sortedTrackIds.join(",")].join("|");
+  if (nextKey === input.lastBroadcastKey) {
+    return null;
+  }
+
+  return nextKey;
+}
+
+export function shouldRecoverManualCacheDataPeers(input: {
+  enableManualTrackCaching: boolean;
+  manualCacheTrackIds: string[];
+  remotePeerIds: string[];
+  connectedPeerIds: string[];
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  localPeerId: string | null | undefined;
+}) {
+  if (!input.enableManualTrackCaching || input.manualCacheTrackIds.length === 0) {
+    return false;
+  }
+
+  const remotePeerSet = new Set(input.remotePeerIds.filter(Boolean));
+  if (remotePeerSet.size === 0) {
+    return false;
+  }
+
+  const connectedPeerSet = new Set(input.connectedPeerIds.filter((peerId) => remotePeerSet.has(peerId)));
+  if (connectedPeerSet.size === 0) {
+    return true;
+  }
+
+  return input.manualCacheTrackIds.some((trackId) => {
+    const remoteAvailabilityOwners = Object.values(input.availabilityByTrack[trackId] ?? {})
+      .filter((announcement) => announcement.ownerPeerId !== input.localPeerId)
+      .map((announcement) => announcement.ownerPeerId)
+      .filter((peerId) => remotePeerSet.has(peerId));
+
+    return remoteAvailabilityOwners.length === 0;
+  });
 }
 
 export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
@@ -977,10 +1006,8 @@ export function useRoomRuntime({
     action: null,
     startedAtMs: null
   });
-  const dataDegradedSinceRef = useRef<number | null>(null);
-  const lastPieceReceivedAtRef = useRef<number>(Date.now());
-  const lastAvailabilityGrowthAtRef = useRef<number>(Date.now());
-  const currentTrackAvailabilityProgressRef = useRef<string | null>(null);
+  const lastManualCacheAvailabilityBroadcastKeyRef = useRef<string | null>(null);
+  const lastManualCacheMeshRecoveryAtRef = useRef<number | null>(null);
   const audioUnlockedRef = useRef(audioUnlocked);
   const setAudioUnlockedRef = useRef(setAudioUnlocked);
   const sourceStartStateRef = useRef(sourceStartState);
@@ -2013,31 +2040,6 @@ export function useRoomRuntime({
       disposeSilentPrewarmHandle();
     };
   }, [disposeSilentPrewarmHandle]);
-
-  useEffect(() => {
-    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
-    if (!currentTrackId) {
-      currentTrackAvailabilityProgressRef.current = null;
-      return;
-    }
-
-    const localAvailability = availabilityByTrack[currentTrackId]?.[peerId];
-    const totalChunks = resolveCurrentRoomTrackTotalChunks({
-      trackId: currentTrackId,
-      roomSnapshot,
-      availabilityByTrack
-    });
-    const nextProgressKey = [
-      currentTrackId,
-      localAvailability?.availableChunks.length ?? 0,
-      totalChunks
-    ].join("|");
-
-    if (currentTrackAvailabilityProgressRef.current !== nextProgressKey) {
-      currentTrackAvailabilityProgressRef.current = nextProgressKey;
-      lastAvailabilityGrowthAtRef.current = Date.now();
-    }
-  }, [availabilityByTrack, peerId, roomSnapshot?.room.playback.currentTrackId, roomSnapshot?.tracks]);
 
   const exitCurrentRoom = useCallback(
     (message: string) => {
@@ -4763,7 +4765,6 @@ export function useRoomRuntime({
           payloadBytes,
           requestRttMs
         }) => {
-          lastPieceReceivedAtRef.current = Date.now();
           recordPieceTransferRef.current({
             peerId: sourcePeerId,
             direction: "download",
@@ -6259,17 +6260,31 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
-    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
-    if (!enableManualTrackCaching || !currentTrackId) {
+    const nextBroadcastKey = shouldReannounceManualCacheAvailability({
+      enableManualTrackCaching,
+      roomId: roomSnapshot?.room.id,
+      roomListenerCount,
+      uploadedTrackIds,
+      lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
+    });
+
+    if (!nextBroadcastKey) {
+      if (!roomSnapshot?.room.id || roomListenerCount === 0 || uploadedTrackIds.length === 0) {
+        lastManualCacheAvailabilityBroadcastKeyRef.current = null;
+      }
       return;
     }
 
-    if (!uploadedTracks[currentTrackId]) {
-      return;
+    lastManualCacheAvailabilityBroadcastKeyRef.current = nextBroadcastKey;
+    for (const trackId of uploadedTrackIds) {
+      void announceLocalCacheRef.current(trackId);
     }
-
-    void announceLocalCacheRef.current(currentTrackId);
-  }, [roomSnapshot?.room.playback.currentTrackId, uploadedTracks]);
+  }, [
+    enableManualTrackCaching,
+    roomListenerCount,
+    roomSnapshot?.room.id,
+    uploadedTrackIds
+  ]);
 
   useEffect(() => {
     const playback = roomSnapshot?.room.playback;
@@ -6599,154 +6614,46 @@ export function useRoomRuntime({
   }, [reportRealtimeFailure, roomListenerPeerIds]);
 
   useEffect(() => {
-    if (mediaConnectedPeers.length > 0 && connectedPeers.length === 0) {
-      if (dataDegradedSinceRef.current === null) {
-        dataDegradedSinceRef.current = Date.now();
-      }
+    if (
+      !shouldRecoverManualCacheDataPeers({
+        enableManualTrackCaching,
+        manualCacheTrackIds,
+        remotePeerIds: roomListenerPeerIds,
+        connectedPeerIds: connectedPeers,
+        availabilityByTrack,
+        localPeerId: peerId
+      })
+    ) {
+      lastManualCacheMeshRecoveryAtRef.current = null;
       return;
     }
 
-    dataDegradedSinceRef.current = null;
-  }, [connectedPeers.length, mediaConnectedPeers.length]);
-
-  useEffect(() => {
-    if (!enableTrackCaching) {
-      dataDegradedSinceRef.current = null;
+    const now = Date.now();
+    if (
+      lastManualCacheMeshRecoveryAtRef.current !== null &&
+      now - lastManualCacheMeshRecoveryAtRef.current < 3_000
+    ) {
       return;
     }
 
-    if (!roomSnapshot?.room.id || !peerId || isCurrentSourceOwner || bufferHealth === "healthy") {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      const remotePeerIds =
-        currentRoomRef.current?.room.members
-          .map((member) => member.peerId)
-          .filter(
-            (memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId
-          ) ?? [];
-      const playback = currentRoomRef.current?.room.playback;
-      const currentTrackId = playback?.currentTrackId ?? null;
-      const localAvailability = currentTrackId ? availabilityByTrack[currentTrackId]?.[peerId] : null;
-      const totalChunks = resolveCurrentRoomTrackTotalChunks({
-        trackId: currentTrackId,
-        roomSnapshot: currentRoomRef.current,
-        availabilityByTrack
+    lastManualCacheMeshRecoveryAtRef.current = now;
+    void meshRef.current?.syncPeers(roomListenerPeerIds, { forceReconnectDegraded: true }).catch((error) => {
+      reportRealtimeFailure({
+        peerId: "system",
+        channelKind: "system",
+        event: "manual-cache-mesh-sync-failed",
+        summary: "Failed to recover data peers for manual cache download",
+        error
       });
-      const localAvailableChunks = localAvailability?.availableChunks.length ?? 0;
-      const shouldRecoverPieceSync = shouldForcePieceSyncRecovery({
-        playbackStatus: playback?.status,
-        currentTrackId,
-        activePlaybackSource,
-        bufferHealth,
-        localAvailableChunks,
-        totalChunks,
-        lastPieceActivityAtMs: Math.max(
-          lastPieceReceivedAtRef.current,
-          lastAvailabilityGrowthAtRef.current
-        )
-      });
-      const shouldRecoverDataPeers =
-        activePlaybackSource === "remote-stream" &&
-        playback?.status === "playing" &&
-        !!currentTrackId &&
-        (totalChunks <= 0 || localAvailableChunks < totalChunks);
-      const sourceRecoveryKey = buildSourceRecoveryActionKey(
-        playback?.sourcePeerId ?? null,
-        playback?.mediaEpoch ?? null
-      );
-      const sourceHardRecoveryInFlight =
-        !!sourceRecoveryKey &&
-        sourceRecoveryCoordinatorRef.current.actionKey === sourceRecoveryKey &&
-        sourceRecoveryCoordinatorRef.current.action !== null;
-      const degradedIceMode = iceConfig?.source === "stun-only" && (playback?.mediaEpoch ?? 0) > 0;
-
-      if (remotePeerIds.length === 0) {
-        return;
-      }
-
-      if (sourceHardRecoveryInFlight || degradedIceMode) {
-        const suppressedReason = sourceHardRecoveryInFlight
-          ? `suppressed-by-${sourceRecoveryCoordinatorRef.current.action}`
-          : "suppressed-by-stun-only-ice";
-        if (playback?.sourcePeerId) {
-          recordPeerDiagnostic({
-            peerId: playback.sourcePeerId,
-            channelKind: "data",
-            direction: "local",
-            event: "mesh-recovery-suppressed",
-            summary: `Data recovery suppressed: ${suppressedReason}`,
-            recordEvent: false,
-            update: (snapshot) => ({
-              ...snapshot,
-              recoverySuppressedReason: suppressedReason
-            })
-          });
-        }
-        return;
-      }
-
-      if (playback?.sourcePeerId) {
-        recordPeerDiagnostic({
-          peerId: playback.sourcePeerId,
-          channelKind: "data",
-          direction: "local",
-          event: "mesh-recovery-suppressed",
-          summary: "Data recovery suppression cleared",
-          recordEvent: false,
-          update: (snapshot) => ({
-            ...snapshot,
-            recoverySuppressedReason: null
-          })
-        });
-      }
-
-      const degradedSince = dataDegradedSinceRef.current;
-      if (degradedSince && shouldRecoverDataPeers && Date.now() - degradedSince >= 6_000) {
-        void meshRef.current?.syncPeers(remotePeerIds, { forceReconnectDegraded: true }).catch((error) => {
-          reportRealtimeFailure({
-            peerId: "system",
-            channelKind: "system",
-            event: "mesh-watchdog-resync-failed",
-            summary: "Failed to recover degraded data peers",
-            error
-          });
-        });
-        dataDegradedSinceRef.current = Date.now();
-        return;
-      }
-      if (!shouldRecoverPieceSync) {
-        return;
-      }
-
-      void meshRef.current?.syncPeers(remotePeerIds, { forceReconnectDegraded: true }).catch((error) => {
-        reportRealtimeFailure({
-          peerId: "system",
-          channelKind: "system",
-          event: "mesh-activity-watchdog-failed",
-          summary: "Failed to recover stalled piece sync",
-          error
-        });
-      });
-      lastPieceReceivedAtRef.current = Date.now();
-      lastAvailabilityGrowthAtRef.current = Date.now();
-    }, 2_000);
-
-    return () => window.clearInterval(intervalId);
+    });
   }, [
-    activePlaybackSource,
     availabilityByTrack,
-    bufferHealth,
-    buildSourceRecoveryActionKey,
-    currentRoomRef,
-    enableTrackCaching,
-    iceConfig?.source,
-    isCurrentSourceOwner,
+    connectedPeers,
+    enableManualTrackCaching,
+    manualCacheTrackIds,
     peerId,
     reportRealtimeFailure,
-    recordPeerDiagnostic,
-    roomSnapshot?.room.id
+    roomListenerPeerIds
   ]);
 
   const playbackClockSource = useMemo(
@@ -6764,8 +6671,10 @@ export function useRoomRuntime({
       return;
     }
 
-    const effectiveSchedulerMode =
-      playbackClockSource === "remote" && transportGovernorMode === "bootstrap"
+    const manualOnlyCaching = !enablePlaybackCacheTakeover && manualCacheTrackIds.length > 0;
+    const effectiveSchedulerMode = manualOnlyCaching
+      ? "idle"
+      : playbackClockSource === "remote" && transportGovernorMode === "bootstrap"
         ? schedulerMode === "idle"
           ? "idle"
           : "conservative"

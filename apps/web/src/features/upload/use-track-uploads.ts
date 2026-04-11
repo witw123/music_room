@@ -146,6 +146,71 @@ export function useTrackUploads(options: {
   }, [refreshCacheLibrary]);
 
   useEffect(() => {
+    if (!activeSession?.userId || !roomSnapshot) {
+      return;
+    }
+
+    const ownedRoomTracks = roomSnapshot.tracks.filter(
+      (track) => track.ownerSessionId === activeSession.userId
+    );
+    if (ownedRoomTracks.length === 0) {
+      setUploadedTracks((current) => {
+        const staleCacheLibraryTrackIds = Object.entries(current)
+          .filter(([, upload]) => upload.origin === "cache-library")
+          .map(([trackId]) => trackId);
+        if (staleCacheLibraryTrackIds.length === 0) {
+          return current;
+        }
+        return removeTracksFromUploads(current, staleCacheLibraryTrackIds);
+      });
+      return;
+    }
+
+    setUploadedTracks((current) => {
+      const nextUploads = { ...current };
+      let changed = false;
+      const recoverableTrackIds = new Set<string>();
+      const ownedTrackIds = new Set<string>();
+
+      for (const track of ownedRoomTracks) {
+        ownedTrackIds.add(track.id);
+        const cachedLibraryTrack = cacheLibraryTracksRef.current.get(track.fileHash);
+        if (!cachedLibraryTrack) {
+          continue;
+        }
+
+        recoverableTrackIds.add(track.id);
+        const existingUpload = current[track.id];
+        if (existingUpload && existingUpload.origin !== "cache-library") {
+          continue;
+        }
+        if (existingUpload?.origin === "cache-library") {
+          continue;
+        }
+
+        nextUploads[track.id] = {
+          file: cachedLibraryTrack.file,
+          objectUrl: URL.createObjectURL(cachedLibraryTrack.file),
+          origin: "cache-library"
+        };
+        changed = true;
+      }
+
+      for (const [trackId, upload] of Object.entries(current)) {
+        if (upload.origin !== "cache-library") {
+          continue;
+        }
+        if (!ownedTrackIds.has(trackId) || !recoverableTrackIds.has(trackId)) {
+          delete nextUploads[trackId];
+          changed = true;
+        }
+      }
+
+      return changed ? nextUploads : current;
+    });
+  }, [activeSession?.userId, roomSnapshot, cacheLibraryTracks]);
+
+  useEffect(() => {
     return () => {
       for (const objectUrl of uploadedTrackUrlsRef.current.values()) {
         URL.revokeObjectURL(objectUrl);
