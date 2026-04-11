@@ -535,6 +535,9 @@ export function resolveManualCacheProviderPeerIds(input: {
       if (!announcement.ownerPeerId || announcement.ownerPeerId === input.localPeerId) {
         continue;
       }
+      if (announcement.totalChunks <= 0 || announcement.availableChunks.length === 0) {
+        continue;
+      }
       if (allowedPeerSet && !allowedPeerSet.has(announcement.ownerPeerId)) {
         continue;
       }
@@ -822,6 +825,18 @@ function resolveRoomListenerPeerIds(
     .sort();
 }
 
+function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
+  const peerIds = new Set<string>();
+  for (const group of peerIdGroups) {
+    for (const peerId of group) {
+      if (peerId) {
+        peerIds.add(peerId);
+      }
+    }
+  }
+  return [...peerIds].sort();
+}
+
 export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
   nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -1033,6 +1048,7 @@ export function useRoomRuntime({
   });
   const listenerMediaLifecycleRef = useRef<{
     traceKey: string | null;
+    sourcePeerId: string | null;
     lastTrackTraceKey: string | null;
     lastBoundTraceKey: string | null;
     lastPlayAttemptTraceKey: string | null;
@@ -1062,6 +1078,7 @@ export function useRoomRuntime({
     playAttempts: number;
   }>({
     traceKey: null,
+    sourcePeerId: null,
     lastTrackTraceKey: null,
     lastBoundTraceKey: null,
     lastPlayAttemptTraceKey: null,
@@ -1948,10 +1965,13 @@ export function useRoomRuntime({
       resolveManualCacheProviderPeerIds({
         manualCacheTrackIds,
         availabilityByTrack,
-        localPeerId: peerId,
-        allowedPeerIds: roomListenerPeerIds
+        localPeerId: peerId
       }),
-    [availabilityByTrack, manualCacheTrackIds, peerId, roomListenerPeerIds]
+    [availabilityByTrack, manualCacheTrackIds, peerId]
+  );
+  const manualCacheRemotePeerIds = useMemo(
+    () => mergePeerIds(roomListenerPeerIds, manualCacheProviderPeerIds),
+    [manualCacheProviderPeerIds, roomListenerPeerIds]
   );
 
   useEffect(() => {
@@ -3401,33 +3421,59 @@ export function useRoomRuntime({
       return;
     }
 
+    const previousSourcePeerId = lifecycle.sourcePeerId;
+    const remoteAudio = remoteAudioRef.current;
+    const existingRemoteStream =
+      (remoteAudio?.srcObject as MediaStream | null | undefined) ?? null;
+    const existingRemoteTrack =
+      typeof existingRemoteStream?.getAudioTracks === "function"
+        ? (existingRemoteStream.getAudioTracks()[0] ?? null)
+        : null;
+    const canReuseExistingRemoteStream =
+      !!traceContext.traceKey &&
+      !!traceContext.sourcePeerId &&
+      previousSourcePeerId === traceContext.sourcePeerId &&
+      !!existingRemoteStream &&
+      !!existingRemoteTrack &&
+      existingRemoteTrack.readyState !== "ended";
+    const existingRemoteAudioPlaying = canReuseExistingRemoteStream && remoteAudio?.paused === false;
+
     lifecycle.traceKey = traceContext.traceKey;
-    lifecycle.lastTrackTraceKey = null;
-    lifecycle.lastBoundTraceKey = null;
-    lifecycle.lastPlayAttemptTraceKey = null;
-    lifecycle.lastPlayAttemptResult = null;
+    lifecycle.sourcePeerId = traceContext.sourcePeerId;
+    lifecycle.lastTrackTraceKey = canReuseExistingRemoteStream ? traceContext.traceKey : null;
+    lifecycle.lastBoundTraceKey = canReuseExistingRemoteStream ? traceContext.traceKey : null;
+    lifecycle.lastPlayAttemptTraceKey = existingRemoteAudioPlaying ? traceContext.traceKey : null;
+    lifecycle.lastPlayAttemptResult = existingRemoteAudioPlaying ? "ok" : null;
     lifecycle.lastPlayAttemptError = null;
-    lifecycle.lastPlayingTraceKey = null;
+    lifecycle.lastPlayingTraceKey = existingRemoteAudioPlaying ? traceContext.traceKey : null;
     lifecycle.lastSoftRecoveryTraceKey = null;
     lifecycle.lastSoftRecoveryAt = null;
     lifecycle.lastHardRecoveryTraceKey = null;
     lifecycle.lastHardRecoveryAt = null;
-    lifecycle.latestStream = null;
+    lifecycle.latestStream = canReuseExistingRemoteStream ? existingRemoteStream : null;
     lifecycle.currentGeneration = traceContext.traceKey;
     lifecycle.generationStartedAt = traceContext.traceKey ? Date.now() : null;
-    lifecycle.boundGeneration = null;
-    lifecycle.playingGeneration = null;
-    lifecycle.lastPlayoutProgressAt = null;
-    lifecycle.lastTransportProgressAt = null;
+    lifecycle.boundGeneration = canReuseExistingRemoteStream ? traceContext.traceKey : null;
+    lifecycle.playingGeneration = existingRemoteAudioPlaying ? traceContext.traceKey : null;
+    lifecycle.lastPlayoutProgressAt = existingRemoteAudioPlaying ? Date.now() : null;
+    lifecycle.lastTransportProgressAt = canReuseExistingRemoteStream ? Date.now() : null;
     lifecycle.lastObservedRemoteCurrentTimeMs = null;
-    lifecycle.recoveryStage = traceContext.traceKey ? "waiting-track" : "idle";
+    lifecycle.recoveryStage = traceContext.traceKey
+      ? canReuseExistingRemoteStream
+        ? "retry-play"
+        : "waiting-track"
+      : "idle";
     lifecycle.restartAttempt = 0;
-    lifecycle.bindAttempts = 0;
-    lifecycle.playAttempts = 0;
+    lifecycle.bindAttempts = canReuseExistingRemoteStream ? 1 : 0;
+    lifecycle.playAttempts = existingRemoteAudioPlaying ? 1 : 0;
     clearListenerMediaRecovery();
 
     updateRemoteMediaDiagnostic(
-      traceContext.traceKey ? "监听端播放 trace 已切换" : "监听端播放 trace 已清空",
+      traceContext.traceKey
+        ? canReuseExistingRemoteStream
+          ? "监听端播放 trace 已切换，并复用现有远端媒体流"
+          : "监听端播放 trace 已切换"
+        : "监听端播放 trace 已清空",
       (snapshot) => ({
         ...snapshot,
         remoteTrackStatus: {
@@ -3435,8 +3481,8 @@ export function useRoomRuntime({
           ...traceContext,
           ...getRemoteAudioDiagnostics(),
           currentGeneration: traceContext.traceKey,
-          boundGeneration: null,
-          playingGeneration: null,
+          boundGeneration: lifecycle.boundGeneration,
+          playingGeneration: lifecycle.playingGeneration,
           recoveryStage: lifecycle.recoveryStage,
           restartAttempt: lifecycle.restartAttempt
         }
@@ -3447,6 +3493,9 @@ export function useRoomRuntime({
     );
     if (traceContext.traceKey) {
       armListenerMediaRecoveryRef.current(traceContext.traceKey);
+      if (canReuseExistingRemoteStream) {
+        scheduleRemotePlaybackRetryRef.current(0, traceContext.traceKey);
+      }
     }
   }, [
     activePlaybackSource,
@@ -3455,6 +3504,7 @@ export function useRoomRuntime({
     getRemoteAudioDiagnostics,
     getRemoteMediaTraceContext,
     isCurrentSourceOwner,
+    remoteAudioRef,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.mediaEpoch,
     roomSnapshot?.room.playback.sourcePeerId,
@@ -3881,7 +3931,7 @@ export function useRoomRuntime({
     }
 
     lastManualCacheBootstrapKeyRef.current = bootstrapKey;
-    void meshRef.current.syncPeers(roomListenerPeerIds).catch((error) => {
+    void meshRef.current.syncPeers(manualCacheRemotePeerIds).catch((error) => {
       reportRealtimeFailure({
         peerId: "system",
         channelKind: "system",
@@ -3894,8 +3944,8 @@ export function useRoomRuntime({
     connectedPeers,
     enableManualTrackCaching,
     manualCacheProviderPeerIds,
+    manualCacheRemotePeerIds,
     manualCacheTrackIds,
-    roomListenerPeerIds,
     reportRealtimeFailure
   ]);
 
@@ -6865,7 +6915,7 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
-    const syncPromise = meshRef.current?.syncPeers(roomListenerPeerIds);
+    const syncPromise = meshRef.current?.syncPeers(manualCacheRemotePeerIds);
     if (!syncPromise) {
       return;
     }
@@ -6879,13 +6929,13 @@ export function useRoomRuntime({
         error
       });
     });
-  }, [reportRealtimeFailure, roomListenerPeerIds]);
+  }, [manualCacheRemotePeerIds, reportRealtimeFailure]);
 
   useEffect(() => {
     const shouldRecover = shouldRecoverManualCacheDataPeers({
       enableManualTrackCaching,
       manualCacheTrackIds,
-      remotePeerIds: roomListenerPeerIds,
+      remotePeerIds: manualCacheRemotePeerIds,
       connectedPeerIds: connectedPeers,
       availabilityByTrack,
       localPeerId: peerId
@@ -6903,7 +6953,7 @@ export function useRoomRuntime({
     }
 
     const recoveryPeerIds =
-      manualCacheProviderPeerIds.length > 0 ? manualCacheProviderPeerIds : roomListenerPeerIds;
+      manualCacheProviderPeerIds.length > 0 ? manualCacheProviderPeerIds : manualCacheRemotePeerIds;
     const recoveryMode = resolveManualCacheMeshRecoveryMode({
       shouldRecover,
       remotePeerIds: recoveryPeerIds,
@@ -6946,10 +6996,10 @@ export function useRoomRuntime({
     connectedPeers,
     enableManualTrackCaching,
     manualCacheTrackIds,
+    manualCacheRemotePeerIds,
     manualCacheProviderPeerIds,
     peerId,
-    reportRealtimeFailure,
-    roomListenerPeerIds
+    reportRealtimeFailure
   ]);
 
   const playbackClockSource = useMemo(
@@ -6967,26 +7017,62 @@ export function useRoomRuntime({
       return;
     }
 
-    const effectiveSchedulerMode = "idle";
+    let syncInFlight = false;
+    const syncManualCacheScheduler = () => {
+      const effectiveSchedulerMode = "idle";
+      const effectiveConnectedPeerIds = mergePeerIds(
+        connectedPeers,
+        meshRef.current?.getConnectedPeerIds() ?? []
+      );
 
-    chunkSchedulerRef.current?.sync({
-      roomSnapshot,
-      availabilityByTrack,
-      connectedPeerIds: connectedPeers,
-      uploadedTrackIds: Object.keys(uploadedTracks),
-      playbackPositionMs: schedulerPlaybackBucketMs,
-      playbackStatus: roomSnapshot?.room.playback.status ?? null,
-      pageVisible: isPageVisible,
-      mode: effectiveSchedulerMode,
-      bufferHealth,
-      playbackClockSource,
-      manualTrackIds: enableManualTrackCaching ? manualCacheTrackIds : [],
-      policy: progressiveSchedulerPolicy ?? "startup"
-    });
+      if (manualCacheProviderPeerIds.length > 0 && !syncInFlight) {
+        syncInFlight = true;
+        const syncPromise = meshRef.current?.syncPeers(manualCacheRemotePeerIds);
+        if (!syncPromise) {
+          syncInFlight = false;
+        } else {
+          void syncPromise.catch((error) => {
+            reportRealtimeFailure({
+              peerId: "system",
+              channelKind: "system",
+              event: "manual-cache-mesh-sync-failed",
+              summary: "Failed to sync data peers for manual cache scheduler",
+              error
+            });
+          })
+            .finally(() => {
+              syncInFlight = false;
+            });
+        }
+      }
+
+      chunkSchedulerRef.current?.sync({
+        roomSnapshot,
+        availabilityByTrack,
+        connectedPeerIds: effectiveConnectedPeerIds,
+        uploadedTrackIds: Object.keys(uploadedTracks),
+        playbackPositionMs: schedulerPlaybackBucketMs,
+        playbackStatus: roomSnapshot?.room.playback.status ?? null,
+        pageVisible: isPageVisible,
+        mode: effectiveSchedulerMode,
+        bufferHealth,
+        playbackClockSource,
+        manualTrackIds: enableManualTrackCaching ? manualCacheTrackIds : [],
+        policy: progressiveSchedulerPolicy ?? "startup"
+      });
+    };
+
+    syncManualCacheScheduler();
+    const timerId = window.setInterval(syncManualCacheScheduler, 1_000);
+    return () => {
+      window.clearInterval(timerId);
+    };
   }, [
     availabilityByTrack,
     connectedPeers,
     manualCacheTrackIds,
+    manualCacheProviderPeerIds,
+    manualCacheRemotePeerIds,
     uploadedTracks,
     roomSnapshot,
     schedulerPlaybackBucketMs,
@@ -6996,8 +7082,35 @@ export function useRoomRuntime({
     transportGovernorMode,
     playbackClockSource,
     progressiveSchedulerPolicy,
-    chunkSchedulerRef
+    chunkSchedulerRef,
+    reportRealtimeFailure
   ]);
+
+  useEffect(() => {
+    if (manualCacheTrackIds.length === 0) {
+      return;
+    }
+
+    for (const trackId of manualCacheTrackIds) {
+      const availability = availabilityByTrack[trackId] ?? {};
+      const hasProviderWithChunks = Object.values(availability).some(
+        (announcement) =>
+          announcement.ownerPeerId !== peerId &&
+          announcement.totalChunks > 0 &&
+          announcement.availableChunks.length > 0
+      );
+      if (!hasProviderWithChunks) {
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "data",
+          direction: "local",
+          event: "manual-cache-provider-unavailable",
+          summary: `缓存下载 ${trackId} 暂无可请求分片的在线提供者`,
+          recordEvent: false
+        });
+      }
+    }
+  }, [availabilityByTrack, manualCacheTrackIds, peerId, recordPeerDiagnostic]);
 
   return {
     scheduleRemotePlaybackRetry,

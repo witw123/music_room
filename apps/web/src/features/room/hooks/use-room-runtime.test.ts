@@ -357,6 +357,54 @@ describe("resolveManualCacheProviderPeerIds", () => {
       })
     ).toEqual(["peer_owner"]);
   });
+
+  it("keeps an announced provider even before the room member snapshot catches up", () => {
+    expect(
+      resolveManualCacheProviderPeerIds({
+        manualCacheTrackIds: ["track_a"],
+        availabilityByTrack: {
+          track_a: {
+            peer_owner: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_owner",
+              nickname: "owner",
+              availableChunks: [0, 1, 2],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local"
+      })
+    ).toEqual(["peer_owner"]);
+  });
+
+  it("ignores announcements that cannot serve any chunk", () => {
+    expect(
+      resolveManualCacheProviderPeerIds({
+        manualCacheTrackIds: ["track_a"],
+        availabilityByTrack: {
+          track_a: {
+            peer_owner: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_owner",
+              nickname: "owner",
+              availableChunks: [],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local"
+      })
+    ).toEqual([]);
+  });
 });
 
 describe("shouldForceManualCacheBootstrap", () => {
