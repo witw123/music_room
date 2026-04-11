@@ -171,16 +171,6 @@ export class ChunkScheduler {
     this.requestSchedule("normal");
   }
 
-  markTrackHydrated(trackId: string) {
-    const state = this.trackStates.get(trackId);
-    if (!state) {
-      return;
-    }
-
-    state.pendingChunks.clear();
-    this.requestSchedule("normal");
-  }
-
   getBufferedChunkCount(trackId: string) {
     return this.trackStates.get(trackId)?.ownedChunks.size ?? 0;
   }

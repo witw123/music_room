@@ -54,7 +54,6 @@ import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import {
   cacheTrackPieces,
-  getCachedTrackAsset,
   getTrackPieceManifest,
   queueTrackPieceManifestUpsert
 } from "@/lib/indexeddb";
@@ -68,11 +67,8 @@ import {
   shouldDeferHostMediaStreamSync
 } from "@/features/playback/host-media-sync";
 import {
-  canUseUploadedTrackForPlayback,
-  enableManualTrackCaching,
-  enablePlaybackCacheTakeover,
-  enableTrackCaching
-} from "@/features/playback/track-cache-policy";
+  enableManualTrackCaching
+} from "@/features/cache/cache-policy";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import { shouldForceSourceOwnerLocalPlayback } from "@/features/playback/progressive-source-controller";
@@ -198,12 +194,6 @@ type UseRoomRuntimeInput = {
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
-  mergeLocalPieceAvailability: (
-    trackId: string,
-    chunkIndex: number,
-    totalChunks: number,
-    chunkSize: number
-  ) => void;
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -211,11 +201,16 @@ type UseRoomRuntimeInput = {
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIds: string[];
-  announceLocalCache: (trackId: string) => Promise<void>;
-  markManualCacheTrackDownloading: (trackId: string) => void;
+  announceRoomTrackAvailability: (trackId: string) => Promise<void>;
+  handleManualCachePieceReceived: (input: {
+    trackId: string;
+    chunkIndex: number;
+    totalChunks: number;
+    chunkSize: number;
+    mimeType: string;
+  }) => void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
-  scheduleTrackHydration: (trackId: string, mimeType: string, totalChunks: number) => void;
   audioRef: RefObject<HTMLAudioElement | null>;
   remoteAudioRef: RefObject<HTMLAudioElement | null>;
   socketRef: MutableRefObject<RoomSocket | null>;
@@ -283,6 +278,7 @@ const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
 const recoveryFullResubscribeThresholdMs = 15_000;
 const listenerBootstrapGraceMs = 1_800;
+const enableTrackCaching = false;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
@@ -936,7 +932,6 @@ export function useRoomRuntime({
   setLastSourceStartError,
   availabilityByTrack,
   queueAvailability,
-  mergeLocalPieceAvailability,
   clearAvailabilityForPeer,
   flushPendingAvailability,
   recordPeerDiagnostic,
@@ -944,11 +939,10 @@ export function useRoomRuntime({
   uploadedTrackIds,
   uploadedTrackIdsRef,
   manualCacheTrackIds,
-  announceLocalCache,
-  markManualCacheTrackDownloading,
+  announceRoomTrackAvailability,
+  handleManualCachePieceReceived,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
-  scheduleTrackHydration,
   audioRef,
   remoteAudioRef,
   socketRef,
@@ -1113,13 +1107,12 @@ export function useRoomRuntime({
   const setLastSourceStartErrorRef = useRef(setLastSourceStartError);
   const manualCacheTrackIdsRef = useRef(manualCacheTrackIds);
   const uploadedTracksRef = useRef(uploadedTracks);
-  const announceLocalCacheRef = useRef(announceLocalCache);
+  const announceRoomTrackAvailabilityRef = useRef(announceRoomTrackAvailability);
+  const handleManualCachePieceReceivedRef = useRef(handleManualCachePieceReceived);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const deleteRoomTrackArtifactsRef = useRef(deleteRoomTrackArtifacts);
-  const scheduleTrackHydrationRef = useRef(scheduleTrackHydration);
   const resetPlayerSurfaceRef = useRef(resetPlayerSurface);
   const queueAvailabilityRef = useRef(queueAvailability);
-  const mergeLocalPieceAvailabilityRef = useRef(mergeLocalPieceAvailability);
   const clearAvailabilityForPeerRef = useRef(clearAvailabilityForPeer);
   const flushPendingAvailabilityRef = useRef(flushPendingAvailability);
   const recordPeerDiagnosticRef = useRef(recordPeerDiagnostic);
@@ -2108,8 +2101,12 @@ export function useRoomRuntime({
   }, [uploadedTracks]);
 
   useEffect(() => {
-    announceLocalCacheRef.current = announceLocalCache;
-  }, [announceLocalCache]);
+    announceRoomTrackAvailabilityRef.current = announceRoomTrackAvailability;
+  }, [announceRoomTrackAvailability]);
+
+  useEffect(() => {
+    handleManualCachePieceReceivedRef.current = handleManualCachePieceReceived;
+  }, [handleManualCachePieceReceived]);
 
   useEffect(() => {
     deleteUploadedTrackArtifactsRef.current = deleteUploadedTrackArtifacts;
@@ -2120,20 +2117,12 @@ export function useRoomRuntime({
   }, [deleteRoomTrackArtifacts]);
 
   useEffect(() => {
-    scheduleTrackHydrationRef.current = scheduleTrackHydration;
-  }, [scheduleTrackHydration]);
-
-  useEffect(() => {
     resetPlayerSurfaceRef.current = resetPlayerSurface;
   }, [resetPlayerSurface]);
 
   useEffect(() => {
     queueAvailabilityRef.current = queueAvailability;
   }, [queueAvailability]);
-
-  useEffect(() => {
-    mergeLocalPieceAvailabilityRef.current = mergeLocalPieceAvailability;
-  }, [mergeLocalPieceAvailability]);
 
   useEffect(() => {
     clearAvailabilityForPeerRef.current = clearAvailabilityForPeer;
@@ -2764,9 +2753,7 @@ export function useRoomRuntime({
           isCurrentSourceOwner;
 
         const currentTrackUpload =
-          playback.currentTrackId && canUseUploadedTrackForPlayback(uploadedTracks[playback.currentTrackId] ?? null)
-            ? uploadedTracks[playback.currentTrackId] ?? null
-            : null;
+          playback.currentTrackId ? uploadedTracks[playback.currentTrackId] ?? null : null;
         const hasPlayableLiveUpload = !!currentTrackUpload;
         const forceSourceOwnerLocalPublish = shouldForceSourceOwnerLocalPlayback({
           isCurrentSourceOwner,
@@ -3145,9 +3132,7 @@ export function useRoomRuntime({
     }
 
     const currentTrackUpload =
-      playback.currentTrackId && canUseUploadedTrackForPlayback(uploadedTracks[playback.currentTrackId] ?? null)
-        ? uploadedTracks[playback.currentTrackId] ?? null
-        : null;
+      playback.currentTrackId ? uploadedTracks[playback.currentTrackId] ?? null : null;
     const directRelayStream =
       typeof getHostRelayStream === "function" ? getHostRelayStream() : null;
     const publishSource = resolveHostPublishSource({
@@ -3277,19 +3262,13 @@ export function useRoomRuntime({
           isCurrentSourceOwner,
           activePlaybackSource,
           hasFullLocalTrack:
-            !!(
-              latestPlayback.currentTrackId &&
-              canUseUploadedTrackForPlayback(uploadedTracks[latestPlayback.currentTrackId] ?? null)
-            )
+            !!(latestPlayback.currentTrackId && uploadedTracks[latestPlayback.currentTrackId])
         }),
         localAudio: audioRef.current,
         remoteAudio: remoteAudioRef.current,
         hostRelayStream: typeof getHostRelayStream === "function" ? getHostRelayStream() : null,
         hasPlayableLiveUpload:
-          !!(
-            latestPlayback.currentTrackId &&
-            canUseUploadedTrackForPlayback(uploadedTracks[latestPlayback.currentTrackId] ?? null)
-          )
+          !!(latestPlayback.currentTrackId && uploadedTracks[latestPlayback.currentTrackId])
       });
       const relayAudio = publishSource.audioElement;
       if (!relayAudio && !relayClockState) {
@@ -4929,13 +4908,10 @@ export function useRoomRuntime({
               durationMs: requestRttMs
             });
           }
-          const shouldProcessPieceForCache =
-            enablePlaybackCacheTakeover ||
-            manualCacheTrackIdsRef.current.includes(trackId);
+          const shouldProcessPieceForCache = manualCacheTrackIdsRef.current.includes(trackId);
           if (!shouldProcessPieceForCache) {
             return;
           }
-          markManualCacheTrackDownloading(trackId);
           const currentTrack =
             currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
           if (currentTrack) {
@@ -4951,8 +4927,13 @@ export function useRoomRuntime({
             });
           }
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
-          mergeLocalPieceAvailabilityRef.current(trackId, chunkIndex, totalChunks, chunkSize);
-          scheduleTrackHydrationRef.current(trackId, mimeType, totalChunks);
+          handleManualCachePieceReceivedRef.current({
+            trackId,
+            chunkIndex,
+            totalChunks,
+            chunkSize,
+            mimeType
+          });
         },
         onPieceSent: ({ peerId: targetPeerId, payloadBytes }) => {
           recordPieceTransferRef.current({
@@ -5100,7 +5081,7 @@ export function useRoomRuntime({
             flushPendingAvailabilityRef.current();
             if (enableManualTrackCaching) {
               for (const trackId of uploadedTrackIdsRef.current) {
-                void announceLocalCacheRef.current(trackId);
+                void announceRoomTrackAvailabilityRef.current(trackId);
               }
             }
           }
@@ -5134,8 +5115,7 @@ export function useRoomRuntime({
           const track =
             currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
           const uploadedTrack = uploadedTracksRef.current[trackId] ?? null;
-          const cachedAsset = uploadedTrack ? null : await getCachedTrackAsset(trackId);
-          const fallbackFile = uploadedTrack?.file ?? cachedAsset?.file ?? null;
+          const fallbackFile = uploadedTrack?.file ?? null;
           if (!track || !fallbackFile) {
             return null;
           }
@@ -5145,7 +5125,7 @@ export function useRoomRuntime({
             track,
             cacheManifest: cachedManifest,
             file: fallbackFile,
-            mimeType: track.mimeType ?? cachedAsset?.mimeType ?? fallbackFile.type ?? null,
+            mimeType: track.mimeType ?? fallbackFile.type ?? null,
             codec: track.codec ?? null,
             sizeBytes: track.sizeBytes ?? fallbackFile.size
           });
@@ -5732,7 +5712,7 @@ export function useRoomRuntime({
           flushPendingAvailabilityRef.current();
           if (enableManualTrackCaching) {
             for (const trackId of uploadedTrackIdsRef.current) {
-              void announceLocalCacheRef.current(trackId);
+              void announceRoomTrackAvailabilityRef.current(trackId);
             }
           }
           if (currentRoomRef.current?.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
@@ -5760,7 +5740,7 @@ export function useRoomRuntime({
       flushPendingAvailabilityRef.current();
       if (enableManualTrackCaching) {
         for (const trackId of uploadedTrackIdsRef.current) {
-          void announceLocalCacheRef.current(trackId);
+          void announceRoomTrackAvailabilityRef.current(trackId);
         }
       }
       resyncRealtimePeers();
@@ -5805,7 +5785,7 @@ export function useRoomRuntime({
         didReplayLocalAvailability = true;
         if (enableManualTrackCaching) {
           for (const trackId of uploadedTrackIdsRef.current) {
-            void announceLocalCacheRef.current(trackId);
+            void announceRoomTrackAvailabilityRef.current(trackId);
           }
         }
       }
@@ -6539,7 +6519,7 @@ export function useRoomRuntime({
 
     lastManualCacheAvailabilityBroadcastKeyRef.current = nextBroadcastKey;
     for (const trackId of uploadedTrackIds) {
-      void announceLocalCacheRef.current(trackId);
+      void announceRoomTrackAvailabilityRef.current(trackId);
     }
   }, [
     enableManualTrackCaching,
@@ -6957,18 +6937,11 @@ export function useRoomRuntime({
   );
 
   useEffect(() => {
-    if (!enablePlaybackCacheTakeover && manualCacheTrackIds.length === 0) {
+    if (manualCacheTrackIds.length === 0) {
       return;
     }
 
-    const manualOnlyCaching = !enablePlaybackCacheTakeover && manualCacheTrackIds.length > 0;
-    const effectiveSchedulerMode = manualOnlyCaching
-      ? "idle"
-      : playbackClockSource === "remote" && transportGovernorMode === "bootstrap"
-        ? schedulerMode === "idle"
-          ? "idle"
-          : "conservative"
-        : schedulerMode;
+    const effectiveSchedulerMode = "idle";
 
     chunkSchedulerRef.current?.sync({
       roomSnapshot,

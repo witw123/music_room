@@ -1,29 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AuthSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import type { TrackAvailabilityAnnouncement } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import {
-  buildLocalPieceAvailabilityAnnouncement,
   removeAvailabilityAnnouncementsByPeer,
   upsertAvailabilityAnnouncement,
   type AvailabilityState
 } from "./availability-state";
 
 type UseAvailabilityAnnouncementsOptions = {
-  peerId: string;
   socketRef: React.RefObject<RoomSocket | null>;
-  activeSessionRef: React.MutableRefObject<AuthSession | null>;
-  currentRoomRef: React.MutableRefObject<RoomSnapshot | null>;
   flushDelayMs?: number;
   emitDelayMs?: number;
 };
 
 export function useAvailabilityAnnouncements({
-  peerId,
   socketRef,
-  activeSessionRef,
-  currentRoomRef,
   flushDelayMs = 90,
   emitDelayMs = 140
 }: UseAvailabilityAnnouncementsOptions) {
@@ -117,56 +110,6 @@ export function useAvailabilityAnnouncements({
     [emitDelayMs, flushQueuedAvailabilityEmits]
   );
 
-  const mergeLocalPieceAvailability = useCallback(
-    (trackId: string, chunkIndex: number, totalChunks: number, chunkSize: number) => {
-      const session = activeSessionRef.current;
-      const room = currentRoomRef.current;
-
-      if (!peerId || !session || !room) {
-        return;
-      }
-
-      const queuedExisting =
-        [...queuedAvailabilityRef.current]
-          .reverse()
-          .find(
-            (announcement) =>
-              announcement.trackId === trackId && announcement.ownerPeerId === peerId
-          ) ??
-        [...pendingAvailabilityEmitRef.current.values()]
-          .reverse()
-          .find(
-            (announcement) =>
-              announcement.trackId === trackId && announcement.ownerPeerId === peerId
-          ) ??
-        null;
-      const existing = availabilityByTrackRef.current[trackId]?.[peerId] ?? queuedExisting;
-      const nextAnnouncement = buildLocalPieceAvailabilityAnnouncement({
-        existing,
-        roomId: room.room.id,
-        trackId,
-        ownerPeerId: peerId,
-        nickname: session.nickname,
-        chunkIndex,
-        totalChunks,
-        chunkSize
-      });
-
-      if (existing === nextAnnouncement) {
-        return;
-      }
-
-      setAvailabilityByTrack((current) => {
-        const next = upsertAvailabilityAnnouncement(current, nextAnnouncement);
-        availabilityByTrackRef.current = next;
-        return next;
-      });
-      queueAvailability(nextAnnouncement);
-      scheduleAvailabilityEmit(nextAnnouncement);
-    },
-    [activeSessionRef, currentRoomRef, peerId, queueAvailability, scheduleAvailabilityEmit]
-  );
-
   const emitAvailability = useCallback(
     (announcement: TrackAvailabilityAnnouncement) => {
       const socket = socketRef.current;
@@ -251,7 +194,6 @@ export function useAvailabilityAnnouncements({
     availabilityByTrack,
     queueAvailability,
     mergeAvailability,
-    mergeLocalPieceAvailability,
     emitAvailability,
     flushPendingAvailability,
     clearAvailabilityForPeer,

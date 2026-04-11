@@ -646,7 +646,7 @@ function getLocalPlaybackStatus(input: {
 
     if (input.mediaConnectedPeersCount > 0) {
       return {
-        label: "本地播放中",
+        label: "本机分发中",
         detail: `当前正在向 ${input.mediaConnectedPeersCount} 位成员分发实时音频。`,
         tone: "success",
         badgeText: "source-live"
@@ -654,7 +654,7 @@ function getLocalPlaybackStatus(input: {
     }
 
     return {
-      label: "本地播放中",
+      label: "本机分发中",
       detail:
         input.sourceStartState === "live"
           ? "当前真实音轨已发布，等待其他成员接入实时音频。"

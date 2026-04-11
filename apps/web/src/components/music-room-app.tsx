@@ -25,14 +25,12 @@ import {
 } from "@/features/playback/playback-start-intent";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { canUseUploadedTrackForPlayback } from "@/features/playback/track-cache-policy";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
-import { useTrackHydrationQueue } from "@/components/room/hooks/use-track-hydration-queue";
 import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
@@ -43,8 +41,6 @@ import {
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
-const maxCachedTracks = 24;
-
 type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
@@ -170,16 +166,12 @@ export function MusicRoomApp({
     availabilityByTrack,
     queueAvailability,
     mergeAvailability,
-    mergeLocalPieceAvailability,
     emitAvailability: stableEmitAvailability,
     flushPendingAvailability,
     clearAvailabilityForPeer,
     resetAvailabilityState
   } = useAvailabilityAnnouncements({
-    peerId,
-    socketRef,
-    activeSessionRef,
-    currentRoomRef
+    socketRef
   });
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
     usePeerDiagnostics({
@@ -214,18 +206,16 @@ export function MusicRoomApp({
     manualCacheTasks,
     manualCacheTrackIds,
     handleFilesSelected: handleTrackFilesSelected,
+    announceRoomTrackAvailability,
     startManualCacheDownload,
     pauseManualCacheDownload,
-    markManualCacheTrackDownloading,
-    announceLocalCache,
-    hydrateTrackFromPieces,
+    handleManualCachePieceReceived,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     deleteCachedLibraryTrackEntry,
     exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom
   } = useTrackUploads({
-    maxCachedTracks,
     peerId,
     activeSession,
     roomSnapshot,
@@ -237,7 +227,7 @@ export function MusicRoomApp({
   const hasFullLocalTrack = useMemo(
     () =>
       currentPlaybackTrackId
-        ? canUseUploadedTrackForPlayback(uploadedTracks[currentPlaybackTrackId] ?? null)
+        ? !!uploadedTracks[currentPlaybackTrackId]
         : false,
     [currentPlaybackTrackId, uploadedTracks]
   );
@@ -278,14 +268,6 @@ export function MusicRoomApp({
       setBufferHealth,
       setMediaConnectionState
     });
-
-  const { scheduleTrackHydration, resetHydrationQueue } = useTrackHydrationQueue({
-    isPageVisible,
-    uploadedTrackIdsRef,
-    chunkSchedulerRef,
-    canHydrateTrack: () => true,
-    hydrateTrackFromPieces
-  });
 
   const refreshAvailableRooms = useCallback(async () => {
     try {
@@ -337,7 +319,6 @@ export function MusicRoomApp({
     resetAvailabilityState();
     resetPeerDiagnostics();
     currentPlaybackPositionRef.current = 0;
-    resetHydrationQueue();
     setPlayerResetEpoch((current) => current + 1);
     setSchedulerPlaybackBucketMs(0);
     setBufferHealth("healthy");
@@ -362,7 +343,6 @@ export function MusicRoomApp({
   }, [
     destroyProgressiveRuntime,
     resetAvailabilityState,
-    resetHydrationQueue,
     resetPeerDiagnostics
   ]);
 
@@ -474,7 +454,6 @@ export function MusicRoomApp({
     setLastSourceStartError,
     availabilityByTrack,
     queueAvailability,
-    mergeLocalPieceAvailability,
     clearAvailabilityForPeer,
     flushPendingAvailability,
     recordPeerDiagnostic,
@@ -482,11 +461,10 @@ export function MusicRoomApp({
     uploadedTrackIds: Object.keys(uploadedTracks),
     uploadedTrackIdsRef,
     manualCacheTrackIds,
-    announceLocalCache,
-    markManualCacheTrackDownloading,
+    announceRoomTrackAvailability,
+    handleManualCachePieceReceived,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
-    scheduleTrackHydration,
     audioRef,
     remoteAudioRef,
     socketRef,

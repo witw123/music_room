@@ -2,7 +2,6 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
-import { enableTrackCaching } from "@/features/playback/track-cache-policy";
 
 export type MemberTransferSummary = {
   memberId: string;
@@ -74,10 +73,6 @@ function getToneClasses(tone: StatusTone) {
 }
 
 function formatCurrentTrackSources(sources: string[]) {
-  if (!enableTrackCaching) {
-    return null;
-  }
-
   const labels = [...new Set(sources)]
     .map((source) => {
       if (source === "live_upload") {
@@ -103,19 +98,10 @@ function getCurrentTrackStatus(
   summary: MemberTransferSummary | undefined,
   presenceState: RoomMember["presenceState"]
 ) {
-  if (!enableTrackCaching) {
-    return {
-      label: "缓存已暂停",
-      detail: "当前版本已暂停本地缓存接管与分片同步。",
-      progressPercent: 0,
-      tone: "neutral" as const
-    };
-  }
-
   if (presenceState === "offline") {
     return {
       label: "离线",
-      detail: "该成员当前不参与实时播放和分片同步。",
+      detail: "该成员当前不参与实时播放或房间分片提供。",
       progressPercent: 0,
       tone: "warning" as const
     };
@@ -132,10 +118,10 @@ function getCurrentTrackStatus(
 
   if (!summary || summary.currentTrackTotalChunks <= 0) {
     return {
-      label: summary?.announcedTrackCount ? "未建立当前曲目缓存" : "未建立缓存",
+      label: summary?.announcedTrackCount ? "未提供当前曲目分片" : "未提供分片",
       detail: summary?.announcedTrackCount
-        ? "本地已有其他缓存，但当前曲目还没有形成可接管播放的前缀。"
-        : "当前正在通过实时音频播放，本地缓存尚未建立。",
+        ? "本地持有其他房间曲目，但当前曲目还没有可供回传的分片。"
+        : "当前主要通过实时音频播放，本地没有可供回传的当前曲目文件。",
       progressPercent: 0,
       tone: "neutral" as const
     };
@@ -148,8 +134,8 @@ function getCurrentTrackStatus(
 
   if (summary.currentTrackChunkCount >= summary.currentTrackTotalChunks) {
     return {
-      label: "已完整缓存",
-      detail: "当前曲目已完整落到本地，可直接切到本地播放。",
+      label: "已提供完整分片",
+      detail: "当前曲目文件已在本地，可为房间回传完整分片。",
       progressPercent: 100,
       tone: "success" as const
     };
@@ -157,16 +143,16 @@ function getCurrentTrackStatus(
 
   if (summary.currentTrackChunkCount > 0) {
     return {
-      label: `缓存中 ${progressPercent}%`,
-      detail: "当前曲目正在补齐本地连续前缀，准备接管播放。",
+      label: `已提供 ${progressPercent}%`,
+      detail: "当前只具备部分分片能力，只用于缓存下载与回传。",
       progressPercent,
       tone: progressPercent >= 50 ? ("accent" as const) : ("neutral" as const)
     };
   }
 
   return {
-    label: "未建立缓存",
-    detail: "当前正在通过实时音频播放，本地缓存尚未建立。",
+    label: "未提供分片",
+    detail: "当前没有可供回传的分片内容。",
     progressPercent: 0,
     tone: "neutral" as const
   };
@@ -212,14 +198,6 @@ function getPlaybackStatus(
     };
   }
 
-  if (fullLocalRecoveryActive && recoveryPhase === "playing-local-fallback") {
-    return {
-      label: "本地缓存已接管",
-      detail: "当前曲目已切到本地缓存播放，实时链路在后台继续恢复。",
-      tone: "success" as const
-    };
-  }
-
   if (recoveryPhase === "joining" || recoveryPhase === "resyncing") {
     return {
       label: "同步房间状态中",
@@ -238,7 +216,6 @@ function getPlaybackStatus(
 
   if (recoveryPhase === "bootstrapping-media") {
     if (
-      !enableTrackCaching &&
       (mediaTransportState === "connected" || mediaTransportState === "prewarming") &&
       publishedTrackKind !== "host-capture" &&
       publishedTrackKind !== "relay-stream"
@@ -345,23 +322,16 @@ function getPlaybackStatus(
 }
 
 function getLibraryStatus(summary: MemberTransferSummary | undefined) {
-  if (!enableTrackCaching) {
-    return {
-      label: "缓存已暂停使用",
-      detail: "历史本地缓存当前不会参与播放或同步。"
-    };
-  }
-
   if (!summary || summary.announcedTrackCount <= 0) {
     return {
-      label: "暂无本地缓存",
-      detail: "还没有形成可复用的本地歌曲缓存。"
+      label: "暂无本地分片",
+      detail: "当前没有可供房间复用的本地分片。"
     };
   }
 
   return {
-    label: `${summary.announcedTrackCount} 首歌曲`,
-    detail: `共缓存 ${summary.totalChunkCount} 片内容，可继续为房间提供同步。`
+    label: `${summary.announcedTrackCount} 首房间曲目`,
+    detail: `共持有 ${summary.totalChunkCount} 片内容，可继续为房间提供分片。`
   };
 }
 
@@ -455,7 +425,6 @@ function MembersPanelBase({
       <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
         在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
         不同成员看到的数值不一定相同。
-        {!enableTrackCaching ? " 当前版本已暂停缓存接管和分片同步。" : ""}
       </div>
 
       {members.length > 0 ? (
@@ -622,7 +591,7 @@ function MembersPanelBase({
                 </div>
 
                 <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
-                  <span className="block text-[10px] text-foreground-muted">当前曲目缓存</span>
+                  <span className="block text-[10px] text-foreground-muted">当前曲目分片</span>
                   <div className="mt-1.5 flex items-center justify-between gap-3">
                     <strong className="text-[13px] font-semibold text-foreground">
                       {currentTrackStatus.label}
@@ -647,7 +616,7 @@ function MembersPanelBase({
                 </div>
 
                 <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
-                  <span className="block text-[10px] text-foreground-muted">本地缓存库存</span>
+                  <span className="block text-[10px] text-foreground-muted">本地分片库存</span>
                   <strong className="mt-1.5 block text-[13px] font-semibold text-foreground">
                     {libraryStatus.label}
                   </strong>
@@ -658,16 +627,14 @@ function MembersPanelBase({
               </div>
 
               <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-1.5 text-[10px] leading-4 text-foreground-muted">
-                {!enableTrackCaching ? (
-                  <span>同步来源：当前只使用实时音频或原上传源，本地缓存已暂停。</span>
-                ) : sourceSummary ? (
+                {sourceSummary ? (
                   <span>同步来源：{sourceSummary}</span>
                 ) : playbackStatus.label === "实时音频中" ? (
-                  <span>同步来源：当前通过实时音频持续播放，等待本地缓存建立。</span>
+                  <span>同步来源：当前通过实时音频持续播放。</span>
                 ) : member.presenceState === "online" ? (
-                  <span>同步来源：当前还没有可用于接管播放的本地缓存。</span>
+                  <span>同步来源：当前没有可供回传的房间分片。</span>
                 ) : member.presenceState === "reconnecting" ? (
-                  <span>同步来源：连接恢复后会重新评估该成员的缓存能力。</span>
+                  <span>同步来源：连接恢复后会重新评估该成员的分片能力。</span>
                 ) : (
                   <span>同步来源：离线成员当前不会参与缓存分发。</span>
                 )}

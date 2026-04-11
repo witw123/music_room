@@ -70,15 +70,24 @@ function CacheTabPanelBase({
               const task = manualCacheTasks[track.id] ?? null;
               const availability = availabilityByTrackId.get(track.id) ?? null;
               const hasOnlineProvider = (availability?.peerCount ?? 0) > 0 && (availability?.totalChunks ?? 0) > 0;
+              const progressTotalChunks = Math.max(
+                task?.totalChunks ?? 0,
+                track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0
+              );
+              const progressCompletedChunks = cachedLibraryTrack
+                ? progressTotalChunks || 1
+                : task?.completedChunks ?? 0;
               const progressLabel =
-                availability && availability.totalChunks > 0
-                  ? `${availability.localChunkCount}/${availability.totalChunks}`
+                progressTotalChunks > 0
+                  ? `${Math.min(progressCompletedChunks, progressTotalChunks)}/${progressTotalChunks}`
                   : "0/0";
               const progressPercent =
-                availability && availability.totalChunks > 0
+                progressTotalChunks > 0
                   ? Math.min(
                       100,
-                      Math.round((availability.localChunkCount / availability.totalChunks) * 100)
+                      Math.round(
+                        (Math.min(progressCompletedChunks, progressTotalChunks) / progressTotalChunks) * 100
+                      )
                     )
                   : 0;
               const statusLabel = cachedLibraryTrack

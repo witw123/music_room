@@ -4,10 +4,6 @@ import { memo, useTransition } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
-import {
-  enablePlaybackCacheTakeover,
-  isCacheBackedUploadedTrack
-} from "@/features/playback/track-cache-policy";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type TrackListSectionProps = {
@@ -72,7 +68,6 @@ function TrackListSectionBase({
               const isMine = track.ownerSessionId === activeSession?.userId;
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
-              const isCacheBacked = isCacheBackedUploadedTrack(uploadedTrack);
               const isInCacheLibrary = cachedLibraryFileHashes.includes(track.fileHash);
 
               return (
@@ -89,18 +84,14 @@ function TrackListSectionBase({
                       <span
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
                           isUploadedLocally
-                            ? isCacheBacked
-                              ? "bg-amber-500"
-                              : "bg-green-500"
+                            ? "bg-green-500"
                             : isInCacheLibrary
                               ? "bg-emerald-500"
                             : "bg-blue-500"
                         }`}
                       />
                       {isUploadedLocally
-                        ? isCacheBacked && !enablePlaybackCacheTakeover
-                          ? "历史缓存已暂停使用"
-                          : "本地上传源可直接播放"
+                        ? "本地上传源可直接播放"
                         : isInCacheLibrary
                           ? "已缓存到个人库"
                         : "房间可用"}{" "}

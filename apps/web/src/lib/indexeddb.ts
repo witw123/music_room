@@ -86,47 +86,6 @@ const queuedManifestUpserts = new Map<string, Omit<TrackPieceManifestRecord, "up
 const queuedManifestTimers = new Map<string, number>();
 const manifestUpsertQueueDelayMs = 250;
 
-export async function cacheTrackAsset(input: {
-  trackId: string;
-  fileHash: string;
-  title: string;
-  mimeType: string;
-  file: Blob;
-}) {
-  await musicRoomDatabase.trackAssets.put({
-    ...input,
-    cachedAt: new Date().toISOString()
-  });
-}
-
-export async function getCachedTrackAsset(trackId: string) {
-  return musicRoomDatabase.trackAssets.get(trackId);
-}
-
-export async function deleteCachedTrackAsset(trackId: string) {
-  await musicRoomDatabase.trackAssets.delete(trackId);
-}
-
-export async function deleteCachedTrackAssets(trackIds: string[]) {
-  if (trackIds.length === 0) {
-    return;
-  }
-
-  await musicRoomDatabase.trackAssets.bulkDelete(trackIds);
-}
-
-export async function getCachedTrackAssets(trackIds: string[]) {
-  if (trackIds.length === 0) {
-    return [];
-  }
-
-  return musicRoomDatabase.trackAssets.where("trackId").anyOf(trackIds).toArray();
-}
-
-export async function getCachedTrackAssetCount() {
-  return musicRoomDatabase.trackAssets.count();
-}
-
 export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRecord, "cachedAt"> & {
   cachedAt?: string;
 }) {
@@ -177,11 +136,7 @@ export async function upsertTrackPieceManifest(
 async function flushQueuedTrackPieceManifest(trackId: string) {
   const queued = queuedManifestUpserts.get(trackId);
   queuedManifestUpserts.delete(trackId);
-  const timerId = queuedManifestTimers.get(trackId);
-  if (timerId !== undefined) {
-    window.clearTimeout(timerId);
-    queuedManifestTimers.delete(trackId);
-  }
+  clearQueuedTrackPieceManifestTimer(trackId);
 
   if (!queued) {
     return;
@@ -242,11 +197,7 @@ export async function getTrackPieceManifests(trackIds: string[]) {
 
 export async function deleteTrackPieceManifest(trackId: string) {
   queuedManifestUpserts.delete(trackId);
-  const timerId = queuedManifestTimers.get(trackId);
-  if (timerId !== undefined) {
-    window.clearTimeout(timerId);
-    queuedManifestTimers.delete(trackId);
-  }
+  clearQueuedTrackPieceManifestTimer(trackId);
   await musicRoomDatabase.trackPieceManifests.delete(trackId);
 }
 
@@ -257,11 +208,7 @@ export async function deleteTrackPieceManifests(trackIds: string[]) {
 
   for (const trackId of trackIds) {
     queuedManifestUpserts.delete(trackId);
-    const timerId = queuedManifestTimers.get(trackId);
-    if (timerId !== undefined) {
-      window.clearTimeout(timerId);
-      queuedManifestTimers.delete(trackId);
-    }
+    clearQueuedTrackPieceManifestTimer(trackId);
   }
 
   await musicRoomDatabase.trackPieceManifests.bulkDelete(trackIds);
@@ -335,6 +282,11 @@ export async function deleteCachedPiecesForTrack(trackId: string, peerId?: strin
     return 0;
   }
 
+  if (!peerId) {
+    queuedManifestUpserts.delete(trackId);
+    clearQueuedTrackPieceManifestTimer(trackId);
+  }
+
   await musicRoomDatabase.transaction(
     "rw",
     musicRoomDatabase.trackPieces,
@@ -356,6 +308,11 @@ export async function deleteCachedPiecesForTracks(trackIds: string[]) {
   }
 
   const pieces = await musicRoomDatabase.trackPieces.where("trackId").anyOf(uniqueTrackIds).toArray();
+  for (const trackId of uniqueTrackIds) {
+    queuedManifestUpserts.delete(trackId);
+    clearQueuedTrackPieceManifestTimer(trackId);
+  }
+
   await musicRoomDatabase.transaction(
     "rw",
     musicRoomDatabase.trackAssets,
@@ -370,52 +327,14 @@ export async function deleteCachedPiecesForTracks(trackIds: string[]) {
     }
   );
 
-  for (const trackId of uniqueTrackIds) {
-    queuedManifestUpserts.delete(trackId);
-    const timerId = queuedManifestTimers.get(trackId);
-    if (timerId !== undefined) {
-      window.clearTimeout(timerId);
-      queuedManifestTimers.delete(trackId);
-    }
-  }
-
   return pieces.length;
-}
-
-export async function pruneCachedTracks(maxAssets: number, protectedTrackIds: string[] = []) {
-  const protectedIds = new Set(protectedTrackIds);
-  const assets = await musicRoomDatabase.trackAssets.orderBy("cachedAt").reverse().toArray();
-  const removable = assets.filter((asset) => !protectedIds.has(asset.trackId));
-  const overflow = Math.max(0, assets.length - maxAssets);
-  const removedTrackIds = removable.slice(Math.max(0, removable.length - overflow)).map((asset) => asset.trackId);
-
-  if (removedTrackIds.length === 0) {
-    return [];
-  }
-
-  await musicRoomDatabase.transaction(
-    "rw",
-    musicRoomDatabase.trackAssets,
-    musicRoomDatabase.trackPieces,
-    musicRoomDatabase.trackPieceManifests,
-    async () => {
-      await musicRoomDatabase.trackAssets.bulkDelete(removedTrackIds);
-      await musicRoomDatabase.trackPieceManifests.bulkDelete(removedTrackIds);
-      for (const trackId of removedTrackIds) {
-        const pieces = await musicRoomDatabase.trackPieces.where("trackId").equals(trackId).toArray();
-        if (pieces.length > 0) {
-          await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
-        }
-      }
-    }
-  );
-
-  return removedTrackIds;
 }
 
 export async function clearAllCachedTracks() {
   for (const timerId of queuedManifestTimers.values()) {
-    window.clearTimeout(timerId);
+    if (typeof window !== "undefined") {
+      window.clearTimeout(timerId);
+    }
   }
   queuedManifestTimers.clear();
   queuedManifestUpserts.clear();
@@ -433,4 +352,38 @@ export async function clearAllCachedTracks() {
       await musicRoomDatabase.cachedTrackLibrary.clear();
     }
   );
+}
+
+export async function clearTransientTrackCacheData() {
+  for (const timerId of queuedManifestTimers.values()) {
+    if (typeof window !== "undefined") {
+      window.clearTimeout(timerId);
+    }
+  }
+  queuedManifestTimers.clear();
+  queuedManifestUpserts.clear();
+
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.trackAssets,
+    musicRoomDatabase.trackPieces,
+    musicRoomDatabase.trackPieceManifests,
+    async () => {
+      await musicRoomDatabase.trackAssets.clear();
+      await musicRoomDatabase.trackPieces.clear();
+      await musicRoomDatabase.trackPieceManifests.clear();
+    }
+  );
+}
+
+function clearQueuedTrackPieceManifestTimer(trackId: string) {
+  const timerId = queuedManifestTimers.get(trackId);
+  if (timerId === undefined) {
+    return;
+  }
+
+  if (typeof window !== "undefined") {
+    window.clearTimeout(timerId);
+  }
+  queuedManifestTimers.delete(trackId);
 }
