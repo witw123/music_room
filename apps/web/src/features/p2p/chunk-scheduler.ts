@@ -637,8 +637,8 @@ export class ChunkScheduler {
       plans.push({
         track,
         priority: "background",
-        maxConcurrent: 2,
-        maxConcurrentPerPeer: 2,
+        maxConcurrent: 1,
+        maxConcurrentPerPeer: 1,
         preferredPeerId: null,
         chunkSize: manifest?.chunkSize ?? this.getTrackChunkSize(track.id),
         wantedChunks: getBackgroundChunks({

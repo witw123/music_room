@@ -459,11 +459,11 @@ export function shouldManagePublishedMediaTransport(input: {
 export function shouldReannounceManualCacheAvailability(input: {
   enableManualTrackCaching: boolean;
   roomId: string | null | undefined;
-  roomListenerCount: number;
+  roomListenerSetHash: string;
   uploadedTrackIds: string[];
   lastBroadcastKey: string | null;
 }) {
-  if (!input.enableManualTrackCaching || !input.roomId || input.roomListenerCount <= 0) {
+  if (!input.enableManualTrackCaching || !input.roomId || !input.roomListenerSetHash) {
     return null;
   }
 
@@ -472,7 +472,7 @@ export function shouldReannounceManualCacheAvailability(input: {
     return null;
   }
 
-  const nextKey = [input.roomId, input.roomListenerCount, sortedTrackIds.join(",")].join("|");
+  const nextKey = [input.roomId, input.roomListenerSetHash, sortedTrackIds.join(",")].join("|");
   if (nextKey === input.lastBroadcastKey) {
     return null;
   }
@@ -6263,13 +6263,13 @@ export function useRoomRuntime({
     const nextBroadcastKey = shouldReannounceManualCacheAvailability({
       enableManualTrackCaching,
       roomId: roomSnapshot?.room.id,
-      roomListenerCount,
+      roomListenerSetHash,
       uploadedTrackIds,
       lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
     });
 
     if (!nextBroadcastKey) {
-      if (!roomSnapshot?.room.id || roomListenerCount === 0 || uploadedTrackIds.length === 0) {
+      if (!roomSnapshot?.room.id || !roomListenerSetHash || uploadedTrackIds.length === 0) {
         lastManualCacheAvailabilityBroadcastKeyRef.current = null;
       }
       return;
@@ -6281,8 +6281,8 @@ export function useRoomRuntime({
     }
   }, [
     enableManualTrackCaching,
-    roomListenerCount,
     roomSnapshot?.room.id,
+    roomListenerSetHash,
     uploadedTrackIds
   ]);
 

@@ -152,11 +152,11 @@ describe("shouldReannounceManualCacheAvailability", () => {
       shouldReannounceManualCacheAvailability({
         enableManualTrackCaching: true,
         roomId: "room_1",
-        roomListenerCount: 2,
+        roomListenerSetHash: "peer_a,peer_b",
         uploadedTrackIds: ["track_b", "track_a"],
         lastBroadcastKey: null
       })
-    ).toBe("room_1|2|track_a,track_b");
+    ).toBe("room_1|peer_a,peer_b|track_a,track_b");
   });
 
   it("does not re-announce when nothing relevant changed", () => {
@@ -164,11 +164,23 @@ describe("shouldReannounceManualCacheAvailability", () => {
       shouldReannounceManualCacheAvailability({
         enableManualTrackCaching: true,
         roomId: "room_1",
-        roomListenerCount: 2,
+        roomListenerSetHash: "peer_a,peer_b",
         uploadedTrackIds: ["track_a", "track_b"],
-        lastBroadcastKey: "room_1|2|track_a,track_b"
+        lastBroadcastKey: "room_1|peer_a,peer_b|track_a,track_b"
       })
     ).toBeNull();
+  });
+
+  it("re-announces when listener peer ids changed even if the listener count stayed the same", () => {
+    expect(
+      shouldReannounceManualCacheAvailability({
+        enableManualTrackCaching: true,
+        roomId: "room_1",
+        roomListenerSetHash: "peer_b,peer_c",
+        uploadedTrackIds: ["track_a", "track_b"],
+        lastBroadcastKey: "room_1|peer_a,peer_b|track_a,track_b"
+      })
+    ).toBe("room_1|peer_b,peer_c|track_a,track_b");
   });
 });
 

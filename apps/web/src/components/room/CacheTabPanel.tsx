@@ -95,30 +95,32 @@ function CacheTabPanelBase({
               return (
                 <article
                   key={track.id}
-                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:flex-row lg:items-center lg:justify-between"
+                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 xl:flex-row xl:items-center xl:justify-between"
                 >
                   <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
                         <p className="mt-1 truncate text-xs text-foreground-muted">
-                          {track.ownerNickname} 上传  {formatDuration(track.durationMs)}
+                          {track.ownerNickname} 上传 {formatDuration(track.durationMs)}
                         </p>
                       </div>
-                      <span
-                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                          cachedLibraryTrack
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                            : task?.status === "failed"
-                              ? "border-red-500/30 bg-red-500/10 text-red-300"
-                              : "border-surface-border bg-background/50 text-foreground-muted"
-                        }`}
-                      >
-                        {statusLabel}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2 sm:self-start">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                            cachedLibraryTrack
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                              : task?.status === "failed"
+                                ? "border-red-500/30 bg-red-500/10 text-red-300"
+                                : "border-surface-border bg-background/50 text-foreground-muted"
+                          }`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/6">
+                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/6">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${
                           cachedLibraryTrack ? "bg-emerald-400" : "bg-accent"
@@ -131,13 +133,13 @@ function CacheTabPanelBase({
                         ? "这首歌已经进入你的个人缓存库。"
                         : task?.status === "paused"
                           ? `已暂停下载，当前缓存进度：${progressLabel}`
-                        : task?.status === "failed"
-                          ? task.errorMessage ?? "分片下载失败，可重新尝试。"
-                          : `当前缓存进度：${progressLabel}`}
+                          : task?.status === "failed"
+                            ? task.errorMessage ?? "分片下载失败，可重新尝试。"
+                            : `当前缓存进度：${progressLabel}`}
                     </p>
                   </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 xl:justify-end">
                     {task?.status === "queued" || task?.status === "downloading" ? (
                       <Button
                         variant="ghost"
@@ -150,7 +152,7 @@ function CacheTabPanelBase({
                     ) : null}
                     <Button
                       variant="outline"
-                      className="h-10 px-4"
+                      className="h-10 min-w-32 px-4"
                       disabled={!!cachedLibraryTrack || task?.status === "assembling"}
                       onClick={() => startTransition(() => void onStartManualCacheDownload(track.id))}
                       type="button"
