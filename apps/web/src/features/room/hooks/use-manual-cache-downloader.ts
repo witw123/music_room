@@ -9,6 +9,7 @@ const directRequestIntervalMs = 450;
 const directRequestBatchSize = 8;
 const directRequestTimeoutMs = 5_000;
 const directPendingTtlMs = 7_000;
+const providerBootstrapRetryCooldownMs = 1_500;
 
 export function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
   const peerIds = new Set<string>();
@@ -173,6 +174,30 @@ export function shouldRecoverManualCacheDataPeers(input: {
   });
 }
 
+export function shouldRetryManualCacheProviderBootstrap(input: {
+  manualCacheTrackIds: string[];
+  providerPeerIds: string[];
+  connectedPeerIds: string[];
+  lastBootstrapAttemptAt: number | null;
+  now?: number;
+}) {
+  if (input.manualCacheTrackIds.length === 0 || input.providerPeerIds.length === 0) {
+    return false;
+  }
+
+  const connectedPeerSet = new Set(input.connectedPeerIds.filter(Boolean));
+  const hasConnectedProvider = input.providerPeerIds.some((peerId) => connectedPeerSet.has(peerId));
+  if (hasConnectedProvider) {
+    return false;
+  }
+
+  const now = input.now ?? Date.now();
+  return (
+    input.lastBootstrapAttemptAt === null ||
+    now - input.lastBootstrapAttemptAt >= providerBootstrapRetryCooldownMs
+  );
+}
+
 export function buildManualCacheSchedulerAvailability(input: {
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   manualCacheTrackIds: string[];
@@ -292,6 +317,7 @@ export function useManualCacheDownloader(input: {
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
 }) {
   const lastBootstrapKeyRef = useRef<string | null>(null);
+  const lastBootstrapAttemptAtRef = useRef<number | null>(null);
   const recoverySinceAtRef = useRef<number | null>(null);
   const lastRecoveryAtRef = useRef<number | null>(null);
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
@@ -351,6 +377,7 @@ export function useManualCacheDownloader(input: {
     }
 
     lastBootstrapKeyRef.current = bootstrapKey;
+    lastBootstrapAttemptAtRef.current = Date.now();
     void input.dataMesh.syncPeers(providerPeerIds).catch((error) => {
       input.onRuntimeEvent?.({
         type: "diagnostic",
@@ -454,7 +481,22 @@ export function useManualCacheDownloader(input: {
 
       inFlight = true;
       try {
-        const connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
+        let connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
+        const now = Date.now();
+        if (
+          shouldRetryManualCacheProviderBootstrap({
+            manualCacheTrackIds: input.manualCacheTrackIds,
+            providerPeerIds,
+            connectedPeerIds,
+            lastBootstrapAttemptAt: lastBootstrapAttemptAtRef.current,
+            now
+          })
+        ) {
+          lastBootstrapAttemptAtRef.current = now;
+          await input.dataMesh.syncPeers(providerPeerIds);
+          connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
+        }
+
         for (const trackId of input.manualCacheTrackIds) {
           const track = input.roomSnapshot.tracks.find((entry) => entry.id === trackId) ?? null;
           const manifest = track?.relayManifest ?? track?.pieceManifest ?? null;
@@ -473,7 +515,6 @@ export function useManualCacheDownloader(input: {
             continue;
           }
 
-          const now = Date.now();
           const localPieceIndexes = new Set(await getCachedPieceIndexes(trackId, input.peerId));
           const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
           for (const [chunkIndex, expiresAt] of pendingForTrack.entries()) {

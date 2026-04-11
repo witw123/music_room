@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   buildManualCacheSchedulerAvailability,
-  resolveManualCacheTrackProviderPeerId
+  resolveManualCacheTrackProviderPeerId,
+  shouldRetryManualCacheProviderBootstrap
 } from "./use-manual-cache-downloader";
 
 describe("buildManualCacheSchedulerAvailability", () => {
@@ -109,6 +110,54 @@ describe("resolveManualCacheTrackProviderPeerId", () => {
         localPeerId: "peer_local"
       })
     ).toBe("peer_high");
+  });
+});
+
+describe("shouldRetryManualCacheProviderBootstrap", () => {
+  it("retries bootstrap when a cache task exists but no provider peer is connected", () => {
+    expect(
+      shouldRetryManualCacheProviderBootstrap({
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        lastBootstrapAttemptAt: null,
+        now: 10_000
+      })
+    ).toBe(true);
+  });
+
+  it("does not retry while a provider is already connected", () => {
+    expect(
+      shouldRetryManualCacheProviderBootstrap({
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: ["peer_owner"],
+        lastBootstrapAttemptAt: null,
+        now: 10_000
+      })
+    ).toBe(false);
+  });
+
+  it("respects the retry cooldown before re-bootstrap", () => {
+    expect(
+      shouldRetryManualCacheProviderBootstrap({
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        lastBootstrapAttemptAt: 9_500,
+        now: 10_000
+      })
+    ).toBe(false);
+
+    expect(
+      shouldRetryManualCacheProviderBootstrap({
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        lastBootstrapAttemptAt: 8_000,
+        now: 10_000
+      })
+    ).toBe(true);
   });
 });
 
