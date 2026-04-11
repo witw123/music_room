@@ -15,6 +15,7 @@ type CacheTabPanelProps = {
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
   onStartManualCacheDownload: (trackId: string) => Promise<void>;
+  onPauseManualCacheDownload: (trackId: string) => void;
   onAddCachedLibraryTrackToLibrary: (fileHash: string) => Promise<void>;
   onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
@@ -27,6 +28,7 @@ function CacheTabPanelBase({
   cacheLibraryTracks,
   manualCacheTasks,
   onStartManualCacheDownload,
+  onPauseManualCacheDownload,
   onAddCachedLibraryTrackToLibrary,
   onExportCachedLibraryTrack,
   onDeleteCachedLibraryTrack
@@ -82,6 +84,8 @@ function CacheTabPanelBase({
                 ? "已缓存"
                 : task?.status === "assembling"
                   ? "组装中"
+                  : task?.status === "paused"
+                    ? "已暂停"
                   : task?.status === "downloading" || task?.status === "queued"
                     ? "下载中"
                     : task?.status === "failed"
@@ -125,6 +129,8 @@ function CacheTabPanelBase({
                     <p className="mt-1 text-[10px] text-foreground-muted">
                       {cachedLibraryTrack
                         ? "这首歌已经进入你的个人缓存库。"
+                        : task?.status === "paused"
+                          ? `已暂停下载，当前缓存进度：${progressLabel}`
                         : task?.status === "failed"
                           ? task.errorMessage ?? "分片下载失败，可重新尝试。"
                           : `当前缓存进度：${progressLabel}`}
@@ -132,14 +138,30 @@ function CacheTabPanelBase({
                   </div>
 
                   <div className="flex items-center justify-end gap-2">
+                    {task?.status === "queued" || task?.status === "downloading" ? (
+                      <Button
+                        variant="ghost"
+                        className="h-10 px-4"
+                        onClick={() => onPauseManualCacheDownload(track.id)}
+                        type="button"
+                      >
+                        暂停
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outline"
                       className="h-10 px-4"
-                      disabled={!!cachedLibraryTrack || task?.status === "downloading" || task?.status === "assembling"}
+                      disabled={!!cachedLibraryTrack || task?.status === "assembling"}
                       onClick={() => startTransition(() => void onStartManualCacheDownload(track.id))}
                       type="button"
                     >
-                      {cachedLibraryTrack ? "已缓存" : "下载到缓存库"}
+                      {cachedLibraryTrack
+                        ? "已缓存"
+                        : task?.status === "paused"
+                          ? "继续下载"
+                          : task?.status === "downloading" || task?.status === "queued"
+                            ? "下载中"
+                            : "下载到缓存库"}
                     </Button>
                   </div>
                 </article>
@@ -166,28 +188,22 @@ function CacheTabPanelBase({
             {cacheLibraryTracks.map((track) => (
               <article
                 key={track.fileHash}
-                className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4"
+                className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:flex-row lg:items-center lg:justify-between"
               >
-                <div className="flex flex-col gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0">
-                        <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
-                        <p className="mt-1 truncate text-xs text-foreground-muted">
-                          {track.lastOwnerNickname ?? "未知上传者"}  {formatDuration(track.durationMs)}
-                        </p>
-                        <p className="mt-1 text-[10px] text-foreground-muted">
-                          缓存时间：{new Date(track.cachedAt).toLocaleString("zh-CN", { hour12: false })}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-foreground-muted">
-                      来源房间数：{track.sourceRoomIds.length}  关联曲目数：{track.sourceTrackIds.length}
-                    </p>
-                  </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
+                  <p className="truncate text-xs text-foreground-muted">
+                    {track.lastOwnerNickname ?? "未知上传者"}  {formatDuration(track.durationMs)}
+                  </p>
+                  <p className="text-[10px] text-foreground-muted">
+                    缓存时间：{new Date(track.cachedAt).toLocaleString("zh-CN", { hour12: false })}
+                  </p>
+                  <p className="text-[10px] text-foreground-muted">
+                    来源房间数：{track.sourceRoomIds.length}  关联曲目数：{track.sourceTrackIds.length}
+                  </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
                   <Button
                     variant="outline"
                     className="h-10 px-4"

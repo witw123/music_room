@@ -36,6 +36,7 @@ export type ManualCacheTaskStatus =
   | "idle"
   | "queued"
   | "downloading"
+  | "paused"
   | "assembling"
   | "ready"
   | "failed";
@@ -337,14 +338,44 @@ export function useTrackUploads(options: {
       return;
     }
 
-    updateManualCacheTask(trackId, "downloading");
+    updateManualCacheTask(trackId, "queued");
     setStatusMessage(`已开始缓存《${track.title}》。`);
+  }
+
+  function pauseManualCacheDownload(trackId: string) {
+    setManualCacheTasks((current) => {
+      const existing = current[trackId];
+      if (!existing) {
+        return current;
+      }
+
+      if (
+        existing.status !== "queued" &&
+        existing.status !== "downloading"
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [trackId]: {
+          ...existing,
+          status: "paused",
+          updatedAt: new Date().toISOString()
+        }
+      };
+    });
   }
 
   function markManualCacheTrackDownloading(trackId: string) {
     setManualCacheTasks((current) => {
       const existing = current[trackId];
-      if (!existing || existing.status === "assembling" || existing.status === "ready") {
+      if (
+        !existing ||
+        existing.status === "paused" ||
+        existing.status === "assembling" ||
+        existing.status === "ready"
+      ) {
         return current;
       }
 
@@ -598,6 +629,7 @@ export function useTrackUploads(options: {
     manualCacheTrackIds,
     handleFilesSelected,
     startManualCacheDownload,
+    pauseManualCacheDownload,
     markManualCacheTrackDownloading,
     announceLocalCache,
     hydrateTrackFromPieces,

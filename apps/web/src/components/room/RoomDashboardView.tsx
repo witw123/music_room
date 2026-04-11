@@ -54,6 +54,7 @@ type RoomDashboardViewProps = {
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onStartManualCacheDownload: (trackId: string) => Promise<void>;
+  onPauseManualCacheDownload: (trackId: string) => void;
   onAddCachedLibraryTrackToLibrary: (fileHash: string) => Promise<void>;
   onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
@@ -139,6 +140,7 @@ function RoomDashboardViewBase({
   onDeleteTrack,
   onPlayTrack,
   onStartManualCacheDownload,
+  onPauseManualCacheDownload,
   onAddCachedLibraryTrackToLibrary,
   onExportCachedLibraryTrack,
   onDeleteCachedLibraryTrack,
@@ -252,6 +254,7 @@ function RoomDashboardViewBase({
               cacheLibraryTracks={cacheLibraryTracks}
               manualCacheTasks={manualCacheTasks}
               onStartManualCacheDownload={onStartManualCacheDownload}
+              onPauseManualCacheDownload={onPauseManualCacheDownload}
               onAddCachedLibraryTrackToLibrary={onAddCachedLibraryTrackToLibrary}
               onExportCachedLibraryTrack={onExportCachedLibraryTrack}
               onDeleteCachedLibraryTrack={onDeleteCachedLibraryTrack}

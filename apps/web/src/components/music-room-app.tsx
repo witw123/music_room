@@ -215,6 +215,7 @@ export function MusicRoomApp({
     manualCacheTrackIds,
     handleFilesSelected: handleTrackFilesSelected,
     startManualCacheDownload,
+    pauseManualCacheDownload,
     markManualCacheTrackDownloading,
     announceLocalCache,
     hydrateTrackFromPieces,
@@ -549,6 +550,12 @@ export function MusicRoomApp({
     },
     [setStatusMessage, startManualCacheDownload]
   );
+
+  const handlePauseManualCacheDownload = useCallback((trackId: string) => {
+    pauseManualCacheDownload(trackId);
+    const trackTitle = roomSnapshot?.tracks.find((track) => track.id === trackId)?.title ?? "歌曲";
+    setStatusMessage(`已暂停《${trackTitle}》的缓存下载。`);
+  }, [pauseManualCacheDownload, roomSnapshot?.tracks, setStatusMessage]);
 
   const handleDeleteCachedLibraryTrack = useCallback(
     async (fileHash: string) => {
@@ -1037,6 +1044,7 @@ export function MusicRoomApp({
         onDeleteTrack={deleteTrack}
         onPlayTrack={handlePlayTrack}
         onStartManualCacheDownload={handleStartManualCacheDownload}
+        onPauseManualCacheDownload={handlePauseManualCacheDownload}
         onAddCachedLibraryTrackToLibrary={handleAddCachedLibraryTrackToLibrary}
         onExportCachedLibraryTrack={handleExportCachedLibraryTrack}
         onDeleteCachedLibraryTrack={handleDeleteCachedLibraryTrack}

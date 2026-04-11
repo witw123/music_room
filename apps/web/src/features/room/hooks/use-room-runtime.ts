@@ -4898,7 +4898,7 @@ export function useRoomRuntime({
           });
           if (state === "open") {
             flushPendingAvailabilityRef.current();
-            if (enableTrackCaching) {
+            if (enableManualTrackCaching) {
               for (const trackId of uploadedTrackIdsRef.current) {
                 void announceLocalCacheRef.current(trackId);
               }
@@ -5467,7 +5467,7 @@ export function useRoomRuntime({
           startPresenceHeartbeat();
           resyncRealtimePeers(response.bootstrap?.members ?? undefined);
           flushPendingAvailabilityRef.current();
-          if (enableTrackCaching) {
+          if (enableManualTrackCaching) {
             for (const trackId of uploadedTrackIdsRef.current) {
               void announceLocalCacheRef.current(trackId);
             }
@@ -5495,7 +5495,7 @@ export function useRoomRuntime({
     socket.on("connect", () => {
       subscribeToRoom();
       flushPendingAvailabilityRef.current();
-      if (enableTrackCaching) {
+      if (enableManualTrackCaching) {
         for (const trackId of uploadedTrackIdsRef.current) {
           void announceLocalCacheRef.current(trackId);
         }
@@ -5540,7 +5540,7 @@ export function useRoomRuntime({
 
       if (!didReplayLocalAvailability) {
         didReplayLocalAvailability = true;
-        if (enableTrackCaching) {
+        if (enableManualTrackCaching) {
           for (const trackId of uploadedTrackIdsRef.current) {
             void announceLocalCacheRef.current(trackId);
           }
@@ -5738,7 +5738,7 @@ export function useRoomRuntime({
       if (announcement.roomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
         return;
       }
-      if (!enableTrackCaching) {
+      if (!enableManualTrackCaching) {
         return;
       }
       recordPeerDiagnosticRef.current({
@@ -5761,7 +5761,7 @@ export function useRoomRuntime({
       if (clearedRoomId !== roomId || activeRouteRoomIdRef.current !== roomId) {
         return;
       }
-      if (!enableTrackCaching) {
+      if (!enableManualTrackCaching) {
         return;
       }
       clearAvailabilityForPeerRef.current(ownerPeerId);
@@ -6260,7 +6260,7 @@ export function useRoomRuntime({
 
   useEffect(() => {
     const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
-    if (!enableTrackCaching || !currentTrackId) {
+    if (!enableManualTrackCaching || !currentTrackId) {
       return;
     }
 

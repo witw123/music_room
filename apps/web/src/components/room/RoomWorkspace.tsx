@@ -58,6 +58,7 @@ type RoomWorkspaceProps = {
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
   onStartManualCacheDownload: (trackId: string) => Promise<void>;
+  onPauseManualCacheDownload: (trackId: string) => void;
   onAddCachedLibraryTrackToLibrary: (fileHash: string) => Promise<void>;
   onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
@@ -111,6 +112,7 @@ function RoomWorkspaceBase({
   onDeleteTrack,
   onPlayTrack,
   onStartManualCacheDownload,
+  onPauseManualCacheDownload,
   onAddCachedLibraryTrackToLibrary,
   onExportCachedLibraryTrack,
   onDeleteCachedLibraryTrack,
@@ -190,6 +192,7 @@ function RoomWorkspaceBase({
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
               onStartManualCacheDownload={onStartManualCacheDownload}
+              onPauseManualCacheDownload={onPauseManualCacheDownload}
               onAddCachedLibraryTrackToLibrary={onAddCachedLibraryTrackToLibrary}
               onExportCachedLibraryTrack={onExportCachedLibraryTrack}
               onDeleteCachedLibraryTrack={onDeleteCachedLibraryTrack}
