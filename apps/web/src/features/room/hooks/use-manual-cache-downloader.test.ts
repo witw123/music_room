@@ -1,0 +1,190 @@
+import { describe, expect, it } from "vitest";
+import type { RoomSnapshot } from "@music-room/shared";
+import {
+  buildManualCacheSchedulerAvailability,
+  resolveManualCacheTrackProviderPeerId
+} from "./use-manual-cache-downloader";
+
+describe("buildManualCacheSchedulerAvailability", () => {
+  it("synthesizes uploader availability when the room owner is online but has not announced pieces yet", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+
+    expect(
+      buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      })
+    ).toEqual({
+      track_a: {
+        peer_owner: {
+          roomId: "room_1",
+          trackId: "track_a",
+          ownerPeerId: "peer_owner",
+          nickname: "owner",
+          assetKind: "relay",
+          assetHash: "hash_a",
+          totalChunks: 4,
+          chunkSize: 128 * 1024,
+          availableChunks: [0, 1, 2, 3],
+          source: "live_upload",
+          announcedAt: expect.any(String)
+        }
+      }
+    });
+  });
+});
+
+describe("resolveManualCacheTrackProviderPeerId", () => {
+  it("prefers the live uploader peer before secondary availability providers", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+
+    expect(
+      resolveManualCacheTrackProviderPeerId({
+        trackId: "track_a",
+        roomSnapshot,
+        availabilityByTrack: {
+          track_a: {
+            peer_other: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_other",
+              nickname: "other",
+              availableChunks: [0, 1, 2, 3],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "local_cache",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        connectedPeerIds: ["peer_other", "peer_owner"],
+        localPeerId: "peer_local"
+      })
+    ).toBe("peer_owner");
+  });
+
+  it("falls back to the best announced provider when the uploader is offline or disconnected", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      ownerPresenceState: "offline"
+    });
+
+    expect(
+      resolveManualCacheTrackProviderPeerId({
+        trackId: "track_a",
+        roomSnapshot,
+        availabilityByTrack: {
+          track_a: {
+            peer_low: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_low",
+              nickname: "low",
+              availableChunks: [0],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "local_cache",
+              announcedAt: new Date(0).toISOString()
+            },
+            peer_high: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_high",
+              nickname: "high",
+              availableChunks: [0, 1, 2],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "local_cache",
+              announcedAt: new Date(1_000).toISOString()
+            }
+          }
+        },
+        connectedPeerIds: ["peer_low", "peer_high"],
+        localPeerId: "peer_local"
+      })
+    ).toBe("peer_high");
+  });
+});
+
+function buildManualCacheRoomSnapshot(input: {
+  ownerPeerId: string | null;
+  ownerPresenceState?: "online" | "reconnecting" | "offline";
+}): RoomSnapshot {
+  return {
+    room: {
+      id: "room_1",
+      hostId: "owner_1",
+      joinCode: "ABCD12",
+      visibility: "private",
+      members: [
+        {
+          id: "owner_1",
+          nickname: "owner",
+          role: "host",
+          joinedAt: new Date(0).toISOString(),
+          peerId: input.ownerPeerId,
+          presenceState: input.ownerPresenceState ?? "online"
+        },
+        {
+          id: "listener_1",
+          nickname: "listener",
+          role: "member",
+          joinedAt: new Date(0).toISOString(),
+          peerId: "peer_local",
+          presenceState: "online"
+        }
+      ],
+      playback: {
+        status: "paused",
+        currentTrackId: null,
+        currentQueueItemId: null,
+        sourceSessionId: null,
+        sourcePeerId: null,
+        sourceTrackId: null,
+        positionMs: 0,
+        startedAt: null,
+        queueVersion: 1,
+        playbackRevision: 1,
+        mediaEpoch: 0
+      },
+      presenceRevision: 1,
+      roomRevision: 1
+    },
+    tracks: [
+      {
+        id: "track_a",
+        title: "Track A",
+        artist: "Artist",
+        album: null,
+        durationMs: 120_000,
+        bitrate: null,
+        sizeBytes: 4 * 128 * 1024,
+        codec: null,
+        mimeType: "audio/mpeg",
+        fileHash: "hash_a",
+        artworkUrl: null,
+        ownerSessionId: "owner_1",
+        ownerNickname: "owner",
+        sourceType: "local_upload",
+        pieceManifest: {
+          totalChunks: 4,
+          chunkSize: 128 * 1024,
+          pieceMimeType: "audio/mpeg"
+        },
+        relayManifest: {
+          totalChunks: 4,
+          chunkSize: 128 * 1024,
+          pieceMimeType: "audio/mpeg"
+        }
+      }
+    ],
+    queue: [],
+    playlists: []
+  };
+}
