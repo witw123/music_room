@@ -215,21 +215,20 @@ describe("P2PMesh", () => {
     expect(sendSignalB).not.toHaveBeenCalled();
   });
 
-  it("can explicitly bootstrap a peer even when this side would normally be passive", async () => {
+  it("does not create duplicate peers when syncPeers runs twice before the first offer settles", async () => {
     const sendSignal = vi.fn();
-    const mesh = new P2PMesh("room_1", "peer_z", sendSignal, {
+    const mesh = new P2PMesh("room_1", "peer_a", sendSignal, {
       onPieceReceived: vi.fn()
     });
 
-    await mesh.bootstrapPeer("peer_a");
+    await Promise.all([mesh.syncPeers(["peer_b"]), mesh.syncPeers(["peer_b"])]);
 
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "offer",
-        toPeerId: "peer_a",
-        channelKind: "data"
-      })
-    );
+    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(
+      sendSignal.mock.calls.filter(
+        ([payload]) => payload && typeof payload === "object" && (payload as { type?: string }).type === "offer"
+      )
+    ).toHaveLength(1);
   });
 
   it("does not reject when queued ICE candidates fail during offer handling", async () => {

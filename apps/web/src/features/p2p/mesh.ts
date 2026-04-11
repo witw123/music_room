@@ -449,20 +449,6 @@ export class P2PMesh {
     return this.recreatePeer(peerId, entry);
   }
 
-  async bootstrapPeer(peerId: string) {
-    const entry = this.peers.get(peerId);
-    if (!entry) {
-      this.expectedPeerIds.add(peerId);
-      return this.ensurePeer(peerId, true);
-    }
-
-    if (entry.channel?.readyState === "open" && !entry.releasing) {
-      return entry;
-    }
-
-    return this.recreatePeer(peerId, entry, true);
-  }
-
   async restartIce(peerId: string) {
     const entry = this.peers.get(peerId);
     if (!entry || entry.releasing) {
@@ -622,33 +608,40 @@ export class P2PMesh {
       this.bindChannel(peerId, entry, entry.channel);
     };
 
-    if (shouldInitiate) {
-      const channel = connection.createDataChannel("music-room-p2p", {
-        ordered: false
-      });
-      entry.channel = channel;
-      this.bindChannel(peerId, entry, channel);
-      const offer = await connection.createOffer();
-      await connection.setLocalDescription(offer);
-      entry.lastSignalProgressAtMs = Date.now();
-      this.callbacks.onSignal?.({
-        peerId,
-        direction: "sent",
-        type: "offer"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "data",
-        type: "offer",
-        payload: offer as unknown as Record<string, unknown>
-      });
-    }
-
     this.peers.set(peerId, entry);
     this.schedulePeerWatchdog(peerId, entry);
-    return entry;
+    try {
+      if (shouldInitiate) {
+        const channel = connection.createDataChannel("music-room-p2p", {
+          ordered: false
+        });
+        entry.channel = channel;
+        this.bindChannel(peerId, entry, channel);
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        entry.lastSignalProgressAtMs = Date.now();
+        this.callbacks.onSignal?.({
+          peerId,
+          direction: "sent",
+          type: "offer"
+        });
+        this.sendSignal({
+          roomId: this.roomId,
+          fromPeerId: this.localPeerId,
+          toPeerId: peerId,
+          channelKind: "data",
+          type: "offer",
+          payload: offer as unknown as Record<string, unknown>
+        });
+      }
+
+      return entry;
+    } catch (error) {
+      if (this.peers.get(peerId) === entry) {
+        this.releasePeer(peerId, entry);
+      }
+      throw error;
+    }
   }
 
   private bindChannel(peerId: string, entry: PeerEntry, channel: RTCDataChannel) {
@@ -1011,13 +1004,10 @@ export class P2PMesh {
     }, delay);
   }
 
-  private async recreatePeer(peerId: string, entry: PeerEntry, forceInitiate = false) {
+  private async recreatePeer(peerId: string, entry: PeerEntry) {
     const reconnectAttempts = entry.reconnectAttempts;
     this.releasePeer(peerId, entry);
-    const nextEntry = await this.ensurePeer(
-      peerId,
-      forceInitiate ? true : this.shouldInitiatePeer(peerId)
-    );
+    const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
     nextEntry.reconnectAttempts = reconnectAttempts;
     return nextEntry;
   }

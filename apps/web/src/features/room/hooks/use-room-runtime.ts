@@ -3891,11 +3891,7 @@ export function useRoomRuntime({
     }
 
     lastManualCacheBootstrapKeyRef.current = bootstrapKey;
-    void Promise.all(
-      manualCacheProviderPeerIds.map((providerPeerId) =>
-        meshRef.current?.bootstrapPeer(providerPeerId)
-      )
-    ).catch((error) => {
+    void meshRef.current.syncPeers(roomListenerPeerIds).catch((error) => {
       reportRealtimeFailure({
         peerId: "system",
         channelKind: "system",
@@ -3909,6 +3905,7 @@ export function useRoomRuntime({
     enableManualTrackCaching,
     manualCacheProviderPeerIds,
     manualCacheTrackIds,
+    roomListenerPeerIds,
     reportRealtimeFailure
   ]);
 
