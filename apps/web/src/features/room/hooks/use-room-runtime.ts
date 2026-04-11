@@ -29,6 +29,7 @@ import {
   createPeerConnectionSupervisorState,
   getWebRTCIceServers,
   canRunRecoveryAction,
+  hashArrayBuffer,
   markRecoveryAction,
   notePeerSignalState,
   observePeerTransport,
@@ -51,7 +52,12 @@ import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { queueTrackPieceManifestUpsert } from "@/lib/indexeddb";
+import {
+  cacheTrackPieces,
+  getCachedTrackAsset,
+  getTrackPieceManifest,
+  queueTrackPieceManifestUpsert
+} from "@/lib/indexeddb";
 import { captureAudioStream, getCapturedAudioStreamMode } from "@/features/upload/audio-utils";
 import {
   resolveHostCaptureRefresh,
@@ -1106,6 +1112,7 @@ export function useRoomRuntime({
   const lastSourceStartErrorRef = useRef(lastSourceStartError);
   const setLastSourceStartErrorRef = useRef(setLastSourceStartError);
   const manualCacheTrackIdsRef = useRef(manualCacheTrackIds);
+  const uploadedTracksRef = useRef(uploadedTracks);
   const announceLocalCacheRef = useRef(announceLocalCache);
   const deleteUploadedTrackArtifactsRef = useRef(deleteUploadedTrackArtifacts);
   const deleteRoomTrackArtifactsRef = useRef(deleteRoomTrackArtifacts);
@@ -2095,6 +2102,10 @@ export function useRoomRuntime({
       })
     });
   }, [audioUnlocked]);
+
+  useEffect(() => {
+    uploadedTracksRef.current = uploadedTracks;
+  }, [uploadedTracks]);
 
   useEffect(() => {
     announceLocalCacheRef.current = announceLocalCache;
@@ -4963,6 +4974,24 @@ export function useRoomRuntime({
             summary: `请求 ${remotePeerId} 的分片 ${trackId}#${chunkSummary}`
           });
         },
+        onPieceRequestReceived: ({ peerId: remotePeerId, trackId, chunkIndex }) => {
+          recordPeerDiagnosticRef.current({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "received",
+            event: "piece-request-received",
+            summary: `收到 ${remotePeerId} 的分片请求 ${trackId}#${chunkIndex}`
+          });
+        },
+        onPieceServed: ({ peerId: remotePeerId, trackId, chunkIndex, payloadBytes }) => {
+          recordPeerDiagnosticRef.current({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "sent",
+            event: "piece-served",
+            summary: `向 ${remotePeerId} 回传分片 ${trackId}#${chunkIndex} (${payloadBytes} bytes)`
+          });
+        },
         onPieceServeMiss: ({ peerId: remotePeerId, trackId, chunkIndex, reason }) => {
           const reasonLabel =
             reason === "piece-missing"
@@ -5100,7 +5129,70 @@ export function useRoomRuntime({
           iceTransportPolicy: resolvePreferredIceTransportPolicy(
             connectionSupervisorStatesRef.current.get(remotePeerId)
           )
-        })
+        }),
+        resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {
+          const track =
+            currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
+          const uploadedTrack = uploadedTracksRef.current[trackId] ?? null;
+          const cachedAsset = uploadedTrack ? null : await getCachedTrackAsset(trackId);
+          const fallbackFile = uploadedTrack?.file ?? cachedAsset?.file ?? null;
+          if (!track || !fallbackFile) {
+            return null;
+          }
+
+          const cachedManifest = await getTrackPieceManifest(trackId);
+          const manifest = resolveTrackPieceManifest({
+            track,
+            cacheManifest: cachedManifest,
+            file: fallbackFile,
+            mimeType: track.mimeType ?? cachedAsset?.mimeType ?? fallbackFile.type ?? null,
+            codec: track.codec ?? null,
+            sizeBytes: track.sizeBytes ?? fallbackFile.size
+          });
+          if (!manifest || chunkIndex < 0 || chunkIndex >= manifest.totalChunks) {
+            return null;
+          }
+
+          const chunkStart = chunkIndex * manifest.chunkSize;
+          if (chunkStart >= fallbackFile.size) {
+            return null;
+          }
+
+          const payload = await fallbackFile
+            .slice(chunkStart, Math.min(fallbackFile.size, chunkStart + manifest.chunkSize))
+            .arrayBuffer();
+          const hash = await hashArrayBuffer(payload);
+
+          await cacheTrackPieces([
+            {
+              pieceId: `${trackId}:${peerId}:${chunkIndex}`,
+              trackId,
+              peerId,
+              chunkIndex,
+              chunkSize: payload.byteLength,
+              hash,
+              payload
+            }
+          ]);
+          void queueTrackPieceManifestUpsert({
+            trackId,
+            fileHash: track.fileHash,
+            mimeType: manifest.pieceMimeType,
+            codec: track.codec ?? null,
+            sizeBytes: track.sizeBytes ?? fallbackFile.size,
+            durationMs: track.durationMs,
+            totalChunks: manifest.totalChunks,
+            chunkSize: manifest.chunkSize
+          });
+
+          return {
+            payload,
+            hash,
+            totalChunks: manifest.totalChunks,
+            chunkSize: manifest.chunkSize,
+            mimeType: manifest.pieceMimeType
+          };
+        }
       }
     );
     meshRef.current = mesh;

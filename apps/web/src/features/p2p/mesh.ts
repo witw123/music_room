@@ -41,6 +41,19 @@ type MeshCallbacks = {
     chunkIndexes: number[];
     requestId?: string;
   }) => void;
+  onPieceRequestReceived?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    requestId?: string;
+  }) => void;
+  onPieceServed?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    payloadBytes: number;
+    requestId?: string;
+  }) => void;
   onPieceServeMiss?: (payload: {
     peerId: string;
     trackId: string;
@@ -88,6 +101,17 @@ type MeshCallbacks = {
 type MeshOptions = {
   autoReconnect?: boolean;
   resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;
+  resolvePieceRequestFallback?: (input: {
+    trackId: string;
+    chunkIndex: number;
+  }) => Promise<{
+    payload: ArrayBuffer;
+    hash: string;
+    totalChunks: number;
+    chunkSize: number;
+    mimeType: string;
+    requestId?: string;
+  } | null>;
 };
 
 type PeerEntry = {
@@ -174,6 +198,7 @@ export class P2PMesh {
   private statsSamplingMode: "off" | "steady" | "active" = "active";
   private readonly autoReconnect: boolean;
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
+  private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
 
   constructor(
     private readonly roomId: string,
@@ -182,9 +207,10 @@ export class P2PMesh {
     private readonly callbacks: MeshCallbacks,
     private readonly iceServers: IceServerConfig[] = [],
     options: MeshOptions = {}
-  ) {
+    ) {
     this.autoReconnect = options.autoReconnect ?? true;
     this.resolveConnectionConfig = options.resolveConnectionConfig;
+    this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
   }
 
   async syncPeers(
@@ -691,6 +717,11 @@ export class P2PMesh {
       }
 
       if (message.kind === "request-piece") {
+        this.callbacks.onPieceRequestReceived?.({
+          peerId,
+          trackId: message.trackId,
+          chunkIndex: message.chunkIndex
+        });
         await this.handlePieceRequest(peerId, entry, {
           trackId: message.trackId,
           chunkIndex: message.chunkIndex
@@ -700,6 +731,12 @@ export class P2PMesh {
 
       if (message.kind === "request-pieces") {
         for (const chunkIndex of message.chunkIndexes) {
+          this.callbacks.onPieceRequestReceived?.({
+            peerId,
+            trackId: message.trackId,
+            chunkIndex,
+            requestId: message.requestId
+          });
           await this.handlePieceRequest(peerId, entry, {
             trackId: message.trackId,
             chunkIndex,
@@ -774,7 +811,37 @@ export class P2PMesh {
       return;
     }
 
-    const piece = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex);
+    let piece: {
+      chunkIndex: number;
+      chunkSize: number;
+      hash: string;
+      payload: ArrayBuffer;
+    } | null = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex);
+    let manifestHeader = piece
+      ? await this.resolveManifestHeader(request.trackId, piece.chunkSize)
+      : null;
+
+    if (!piece || !manifestHeader) {
+      const fallbackPiece = await this.resolvePieceRequestFallback?.({
+        trackId: request.trackId,
+        chunkIndex: request.chunkIndex
+      });
+      if (fallbackPiece) {
+        piece = {
+          chunkIndex: request.chunkIndex,
+          chunkSize: fallbackPiece.payload.byteLength,
+          hash: fallbackPiece.hash,
+          payload: fallbackPiece.payload
+        };
+        manifestHeader = {
+          totalChunks: fallbackPiece.totalChunks,
+          chunkSize: fallbackPiece.chunkSize,
+          mimeType: fallbackPiece.mimeType
+        };
+        this.pieceManifestHeaders.set(request.trackId, manifestHeader);
+      }
+    }
+
     if (!piece) {
       this.callbacks.onPieceServeMiss?.({
         peerId,
@@ -785,7 +852,6 @@ export class P2PMesh {
       return;
     }
 
-    const manifestHeader = await this.resolveManifestHeader(request.trackId, piece.chunkSize);
     if (!manifestHeader || entry.channel?.readyState !== "open") {
       this.callbacks.onPieceServeMiss?.({
         peerId,
@@ -813,6 +879,13 @@ export class P2PMesh {
       trackId: request.trackId,
       chunkIndex: piece.chunkIndex,
       payloadBytes: piece.payload.byteLength
+    });
+    this.callbacks.onPieceServed?.({
+      peerId,
+      trackId: request.trackId,
+      chunkIndex: piece.chunkIndex,
+      payloadBytes: piece.payload.byteLength,
+      requestId: request.requestId
     });
   }
 
