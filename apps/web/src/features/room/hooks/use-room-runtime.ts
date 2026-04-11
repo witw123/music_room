@@ -54,6 +54,7 @@ import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import {
   cacheTrackPieces,
+  getCachedPieceIndexes,
   getTrackPieceManifest,
   queueTrackPieceManifestUpsert
 } from "@/lib/indexeddb";
@@ -254,6 +255,10 @@ const pieceTransferWindowMs = 12_000;
 const hostMediaSyncRetryDelayMs = 75;
 const hostCaptureHealthCheckIntervalMs = 2_000;
 const hostCaptureRefreshCooldownMs = 1_200;
+const manualCacheDirectRequestIntervalMs = 450;
+const manualCacheDirectRequestBatchSize = 8;
+const manualCacheDirectRequestTimeoutMs = 5_000;
+const manualCacheDirectPendingTtlMs = 7_000;
 const remoteStreamSwapGraceMs = 900;
 const remotePlaybackRetryBackoffMs = [120, 240, 400] as const;
 const maxRemotePlaybackRetryAttempts = 3;
@@ -941,6 +946,45 @@ function buildManualCacheSchedulerAvailability(input: {
   return nextAvailabilityByTrack ?? input.availabilityByTrack;
 }
 
+function resolveManualCacheTrackProviderPeerId(input: {
+  trackId: string;
+  roomSnapshot: RoomSnapshot | null | undefined;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  connectedPeerIds: string[];
+  localPeerId: string | null | undefined;
+}) {
+  const track = input.roomSnapshot?.tracks.find((entry) => entry.id === input.trackId) ?? null;
+  const owner = track
+    ? input.roomSnapshot?.room.members.find((member) => member.id === track.ownerSessionId) ?? null
+    : null;
+  if (
+    owner?.peerId &&
+    owner.peerId !== input.localPeerId &&
+    owner.presenceState !== "offline" &&
+    input.connectedPeerIds.includes(owner.peerId)
+  ) {
+    return owner.peerId;
+  }
+
+  return (
+    Object.values(input.availabilityByTrack[input.trackId] ?? {})
+      .filter(
+        (announcement) =>
+          announcement.ownerPeerId !== input.localPeerId &&
+          announcement.totalChunks > 0 &&
+          announcement.availableChunks.length > 0 &&
+          input.connectedPeerIds.includes(announcement.ownerPeerId)
+      )
+      .sort((left, right) => {
+        const chunkDifference = right.availableChunks.length - left.availableChunks.length;
+        if (chunkDifference !== 0) {
+          return chunkDifference;
+        }
+        return new Date(right.announcedAt).getTime() - new Date(left.announcedAt).getTime();
+      })[0]?.ownerPeerId ?? null
+  );
+}
+
 export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
   nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -1220,6 +1264,7 @@ export function useRoomRuntime({
   const lastManualCacheBootstrapKeyRef = useRef<string | null>(null);
   const manualCacheMeshRecoverySinceAtRef = useRef<number | null>(null);
   const lastManualCacheMeshRecoveryAtRef = useRef<number | null>(null);
+  const manualCacheDirectPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
   const audioUnlockedRef = useRef(audioUnlocked);
   const setAudioUnlockedRef = useRef(setAudioUnlocked);
   const sourceStartStateRef = useRef(sourceStartState);
@@ -5104,6 +5149,7 @@ export function useRoomRuntime({
             });
           }
           chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
+          manualCacheDirectPendingRef.current.get(trackId)?.delete(chunkIndex);
           handleManualCachePieceReceivedRef.current({
             trackId,
             chunkIndex,
@@ -5177,6 +5223,7 @@ export function useRoomRuntime({
             outcome: "timeout",
             durationMs: requestDurationMs
           });
+          manualCacheDirectPendingRef.current.get(trackId)?.delete(chunkIndex);
           chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
         },
         onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
@@ -7211,6 +7258,119 @@ export function useRoomRuntime({
     progressiveSchedulerPolicy,
     chunkSchedulerRef,
     reportRealtimeFailure
+  ]);
+
+  useEffect(() => {
+    if (manualCacheTrackIds.length === 0) {
+      manualCacheDirectPendingRef.current.clear();
+      return;
+    }
+
+    let stopped = false;
+    let inFlight = false;
+
+    const requestMissingPieces = async () => {
+      if (stopped || inFlight || !roomSnapshot?.room.id || !peerId) {
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const mesh = meshRef.current;
+        if (!mesh) {
+          return;
+        }
+
+        const now = Date.now();
+        const connectedPeerIds = mergePeerIds(connectedPeers, mesh.getConnectedPeerIds());
+        for (const trackId of manualCacheTrackIds) {
+          const track = roomSnapshot.tracks.find((entry) => entry.id === trackId) ?? null;
+          const manifest = track?.relayManifest ?? track?.pieceManifest ?? null;
+          if (!track || !manifest?.totalChunks || !manifest.chunkSize) {
+            continue;
+          }
+
+          const providerPeerId = resolveManualCacheTrackProviderPeerId({
+            trackId,
+            roomSnapshot,
+            availabilityByTrack: manualCacheSchedulerAvailabilityByTrack,
+            connectedPeerIds,
+            localPeerId: peerId
+          });
+          if (!providerPeerId) {
+            continue;
+          }
+
+          const localPieceIndexes = new Set(await getCachedPieceIndexes(trackId, peerId));
+          const pendingForTrack =
+            manualCacheDirectPendingRef.current.get(trackId) ?? new Map<number, number>();
+          for (const [chunkIndex, expiresAt] of pendingForTrack.entries()) {
+            if (expiresAt <= now || localPieceIndexes.has(chunkIndex)) {
+              pendingForTrack.delete(chunkIndex);
+            }
+          }
+          manualCacheDirectPendingRef.current.set(trackId, pendingForTrack);
+
+          const chunkIndexes: number[] = [];
+          for (let chunkIndex = 0; chunkIndex < manifest.totalChunks; chunkIndex += 1) {
+            if (localPieceIndexes.has(chunkIndex) || pendingForTrack.has(chunkIndex)) {
+              continue;
+            }
+            chunkIndexes.push(chunkIndex);
+            if (chunkIndexes.length >= manualCacheDirectRequestBatchSize) {
+              break;
+            }
+          }
+
+          if (chunkIndexes.length === 0) {
+            continue;
+          }
+
+          const didRequest = mesh.requestPieces(
+            providerPeerId,
+            trackId,
+            chunkIndexes,
+            manifest.totalChunks,
+            manualCacheDirectRequestTimeoutMs
+          );
+          if (!didRequest) {
+            continue;
+          }
+
+          const expiresAt = now + manualCacheDirectPendingTtlMs;
+          for (const chunkIndex of chunkIndexes) {
+            pendingForTrack.set(chunkIndex, expiresAt);
+          }
+          recordPeerDiagnostic({
+            peerId: providerPeerId,
+            channelKind: "data",
+            direction: "sent",
+            event: "manual-cache-direct-request",
+            summary: `缓存下载直接请求上传者分片 ${trackId}#${chunkIndexes[0]}-${chunkIndexes[chunkIndexes.length - 1]}`,
+            recordEvent: false
+          });
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void requestMissingPieces();
+    const timerId = window.setInterval(() => {
+      void requestMissingPieces();
+    }, manualCacheDirectRequestIntervalMs);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timerId);
+    };
+  }, [
+    connectedPeers,
+    manualCacheSchedulerAvailabilityByTrack,
+    manualCacheTrackIds,
+    peerId,
+    recordPeerDiagnostic,
+    roomSnapshot
   ]);
 
   useEffect(() => {
