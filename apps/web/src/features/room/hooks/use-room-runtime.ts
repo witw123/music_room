@@ -6647,6 +6647,32 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
+    if (isCurrentSourceOwner) {
+      return;
+    }
+
+    clearHostMediaSyncRetry();
+    hostStreamRef.current = null;
+    hostMediaSyncStateRef.current = {
+      inFlight: false,
+      lastAppliedKey: null,
+      pendingKey: null,
+      lastCaptureRefreshKey: null,
+      lastPublishKey: null,
+      retryKey: null,
+      publishGeneration: hostMediaSyncStateRef.current.publishGeneration,
+      stage: "idle",
+      lastPublishedListenerSet: null
+    };
+    void mediaMeshRef.current?.updateLocalStream(null);
+  }, [
+    clearHostMediaSyncRetry,
+    isCurrentSourceOwner,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback.sourcePeerId
+  ]);
+
+  useEffect(() => {
     if (!roomSnapshot?.room.id || !peerId || !isCurrentSourceOwner) {
       return;
     }
