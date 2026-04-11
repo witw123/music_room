@@ -13,6 +13,7 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
+import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -86,7 +87,7 @@ export function RoomsHomePage() {
   async function refreshAvailableRooms() {
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(rooms);
+      setAvailableRooms(filterOpenPublicRooms(rooms));
     } catch {
       setAvailableRooms([]);
     }

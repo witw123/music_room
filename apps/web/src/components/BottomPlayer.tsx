@@ -152,7 +152,7 @@ function BottomPlayerBase({
   }, [onNext]);
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-50 min-h-[8.1rem] border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:min-h-[6rem] lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)+0.55rem)] lg:pt-2.5">
+    <footer className="fixed bottom-0 left-0 right-0 z-50 flex flex-col justify-center min-h-[8.1rem] border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-2 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:min-h-[6rem] lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)+0.55rem)] lg:pt-2.5">
       <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5" aria-hidden="true">
         <div
           className="h-full bg-gradient-to-r from-accent to-blue-400 shadow-[0_0_10px_rgba(0,112,243,0.6)] transition-[width] duration-150 ease-linear"

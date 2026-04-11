@@ -34,6 +34,7 @@ import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
+import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import {
   initialRoomStateStore,
   roomStateReducer
@@ -272,7 +273,7 @@ export function MusicRoomApp({
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(rooms);
+      setAvailableRooms(filterOpenPublicRooms(rooms));
     } catch {
       setAvailableRooms([]);
     }

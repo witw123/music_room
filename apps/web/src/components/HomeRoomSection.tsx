@@ -16,6 +16,7 @@ import {
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
+import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -54,6 +55,27 @@ export function HomeRoomSection() {
     void refreshRecentRoom();
   }, [hydrated, activeSession?.id, refreshSession]);
 
+  useEffect(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    const refresh = () => {
+      void refreshAvailableRooms();
+      void refreshRecentRoom();
+    };
+
+    const intervalId = window.setInterval(refresh, 10000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [activeSession?.id]);
+
   async function refreshAvailableRooms() {
     if (!activeSession) {
       setAvailableRooms([]);
@@ -62,7 +84,7 @@ export function HomeRoomSection() {
 
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(rooms);
+      setAvailableRooms(filterOpenPublicRooms(rooms));
     } catch {
       setAvailableRooms([]);
     }
