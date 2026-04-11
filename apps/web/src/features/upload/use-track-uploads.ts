@@ -153,7 +153,14 @@ export function useTrackUploads(options: {
     const ownedRoomTracks = roomSnapshot.tracks.filter(
       (track) => track.ownerSessionId === activeSession.userId
     );
-    if (ownedRoomTracks.length === 0) {
+    const currentPlaybackTrack =
+      roomSnapshot.room.playback.currentTrackId
+        ? roomSnapshot.tracks.find((track) => track.id === roomSnapshot.room.playback.currentTrackId) ?? null
+        : null;
+    const shouldRecoverCurrentSourceTrack =
+      !!currentPlaybackTrack &&
+      roomSnapshot.room.playback.sourceSessionId === activeSession.userId;
+    if (ownedRoomTracks.length === 0 && !shouldRecoverCurrentSourceTrack) {
       setUploadedTracks((current) => {
         const staleCacheLibraryTrackIds = Object.entries(current)
           .filter(([, upload]) => upload.origin === "cache-library")
@@ -194,6 +201,24 @@ export function useTrackUploads(options: {
           origin: "cache-library"
         };
         changed = true;
+      }
+
+      if (shouldRecoverCurrentSourceTrack && currentPlaybackTrack) {
+        const cachedLibraryTrack = cacheLibraryTracksRef.current.get(currentPlaybackTrack.fileHash);
+        if (cachedLibraryTrack) {
+          recoverableTrackIds.add(currentPlaybackTrack.id);
+          const existingUpload = current[currentPlaybackTrack.id];
+          if (!existingUpload || existingUpload.origin === "cache-library") {
+            if (!existingUpload) {
+              nextUploads[currentPlaybackTrack.id] = {
+                file: cachedLibraryTrack.file,
+                objectUrl: URL.createObjectURL(cachedLibraryTrack.file),
+                origin: "cache-library"
+              };
+              changed = true;
+            }
+          }
+        }
       }
 
       for (const [trackId, upload] of Object.entries(current)) {
