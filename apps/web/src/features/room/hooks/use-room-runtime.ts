@@ -548,6 +548,41 @@ export function resolveManualCacheProviderPeerIds(input: {
   return [...providerPeerIds].sort();
 }
 
+export function resolveManualCacheUploaderPeerIds(input: {
+  manualCacheTrackIds: string[];
+  roomSnapshot: RoomSnapshot | null | undefined;
+  localPeerId: string | null | undefined;
+}) {
+  if (!input.roomSnapshot || input.manualCacheTrackIds.length === 0) {
+    return [] as string[];
+  }
+
+  const tracksById = new Map(input.roomSnapshot.tracks.map((track) => [track.id, track] as const));
+  const membersBySessionId = new Map(
+    input.roomSnapshot.room.members.map((member) => [member.id, member] as const)
+  );
+  const peerIds = new Set<string>();
+
+  for (const trackId of input.manualCacheTrackIds) {
+    const track = tracksById.get(trackId);
+    if (!track) {
+      continue;
+    }
+
+    const owner = membersBySessionId.get(track.ownerSessionId);
+    if (
+      !owner?.peerId ||
+      owner.peerId === input.localPeerId ||
+      owner.presenceState === "offline"
+    ) {
+      continue;
+    }
+    peerIds.add(owner.peerId);
+  }
+
+  return [...peerIds].sort();
+}
+
 export function shouldForceManualCacheBootstrap(input: {
   enableManualTrackCaching: boolean;
   manualCacheTrackIds: string[];
@@ -835,6 +870,75 @@ function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
     }
   }
   return [...peerIds].sort();
+}
+
+function buildManualCacheSchedulerAvailability(input: {
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  manualCacheTrackIds: string[];
+  roomSnapshot: RoomSnapshot | null | undefined;
+  localPeerId: string | null | undefined;
+}) {
+  if (!input.roomSnapshot || input.manualCacheTrackIds.length === 0) {
+    return input.availabilityByTrack;
+  }
+
+  let nextAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> | null = null;
+  const tracksById = new Map(input.roomSnapshot.tracks.map((track) => [track.id, track] as const));
+  const membersBySessionId = new Map(
+    input.roomSnapshot.room.members.map((member) => [member.id, member] as const)
+  );
+
+  for (const trackId of input.manualCacheTrackIds) {
+    const track = tracksById.get(trackId);
+    if (!track) {
+      continue;
+    }
+
+    const owner = membersBySessionId.get(track.ownerSessionId);
+    if (
+      !owner?.peerId ||
+      owner.peerId === input.localPeerId ||
+      owner.presenceState === "offline"
+    ) {
+      continue;
+    }
+
+    const existingTrackAvailability =
+      (nextAvailabilityByTrack ?? input.availabilityByTrack)[trackId] ?? {};
+    const existingOwnerAvailability = existingTrackAvailability[owner.peerId] ?? null;
+    if (
+      existingOwnerAvailability &&
+      existingOwnerAvailability.totalChunks > 0 &&
+      existingOwnerAvailability.availableChunks.length > 0
+    ) {
+      continue;
+    }
+
+    const manifest = track.relayManifest ?? track.pieceManifest ?? null;
+    if (!manifest?.totalChunks || !manifest.chunkSize) {
+      continue;
+    }
+
+    nextAvailabilityByTrack ??= { ...input.availabilityByTrack };
+    nextAvailabilityByTrack[trackId] = {
+      ...existingTrackAvailability,
+      [owner.peerId]: {
+        roomId: input.roomSnapshot.room.id,
+        trackId,
+        ownerPeerId: owner.peerId,
+        nickname: owner.nickname,
+        assetKind: "relay",
+        assetHash: track.fileHash,
+        totalChunks: manifest.totalChunks,
+        chunkSize: manifest.chunkSize,
+        availableChunks: Array.from({ length: manifest.totalChunks }, (_, index) => index),
+        source: "live_upload",
+        announcedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  return nextAvailabilityByTrack ?? input.availabilityByTrack;
 }
 
 export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
@@ -1960,7 +2064,7 @@ export function useRoomRuntime({
     [roomListenerSetHash]
   );
   const roomListenerCount = roomListenerPeerIds.length;
-  const manualCacheProviderPeerIds = useMemo(
+  const manualCacheAvailabilityProviderPeerIds = useMemo(
     () =>
       resolveManualCacheProviderPeerIds({
         manualCacheTrackIds,
@@ -1969,9 +2073,32 @@ export function useRoomRuntime({
       }),
     [availabilityByTrack, manualCacheTrackIds, peerId]
   );
+  const manualCacheUploaderPeerIds = useMemo(
+    () =>
+      resolveManualCacheUploaderPeerIds({
+        manualCacheTrackIds,
+        roomSnapshot,
+        localPeerId: peerId
+      }),
+    [manualCacheTrackIds, peerId, roomSnapshot]
+  );
+  const manualCacheProviderPeerIds = useMemo(
+    () => mergePeerIds(manualCacheUploaderPeerIds, manualCacheAvailabilityProviderPeerIds),
+    [manualCacheAvailabilityProviderPeerIds, manualCacheUploaderPeerIds]
+  );
   const manualCacheRemotePeerIds = useMemo(
     () => mergePeerIds(roomListenerPeerIds, manualCacheProviderPeerIds),
     [manualCacheProviderPeerIds, roomListenerPeerIds]
+  );
+  const manualCacheSchedulerAvailabilityByTrack = useMemo(
+    () =>
+      buildManualCacheSchedulerAvailability({
+        availabilityByTrack,
+        manualCacheTrackIds,
+        roomSnapshot,
+        localPeerId: peerId
+      }),
+    [availabilityByTrack, manualCacheTrackIds, peerId, roomSnapshot]
   );
 
   useEffect(() => {
@@ -6937,7 +7064,7 @@ export function useRoomRuntime({
       manualCacheTrackIds,
       remotePeerIds: manualCacheRemotePeerIds,
       connectedPeerIds: connectedPeers,
-      availabilityByTrack,
+      availabilityByTrack: manualCacheSchedulerAvailabilityByTrack,
       localPeerId: peerId
     });
 
@@ -6992,9 +7119,9 @@ export function useRoomRuntime({
         });
       });
   }, [
-    availabilityByTrack,
     connectedPeers,
     enableManualTrackCaching,
+    manualCacheSchedulerAvailabilityByTrack,
     manualCacheTrackIds,
     manualCacheRemotePeerIds,
     manualCacheProviderPeerIds,
@@ -7048,7 +7175,7 @@ export function useRoomRuntime({
 
       chunkSchedulerRef.current?.sync({
         roomSnapshot,
-        availabilityByTrack,
+        availabilityByTrack: manualCacheSchedulerAvailabilityByTrack,
         connectedPeerIds: effectiveConnectedPeerIds,
         uploadedTrackIds: Object.keys(uploadedTracks),
         playbackPositionMs: schedulerPlaybackBucketMs,
@@ -7068,8 +7195,8 @@ export function useRoomRuntime({
       window.clearInterval(timerId);
     };
   }, [
-    availabilityByTrack,
     connectedPeers,
+    manualCacheSchedulerAvailabilityByTrack,
     manualCacheTrackIds,
     manualCacheProviderPeerIds,
     manualCacheRemotePeerIds,
@@ -7092,7 +7219,7 @@ export function useRoomRuntime({
     }
 
     for (const trackId of manualCacheTrackIds) {
-      const availability = availabilityByTrack[trackId] ?? {};
+      const availability = manualCacheSchedulerAvailabilityByTrack[trackId] ?? {};
       const hasProviderWithChunks = Object.values(availability).some(
         (announcement) =>
           announcement.ownerPeerId !== peerId &&
@@ -7110,7 +7237,7 @@ export function useRoomRuntime({
         });
       }
     }
-  }, [availabilityByTrack, manualCacheTrackIds, peerId, recordPeerDiagnostic]);
+  }, [manualCacheSchedulerAvailabilityByTrack, manualCacheTrackIds, peerId, recordPeerDiagnostic]);
 
   return {
     scheduleRemotePlaybackRetry,
