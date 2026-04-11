@@ -35,6 +35,18 @@ type MeshCallbacks = {
     chunkIndex: number;
     payloadBytes: number;
   }) => void;
+  onPieceRequestSent?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndexes: number[];
+    requestId?: string;
+  }) => void;
+  onPieceServeMiss?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    reason: "channel-not-open" | "piece-missing" | "manifest-missing";
+  }) => void;
   onPieceRequestTimeout?: (payload: {
     trackId: string;
     chunkIndex: number;
@@ -410,6 +422,12 @@ export class P2PMesh {
     this.enqueueSendItem(peerId, entry, {
       data: JSON.stringify(payload)
     });
+    this.callbacks.onPieceRequestSent?.({
+      peerId,
+      trackId,
+      chunkIndexes: normalizedChunkIndexes,
+      requestId
+    });
     return true;
   }
 
@@ -754,16 +772,34 @@ export class P2PMesh {
     }
   ) {
     if (entry.channel?.readyState !== "open") {
+      this.callbacks.onPieceServeMiss?.({
+        peerId,
+        trackId: request.trackId,
+        chunkIndex: request.chunkIndex,
+        reason: "channel-not-open"
+      });
       return;
     }
 
     const piece = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex);
     if (!piece) {
+      this.callbacks.onPieceServeMiss?.({
+        peerId,
+        trackId: request.trackId,
+        chunkIndex: request.chunkIndex,
+        reason: "piece-missing"
+      });
       return;
     }
 
     const manifestHeader = await this.resolveManifestHeader(request.trackId, piece.chunkSize);
     if (!manifestHeader || entry.channel?.readyState !== "open") {
+      this.callbacks.onPieceServeMiss?.({
+        peerId,
+        trackId: request.trackId,
+        chunkIndex: request.chunkIndex,
+        reason: "manifest-missing"
+      });
       return;
     }
 

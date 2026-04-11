@@ -520,12 +520,20 @@ export function resolveManualCacheProviderPeerIds(input: {
   manualCacheTrackIds: string[];
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   localPeerId: string | null | undefined;
+  allowedPeerIds?: string[];
 }) {
+  const allowedPeerSet =
+    input.allowedPeerIds && input.allowedPeerIds.length > 0
+      ? new Set(input.allowedPeerIds.filter(Boolean))
+      : null;
   const providerPeerIds = new Set<string>();
 
   for (const trackId of input.manualCacheTrackIds) {
     for (const announcement of Object.values(input.availabilityByTrack[trackId] ?? {})) {
       if (!announcement.ownerPeerId || announcement.ownerPeerId === input.localPeerId) {
+        continue;
+      }
+      if (allowedPeerSet && !allowedPeerSet.has(announcement.ownerPeerId)) {
         continue;
       }
       providerPeerIds.add(announcement.ownerPeerId);
@@ -1940,9 +1948,10 @@ export function useRoomRuntime({
       resolveManualCacheProviderPeerIds({
         manualCacheTrackIds,
         availabilityByTrack,
-        localPeerId: peerId
+        localPeerId: peerId,
+        allowedPeerIds: roomListenerPeerIds
       }),
-    [availabilityByTrack, manualCacheTrackIds, peerId]
+    [availabilityByTrack, manualCacheTrackIds, peerId, roomListenerPeerIds]
   );
 
   useEffect(() => {
@@ -4942,6 +4951,35 @@ export function useRoomRuntime({
             peerId: targetPeerId,
             direction: "upload",
             bytes: payloadBytes
+          });
+        },
+        onPieceRequestSent: ({ peerId: remotePeerId, trackId, chunkIndexes }) => {
+          const chunkSummary =
+            chunkIndexes.length === 1
+              ? `${chunkIndexes[0]}`
+              : `${chunkIndexes[0]}-${chunkIndexes[chunkIndexes.length - 1]}`;
+          recordPeerDiagnosticRef.current({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "sent",
+            event: "piece-request",
+            summary: `请求 ${remotePeerId} 的分片 ${trackId}#${chunkSummary}`
+          });
+        },
+        onPieceServeMiss: ({ peerId: remotePeerId, trackId, chunkIndex, reason }) => {
+          const reasonLabel =
+            reason === "piece-missing"
+              ? "本地缺少分片"
+              : reason === "manifest-missing"
+                ? "分片清单缺失"
+                : "DataChannel 未打开";
+          recordPeerDiagnosticRef.current({
+            peerId: remotePeerId,
+            channelKind: "data",
+            direction: "local",
+            event: "piece-serve-miss",
+            level: "warning",
+            summary: `${trackId}#${chunkIndex} 未回片：${reasonLabel}`
           });
         },
         onPieceRequestTimeout: ({

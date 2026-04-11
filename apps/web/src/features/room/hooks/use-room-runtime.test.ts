@@ -316,9 +316,46 @@ describe("resolveManualCacheProviderPeerIds", () => {
             }
           }
         },
-        localPeerId: "peer_local"
+        localPeerId: "peer_local",
+        allowedPeerIds: ["peer_owner_a", "peer_owner_b"]
       })
     ).toEqual(["peer_owner_a", "peer_owner_b"]);
+  });
+
+  it("filters out stale provider peer ids that are no longer in the room", () => {
+    expect(
+      resolveManualCacheProviderPeerIds({
+        manualCacheTrackIds: ["track_a"],
+        availabilityByTrack: {
+          track_a: {
+            peer_stale: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_stale",
+              nickname: "stale",
+              availableChunks: [0],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            },
+            peer_owner: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_owner",
+              nickname: "owner",
+              availableChunks: [0],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local",
+        allowedPeerIds: ["peer_owner"]
+      })
+    ).toEqual(["peer_owner"]);
   });
 });
 
