@@ -7,6 +7,8 @@ import {
 import {
   resolveListenerMediaRecoveryAction,
   resolveListenerMediaRecoveryReason,
+  resolveManualCacheProviderPeerIds,
+  resolveManualCacheMeshRecoveryMode,
   resolveMediaDiagnosticPeerId,
   resolvePeerConnectionNoProgressMs,
   shouldKickSourcePlaybackFromRealtimeEvent,
@@ -250,6 +252,110 @@ describe("shouldRecoverManualCacheDataPeers", () => {
         localPeerId: "peer_local"
       })
     ).toBe(false);
+  });
+
+  it("still requests recovery when only a non-provider peer is connected", () => {
+    expect(
+      shouldRecoverManualCacheDataPeers({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        remotePeerIds: ["peer_owner", "peer_other"],
+        connectedPeerIds: ["peer_other"],
+        availabilityByTrack: {
+          track_a: {
+            peer_owner: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_owner",
+              nickname: "owner",
+              availableChunks: [0, 1],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local"
+      })
+    ).toBe(true);
+  });
+});
+
+describe("resolveManualCacheProviderPeerIds", () => {
+  it("collects unique remote provider peer ids for active manual cache tasks", () => {
+    expect(
+      resolveManualCacheProviderPeerIds({
+        manualCacheTrackIds: ["track_a", "track_b"],
+        availabilityByTrack: {
+          track_a: {
+            peer_owner_b: {
+              roomId: "room_1",
+              trackId: "track_a",
+              ownerPeerId: "peer_owner_b",
+              nickname: "owner_b",
+              availableChunks: [0],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          },
+          track_b: {
+            peer_owner_a: {
+              roomId: "room_1",
+              trackId: "track_b",
+              ownerPeerId: "peer_owner_a",
+              nickname: "owner_a",
+              availableChunks: [0],
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              source: "live_upload",
+              announcedAt: new Date(0).toISOString()
+            }
+          }
+        },
+        localPeerId: "peer_local"
+      })
+    ).toEqual(["peer_owner_a", "peer_owner_b"]);
+  });
+});
+
+describe("resolveManualCacheMeshRecoveryMode", () => {
+  it("starts with a soft sync while manual cache peers are still bootstrapping", () => {
+    expect(
+      resolveManualCacheMeshRecoveryMode({
+        shouldRecover: true,
+        remotePeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        recoverySinceAt: 1_000,
+        now: 6_000
+      })
+    ).toBe("sync");
+  });
+
+  it("stays in soft sync when at least one remote peer is already connected", () => {
+    expect(
+      resolveManualCacheMeshRecoveryMode({
+        shouldRecover: true,
+        remotePeerIds: ["peer_owner"],
+        connectedPeerIds: ["peer_owner"],
+        recoverySinceAt: 1_000,
+        now: 20_000
+      })
+    ).toBe("sync");
+  });
+
+  it("escalates to a forced reconnect only after a long no-progress window", () => {
+    expect(
+      resolveManualCacheMeshRecoveryMode({
+        shouldRecover: true,
+        remotePeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        recoverySinceAt: 1_000,
+        now: 12_500
+      })
+    ).toBe("force-reconnect");
   });
 });
 

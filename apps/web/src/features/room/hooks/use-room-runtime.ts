@@ -508,8 +508,57 @@ export function shouldRecoverManualCacheDataPeers(input: {
       .map((announcement) => announcement.ownerPeerId)
       .filter((peerId) => remotePeerSet.has(peerId));
 
-    return remoteAvailabilityOwners.length === 0;
+    if (remoteAvailabilityOwners.length === 0) {
+      return true;
+    }
+
+    return !remoteAvailabilityOwners.some((peerId) => connectedPeerSet.has(peerId));
   });
+}
+
+export function resolveManualCacheProviderPeerIds(input: {
+  manualCacheTrackIds: string[];
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  localPeerId: string | null | undefined;
+}) {
+  const providerPeerIds = new Set<string>();
+
+  for (const trackId of input.manualCacheTrackIds) {
+    for (const announcement of Object.values(input.availabilityByTrack[trackId] ?? {})) {
+      if (!announcement.ownerPeerId || announcement.ownerPeerId === input.localPeerId) {
+        continue;
+      }
+      providerPeerIds.add(announcement.ownerPeerId);
+    }
+  }
+
+  return [...providerPeerIds].sort();
+}
+
+export function resolveManualCacheMeshRecoveryMode(input: {
+  shouldRecover: boolean;
+  remotePeerIds: string[];
+  connectedPeerIds: string[];
+  recoverySinceAt: number | null;
+  now?: number;
+}) {
+  if (!input.shouldRecover || input.remotePeerIds.length === 0) {
+    return "none" as const;
+  }
+
+  const now = input.now ?? Date.now();
+  const connectedPeerSet = new Set(input.connectedPeerIds);
+  const hasConnectedRemotePeer = input.remotePeerIds.some((peerId) => connectedPeerSet.has(peerId));
+
+  if (hasConnectedRemotePeer) {
+    return "sync" as const;
+  }
+
+  if (input.recoverySinceAt === null) {
+    return "sync" as const;
+  }
+
+  return now - input.recoverySinceAt >= 10_000 ? "force-reconnect" as const : "sync" as const;
 }
 
 export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
@@ -1007,6 +1056,7 @@ export function useRoomRuntime({
     startedAtMs: null
   });
   const lastManualCacheAvailabilityBroadcastKeyRef = useRef<string | null>(null);
+  const manualCacheMeshRecoverySinceAtRef = useRef<number | null>(null);
   const lastManualCacheMeshRecoveryAtRef = useRef<number | null>(null);
   const audioUnlockedRef = useRef(audioUnlocked);
   const setAudioUnlockedRef = useRef(setAudioUnlocked);
@@ -1852,6 +1902,15 @@ export function useRoomRuntime({
     [roomListenerSetHash]
   );
   const roomListenerCount = roomListenerPeerIds.length;
+  const manualCacheProviderPeerIds = useMemo(
+    () =>
+      resolveManualCacheProviderPeerIds({
+        manualCacheTrackIds,
+        availabilityByTrack,
+        localPeerId: peerId
+      }),
+    [availabilityByTrack, manualCacheTrackIds, peerId]
+  );
 
   useEffect(() => {
     const roomId = roomSnapshot?.room.id ?? null;
@@ -6614,43 +6673,71 @@ export function useRoomRuntime({
   }, [reportRealtimeFailure, roomListenerPeerIds]);
 
   useEffect(() => {
-    if (
-      !shouldRecoverManualCacheDataPeers({
-        enableManualTrackCaching,
-        manualCacheTrackIds,
-        remotePeerIds: roomListenerPeerIds,
-        connectedPeerIds: connectedPeers,
-        availabilityByTrack,
-        localPeerId: peerId
-      })
-    ) {
+    const shouldRecover = shouldRecoverManualCacheDataPeers({
+      enableManualTrackCaching,
+      manualCacheTrackIds,
+      remotePeerIds: roomListenerPeerIds,
+      connectedPeerIds: connectedPeers,
+      availabilityByTrack,
+      localPeerId: peerId
+    });
+
+    if (!shouldRecover) {
+      manualCacheMeshRecoverySinceAtRef.current = null;
       lastManualCacheMeshRecoveryAtRef.current = null;
       return;
     }
 
     const now = Date.now();
+    if (manualCacheMeshRecoverySinceAtRef.current === null) {
+      manualCacheMeshRecoverySinceAtRef.current = now;
+    }
+
+    const recoveryPeerIds =
+      manualCacheProviderPeerIds.length > 0 ? manualCacheProviderPeerIds : roomListenerPeerIds;
+    const recoveryMode = resolveManualCacheMeshRecoveryMode({
+      shouldRecover,
+      remotePeerIds: recoveryPeerIds,
+      connectedPeerIds: connectedPeers,
+      recoverySinceAt: manualCacheMeshRecoverySinceAtRef.current,
+      now
+    });
+    if (recoveryMode === "none") {
+      return;
+    }
+
+    const cooldownMs = recoveryMode === "force-reconnect" ? 8_000 : 3_000;
     if (
       lastManualCacheMeshRecoveryAtRef.current !== null &&
-      now - lastManualCacheMeshRecoveryAtRef.current < 3_000
+      now - lastManualCacheMeshRecoveryAtRef.current < cooldownMs
     ) {
       return;
     }
 
     lastManualCacheMeshRecoveryAtRef.current = now;
-    void meshRef.current?.syncPeers(roomListenerPeerIds, { forceReconnectDegraded: true }).catch((error) => {
-      reportRealtimeFailure({
-        peerId: "system",
-        channelKind: "system",
-        event: "manual-cache-mesh-sync-failed",
-        summary: "Failed to recover data peers for manual cache download",
-        error
+    void meshRef.current
+      ?.syncPeers(
+        recoveryPeerIds,
+        recoveryMode === "force-reconnect" ? { forceReconnectDegraded: true } : undefined
+      )
+      .catch((error) => {
+        reportRealtimeFailure({
+          peerId: "system",
+          channelKind: "system",
+          event: "manual-cache-mesh-sync-failed",
+          summary:
+            recoveryMode === "force-reconnect"
+              ? "Failed to force-reconnect data peers for manual cache download"
+              : "Failed to sync data peers for manual cache download",
+          error
+        });
       });
-    });
   }, [
     availabilityByTrack,
     connectedPeers,
     enableManualTrackCaching,
     manualCacheTrackIds,
+    manualCacheProviderPeerIds,
     peerId,
     reportRealtimeFailure,
     roomListenerPeerIds

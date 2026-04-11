@@ -64,7 +64,7 @@ function CacheTabPanelBase({
         </div>
 
         {downloadableTracks.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4">
             {downloadableTracks.map((track) => {
               const cachedLibraryTrack = cacheLibraryByHash.get(track.fileHash) ?? null;
               const task = manualCacheTasks[track.id] ?? null;
@@ -98,34 +98,40 @@ function CacheTabPanelBase({
               return (
                 <article
                   key={track.id}
-                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:flex-row lg:items-center lg:justify-between"
                 >
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
-                        <p className="mt-1 truncate text-xs text-foreground-muted">
-                          {track.ownerNickname} 上传 {formatDuration(track.durationMs)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                            cachedLibraryTrack
-                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                              : !hasOnlineProvider
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                      <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                          cachedLibraryTrack
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                            : !hasOnlineProvider
+                              ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
                               : task?.status === "failed"
                                 ? "border-red-500/30 bg-red-500/10 text-red-300"
                                 : "border-surface-border bg-background/50 text-foreground-muted"
-                          }`}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
+                        }`}
+                      >
+                        {statusLabel}
+                      </span>
                     </div>
-
-                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/6">
+                    <p className="truncate text-xs text-foreground-muted">
+                      {track.ownerNickname} 上传 {formatDuration(track.durationMs)}
+                    </p>
+                    <p className="text-[10px] text-foreground-muted">
+                      {cachedLibraryTrack
+                        ? "这首歌已经进入你的个人缓存库。"
+                        : !hasOnlineProvider
+                          ? "歌曲提供者当前不在线，暂时无法下载缓存。"
+                          : task?.status === "paused"
+                            ? `已暂停下载，当前缓存进度：${progressLabel}`
+                            : task?.status === "failed"
+                              ? task.errorMessage ?? "分片下载失败，可重新尝试。"
+                              : `当前缓存进度：${progressLabel}`}
+                    </p>
+                    <div className="h-1 overflow-hidden rounded-full bg-white/6">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${
                           cachedLibraryTrack ? "bg-emerald-400" : "bg-accent"
@@ -133,24 +139,13 @@ function CacheTabPanelBase({
                         style={{ width: `${cachedLibraryTrack ? 100 : progressPercent}%` }}
                       />
                     </div>
-                    <p className="mt-1 text-[10px] text-foreground-muted">
-                      {cachedLibraryTrack
-                        ? "这首歌已经进入你的个人缓存库。"
-                        : !hasOnlineProvider
-                          ? "歌曲提供者当前不在线，暂时无法下载缓存。"
-                        : task?.status === "paused"
-                          ? `已暂停下载，当前缓存进度：${progressLabel}`
-                          : task?.status === "failed"
-                            ? task.errorMessage ?? "分片下载失败，可重新尝试。"
-                            : `当前缓存进度：${progressLabel}`}
-                    </p>
                   </div>
 
-                  <div className="flex shrink-0 flex-col items-stretch gap-2 sm:w-40">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
                     {hasOnlineProvider && (task?.status === "queued" || task?.status === "downloading") ? (
                       <Button
                         variant="ghost"
-                        className="h-10 w-full px-4"
+                        className="h-10 px-4"
                         onClick={() => onPauseManualCacheDownload(track.id)}
                         type="button"
                       >
@@ -159,7 +154,7 @@ function CacheTabPanelBase({
                     ) : null}
                     <Button
                       variant="outline"
-                      className="h-10 w-full px-4"
+                      className="h-10 px-4"
                       disabled={!hasOnlineProvider || !!cachedLibraryTrack || task?.status === "assembling"}
                       onClick={() => {
                         if (!hasOnlineProvider) {
@@ -173,11 +168,11 @@ function CacheTabPanelBase({
                         ? "已缓存"
                         : !hasOnlineProvider
                           ? "等待提供者在线"
-                        : task?.status === "paused"
-                          ? "继续下载"
-                          : task?.status === "downloading" || task?.status === "queued"
-                            ? "下载中"
-                            : "下载到缓存库"}
+                          : task?.status === "paused"
+                            ? "继续下载"
+                            : task?.status === "downloading" || task?.status === "queued"
+                              ? "下载中"
+                              : "下载到缓存库"}
                     </Button>
                   </div>
                 </article>
