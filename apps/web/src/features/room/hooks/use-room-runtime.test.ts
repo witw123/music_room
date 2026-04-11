@@ -8,6 +8,7 @@ import {
   resolveListenerMediaRecoveryAction,
   resolveListenerMediaRecoveryReason,
   resolveManualCacheProviderPeerIds,
+  shouldForceManualCacheBootstrap,
   resolveManualCacheMeshRecoveryMode,
   resolveMediaDiagnosticPeerId,
   resolvePeerConnectionNoProgressMs,
@@ -318,6 +319,44 @@ describe("resolveManualCacheProviderPeerIds", () => {
         localPeerId: "peer_local"
       })
     ).toEqual(["peer_owner_a", "peer_owner_b"]);
+  });
+});
+
+describe("shouldForceManualCacheBootstrap", () => {
+  it("forces a bootstrap when a manual cache task starts without a connected provider", () => {
+    expect(
+      shouldForceManualCacheBootstrap({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        lastBootstrapKey: null
+      })
+    ).toBe("track_a|peer_owner");
+  });
+
+  it("does not repeat the same bootstrap key", () => {
+    expect(
+      shouldForceManualCacheBootstrap({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: [],
+        lastBootstrapKey: "track_a|peer_owner"
+      })
+    ).toBeNull();
+  });
+
+  it("does not force a bootstrap when the provider is already connected", () => {
+    expect(
+      shouldForceManualCacheBootstrap({
+        enableManualTrackCaching: true,
+        manualCacheTrackIds: ["track_a"],
+        providerPeerIds: ["peer_owner"],
+        connectedPeerIds: ["peer_owner"],
+        lastBootstrapKey: null
+      })
+    ).toBeNull();
   });
 });
 

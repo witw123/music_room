@@ -215,6 +215,23 @@ describe("P2PMesh", () => {
     expect(sendSignalB).not.toHaveBeenCalled();
   });
 
+  it("can explicitly bootstrap a peer even when this side would normally be passive", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_z", sendSignal, {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.bootstrapPeer("peer_a");
+
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "offer",
+        toPeerId: "peer_a",
+        channelKind: "data"
+      })
+    );
+  });
+
   it("does not reject when queued ICE candidates fail during offer handling", async () => {
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
       onPieceReceived: vi.fn()

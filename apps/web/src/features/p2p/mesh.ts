@@ -431,6 +431,20 @@ export class P2PMesh {
     return this.recreatePeer(peerId, entry);
   }
 
+  async bootstrapPeer(peerId: string) {
+    const entry = this.peers.get(peerId);
+    if (!entry) {
+      this.expectedPeerIds.add(peerId);
+      return this.ensurePeer(peerId, true);
+    }
+
+    if (entry.channel?.readyState === "open" && !entry.releasing) {
+      return entry;
+    }
+
+    return this.recreatePeer(peerId, entry, true);
+  }
+
   async restartIce(peerId: string) {
     const entry = this.peers.get(peerId);
     if (!entry || entry.releasing) {
@@ -961,10 +975,13 @@ export class P2PMesh {
     }, delay);
   }
 
-  private async recreatePeer(peerId: string, entry: PeerEntry) {
+  private async recreatePeer(peerId: string, entry: PeerEntry, forceInitiate = false) {
     const reconnectAttempts = entry.reconnectAttempts;
     this.releasePeer(peerId, entry);
-    const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
+    const nextEntry = await this.ensurePeer(
+      peerId,
+      forceInitiate ? true : this.shouldInitiatePeer(peerId)
+    );
     nextEntry.reconnectAttempts = reconnectAttempts;
     return nextEntry;
   }

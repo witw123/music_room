@@ -535,6 +535,38 @@ export function resolveManualCacheProviderPeerIds(input: {
   return [...providerPeerIds].sort();
 }
 
+export function shouldForceManualCacheBootstrap(input: {
+  enableManualTrackCaching: boolean;
+  manualCacheTrackIds: string[];
+  providerPeerIds: string[];
+  connectedPeerIds: string[];
+  lastBootstrapKey: string | null;
+}) {
+  if (
+    !input.enableManualTrackCaching ||
+    input.manualCacheTrackIds.length === 0 ||
+    input.providerPeerIds.length === 0
+  ) {
+    return null;
+  }
+
+  const connectedPeerSet = new Set(input.connectedPeerIds);
+  const hasConnectedProvider = input.providerPeerIds.some((peerId) => connectedPeerSet.has(peerId));
+  if (hasConnectedProvider) {
+    return null;
+  }
+
+  const nextKey = [
+    input.manualCacheTrackIds.join(","),
+    input.providerPeerIds.join(",")
+  ].join("|");
+  if (nextKey === input.lastBootstrapKey) {
+    return null;
+  }
+
+  return nextKey;
+}
+
 export function resolveManualCacheMeshRecoveryMode(input: {
   shouldRecover: boolean;
   remotePeerIds: string[];
@@ -1056,6 +1088,7 @@ export function useRoomRuntime({
     startedAtMs: null
   });
   const lastManualCacheAvailabilityBroadcastKeyRef = useRef<string | null>(null);
+  const lastManualCacheBootstrapKeyRef = useRef<string | null>(null);
   const manualCacheMeshRecoverySinceAtRef = useRef<number | null>(null);
   const lastManualCacheMeshRecoveryAtRef = useRef<number | null>(null);
   const audioUnlockedRef = useRef(audioUnlocked);
@@ -3826,6 +3859,49 @@ export function useRoomRuntime({
     },
     [recordPeerDiagnostic, setMediaConnectionState]
   );
+
+  useEffect(() => {
+    if (!enableManualTrackCaching || manualCacheProviderPeerIds.length === 0) {
+      lastManualCacheBootstrapKeyRef.current = null;
+      return;
+    }
+
+    const bootstrapKey = shouldForceManualCacheBootstrap({
+      enableManualTrackCaching,
+      manualCacheTrackIds,
+      providerPeerIds: manualCacheProviderPeerIds,
+      connectedPeerIds: connectedPeers,
+      lastBootstrapKey: lastManualCacheBootstrapKeyRef.current
+    });
+    if (!bootstrapKey) {
+      return;
+    }
+
+    if (!meshRef.current) {
+      return;
+    }
+
+    lastManualCacheBootstrapKeyRef.current = bootstrapKey;
+    void Promise.all(
+      manualCacheProviderPeerIds.map((providerPeerId) =>
+        meshRef.current?.bootstrapPeer(providerPeerId)
+      )
+    ).catch((error) => {
+      reportRealtimeFailure({
+        peerId: "system",
+        channelKind: "system",
+        event: "manual-cache-provider-sync-failed",
+        summary: "Failed to bootstrap manual cache providers",
+        error
+      });
+    });
+  }, [
+    connectedPeers,
+    enableManualTrackCaching,
+    manualCacheProviderPeerIds,
+    manualCacheTrackIds,
+    reportRealtimeFailure
+  ]);
 
   function ensureConnectionSupervisorState(remotePeerId: string) {
     const roomId = currentRoomRef.current?.room.id ?? roomSnapshot?.room.id ?? null;

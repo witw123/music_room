@@ -779,4 +779,42 @@ describe("ChunkScheduler", () => {
 
     expect(requestedCurrentChunks).toEqual(expect.arrayContaining([10, 11]));
   });
+
+  it("requests manual cache chunks from a connected provider even when playback scheduling is idle", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_listener", {
+      now: () => 1_000,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_2: {
+          peer_provider: buildAnnouncement({
+            trackId: "track_2",
+            ownerPeerId: "peer_provider",
+            nickname: "Provider",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12,
+            chunkSize: 128 * 1024
+          })
+        }
+      },
+      connectedPeerIds: ["peer_provider"],
+      uploadedTrackIds: [],
+      manualTrackIds: ["track_2"],
+      playbackPositionMs: 0,
+      mode: "idle"
+    });
+
+    expect(requestPiece).toHaveBeenCalledWith(
+      expect.objectContaining({
+        peerId: "peer_provider",
+        trackId: "track_2",
+        priority: "background"
+      })
+    );
+  });
 });
