@@ -75,7 +75,7 @@ export function MobileBottomPlayerLayout({
 }: LayoutProps) {
   return (
     <div className="mx-auto w-full max-w-[1400px] lg:hidden">
-      <div className="grid min-h-[6.75rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5">
+      <div className="grid min-h-[5.5rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
         <VinylBadge isPlaying={isPlaying} compact />
 
         <div className="min-w-0">
@@ -109,7 +109,7 @@ export function MobileBottomPlayerLayout({
           </span>
         </div>
 
-        <div className="col-span-2 grid min-h-[2.75rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="col-span-2 grid min-h-[2.5rem] grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div />
 
           <div className="flex items-center justify-center gap-1">
@@ -211,7 +211,7 @@ export function DesktopBottomPlayerLayout({
           <p className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.22em] text-accent">
             {isPlaying ? "正在播放" : "已暂停"}
           </p>
-          <div className="min-h-[2.2rem]">
+          <div className="min-h-[2rem]">
             <h3 className="truncate text-sm font-semibold text-foreground">{title}</h3>
             <p className="truncate text-xs text-foreground-muted">{artist}</p>
           </div>
@@ -232,7 +232,7 @@ export function DesktopBottomPlayerLayout({
         </Button>
 
         <button
-          className={`inline-grid h-12 w-12 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+          className={`inline-grid h-10 w-10 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
             canControlPlayback
               ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
               : "cursor-not-allowed bg-surface text-foreground-muted opacity-50"
