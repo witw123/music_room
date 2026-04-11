@@ -3,6 +3,7 @@ import type { RoomSnapshot } from "@music-room/shared";
 import {
   buildManualCacheSchedulerAvailability,
   resolveManualCacheTrackProviderPeerId,
+  shouldRestartManualCacheProviderPeer,
   shouldRetryManualCacheProviderBootstrap
 } from "./use-manual-cache-downloader";
 
@@ -158,6 +159,56 @@ describe("shouldRetryManualCacheProviderBootstrap", () => {
         now: 10_000
       })
     ).toBe(true);
+  });
+});
+
+describe("shouldRestartManualCacheProviderPeer", () => {
+  it("restarts a provider peer after it stays unavailable for too long", () => {
+    expect(
+      shouldRestartManualCacheProviderPeer({
+        providerPeerId: "peer_owner",
+        connectedPeerIds: [],
+        unavailableSinceAt: 1_000,
+        lastRestartAt: null,
+        now: 7_100
+      })
+    ).toBe(true);
+  });
+
+  it("does not restart a provider peer before the unavailable window is long enough", () => {
+    expect(
+      shouldRestartManualCacheProviderPeer({
+        providerPeerId: "peer_owner",
+        connectedPeerIds: [],
+        unavailableSinceAt: 2_000,
+        lastRestartAt: null,
+        now: 7_000
+      })
+    ).toBe(false);
+  });
+
+  it("does not restart a provider peer while the restart cooldown is still active", () => {
+    expect(
+      shouldRestartManualCacheProviderPeer({
+        providerPeerId: "peer_owner",
+        connectedPeerIds: [],
+        unavailableSinceAt: 0,
+        lastRestartAt: 4_000,
+        now: 8_000
+      })
+    ).toBe(false);
+  });
+
+  it("does not restart a provider peer that is already connected", () => {
+    expect(
+      shouldRestartManualCacheProviderPeer({
+        providerPeerId: "peer_owner",
+        connectedPeerIds: ["peer_owner"],
+        unavailableSinceAt: 0,
+        lastRestartAt: null,
+        now: 10_000
+      })
+    ).toBe(false);
   });
 });
 

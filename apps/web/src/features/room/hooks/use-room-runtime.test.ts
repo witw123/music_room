@@ -17,6 +17,8 @@ import {
   shouldKickSourcePlaybackFromRealtimeEvent,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldManagePublishedMediaTransport,
+  shouldForceRemoteAudioElementRebind,
+  shouldKickRemotePlaybackFromAudioEvent,
   shouldReannounceManualCacheAvailability,
   shouldRecoverManualCacheDataPeers,
   shouldResumeRemotePlaybackAfterAudioUnlock,
@@ -186,6 +188,111 @@ describe("shouldReannounceManualCacheAvailability", () => {
         lastBroadcastKey: "room_1|peer_a,peer_b|track_a,track_b"
       })
     ).toBe("room_1|peer_b,peer_c|track_a,track_b");
+  });
+});
+
+describe("shouldForceRemoteAudioElementRebind", () => {
+  it("forces a rebind when the same remote stream is reused for a new playback generation", () => {
+    const sharedStream = {} as MediaStream;
+
+    expect(
+      shouldForceRemoteAudioElementRebind({
+        incomingStream: sharedStream,
+        boundStream: sharedStream,
+        currentGeneration: "track_b|2|peer_source|peer_listener",
+        boundGeneration: "track_a|1|peer_source|peer_listener"
+      })
+    ).toBe(true);
+  });
+
+  it("does not force a rebind when the current generation is already bound", () => {
+    const sharedStream = {} as MediaStream;
+
+    expect(
+      shouldForceRemoteAudioElementRebind({
+        incomingStream: sharedStream,
+        boundStream: sharedStream,
+        currentGeneration: "track_b|2|peer_source|peer_listener",
+        boundGeneration: "track_b|2|peer_source|peer_listener"
+      })
+    ).toBe(false);
+  });
+
+  it("does not force a rebind when there is no currently bound stream", () => {
+    expect(
+      shouldForceRemoteAudioElementRebind({
+        incomingStream: {} as MediaStream,
+        boundStream: null,
+        currentGeneration: "track_b|2|peer_source|peer_listener",
+        boundGeneration: null
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldKickRemotePlaybackFromAudioEvent", () => {
+  it("kicks playback when remote audio becomes canplay but is still paused", () => {
+    expect(
+      shouldKickRemotePlaybackFromAudioEvent({
+        eventName: "canplay",
+        playbackStatus: "playing",
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: false,
+        traceKey: "track_a|1|peer_source|peer_listener",
+        hasSrcObject: true,
+        remoteAudioPaused: true,
+        currentGeneration: "track_a|1|peer_source|peer_listener",
+        playingGeneration: null
+      })
+    ).toBe(true);
+  });
+
+  it("kicks playback when the element pauses during an active remote generation", () => {
+    expect(
+      shouldKickRemotePlaybackFromAudioEvent({
+        eventName: "pause",
+        playbackStatus: "playing",
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: false,
+        traceKey: "track_a|1|peer_source|peer_listener",
+        hasSrcObject: true,
+        remoteAudioPaused: true,
+        currentGeneration: "track_a|1|peer_source|peer_listener",
+        playingGeneration: "track_a|1|peer_source|peer_listener"
+      })
+    ).toBe(true);
+  });
+
+  it("does not kick playback when the room is not expecting remote playback", () => {
+    expect(
+      shouldKickRemotePlaybackFromAudioEvent({
+        eventName: "canplay",
+        playbackStatus: "paused",
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: false,
+        traceKey: "track_a|1|peer_source|peer_listener",
+        hasSrcObject: true,
+        remoteAudioPaused: true,
+        currentGeneration: "track_a|1|peer_source|peer_listener",
+        playingGeneration: null
+      })
+    ).toBe(false);
+  });
+
+  it("does not kick playback for the source owner", () => {
+    expect(
+      shouldKickRemotePlaybackFromAudioEvent({
+        eventName: "pause",
+        playbackStatus: "playing",
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: true,
+        traceKey: "track_a|1|peer_source|peer_listener",
+        hasSrcObject: true,
+        remoteAudioPaused: true,
+        currentGeneration: "track_a|1|peer_source|peer_listener",
+        playingGeneration: null
+      })
+    ).toBe(false);
   });
 });
 

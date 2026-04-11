@@ -58,6 +58,74 @@ export function shouldManagePublishedMediaTransport(input: {
   return !!input.roomId && !!input.peerId && input.isCurrentSourceOwner;
 }
 
+export function shouldForceRemoteAudioElementRebind(input: {
+  incomingStream: MediaStream | null;
+  boundStream: MediaStream | null;
+  currentGeneration: string | null;
+  boundGeneration: string | null;
+}) {
+  return (
+    !!input.incomingStream &&
+    !!input.boundStream &&
+    input.incomingStream === input.boundStream &&
+    !!input.currentGeneration &&
+    input.boundGeneration !== input.currentGeneration
+  );
+}
+
+export function shouldKickRemotePlaybackFromAudioEvent(input: {
+  eventName:
+    | "playing"
+    | "waiting"
+    | "loadedmetadata"
+    | "canplay"
+    | "pause"
+    | "stalled"
+    | "ended"
+    | "emptied"
+    | "error";
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  activePlaybackSource: ProgressivePlaybackSource;
+  isCurrentSourceOwner: boolean;
+  traceKey: string | null;
+  hasSrcObject: boolean;
+  remoteAudioPaused: boolean | null;
+  currentGeneration: string | null;
+  playingGeneration: string | null;
+}) {
+  if (
+    input.isCurrentSourceOwner ||
+    input.activePlaybackSource !== "remote-stream" ||
+    input.playbackStatus !== "playing" ||
+    !input.traceKey ||
+    !input.currentGeneration ||
+    !input.hasSrcObject
+  ) {
+    return false;
+  }
+
+  switch (input.eventName) {
+    case "playing":
+    case "waiting":
+      return false;
+    case "loadedmetadata":
+    case "canplay":
+      return input.remoteAudioPaused !== false;
+    case "pause":
+      return (
+        input.remoteAudioPaused !== false ||
+        input.playingGeneration !== input.currentGeneration
+      );
+    case "stalled":
+    case "ended":
+    case "emptied":
+    case "error":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function resolveRoomMediaClockEmitIntervalMs(input: {
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
@@ -250,11 +318,20 @@ export function createRoomMediaMeshRuntime(input: {
         const traceContext = input.getRemoteMediaTraceContext();
         input.listenerMediaLifecycleRef.current.latestStream = stream;
 
-        if (remoteAudio.srcObject !== stream) {
+        const boundStream = (remoteAudio.srcObject as MediaStream | null | undefined) ?? null;
+        const forceRebind = shouldForceRemoteAudioElementRebind({
+          incomingStream: stream,
+          boundStream,
+          currentGeneration: input.listenerMediaLifecycleRef.current.currentGeneration,
+          boundGeneration: input.listenerMediaLifecycleRef.current.boundGeneration
+        });
+
+        if (remoteAudio.srcObject !== stream || forceRebind) {
           input.resetRemoteAudioElement(stream, {
             deferNullReset:
               !stream && input.currentRoomRef.current?.room.playback.status === "playing",
-            generation: input.listenerMediaLifecycleRef.current.currentGeneration
+            generation: input.listenerMediaLifecycleRef.current.currentGeneration,
+            forceRebind
           });
           input.updateRemoteMediaDiagnostic(
             stream ? "远端媒体流已绑定到音频元素" : "远端媒体流已清空",
@@ -1526,7 +1603,16 @@ export function useRoomMediaRuntime(input: {
     }
 
     const syncRemoteAudioEvent = (
-      eventName: "playing" | "waiting" | "pause" | "error",
+      eventName:
+        | "playing"
+        | "waiting"
+        | "pause"
+        | "error"
+        | "loadedmetadata"
+        | "canplay"
+        | "stalled"
+        | "ended"
+        | "emptied",
       summary: string
     ) => {
       const traceContext = input.getRemoteMediaTraceContext();
@@ -1549,13 +1635,13 @@ export function useRoomMediaRuntime(input: {
           mediaConnectionState:
             eventName === "playing"
               ? "live"
-              : eventName === "error"
+              : eventName === "error" || eventName === "ended" || eventName === "emptied"
                 ? "failed"
                 : "buffering",
           recoveryActionLevel:
             eventName === "playing"
               ? "observe"
-              : eventName === "error"
+              : eventName === "error" || eventName === "ended" || eventName === "emptied"
                 ? "hard-reconnect"
                 : "observe",
           remoteTrackStatus: {
@@ -1577,31 +1663,66 @@ export function useRoomMediaRuntime(input: {
       if (eventName !== "playing" && traceContext.traceKey) {
         input.armListenerMediaRecoveryRef.current(traceContext.traceKey);
       }
+      if (
+        shouldKickRemotePlaybackFromAudioEvent({
+          eventName,
+          playbackStatus: input.roomSnapshot?.room.playback.status,
+          activePlaybackSource: input.activePlaybackSource,
+          isCurrentSourceOwner: input.isCurrentSourceOwner,
+          traceKey: traceContext.traceKey,
+          hasSrcObject: !!remoteAudio.srcObject,
+          remoteAudioPaused: remoteAudio.paused,
+          currentGeneration: input.listenerMediaLifecycleRef.current.currentGeneration,
+          playingGeneration: input.listenerMediaLifecycleRef.current.playingGeneration
+        })
+      ) {
+        input.scheduleRemotePlaybackRetry(0, traceContext.traceKey);
+      }
     };
 
     const handlePlaying = () => syncRemoteAudioEvent("playing", "远端音频元素开始播放");
     const handleWaiting = () => syncRemoteAudioEvent("waiting", "远端音频元素进入等待");
     const handlePause = () => syncRemoteAudioEvent("pause", "远端音频元素暂停");
+    const handleLoadedMetadata = () =>
+      syncRemoteAudioEvent("loadedmetadata", "远端音频元素已载入媒体元数据");
+    const handleCanPlay = () => syncRemoteAudioEvent("canplay", "远端音频元素已可播放");
+    const handleStalled = () => syncRemoteAudioEvent("stalled", "远端音频元素播放卡顿");
+    const handleEnded = () => syncRemoteAudioEvent("ended", "远端音频元素播放结束");
+    const handleEmptied = () => syncRemoteAudioEvent("emptied", "远端音频元素媒体流已清空");
     const handleError = () => syncRemoteAudioEvent("error", "远端音频元素播放失败");
 
     remoteAudio.addEventListener("playing", handlePlaying);
     remoteAudio.addEventListener("waiting", handleWaiting);
     remoteAudio.addEventListener("pause", handlePause);
+    remoteAudio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    remoteAudio.addEventListener("canplay", handleCanPlay);
+    remoteAudio.addEventListener("stalled", handleStalled);
+    remoteAudio.addEventListener("ended", handleEnded);
+    remoteAudio.addEventListener("emptied", handleEmptied);
     remoteAudio.addEventListener("error", handleError);
 
     return () => {
       remoteAudio.removeEventListener("playing", handlePlaying);
       remoteAudio.removeEventListener("waiting", handleWaiting);
       remoteAudio.removeEventListener("pause", handlePause);
+      remoteAudio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      remoteAudio.removeEventListener("canplay", handleCanPlay);
+      remoteAudio.removeEventListener("stalled", handleStalled);
+      remoteAudio.removeEventListener("ended", handleEnded);
+      remoteAudio.removeEventListener("emptied", handleEmptied);
       remoteAudio.removeEventListener("error", handleError);
     };
   }, [
     input.armListenerMediaRecoveryRef,
     input.clearListenerMediaRecovery,
+    input.activePlaybackSource,
     input.getRemoteAudioDiagnostics,
     input.getRemoteMediaTraceContext,
+    input.isCurrentSourceOwner,
     input.listenerMediaLifecycleRef,
     input.remoteAudioRef,
+    input.roomSnapshot?.room.playback.status,
+    input.scheduleRemotePlaybackRetry,
     input.updateRemoteMediaDiagnostic
   ]);
 

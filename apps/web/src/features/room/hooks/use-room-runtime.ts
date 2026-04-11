@@ -82,6 +82,8 @@ export {
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
 export { shouldManagePublishedMediaTransport } from "./use-room-media-runtime";
+export { shouldForceRemoteAudioElementRebind } from "./use-room-media-runtime";
+export { shouldKickRemotePlaybackFromAudioEvent } from "./use-room-media-runtime";
 export { shouldReannounceManualCacheAvailability } from "./use-room-realtime-connection";
 export { shouldRedirectRoomRouteToAuth } from "./use-room-runtime-lifecycle";
 
@@ -839,7 +841,12 @@ export function useRoomRuntime({
   const resetRemoteAudioElement = useCallback(
     (
       stream: MediaStream | null,
-      options?: { deferNullReset?: boolean; generation?: string | null; reason?: string }
+      options?: {
+        deferNullReset?: boolean;
+        generation?: string | null;
+        reason?: string;
+        forceRebind?: boolean;
+      }
     ) => {
       const remoteAudio = remoteAudioRef.current;
       if (!remoteAudio) {
@@ -854,7 +861,7 @@ export function useRoomRuntime({
         }
         clearPendingRemoteStreamClear();
         const traceContext = getRemoteMediaTraceContext();
-        if (remoteAudio.srcObject !== stream) {
+        if (remoteAudio.srcObject !== stream || options?.forceRebind) {
           remoteAudio.pause();
           if (remoteAudio.srcObject) {
             remoteAudio.srcObject = null;
@@ -873,8 +880,7 @@ export function useRoomRuntime({
             remoteTrackStatus: {
               ...snapshot.remoteTrackStatus,
               ...traceContext,
-              ...getRemoteAudioDiagnostics()
-            ,
+              ...getRemoteAudioDiagnostics(),
               boundToAudioElement: true,
               lastBoundAt: new Date().toISOString(),
               boundGeneration: generation ?? null,
@@ -1344,7 +1350,8 @@ export function useRoomRuntime({
         if (lifecycle.latestStream) {
           resetRemoteAudioElement(lifecycle.latestStream, {
             generation: expectedGeneration,
-            reason: action
+            reason: action,
+            forceRebind: action === "rebind-element" || action === "rebind-and-play"
           });
         }
 
@@ -1502,12 +1509,20 @@ export function useRoomRuntime({
       !!existingRemoteStream &&
       !!existingRemoteTrack &&
       existingRemoteTrack.readyState !== "ended";
-    const existingRemoteAudioPlaying = canReuseExistingRemoteStream && remoteAudio?.paused === false;
+    const shouldForceRebindReusedRemoteStream =
+      canReuseExistingRemoteStream && !!traceContext.traceKey;
+    const existingRemoteAudioPlaying =
+      canReuseExistingRemoteStream &&
+      !shouldForceRebindReusedRemoteStream &&
+      remoteAudio?.paused === false;
 
     lifecycle.traceKey = traceContext.traceKey;
     lifecycle.sourcePeerId = traceContext.sourcePeerId;
     lifecycle.lastTrackTraceKey = canReuseExistingRemoteStream ? traceContext.traceKey : null;
-    lifecycle.lastBoundTraceKey = canReuseExistingRemoteStream ? traceContext.traceKey : null;
+    lifecycle.lastBoundTraceKey =
+      canReuseExistingRemoteStream && !shouldForceRebindReusedRemoteStream
+        ? traceContext.traceKey
+        : null;
     lifecycle.lastPlayAttemptTraceKey = existingRemoteAudioPlaying ? traceContext.traceKey : null;
     lifecycle.lastPlayAttemptResult = existingRemoteAudioPlaying ? "ok" : null;
     lifecycle.lastPlayAttemptError = null;
@@ -1519,14 +1534,19 @@ export function useRoomRuntime({
     lifecycle.latestStream = canReuseExistingRemoteStream ? existingRemoteStream : null;
     lifecycle.currentGeneration = traceContext.traceKey;
     lifecycle.generationStartedAt = traceContext.traceKey ? Date.now() : null;
-    lifecycle.boundGeneration = canReuseExistingRemoteStream ? traceContext.traceKey : null;
+    lifecycle.boundGeneration =
+      canReuseExistingRemoteStream && !shouldForceRebindReusedRemoteStream
+        ? traceContext.traceKey
+        : null;
     lifecycle.playingGeneration = existingRemoteAudioPlaying ? traceContext.traceKey : null;
     lifecycle.lastPlayoutProgressAt = existingRemoteAudioPlaying ? Date.now() : null;
     lifecycle.lastTransportProgressAt = canReuseExistingRemoteStream ? Date.now() : null;
     lifecycle.lastObservedRemoteCurrentTimeMs = null;
     lifecycle.recoveryStage = traceContext.traceKey
       ? canReuseExistingRemoteStream
-        ? "retry-play"
+        ? shouldForceRebindReusedRemoteStream
+          ? "rebind-and-play"
+          : "retry-play"
         : "waiting-track"
       : "idle";
     lifecycle.restartAttempt = 0;
@@ -1558,6 +1578,13 @@ export function useRoomRuntime({
       }
     );
     if (traceContext.traceKey) {
+      if (shouldForceRebindReusedRemoteStream && existingRemoteStream) {
+        resetRemoteAudioElement(existingRemoteStream, {
+          generation: traceContext.traceKey,
+          reason: "trace-switch",
+          forceRebind: true
+        });
+      }
       armListenerMediaRecoveryRef.current(traceContext.traceKey);
       if (canReuseExistingRemoteStream) {
         scheduleRemotePlaybackRetryRef.current(0, traceContext.traceKey);
@@ -1571,6 +1598,7 @@ export function useRoomRuntime({
     getRemoteMediaTraceContext,
     isCurrentSourceOwner,
     remoteAudioRef,
+    resetRemoteAudioElement,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.mediaEpoch,
     roomSnapshot?.room.playback.sourcePeerId,

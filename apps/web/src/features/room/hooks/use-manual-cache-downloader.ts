@@ -10,6 +10,8 @@ const directRequestBatchSize = 8;
 const directRequestTimeoutMs = 5_000;
 const directPendingTtlMs = 7_000;
 const providerBootstrapRetryCooldownMs = 1_500;
+const providerRestartAfterMs = 6_000;
+const providerRestartCooldownMs = 5_000;
 
 export function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
   const peerIds = new Set<string>();
@@ -198,6 +200,28 @@ export function shouldRetryManualCacheProviderBootstrap(input: {
   );
 }
 
+export function shouldRestartManualCacheProviderPeer(input: {
+  providerPeerId: string;
+  connectedPeerIds: string[];
+  unavailableSinceAt: number | null;
+  lastRestartAt: number | null;
+  now?: number;
+}) {
+  if (!input.providerPeerId || input.connectedPeerIds.includes(input.providerPeerId)) {
+    return false;
+  }
+
+  const now = input.now ?? Date.now();
+  if (
+    input.unavailableSinceAt === null ||
+    now - input.unavailableSinceAt < providerRestartAfterMs
+  ) {
+    return false;
+  }
+
+  return input.lastRestartAt === null || now - input.lastRestartAt >= providerRestartCooldownMs;
+}
+
 export function buildManualCacheSchedulerAvailability(input: {
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   manualCacheTrackIds: string[];
@@ -321,6 +345,8 @@ export function useManualCacheDownloader(input: {
   const recoverySinceAtRef = useRef<number | null>(null);
   const lastRecoveryAtRef = useRef<number | null>(null);
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
+  const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());
+  const lastProviderRestartAtRef = useRef<Map<string, number>>(new Map());
 
   const availabilityProviderPeerIds = useMemo(
     () =>
@@ -483,6 +509,16 @@ export function useManualCacheDownloader(input: {
       try {
         let connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
         const now = Date.now();
+        for (const providerPeerId of providerPeerIds) {
+          if (connectedPeerIds.includes(providerPeerId)) {
+            providerUnavailableSinceRef.current.delete(providerPeerId);
+            continue;
+          }
+
+          if (!providerUnavailableSinceRef.current.has(providerPeerId)) {
+            providerUnavailableSinceRef.current.set(providerPeerId, now);
+          }
+        }
         if (
           shouldRetryManualCacheProviderBootstrap({
             manualCacheTrackIds: input.manualCacheTrackIds,
@@ -495,6 +531,31 @@ export function useManualCacheDownloader(input: {
           lastBootstrapAttemptAtRef.current = now;
           await input.dataMesh.syncPeers(providerPeerIds);
           connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
+        }
+        for (const providerPeerId of providerPeerIds) {
+          if (
+            shouldRestartManualCacheProviderPeer({
+              providerPeerId,
+              connectedPeerIds,
+              unavailableSinceAt:
+                providerUnavailableSinceRef.current.get(providerPeerId) ?? null,
+              lastRestartAt: lastProviderRestartAtRef.current.get(providerPeerId) ?? null,
+              now
+            })
+          ) {
+            lastProviderRestartAtRef.current.set(providerPeerId, now);
+            await input.dataMesh.restartPeer(providerPeerId).catch((error) => {
+              input.onRuntimeEvent?.({
+                type: "diagnostic",
+                peerId: providerPeerId,
+                channelKind: "data",
+                direction: "local",
+                event: "manual-cache-provider-restart-failed",
+                summary: `Failed to restart stalled manual cache provider ${providerPeerId}: ${String(error)}`,
+                level: "error"
+              });
+            });
+          }
         }
 
         for (const trackId of input.manualCacheTrackIds) {
