@@ -744,19 +744,20 @@ export function MusicRoomApp({
     [armPlaybackStart, playTrack, roomSnapshot?.room.playback.currentTrackId]
   );
 
-  const handlePlayCachedLibraryTrackToRoom = useCallback(
+  const handleAddCachedLibraryTrackToLibrary = useCallback(
     async (fileHash: string) => {
       try {
         const trackId = await importCachedLibraryTrackToRoom(fileHash);
         if (!trackId) {
           return;
         }
-        await handlePlayTrack(trackId);
+        const importedTrack = roomSnapshot?.tracks.find((track) => track.id === trackId)?.title ?? "歌曲";
+        setStatusMessage(`已将《${importedTrack}》添加到当前曲库。`);
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
       }
     },
-    [handlePlayTrack, importCachedLibraryTrackToRoom, setStatusMessage]
+    [importCachedLibraryTrackToRoom, roomSnapshot?.tracks, setStatusMessage]
   );
 
   const handlePlayQueueItem = useCallback(
@@ -1036,7 +1037,7 @@ export function MusicRoomApp({
         onDeleteTrack={deleteTrack}
         onPlayTrack={handlePlayTrack}
         onStartManualCacheDownload={handleStartManualCacheDownload}
-        onPlayCachedLibraryTrackToRoom={handlePlayCachedLibraryTrackToRoom}
+        onAddCachedLibraryTrackToLibrary={handleAddCachedLibraryTrackToLibrary}
         onExportCachedLibraryTrack={handleExportCachedLibraryTrack}
         onDeleteCachedLibraryTrack={handleDeleteCachedLibraryTrack}
         onPlayQueueItem={handlePlayQueueItem}

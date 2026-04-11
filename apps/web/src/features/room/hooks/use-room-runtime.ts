@@ -6610,6 +6610,11 @@ export function useRoomRuntime({
   }, [connectedPeers.length, mediaConnectedPeers.length]);
 
   useEffect(() => {
+    if (!enableTrackCaching) {
+      dataDegradedSinceRef.current = null;
+      return;
+    }
+
     if (!roomSnapshot?.room.id || !peerId || isCurrentSourceOwner || bufferHealth === "healthy") {
       return;
     }
@@ -6735,6 +6740,7 @@ export function useRoomRuntime({
     bufferHealth,
     buildSourceRecoveryActionKey,
     currentRoomRef,
+    enableTrackCaching,
     iceConfig?.source,
     isCurrentSourceOwner,
     peerId,

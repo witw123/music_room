@@ -15,7 +15,7 @@ type CacheTabPanelProps = {
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
   onStartManualCacheDownload: (trackId: string) => Promise<void>;
-  onPlayCachedLibraryTrackToRoom: (fileHash: string) => Promise<void>;
+  onAddCachedLibraryTrackToLibrary: (fileHash: string) => Promise<void>;
   onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
 };
@@ -27,7 +27,7 @@ function CacheTabPanelBase({
   cacheLibraryTracks,
   manualCacheTasks,
   onStartManualCacheDownload,
-  onPlayCachedLibraryTrackToRoom,
+  onAddCachedLibraryTrackToLibrary,
   onExportCachedLibraryTrack,
   onDeleteCachedLibraryTrack
 }: CacheTabPanelProps) {
@@ -157,7 +157,7 @@ function CacheTabPanelBase({
         <div>
           <h3 className="text-sm font-semibold text-foreground">我的缓存库</h3>
           <p className="mt-1 text-xs text-foreground-muted">
-            这里是当前设备的个人缓存库。你可以试听、导出到本地，或显式作为你的本地音源播放到房间。
+            这里是当前设备的个人缓存库。你可以把缓存歌曲显式添加到当前房间曲库、导出到本地，或删除缓存。
           </p>
         </div>
 
@@ -168,7 +168,7 @@ function CacheTabPanelBase({
                 key={track.fileHash}
                 className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4"
               >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex flex-col gap-3">
                   <div className="min-w-0 space-y-1">
                     <div className="flex items-start gap-3">
                       <div className="min-w-0">
@@ -185,20 +185,16 @@ function CacheTabPanelBase({
                       来源房间数：{track.sourceRoomIds.length}  关联曲目数：{track.sourceTrackIds.length}
                     </p>
                   </div>
-
-                  <div className="rounded-xl border border-surface-border bg-background/30 p-2 lg:w-[280px]">
-                    <audio className="w-full" controls preload="none" src={track.objectUrl} />
-                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <Button
                     variant="outline"
                     className="h-10 px-4"
-                    onClick={() => startTransition(() => void onPlayCachedLibraryTrackToRoom(track.fileHash))}
+                    onClick={() => startTransition(() => void onAddCachedLibraryTrackToLibrary(track.fileHash))}
                     type="button"
                   >
-                    播放到房间
+                    添加到曲库
                   </Button>
                   <Button
                     variant="outline"
