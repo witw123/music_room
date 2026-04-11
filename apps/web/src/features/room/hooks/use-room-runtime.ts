@@ -688,6 +688,53 @@ function buildHostPublishKey(input: {
   ].join("|");
 }
 
+function resolveRoomListenerPeerIds(
+  members: RoomSnapshot["room"]["members"] | null | undefined,
+  localPeerId: string | null | undefined
+) {
+  if (!members || !localPeerId) {
+    return [] as string[];
+  }
+
+  return members
+    .map((member) => member.peerId)
+    .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== localPeerId)
+    .sort();
+}
+
+export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
+  previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
+  nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
+  activeSessionId: string | null | undefined;
+}) {
+  const { previousPlayback, nextPlayback, activeSessionId } = input;
+  if (!activeSessionId || !nextPlayback || nextPlayback.sourceSessionId !== activeSessionId) {
+    return false;
+  }
+
+  if (!previousPlayback) {
+    return true;
+  }
+
+  if (previousPlayback.sourceSessionId !== nextPlayback.sourceSessionId) {
+    return true;
+  }
+
+  if (previousPlayback.sourcePeerId !== nextPlayback.sourcePeerId) {
+    return true;
+  }
+
+  if (previousPlayback.currentTrackId !== nextPlayback.currentTrackId) {
+    return true;
+  }
+
+  if (previousPlayback.mediaEpoch !== nextPlayback.mediaEpoch) {
+    return true;
+  }
+
+  return previousPlayback.status !== "playing" && nextPlayback.status === "playing";
+}
+
 function withResolvedTransportHealth(snapshot: PeerDiagnosticsSnapshot): PeerDiagnosticsSnapshot {
   return {
     ...snapshot,
@@ -1767,6 +1814,17 @@ export function useRoomRuntime({
   useEffect(() => {
     currentRoomRef.current = roomSnapshot;
   }, [roomSnapshot, currentRoomRef]);
+
+  const rawRoomListenerPeerIds = useMemo(
+    () => resolveRoomListenerPeerIds(roomSnapshot?.room.members, peerId),
+    [roomSnapshot?.room.members, peerId]
+  );
+  const roomListenerSetHash = rawRoomListenerPeerIds.join(",");
+  const roomListenerPeerIds = useMemo(
+    () => (roomListenerSetHash ? roomListenerSetHash.split(",") : []),
+    [roomListenerSetHash]
+  );
+  const roomListenerCount = roomListenerPeerIds.length;
 
   useEffect(() => {
     const roomId = roomSnapshot?.room.id ?? null;
@@ -3079,11 +3137,7 @@ export function useRoomRuntime({
       return;
     }
 
-    const listenerPeerIds =
-      roomSnapshot.room.members
-        .map((member) => member.peerId)
-        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
-    if (listenerPeerIds.length === 0) {
+    if (roomListenerCount === 0) {
       return;
     }
 
@@ -3227,8 +3281,8 @@ export function useRoomRuntime({
     peerId,
     remoteAudioRef,
     roomSnapshot?.room.id,
-    roomSnapshot?.room.members,
     roomSnapshot?.room.playback,
+    roomListenerCount,
     setAuthoritativeMediaClock,
     socketRef,
     sourceStartState,
@@ -5463,6 +5517,12 @@ export function useRoomRuntime({
         return;
       }
 
+      const shouldKickSourcePlayback = shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: currentRoomRef.current?.room.playback,
+        nextPlayback: snapshot.room.playback,
+        activeSessionId: activeSessionRef.current?.userId
+      });
+
       lastRealtimeRoomEventAtRef.current = Date.now();
       dispatchRoomStateEvent({
         type: "server-snapshot",
@@ -5489,7 +5549,7 @@ export function useRoomRuntime({
 
       flushPendingAvailabilityRef.current();
       resyncRealtimePeers(snapshot.room.members);
-      if (snapshot.room.playback.sourceSessionId === activeSessionRef.current?.userId) {
+      if (shouldKickSourcePlayback) {
         window.setTimeout(() => {
           if (activeRouteRoomIdRef.current === roomId) {
             void ensureSourcePlaybackStartedRef.current();
@@ -5568,6 +5628,12 @@ export function useRoomRuntime({
         return;
       }
 
+      const shouldKickSourcePlayback = shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: currentRoomRef.current?.room.playback,
+        nextPlayback: playback,
+        activeSessionId: activeSessionRef.current?.userId
+      });
+
       lastRealtimeRoomEventAtRef.current = Date.now();
       dispatchRoomStateEvent({
         type: "server-presence-patch",
@@ -5579,7 +5645,7 @@ export function useRoomRuntime({
       });
       void requestRoomSnapshotResyncRef.current("realtime-room-event", roomId);
       resyncRealtimePeers(members);
-      if (playback.sourceSessionId === activeSessionRef.current?.userId) {
+      if (shouldKickSourcePlayback) {
         window.setTimeout(() => {
           if (activeRouteRoomIdRef.current === roomId) {
             void ensureSourcePlaybackStartedRef.current();
@@ -6286,10 +6352,7 @@ export function useRoomRuntime({
       return;
     }
 
-    const listenerPeerIds = room.members
-      .filter((member) => !!member.peerId && member.peerId !== peerId)
-      .map((member) => member.peerId as string);
-    if (listenerPeerIds.length === 0) {
+    if (roomListenerCount === 0) {
       return;
     }
 
@@ -6297,13 +6360,11 @@ export function useRoomRuntime({
       preferPublishedTrack: room.playback.status === "playing" && isCurrentSourceOwner
     });
   }, [
-    activeSession?.userId,
     isCurrentSourceOwner,
     peerId,
-    roomSnapshot?.room.hostId,
     roomSnapshot?.room.id,
-    roomSnapshot?.room.members,
-    roomSnapshot?.room.playback.status
+    roomSnapshot?.room.playback.status,
+    roomListenerCount
   ]);
 
   useEffect(() => {
@@ -6319,11 +6380,11 @@ export function useRoomRuntime({
     isCurrentSourceOwner,
     peerId,
     roomSnapshot?.room.id,
-    roomSnapshot?.room.members,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.mediaEpoch,
     roomSnapshot?.room.playback.sourceSessionId,
     roomSnapshot?.room.playback.status,
+    roomListenerSetHash,
     updateSourceStartState,
     activePlaybackSource
   ]);
@@ -6347,12 +6408,12 @@ export function useRoomRuntime({
     isCurrentSourceOwner,
     peerId,
     roomSnapshot?.room.id,
-    roomSnapshot?.room.members,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.status,
     roomSnapshot?.room.playback.sourceSessionId,
     roomSnapshot?.room.playback.mediaEpoch,
     activePlaybackSource,
+    roomListenerSetHash,
     sourceStartState,
     syncHostMediaStream
   ]);
@@ -6370,18 +6431,14 @@ export function useRoomRuntime({
       return;
     }
 
-    const listenerPeerIds = roomSnapshot.room.members
-      .filter((member) => !!member.peerId && member.peerId !== peerId)
-      .map((member) => member.peerId as string)
-      .sort();
-    if (listenerPeerIds.length === 0) {
+    if (roomListenerCount === 0) {
       lastListenerBootstrapKeyRef.current = null;
       return;
     }
 
     const now = Date.now();
     const connectedPeerSet = new Set(mediaConnectedPeers);
-    for (const listenerPeerId of listenerPeerIds) {
+    for (const listenerPeerId of roomListenerPeerIds) {
       if (connectedPeerSet.has(listenerPeerId)) {
         missingListenerSinceRef.current.delete(listenerPeerId);
       } else if (!missingListenerSinceRef.current.has(listenerPeerId)) {
@@ -6389,12 +6446,12 @@ export function useRoomRuntime({
       }
     }
     for (const trackedPeerId of [...missingListenerSinceRef.current.keys()]) {
-      if (!listenerPeerIds.includes(trackedPeerId)) {
+      if (!roomListenerPeerIds.includes(trackedPeerId)) {
         missingListenerSinceRef.current.delete(trackedPeerId);
       }
     }
 
-    const stableMissingListenerPeerIds = listenerPeerIds.filter((listenerPeerId) => {
+    const stableMissingListenerPeerIds = roomListenerPeerIds.filter((listenerPeerId) => {
       if (connectedPeerSet.has(listenerPeerId)) {
         return false;
       }
@@ -6410,7 +6467,6 @@ export function useRoomRuntime({
       roomSnapshot.room.id,
       roomSnapshot.room.playback.mediaEpoch,
       mediaTransportEpochRef.current,
-      roomSnapshot.room.presenceRevision,
       ...stableMissingListenerPeerIds
     ].join("|");
     if (lastListenerBootstrapKeyRef.current === bootstrapKey) {
@@ -6457,10 +6513,10 @@ export function useRoomRuntime({
     peerId,
     roomSnapshot?.room.id,
     mediaConnectedPeers,
-    roomSnapshot?.room.members,
     roomSnapshot?.room.playback.mediaEpoch,
     roomSnapshot?.room.playback.status,
-    roomSnapshot?.room.presenceRevision,
+    roomListenerCount,
+    roomListenerPeerIds,
     sourceStartState,
     updateHostCaptureDiagnostics
   ]);
@@ -6481,9 +6537,7 @@ export function useRoomRuntime({
       return;
     }
 
-    const listenerPeerCount =
-      roomSnapshot.room.members.filter((member) => !!member.peerId && member.peerId !== peerId).length;
-    if (listenerPeerCount <= 0) {
+    if (roomListenerCount <= 0) {
       lastHostCaptureRefreshAtRef.current = 0;
       return;
     }
@@ -6519,21 +6573,16 @@ export function useRoomRuntime({
     isCurrentSourceOwner,
     peerId,
     roomSnapshot?.room.id,
-    roomSnapshot?.room.members,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.mediaEpoch,
     roomSnapshot?.room.playback.status,
+    roomListenerCount,
     sourceStartState,
     syncHostMediaStream
   ]);
 
   useEffect(() => {
-    const remotePeerIds =
-      roomSnapshot?.room.members
-        .map((member) => member.peerId)
-        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== peerId) ?? [];
-
-    const syncPromise = meshRef.current?.syncPeers(remotePeerIds);
+    const syncPromise = meshRef.current?.syncPeers(roomListenerPeerIds);
     if (!syncPromise) {
       return;
     }
@@ -6547,7 +6596,7 @@ export function useRoomRuntime({
         error
       });
     });
-  }, [roomSnapshot?.room.members, peerId, reportRealtimeFailure]);
+  }, [reportRealtimeFailure, roomListenerPeerIds]);
 
   useEffect(() => {
     if (mediaConnectedPeers.length > 0 && connectedPeers.length === 0) {

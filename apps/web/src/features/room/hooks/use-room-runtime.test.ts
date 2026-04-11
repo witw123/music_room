@@ -9,6 +9,7 @@ import {
   resolveListenerMediaRecoveryReason,
   resolveMediaDiagnosticPeerId,
   resolvePeerConnectionNoProgressMs,
+  shouldKickSourcePlaybackFromRealtimeEvent,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldManagePublishedMediaTransport,
   shouldResumeRemotePlaybackAfterAudioUnlock,
@@ -374,6 +375,71 @@ describe("shouldManagePublishedMediaTransport", () => {
         isCurrentSourceOwner: true
       })
     ).toBe(false);
+  });
+});
+
+describe("shouldKickSourcePlaybackFromRealtimeEvent", () => {
+  const basePlayback = {
+    status: "playing" as const,
+    currentTrackId: "track_a",
+    currentQueueItemId: "queue_a",
+    startedAt: null,
+    positionMs: 0,
+    pauseRevision: 0,
+    queueVersion: 1,
+    mediaEpoch: 3,
+    playbackRevision: 1,
+    sourceSessionId: "member_1",
+    sourcePeerId: "peer_member",
+    sourceTrackId: "track_a"
+  };
+
+  it("does not re-kick source playback for presence-only patches while the same member remains source", () => {
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback
+        },
+        activeSessionId: "member_1"
+      })
+    ).toBe(false);
+  });
+
+  it("kicks source playback when the active source member changes track, media epoch, or ownership", () => {
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback,
+          currentTrackId: "track_b"
+        },
+        activeSessionId: "member_1"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback,
+          mediaEpoch: 4
+        },
+        activeSessionId: "member_1"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: {
+          ...basePlayback,
+          sourceSessionId: "host_1",
+          sourcePeerId: "peer_host"
+        },
+        nextPlayback: basePlayback,
+        activeSessionId: "member_1"
+      })
+    ).toBe(true);
   });
 });
 
