@@ -140,6 +140,22 @@ export function shouldKickRemotePlaybackFromAudioEvent(input: {
   }
 }
 
+export function shouldBootstrapMissingListeners(input: {
+  roomId: string | null | undefined;
+  peerId: string | null | undefined;
+  isCurrentSourceOwner: boolean;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  roomListenerCount: number;
+}) {
+  return (
+    !!input.roomId &&
+    !!input.peerId &&
+    input.isCurrentSourceOwner &&
+    input.playbackStatus === "playing" &&
+    input.roomListenerCount > 0
+  );
+}
+
 function resolveRoomMediaClockEmitIntervalMs(input: {
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
@@ -1965,18 +1981,14 @@ export function useRoomMediaRuntime(input: {
 
   useEffect(() => {
     if (
-      !input.roomSnapshot?.room.id ||
-      !input.peerId ||
-      !input.isCurrentSourceOwner ||
-      !input.audioUnlocked ||
-      input.roomSnapshot.room.playback.status !== "playing" ||
-      input.sourceStartState !== "live"
+      !shouldBootstrapMissingListeners({
+        roomId: input.roomSnapshot?.room.id,
+        peerId: input.peerId,
+        isCurrentSourceOwner: input.isCurrentSourceOwner,
+        playbackStatus: input.roomSnapshot?.room.playback.status,
+        roomListenerCount: input.roomListenerCount
+      })
     ) {
-      input.lastListenerBootstrapKeyRef.current = null;
-      return;
-    }
-
-    if (input.roomListenerCount === 0) {
       input.lastListenerBootstrapKeyRef.current = null;
       return;
     }
@@ -2008,9 +2020,15 @@ export function useRoomMediaRuntime(input: {
       return;
     }
 
+    const roomSnapshot = input.roomSnapshot;
+    if (!roomSnapshot) {
+      input.lastListenerBootstrapKeyRef.current = null;
+      return;
+    }
+
     const bootstrapKey = [
-      input.roomSnapshot.room.id,
-      input.roomSnapshot.room.playback.mediaEpoch,
+      roomSnapshot.room.id,
+      roomSnapshot.room.playback.mediaEpoch,
       input.mediaTransportEpochRef.current,
       ...stableMissingListenerPeerIds
     ].join("|");
@@ -2060,7 +2078,6 @@ export function useRoomMediaRuntime(input: {
     };
   }, [
     input.activeRouteRoomIdRef,
-    input.audioUnlocked,
     input.hostMediaSyncStateRef,
     input.hostStreamRef,
     input.isCurrentSourceOwner,
@@ -2075,7 +2092,6 @@ export function useRoomMediaRuntime(input: {
     input.roomSnapshot?.room.id,
     input.roomSnapshot?.room.playback.mediaEpoch,
     input.roomSnapshot?.room.playback.status,
-    input.sourceStartState,
     input.syncHostMediaStreamRef,
     input.updateHostCaptureDiagnostics
   ]);

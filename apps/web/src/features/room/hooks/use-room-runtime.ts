@@ -1410,6 +1410,10 @@ export function useRoomRuntime({
           ? null
           : result.error ?? "play-rejected";
         if (result.ok) {
+          if (!audioUnlockedRef.current && roomAudioOutput.isActivated()) {
+            setAudioUnlockedRef.current(true);
+            audioUnlockedRef.current = true;
+          }
           listenerMediaLifecycleRef.current.playingGeneration = generation;
           listenerMediaLifecycleRef.current.recoveryStage = "idle";
           listenerMediaLifecycleRef.current.lastPlayoutProgressAt = Date.now();
@@ -1461,10 +1465,12 @@ export function useRoomRuntime({
     },
     [
       clearListenerMediaRecovery,
+      audioUnlockedRef,
       currentRoomRef,
       getRemoteAudioDiagnostics,
       getRemoteMediaTraceContext,
       remoteAudioRef,
+      setAudioUnlockedRef,
       setStatusMessage,
       updateRemoteMediaDiagnostic
     ]

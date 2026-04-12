@@ -25,7 +25,10 @@ import {
   shouldRedirectRoomRouteToAuth,
 } from "./use-room-runtime";
 import { shouldSuppressSourceRecoveryDuringGenerationBootstrap } from "./use-room-connection-supervisor";
-import { resolveMediaTransportOwnerKey } from "./use-room-media-runtime";
+import {
+  resolveMediaTransportOwnerKey,
+  shouldBootstrapMissingListeners
+} from "./use-room-media-runtime";
 
 describe("resolveListenerMediaRecoveryReason", () => {
   const traceKey = "track_a|3|peer_source|peer_listener";
@@ -359,6 +362,42 @@ describe("shouldSuppressSourceRecoveryDuringGenerationBootstrap", () => {
         generationStartedAt: 10_000,
         playingGeneration: null,
         now: 14_000
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldBootstrapMissingListeners", () => {
+  it("keeps listener bootstrap enabled for a source owner even before the real track is marked live", () => {
+    expect(
+      shouldBootstrapMissingListeners({
+        roomId: "room_1",
+        peerId: "peer_member",
+        isCurrentSourceOwner: true,
+        playbackStatus: "playing",
+        roomListenerCount: 1
+      })
+    ).toBe(true);
+  });
+
+  it("does not bootstrap when the room is idle or the peer is not the current source owner", () => {
+    expect(
+      shouldBootstrapMissingListeners({
+        roomId: "room_1",
+        peerId: "peer_member",
+        isCurrentSourceOwner: true,
+        playbackStatus: "paused",
+        roomListenerCount: 1
+      })
+    ).toBe(false);
+
+    expect(
+      shouldBootstrapMissingListeners({
+        roomId: "room_1",
+        peerId: "peer_member",
+        isCurrentSourceOwner: false,
+        playbackStatus: "playing",
+        roomListenerCount: 1
       })
     ).toBe(false);
   });
