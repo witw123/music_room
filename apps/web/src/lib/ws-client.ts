@@ -1,6 +1,34 @@
 import type { ClientToServerEvents, ServerToClientEvents } from "@music-room/shared";
 import { io, type Socket } from "socket.io-client";
 
+const localHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+function normalizeConfiguredWsBaseUrl(rawUrl: string) {
+  return rawUrl.trim().replace(/\/$/, "");
+}
+
+function isLocalHostname(hostname: string) {
+  return localHostnames.has(hostname.trim().toLowerCase());
+}
+
+function shouldPreferCurrentWsOrigin(configuredBaseUrl: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const configured = new URL(configuredBaseUrl, window.location.origin);
+    const current = new URL(window.location.origin);
+    if (isLocalHostname(configured.hostname) || isLocalHostname(current.hostname)) {
+      return false;
+    }
+
+    return configured.host !== current.host;
+  } catch {
+    return true;
+  }
+}
+
 function getDefaultWsBaseUrl() {
   if (typeof window !== "undefined") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -10,7 +38,21 @@ function getDefaultWsBaseUrl() {
   return "ws://localhost:3001";
 }
 
-export const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL?.trim() || getDefaultWsBaseUrl();
+function resolveWsBaseUrl() {
+  const configuredWsBaseUrl = process.env.NEXT_PUBLIC_WS_URL?.trim();
+  if (!configuredWsBaseUrl) {
+    return getDefaultWsBaseUrl();
+  }
+
+  const normalizedConfiguredWsBaseUrl = normalizeConfiguredWsBaseUrl(configuredWsBaseUrl);
+  if (shouldPreferCurrentWsOrigin(normalizedConfiguredWsBaseUrl)) {
+    return getDefaultWsBaseUrl();
+  }
+
+  return normalizedConfiguredWsBaseUrl;
+}
+
+export const wsBaseUrl = resolveWsBaseUrl();
 export const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH ?? "/ws/socket.io";
 const sessionStorageKey = "music-room-session";
 
