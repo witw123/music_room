@@ -24,6 +24,8 @@ import {
   shouldResumeRemotePlaybackAfterAudioUnlock,
   shouldRedirectRoomRouteToAuth,
 } from "./use-room-runtime";
+import { shouldSuppressSourceRecoveryDuringGenerationBootstrap } from "./use-room-connection-supervisor";
+import { resolveMediaTransportOwnerKey } from "./use-room-media-runtime";
 
 describe("resolveListenerMediaRecoveryReason", () => {
   const traceKey = "track_a|3|peer_source|peer_listener";
@@ -291,6 +293,72 @@ describe("shouldKickRemotePlaybackFromAudioEvent", () => {
         remoteAudioPaused: true,
         currentGeneration: "track_a|1|peer_source|peer_listener",
         playingGeneration: null
+      })
+    ).toBe(false);
+  });
+});
+
+describe("resolveMediaTransportOwnerKey", () => {
+  it("changes the transport owner key when mediaEpoch changes for the same source peer", () => {
+    expect(
+      resolveMediaTransportOwnerKey({
+        roomId: "room_a",
+        sourcePeerId: "peer_source",
+        mediaEpoch: 3
+      })
+    ).toBe("room_a|peer_source|3");
+
+    expect(
+      resolveMediaTransportOwnerKey({
+        roomId: "room_a",
+        sourcePeerId: "peer_source",
+        mediaEpoch: 4
+      })
+    ).toBe("room_a|peer_source|4");
+  });
+
+  it("returns null when the room identity is missing", () => {
+    expect(
+      resolveMediaTransportOwnerKey({
+        roomId: null,
+        sourcePeerId: "peer_source",
+        mediaEpoch: 3
+      })
+    ).toBeNull();
+  });
+});
+
+describe("shouldSuppressSourceRecoveryDuringGenerationBootstrap", () => {
+  it("suppresses hard recovery while a fresh remote playback generation is still bootstrapping", () => {
+    expect(
+      shouldSuppressSourceRecoveryDuringGenerationBootstrap({
+        playbackStatus: "playing",
+        currentGeneration: "track_b|4|peer_source|peer_listener",
+        generationStartedAt: 10_000,
+        playingGeneration: "track_a|3|peer_source|peer_listener",
+        now: 11_500
+      })
+    ).toBe(true);
+  });
+
+  it("stops suppressing once the new generation is already playing or the grace window expired", () => {
+    expect(
+      shouldSuppressSourceRecoveryDuringGenerationBootstrap({
+        playbackStatus: "playing",
+        currentGeneration: "track_b|4|peer_source|peer_listener",
+        generationStartedAt: 10_000,
+        playingGeneration: "track_b|4|peer_source|peer_listener",
+        now: 11_500
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSuppressSourceRecoveryDuringGenerationBootstrap({
+        playbackStatus: "playing",
+        currentGeneration: "track_b|4|peer_source|peer_listener",
+        generationStartedAt: 10_000,
+        playingGeneration: null,
+        now: 14_000
       })
     ).toBe(false);
   });

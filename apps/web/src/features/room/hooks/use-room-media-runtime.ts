@@ -73,6 +73,20 @@ export function shouldForceRemoteAudioElementRebind(input: {
   );
 }
 
+export function resolveMediaTransportOwnerKey(input: {
+  roomId: string | null | undefined;
+  sourcePeerId: string | null | undefined;
+  mediaEpoch: number | null | undefined;
+}) {
+  if (!input.roomId) {
+    return null;
+  }
+
+  return `${input.roomId}|${input.sourcePeerId ?? "none"}|${
+    typeof input.mediaEpoch === "number" ? input.mediaEpoch : "none"
+  }`;
+}
+
 export function shouldKickRemotePlaybackFromAudioEvent(input: {
   eventName:
     | "playing"
@@ -1551,7 +1565,12 @@ export function useRoomMediaRuntime(input: {
   useEffect(() => {
     const roomId = input.roomSnapshot?.room.id ?? null;
     const sourcePeerId = input.roomSnapshot?.room.playback.sourcePeerId ?? null;
-    const ownerKey = roomId ? `${roomId}|${sourcePeerId ?? "none"}` : null;
+    const mediaEpoch = input.roomSnapshot?.room.playback.mediaEpoch ?? null;
+    const ownerKey = resolveMediaTransportOwnerKey({
+      roomId,
+      sourcePeerId,
+      mediaEpoch
+    });
     if (!ownerKey) {
       input.mediaTransportOwnerKeyRef.current = null;
       input.mediaTransportEpochRef.current = 0;
@@ -1581,6 +1600,7 @@ export function useRoomMediaRuntime(input: {
     input.mediaTransportOwnerKeyRef,
     input.missingListenerSinceRef,
     input.roomSnapshot?.room.id,
+    input.roomSnapshot?.room.playback.mediaEpoch,
     input.roomSnapshot?.room.playback.sourcePeerId
   ]);
 

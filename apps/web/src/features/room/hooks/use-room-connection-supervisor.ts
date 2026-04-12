@@ -39,6 +39,7 @@ const listenerHardRecoveryCooldownMs = 3_000;
 const connectionSupervisorHardRecreateNoProgressFloorMs = 15_000;
 const recentAudibleProgressGraceMs = 2_500;
 const recoveryBootstrapGraceMs = 5_000;
+const sourceGenerationBootstrapGraceMs = 3_500;
 const connectionSupervisorForegroundIntervalMs = 500;
 const connectionSupervisorBackgroundIntervalMs = 2_000;
 
@@ -87,12 +88,40 @@ export function withSupervisorDiagnosticPatch(
   };
 }
 
+export function shouldSuppressSourceRecoveryDuringGenerationBootstrap(input: {
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  currentGeneration: string | null;
+  generationStartedAt: number | null;
+  playingGeneration: string | null;
+  now?: number;
+  graceMs?: number;
+}) {
+  if (
+    input.playbackStatus !== "playing" ||
+    !input.currentGeneration ||
+    typeof input.generationStartedAt !== "number"
+  ) {
+    return false;
+  }
+
+  if (input.playingGeneration === input.currentGeneration) {
+    return false;
+  }
+
+  const now = input.now ?? Date.now();
+  const graceMs = input.graceMs ?? sourceGenerationBootstrapGraceMs;
+  return now - input.generationStartedAt < graceMs;
+}
+
 export function useRoomConnectionSupervisor(input: {
   roomSnapshot: RoomSnapshot | null;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   remoteAudioRef: RefObject<HTMLAudioElement | null>;
   listenerMediaLifecycleRef: MutableRefObject<{
+    currentGeneration: string | null;
+    generationStartedAt: number | null;
+    playingGeneration: string | null;
     lastPlayoutProgressAt: number | null;
     lastTransportProgressAt: number | null;
   }>;
@@ -297,6 +326,18 @@ export function useRoomConnectionSupervisor(input: {
 
       if (!input.isPageVisible) {
         return "page-hidden";
+      }
+
+      if (
+        shouldSuppressSourceRecoveryDuringGenerationBootstrap({
+          playbackStatus: playback.status,
+          currentGeneration: input.listenerMediaLifecycleRef.current.currentGeneration,
+          generationStartedAt: input.listenerMediaLifecycleRef.current.generationStartedAt,
+          playingGeneration: input.listenerMediaLifecycleRef.current.playingGeneration,
+          now
+        })
+      ) {
+        return "generation-bootstrap-grace";
       }
 
       const continuity = resolveSourceContinuityState(now);
@@ -532,6 +573,8 @@ export function useRoomConnectionSupervisorRuntime(input: {
   ) => void;
   listenerMediaLifecycleRef: MutableRefObject<{
     currentGeneration: string | null;
+    generationStartedAt: number | null;
+    playingGeneration: string | null;
     lastPlayoutProgressAt: number | null;
     lastTransportProgressAt: number | null;
   }>;
@@ -567,9 +610,62 @@ export function useRoomConnectionSupervisorRuntime(input: {
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   resubscribeRoomRef: MutableRefObject<(() => void) | null>;
 }) {
+  const lastSourceSupervisorKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentRoom = input.currentRoomRef.current;
+    const roomId = currentRoom?.room.id ?? input.roomSnapshot?.room.id ?? null;
+    const playback = currentRoom?.room.playback ?? input.roomSnapshot?.room.playback ?? null;
+    const sourcePeerId = playback?.sourcePeerId ?? null;
+    const mediaEpoch = playback?.mediaEpoch ?? null;
+    const sourceSupervisorKey =
+      roomId &&
+      sourcePeerId &&
+      sourcePeerId !== input.peerId &&
+      typeof mediaEpoch === "number"
+        ? `${roomId}|${sourcePeerId}|${mediaEpoch}`
+        : null;
+
+    if (lastSourceSupervisorKeyRef.current === sourceSupervisorKey) {
+      return;
+    }
+
+    lastSourceSupervisorKeyRef.current = sourceSupervisorKey;
+    input.clearSourceHardRecoveryAction(null, null);
+
+    if (!roomId || !sourcePeerId || sourcePeerId === input.peerId) {
+      return;
+    }
+
+    const nextState = createPeerConnectionSupervisorState({
+      roomId,
+      peerId: sourcePeerId
+    });
+    input.connectionSupervisorStatesRef.current.set(sourcePeerId, nextState);
+    input.recordPeerDiagnosticRef.current({
+      peerId: sourcePeerId,
+      channelKind: "media",
+      direction: "local",
+      event: "source-supervisor-reset",
+      summary: "播放代次切换，重置源媒体连接监督状态",
+      recordEvent: false,
+      update: (snapshot: any) => withSupervisorDiagnosticPatch(snapshot, nextState)
+    });
+  }, [
+    input.clearSourceHardRecoveryAction,
+    input.connectionSupervisorStatesRef,
+    input.currentRoomRef,
+    input.peerId,
+    input.recordPeerDiagnosticRef,
+    input.roomSnapshot?.room.id,
+    input.roomSnapshot?.room.playback.mediaEpoch,
+    input.roomSnapshot?.room.playback.sourcePeerId
+  ]);
+
   useEffect(() => {
     if (!input.roomSnapshot?.room.id || !input.peerId) {
       input.connectionSupervisorStatesRef.current.clear();
+      lastSourceSupervisorKeyRef.current = null;
       return;
     }
 
@@ -785,7 +881,7 @@ export function useRoomConnectionSupervisorRuntime(input: {
         const needsHardRecovery =
           hasHardRecoverySignal &&
           hardRecoveryWindowSatisfied &&
-          (!sourceRecoverySuppressedReason || hasImmediateHardRecoverySignal);
+          !sourceRecoverySuppressedReason;
 
         if (
           needsHardRecovery &&
