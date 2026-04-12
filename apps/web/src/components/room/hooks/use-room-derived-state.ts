@@ -15,6 +15,7 @@ import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement
 } from "@/features/p2p";
+import { buildManualCacheSchedulerAvailability } from "@/features/room/hooks/use-manual-cache-downloader";
 
 type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
@@ -72,6 +73,15 @@ export function useRoomDerivedState({
     () => getActiveMemberPeerIds(roomSnapshot?.room.members ?? []),
     [roomSnapshot?.room.members]
   );
+  const derivedAvailabilityByTrack = useMemo(
+    () =>
+      resolveDerivedAvailabilityByTrack({
+        roomSnapshot,
+        availabilityByTrack,
+        localPeerId: peerId
+      }),
+    [availabilityByTrack, peerId, roomSnapshot]
+  );
   const remoteMediaDiagnostic = useMemo(
     () => peerDiagnostics.find((peer) => peer.peerId === "remote-media") ?? null,
     [peerDiagnostics]
@@ -90,14 +100,14 @@ export function useRoomDerivedState({
   const availabilitySummary =
     roomSnapshot?.tracks.map((track) => {
       const peers = filterAvailabilityAnnouncementsByCurrentRoomPeers(
-        availabilityByTrack[track.id] ?? {},
+        derivedAvailabilityByTrack[track.id] ?? {},
         roomSnapshot.room.id,
         activeMemberPeerIds
       );
       const local = peers.find((entry) => entry.ownerPeerId === peerId);
       const manifest = resolveCurrentRoomTrackManifest(
         track,
-        availabilityByTrack[track.id] ?? {},
+        derivedAvailabilityByTrack[track.id] ?? {},
         roomSnapshot.room.id,
         activeMemberPeerIds
       );
@@ -131,7 +141,7 @@ export function useRoomDerivedState({
     const currentTrackManifest = currentTrack
       ? resolveCurrentRoomTrackManifest(
           currentTrack,
-          availabilityByTrack[currentTrack.id] ?? {},
+          derivedAvailabilityByTrack[currentTrack.id] ?? {},
           roomSnapshot.room.id,
           activeMemberPeerIds
         )
@@ -149,7 +159,7 @@ export function useRoomDerivedState({
 
     for (const track of roomSnapshot.tracks) {
       for (const announcement of filterAvailabilityAnnouncementsByCurrentRoomPeers(
-        availabilityByTrack[track.id] ?? {},
+        derivedAvailabilityByTrack[track.id] ?? {},
         roomSnapshot.room.id,
         activeMemberPeerIds
       )) {
@@ -199,7 +209,7 @@ export function useRoomDerivedState({
         currentTrackSources: [...(stats?.currentTrackSources ?? [])]
       };
     });
-  }, [activeDashboardTab, activeMemberPeerIds, availabilityByTrack, currentTrack, roomSnapshot]);
+  }, [activeDashboardTab, activeMemberPeerIds, currentTrack, derivedAvailabilityByTrack, roomSnapshot]);
 
   const visiblePeerDiagnostics = useMemo(() => {
     return filterVisiblePeerDiagnostics(
@@ -405,6 +415,23 @@ export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"])
       .map((member) => member.peerId)
       .filter((memberPeerId): memberPeerId is string => !!memberPeerId)
   );
+}
+
+export function resolveDerivedAvailabilityByTrack(input: {
+  roomSnapshot: RoomSnapshot | null;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  localPeerId: string;
+}) {
+  if (!input.roomSnapshot) {
+    return input.availabilityByTrack;
+  }
+
+  return buildManualCacheSchedulerAvailability({
+    availabilityByTrack: input.availabilityByTrack,
+    manualCacheTrackIds: input.roomSnapshot.tracks.map((track) => track.id),
+    roomSnapshot: input.roomSnapshot,
+    localPeerId: input.localPeerId
+  });
 }
 
 export function filterAvailabilityAnnouncementsByActivePeers(

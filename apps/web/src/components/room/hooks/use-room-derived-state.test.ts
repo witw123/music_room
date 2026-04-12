@@ -7,6 +7,7 @@ import {
   filterVisiblePeerDiagnostics,
   getActiveMemberPeerIds,
   isRemoteMediaPlaybackReady,
+  resolveDerivedAvailabilityByTrack,
   resolveCurrentRoomTrackManifest
 } from "./use-room-derived-state";
 
@@ -147,6 +148,102 @@ describe("use-room-derived-state helpers", () => {
       totalChunks: 169,
       chunkSize: 256 * 1024,
       source: "availability"
+    });
+  });
+
+  it("synthesizes the online uploader as a visible provider when piece availability was missed", () => {
+    expect(
+      resolveDerivedAvailabilityByTrack({
+        roomSnapshot: {
+          room: {
+            id: "room_1",
+            hostId: "host",
+            joinCode: "ABCD12",
+            visibility: "private",
+            members: [
+              {
+                id: "host",
+                nickname: "Host",
+                role: "host",
+                joinedAt: "2026-04-04T00:00:00.000Z",
+                peerId: "peer_host",
+                presenceState: "online"
+              },
+              {
+                id: "listener",
+                nickname: "Listener",
+                role: "member",
+                joinedAt: "2026-04-04T00:01:00.000Z",
+                peerId: "peer_listener",
+                presenceState: "online"
+              }
+            ],
+            playback: {
+              status: "paused",
+              currentTrackId: null,
+              currentQueueItemId: null,
+              sourceSessionId: null,
+              sourcePeerId: null,
+              sourceTrackId: null,
+              positionMs: 0,
+              startedAt: null,
+              queueVersion: 1,
+              playbackRevision: 1,
+              mediaEpoch: 0
+            },
+            presenceRevision: 1,
+            roomRevision: 1
+          },
+          tracks: [
+            {
+              id: "track_1",
+              title: "Track",
+              artist: "Artist",
+              album: null,
+              durationMs: 120_000,
+              bitrate: null,
+              sizeBytes: 43_000_000,
+              codec: "flac",
+              mimeType: "audio/flac",
+              fileHash: "hash_1",
+              artworkUrl: null,
+              ownerSessionId: "host",
+              ownerNickname: "Host",
+              sourceType: "local_upload",
+              relayManifest: {
+                totalChunks: 169,
+                chunkSize: 256 * 1024,
+                pieceMimeType: "audio/flac"
+              },
+              pieceManifest: {
+                totalChunks: 169,
+                chunkSize: 256 * 1024,
+                pieceMimeType: "audio/flac"
+              }
+            }
+          ],
+          queue: [],
+          playlists: []
+        },
+        availabilityByTrack: {},
+        localPeerId: "peer_listener"
+      })
+    ).toEqual({
+      track_1: {
+        peer_host: {
+          roomId: "room_1",
+          trackId: "track_1",
+          ownerPeerId: "peer_host",
+          nickname: "Host",
+          assetKind: "relay",
+          assetHash: "hash_1",
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          availableChunks: Array.from({ length: 169 }, (_, index) => index),
+          source: "live_upload",
+          announcedAt: expect.any(String)
+        }
+      }
     });
   });
 

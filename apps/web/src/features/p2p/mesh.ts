@@ -142,7 +142,7 @@ type PendingPieceRequest = {
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
-type PieceFrameHeader = {
+type SendPieceFrameHeader = {
   kind: "send-piece";
   requestId?: string;
   trackId: string;
@@ -153,8 +153,28 @@ type PieceFrameHeader = {
   pieceHash: string;
 };
 
-type BinaryPieceMessage = PieceFrameHeader & {
-  header: PieceFrameHeader;
+type SendPieceFragmentFrameHeader = {
+  kind: "send-piece-fragment";
+  requestId?: string;
+  trackId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkSize: number;
+  mimeType: string;
+  pieceHash: string;
+  fragmentIndex: number;
+  fragmentCount: number;
+};
+
+type PieceFrameHeader = SendPieceFrameHeader | SendPieceFragmentFrameHeader;
+
+type BinaryPieceMessage = SendPieceFrameHeader & {
+  header: SendPieceFrameHeader;
+  payload: ArrayBuffer;
+};
+
+type BinaryPieceFragmentMessage = SendPieceFragmentFrameHeader & {
+  header: SendPieceFragmentFrameHeader;
   payload: ArrayBuffer;
 };
 
@@ -162,6 +182,20 @@ type IncomingPieceBatchItem = {
   peerId: string;
   message: BinaryPieceMessage;
   pendingRequest?: PendingPieceRequest;
+};
+
+type PendingIncomingPieceFragments = {
+  peerId: string;
+  requestId?: string;
+  trackId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkSize: number;
+  mimeType: string;
+  pieceHash: string;
+  fragmentCount: number;
+  receivedAtMs: number;
+  fragments: Map<number, ArrayBuffer>;
 };
 
 type CachedPieceManifestHeader = {
@@ -195,10 +229,13 @@ export class P2PMesh {
   private readonly sendQueueLowWatermarkBytes = 256 * 1024;
   private readonly sendQueueHighWatermarkBytes = 1024 * 1024;
   private readonly incomingPieceBatchSize = 24;
+  private readonly maxDataChannelPayloadBytes = 48 * 1024;
+  private readonly incomingPieceFragmentTtlMs = 15_000;
   private statsSamplingMode: "off" | "steady" | "active" = "active";
   private readonly autoReconnect: boolean;
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
   private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
+  private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
 
   constructor(
     private readonly roomId: string,
@@ -517,6 +554,7 @@ export class P2PMesh {
       this.pieceFlushTimer = null;
     }
     this.pendingIncomingPieces.length = 0;
+    this.pendingIncomingPieceFragments.clear();
 
     for (const [peerId, entry] of this.peers.entries()) {
       this.releasePeer(peerId, entry);
@@ -760,6 +798,11 @@ export class P2PMesh {
           pendingRequest
         });
         this.scheduleIncomingPieceFlush();
+        return;
+      }
+
+      if (message.kind === "send-piece-fragment" && isBinaryPieceFragmentMessage(message)) {
+        this.handleIncomingPieceFragment(peerId, message);
       }
     };
 
@@ -862,24 +905,27 @@ export class P2PMesh {
       return;
     }
 
-    this.enqueueSendItem(peerId, entry, {
-      data: buildPieceFrame(
-        {
-          kind: "send-piece",
-          requestId: request.requestId,
-          trackId: request.trackId,
-          chunkIndex: piece.chunkIndex,
-          totalChunks: manifestHeader.totalChunks,
-          chunkSize: manifestHeader.chunkSize,
-          mimeType: manifestHeader.mimeType,
-          pieceHash: piece.hash
-        },
-        piece.payload
-      ),
-      trackId: request.trackId,
-      chunkIndex: piece.chunkIndex,
-      payloadBytes: piece.payload.byteLength
-    });
+    const pieceFrames = buildPieceFrames(
+      {
+        requestId: request.requestId,
+        trackId: request.trackId,
+        chunkIndex: piece.chunkIndex,
+        totalChunks: manifestHeader.totalChunks,
+        chunkSize: manifestHeader.chunkSize,
+        mimeType: manifestHeader.mimeType,
+        pieceHash: piece.hash
+      },
+      piece.payload,
+      this.maxDataChannelPayloadBytes
+    );
+    for (const frame of pieceFrames) {
+      this.enqueueSendItem(peerId, entry, {
+        data: frame.data,
+        trackId: request.trackId,
+        chunkIndex: piece.chunkIndex,
+        payloadBytes: frame.payloadBytes
+      });
+    }
     this.callbacks.onPieceServed?.({
       peerId,
       trackId: request.trackId,
@@ -935,10 +981,22 @@ export class P2PMesh {
 
     while (entry.sendQueue.length > 0 && channel.bufferedAmount < this.sendQueueHighWatermarkBytes) {
       const nextItem = entry.sendQueue.shift()!;
-      if (typeof nextItem.data === "string") {
-        channel.send(nextItem.data);
-      } else {
-        channel.send(nextItem.data);
+      try {
+        if (typeof nextItem.data === "string") {
+          channel.send(nextItem.data);
+        } else {
+          channel.send(nextItem.data);
+        }
+      } catch {
+        entry.sendQueue.unshift(nextItem);
+        this.callbacks.onPeerStalled?.({
+          peerId,
+          reason: "data-channel-closed"
+        });
+        if (this.autoReconnect) {
+          this.schedulePeerReconnect(peerId, entry);
+        }
+        break;
       }
       if (
         typeof nextItem.trackId === "string" &&
@@ -1334,10 +1392,104 @@ export class P2PMesh {
       }
     }
   }
+
+  private handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage) {
+    this.purgeStaleIncomingPieceFragments();
+    const fragmentKey = this.buildIncomingPieceFragmentKey(
+      peerId,
+      message.trackId,
+      message.chunkIndex,
+      message.requestId
+    );
+    const existing = this.pendingIncomingPieceFragments.get(fragmentKey);
+    const fragmentState: PendingIncomingPieceFragments =
+      existing &&
+      existing.fragmentCount === message.fragmentCount &&
+      existing.pieceHash === message.pieceHash
+        ? existing
+        : {
+            peerId,
+            requestId: message.requestId,
+            trackId: message.trackId,
+            chunkIndex: message.chunkIndex,
+            totalChunks: message.totalChunks,
+            chunkSize: message.chunkSize,
+            mimeType: message.mimeType,
+            pieceHash: message.pieceHash,
+            fragmentCount: message.fragmentCount,
+            receivedAtMs: Date.now(),
+            fragments: new Map<number, ArrayBuffer>()
+          };
+
+    fragmentState.receivedAtMs = Date.now();
+    fragmentState.fragments.set(message.fragmentIndex, message.payload);
+    this.pendingIncomingPieceFragments.set(fragmentKey, fragmentState);
+
+    if (fragmentState.fragments.size < fragmentState.fragmentCount) {
+      return;
+    }
+
+    const assembledPayload = assembleIncomingPieceFragments(fragmentState);
+    this.pendingIncomingPieceFragments.delete(fragmentKey);
+    if (!assembledPayload) {
+      return;
+    }
+
+    const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
+    const pendingRequest = this.pendingPieceRequests.get(requestKey);
+    if (pendingRequest) {
+      clearTimeout(pendingRequest.timeoutId);
+      this.pendingPieceRequests.delete(requestKey);
+    }
+
+    this.pendingIncomingPieces.push({
+      peerId,
+      message: {
+        kind: "send-piece",
+        requestId: message.requestId,
+        trackId: message.trackId,
+        chunkIndex: message.chunkIndex,
+        totalChunks: message.totalChunks,
+        chunkSize: message.chunkSize,
+        mimeType: message.mimeType,
+        pieceHash: message.pieceHash,
+        header: {
+          kind: "send-piece",
+          requestId: message.requestId,
+          trackId: message.trackId,
+          chunkIndex: message.chunkIndex,
+          totalChunks: message.totalChunks,
+          chunkSize: message.chunkSize,
+          mimeType: message.mimeType,
+          pieceHash: message.pieceHash
+        },
+        payload: assembledPayload
+      },
+      pendingRequest
+    });
+    this.scheduleIncomingPieceFlush();
+  }
+
+  private buildIncomingPieceFragmentKey(
+    peerId: string,
+    trackId: string,
+    chunkIndex: number,
+    requestId?: string
+  ) {
+    return `${peerId}:${trackId}:${chunkIndex}:${requestId ?? "none"}`;
+  }
+
+  private purgeStaleIncomingPieceFragments(now = Date.now()) {
+    for (const [fragmentKey, fragmentState] of this.pendingIncomingPieceFragments.entries()) {
+      if (now - fragmentState.receivedAtMs >= this.incomingPieceFragmentTtlMs) {
+        this.pendingIncomingPieceFragments.delete(fragmentKey);
+      }
+    }
+  }
 }
 
 async function parseIncomingMessage(data: unknown): Promise<
-  P2PDataMessage | BinaryPieceMessage | null
+  P2PDataMessage | BinaryPieceMessage | BinaryPieceFragmentMessage | null
 > {
   if (typeof data === "string") {
     let parsedMessage: unknown;
@@ -1364,9 +1516,9 @@ async function parseIncomingMessage(data: unknown): Promise<
 
   return {
     ...frame.header,
-    header: frame.header,
+    header: frame.header as any,
     payload: frame.payload
-  };
+  } as BinaryPieceMessage | BinaryPieceFragmentMessage;
 }
 
 async function toArrayBuffer(data: unknown) {
@@ -1397,6 +1549,48 @@ function buildPieceFrame(header: PieceFrameHeader, payload: ArrayBuffer) {
   frame.set(payloadBytes, 4 + headerBytes.byteLength);
 
   return frame.buffer;
+}
+
+function buildPieceFrames(
+  header: Omit<SendPieceFrameHeader, "kind">,
+  payload: ArrayBuffer,
+  maxPayloadBytes: number
+) {
+  const singleFrame = buildPieceFrame(
+    {
+      kind: "send-piece",
+      ...header
+    },
+    payload
+  );
+  if (singleFrame.byteLength <= maxPayloadBytes) {
+    return [{ data: singleFrame, payloadBytes: payload.byteLength }];
+  }
+
+  const fragmentPayloadSize = Math.max(8 * 1024, maxPayloadBytes - 1024);
+  const payloadBytes = new Uint8Array(payload);
+  const fragmentCount = Math.ceil(payloadBytes.byteLength / fragmentPayloadSize);
+  const frames: Array<{ data: ArrayBuffer; payloadBytes: number }> = [];
+
+  for (let fragmentIndex = 0; fragmentIndex < fragmentCount; fragmentIndex += 1) {
+    const fragmentStart = fragmentIndex * fragmentPayloadSize;
+    const fragmentEnd = Math.min(payloadBytes.byteLength, fragmentStart + fragmentPayloadSize);
+    const fragmentPayload = payloadBytes.slice(fragmentStart, fragmentEnd).buffer;
+    frames.push({
+      data: buildPieceFrame(
+        {
+          kind: "send-piece-fragment",
+          ...header,
+          fragmentIndex,
+          fragmentCount
+        },
+        fragmentPayload
+      ),
+      payloadBytes: fragmentEnd - fragmentStart
+    });
+  }
+
+  return frames;
 }
 
 function decodePieceFrame(buffer: ArrayBuffer) {
@@ -1438,20 +1632,63 @@ function isPieceFrameHeader(value: unknown): value is PieceFrameHeader {
   }
 
   const header = value as Record<string, unknown>;
-  return (
-    header.kind === "send-piece" &&
+  const hasBaseShape =
     (typeof header.requestId === "undefined" || typeof header.requestId === "string") &&
     typeof header.trackId === "string" &&
     typeof header.chunkIndex === "number" &&
     typeof header.totalChunks === "number" &&
     typeof header.chunkSize === "number" &&
     typeof header.mimeType === "string" &&
-    typeof header.pieceHash === "string"
+    typeof header.pieceHash === "string";
+
+  if (!hasBaseShape) {
+    return false;
+  }
+
+  if (header.kind === "send-piece") {
+    return true;
+  }
+
+  return (
+    header.kind === "send-piece-fragment" &&
+    typeof header.fragmentIndex === "number" &&
+    typeof header.fragmentCount === "number"
   );
 }
 
 function isBinaryPieceMessage(value: P2PDataMessage | BinaryPieceMessage): value is BinaryPieceMessage {
   return "header" in value && "payload" in value;
+}
+
+function isBinaryPieceFragmentMessage(
+  value: P2PDataMessage | BinaryPieceMessage | BinaryPieceFragmentMessage
+): value is BinaryPieceFragmentMessage {
+  return (
+    "header" in value &&
+    "payload" in value &&
+    value.header.kind === "send-piece-fragment"
+  );
+}
+
+function assembleIncomingPieceFragments(fragmentState: PendingIncomingPieceFragments) {
+  const orderedFragments: Uint8Array[] = [];
+  for (let fragmentIndex = 0; fragmentIndex < fragmentState.fragmentCount; fragmentIndex += 1) {
+    const fragment = fragmentState.fragments.get(fragmentIndex);
+    if (!fragment) {
+      return null;
+    }
+    orderedFragments.push(new Uint8Array(fragment));
+  }
+
+  const totalLength = orderedFragments.reduce((sum, fragment) => sum + fragment.byteLength, 0);
+  const payload = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const fragment of orderedFragments) {
+    payload.set(fragment, offset);
+    offset += fragment.byteLength;
+  }
+
+  return payload.buffer;
 }
 
 function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {
