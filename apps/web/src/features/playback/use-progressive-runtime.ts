@@ -1711,6 +1711,7 @@ export function useProgressiveRuntime({
 
     const remoteAudio = remoteAudioRef.current;
     const uploaded = uploadedTracks[playback.currentTrackId] ?? null;
+    const sourceOwnerHasLocalTrack = isCurrentSourceOwner && !!uploaded;
     const shouldWarmBufferedFullLocal =
       !!uploaded &&
       !isCurrentSourceOwner &&
@@ -1719,7 +1720,12 @@ export function useProgressiveRuntime({
     const expectedSeconds =
       getEffectivePlaybackPositionMs(playback, currentTrack?.durationMs ?? 0, Date.now()) / 1000;
 
-    if ((activePlaybackSource === "full-local" || forceSourceOwnerLocalPlayback) && uploaded) {
+    if (
+      (activePlaybackSource === "full-local" ||
+        forceSourceOwnerLocalPlayback ||
+        sourceOwnerHasLocalTrack) &&
+      uploaded
+    ) {
       if (remoteAudio) {
         remoteAudio.pause();
         remoteAudio.srcObject = null;

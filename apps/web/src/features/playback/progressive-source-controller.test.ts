@@ -32,6 +32,24 @@ describe("progressive source controller", () => {
     ).toBe(false);
   });
 
+  it("keeps forcing source owners onto full-local until they are fully off the remote path", () => {
+    expect(
+      shouldForceSourceOwnerLocalPlayback({
+        isCurrentSourceOwner: true,
+        activePlaybackSource: "progressive-local",
+        hasFullLocalTrack: true
+      })
+    ).toBe(true);
+
+    expect(
+      shouldForceSourceOwnerLocalPlayback({
+        isCurrentSourceOwner: true,
+        activePlaybackSource: "full-local",
+        hasFullLocalTrack: true
+      })
+    ).toBe(false);
+  });
+
   it("requires a stable warmup window before switching to progressive local", () => {
     const firstDecision = resolveProgressiveWarmupDecision({
       currentSource: "remote-stream",

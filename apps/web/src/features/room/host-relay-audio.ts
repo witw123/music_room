@@ -89,11 +89,11 @@ export function resolveHostRelayAudioElement(input: {
   const localBound = hasBoundAudioSource(input.localAudio);
   const remoteBound = hasBoundAudioSource(input.remoteAudio);
 
-  if (input.forceSourceOwnerLocalPlayback && input.localAudio) {
+  if (input.isCurrentSourceOwner) {
     return input.localAudio;
   }
 
-  if (input.isCurrentSourceOwner && input.hasPlayableLiveUpload) {
+  if (input.forceSourceOwnerLocalPlayback && input.localAudio) {
     return input.localAudio;
   }
 
@@ -156,8 +156,7 @@ export function resolveHostPublishSource(input: {
     relayTrack.enabled !== false &&
     relayTrack.muted !== true &&
     relayTrack.readyState === "live";
-  const shouldPreferRelayStream =
-    relayReady && !(input.isCurrentSourceOwner && input.hasPlayableLiveUpload);
+  const shouldPreferRelayStream = relayReady && !input.isCurrentSourceOwner;
 
   if (shouldPreferRelayStream && input.hostRelayStream) {
     return {

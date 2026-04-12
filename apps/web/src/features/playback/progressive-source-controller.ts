@@ -26,7 +26,7 @@ export function shouldForceSourceOwnerLocalPlayback(input: {
   return (
     input.isCurrentSourceOwner &&
     input.hasFullLocalTrack &&
-    input.activePlaybackSource === "remote-stream"
+    input.activePlaybackSource !== "full-local"
   );
 }
 

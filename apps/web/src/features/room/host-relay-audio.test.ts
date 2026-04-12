@@ -86,6 +86,23 @@ describe("host relay audio", () => {
     ).toBe(localAudio);
   });
 
+  it("never selects the remote audio element while the current peer is the source owner", () => {
+    const localAudio = createAudioElement({ paused: true, readyState: 0, currentSrc: "" });
+    const remoteAudio = createAudioElement({ paused: false, readyState: 4, srcObject: {} });
+
+    expect(
+      resolveHostRelayAudioElement({
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: true,
+        forceSourceOwnerLocalPlayback: false,
+        localAudio,
+        remoteAudio,
+        hasPlayableLiveUpload: false,
+        hostRelayStreamAvailable: true
+      })
+    ).toBe(localAudio);
+  });
+
   it("resolves a source-owner live upload to local-audio publish target", () => {
     const localAudio = createAudioElement({ paused: false, readyState: 4, currentSrc: "blob:local" });
     const remoteAudio = createAudioElement();
@@ -152,6 +169,29 @@ describe("host relay audio", () => {
       publishTarget: "local-audio",
       resolvedPublishElement: "local-audio",
       resolvedPublishStreamKind: "audio-element-capture"
+    });
+  });
+
+  it("does not reuse the relay stream for a source owner even before the upload registry catches up", () => {
+    const hostRelayStream = {
+      getAudioTracks: () => [{ enabled: true, muted: false, readyState: "live" }]
+    } as unknown as MediaStream;
+    const localAudio = createAudioElement({ paused: true, readyState: 1, currentSrc: "blob:pending" });
+
+    expect(
+      resolveHostPublishSource({
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: true,
+        forceSourceOwnerLocalPlayback: false,
+        localAudio,
+        remoteAudio: createAudioElement({ paused: false, readyState: 4, srcObject: {} }),
+        hostRelayStream,
+        hasPlayableLiveUpload: false
+      })
+    ).toMatchObject({
+      publishTarget: "local-audio",
+      readiness: "awaiting-audio",
+      resolvedPublishElement: "local-audio"
     });
   });
 
