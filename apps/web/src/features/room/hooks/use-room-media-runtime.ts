@@ -1331,12 +1331,14 @@ export function useRoomMediaPublicationRuntime(input: {
         hasPlayableLiveUpload:
           !!(latestPlayback.currentTrackId && input.uploadedTracks[latestPlayback.currentTrackId])
       });
+      const effectiveRelayClockState =
+        publishSource.resolvedPublishStreamKind === "pcm-relay-stream" ? relayClockState : null;
       const relayAudio = publishSource.audioElement;
-      if (!relayAudio && !relayClockState) {
+      if (!relayAudio && !effectiveRelayClockState) {
         return;
       }
       const localPlaybackPositionMs =
-        relayClockState?.mediaTimeMs ??
+        effectiveRelayClockState?.mediaTimeMs ??
         (input.activePlaybackSource !== "remote-stream" && typeof input.getLocalPlaybackPositionMs === "function"
           ? input.getLocalPlaybackPositionMs()
           : null);
@@ -1357,8 +1359,8 @@ export function useRoomMediaPublicationRuntime(input: {
           ? relayAudio.playbackRate
           : 1;
       const advancing =
-        relayClockState
-          ? relayClockState.playoutState === "playing"
+        effectiveRelayClockState
+          ? effectiveRelayClockState.playoutState === "playing"
           : latestPlayback.status === "playing" &&
             (input.activePlaybackSource !== "remote-stream"
               ? typeof localPlaybackPositionMs === "number" ||
@@ -1372,8 +1374,9 @@ export function useRoomMediaPublicationRuntime(input: {
         mediaTimeMs,
         playbackRate,
         advancing,
-        playoutState: relayClockState?.playoutState ?? (advancing ? "playing" : latestPlayback.status),
-        bufferedAheadMs: relayClockState?.bufferedAheadMs ?? 0,
+        playoutState:
+          effectiveRelayClockState?.playoutState ?? (advancing ? "playing" : latestPlayback.status),
+        bufferedAheadMs: effectiveRelayClockState?.bufferedAheadMs ?? 0,
         sequence: ++input.hostMediaClockSequenceRef.current,
         emittedAt: new Date().toISOString()
       };
@@ -1535,6 +1538,15 @@ export function useRoomMediaRuntime(input: {
     summary: string,
     update?: (snapshot: any) => any,
     options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
+  ) => void;
+  resetRemoteAudioElement: (
+    stream: MediaStream | null,
+    options?: {
+      deferNullReset?: boolean;
+      generation?: string | null;
+      reason?: string;
+      forceRebind?: boolean;
+    }
   ) => void;
   scheduleRemotePlaybackRetry: (attempt?: number, generation?: string | null) => void;
   shouldResumeRemotePlaybackAfterAudioUnlock: (input: {
@@ -1816,6 +1828,31 @@ export function useRoomMediaRuntime(input: {
     input.scheduleRemotePlaybackRetry,
     input.shouldResumeRemotePlaybackAfterAudioUnlock,
     input.updateRemoteMediaDiagnostic
+  ]);
+
+  useEffect(() => {
+    const remoteAudio = input.remoteAudioRef.current;
+    const shouldClearRemoteAudio =
+      input.isCurrentSourceOwner ||
+      input.activePlaybackSource !== "remote-stream" ||
+      input.roomSnapshot?.room.playback.sourcePeerId === input.peerId ||
+      input.roomSnapshot?.room.playback.status !== "playing";
+
+    if (!remoteAudio || !shouldClearRemoteAudio || !remoteAudio.srcObject) {
+      return;
+    }
+
+    input.resetRemoteAudioElement(null, {
+      reason: input.isCurrentSourceOwner ? "source-owner-takeover" : "remote-playback-inactive"
+    });
+  }, [
+    input.activePlaybackSource,
+    input.isCurrentSourceOwner,
+    input.peerId,
+    input.remoteAudioRef,
+    input.resetRemoteAudioElement,
+    input.roomSnapshot?.room.playback.sourcePeerId,
+    input.roomSnapshot?.room.playback.status
   ]);
 
   useEffect(() => {

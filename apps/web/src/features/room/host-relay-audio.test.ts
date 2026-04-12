@@ -69,6 +69,23 @@ describe("host relay audio", () => {
     ).toBe(localAudio);
   });
 
+  it("keeps source owners on the local audio element even when a stale remote audio element is still bound", () => {
+    const localAudio = createAudioElement({ paused: true, readyState: 0, currentSrc: "" });
+    const remoteAudio = createAudioElement({ paused: false, readyState: 4, srcObject: {} });
+
+    expect(
+      resolveHostRelayAudioElement({
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: true,
+        forceSourceOwnerLocalPlayback: false,
+        localAudio,
+        remoteAudio,
+        hasPlayableLiveUpload: true,
+        hostRelayStreamAvailable: false
+      })
+    ).toBe(localAudio);
+  });
+
   it("resolves a source-owner live upload to local-audio publish target", () => {
     const localAudio = createAudioElement({ paused: false, readyState: 4, currentSrc: "blob:local" });
     const remoteAudio = createAudioElement();
@@ -114,6 +131,30 @@ describe("host relay audio", () => {
     });
   });
 
+  it("does not reuse a stale PCM relay stream when the current source owner has a real local upload", () => {
+    const hostRelayStream = {
+      getAudioTracks: () => [{ enabled: true, muted: false, readyState: "live" }]
+    } as unknown as MediaStream;
+    const localAudio = createAudioElement({ paused: true, readyState: 0, currentSrc: "" });
+    const remoteAudio = createAudioElement({ paused: false, readyState: 4, srcObject: {} });
+
+    expect(
+      resolveHostPublishSource({
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: true,
+        forceSourceOwnerLocalPlayback: false,
+        localAudio,
+        remoteAudio,
+        hostRelayStream,
+        hasPlayableLiveUpload: true
+      })
+    ).toMatchObject({
+      publishTarget: "local-audio",
+      resolvedPublishElement: "local-audio",
+      resolvedPublishStreamKind: "audio-element-capture"
+    });
+  });
+
   it("reports awaiting-audio when the chosen publish element is bound but not yet playing", () => {
     const localAudio = createAudioElement({ paused: true, readyState: 1, currentSrc: "blob:local" });
 
@@ -131,6 +172,28 @@ describe("host relay audio", () => {
       publishTarget: "local-audio",
       readiness: "awaiting-audio",
       reason: "local-audio-not-yet-playing"
+    });
+  });
+
+  it("does not promote a stale remote audio element to the source-owner publish target", () => {
+    const localAudio = createAudioElement({ paused: true, readyState: 0, currentSrc: "" });
+    const remoteAudio = createAudioElement({ paused: false, readyState: 4, srcObject: {} });
+
+    expect(
+      resolveHostPublishSource({
+        activePlaybackSource: "remote-stream",
+        isCurrentSourceOwner: true,
+        forceSourceOwnerLocalPlayback: false,
+        localAudio,
+        remoteAudio,
+        hostRelayStream: null,
+        hasPlayableLiveUpload: true
+      })
+    ).toMatchObject({
+      publishTarget: "local-audio",
+      readiness: "failed",
+      reason: "local-audio-has-no-bound-source",
+      resolvedPublishElement: "local-audio"
     });
   });
 });

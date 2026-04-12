@@ -93,7 +93,7 @@ export function resolveHostRelayAudioElement(input: {
     return input.localAudio;
   }
 
-  if (input.isCurrentSourceOwner && input.hasPlayableLiveUpload && input.localAudio && localBound) {
+  if (input.isCurrentSourceOwner && input.hasPlayableLiveUpload) {
     return input.localAudio;
   }
 
@@ -156,8 +156,10 @@ export function resolveHostPublishSource(input: {
     relayTrack.enabled !== false &&
     relayTrack.muted !== true &&
     relayTrack.readyState === "live";
+  const shouldPreferRelayStream =
+    relayReady && !(input.isCurrentSourceOwner && input.hasPlayableLiveUpload);
 
-  if (relayReady && input.hostRelayStream) {
+  if (shouldPreferRelayStream && input.hostRelayStream) {
     return {
       publishTarget: "pcm-relay-stream" as const,
       audioElement: null,

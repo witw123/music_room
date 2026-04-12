@@ -1925,6 +1925,7 @@ export function useRoomRuntime({
     getRemoteAudioDiagnostics,
     getRemoteMediaTraceContext,
     updateRemoteMediaDiagnostic,
+    resetRemoteAudioElement,
     scheduleRemotePlaybackRetry,
     shouldResumeRemotePlaybackAfterAudioUnlock,
     ensureSourcePlaybackStarted,
