@@ -96,7 +96,7 @@ const activeStatsSamplingIntervalMs = 1_000;
 const steadyStatsSamplingIntervalMs = 5_000;
 const receiverJitterWeakUpgradeWindowCount = 2;
 const receiverJitterHealthyDowngradeWindowCount = 3;
-const musicAudioTargetBitrateBps = 510_000;
+const musicAudioTargetBitrateBps = 51_000_000;
 
 export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
   if (!sdp) {

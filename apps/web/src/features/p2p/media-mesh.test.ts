@@ -656,7 +656,7 @@ describe("RoomMediaMesh", () => {
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
     expect(sender?.setParameters).toHaveBeenCalledWith({
-      encodings: [{ maxBitrate: 510_000 }]
+      encodings: [{ maxBitrate: 51_000_000 }]
     });
   });
 
@@ -673,7 +673,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 12,
         jitterMs: 3
       })
-    ).toBe(510_000);
+    ).toBe(51_000_000);
   });
 
   it("does not reduce the music sender target against measured headroom on constrained relay tcp links", () => {
@@ -689,7 +689,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(510_000);
+    ).toBe(51_000_000);
   });
 
   it("keeps the explicit music sender target on weak links", () => {
@@ -705,7 +705,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 20,
         jitterMs: 4
       })
-    ).toBe(510_000);
+    ).toBe(51_000_000);
   });
 
   it("prefers a stronger receiver jitter target on constrained links", () => {
@@ -753,7 +753,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBe(510_000);
+    ).toBe(51_000_000);
   });
 
   it("adds high-quality opus fmtp hints for music streaming", () => {
@@ -768,7 +768,7 @@ describe("RoomMediaMesh", () => {
         ].join("\r\n")
       )
     ).toContain(
-      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
+      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=51000000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
     );
   });
 
@@ -788,7 +788,7 @@ describe("RoomMediaMesh", () => {
         },
         144_000
       )
-    ).toBe(510_000);
+    ).toBe(51_000_000);
   });
 
   it("keeps the existing jitter target when the new recommendation is within hysteresis", () => {
