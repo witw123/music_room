@@ -114,21 +114,21 @@ describe("progressive playback helpers", () => {
   it("allows a shorter hot handoff window before cold startup is ready", () => {
     const manifest = buildProgressiveTrackManifest(track, {
       ...availability,
-      availableChunks: [0, 1, 2, 3, 4]
+      availableChunks: [0, 1, 2, 3]
     });
 
     expect(
       isStartupReady({
         manifest,
-        availableChunks: [0, 1, 2, 3, 4],
-        playbackPositionMs: 40_000
+        availableChunks: [0, 1, 2, 3],
+        playbackPositionMs: 35_000
       })
     ).toBe(false);
     expect(
       isTakeoverReady({
         manifest,
-        availableChunks: [0, 1, 2, 3, 4],
-        playbackPositionMs: 40_000
+        availableChunks: [0, 1, 2, 3],
+        playbackPositionMs: 35_000
       })
     ).toBe(true);
   });
@@ -176,11 +176,11 @@ describe("progressive playback helpers", () => {
         diagnostics: {
           mediaCandidateType: "host",
           mediaProtocol: "udp",
-          currentRoundTripTimeMs: 240,
-          availableOutgoingBitrateKbps: 64,
-          packetLossRate: 8.3,
+          currentRoundTripTimeMs: 420,
+          availableOutgoingBitrateKbps: 40,
+          packetLossRate: 12.8,
           packetsLost: 130,
-          jitterMs: 48
+          jitterMs: 88
         }
       })
     ).toBe(true);
@@ -270,7 +270,7 @@ describe("progressive playback helpers", () => {
   });
 
   it("switches into outrun-recovery when fill time is slower than the remaining playback window", () => {
-    const outrunChunks = Array.from({ length: 17 }, (_, index) => index);
+    const outrunChunks = Array.from({ length: 13 }, (_, index) => index);
     const manifest = buildProgressiveTrackManifest({
       ...track,
       codec: "flac",
@@ -288,7 +288,7 @@ describe("progressive playback helpers", () => {
       sourceSessionId: "host_1",
       sourcePeerId: "peer_host",
       sourceTrackId: "track_1",
-      positionMs: 60_000,
+      positionMs: 50_000,
       startedAt: null,
       queueVersion: 1,
       playbackRevision: 1,
@@ -322,7 +322,7 @@ describe("progressive playback helpers", () => {
 
     expect(health.schedulerPolicy).toBe("outrun-recovery");
     expect(health.estimatedFillTimeMs).not.toBeNull();
-    expect(health.remainingPlaybackMs).toBe(60_000);
+    expect(health.remainingPlaybackMs).toBe(70_000);
   });
 
   it("only enables MSE progressive playback for stream-safe mime types", () => {

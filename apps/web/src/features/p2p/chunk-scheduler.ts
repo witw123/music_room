@@ -850,32 +850,32 @@ export class ChunkScheduler {
   ) {
     const window = this.resolvePeerRequestWindow(peerId, trackId, priority);
     if (!window) {
-      return 1024 * 1024;
+      return 2 * 1024 * 1024;
     }
 
     const constrainedTransport =
       window.protocol === "tcp" || window.candidateType === "relay";
     if (window.transportScore === "failed" || window.transportScore === "unstable") {
-      return 512 * 1024;
-    }
-
-    if (constrainedTransport) {
-      return 768 * 1024;
-    }
-
-    if (window.transportScore === "degraded") {
       return 1024 * 1024;
     }
 
-    if ((window.downloadRateKbps ?? 0) >= 4_000) {
-      return 4 * 1024 * 1024;
-    }
-
-    if ((window.downloadRateKbps ?? 0) >= 1_500) {
+    if (constrainedTransport) {
       return 2 * 1024 * 1024;
     }
 
-    return 1024 * 1024;
+    if (window.transportScore === "degraded") {
+      return 2 * 1024 * 1024;
+    }
+
+    if ((window.downloadRateKbps ?? 0) >= 4_000) {
+      return 8 * 1024 * 1024;
+    }
+
+    if ((window.downloadRateKbps ?? 0) >= 1_500) {
+      return 4 * 1024 * 1024;
+    }
+
+    return 2 * 1024 * 1024;
   }
 
   private resolvePieceTimeoutMs(
@@ -907,7 +907,7 @@ export class ChunkScheduler {
       window?.candidateType === "relay" ||
       window?.transportScore === "degraded" ||
       window?.transportScore === "unstable";
-    const maxBatchSize = constrainedTransport ? 2 : 4;
+    const maxBatchSize = constrainedTransport ? 4 : 8;
     const remainingSlots = Math.max(1, input.maxConcurrent - input.activeTrackRequests);
     const resolvedBatchSize = Math.max(1, Math.min(maxBatchSize, remainingSlots));
     const availability = Object.values(this.availabilityByTrack[input.trackId] ?? {}).find(
@@ -975,36 +975,36 @@ function getTrackStreamingProfile(
     if (policy === "outrun-recovery") {
       if (remoteBootstrapConservative) {
         return {
-          maxConcurrent: streamProfile === "large-lossless" ? 14 : 12,
-          maxConcurrentPerPeer: 3,
+          maxConcurrent: streamProfile === "large-lossless" ? 20 : 16,
+          maxConcurrentPerPeer: 5,
           lookBehindMs: 0,
-          lookAheadMs: streamProfile === "large-lossless" ? 120_000 : 72_000,
-          timeoutMs: 1_500
+          lookAheadMs: streamProfile === "large-lossless" ? 180_000 : 108_000,
+          timeoutMs: 1_200
         };
       }
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 32 : 26,
-        maxConcurrentPerPeer: streamProfile === "large-lossless" ? 10 : 8,
+        maxConcurrent: streamProfile === "large-lossless" ? 48 : 34,
+        maxConcurrentPerPeer: streamProfile === "large-lossless" ? 14 : 10,
         lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 320_000 : 180_000,
-        timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_100
+        lookAheadMs: streamProfile === "large-lossless" ? 360_000 : 220_000,
+        timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
       };
     }
     if (remoteBootstrapConservative) {
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 10 : 8,
-        maxConcurrentPerPeer: 2,
+        maxConcurrent: streamProfile === "large-lossless" ? 18 : 12,
+        maxConcurrentPerPeer: 4,
         lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 72_000 : 42_000,
-        timeoutMs: 1_900
+        lookAheadMs: streamProfile === "large-lossless" ? 128_000 : 72_000,
+        timeoutMs: 1_500
       };
     }
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 24 : 18,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 7 : 6,
+      maxConcurrent: streamProfile === "large-lossless" ? 36 : 24,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 10 : 7,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 160_000 : 96_000,
-      timeoutMs: 1_500
+      lookAheadMs: streamProfile === "large-lossless" ? 220_000 : 128_000,
+      timeoutMs: 1_200
     };
   }
 

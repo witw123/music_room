@@ -81,11 +81,11 @@ export function isFlacTrack(input: { mimeType?: string | null; codec?: string | 
 }
 
 export function getStartupWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
-  return isFlacTrack(input) ? 20_000 : 12_000;
+  return isFlacTrack(input) ? 14_000 : 10_000;
 }
 
 export function getTakeoverWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
-  return isFlacTrack(input) ? 4_500 : 3_000;
+  return isFlacTrack(input) ? 3_000 : 2_000;
 }
 
 export function getTargetSteadyBufferMs(input: { mimeType?: string | null; codec?: string | null }) {
@@ -104,7 +104,7 @@ export function getRemoteFirstComfortBufferMs(input: {
   mimeType?: string | null;
   codec?: string | null;
 }) {
-  return isFlacTrack(input) ? 32_000 : 14_000;
+  return isFlacTrack(input) ? 18_000 : 10_000;
 }
 
 export function getOutrunRecoverySafetyFactor() {
@@ -322,7 +322,7 @@ function isProgressiveReady(
       (mode === "takeover" ? getTakeoverWindowMs(manifest) : getStartupWindowMs(manifest))
   );
   const contiguousBytes = contiguousChunkCount * manifest.chunkSize;
-  const requiredBytes = mode === "takeover" ? 320 * 1024 : 1.5 * 1024 * 1024;
+  const requiredBytes = mode === "takeover" ? 192 * 1024 : 768 * 1024;
 
   return contiguousBufferedMs >= requiredBufferedMs && contiguousBytes >= requiredBytes;
 }
@@ -601,14 +601,14 @@ export function shouldEnableRemoteFirstLock(input: {
 
   if (
     typeof diagnostics.currentRoundTripTimeMs === "number" &&
-    diagnostics.currentRoundTripTimeMs >= 220
+    diagnostics.currentRoundTripTimeMs >= 360
   ) {
     return true;
   }
 
   if (
     typeof diagnostics.packetLossRate === "number" &&
-    diagnostics.packetLossRate >= 8
+    diagnostics.packetLossRate >= 12
   ) {
     return true;
   }
@@ -616,14 +616,14 @@ export function shouldEnableRemoteFirstLock(input: {
   if (
     typeof diagnostics.availableOutgoingBitrateKbps === "number" &&
     diagnostics.availableOutgoingBitrateKbps > 0 &&
-    diagnostics.availableOutgoingBitrateKbps <= 72
+    diagnostics.availableOutgoingBitrateKbps <= 48
   ) {
     return true;
   }
 
   if (
     typeof diagnostics.jitterMs === "number" &&
-    diagnostics.jitterMs >= 45
+    diagnostics.jitterMs >= 80
   ) {
     return true;
   }

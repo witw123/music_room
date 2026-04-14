@@ -226,8 +226,8 @@ export class P2PMesh {
   private readonly connectionProgressTimeoutMs = 15_000;
   private readonly activeStatsSamplingIntervalMs = 1_000;
   private readonly steadyStatsSamplingIntervalMs = 5_000;
-  private readonly sendQueueLowWatermarkBytes = 256 * 1024;
-  private readonly sendQueueHighWatermarkBytes = 1024 * 1024;
+  private readonly sendQueueLowWatermarkBytes = 2 * 1024 * 1024;
+  private readonly sendQueueHighWatermarkBytes = 16 * 1024 * 1024;
   private readonly incomingPieceBatchSize = 24;
   private readonly maxDataChannelPayloadBytes = 48 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;

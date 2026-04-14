@@ -562,7 +562,7 @@ describe("ChunkScheduler", () => {
     expect(requestedTrackIds).toContain("track_2:upcoming");
   });
 
-  it("throttles current-track requests during remote bootstrap to preserve media bandwidth", () => {
+  it("keeps remote bootstrap bounded while allowing deeper current-track fill", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,
@@ -598,7 +598,8 @@ describe("ChunkScheduler", () => {
       mode: "conservative"
     });
 
-    expect(requestPiece.mock.calls.length).toBeLessThanOrEqual(7);
+    expect(requestPiece.mock.calls.length).toBeGreaterThan(7);
+    expect(requestPiece.mock.calls.length).toBeLessThanOrEqual(18);
     const requestedTrackIds = (requestPiece.mock.calls as unknown as Array<[{
       trackId: string;
       priority: string;
