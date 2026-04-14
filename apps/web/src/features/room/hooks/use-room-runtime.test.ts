@@ -21,7 +21,7 @@ import {
   shouldKickRemotePlaybackFromAudioEvent,
   shouldReannounceManualCacheAvailability,
   shouldRecoverManualCacheDataPeers,
-  shouldResumeRemotePlaybackAfterAudioUnlock,
+  shouldResumeRemotePlayback,
   shouldRedirectRoomRouteToAuth,
 } from "./use-room-runtime";
 import { shouldSuppressSourceRecoveryDuringGenerationBootstrap } from "./use-room-connection-supervisor";
@@ -817,10 +817,10 @@ describe("resolveMediaDiagnosticPeerId", () => {
   });
 });
 
-describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
-  it("resumes listener remote playback once audio is unlocked and a paused remote stream is already bound", () => {
+describe("shouldResumeRemotePlayback", () => {
+  it("resumes listener remote playback when a bound remote stream is paused while playback is active", () => {
     expect(
-      shouldResumeRemotePlaybackAfterAudioUnlock({
+      shouldResumeRemotePlayback({
         audioUnlocked: true,
         isCurrentSourceOwner: false,
         activePlaybackSource: "remote-stream",
@@ -834,7 +834,7 @@ describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
 
   it("does not resume when the listener is already audibly playing", () => {
     expect(
-      shouldResumeRemotePlaybackAfterAudioUnlock({
+      shouldResumeRemotePlayback({
         audioUnlocked: true,
         isCurrentSourceOwner: false,
         activePlaybackSource: "remote-stream",
@@ -848,7 +848,7 @@ describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
 
   it("does not resume for local playback, room hosts, or missing bound streams", () => {
     expect(
-      shouldResumeRemotePlaybackAfterAudioUnlock({
+      shouldResumeRemotePlayback({
         audioUnlocked: true,
         isCurrentSourceOwner: true,
         activePlaybackSource: "remote-stream",
@@ -859,7 +859,7 @@ describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
       })
     ).toBe(false);
     expect(
-      shouldResumeRemotePlaybackAfterAudioUnlock({
+      shouldResumeRemotePlayback({
         audioUnlocked: true,
         isCurrentSourceOwner: false,
         activePlaybackSource: "full-local",
@@ -870,7 +870,7 @@ describe("shouldResumeRemotePlaybackAfterAudioUnlock", () => {
       })
     ).toBe(false);
     expect(
-      shouldResumeRemotePlaybackAfterAudioUnlock({
+      shouldResumeRemotePlayback({
         audioUnlocked: true,
         isCurrentSourceOwner: false,
         activePlaybackSource: "remote-stream",

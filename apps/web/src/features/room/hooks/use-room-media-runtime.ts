@@ -39,6 +39,7 @@ import {
   type ResolvedPublishStreamKind
 } from "@/features/room/host-relay-audio";
 import type { PlaybackConnectionKey, PlaybackRecoveryRecommendation } from "./room-runtime-types";
+import { shouldMaintainRemotePlaybackSurface } from "./room-playback-policy";
 
 const listenerBootstrapGraceMs = 1_800;
 const hostCaptureHealthCheckIntervalMs = 2_000;
@@ -1568,7 +1569,7 @@ export function useRoomMediaRuntime(input: {
   scheduleRemotePlaybackRetry: (attempt?: number, generation?: PlaybackConnectionKey | null) => void;
   queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
   getCurrentPlaybackConnectionKey?: () => PlaybackConnectionKey | null;
-  shouldResumeRemotePlaybackAfterAudioUnlock: (input: {
+  shouldResumeRemotePlayback: (input: {
     audioUnlocked: boolean;
     isCurrentSourceOwner: boolean;
     activePlaybackSource: ProgressivePlaybackSource;
@@ -1799,7 +1800,7 @@ export function useRoomMediaRuntime(input: {
     const generation =
       input.getCurrentPlaybackConnectionKey?.() ??
       input.listenerMediaLifecycleRef.current.currentGeneration;
-    const shouldResume = input.shouldResumeRemotePlaybackAfterAudioUnlock({
+    const shouldResume = input.shouldResumeRemotePlayback({
       audioUnlocked: input.audioUnlocked,
       isCurrentSourceOwner: input.isCurrentSourceOwner,
       activePlaybackSource: input.activePlaybackSource,
@@ -1830,7 +1831,7 @@ export function useRoomMediaRuntime(input: {
     input.remotePlaybackResumeAfterUnlockKeyRef.current = resumeKey;
 
     input.updateRemoteMediaDiagnostic(
-      "房间音频解锁后重新拉起远端播放",
+      "重新拉起已暂停的远端播放",
       (snapshot) => ({
         ...snapshot,
         mediaConnectionState: "buffering",
@@ -1846,17 +1847,17 @@ export function useRoomMediaRuntime(input: {
         }
       }),
       {
-        event: "remote-play-after-unlock",
-        recordEvent: false
-      }
-    );
+          event: "remote-play-resume",
+          recordEvent: false
+        }
+      );
     if (input.queuePlaybackRecoveryRecommendation && generation) {
       input.queuePlaybackRecoveryRecommendation({
         playbackConnectionKey: generation,
         peerId: playback?.sourcePeerId ?? null,
         scope: "media",
         level: "soft",
-        reason: "audio-unlock-resume",
+        reason: "remote-play-resume",
         observedNoProgressMs: null
       });
     } else {
@@ -1876,17 +1877,20 @@ export function useRoomMediaRuntime(input: {
     input.roomSnapshot?.room.id,
     input.roomSnapshot?.room.playback,
     input.scheduleRemotePlaybackRetry,
-    input.shouldResumeRemotePlaybackAfterAudioUnlock,
+    input.shouldResumeRemotePlayback,
     input.updateRemoteMediaDiagnostic
   ]);
 
   useEffect(() => {
     const remoteAudio = input.remoteAudioRef.current;
-    const shouldClearRemoteAudio =
-      input.isCurrentSourceOwner ||
-      input.activePlaybackSource !== "remote-stream" ||
-      input.roomSnapshot?.room.playback.sourcePeerId === input.peerId ||
-      input.roomSnapshot?.room.playback.status !== "playing";
+    const shouldClearRemoteAudio = !shouldMaintainRemotePlaybackSurface({
+      isCurrentSourceOwner: input.isCurrentSourceOwner,
+      activePlaybackSource: input.activePlaybackSource,
+      playbackStatus: input.roomSnapshot?.room.playback.status,
+      currentTrackId: input.roomSnapshot?.room.playback.currentTrackId ?? null,
+      sourcePeerId: input.roomSnapshot?.room.playback.sourcePeerId ?? null,
+      localPeerId: input.peerId
+    });
 
     if (!remoteAudio || !shouldClearRemoteAudio || !remoteAudio.srcObject) {
       return;
@@ -1901,6 +1905,7 @@ export function useRoomMediaRuntime(input: {
     input.peerId,
     input.remoteAudioRef,
     input.resetRemoteAudioElement,
+    input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.sourcePeerId,
     input.roomSnapshot?.room.playback.status
   ]);

@@ -78,6 +78,7 @@ import {
   resolvePlaybackRecoveryActionType,
   useRoomPlaybackConnectionCoordinator
 } from "./use-room-playback-connection-coordinator";
+import { shouldMaintainRemotePlaybackSurface } from "./room-playback-policy";
 
 export {
   resolveManualCacheProviderPeerIds,
@@ -359,7 +360,7 @@ function resolveConsecutiveNoProgressMs(...values: Array<number | null>) {
   return Math.max(0, Math.round(Math.min(...definedValues)));
 }
 
-export function shouldResumeRemotePlaybackAfterAudioUnlock(input: {
+export function shouldResumeRemotePlayback(input: {
   audioUnlocked: boolean;
   isCurrentSourceOwner: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
@@ -1753,11 +1754,16 @@ export function useRoomRuntime({
 
   useEffect(() => {
     const playback = roomSnapshot?.room.playback;
+    const shouldMaintainRemotePlayback = shouldMaintainRemotePlaybackSurface({
+      isCurrentSourceOwner,
+      activePlaybackSource,
+      playbackStatus: playback?.status,
+      currentTrackId: playback?.currentTrackId ?? null,
+      sourcePeerId: playback?.sourcePeerId ?? null,
+      localPeerId: peerId
+    });
     const traceContext =
-      !isCurrentSourceOwner &&
-      activePlaybackSource === "remote-stream" &&
-      playback?.status === "playing" &&
-      playback.currentTrackId
+      shouldMaintainRemotePlayback && playback?.sourcePeerId
         ? getRemoteMediaTraceContext(playback.sourcePeerId)
         : {
             currentTrackId: null,
@@ -1905,6 +1911,7 @@ export function useRoomRuntime({
     beginPlaybackConnection,
     disposePlaybackConnection,
     mediaTransportEpochRef,
+    peerId,
     reportPlaybackState,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.mediaEpoch,
@@ -2242,7 +2249,7 @@ export function useRoomRuntime({
     scheduleRemotePlaybackRetry,
     queuePlaybackRecoveryRecommendation,
     getCurrentPlaybackConnectionKey,
-    shouldResumeRemotePlaybackAfterAudioUnlock,
+    shouldResumeRemotePlayback,
     ensureSourcePlaybackStarted,
     syncHostMediaStream,
     updateSourceStartState,
