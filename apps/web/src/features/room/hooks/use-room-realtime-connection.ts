@@ -24,6 +24,7 @@ import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-cloc
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import { createRoomMediaMeshRuntime } from "./use-room-media-runtime";
+import type { PlaybackRecoveryRecommendation } from "./room-runtime-types";
 
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
@@ -31,6 +32,18 @@ const recoverySoftRetryThresholdMs = 5_000;
 const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
 const recoveryFullResubscribeThresholdMs = 15_000;
+const socketDisconnectGraceMs = 6_000;
+
+export function isSocketDisconnectGraceActive(disconnectGraceUntilMs: number | null, now = Date.now()) {
+  return typeof disconnectGraceUntilMs === "number" && disconnectGraceUntilMs > now;
+}
+
+export function shouldSuppressPlaybackWatchdogEscalation(input: {
+  recoverySuppressedReason: string | null;
+  socketDisconnectGraceActive: boolean;
+}) {
+  return input.recoverySuppressedReason !== null || input.socketDisconnectGraceActive;
+}
 
 export function shouldReannounceManualCacheAvailability(input: {
   enableManualTrackCaching: boolean;
@@ -309,9 +322,12 @@ export function createRoomRealtimeRuntime(input: {
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
   recoveryModeRef: MutableRefObject<"late-join" | "rejoin" | "steady">;
   remotePlaybackRetryRef: MutableRefObject<number | null>;
+  socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
+  socketDisconnectGraceTimeoutRef: MutableRefObject<number | null>;
   stopPresenceHeartbeat: () => void;
   stopRecoveryWatchdog: () => void;
   clearListenerMediaRecovery: () => void;
+  clearSocketDisconnectGrace: () => void;
   clearHostMediaSyncRetry: () => void;
   bumpMediaTransportEpoch: (
     reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
@@ -465,12 +481,15 @@ export function createRoomRealtimeRuntime(input: {
     lastRealtimeRoomEventAtRef: input.lastRealtimeRoomEventAtRef,
     recoveryGenerationRef: input.recoveryGenerationRef,
     remotePlaybackRetryRef: input.remotePlaybackRetryRef,
+    socketDisconnectGraceUntilRef: input.socketDisconnectGraceUntilRef,
+    socketDisconnectGraceTimeoutRef: input.socketDisconnectGraceTimeoutRef,
     roomRecoveryStateRef: input.roomRecoveryStateRef,
     lastSubscribeAckAtRef: input.lastSubscribeAckAtRef,
     recoveryModeRef: input.recoveryModeRef,
     stopPresenceHeartbeat: input.stopPresenceHeartbeat,
     stopRecoveryWatchdog: input.stopRecoveryWatchdog,
     clearListenerMediaRecovery: input.clearListenerMediaRecovery,
+    clearSocketDisconnectGrace: input.clearSocketDisconnectGrace,
     clearHostMediaSyncRetry: input.clearHostMediaSyncRetry,
     bumpMediaTransportEpoch: input.bumpMediaTransportEpoch,
     resetRemoteAudioElement: input.resetRemoteAudioElement,
@@ -495,6 +514,7 @@ export function createRoomRealtimeRuntime(input: {
     shouldAcceptIncomingPeerSignalRecoveryGeneration:
       input.shouldAcceptIncomingPeerSignalRecoveryGeneration,
     getRemoteMediaTraceContext: input.getRemoteMediaTraceContext,
+    updateRemoteMediaDiagnostic: input.updateRemoteMediaDiagnostic,
     withResolvedTransportHealth: input.withResolvedTransportHealth,
     resyncRealtimePeers
   });
@@ -548,10 +568,16 @@ export function useRoomRealtimeConnection(input: {
     audibleSource: "none" | "remote-stream" | "progressive-local" | "full-local" | null | undefined;
     consecutiveNoProgressMs: number | null;
   };
+  resolveSourceRecoverySuppressedReason: (now?: number) => string | null;
+  socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
   requestRoomSnapshotResync: (
     reason: RoomSnapshotResyncReason,
     roomId?: string | null
   ) => Promise<void>;
+  getCurrentPlaybackConnectionKey?: () => string | null;
+  queuePlaybackRecoveryRecommendation?: (
+    recommendation: PlaybackRecoveryRecommendation
+  ) => void;
 }) {
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
@@ -926,6 +952,17 @@ export function useRoomRealtimeConnection(input: {
         input.lastDataActivityAtRef.current !== null
           ? now - input.lastDataActivityAtRef.current
           : ageMs;
+      const recoverySuppressedReason = input.resolveSourceRecoverySuppressedReason(now);
+      const socketDisconnectGraceActive = isSocketDisconnectGraceActive(
+        input.socketDisconnectGraceUntilRef.current,
+        now
+      );
+      const escalationGuardReason = shouldSuppressPlaybackWatchdogEscalation({
+        recoverySuppressedReason,
+        socketDisconnectGraceActive
+      })
+        ? (recoverySuppressedReason ?? "socket-disconnect-grace")
+        : null;
       const hasProtectedAudibleSource =
         continuity.audibleSource === "progressive-local" ||
         continuity.audibleSource === "full-local" ||
@@ -944,7 +981,11 @@ export function useRoomRealtimeConnection(input: {
         }
       }
 
-      if (!latestMediaReady && noProgressMs >= recoverySoftRetryThresholdMs) {
+      if (
+        !escalationGuardReason &&
+        !latestMediaReady &&
+        noProgressMs >= recoverySoftRetryThresholdMs
+      ) {
         const mediaRetryKey = `${recoveryKey}|soft-media`;
         if (recoveryWatchdogActionsRef.current.softMediaRetryKey !== mediaRetryKey) {
           recoveryWatchdogActionsRef.current.softMediaRetryKey = mediaRetryKey;
@@ -955,15 +996,30 @@ export function useRoomRealtimeConnection(input: {
             listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
           }));
           if (!latestHasFullLocalTrack) {
-            input.scheduleRemotePlaybackRetryRef.current(
-              0,
-              input.listenerMediaLifecycleRef.current.currentGeneration
-            );
+            if (input.queuePlaybackRecoveryRecommendation) {
+              input.queuePlaybackRecoveryRecommendation({
+                playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
+                peerId: latestSourcePeerId,
+                scope: "media",
+                level: "soft",
+                reason: "watchdog-soft-media-retry",
+                observedNoProgressMs: noProgressMs
+              });
+            } else {
+              input.scheduleRemotePlaybackRetryRef.current(
+                0,
+                input.listenerMediaLifecycleRef.current.currentGeneration
+              );
+            }
           }
         }
       }
 
-      if (!latestDataReady && noDataProgressMs >= recoveryDataRestartThresholdMs) {
+      if (
+        !escalationGuardReason &&
+        !latestDataReady &&
+        noDataProgressMs >= recoveryDataRestartThresholdMs
+      ) {
         const dataRestartKey = `${recoveryKey}|data`;
         if (recoveryWatchdogActionsRef.current.dataRestartKey !== dataRestartKey) {
           recoveryWatchdogActionsRef.current.dataRestartKey = dataRestartKey;
@@ -972,7 +1028,18 @@ export function useRoomRealtimeConnection(input: {
             phase: "bootstrapping-data",
             listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
           }));
-          void input.meshRef.current?.restartPeer(latestSourcePeerId);
+          if (input.queuePlaybackRecoveryRecommendation) {
+            input.queuePlaybackRecoveryRecommendation({
+              playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
+              peerId: latestSourcePeerId,
+              scope: "data",
+              level: "hard-recreate",
+              reason: "watchdog-data-stalled",
+              observedNoProgressMs: noDataProgressMs
+            });
+          } else {
+            void input.meshRef.current?.restartPeer(latestSourcePeerId);
+          }
         }
       }
 
@@ -984,7 +1051,7 @@ export function useRoomRealtimeConnection(input: {
             fullLocalRecoveryActive: true,
             pendingMedia: true
           }));
-        } else if (!hasProtectedAudibleSource) {
+        } else if (!hasProtectedAudibleSource && !escalationGuardReason) {
           const mediaRestartKey = `${recoveryKey}|media`;
           if (recoveryWatchdogActionsRef.current.mediaRestartKey !== mediaRestartKey) {
             recoveryWatchdogActionsRef.current.mediaRestartKey = mediaRestartKey;
@@ -993,7 +1060,18 @@ export function useRoomRealtimeConnection(input: {
               phase: "bootstrapping-media",
               listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
             }));
-            void input.mediaMeshRef.current?.restartListenerIce(latestSourcePeerId);
+            if (input.queuePlaybackRecoveryRecommendation) {
+              input.queuePlaybackRecoveryRecommendation({
+                playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
+                peerId: latestSourcePeerId,
+                scope: "media",
+                level: "ice-restart",
+                reason: "watchdog-media-stalled",
+                observedNoProgressMs: noProgressMs
+              });
+            } else {
+              void input.mediaMeshRef.current?.restartListenerIce(latestSourcePeerId);
+            }
           }
         }
       }
@@ -1004,7 +1082,8 @@ export function useRoomRealtimeConnection(input: {
         noProgressMs >= recoveryFullResubscribeThresholdMs &&
         noDataProgressMs >= recoveryFullResubscribeThresholdMs &&
         !hasProtectedAudibleSource &&
-        !latestHasFullLocalTrack
+        !latestHasFullLocalTrack &&
+        !escalationGuardReason
       ) {
         const fullResubscribeKey = `${recoveryKey}|resubscribe`;
         if (recoveryWatchdogActionsRef.current.fullResubscribeKey !== fullResubscribeKey) {
@@ -1015,11 +1094,22 @@ export function useRoomRealtimeConnection(input: {
             pendingSnapshot: true,
             listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
           }));
-          input.resubscribeRoomRef.current?.();
-          void input.meshRef.current?.restartPeer(latestSourcePeerId);
-          const nextTransportEpoch = input.bumpMediaTransportEpoch("explicit-hard-reset");
-          input.mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
-          void input.mediaMeshRef.current?.resetListenerPeer(latestSourcePeerId);
+          if (input.queuePlaybackRecoveryRecommendation) {
+            input.queuePlaybackRecoveryRecommendation({
+              playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
+              peerId: latestSourcePeerId,
+              scope: "room",
+              level: "full-resubscribe",
+              reason: "watchdog-full-resubscribe",
+              observedNoProgressMs: noProgressMs
+            });
+          } else {
+            input.resubscribeRoomRef.current?.();
+            void input.meshRef.current?.restartPeer(latestSourcePeerId);
+            const nextTransportEpoch = input.bumpMediaTransportEpoch("explicit-hard-reset");
+            input.mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
+            void input.mediaMeshRef.current?.resetListenerPeer(latestSourcePeerId);
+          }
         }
       }
     }, 500);
@@ -1041,11 +1131,13 @@ export function useRoomRealtimeConnection(input: {
     input.recoveryGenerationRef,
     input.requestRoomSnapshotResync,
     input.resolveSourceContinuityState,
+    input.resolveSourceRecoverySuppressedReason,
     input.roomRecoveryState.fullLocalRecoveryActive,
     input.roomRecoveryState.generation,
     input.roomRecoveryState.pendingSnapshot,
     input.roomSnapshot,
     input.scheduleRemotePlaybackRetryRef,
+    input.socketDisconnectGraceUntilRef,
     input.setRoomRecoveryState,
     input.uploadedTracks,
     input.bumpMediaTransportEpoch,
@@ -1118,6 +1210,8 @@ export function attachRoomSocketHandlers(input: {
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   recoveryGenerationRef: MutableRefObject<number | null>;
   remotePlaybackRetryRef: MutableRefObject<number | null>;
+  socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
+  socketDisconnectGraceTimeoutRef: MutableRefObject<number | null>;
   roomRecoveryStateRef: MutableRefObject<{
     fullLocalRecoveryActive: boolean;
     generation: number | null;
@@ -1128,6 +1222,7 @@ export function attachRoomSocketHandlers(input: {
   stopPresenceHeartbeat: () => void;
   stopRecoveryWatchdog: () => void;
   clearListenerMediaRecovery: () => void;
+  clearSocketDisconnectGrace: () => void;
   clearHostMediaSyncRetry: () => void;
   bumpMediaTransportEpoch: (
     reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
@@ -1162,6 +1257,11 @@ export function attachRoomSocketHandlers(input: {
   getRemoteMediaTraceContext: (remotePeerId?: string | null) => {
     traceKey: string | null;
   };
+  updateRemoteMediaDiagnostic: (
+    summary: string,
+    update?: (snapshot: any) => any,
+    options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
+  ) => void;
   withResolvedTransportHealth: (snapshot: any) => any;
   resyncRealtimePeers: (
     members?: Array<{ peerId: string | null }>
@@ -1179,6 +1279,22 @@ export function attachRoomSocketHandlers(input: {
       window.clearTimeout(subscribeAckTimeoutId);
       subscribeAckTimeoutId = null;
     }
+  };
+
+  const clearSocketDisconnectGrace = () => {
+    const hadGrace = isSocketDisconnectGraceActive(input.socketDisconnectGraceUntilRef.current);
+    input.clearSocketDisconnectGrace();
+    if (!hadGrace) {
+      return;
+    }
+    input.updateRemoteMediaDiagnostic(
+      "Socket 断线保护窗口结束",
+      undefined,
+      {
+        event: "socket-disconnect-grace",
+        recordEvent: false
+      }
+    );
   };
 
   const scheduleSubscribeRetry = (attempt: number) => {
@@ -1241,6 +1357,7 @@ export function attachRoomSocketHandlers(input: {
         }
 
         clearSubscribeRetry();
+        clearSocketDisconnectGrace();
         const appliedBootstrap = applyRoomSubscribeBootstrap({
           ack: response,
           activeRouteRoomIdRef: input.activeRouteRoomIdRef,
@@ -1293,6 +1410,7 @@ export function attachRoomSocketHandlers(input: {
   };
 
   input.socket.on("connect", () => {
+    clearSocketDisconnectGrace();
     subscribeToRoom();
     input.flushPendingAvailabilityRef.current();
     if (input.enableManualTrackCaching) {
@@ -1628,12 +1746,46 @@ export function attachRoomSocketHandlers(input: {
     input.stopPresenceHeartbeat();
     input.stopRecoveryWatchdog();
     input.bumpMediaTransportEpoch("socket-reconnect");
+    input.clearSocketDisconnectGrace();
+    if (reason !== "io client disconnect") {
+      input.socketDisconnectGraceUntilRef.current = Date.now() + socketDisconnectGraceMs;
+      input.socketDisconnectGraceTimeoutRef.current = window.setTimeout(() => {
+        input.socketDisconnectGraceTimeoutRef.current = null;
+        const playback = input.currentRoomRef.current?.room.playback;
+        if (
+          input.socket.connected ||
+          !isSocketDisconnectGraceActive(input.socketDisconnectGraceUntilRef.current)
+        ) {
+          input.socketDisconnectGraceUntilRef.current = null;
+          return;
+        }
+        input.socketDisconnectGraceUntilRef.current = null;
+        if (playback?.status === "playing") {
+          input.resetRemoteAudioElement(null);
+          input.updateRemoteMediaDiagnostic(
+            "Socket 断线保护窗口超时，远端音频已清空等待重建",
+            undefined,
+            {
+              event: "socket-disconnect-grace-expired",
+              recordEvent: true,
+              level: "warning"
+            }
+          );
+        }
+      }, socketDisconnectGraceMs);
+    }
     input.hostMediaSyncStateRef.current.lastAppliedKey = null;
     input.hostMediaSyncStateRef.current.pendingKey = null;
     input.setConnectedPeers([]);
     input.setMediaConnectedPeers([]);
     input.setAuthoritativeMediaClock(null);
-    input.resetRemoteAudioElement(null);
+    if (reason !== "io client disconnect") {
+      input.updateRemoteMediaDiagnostic("Socket 已断开，保留远端音频等待控制面恢复", undefined, {
+        event: "socket-disconnect-grace",
+        recordEvent: false,
+        level: "warning"
+      });
+    }
     input.setMediaConnectionState(
       input.currentRoomRef.current?.room.playback.status === "playing"
         ? input.resolveSocketRecoveryMediaState()
@@ -1661,6 +1813,7 @@ export function attachRoomSocketHandlers(input: {
     input.stopPresenceHeartbeat();
     input.stopRecoveryWatchdog();
     clearSubscribeRetry();
+    clearSocketDisconnectGrace();
     if (input.remotePlaybackRetryRef.current !== null) {
       window.clearTimeout(input.remotePlaybackRetryRef.current);
       input.remotePlaybackRetryRef.current = null;

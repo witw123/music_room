@@ -28,6 +28,7 @@ import {
 } from "@/features/p2p";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import type { PlaybackRecoveryRecommendation } from "./room-runtime-types";
 
 export type SourceRecoveryCoordinatorState = {
   actionKey: string | null;
@@ -609,6 +610,10 @@ export function useRoomConnectionSupervisorRuntime(input: {
   setMediaConnectionState: Dispatch<SetStateAction<any>>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   resubscribeRoomRef: MutableRefObject<(() => void) | null>;
+  getCurrentPlaybackConnectionKey?: () => string | null;
+  queuePlaybackRecoveryRecommendation?: (
+    recommendation: PlaybackRecoveryRecommendation
+  ) => void;
 }) {
   const lastSourceSupervisorKeyRef = useRef<string | null>(null);
 
@@ -837,6 +842,21 @@ export function useRoomConnectionSupervisorRuntime(input: {
           });
           input.commitConnectionSupervisorState(remotePeerId, recoveryChannel, nextState);
 
+          if (input.queuePlaybackRecoveryRecommendation) {
+            input.queuePlaybackRecoveryRecommendation({
+              playbackConnectionKey: isSourcePeer
+                ? input.getCurrentPlaybackConnectionKey?.() ?? null
+                : null,
+              peerId: remotePeerId,
+              scope: recoveryChannel,
+              level: "ice-restart",
+              reason: nextState.lastFailureReason ?? "ice-restart-required",
+              observedNoProgressMs:
+                typeof consecutiveNoProgressMs === "number" ? consecutiveNoProgressMs : null
+            });
+            continue;
+          }
+
           if (recoveryChannel === "media") {
             if (!input.beginSourceHardRecoveryAction(remotePeerId, playback.mediaEpoch, "ice-restart")) {
               continue;
@@ -899,6 +919,21 @@ export function useRoomConnectionSupervisorRuntime(input: {
             failureReason: nextState.lastFailureReason ?? "peer-stalled"
           });
           input.commitConnectionSupervisorState(remotePeerId, recoveryChannel, nextState);
+
+          if (input.queuePlaybackRecoveryRecommendation) {
+            input.queuePlaybackRecoveryRecommendation({
+              playbackConnectionKey: isSourcePeer
+                ? input.getCurrentPlaybackConnectionKey?.() ?? null
+                : null,
+              peerId: remotePeerId,
+              scope: recoveryChannel,
+              level: "hard-recreate",
+              reason: nextState.lastFailureReason ?? "peer-stalled",
+              observedNoProgressMs:
+                typeof consecutiveNoProgressMs === "number" ? consecutiveNoProgressMs : null
+            });
+            continue;
+          }
 
           if (recoveryChannel === "media") {
             if (
@@ -990,6 +1025,17 @@ export function useRoomConnectionSupervisorRuntime(input: {
           failureReason: "room-control-stale"
         });
         input.commitConnectionSupervisorState(sourcePeerId, "media", nextState);
+        if (input.queuePlaybackRecoveryRecommendation) {
+          input.queuePlaybackRecoveryRecommendation({
+            playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
+            peerId: sourcePeerId,
+            scope: "room",
+            level: "full-resubscribe",
+            reason: "room-control-stale",
+            observedNoProgressMs: sourceContinuityForResubscribe.consecutiveNoProgressMs
+          });
+          return;
+        }
         if (
           input.beginSourceHardRecoveryAction(
             sourcePeerId,

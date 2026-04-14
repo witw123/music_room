@@ -151,6 +151,55 @@ export const remoteTrackStatusSchema = z.object({
 
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  playbackConnectionKey: z.string().nullable().optional(),
+  listenerPlaybackState: z
+    .enum([
+      "idle",
+      "awaiting-offer",
+      "negotiating",
+      "stream-bound",
+      "playback-starting",
+      "live",
+      "recovering-soft",
+      "recovering-hard",
+      "failed"
+    ])
+    .nullable()
+    .optional(),
+  activeRecoveryActionType: z
+    .enum([
+      "retry-play",
+      "rebind-element",
+      "restart-listener-ice",
+      "reset-listener-peer",
+      "restart-data-peer",
+      "full-resubscribe"
+    ])
+    .nullable()
+    .optional(),
+  activeRecoveryActionResult: z
+    .enum(["running", "completed", "failed", "dropped"])
+    .nullable()
+    .optional(),
+  activeRecoveryActionStartedAt: z.string().datetime().nullable().optional(),
+  activeRecoveryActionReason: z.string().nullable().optional(),
+  lastRecoveryRecommendationScope: z.enum(["media", "data", "room"]).nullable().optional(),
+  lastRecoveryRecommendationLevel: z
+    .enum(["soft", "ice-restart", "hard-recreate", "full-resubscribe"])
+    .nullable()
+    .optional(),
+  lastRecoveryRecommendationReason: z.string().nullable().optional(),
+  lastRecoveryRecommendationAt: z.string().datetime().nullable().optional(),
+  recoveryDropReason: z
+    .enum([
+      "stale-connection-key",
+      "lower-priority-running",
+      "suppressed-by-guard",
+      "missing-peer"
+    ])
+    .nullable()
+    .optional(),
+  socketDisconnectGraceActive: z.boolean().optional(),
   mediaTransportState: z
     .enum(["idle", "prewarming", "connected", "publishing", "failed"])
     .nullable()

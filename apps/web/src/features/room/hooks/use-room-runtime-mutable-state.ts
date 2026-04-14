@@ -11,6 +11,7 @@ import {
   type SilentPrewarmHandle
 } from "@/features/playback/silent-prewarm-stream";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import type { PlaybackConnectionKey } from "./room-runtime-types";
 import type {
   HostPublishReadiness,
   HostPublishSourceTarget,
@@ -54,10 +55,10 @@ export type ListenerMediaLifecycleState = {
   lastHardRecoveryTraceKey: string | null;
   lastHardRecoveryAt: number | null;
   latestStream: MediaStream | null;
-  currentGeneration: string | null;
+  currentGeneration: PlaybackConnectionKey | null;
   generationStartedAt: number | null;
-  boundGeneration: string | null;
-  playingGeneration: string | null;
+  boundGeneration: PlaybackConnectionKey | null;
+  playingGeneration: PlaybackConnectionKey | null;
   lastPlayoutProgressAt: number | null;
   lastTransportProgressAt: number | null;
   lastObservedRemoteCurrentTimeMs: number | null;
@@ -137,6 +138,7 @@ export function useRoomRuntimeMutableState(input: {
   const remotePlaybackRetryRef = useRef<number | null>(null);
   const remotePlaybackResumeAfterUnlockKeyRef = useRef<string | null>(null);
   const remoteStreamClearTimeoutRef = useRef<number | null>(null);
+  const socketDisconnectGraceUntilRef = useRef<number | null>(null);
   const resubscribeRoomRef = useRef<(() => void) | null>(null);
   const recoveryGenerationRef = useRef<number | null>(input.roomRecoveryState.generation);
   const roomRecoveryStateRef = useRef(input.roomRecoveryState);
@@ -187,6 +189,7 @@ export function useRoomRuntimeMutableState(input: {
     playAttempts: 0
   });
   const listenerMediaRecoveryTimeoutRef = useRef<number | null>(null);
+  const socketDisconnectGraceTimeoutRef = useRef<number | null>(null);
   const hostMediaClockSequenceRef = useRef(0);
   const armListenerMediaRecoveryRef = useRef<(generation?: string | null) => void>(() => undefined);
   const audioUnlockedRef = useRef(input.audioUnlocked);
@@ -219,6 +222,14 @@ export function useRoomRuntimeMutableState(input: {
       window.clearTimeout(listenerMediaRecoveryTimeoutRef.current);
       listenerMediaRecoveryTimeoutRef.current = null;
     }
+  }, []);
+
+  const clearSocketDisconnectGrace = useCallback(() => {
+    if (socketDisconnectGraceTimeoutRef.current !== null) {
+      window.clearTimeout(socketDisconnectGraceTimeoutRef.current);
+      socketDisconnectGraceTimeoutRef.current = null;
+    }
+    socketDisconnectGraceUntilRef.current = null;
   }, []);
 
   const clearHostMediaSyncRetry = useCallback(() => {
@@ -627,8 +638,9 @@ export function useRoomRuntimeMutableState(input: {
   useEffect(() => {
     return () => {
       disposeSilentPrewarmHandle();
+      clearSocketDisconnectGrace();
     };
-  }, [disposeSilentPrewarmHandle]);
+  }, [clearSocketDisconnectGrace, disposeSilentPrewarmHandle]);
 
   return {
     meshRef,
@@ -644,6 +656,7 @@ export function useRoomRuntimeMutableState(input: {
     remotePlaybackRetryRef,
     remotePlaybackResumeAfterUnlockKeyRef,
     remoteStreamClearTimeoutRef,
+    socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
     recoveryGenerationRef,
     roomRecoveryStateRef,
@@ -659,6 +672,7 @@ export function useRoomRuntimeMutableState(input: {
     hostMediaSyncStateRef,
     listenerMediaLifecycleRef,
     listenerMediaRecoveryTimeoutRef,
+    socketDisconnectGraceTimeoutRef,
     hostMediaClockSequenceRef,
     armListenerMediaRecoveryRef,
     audioUnlockedRef,
@@ -680,6 +694,7 @@ export function useRoomRuntimeMutableState(input: {
     recordPeerDiagnosticRef,
     clearPendingRemoteStreamClear,
     clearListenerMediaRecovery,
+    clearSocketDisconnectGrace,
     clearHostMediaSyncRetry,
     getSilentPrewarmHandle,
     bumpMediaTransportEpoch,

@@ -38,6 +38,7 @@ import {
   type ResolvedPublishElement,
   type ResolvedPublishStreamKind
 } from "@/features/room/host-relay-audio";
+import type { PlaybackConnectionKey, PlaybackRecoveryRecommendation } from "./room-runtime-types";
 
 const listenerBootstrapGraceMs = 1_800;
 const hostCaptureHealthCheckIntervalMs = 2_000;
@@ -179,9 +180,9 @@ export function createRoomMediaMeshRuntime(input: {
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   mediaMeshRef: MutableRefObject<RoomMediaMesh | null>;
   listenerMediaLifecycleRef: MutableRefObject<any>;
-  armListenerMediaRecoveryRef: MutableRefObject<(generation?: string | null) => void>;
+  armListenerMediaRecoveryRef: MutableRefObject<(generation?: PlaybackConnectionKey | null) => void>;
   scheduleRemotePlaybackRetryRef: MutableRefObject<
-    (attempt?: number, generation?: string | null) => void
+    (attempt?: number, generation?: PlaybackConnectionKey | null) => void
   >;
   mediaTransportEpochRef: MutableRefObject<number>;
   connectionSupervisorStatesRef: MutableRefObject<Map<string, any>>;
@@ -1506,16 +1507,16 @@ export function useRoomMediaRuntime(input: {
   lastHostCaptureRefreshAtRef: MutableRefObject<number>;
   remotePlaybackResumeAfterUnlockKeyRef: MutableRefObject<string | null>;
   listenerMediaLifecycleRef: MutableRefObject<{
-    currentGeneration: string | null;
-    boundGeneration: string | null;
-    playingGeneration: string | null;
+    currentGeneration: PlaybackConnectionKey | null;
+    boundGeneration: PlaybackConnectionKey | null;
+    playingGeneration: PlaybackConnectionKey | null;
     lastPlayingTraceKey: string | null;
     recoveryStage: "idle" | "waiting-track" | "rebind-element" | "retry-play" | "rebind-and-play";
     restartAttempt: number;
     lastPlayoutProgressAt: number | null;
     lastObservedRemoteCurrentTimeMs: number | null;
   }>;
-  armListenerMediaRecoveryRef: MutableRefObject<(generation?: string | null) => void>;
+  armListenerMediaRecoveryRef: MutableRefObject<(generation?: PlaybackConnectionKey | null) => void>;
   ensureMediaTransportConnectedRef: MutableRefObject<
     (options?: {
       preferPublishedTrack?: boolean;
@@ -1559,12 +1560,14 @@ export function useRoomMediaRuntime(input: {
     stream: MediaStream | null,
     options?: {
       deferNullReset?: boolean;
-      generation?: string | null;
+      generation?: PlaybackConnectionKey | null;
       reason?: string;
       forceRebind?: boolean;
     }
   ) => void;
-  scheduleRemotePlaybackRetry: (attempt?: number, generation?: string | null) => void;
+  scheduleRemotePlaybackRetry: (attempt?: number, generation?: PlaybackConnectionKey | null) => void;
+  queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
+  getCurrentPlaybackConnectionKey?: () => PlaybackConnectionKey | null;
   shouldResumeRemotePlaybackAfterAudioUnlock: (input: {
     audioUnlocked: boolean;
     isCurrentSourceOwner: boolean;
@@ -1664,6 +1667,9 @@ export function useRoomMediaRuntime(input: {
       summary: string
     ) => {
       const traceContext = input.getRemoteMediaTraceContext();
+      const playbackConnectionKey =
+        input.getCurrentPlaybackConnectionKey?.() ??
+        input.listenerMediaLifecycleRef.current.currentGeneration;
       if (eventName === "playing") {
         input.listenerMediaLifecycleRef.current.lastPlayingTraceKey = traceContext.traceKey;
         input.listenerMediaLifecycleRef.current.playingGeneration =
@@ -1709,7 +1715,7 @@ export function useRoomMediaRuntime(input: {
         }
       );
       if (eventName !== "playing" && traceContext.traceKey) {
-        input.armListenerMediaRecoveryRef.current(traceContext.traceKey);
+        input.armListenerMediaRecoveryRef.current(playbackConnectionKey);
       }
       if (
         shouldKickRemotePlaybackFromAudioEvent({
@@ -1724,7 +1730,18 @@ export function useRoomMediaRuntime(input: {
           playingGeneration: input.listenerMediaLifecycleRef.current.playingGeneration
         })
       ) {
-        input.scheduleRemotePlaybackRetry(0, traceContext.traceKey);
+        if (input.queuePlaybackRecoveryRecommendation && playbackConnectionKey) {
+          input.queuePlaybackRecoveryRecommendation({
+            playbackConnectionKey,
+            peerId: input.roomSnapshot?.room.playback.sourcePeerId ?? null,
+            scope: "media",
+            level: "soft",
+            reason: `audio-event-${eventName}`,
+            observedNoProgressMs: null
+          });
+        } else {
+          input.scheduleRemotePlaybackRetry(0, playbackConnectionKey);
+        }
       }
     };
 
@@ -1764,10 +1781,12 @@ export function useRoomMediaRuntime(input: {
     input.armListenerMediaRecoveryRef,
     input.clearListenerMediaRecovery,
     input.activePlaybackSource,
+    input.getCurrentPlaybackConnectionKey,
     input.getRemoteAudioDiagnostics,
     input.getRemoteMediaTraceContext,
     input.isCurrentSourceOwner,
     input.listenerMediaLifecycleRef,
+    input.queuePlaybackRecoveryRecommendation,
     input.remoteAudioRef,
     input.roomSnapshot?.room.playback.status,
     input.scheduleRemotePlaybackRetry,
@@ -1777,7 +1796,9 @@ export function useRoomMediaRuntime(input: {
   useEffect(() => {
     const playback = input.roomSnapshot?.room.playback;
     const remoteAudio = input.remoteAudioRef.current;
-    const generation = input.listenerMediaLifecycleRef.current.currentGeneration;
+    const generation =
+      input.getCurrentPlaybackConnectionKey?.() ??
+      input.listenerMediaLifecycleRef.current.currentGeneration;
     const shouldResume = input.shouldResumeRemotePlaybackAfterAudioUnlock({
       audioUnlocked: input.audioUnlocked,
       isCurrentSourceOwner: input.isCurrentSourceOwner,
@@ -1829,14 +1850,27 @@ export function useRoomMediaRuntime(input: {
         recordEvent: false
       }
     );
-    input.scheduleRemotePlaybackRetry(0, generation);
+    if (input.queuePlaybackRecoveryRecommendation && generation) {
+      input.queuePlaybackRecoveryRecommendation({
+        playbackConnectionKey: generation,
+        peerId: playback?.sourcePeerId ?? null,
+        scope: "media",
+        level: "soft",
+        reason: "audio-unlock-resume",
+        observedNoProgressMs: null
+      });
+    } else {
+      input.scheduleRemotePlaybackRetry(0, generation);
+    }
   }, [
     input.activePlaybackSource,
     input.audioUnlocked,
+    input.getCurrentPlaybackConnectionKey,
     input.getRemoteAudioDiagnostics,
     input.getRemoteMediaTraceContext,
     input.isCurrentSourceOwner,
     input.listenerMediaLifecycleRef,
+    input.queuePlaybackRecoveryRecommendation,
     input.remoteAudioRef,
     input.remotePlaybackResumeAfterUnlockKeyRef,
     input.roomSnapshot?.room.id,

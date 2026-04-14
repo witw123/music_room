@@ -273,13 +273,18 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
           <DiagnosticBlock title="播放运行时">
             <DiagnosticGrid>
               <span>播放源: {playback.activeSource ?? "未启用"}</span>
+              <span>连接代次: {playback.playbackConnectionKey ?? "未知"}</span>
+              <span>监听状态: {playback.listenerPlaybackState ?? "未知"}</span>
               <span>传输状态: {playback.mediaTransportState ?? "未知"}</span>
               <span>音源启动: {playback.sourceStartState ?? "未知"}</span>
               <span>恢复阶段: {playback.recoveryPhase ?? "未知"}</span>
+              <span>恢复动作: {playback.activeRecoveryActionType ?? "无"}</span>
+              <span>动作结果: {playback.activeRecoveryActionResult ?? "无"}</span>
               <span>引擎: {playback.engineType ?? "none"}</span>
               <span>调度: {playback.schedulerPolicy ?? "未激活"}</span>
               <span>前向缓冲: {formatDurationMs(playback.aheadBufferedMs)}</span>
               <span>音频解锁: {formatBoolean(playback.audioUnlocked)}</span>
+              <span>Socket 保护: {formatBoolean(playback.socketDisconnectGraceActive)}</span>
             </DiagnosticGrid>
             {playback.lastSourceStartError ? (
               <p className="mt-2 text-[10px] text-red-300">
@@ -294,6 +299,25 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
             {playback.fallbackReason ? (
               <p className="mt-1 text-[10px] text-amber-300">
                 回退原因: {playback.fallbackReason}
+              </p>
+            ) : null}
+            {playback.activeRecoveryActionReason ? (
+              <p className="mt-1 text-[10px] text-amber-300">
+                当前恢复原因: {playback.activeRecoveryActionReason}
+              </p>
+            ) : null}
+            {playback.lastRecoveryRecommendationLevel ? (
+              <p className="mt-1 text-[10px] text-sky-300">
+                最近建议: {playback.lastRecoveryRecommendationScope ?? "media"} /{" "}
+                {playback.lastRecoveryRecommendationLevel}
+                {playback.lastRecoveryRecommendationReason
+                  ? ` / ${playback.lastRecoveryRecommendationReason}`
+                  : ""}
+              </p>
+            ) : null}
+            {playback.recoveryDropReason ? (
+              <p className="mt-1 text-[10px] text-amber-300">
+                建议已丢弃: {playback.recoveryDropReason}
               </p>
             ) : null}
           </DiagnosticBlock>

@@ -73,6 +73,11 @@ import {
 import {
   useRoomRuntimeLifecycle
 } from "./use-room-runtime-lifecycle";
+import {
+  resolvePlaybackConnectionKey,
+  resolvePlaybackRecoveryActionType,
+  useRoomPlaybackConnectionCoordinator
+} from "./use-room-playback-connection-coordinator";
 
 export {
   resolveManualCacheProviderPeerIds,
@@ -614,6 +619,7 @@ export function useRoomRuntime({
     remotePlaybackRetryRef,
     remotePlaybackResumeAfterUnlockKeyRef,
     remoteStreamClearTimeoutRef,
+    socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
     recoveryGenerationRef,
     roomRecoveryStateRef,
@@ -629,6 +635,7 @@ export function useRoomRuntime({
     hostMediaSyncStateRef,
     listenerMediaLifecycleRef,
     listenerMediaRecoveryTimeoutRef,
+    socketDisconnectGraceTimeoutRef,
     hostMediaClockSequenceRef,
     armListenerMediaRecoveryRef,
     audioUnlockedRef,
@@ -650,6 +657,7 @@ export function useRoomRuntime({
     recordPeerDiagnosticRef,
     clearPendingRemoteStreamClear,
     clearListenerMediaRecovery,
+    clearSocketDisconnectGrace,
     clearHostMediaSyncRetry,
     getSilentPrewarmHandle,
     bumpMediaTransportEpoch,
@@ -685,6 +693,33 @@ export function useRoomRuntime({
     recordPeerDiagnostic,
     setAuthoritativeMediaClock,
     enableTrackCaching
+  });
+  const clearRemotePlaybackRetry = useCallback(() => {
+    if (remotePlaybackRetryRef.current !== null) {
+      window.clearTimeout(remotePlaybackRetryRef.current);
+      remotePlaybackRetryRef.current = null;
+    }
+  }, [remotePlaybackRetryRef]);
+  const {
+    playbackConnectionKeyRef,
+    listenerPlaybackStateRef,
+    activeRecoveryActionRef,
+    activeRecoveryActionResultRef,
+    lastRecoveryRecommendationRef,
+    lastRecoveryDropReasonRef,
+    getCurrentPlaybackConnectionKey,
+    beginPlaybackConnection,
+    disposePlaybackConnection,
+    reportPlaybackState,
+    applyRecoveryAction,
+    finishRecoveryAction,
+    noteRecoveryRecommendation
+  } = useRoomPlaybackConnectionCoordinator({
+    currentRoomRef,
+    mediaTransportEpochRef,
+    listenerMediaLifecycleRef,
+    clearListenerMediaRecovery,
+    clearRemotePlaybackRetry
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
   const emitRuntimeEvent = useRoomDiagnosticsBridge({
@@ -824,6 +859,33 @@ export function useRoomRuntime({
       update?: (snapshot: PeerDiagnosticsSnapshot) => PeerDiagnosticsSnapshot,
       options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
     ) => {
+      const withPlaybackConnectionDiagnostics = (snapshot: PeerDiagnosticsSnapshot) => {
+        const baselineProgressiveStatus =
+          snapshot.progressivePlaybackStatus ??
+          createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!;
+        const activeRecoveryAction = activeRecoveryActionRef.current;
+        const lastRecoveryRecommendation = lastRecoveryRecommendationRef.current;
+        return {
+          ...snapshot,
+          progressivePlaybackStatus: {
+            ...baselineProgressiveStatus,
+            playbackConnectionKey: playbackConnectionKeyRef.current,
+            listenerPlaybackState: listenerPlaybackStateRef.current,
+            activeRecoveryActionType: activeRecoveryAction?.actionType ?? null,
+            activeRecoveryActionResult: activeRecoveryActionResultRef.current,
+            activeRecoveryActionStartedAt: activeRecoveryAction?.startedAt ?? null,
+            activeRecoveryActionReason: activeRecoveryAction?.reason ?? null,
+            lastRecoveryRecommendationScope: lastRecoveryRecommendation?.scope ?? null,
+            lastRecoveryRecommendationLevel: lastRecoveryRecommendation?.level ?? null,
+            lastRecoveryRecommendationReason: lastRecoveryRecommendation?.reason ?? null,
+            lastRecoveryRecommendationAt: lastRecoveryRecommendation?.recommendedAt ?? null,
+            recoveryDropReason: lastRecoveryDropReasonRef.current,
+            socketDisconnectGraceActive:
+              socketDisconnectGraceUntilRef.current !== null &&
+              socketDisconnectGraceUntilRef.current > Date.now()
+          }
+        };
+      };
       recordPeerDiagnosticRef.current({
         peerId: "remote-media",
         channelKind: "media",
@@ -832,10 +894,21 @@ export function useRoomRuntime({
         summary,
         recordEvent: options?.recordEvent ?? false,
         level: options?.level,
-        update
+        update: (snapshot) => {
+          const seededSnapshot = withPlaybackConnectionDiagnostics(snapshot);
+          return withPlaybackConnectionDiagnostics(update ? update(seededSnapshot) : seededSnapshot);
+        }
       });
     },
-    []
+    [
+      activeRecoveryActionRef,
+      activeRecoveryActionResultRef,
+      lastRecoveryRecommendationRef,
+      lastRecoveryDropReasonRef,
+      listenerPlaybackStateRef,
+      playbackConnectionKeyRef,
+      socketDisconnectGraceUntilRef
+    ]
   );
 
   const resetRemoteAudioElement = useCallback(
@@ -1097,6 +1170,144 @@ export function useRoomRuntime({
     },
     [activeSessionRef, hydrated, isNavigatingRoomExit, roomSnapshotResyncController]
   );
+  const queuePlaybackRecoveryRecommendation = useCallback(
+    (recommendation: {
+      playbackConnectionKey: string | null;
+      peerId: string | null;
+      scope: "media" | "data" | "room";
+      level: "soft" | "ice-restart" | "hard-recreate" | "full-resubscribe";
+      reason: string;
+      observedNoProgressMs: number | null;
+      guardReason?: string | null;
+    }) => {
+      noteRecoveryRecommendation(recommendation);
+      if (recommendation.guardReason) {
+        lastRecoveryDropReasonRef.current = "suppressed-by-guard";
+        return;
+      }
+      const currentPlaybackConnectionKey = getCurrentPlaybackConnectionKey();
+      if (
+        recommendation.playbackConnectionKey &&
+        recommendation.playbackConnectionKey !== currentPlaybackConnectionKey
+      ) {
+        lastRecoveryDropReasonRef.current = "stale-connection-key";
+        return;
+      }
+      updateRemoteMediaDiagnostic("收到播放恢复建议", undefined, {
+        event: "playback-recovery-recommendation",
+        recordEvent: false
+      });
+
+      const actionType = resolvePlaybackRecoveryActionType(recommendation);
+      if (actionType === "retry-play") {
+        scheduleRemotePlaybackRetryRef.current(
+          0,
+          recommendation.playbackConnectionKey ?? currentPlaybackConnectionKey
+        );
+        return;
+      }
+
+      if (actionType !== "full-resubscribe" && !recommendation.peerId) {
+        lastRecoveryDropReasonRef.current = "missing-peer";
+        return;
+      }
+
+      const action = applyRecoveryAction({
+        playbackConnectionKey:
+          recommendation.playbackConnectionKey ?? currentPlaybackConnectionKey,
+        actionType,
+        peerId: recommendation.peerId,
+        reason: recommendation.reason
+      });
+      if (!action) {
+        return;
+      }
+
+      reportPlaybackState("recovering-hard", {
+        playbackConnectionKey: action.playbackConnectionKey
+      });
+
+      if (actionType === "restart-listener-ice" && recommendation.peerId) {
+        setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
+        void mediaMeshRef.current
+          ?.restartListenerIce(recommendation.peerId)
+          .then(() => {
+            finishRecoveryAction(action.actionId, "completed", {
+              nextState: "negotiating"
+            });
+          })
+          .catch(() => {
+            finishRecoveryAction(action.actionId, "failed", {
+              nextState: "failed"
+            });
+          });
+        return;
+      }
+
+      if (actionType === "reset-listener-peer" && recommendation.peerId) {
+        setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
+        void mediaMeshRef.current
+          ?.resetListenerPeer(recommendation.peerId)
+          .then(() => {
+            finishRecoveryAction(action.actionId, "completed", {
+              nextState: "negotiating"
+            });
+          })
+          .catch(() => {
+            finishRecoveryAction(action.actionId, "failed", {
+              nextState: "failed"
+            });
+          });
+        return;
+      }
+
+      if (actionType === "restart-data-peer" && recommendation.peerId) {
+        void meshRef.current
+          ?.restartPeer(recommendation.peerId)
+          .then(() => {
+            finishRecoveryAction(action.actionId, "completed", {
+              nextState: "recovering-hard"
+            });
+          })
+          .catch(() => {
+            finishRecoveryAction(action.actionId, "failed", {
+              nextState: "failed"
+            });
+          });
+        return;
+      }
+
+      if (actionType === "full-resubscribe") {
+        resubscribeRoomRef.current?.();
+        if (recommendation.peerId) {
+          void meshRef.current?.restartPeer(recommendation.peerId);
+        }
+        const nextTransportEpoch = bumpMediaTransportEpoch("explicit-hard-reset");
+        mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
+        if (recommendation.peerId) {
+          void mediaMeshRef.current?.resetListenerPeer(recommendation.peerId);
+        }
+      finishRecoveryAction(action.actionId, "completed", {
+          nextState: "negotiating"
+        });
+      }
+    },
+    [
+      applyRecoveryAction,
+      bumpMediaTransportEpoch,
+      finishRecoveryAction,
+      getCurrentPlaybackConnectionKey,
+      listenerMediaLifecycleRef,
+      mediaMeshRef,
+      meshRef,
+      noteRecoveryRecommendation,
+      reportPlaybackState,
+      resolveSoftRecoveryMediaState,
+      setMediaConnectionState,
+      lastRecoveryDropReasonRef,
+      updateRemoteMediaDiagnostic
+    ]
+  );
   const {
     emitPresence,
     startPresenceHeartbeat,
@@ -1138,7 +1349,11 @@ export function useRoomRuntime({
       mediaMeshRef,
       bumpMediaTransportEpoch,
       resolveSourceContinuityState,
-      requestRoomSnapshotResync
+      resolveSourceRecoverySuppressedReason,
+      socketDisconnectGraceUntilRef,
+      requestRoomSnapshotResync,
+      getCurrentPlaybackConnectionKey,
+      queuePlaybackRecoveryRecommendation
     });
 
   useRoomRuntimeLifecycle({
@@ -1181,7 +1396,7 @@ export function useRoomRuntime({
     (generation?: string | null) => {
       clearListenerMediaRecovery();
 
-      const expectedGeneration = generation ?? listenerMediaLifecycleRef.current.currentGeneration;
+      const expectedGeneration = generation ?? getCurrentPlaybackConnectionKey();
       const playback = currentRoomRef.current?.room.playback;
       if (
         !expectedGeneration ||
@@ -1210,11 +1425,15 @@ export function useRoomRuntime({
         const lifecycle = listenerMediaLifecycleRef.current;
         const latestPlayback = currentRoomRef.current?.room.playback;
         const remoteAudio = remoteAudioRef.current;
+        const latestPlaybackConnectionKey = getCurrentPlaybackConnectionKey();
+        const latestTraceContext = latestPlayback?.sourcePeerId
+          ? getRemoteMediaTraceContext(latestPlayback.sourcePeerId)
+          : null;
         if (
           !latestPlayback?.currentTrackId ||
           latestPlayback.status !== "playing" ||
           lifecycle.currentGeneration !== expectedGeneration ||
-          expectedGeneration !== lifecycle.traceKey
+          latestPlaybackConnectionKey !== expectedGeneration
         ) {
           return;
         }
@@ -1231,7 +1450,7 @@ export function useRoomRuntime({
             ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0] ?? null)
             : null;
         const reason = resolveListenerMediaRecoveryReason({
-          traceKey: expectedGeneration,
+          traceKey: latestTraceContext?.traceKey ?? expectedGeneration,
           lastTrackTraceKey: lifecycle.lastTrackTraceKey,
           lastBoundTraceKey: lifecycle.lastBoundTraceKey,
           lastPlayAttemptTraceKey: lifecycle.lastPlayAttemptTraceKey,
@@ -1273,6 +1492,9 @@ export function useRoomRuntime({
         if (hardRecoveryRequired && !action) {
           lifecycle.recoveryStage = "waiting-track";
           setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
+          reportPlaybackState("recovering-hard", {
+            playbackConnectionKey: getCurrentPlaybackConnectionKey()
+          });
           updateRemoteMediaDiagnostic(
             `监听端等待连接监督恢复媒体链路${reason ? ` · ${reason}` : ""}`,
             (snapshot) => ({
@@ -1300,6 +1522,9 @@ export function useRoomRuntime({
         }
         if (!action) {
           lifecycle.recoveryStage = "idle";
+          reportPlaybackState("stream-bound", {
+            playbackConnectionKey: getCurrentPlaybackConnectionKey()
+          });
           return;
         }
         const lastRecoveryTraceKey = lifecycle.lastSoftRecoveryTraceKey;
@@ -1322,6 +1547,16 @@ export function useRoomRuntime({
             : action === "rebind-and-play"
               ? "rebind-and-play"
               : "retry-play";
+        const acceptedRecoveryAction = applyRecoveryAction({
+          playbackConnectionKey: expectedGeneration,
+          actionType: action === "rebind-element" ? "rebind-element" : "retry-play",
+          peerId: latestPlayback.sourcePeerId ?? null,
+          reason: reason ?? action
+        });
+        if (!acceptedRecoveryAction) {
+          armListenerMediaRecoveryRef.current(expectedGeneration);
+          return;
+        }
 
         updateRemoteMediaDiagnostic(
           `监听端执行媒体恢复：${action}${reason ? ` · ${reason}` : ""}`,
@@ -1360,18 +1595,25 @@ export function useRoomRuntime({
           return;
         }
 
+        finishRecoveryAction(acceptedRecoveryAction.actionId, "completed", {
+          nextState: "stream-bound"
+        });
         armListenerMediaRecoveryRef.current(expectedGeneration);
       }, recoveryDelayMs);
     },
     [
       activePlaybackSource,
+      applyRecoveryAction,
       clearListenerMediaRecovery,
       currentRoomRef,
+      finishRecoveryAction,
       getRemoteAudioDiagnostics,
+      getCurrentPlaybackConnectionKey,
       getRemoteMediaTraceContext,
       isCurrentSourceOwner,
       remoteAudioRef,
       resetRemoteAudioElement,
+      reportPlaybackState,
       resolveSoftRecoveryMediaState,
       updateRemoteMediaDiagnostic
     ]
@@ -1379,10 +1621,7 @@ export function useRoomRuntime({
 
   const scheduleRemotePlaybackRetry = useCallback(
     (attempt = 0, expectedGeneration?: string | null) => {
-      if (remotePlaybackRetryRef.current !== null) {
-        window.clearTimeout(remotePlaybackRetryRef.current);
-        remotePlaybackRetryRef.current = null;
-      }
+      clearRemotePlaybackRetry();
 
       const remoteAudio = remoteAudioRef.current;
       const playback = currentRoomRef.current?.room.playback;
@@ -1395,11 +1634,27 @@ export function useRoomRuntime({
       ) {
         return;
       }
-      const generation = expectedGeneration ?? listenerMediaLifecycleRef.current.currentGeneration;
-      if (!generation || listenerMediaLifecycleRef.current.currentGeneration !== generation) {
+      const generation = expectedGeneration ?? getCurrentPlaybackConnectionKey();
+      if (
+        !generation ||
+        listenerMediaLifecycleRef.current.currentGeneration !== generation ||
+        getCurrentPlaybackConnectionKey() !== generation
+      ) {
+        return;
+      }
+      const acceptedRecoveryAction = applyRecoveryAction({
+        playbackConnectionKey: generation,
+        actionType: "retry-play",
+        peerId: playback.sourcePeerId ?? null,
+        reason: attempt === 0 ? "remote-playback-retry" : `remote-playback-retry-${attempt + 1}`
+      });
+      if (!acceptedRecoveryAction) {
         return;
       }
       listenerMediaLifecycleRef.current.playAttempts += 1;
+      reportPlaybackState("playback-starting", {
+        playbackConnectionKey: acceptedRecoveryAction.playbackConnectionKey
+      });
 
       void roomAudioOutput.playElement(remoteAudio).then((result) => {
         const now = new Date().toISOString();
@@ -1421,6 +1676,16 @@ export function useRoomRuntime({
             Number.isFinite(remoteAudio.currentTime) && remoteAudio.currentTime >= 0
               ? Math.round(remoteAudio.currentTime * 1000)
               : listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs;
+          finishRecoveryAction(acceptedRecoveryAction.actionId, "completed", {
+            nextState: "live"
+          });
+          reportPlaybackState("live", {
+            playbackConnectionKey: acceptedRecoveryAction.playbackConnectionKey
+          });
+        } else {
+          finishRecoveryAction(acceptedRecoveryAction.actionId, "failed", {
+            nextState: "recovering-soft"
+          });
         }
         updateRemoteMediaDiagnostic(
           result.ok ? "远端音频自动拉起成功" : `远端音频自动拉起失败：${result.error ?? "未知错误"}`,
@@ -1464,12 +1729,17 @@ export function useRoomRuntime({
       });
     },
     [
+      applyRecoveryAction,
       clearListenerMediaRecovery,
+      clearRemotePlaybackRetry,
       audioUnlockedRef,
       currentRoomRef,
+      finishRecoveryAction,
       getRemoteAudioDiagnostics,
+      getCurrentPlaybackConnectionKey,
       getRemoteMediaTraceContext,
       remoteAudioRef,
+      reportPlaybackState,
       setAudioUnlockedRef,
       setStatusMessage,
       updateRemoteMediaDiagnostic
@@ -1495,12 +1765,22 @@ export function useRoomRuntime({
             sourcePeerId: null,
             traceKey: null
           };
+    const playbackConnectionKey = resolvePlaybackConnectionKey({
+      roomId: roomSnapshot?.room.id ?? null,
+      sourcePeerId: traceContext.sourcePeerId,
+      mediaEpoch: traceContext.mediaEpoch,
+      transportEpoch: mediaTransportEpochRef.current
+    });
     const lifecycle = listenerMediaLifecycleRef.current;
-    if (lifecycle.traceKey === traceContext.traceKey) {
+    if (
+      lifecycle.traceKey === traceContext.traceKey &&
+      lifecycle.currentGeneration === playbackConnectionKey
+    ) {
       return;
     }
 
     const previousSourcePeerId = lifecycle.sourcePeerId;
+    const previousPlaybackConnectionKey = lifecycle.currentGeneration;
     const remoteAudio = remoteAudioRef.current;
     const existingRemoteStream =
       (remoteAudio?.srcObject as MediaStream | null | undefined) ?? null;
@@ -1509,14 +1789,13 @@ export function useRoomRuntime({
         ? (existingRemoteStream.getAudioTracks()[0] ?? null)
         : null;
     const canReuseExistingRemoteStream =
-      !!traceContext.traceKey &&
+      !!playbackConnectionKey &&
       !!traceContext.sourcePeerId &&
       previousSourcePeerId === traceContext.sourcePeerId &&
       !!existingRemoteStream &&
       !!existingRemoteTrack &&
       existingRemoteTrack.readyState !== "ended";
-    const shouldForceRebindReusedRemoteStream =
-      canReuseExistingRemoteStream && !!traceContext.traceKey;
+    const shouldForceRebindReusedRemoteStream = false;
     const existingRemoteAudioPlaying =
       canReuseExistingRemoteStream &&
       !shouldForceRebindReusedRemoteStream &&
@@ -1538,17 +1817,17 @@ export function useRoomRuntime({
     lifecycle.lastHardRecoveryTraceKey = null;
     lifecycle.lastHardRecoveryAt = null;
     lifecycle.latestStream = canReuseExistingRemoteStream ? existingRemoteStream : null;
-    lifecycle.currentGeneration = traceContext.traceKey;
-    lifecycle.generationStartedAt = traceContext.traceKey ? Date.now() : null;
+    lifecycle.currentGeneration = playbackConnectionKey;
+    lifecycle.generationStartedAt = playbackConnectionKey ? Date.now() : null;
     lifecycle.boundGeneration =
       canReuseExistingRemoteStream && !shouldForceRebindReusedRemoteStream
-        ? traceContext.traceKey
+        ? playbackConnectionKey
         : null;
-    lifecycle.playingGeneration = existingRemoteAudioPlaying ? traceContext.traceKey : null;
+    lifecycle.playingGeneration = existingRemoteAudioPlaying ? playbackConnectionKey : null;
     lifecycle.lastPlayoutProgressAt = existingRemoteAudioPlaying ? Date.now() : null;
     lifecycle.lastTransportProgressAt = canReuseExistingRemoteStream ? Date.now() : null;
     lifecycle.lastObservedRemoteCurrentTimeMs = null;
-    lifecycle.recoveryStage = traceContext.traceKey
+    lifecycle.recoveryStage = playbackConnectionKey
       ? canReuseExistingRemoteStream
         ? shouldForceRebindReusedRemoteStream
           ? "rebind-and-play"
@@ -1559,6 +1838,20 @@ export function useRoomRuntime({
     lifecycle.bindAttempts = canReuseExistingRemoteStream ? 1 : 0;
     lifecycle.playAttempts = existingRemoteAudioPlaying ? 1 : 0;
     clearListenerMediaRecovery();
+    if (playbackConnectionKey) {
+      beginPlaybackConnection(playbackConnectionKey, {
+        sourcePeerId: traceContext.sourcePeerId,
+        hasExistingBoundStream: canReuseExistingRemoteStream
+      });
+      reportPlaybackState(
+        canReuseExistingRemoteStream ? "stream-bound" : "awaiting-offer",
+        {
+          playbackConnectionKey
+        }
+      );
+    } else {
+      disposePlaybackConnection();
+    }
 
     updateRemoteMediaDiagnostic(
       traceContext.traceKey
@@ -1583,17 +1876,21 @@ export function useRoomRuntime({
         event: "remote-media-trace"
       }
     );
-    if (traceContext.traceKey) {
+    if (playbackConnectionKey) {
       if (shouldForceRebindReusedRemoteStream && existingRemoteStream) {
         resetRemoteAudioElement(existingRemoteStream, {
-          generation: traceContext.traceKey,
+          generation: playbackConnectionKey,
           reason: "trace-switch",
           forceRebind: true
         });
       }
-      armListenerMediaRecoveryRef.current(traceContext.traceKey);
-      if (canReuseExistingRemoteStream) {
-        scheduleRemotePlaybackRetryRef.current(0, traceContext.traceKey);
+      armListenerMediaRecoveryRef.current(playbackConnectionKey);
+      if (
+        canReuseExistingRemoteStream &&
+        previousPlaybackConnectionKey !== playbackConnectionKey &&
+        remoteAudio?.paused !== false
+      ) {
+        scheduleRemotePlaybackRetryRef.current(0, playbackConnectionKey);
       }
     }
   }, [
@@ -1605,8 +1902,13 @@ export function useRoomRuntime({
     isCurrentSourceOwner,
     remoteAudioRef,
     resetRemoteAudioElement,
+    beginPlaybackConnection,
+    disposePlaybackConnection,
+    mediaTransportEpochRef,
+    reportPlaybackState,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.mediaEpoch,
+    roomSnapshot?.room.id,
     roomSnapshot?.room.playback.sourcePeerId,
     roomSnapshot?.room.playback.status,
     updateRemoteMediaDiagnostic
@@ -1627,12 +1929,12 @@ export function useRoomRuntime({
       return;
     }
 
-    const traceContext = getRemoteMediaTraceContext(playback.sourcePeerId);
-    if (!traceContext.traceKey) {
+    const playbackConnectionKey = getCurrentPlaybackConnectionKey();
+    if (!playbackConnectionKey) {
       clearListenerMediaRecovery();
       return;
     }
-    armListenerMediaRecoveryRef.current(traceContext.traceKey);
+    armListenerMediaRecoveryRef.current(playbackConnectionKey);
 
     return () => {
       clearListenerMediaRecovery();
@@ -1641,7 +1943,7 @@ export function useRoomRuntime({
     activePlaybackSource,
     armListenerMediaRecovery,
     clearListenerMediaRecovery,
-    getRemoteMediaTraceContext,
+    getCurrentPlaybackConnectionKey,
     isCurrentSourceOwner,
     peerId,
     roomSnapshot?.room.id,
@@ -1750,7 +2052,9 @@ export function useRoomRuntime({
     reportRealtimeFailureRef,
     setMediaConnectionState,
     lastRealtimeRoomEventAtRef,
-    resubscribeRoomRef
+    resubscribeRoomRef,
+    getCurrentPlaybackConnectionKey,
+    queuePlaybackRecoveryRecommendation
   });
 
   useEffect(() => {
@@ -1849,9 +2153,12 @@ export function useRoomRuntime({
       lastSubscribeAckAtRef,
       recoveryModeRef,
       remotePlaybackRetryRef,
+      socketDisconnectGraceUntilRef,
+      socketDisconnectGraceTimeoutRef,
       stopPresenceHeartbeat,
       stopRecoveryWatchdog,
       clearListenerMediaRecovery,
+      clearSocketDisconnectGrace,
       clearHostMediaSyncRetry,
       bumpMediaTransportEpoch,
       dispatchRoomStateEvent,
@@ -1933,6 +2240,8 @@ export function useRoomRuntime({
     updateRemoteMediaDiagnostic,
     resetRemoteAudioElement,
     scheduleRemotePlaybackRetry,
+    queuePlaybackRecoveryRecommendation,
+    getCurrentPlaybackConnectionKey,
     shouldResumeRemotePlaybackAfterAudioUnlock,
     ensureSourcePlaybackStarted,
     syncHostMediaStream,
