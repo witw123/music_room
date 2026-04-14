@@ -655,10 +655,12 @@ describe("RoomMediaMesh", () => {
     const sender = FakeRTCPeerConnection.senders[0];
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
-    expect(sender?.setParameters).toHaveBeenCalledWith({});
+    expect(sender?.setParameters).toHaveBeenCalledWith({
+      encodings: [{ maxBitrate: 510_000 }]
+    });
   });
 
-  it("does not cap sender bitrate on healthy relay tcp links", () => {
+  it("keeps a high music sender bitrate target on healthy relay tcp links", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -671,10 +673,10 @@ describe("RoomMediaMesh", () => {
         packetsLost: 12,
         jitterMs: 3
       })
-    ).toBeNull();
+    ).toBe(510_000);
   });
 
-  it("does not reduce sender bitrate against measured headroom on constrained relay tcp links", () => {
+  it("does not reduce the music sender target against measured headroom on constrained relay tcp links", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -687,10 +689,10 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBeNull();
+    ).toBe(510_000);
   });
 
-  it("does not cap sender bitrate on weak links", () => {
+  it("keeps the explicit music sender target on weak links", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -703,7 +705,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 20,
         jitterMs: 4
       })
-    ).toBeNull();
+    ).toBe(510_000);
   });
 
   it("prefers a stronger receiver jitter target on constrained links", () => {
@@ -738,7 +740,7 @@ describe("RoomMediaMesh", () => {
     ).toBe(320);
   });
 
-  it("does not keep audio in weak-link mode on high cumulative loss when the short window is healthy", () => {
+  it("does not lower the music sender target on high cumulative loss when the short window is healthy", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "host",
@@ -751,7 +753,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBeNull();
+    ).toBe(510_000);
   });
 
   it("adds high-quality opus fmtp hints for music streaming", () => {
@@ -766,11 +768,11 @@ describe("RoomMediaMesh", () => {
         ].join("\r\n")
       )
     ).toContain(
-      "a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;usedtx=0"
+      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
     );
   });
 
-  it("reports no sender bitrate cap even when a previous cap existed", () => {
+  it("restores the high music sender target even when a previous lower cap existed", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps(
         {
@@ -786,7 +788,7 @@ describe("RoomMediaMesh", () => {
         },
         144_000
       )
-    ).toBeNull();
+    ).toBe(510_000);
   });
 
   it("keeps the existing jitter target when the new recommendation is within hysteresis", () => {

@@ -96,6 +96,7 @@ const activeStatsSamplingIntervalMs = 1_000;
 const steadyStatsSamplingIntervalMs = 5_000;
 const receiverJitterWeakUpgradeWindowCount = 2;
 const receiverJitterHealthyDowngradeWindowCount = 3;
+const musicAudioTargetBitrateBps = 510_000;
 
 export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
   if (!sdp) {
@@ -127,7 +128,7 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
       );
       if (!hasExistingFmtp) {
         tunedLines.push(
-          `a=fmtp:${rtpMapMatch[1]} stereo=1;sprop-stereo=1;usedtx=0`
+          `a=fmtp:${rtpMapMatch[1]} maxaveragebitrate=${musicAudioTargetBitrateBps};stereo=1;sprop-stereo=1;cbr=1;usedtx=0`
         );
         seenFmtp.add(rtpMapMatch[1]);
       }
@@ -148,10 +149,10 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
       const [rawKey, rawValue = ""] = entry.split("=");
       paramMap.set(rawKey.trim().toLowerCase(), rawValue.trim());
     }
-    paramMap.delete("maxaveragebitrate");
+    paramMap.set("maxaveragebitrate", `${musicAudioTargetBitrateBps}`);
     paramMap.set("stereo", "1");
     paramMap.set("sprop-stereo", "1");
-    paramMap.delete("cbr");
+    paramMap.set("cbr", "1");
     paramMap.set("usedtx", "0");
     tunedLines[tunedLines.length - 1] =
       `a=fmtp:${fmtpMatch[1]} ` +
@@ -749,7 +750,7 @@ export class RoomMediaMesh {
     if (entry.senders.length === 0 && nextTrack) {
       const sender = entry.connection.addTrack(nextTrack, localStream as MediaStream);
       entry.senders = [sender];
-      await this.configureAudioSender(entry, sender, nextTrack, null);
+      await this.configureAudioSender(entry, sender, nextTrack, musicAudioTargetBitrateBps);
       entry.stream = localStream;
       return true;
     }
@@ -762,7 +763,7 @@ export class RoomMediaMesh {
             entry,
             sender,
             nextTrack,
-            entry.configuredAudioMaxBitrateBps
+            entry.configuredAudioMaxBitrateBps ?? musicAudioTargetBitrateBps
           );
         })
       ).catch(() => undefined);
@@ -1015,7 +1016,15 @@ export class RoomMediaMesh {
                 return nextEncoding;
               })
             }
-          : {})
+          : typeof maxBitrateBps === "number"
+            ? {
+                encodings: [
+                  {
+                    maxBitrate: maxBitrateBps
+                  } satisfies RTCRtpEncodingParameters
+                ]
+              }
+            : {})
       };
       await sender.setParameters(nextParameters);
       entry.configuredAudioMaxBitrateBps = maxBitrateBps;
@@ -1145,7 +1154,7 @@ export function resolvePreferredAudioMaxBitrateBps(
 ) {
   void sample;
   void currentConfiguredBitrateBps;
-  return null;
+  return musicAudioTargetBitrateBps;
 }
 
 export function resolvePreferredReceiverJitterTargetMs(
