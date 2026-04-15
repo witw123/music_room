@@ -69,6 +69,8 @@ type MediaPeerEntry = {
   negotiationRole: "publisher" | "listener";
   statsIntervalId: ReturnType<typeof setInterval> | null;
   configuredAudioMaxBitrateBps: number | null;
+  senderAudioMaxBitrateBps: number | null;
+  lastLocalOpusFmtpLine: string | null;
   configuredReceiverJitterTargetMs: number | null;
   statsSnapshot: PeerConnectionStatsSnapshot | null;
   publishGeneration: number;
@@ -161,6 +163,31 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
   }
 
   return tunedLines.join("\r\n");
+}
+
+export function extractOpusFmtpLine(sdp: string | null | undefined) {
+  if (!sdp) {
+    return null;
+  }
+
+  const lines = sdp.split(/\r\n|\n/);
+  const opusPayloadTypes = new Set<string>();
+  for (const line of lines) {
+    const match = /^a=rtpmap:(\d+)\s+opus\/48000(?:\/2)?$/i.exec(line.trim());
+    if (match?.[1]) {
+      opusPayloadTypes.add(match[1]);
+    }
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const fmtpMatch = /^a=fmtp:(\d+)\s+(.+)$/i.exec(trimmed);
+    if (fmtpMatch?.[1] && opusPayloadTypes.has(fmtpMatch[1])) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }
 
 function tuneSessionDescriptionForMusic<T extends RTCSessionDescriptionInit>(description: T): T {
@@ -299,6 +326,9 @@ export class RoomMediaMesh {
         await this.flushPendingCandidates(entry);
         const answer = tuneSessionDescriptionForMusic(await entry.connection.createAnswer());
         await entry.connection.setLocalDescription(answer);
+        entry.lastLocalOpusFmtpLine = extractOpusFmtpLine(
+          entry.connection.localDescription?.sdp ?? answer.sdp
+        );
         entry.negotiatedTrackId = entry.attachedTrackId;
         this.emitPeerRuntimeState(payload.fromPeerId, entry);
         this.callbacks.onSignal?.({
@@ -564,6 +594,9 @@ export class RoomMediaMesh {
         await entry.connection.createOffer(forceIceRestart ? { iceRestart: true } : undefined)
       );
       await entry.connection.setLocalDescription(offer);
+      entry.lastLocalOpusFmtpLine = extractOpusFmtpLine(
+        entry.connection.localDescription?.sdp ?? offer.sdp
+      );
       this.callbacks.onSignal?.({
         peerId,
         direction: "sent",
@@ -605,6 +638,8 @@ export class RoomMediaMesh {
       negotiationRole,
       statsIntervalId: null,
       configuredAudioMaxBitrateBps: null,
+      senderAudioMaxBitrateBps: null,
+      lastLocalOpusFmtpLine: null,
       configuredReceiverJitterTargetMs: null,
       statsSnapshot: null,
       publishGeneration: 0,
@@ -951,6 +986,15 @@ export class RoomMediaMesh {
             entry.configuredAudioMaxBitrateBps !== null
               ? Math.round(entry.configuredAudioMaxBitrateBps / 1000)
               : null,
+          configuredAudioMaxBitrateKbps:
+            entry.configuredAudioMaxBitrateBps !== null
+              ? Math.round(entry.configuredAudioMaxBitrateBps / 1000)
+              : null,
+          senderAudioMaxBitrateKbps:
+            entry.senderAudioMaxBitrateBps !== null
+              ? Math.round(entry.senderAudioMaxBitrateBps / 1000)
+              : null,
+          opusFmtpLine: entry.lastLocalOpusFmtpLine,
           receiverJitterTargetMs: entry.configuredReceiverJitterTargetMs
         }
       });
@@ -1028,6 +1072,7 @@ export class RoomMediaMesh {
       };
       await sender.setParameters(nextParameters);
       entry.configuredAudioMaxBitrateBps = maxBitrateBps;
+      entry.senderAudioMaxBitrateBps = resolveSenderAudioMaxBitrateBps(sender);
     } catch {
       // Some runtimes reject sender parameter changes after negotiation; ignore and keep streaming.
     }
@@ -1217,6 +1262,22 @@ function getAudioCodecCapabilities() {
 
 function hasEncodingDtxFlag(encoding: RTCRtpEncodingParameters) {
   return "dtx" in (encoding as RTCRtpEncodingParameters & { dtx?: unknown });
+}
+
+function resolveSenderAudioMaxBitrateBps(sender: RTCRtpSender) {
+  if (!sender.getParameters) {
+    return null;
+  }
+
+  try {
+    const encodings = sender.getParameters().encodings ?? [];
+    const firstMaxBitrate = encodings
+      .map((encoding) => encoding.maxBitrate)
+      .find((value): value is number => typeof value === "number" && Number.isFinite(value));
+    return firstMaxBitrate ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {

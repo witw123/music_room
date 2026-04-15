@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PeerSignalMessage } from "@music-room/shared";
 import {
   RoomMediaMesh,
+  extractOpusFmtpLine,
   resolvePreferredAudioMaxBitrateBps,
   resolvePreferredReceiverJitterTargetMs,
   tuneOpusSdpForMusic
@@ -757,17 +758,20 @@ describe("RoomMediaMesh", () => {
   });
 
   it("adds high-quality opus fmtp hints for music streaming", () => {
-    expect(
-      tuneOpusSdpForMusic(
-        [
-          "v=0",
-          "m=audio 9 UDP/TLS/RTP/SAVPF 111 0",
-          "a=rtpmap:111 opus/48000/2",
-          "a=fmtp:111 minptime=10;useinbandfec=1",
-          ""
-        ].join("\r\n")
-      )
-    ).toContain(
+    const tunedSdp = tuneOpusSdpForMusic(
+      [
+        "v=0",
+        "m=audio 9 UDP/TLS/RTP/SAVPF 111 0",
+        "a=rtpmap:111 opus/48000/2",
+        "a=fmtp:111 minptime=10;useinbandfec=1",
+        ""
+      ].join("\r\n")
+    );
+
+    expect(tunedSdp).toContain(
+      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=51000000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
+    );
+    expect(extractOpusFmtpLine(tunedSdp)).toBe(
       "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=51000000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
     );
   });

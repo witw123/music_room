@@ -337,8 +337,6 @@ export const progressivePlaybackStatusSchema = z.object({
   maxDriftMs: z.number().nonnegative().nullable().optional(),
   waitingEventsLast30s: z.number().int().nonnegative().nullable().optional(),
   stalledEventsLast30s: z.number().int().nonnegative().nullable().optional(),
-  audioBitrateTier: z.enum(["high", "medium", "low"]).nullable().optional(),
-  receiverJitterTier: z.enum(["low", "medium", "high"]).nullable().optional(),
   playbackRecoveryStage: z
     .enum([
       "startup-buffering",
@@ -390,6 +388,9 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   currentRoundTripTimeMs: z.number().nonnegative().nullable(),
   availableOutgoingBitrateKbps: z.number().nonnegative().nullable(),
   targetAudioBitrateKbps: z.number().nonnegative().nullable().optional(),
+  configuredAudioMaxBitrateKbps: z.number().nonnegative().nullable().optional(),
+  senderAudioMaxBitrateKbps: z.number().nonnegative().nullable().optional(),
+  opusFmtpLine: z.string().nullable().optional(),
   packetLossRate: z.number().nonnegative().nullable().optional(),
   receiverJitterTargetMs: z.number().nonnegative().nullable().optional(),
   startupBufferMs: z.number().nonnegative().nullable().optional(),

@@ -225,6 +225,9 @@ export function useRoomRuntimeObservability(input: {
         currentRoundTripTimeMs: number | null;
         availableOutgoingBitrateKbps: number | null;
         targetAudioBitrateKbps?: number | null;
+        configuredAudioMaxBitrateKbps?: number | null;
+        senderAudioMaxBitrateKbps?: number | null;
+        opusFmtpLine?: string | null;
         packetLossRate?: number | null;
         receiverJitterTargetMs?: number | null;
         mediaReceiveBitrateKbps: number | null;
@@ -273,6 +276,12 @@ export function useRoomRuntimeObservability(input: {
               snapshot.availableOutgoingBitrateKbps,
             targetAudioBitrateKbps:
               transportInput.sample.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
+            configuredAudioMaxBitrateKbps:
+              transportInput.sample.configuredAudioMaxBitrateKbps ??
+              snapshot.configuredAudioMaxBitrateKbps,
+            senderAudioMaxBitrateKbps:
+              transportInput.sample.senderAudioMaxBitrateKbps ?? snapshot.senderAudioMaxBitrateKbps,
+            opusFmtpLine: transportInput.sample.opusFmtpLine ?? snapshot.opusFmtpLine,
             packetLossRate: transportInput.sample.packetLossRate ?? snapshot.packetLossRate,
             receiverJitterTargetMs:
               transportInput.sample.receiverJitterTargetMs ?? snapshot.receiverJitterTargetMs,

@@ -245,12 +245,20 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
             <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>
             <span>媒体接收: {formatMetric(peer.mediaReceiveBitrateKbps, " kbps")}</span>
             <span>媒体发送: {formatMetric(peer.mediaSendBitrateKbps, " kbps")}</span>
+            <span>目标码率: {formatMetric(peer.targetAudioBitrateKbps, " kbps")}</span>
+            <span>已配置 sender: {formatMetric(peer.configuredAudioMaxBitrateKbps, " kbps")}</span>
+            <span>实际 sender: {formatMetric(peer.senderAudioMaxBitrateKbps, " kbps")}</span>
             <span>分片下载: {formatMetric(peer.pieceDownloadRateKbps, " kbps")}</span>
             <span>分片上传: {formatMetric(peer.pieceUploadRateKbps, " kbps")}</span>
             <span>分片 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
             <span>丢包率: {formatMetric(peer.packetLossRate, "%")}</span>
             <span>抖动: {formatMetric(peer.jitterMs, "ms")}</span>
           </DiagnosticGrid>
+          {peer.opusFmtpLine ? (
+            <p className="mt-2 break-all font-mono text-[10px] text-sky-300">
+              Opus fmtp: {peer.opusFmtpLine}
+            </p>
+          ) : null}
         </DiagnosticBlock>
 
         <DiagnosticBlock title="远端音频">

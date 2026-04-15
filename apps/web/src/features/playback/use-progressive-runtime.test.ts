@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
-  resolveAudioQualityTier,
   resolveMediaElementPlaybackRole,
   shouldBlockFullLocalHandoffForRecentRemoteRecovery,
   shouldEnableFullLocalHandoff,
@@ -166,18 +165,6 @@ describe("shouldPollRemoteStartupGate", () => {
         shadowWarmupActive: true
       })
     ).toBeGreaterThan(500);
-  });
-
-  it("maps bitrate and jitter targets to coarse quality tiers", () => {
-    expect(
-      resolveAudioQualityTier({
-        targetAudioBitrateKbps: 192,
-        receiverJitterTargetMs: 280
-      })
-    ).toEqual({
-      audioBitrateTier: "high",
-      receiverJitterTier: "low"
-    });
   });
 
   it("does not prefer listener local takeover while remote-first lock is active", () => {

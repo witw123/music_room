@@ -6,6 +6,9 @@ export type PeerConnectionStatsSample = {
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
   targetAudioBitrateKbps?: number | null;
+  configuredAudioMaxBitrateKbps?: number | null;
+  senderAudioMaxBitrateKbps?: number | null;
+  opusFmtpLine?: string | null;
   packetLossRate?: number | null;
   receiverJitterTargetMs?: number | null;
   mediaReceiveBitrateKbps: number | null;

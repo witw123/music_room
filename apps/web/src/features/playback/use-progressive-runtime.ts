@@ -332,33 +332,6 @@ export function resolveRemoteStartupGateState(input: {
   };
 }
 
-export function resolveAudioQualityTier(input: {
-  targetAudioBitrateKbps: number | null | undefined;
-  receiverJitterTargetMs: number | null | undefined;
-}) {
-  const audioBitrateTier =
-    typeof input.targetAudioBitrateKbps === "number"
-      ? input.targetAudioBitrateKbps >= 176
-        ? "high"
-        : input.targetAudioBitrateKbps >= 104
-          ? "medium"
-          : "low"
-      : null;
-  const receiverJitterTier =
-    typeof input.receiverJitterTargetMs === "number"
-      ? input.receiverJitterTargetMs >= 500
-        ? "high"
-        : input.receiverJitterTargetMs >= 340
-          ? "medium"
-          : "low"
-      : null;
-
-  return {
-    audioBitrateTier,
-    receiverJitterTier
-  } as const;
-}
-
 export function shouldBlockFullLocalHandoffForRecentRemoteRecovery(input: {
   lastRemoteWaitingAtMs: number | null;
   startupBufferMs: number;
@@ -2755,10 +2728,6 @@ export function useProgressiveRuntime({
         codec: null
       }
     );
-    const qualityTiers = resolveAudioQualityTier({
-      targetAudioBitrateKbps: sourceDiagnostics?.targetAudioBitrateKbps ?? null,
-      receiverJitterTargetMs: sourceDiagnostics?.receiverJitterTargetMs ?? null
-    });
     recordPeerDiagnostic({
       peerId: "system",
       channelKind: "system",
@@ -2825,8 +2794,6 @@ export function useProgressiveRuntime({
           maxDriftMs: playbackQualityMetrics.maxDriftMs,
           waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
           stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-          audioBitrateTier: qualityTiers.audioBitrateTier,
-          receiverJitterTier: qualityTiers.receiverJitterTier,
           shadowWarmupActive,
           playbackRecoveryStage,
           audibleLocalFallbackActive,
@@ -2863,8 +2830,6 @@ export function useProgressiveRuntime({
     playbackRecoveryStage,
     audibleLocalFallbackActive,
     shadowWarmupActive,
-    sourceDiagnostics?.receiverJitterTargetMs,
-    sourceDiagnostics?.targetAudioBitrateKbps,
     pendingPlaybackIntent,
     playbackStartIntent,
     nextQueueTrackPrefetch,
