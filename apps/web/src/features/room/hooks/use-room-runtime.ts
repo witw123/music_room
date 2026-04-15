@@ -51,6 +51,7 @@ import {
   withSupervisorDiagnosticPatch
 } from "./use-room-connection-supervisor";
 import { useManualCacheDownloader } from "./use-manual-cache-downloader";
+import type { ManualCacheTrackPlan } from "./use-manual-cache-downloader";
 import {
   formatDiagnosticsTimestamp,
   getPieceTransferRates,
@@ -213,6 +214,7 @@ type UseRoomRuntimeInput = {
     chunkSize: number;
     mimeType: string;
   }) => void;
+  handleManualCachePlan: (plan: ManualCacheTrackPlan) => void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -250,7 +252,12 @@ const stalledPieceSyncRecoveryThresholdMs = 20_000;
 const recoverySoftRetryThresholdMs = 5_000;
 const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
-const enableTrackCaching = false;
+const cacheRuntimePolicy = {
+  manualCaching: true,
+  autoCachePlayedTracks: true,
+  autoCacheUpcomingTracks: false
+} as const;
+const enableTrackCaching = cacheRuntimePolicy.autoCachePlayedTracks;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
@@ -594,6 +601,7 @@ export function useRoomRuntime({
   manualCacheTrackIds,
   announceRoomTrackAvailability,
   handleManualCachePieceReceived,
+  handleManualCachePlan,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
   audioRef,
@@ -1053,7 +1061,8 @@ export function useRoomRuntime({
     peerId,
     connectedPeers,
     dataMesh: dataMeshBridge,
-    onRuntimeEvent: emitRuntimeEvent
+    onRuntimeEvent: emitRuntimeEvent,
+    onManualCachePlan: handleManualCachePlan
   });
 
   const exitCurrentRoom = useCallback(

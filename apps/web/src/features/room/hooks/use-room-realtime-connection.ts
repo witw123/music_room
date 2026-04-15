@@ -809,7 +809,7 @@ export function useRoomRealtimeConnection(input: {
       enableManualTrackCaching: input.enableManualTrackCaching,
       roomId: input.roomSnapshot?.room.id,
       roomListenerSetHash: input.roomListenerSetHash,
-      uploadedTrackIds: input.uploadedTrackIds,
+      uploadedTrackIds: input.roomSnapshot?.tracks.map((track) => track.id) ?? input.uploadedTrackIds,
       lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
     });
 
@@ -817,7 +817,7 @@ export function useRoomRealtimeConnection(input: {
       if (
         !input.roomSnapshot?.room.id ||
         !input.roomListenerSetHash ||
-        input.uploadedTrackIds.length === 0
+        (input.roomSnapshot?.tracks.length ?? input.uploadedTrackIds.length) === 0
       ) {
         lastManualCacheAvailabilityBroadcastKeyRef.current = null;
       }
@@ -825,7 +825,7 @@ export function useRoomRealtimeConnection(input: {
     }
 
     lastManualCacheAvailabilityBroadcastKeyRef.current = nextBroadcastKey;
-    for (const trackId of input.uploadedTrackIds) {
+    for (const trackId of input.roomSnapshot?.tracks.map((track) => track.id) ?? input.uploadedTrackIds) {
       void input.announceRoomTrackAvailabilityRef.current(trackId);
     }
   }, [
@@ -833,6 +833,7 @@ export function useRoomRealtimeConnection(input: {
     input.enableManualTrackCaching,
     input.roomListenerSetHash,
     input.roomSnapshot?.room.id,
+    input.roomSnapshot?.tracks,
     input.uploadedTrackIds
   ]);
 
@@ -1380,7 +1381,7 @@ export function attachRoomSocketHandlers(input: {
         input.resyncRealtimePeers(response.bootstrap?.members ?? undefined);
         input.flushPendingAvailabilityRef.current();
         if (input.enableManualTrackCaching) {
-          for (const trackId of input.uploadedTrackIdsRef.current) {
+          for (const trackId of input.currentRoomRef.current?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
             void input.announceRoomTrackAvailabilityRef.current(trackId);
           }
         }
@@ -1414,7 +1415,7 @@ export function attachRoomSocketHandlers(input: {
     subscribeToRoom();
     input.flushPendingAvailabilityRef.current();
     if (input.enableManualTrackCaching) {
-      for (const trackId of input.uploadedTrackIdsRef.current) {
+      for (const trackId of input.currentRoomRef.current?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
         void input.announceRoomTrackAvailabilityRef.current(trackId);
       }
     }

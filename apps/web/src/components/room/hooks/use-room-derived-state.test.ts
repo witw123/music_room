@@ -151,7 +151,7 @@ describe("use-room-derived-state helpers", () => {
     });
   });
 
-  it("synthesizes the online uploader as a visible provider when piece availability was missed", () => {
+  it("does not synthesize uploader availability when the uploader has not announced pieces", () => {
     expect(
       resolveDerivedAvailabilityByTrack({
         roomSnapshot: {
@@ -228,23 +228,7 @@ describe("use-room-derived-state helpers", () => {
         availabilityByTrack: {},
         localPeerId: "peer_listener"
       })
-    ).toEqual({
-      track_1: {
-        peer_host: {
-          roomId: "room_1",
-          trackId: "track_1",
-          ownerPeerId: "peer_host",
-          nickname: "Host",
-          assetKind: "relay",
-          assetHash: "hash_1",
-          totalChunks: 169,
-          chunkSize: 256 * 1024,
-          availableChunks: Array.from({ length: 169 }, (_, index) => index),
-          source: "live_upload",
-          announcedAt: expect.any(String)
-        }
-      }
-    });
+    ).toEqual({});
   });
 
   it("hides diagnostics from peers that have already left the room", () => {

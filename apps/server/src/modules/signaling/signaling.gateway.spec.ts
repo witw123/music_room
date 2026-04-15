@@ -76,11 +76,17 @@ function createRedisServiceMock(overrides?: Partial<{
   isAvailable: () => boolean;
   publish: jest.Mock;
   subscribe: jest.Mock;
+  setJson: jest.Mock;
+  getJson: jest.Mock;
+  delete: jest.Mock;
 }>) {
   return {
     isAvailable: jest.fn(() => true),
     publish: jest.fn(),
     subscribe: jest.fn(),
+    setJson: jest.fn(),
+    getJson: jest.fn().mockResolvedValue(null),
+    delete: jest.fn(),
     ...overrides
   };
 }
@@ -709,6 +715,35 @@ describe("SignalingGateway", () => {
         type: "offer"
       })
     );
+  });
+
+  it("replays redis TTL availability when local memory is empty", async () => {
+    const redisAvailability = {
+      roomId: "room_1",
+      trackId: "track_redis",
+      ownerPeerId: "peer_host",
+      nickname: "Host",
+      totalChunks: 6,
+      chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3, 4, 5],
+      source: "local_cache" as const,
+      announcedAt: new Date().toISOString()
+    };
+    const { gateway, redisService } = createGateway({
+      redisService: createRedisServiceMock({
+        getJson: jest.fn().mockResolvedValue([redisAvailability])
+      })
+    });
+
+    const client = createClient({ id: "socket_new" });
+    await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_new",
+      peerId: "peer_guest"
+    });
+
+    expect(redisService.getJson).toHaveBeenCalledWith("music-room:availability:room_1");
+    expect(client.emit).toHaveBeenCalledWith("piece.availability", redisAvailability);
   });
 
   it("queues peer signals until the target peer subscribes, then flushes them with the active recovery generation", async () => {

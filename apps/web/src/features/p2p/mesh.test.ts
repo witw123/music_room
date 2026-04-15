@@ -143,7 +143,8 @@ vi.mock("@/lib/indexeddb", () => ({
   cacheTrackPieces: vi.fn(),
   getCachedPiece: vi.fn(),
   getCachedPieceIndexes: vi.fn(async () => []),
-  getTrackPieceManifest: vi.fn(async () => null)
+  getTrackPieceManifest: vi.fn(async () => null),
+  localCacheOwnerKey: "__local__"
 }));
 
 describe("P2PMesh", () => {

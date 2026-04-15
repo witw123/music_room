@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   buildManualCacheSchedulerAvailability,
+  resolveManualCacheTrackPlan,
   resolveManualCacheTrackProviderPeerId,
   shouldRestartManualCacheProviderPeer,
   shouldRetryManualCacheProviderBootstrap
 } from "./use-manual-cache-downloader";
 
 describe("buildManualCacheSchedulerAvailability", () => {
-  it("synthesizes uploader availability when the room owner is online but has not announced pieces yet", () => {
+  it("does not synthesize remote uploader availability without a real announcement", () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner"
     });
@@ -20,23 +21,81 @@ describe("buildManualCacheSchedulerAvailability", () => {
         roomSnapshot,
         localPeerId: "peer_local"
       })
-    ).toEqual({
-      track_a: {
-        peer_owner: {
-          roomId: "room_1",
-          trackId: "track_a",
-          ownerPeerId: "peer_owner",
-          nickname: "owner",
-          assetKind: "relay",
-          assetHash: "hash_a",
-          totalChunks: 4,
-          chunkSize: 128 * 1024,
-          availableChunks: [0, 1, 2, 3],
-          source: "live_upload",
-          announcedAt: expect.any(String)
-        }
-      }
+    ).toEqual({});
+  });
+});
+
+describe("resolveManualCacheTrackPlan", () => {
+  it("uses availability manifest when the snapshot manifest is absent", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      omitTrackManifest: true
     });
+    const track = roomSnapshot.tracks[0];
+
+    const plan = resolveManualCacheTrackPlan({
+      track,
+      roomId: "room_1",
+      localPeerId: "peer_local",
+      availabilityByTrack: {
+        track_a: {
+          peer_owner: {
+            roomId: "room_1",
+            trackId: "track_a",
+            ownerPeerId: "peer_owner",
+            nickname: "owner",
+            totalChunks: 4,
+            chunkSize: 128 * 1024,
+            availableChunks: [0, 1, 2, 3],
+            source: "live_upload",
+            announcedAt: new Date(0).toISOString()
+          }
+        }
+      },
+      connectedPeerIds: ["peer_owner"],
+      cachedManifest: null,
+      localPieceIndexes: [0],
+      pendingChunkIndexes: []
+    });
+
+    expect(plan.manifestSource).toBe("availability");
+    expect(plan.selectedProviderPeerId).toBe("peer_owner");
+    expect(plan.requestableChunks).toEqual([1, 2, 3]);
+    expect(plan.blockedReason).toBeNull();
+  });
+
+  it("only requests chunks that the selected provider announced", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+    const track = roomSnapshot.tracks[0];
+
+    const plan = resolveManualCacheTrackPlan({
+      track,
+      roomId: "room_1",
+      localPeerId: "peer_local",
+      availabilityByTrack: {
+        track_a: {
+          peer_owner: {
+            roomId: "room_1",
+            trackId: "track_a",
+            ownerPeerId: "peer_owner",
+            nickname: "owner",
+            totalChunks: 4,
+            chunkSize: 128 * 1024,
+            availableChunks: [1, 3],
+            source: "live_upload",
+            announcedAt: new Date(0).toISOString()
+          }
+        }
+      },
+      connectedPeerIds: ["peer_owner"],
+      cachedManifest: null,
+      localPieceIndexes: [],
+      pendingChunkIndexes: [1]
+    });
+
+    expect(plan.requestableChunks).toEqual([3]);
   });
 });
 
@@ -215,6 +274,7 @@ describe("shouldRestartManualCacheProviderPeer", () => {
 function buildManualCacheRoomSnapshot(input: {
   ownerPeerId: string | null;
   ownerPresenceState?: "online" | "reconnecting" | "offline";
+  omitTrackManifest?: boolean;
 }): RoomSnapshot {
   return {
     room: {
@@ -272,16 +332,20 @@ function buildManualCacheRoomSnapshot(input: {
         ownerSessionId: "owner_1",
         ownerNickname: "owner",
         sourceType: "local_upload",
-        pieceManifest: {
-          totalChunks: 4,
-          chunkSize: 128 * 1024,
-          pieceMimeType: "audio/mpeg"
-        },
-        relayManifest: {
-          totalChunks: 4,
-          chunkSize: 128 * 1024,
-          pieceMimeType: "audio/mpeg"
-        }
+        pieceManifest: input.omitTrackManifest
+          ? undefined
+          : {
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              pieceMimeType: "audio/mpeg"
+            },
+        relayManifest: input.omitTrackManifest
+          ? undefined
+          : {
+              totalChunks: 4,
+              chunkSize: 128 * 1024,
+              pieceMimeType: "audio/mpeg"
+            }
       }
     ],
     queue: [],

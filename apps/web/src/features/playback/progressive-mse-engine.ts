@@ -1,4 +1,4 @@
-import { getCachedPiecesForTrack } from "@/lib/indexeddb";
+import { getCachedPiecesForTrack, localCacheOwnerKey } from "@/lib/indexeddb";
 import type { ProgressiveTrackManifest } from "./progressive-playback";
 
 type EngineStatus = "idle" | "opening" | "ready" | "failed" | "destroyed";
@@ -94,7 +94,11 @@ export class ProgressiveMseEngine {
         return;
       }
 
-      const pieces = await getCachedPiecesForTrack(this.manifest.trackId, this.peerId);
+      const pieces = await getCachedPiecesForTrack(this.manifest.trackId, this.peerId, {
+        fileHash: this.manifest.fileHash,
+        ownerKey: localCacheOwnerKey,
+        chunkSize: this.manifest.chunkSize
+      });
       const piecesByChunkIndex = new Map(
         pieces.map((piece) => [piece.chunkIndex, piece] as const)
       );

@@ -43,6 +43,7 @@ export const trackAvailabilityAnnouncementSchema = z.object({
   totalChunks: z.number().int().nonnegative(),
   chunkSize: z.number().int().positive(),
   availableChunks: z.array(z.number().int().nonnegative()),
+  pieceHashes: z.array(z.string()).optional(),
   source: z.enum(["live_upload", "local_cache"]),
   announcedAt: z.string().datetime()
 });

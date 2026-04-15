@@ -11,7 +11,10 @@ import {
 } from "@/features/p2p";
 import {
   cacheTrackPieces,
+  getCachedLibraryTrack,
   getTrackPieceManifest,
+  getTrackPieceManifestByFileHash,
+  localCacheOwnerKey,
   queueTrackPieceManifestUpsert
 } from "@/lib/indexeddb";
 import { hashArrayBuffer } from "@/features/p2p";
@@ -151,16 +154,22 @@ export function createRoomDataMeshRuntime(input: {
         const currentTrack =
           input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         if (currentTrack) {
-          void queueTrackPieceManifestUpsert({
-            trackId,
-            fileHash: currentTrack.fileHash,
-            mimeType: currentTrack.mimeType || mimeType || "audio/mpeg",
-            codec: currentTrack.codec ?? null,
-            sizeBytes: currentTrack.sizeBytes ?? null,
-            durationMs: currentTrack.durationMs,
-            totalChunks,
-            chunkSize
-          });
+          void (async () => {
+            const cacheManifest =
+              (await getTrackPieceManifestByFileHash(currentTrack.fileHash)) ??
+              (await getTrackPieceManifest(trackId));
+            await queueTrackPieceManifestUpsert({
+              trackId,
+              fileHash: currentTrack.fileHash,
+              mimeType: currentTrack.mimeType || mimeType || "audio/mpeg",
+              codec: currentTrack.codec ?? null,
+              sizeBytes: currentTrack.sizeBytes ?? null,
+              durationMs: currentTrack.durationMs,
+              totalChunks,
+              chunkSize,
+              pieceHashes: cacheManifest?.pieceHashes
+            });
+          })();
         }
         input.chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
         input.clearManualCachePendingPiece(trackId, chunkIndex);
@@ -317,7 +326,7 @@ export function createRoomDataMeshRuntime(input: {
         if (state === "open") {
           input.flushPendingAvailabilityRef.current();
           if (input.enableManualTrackCaching) {
-            for (const trackId of input.uploadedTrackIdsRef.current) {
+            for (const trackId of input.currentRoomRef.current?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
               void input.announceRoomTrackAvailabilityRef.current(trackId);
             }
           }
@@ -351,12 +360,15 @@ export function createRoomDataMeshRuntime(input: {
       resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         const uploadedTrack = input.uploadedTracksRef.current[trackId] ?? null;
-        const fallbackFile = uploadedTrack?.file ?? null;
+        const cachedLibraryTrack = track ? await getCachedLibraryTrack(track.fileHash) : null;
+        const fallbackFile = uploadedTrack?.file ?? cachedLibraryTrack?.file ?? null;
         if (!track || !fallbackFile) {
           return null;
         }
 
-        const cachedManifest = await getTrackPieceManifest(trackId);
+        const cachedManifest =
+          (await getTrackPieceManifestByFileHash(track.fileHash)) ??
+          (await getTrackPieceManifest(trackId));
         const manifest = resolveTrackPieceManifest({
           track,
           cacheManifest: cachedManifest,
@@ -381,9 +393,11 @@ export function createRoomDataMeshRuntime(input: {
 
         await cacheTrackPieces([
           {
-            pieceId: `${trackId}:${input.peerId}:${chunkIndex}`,
+            pieceId: `${track.fileHash}:${manifest.chunkSize}:${localCacheOwnerKey}:${chunkIndex}`,
             trackId,
+            fileHash: track.fileHash,
             peerId: input.peerId,
+            ownerKey: localCacheOwnerKey,
             chunkIndex,
             chunkSize: payload.byteLength,
             hash,
@@ -398,15 +412,23 @@ export function createRoomDataMeshRuntime(input: {
           sizeBytes: track.sizeBytes ?? fallbackFile.size,
           durationMs: track.durationMs,
           totalChunks: manifest.totalChunks,
-          chunkSize: manifest.chunkSize
+          chunkSize: manifest.chunkSize,
+          pieceHashes: manifest.pieceHashes
         });
 
         return {
           payload,
-          hash,
+          hash: manifest.pieceHashes?.[chunkIndex] ?? hash,
           totalChunks: manifest.totalChunks,
           chunkSize: manifest.chunkSize,
           mimeType: manifest.pieceMimeType
+        };
+      },
+      resolveTrackCacheIdentity: (trackId) => {
+        const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
+        return {
+          fileHash: track?.fileHash ?? null,
+          ownerKey: localCacheOwnerKey
         };
       }
     }

@@ -2,41 +2,69 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
 import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
-import { assembleTrackFileFromPieces, buildTrackAvailabilityFromFile } from "@/features/p2p";
+import {
+  assembleTrackFileFromPieces,
+  buildTrackAvailabilityFromCache,
+  buildTrackAvailabilityFromFile
+} from "@/features/p2p";
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   clearTransientTrackCacheData,
   deleteCachedLibraryTrack as deleteCachedLibraryTrackRecord,
+  deleteManualCacheTask,
+  deleteManualCacheTasksForTracks,
   deleteCachedPiecesForTrack,
   deleteCachedPiecesForTracks,
+  getCachedLibraryTrack,
   getCachedLibraryTrackCount,
+  getCachedPieceIndexes,
   getCachedPiecesForTrack,
   getTrackPieceManifest,
+  getTrackPieceManifestByFileHash,
+  listManualCacheTasksForRoom,
   listCachedLibraryTracks,
+  localCacheOwnerKey,
+  upsertManualCacheTask,
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/upload/audio-utils";
+import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
 
 export type ManualCacheTaskStatus =
   | "idle"
   | "queued"
   | "downloading"
   | "paused"
+  | "blocked"
   | "assembling"
   | "ready"
-  | "failed";
+  | "failed"
+  | "failed-integrity";
 
 export type ManualCacheTask = {
   trackId: string;
   status: ManualCacheTaskStatus;
+  mode: "manual" | "auto-played";
+  fileHash: string;
   updatedAt: string;
   errorMessage: string | null;
   completedChunks: number;
   totalChunks: number;
   mimeType: string | null;
+  manifestSource: string | null;
+  blockedReason: string | null;
+  integrityMode: "strong" | "weak" | null;
+  providerPeerIds: string[];
+  connectedProviderPeerIds: string[];
+  selectedProviderPeerId: string | null;
+  requestableChunkCount: number;
+  pendingChunkCount: number;
+  lastRequestedChunks: number[];
+  lastPieceReceivedAt: string | null;
+  lastError: string | null;
 };
 
 export function useTrackUploads(options: {
@@ -75,6 +103,7 @@ export function useTrackUploads(options: {
           (task) =>
             task.status === "queued" ||
             task.status === "downloading" ||
+            task.status === "blocked" ||
             task.status === "assembling"
         )
         .map((task) => task.trackId),
@@ -139,9 +168,62 @@ export function useTrackUploads(options: {
   }, [refreshCacheLibrary]);
 
   useEffect(() => {
+    if (!roomSnapshot?.room.id) {
+      return;
+    }
+    let cancelled = false;
+    void listManualCacheTasksForRoom(roomSnapshot.room.id).then((tasks) => {
+      if (cancelled) {
+        return;
+      }
+      setManualCacheTasks(
+        Object.fromEntries(
+          tasks.map((task) => [
+            task.trackId,
+            {
+              trackId: task.trackId,
+              status: task.status,
+              mode: task.mode,
+              fileHash: task.fileHash,
+              updatedAt: task.updatedAt,
+              errorMessage: task.errorMessage,
+              completedChunks: task.completedChunks,
+              totalChunks: task.totalChunks,
+              mimeType: task.mimeType,
+              manifestSource: task.manifestSource,
+              blockedReason: task.blockedReason,
+              integrityMode: task.integrityMode,
+              providerPeerIds: task.providerPeerIds,
+              connectedProviderPeerIds: task.connectedProviderPeerIds,
+              selectedProviderPeerId: task.selectedProviderPeerId,
+              requestableChunkCount: task.requestableChunkCount,
+              pendingChunkCount: task.pendingChunkCount,
+              lastRequestedChunks: task.lastRequestedChunks,
+              lastPieceReceivedAt: task.lastPieceReceivedAt,
+              lastError: task.lastError
+            } satisfies ManualCacheTask
+          ])
+        )
+      );
+      for (const task of tasks) {
+        if (task.status === "queued" || task.status === "downloading" || task.status === "blocked") {
+          void getCachedPieceIndexes(task.trackId, peerId, {
+            fileHash: task.fileHash,
+            ownerKey: localCacheOwnerKey
+          }).then((indexes) => {
+            manualCacheChunkIndexesRef.current.set(task.trackId, new Set(indexes));
+          });
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [peerId, roomSnapshot?.room.id]);
+
+  useEffect(() => {
     manualCacheChunkIndexesRef.current.clear();
     manualCacheAssemblingTrackIdsRef.current.clear();
-    setManualCacheTasks({});
     setUploadedTracks((current) => {
       const next = { ...current };
       const activeTrackIds = new Set(roomSnapshot?.tracks.map((track) => track.id) ?? []);
@@ -197,28 +279,71 @@ export function useTrackUploads(options: {
         if (!nextPatch) {
           return current;
         }
+        const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
+        const nextTask: ManualCacheTask = {
+          trackId,
+          status: existing?.status ?? "idle",
+          mode: existing?.mode ?? "manual",
+          fileHash: existing?.fileHash ?? track?.fileHash ?? "",
+          errorMessage: existing?.errorMessage ?? null,
+          completedChunks: existing?.completedChunks ?? 0,
+          totalChunks: existing?.totalChunks ?? 0,
+          mimeType: existing?.mimeType ?? null,
+          manifestSource: existing?.manifestSource ?? null,
+          blockedReason: existing?.blockedReason ?? null,
+          integrityMode: existing?.integrityMode ?? null,
+          providerPeerIds: existing?.providerPeerIds ?? [],
+          connectedProviderPeerIds: existing?.connectedProviderPeerIds ?? [],
+          selectedProviderPeerId: existing?.selectedProviderPeerId ?? null,
+          requestableChunkCount: existing?.requestableChunkCount ?? 0,
+          pendingChunkCount: existing?.pendingChunkCount ?? 0,
+          lastRequestedChunks: existing?.lastRequestedChunks ?? [],
+          lastPieceReceivedAt: existing?.lastPieceReceivedAt ?? null,
+          lastError: existing?.lastError ?? null,
+          ...nextPatch,
+          updatedAt: new Date().toISOString()
+        };
+        if (roomSnapshot?.room.id && nextTask.fileHash) {
+          void upsertManualCacheTask({
+            roomId: roomSnapshot.room.id,
+            trackId,
+            fileHash: nextTask.fileHash,
+            status: nextTask.status,
+            mode: nextTask.mode,
+            errorMessage: nextTask.errorMessage,
+            completedChunks: nextTask.completedChunks,
+            totalChunks: nextTask.totalChunks,
+            mimeType: nextTask.mimeType,
+            manifestSource: nextTask.manifestSource,
+            blockedReason: nextTask.blockedReason,
+            integrityMode: nextTask.integrityMode,
+            providerPeerIds: nextTask.providerPeerIds,
+            connectedProviderPeerIds: nextTask.connectedProviderPeerIds,
+            selectedProviderPeerId: nextTask.selectedProviderPeerId,
+            requestableChunkCount: nextTask.requestableChunkCount,
+            pendingChunkCount: nextTask.pendingChunkCount,
+            lastRequestedChunks: nextTask.lastRequestedChunks,
+            lastPieceReceivedAt: nextTask.lastPieceReceivedAt,
+            lastError: nextTask.lastError,
+            updatedAt: nextTask.updatedAt
+          });
+        }
 
         return {
           ...current,
-          [trackId]: {
-            trackId,
-            status: existing?.status ?? "idle",
-            errorMessage: existing?.errorMessage ?? null,
-            completedChunks: existing?.completedChunks ?? 0,
-            totalChunks: existing?.totalChunks ?? 0,
-            mimeType: existing?.mimeType ?? null,
-            ...nextPatch,
-            updatedAt: new Date().toISOString()
-          }
+          [trackId]: nextTask
         };
       });
     },
-    []
+    [roomSnapshot]
   );
 
   const dropManualCacheTask = useCallback((trackId: string) => {
     manualCacheChunkIndexesRef.current.delete(trackId);
     manualCacheAssemblingTrackIdsRef.current.delete(trackId);
+    if (roomSnapshot?.room.id) {
+      void deleteManualCacheTask(roomSnapshot.room.id, trackId);
+    }
     setManualCacheTasks((current) => {
       if (!(trackId in current)) {
         return current;
@@ -228,7 +353,7 @@ export function useTrackUploads(options: {
       delete next[trackId];
       return next;
     });
-  }, []);
+  }, [roomSnapshot?.room.id]);
 
   const persistTrackIntoLibrary = useCallback(
     async (input: {
@@ -275,7 +400,30 @@ export function useTrackUploads(options: {
 
       const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
       const uploadedTrack = uploadedTracks[trackId] ?? null;
-      if (!track || !uploadedTrack) {
+      if (!track) {
+        return;
+      }
+      const cachedLibraryTrack = await getCachedLibraryTrack(track.fileHash);
+      const fallbackFile = uploadedTrack?.file ?? cachedLibraryTrack?.file ?? null;
+
+      if (!fallbackFile) {
+        const cachedManifest =
+          (await getTrackPieceManifestByFileHash(track.fileHash)) ??
+          (await getTrackPieceManifest(trackId));
+        const availabilityFromPieces = await buildTrackAvailabilityFromCache({
+          roomId: roomSnapshot.room.id,
+          trackId,
+          fileHash: track.fileHash,
+          peerId,
+          nickname: activeSession.nickname,
+          totalChunks: cachedManifest?.totalChunks,
+          chunkSize: cachedManifest?.chunkSize,
+          assetHash: track.fileHash
+        });
+        if (availabilityFromPieces && availabilityFromPieces.availableChunks.length >= availabilityFromPieces.totalChunks) {
+          onAvailability(availabilityFromPieces);
+          emitAvailability(availabilityFromPieces);
+        }
         return;
       }
 
@@ -283,13 +431,13 @@ export function useTrackUploads(options: {
         roomId: roomSnapshot.room.id,
         trackId,
         fileHash: track.fileHash,
-        file: uploadedTrack.file,
+        file: fallbackFile,
         peerId,
         nickname: activeSession.nickname,
-        source: "live_upload",
+        source: uploadedTrack ? "live_upload" : "local_cache",
         mimeType: track.mimeType,
         codec: track.codec ?? null,
-        sizeBytes: track.sizeBytes ?? uploadedTrack.file.size,
+        sizeBytes: track.sizeBytes ?? fallbackFile.size,
         durationMs: track.durationMs,
         totalChunks: track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks,
         chunkSize: track.relayManifest?.chunkSize ?? track.pieceManifest?.chunkSize
@@ -316,12 +464,16 @@ export function useTrackUploads(options: {
         updateManualCacheTask(trackId, {
           status: "assembling",
           errorMessage: null,
+          blockedReason: null,
           totalChunks,
           completedChunks: totalChunks,
           mimeType
         });
 
-        const pieces = await getCachedPiecesForTrack(trackId, peerId);
+        const pieces = await getCachedPiecesForTrack(trackId, peerId, {
+          fileHash: track.fileHash,
+          ownerKey: localCacheOwnerKey
+        });
         if (pieces.length < totalChunks) {
           updateManualCacheTask(trackId, (current) =>
             current && current.status !== "paused"
@@ -345,16 +497,15 @@ export function useTrackUploads(options: {
         });
 
         if (!assembled) {
-          await deleteCachedPiecesForTrack(trackId);
-          manualCacheChunkIndexesRef.current.delete(trackId);
           updateManualCacheTask(trackId, {
-            status: "failed",
-            errorMessage: "文件组装失败",
-            completedChunks: 0,
-            totalChunks: 0,
-            mimeType
+            status: "failed-integrity",
+            errorMessage: "文件组装或完整性校验失败",
+            completedChunks: pieces.length,
+            totalChunks,
+            mimeType,
+            lastError: "integrity-mismatch"
           });
-          setStatusMessage(`曲目 ${track.title} 的缓存组装失败。`);
+          setStatusMessage(`曲目 ${track.title} 的缓存完整性校验失败，等待新的可用来源后重试。`);
           return;
         }
 
@@ -368,9 +519,11 @@ export function useTrackUploads(options: {
         updateManualCacheTask(trackId, {
           status: "ready",
           errorMessage: null,
+          blockedReason: null,
           completedChunks: totalChunks,
           totalChunks,
-          mimeType: mimeType || assembled.file.type || track.mimeType || null
+          mimeType: mimeType || assembled.file.type || track.mimeType || null,
+          lastError: null
         });
         setStatusMessage(`已缓存《${track.title}》。`);
       } finally {
@@ -478,7 +631,7 @@ export function useTrackUploads(options: {
   );
 
   const startManualCacheDownload = useCallback(
-    async (trackId: string) => {
+    async (trackId: string, mode: ManualCacheTask["mode"] = "manual") => {
       if (!enableManualTrackCaching || !roomSnapshot) {
         return;
       }
@@ -488,19 +641,25 @@ export function useTrackUploads(options: {
         return;
       }
 
-      if (cacheLibraryTracksRef.current.has(track.fileHash)) {
+      if (cacheLibraryTracksRef.current.has(track.fileHash) || (await getCachedLibraryTrack(track.fileHash))) {
         updateManualCacheTask(trackId, {
           status: "ready",
+          mode,
+          fileHash: track.fileHash,
           errorMessage: null,
           completedChunks: resolveTrackTotalChunks(track),
           totalChunks: resolveTrackTotalChunks(track),
-          mimeType: track.mimeType ?? null
+          mimeType: track.mimeType ?? null,
+          blockedReason: null,
+          lastError: null
         });
         return;
       }
 
       const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-      const cachedManifest = await getTrackPieceManifest(trackId);
+      const cachedManifest =
+        (await getTrackPieceManifestByFileHash(track.fileHash)) ??
+        (await getTrackPieceManifest(trackId));
       if (
         cachedManifest &&
         expectedManifest &&
@@ -511,7 +670,11 @@ export function useTrackUploads(options: {
         manualCacheChunkIndexesRef.current.delete(trackId);
       }
 
-      const pieces = await getCachedPiecesForTrack(trackId, peerId);
+      const pieces = await getCachedPiecesForTrack(trackId, peerId, {
+        fileHash: track.fileHash,
+        ownerKey: localCacheOwnerKey,
+        chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize
+      });
       const chunkIndexes = new Set(pieces.map((piece) => piece.chunkIndex));
       manualCacheChunkIndexesRef.current.set(trackId, chunkIndexes);
 
@@ -526,10 +689,16 @@ export function useTrackUploads(options: {
 
       updateManualCacheTask(trackId, {
         status,
+        mode,
+        fileHash: track.fileHash,
         errorMessage: null,
         completedChunks,
         totalChunks,
-        mimeType
+        mimeType,
+        manifestSource: cachedManifest ? "cache" : expectedManifest ? "snapshot" : null,
+        blockedReason: null,
+        integrityMode: cachedManifest?.pieceHashes?.length === totalChunks ? "strong" : "weak",
+        lastError: null
       });
       setStatusMessage(`已开始缓存《${track.title}》。`);
 
@@ -597,9 +766,12 @@ export function useTrackUploads(options: {
               ? current.status
               : "downloading",
           errorMessage: null,
+          blockedReason: null,
           completedChunks: nextCompletedChunks,
           totalChunks: nextTotalChunks,
-          mimeType: input.mimeType || current.mimeType
+          mimeType: input.mimeType || current.mimeType,
+          lastPieceReceivedAt: new Date().toISOString(),
+          lastError: null
         };
       });
 
@@ -614,12 +786,51 @@ export function useTrackUploads(options: {
     [assembleManualCacheTrack, updateManualCacheTask]
   );
 
+  const handleManualCachePlan = useCallback(
+    (plan: ManualCacheTrackPlan) => {
+      if (!plan.trackId || !roomSnapshot) {
+        return;
+      }
+      const track = roomSnapshot.tracks.find((entry) => entry.id === plan.trackId) ?? null;
+      const existingTask = manualCacheTasks[plan.trackId] ?? null;
+      if (!track || !existingTask || existingTask.status === "paused" || existingTask.status === "ready") {
+        return;
+      }
+      updateManualCacheTask(plan.trackId, {
+        status:
+          plan.blockedReason && plan.blockedReason !== "complete"
+            ? "blocked"
+            : existingTask.status === "queued"
+              ? "downloading"
+              : existingTask.status,
+        fileHash: track.fileHash,
+        completedChunks: plan.localPieceIndexes.length,
+        totalChunks: plan.manifest?.totalChunks ?? existingTask.totalChunks,
+        mimeType: plan.manifest?.pieceMimeType ?? existingTask.mimeType,
+        manifestSource: plan.manifestSource === "none" ? null : plan.manifestSource,
+        blockedReason: plan.blockedReason === "complete" ? null : plan.blockedReason,
+        integrityMode: plan.integrityMode,
+        providerPeerIds: plan.providerPeerIds,
+        connectedProviderPeerIds: plan.connectedProviderPeerIds,
+        selectedProviderPeerId: plan.selectedProviderPeerId,
+        requestableChunkCount: plan.requestableChunks.length,
+        pendingChunkCount: Math.max(0, existingTask.pendingChunkCount),
+        lastRequestedChunks: plan.requestableChunks,
+        lastError: plan.blockedReason && plan.blockedReason !== "complete" ? plan.blockedReason : null
+      });
+    },
+    [manualCacheTasks, roomSnapshot, updateManualCacheTask]
+  );
+
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
     await deleteCachedPiecesForTrack(trackId);
+    if (roomSnapshot?.room.id) {
+      await deleteManualCacheTask(roomSnapshot.room.id, trackId);
+    }
     manualCacheChunkIndexesRef.current.delete(trackId);
     manualCacheAssemblingTrackIdsRef.current.delete(trackId);
     setUploadedTracks((current) => removeTracksFromUploads(current, [trackId]));
-  }, []);
+  }, [roomSnapshot?.room.id]);
 
   const deleteRoomTrackArtifacts = useCallback(
     async (trackIds: string[]) => {
@@ -641,8 +852,11 @@ export function useTrackUploads(options: {
         }
         return next;
       });
+      if (roomSnapshot?.room.id) {
+        await deleteManualCacheTasksForTracks(roomSnapshot.room.id, uniqueTrackIds);
+      }
     },
-    []
+    [roomSnapshot?.room.id]
   );
 
   const deleteCachedLibraryTrackEntry = useCallback(
@@ -766,6 +980,7 @@ export function useTrackUploads(options: {
     startManualCacheDownload,
     pauseManualCacheDownload,
     handleManualCachePieceReceived,
+    handleManualCachePlan,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     deleteCachedLibraryTrackEntry,

@@ -1,17 +1,54 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import type { RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
-import { getCachedPieceIndexes } from "@/lib/indexeddb";
+import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import {
+  getCachedPieceIndexes,
+  getTrackPieceManifest,
+  getTrackPieceManifestByFileHash,
+  localCacheOwnerKey,
+  type TrackPieceManifestRecord
+} from "@/lib/indexeddb";
+import {
+  resolveTrackPieceManifest,
+  selectCanonicalTrackAvailabilityAnnouncement,
+  type ResolvedTrackPieceManifest
+} from "@/features/p2p";
 import type { DataMeshBridge, RoomRuntimeEvent } from "./room-runtime-types";
 
 const directRequestIntervalMs = 450;
-const directRequestBatchSize = 8;
+const directRequestBatchSize = 16;
 const directRequestTimeoutMs = 5_000;
-const directPendingTtlMs = 7_000;
+const directPendingTtlMs = 12_000;
+const maxPendingPerTrack = 32;
+const maxPendingPerPeer = 8;
 const providerBootstrapRetryCooldownMs = 1_500;
 const providerRestartAfterMs = 6_000;
 const providerRestartCooldownMs = 5_000;
+
+export type ManualCacheManifestSource = ResolvedTrackPieceManifest["source"] | "none";
+export type ManualCacheBlockedReason =
+  | "missing-track"
+  | "missing-manifest"
+  | "complete"
+  | "no-provider"
+  | "provider-not-connected"
+  | "provider-has-no-requestable-chunks"
+  | "pending-window-full";
+
+export type ManualCacheTrackPlan = {
+  trackId: string;
+  manifest: ResolvedTrackPieceManifest | null;
+  manifestSource: ManualCacheManifestSource;
+  integrityMode: "strong" | "weak" | null;
+  localPieceIndexes: number[];
+  providerCandidates: TrackAvailabilityAnnouncement[];
+  providerPeerIds: string[];
+  connectedProviderPeerIds: string[];
+  selectedProviderPeerId: string | null;
+  requestableChunks: number[];
+  blockedReason: ManualCacheBlockedReason | null;
+};
 
 export function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
   const peerIds = new Set<string>();
@@ -228,67 +265,7 @@ export function buildManualCacheSchedulerAvailability(input: {
   roomSnapshot: RoomSnapshot | null | undefined;
   localPeerId: string | null | undefined;
 }) {
-  if (!input.roomSnapshot || input.manualCacheTrackIds.length === 0) {
-    return input.availabilityByTrack;
-  }
-
-  let nextAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> | null = null;
-  const tracksById = new Map(input.roomSnapshot.tracks.map((track) => [track.id, track] as const));
-  const membersBySessionId = new Map(
-    input.roomSnapshot.room.members.map((member) => [member.id, member] as const)
-  );
-
-  for (const trackId of input.manualCacheTrackIds) {
-    const track = tracksById.get(trackId);
-    if (!track) {
-      continue;
-    }
-
-    const owner = membersBySessionId.get(track.ownerSessionId);
-    if (
-      !owner?.peerId ||
-      owner.peerId === input.localPeerId ||
-      owner.presenceState === "offline"
-    ) {
-      continue;
-    }
-
-    const existingTrackAvailability =
-      (nextAvailabilityByTrack ?? input.availabilityByTrack)[trackId] ?? {};
-    const existingOwnerAvailability = existingTrackAvailability[owner.peerId] ?? null;
-    if (
-      existingOwnerAvailability &&
-      existingOwnerAvailability.totalChunks > 0 &&
-      existingOwnerAvailability.availableChunks.length > 0
-    ) {
-      continue;
-    }
-
-    const manifest = track.relayManifest ?? track.pieceManifest ?? null;
-    if (!manifest?.totalChunks || !manifest.chunkSize) {
-      continue;
-    }
-
-    nextAvailabilityByTrack ??= { ...input.availabilityByTrack };
-    nextAvailabilityByTrack[trackId] = {
-      ...existingTrackAvailability,
-      [owner.peerId]: {
-        roomId: input.roomSnapshot.room.id,
-        trackId,
-        ownerPeerId: owner.peerId,
-        nickname: owner.nickname,
-        assetKind: "relay",
-        assetHash: track.fileHash,
-        totalChunks: manifest.totalChunks,
-        chunkSize: manifest.chunkSize,
-        availableChunks: Array.from({ length: manifest.totalChunks }, (_, index) => index),
-        source: "live_upload",
-        announcedAt: new Date().toISOString()
-      }
-    };
-  }
-
-  return nextAvailabilityByTrack ?? input.availabilityByTrack;
+  return input.availabilityByTrack;
 }
 
 export function resolveManualCacheTrackProviderPeerId(input: {
@@ -330,6 +307,184 @@ export function resolveManualCacheTrackProviderPeerId(input: {
   );
 }
 
+export function resolveManualCacheTrackPlan(input: {
+  track: TrackMeta | null;
+  roomId: string;
+  localPeerId: string;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  connectedPeerIds: string[];
+  cachedManifest: TrackPieceManifestRecord | null;
+  localPieceIndexes: number[];
+  pendingChunkIndexes: number[];
+  maxRequestChunks?: number;
+}): ManualCacheTrackPlan {
+  const trackId = input.track?.id ?? "";
+  if (!input.track) {
+    return emptyManualCacheTrackPlan(trackId, "missing-track");
+  }
+
+  const connectedPeerSet = new Set(input.connectedPeerIds);
+  const pendingChunkSet = new Set(input.pendingChunkIndexes);
+  const availabilityCandidates = Object.values(input.availabilityByTrack[input.track.id] ?? {}).filter(
+    (announcement) =>
+      announcement.roomId === input.roomId &&
+      announcement.ownerPeerId !== input.localPeerId &&
+      announcement.totalChunks > 0 &&
+      announcement.chunkSize > 0 &&
+      announcement.availableChunks.length > 0
+  );
+  const canonicalAvailability = selectCanonicalTrackAvailabilityAnnouncement(availabilityCandidates);
+  const manifest = resolveTrackPieceManifest({
+    track: input.track,
+    cacheManifest: input.cachedManifest,
+    availability: canonicalAvailability
+  });
+  if (!manifest) {
+    return {
+      ...emptyManualCacheTrackPlan(input.track.id, "missing-manifest"),
+      providerCandidates: availabilityCandidates,
+      providerPeerIds: availabilityCandidates.map((announcement) => announcement.ownerPeerId),
+      connectedProviderPeerIds: availabilityCandidates
+        .map((announcement) => announcement.ownerPeerId)
+        .filter((peerId) => connectedPeerSet.has(peerId))
+    };
+  }
+
+  const localPieceSet = new Set(
+    input.localPieceIndexes.filter(
+      (chunkIndex) => chunkIndex >= 0 && chunkIndex < manifest.totalChunks
+    )
+  );
+  if (localPieceSet.size >= manifest.totalChunks) {
+    return {
+      ...emptyManualCacheTrackPlan(input.track.id, "complete"),
+      manifest,
+      manifestSource: manifest.source,
+      integrityMode: manifest.pieceHashes?.length === manifest.totalChunks ? "strong" : "weak",
+      localPieceIndexes: [...localPieceSet].sort((left, right) => left - right)
+    };
+  }
+
+  const providerCandidates = availabilityCandidates
+    .filter(
+      (announcement) =>
+        announcement.totalChunks === manifest.totalChunks &&
+        announcement.chunkSize === manifest.chunkSize
+    )
+    .sort((left, right) => {
+      const connectedDifference =
+        Number(connectedPeerSet.has(right.ownerPeerId)) - Number(connectedPeerSet.has(left.ownerPeerId));
+      if (connectedDifference !== 0) {
+        return connectedDifference;
+      }
+      const chunkDifference = right.availableChunks.length - left.availableChunks.length;
+      if (chunkDifference !== 0) {
+        return chunkDifference;
+      }
+      return new Date(right.announcedAt).getTime() - new Date(left.announcedAt).getTime();
+    });
+  const connectedProviderCandidates = providerCandidates.filter((announcement) =>
+    connectedPeerSet.has(announcement.ownerPeerId)
+  );
+  const providerPeerIds = [...new Set(providerCandidates.map((announcement) => announcement.ownerPeerId))];
+  const connectedProviderPeerIds = [
+    ...new Set(connectedProviderCandidates.map((announcement) => announcement.ownerPeerId))
+  ];
+  const missingChunks: number[] = [];
+  for (let chunkIndex = 0; chunkIndex < manifest.totalChunks; chunkIndex += 1) {
+    if (!localPieceSet.has(chunkIndex)) {
+      missingChunks.push(chunkIndex);
+    }
+  }
+
+  if (providerCandidates.length === 0) {
+    return {
+      trackId: input.track.id,
+      manifest,
+      manifestSource: manifest.source,
+      integrityMode: manifest.pieceHashes?.length === manifest.totalChunks ? "strong" : "weak",
+      localPieceIndexes: [...localPieceSet].sort((left, right) => left - right),
+      providerCandidates,
+      providerPeerIds,
+      connectedProviderPeerIds,
+      selectedProviderPeerId: null,
+      requestableChunks: [],
+      blockedReason: "no-provider"
+    };
+  }
+
+  if (connectedProviderCandidates.length === 0) {
+    return {
+      trackId: input.track.id,
+      manifest,
+      manifestSource: manifest.source,
+      integrityMode: manifest.pieceHashes?.length === manifest.totalChunks ? "strong" : "weak",
+      localPieceIndexes: [...localPieceSet].sort((left, right) => left - right),
+      providerCandidates,
+      providerPeerIds,
+      connectedProviderPeerIds,
+      selectedProviderPeerId: null,
+      requestableChunks: [],
+      blockedReason: "provider-not-connected"
+    };
+  }
+
+  for (const provider of connectedProviderCandidates) {
+    const availableChunkSet = new Set(provider.availableChunks);
+    const requestableChunks = missingChunks
+      .filter((chunkIndex) => availableChunkSet.has(chunkIndex) && !pendingChunkSet.has(chunkIndex))
+      .slice(0, input.maxRequestChunks ?? directRequestBatchSize);
+    if (requestableChunks.length > 0) {
+      return {
+        trackId: input.track.id,
+        manifest,
+        manifestSource: manifest.source,
+        integrityMode: manifest.pieceHashes?.length === manifest.totalChunks ? "strong" : "weak",
+        localPieceIndexes: [...localPieceSet].sort((left, right) => left - right),
+        providerCandidates,
+        providerPeerIds,
+        connectedProviderPeerIds,
+        selectedProviderPeerId: provider.ownerPeerId,
+        requestableChunks,
+        blockedReason: null
+      };
+    }
+  }
+
+  return {
+    trackId: input.track.id,
+    manifest,
+    manifestSource: manifest.source,
+    integrityMode: manifest.pieceHashes?.length === manifest.totalChunks ? "strong" : "weak",
+    localPieceIndexes: [...localPieceSet].sort((left, right) => left - right),
+    providerCandidates,
+    providerPeerIds,
+    connectedProviderPeerIds,
+    selectedProviderPeerId: null,
+    requestableChunks: [],
+    blockedReason: pendingChunkSet.size >= maxPendingPerTrack ? "pending-window-full" : "provider-has-no-requestable-chunks"
+  };
+}
+
+function emptyManualCacheTrackPlan(
+  trackId: string,
+  blockedReason: ManualCacheBlockedReason
+): ManualCacheTrackPlan {
+  return {
+    trackId,
+    manifest: null,
+    manifestSource: "none",
+    integrityMode: null,
+    localPieceIndexes: [],
+    providerCandidates: [],
+    providerPeerIds: [],
+    connectedProviderPeerIds: [],
+    selectedProviderPeerId: null,
+    requestableChunks: [],
+    blockedReason
+  };
+}
+
 export function useManualCacheDownloader(input: {
   enableManualTrackCaching: boolean;
   manualCacheTrackIds: string[];
@@ -339,6 +494,7 @@ export function useManualCacheDownloader(input: {
   connectedPeers: string[];
   dataMesh: DataMeshBridge | null;
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
+  onManualCachePlan?: (plan: ManualCacheTrackPlan) => void;
 }) {
   const lastBootstrapKeyRef = useRef<string | null>(null);
   const lastBootstrapAttemptAtRef = useRef<number | null>(null);
@@ -560,51 +716,68 @@ export function useManualCacheDownloader(input: {
 
         for (const trackId of input.manualCacheTrackIds) {
           const track = input.roomSnapshot.tracks.find((entry) => entry.id === trackId) ?? null;
-          const manifest = track?.relayManifest ?? track?.pieceManifest ?? null;
-          if (!track || !manifest?.totalChunks || !manifest.chunkSize) {
+          if (!track) {
+            input.onManualCachePlan?.(emptyManualCacheTrackPlan(trackId, "missing-track"));
             continue;
           }
 
-          const providerPeerId = resolveManualCacheTrackProviderPeerId({
-            trackId,
-            roomSnapshot: input.roomSnapshot,
-            availabilityByTrack: schedulerAvailabilityByTrack,
-            connectedPeerIds,
-            localPeerId: input.peerId
+          const cachedManifest =
+            (await getTrackPieceManifestByFileHash(track.fileHash)) ??
+            (await getTrackPieceManifest(trackId)) ??
+            null;
+          const localPieceIndexes = await getCachedPieceIndexes(trackId, input.peerId, {
+            fileHash: track.fileHash,
+            ownerKey: localCacheOwnerKey
           });
-          if (!providerPeerId) {
-            continue;
-          }
-
-          const localPieceIndexes = new Set(await getCachedPieceIndexes(trackId, input.peerId));
           const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
           for (const [chunkIndex, expiresAt] of pendingForTrack.entries()) {
-            if (expiresAt <= now || localPieceIndexes.has(chunkIndex)) {
+            if (expiresAt <= now || localPieceIndexes.includes(chunkIndex)) {
               pendingForTrack.delete(chunkIndex);
             }
           }
           directPendingRef.current.set(trackId, pendingForTrack);
-
-          const chunkIndexes: number[] = [];
-          for (let chunkIndex = 0; chunkIndex < manifest.totalChunks; chunkIndex += 1) {
-            if (localPieceIndexes.has(chunkIndex) || pendingForTrack.has(chunkIndex)) {
-              continue;
-            }
-            chunkIndexes.push(chunkIndex);
-            if (chunkIndexes.length >= directRequestBatchSize) {
-              break;
-            }
+          if (pendingForTrack.size >= maxPendingPerTrack) {
+            input.onManualCachePlan?.({
+              ...emptyManualCacheTrackPlan(trackId, "pending-window-full"),
+              localPieceIndexes
+            });
+            continue;
           }
 
-          if (chunkIndexes.length === 0) {
+          const remainingTrackSlots = Math.max(0, maxPendingPerTrack - pendingForTrack.size);
+          const plan = resolveManualCacheTrackPlan({
+            track,
+            roomId: input.roomSnapshot.room.id,
+            localPeerId: input.peerId,
+            availabilityByTrack: schedulerAvailabilityByTrack,
+            connectedPeerIds,
+            cachedManifest,
+            localPieceIndexes,
+            pendingChunkIndexes: [...pendingForTrack.keys()],
+            maxRequestChunks: Math.min(directRequestBatchSize, remainingTrackSlots, maxPendingPerPeer)
+          });
+          input.onManualCachePlan?.(plan);
+
+          if (!plan.selectedProviderPeerId || plan.requestableChunks.length === 0 || !plan.manifest) {
+            if (plan.blockedReason && plan.blockedReason !== "complete") {
+              input.onRuntimeEvent?.({
+                type: "diagnostic",
+                peerId: "system",
+                channelKind: "data",
+                direction: "local",
+                event: "manual-cache-blocked",
+                summary: `缓存下载 ${trackId} 阻塞：${plan.blockedReason}`,
+                recordEvent: false
+              });
+            }
             continue;
           }
 
           const didRequest = input.dataMesh.requestPieces(
-            providerPeerId,
+            plan.selectedProviderPeerId,
             trackId,
-            chunkIndexes,
-            manifest.totalChunks,
+            plan.requestableChunks,
+            plan.manifest.totalChunks,
             directRequestTimeoutMs
           );
           if (!didRequest) {
@@ -612,16 +785,16 @@ export function useManualCacheDownloader(input: {
           }
 
           const expiresAt = Date.now() + directPendingTtlMs;
-          for (const chunkIndex of chunkIndexes) {
+          for (const chunkIndex of plan.requestableChunks) {
             pendingForTrack.set(chunkIndex, expiresAt);
           }
           input.onRuntimeEvent?.({
             type: "diagnostic",
-            peerId: providerPeerId,
+            peerId: plan.selectedProviderPeerId,
             channelKind: "data",
             direction: "sent",
-            event: "manual-cache-direct-request",
-            summary: `缓存下载直接请求上传者分片 ${trackId}#${chunkIndexes[0]}-${chunkIndexes[chunkIndexes.length - 1]}`,
+            event: "manual-cache-request",
+            summary: `缓存下载请求分片 ${trackId}#${plan.requestableChunks[0]}-${plan.requestableChunks[plan.requestableChunks.length - 1]}`,
             recordEvent: false
           });
         }
@@ -643,6 +816,7 @@ export function useManualCacheDownloader(input: {
     input.connectedPeers,
     input.dataMesh,
     input.manualCacheTrackIds,
+    input.onManualCachePlan,
     input.onRuntimeEvent,
     input.peerId,
     input.roomSnapshot,

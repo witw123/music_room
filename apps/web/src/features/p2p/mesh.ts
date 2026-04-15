@@ -8,7 +8,8 @@ import {
   cacheTrackPieces,
   getCachedPiece,
   getCachedPieceIndexes,
-  getTrackPieceManifest
+  getTrackPieceManifest,
+  localCacheOwnerKey
 } from "@/lib/indexeddb";
 import {
   samplePeerConnectionStats,
@@ -112,6 +113,13 @@ type MeshOptions = {
     mimeType: string;
     requestId?: string;
   } | null>;
+  resolveTrackCacheIdentity?: (trackId: string) =>
+    | {
+        fileHash: string | null;
+        ownerKey?: string | null;
+      }
+    | null
+    | undefined;
 };
 
 type PeerEntry = {
@@ -202,6 +210,7 @@ type CachedPieceManifestHeader = {
   totalChunks: number;
   chunkSize: number;
   mimeType: string;
+  pieceHashes?: string[];
 };
 
 type QueuedSendItem = {
@@ -235,6 +244,7 @@ export class P2PMesh {
   private readonly autoReconnect: boolean;
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
   private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
+  private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
   private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
 
   constructor(
@@ -248,6 +258,7 @@ export class P2PMesh {
     this.autoReconnect = options.autoReconnect ?? true;
     this.resolveConnectionConfig = options.resolveConnectionConfig;
     this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
+    this.resolveTrackCacheIdentity = options.resolveTrackCacheIdentity;
   }
 
   async syncPeers(
@@ -854,12 +865,16 @@ export class P2PMesh {
       return;
     }
 
+    const cacheIdentity = this.resolveTrackCacheIdentity?.(request.trackId) ?? null;
     let piece: {
       chunkIndex: number;
       chunkSize: number;
       hash: string;
       payload: ArrayBuffer;
-    } | null = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex);
+    } | null = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex, {
+      fileHash: cacheIdentity?.fileHash,
+      ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey
+    });
     let manifestHeader = piece
       ? await this.resolveManifestHeader(request.trackId, piece.chunkSize)
       : null;
@@ -943,7 +958,8 @@ export class P2PMesh {
         manifestHeader = {
           totalChunks: manifest.totalChunks,
           chunkSize: manifest.chunkSize,
-          mimeType: manifest.mimeType || "audio/mpeg"
+          mimeType: manifest.mimeType || "audio/mpeg",
+          pieceHashes: manifest.pieceHashes
         };
         this.pieceManifestHeaders.set(trackId, manifestHeader);
       }
@@ -951,7 +967,11 @@ export class P2PMesh {
 
     let totalChunks = manifestHeader?.totalChunks ?? 0;
     if (totalChunks <= 0) {
-      const chunkIndexes = await getCachedPieceIndexes(trackId, this.localPeerId);
+      const cacheIdentity = this.resolveTrackCacheIdentity?.(trackId) ?? null;
+      const chunkIndexes = await getCachedPieceIndexes(trackId, this.localPeerId, {
+        fileHash: cacheIdentity?.fileHash,
+        ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey
+      });
       totalChunks = chunkIndexes.length;
       manifestHeader = {
         totalChunks,
@@ -1325,10 +1345,19 @@ export class P2PMesh {
     const batch = this.pendingIncomingPieces.splice(0, this.incomingPieceBatchSize);
 
     try {
+      const expectedHashes = await Promise.all(
+        batch.map(async (item) => {
+          const manifestHeader = await this.resolveManifestHeader(
+            item.message.trackId,
+            item.message.header.chunkSize
+          );
+          return manifestHeader?.pieceHashes?.[item.message.chunkIndex] ?? item.message.pieceHash;
+        })
+      );
       const validationResults = await validateTrackPiecePayloadBatch(
-        batch.map((item) => ({
+        batch.map((item, index) => ({
           payload: item.message.payload,
-          expectedHash: item.message.pieceHash
+          expectedHash: expectedHashes[index] ?? item.message.pieceHash
         }))
       );
 
@@ -1352,7 +1381,10 @@ export class P2PMesh {
         this.pieceManifestHeaders.set(item.message.trackId, {
           totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
           chunkSize: item.message.header.chunkSize,
-          mimeType: item.message.header.mimeType
+          mimeType: item.message.header.mimeType,
+          pieceHashes:
+            this.pieceManifestHeaders.get(item.message.trackId)?.pieceHashes ??
+            (item.message.pieceHash ? undefined : undefined)
         });
 
         this.callbacks.onPieceReceived({
@@ -1371,12 +1403,16 @@ export class P2PMesh {
 
       if (validPieces.length > 0) {
         const piecesToPersist = validPieces.map(({ item }) => ({
-          pieceId: `${item.message.trackId}:${this.localPeerId}:${item.message.chunkIndex}`,
+          pieceId: `${
+            this.resolveTrackCacheIdentity?.(item.message.trackId)?.fileHash ?? item.message.trackId
+          }:${item.message.header.chunkSize}:${localCacheOwnerKey}:${item.message.chunkIndex}`,
           trackId: item.message.trackId,
+          fileHash: this.resolveTrackCacheIdentity?.(item.message.trackId)?.fileHash ?? undefined,
           peerId: this.localPeerId,
+          ownerKey: localCacheOwnerKey,
           chunkIndex: item.message.chunkIndex,
           chunkSize: item.message.payload.byteLength,
-          hash: item.message.pieceHash,
+          hash: expectedHashes[batch.indexOf(item)] ?? item.message.pieceHash,
           payload: item.message.payload
         }));
         this.piecePersistChain = this.piecePersistChain

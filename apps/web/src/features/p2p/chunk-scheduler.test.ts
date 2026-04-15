@@ -781,7 +781,7 @@ describe("ChunkScheduler", () => {
     expect(requestedCurrentChunks).toEqual(expect.arrayContaining([10, 11]));
   });
 
-  it("requests manual cache chunks from a connected provider even when playback scheduling is idle", () => {
+  it("does not schedule manual cache chunks because manual cache owns its downloader", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_listener", {
       now: () => 1_000,
@@ -810,12 +810,6 @@ describe("ChunkScheduler", () => {
       mode: "idle"
     });
 
-    expect(requestPiece).toHaveBeenCalledWith(
-      expect.objectContaining({
-        peerId: "peer_provider",
-        trackId: "track_2",
-        priority: "background"
-      })
-    );
+    expect(requestPiece).not.toHaveBeenCalled();
   });
 });

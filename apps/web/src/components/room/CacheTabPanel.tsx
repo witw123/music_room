@@ -96,6 +96,10 @@ function CacheTabPanelBase({
                   ? "组装中"
                   : task?.status === "paused"
                     ? "已暂停"
+                    : task?.status === "blocked"
+                      ? "等待恢复"
+                      : task?.status === "failed-integrity"
+                        ? "校验失败"
                   : task?.status === "downloading" || task?.status === "queued"
                     ? "下载中"
                     : !hasOnlineProvider
@@ -136,10 +140,21 @@ function CacheTabPanelBase({
                           ? "歌曲提供者当前不在线，暂时无法下载缓存。"
                           : task?.status === "paused"
                             ? `已暂停下载，当前缓存进度：${progressLabel}`
+                            : task?.status === "blocked"
+                              ? `缓存暂时阻塞：${task.blockedReason ?? "等待可用来源"}。已完成：${progressLabel}`
+                              : task?.status === "failed-integrity"
+                                ? task.errorMessage ?? "文件完整性校验失败，等待新的可用来源。"
                             : task?.status === "failed"
                               ? task.errorMessage ?? "分片下载失败，可重新尝试。"
                               : `当前缓存进度：${progressLabel}`}
                     </p>
+                    {task ? (
+                      <p className="text-[10px] text-foreground-muted">
+                        manifest：{task.manifestSource ?? "未知"}  校验：{task.integrityMode ?? "未知"}  provider：
+                        {task.connectedProviderPeerIds.length}/{task.providerPeerIds.length}  pending：
+                        {task.pendingChunkCount}  可请求：{task.requestableChunkCount}
+                      </p>
+                    ) : null}
                     <div className="h-1 overflow-hidden rounded-full bg-white/6">
                       <div
                         className={`h-full rounded-full transition-all duration-300 ${
@@ -151,7 +166,7 @@ function CacheTabPanelBase({
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                    {hasOnlineProvider && (task?.status === "queued" || task?.status === "downloading") ? (
+                    {hasOnlineProvider && (task?.status === "queued" || task?.status === "downloading" || task?.status === "blocked") ? (
                       <Button
                         variant="ghost"
                         className="h-10 px-4"
@@ -179,6 +194,8 @@ function CacheTabPanelBase({
                           ? "等待提供者在线"
                           : task?.status === "paused"
                             ? "继续下载"
+                            : task?.status === "blocked"
+                              ? "等待恢复"
                             : task?.status === "downloading" || task?.status === "queued"
                               ? "下载中"
                               : "下载到缓存库"}

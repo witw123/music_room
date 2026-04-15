@@ -1,4 +1,4 @@
-import { getCachedPiece } from "@/lib/indexeddb";
+import { getCachedPiece, localCacheOwnerKey } from "@/lib/indexeddb";
 import type { ProgressiveTrackManifest } from "./progressive-playback";
 import {
   extractFlacPacketsFromBitstream,
@@ -366,7 +366,12 @@ export class ProgressivePcmEngine {
       const piece = await getCachedPiece(
         this.manifest.trackId,
         this.peerId,
-        this.contiguousChunkCount
+        this.contiguousChunkCount,
+        {
+          fileHash: this.manifest.fileHash,
+          ownerKey: localCacheOwnerKey,
+          chunkSize: this.manifest.chunkSize
+        }
       );
       if (!piece) {
         break;

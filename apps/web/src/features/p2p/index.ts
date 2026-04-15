@@ -9,6 +9,7 @@ import {
   cacheTrackPieces,
   getCachedPieceIndexes,
   getTrackPieceManifest,
+  localCacheOwnerKey,
   upsertTrackPieceManifest
 } from "@/lib/indexeddb";
 import {
@@ -40,6 +41,7 @@ export type ResolvedTrackPieceManifest = {
   totalChunks: number;
   chunkSize: number;
   pieceMimeType: string;
+  pieceHashes?: string[];
   source: "cache" | "availability" | "snapshot" | "computed";
 };
 
@@ -219,16 +221,21 @@ export async function buildTrackAvailabilityFromFile(input: {
   const totalChunks = manifest.totalChunks;
   const chunks = await splitBlobIntoChunks(input.file, chunkSize);
   const pieces = [];
+  const pieceHashes: string[] = [];
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
     const chunk = chunks[chunkIndex];
+    const hash = await hashArrayBuffer(chunk);
+    pieceHashes.push(hash);
     pieces.push({
-      pieceId: `${input.trackId}:${input.peerId}:${chunkIndex}`,
+      pieceId: `${input.fileHash}:${chunkSize}:${localCacheOwnerKey}:${chunkIndex}`,
       trackId: input.trackId,
+      fileHash: input.fileHash,
       peerId: input.peerId,
+      ownerKey: localCacheOwnerKey,
       chunkIndex,
       chunkSize: chunk.byteLength,
-      hash: await hashArrayBuffer(chunk),
+      hash,
       payload: chunk
     });
 
@@ -249,7 +256,8 @@ export async function buildTrackAvailabilityFromFile(input: {
     sizeBytes: input.sizeBytes ?? input.file.size,
     durationMs: input.durationMs ?? 0,
     totalChunks,
-    chunkSize
+    chunkSize,
+    pieceHashes
   });
 
   return {
@@ -262,6 +270,7 @@ export async function buildTrackAvailabilityFromFile(input: {
     totalChunks,
     chunkSize,
     availableChunks,
+    pieceHashes,
     source: input.source,
     announcedAt: new Date().toISOString()
   };
@@ -329,12 +338,14 @@ export function selectCanonicalTrackAvailabilityAnnouncement(
 
 export function resolveTrackPieceManifest(input: {
   track?: TrackMeta | null;
-  availability?: Pick<TrackAvailabilityAnnouncement, "totalChunks" | "chunkSize"> | null;
+  availability?: Pick<TrackAvailabilityAnnouncement, "totalChunks" | "chunkSize"> &
+    Partial<Pick<TrackAvailabilityAnnouncement, "pieceHashes">> | null;
   cacheManifest?: {
     totalChunks: number;
     chunkSize: number;
     mimeType?: string | null;
     pieceMimeType?: string | null;
+    pieceHashes?: string[] | null;
   } | null;
   file?: Blob | null;
   codec?: string | null;
@@ -359,6 +370,7 @@ export function resolveTrackPieceManifest(input: {
         input.mimeType ??
         input.file?.type ??
         "audio/mpeg",
+      pieceHashes: cacheManifest.pieceHashes ?? undefined,
       source: "cache"
     };
   }
@@ -378,6 +390,7 @@ export function resolveTrackPieceManifest(input: {
         input.mimeType ??
         input.file?.type ??
         "audio/mpeg",
+      pieceHashes: input.availability.pieceHashes,
       source: "availability"
     };
   }
@@ -533,6 +546,7 @@ async function assembleTrackFileFromPiecesLocal(input: {
 export async function buildTrackAvailabilityFromCache(input: {
   roomId: string;
   trackId: string;
+  fileHash?: string;
   peerId: string;
   nickname: string;
   totalChunks?: number;
@@ -540,7 +554,10 @@ export async function buildTrackAvailabilityFromCache(input: {
   assetKind?: "relay" | "original";
   assetHash?: string;
 }) {
-  const availableChunks = await getCachedPieceIndexes(input.trackId, input.peerId);
+  const availableChunks = await getCachedPieceIndexes(input.trackId, input.peerId, {
+    fileHash: input.fileHash,
+    ownerKey: localCacheOwnerKey
+  });
 
   if (availableChunks.length === 0) {
     return null;
@@ -570,6 +587,7 @@ export async function buildTrackAvailabilityFromCache(input: {
     totalChunks,
     chunkSize,
     availableChunks,
+    pieceHashes: resolvedManifest?.pieceHashes,
     source: "local_cache" as const,
     announcedAt: new Date().toISOString()
   };

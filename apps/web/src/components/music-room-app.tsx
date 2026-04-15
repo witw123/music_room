@@ -211,6 +211,7 @@ export function MusicRoomApp({
     startManualCacheDownload,
     pauseManualCacheDownload,
     handleManualCachePieceReceived,
+    handleManualCachePlan,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     deleteCachedLibraryTrackEntry,
@@ -225,6 +226,25 @@ export function MusicRoomApp({
     onAvailability: mergeAvailability,
     emitAvailability: stableEmitAvailability
   });
+  useEffect(() => {
+    if (
+      !currentPlaybackTrackId ||
+      !roomSnapshot ||
+      roomSnapshot.room.playback.status !== "playing" ||
+      isCurrentSourceOwner ||
+      !!manualCacheTasks[currentPlaybackTrackId]
+    ) {
+      return;
+    }
+
+    void startManualCacheDownload(currentPlaybackTrackId, "auto-played");
+  }, [
+    currentPlaybackTrackId,
+    isCurrentSourceOwner,
+    manualCacheTasks,
+    roomSnapshot,
+    startManualCacheDownload
+  ]);
   const hasFullLocalTrack = useMemo(
     () =>
       currentPlaybackTrackId
@@ -464,6 +484,7 @@ export function MusicRoomApp({
     manualCacheTrackIds,
     announceRoomTrackAvailability,
     handleManualCachePieceReceived,
+    handleManualCachePlan,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     audioRef,

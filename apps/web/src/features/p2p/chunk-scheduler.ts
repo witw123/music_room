@@ -117,7 +117,6 @@ export class ChunkScheduler {
   private availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> = {};
   private connectedPeerIds = new Set<string>();
   private uploadedTrackIds = new Set<string>();
-  private manualTrackIds = new Set<string>();
   private playbackPositionMs = 0;
   private playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null = null;
   private pageVisible = true;
@@ -139,7 +138,6 @@ export class ChunkScheduler {
     this.availabilityByTrack = input.availabilityByTrack;
     this.connectedPeerIds = new Set(input.connectedPeerIds);
     this.uploadedTrackIds = new Set(input.uploadedTrackIds);
-    this.manualTrackIds = new Set(input.manualTrackIds ?? []);
     this.playbackPositionMs = input.playbackPositionMs;
     this.playbackStatus = input.playbackStatus ?? this.roomSnapshot?.room.playback.status ?? null;
     this.pageVisible = input.pageVisible ?? true;
@@ -602,46 +600,7 @@ export class ChunkScheduler {
   }
 
   private buildManualTrackPlans() {
-    if (!this.roomSnapshot || this.manualTrackIds.size === 0) {
-      return [] as TrackPlan[];
-    }
-
-    const plans: TrackPlan[] = [];
-    for (const trackId of this.manualTrackIds) {
-      if (this.uploadedTrackIds.has(trackId)) {
-        continue;
-      }
-
-      const track = this.roomSnapshot.tracks.find((entry) => entry.id === trackId);
-      if (!track || this.isTrackComplete(track.id, this.getTotalChunks(track.id))) {
-        continue;
-      }
-
-      const manifest = buildProgressiveTrackManifest(
-        track,
-        this.availabilityByTrack[track.id]?.[this.localPeerId] ??
-          Object.values(this.availabilityByTrack[track.id] ?? {})[0] ??
-          null
-      );
-      const state = this.ensureTrackState(track.id, this.getTotalChunks(track.id));
-      plans.push({
-        track,
-        priority: "background",
-        maxConcurrent: 1,
-        maxConcurrentPerPeer: 1,
-        preferredPeerId: null,
-        chunkSize: manifest?.chunkSize ?? this.getTrackChunkSize(track.id),
-        wantedChunks: getBackgroundChunks({
-          totalChunks: this.getTotalChunks(track.id),
-          ownedChunks: state.ownedChunks,
-          pendingChunks: state.pendingChunks,
-          batchSize: 4
-        }),
-        timeoutMs: 4_000
-      });
-    }
-
-    return plans;
+    return [] as TrackPlan[];
   }
 
   private reconcileTrackStates() {

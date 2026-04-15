@@ -3,7 +3,8 @@ import { getCachedPiece } from "@/lib/indexeddb";
 import { ProgressivePcmEngine } from "./progressive-pcm-engine";
 
 vi.mock("@/lib/indexeddb", () => ({
-  getCachedPiece: vi.fn()
+  getCachedPiece: vi.fn(),
+  localCacheOwnerKey: "__local__"
 }));
 
 vi.mock("./progressive-flac", async (importOriginal) => {
@@ -268,11 +269,16 @@ describe("ProgressivePcmEngine", () => {
       await engine.sync();
       await engine.sync();
 
+      const cacheOptions = {
+        fileHash: manifest.fileHash,
+        ownerKey: "__local__",
+        chunkSize: manifest.chunkSize
+      };
       expect(vi.mocked(getCachedPiece).mock.calls).toEqual([
-        [manifest.trackId, "peer_local", 0],
-        [manifest.trackId, "peer_local", 1],
-        [manifest.trackId, "peer_local", 1],
-        [manifest.trackId, "peer_local", 2]
+        [manifest.trackId, "peer_local", 0, cacheOptions],
+        [manifest.trackId, "peer_local", 1, cacheOptions],
+        [manifest.trackId, "peer_local", 1, cacheOptions],
+        [manifest.trackId, "peer_local", 2, cacheOptions]
       ]);
       expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(2);
       expect(Reflect.get(engine as object, "contiguousByteLength")).toBe(6);
