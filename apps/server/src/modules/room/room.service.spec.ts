@@ -952,6 +952,56 @@ describe("RoomService", () => {
     expect(resumed.mediaEpoch).toBe(playing.mediaEpoch);
   });
 
+  it("does not rewind an already playing track when play is submitted again", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-04-04T00:00:00.000Z"));
+    try {
+      const prisma = createPrismaMock();
+      const redis = createRedisMock();
+      const authService = new AuthService(prisma as never);
+      const roomService = new RoomService(authService, prisma as never, redis as never);
+
+      const host = await authService.createGuestSession("Host");
+      const member = await authService.createGuestSession("Member");
+      const snapshot = await roomService.createRoom(host.id);
+      await roomService.joinRoom(snapshot.room.id, member.id);
+      await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+      const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+        title: "No Rewind",
+        artist: "Artist",
+        album: null,
+        durationMs: 120000,
+        bitrate: null,
+        fileHash: "no-rewind-track",
+        artworkUrl: null,
+        ownerSessionId: host.id,
+        ownerNickname: host.nickname,
+        sourceType: "local_upload"
+      });
+
+      const playing = await roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: track.id,
+        actorSessionId: member.id
+      });
+
+      jest.setSystemTime(new Date("2026-04-04T00:00:05.000Z"));
+
+      const repeatedPlay = await roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        actorSessionId: member.id
+      });
+
+      expect(playing.positionMs).toBe(0);
+      expect(repeatedPlay.currentTrackId).toBe(track.id);
+      expect(repeatedPlay.positionMs).toBe(5000);
+      expect(repeatedPlay.mediaEpoch).toBe(playing.mediaEpoch);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("restores the recent active room for a session from redis", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

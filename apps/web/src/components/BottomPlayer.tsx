@@ -23,8 +23,8 @@ type BottomPlayerProps = {
   syncDurationFromAudio: () => void;
   currentTrack: TrackMeta | null;
   onPlay: () => void;
-  onPause: (positionMs?: number) => void;
-  onSeek: (positionMs: number) => void;
+  onPause: (positionMs?: number) => void | Promise<void>;
+  onSeek: (positionMs: number) => void | Promise<void>;
   onPrev: () => void;
   onNext: () => void;
   onEnded: () => void;
@@ -122,10 +122,19 @@ function BottomPlayerBase({
 
   const commitSeek = useCallback(() => {
     if (seekDraft !== null && canControlPlayback) {
-      startTransition(() => void onSeek(seekDraft));
-      setSeekDraft(null);
+      const targetPositionMs = clampProgressMs(seekDraft, currentTrackDuration);
+      setRenderedProgressMs(targetPositionMs);
+      progressAnchorRef.current = {
+        progressMs: targetPositionMs,
+        receivedAtMs: Date.now()
+      };
+      startTransition(() => {
+        void Promise.resolve(onSeek(targetPositionMs)).finally(() => {
+          setSeekDraft(null);
+        });
+      });
     }
-  }, [canControlPlayback, onSeek, seekDraft, setSeekDraft, startTransition]);
+  }, [canControlPlayback, currentTrackDuration, onSeek, seekDraft, setSeekDraft, startTransition]);
 
   const applyVolume = useCallback(
     (nextVolume: number) => {
@@ -140,8 +149,8 @@ function BottomPlayerBase({
   );
 
   const togglePlayback = useCallback(() => {
-    void (isPlaying ? onPause() : onPlay());
-  }, [isPlaying, onPause, onPlay]);
+    void (isPlaying ? onPause(boundedProgressMs) : onPlay());
+  }, [boundedProgressMs, isPlaying, onPause, onPlay]);
 
   const playPrev = useCallback(() => {
     void onPrev();

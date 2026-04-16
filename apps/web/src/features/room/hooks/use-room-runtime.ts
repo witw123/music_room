@@ -1805,7 +1805,8 @@ export function useRoomRuntime({
       !!existingRemoteStream &&
       !!existingRemoteTrack &&
       existingRemoteTrack.readyState !== "ended";
-    const shouldForceRebindReusedRemoteStream = false;
+    const shouldForceRebindReusedRemoteStream =
+      canReuseExistingRemoteStream && previousPlaybackConnectionKey !== playbackConnectionKey;
     const existingRemoteAudioPlaying =
       canReuseExistingRemoteStream &&
       !shouldForceRebindReusedRemoteStream &&
@@ -1875,7 +1876,7 @@ export function useRoomRuntime({
           ...snapshot.remoteTrackStatus,
           ...traceContext,
           ...getRemoteAudioDiagnostics(),
-          currentGeneration: traceContext.traceKey,
+          currentGeneration: playbackConnectionKey,
           boundGeneration: lifecycle.boundGeneration,
           playingGeneration: lifecycle.playingGeneration,
           recoveryStage: lifecycle.recoveryStage,

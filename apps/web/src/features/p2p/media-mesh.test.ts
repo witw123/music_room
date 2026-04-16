@@ -226,7 +226,7 @@ describe("RoomMediaMesh", () => {
     expect(sendSignal).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the existing transport alive when only mediaEpoch changes", async () => {
+  it("renegotiates the existing transport when only mediaEpoch changes", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {
       onRemoteStream: vi.fn()
@@ -246,7 +246,13 @@ describe("RoomMediaMesh", () => {
 
     expect(FakeRTCPeerConnection.instances).toHaveLength(1);
     expect(firstPeer.closed).toBe(false);
-    expect(sendSignal).toHaveBeenCalledTimes(0);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignal.mock.calls[0]?.[0]).toMatchObject({
+      type: "offer",
+      toPeerId: "peer_listener",
+      mediaEpoch: 2,
+      transportEpoch: 0
+    });
   });
 
   it("rebuilds the media transport when transportEpoch changes", async () => {

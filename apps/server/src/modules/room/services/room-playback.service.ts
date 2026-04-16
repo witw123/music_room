@@ -62,7 +62,9 @@ export class RoomPlaybackService {
         this.clearPlayback(playback);
       } else {
         const isTrackSwitch = nextTrackId !== playback.currentTrackId;
-        const startPositionMs = input.positionMs ?? (isTrackSwitch ? 0 : playback.positionMs);
+        const startPositionMs =
+          input.positionMs ??
+          (isTrackSwitch ? 0 : this.getEffectivePlaybackPositionMs(record, playback));
         await this.applyTrackPlayback(
           record,
           nextTrackId,

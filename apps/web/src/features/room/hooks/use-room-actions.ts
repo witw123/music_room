@@ -60,6 +60,11 @@ export function useRoomActions({
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           const playback = await requestPlayback(nextExpectedVersion);
+          dispatchRoomStateEvent({
+            type: "server-playback-patch",
+            roomId,
+            playback
+          });
           void syncRoomSnapshot(roomId).catch(() => undefined);
           return playback;
         } catch (error) {
@@ -83,7 +88,7 @@ export function useRoomActions({
 
       return null;
     },
-    [setStatusMessage, syncRoomSnapshot]
+    [dispatchRoomStateEvent, setStatusMessage, syncRoomSnapshot]
   );
 
   const leaveRoom = useCallback(async () => {

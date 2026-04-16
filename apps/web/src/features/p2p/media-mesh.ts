@@ -233,6 +233,7 @@ export class RoomMediaMesh {
     mediaEpoch = 0,
     transportEpoch = this.currentTransportEpoch
   ) {
+    const mediaEpochChanged = this.currentMediaEpoch !== mediaEpoch;
     this.latestLocalStream = localStream;
     this.currentMediaEpoch = mediaEpoch;
     if (this.currentTransportEpoch !== transportEpoch) {
@@ -242,7 +243,7 @@ export class RoomMediaMesh {
     const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
 
     for (const peerId of nextPeers) {
-      const shouldInitiateOffer = !this.peers.has(peerId);
+      const shouldInitiateOffer = !this.peers.has(peerId) || mediaEpochChanged;
       await this.ensurePeer(peerId, localStream, shouldInitiateOffer);
     }
 
