@@ -252,12 +252,7 @@ const stalledPieceSyncRecoveryThresholdMs = 20_000;
 const recoverySoftRetryThresholdMs = 5_000;
 const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
-const cacheRuntimePolicy = {
-  manualCaching: true,
-  autoCachePlayedTracks: true,
-  autoCacheUpcomingTracks: false
-} as const;
-const enableTrackCaching = cacheRuntimePolicy.autoCachePlayedTracks;
+const enableTrackCaching = false;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"

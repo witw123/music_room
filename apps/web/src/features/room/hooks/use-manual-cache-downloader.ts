@@ -47,6 +47,7 @@ export type ManualCacheTrackPlan = {
   connectedProviderPeerIds: string[];
   selectedProviderPeerId: string | null;
   requestableChunks: number[];
+  pendingChunkCount: number;
   blockedReason: ManualCacheBlockedReason | null;
 };
 
@@ -346,7 +347,8 @@ export function resolveManualCacheTrackPlan(input: {
       providerPeerIds: availabilityCandidates.map((announcement) => announcement.ownerPeerId),
       connectedProviderPeerIds: availabilityCandidates
         .map((announcement) => announcement.ownerPeerId)
-        .filter((peerId) => connectedPeerSet.has(peerId))
+        .filter((peerId) => connectedPeerSet.has(peerId)),
+      pendingChunkCount: pendingChunkSet.size
     };
   }
 
@@ -361,7 +363,8 @@ export function resolveManualCacheTrackPlan(input: {
       manifest,
       manifestSource: manifest.source,
       integrityMode: manifest.pieceHashes?.length === manifest.totalChunks ? "strong" : "weak",
-      localPieceIndexes: [...localPieceSet].sort((left, right) => left - right)
+      localPieceIndexes: [...localPieceSet].sort((left, right) => left - right),
+      pendingChunkCount: pendingChunkSet.size
     };
   }
 
@@ -409,6 +412,7 @@ export function resolveManualCacheTrackPlan(input: {
       connectedProviderPeerIds,
       selectedProviderPeerId: null,
       requestableChunks: [],
+      pendingChunkCount: pendingChunkSet.size,
       blockedReason: "no-provider"
     };
   }
@@ -425,6 +429,7 @@ export function resolveManualCacheTrackPlan(input: {
       connectedProviderPeerIds,
       selectedProviderPeerId: null,
       requestableChunks: [],
+      pendingChunkCount: pendingChunkSet.size,
       blockedReason: "provider-not-connected"
     };
   }
@@ -446,6 +451,7 @@ export function resolveManualCacheTrackPlan(input: {
         connectedProviderPeerIds,
         selectedProviderPeerId: provider.ownerPeerId,
         requestableChunks,
+        pendingChunkCount: pendingChunkSet.size,
         blockedReason: null
       };
     }
@@ -462,6 +468,7 @@ export function resolveManualCacheTrackPlan(input: {
     connectedProviderPeerIds,
     selectedProviderPeerId: null,
     requestableChunks: [],
+    pendingChunkCount: pendingChunkSet.size,
     blockedReason: pendingChunkSet.size >= maxPendingPerTrack ? "pending-window-full" : "provider-has-no-requestable-chunks"
   };
 }
@@ -481,6 +488,7 @@ function emptyManualCacheTrackPlan(
     connectedProviderPeerIds: [],
     selectedProviderPeerId: null,
     requestableChunks: [],
+    pendingChunkCount: 0,
     blockedReason
   };
 }
@@ -736,13 +744,6 @@ export function useManualCacheDownloader(input: {
             }
           }
           directPendingRef.current.set(trackId, pendingForTrack);
-          if (pendingForTrack.size >= maxPendingPerTrack) {
-            input.onManualCachePlan?.({
-              ...emptyManualCacheTrackPlan(trackId, "pending-window-full"),
-              localPieceIndexes
-            });
-            continue;
-          }
 
           const remainingTrackSlots = Math.max(0, maxPendingPerTrack - pendingForTrack.size);
           const plan = resolveManualCacheTrackPlan({

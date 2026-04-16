@@ -166,7 +166,7 @@ function CacheTabPanelBase({
                   </div>
 
                   <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                    {hasOnlineProvider && (task?.status === "queued" || task?.status === "downloading" || task?.status === "blocked") ? (
+                    {task?.status === "queued" || task?.status === "downloading" || task?.status === "blocked" ? (
                       <Button
                         variant="ghost"
                         className="h-10 px-4"

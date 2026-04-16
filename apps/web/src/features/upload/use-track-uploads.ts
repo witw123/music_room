@@ -178,11 +178,22 @@ export function useTrackUploads(options: {
       }
       setManualCacheTasks(
         Object.fromEntries(
-          tasks.map((task) => [
-            task.trackId,
-            {
+          tasks.map((task) => {
+            const shouldPauseDisabledAutoTask =
+              task.mode === "auto-played" &&
+              (task.status === "queued" || task.status === "downloading" || task.status === "blocked");
+            const status = shouldPauseDisabledAutoTask ? "paused" : task.status;
+            if (shouldPauseDisabledAutoTask) {
+              void upsertManualCacheTask({
+                ...task,
+                status
+              });
+            }
+            return [
+              task.trackId,
+              {
               trackId: task.trackId,
-              status: task.status,
+              status,
               mode: task.mode,
               fileHash: task.fileHash,
               updatedAt: task.updatedAt,
@@ -201,8 +212,9 @@ export function useTrackUploads(options: {
               lastRequestedChunks: task.lastRequestedChunks,
               lastPieceReceivedAt: task.lastPieceReceivedAt,
               lastError: task.lastError
-            } satisfies ManualCacheTask
-          ])
+              } satisfies ManualCacheTask
+            ];
+          })
         )
       );
       for (const task of tasks) {
@@ -814,7 +826,7 @@ export function useTrackUploads(options: {
         connectedProviderPeerIds: plan.connectedProviderPeerIds,
         selectedProviderPeerId: plan.selectedProviderPeerId,
         requestableChunkCount: plan.requestableChunks.length,
-        pendingChunkCount: Math.max(0, existingTask.pendingChunkCount),
+        pendingChunkCount: plan.pendingChunkCount,
         lastRequestedChunks: plan.requestableChunks,
         lastError: plan.blockedReason && plan.blockedReason !== "complete" ? plan.blockedReason : null
       });
