@@ -195,7 +195,7 @@ function CacheTabPanelBase({
                           : task?.status === "paused"
                             ? "继续下载"
                             : task?.status === "blocked"
-                              ? "等待恢复"
+                              ? "重试连接"
                             : task?.status === "downloading" || task?.status === "queued"
                               ? "下载中"
                               : "下载到缓存库"}

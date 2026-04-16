@@ -723,27 +723,28 @@ export function useTrackUploads(options: {
 
   const pauseManualCacheDownload = useCallback(
     (trackId: string) => {
-      setManualCacheTasks((current) => {
-        const existing = current[trackId];
-        if (!existing) {
-          return current;
-        }
-
-        if (existing.status !== "queued" && existing.status !== "downloading") {
-          return current;
+      updateManualCacheTask(trackId, (current) => {
+        if (
+          !current ||
+          (current.status !== "queued" &&
+            current.status !== "downloading" &&
+            current.status !== "blocked")
+        ) {
+          return null;
         }
 
         return {
-          ...current,
-          [trackId]: {
-            ...existing,
-            status: "paused",
-            updatedAt: new Date().toISOString()
-          }
+          status: "paused",
+          blockedReason: null,
+          selectedProviderPeerId: null,
+          requestableChunkCount: 0,
+          pendingChunkCount: 0,
+          lastRequestedChunks: [],
+          lastError: null
         };
       });
     },
-    []
+    [updateManualCacheTask]
   );
 
   const handleManualCachePieceReceived = useCallback(
@@ -804,34 +805,39 @@ export function useTrackUploads(options: {
         return;
       }
       const track = roomSnapshot.tracks.find((entry) => entry.id === plan.trackId) ?? null;
-      const existingTask = manualCacheTasks[plan.trackId] ?? null;
-      if (!track || !existingTask || existingTask.status === "paused" || existingTask.status === "ready") {
+      if (!track) {
         return;
       }
-      updateManualCacheTask(plan.trackId, {
-        status:
-          plan.blockedReason && plan.blockedReason !== "complete"
-            ? "blocked"
-            : existingTask.status === "queued"
-              ? "downloading"
-              : existingTask.status,
-        fileHash: track.fileHash,
-        completedChunks: plan.localPieceIndexes.length,
-        totalChunks: plan.manifest?.totalChunks ?? existingTask.totalChunks,
-        mimeType: plan.manifest?.pieceMimeType ?? existingTask.mimeType,
-        manifestSource: plan.manifestSource === "none" ? null : plan.manifestSource,
-        blockedReason: plan.blockedReason === "complete" ? null : plan.blockedReason,
-        integrityMode: plan.integrityMode,
-        providerPeerIds: plan.providerPeerIds,
-        connectedProviderPeerIds: plan.connectedProviderPeerIds,
-        selectedProviderPeerId: plan.selectedProviderPeerId,
-        requestableChunkCount: plan.requestableChunks.length,
-        pendingChunkCount: plan.pendingChunkCount,
-        lastRequestedChunks: plan.requestableChunks,
-        lastError: plan.blockedReason && plan.blockedReason !== "complete" ? plan.blockedReason : null
+      updateManualCacheTask(plan.trackId, (current) => {
+        if (!current || current.status === "paused" || current.status === "ready") {
+          return null;
+        }
+
+        return {
+          status:
+            plan.blockedReason && plan.blockedReason !== "complete"
+              ? "blocked"
+              : current.status === "queued"
+                ? "downloading"
+                : current.status,
+          fileHash: track.fileHash,
+          completedChunks: plan.localPieceIndexes.length,
+          totalChunks: plan.manifest?.totalChunks ?? current.totalChunks,
+          mimeType: plan.manifest?.pieceMimeType ?? current.mimeType,
+          manifestSource: plan.manifestSource === "none" ? null : plan.manifestSource,
+          blockedReason: plan.blockedReason === "complete" ? null : plan.blockedReason,
+          integrityMode: plan.integrityMode,
+          providerPeerIds: plan.providerPeerIds,
+          connectedProviderPeerIds: plan.connectedProviderPeerIds,
+          selectedProviderPeerId: plan.selectedProviderPeerId,
+          requestableChunkCount: plan.requestableChunks.length,
+          pendingChunkCount: plan.pendingChunkCount,
+          lastRequestedChunks: plan.requestableChunks,
+          lastError: plan.blockedReason && plan.blockedReason !== "complete" ? plan.blockedReason : null
+        };
       });
     },
-    [manualCacheTasks, roomSnapshot, updateManualCacheTask]
+    [roomSnapshot, updateManualCacheTask]
   );
 
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {

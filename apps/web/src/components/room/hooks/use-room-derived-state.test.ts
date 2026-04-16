@@ -151,9 +151,8 @@ describe("use-room-derived-state helpers", () => {
     });
   });
 
-  it("does not synthesize uploader availability when the uploader has not announced pieces", () => {
-    expect(
-      resolveDerivedAvailabilityByTrack({
+  it("synthesizes uploader availability from the current room manifest", () => {
+    const availability = resolveDerivedAvailabilityByTrack({
         roomSnapshot: {
           room: {
             id: "room_1",
@@ -227,8 +226,16 @@ describe("use-room-derived-state helpers", () => {
         },
         availabilityByTrack: {},
         localPeerId: "peer_listener"
-      })
-    ).toEqual({});
+      });
+
+    expect(availability.track_1?.peer_host).toMatchObject({
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_host",
+      totalChunks: 169,
+      chunkSize: 256 * 1024,
+      source: "live_upload"
+    });
   });
 
   it("hides diagnostics from peers that have already left the room", () => {

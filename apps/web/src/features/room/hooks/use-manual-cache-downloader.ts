@@ -266,7 +266,74 @@ export function buildManualCacheSchedulerAvailability(input: {
   roomSnapshot: RoomSnapshot | null | undefined;
   localPeerId: string | null | undefined;
 }) {
-  return input.availabilityByTrack;
+  if (!input.roomSnapshot || input.manualCacheTrackIds.length === 0) {
+    return input.availabilityByTrack;
+  }
+
+  const activeMemberPeerIds = new Set(
+    input.roomSnapshot.room.members
+      .map((member) => member.peerId)
+      .filter((peerId): peerId is string => !!peerId)
+  );
+  const membersBySessionId = new Map(
+    input.roomSnapshot.room.members.map((member) => [member.id, member] as const)
+  );
+  const tracksById = new Map(input.roomSnapshot.tracks.map((track) => [track.id, track] as const));
+  const nextAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> = {};
+
+  for (const trackId of input.manualCacheTrackIds) {
+    const track = tracksById.get(trackId) ?? null;
+    const currentAvailability = input.availabilityByTrack[trackId] ?? {};
+    const nextTrackAvailability: Record<string, TrackAvailabilityAnnouncement> = {};
+
+    for (const announcement of Object.values(currentAvailability)) {
+      if (
+        announcement.roomId === input.roomSnapshot.room.id &&
+        activeMemberPeerIds.has(announcement.ownerPeerId)
+      ) {
+        nextTrackAvailability[announcement.ownerPeerId] = announcement;
+      }
+    }
+
+    if (!track) {
+      if (Object.keys(nextTrackAvailability).length > 0) {
+        nextAvailabilityByTrack[trackId] = nextTrackAvailability;
+      }
+      continue;
+    }
+
+    const owner = membersBySessionId.get(track.ownerSessionId) ?? null;
+    const ownerPeerId = owner?.peerId ?? null;
+    const manifest = track.relayManifest ?? track.pieceManifest ?? null;
+    if (
+      owner &&
+      ownerPeerId &&
+      ownerPeerId !== input.localPeerId &&
+      owner.presenceState !== "offline" &&
+      manifest &&
+      !nextTrackAvailability[ownerPeerId]
+    ) {
+      nextTrackAvailability[ownerPeerId] = {
+        roomId: input.roomSnapshot.room.id,
+        trackId: track.id,
+        ownerPeerId,
+        nickname: owner.nickname,
+        assetKind: "relay",
+        assetHash: track.fileHash,
+        totalChunks: manifest.totalChunks,
+        chunkSize: manifest.chunkSize,
+        availableChunks: Array.from({ length: manifest.totalChunks }, (_, chunkIndex) => chunkIndex),
+        source: "live_upload",
+        announcedAt: "1970-01-01T00:00:00.000Z"
+      };
+    }
+
+    if (Object.keys(nextTrackAvailability).length > 0) {
+      nextAvailabilityByTrack[trackId] = nextTrackAvailability;
+    }
+  }
+
+  return nextAvailabilityByTrack;
 }
 
 export function resolveManualCacheTrackProviderPeerId(input: {
@@ -512,14 +579,24 @@ export function useManualCacheDownloader(input: {
   const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());
   const lastProviderRestartAtRef = useRef<Map<string, number>>(new Map());
 
+  const schedulerAvailabilityByTrack = useMemo(
+    () =>
+      buildManualCacheSchedulerAvailability({
+        availabilityByTrack: input.availabilityByTrack,
+        manualCacheTrackIds: input.manualCacheTrackIds,
+        roomSnapshot: input.roomSnapshot,
+        localPeerId: input.peerId
+      }),
+    [input.availabilityByTrack, input.manualCacheTrackIds, input.peerId, input.roomSnapshot]
+  );
   const availabilityProviderPeerIds = useMemo(
     () =>
       resolveManualCacheProviderPeerIds({
         manualCacheTrackIds: input.manualCacheTrackIds,
-        availabilityByTrack: input.availabilityByTrack,
+        availabilityByTrack: schedulerAvailabilityByTrack,
         localPeerId: input.peerId
       }),
-    [input.availabilityByTrack, input.manualCacheTrackIds, input.peerId]
+    [input.manualCacheTrackIds, input.peerId, schedulerAvailabilityByTrack]
   );
   const uploaderPeerIds = useMemo(
     () =>
@@ -537,16 +614,6 @@ export function useManualCacheDownloader(input: {
   const remotePeerIds = useMemo(
     () => mergePeerIds(providerPeerIds),
     [providerPeerIds]
-  );
-  const schedulerAvailabilityByTrack = useMemo(
-    () =>
-      buildManualCacheSchedulerAvailability({
-        availabilityByTrack: input.availabilityByTrack,
-        manualCacheTrackIds: input.manualCacheTrackIds,
-        roomSnapshot: input.roomSnapshot,
-        localPeerId: input.peerId
-      }),
-    [input.availabilityByTrack, input.manualCacheTrackIds, input.peerId, input.roomSnapshot]
   );
 
   useEffect(() => {
@@ -656,8 +723,14 @@ export function useManualCacheDownloader(input: {
   ]);
 
   useEffect(() => {
+    const activeTrackIds = new Set(input.manualCacheTrackIds);
+    for (const trackId of directPendingRef.current.keys()) {
+      if (!activeTrackIds.has(trackId)) {
+        directPendingRef.current.delete(trackId);
+      }
+    }
+
     if (input.manualCacheTrackIds.length === 0) {
-      directPendingRef.current.clear();
       return;
     }
 

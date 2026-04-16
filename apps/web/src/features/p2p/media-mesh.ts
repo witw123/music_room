@@ -98,7 +98,13 @@ const activeStatsSamplingIntervalMs = 1_000;
 const steadyStatsSamplingIntervalMs = 5_000;
 const receiverJitterWeakUpgradeWindowCount = 2;
 const receiverJitterHealthyDowngradeWindowCount = 3;
-const musicAudioTargetBitrateBps = 51_000_000;
+const musicAudioMaxBitrateBps = 510_000;
+const musicAudioBootstrapBitrateBps = 320_000;
+const musicAudioConstrainedBitrateBps = 256_000;
+const musicAudioWeakBitrateBps = 192_000;
+const musicAudioSevereBitrateBps = 128_000;
+const musicAudioMinBitrateBps = 96_000;
+const audioBitrateRetuneHysteresisBps = 32_000;
 
 export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
   if (!sdp) {
@@ -130,7 +136,7 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
       );
       if (!hasExistingFmtp) {
         tunedLines.push(
-          `a=fmtp:${rtpMapMatch[1]} maxaveragebitrate=${musicAudioTargetBitrateBps};stereo=1;sprop-stereo=1;cbr=1;usedtx=0`
+          `a=fmtp:${rtpMapMatch[1]} minptime=10;useinbandfec=1;maxaveragebitrate=${musicAudioMaxBitrateBps};stereo=1;sprop-stereo=1;usedtx=0`
         );
         seenFmtp.add(rtpMapMatch[1]);
       }
@@ -151,10 +157,11 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
       const [rawKey, rawValue = ""] = entry.split("=");
       paramMap.set(rawKey.trim().toLowerCase(), rawValue.trim());
     }
-    paramMap.set("maxaveragebitrate", `${musicAudioTargetBitrateBps}`);
+    paramMap.set("useinbandfec", "1");
+    paramMap.set("maxaveragebitrate", `${musicAudioMaxBitrateBps}`);
     paramMap.set("stereo", "1");
     paramMap.set("sprop-stereo", "1");
-    paramMap.set("cbr", "1");
+    paramMap.delete("cbr");
     paramMap.set("usedtx", "0");
     tunedLines[tunedLines.length - 1] =
       `a=fmtp:${fmtpMatch[1]} ` +
@@ -785,7 +792,7 @@ export class RoomMediaMesh {
     if (entry.senders.length === 0 && nextTrack) {
       const sender = entry.connection.addTrack(nextTrack, localStream as MediaStream);
       entry.senders = [sender];
-      await this.configureAudioSender(entry, sender, nextTrack, musicAudioTargetBitrateBps);
+      await this.configureAudioSender(entry, sender, nextTrack, musicAudioBootstrapBitrateBps);
       entry.stream = localStream;
       return true;
     }
@@ -798,7 +805,7 @@ export class RoomMediaMesh {
             entry,
             sender,
             nextTrack,
-            entry.configuredAudioMaxBitrateBps ?? musicAudioTargetBitrateBps
+            entry.configuredAudioMaxBitrateBps ?? musicAudioBootstrapBitrateBps
           );
         })
       ).catch(() => undefined);
@@ -1197,9 +1204,34 @@ export function resolvePreferredAudioMaxBitrateBps(
   sample: PeerConnectionStatsSample,
   currentConfiguredBitrateBps: number | null = null
 ) {
-  void sample;
-  void currentConfiguredBitrateBps;
-  return musicAudioTargetBitrateBps;
+  const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  let targetBitrateBps = musicAudioMaxBitrateBps;
+
+  if (isSevereWeakLink(sample)) {
+    targetBitrateBps = musicAudioSevereBitrateBps;
+  } else if (isWeakLink(sample)) {
+    targetBitrateBps = musicAudioWeakBitrateBps;
+  } else if (constrainedTransport) {
+    targetBitrateBps = musicAudioConstrainedBitrateBps;
+  }
+
+  const availableHeadroomBps = resolveAudioHeadroomBitrateBps(sample.availableOutgoingBitrateKbps);
+  if (availableHeadroomBps !== null) {
+    targetBitrateBps = Math.min(targetBitrateBps, availableHeadroomBps);
+  }
+
+  targetBitrateBps = clampAudioBitrateBps(targetBitrateBps);
+
+  if (
+    currentConfiguredBitrateBps !== null &&
+    currentConfiguredBitrateBps >= musicAudioMinBitrateBps &&
+    currentConfiguredBitrateBps <= musicAudioMaxBitrateBps &&
+    Math.abs(currentConfiguredBitrateBps - targetBitrateBps) < audioBitrateRetuneHysteresisBps
+  ) {
+    return currentConfiguredBitrateBps;
+  }
+
+  return targetBitrateBps;
 }
 
 export function resolvePreferredReceiverJitterTargetMs(
@@ -1248,6 +1280,25 @@ function isWeakLink(sample: PeerConnectionStatsSample) {
       sample.packetsLost >= 80) ||
     (typeof sample.jitterMs === "number" && sample.jitterMs >= 30)
   );
+}
+
+function resolveAudioHeadroomBitrateBps(availableOutgoingBitrateKbps: number | null | undefined) {
+  if (
+    typeof availableOutgoingBitrateKbps !== "number" ||
+    !Number.isFinite(availableOutgoingBitrateKbps) ||
+    availableOutgoingBitrateKbps <= 0
+  ) {
+    return null;
+  }
+
+  // Keep margin for RTP/RTCP/retransmission overhead so Opus does not saturate the path.
+  return clampAudioBitrateBps(
+    Math.round((availableOutgoingBitrateKbps * 1_000 * 0.75) / 1_000) * 1_000
+  );
+}
+
+function clampAudioBitrateBps(bitrateBps: number) {
+  return Math.max(musicAudioMinBitrateBps, Math.min(musicAudioMaxBitrateBps, bitrateBps));
 }
 
 function getAudioCodecCapabilities() {

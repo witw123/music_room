@@ -9,9 +9,63 @@ import {
 } from "./use-manual-cache-downloader";
 
 describe("buildManualCacheSchedulerAvailability", () => {
-  it("does not synthesize remote uploader availability without a real announcement", () => {
+  it("synthesizes current online uploader availability from the room manifest", () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner"
+    });
+
+    const availability = buildManualCacheSchedulerAvailability({
+      availabilityByTrack: {},
+      manualCacheTrackIds: ["track_a"],
+      roomSnapshot,
+      localPeerId: "peer_local"
+    });
+
+    expect(availability.track_a?.peer_owner).toMatchObject({
+      roomId: "room_1",
+      trackId: "track_a",
+      ownerPeerId: "peer_owner",
+      totalChunks: 4,
+      chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3],
+      source: "live_upload"
+    });
+  });
+
+  it("drops stale availability from peers that are no longer active room members", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+
+    const availability = buildManualCacheSchedulerAvailability({
+      availabilityByTrack: {
+        track_a: {
+          peer_stale: {
+            roomId: "room_1",
+            trackId: "track_a",
+            ownerPeerId: "peer_stale",
+            nickname: "stale",
+            totalChunks: 4,
+            chunkSize: 128 * 1024,
+            availableChunks: [0, 1, 2, 3],
+            source: "local_cache",
+            announcedAt: new Date(0).toISOString()
+          }
+        }
+      },
+      manualCacheTrackIds: ["track_a"],
+      roomSnapshot,
+      localPeerId: "peer_local"
+    });
+
+    expect(availability.track_a?.peer_stale).toBeUndefined();
+    expect(availability.track_a?.peer_owner).toBeDefined();
+  });
+
+  it("does not synthesize uploader availability when the uploader is offline", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      ownerPresenceState: "offline"
     });
 
     expect(
