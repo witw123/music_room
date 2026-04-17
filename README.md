@@ -7,6 +7,44 @@
 
 Music Room 是一个面向多人同步听歌的协作式音乐房项目。仓库采用 Monorepo，包含 Web 前端、NestJS 服务端、桌面端、移动端，以及前后端共享类型。
 
+## 项目定位
+
+Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
+
+当前项目的核心目标是：
+
+- 让用户基于本地音频完成多人同步听歌
+- 用共享队列、P2P 分片和实时音频把房间体验串成闭环
+- 在不上传音频文件本体的前提下，尽量提供稳定的多人协作播放体验
+
+## 当前进度
+
+当前代码已经具备可运行的核心闭环，项目状态处于“产品可用，工程持续加固”阶段：
+
+- 首页 `/` 为官网展示入口，`/app` 为客户端工作区入口
+- 账号注册 / 登录、房间创建 / 加入 / 恢复、共享队列、房主播放控制已打通
+- 房间主界面当前收敛为 `共享队列`、`曲库`、`缓存`、`成员`
+- P2P 分片缓存、房主实时音频推流、MP3/FLAC 渐进式本地播放均已接入
+- 桌面端已迁移到 Tauri 2，移动端当前提供 Capacitor Android 壳
+
+进度细节见：
+
+- [项目状态](./docs/engineering/status.md)
+- [路线图](./docs/engineering/roadmap.md)
+- [测试策略](./docs/engineering/testing.md)
+
+## 文档入口
+
+如果你是第一次打开这个仓库，建议按这个顺序阅读：
+
+- [文档总览](./docs/README.md)
+- [接口文档总览](./docs/api/README.md)
+- [REST API](./docs/api/rest.md)
+- [WebSocket 事件](./docs/api/websocket-events.md)
+- [共享模型](./docs/api/shared-models.md)
+- [测试场景手册](./docs/api/testing-playbook.md)
+- [部署说明](./docs/deployment/deployment.md)
+
 ## 仓库结构
 
 - `apps/web`: Next.js Web 前端
@@ -18,10 +56,12 @@ Music Room 是一个面向多人同步听歌的协作式音乐房项目。仓库
 ## 功能概览
 
 - 房间创建、加入、恢复与退出
+- 首页展示入口与 `/app` 客户端工作区分流
 - 多人共享播放队列、房主控制与播放同步
 - 本地音频导入、曲库管理、歌单管理
 - P2P 分片缓存同步
 - WebRTC 实时音频推流
+- 手动缓存、缓存回库与缓存导出
 - 成员级“连接与缓存诊断”面板
 - 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
 
@@ -49,6 +89,13 @@ pnpm dev
 - Server: `http://localhost:3001`
 - Health: `http://localhost:3001/health`
 
+开发期主入口：
+
+- 首页展示：`/`
+- 客户端工作区：`/app`
+- 登录页：`/auth`
+- 房间入口：`/rooms`
+
 ### 常用命令
 
 ```bash
@@ -64,7 +111,7 @@ pnpm pack:mobile
 
 - Web falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
 - Desktop and mobile shells use `MUSIC_ROOM_PUBLIC_ORIGIN` at build/package time.
-- If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, the repo keeps the placeholder `https://example.com`.
+- If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, desktop and mobile packaging now fails fast instead of producing a client pointed at `https://example.com`.
 - Official `0.2.7` client packages are expected to target `https://musicroom.witw.top`.
 
 Examples:
@@ -156,6 +203,12 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
   - `5349/tcp`
 - 若 coturn 在 NAT 后方，需要正确配置公网域名或 `external-ip`
 
+部署细节见：
+
+- [部署说明](./docs/deployment/deployment.md)
+- [风险与约束](./docs/deployment/risks.md)
+- [可观测性](./docs/deployment/observability.md)
+
 ## 发布
 
 桌面端和移动端安装包发布在：
@@ -168,6 +221,12 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 - macOS `.dmg`
 - Linux `.AppImage` / `.deb` / `.rpm`
 - Android `.apk`
+
+## 当前已知边界
+
+- 播放控制依赖 Realtime 可用；Redis 不可用时，播放相关接口会直接失败
+- 房间主界面当前以 `共享队列 / 曲库 / 缓存 / 成员` 为主，歌单后端能力保留但默认不作为主入口
+- 浏览器级 E2E、真实 WebRTC 集成测试和统一观测能力仍在继续补强
 
 ## License
 

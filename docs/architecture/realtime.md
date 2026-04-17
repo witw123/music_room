@@ -1,6 +1,6 @@
 # 实时链路
 
-最后更新：`2026-04-04`
+最后更新：`2026-04-17`
 
 ## 角色划分
 
@@ -37,12 +37,15 @@
 - `room.snapshot`
 - `room.snapshot.missing`
 - `room.deleted`
+- `room.session.replaced`
 - `room.playback.patch`
 - `room.queue.patch`
 - `room.presence.patch`
 - `room.library.patch`
+- `room.media.clock`
 - `peer.signal`
 - `piece.availability`
+- `piece.availability.clear`
 - `room.chat`
 
 ## 快照与 patch 的关系
@@ -57,9 +60,11 @@
 ## 在线与断线策略
 
 - 客户端定期发送 `room.presence`
-- 服务端在线 TTL 当前为 `20s`
+- 服务端在线 TTL 当前为 `60s`
 - Socket 断开后存在 `25s` 重连宽限期
 - 宽限期内同一成员重新订阅，在线态和媒体链路不会立刻被清空
+- 同一 `roomId + sessionId` 被不同 `peerId` 重复订阅时，旧连接会收到 `room.session.replaced`
+- 目标 peer 不在线时，`peer.signal` 会做短时缓存并在其重新订阅后回放
 
 ## 当前诊断意义
 

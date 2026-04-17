@@ -1,6 +1,6 @@
 # Docs
 
-最后更新：`2026-04-11`
+最后更新：`2026-04-17`
 当前版本：`0.2.7`
 
 ## 当前项目现状
@@ -13,11 +13,13 @@ Music Room 现在是一套围绕“本地音乐多人同步播放”构建的完
 - Capacitor Android 壳
 - PostgreSQL、Redis、coturn 的生产依赖
 - P2P 分片同步、实时音频和渐进式本地播放
+- 官网展示入口 `/` 与客户端入口 `/app`
 
 当前房间 UI 默认是：
 
 - `共享队列`
 - `曲库`
+- `缓存`
 - `成员与诊断`
 
 歌单后端能力仍保留，但房间中的歌单区域当前已默认隐藏。
@@ -25,12 +27,17 @@ Music Room 现在是一套围绕“本地音乐多人同步播放”构建的完
 ## 先看哪几页
 
 - 当前状态：[engineering/status.md](./engineering/status.md)
+- 测试策略：[engineering/testing.md](./engineering/testing.md)
+- 工程路线：[engineering/roadmap.md](./engineering/roadmap.md)
+- 接口文档总览：[api/README.md](./api/README.md)
 - 整体架构：[architecture/overview.md](./architecture/overview.md)
 - 播放同步：[architecture/playback-sync.md](./architecture/playback-sync.md)
 - P2P 分发：[architecture/p2p-distribution.md](./architecture/p2p-distribution.md)
 - 部署说明：[deployment/deployment.md](./deployment/deployment.md)
 - REST API：[api/rest.md](./api/rest.md)
 - WebSocket 事件：[api/websocket-events.md](./api/websocket-events.md)
+- 共享模型：[api/shared-models.md](./api/shared-models.md)
+- 测试场景手册：[api/testing-playbook.md](./api/testing-playbook.md)
 
 ## 重要说明
 
@@ -40,6 +47,12 @@ Music Room 现在是一套围绕“本地音乐多人同步播放”构建的完
 - 桌面端和移动端打包时需要注入 `MUSIC_ROOM_PUBLIC_ORIGIN`
 - 如果缺失该变量，客户端打包现在会直接失败，而不是静默产出指向 `example.com` 的坏包
 - `0.2.7` 官方客户端打包口径统一为 `https://musicroom.witw.top`
+
+### 1.5. 当前工程阶段是“可用 + 加固”
+
+- 核心用户链路已经跑通，不再是 PoC
+- 当前主要工作集中在重连恢复、多实例稳态、自动化测试和观测能力
+- 文档中的“未完成”项优先理解为工程加固，而不是产品完全不可用
 
 ### 2. Docker 配置不能直接当宿主机 Nginx 配置用
 
