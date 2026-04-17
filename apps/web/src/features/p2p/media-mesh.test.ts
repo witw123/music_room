@@ -663,11 +663,11 @@ describe("RoomMediaMesh", () => {
     expect(sender).toBeDefined();
     expect(liveTrack.contentHint).toBe("music");
     expect(sender?.setParameters).toHaveBeenCalledWith({
-      encodings: [{ maxBitrate: 320_000 }]
+      encodings: [{ maxBitrate: 510_000 }]
     });
   });
 
-  it("caps the music sender bitrate on healthy relay tcp links", () => {
+  it("keeps the music sender at the high-fidelity target on healthy relay tcp links", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -680,10 +680,10 @@ describe("RoomMediaMesh", () => {
         packetsLost: 12,
         jitterMs: 3
       })
-    ).toBe(256_000);
+    ).toBe(510_000);
   });
 
-  it("keeps sender bitrate below measured headroom on constrained relay tcp links", () => {
+  it("does not lower sender bitrate below the high-fidelity target on constrained relay tcp links", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -696,10 +696,10 @@ describe("RoomMediaMesh", () => {
         packetsLost: 104,
         jitterMs: 3
       })
-    ).toBe(111_000);
+    ).toBe(510_000);
   });
 
-  it("keeps a minimum music sender bitrate on very low headroom links", () => {
+  it("does not lower sender bitrate from available headroom alone", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "relay",
@@ -712,7 +712,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 20,
         jitterMs: 4
       })
-    ).toBe(96_000);
+    ).toBe(510_000);
   });
 
   it("prefers a stronger receiver jitter target on constrained links", () => {
@@ -747,7 +747,7 @@ describe("RoomMediaMesh", () => {
     ).toBe(320);
   });
 
-  it("caps the music sender target to available headroom when the short window is healthy", () => {
+  it("keeps the high-fidelity sender target when the short window is healthy", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "host",
@@ -760,10 +760,10 @@ describe("RoomMediaMesh", () => {
         packetsLost: 520,
         jitterMs: 4
       })
-    ).toBe(240_000);
+    ).toBe(510_000);
   });
 
-  it("drops the music sender target on severe loss and high RTT", () => {
+  it("does not self-throttle the music sender target on severe loss and high RTT", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps({
         candidateType: "srflx",
@@ -776,7 +776,7 @@ describe("RoomMediaMesh", () => {
         packetsLost: 260,
         jitterMs: 24
       })
-    ).toBe(128_000);
+    ).toBe(510_000);
   });
 
   it("adds high-quality opus fmtp hints for music streaming", () => {
@@ -791,14 +791,14 @@ describe("RoomMediaMesh", () => {
     );
 
     expect(tunedSdp).toContain(
-      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000;stereo=1;sprop-stereo=1;usedtx=0"
+      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
     );
     expect(extractOpusFmtpLine(tunedSdp)).toBe(
-      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000;stereo=1;sprop-stereo=1;usedtx=0"
+      "a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000;stereo=1;sprop-stereo=1;cbr=1;usedtx=0"
     );
   });
 
-  it("retunes stale 51 Mbps sender caps down to measured headroom", () => {
+  it("retunes stale 51 Mbps sender caps down to the supported music target", () => {
     expect(
       resolvePreferredAudioMaxBitrateBps(
         {
@@ -814,7 +814,7 @@ describe("RoomMediaMesh", () => {
         },
         51_000_000
       )
-    ).toBe(113_000);
+    ).toBe(510_000);
   });
 
   it("keeps the existing jitter target when the new recommendation is within hysteresis", () => {

@@ -22,6 +22,7 @@ const directRequestTimeoutMs = 5_000;
 const directPendingTtlMs = 12_000;
 const maxPendingPerTrack = 32;
 const maxPendingPerPeer = 8;
+const pendingRefillLowWatermark = maxPendingPerTrack - maxPendingPerPeer;
 const providerBootstrapRetryCooldownMs = 1_500;
 const providerRestartAfterMs = 6_000;
 const providerRestartCooldownMs = 5_000;
@@ -536,7 +537,11 @@ export function resolveManualCacheTrackPlan(input: {
     selectedProviderPeerId: null,
     requestableChunks: [],
     pendingChunkCount: pendingChunkSet.size,
-    blockedReason: pendingChunkSet.size >= maxPendingPerTrack ? "pending-window-full" : "provider-has-no-requestable-chunks"
+    blockedReason:
+      pendingChunkSet.size > 0 &&
+      (pendingChunkSet.size >= maxPendingPerTrack || (input.maxRequestChunks ?? directRequestBatchSize) <= 0)
+        ? "pending-window-full"
+        : "provider-has-no-requestable-chunks"
   };
 }
 
@@ -819,6 +824,8 @@ export function useManualCacheDownloader(input: {
           directPendingRef.current.set(trackId, pendingForTrack);
 
           const remainingTrackSlots = Math.max(0, maxPendingPerTrack - pendingForTrack.size);
+          const shouldRefillPendingWindow =
+            pendingForTrack.size === 0 || pendingForTrack.size <= pendingRefillLowWatermark;
           const plan = resolveManualCacheTrackPlan({
             track,
             roomId: input.roomSnapshot.room.id,
@@ -828,7 +835,9 @@ export function useManualCacheDownloader(input: {
             cachedManifest,
             localPieceIndexes,
             pendingChunkIndexes: [...pendingForTrack.keys()],
-            maxRequestChunks: Math.min(directRequestBatchSize, remainingTrackSlots, maxPendingPerPeer)
+            maxRequestChunks: shouldRefillPendingWindow
+              ? Math.min(directRequestBatchSize, remainingTrackSlots, maxPendingPerPeer)
+              : 0
           });
           input.onManualCachePlan?.(plan);
 

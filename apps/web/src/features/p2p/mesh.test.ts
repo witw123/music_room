@@ -526,6 +526,77 @@ describe("P2PMesh", () => {
     expect(channel?.sentMessages[1] ?? channel?.sentMessages[0]).toBeInstanceOf(ArrayBuffer);
   });
 
+  it("serves every chunk in a batched piece request", async () => {
+    const payloads = await Promise.all(
+      [0, 1, 2].map(async (chunkIndex) => {
+        const payload = new TextEncoder().encode(`piece-${chunkIndex}`).buffer;
+        return {
+          chunkIndex,
+          payload,
+          hash: await sha256Hex(payload)
+        };
+      })
+    );
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      const piece = payloads.find((entry) => entry.chunkIndex === chunkIndex);
+      if (!piece) {
+        return null;
+      }
+      return {
+        pieceId: `track_1:peer_a:${chunkIndex}`,
+        trackId: "track_1",
+        peerId: "peer_a",
+        chunkIndex,
+        chunkSize: piece.payload.byteLength,
+        hash: piece.hash,
+        createdAt: "2026-04-03T16:30:00.000Z",
+        payload: piece.payload
+      };
+    });
+    vi.mocked(getTrackPieceManifest).mockResolvedValue({
+      trackId: "track_1",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: payloads.reduce((sum, piece) => sum + piece.payload.byteLength, 0),
+      durationMs: 1000,
+      totalChunks: 3,
+      chunkSize: payloads[0]!.payload.byteLength,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+    const onPieceServed = vi.fn();
+    const onPieceRequestReceived = vi.fn();
+    const onPieceServeMiss = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn(),
+      onPieceServed,
+      onPieceRequestReceived,
+      onPieceServeMiss
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
+    expect(channel).toBeDefined();
+    expect(channel?.onmessage).toBeTypeOf("function");
+    await channel?.onmessage?.({
+      data: JSON.stringify({
+        kind: "request-pieces",
+        requestId: "request-1",
+        trackId: "track_1",
+        chunkIndexes: [0, 1, 2]
+      })
+    } as MessageEvent<string>);
+
+    expect(onPieceRequestReceived).toHaveBeenCalledTimes(3);
+    expect(onPieceServeMiss).not.toHaveBeenCalled();
+    expect(onPieceServed).toHaveBeenCalledTimes(3);
+    expect(onPieceServed.mock.calls.map(([payload]) => payload.chunkIndex)).toEqual([0, 1, 2]);
+    const binaryFrames =
+      channel?.sentMessages.filter((message): message is ArrayBuffer => message instanceof ArrayBuffer) ??
+      [];
+    expect(binaryFrames).toHaveLength(3);
+  });
+
   it("fragments oversized piece frames before sending over the data channel", async () => {
     const piecePayload = new Uint8Array(128 * 1024).fill(7).buffer;
     vi.mocked(getCachedPiece).mockResolvedValueOnce({

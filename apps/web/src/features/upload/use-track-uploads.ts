@@ -813,11 +813,15 @@ export function useTrackUploads(options: {
           return null;
         }
 
+        const pendingWindowFull = plan.blockedReason === "pending-window-full";
+        const actuallyBlocked =
+          !!plan.blockedReason && plan.blockedReason !== "complete" && !pendingWindowFull;
+
         return {
           status:
-            plan.blockedReason && plan.blockedReason !== "complete"
+            actuallyBlocked
               ? "blocked"
-              : current.status === "queued"
+              : current.status === "queued" || current.status === "blocked"
                 ? "downloading"
                 : current.status,
           fileHash: track.fileHash,
@@ -833,7 +837,7 @@ export function useTrackUploads(options: {
           requestableChunkCount: plan.requestableChunks.length,
           pendingChunkCount: plan.pendingChunkCount,
           lastRequestedChunks: plan.requestableChunks,
-          lastError: plan.blockedReason && plan.blockedReason !== "complete" ? plan.blockedReason : null
+          lastError: actuallyBlocked ? plan.blockedReason : null
         };
       });
     },

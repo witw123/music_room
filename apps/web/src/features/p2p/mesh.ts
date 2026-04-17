@@ -1537,7 +1537,15 @@ async function parseIncomingMessage(data: unknown): Promise<
     }
 
     const result = p2pDataMessageSchema.safeParse(parsedMessage);
-    return result.success ? result.data : null;
+    if (result.success) {
+      return result.data;
+    }
+
+    if (isRequestPiecesDataMessage(parsedMessage)) {
+      return parsedMessage;
+    }
+
+    return null;
   }
 
   const buffer = await toArrayBuffer(data);
@@ -1555,6 +1563,37 @@ async function parseIncomingMessage(data: unknown): Promise<
     header: frame.header as any,
     payload: frame.payload
   } as BinaryPieceMessage | BinaryPieceFragmentMessage;
+}
+
+function isRequestPiecesDataMessage(
+  value: unknown
+): value is Extract<P2PDataMessage, { kind: "request-pieces" }> {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as {
+    kind?: unknown;
+    requestId?: unknown;
+    trackId?: unknown;
+    chunkIndexes?: unknown;
+  };
+
+  return (
+    candidate.kind === "request-pieces" &&
+    typeof candidate.requestId === "string" &&
+    candidate.requestId.length > 0 &&
+    typeof candidate.trackId === "string" &&
+    candidate.trackId.length > 0 &&
+    Array.isArray(candidate.chunkIndexes) &&
+    candidate.chunkIndexes.length > 0 &&
+    candidate.chunkIndexes.every(
+      (chunkIndex) =>
+        typeof chunkIndex === "number" &&
+        Number.isInteger(chunkIndex) &&
+        chunkIndex >= 0
+    )
+  );
 }
 
 async function toArrayBuffer(data: unknown) {
