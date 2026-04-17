@@ -528,7 +528,18 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
     return true;
   }
 
-  return previousPlayback.status !== "playing" && nextPlayback.status === "playing";
+  if (previousPlayback.status !== "playing" && nextPlayback.status === "playing") {
+    return true;
+  }
+
+  if (nextPlayback.status !== "playing") {
+    return false;
+  }
+
+  return (
+    previousPlayback.positionMs !== nextPlayback.positionMs ||
+    previousPlayback.startedAt !== nextPlayback.startedAt
+  );
 }
 
 export function useRoomRuntime({

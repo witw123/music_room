@@ -238,6 +238,7 @@ export class P2PMesh {
   private readonly sendQueueLowWatermarkBytes = 2 * 1024 * 1024;
   private readonly sendQueueHighWatermarkBytes = 16 * 1024 * 1024;
   private readonly incomingPieceBatchSize = 24;
+  private readonly pieceServeBatchConcurrency = 8;
   private readonly maxDataChannelPayloadBytes = 48 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;
   private statsSamplingMode: "off" | "steady" | "active" = "active";
@@ -779,18 +780,24 @@ export class P2PMesh {
       }
 
       if (message.kind === "request-pieces") {
-        for (const chunkIndex of message.chunkIndexes) {
-          this.callbacks.onPieceRequestReceived?.({
-            peerId,
-            trackId: message.trackId,
-            chunkIndex,
-            requestId: message.requestId
-          });
-          await this.handlePieceRequest(peerId, entry, {
-            trackId: message.trackId,
-            chunkIndex,
-            requestId: message.requestId
-          });
+        const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
+        for (let offset = 0; offset < chunkIndexes.length; offset += this.pieceServeBatchConcurrency) {
+          const batch = chunkIndexes.slice(offset, offset + this.pieceServeBatchConcurrency);
+          await Promise.all(
+            batch.map(async (chunkIndex) => {
+              this.callbacks.onPieceRequestReceived?.({
+                peerId,
+                trackId: message.trackId,
+                chunkIndex,
+                requestId: message.requestId
+              });
+              await this.handlePieceRequest(peerId, entry, {
+                trackId: message.trackId,
+                chunkIndex,
+                requestId: message.requestId
+              });
+            })
+          );
         }
         return;
       }

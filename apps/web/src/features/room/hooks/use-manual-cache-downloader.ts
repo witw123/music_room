@@ -16,12 +16,12 @@ import {
 } from "@/features/p2p";
 import type { DataMeshBridge, RoomRuntimeEvent } from "./room-runtime-types";
 
-const directRequestIntervalMs = 450;
-const directRequestBatchSize = 16;
-const directRequestTimeoutMs = 5_000;
-const directPendingTtlMs = 12_000;
-const maxPendingPerTrack = 32;
-const maxPendingPerPeer = 8;
+const directRequestIntervalMs = 250;
+const directRequestBatchSize = 32;
+const directRequestTimeoutMs = 15_000;
+const directPendingTtlMs = 20_000;
+const maxPendingPerTrack = 128;
+const maxPendingPerPeer = 32;
 const pendingRefillLowWatermark = maxPendingPerTrack - maxPendingPerPeer;
 const providerBootstrapRetryCooldownMs = 1_500;
 const providerRestartAfterMs = 6_000;

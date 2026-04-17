@@ -1486,11 +1486,25 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback,
+      activeSessionId: input.activeSessionRef.current?.userId
+    });
+
     input.dispatchRoomStateEvent({
       type: "server-playback-patch",
       roomId: input.roomId,
       playback
     });
+
+    if (shouldKickSourcePlayback) {
+      window.setTimeout(() => {
+        if (input.activeRouteRoomIdRef.current === input.roomId) {
+          void input.ensureSourcePlaybackStartedRef.current();
+        }
+      }, 0);
+    }
   });
 
   input.socket.on("room.media.clock", (payload: RoomMediaClockPayload) => {
@@ -1539,6 +1553,12 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback,
+      activeSessionId: input.activeSessionRef.current?.userId
+    });
+
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.dispatchRoomStateEvent({
       type: "server-queue-patch",
@@ -1548,6 +1568,13 @@ export function attachRoomSocketHandlers(input: {
       roomRevision
     });
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+    if (shouldKickSourcePlayback) {
+      window.setTimeout(() => {
+        if (input.activeRouteRoomIdRef.current === input.roomId) {
+          void input.ensureSourcePlaybackStartedRef.current();
+        }
+      }, 0);
+    }
   });
 
   input.socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
@@ -1586,6 +1613,12 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback,
+      activeSessionId: input.activeSessionRef.current?.userId
+    });
+
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.dispatchRoomStateEvent({
       type: "server-library-patch",
@@ -1596,6 +1629,13 @@ export function attachRoomSocketHandlers(input: {
       roomRevision
     });
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+    if (shouldKickSourcePlayback) {
+      window.setTimeout(() => {
+        if (input.activeRouteRoomIdRef.current === input.roomId) {
+          void input.ensureSourcePlaybackStartedRef.current();
+        }
+      }, 0);
+    }
   });
 
   input.socket.on("peer.signal", (payload) => {

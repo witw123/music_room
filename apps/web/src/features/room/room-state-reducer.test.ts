@@ -241,6 +241,65 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.members).toHaveLength(2);
   });
 
+  it("does not let an older authoritative snapshot rewind a newer playback patch", () => {
+    const initial = createRoomSnapshot({
+      room: {
+        roomRevision: 5,
+        playback: createPlaybackSnapshot({
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: "track_1",
+          positionMs: 10_000,
+          startedAt: "2026-04-17T00:00:00.000Z",
+          queueVersion: 4,
+          playbackRevision: 4,
+          mediaEpoch: 2
+        })
+      }
+    });
+    const seekPatch = createPlaybackSnapshot({
+      status: "playing",
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host",
+      sourcePeerId: "peer-host",
+      sourceTrackId: "track_1",
+      positionMs: 60_000,
+      startedAt: "2026-04-17T00:00:05.000Z",
+      queueVersion: 5,
+      playbackRevision: 5,
+      mediaEpoch: 2
+    });
+    const staleSnapshot = createRoomSnapshot({
+      room: {
+        roomRevision: 5,
+        playback: initial.room.playback
+      }
+    });
+
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: initial
+      },
+      {
+        type: "server-playback-patch",
+        roomId: "room_1",
+        playback: seekPatch
+      },
+      {
+        type: "recover-snapshot",
+        snapshot: staleSnapshot
+      }
+    );
+
+    expect(state.snapshot?.room.playback.positionMs).toBe(60_000);
+    expect(state.snapshot?.room.playback.playbackRevision).toBe(5);
+  });
+
   it("applies only newer presence patches and advances roomRevision", () => {
     const state = applyEvents(
       {

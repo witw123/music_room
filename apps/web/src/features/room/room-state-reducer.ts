@@ -140,6 +140,13 @@ function normalizeSnapshot(
     return incomingSnapshot;
   }
 
+  const playback = shouldReplacePlaybackSnapshot(
+    currentSnapshot.room.playback,
+    incomingSnapshot.room.playback
+  )
+    ? incomingSnapshot.room.playback
+    : currentSnapshot.room.playback;
+
   return {
     ...incomingSnapshot,
     tracks: ensurePlaybackTrackMetadata(
@@ -151,7 +158,8 @@ function normalizeSnapshot(
     ),
     room: {
       ...incomingSnapshot.room,
-      roomRevision: getRoomRevision(incomingSnapshot)
+      roomRevision: getRoomRevision(incomingSnapshot),
+      playback
     }
   } satisfies RoomSnapshot;
 }

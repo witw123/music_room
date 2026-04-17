@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveAuthoritativeClockSample,
   resolveAudibleClockSample,
   resolveAudibleClockContinuitySample,
   resolveDisplayClockProgress,
@@ -322,12 +323,14 @@ describe("resolveAudibleClockContinuitySample", () => {
         progressMs: 42_000,
         source: "remote-audible" as const
       },
-      observedAtMs: 1_000
+      observedAtMs: 1_000,
+      sessionKey: "track-a|1|1|started|playing"
     };
 
     const result = resolveAudibleClockContinuitySample({
       audibleClockSample: null,
       previousContinuity,
+      playbackSessionKey: "track-a|1|1|started|playing",
       playbackStatus: "playing",
       now: 1_600
     });
@@ -342,7 +345,8 @@ describe("resolveAudibleClockContinuitySample", () => {
         progressMs: 42_000,
         source: "remote-audible" as const
       },
-      observedAtMs: 1_000
+      observedAtMs: 1_000,
+      sessionKey: "track-a|1|1|started|playing"
     };
 
     const result = resolveDisplayClockProgress({
@@ -373,17 +377,81 @@ describe("resolveAudibleClockContinuitySample", () => {
         progressMs: 42_000,
         source: "remote-audible" as const
       },
-      observedAtMs: 1_000
+      observedAtMs: 1_000,
+      sessionKey: "track-a|1|1|started|playing"
     };
 
     const result = resolveAudibleClockContinuitySample({
       audibleClockSample: null,
       previousContinuity,
+      playbackSessionKey: "track-a|1|1|started|playing",
       playbackStatus: "playing",
       now: 4_500
     });
 
     expect(result.sample).toBeNull();
     expect(result.continuityState).toBe(previousContinuity);
+  });
+
+  it("drops continuity when a seek creates a new playback session", () => {
+    const previousContinuity = {
+      sample: {
+        progressMs: 42_000,
+        source: "remote-audible" as const
+      },
+      observedAtMs: 1_000,
+      sessionKey: "track-a|1|1|old-start|playing"
+    };
+
+    const result = resolveAudibleClockContinuitySample({
+      audibleClockSample: null,
+      previousContinuity,
+      playbackSessionKey: "track-a|1|2|new-start|playing",
+      playbackStatus: "playing",
+      now: 1_050
+    });
+
+    expect(result.sample).toBeNull();
+    expect(result.continuityState).toBeNull();
+  });
+});
+
+describe("resolveAuthoritativeClockSample", () => {
+  const playback = {
+    status: "playing" as const,
+    currentTrackId: "track-a",
+    currentQueueItemId: "queue-a",
+    sourceSessionId: "host",
+    sourcePeerId: "peer-host",
+    sourceTrackId: "track-a",
+    positionMs: 80_000,
+    startedAt: "2026-04-17T00:00:00.000Z",
+    queueVersion: 2,
+    playbackRevision: 2,
+    mediaEpoch: 3
+  };
+
+  it("rejects stale authority clocks that no longer match the room timeline after seek", () => {
+    const result = resolveAuthoritativeClockSample({
+      authoritativeMediaClock: {
+        roomId: "room-a",
+        mediaEpoch: 3,
+        sourcePeerId: "peer-host",
+        relayGeneration: 1,
+        mediaTimeMs: 42_000,
+        playbackRate: 1,
+        advancing: true,
+        playoutState: "playing",
+        bufferedAheadMs: 0,
+        sequence: 10,
+        emittedAt: "2026-04-17T00:00:00.000Z",
+        receivedAtMs: Date.parse("2026-04-17T00:00:00.000Z")
+      },
+      playback,
+      durationMs: 240_000,
+      now: Date.parse("2026-04-17T00:00:00.100Z")
+    });
+
+    expect(result).toBeNull();
   });
 });

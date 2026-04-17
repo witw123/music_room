@@ -985,6 +985,37 @@ describe("shouldKickSourcePlaybackFromRealtimeEvent", () => {
       })
     ).toBe(true);
   });
+
+  it("kicks source playback when a seek updates the active timeline without changing media epoch", () => {
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback,
+          positionMs: 45_000,
+          startedAt: "2026-04-17T00:00:00.000Z",
+          playbackRevision: 2
+        },
+        activeSessionId: "member_1"
+      })
+    ).toBe(true);
+  });
+
+  it("does not kick source playback for paused timeline patches", () => {
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback,
+          status: "paused",
+          positionMs: 45_000,
+          startedAt: null,
+          playbackRevision: 2
+        },
+        activeSessionId: "member_1"
+      })
+    ).toBe(false);
+  });
 });
 
 describe("shouldAcceptIncomingPeerSignalRecoveryGeneration", () => {
