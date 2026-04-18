@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PlaybackSnapshot } from "@music-room/shared";
 import { captureAudioStream } from "@/features/upload/audio-utils";
+import { audioVisualizerStore } from "./audio-visualizer-store";
 import type { ProgressivePlaybackSource } from "./progressive-playback";
 
 const analyserFftSize = 256;
@@ -418,19 +419,20 @@ export function usePlayerAudioVisualizer(
       const graph = await ensureGraph();
       const timeDomainBuffer = timeDomainBufferRef.current;
       if (!graph || !timeDomainBuffer) {
+        audioVisualizerStore.samples = idleSamples;
         setSamples(idleSamples);
         scheduleNextFrame(tick);
         return;
       }
 
       graph.analyser.getByteTimeDomainData(timeDomainBuffer);
-      setSamples(
-        normalizeWaveformSamples({
-          timeDomainData: timeDomainBuffer,
-          sampleCount,
-          reducedMotion: renderMode === "reduced-motion"
-        })
-      );
+      const nextSamples = normalizeWaveformSamples({
+        timeDomainData: timeDomainBuffer,
+        sampleCount,
+        reducedMotion: renderMode === "reduced-motion"
+      });
+      audioVisualizerStore.samples = nextSamples;
+      setSamples(nextSamples);
       scheduleNextFrame(tick);
     };
 
@@ -439,11 +441,13 @@ export function usePlayerAudioVisualizer(
         return;
       }
 
-      setSamples((current) =>
-        current.length === sampleCount
+      setSamples((current) => {
+        const nextSamples = current.length === sampleCount
           ? decayWaveformSamples(current, pausedDecayFactor, pausedFloorAmplitude)
-          : buildIdleWaveformSamples(sampleCount, pausedFloorAmplitude)
-      );
+          : buildIdleWaveformSamples(sampleCount, pausedFloorAmplitude);
+        audioVisualizerStore.samples = nextSamples;
+        return nextSamples;
+      });
       scheduleNextFrame(tick);
     };
 

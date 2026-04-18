@@ -82,6 +82,8 @@ function getConnectionLabel(
   }
 }
 
+import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
+
 function RoomStageBase({
   roomSnapshot,
   currentTrack,
@@ -259,6 +261,8 @@ function RoomStageBase({
           }`}
         >
           <div className="group relative flex items-center justify-center">
+            <VinylAuraVisualizer isPlaying={isPlaying} />
+
             <div
               className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-all duration-1000 ${
                 ultraCompactStage
