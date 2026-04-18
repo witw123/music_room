@@ -177,7 +177,7 @@ function BottomPlayerBase({
         maxDevicePixelRatio={visualizerMaxDevicePixelRatio}
       />
 
-      <div className="absolute left-0 right-0 top-[12px] h-[2px] bg-white/5 lg:top-[14px]" aria-hidden="true">
+      <div className="absolute left-0 right-0 top-[13px] h-[2px] bg-white/5 lg:top-[16px]" aria-hidden="true">
         <div
           className="h-full bg-gradient-to-r from-accent to-blue-400 shadow-[0_0_10px_rgba(0,112,243,0.6)] transition-[width] duration-150 ease-linear"
           style={{ width: `${progressRatio * 100}%` }}
