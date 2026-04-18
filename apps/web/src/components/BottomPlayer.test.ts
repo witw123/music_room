@@ -18,8 +18,8 @@ describe("BottomPlayer source", () => {
       "utf8"
     );
 
-    expect(source).toContain("min-h-[8.1rem]");
-    expect(layoutSource).toContain("min-h-[6.75rem]");
+    expect(source).toContain("min-h-[6.5rem]");
+    expect(layoutSource).toContain("min-h-[5.5rem]");
     expect(layoutSource).toContain('w-[5.4rem]');
     expect(layoutSource).toContain('w-[44px]');
   });
@@ -29,5 +29,18 @@ describe("BottomPlayer source", () => {
 
     expect(source).toContain("seekDraft ?? renderedProgressMs");
     expect(source).not.toContain("seekDraft ?? snapshotProgressMs ?? progressMs");
+  });
+
+  it("renders the top waveform above the progress bar without intercepting pointer events", () => {
+    const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+    const waveformSource = readFileSync(
+      new URL("./bottom-player/PlayerTopWaveform.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(source).toContain("<PlayerTopWaveform");
+    expect(source).toContain('top-[12px]');
+    expect(waveformSource).toContain("pointer-events-none");
+    expect(waveformSource).toContain('data-testid="player-top-waveform"');
   });
 });

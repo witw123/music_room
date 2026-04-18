@@ -4,6 +4,7 @@ import { memo, useEffect } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { BottomPlayer } from "@/components/BottomPlayer";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
+import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-visualizer";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
@@ -83,6 +84,13 @@ function BottomPlayerControllerBase({
     authoritativeMediaClock,
     getLocalPlaybackPositionMs
   });
+  const visualizer = usePlayerAudioVisualizer({
+    audioRef,
+    remoteAudioRef,
+    activePlaybackSource,
+    playbackStatus: playback?.status,
+    currentTrackId: playback?.currentTrackId
+  });
 
   useEffect(() => {
     onPlaybackPositionChange(progressMs);
@@ -123,6 +131,9 @@ function BottomPlayerControllerBase({
       syncProgressFromAudio={syncProgressFromAudio}
       syncDurationFromAudio={syncDurationFromAudio}
       currentTrack={progressTrack ?? currentTrack}
+      visualizerSamples={visualizer.samples}
+      visualizerReducedMotion={visualizer.reducedMotion}
+      visualizerMaxDevicePixelRatio={visualizer.maxDevicePixelRatio}
       onPlay={onPlay}
       onPause={onPause}
       onSeek={onSeek}
