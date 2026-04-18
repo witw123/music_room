@@ -39,7 +39,7 @@ describe("BottomPlayer source", () => {
     );
 
     expect(source).toContain("<PlayerTopWaveform");
-    expect(source).toContain('top-[13px]');
+    expect(source).toContain('top-0 h-[2px]');
     expect(waveformSource).toContain("pointer-events-none");
     expect(waveformSource).toContain('data-testid="player-top-waveform"');
   });

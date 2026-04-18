@@ -85,122 +85,131 @@ export function PlayerTopWaveform({
       const bounds = canvas.getBoundingClientRect();
       const width = Math.max(1, bounds.width);
       const height = Math.max(1, bounds.height);
-      const baseline = height / 2;
+      const baseline = height - 3;
       const safeProgressRatio = Math.min(Math.max(progressRatio, 0), 1);
       const isCompact = width < 640;
-      const outerPadding = isCompact ? 6 : 8;
+      const outerPadding = isCompact ? 10 : 14;
       const usableWidth = Math.max(1, width - outerPadding * 2);
       const targetBarCount = Math.max(
-        isCompact ? 22 : 30,
-        Math.min(isCompact ? 46 : 74, Math.floor(width / (reducedMotion ? (isCompact ? 16 : 14) : isCompact ? 12 : 10)))
+        isCompact ? 18 : 24,
+        Math.min(isCompact ? 26 : 34, Math.floor(width / (isCompact ? 34 : 52)))
       );
       const barCount = Math.min(targetBarCount, Math.max(1, samples.length));
-      const gap = reducedMotion ? (isCompact ? 2.25 : 2) : isCompact ? 1.8 : 1.5;
-      const barWidth = Math.max(2, usableWidth / Math.max(1, barCount) - gap);
+      const baseGap = isCompact ? 6 : 8;
+      const gap = reducedMotion ? baseGap : baseGap * 0.9;
+      const barWidth = Math.max(isCompact ? 6 : 8, usableWidth / Math.max(1, barCount) - gap);
       const stride = samples.length / Math.max(1, barCount);
       const progressX = width * safeProgressRatio;
-      const activeMaxHeight = height * (isPlaying ? (isCompact ? 0.82 : 0.92) : isCompact ? 0.56 : 0.64);
-      const idleFloorHeight = Math.max(isCompact ? 2 : 2.4, height * (isCompact ? 0.15 : 0.18));
+      const activeMaxHeight = Math.max(isCompact ? 14 : 18, height * (isPlaying ? (isCompact ? 0.76 : 0.82) : isCompact ? 0.46 : 0.54));
+      const idleFloorHeight = Math.max(isCompact ? 3 : 4, height * (isCompact ? 0.16 : 0.18));
       const averageEnergy =
         samples.length > 0
           ? samples.reduce((sum, sample) => sum + Math.max(0, sample), 0) / samples.length
           : 0;
       const peakEnergy = samples.reduce((peak, sample) => Math.max(peak, sample ?? 0), 0);
-      const scanGlowWidth = Math.max(isCompact ? 22 : 28, width * (isCompact ? 0.065 : 0.08));
-      const hotspotRadius = Math.max(isCompact ? 9 : 12, height * (isCompact ? 0.9 : 1.1) + peakEnergy * height * 0.9);
+      const scanGlowWidth = Math.max(isCompact ? 26 : 40, width * (isCompact ? 0.07 : 0.085));
+      const hotspotRadius = Math.max(isCompact ? 10 : 14, height * (isCompact ? 0.75 : 0.9) + peakEnergy * height * 0.55);
 
       context.clearRect(0, 0, width, height);
-      const laneGradient = context.createLinearGradient(0, 0, width, 0);
-      laneGradient.addColorStop(0, "rgba(255,255,255,0)");
-      laneGradient.addColorStop(0.18, "rgba(103,161,255,0.05)");
-      laneGradient.addColorStop(0.5, "rgba(37,99,235,0.1)");
-      laneGradient.addColorStop(0.82, "rgba(103,161,255,0.05)");
-      laneGradient.addColorStop(1, "rgba(255,255,255,0)");
-      context.fillStyle = laneGradient;
-      context.fillRect(0, Math.max(0, baseline - height * 0.2), width, Math.max(1, height * 0.4));
+      const ambientGradient = context.createLinearGradient(0, 0, 0, baseline);
+      ambientGradient.addColorStop(0, "rgba(125, 211, 252, 0.06)");
+      ambientGradient.addColorStop(0.55, "rgba(56, 189, 248, 0.03)");
+      ambientGradient.addColorStop(1, "rgba(2, 6, 23, 0)");
+      context.fillStyle = ambientGradient;
+      context.fillRect(0, 0, width, baseline);
 
-      const spineGradient = context.createLinearGradient(0, 0, width, 0);
-      spineGradient.addColorStop(0, "rgba(125, 211, 252, 0.04)");
-      spineGradient.addColorStop(0.5, "rgba(96, 165, 250, 0.22)");
-      spineGradient.addColorStop(1, "rgba(125, 211, 252, 0.04)");
-      context.strokeStyle = spineGradient;
+      const floorLine = context.createLinearGradient(0, 0, width, 0);
+      floorLine.addColorStop(0, "rgba(255,255,255,0)");
+      floorLine.addColorStop(0.3, "rgba(96, 165, 250, 0.08)");
+      floorLine.addColorStop(0.5, "rgba(125, 211, 252, 0.18)");
+      floorLine.addColorStop(0.7, "rgba(96, 165, 250, 0.08)");
+      floorLine.addColorStop(1, "rgba(255,255,255,0)");
+      context.strokeStyle = floorLine;
       context.lineWidth = 1;
       context.beginPath();
       context.moveTo(0, baseline);
       context.lineTo(width, baseline);
       context.stroke();
 
-      const topMistGradient = context.createLinearGradient(0, 0, 0, height);
-      topMistGradient.addColorStop(0, "rgba(125, 211, 252, 0.08)");
-      topMistGradient.addColorStop(0.42, "rgba(56, 189, 248, 0.02)");
-      topMistGradient.addColorStop(1, "rgba(2, 6, 23, 0)");
-      context.fillStyle = topMistGradient;
-      context.fillRect(0, 0, width, height);
-
       for (let index = 0; index < barCount; index += 1) {
         const bandProgress = index / Math.max(1, barCount - 1);
         const sampleIndex = index * stride + stride * 0.5;
-        const localRadius = Math.max(0.9, stride * (isCompact ? 1.2 : 1.45));
-        const sample = Math.max(0.012, sampleWindowEnergy(samples, sampleIndex, localRadius));
-        const envelope = resolveSectionBoost(bandProgress);
-        const pulse = reducedMotion ? 0.94 : 1 + ((index % 7) - 3) * 0.014;
+        const localRadius = Math.max(1.2, stride * (isCompact ? 1.65 : 1.9));
+        const sample = Math.max(0.01, sampleWindowEnergy(samples, sampleIndex, localRadius));
+        const smoothed = Math.pow(sample, 0.72);
+        const envelope = resolveSectionBoost(bandProgress) * (0.92 + 0.08 * Math.sin(bandProgress * Math.PI));
+        const pulse = reducedMotion ? 0.96 : 1 + ((index % 6) - 2.5) * 0.01;
         const centerBias = 1 - Math.abs(bandProgress - safeProgressRatio);
-        const progressBias = 1 + clamp01(centerBias) * (isPlaying ? 0.08 : 0.04);
+        const progressBias = 1 + clamp01(centerBias) * (isPlaying ? 0.05 : 0.02);
         const barHeight = Math.min(
           activeMaxHeight,
-          idleFloorHeight + sample * activeMaxHeight * envelope * pulse * progressBias
+          idleFloorHeight + smoothed * activeMaxHeight * envelope * pulse * progressBias
         );
-        const x = outerPadding + index * (barWidth + gap);
-        const y = baseline - barHeight / 2;
-        const radius = Math.min(barWidth / 2, 2.6);
+        const clusterGap = index > 0 && index % 4 === 0 ? gap + (isCompact ? 1.5 : 2) : gap;
+        const x =
+          outerPadding +
+          index * (barWidth + gap) +
+          Math.floor(index / 4) * (clusterGap - gap);
+        const y = baseline - barHeight;
+        const radius = Math.min(barWidth / 2, 3.5);
         const barRight = x + barWidth;
         const isProgressed = barRight <= progressX;
-        const nearPlaybackHead = Math.abs(barRight - progressX) <= scanGlowWidth * 0.75;
+        const nearPlaybackHead = Math.abs(barRight - progressX) <= scanGlowWidth * 0.65;
 
-        const fillGradient = context.createLinearGradient(0, y, 0, y + barHeight);
-        if (isProgressed) {
-          fillGradient.addColorStop(0, "rgba(129, 230, 255, 0.95)");
-          fillGradient.addColorStop(0.4, "rgba(56, 189, 248, 0.9)");
-          fillGradient.addColorStop(1, "rgba(14, 116, 255, 0.82)");
-        } else {
-          fillGradient.addColorStop(0, isPlaying ? "rgba(129, 230, 255, 0.42)" : "rgba(148, 163, 184, 0.28)");
-          fillGradient.addColorStop(0.45, isPlaying ? "rgba(59, 130, 246, 0.4)" : "rgba(96, 165, 250, 0.24)");
-          fillGradient.addColorStop(1, isPlaying ? "rgba(15, 23, 42, 0.62)" : "rgba(15, 23, 42, 0.44)");
-        }
-
-        if (!reducedMotion) {
-          context.shadowBlur = nearPlaybackHead ? 15 : isProgressed ? 11 : isCompact ? 4 : 6;
-          context.shadowColor = nearPlaybackHead
-            ? "rgba(191, 219, 254, 0.42)"
-            : isProgressed
-            ? "rgba(56, 189, 248, 0.4)"
-            : "rgba(59, 130, 246, 0.18)";
-        }
-
-        context.fillStyle = fillGradient;
+        const shellGradient = context.createLinearGradient(0, y, 0, y + barHeight);
+        shellGradient.addColorStop(0, "rgba(255,255,255,0.08)");
+        shellGradient.addColorStop(0.32, "rgba(30, 41, 59, 0.4)");
+        shellGradient.addColorStop(1, "rgba(2, 6, 23, 0.68)");
+        context.fillStyle = shellGradient;
         context.beginPath();
         context.roundRect(x, y, barWidth, barHeight, radius);
         context.fill();
 
-        const capHeight = Math.max(1.2, barHeight * 0.12);
+        const fillGradient = context.createLinearGradient(0, y, 0, y + barHeight);
+        if (isProgressed) {
+          fillGradient.addColorStop(0, "rgba(219, 234, 254, 0.88)");
+          fillGradient.addColorStop(0.32, "rgba(125, 211, 252, 0.9)");
+          fillGradient.addColorStop(0.72, "rgba(56, 189, 248, 0.82)");
+          fillGradient.addColorStop(1, "rgba(29, 78, 216, 0.66)");
+        } else {
+          fillGradient.addColorStop(0, isPlaying ? "rgba(191, 219, 254, 0.22)" : "rgba(148, 163, 184, 0.16)");
+          fillGradient.addColorStop(0.48, isPlaying ? "rgba(59, 130, 246, 0.18)" : "rgba(71, 85, 105, 0.18)");
+          fillGradient.addColorStop(1, "rgba(15, 23, 42, 0.08)");
+        }
+
+        if (!reducedMotion) {
+          context.shadowBlur = nearPlaybackHead ? 18 : isProgressed ? 12 : isCompact ? 3 : 5;
+          context.shadowColor = nearPlaybackHead
+            ? "rgba(191, 219, 254, 0.28)"
+            : isProgressed
+            ? "rgba(56, 189, 248, 0.22)"
+            : "rgba(59, 130, 246, 0.08)";
+        }
+
+        context.fillStyle = fillGradient;
+        context.beginPath();
+        context.roundRect(x + 0.5, y + 0.5, Math.max(1, barWidth - 1), Math.max(1, barHeight - 1), radius);
+        context.fill();
+
+        const capHeight = Math.max(1.1, barHeight * 0.1);
         const capGradient = context.createLinearGradient(0, y, 0, y + capHeight);
-        capGradient.addColorStop(0, isProgressed ? "rgba(255,255,255,0.85)" : "rgba(186,230,253,0.38)");
+        capGradient.addColorStop(0, isProgressed ? "rgba(255,255,255,0.48)" : "rgba(255,255,255,0.16)");
         capGradient.addColorStop(1, "rgba(255,255,255,0)");
         context.fillStyle = capGradient;
         context.beginPath();
-        context.roundRect(x, y, barWidth, capHeight, radius);
+        context.roundRect(x + 0.5, y + 0.5, Math.max(1, barWidth - 1), capHeight, radius);
         context.fill();
+
+        if (isProgressed) {
+          const reflectionGradient = context.createLinearGradient(0, y, 0, baseline);
+          reflectionGradient.addColorStop(0, "rgba(191, 219, 254, 0.08)");
+          reflectionGradient.addColorStop(1, "rgba(191, 219, 254, 0)");
+          context.fillStyle = reflectionGradient;
+          context.fillRect(x, baseline, barWidth, Math.min(6, height - baseline));
+        }
 
         context.shadowBlur = 0;
       }
-
-      const sweepGradient = context.createLinearGradient(0, 0, width, 0);
-      sweepGradient.addColorStop(0, "rgba(255,255,255,0)");
-      sweepGradient.addColorStop(Math.max(0, safeProgressRatio - 0.06), "rgba(255,255,255,0)");
-      sweepGradient.addColorStop(Math.min(1, safeProgressRatio), "rgba(186,230,253,0.12)");
-      sweepGradient.addColorStop(Math.min(1, safeProgressRatio + 0.04), "rgba(59,130,246,0)");
-      context.fillStyle = sweepGradient;
-      context.fillRect(0, 0, width, height);
 
       if (safeProgressRatio > 0 && safeProgressRatio < 1) {
         const scanGradient = context.createLinearGradient(
@@ -210,9 +219,9 @@ export function PlayerTopWaveform({
           0
         );
         scanGradient.addColorStop(0, "rgba(255,255,255,0)");
-        scanGradient.addColorStop(0.4, `rgba(125, 211, 252, ${reducedMotion ? 0.08 : 0.14})`);
-        scanGradient.addColorStop(0.5, `rgba(255, 255, 255, ${reducedMotion ? 0.18 : 0.28})`);
-        scanGradient.addColorStop(0.6, `rgba(56, 189, 248, ${reducedMotion ? 0.1 : 0.18})`);
+        scanGradient.addColorStop(0.38, `rgba(125, 211, 252, ${reducedMotion ? 0.05 : 0.09})`);
+        scanGradient.addColorStop(0.5, `rgba(255, 255, 255, ${reducedMotion ? 0.1 : 0.16})`);
+        scanGradient.addColorStop(0.62, `rgba(56, 189, 248, ${reducedMotion ? 0.06 : 0.1})`);
         scanGradient.addColorStop(1, "rgba(255,255,255,0)");
         context.fillStyle = scanGradient;
         context.fillRect(
@@ -221,42 +230,27 @@ export function PlayerTopWaveform({
           Math.min(width, scanGlowWidth * 2),
           height
         );
-
-        context.strokeStyle = `rgba(186, 230, 253, ${reducedMotion ? 0.22 : 0.38})`;
-        context.lineWidth = 1;
-        context.beginPath();
-        context.moveTo(progressX, Math.max(0, baseline - height * 0.42));
-        context.lineTo(progressX, Math.min(height, baseline + height * 0.42));
-        context.stroke();
       }
 
       if (isPlaying && averageEnergy > 0.02) {
         const hotspotGradient = context.createRadialGradient(
           progressX,
-          baseline,
+          Math.max(4, baseline - 4),
           0,
           progressX,
-          baseline,
+          Math.max(4, baseline - 4),
           hotspotRadius
         );
-        hotspotGradient.addColorStop(0, `rgba(191, 219, 254, ${0.16 + peakEnergy * 0.16})`);
-        hotspotGradient.addColorStop(0.45, `rgba(56, 189, 248, ${0.08 + averageEnergy * 0.18})`);
+        hotspotGradient.addColorStop(0, `rgba(191, 219, 254, ${0.1 + peakEnergy * 0.08})`);
+        hotspotGradient.addColorStop(0.45, `rgba(56, 189, 248, ${0.04 + averageEnergy * 0.1})`);
         hotspotGradient.addColorStop(1, "rgba(14, 116, 255, 0)");
         context.fillStyle = hotspotGradient;
         context.fillRect(
           Math.max(0, progressX - hotspotRadius),
-          Math.max(0, baseline - hotspotRadius),
+          Math.max(0, baseline - hotspotRadius - 4),
           Math.min(width, hotspotRadius * 2),
           Math.min(height, hotspotRadius * 2)
         );
-      }
-
-      if (!reducedMotion && isPlaying && peakEnergy > 0.08) {
-        const floorGlow = context.createLinearGradient(0, baseline, 0, height);
-        floorGlow.addColorStop(0, `rgba(96, 165, 250, ${0.03 + averageEnergy * 0.05})`);
-        floorGlow.addColorStop(1, "rgba(2, 6, 23, 0)");
-        context.fillStyle = floorGlow;
-        context.fillRect(0, baseline, width, height - baseline);
       }
     };
 
@@ -280,7 +274,7 @@ export function PlayerTopWaveform({
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-x-0 top-0 h-[15px] w-full opacity-95 lg:h-[18px]"
+      className="pointer-events-none absolute inset-x-0 top-[-18px] h-[20px] w-full opacity-95 lg:top-[-22px] lg:h-[24px]"
       data-testid="player-top-waveform"
     />
   );
