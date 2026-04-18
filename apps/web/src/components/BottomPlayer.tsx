@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { PlayerTopWaveform } from "@/components/bottom-player/PlayerTopWaveform";
+import { PlayerAmbientAura } from "@/components/bottom-player/PlayerAmbientAura";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
@@ -89,8 +89,8 @@ function BottomPlayerBase({
       : effectiveProgressMs;
   const progressRatio =
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
-  const title = currentTrack?.title ?? "等待选择歌曲";
-  const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
+  const title = currentTrack?.title ?? "绛夊緟閫夋嫨姝屾洸";
+  const artist = currentTrack?.artist ?? "浠庢洸搴撴垨鍏变韩闃熷垪涓€夋嫨涓€棣栨瓕";
 
   useEffect(() => {
     progressAnchorRef.current = {
@@ -168,22 +168,22 @@ function BottomPlayerBase({
   }, [onNext]);
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-50 flex flex-col justify-center min-h-[6.5rem] border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.3rem)] pt-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:min-h-[4.5rem] lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.2rem)] lg:pt-4">
-      <PlayerTopWaveform
+    <footer className="fixed bottom-0 left-0 right-0 z-50 flex flex-col justify-center min-h-[6.5rem] border-t border-surface-border bg-background-secondary/90 px-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] pt-3 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:px-4 lg:min-h-[4.5rem] lg:px-8 lg:pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)] lg:pt-3 overflow-hidden">
+      <PlayerAmbientAura
         samples={visualizerSamples}
         isPlaying={!!isPlaying}
-        progressRatio={progressRatio}
         reducedMotion={visualizerReducedMotion}
         maxDevicePixelRatio={visualizerMaxDevicePixelRatio}
       />
 
-      <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5" aria-hidden="true">
+      <div className="absolute left-0 right-0 top-0 h-[2px] bg-white/5 z-10" aria-hidden="true">
         <div
           className="h-full bg-gradient-to-r from-accent to-blue-400 shadow-[0_0_10px_rgba(0,112,243,0.6)] transition-[width] duration-150 ease-linear"
           style={{ width: `${progressRatio * 100}%` }}
         />
       </div>
 
+      <div className="relative z-10 w-full flex flex-col justify-center">
       <MobileBottomPlayerLayout
         isPlaying={isPlaying}
         canControlPlayback={canControlPlayback}
@@ -200,6 +200,7 @@ function BottomPlayerBase({
         onNext={playNext}
         onTogglePlay={togglePlayback}
       />
+      </div>
 
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
@@ -217,6 +218,7 @@ function BottomPlayerBase({
         onNext={playNext}
         onTogglePlay={togglePlayback}
       />
+      </div>
 
       <audio
         ref={audioRef}
@@ -264,7 +266,7 @@ function BottomPlayerBase({
       {isPending ? (
         <div className="animate-fade-in absolute -top-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-3 py-1 text-xs text-foreground-muted shadow-lg backdrop-blur-md">
           <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
-          同步中...
+          鍚屾涓?..
         </div>
       ) : null}
     </footer>
@@ -272,3 +274,5 @@ function BottomPlayerBase({
 }
 
 export const BottomPlayer = memo(BottomPlayerBase);
+
+
