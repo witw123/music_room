@@ -81,8 +81,11 @@ export function VinylAuraVisualizer({
       const boostScale = isPlaying ? 1.0 : 0;
 
       const blobScale = baseScale + smoothedPeak * boostScale * 0.8;
-      const minRadius = Math.min(width, height) * 0.35 + (smoothedAverage * 20); // Extends past the vinyl body
-      const blobRadius = minRadius + (Math.min(width, height) * 0.25 * blobScale);
+      
+      // Because canvas is 200% the size of the vinyl, the vinyl's radius is width * 0.25 (1/4th)
+      const vinylRadius = Math.min(width, height) * 0.25;
+      const minRadius = vinylRadius * 1.05 + (smoothedAverage * 30); // Extends just past the vinyl body
+      const blobRadius = minRadius + (vinylRadius * 0.5 * blobScale);
 
       // Main Halo Aura
       const grad1 = context.createRadialGradient(centerX, centerY, minRadius * 0.5, centerX, centerY, blobRadius * 1.5);
@@ -157,7 +160,7 @@ export function VinylAuraVisualizer({
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-70 mix-blend-screen transition-opacity duration-1000 scale-[1.35] blur-md"
+      className="pointer-events-none absolute -left-1/2 -top-1/2 h-[200%] w-[200%] opacity-80 mix-blend-screen transition-opacity duration-1000 blur-md"
       data-testid="vinyl-aura-visualizer"
     />
   );
