@@ -11,24 +11,38 @@ import {
 describe("resolveVisualizerSourceSelection", () => {
   it("selects the remote audio element while remote-stream is active", () => {
     const localAudio = {} as HTMLAudioElement;
-    const remoteAudio = {} as HTMLAudioElement;
+    const remoteStream = {
+      getAudioTracks: () => [{ readyState: "live", enabled: true }]
+    } as unknown as MediaStream;
+    const remoteAudio = {
+      srcObject: remoteStream
+    } as unknown as HTMLAudioElement;
 
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,
         remoteAudioElement: remoteAudio,
         activePlaybackSource: "remote-stream",
-        currentTrackId: "track-a"
+        currentTrackId: "track-a",
+        mediaEpoch: 3,
+        sourcePeerId: "peer_source",
+        sourceSessionId: "member_source"
       })
-    ).toEqual({
-      kind: "remote",
+    ).toMatchObject({
+      kind: "remote-stream",
       element: remoteAudio,
-      graphKey: "track-a:remote-stream:remote"
+      stream: remoteStream,
+      hasSignal: true
     });
   });
 
   it("selects the local audio element while local playback is audible", () => {
-    const localAudio = {} as HTMLAudioElement;
+    const localStream = {
+      getAudioTracks: () => [{ readyState: "live", enabled: true }]
+    } as unknown as MediaStream;
+    const localAudio = {
+      srcObject: localStream
+    } as unknown as HTMLAudioElement;
     const remoteAudio = {} as HTMLAudioElement;
 
     expect(
@@ -36,12 +50,16 @@ describe("resolveVisualizerSourceSelection", () => {
         audioElement: localAudio,
         remoteAudioElement: remoteAudio,
         activePlaybackSource: "progressive-local",
-        currentTrackId: "track-a"
+        currentTrackId: "track-a",
+        mediaEpoch: 3,
+        sourcePeerId: "peer_source",
+        sourceSessionId: "member_source"
       })
-    ).toEqual({
-      kind: "local",
+    ).toMatchObject({
+      kind: "local-stream",
       element: localAudio,
-      graphKey: "track-a:progressive-local:local"
+      stream: localStream,
+      hasSignal: true
     });
   });
 
@@ -55,9 +73,66 @@ describe("resolveVisualizerSourceSelection", () => {
       })
     ).toEqual({
       kind: "none",
+      stream: null,
       element: null,
-      graphKey: "none"
+      graphKey: "none",
+      hasSignal: false
     });
+  });
+
+  it("falls back to element capture when a local element has a src but no srcObject", () => {
+    const localAudio = {
+      currentSrc: "blob:track-a"
+    } as unknown as HTMLAudioElement;
+
+    expect(
+      resolveVisualizerSourceSelection({
+        audioElement: localAudio,
+        remoteAudioElement: null,
+        activePlaybackSource: "full-local",
+        currentTrackId: "track-a",
+        mediaEpoch: 5,
+        sourcePeerId: "peer_source",
+        sourceSessionId: "member_source"
+      })
+    ).toMatchObject({
+      kind: "local-element",
+      element: localAudio,
+      stream: null,
+      hasSignal: true
+    });
+  });
+
+  it("changes the graph key when the same track gets a new playback session", () => {
+    const remoteStream = {
+      getAudioTracks: () => [{ readyState: "live", enabled: true }]
+    } as unknown as MediaStream;
+    const remoteAudio = {
+      srcObject: remoteStream
+    } as unknown as HTMLAudioElement;
+
+    const first = resolveVisualizerSourceSelection({
+      audioElement: null,
+      remoteAudioElement: remoteAudio,
+      activePlaybackSource: "remote-stream",
+      currentTrackId: "track-a",
+      mediaEpoch: 1,
+      sourcePeerId: "peer_source_a",
+      sourceSessionId: "member_source"
+    });
+    const second = resolveVisualizerSourceSelection({
+      audioElement: null,
+      remoteAudioElement: remoteAudio,
+      activePlaybackSource: "remote-stream",
+      currentTrackId: "track-a",
+      mediaEpoch: 2,
+      sourcePeerId: "peer_source_b",
+      sourceSessionId: "member_source"
+    });
+
+    expect(first.kind).toBe("remote-stream");
+    expect(second.kind).toBe("remote-stream");
+    expect(first.graphKey).not.toBe(second.graphKey);
   });
 });
 

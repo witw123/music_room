@@ -153,6 +153,32 @@ export const remoteTrackStatusSchema = z.object({
 export const progressivePlaybackStatusSchema = z.object({
   activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
   playbackConnectionKey: z.string().nullable().optional(),
+  playbackSurfaceKey: z.string().nullable().optional(),
+  playbackTimelineKey: z.string().nullable().optional(),
+  roomChangeKind: z
+    .enum([
+      "presence-only",
+      "catalog-only",
+      "playback-timeline",
+      "playback-topology",
+      "transport-topology"
+    ])
+    .nullable()
+    .optional(),
+  remoteOutputMode: z.enum(["audible", "held-silent", "inactive"]).nullable().optional(),
+  sourceResetReason: z
+    .enum([
+      "track-changed",
+      "source-session-changed",
+      "source-peer-changed",
+      "media-epoch-changed",
+      "transport-epoch-changed",
+      "playback-stopped",
+      "none"
+    ])
+    .nullable()
+    .optional(),
+  remoteSurfacePreserved: z.boolean().optional(),
   listenerPlaybackState: z
     .enum([
       "idle",

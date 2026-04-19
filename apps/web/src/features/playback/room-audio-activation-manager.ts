@@ -12,6 +12,12 @@ export type RoomAudioElementPlayResult = {
   error: string | null;
 };
 
+export type PrimeRoomAudioOutputsResult = {
+  ok: boolean;
+  local: RoomAudioElementPlayResult;
+  remote: RoomAudioElementPlayResult;
+};
+
 export class RoomAudioActivationManager {
   private sharedContext: AudioContext | null = null;
   private activated = false;
@@ -19,13 +25,18 @@ export class RoomAudioActivationManager {
   async activateOutputs(input: {
     localAudio?: HTMLAudioElement | null;
     remoteAudio?: HTMLAudioElement | null;
-  }) {
-    await Promise.all([
-      this.resumeSharedContext().catch(() => undefined),
+  }): Promise<PrimeRoomAudioOutputsResult> {
+    const [contextReady, local, remote] = await Promise.all([
+      this.resumeSharedContext().catch(() => false),
       this.primeAudioElement({ element: input.localAudio }),
       this.primeAudioElement({ element: input.remoteAudio })
     ]);
-    this.activated = true;
+    this.activated = contextReady || local.ok || remote.ok;
+    return {
+      ok: this.activated,
+      local,
+      remote
+    };
   }
 
   async playElement(element: HTMLAudioElement | null | undefined): Promise<RoomAudioElementPlayResult> {
@@ -56,9 +67,14 @@ export class RoomAudioActivationManager {
     return this.activated;
   }
 
-  private async primeAudioElement({ element }: PrimeAudioElementInput) {
+  private async primeAudioElement({
+    element
+  }: PrimeAudioElementInput): Promise<RoomAudioElementPlayResult> {
     if (!element) {
-      return;
+      return {
+        ok: false,
+        error: "missing-audio-element"
+      };
     }
 
     const hadSrcObject = !!element.srcObject;
@@ -83,11 +99,19 @@ export class RoomAudioActivationManager {
         usedSilentSource = true;
       }
 
-      await element.play().catch(() => undefined);
-    } catch {
+      await element.play();
+      return {
+        ok: true,
+        error: null
+      };
+    } catch (error) {
       // Priming is best-effort only. Some embedded webviews and custom shells
       // throw synchronously on media mutations; callers should continue without
       // letting playback gestures crash the whole app.
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "play-rejected"
+      };
     } finally {
       if (wasPaused) {
         this.safeCall(() => element.pause());
@@ -107,10 +131,15 @@ export class RoomAudioActivationManager {
   private async resumeSharedContext() {
     const context = this.getOrCreateSharedContext();
     if (!context || context.state !== "suspended") {
-      return;
+      return context !== null;
     }
 
-    await context.resume().catch(() => undefined);
+    try {
+      await context.resume();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private getOrCreateSharedContext() {

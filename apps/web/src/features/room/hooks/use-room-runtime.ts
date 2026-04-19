@@ -80,6 +80,14 @@ import {
   useRoomPlaybackConnectionCoordinator
 } from "./use-room-playback-connection-coordinator";
 import { shouldMaintainRemotePlaybackSurface } from "./room-playback-policy";
+import {
+  classifyRoomPlaybackChange,
+  resolvePlaybackSurfaceKey,
+  resolvePlaybackTimelineKey,
+  type RoomChangeKind,
+  type RoomRealtimeEventKind,
+  type SourceResetReason
+} from "./room-playback-topology";
 
 export {
   resolveManualCacheProviderPeerIds,
@@ -502,41 +510,33 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
   nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
   activeSessionId: string | null | undefined;
+  eventKind?: RoomRealtimeEventKind;
 }) {
   const { previousPlayback, nextPlayback, activeSessionId } = input;
   if (!activeSessionId || !nextPlayback || nextPlayback.sourceSessionId !== activeSessionId) {
     return false;
   }
 
+  const roomChangeKind = classifyRoomPlaybackChange({
+    eventKind: input.eventKind ?? "playback",
+    previousPlayback,
+    nextPlayback
+  });
+
+  if (roomChangeKind === "playback-topology" || roomChangeKind === "transport-topology") {
+    return true;
+  }
+
   if (!previousPlayback) {
     return true;
   }
 
-  if (previousPlayback.sourceSessionId !== nextPlayback.sourceSessionId) {
-    return true;
-  }
-
-  if (previousPlayback.sourcePeerId !== nextPlayback.sourcePeerId) {
-    return true;
-  }
-
-  if (previousPlayback.currentTrackId !== nextPlayback.currentTrackId) {
-    return true;
-  }
-
-  if (previousPlayback.mediaEpoch !== nextPlayback.mediaEpoch) {
-    return true;
-  }
-
-  if (previousPlayback.status !== "playing" && nextPlayback.status === "playing") {
-    return true;
-  }
-
-  if (nextPlayback.status !== "playing") {
+  if (roomChangeKind !== "playback-timeline" || nextPlayback.status !== "playing") {
     return false;
   }
 
   return (
+    previousPlayback.status !== "playing" ||
     previousPlayback.positionMs !== nextPlayback.positionMs ||
     previousPlayback.startedAt !== nextPlayback.startedAt
   );
@@ -737,6 +737,8 @@ export function useRoomRuntime({
     clearRemotePlaybackRetry
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
+  const lastRoomChangeKindRef = useRef<RoomChangeKind | null>(null);
+  const lastSourceResetReasonRef = useRef<SourceResetReason | null>(null);
   const emitRuntimeEvent = useRoomDiagnosticsBridge({
     recordPeerDiagnostic,
     setStatusMessage
@@ -875,6 +877,7 @@ export function useRoomRuntime({
       options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
     ) => {
       const withPlaybackConnectionDiagnostics = (snapshot: PeerDiagnosticsSnapshot) => {
+        const playback = currentRoomRef.current?.room.playback;
         const baselineProgressiveStatus =
           snapshot.progressivePlaybackStatus ??
           createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!;
@@ -895,6 +898,10 @@ export function useRoomRuntime({
             lastRecoveryRecommendationReason: lastRecoveryRecommendation?.reason ?? null,
             lastRecoveryRecommendationAt: lastRecoveryRecommendation?.recommendedAt ?? null,
             recoveryDropReason: lastRecoveryDropReasonRef.current,
+            playbackSurfaceKey: resolvePlaybackSurfaceKey(playback),
+            playbackTimelineKey: resolvePlaybackTimelineKey(playback),
+            roomChangeKind: lastRoomChangeKindRef.current,
+            sourceResetReason: lastSourceResetReasonRef.current,
             socketDisconnectGraceActive:
               socketDisconnectGraceUntilRef.current !== null &&
               socketDisconnectGraceUntilRef.current > Date.now()
@@ -920,9 +927,12 @@ export function useRoomRuntime({
       activeRecoveryActionResultRef,
       lastRecoveryRecommendationRef,
       lastRecoveryDropReasonRef,
+      lastRoomChangeKindRef,
+      lastSourceResetReasonRef,
       listenerPlaybackStateRef,
       playbackConnectionKeyRef,
-      socketDisconnectGraceUntilRef
+      socketDisconnectGraceUntilRef,
+      currentRoomRef
     ]
   );
 
@@ -1775,7 +1785,8 @@ export function useRoomRuntime({
       playbackStatus: playback?.status,
       currentTrackId: playback?.currentTrackId ?? null,
       sourcePeerId: playback?.sourcePeerId ?? null,
-      localPeerId: peerId
+      localPeerId: peerId,
+      hasRemoteSrcObject: !!remoteAudioRef.current?.srcObject
     });
     const traceContext =
       shouldMaintainRemotePlayback && playback?.sourcePeerId
@@ -2172,6 +2183,8 @@ export function useRoomRuntime({
       clearAvailabilityForPeerRef,
       deleteRoomTrackArtifactsRef,
       lastRealtimeRoomEventAtRef,
+      lastRoomChangeKindRef,
+      lastSourceResetReasonRef,
       recoveryGenerationRef,
       lastSubscribeAckAtRef,
       recoveryModeRef,

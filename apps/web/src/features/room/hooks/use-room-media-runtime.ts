@@ -1883,14 +1883,36 @@ export function useRoomMediaRuntime(input: {
 
   useEffect(() => {
     const remoteAudio = input.remoteAudioRef.current;
-    const shouldClearRemoteAudio = !shouldMaintainRemotePlaybackSurface({
+    const shouldPreserveRemoteSurface = shouldMaintainRemotePlaybackSurface({
       isCurrentSourceOwner: input.isCurrentSourceOwner,
       activePlaybackSource: input.activePlaybackSource,
       playbackStatus: input.roomSnapshot?.room.playback.status,
       currentTrackId: input.roomSnapshot?.room.playback.currentTrackId ?? null,
       sourcePeerId: input.roomSnapshot?.room.playback.sourcePeerId ?? null,
-      localPeerId: input.peerId
+      localPeerId: input.peerId,
+      hasRemoteSrcObject: !!remoteAudio?.srcObject
     });
+    const shouldClearRemoteAudio = !shouldPreserveRemoteSurface;
+
+    input.updateRemoteMediaDiagnostic(
+      shouldPreserveRemoteSurface
+        ? "当前远端播放面已保留"
+        : "当前远端播放面允许释放",
+      (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          ...(
+            snapshot.progressivePlaybackStatus ??
+            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+          ),
+          remoteSurfacePreserved: shouldPreserveRemoteSurface
+        }
+      }),
+      {
+        event: shouldPreserveRemoteSurface ? "remote-surface-preserved" : "remote-surface-clearable",
+        recordEvent: false
+      }
+    );
 
     if (!remoteAudio || !shouldClearRemoteAudio || !remoteAudio.srcObject) {
       return;

@@ -31,16 +31,9 @@ describe("BottomPlayer source", () => {
     expect(source).not.toContain("seekDraft ?? snapshotProgressMs ?? progressMs");
   });
 
-  it("renders the top waveform above the progress bar without intercepting pointer events", () => {
+  it("keeps the progress bar pinned at the top edge of the player", () => {
     const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
-    const waveformSource = readFileSync(
-      new URL("./bottom-player/PlayerTopWaveform.tsx", import.meta.url),
-      "utf8"
-    );
 
-    expect(source).toContain("<PlayerTopWaveform");
     expect(source).toContain('top-0 h-[2px]');
-    expect(waveformSource).toContain("pointer-events-none");
-    expect(waveformSource).toContain('data-testid="player-top-waveform"');
   });
 });

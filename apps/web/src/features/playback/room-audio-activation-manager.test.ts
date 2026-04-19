@@ -30,8 +30,20 @@ describe("RoomAudioActivationManager", () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();
 
-    await manager.activateOutputs({
-      localAudio: audio
+    await expect(
+      manager.activateOutputs({
+        localAudio: audio
+      })
+    ).resolves.toEqual({
+      ok: true,
+      local: {
+        ok: true,
+        error: null
+      },
+      remote: {
+        ok: false,
+        error: "missing-audio-element"
+      }
     });
 
     expect(audio.play).toHaveBeenCalledTimes(1);
@@ -41,6 +53,33 @@ describe("RoomAudioActivationManager", () => {
     expect(audio.muted).toBe(false);
     expect(audio.volume).toBe(0.72);
     expect(audio.preload).toBe("none");
+    expect(manager.isActivated()).toBe(true);
+  });
+
+  it("does not mark outputs activated when priming never actually plays", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    audio.play = vi.fn(async () => {
+      throw new DOMException("blocked", "NotAllowedError");
+    });
+
+    await expect(
+      manager.activateOutputs({
+        localAudio: audio
+      })
+    ).resolves.toEqual({
+      ok: false,
+      local: {
+        ok: false,
+        error: "blocked"
+      },
+      remote: {
+        ok: false,
+        error: "missing-audio-element"
+      }
+    });
+
+    expect(manager.isActivated()).toBe(false);
   });
 
   it("does not reject when an embedded webview throws during priming", async () => {
@@ -54,7 +93,17 @@ describe("RoomAudioActivationManager", () => {
       manager.activateOutputs({
         localAudio: audio
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      ok: true,
+      local: {
+        ok: true,
+        error: null
+      },
+      remote: {
+        ok: false,
+        error: "missing-audio-element"
+      }
+    });
   });
 
   it("marks outputs activated after a successful play call", async () => {

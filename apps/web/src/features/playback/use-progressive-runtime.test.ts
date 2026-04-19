@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveAdaptiveStartupBufferMs,
   resolveMediaElementPlaybackRole,
+  resolveRemoteOutputMode,
   shouldBlockFullLocalHandoffForRecentRemoteRecovery,
   shouldEnableFullLocalHandoff,
   shouldPreferImmediateFullLocalRecovery,
@@ -386,5 +387,29 @@ describe("shouldPollRemoteStartupGate", () => {
         cooldownMs: 0
       })
     ).toBe(true);
+  });
+
+  it("classifies remote output mode separately from the active playback source", () => {
+    expect(
+      resolveRemoteOutputMode({
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        hasRemoteSrcObject: true
+      })
+    ).toBe("audible");
+    expect(
+      resolveRemoteOutputMode({
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        hasRemoteSrcObject: true
+      })
+    ).toBe("held-silent");
+    expect(
+      resolveRemoteOutputMode({
+        activePlaybackSource: "full-local",
+        playbackStatus: "paused",
+        hasRemoteSrcObject: false
+      })
+    ).toBe("inactive");
   });
 });

@@ -36,18 +36,32 @@ type UsePlayerAudioVisualizerInput = {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: PlaybackSnapshot["status"] | null | undefined;
   currentTrackId: string | null | undefined;
+  mediaEpoch?: number | null;
+  sourcePeerId?: string | null;
+  sourceSessionId?: string | null;
 };
 
 type VisualizerSourceSelection =
   | {
-      kind: "local" | "remote";
+      kind: "remote-stream" | "local-stream";
+      stream: MediaStream;
+      element: HTMLAudioElement | null;
+      graphKey: string;
+      hasSignal: boolean;
+    }
+  | {
+      kind: "remote-element" | "local-element";
+      stream: null;
       element: HTMLAudioElement;
       graphKey: string;
+      hasSignal: boolean;
     }
   | {
       kind: "none";
+      stream: null;
       element: null;
       graphKey: "none";
+      hasSignal: false;
     };
 
 type VisualizerGraph = {
@@ -58,45 +72,186 @@ type VisualizerGraph = {
   stream: MediaStream;
 };
 
+const mediaStreamIdentityMap = new WeakMap<MediaStream, string>();
+let mediaStreamIdentitySequence = 0;
+
+function asMediaStream(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return typeof (value as MediaStream).getAudioTracks === "function"
+    ? (value as MediaStream)
+    : null;
+}
+
+function getMediaStreamIdentity(stream: MediaStream) {
+  const existing = mediaStreamIdentityMap.get(stream);
+  if (existing) {
+    return existing;
+  }
+
+  mediaStreamIdentitySequence += 1;
+  const nextIdentity = `stream-${mediaStreamIdentitySequence}`;
+  mediaStreamIdentityMap.set(stream, nextIdentity);
+  return nextIdentity;
+}
+
+function getAudioElementSourceKey(audio: HTMLAudioElement) {
+  const attributeSrc =
+    typeof audio.getAttribute === "function" ? audio.getAttribute("src") : null;
+  const currentSrc = audio.currentSrc || attributeSrc || "no-src";
+  const readyState = Number.isFinite(audio.readyState) ? audio.readyState : "na";
+  const paused = typeof audio.paused === "boolean" ? (audio.paused ? "paused" : "playing") : "na";
+  return `${currentSrc}|${readyState}|${paused}`;
+}
+
+function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
+  if (!stream || typeof stream.getAudioTracks !== "function") {
+    return false;
+  }
+
+  return stream
+    .getAudioTracks()
+    .some((track) => track.readyState === "live" && track.enabled !== false);
+}
+
+function hasElementCaptureSource(audio: HTMLAudioElement | null | undefined) {
+  if (!audio) {
+    return false;
+  }
+
+  const attributeSrc =
+    typeof audio.getAttribute === "function" ? audio.getAttribute("src") : null;
+  return Boolean(audio.currentSrc || attributeSrc || audio.srcObject);
+}
+
+function resolveVisualizerGraphKey(input: {
+  currentTrackId: string;
+  activePlaybackSource: ProgressivePlaybackSource;
+  mediaEpoch?: number | null;
+  sourcePeerId?: string | null;
+  sourceSessionId?: string | null;
+  sourceIdentity: string;
+}) {
+  return [
+    input.currentTrackId,
+    input.activePlaybackSource,
+    typeof input.mediaEpoch === "number" ? input.mediaEpoch : "none",
+    input.sourceSessionId ?? "none",
+    input.sourcePeerId ?? "none",
+    input.sourceIdentity
+  ].join("|");
+}
+
 export function resolveVisualizerSourceSelection(input: {
   audioElement: HTMLAudioElement | null | undefined;
   remoteAudioElement: HTMLAudioElement | null | undefined;
   activePlaybackSource: ProgressivePlaybackSource;
   currentTrackId: string | null | undefined;
-}) : VisualizerSourceSelection {
+  mediaEpoch?: number | null;
+  sourcePeerId?: string | null;
+  sourceSessionId?: string | null;
+}): VisualizerSourceSelection {
   if (!input.currentTrackId) {
     return {
       kind: "none",
+      stream: null,
       element: null,
-      graphKey: "none"
+      graphKey: "none",
+      hasSignal: false
     };
   }
 
   if (input.activePlaybackSource === "remote-stream") {
-    return input.remoteAudioElement
-      ? {
-          kind: "remote",
-          element: input.remoteAudioElement,
-          graphKey: `${input.currentTrackId}:remote-stream:remote`
-        }
-      : {
-          kind: "none",
-          element: null,
-          graphKey: "none"
-        };
+    const remoteElement = input.remoteAudioElement ?? null;
+    const remoteStream = asMediaStream(remoteElement?.srcObject ?? null);
+    if (remoteStream && hasLiveAudioTrack(remoteStream)) {
+      return {
+        kind: "remote-stream",
+        stream: remoteStream,
+        element: remoteElement,
+        graphKey: resolveVisualizerGraphKey({
+          currentTrackId: input.currentTrackId,
+          activePlaybackSource: input.activePlaybackSource,
+          mediaEpoch: input.mediaEpoch,
+          sourcePeerId: input.sourcePeerId,
+          sourceSessionId: input.sourceSessionId,
+          sourceIdentity: getMediaStreamIdentity(remoteStream)
+        }),
+        hasSignal: true
+      };
+    }
+
+    if (remoteElement && hasElementCaptureSource(remoteElement)) {
+      return {
+        kind: "remote-element",
+        stream: null,
+        element: remoteElement,
+        graphKey: resolveVisualizerGraphKey({
+          currentTrackId: input.currentTrackId,
+          activePlaybackSource: input.activePlaybackSource,
+          mediaEpoch: input.mediaEpoch,
+          sourcePeerId: input.sourcePeerId,
+          sourceSessionId: input.sourceSessionId,
+          sourceIdentity: getAudioElementSourceKey(remoteElement)
+        }),
+        hasSignal: true
+      };
+    }
+
+    return {
+      kind: "none",
+      stream: null,
+      element: null,
+      graphKey: "none",
+      hasSignal: false
+    };
   }
 
-  return input.audioElement
-    ? {
-        kind: "local",
-        element: input.audioElement,
-        graphKey: `${input.currentTrackId}:${input.activePlaybackSource}:local`
-      }
-    : {
-        kind: "none",
-        element: null,
-        graphKey: "none"
-      };
+  const localElement = input.audioElement ?? null;
+  const localStream = asMediaStream(localElement?.srcObject ?? null);
+  if (localStream && hasLiveAudioTrack(localStream)) {
+    return {
+      kind: "local-stream",
+      stream: localStream,
+      element: localElement,
+      graphKey: resolveVisualizerGraphKey({
+        currentTrackId: input.currentTrackId,
+        activePlaybackSource: input.activePlaybackSource,
+        mediaEpoch: input.mediaEpoch,
+        sourcePeerId: input.sourcePeerId,
+        sourceSessionId: input.sourceSessionId,
+        sourceIdentity: getMediaStreamIdentity(localStream)
+      }),
+      hasSignal: true
+    };
+  }
+
+  if (localElement && hasElementCaptureSource(localElement)) {
+    return {
+      kind: "local-element",
+      stream: null,
+      element: localElement,
+      graphKey: resolveVisualizerGraphKey({
+        currentTrackId: input.currentTrackId,
+        activePlaybackSource: input.activePlaybackSource,
+        mediaEpoch: input.mediaEpoch,
+        sourcePeerId: input.sourcePeerId,
+        sourceSessionId: input.sourceSessionId,
+        sourceIdentity: getAudioElementSourceKey(localElement)
+      }),
+      hasSignal: true
+    };
+  }
+
+  return {
+    kind: "none",
+    stream: null,
+    element: null,
+    graphKey: "none",
+    hasSignal: false
+  };
 }
 
 export function resolvePlayerAudioVisualizerRenderMode(input: {
@@ -173,8 +328,9 @@ export function decayWaveformSamples(
   factor = pausedDecayFactor,
   floorAmplitude = pausedFloorAmplitude
 ) {
-  return samples.map((sample, index, collection) => {
-    const idleTarget = buildIdleWaveformSamples(collection.length, floorAmplitude)[index] ?? floorAmplitude;
+  const idleFloor = buildIdleWaveformSamples(samples.length, floorAmplitude);
+  return samples.map((sample, index) => {
+    const idleTarget = idleFloor[index] ?? floorAmplitude;
     return Math.max(idleTarget, sample * factor);
   });
 }
@@ -215,6 +371,40 @@ function getWindowViewportWidth() {
   return window.innerWidth;
 }
 
+function commitVisualizerIdle(samples: number[], reason: string | null = null) {
+  audioVisualizerStore.samples = samples;
+  audioVisualizerStore.averageEnergy = 0;
+  audioVisualizerStore.peakEnergy = 0;
+  audioVisualizerStore.hasLiveGraph = false;
+  audioVisualizerStore.sourceKind = "none";
+  audioVisualizerStore.graphKey = null;
+  audioVisualizerStore.lastError = reason;
+}
+
+function commitVisualizerSamples(input: {
+  samples: number[];
+  sourceKind: typeof audioVisualizerStore.sourceKind;
+  graphKey: string;
+  lastError?: string | null;
+}) {
+  let peakEnergy = 0;
+  let totalEnergy = 0;
+  for (const sample of input.samples) {
+    const normalizedSample = Math.max(0, sample);
+    peakEnergy = Math.max(peakEnergy, normalizedSample);
+    totalEnergy += normalizedSample;
+  }
+
+  audioVisualizerStore.samples = input.samples;
+  audioVisualizerStore.averageEnergy =
+    input.samples.length > 0 ? totalEnergy / input.samples.length : 0;
+  audioVisualizerStore.peakEnergy = peakEnergy;
+  audioVisualizerStore.sourceKind = input.sourceKind;
+  audioVisualizerStore.graphKey = input.graphKey;
+  audioVisualizerStore.hasLiveGraph = true;
+  audioVisualizerStore.lastError = input.lastError ?? null;
+}
+
 export function usePlayerAudioVisualizer(
   input: UsePlayerAudioVisualizerInput
 ): PlayerAudioVisualizerState {
@@ -234,13 +424,16 @@ export function usePlayerAudioVisualizer(
     audioElement: input.audioRef.current,
     remoteAudioElement: input.remoteAudioRef.current,
     activePlaybackSource: input.activePlaybackSource,
-    currentTrackId: input.currentTrackId
+    currentTrackId: input.currentTrackId,
+    mediaEpoch: input.mediaEpoch,
+    sourcePeerId: input.sourcePeerId,
+    sourceSessionId: input.sourceSessionId
   });
   const renderMode = resolvePlayerAudioVisualizerRenderMode({
     playbackStatus: input.playbackStatus,
     hasTrack: !!input.currentTrackId,
     reducedMotion,
-    hasLiveSignal: sourceSelection.kind !== "none"
+    hasLiveSignal: sourceSelection.hasSignal
   });
   const sampleIntervalMs =
     renderMode === "reduced-motion"
@@ -306,8 +499,9 @@ export function usePlayerAudioVisualizer(
       }
       destroyVisualizerGraph(graphRef.current);
       graphRef.current = null;
+      commitVisualizerIdle(idleSamples);
     };
-  }, []);
+  }, [idleSamples]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -323,16 +517,17 @@ export function usePlayerAudioVisualizer(
       timeoutRef.current = null;
     }
 
-    const stopGraphIfIdle = () => {
+    const stopGraphIfIdle = (reason: string | null = null) => {
       if (renderMode === "idle" || !isPageVisible || sourceSelection.kind === "none") {
         destroyVisualizerGraph(graphRef.current);
         graphRef.current = null;
         timeDomainBufferRef.current = null;
+        commitVisualizerIdle(idleSamples, reason);
       }
     };
 
     if (!isPageVisible) {
-      stopGraphIfIdle();
+      stopGraphIfIdle("page-hidden");
       return;
     }
 
@@ -340,7 +535,7 @@ export function usePlayerAudioVisualizer(
 
     const ensureGraph = async () => {
       if (sourceSelection.kind === "none") {
-        stopGraphIfIdle();
+        stopGraphIfIdle("no-visualizer-source");
         return null;
       }
 
@@ -356,10 +551,13 @@ export function usePlayerAudioVisualizer(
       graphRef.current = null;
       timeDomainBufferRef.current = null;
 
-      const stream = captureAudioStream(sourceSelection.element, {
-        preferAudioContext: sourceSelection.kind === "local"
-      });
-      if (!stream) {
+      const sourceStream =
+        sourceSelection.stream ??
+        captureAudioStream(sourceSelection.element, {
+          preferAudioContext: sourceSelection.kind === "local-element"
+        });
+      if (!sourceStream) {
+        audioVisualizerStore.lastError = "visualizer-stream-unavailable";
         return null;
       }
 
@@ -368,12 +566,13 @@ export function usePlayerAudioVisualizer(
         ((window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ??
           null);
       if (!AudioContextCtor) {
+        audioVisualizerStore.lastError = "visualizer-audiocontext-unavailable";
         return null;
       }
 
       try {
         const context = new AudioContextCtor();
-        const source = context.createMediaStreamSource(stream);
+        const source = context.createMediaStreamSource(sourceStream);
         const analyser = context.createAnalyser();
         analyser.fftSize = analyserFftSize;
         analyser.smoothingTimeConstant = analyserSmoothingTimeConstant;
@@ -386,7 +585,7 @@ export function usePlayerAudioVisualizer(
           context,
           analyser,
           source,
-          stream
+          stream: sourceStream
         } satisfies VisualizerGraph;
         if (disposed) {
           destroyVisualizerGraph(graph);
@@ -394,8 +593,10 @@ export function usePlayerAudioVisualizer(
         }
         graphRef.current = graph;
         timeDomainBufferRef.current = new Uint8Array(new ArrayBuffer(graph.analyser.fftSize));
+        audioVisualizerStore.lastError = null;
         return graph;
       } catch {
+        audioVisualizerStore.lastError = "visualizer-graph-create-failed";
         return null;
       }
     };
@@ -419,7 +620,7 @@ export function usePlayerAudioVisualizer(
       const graph = await ensureGraph();
       const timeDomainBuffer = timeDomainBufferRef.current;
       if (!graph || !timeDomainBuffer) {
-        audioVisualizerStore.samples = idleSamples;
+        commitVisualizerIdle(idleSamples, audioVisualizerStore.lastError ?? "visualizer-graph-missing");
         setSamples(idleSamples);
         scheduleNextFrame(tick);
         return;
@@ -431,7 +632,11 @@ export function usePlayerAudioVisualizer(
         sampleCount,
         reducedMotion: renderMode === "reduced-motion"
       });
-      audioVisualizerStore.samples = nextSamples;
+      commitVisualizerSamples({
+        samples: nextSamples,
+        sourceKind: sourceSelection.kind,
+        graphKey: sourceSelection.graphKey
+      });
       setSamples(nextSamples);
       scheduleNextFrame(tick);
     };
@@ -442,10 +647,15 @@ export function usePlayerAudioVisualizer(
       }
 
       setSamples((current) => {
-        const nextSamples = current.length === sampleCount
-          ? decayWaveformSamples(current, pausedDecayFactor, pausedFloorAmplitude)
-          : buildIdleWaveformSamples(sampleCount, pausedFloorAmplitude);
-        audioVisualizerStore.samples = nextSamples;
+        const nextSamples =
+          current.length === sampleCount
+            ? decayWaveformSamples(current, pausedDecayFactor, pausedFloorAmplitude)
+            : buildIdleWaveformSamples(sampleCount, pausedFloorAmplitude);
+        commitVisualizerSamples({
+          samples: nextSamples,
+          sourceKind: sourceSelection.kind === "none" ? "none" : sourceSelection.kind,
+          graphKey: sourceSelection.kind === "none" ? "none" : sourceSelection.graphKey
+        });
         return nextSamples;
       });
       scheduleNextFrame(tick);
@@ -456,7 +666,7 @@ export function usePlayerAudioVisualizer(
         return;
       }
 
-      stopGraphIfIdle();
+      stopGraphIfIdle("visualizer-idle");
       setSamples(idleSamples);
     };
 
@@ -490,12 +700,12 @@ export function usePlayerAudioVisualizer(
     };
   }, [
     idleSamples,
-    input.playbackStatus,
     isPageVisible,
     renderMode,
     sampleCount,
     sampleIntervalMs,
     sourceSelection.graphKey,
+    sourceSelection.hasSignal,
     sourceSelection.kind
   ]);
 

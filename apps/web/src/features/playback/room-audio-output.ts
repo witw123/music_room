@@ -2,6 +2,7 @@
 
 import {
   roomAudioActivationManager,
+  type PrimeRoomAudioOutputsResult,
   type RoomAudioElementPlayResult
 } from "./room-audio-activation-manager";
 
@@ -17,8 +18,8 @@ type ApplyRoomAudioVolumeInput = {
 };
 
 export class RoomAudioOutput {
-  async primeOutputs(input: PrimeRoomAudioOutputInput) {
-    await roomAudioActivationManager.activateOutputs(input);
+  async primeOutputs(input: PrimeRoomAudioOutputInput): Promise<PrimeRoomAudioOutputsResult> {
+    return roomAudioActivationManager.activateOutputs(input);
   }
 
   async playElement(

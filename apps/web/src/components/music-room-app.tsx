@@ -28,6 +28,11 @@ import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
+import {
+  resolvePlaybackSourceResetReason,
+  resolvePlaybackSurfaceKey,
+  resolvePlaybackTimelineKey
+} from "@/features/room/hooks/room-playback-topology";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
@@ -185,13 +190,14 @@ export function MusicRoomApp({
   const isCurrentSourceOwner =
     (!!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId) ||
     (!!peerId && roomSnapshot?.room.playback.sourcePeerId === peerId);
-  const playbackTransitionKey = roomSnapshot?.room.playback.currentTrackId
-    ? [
-        roomSnapshot.room.playback.currentTrackId,
-        roomSnapshot.room.playback.playbackRevision ?? roomSnapshot.room.playback.queueVersion,
-        roomSnapshot.room.playback.mediaEpoch
-      ].join(":")
-    : null;
+  const playbackSurfaceKey = useMemo(
+    () => resolvePlaybackSurfaceKey(roomSnapshot?.room.playback),
+    [roomSnapshot?.room.playback]
+  );
+  const playbackTimelineKey = useMemo(
+    () => resolvePlaybackTimelineKey(roomSnapshot?.room.playback),
+    [roomSnapshot?.room.playback]
+  );
   const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
   const currentTrack = useMemo(
     () =>
@@ -508,7 +514,42 @@ export function MusicRoomApp({
         : "remote-stream"
     );
     setProgressiveFallbackReason(null);
-  }, [playbackTransitionKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);
+  }, [playbackSurfaceKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);
+
+  const previousPlaybackRef = useRef(roomSnapshot?.room.playback ?? null);
+
+  useEffect(() => {
+    const previousPlayback = previousPlaybackRef.current;
+    const nextPlayback = roomSnapshot?.room.playback ?? null;
+    const sourceResetReason = resolvePlaybackSourceResetReason({
+      previousPlayback,
+      nextPlayback
+    });
+    previousPlaybackRef.current = nextPlayback;
+
+    recordPeerDiagnostic({
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "playback-surface-state",
+      summary: playbackSurfaceKey
+        ? `播放面 ${playbackSurfaceKey}`
+        : "当前没有活跃播放面",
+      recordEvent: false,
+      update: (snapshot) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          ...(
+            snapshot.progressivePlaybackStatus ??
+            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+          ),
+          playbackSurfaceKey,
+          playbackTimelineKey,
+          sourceResetReason
+        }
+      })
+    });
+  }, [playbackSurfaceKey, playbackTimelineKey, recordPeerDiagnostic, roomSnapshot?.room.playback]);
 
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {
@@ -583,11 +624,37 @@ export function MusicRoomApp({
       }
 
       try {
-        await roomAudioOutput.primeOutputs({
+        const primeResult = await roomAudioOutput.primeOutputs({
           localAudio: audioRef.current,
           remoteAudio: remoteAudioRef.current
         });
-        setAudioUnlocked(true);
+        setAudioUnlocked(primeResult.ok);
+        if (!primeResult.ok) {
+          const message = "浏览器仍未允许房间音频输出";
+          setLastSourceStartError(message);
+          setStatusMessage(message);
+          recordPeerDiagnostic({
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: "audio-unlock-failed",
+            level: "warning",
+            summary: message,
+            update: (snapshot) => ({
+              ...snapshot,
+              lastError: message,
+              progressivePlaybackStatus: {
+                ...(
+                  snapshot.progressivePlaybackStatus ??
+                  createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+                ),
+                audioUnlocked: false,
+                lastSourceStartError: message
+              }
+            })
+          });
+          return false;
+        }
         setLastSourceStartError(null);
         recordPeerDiagnostic({
           peerId: "system",
@@ -636,7 +703,14 @@ export function MusicRoomApp({
         return false;
       }
     },
-    [recordPeerDiagnostic]
+    [
+      audioRef,
+      remoteAudioRef,
+      recordPeerDiagnostic,
+      setAudioUnlocked,
+      setLastSourceStartError,
+      setStatusMessage
+    ]
   );
 
   const handleLocalPlaybackReady = useCallback(() => {
@@ -971,12 +1045,17 @@ export function MusicRoomApp({
 
   const handleAudioUnlock = useCallback(async () => {
     setAudioBlockedOverlay(false);
-    await roomAudioOutput.primeOutputs({
+    const primeResult = await roomAudioOutput.primeOutputs({
       localAudio: audioRef.current,
       remoteAudio: remoteAudioRef.current
     });
-    setAudioUnlocked(true);
-    setStatusMessage("");
+    setAudioUnlocked(primeResult.ok);
+    if (primeResult.ok) {
+      setStatusMessage("");
+      return;
+    }
+    setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
+    setAudioBlockedOverlay(true);
   }, [audioRef, remoteAudioRef, setAudioUnlocked, setStatusMessage]);
 
   return (

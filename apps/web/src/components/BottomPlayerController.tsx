@@ -89,7 +89,10 @@ function BottomPlayerControllerBase({
     remoteAudioRef,
     activePlaybackSource,
     playbackStatus: playback?.status,
-    currentTrackId: playback?.currentTrackId
+    currentTrackId: playback?.currentTrackId,
+    mediaEpoch: playback?.mediaEpoch ?? null,
+    sourcePeerId: playback?.sourcePeerId ?? null,
+    sourceSessionId: playback?.sourceSessionId ?? null
   });
 
   useEffect(() => {

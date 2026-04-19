@@ -10,20 +10,29 @@ export function shouldMaintainRemotePlaybackSurface(input: {
   currentTrackId: string | null | undefined;
   sourcePeerId: string | null | undefined;
   localPeerId: string | null | undefined;
+  hasRemoteSrcObject?: boolean;
 }) {
   if (input.isCurrentSourceOwner) {
     return false;
   }
 
-  if (input.activePlaybackSource !== "remote-stream") {
-    return false;
-  }
-
   if (!input.currentTrackId || !input.sourcePeerId) {
-    return false;
+    return (
+      !!input.hasRemoteSrcObject &&
+      (input.playbackStatus === "playing" ||
+        input.playbackStatus === "paused" ||
+        input.playbackStatus === "buffering")
+    );
   }
 
   if (input.sourcePeerId === input.localPeerId) {
+    return false;
+  }
+
+  if (
+    input.activePlaybackSource !== "remote-stream" &&
+    !input.hasRemoteSrcObject
+  ) {
     return false;
   }
 

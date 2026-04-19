@@ -282,12 +282,18 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
             <DiagnosticGrid>
               <span>播放源: {playback.activeSource ?? "未启用"}</span>
               <span>连接代次: {playback.playbackConnectionKey ?? "未知"}</span>
+              <span>播放面: {playback.playbackSurfaceKey ?? "未知"}</span>
+              <span>时间线: {playback.playbackTimelineKey ?? "未知"}</span>
               <span>监听状态: {playback.listenerPlaybackState ?? "未知"}</span>
               <span>传输状态: {playback.mediaTransportState ?? "未知"}</span>
+              <span>房间变更: {playback.roomChangeKind ?? "未知"}</span>
+              <span>远端输出: {playback.remoteOutputMode ?? "未知"}</span>
               <span>音源启动: {playback.sourceStartState ?? "未知"}</span>
               <span>恢复阶段: {playback.recoveryPhase ?? "未知"}</span>
               <span>恢复动作: {playback.activeRecoveryActionType ?? "无"}</span>
               <span>动作结果: {playback.activeRecoveryActionResult ?? "无"}</span>
+              <span>最近重置: {playback.sourceResetReason ?? "无"}</span>
+              <span>远端保流: {formatBoolean(playback.remoteSurfacePreserved)}</span>
               <span>引擎: {playback.engineType ?? "none"}</span>
               <span>调度: {playback.schedulerPolicy ?? "未激活"}</span>
               <span>前向缓冲: {formatDurationMs(playback.aheadBufferedMs)}</span>

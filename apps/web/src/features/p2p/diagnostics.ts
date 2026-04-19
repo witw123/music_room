@@ -210,6 +210,12 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     progressivePlaybackStatus: {
       activeSource: null,
       playbackConnectionKey: null,
+      playbackSurfaceKey: null,
+      playbackTimelineKey: null,
+      roomChangeKind: null,
+      remoteOutputMode: "inactive",
+      sourceResetReason: "none",
+      remoteSurfacePreserved: false,
       listenerPlaybackState: "idle",
       activeRecoveryActionType: null,
       activeRecoveryActionResult: null,

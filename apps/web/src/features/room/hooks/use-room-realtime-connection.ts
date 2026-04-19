@@ -19,12 +19,22 @@ import type {
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { getWebRTCIceServers } from "@/features/p2p";
+import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import { createRoomMediaMeshRuntime } from "./use-room-media-runtime";
 import type { PlaybackRecoveryRecommendation } from "./room-runtime-types";
+import {
+  classifyRoomPlaybackChange,
+  resolvePlaybackSourceResetReason,
+  resolvePlaybackSurfaceKey,
+  resolvePlaybackTimelineKey,
+  type RoomChangeKind,
+  type RoomRealtimeEventKind,
+  type SourceResetReason
+} from "./room-playback-topology";
 
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
@@ -318,6 +328,8 @@ export function createRoomRealtimeRuntime(input: {
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
   deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[]) => Promise<void> | void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
+  lastRoomChangeKindRef: MutableRefObject<RoomChangeKind | null>;
+  lastSourceResetReasonRef: MutableRefObject<SourceResetReason | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
   recoveryModeRef: MutableRefObject<"late-join" | "rejoin" | "steady">;
@@ -346,6 +358,7 @@ export function createRoomRealtimeRuntime(input: {
     previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
     nextPlayback: RoomSnapshot["room"]["playback"];
     activeSessionId: string | null | undefined;
+    eventKind?: RoomRealtimeEventKind;
   }) => boolean;
   shouldAcceptIncomingPeerSignalRecoveryGeneration: (input: {
     payloadRecoveryGeneration: number | null | undefined;
@@ -479,6 +492,8 @@ export function createRoomRealtimeRuntime(input: {
     deleteRoomTrackArtifactsRef: input.deleteRoomTrackArtifactsRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
     lastRealtimeRoomEventAtRef: input.lastRealtimeRoomEventAtRef,
+    lastRoomChangeKindRef: input.lastRoomChangeKindRef,
+    lastSourceResetReasonRef: input.lastSourceResetReasonRef,
     recoveryGenerationRef: input.recoveryGenerationRef,
     remotePlaybackRetryRef: input.remotePlaybackRetryRef,
     socketDisconnectGraceUntilRef: input.socketDisconnectGraceUntilRef,
@@ -1209,6 +1224,8 @@ export function attachRoomSocketHandlers(input: {
   >;
   recordPeerDiagnosticRef: MutableRefObject<(input: any) => void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
+  lastRoomChangeKindRef: MutableRefObject<RoomChangeKind | null>;
+  lastSourceResetReasonRef: MutableRefObject<SourceResetReason | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
   remotePlaybackRetryRef: MutableRefObject<number | null>;
   socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
@@ -1250,6 +1267,7 @@ export function attachRoomSocketHandlers(input: {
     previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
     nextPlayback: RoomSnapshot["room"]["playback"];
     activeSessionId: string | null | undefined;
+    eventKind?: RoomRealtimeEventKind;
   }) => boolean;
   shouldAcceptIncomingPeerSignalRecoveryGeneration: (input: {
     payloadRecoveryGeneration: number | null | undefined;
@@ -1296,6 +1314,47 @@ export function attachRoomSocketHandlers(input: {
         recordEvent: false
       }
     );
+  };
+
+  const recordRoomChangeDiagnostics = (inputValue: {
+    eventKind: RoomRealtimeEventKind;
+    previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
+    nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
+  }) => {
+    const roomChangeKind = classifyRoomPlaybackChange({
+      eventKind: inputValue.eventKind,
+      previousPlayback: inputValue.previousPlayback,
+      nextPlayback: inputValue.nextPlayback
+    });
+    const sourceResetReason = resolvePlaybackSourceResetReason({
+      previousPlayback: inputValue.previousPlayback,
+      nextPlayback: inputValue.nextPlayback
+    });
+    input.lastRoomChangeKindRef.current = roomChangeKind;
+    input.lastSourceResetReasonRef.current = sourceResetReason;
+    input.recordPeerDiagnosticRef.current({
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "room-change-kind",
+      summary: `房间变更 ${roomChangeKind}`,
+      recordEvent: false,
+      update: (snapshot: any) => ({
+        ...snapshot,
+        progressivePlaybackStatus: {
+          ...(
+            snapshot.progressivePlaybackStatus ??
+            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+          ),
+          playbackSurfaceKey: resolvePlaybackSurfaceKey(inputValue.nextPlayback),
+          playbackTimelineKey: resolvePlaybackTimelineKey(inputValue.nextPlayback),
+          roomChangeKind,
+          sourceResetReason
+        }
+      })
+    });
+
+    return roomChangeKind;
   };
 
   const scheduleSubscribeRetry = (attempt: number) => {
@@ -1440,10 +1499,16 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    recordRoomChangeDiagnostics({
+      eventKind: "snapshot",
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: snapshot.room.playback
+    });
     const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
       previousPlayback: input.currentRoomRef.current?.room.playback,
       nextPlayback: snapshot.room.playback,
-      activeSessionId: input.activeSessionRef.current?.userId
+      activeSessionId: input.activeSessionRef.current?.userId,
+      eventKind: "snapshot"
     });
 
     input.lastRealtimeRoomEventAtRef.current = Date.now();
@@ -1486,10 +1551,16 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    recordRoomChangeDiagnostics({
+      eventKind: "playback",
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback
+    });
     const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
       previousPlayback: input.currentRoomRef.current?.room.playback,
       nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId
+      activeSessionId: input.activeSessionRef.current?.userId,
+      eventKind: "playback"
     });
 
     input.dispatchRoomStateEvent({
@@ -1553,10 +1624,16 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    recordRoomChangeDiagnostics({
+      eventKind: "queue",
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback
+    });
     const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
       previousPlayback: input.currentRoomRef.current?.room.playback,
       nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId
+      activeSessionId: input.activeSessionRef.current?.userId,
+      eventKind: "queue"
     });
 
     input.lastRealtimeRoomEventAtRef.current = Date.now();
@@ -1582,10 +1659,16 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    recordRoomChangeDiagnostics({
+      eventKind: "presence",
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback
+    });
     const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
       previousPlayback: input.currentRoomRef.current?.room.playback,
       nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId
+      activeSessionId: input.activeSessionRef.current?.userId,
+      eventKind: "presence"
     });
 
     input.lastRealtimeRoomEventAtRef.current = Date.now();
@@ -1613,10 +1696,16 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
+    recordRoomChangeDiagnostics({
+      eventKind: "library",
+      previousPlayback: input.currentRoomRef.current?.room.playback,
+      nextPlayback: playback
+    });
     const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
       previousPlayback: input.currentRoomRef.current?.room.playback,
       nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId
+      activeSessionId: input.activeSessionRef.current?.userId,
+      eventKind: "library"
     });
 
     input.lastRealtimeRoomEventAtRef.current = Date.now();

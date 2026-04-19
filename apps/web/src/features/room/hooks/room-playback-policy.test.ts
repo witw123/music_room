@@ -40,4 +40,32 @@ describe("shouldMaintainRemotePlaybackSurface", () => {
       })
     ).toBe(false);
   });
+
+  it("keeps a bound remote surface alive during temporary local fallback while room playback remains active", () => {
+    expect(
+      shouldMaintainRemotePlaybackSurface({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        currentTrackId: "track_1",
+        sourcePeerId: "peer_source",
+        localPeerId: "peer_listener",
+        hasRemoteSrcObject: true
+      })
+    ).toBe(true);
+  });
+
+  it("keeps a bound remote surface alive during source-lost grace even before a new source peer is known", () => {
+    expect(
+      shouldMaintainRemotePlaybackSurface({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "remote-stream",
+        playbackStatus: "playing",
+        currentTrackId: "track_1",
+        sourcePeerId: null,
+        localPeerId: "peer_listener",
+        hasRemoteSrcObject: true
+      })
+    ).toBe(true);
+  });
 });
