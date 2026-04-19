@@ -67,6 +67,25 @@ export type ManualCacheTask = {
   lastError: string | null;
 };
 
+type RehydratableRoomTrack = Pick<TrackMeta, "id" | "fileHash" | "ownerSessionId">;
+
+export function resolveMissingOwnedUploadedTracks(input: {
+  roomTracks: RehydratableRoomTrack[];
+  activeSessionId: string | null | undefined;
+  uploadedTracks: Record<string, UploadedTrack>;
+}) {
+  if (!input.activeSessionId) {
+    return [];
+  }
+
+  return input.roomTracks.filter(
+    (track) =>
+      track.ownerSessionId === input.activeSessionId &&
+      !input.uploadedTracks[track.id] &&
+      !!track.fileHash
+  );
+}
+
 export function useTrackUploads(options: {
   peerId: string;
   activeSession: GuestSession | null;
@@ -236,6 +255,11 @@ export function useTrackUploads(options: {
   useEffect(() => {
     manualCacheChunkIndexesRef.current.clear();
     manualCacheAssemblingTrackIdsRef.current.clear();
+    if (!roomSnapshot?.room.id) {
+      void clearTransientTrackCacheData();
+      return;
+    }
+
     setUploadedTracks((current) => {
       const next = { ...current };
       const activeTrackIds = new Set(roomSnapshot?.tracks.map((track) => track.id) ?? []);
@@ -247,7 +271,79 @@ export function useTrackUploads(options: {
       return next;
     });
     void clearTransientTrackCacheData();
-  }, [roomSnapshot?.room.id]);
+  }, [roomSnapshot?.room.id, roomSnapshot?.tracks]);
+
+  useEffect(() => {
+    if (!roomSnapshot?.room.id || !activeSession) {
+      return;
+    }
+
+    const missingOwnedTracks = resolveMissingOwnedUploadedTracks({
+      roomTracks: roomSnapshot.tracks,
+      activeSessionId: activeSession.userId,
+      uploadedTracks
+    });
+    if (missingOwnedTracks.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const rehydratedUploads: Record<string, UploadedTrack> = {};
+
+      for (const track of missingOwnedTracks) {
+        const cachedTrack =
+          cacheLibraryTracksRef.current.get(track.fileHash) ??
+          (await getCachedLibraryTrack(track.fileHash));
+        if (!cachedTrack) {
+          continue;
+        }
+        const cachedFile = toCachedLibraryFile({
+          file: cachedTrack.file,
+          title: cachedTrack.title,
+          mimeType: cachedTrack.mimeType,
+          fileHash: cachedTrack.fileHash
+        });
+
+        rehydratedUploads[track.id] = {
+          file: cachedFile,
+          objectUrl: URL.createObjectURL(cachedFile),
+          origin: "live-upload"
+        };
+      }
+
+      if (cancelled || Object.keys(rehydratedUploads).length === 0) {
+        for (const upload of Object.values(rehydratedUploads)) {
+          URL.revokeObjectURL(upload.objectUrl);
+        }
+        return;
+      }
+
+      setUploadedTracks((current) => {
+        let changed = false;
+        const next = { ...current };
+        for (const [trackId, upload] of Object.entries(rehydratedUploads)) {
+          if (next[trackId]) {
+            URL.revokeObjectURL(upload.objectUrl);
+            continue;
+          }
+          next[trackId] = upload;
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSession,
+    cacheLibraryTracks,
+    roomSnapshot?.room.id,
+    roomSnapshot?.tracks,
+    uploadedTracks
+  ]);
 
   useEffect(() => {
     return () => {

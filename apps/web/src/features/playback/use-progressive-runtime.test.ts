@@ -117,11 +117,11 @@ describe("shouldPollRemoteStartupGate", () => {
     });
     expect(result.shouldPoll).toBe(true);
     expect(result.shouldMute).toBe(false);
-    expect(result.nextStableSinceMs).toBe(1_200);
-    expect(result.volumeRamp).toBeDefined();
+    expect(result.nextStableSinceMs).toBeNull();
+    expect(result.volumeRamp).toBe(0.15);
   });
 
-  it("does not keep a bound remote MediaStream muted forever just because readyState stays low", () => {
+  it("keeps the startup gate active while a bound remote stream still lacks current data", () => {
     const result = resolveRemoteStartupGateState({
       activePlaybackSource: "remote-stream",
       playbackStatus: "playing",
@@ -133,10 +133,10 @@ describe("shouldPollRemoteStartupGate", () => {
       now: 1_400,
       lastWaitingAtMs: null
     });
-    expect(result.shouldPoll).toBe(false);
+    expect(result.shouldPoll).toBe(true);
     expect(result.shouldMute).toBe(false);
-    expect(result.nextStableSinceMs).toBe(1_000);
-    expect(result.volumeRamp).toBe(1.0);
+    expect(result.nextStableSinceMs).toBeNull();
+    expect(result.volumeRamp).toBe(0.15);
   });
 
   it("restarts the startup gate after a recent waiting event with low volume ramp", () => {

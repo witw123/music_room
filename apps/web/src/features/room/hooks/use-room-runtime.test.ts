@@ -1001,6 +1001,21 @@ describe("shouldKickSourcePlaybackFromRealtimeEvent", () => {
     ).toBe(true);
   });
 
+  it("does not kick source playback when a presence patch only carries timeline drift", () => {
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        previousPlayback: basePlayback,
+        nextPlayback: {
+          ...basePlayback,
+          positionMs: 12_000,
+          startedAt: "2026-04-19T00:00:00.000Z"
+        },
+        activeSessionId: "member_1",
+        eventKind: "presence"
+      })
+    ).toBe(false);
+  });
+
   it("does not kick source playback for paused timeline patches", () => {
     expect(
       shouldKickSourcePlaybackFromRealtimeEvent({

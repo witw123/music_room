@@ -116,7 +116,7 @@ describe("syncLocalPlaybackWindow", () => {
     expect(result.didSeek).toBe(true);
   });
 
-  it("uses a narrow playbackRate window for audible local follow before hard drift", () => {
+  it("keeps audible local follow at fixed rate before hard drift to avoid pitch shift", () => {
     const audio = {
       currentTime: 10,
       playbackRate: 1
@@ -129,8 +129,7 @@ describe("syncLocalPlaybackWindow", () => {
     });
 
     expect(audio.currentTime).toBe(10);
-    expect(audio.playbackRate).toBeGreaterThan(1);
-    expect(audio.playbackRate).toBeLessThanOrEqual(1.006);
+    expect(audio.playbackRate).toBe(1);
     expect(result.didSeek).toBe(false);
   });
 

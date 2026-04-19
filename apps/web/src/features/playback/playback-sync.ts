@@ -112,14 +112,7 @@ export function syncLocalPlaybackWindow(
         };
       }
 
-      const boundedPlaybackRate = resolveContinuousPlaybackRate({
-        driftMs,
-        maxRateDelta: 0.006
-      });
-      audio.playbackRate = Math.max(
-        minimumAudibleRate,
-        Math.min(maximumAudibleRate, boundedPlaybackRate)
-      );
+      audio.playbackRate = 1;
       return {
         driftMs,
         playbackRate: audio.playbackRate,

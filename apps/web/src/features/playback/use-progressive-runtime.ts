@@ -309,7 +309,7 @@ export function resolveRemoteStartupGateState(input: {
   const hasPlayableRemoteSource =
     input.hasSrcObject &&
     !input.paused &&
-    (input.readyState >= haveCurrentDataReadyState || input.hasSrcObject);
+    input.readyState >= haveCurrentDataReadyState;
   if (!hasPlayableRemoteSource) {
     return {
       shouldPoll: true,

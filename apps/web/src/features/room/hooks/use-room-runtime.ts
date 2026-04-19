@@ -531,6 +531,10 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
     return true;
   }
 
+  if (input.eventKind === "presence") {
+    return false;
+  }
+
   if (roomChangeKind !== "playback-timeline" || nextPlayback.status !== "playing") {
     return false;
   }
