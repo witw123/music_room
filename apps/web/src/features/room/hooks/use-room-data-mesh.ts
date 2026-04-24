@@ -149,7 +149,7 @@ export function createRoomDataMeshRuntime(input: {
         }
         const shouldProcessPieceForCache = input.manualCacheTrackIdsRef.current.includes(trackId);
         if (!shouldProcessPieceForCache) {
-          return;
+          return false;
         }
         const currentTrack =
           input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
@@ -180,6 +180,7 @@ export function createRoomDataMeshRuntime(input: {
           chunkSize,
           mimeType
         });
+        return true;
       },
       onPieceSent: ({ peerId: targetPeerId, payloadBytes }) => {
         input.recordPieceTransferRef.current({

@@ -18,7 +18,10 @@ import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
-import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
+import {
+  useProgressiveRuntime,
+  type FullLocalPlaybackTrack
+} from "@/features/playback/use-progressive-runtime";
 import {
   createPlaybackStartIntent,
   type PlaybackStartIntent
@@ -235,10 +238,36 @@ export function MusicRoomApp({
   const hasFullLocalTrack = useMemo(
     () =>
       currentPlaybackTrackId
-        ? !!uploadedTracks[currentPlaybackTrackId]
+        ? !!uploadedTracks[currentPlaybackTrackId] ||
+          !!cacheLibraryTracks.find((track) => track.fileHash === currentTrack?.fileHash)
         : false,
-    [currentPlaybackTrackId, uploadedTracks]
+    [cacheLibraryTracks, currentPlaybackTrackId, currentTrack?.fileHash, uploadedTracks]
   );
+  const fullLocalPlaybackTracks = useMemo<Record<string, FullLocalPlaybackTrack>>(() => {
+    const next: Record<string, FullLocalPlaybackTrack> = { ...uploadedTracks };
+    if (!roomSnapshot) {
+      return next;
+    }
+
+    const cachedTracksByHash = new Map(
+      cacheLibraryTracks.map((track) => [track.fileHash, track] as const)
+    );
+    for (const track of roomSnapshot.tracks) {
+      if (next[track.id]) {
+        continue;
+      }
+      const cachedTrack = cachedTracksByHash.get(track.fileHash);
+      if (!cachedTrack) {
+        continue;
+      }
+      next[track.id] = {
+        file: cachedTrack.file,
+        objectUrl: cachedTrack.objectUrl
+      };
+    }
+
+    return next;
+  }, [cacheLibraryTracks, roomSnapshot, uploadedTracks]);
 
   const {
     progressiveSchedulerPolicy,
@@ -256,6 +285,7 @@ export function MusicRoomApp({
       peerId,
       availabilityByTrack,
       uploadedTracks,
+      fullLocalPlaybackTracks,
       isCurrentSourceOwner,
       activePlaybackSource,
       setActivePlaybackSource,

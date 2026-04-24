@@ -429,7 +429,7 @@ describe("P2PMesh", () => {
   });
 
   it("batches received piece validation and IndexedDB writes", async () => {
-    const onPieceReceived = vi.fn();
+    const onPieceReceived = vi.fn(() => true);
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
       onPieceReceived
     });
@@ -482,6 +482,33 @@ describe("P2PMesh", () => {
       })
     ]);
     expect(onPieceReceived).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips IndexedDB writes when the runtime declines a received piece", async () => {
+    const onPieceReceived = vi.fn(() => false);
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived
+    });
+    const payload = new TextEncoder().encode("piece-1").buffer;
+    const hash = await sha256Hex(payload);
+
+    (mesh as any).pendingIncomingPieces.push({
+      peerId: "peer_b",
+      message: buildIncomingPieceMessage({
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        mimeType: "audio/flac",
+        pieceHash: hash,
+        payload
+      })
+    });
+
+    await (mesh as any).flushIncomingPieces();
+    await (mesh as any).piecePersistChain;
+
+    expect(onPieceReceived).toHaveBeenCalledTimes(1);
+    expect(cacheTrackPieces).not.toHaveBeenCalled();
   });
 
   it("uses cached manifest metadata when serving a requested piece", async () => {
@@ -643,7 +670,7 @@ describe("P2PMesh", () => {
   });
 
   it("reassembles fragmented piece frames before persisting the received piece", async () => {
-    const onPieceReceived = vi.fn();
+    const onPieceReceived = vi.fn(() => true);
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
       onPieceReceived
     });

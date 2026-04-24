@@ -1318,6 +1318,51 @@ describe("RoomService", () => {
     });
   });
 
+  it("bumps media epoch when the current source session reconnects with a new peer id", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.updatePeerPresence(snapshot.room.id, host.id, "peer-host", "online");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Source Peer Refresh",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "source-peer-refresh",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 2,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+    const roomAfterReconnect = await roomService.updatePeerPresence(
+      snapshot.room.id,
+      host.id,
+      "peer-host-reconnected",
+      "online"
+    );
+
+    expect(roomAfterReconnect.playback.sourcePeerId).toBe("peer-host-reconnected");
+    expect(roomAfterReconnect.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
+    expect(roomAfterReconnect.playback.playbackRevision).toBe(playback.playbackRevision + 1);
+    expect(roomAfterReconnect.playback.queueVersion).toBe(playback.queueVersion + 1);
+  });
+
   it("re-elects an online cached peer when the current source goes offline", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

@@ -8,7 +8,14 @@ import {
 type MediaConnectionState = "idle" | RTCPeerConnectionState;
 
 type MediaMeshCallbacks = {
-  onRemoteStream: (stream: MediaStream | null) => void;
+  onRemoteStream: (
+    stream: MediaStream | null,
+    context?: {
+      peerId: string;
+      mediaEpoch: number;
+      transportEpoch: number;
+    }
+  ) => void;
   onPeerRuntimeState?: (payload: {
     peerId: string;
     transportEpoch: number;
@@ -40,6 +47,8 @@ type MediaMeshCallbacks = {
   }) => void;
   onRemoteTrack?: (payload: {
     peerId: string;
+    mediaEpoch: number;
+    transportEpoch: number;
     trackId: string;
     trackMuted: boolean;
     trackEnabled: boolean;
@@ -267,6 +276,15 @@ export class RoomMediaMesh {
 
     const incomingMediaEpoch = payload.mediaEpoch ?? 0;
     const incomingTransportEpoch = payload.transportEpoch ?? 0;
+
+    if (incomingMediaEpoch < this.currentMediaEpoch) {
+      const staleEntry = this.peers.get(payload.fromPeerId);
+      if (staleEntry) {
+        staleEntry.lastIgnoredOfferReason = "stale-generation";
+        this.emitPeerRuntimeState(payload.fromPeerId, staleEntry);
+      }
+      return;
+    }
 
     if (incomingTransportEpoch < this.currentTransportEpoch) {
       const staleEntry = this.peers.get(payload.fromPeerId);
@@ -698,12 +716,19 @@ export class RoomMediaMesh {
     connection.ontrack = (event) => {
       const [stream] = event.streams;
       const nextStream = stream ?? new MediaStream([event.track]);
+      const streamContext = {
+        peerId,
+        mediaEpoch: this.currentMediaEpoch,
+        transportEpoch: this.currentTransportEpoch
+      };
       entry.listenerAwaitingPublisherOffer = false;
       entry.lastIgnoredOfferReason = "none";
       this.emitPeerRuntimeState(peerId, entry);
       const emitRemoteTrackState = () => {
         this.callbacks.onRemoteTrack?.({
           peerId,
+          mediaEpoch: streamContext.mediaEpoch,
+          transportEpoch: streamContext.transportEpoch,
           trackId: event.track.id,
           trackMuted: event.track.muted,
           trackEnabled: event.track.enabled,
@@ -711,10 +736,10 @@ export class RoomMediaMesh {
         });
       };
       emitRemoteTrackState();
-      this.callbacks.onRemoteStream(nextStream);
+      this.callbacks.onRemoteStream(nextStream, streamContext);
       event.track.onunmute = () => {
         emitRemoteTrackState();
-        this.callbacks.onRemoteStream(nextStream);
+        this.callbacks.onRemoteStream(nextStream, streamContext);
       };
       event.track.onmute = () => {
         emitRemoteTrackState();

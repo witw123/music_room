@@ -462,6 +462,20 @@ describe("RoomMediaMesh", () => {
     });
   });
 
+  it("drops media signals from an older media epoch", async () => {
+    const sendSignal = vi.fn();
+    const mesh = new RoomMediaMesh("room_1", "peer_listener", sendSignal, [], {
+      onRemoteStream: vi.fn()
+    });
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 2));
+    sendSignal.mockClear();
+
+    await mesh.handleSignal(buildOffer("peer_source_a", 1));
+
+    expect(sendSignal).not.toHaveBeenCalled();
+  });
+
   it("ignores a colliding offer on an impolite source peer", async () => {
     const sendSignal = vi.fn();
     const mesh = new RoomMediaMesh("room_1", "peer_source", sendSignal, [], {

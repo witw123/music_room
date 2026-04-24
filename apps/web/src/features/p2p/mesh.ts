@@ -29,7 +29,7 @@ type MeshCallbacks = {
     payloadBytes: number;
     requestId?: string;
     requestRttMs?: number | null;
-  }) => void;
+  }) => boolean | void;
   onPieceSent?: (payload: {
     peerId: string;
     trackId: string;
@@ -1368,10 +1368,7 @@ export class P2PMesh {
         }))
       );
 
-      const validPieces = batch
-        .map((item, index) => ({ item, isValid: validationResults[index] ?? false }))
-        .filter((entry) => entry.isValid);
-
+      const persistablePieces: typeof batch = [];
       for (const [index, item] of batch.entries()) {
         if (!(validationResults[index] ?? false)) {
           this.callbacks.onPieceRequestTimeout?.({
@@ -1394,7 +1391,7 @@ export class P2PMesh {
             (item.message.pieceHash ? undefined : undefined)
         });
 
-        this.callbacks.onPieceReceived({
+        const shouldPersistPiece = this.callbacks.onPieceReceived({
           peerId: item.peerId,
           trackId: item.message.header.trackId,
           chunkIndex: item.message.header.chunkIndex,
@@ -1406,10 +1403,13 @@ export class P2PMesh {
           requestRttMs:
             item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null
         });
+        if (shouldPersistPiece === true) {
+          persistablePieces.push(item);
+        }
       }
 
-      if (validPieces.length > 0) {
-        const piecesToPersist = validPieces.map(({ item }) => ({
+      if (persistablePieces.length > 0) {
+        const piecesToPersist = persistablePieces.map((item) => ({
           pieceId: `${
             this.resolveTrackCacheIdentity?.(item.message.trackId)?.fileHash ?? item.message.trackId
           }:${item.message.header.chunkSize}:${localCacheOwnerKey}:${item.message.chunkIndex}`,

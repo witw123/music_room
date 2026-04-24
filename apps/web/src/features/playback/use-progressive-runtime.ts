@@ -62,6 +62,8 @@ import {
 } from "@/features/room/hooks/room-playback-topology";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
+export type FullLocalPlaybackTrack = Pick<UploadedTrack, "file" | "objectUrl">;
+
 type UseProgressiveRuntimeInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
   remoteAudioRef: RefObject<HTMLAudioElement | null>;
@@ -70,6 +72,7 @@ type UseProgressiveRuntimeInput = {
   peerId: string;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   uploadedTracks: Record<string, UploadedTrack>;
+  fullLocalPlaybackTracks: Record<string, FullLocalPlaybackTrack>;
   isCurrentSourceOwner: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
   setActivePlaybackSource: Dispatch<SetStateAction<ProgressivePlaybackSource>>;
@@ -597,6 +600,7 @@ export function useProgressiveRuntime({
   peerId,
   availabilityByTrack,
   uploadedTracks,
+  fullLocalPlaybackTracks,
   isCurrentSourceOwner,
   activePlaybackSource,
   setActivePlaybackSource,
@@ -635,6 +639,13 @@ export function useProgressiveRuntime({
   const lastRemoteWaitingAtRef = useRef<number | null>(null);
   const continuousPlaybackStartedAtRef = useRef<number | null>(null);
   const continuousPlaybackSegmentsRef = useRef<Array<{ startedAtMs: number; endedAtMs: number }>>([]);
+  const fullLocalPlaybackSessionRef = useRef<{
+    key: string | null;
+    availableAtStart: boolean;
+  }>({
+    key: null,
+    availableAtStart: false
+  });
   const playback = roomSnapshot?.room.playback;
   const playbackRevision = playback?.playbackRevision ?? playback?.queueVersion ?? 0;
   const playbackSurfaceKey = useMemo(() => resolvePlaybackSurfaceKey(playback), [playback]);
@@ -643,10 +654,18 @@ export function useProgressiveRuntime({
   const currentBufferedFullLocalTrack = useMemo(
     () =>
       currentTrack?.id
-        ? uploadedTracks[currentTrack.id] ?? null
+        ? fullLocalPlaybackTracks[currentTrack.id] ?? uploadedTracks[currentTrack.id] ?? null
         : null,
-    [currentTrack?.id, uploadedTracks]
+    [currentTrack?.id, fullLocalPlaybackTracks, uploadedTracks]
   );
+  if (fullLocalPlaybackSessionRef.current.key !== playbackSurfaceKey) {
+    fullLocalPlaybackSessionRef.current = {
+      key: playbackSurfaceKey,
+      availableAtStart: !!currentBufferedFullLocalTrack
+    };
+  }
+  const canUseFullLocalForPlaybackSession =
+    fullLocalPlaybackSessionRef.current.availableAtStart && !!currentBufferedFullLocalTrack;
   const forceSourceOwnerLocalPlayback = useMemo(
     () =>
       shouldForceSourceOwnerLocalPlayback({
@@ -763,7 +782,7 @@ export function useProgressiveRuntime({
   const canWarmBufferedFullLocal =
     !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
-    !!currentBufferedFullLocalTrack;
+    canUseFullLocalForPlaybackSession;
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
   const systemDiagnostics = useMemo(
     () => peerDiagnostics.find((snapshot) => snapshot.peerId === "system") ?? null,
@@ -868,7 +887,7 @@ export function useProgressiveRuntime({
     () => Math.max(0, localTakeoverCooldownUntilRef.current - Date.now()),
     [playbackRevision, playback?.currentTrackId, activePlaybackSource, remoteFirstLock]
   );
-  const fullLocalReady = !!currentBufferedFullLocalTrack;
+  const fullLocalReady = canUseFullLocalForPlaybackSession;
   const bufferSafetyMarginMs = useMemo(() => {
     if (progressiveHealthSnapshot.estimatedFillTimeMs === null) {
       return null;
@@ -1271,7 +1290,7 @@ export function useProgressiveRuntime({
     shouldPreferImmediateFullLocalRecovery({
       isCurrentSourceOwner,
       audioUnlocked,
-      hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
+      hasBufferedFullLocalTrack: canUseFullLocalForPlaybackSession,
       fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive,
       recoveryPhase: roomRecoveryState.phase,
       recoveryMode: roomRecoveryState.mode,
@@ -1358,7 +1377,15 @@ export function useProgressiveRuntime({
       return "track-not-fully-cached";
     }
 
-    if (!isCurrentSourceOwner && !enableListenerLocalTakeover) {
+    if (!canUseFullLocalForPlaybackSession) {
+      return "full-local-not-available-at-playback-start";
+    }
+
+    if (
+      !isCurrentSourceOwner &&
+      !enableListenerLocalTakeover &&
+      activePlaybackSource !== "full-local"
+    ) {
       return "listener-handoff-disabled";
     }
 
@@ -1368,7 +1395,9 @@ export function useProgressiveRuntime({
 
     return null;
   }, [
+    canUseFullLocalForPlaybackSession,
     currentBufferedFullLocalTrack,
+    activePlaybackSource,
     isCurrentSourceOwner,
     roomRecoveryState.fullLocalRecoveryActive,
     startupGatePending
@@ -1376,12 +1405,44 @@ export function useProgressiveRuntime({
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
 
   useEffect(() => {
-    if (enableListenerLocalTakeover || isCurrentSourceOwner || activePlaybackSource === "remote-stream") {
+    if (
+      enableListenerLocalTakeover ||
+      isCurrentSourceOwner ||
+      activePlaybackSource === "remote-stream" ||
+      (activePlaybackSource === "full-local" && canUseFullLocalForPlaybackSession)
+    ) {
       return;
     }
 
     setActivePlaybackSource("remote-stream");
-  }, [activePlaybackSource, isCurrentSourceOwner, setActivePlaybackSource]);
+  }, [
+    activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
+    isCurrentSourceOwner,
+    setActivePlaybackSource
+  ]);
+
+  useEffect(() => {
+    if (
+      !canUseFullLocalForPlaybackSession ||
+      isCurrentSourceOwner ||
+      activePlaybackSource === "full-local" ||
+      !playback?.currentTrackId
+    ) {
+      return;
+    }
+
+    setActivePlaybackSource("full-local");
+    setProgressiveFallbackReason(null);
+  }, [
+    activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
+    isCurrentSourceOwner,
+    playback?.currentTrackId,
+    playbackSurfaceKey,
+    setActivePlaybackSource,
+    setProgressiveFallbackReason
+  ]);
 
   useEffect(() => {
     if (
@@ -1753,7 +1814,10 @@ export function useProgressiveRuntime({
     }
 
     const remoteAudio = remoteAudioRef.current;
-    const uploaded = uploadedTracks[playback.currentTrackId] ?? null;
+    const uploaded =
+      fullLocalPlaybackTracks[playback.currentTrackId] ??
+      uploadedTracks[playback.currentTrackId] ??
+      null;
     const sourceOwnerHasLocalTrack = isCurrentSourceOwner && !!uploaded;
     const shouldWarmBufferedFullLocal =
       !!uploaded &&
@@ -1900,6 +1964,7 @@ export function useProgressiveRuntime({
     playback,
     currentTrack?.durationMs,
     uploadedTracks,
+    fullLocalPlaybackTracks,
     activePlaybackSource,
     forceSourceOwnerLocalPlayback,
     isCurrentSourceOwner,

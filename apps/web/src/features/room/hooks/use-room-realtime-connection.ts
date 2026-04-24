@@ -79,6 +79,39 @@ export function shouldReannounceManualCacheAvailability(input: {
   return nextKey;
 }
 
+export function shouldAcceptIncomingMediaSignal(input: {
+  payload: PeerSignalMessage;
+  currentPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
+  localPeerId: string;
+  currentTransportEpoch: number;
+}) {
+  if (input.payload.channelKind !== "media") {
+    return true;
+  }
+
+  const playback = input.currentPlayback;
+  if (!playback?.currentTrackId || !playback.sourcePeerId) {
+    return false;
+  }
+
+  if ((input.payload.mediaEpoch ?? 0) !== playback.mediaEpoch) {
+    return false;
+  }
+
+  if ((input.payload.transportEpoch ?? 0) !== input.currentTransportEpoch) {
+    return false;
+  }
+
+  if (input.payload.fromPeerId === playback.sourcePeerId) {
+    return true;
+  }
+
+  return (
+    input.localPeerId === playback.sourcePeerId &&
+    input.payload.toPeerId === input.localPeerId
+  );
+}
+
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -507,6 +540,7 @@ export function createRoomRealtimeRuntime(input: {
     clearSocketDisconnectGrace: input.clearSocketDisconnectGrace,
     clearHostMediaSyncRetry: input.clearHostMediaSyncRetry,
     bumpMediaTransportEpoch: input.bumpMediaTransportEpoch,
+    mediaTransportEpochRef: input.mediaTransportEpochRef,
     resetRemoteAudioElement: input.resetRemoteAudioElement,
     dispatchRoomStateEvent: input.dispatchRoomStateEvent,
     setConnectedPeers: input.setConnectedPeers,
@@ -1245,6 +1279,7 @@ export function attachRoomSocketHandlers(input: {
   bumpMediaTransportEpoch: (
     reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
   ) => number;
+  mediaTransportEpochRef: MutableRefObject<number>;
   resetRemoteAudioElement: (stream: MediaStream | null) => void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -1744,6 +1779,27 @@ export function attachRoomSocketHandlers(input: {
         direction: "received",
         event: "stale-signal-dropped",
         summary: `丢弃旧恢复代次信令 ${payload.recoveryGeneration}`,
+        level: "warning",
+        recordEvent: false
+      });
+      return;
+    }
+
+    if (
+      payload.channelKind === "media" &&
+      !shouldAcceptIncomingMediaSignal({
+        payload,
+        currentPlayback: input.currentRoomRef.current?.room.playback,
+        localPeerId: input.peerId,
+        currentTransportEpoch: input.mediaTransportEpochRef.current
+      })
+    ) {
+      input.recordPeerDiagnosticRef.current({
+        peerId: payload.fromPeerId,
+        channelKind: "media",
+        direction: "received",
+        event: "stale-media-signal-dropped",
+        summary: `丢弃旧媒体信令 source=${payload.fromPeerId} mediaEpoch=${payload.mediaEpoch ?? "none"} transportEpoch=${payload.transportEpoch ?? "none"}`,
         level: "warning",
         recordEvent: false
       });

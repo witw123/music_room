@@ -342,12 +342,31 @@ export function createRoomMediaMeshRuntime(input: {
           }
         );
       },
-      onRemoteStream: (stream) => {
+      onRemoteStream: (stream, streamContext) => {
         const remoteAudio = input.remoteAudioRef.current;
         if (!remoteAudio) {
           return;
         }
-        const traceContext = input.getRemoteMediaTraceContext();
+        const playback = input.currentRoomRef.current?.room.playback ?? null;
+        if (
+          stream &&
+          (!streamContext ||
+            streamContext.peerId !== playback?.sourcePeerId ||
+            streamContext.mediaEpoch !== playback?.mediaEpoch ||
+            streamContext.transportEpoch !== input.mediaTransportEpochRef.current)
+        ) {
+          input.recordPeerDiagnosticRef.current({
+            peerId: streamContext?.peerId ?? "remote-media",
+            channelKind: "media",
+            direction: "received",
+            event: "stale-remote-stream-dropped",
+            summary: `丢弃旧媒体流 source=${streamContext?.peerId ?? "unknown"} mediaEpoch=${streamContext?.mediaEpoch ?? "unknown"} transportEpoch=${streamContext?.transportEpoch ?? "unknown"}`,
+            level: "warning",
+            recordEvent: false
+          });
+          return;
+        }
+        const traceContext = input.getRemoteMediaTraceContext(streamContext?.peerId);
         input.listenerMediaLifecycleRef.current.latestStream = stream;
 
         const boundStream = (remoteAudio.srcObject as MediaStream | null | undefined) ?? null;
@@ -531,7 +550,15 @@ export function createRoomMediaMeshRuntime(input: {
           })
         });
       },
-      onRemoteTrack: ({ peerId: remotePeerId, trackId, trackMuted, trackEnabled, trackReadyState }) => {
+      onRemoteTrack: ({
+        peerId: remotePeerId,
+        mediaEpoch,
+        transportEpoch,
+        trackId,
+        trackMuted,
+        trackEnabled,
+        trackReadyState
+      }) => {
         const now = new Date().toISOString();
         const traceContext = input.getRemoteMediaTraceContext(remotePeerId);
         input.listenerMediaLifecycleRef.current.lastTrackTraceKey = traceContext.traceKey;
@@ -549,6 +576,8 @@ export function createRoomMediaMeshRuntime(input: {
             remoteTrackStatus: {
               ...snapshot.remoteTrackStatus,
               ...traceContext,
+              mediaEpoch,
+              transportEpoch,
               trackId,
               trackMuted,
               trackEnabled,
@@ -570,6 +599,8 @@ export function createRoomMediaMeshRuntime(input: {
             remoteTrackStatus: {
               ...snapshot.remoteTrackStatus,
               ...traceContext,
+              mediaEpoch,
+              transportEpoch,
               trackId,
               trackMuted,
               trackEnabled,

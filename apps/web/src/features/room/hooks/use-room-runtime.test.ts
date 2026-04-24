@@ -19,6 +19,7 @@ import {
   shouldManagePublishedMediaTransport,
   shouldForceRemoteAudioElementRebind,
   shouldKickRemotePlaybackFromAudioEvent,
+  shouldAcceptIncomingMediaSignal,
   shouldReannounceManualCacheAvailability,
   shouldRecoverManualCacheDataPeers,
   shouldResumeRemotePlayback,
@@ -193,6 +194,102 @@ describe("shouldReannounceManualCacheAvailability", () => {
         lastBroadcastKey: "room_1|peer_a,peer_b|track_a,track_b"
       })
     ).toBe("room_1|peer_b,peer_c|track_a,track_b");
+  });
+});
+
+describe("shouldAcceptIncomingMediaSignal", () => {
+  const currentPlayback: RoomSnapshot["room"]["playback"] = {
+    status: "playing",
+    currentTrackId: "track_a",
+    currentQueueItemId: null,
+    sourceSessionId: "session_host",
+    sourcePeerId: "peer_source",
+    sourceTrackId: "track_a",
+    positionMs: 0,
+    startedAt: "2026-04-24T00:00:00.000Z",
+    queueVersion: 4,
+    playbackRevision: 4,
+    mediaEpoch: 3
+  };
+
+  it("accepts current source media signals for the listener", () => {
+    expect(
+      shouldAcceptIncomingMediaSignal({
+        payload: {
+          roomId: "room_1",
+          fromPeerId: "peer_source",
+          toPeerId: "peer_listener",
+          channelKind: "media",
+          mediaEpoch: 3,
+          transportEpoch: 2,
+          type: "offer",
+          payload: {}
+        },
+        currentPlayback,
+        localPeerId: "peer_listener",
+        currentTransportEpoch: 2
+      })
+    ).toBe(true);
+  });
+
+  it("drops old media epoch signals", () => {
+    expect(
+      shouldAcceptIncomingMediaSignal({
+        payload: {
+          roomId: "room_1",
+          fromPeerId: "peer_source",
+          toPeerId: "peer_listener",
+          channelKind: "media",
+          mediaEpoch: 2,
+          transportEpoch: 2,
+          type: "offer",
+          payload: {}
+        },
+        currentPlayback,
+        localPeerId: "peer_listener",
+        currentTransportEpoch: 2
+      })
+    ).toBe(false);
+  });
+
+  it("drops stale transport signals even when media epoch matches", () => {
+    expect(
+      shouldAcceptIncomingMediaSignal({
+        payload: {
+          roomId: "room_1",
+          fromPeerId: "peer_source",
+          toPeerId: "peer_listener",
+          channelKind: "media",
+          mediaEpoch: 3,
+          transportEpoch: 1,
+          type: "candidate",
+          payload: {}
+        },
+        currentPlayback,
+        localPeerId: "peer_listener",
+        currentTransportEpoch: 2
+      })
+    ).toBe(false);
+  });
+
+  it("accepts listener answers on the current source peer", () => {
+    expect(
+      shouldAcceptIncomingMediaSignal({
+        payload: {
+          roomId: "room_1",
+          fromPeerId: "peer_listener",
+          toPeerId: "peer_source",
+          channelKind: "media",
+          mediaEpoch: 3,
+          transportEpoch: 2,
+          type: "answer",
+          payload: {}
+        },
+        currentPlayback,
+        localPeerId: "peer_source",
+        currentTransportEpoch: 2
+      })
+    ).toBe(true);
   });
 });
 

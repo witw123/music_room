@@ -99,7 +99,10 @@ export {
 export { shouldManagePublishedMediaTransport } from "./use-room-media-runtime";
 export { shouldForceRemoteAudioElementRebind } from "./use-room-media-runtime";
 export { shouldKickRemotePlaybackFromAudioEvent } from "./use-room-media-runtime";
-export { shouldReannounceManualCacheAvailability } from "./use-room-realtime-connection";
+export {
+  shouldAcceptIncomingMediaSignal,
+  shouldReannounceManualCacheAvailability
+} from "./use-room-realtime-connection";
 export { shouldRedirectRoomRouteToAuth } from "./use-room-runtime-lifecycle";
 
 type RoomRouter = {

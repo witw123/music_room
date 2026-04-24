@@ -234,6 +234,22 @@ export class RoomPlaybackService {
     return true;
   }
 
+  handleSourcePeerOnline(record: RoomRecord, sessionId: string, peerId: string) {
+    const playback = record.room.playback;
+    if (
+      !playback.currentTrackId ||
+      playback.sourceSessionId !== sessionId ||
+      playback.sourcePeerId === peerId
+    ) {
+      return false;
+    }
+
+    playback.sourcePeerId = peerId;
+    playback.mediaEpoch += 1;
+    this.bumpPlaybackVersion(playback);
+    return true;
+  }
+
   pausePlaybackForSessionReplacement(record: RoomRecord, sessionId: string) {
     const playback = record.room.playback;
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {

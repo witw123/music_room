@@ -5,7 +5,8 @@ import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement, TrackMe
 import {
   assembleTrackFileFromPieces,
   buildTrackAvailabilityFromCache,
-  buildTrackAvailabilityFromFile
+  buildTrackAvailabilityFromFile,
+  buildTrackAvailabilityFromManifest
 } from "@/features/p2p";
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
@@ -112,6 +113,8 @@ export function useTrackUploads(options: {
   const cacheLibraryUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
+  const availabilityAnnouncementInFlightRef = useRef<Set<string>>(new Set());
+  const availabilityAnnouncementTtlRef = useRef<Map<string, number>>(new Map());
   const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
   const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
 
@@ -513,45 +516,73 @@ export function useTrackUploads(options: {
       }
       const cachedLibraryTrack = await getCachedLibraryTrack(track.fileHash);
       const fallbackFile = uploadedTrack?.file ?? cachedLibraryTrack?.file ?? null;
+      const announcementKey = [
+        roomSnapshot.room.id,
+        trackId,
+        track.fileHash,
+        peerId
+      ].join("|");
+      const now = Date.now();
+      const lastAnnouncedAt = availabilityAnnouncementTtlRef.current.get(announcementKey) ?? 0;
+      if (
+        availabilityAnnouncementInFlightRef.current.has(announcementKey) ||
+        now - lastAnnouncedAt < 5_000
+      ) {
+        return;
+      }
+      availabilityAnnouncementInFlightRef.current.add(announcementKey);
 
-      if (!fallbackFile) {
+      try {
         const cachedManifest =
           (await getTrackPieceManifestByFileHash(track.fileHash)) ??
           (await getTrackPieceManifest(trackId));
-        const availabilityFromPieces = await buildTrackAvailabilityFromCache({
+        if (!fallbackFile) {
+          const availabilityFromPieces = await buildTrackAvailabilityFromCache({
+            roomId: roomSnapshot.room.id,
+            trackId,
+            fileHash: track.fileHash,
+            peerId,
+            nickname: activeSession.nickname,
+            totalChunks: cachedManifest?.totalChunks,
+            chunkSize: cachedManifest?.chunkSize,
+            assetHash: track.fileHash
+          });
+          if (
+            availabilityFromPieces &&
+            availabilityFromPieces.availableChunks.length >= availabilityFromPieces.totalChunks
+          ) {
+            availabilityAnnouncementTtlRef.current.set(announcementKey, Date.now());
+            onAvailability(availabilityFromPieces);
+            emitAvailability(availabilityFromPieces);
+          }
+          return;
+        }
+
+        const availability = buildTrackAvailabilityFromManifest({
           roomId: roomSnapshot.room.id,
           trackId,
           fileHash: track.fileHash,
+          track,
+          file: fallbackFile,
+          cacheManifest: cachedManifest,
           peerId,
           nickname: activeSession.nickname,
-          totalChunks: cachedManifest?.totalChunks,
-          chunkSize: cachedManifest?.chunkSize,
-          assetHash: track.fileHash
+          source: uploadedTrack ? "live_upload" : "local_cache",
+          mimeType: track.mimeType,
+          codec: track.codec ?? null,
+          sizeBytes: track.sizeBytes ?? fallbackFile.size,
+          durationMs: track.durationMs,
+          totalChunks: track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks,
+          chunkSize: track.relayManifest?.chunkSize ?? track.pieceManifest?.chunkSize
         });
-        if (availabilityFromPieces && availabilityFromPieces.availableChunks.length >= availabilityFromPieces.totalChunks) {
-          onAvailability(availabilityFromPieces);
-          emitAvailability(availabilityFromPieces);
+        if (availability) {
+          availabilityAnnouncementTtlRef.current.set(announcementKey, Date.now());
+          onAvailability(availability);
+          emitAvailability(availability);
         }
-        return;
+      } finally {
+        availabilityAnnouncementInFlightRef.current.delete(announcementKey);
       }
-
-      const availability = await buildTrackAvailabilityFromFile({
-        roomId: roomSnapshot.room.id,
-        trackId,
-        fileHash: track.fileHash,
-        file: fallbackFile,
-        peerId,
-        nickname: activeSession.nickname,
-        source: uploadedTrack ? "live_upload" : "local_cache",
-        mimeType: track.mimeType,
-        codec: track.codec ?? null,
-        sizeBytes: track.sizeBytes ?? fallbackFile.size,
-        durationMs: track.durationMs,
-        totalChunks: track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks,
-        chunkSize: track.relayManifest?.chunkSize ?? track.pieceManifest?.chunkSize
-      });
-      onAvailability(availability);
-      emitAvailability(availability);
     },
     [activeSession, emitAvailability, onAvailability, peerId, roomSnapshot, uploadedTracks]
   );
@@ -633,12 +664,20 @@ export function useTrackUploads(options: {
           mimeType: mimeType || assembled.file.type || track.mimeType || null,
           lastError: null
         });
+        void announceRoomTrackAvailability(trackId);
         setStatusMessage(`已缓存《${track.title}》。`);
       } finally {
         manualCacheAssemblingTrackIdsRef.current.delete(trackId);
       }
     },
-    [peerId, persistTrackIntoLibrary, roomSnapshot, setStatusMessage, updateManualCacheTask]
+    [
+      announceRoomTrackAvailability,
+      peerId,
+      persistTrackIntoLibrary,
+      roomSnapshot,
+      setStatusMessage,
+      updateManualCacheTask
+    ]
   );
 
   const handleFilesSelected = useCallback(

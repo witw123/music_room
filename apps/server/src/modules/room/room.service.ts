@@ -284,6 +284,7 @@ export class RoomService {
 
     if (presenceState === "online" && peerId) {
       await this.roomPresenceService.touchRealtimePresence(roomId, sessionId, peerId);
+      this.roomPlaybackService.handleSourcePeerOnline(record, sessionId, peerId);
     } else if (presenceState === "reconnecting") {
       await this.roomPresenceService.markRealtimeReconnecting(roomId, sessionId);
     } else {

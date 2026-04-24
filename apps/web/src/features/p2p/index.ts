@@ -276,6 +276,69 @@ export async function buildTrackAvailabilityFromFile(input: {
   };
 }
 
+export function buildTrackAvailabilityFromManifest(input: {
+  roomId: string;
+  trackId: string;
+  fileHash: string;
+  peerId: string;
+  nickname: string;
+  source: "live_upload" | "local_cache";
+  track?: TrackMeta | null;
+  file?: Blob | null;
+  cacheManifest?: {
+    totalChunks: number;
+    chunkSize: number;
+    mimeType?: string | null;
+    pieceMimeType?: string | null;
+    pieceHashes?: string[] | null;
+  } | null;
+  mimeType?: string | null;
+  codec?: string | null;
+  sizeBytes?: number | null;
+  durationMs?: number;
+  totalChunks?: number;
+  chunkSize?: number;
+  assetKind?: "relay" | "original";
+  assetHash?: string;
+}): TrackAvailabilityAnnouncement | null {
+  const manifest = resolveTrackPieceManifest({
+    track: input.track,
+    cacheManifest: input.cacheManifest,
+    availability:
+      typeof input.totalChunks === "number" && typeof input.chunkSize === "number"
+        ? {
+            totalChunks: input.totalChunks,
+            chunkSize: input.chunkSize
+          }
+        : null,
+    file: input.file,
+    mimeType: input.mimeType,
+    codec: input.codec,
+    sizeBytes: input.sizeBytes ?? input.file?.size ?? null
+  });
+  if (!manifest) {
+    return null;
+  }
+
+  return {
+    roomId: input.roomId,
+    trackId: input.trackId,
+    ownerPeerId: input.peerId,
+    nickname: input.nickname,
+    assetKind: input.assetKind ?? "relay",
+    assetHash: input.assetHash ?? input.fileHash,
+    totalChunks: manifest.totalChunks,
+    chunkSize: manifest.chunkSize,
+    availableChunks: Array.from(
+      { length: manifest.totalChunks },
+      (_, chunkIndex) => chunkIndex
+    ),
+    pieceHashes: manifest.pieceHashes,
+    source: input.source,
+    announcedAt: new Date().toISOString()
+  };
+}
+
 export function resolveCanonicalChunkSize(input: {
   file?: Blob | null;
   codec?: string | null;
