@@ -31,12 +31,23 @@
 
 - `GET /health`
 - `GET /health/readiness`
+- `GET /metrics`
 
 `/health/readiness` 当前会直接反映：
 
 - Prisma 是否可用
 - Redis 是否可用
 - Redis 当前模式
+
+`/metrics` 当前输出 Prometheus 文本格式，至少包含：
+
+- `music_room_ws_connections`
+- `music_room_active_rooms`
+- `music_room_realtime_failures_total`
+- `music_room_playback_conflicts_total`
+- `music_room_ice_failures_total`
+- `music_room_prisma_available`
+- `music_room_redis_available`
 
 ### 3. 房间诊断面板
 
@@ -56,9 +67,8 @@
 
 ## 当前缺口
 
-下面这些能力目前仍未形成统一方案：
+下面这些能力目前仍未形成完整统一方案：
 
-- Prometheus / Grafana 指标采集
 - 前后端统一 tracing
 - Sentry 或等价错误聚合
 - 告警阈值与通知链路

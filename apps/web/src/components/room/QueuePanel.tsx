@@ -127,6 +127,7 @@ function QueuePanelBase({
             return (
               <article
                 key={item.id}
+                data-testid="queue-item"
                 data-queue-item-id={item.id}
                 className={`flex flex-col gap-4 rounded-2xl border p-4 transition-all sm:flex-row sm:items-center ${
                   isCurrent
@@ -232,6 +233,8 @@ function QueuePanelBase({
 
                 <div className="flex shrink-0 items-center gap-2 sm:justify-end">
                   <Button
+                    data-testid="queue-item-play-button"
+                    data-queue-item-id={item.id}
                     variant="ghost"
                     size="sm"
                     className={isCurrent ? "pointer-events-none opacity-0" : ""}
@@ -242,6 +245,8 @@ function QueuePanelBase({
                     播放
                   </Button>
                   <Button
+                    data-testid="queue-item-remove-button"
+                    data-queue-item-id={item.id}
                     variant="ghost"
                     size="sm"
                     className="text-foreground-muted hover:bg-red-500/10 hover:text-red-400"

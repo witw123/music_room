@@ -9,13 +9,26 @@
 - 认证头：`x-session-token: <token>`
 - 除 `GET /health` 和 `GET /health/readiness` 外，当前 REST 接口都要求已登录
 - 文档中的对象结构以 [shared-models.md](./shared-models.md) 为准
-- 当前项目尚未统一接入 DTO 校验和错误码规范化；除认证和播放控制外，部分业务错误仍可能以未包装异常形式返回
+- REST 错误响应统一为 `{ "code": string, "message": string, "details"?: unknown }`
 
 ## 现状说明
 
 - 注册曲目只上传元数据，不上传音频文件本体
 - 房间、队列、曲库、歌单接口除了返回 REST 响应外，通常还会触发 Socket.IO 快照或 patch 广播
 - 播放控制依赖 Redis 可用；当 Realtime 不可用时，`PATCH /v1/rooms/{roomId}/playback` 会直接失败
+
+## 标准错误码
+
+当前前后端共享错误码定义在 `packages/shared/src/contracts/errors.ts`。稳定上线阶段优先保证这些 code 可被前端识别：
+
+- `REALTIME_UNAVAILABLE`
+- `PLAYBACK_VERSION_CONFLICT`
+- `ROOM_NOT_FOUND`
+- `TRACK_OWNER_OFFLINE`
+- `UNAUTHORIZED_ROOM_ACTION`
+- `UNAUTHORIZED`
+- `RATE_LIMITED`
+- `INTERNAL_ERROR`
 
 ## 认证
 

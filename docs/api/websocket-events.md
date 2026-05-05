@@ -33,6 +33,7 @@ io("http://localhost:3001", {
 - `room.playback.patch`、`room.queue.patch`、`room.presence.patch`、`room.library.patch` 只做增量优化
 - 客户端在 patch 与本地状态冲突时，应以更高版本的完整快照为准
 - `room.subscribe` 的 ack 只提供 bootstrap 信息，不替代随后的 `room.snapshot`
+- WsException 错误优先返回 `{ "code": string, "message": string, "details"?: unknown }`，错误码与 REST 共享
 
 ## 连接与恢复语义
 
@@ -104,7 +105,8 @@ io("http://localhost:3001", {
 
 - 失败路径：
   - 缺少 `sessionId` 或 `peerId`：WsException
-  - token 与 `sessionId` 不匹配：WsException
+  - token 与 `sessionId` 不匹配：`UNAUTHORIZED`
+  - Redis / Realtime 不可用：`REALTIME_UNAVAILABLE`
   - 房间不存在：服务端会先 emit `room.snapshot.missing`，ack 返回 `{ "ok": false }`
 - 广播语义：
   - 订阅成功后服务端会异步向当前客户端 emit `room.snapshot`

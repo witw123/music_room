@@ -1,5 +1,6 @@
 import { apiBaseUrl } from "./api-client";
 import type {
+  ApiErrorResponse,
   AuthSession,
   IceConfigResponse,
   PlaybackSnapshot,
@@ -10,6 +11,16 @@ import type {
 } from "@music-room/shared";
 
 const sessionStorageKey = "music-room-session";
+
+export class MusicRoomApiError extends Error {
+  constructor(
+    message: string,
+    public readonly code: ApiErrorResponse["code"] | null,
+    public readonly details?: unknown
+  ) {
+    super(message);
+  }
+}
 
 export type QueueMutationResponse = {
   queue: QueueItem[];
@@ -60,6 +71,28 @@ export function extractApiErrorMessage(rawBody: string) {
   return trimmed;
 }
 
+export function extractApiError(rawBody: string): ApiErrorResponse | null {
+  const trimmed = rawBody.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as Partial<ApiErrorResponse>;
+    if (typeof parsed.code === "string" && typeof parsed.message === "string") {
+      return {
+        code: parsed.code as ApiErrorResponse["code"],
+        message: parsed.message,
+        details: parsed.details
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const sessionToken = getSessionToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -73,7 +106,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const message = extractApiErrorMessage(await response.text());
+    const rawErrorBody = await response.text();
+    const apiError = extractApiError(rawErrorBody);
+    const message = apiError?.message ?? extractApiErrorMessage(rawErrorBody);
     if (response.status === 401 && typeof window !== "undefined") {
       window.localStorage.removeItem(sessionStorageKey);
       window.dispatchEvent(
@@ -82,7 +117,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         })
       );
     }
-    throw new Error(message || `Request failed: ${response.status}`);
+    throw new MusicRoomApiError(
+      message || `Request failed: ${response.status}`,
+      apiError?.code ?? null,
+      apiError?.details
+    );
   }
 
   if (response.status === 204) {

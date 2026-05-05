@@ -812,4 +812,148 @@ describe("ChunkScheduler", () => {
 
     expect(requestPiece).not.toHaveBeenCalled();
   });
+
+  it("releases pending chunks and switches peer when a peer becomes unavailable", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      maxConcurrentCurrentTrack: 1,
+      maxConcurrentPerPeer: 1,
+      requestPiece
+    });
+
+    scheduler.sync({
+      roomSnapshot: buildRoomSnapshot(),
+      availabilityByTrack: {
+        track_1: {
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: [2, 3, 4]
+          }),
+          peer_seed: buildAnnouncement({
+            ownerPeerId: "peer_seed",
+            nickname: "Seed",
+            availableChunks: [2, 3, 4],
+            announcedAt: "2026-03-31T10:00:02.000Z"
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host", "peer_seed"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 30_000
+    });
+
+    expect(requestPiece).toHaveBeenCalledWith(
+      expect.objectContaining({ peerId: "peer_host", trackId: "track_1" })
+    );
+
+    scheduler.markPeerUnavailable("peer_host");
+
+    expect(requestPiece).toHaveBeenCalledWith(
+      expect.objectContaining({ peerId: "peer_seed", trackId: "track_1" })
+    );
+  });
+
+  it("avoids unstable peers for current playback and prefers healthy low-buffer peers", () => {
+    const selectedPeerId = selectChunkPeer({
+      announcements: [
+        buildAnnouncement({
+          ownerPeerId: "peer_unstable",
+          availableChunks: [2, 3, 4],
+          announcedAt: "2026-03-31T10:00:03.000Z"
+        }),
+        buildAnnouncement({
+          ownerPeerId: "peer_healthy",
+          availableChunks: [2],
+          announcedAt: "2026-03-31T10:00:01.000Z"
+        })
+      ],
+      chunkIndex: 2,
+      connectedPeerIds: new Set(["peer_unstable", "peer_healthy"]),
+      excludedPeerIds: new Set(["peer_member"]),
+      preferredPeerId: "peer_unstable",
+      peerLoads: new Map(),
+      peerInFlightBytes: new Map(),
+      chunkSize: 128 * 1024,
+      maxConcurrentPerPeer: 3,
+      priority: "current",
+      resolvePeerRequestWindow: (peerId) =>
+        peerId === "peer_unstable"
+          ? { transportScore: "unstable", bufferedAmountBytes: 900 * 1024 }
+          : { transportScore: "healthy", bufferedAmountBytes: 0, downloadRateKbps: 3_000 }
+    });
+
+    expect(selectedPeerId).toBe("peer_healthy");
+  });
+
+  it("keeps background hidden playback focused on current chunks", () => {
+    const requestPiece = vi.fn(() => true);
+    const scheduler = new ChunkScheduler("peer_member", {
+      now: () => 1_000,
+      maxConcurrentCurrentTrack: 2,
+      maxConcurrentPerPeer: 2,
+      requestPiece
+    });
+    const roomSnapshot = buildRoomSnapshot();
+    roomSnapshot.tracks.push({
+      id: "track_3",
+      title: "Background",
+      artist: "Artist",
+      album: null,
+      durationMs: 180_000,
+      bitrate: null,
+      fileHash: "hash-background",
+      artworkUrl: null,
+      ownerSessionId: "host_1",
+      ownerNickname: "Host",
+      sourceType: "local_upload"
+    });
+
+    scheduler.sync({
+      roomSnapshot,
+      availabilityByTrack: {
+        track_1: {
+          peer_host: buildAnnouncement({
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12
+          })
+        },
+        track_2: {
+          peer_host: buildAnnouncement({
+            trackId: "track_2",
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12
+          })
+        },
+        track_3: {
+          peer_host: buildAnnouncement({
+            trackId: "track_3",
+            ownerPeerId: "peer_host",
+            nickname: "Host",
+            availableChunks: Array.from({ length: 12 }, (_, index) => index),
+            totalChunks: 12
+          })
+        }
+      },
+      connectedPeerIds: ["peer_host"],
+      uploadedTrackIds: [],
+      playbackPositionMs: 30_000,
+      playbackStatus: "playing",
+      pageVisible: false,
+      policy: "background",
+      bufferHealth: "healthy"
+    });
+
+    const priorities = (requestPiece.mock.calls as unknown as Array<[{
+      priority: string;
+    }]>).map(([call]) => call.priority);
+
+    expect(priorities.length).toBeGreaterThan(0);
+    expect(priorities.every((priority) => priority === "current")).toBe(true);
+  });
 });

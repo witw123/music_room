@@ -143,6 +143,7 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">用户名</span>
                     <input
+                      data-testid="auth-login-username"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={loginUsername}
                       onChange={(event) => setLoginUsername(event.target.value)}
@@ -153,6 +154,7 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
+                      data-testid="auth-login-password"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       type="password"
                       value={loginPassword}
@@ -167,6 +169,7 @@ export function AuthPage() {
                   </label>
 
                   <Button
+                    data-testid="auth-login-submit"
                     size="lg"
                     className="mt-4 h-12 w-full rounded-lg bg-accent text-base font-bold text-white transition-all hover:bg-accent-hover"
                     disabled={!loginUsername.trim() || !loginPassword || isPending}
@@ -181,6 +184,7 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">用户名</span>
                     <input
+                      data-testid="auth-register-username"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={registerUsername}
                       onChange={(event) => setRegisterUsername(event.target.value)}
@@ -191,6 +195,7 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">密码</span>
                     <input
+                      data-testid="auth-register-password"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       type="password"
                       value={registerPassword}
@@ -202,6 +207,7 @@ export function AuthPage() {
                   <label className="flex flex-col gap-2">
                     <span className="text-xs font-medium text-white/50">昵称</span>
                     <input
+                      data-testid="auth-register-nickname"
                       className="w-full rounded-lg border border-white/10 bg-[#111] px-4 py-3 text-sm text-white transition-all placeholder:text-white/20 focus:border-accent focus:outline-none"
                       value={registerNickname}
                       onChange={(event) => setRegisterNickname(event.target.value)}
@@ -220,6 +226,7 @@ export function AuthPage() {
                   </label>
 
                   <Button
+                    data-testid="auth-register-submit"
                     size="lg"
                     className="mt-4 h-12 w-full rounded-lg bg-accent text-base font-bold text-white transition-all hover:bg-accent-hover"
                     disabled={
@@ -240,6 +247,7 @@ export function AuthPage() {
                 <p className="text-xs text-white/40">
                   {mode === "login" ? "还没有账号？" : "已有账号？"}
                   <button
+                    data-testid="auth-mode-toggle"
                     className="ml-2 font-medium text-white transition-colors hover:text-accent"
                     onClick={() => setMode(mode === "login" ? "register" : "login")}
                     type="button"

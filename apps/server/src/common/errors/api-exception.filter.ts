@@ -1,0 +1,145 @@
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus
+} from "@nestjs/common";
+import {
+  createApiErrorResponse,
+  errorCodes,
+  type ApiErrorResponse,
+  type ErrorCode
+} from "@music-room/shared";
+
+@Catch()
+export class ApiExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    if (host.getType() !== "http") {
+      throw exception;
+    }
+
+    const context = host.switchToHttp();
+    const response = context.getResponse();
+    const { status, body } = toHttpApiError(exception);
+
+    response.status(status).json(body);
+  }
+}
+
+export function toHttpApiError(exception: unknown): {
+  status: number;
+  body: ApiErrorResponse;
+} {
+  if (exception instanceof HttpException) {
+    const status = exception.getStatus();
+    const response = exception.getResponse();
+    const message = getExceptionMessage(response, exception.message);
+    const code = getApiErrorCode(response) ?? mapErrorCode(message, status);
+    const details = typeof response === "object" && response !== null && "details" in response
+      ? (response as { details?: unknown }).details
+      : undefined;
+
+    return {
+      status,
+      body: createApiErrorResponse(code, message, details)
+    };
+  }
+
+  const message = exception instanceof Error ? exception.message : "Internal server error.";
+  const code = mapErrorCode(message, HttpStatus.INTERNAL_SERVER_ERROR);
+  return {
+    status: code === errorCodes.roomNotFound ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR,
+    body: createApiErrorResponse(code, message)
+  };
+}
+
+export function mapErrorCode(message: string, status?: number): ErrorCode {
+  if (message.includes("Realtime sync unavailable") || message.includes("Redis unavailable")) {
+    return errorCodes.realtimeUnavailable;
+  }
+
+  if (message.includes("Playback state version conflict")) {
+    return errorCodes.playbackVersionConflict;
+  }
+
+  if (message.includes("Track owner is not online")) {
+    return errorCodes.trackOwnerOffline;
+  }
+
+  if (message.includes("Room not found") || message.includes("room.snapshot.missing")) {
+    return errorCodes.roomNotFound;
+  }
+
+  if (
+    message.includes("Only room members can perform this action") ||
+    message.includes("Only the host") ||
+    message.includes("Only the original uploader") ||
+    message.includes("Only the playlist owner")
+  ) {
+    return errorCodes.unauthorizedRoomAction;
+  }
+
+  if (message.includes("rate limit") || status === HttpStatus.TOO_MANY_REQUESTS) {
+    return errorCodes.rateLimited;
+  }
+
+  if (
+    message.includes("Unauthorized") ||
+    message.includes("Invalid session token") ||
+    message.includes("Invalid username or password")
+  ) {
+    return errorCodes.unauthorized;
+  }
+
+  if (status === HttpStatus.BAD_REQUEST || message.includes("Username already exists")) {
+    return errorCodes.validationFailed;
+  }
+
+  if (status === HttpStatus.NOT_FOUND) {
+    return errorCodes.roomNotFound;
+  }
+
+  if (status === HttpStatus.UNAUTHORIZED) {
+    return errorCodes.unauthorized;
+  }
+
+  if (status === HttpStatus.FORBIDDEN) {
+    return errorCodes.unauthorizedRoomAction;
+  }
+
+  if (status === HttpStatus.SERVICE_UNAVAILABLE) {
+    return errorCodes.realtimeUnavailable;
+  }
+
+  return errorCodes.internal;
+}
+
+function getApiErrorCode(response: string | object): ErrorCode | null {
+  if (typeof response !== "object" || response === null || !("code" in response)) {
+    return null;
+  }
+
+  const code = (response as { code?: unknown }).code;
+  return typeof code === "string" && Object.values(errorCodes).includes(code as ErrorCode)
+    ? (code as ErrorCode)
+    : null;
+}
+
+function getExceptionMessage(response: string | object, fallback: string) {
+  if (typeof response === "string") {
+    return response;
+  }
+
+  if (response && typeof response === "object" && "message" in response) {
+    const message = (response as { message?: unknown }).message;
+    if (Array.isArray(message)) {
+      return message.join(", ");
+    }
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+
+  return fallback || "Internal server error.";
+}

@@ -136,6 +136,7 @@ function RoomStageBase({
       >
         <div className="min-w-0 space-y-2">
           <button
+            data-testid="room-code-button"
             className="group flex max-w-full items-center gap-2"
             onClick={() => startTransition(() => void onCopyJoinCode())}
             type="button"
@@ -169,7 +170,7 @@ function RoomStageBase({
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              {onlineMemberCount} 人在线
+              <span data-testid="online-member-count">{onlineMemberCount}</span> 人在线
             </span>
             <span>·</span>
             <span>{roomSnapshot.room.visibility === "public" ? "公开房间" : "私密房间"}</span>
@@ -198,6 +199,7 @@ function RoomStageBase({
 
         <div className="relative shrink-0 pointer-events-auto">
           <Button
+            data-testid="room-settings-button"
             variant="ghost"
             size="icon"
             className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 backdrop-blur-md transition-all hover:bg-white/15 hover:text-white sm:h-10 sm:w-10"
@@ -214,6 +216,7 @@ function RoomStageBase({
           {showSettings ? (
             <div className="animate-fade-in absolute right-0 top-11 z-[60] flex w-56 origin-top-right flex-col rounded-2xl border border-white/10 bg-surface/92 p-1 shadow-2xl backdrop-blur-xl">
               <button
+                data-testid="leave-room-button"
                 className="w-full cursor-pointer rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-accent/40"
                 onClick={() => {
                   setShowSettings(false);
@@ -227,6 +230,7 @@ function RoomStageBase({
               {canDeleteRoom ? (
                 <>
                   <button
+                    data-testid="delete-room-button"
                     className={`my-1 w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/30 ${
                       canDisbandRoom
                         ? "cursor-pointer text-red-400 hover:bg-red-500/10 hover:text-red-300"

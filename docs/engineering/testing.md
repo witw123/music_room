@@ -4,13 +4,12 @@
 
 ## 当前状态
 
-- 当前仓库共有 `52` 个 `*.test.ts` / `*.spec.ts` 文件
+- 当前仓库共有 `58` 个 `*.test.ts` / `*.spec.ts` 文件
 - 已覆盖：
   - `packages/shared` 协议、模型与事件约束
   - `apps/server` 的认证、房间、队列、播放、实时、信令、Redis 配置等核心模块
   - `apps/web` 的房间运行时、P2P 调度、播放引擎、上传工具、API/客户端桥接，以及部分组件 / Hook
 - 仍未覆盖：
-  - 浏览器级 E2E 主流程
   - 真实 WebRTC 多端联调
   - IndexedDB / MediaSource / AudioContext 的集成级回归
   - 桌面端 / Android 壳的打包后 smoke test
@@ -72,20 +71,28 @@
 
 ## 4. E2E
 
+已引入 Playwright，CI 使用真实 server + web + Redis，server 认证走 fallback store，不要求 Postgres。
+
 - 注册 / 登录
 - 创建房间
 - 导入曲目
 - 加歌、播放、seek
-- 保存歌单并导回房间
 - 第二位成员通过房间码加入
+- 断线刷新后恢复订阅
+- 删除房间和 `/metrics` smoke
 
 ## 5. P2P 专项测试
 
-- WebRTC 建链成功率
-- DataChannel 分片收发
-- IndexedDB 缓存命中
-- 弱网重试
-- Media 实时流和本地缓存切换
+- `已完成`
+  - 弱网 timeout 后 peer 切换
+  - peer failed/disconnected 后释放 pending 分片
+  - relay/tcp/degraded/high bufferedAmount 降低批量与 in-flight
+  - 后台播放限速
+- `未完成`
+  - WebRTC 建链成功率
+  - DataChannel 分片收发
+  - IndexedDB 缓存命中
+  - Media 实时流和本地缓存切换
 
 ## 最近测试优先级
 

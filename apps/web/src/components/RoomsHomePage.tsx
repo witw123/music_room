@@ -190,10 +190,10 @@ export function RoomsHomePage() {
             这里是你的房间列表。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
           </p>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-            <Button size="lg" className="w-full sm:w-auto" onClick={() => handleCreateRoom("public")} type="button">
+            <Button data-testid="create-public-room" size="lg" className="w-full sm:w-auto" onClick={() => handleCreateRoom("public")} type="button">
               创建公开房间
             </Button>
-            <Button variant="outline" size="lg" className="w-full sm:w-auto bg-surface hover:bg-surface-hover border-surface-border" onClick={() => handleCreateRoom("private")} type="button">
+            <Button data-testid="create-private-room" variant="outline" size="lg" className="w-full sm:w-auto bg-surface hover:bg-surface-hover border-surface-border" onClick={() => handleCreateRoom("private")} type="button">
               创建私密房间
             </Button>
           </div>
@@ -216,12 +216,14 @@ export function RoomsHomePage() {
 
             <div className="mt-1 flex flex-col gap-3">
               <input
+                data-testid="join-code-input"
                 className="w-full rounded-2xl border border-surface-border bg-black/40 px-4 py-3 text-base font-mono uppercase text-foreground placeholder:font-sans placeholder:normal-case placeholder:text-foreground-muted/50 focus:outline-none focus:ring-2 focus:ring-accent"
                 value={joinCode}
                 onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
                 placeholder="输入 6 位房间码"
               />
               <Button
+                data-testid="join-code-submit"
                 size="lg"
                 variant="outline"
                 className="w-full bg-white/5 hover:bg-white/10"
@@ -233,7 +235,7 @@ export function RoomsHomePage() {
               </Button>
 
               {statusMessage ? (
-                <p className="animate-fade-in text-center text-sm text-red-400">{statusMessage}</p>
+                <p data-testid="room-home-status" className="animate-fade-in text-center text-sm text-red-400">{statusMessage}</p>
               ) : null}
             </div>
           </div>
@@ -366,6 +368,7 @@ export function RoomsHomePage() {
                         </p>
                       </div>
                       <Button
+                        data-testid="join-public-room"
                         variant="ghost"
                         className="mt-auto w-full border border-surface-border bg-white/5 transition-all group-hover:border-accent group-hover:bg-accent group-hover:text-white"
                         onClick={() => handleJoinRoom(item.room.joinCode)}
