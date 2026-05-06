@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -15,7 +15,7 @@ const command = pnpmExecPath && pnpmExecPath.endsWith(".cjs") ? process.execPath
 const baseArgs = pnpmExecPath && pnpmExecPath.endsWith(".cjs") ? [pnpmExecPath] : [];
 const args =
   target === "server"
-    ? [...baseArgs, "--filter", "@music-room/server", "dev"]
+    ? [...baseArgs, "--filter", "@music-room/server", "start"]
     : [...baseArgs, "--filter", "@music-room/web", "dev"];
 
 const env =
@@ -40,6 +40,23 @@ const env =
         NEXT_PUBLIC_WS_URL: "ws://127.0.0.1:3001",
         NEXT_PUBLIC_SOCKET_PATH: "/ws/socket.io"
       };
+
+if (target === "server") {
+  const build = spawnSync(
+    command,
+    [...baseArgs, "--filter", "@music-room/server", "build"],
+    {
+      cwd: repoRoot,
+      env: process.env,
+      stdio: "inherit",
+      shell: process.platform === "win32"
+    }
+  );
+
+  if (build.status !== 0) {
+    process.exit(build.status ?? 1);
+  }
+}
 
 const child = spawn(command, args, {
   cwd: repoRoot,
