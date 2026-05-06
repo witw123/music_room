@@ -1,73 +1,75 @@
 # Music Room
 
+[English](./README.md) | [中文](./README.zh-CN.md)
+
 [![Release](https://img.shields.io/github/v/release/witw123/music_room)](https://github.com/witw123/music_room/releases)
 [![License](https://img.shields.io/github/license/witw123/music_room)](./LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room 是一个面向多人同步听歌的协作式音乐房项目。仓库采用 Monorepo，包含 Web 前端、NestJS 服务端、桌面端、移动端，以及前后端共享类型。
+Music Room is a collaborative music-room project for listening to local music together. The repository is a monorepo that includes the web client, NestJS server, desktop shell, mobile shell, and shared frontend/server contracts.
 
-## 项目定位
+## Product Scope
 
-Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
+Music Room is not a public licensed music catalog, and it is not a server-hosted audio platform.
 
-当前项目的核心目标是：
+The current goals are:
 
-- 让用户基于本地音频完成多人同步听歌
-- 用共享队列、P2P 分片和实时音频把房间体验串成闭环
-- 在不上传音频文件本体的前提下，尽量提供稳定的多人协作播放体验
+- Let users listen together using their own local audio files
+- Build a complete room experience with a shared queue, P2P chunks, and realtime audio
+- Keep audio files off the server while still providing stable collaborative playback
 
-## 当前进度
+## Current Status
 
-当前代码已经具备可运行的核心闭环，项目状态处于“产品可用，工程持续加固”阶段：
+The core loop is already runnable. The project is in a "usable product, ongoing hardening" stage:
 
-- 首页 `/` 为官网展示入口，`/app` 为客户端工作区入口
-- 账号注册 / 登录、房间创建 / 加入 / 恢复、共享队列、房主播放控制已打通
-- 房间主界面当前收敛为 `共享队列`、`曲库`、`缓存`、`成员`
-- P2P 分片缓存、房主实时音频推流、MP3/FLAC 渐进式本地播放均已接入
-- 桌面端已迁移到 Tauri 2，移动端当前提供 Capacitor Android 壳
+- `/` is the public website entry, and `/app` is the client workspace
+- Registration/login, room creation/join/recovery, shared queue, and host playback control are connected
+- The room workspace currently focuses on `Queue`, `Library`, `Cache`, and `Members`
+- P2P chunk cache, host realtime audio relay, and progressive local playback for MP3/FLAC are integrated
+- The desktop app has moved to Tauri 2, and the mobile app currently provides a Capacitor Android shell
 
-进度细节见：
+More details:
 
-- [项目状态](./docs/engineering/status.md)
-- [路线图](./docs/engineering/roadmap.md)
-- [测试策略](./docs/engineering/testing.md)
+- [Project status](./docs/engineering/status.md)
+- [Roadmap](./docs/engineering/roadmap.md)
+- [Testing strategy](./docs/engineering/testing.md)
 
-## 文档入口
+## Documentation
 
-如果你是第一次打开这个仓库，建议按这个顺序阅读：
+Recommended reading order:
 
-- [文档总览](./docs/README.md)
-- [接口文档总览](./docs/api/README.md)
+- [Documentation overview](./docs/README.md)
+- [API documentation overview](./docs/api/README.md)
 - [REST API](./docs/api/rest.md)
-- [WebSocket 事件](./docs/api/websocket-events.md)
-- [共享模型](./docs/api/shared-models.md)
-- [测试场景手册](./docs/api/testing-playbook.md)
-- [部署说明](./docs/deployment/deployment.md)
+- [WebSocket events](./docs/api/websocket-events.md)
+- [Shared models](./docs/api/shared-models.md)
+- [Testing playbook](./docs/api/testing-playbook.md)
+- [Deployment guide](./docs/deployment/deployment.md)
 
-## 仓库结构
+## Repository Layout
 
-- `apps/web`: Next.js Web 前端
-- `apps/server`: NestJS API、房间服务、WebSocket 信令
-- `apps/desktop`: Tauri 桌面端
-- `apps/mobile`: Capacitor 移动端壳
-- `packages/shared`: 前后端共享协议、类型、校验模型
+- `apps/web`: Next.js web client
+- `apps/server`: NestJS API, room service, and WebSocket signaling
+- `apps/desktop`: Tauri desktop app
+- `apps/mobile`: Capacitor mobile shell
+- `packages/shared`: Shared contracts, types, and validation models
 
-## 功能概览
+## Feature Overview
 
-- 房间创建、加入、恢复与退出
-- 首页展示入口与 `/app` 客户端工作区分流
-- 多人共享播放队列、房主控制与播放同步
-- 本地音频导入、曲库管理、歌单管理
-- P2P 分片缓存同步
-- WebRTC 实时音频推流
-- 手动缓存、缓存回库与缓存导出
-- 成员级“连接与缓存诊断”面板
-- 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
+- Room creation, join, recovery, and exit
+- Public website and `/app` client workspace split
+- Shared playback queue, host controls, and playback sync
+- Local audio import, library management, and playlist management
+- P2P chunk cache sync
+- WebRTC realtime audio relay
+- Manual cache, cache restore to library, and cache export
+- Member-level connection and cache diagnostics
+- Server-issued short-lived TURN credentials with frontend fallback to static ICE config
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Requirements
 
 - Node.js 22.x
 - pnpm 10.x
@@ -75,7 +77,7 @@ Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
 - Redis
 - Docker / Docker Compose
 
-### 本地开发
+### Local Development
 
 ```bash
 pnpm install
@@ -83,20 +85,20 @@ cp .env.example .env
 pnpm dev
 ```
 
-默认地址：
+Default addresses:
 
 - Web: `http://localhost:3000`
 - Server: `http://localhost:3001`
 - Health: `http://localhost:3001/health`
 
-开发期主入口：
+Development entries:
 
-- 首页展示：`/`
-- 客户端工作区：`/app`
-- 登录页：`/auth`
-- 房间入口：`/rooms`
+- Website: `/`
+- Client workspace: `/app`
+- Login page: `/auth`
+- Room entry: `/rooms`
 
-### 常用命令
+### Common Commands
 
 ```bash
 pnpm dev
@@ -109,13 +111,13 @@ pnpm pack:desktop
 pnpm pack:mobile
 ```
 
-`pnpm e2e` 会启动真实 server + web，并要求本地 Redis 可连接到 `redis://127.0.0.1:6379/15`；`pnpm check:toolchain` 会强制校验 Node.js 22.x 与 pnpm 10.x，避免本地环境和 CI / 发布环境漂移。
+`pnpm e2e` starts the real server and web app, and requires local Redis at `redis://127.0.0.1:6379/15`. `pnpm check:toolchain` enforces Node.js 22.x and pnpm 10.x to avoid drift between local development, CI, and deployment environments.
 
 ## Shell Origin Configuration
 
-- Web falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
+- The web client falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
 - Desktop and mobile shells use `MUSIC_ROOM_PUBLIC_ORIGIN` at build/package time.
-- If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, desktop and mobile packaging now fails fast instead of producing a client pointed at `https://example.com`.
+- If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, desktop and mobile packaging fails fast instead of producing a client pointed at `https://example.com`.
 - Official `0.2.7` client packages are expected to target `https://musicroom.witw.top`.
 
 Examples:
@@ -130,13 +132,13 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile pack
 ```
 
-## WebRTC / TURN 配置
+## WebRTC / TURN Configuration
 
-前端优先请求服务端短期 ICE 配置接口：
+The frontend first requests short-lived ICE configuration from the server:
 
 - `GET /v1/realtime/ice-config`
 
-返回内容包含：
+The response includes:
 
 - `iceServers`
 - `ttlSeconds`
@@ -145,15 +147,15 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
   - `static`
   - `stun-only`
 
-默认策略：
+Default behavior:
 
-- 前端优先使用服务端返回的短期 TURN 凭证
-- 若接口不可用，则回退到静态 `NEXT_PUBLIC_TURN_*` / `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`
-- 若 TURN 完全不可用，则只使用 STUN
+- Prefer short-lived TURN credentials returned by the server
+- Fall back to static `NEXT_PUBLIC_TURN_*` / `NEXT_PUBLIC_WEBRTC_ICE_SERVERS` if the endpoint is unavailable
+- Use STUN only if TURN is unavailable
 
-### 关键环境变量
+### Key Environment Variables
 
-服务端：
+Server:
 
 - `TURN_ENABLED`
 - `TURN_PUBLIC_HOST`
@@ -164,7 +166,7 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 - `TURN_PROTOCOLS`
 - `TURN_TTL_SECONDS`
 
-前端 fallback：
+Frontend fallback:
 
 - `NEXT_PUBLIC_STUN_URL`
 - `NEXT_PUBLIC_TURN_URL`
@@ -172,65 +174,65 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 - `NEXT_PUBLIC_TURN_CREDENTIAL`
 - `NEXT_PUBLIC_WEBRTC_ICE_SERVERS`
 
-## 连接与缓存诊断
+## Connection And Cache Diagnostics
 
-成员页中的“连接与缓存诊断”现在会输出：
+The member page's "connection and cache diagnostics" panel reports:
 
-- 每个 peer 的 `offer / answer / candidate` 收发事件
-- Data / Media 的 ICE 状态与连接状态
-- 是否收到远端 `track`
-- 是否已绑定到远端音频元素
-- 远端音频元素 `playing / waiting / pause / error`
-- 最近事件流与错误摘要
+- Per-peer `offer / answer / candidate` send/receive events
+- Data/media ICE state and connection state
+- Whether a remote `track` has been received
+- Whether the remote audio element has been bound
+- Remote audio element `playing / waiting / pause / error` events
+- Recent event stream and error summary
 
-诊断判读原则：
+Diagnostic rules of thumb:
 
-- 有 `offer / answer`，但没有 candidate 或 ICE 一直不 `connected`：优先检查 TURN、网络出口、防火墙
-- Media 已 `connected`，但没有 `remote track`：优先检查 host 侧媒体流注入
-- Data 正常、Media 全断：优先检查媒体协商、浏览器自动播放限制、TURN 媒体 candidate
+- `offer / answer` exists, but no candidates or ICE never reaches `connected`: check TURN, network egress, and firewall rules first
+- Media is `connected`, but no `remote track`: check host-side media stream injection first
+- Data works but media is fully disconnected: check media negotiation, browser autoplay restrictions, and TURN media candidates
 
-## Docker 部署
+## Docker Deployment
 
-本仓库提供：
+This repository provides:
 
-- 根目录开发用 `docker-compose.yml`
-- Linux 生产模板 [deploy/linux](./deploy/linux)
-- 部署文档 [docs/deployment/deployment.md](./docs/deployment/deployment.md)
+- Root-level `docker-compose.yml` for development
+- Linux production template in [deploy/linux](./deploy/linux)
+- Deployment documentation in [docs/deployment/deployment.md](./docs/deployment/deployment.md)
 
-生产建议：
+Production recommendations:
 
-- Nginx 只反代 Web / API / WebSocket
-- TURN 不经过 Nginx，直接开放端口
-- 至少开放：
+- Use Nginx only for Web / API / WebSocket reverse proxying
+- Do not route TURN through Nginx; expose TURN ports directly
+- Open at least:
   - `3478/udp`
   - `3478/tcp`
   - `5349/tcp`
-- 若 coturn 在 NAT 后方，需要正确配置公网域名或 `external-ip`
+- If coturn runs behind NAT, configure the public domain or `external-ip` correctly
 
-部署细节见：
+More deployment details:
 
-- [部署说明](./docs/deployment/deployment.md)
-- [风险与约束](./docs/deployment/risks.md)
-- [可观测性](./docs/deployment/observability.md)
+- [Deployment guide](./docs/deployment/deployment.md)
+- [Risks and constraints](./docs/deployment/risks.md)
+- [Observability](./docs/deployment/observability.md)
 
-## 发布
+## Releases
 
-桌面端和移动端安装包发布在：
+Desktop and mobile installers are published through:
 
 - [GitHub Releases](https://github.com/witw123/music_room/releases)
 
-当前发布物通常包含：
+Release artifacts usually include:
 
 - Windows `.exe` / `.msi`
 - macOS `.dmg`
 - Linux `.AppImage` / `.deb` / `.rpm`
 - Android `.apk`
 
-## 当前已知边界
+## Known Boundaries
 
-- 播放控制依赖 Realtime 可用；Redis 不可用时，播放相关接口会直接失败
-- 房间主界面当前以 `共享队列 / 曲库 / 缓存 / 成员` 为主，歌单后端能力保留但默认不作为主入口
-- 浏览器级 E2E、真实 WebRTC 集成测试和统一观测能力仍在继续补强
+- Playback control depends on realtime availability; playback APIs fail directly when Redis is unavailable
+- The room workspace currently focuses on `Queue / Library / Cache / Members`; playlist backend capabilities remain available but are not the default primary entry
+- Browser-level E2E, real WebRTC integration tests, and unified observability are still being expanded
 
 ## License
 
