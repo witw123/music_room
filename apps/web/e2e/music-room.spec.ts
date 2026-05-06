@@ -124,7 +124,9 @@ test("upload-queue-playback", async ({ browser, page }) => {
   await expect(listenerPage.getByText("正在播放").first()).toBeVisible({ timeout: 15_000 });
 
   await page.getByTestId("player-toggle-button").last().click();
-  await expect(page.getByText("已暂停").first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId("player-toggle-button").last()).toHaveAttribute("title", "播放", {
+    timeout: 10_000
+  });
 
   const seekSlider = page.getByTestId("player-seek-slider").last();
   await seekSlider.evaluate((input) => {
@@ -149,9 +151,8 @@ test("delete-room", async ({ browser, page }) => {
   await page.getByTestId("delete-room-button").click();
 
   await expect(page).toHaveURL(/\/app/);
-  await expect(listenerPage.getByText(/房间已不可用|没有恢复到有效房间|重新创建或通过房间码加入/)).toBeVisible({
-    timeout: 15_000
-  });
+  await expect(listenerPage).toHaveURL(/\/app/, { timeout: 15_000 });
+  await expect(listenerPage.getByTestId("create-public-room")).toBeVisible();
   await listenerContext.close();
 });
 
