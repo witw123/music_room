@@ -41,7 +41,7 @@ const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
 const recoverySoftRetryThresholdMs = 5_000;
 const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
-const recoveryFullResubscribeThresholdMs = 15_000;
+const recoveryFullResubscribeThresholdMs = 45_000;
 const socketDisconnectGraceMs = 6_000;
 
 export function isSocketDisconnectGraceActive(disconnectGraceUntilMs: number | null, now = Date.now()) {

@@ -37,8 +37,8 @@ export type SourceRecoveryCoordinatorState = {
 };
 
 const listenerHardRecoveryCooldownMs = 3_000;
-const connectionSupervisorHardRecreateNoProgressFloorMs = 15_000;
-const recentAudibleProgressGraceMs = 2_500;
+const connectionSupervisorHardRecreateNoProgressFloorMs = 45_000;
+const recentAudibleProgressGraceMs = 5_000;
 const recoveryBootstrapGraceMs = 5_000;
 const sourceGenerationBootstrapGraceMs = 3_500;
 const connectionSupervisorForegroundIntervalMs = 500;
@@ -305,6 +305,7 @@ export function useRoomConnectionSupervisor(input: {
           (input.mediaConnectionState === "buffering" ||
             input.mediaConnectionState === "connecting"),
         remoteAudioPlayable: remoteContinuity.hasPlayableRemoteElement,
+        remoteAudioHasLiveTrack: remoteContinuity.hasLiveRemoteTrack,
         remoteAudioRecentlyProgressing: remoteContinuity.hasRecentRemoteProgress,
         consecutiveNoProgressMs
       };
@@ -369,6 +370,14 @@ export function useRoomConnectionSupervisor(input: {
         now - input.lastSubscribeAckAtRef.current < recoveryBootstrapGraceMs
       ) {
         return "bootstrap-grace";
+      }
+
+      if (
+        continuity.remoteAudioHasLiveTrack &&
+        remoteNoProgressMs !== null &&
+        remoteNoProgressMs < connectionSupervisorHardRecreateNoProgressFloorMs
+      ) {
+        return "remote-track-present";
       }
 
       return null;
@@ -560,6 +569,9 @@ export function useRoomConnectionSupervisorRuntime(input: {
     lastMediaStatsProgressAtMs: number | null;
     lastDataActivityAtMs: number | null;
     bufferingWhileAudible: boolean;
+    remoteAudioPlayable?: boolean;
+    remoteAudioHasLiveTrack?: boolean;
+    remoteAudioRecentlyProgressing?: boolean;
     consecutiveNoProgressMs: number | null;
   };
   resolveSourceRecoverySuppressedReason: (now?: number) => string | null;

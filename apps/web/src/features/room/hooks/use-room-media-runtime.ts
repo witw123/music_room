@@ -41,10 +41,10 @@ import {
 import type { PlaybackConnectionKey, PlaybackRecoveryRecommendation } from "./room-runtime-types";
 import { shouldMaintainRemotePlaybackSurface } from "./room-playback-policy";
 
-const listenerBootstrapGraceMs = 1_800;
+const listenerBootstrapGraceMs = 5_000;
 const hostCaptureHealthCheckIntervalMs = 2_000;
 const hostCaptureRefreshCooldownMs = 1_200;
-const hostMediaSyncRetryDelayMs = 75;
+const hostMediaSyncRetryDelayMs = 500;
 const steadyRoomMediaClockEmitIntervalMs = 120;
 const recoveryRoomMediaClockEmitIntervalMs = 60;
 
@@ -635,7 +635,8 @@ export function createRoomMediaMeshRuntime(input: {
           input.listenerMediaLifecycleRef.current.lastBoundTraceKey = null;
           input.resetRemoteAudioElement(null, {
             generation: input.listenerMediaLifecycleRef.current.currentGeneration,
-            reason: "source-peer-failed"
+            reason: "source-peer-failed",
+            deferNullReset: input.currentRoomRef.current?.room.playback.status === "playing"
           });
         }
         input.recordPeerDiagnosticRef.current({
@@ -791,7 +792,7 @@ export function useRoomMediaPublicationRuntime(input: {
         options?.preferPublishedTrack ? "publish" : "transport"
       ].join("|");
 
-      if (!forceResync && (syncState.lastAppliedKey === publishKey || syncState.pendingKey === publishKey)) {
+      if (!forceResync && syncState.lastAppliedKey === publishKey) {
         return;
       }
 
@@ -1033,6 +1034,10 @@ export function useRoomMediaPublicationRuntime(input: {
             ].join("|");
             syncState.pendingKey = publishKey;
           }
+        }
+
+        if (!forceResync && publishKey && syncState.lastAppliedKey === publishKey) {
+          return;
         }
 
         syncState.lastCaptureRefreshKey = captureRefreshKey;
@@ -2131,8 +2136,8 @@ export function useRoomMediaRuntime(input: {
 
     const retryPlan = [
       { delayMs: 0, attempt: 1 },
-      { delayMs: 800, attempt: 2 },
-      { delayMs: 2_400, attempt: 3 }
+      { delayMs: 2_500, attempt: 2 },
+      { delayMs: 7_000, attempt: 3 }
     ];
     const timerIds = retryPlan.map(({ delayMs, attempt }) =>
       window.setTimeout(() => {

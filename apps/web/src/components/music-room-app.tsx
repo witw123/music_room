@@ -581,17 +581,6 @@ export function MusicRoomApp({
     });
   }, [playbackSurfaceKey, playbackTimelineKey, recordPeerDiagnostic, roomSnapshot?.room.playback]);
 
-  const handleFilesSelected = useCallback(
-    async (files: FileList | File[] | null) => {
-      try {
-        await handleTrackFilesSelected(files);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
-    },
-    [handleTrackFilesSelected, setStatusMessage]
-  );
-
   const handleStartManualCacheDownload = useCallback(
     async (trackId: string) => {
       try {
@@ -754,6 +743,20 @@ export function MusicRoomApp({
   const handlePlaybackBucketChange = useCallback((bucketMs: number) => {
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
   }, []);
+
+  const handleFilesSelected = useCallback(
+    async (files: FileList | File[] | null) => {
+      try {
+        if (files && Array.from(files).length > 0) {
+          await ensureRoomAudioUnlocked("track-upload");
+        }
+        await handleTrackFilesSelected(files);
+      } catch (error) {
+        setStatusMessage(toUserFacingError(error));
+      }
+    },
+    [ensureRoomAudioUnlocked, handleTrackFilesSelected, setStatusMessage]
+  );
 
   const armPlaybackStart = useCallback(
     async (input: {
