@@ -22,6 +22,9 @@ import type {
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
+import { errorCodes } from "@music-room/shared";
+import { createWsApiException } from "../../common/errors/ws-error";
+import { MetricsService } from "../../common/metrics/metrics.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { getCorsOrigins } from "../../common/cors/get-cors-origins";
 import { AuthService } from "../auth/auth.service";
@@ -80,7 +83,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @Inject(forwardRef(() => RoomRealtimePublisher))
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly metrics: MetricsService
   ) {}
 
   @WebSocketServer()
@@ -96,6 +100,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.availabilityByRoom.delete(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
+    this.metrics.clearRoom(roomId);
     this.clearRoomRecoveryState(roomId);
     this.roomRealtimeBroadcaster.emitRoomMissing(roomId);
     void this.deleteAvailabilitySnapshot(roomId);
@@ -106,6 +111,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.availabilityByRoom.delete(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
+    this.metrics.clearRoom(roomId);
     this.clearRoomRecoveryState(roomId);
     this.roomRealtimeBroadcaster.emitRoomDeleted(roomId, trackIds);
     void this.deleteAvailabilitySnapshot(roomId);
@@ -210,6 +216,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       void this.deleteAvailabilitySnapshot(message.roomId);
       this.peerSocketsByRoom.delete(message.roomId);
       this.activeSessionsByRoom.delete(message.roomId);
+      this.metrics.clearRoom(message.roomId);
       this.clearRoomRecoveryState(message.roomId);
       this.server.to(message.roomId).emit("room.snapshot.missing", { roomId: message.roomId });
     });
@@ -233,6 +240,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       void this.deleteAvailabilitySnapshot(message.roomId);
       this.peerSocketsByRoom.delete(message.roomId);
       this.activeSessionsByRoom.delete(message.roomId);
+      this.metrics.clearRoom(message.roomId);
       this.clearRoomRecoveryState(message.roomId);
       this.server
         .to(message.roomId)
@@ -514,7 +522,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     try {
       await this.authService.assertSessionToken(payload.sessionId, sessionToken);
     } catch (error) {
-      throw new WsException(error instanceof Error ? error.message : "Unauthorized.");
+      throw createWsApiException(
+        error instanceof Error ? error.message : "Unauthorized.",
+        errorCodes.unauthorized
+      );
     }
 
     const previousRoomId = client.data.roomId as string | undefined;
@@ -531,6 +542,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       previousSessionId,
       client.id
     );
+    this.metrics.unbindRealtimeSocket(client.id);
     if (previousRoomId && previousRoomId !== payload.roomId) {
       client.leave(previousRoomId);
       if (previousSessionId) {
@@ -573,6 +585,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         client.emit("room.snapshot.missing", { roomId: payload.roomId });
         return { ok: false };
       }
+      this.metrics.bindRealtimeSocket(client.id, payload.roomId);
       setTimeout(() => {
         client.emit("room.snapshot", snapshot);
       }, 0);
@@ -589,7 +602,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       client.data.sessionId = undefined;
       client.data.peerId = undefined;
       client.data.isRealtimeAuthenticated = false;
-      throw new WsException(error instanceof Error ? error.message : "Unauthorized.");
+      this.metrics.unbindRealtimeSocket(client.id);
+      throw createWsApiException(error instanceof Error ? error.message : "Unauthorized.");
     }
   }
 
@@ -628,6 +642,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.unregisterPeerSocket(payload.roomId, peerId, client.id);
     this.unregisterSessionSocket(payload.roomId, sessionId, client.id);
+    this.metrics.unbindRealtimeSocket(client.id);
     if (sessionId && isActiveSessionSocket) {
       this.cancelPendingDisconnectCleanup(payload.roomId, sessionId);
     }
@@ -660,6 +675,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.unregisterPeerSocket(roomId, peerId, client.id);
     this.unregisterSessionSocket(roomId, sessionId, client.id);
+    this.metrics.unbindRealtimeSocket(client.id);
     if (roomId && sessionId && isActiveSessionSocket) {
       void this.updatePeerPresence(roomId, sessionId, null, "reconnecting");
       this.scheduleDisconnectCleanup(roomId, sessionId, peerId);
@@ -725,7 +741,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       typeof this.redisService.isAvailable === "function" &&
       !this.redisService.isAvailable()
     ) {
-      throw new WsException("Realtime sync unavailable.");
+      this.metrics.incrementRealtimeFailure();
+      throw createWsApiException(
+        "Realtime sync unavailable.",
+        errorCodes.realtimeUnavailable
+      );
     }
   }
 
@@ -1118,6 +1138,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     this.cancelPendingDisconnectCleanup(roomId, sessionId);
     this.unregisterPeerSocket(roomId, existing.peerId, existing.socketId);
     this.unregisterSessionSocket(roomId, sessionId, existing.socketId);
+    this.metrics.unbindRealtimeSocket(existing.socketId);
     this.clearRecoveryGeneration(roomId, sessionId, existing.peerId);
 
     const replacedSocket = this.server.sockets.sockets.get(existing.socketId);

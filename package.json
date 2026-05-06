@@ -12,8 +12,10 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "e2e": "pnpm --filter @music-room/web e2e",
     "pack:desktop": "turbo run pack --filter=@music-room/desktop",
     "pack:mobile": "turbo run pack --filter=@music-room/mobile",
+    "check:toolchain": "node scripts/check-toolchain.mjs",
     "deploy:check": "node scripts/deploy-check.mjs",
     "deploy:linux": "sh scripts/deploy-linux.sh"
   },

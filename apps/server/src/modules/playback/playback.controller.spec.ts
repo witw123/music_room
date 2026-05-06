@@ -1,4 +1,5 @@
 import { HttpException } from "@nestjs/common";
+import { MetricsService } from "../../common/metrics/metrics.service";
 import { PlaybackController } from "./playback.controller";
 
 describe("PlaybackController", () => {
@@ -26,7 +27,8 @@ describe("PlaybackController", () => {
     const controller = new PlaybackController(
       roomService as never,
       roomRealtimePublisher as never,
-      createAuthServiceMock() as never
+      createAuthServiceMock() as never,
+      new MetricsService()
     );
 
     try {
@@ -39,6 +41,10 @@ describe("PlaybackController", () => {
       expect(error).toBeInstanceOf(HttpException);
       expect((error as HttpException).getStatus()).toBe(409);
       expect((error as HttpException).message).toBe("Playback state version conflict.");
+      expect((error as HttpException).getResponse()).toEqual({
+        code: "PLAYBACK_VERSION_CONFLICT",
+        message: "Playback state version conflict."
+      });
     }
   });
 });

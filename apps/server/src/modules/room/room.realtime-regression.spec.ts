@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PlaybackController } from "../playback/playback.controller";
+import { MetricsService } from "../../common/metrics/metrics.service";
 import { QueueController } from "../queue/queue.controller";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { SignalingGateway } from "../signaling/signaling.gateway";
@@ -191,6 +192,7 @@ function createRealtimeHarness() {
   const authService = createFakeAuthService();
   const roomService = new RoomService(authService as never, prisma as never, redis as never);
   const broadcaster = new RoomRealtimeBroadcaster(redis as never);
+  const metrics = new MetricsService();
   const roomRealtimePublisher = new RoomRealtimePublisher(
     roomService as never,
     broadcaster as never
@@ -200,7 +202,8 @@ function createRealtimeHarness() {
     roomService as never,
     roomRealtimePublisher as never,
     broadcaster as never,
-    authService as never
+    authService as never,
+    metrics
   );
   const playlistService = createPlaylistServiceMock();
   const roomController = new RoomController(
@@ -217,7 +220,8 @@ function createRealtimeHarness() {
   const playbackController = new PlaybackController(
     roomService as never,
     roomRealtimePublisher as never,
-    authService as never
+    authService as never,
+    metrics
   );
 
   return {
@@ -227,6 +231,7 @@ function createRealtimeHarness() {
     roomService,
     broadcaster,
     roomRealtimePublisher,
+    metrics,
     signalingGateway,
     playlistService,
     roomController,

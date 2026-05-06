@@ -1,5 +1,7 @@
 const webUrl = process.env.DEPLOY_CHECK_WEB_URL ?? "http://localhost:3000";
 const appUrl = process.env.DEPLOY_CHECK_APP_URL ?? `${webUrl.replace(/\/$/, "")}/app?client=desktop`;
+const serverUrl = process.env.DEPLOY_CHECK_SERVER_URL ?? "http://localhost:3001";
+const socketPath = process.env.DEPLOY_CHECK_SOCKET_PATH ?? "/ws/socket.io";
 
 const checks = [
   {
@@ -12,11 +14,15 @@ const checks = [
   },
   {
     name: "health",
-    url: process.env.DEPLOY_CHECK_HEALTH_URL ?? "http://localhost:3001/health"
+    url: process.env.DEPLOY_CHECK_HEALTH_URL ?? `${serverUrl}/health`
   },
   {
     name: "readiness",
-    url: process.env.DEPLOY_CHECK_READINESS_URL ?? "http://localhost:3001/health/readiness"
+    url: process.env.DEPLOY_CHECK_READINESS_URL ?? `${serverUrl}/health/readiness`
+  },
+  {
+    name: "metrics",
+    url: process.env.DEPLOY_CHECK_METRICS_URL ?? `${serverUrl}/metrics`
   }
 ];
 
@@ -76,6 +82,23 @@ for (const check of checks) {
     console.log(`[${check.name}] failed ${check.url}`);
     console.log(String(error));
   }
+}
+
+try {
+  const socketHandshakeUrl = new URL(socketPath, serverUrl);
+  socketHandshakeUrl.searchParams.set("EIO", "4");
+  socketHandshakeUrl.searchParams.set("transport", "polling");
+  const response = await fetch(socketHandshakeUrl, { cache: "no-store" });
+  const body = await response.text();
+  console.log(`[socket] ${response.status} ${socketHandshakeUrl.toString()}`);
+  console.log(body.slice(0, 200));
+  if (!response.ok || !body.startsWith("0")) {
+    hasFailure = true;
+  }
+} catch (error) {
+  hasFailure = true;
+  console.log(`[socket] failed ${serverUrl}${socketPath}`);
+  console.log(String(error));
 }
 
 if (hasFailure) {

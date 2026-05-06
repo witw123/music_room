@@ -12,6 +12,7 @@ import { TrackModule } from "./modules/track/track.module";
 import { ConfigFactoryModule } from "./infra/config/config.module";
 import { PrismaModule } from "./infra/prisma/prisma.module";
 import { RedisModule } from "./infra/redis/redis.module";
+import { MetricsModule } from "./common/metrics/metrics.module";
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RedisModule } from "./infra/redis/redis.module";
     ConfigFactoryModule,
     PrismaModule,
     RedisModule,
+    MetricsModule,
     AuthModule,
     HealthModule,
     PlaybackModule,

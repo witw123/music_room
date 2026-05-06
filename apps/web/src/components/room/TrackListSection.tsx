@@ -53,6 +53,7 @@ function TrackListSectionBase({
         <span className="mb-1 text-base font-semibold text-foreground">导入本地音频</span>
         <span className="text-sm text-foreground-muted">点击选择文件，或直接拖拽到这里</span>
         <input
+          data-testid="track-upload-input"
           type="file"
           accept="audio/*"
           multiple
@@ -73,6 +74,8 @@ function TrackListSectionBase({
               return (
                 <article
                   key={track.id}
+                  data-testid="track-card"
+                  data-track-id={track.id}
                   className="group flex flex-col justify-between gap-4 rounded-2xl border border-surface-border bg-surface p-4 transition-all duration-300 hover:bg-surface-hover hover:shadow-md"
                 >
                   <div className="min-w-0 space-y-1">
@@ -108,6 +111,8 @@ function TrackListSectionBase({
                   >
                     {isMine ? (
                       <Button
+                        data-testid="track-delete-button"
+                        data-track-id={track.id}
                         variant="ghost"
                         className="h-10 shrink-0 whitespace-nowrap px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => startTransition(() => void onDeleteTrack(track.id))}
@@ -118,6 +123,8 @@ function TrackListSectionBase({
                     ) : null}
 
                     <Button
+                      data-testid="track-add-queue-button"
+                      data-track-id={track.id}
                       variant="outline"
                       className="h-10 min-w-0 w-full justify-center whitespace-nowrap bg-background/50 px-4"
                       onClick={() => startTransition(() => void onAddToQueue(track.id))}
@@ -127,6 +134,8 @@ function TrackListSectionBase({
                     </Button>
 
                     <Button
+                      data-testid="track-play-button"
+                      data-track-id={track.id}
                       variant="ghost"
                       className="h-10 w-full shrink-0 px-0 hover:bg-accent/10 hover:text-accent sm:w-12"
                       disabled={!canControlPlayback}

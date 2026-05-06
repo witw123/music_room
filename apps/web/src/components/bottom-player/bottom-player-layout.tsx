@@ -96,6 +96,7 @@ export function MobileBottomPlayerLayout({
           </span>
           <div className="flex-1">
             <Slider
+              data-testid="player-seek-slider"
               value={boundedProgressMs}
               max={currentTrackDuration || 1}
               disabled={!currentTrackDuration || !canControlPlayback}
@@ -114,6 +115,7 @@ export function MobileBottomPlayerLayout({
 
           <div className="flex items-center justify-center gap-1">
             <Button
+              data-testid="player-prev-button"
               variant="ghost"
               size="icon"
               disabled={!canControlPlayback || !playbackTrackId}
@@ -127,6 +129,7 @@ export function MobileBottomPlayerLayout({
             </Button>
 
             <button
+              data-testid="player-toggle-button"
               className={`inline-grid h-10 w-10 shrink-0 place-items-center rounded-full outline-none transition-[transform,box-shadow,background-color,color] duration-200 will-change-transform focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                 canControlPlayback
                   ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
@@ -149,6 +152,7 @@ export function MobileBottomPlayerLayout({
             </button>
 
             <Button
+              data-testid="player-next-button"
               variant="ghost"
               size="icon"
               disabled={!canControlPlayback || !playbackTrackId}
@@ -220,6 +224,7 @@ export function DesktopBottomPlayerLayout({
 
       <div className="flex items-center justify-center gap-3">
         <Button
+          data-testid="player-prev-button"
           variant="ghost"
           size="icon"
           disabled={!canControlPlayback || !playbackTrackId}
@@ -232,6 +237,7 @@ export function DesktopBottomPlayerLayout({
         </Button>
 
         <button
+          data-testid="player-toggle-button"
           className={`inline-grid h-10 w-10 place-items-center rounded-full outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
             canControlPlayback
               ? "bg-foreground text-background shadow-xl hover:scale-105 active:scale-95"
@@ -254,6 +260,7 @@ export function DesktopBottomPlayerLayout({
         </button>
 
         <Button
+          data-testid="player-next-button"
           variant="ghost"
           size="icon"
           disabled={!canControlPlayback || !playbackTrackId}
@@ -273,6 +280,7 @@ export function DesktopBottomPlayerLayout({
           </span>
           <div className="flex h-8 flex-1 items-center">
             <Slider
+              data-testid="player-seek-slider"
               value={boundedProgressMs}
               max={currentTrackDuration || 1}
               disabled={!currentTrackDuration || !canControlPlayback}

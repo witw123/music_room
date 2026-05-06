@@ -10,6 +10,8 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
+import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+import { MetricsService } from "../../common/metrics/metrics.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
@@ -29,7 +31,8 @@ export class PlaybackController {
   constructor(
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly metrics: MetricsService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -60,14 +63,24 @@ export class PlaybackController {
       this.logger.warn(
         `rejected playback update room=${roomId} actor=${userId} reason=realtime-unavailable`
       );
-      throw new ServiceUnavailableException("Realtime sync unavailable.");
+      this.metrics.incrementRealtimeFailure();
+      throw new ServiceUnavailableException(
+        createApiErrorResponse(errorCodes.realtimeUnavailable, "Realtime sync unavailable.")
+      );
     }
 
     if (typeof body.expectedVersion !== "number") {
       this.logger.warn(
         `rejected playback update room=${roomId} actor=${userId} reason=missing-expected-version`
       );
-      throw new HttpException("Playback state version conflict.", HttpStatus.CONFLICT);
+      this.metrics.incrementPlaybackConflict();
+      throw new HttpException(
+        createApiErrorResponse(
+          errorCodes.playbackVersionConflict,
+          "Playback state version conflict."
+        ),
+        HttpStatus.CONFLICT
+      );
     }
 
     this.assertPlaybackRateLimit(roomId, userId, body.action);
@@ -99,23 +112,39 @@ export class PlaybackController {
     const message = error instanceof Error ? error.message : "Internal server error";
 
     if (message.includes("Playback state version conflict")) {
-      throw new HttpException(message, HttpStatus.CONFLICT);
+      this.metrics.incrementPlaybackConflict();
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.playbackVersionConflict, message),
+        HttpStatus.CONFLICT
+      );
     }
 
     if (message.includes("Track owner is not online")) {
-      throw new HttpException(message, HttpStatus.CONFLICT);
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.trackOwnerOffline, message),
+        HttpStatus.CONFLICT
+      );
     }
 
     if (message.includes("Queue item not found") || message.includes("Track not found")) {
-      throw new HttpException(message, HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.roomNotFound, message),
+        HttpStatus.NOT_FOUND
+      );
     }
 
     if (message.includes("Only room members can perform this action")) {
-      throw new HttpException(message, HttpStatus.FORBIDDEN);
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.unauthorizedRoomAction, message),
+        HttpStatus.FORBIDDEN
+      );
     }
 
     if (message.includes("Realtime sync unavailable")) {
-      throw new ServiceUnavailableException(message);
+      this.metrics.incrementRealtimeFailure();
+      throw new ServiceUnavailableException(
+        createApiErrorResponse(errorCodes.realtimeUnavailable, message)
+      );
     }
 
     throw error instanceof Error ? error : new Error(message);
@@ -137,7 +166,7 @@ export class PlaybackController {
 
     if (userBucket.timestamps.length >= limits.perUser || roomBucket.timestamps.length >= limits.perRoom) {
       throw new HttpException(
-        "Playback control rate limit exceeded.",
+        createApiErrorResponse(errorCodes.rateLimited, "Playback control rate limit exceeded."),
         HttpStatus.TOO_MANY_REQUESTS
       );
     }

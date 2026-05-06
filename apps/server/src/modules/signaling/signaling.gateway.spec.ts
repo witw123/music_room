@@ -1,4 +1,5 @@
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
+import { MetricsService } from "../../common/metrics/metrics.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
 import { SignalingGateway } from "./signaling.gateway";
 
@@ -103,12 +104,14 @@ function createGateway(input?: {
     broadcaster as never
   );
   const authService = createAuthServiceMock();
+  const metrics = new MetricsService();
   const gateway = new SignalingGateway(
     redisService as never,
     roomService as never,
     roomRealtimePublisher as never,
     broadcaster as never,
-    authService as never
+    authService as never,
+    metrics
   );
 
   return {
@@ -117,7 +120,8 @@ function createGateway(input?: {
     redisService,
     authService,
     broadcaster,
-    roomRealtimePublisher
+    roomRealtimePublisher,
+    metrics
   };
 }
 
@@ -553,7 +557,12 @@ describe("SignalingGateway", () => {
         sessionId: "guest_host",
         peerId: "peer_host"
       })
-    ).rejects.toThrow("Realtime sync unavailable.");
+    ).rejects.toMatchObject({
+      error: {
+        code: "REALTIME_UNAVAILABLE",
+        message: "Realtime sync unavailable."
+      }
+    });
   });
 
   it("rejects peer signals when redis realtime is unavailable", async () => {
@@ -579,7 +588,12 @@ describe("SignalingGateway", () => {
           payload: {}
         }
       )
-    ).rejects.toThrow("Realtime sync unavailable.");
+    ).rejects.toMatchObject({
+      error: {
+        code: "REALTIME_UNAVAILABLE",
+        message: "Realtime sync unavailable."
+      }
+    });
   });
 
   it("emits a presence patch after a successful room subscribe", async () => {

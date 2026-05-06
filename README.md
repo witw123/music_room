@@ -103,9 +103,13 @@ pnpm dev
 pnpm build
 pnpm typecheck
 pnpm test
+pnpm e2e
+pnpm check:toolchain
 pnpm pack:desktop
 pnpm pack:mobile
 ```
+
+`pnpm e2e` 会启动真实 server + web，并要求本地 Redis 可连接到 `redis://127.0.0.1:6379/15`；`pnpm check:toolchain` 会强制校验 Node.js 22.x 与 pnpm 10.x，避免本地环境和 CI / 发布环境漂移。
 
 ## Shell Origin Configuration
 

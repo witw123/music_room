@@ -120,6 +120,7 @@ export function createRoomDataMeshRuntime(input: {
   enableManualTrackCaching: boolean;
   reportMeshResyncFailure: (error: unknown) => void;
 }) {
+  const peerBufferedAmountBytes = new Map<string, number>();
   const mesh = new P2PMesh(
     input.roomId,
     input.peerId,
@@ -148,8 +149,14 @@ export function createRoomDataMeshRuntime(input: {
           });
         }
         const shouldProcessPieceForCache = input.manualCacheTrackIdsRef.current.includes(trackId);
+        input.chunkSchedulerRef.current?.markPieceReceived(
+          trackId,
+          chunkIndex,
+          totalChunks,
+          sourcePeerId
+        );
         if (!shouldProcessPieceForCache) {
-          return false;
+          return true;
         }
         const currentTrack =
           input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
@@ -171,7 +178,6 @@ export function createRoomDataMeshRuntime(input: {
             });
           })();
         }
-        input.chunkSchedulerRef.current?.markPieceReceived(trackId, chunkIndex, totalChunks);
         input.clearManualCachePendingPiece(trackId, chunkIndex);
         input.handleManualCachePieceReceivedRef.current({
           trackId,
@@ -271,6 +277,8 @@ export function createRoomDataMeshRuntime(input: {
           })
         });
         if (state === "closed" || state === "failed" || state === "disconnected") {
+          peerBufferedAmountBytes.delete(remotePeerId);
+          input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
           input.setConnectedPeers((current) => current.filter((peer) => peer !== remotePeerId));
         }
       },
@@ -332,8 +340,13 @@ export function createRoomDataMeshRuntime(input: {
             }
           }
         }
+        if (state === "closed" || state === "closing") {
+          peerBufferedAmountBytes.delete(remotePeerId);
+          input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
+        }
       },
       onDataBufferedAmountChange: ({ peerId: remotePeerId, bufferedAmountBytes }) => {
+        peerBufferedAmountBytes.set(remotePeerId, bufferedAmountBytes);
         input.updatePeerBufferedAmountRef.current(remotePeerId, bufferedAmountBytes);
       },
       onStatsSample: ({ peerId: remotePeerId, sample }) => {
@@ -348,6 +361,7 @@ export function createRoomDataMeshRuntime(input: {
           channelKind: "data",
           lastFailureReason: reason
         });
+        input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
       }
     },
     input.iceServers,
@@ -458,7 +472,8 @@ export function createRoomDataMeshRuntime(input: {
         downloadRateKbps: pieceTransferRates.downloadRateKbps,
         candidateType: supervisorState?.lastObservedTransportKind ?? null,
         protocol: supervisorState?.samples[supervisorState.samples.length - 1]?.protocol ?? null,
-        transportScore: supervisorState?.transportScore ?? null
+        transportScore: supervisorState?.transportScore ?? null,
+        bufferedAmountBytes: peerBufferedAmountBytes.get(remotePeerId) ?? null
       };
     }
   });

@@ -1,6 +1,7 @@
 "use client";
 
-import type { PlaybackSnapshot, RoomMember, RoomSnapshot } from "@music-room/shared";
+import { errorCodes, type PlaybackSnapshot, type RoomMember, type RoomSnapshot } from "@music-room/shared";
+import { MusicRoomApiError } from "./music-room-api";
 
 export function formatDuration(durationMs: number) {
   if (!durationMs) {
@@ -239,6 +240,35 @@ function ensurePlaybackTrackMetadata(
 
 export function toUserFacingError(error: unknown) {
   const message = error instanceof Error ? error.message : "请求失败。";
+  const code = error instanceof MusicRoomApiError ? error.code : null;
+
+  if (code === errorCodes.unauthorizedRoomAction) {
+    return "当前账号没有执行这个房间操作的权限。";
+  }
+
+  if (code === errorCodes.roomNotFound) {
+    return "房间不存在或已经被删除。";
+  }
+
+  if (code === errorCodes.trackOwnerOffline) {
+    return "这首歌的上传者当前不在线，暂时无法播放。";
+  }
+
+  if (code === errorCodes.playbackVersionConflict) {
+    return "房间播放状态刚刚被别人改动，请稍后再试。";
+  }
+
+  if (code === errorCodes.realtimeUnavailable) {
+    return "实时同步暂不可用，请稍后再试。";
+  }
+
+  if (code === errorCodes.rateLimited) {
+    return "操作过于频繁，请稍后再试。";
+  }
+
+  if (code === errorCodes.unauthorized) {
+    return "当前登录状态已失效，请重新登录。";
+  }
 
   if (message.includes("Only the host can control playback")) {
     return "只有房主可以控制当前房间的播放。";

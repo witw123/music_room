@@ -199,6 +199,7 @@ function RoomDashboardViewBase({
             {(["queue", "library", "cache", "members"] as TabId[]).map((tab) => (
               <button
                 key={tab}
+                data-testid={`room-tab-${tab}`}
                 onClick={() => handleTabChange(tab)}
                 className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
                   activeTab === tab
