@@ -272,6 +272,26 @@ describe("shouldAcceptIncomingMediaSignal", () => {
     ).toBe(false);
   });
 
+  it("accepts newer transport signals so the media mesh can advance epochs", () => {
+    expect(
+      shouldAcceptIncomingMediaSignal({
+        payload: {
+          roomId: "room_1",
+          fromPeerId: "peer_source",
+          toPeerId: "peer_listener",
+          channelKind: "media",
+          mediaEpoch: 3,
+          transportEpoch: 3,
+          type: "offer",
+          payload: {}
+        },
+        currentPlayback,
+        localPeerId: "peer_listener",
+        currentTransportEpoch: 2
+      })
+    ).toBe(true);
+  });
+
   it("accepts listener answers on the current source peer", () => {
     expect(
       shouldAcceptIncomingMediaSignal({

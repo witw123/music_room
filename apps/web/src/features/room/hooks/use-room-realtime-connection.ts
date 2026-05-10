@@ -98,7 +98,7 @@ export function shouldAcceptIncomingMediaSignal(input: {
     return false;
   }
 
-  if ((input.payload.transportEpoch ?? 0) !== input.currentTransportEpoch) {
+  if ((input.payload.transportEpoch ?? 0) < input.currentTransportEpoch) {
     return false;
   }
 
@@ -1804,6 +1804,13 @@ export function attachRoomSocketHandlers(input: {
         recordEvent: false
       });
       return;
+    }
+
+    if (payload.channelKind === "media") {
+      const incomingTransportEpoch = payload.transportEpoch ?? 0;
+      if (incomingTransportEpoch > input.mediaTransportEpochRef.current) {
+        input.mediaTransportEpochRef.current = incomingTransportEpoch;
+      }
     }
 
     const traceContext =

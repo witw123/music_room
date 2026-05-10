@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -751,6 +752,8 @@ export function useRoomMediaPublicationRuntime(input: {
   updateHostCaptureDiagnostics: (input: any) => void;
   enableTrackCaching: boolean;
 }) {
+  const lastSourceAudioPublishKickRef = useRef<{ key: string; at: number } | null>(null);
+
   const ensureMediaTransportConnected = useCallback(
     async (options?: { forceResync?: boolean; reason?: string; preferPublishedTrack?: boolean }) => {
       const forceResync = options?.forceResync ?? false;
@@ -1251,6 +1254,24 @@ export function useRoomMediaPublicationRuntime(input: {
       hostRelayStream: directRelayStream,
       hasPlayableLiveUpload: !!currentTrackUpload
     });
+    const publishStartedSource = async (reason: string, summary: string) => {
+      input.setAudioUnlockedRef.current(true);
+      input.audioUnlockedRef.current = true;
+      input.updateSourceStartState("starting", { summary });
+      await ensureMediaTransportConnected({
+        preferPublishedTrack: true,
+        forceResync: true,
+        reason
+      });
+      input.updateSourceStartState(
+        input.hostMediaSyncStateRef.current.stage === "published" ? "live" : "starting",
+        input.hostMediaSyncStateRef.current.stage === "published"
+          ? undefined
+          : {
+              summary: "音源端已起播，正在等待真实音轨完成发布"
+            }
+      );
+    };
 
     if (publishSource.publishTarget === "none") {
       input.updateSourceStartState("failed", {
@@ -1266,6 +1287,17 @@ export function useRoomMediaPublicationRuntime(input: {
     }
 
     if (publishSource.readiness !== "ready") {
+      if (publishSource.readiness === "awaiting-audio" && publishSource.audioElement) {
+        const playResult = await roomAudioOutput.playElement(publishSource.audioElement);
+        if (playResult.ok) {
+          await publishStartedSource(
+            "source-audio-started-from-awaiting",
+            "音源端本地音频已起播，正在切入真实发布源"
+          );
+          return;
+        }
+      }
+
       const nextSummary =
         publishSource.readiness === "failed"
           ? `音源端已起播，但发布源不可用：${publishSource.reason ?? publishSource.publishTarget}`
@@ -1285,6 +1317,17 @@ export function useRoomMediaPublicationRuntime(input: {
     const publishAudio = publishSource.audioElement;
     const isElementPlaying = publishAudio ? isAudioElementEffectivelyPlaying(publishAudio) : true;
     if (!isElementPlaying) {
+      if (publishAudio) {
+        const playResult = await roomAudioOutput.playElement(publishAudio);
+        if (playResult.ok) {
+          await publishStartedSource(
+            "source-audio-started-before-publish",
+            `音源端${publishSource.publishTarget}已起播，正在发布真实音轨`
+          );
+          return;
+        }
+      }
+
       input.updateSourceStartState("starting", {
         summary: `音源端已解锁，正在等待${publishSource.publishTarget}真正起播`
       });
@@ -1317,6 +1360,7 @@ export function useRoomMediaPublicationRuntime(input: {
     input.audioUnlockedRef,
     input.currentRoomRef,
     input.getHostRelayStream,
+    input.hostMediaSyncStateRef,
     input.isCurrentSourceOwner,
     input.peerId,
     input.remoteAudioRef,
@@ -1336,6 +1380,120 @@ export function useRoomMediaPublicationRuntime(input: {
   useEffect(() => {
     input.ensureSourcePlaybackStartedRef.current = ensureSourcePlaybackStarted;
   }, [ensureSourcePlaybackStarted, input.ensureSourcePlaybackStartedRef]);
+
+  useEffect(() => {
+    const room = input.roomSnapshot?.room;
+    const audio = input.audioRef.current;
+    if (
+      !room?.id ||
+      !audio ||
+      !input.peerId ||
+      !input.isCurrentSourceOwner ||
+      room.playback.status !== "playing" ||
+      !room.playback.currentTrackId ||
+      room.playback.sourcePeerId !== input.peerId
+    ) {
+      lastSourceAudioPublishKickRef.current = null;
+      return;
+    }
+
+    const kickSourcePublish = (eventName: string) => {
+      const latestRoom = input.currentRoomRef.current;
+      const latestPlayback = latestRoom?.room.playback;
+      if (
+        !latestRoom?.room.id ||
+        latestRoom.room.id !== room.id ||
+        input.activeRouteRoomIdRef.current !== room.id ||
+        latestPlayback?.status !== "playing" ||
+        !latestPlayback.currentTrackId ||
+        latestPlayback.sourcePeerId !== input.peerId
+      ) {
+        return;
+      }
+
+      if (
+        eventName === "timeupdate" &&
+        input.sourceStartState === "live" &&
+        input.hostMediaSyncStateRef.current.stage === "published"
+      ) {
+        return;
+      }
+
+      const audioIsPlayable =
+        isAudioElementEffectivelyPlaying(audio) ||
+        (eventName !== "timeupdate" && !audio.paused && audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA);
+      if (!audioIsPlayable) {
+        return;
+      }
+
+      const now = Date.now();
+      const listenerSetHash = latestRoom.room.members
+        .map((member) => member.peerId)
+        .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== input.peerId)
+        .sort()
+        .join(",");
+      const kickKey = [
+        latestRoom.room.id,
+        latestPlayback.currentTrackId,
+        latestPlayback.mediaEpoch,
+        input.mediaTransportEpochRef.current,
+        listenerSetHash
+      ].join("|");
+      const lastKick = lastSourceAudioPublishKickRef.current;
+      if (lastKick?.key === kickKey && now - lastKick.at < 1_500) {
+        return;
+      }
+      lastSourceAudioPublishKickRef.current = { key: kickKey, at: now };
+
+      void input.ensureSourcePlaybackStartedRef.current();
+      window.setTimeout(() => {
+        if (input.activeRouteRoomIdRef.current !== room.id) {
+          return;
+        }
+        void input.syncHostMediaStreamRef.current({
+          forceResync: true,
+          reason: `source-audio-${eventName}`
+        });
+      }, 0);
+    };
+
+    const handlePlaying = () => kickSourcePublish("playing");
+    const handlePlay = () => kickSourcePublish("play");
+    const handleCanPlay = () => kickSourcePublish("canplay");
+    const handleLoadedMetadata = () => kickSourcePublish("loadedmetadata");
+    const handleTimeUpdate = () => kickSourcePublish("timeupdate");
+
+    audio.addEventListener("playing", handlePlaying);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    kickSourcePublish("effect");
+
+    return () => {
+      audio.removeEventListener("playing", handlePlaying);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+    };
+  }, [
+    input.activeRouteRoomIdRef,
+    input.audioRef,
+    input.currentRoomRef,
+    input.ensureSourcePlaybackStartedRef,
+    input.hostMediaSyncStateRef,
+    input.isCurrentSourceOwner,
+    input.mediaTransportEpochRef,
+    input.peerId,
+    input.roomSnapshot?.room.id,
+    input.roomSnapshot?.room.playback.currentTrackId,
+    input.roomSnapshot?.room.playback.mediaEpoch,
+    input.roomSnapshot?.room.playback.sourcePeerId,
+    input.roomSnapshot?.room.playback.status,
+    input.sourceStartState,
+    input.syncHostMediaStreamRef
+  ]);
 
   useEffect(() => {
     const roomId = input.roomSnapshot?.room.id;
