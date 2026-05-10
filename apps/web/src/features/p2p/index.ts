@@ -22,6 +22,107 @@ import {
 export const p2pFeatureBoundary =
   "P2P feature owns peer connectivity, chunk transfer, cache indexing, and source selection.";
 
+export type TurnConnectivityResult = {
+  reachable: boolean;
+  relayCandidates: number;
+  srflxCandidates: number;
+  hostCandidates: number;
+  totalCandidates: number;
+  gatherDurationMs: number;
+  error?: string;
+};
+
+/**
+ * Tests whether TURN servers are reachable by creating a temporary
+ * RTCPeerConnection with iceTransportPolicy="relay" and checking if any
+ * relay candidates can be gathered.
+ *
+ * This is the definitive browser-side check for TURN availability.
+ */
+export async function testTurnConnectivity(
+  iceServers: IceServerConfig[],
+  timeoutMs = 8_000
+): Promise<TurnConnectivityResult> {
+  const startedAt = performance.now();
+
+  const turnServers: IceServerConfig[] = iceServers.filter((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return urls.some((url) => url.startsWith("turn:") || url.startsWith("turns:"));
+  });
+
+  if (turnServers.length === 0) {
+    return {
+      reachable: false,
+      relayCandidates: 0,
+      srflxCandidates: 0,
+      hostCandidates: 0,
+      totalCandidates: 0,
+      gatherDurationMs: 0,
+      error: "no-turn-servers-configured"
+    };
+  }
+
+  const pc = new RTCPeerConnection({
+    iceServers: turnServers,
+    iceTransportPolicy: "relay"
+  });
+
+  const relayCandidates: RTCIceCandidate[] = [];
+  const srflxCandidates: RTCIceCandidate[] = [];
+  const hostCandidates: RTCIceCandidate[] = [];
+  let gatherError: string | undefined;
+
+  try {
+    const gatherPromise = new Promise<void>((resolve) => {
+      pc.onicegatheringstatechange = () => {
+        if (pc.iceGatheringState === "complete") {
+          resolve();
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (!event.candidate) {
+          return;
+        }
+        if (event.candidate.type === "relay") {
+          relayCandidates.push(event.candidate);
+        } else if (event.candidate.type === "srflx") {
+          srflxCandidates.push(event.candidate);
+        } else if (event.candidate.type === "host") {
+          hostCandidates.push(event.candidate);
+        }
+      };
+    });
+
+    // Create a data channel to trigger ICE candidate gathering
+    pc.createDataChannel("turn-test");
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(resolve, timeoutMs);
+    });
+
+    await Promise.race([gatherPromise, timeoutPromise]);
+  } catch (error) {
+    gatherError = error instanceof Error ? error.message : String(error);
+  }
+
+  const gatherDurationMs = performance.now() - startedAt;
+  pc.close();
+
+  return {
+    reachable: relayCandidates.length > 0,
+    relayCandidates: relayCandidates.length,
+    srflxCandidates: srflxCandidates.length,
+    hostCandidates: hostCandidates.length,
+    totalCandidates: relayCandidates.length + srflxCandidates.length + hostCandidates.length,
+    gatherDurationMs: Math.round(gatherDurationMs),
+    error: gatherError
+  };
+}
+
 export * from "./mesh";
 export * from "./media-mesh";
 export * from "./chunk-scheduler";

@@ -8,6 +8,7 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
+import { testTurnConnectivity } from "@/features/p2p";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -180,6 +181,33 @@ export function useRoomRuntimeLifecycle(input: {
             iceConfigSource: nextIceConfig.source
           })
         });
+
+        // Run TURN connectivity test in background — does not block setup.
+        if (nextIceConfig.source !== "stun-only") {
+          void testTurnConnectivity(nextIceConfig.iceServers).then((result) => {
+            if (cancelled) return;
+            const level: "info" | "warning" | "error" = result.reachable ? "info" : "error";
+            input.recordPeerDiagnostic({
+              peerId: "system",
+              channelKind: "system",
+              direction: "local",
+              event: "turn-connectivity-test",
+              level,
+              summary: result.reachable
+                ? `TURN 中继可达 · ${result.relayCandidates} relay / ${result.totalCandidates} total · ${result.gatherDurationMs}ms`
+                : result.error === "no-turn-servers-configured"
+                  ? "未配置 TURN 服务器"
+                  : `TURN 中继不可达！${result.error ?? "无法收集 relay 候选"} · ${result.gatherDurationMs}ms · 请检查 coturn 是否运行、防火墙端口是否开放`,
+              update: (snapshot) => ({
+                ...snapshot,
+                lastError: result.reachable
+                  ? snapshot.lastError
+                  : "TURN 中继服务器不可达，跨网络用户将无法同步播放。请检查服务器 TURN 端口是否开放。",
+                iceConfigSource: result.reachable ? snapshot.iceConfigSource : "stun-only"
+              })
+            });
+          });
+        }
       } catch (error) {
         if (cancelled) {
           return;
