@@ -145,10 +145,36 @@ function ProductRoomPreview() {
               </div>
             </div>
 
-            <div className="self-center flex h-44 w-44 items-center justify-center rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,rgba(0,112,243,0.38),rgba(8,13,29,0.88))] shadow-[0_24px_80px_rgba(0,112,243,0.22)] sm:h-56 sm:w-56">
-              <div className="flex h-28 w-28 items-center justify-center rounded-full border border-white/[0.12] bg-black/20">
-                <div className="h-8 w-8 rounded-full bg-white/25" />
+            <div className="group relative self-center my-4 flex items-center justify-center">
+              <div className="relative flex h-[11rem] w-[11rem] items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-[0_24px_80px_rgba(0,112,243,0.15)] animate-spin-slow sm:h-[13rem] sm:w-[13rem]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(255,255,255,0.1),transparent_40%)]" />
+                <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_0deg_at_50%_50%,rgba(0,112,243,0.1)_0deg,rgba(0,0,0,0)_90deg,rgba(0,112,243,0.1)_180deg,rgba(0,0,0,0)_270deg,rgba(0,112,243,0.1)_360deg)]" />
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="absolute rounded-full border border-white/[0.02]"
+                    style={{ width: `${100 - index * 15}%`, height: `${100 - index * 15}%` }}
+                  />
+                ))}
+                <div className="relative z-10 flex h-[3.5rem] w-[3.5rem] items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-accent/20 to-blue-500/20 shadow-inner sm:h-[4rem] sm:w-[4rem]">
+                  <div className="h-[1rem] w-[1rem] rounded-full border border-white/5 bg-black shadow-inner sm:h-[1.1rem] sm:w-[1.1rem]" />
+                </div>
               </div>
+
+              <div
+                className="absolute right-[-1.5rem] top-[0.5rem] flex h-[7.5rem] w-[1.75rem] origin-[14px_14px] rotate-[20deg] flex-col items-center sm:right-[-2.2rem] sm:h-[9rem] sm:w-[1.8rem]"
+                style={{ zIndex: 30 }}
+              >
+                <div className="absolute top-0 z-10 flex h-[1.75rem] w-[1.75rem] items-center justify-center rounded-full border-2 border-[#111] bg-gradient-to-br from-neutral-300 to-neutral-600 shadow-xl sm:h-[1.8rem] sm:w-[1.8rem]">
+                  <div className="h-[0.75rem] w-[0.75rem] rounded-full bg-[#111] shadow-inner sm:h-[0.8rem] sm:w-[0.8rem]" />
+                </div>
+                <div className="h-full w-[0.6rem] bg-gradient-to-r from-neutral-400 via-neutral-200 to-neutral-500 pt-[1.75rem] shadow-lg sm:w-[0.65rem] sm:pt-[1.8rem]" />
+                <div className="relative ml-[-0.75rem] h-[2.25rem] w-[1.25rem] skew-x-[15deg] rounded-b-md border-b-2 border-accent bg-[#222] shadow-2xl sm:ml-[-0.85rem] sm:h-[2.4rem] sm:w-[1.4rem]">
+                  <div className="absolute right-0 top-2 h-2 w-2 rounded-full bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+                </div>
+              </div>
+
+              <div className="absolute bottom-[-1.5rem] left-1/2 h-[2rem] w-[80%] -translate-x-1/2 bg-accent/20 blur-[45px] sm:h-[2.5rem]" />
             </div>
 
             <div>

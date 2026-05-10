@@ -134,7 +134,7 @@ function RoomWorkspaceBase({
 
   return (
     <main className="relative flex min-h-screen flex-col bg-background pb-32">
-      <TopBar activeSession={activeSession} onLogout={onLogout} />
+
 
       {roomSnapshot && statusMessage ? (
         <div

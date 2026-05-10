@@ -10,6 +10,7 @@ import { buildAppEntryHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
+import { clearMusicRoomLocalCache } from "@/lib/local-cache";
 
 type AuthMode = "login" | "register";
 
@@ -25,6 +26,7 @@ export function AuthPage() {
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerNickname, setRegisterNickname] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [isClearingCache, setIsClearingCache] = useState(false);
   const {
     activeSession,
     hydrated,
@@ -86,6 +88,20 @@ export function AuthPage() {
     }
   }
 
+  async function handleClearLocalCache() {
+    if (isClearingCache) {
+      return;
+    }
+
+    setIsClearingCache(true);
+
+    try {
+      await clearMusicRoomLocalCache();
+    } finally {
+      window.location.reload();
+    }
+  }
+
   const statusToneClass =
     statusMessage.includes("失败") || statusMessage.includes("错误")
       ? "text-red-400"
@@ -93,7 +109,7 @@ export function AuthPage() {
 
   return (
     <main className="relative flex min-h-screen flex-col bg-[#000000] font-sans selection:bg-accent/30 selection:text-white">
-      <TopBar activeSession={null} />
+      
 
       <div className="relative z-10 mx-auto my-auto flex min-h-[80vh] w-full max-w-5xl flex-col items-center justify-center p-6 lg:p-12">
         <div className="relative flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-transparent lg:flex-row">
@@ -243,7 +259,7 @@ export function AuthPage() {
                 </div>
               )}
 
-              <div className="mt-8 border-t border-white/5 pt-8 text-center">
+              <div className="mt-8 border-t border-white/5 pt-8 text-center flex flex-col gap-4">
                 <p className="text-xs text-white/40">
                   {mode === "login" ? "还没有账号？" : "已有账号？"}
                   <button
@@ -255,6 +271,16 @@ export function AuthPage() {
                     {mode === "login" ? "去注册" : "去登录"}
                   </button>
                 </p>
+                
+                <div className="pt-2">
+                  <button
+                    onClick={handleClearLocalCache}
+                    disabled={isClearingCache}
+                    className="text-[11px] text-white/20 hover:text-white/40 transition-colors uppercase tracking-widest font-bold"
+                  >
+                    {isClearingCache ? "正在清理..." : "清除本地数据缓存"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -180,7 +180,18 @@ export function RoomsHomePage() {
         <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
       </div>
 
-      <TopBar activeSession={activeSession} onLogout={handleLogout} />
+      <div className="absolute right-4 top-6 z-20 sm:right-6 lg:right-8">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleLogout}
+          className="font-medium text-white/40 transition-all hover:bg-white/5 hover:text-white"
+        >
+          退出登录
+        </Button>
+      </div>
+
+
 
       <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:py-14 lg:flex-row lg:gap-16 lg:px-8">
         <div className="z-10 flex flex-1 flex-col items-start justify-center">

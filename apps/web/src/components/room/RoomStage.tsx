@@ -31,107 +31,7 @@ type RoomStageProps = {
   socket: RoomSocket | null;
 };
 
-function getConnectionLabel(
-  mediaConnectionState: RoomMediaConnectionState,
-  isSourceOwner: boolean,
-  mediaConnectedPeersCount: number,
-  onlineMemberCount: number,
-  iceConfigSource: string
-) {
-  if (isSourceOwner) {
-    const listeners = Math.max(0, onlineMemberCount - 1);
 
-    if (listeners === 0) {
-      return "当前没有其他在线成员";
-    }
-
-    if (mediaConnectedPeersCount === 0) {
-      if (iceConfigSource === "stun-only") {
-        return `有 ${listeners} 位成员在线，但当前仅 STUN，TURN 未配置`;
-      }
-
-      return `有 ${listeners} 位成员在线，实时音频尚未接通`;
-    }
-
-    return `已向 ${mediaConnectedPeersCount} 位成员分发实时音频`;
-  }
-
-  if (iceConfigSource === "stun-only") {
-    switch (mediaConnectionState) {
-      case "connecting":
-      case "reconnecting":
-      case "failed":
-        return "当前仅 STUN，跨网环境通常需要 TURN 才能接通实时音频";
-      default:
-        break;
-    }
-  }
-
-  switch (mediaConnectionState) {
-    case "connecting":
-      return "正在连接实时音频";
-    case "buffering":
-      return "已接入音频链路，正在缓冲";
-    case "live":
-      return "已接入实时音频";
-    case "reconnecting":
-      return "实时音频重连中";
-    case "failed":
-      return "实时音频连接失败";
-    default:
-      return "等待当前音源开始播放";
-  }
-}
-
-function getConnectionTone(
-  mediaConnectionState: RoomMediaConnectionState,
-  isSourceOwner: boolean,
-  mediaConnectedPeersCount: number,
-  onlineMemberCount: number
-) {
-  if (isSourceOwner) {
-    return mediaConnectedPeersCount > 0 || onlineMemberCount <= 1 ? "success" : "warning";
-  }
-
-  switch (mediaConnectionState) {
-    case "live":
-      return "success";
-    case "buffering":
-    case "connecting":
-    case "reconnecting":
-      return "warning";
-    case "failed":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function getConnectionTitle(
-  mediaConnectionState: RoomMediaConnectionState,
-  isSourceOwner: boolean,
-  mediaConnectedPeersCount: number,
-  onlineMemberCount: number
-) {
-  if (isSourceOwner) {
-    return mediaConnectedPeersCount > 0 || onlineMemberCount <= 1 ? "本机音源正常" : "等待听众音频接入";
-  }
-
-  switch (mediaConnectionState) {
-    case "live":
-      return "可以听到远端音频";
-    case "buffering":
-      return "音频缓冲中";
-    case "connecting":
-      return "正在接入音频";
-    case "reconnecting":
-      return "音频重连中";
-    case "failed":
-      return "音频连接失败";
-    default:
-      return "等待音源";
-  }
-}
 
 function getSourceModeLabel(
   mediaConnectionState: RoomMediaConnectionState,
@@ -153,12 +53,7 @@ function getSourceModeLabel(
   return "等待远端音频";
 }
 
-const connectionToneClasses = {
-  success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
-  warning: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  danger: "border-red-400/25 bg-red-400/10 text-red-200",
-  neutral: "border-white/[0.07] bg-white/[0.045] text-white/70"
-} as const;
+
 
 function RoomStageBase({
   roomSnapshot,
@@ -186,25 +81,7 @@ function RoomStageBase({
   const compactStage = viewportHeight !== null && viewportHeight < 900;
   const ultraCompactStage = viewportHeight !== null && viewportHeight < 760;
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
-  const connectionLabel = getConnectionLabel(
-    mediaConnectionState,
-    isSourceOwner,
-    mediaConnectedPeersCount,
-    onlineMemberCount,
-    iceConfigSource
-  );
-  const connectionTone = getConnectionTone(
-    mediaConnectionState,
-    isSourceOwner,
-    mediaConnectedPeersCount,
-    onlineMemberCount
-  );
-  const connectionTitle = getConnectionTitle(
-    mediaConnectionState,
-    isSourceOwner,
-    mediaConnectedPeersCount,
-    onlineMemberCount
-  );
+
   const sourceModeLabel = getSourceModeLabel(mediaConnectionState, isSourceOwner, currentTrack);
 
   useEffect(() => {
@@ -280,18 +157,7 @@ function RoomStageBase({
             <span>{sourceModeLabel}</span>
           </div>
 
-          <div
-            className={`flex max-w-full flex-col gap-1 rounded-xl border px-3 py-2 shadow-sm backdrop-blur-md sm:flex-row sm:items-center sm:gap-3 ${
-              connectionToneClasses[connectionTone]
-            }`}
-          >
-            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em]">
-              {connectionTitle}
-            </span>
-            <span className="min-w-0 text-xs leading-5 text-white/[0.72] sm:truncate">
-              {connectionLabel}
-            </span>
-          </div>
+
         </div>
 
         <div className="relative shrink-0 pointer-events-auto">
