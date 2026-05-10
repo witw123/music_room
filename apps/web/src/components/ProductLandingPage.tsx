@@ -67,7 +67,7 @@ function ProductRoomPreview() {
   ];
 
   return (
-    <div className="relative w-full max-w-5xl animate-slide-up select-none">
+    <div className="relative mx-auto w-full max-w-5xl animate-slide-up select-none">
       <div className="absolute -inset-6 rounded-[2rem] bg-[radial-gradient(circle_at_35%_20%,rgba(0,112,243,0.22),transparent_34%),radial-gradient(circle_at_80%_45%,rgba(16,185,129,0.12),transparent_28%)] blur-2xl" />
       <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#05070a] shadow-2xl">
         <div className="flex h-11 items-center border-b border-white/[0.05] px-4">

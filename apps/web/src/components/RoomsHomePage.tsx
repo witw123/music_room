@@ -173,10 +173,16 @@ export function RoomsHomePage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col bg-background pb-24 text-foreground">
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-black pb-24 text-foreground selection:bg-accent/30 selection:text-white">
+      <div className="fixed inset-0 -z-10 bg-black">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+        <div className="absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/20 blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-fuchsia-600/10 blur-[150px]" />
+      </div>
+
       <TopBar activeSession={activeSession} onLogout={handleLogout} />
 
-      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:py-14 lg:flex-row lg:gap-16 lg:px-8">
+      <section className="relative mx-auto flex w-full max-w-[1200px] flex-col gap-10 px-4 py-10 sm:px-6 md:py-14 lg:flex-row lg:gap-16 lg:px-8">
         <div className="z-10 flex flex-1 flex-col items-start justify-center">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.28em] text-accent">Music Room</p>
           <h1 className="mb-4 text-3xl font-extrabold leading-[1.08] tracking-tight text-foreground sm:text-4xl md:text-5xl lg:text-6xl">
@@ -251,7 +257,9 @@ export function RoomsHomePage() {
             <h2 className="text-xl font-bold text-foreground">最近一次协作</h2>
           </div>
 
-          <div className="glass-panel flex h-full min-h-[220px] flex-col justify-between rounded-[28px] p-5 sm:p-6">
+          <div className="glass-panel group relative flex h-full min-h-[220px] flex-col justify-between overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all hover:border-accent/30">
+            <div className="pointer-events-none absolute -left-10 -top-10 z-0 h-32 w-32 rounded-full bg-accent/10 blur-[50px] transition-all group-hover:bg-accent/20" />
+            <div className="relative z-10 flex h-full flex-col">
             {recentRoom ? (
               <div className="flex h-full flex-col gap-5">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-surface-border bg-gradient-to-br from-surface to-surface-hover text-accent shadow-inner">
@@ -315,6 +323,7 @@ export function RoomsHomePage() {
                 </p>
               </div>
             )}
+            </div>
           </div>
         </div>
 
@@ -351,7 +360,7 @@ export function RoomsHomePage() {
                   return (
                     <article
                       key={item.room.id}
-                      className="group flex flex-col gap-4 rounded-3xl border border-surface-border bg-surface p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:bg-surface-hover"
+                      className="group flex flex-col gap-4 rounded-3xl border border-surface-border bg-surface/50 backdrop-blur-md p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:bg-surface-hover hover:border-accent/30"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 font-mono font-bold text-accent">
