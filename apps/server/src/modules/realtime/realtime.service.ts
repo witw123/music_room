@@ -19,7 +19,7 @@ export class RealtimeService {
     const staticIceServers = this.getStaticIceServers(stunUrl);
     const hasStaticTurn = hasTurnIceServer(staticIceServers);
     const turnEnabled = process.env.TURN_ENABLED !== "false";
-    const turnHost = resolveTurnHost();
+    const turnHost = resolveTurnHost(options?.requestHost);
     const turnSecret = process.env.TURN_SHARED_SECRET?.trim();
 
     if (turnEnabled && turnHost && turnSecret) {
@@ -144,7 +144,7 @@ function parsePositiveInt(value?: string | null) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function resolveTurnHost() {
+function resolveTurnHost(requestHost?: string | null) {
   const explicitHost = process.env.TURN_PUBLIC_HOST?.trim();
   if (explicitHost) {
     return explicitHost;
@@ -152,7 +152,21 @@ function resolveTurnHost() {
 
   const appDomain = process.env.APP_DOMAIN?.trim();
   if (appDomain) {
+    // Allow TURN_PUBLIC_HOST_USE_APP_DOMAIN=1 to skip the "turn." prefix
+    // so that TURN shares the same domain as the app (useful when the
+    // reverse proxy / load balancer routes TURN ports on the same host).
+    if (process.env.TURN_PUBLIC_HOST_USE_APP_DOMAIN === "1") {
+      return appDomain;
+    }
     return appDomain.startsWith("turn.") ? appDomain : `turn.${appDomain}`;
+  }
+
+  // Use the request's Host header as a last-resort fallback.
+  // This handles cases where neither TURN_PUBLIC_HOST nor APP_DOMAIN is set
+  // but the ICE endpoint is reached via a known public hostname.
+  const normalizedRequestHost = requestHost?.trim();
+  if (normalizedRequestHost) {
+    return normalizedRequestHost;
   }
 
   return null;

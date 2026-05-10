@@ -33,6 +33,10 @@ services:
   coturn:
     image: coturn/coturn:4.6.3
     container_name: music-room-coturn
+    # host networking avoids mapping dozens of relay ports individually.
+    # On Linux, remove network_mode and uncomment the ports block below
+    # if you prefer bridge networking (required for Docker Desktop on Win/Mac).
+    network_mode: host
     command:
       - -n
       - --log-file=stdout
@@ -45,12 +49,8 @@ services:
       - --external-ip=${TURN_EXTERNAL_IP:-your-public-ip}
       - --no-cli
       - --no-multicast-peers
-    ports:
-      - "3478:3478"
-      - "3478:3478/udp"
-      - "5349:5349"
-      - "5349:5349/udp"
-      - "${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}:${TURN_MIN_PORT:-49160}-${TURN_MAX_PORT:-49200}/udp"
+      - --listening-port=${TURN_PORT:-3478}
+      - --tls-listening-port=${TURN_TLS_PORT:-5349}
 
   server:
     build:
