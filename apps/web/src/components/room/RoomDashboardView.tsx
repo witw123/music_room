@@ -13,6 +13,7 @@ import type {
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
+import { RoomChatOverlay } from "./RoomChatOverlay";
 import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
@@ -176,66 +177,77 @@ function RoomDashboardViewBase({
   );
 
   return (
-    <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100vh-140px)] lg:min-h-0 lg:flex-row lg:gap-0 lg:overflow-hidden">
+    <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100dvh-80px)] lg:min-h-0 lg:flex-row lg:gap-0 lg:overflow-hidden">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
-          <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[30%] lg:top-1/4" />
+          <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[28%] lg:top-1/4" />
         ) : null}
       </div>
 
-      {/* Left: Stage + Inline Queue */}
-      <div className="relative z-10 flex min-h-[min(38svh,25rem)] w-full shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:flex-[3] lg:min-w-0">
-        <div className="flex h-full flex-col lg:flex-row">
-          {/* Queue sidebar inside the stage column */}
-          <div className="hidden lg:flex relative z-20 w-[280px] xl:w-[320px] shrink-0 min-h-0 flex-col border-r border-white/[0.04] overflow-hidden">
-            <div className="shrink-0 border-b border-white/5 px-5 py-4 xl:px-6 xl:py-5">
-              <h3 className="text-xs font-semibold text-white/60 uppercase tracking-wider">播放队列</h3>
-            </div>
-            <div className="hide-scrollbar flex-1 overflow-y-auto px-4 py-3 pb-12 xl:px-5">
-              <QueuePanel
-                queue={roomSnapshot.queue}
-                tracks={roomSnapshot.tracks}
-                currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
-                activeSession={activeSession}
-                hostId={roomSnapshot.room.hostId}
-                canControlPlayback={canControlPlayback}
-                canReorderQueue={canReorderQueue}
-                onPlayQueueItem={onPlayQueueItem}
-                onRemoveQueueItem={onRemoveQueueItem}
-                onReorderQueue={onReorderQueue}
-                onAddToQueue={onAddToQueue}
-              />
-            </div>
-          </div>
+      {/* ══════ LEFT: Immersive Stage ══════ */}
+      <div className="relative z-10 flex min-h-[min(38svh,25rem)] w-full shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:flex-[3] lg:min-w-0 lg:overflow-hidden">
 
-          {/* Vinyl Stage */}
-          <div className="flex-1 min-w-0 min-h-0">
-            <RoomStage
-              roomSnapshot={roomSnapshot}
-              currentTrack={currentTrack}
-              currentTrackDuration={currentTrackDuration}
-              isPlaying={isPlaying}
+        {/* Vinyl + Track Info */}
+        <div className="lg:flex-[2] lg:min-h-0">
+          <RoomStage
+            roomSnapshot={roomSnapshot}
+            currentTrack={currentTrack}
+            currentTrackDuration={currentTrackDuration}
+            isPlaying={isPlaying}
+            activeSession={activeSession}
+            host={host}
+            canDeleteRoom={canDeleteRoom}
+            canDisbandRoom={canDisbandRoom}
+            currentSourceOwnerNickname={currentSourceOwnerNickname}
+            mediaConnectionState={mediaConnectionState}
+            mediaConnectedPeersCount={mediaConnectedPeersCount}
+            iceConfigSource={iceConfigSource}
+            onCopyJoinCode={onCopyJoinCode}
+            onLeaveRoom={onLeaveRoom}
+            onDeleteRoom={onDeleteRoom}
+            socket={socket}
+            hideChat
+          />
+        </div>
+
+        {/* Inline Queue — desktop only */}
+        <div className="hidden lg:flex lg:flex-[1] lg:min-h-[120px] flex-col border-t border-white/[0.06] overflow-hidden">
+          <div className="shrink-0 flex items-center justify-between px-6 py-3 xl:px-8">
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">播放队列</h3>
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-bold text-white/30">{roomSnapshot.queue.length} 首</span>
+          </div>
+          <div className="hide-scrollbar flex-1 min-h-0 overflow-y-auto px-5 pb-4 xl:px-7">
+            <QueuePanel
+              queue={roomSnapshot.queue}
+              tracks={roomSnapshot.tracks}
+              currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
               activeSession={activeSession}
-              host={host}
-              canDeleteRoom={canDeleteRoom}
-              canDisbandRoom={canDisbandRoom}
-              currentSourceOwnerNickname={currentSourceOwnerNickname}
-              mediaConnectionState={mediaConnectionState}
-              mediaConnectedPeersCount={mediaConnectedPeersCount}
-              iceConfigSource={iceConfigSource}
-              onCopyJoinCode={onCopyJoinCode}
-              onLeaveRoom={onLeaveRoom}
-              onDeleteRoom={onDeleteRoom}
-              socket={socket}
+              hostId={roomSnapshot.room.hostId}
+              canControlPlayback={canControlPlayback}
+              canReorderQueue={canReorderQueue}
+              onPlayQueueItem={onPlayQueueItem}
+              onRemoveQueueItem={onRemoveQueueItem}
+              onReorderQueue={onReorderQueue}
+              onAddToQueue={onAddToQueue}
             />
           </div>
         </div>
+
+        {/* Chat — desktop only, pinned at bottom */}
+        <div className="hidden lg:block shrink-0 border-t border-white/[0.06] px-6 py-3 xl:px-8">
+          <RoomChatOverlay
+            roomId={roomSnapshot.room.id}
+            activeSession={activeSession}
+            socket={socket}
+            compact
+          />
+        </div>
       </div>
 
-      {/* Right: Tabbed Panel */}
-      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl lg:min-h-0 lg:w-[420px] xl:w-[480px] lg:flex-none lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
+      {/* ══════ RIGHT: Management Panel ══════ */}
+      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl lg:min-h-0 lg:flex-[2] lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
         <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/72 px-4 pb-3 pt-3 sm:px-6 sm:pt-5">
-          <div className="mb-3 hidden grid-cols-3 gap-2 text-[10px] font-medium text-foreground-muted sm:grid">
+          <div className="mb-3 hidden grid-cols-3 gap-2 text-[10px] font-medium text-foreground-muted lg:grid">
             <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
               <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">Audio</span>
               <strong className="mt-1 block truncate text-xs font-semibold text-white">

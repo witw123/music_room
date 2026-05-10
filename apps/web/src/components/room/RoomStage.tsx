@@ -29,6 +29,7 @@ type RoomStageProps = {
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   socket: RoomSocket | null;
+  hideChat?: boolean;
 };
 
 
@@ -71,7 +72,8 @@ function RoomStageBase({
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom,
-  socket
+  socket,
+  hideChat
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
@@ -335,15 +337,17 @@ function RoomStageBase({
           </p>
         </div>
 
-        <div className={`hidden w-full sm:block ${ultraCompactStage ? "max-w-[460px]" : compactStage ? "max-w-[500px]" : "max-w-[540px]"}`}>
-          <RoomChatOverlay
-            roomId={roomSnapshot.room.id}
-            activeSession={activeSession}
-            socket={socket}
-            compact={compactStage}
-            ultraCompact={ultraCompactStage}
-          />
-        </div>
+        {!hideChat ? (
+          <div className={`hidden w-full sm:block ${ultraCompactStage ? "max-w-[460px]" : compactStage ? "max-w-[500px]" : "max-w-[540px]"}`}>
+            <RoomChatOverlay
+              roomId={roomSnapshot.room.id}
+              activeSession={activeSession}
+              socket={socket}
+              compact={compactStage}
+              ultraCompact={ultraCompactStage}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );
