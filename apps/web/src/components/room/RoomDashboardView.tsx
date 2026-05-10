@@ -176,56 +176,64 @@ function RoomDashboardViewBase({
   );
 
   return (
-    <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100vh-140px)] lg:min-h-0 lg:flex-row lg:gap-4 xl:gap-5 lg:px-4 xl:px-5 lg:overflow-hidden">
+    <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100vh-140px)] lg:min-h-0 lg:flex-row lg:gap-0 lg:overflow-hidden">
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
         {isPlaying ? (
-          <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:top-1/4" />
+          <div className="absolute left-1/2 top-24 h-[58vw] w-[58vw] -translate-x-1/2 rounded-full bg-accent/6 blur-[110px] sm:h-[46vw] sm:w-[46vw] lg:left-[30%] lg:top-1/4" />
         ) : null}
       </div>
 
-      <div className="hidden lg:flex relative z-20 w-[260px] xl:w-[320px] shrink-0 min-h-0 flex-col rounded-2xl border border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl shadow-xl overflow-hidden">
-        <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/72 px-4 py-4 xl:px-6 xl:py-5">
-           <h3 className="text-sm font-semibold text-white uppercase tracking-wider">播放队列</h3>
-        </div>
-        <div className="hide-scrollbar flex-1 overflow-y-auto px-4 py-4 pb-12 xl:px-6 xl:py-5">
-          <QueuePanel
-            queue={roomSnapshot.queue}
-            tracks={roomSnapshot.tracks}
-            currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
-            activeSession={activeSession}
-            hostId={roomSnapshot.room.hostId}
-            canControlPlayback={canControlPlayback}
-            canReorderQueue={canReorderQueue}
-            onPlayQueueItem={onPlayQueueItem}
-            onRemoveQueueItem={onRemoveQueueItem}
-            onReorderQueue={onReorderQueue}
-            onAddToQueue={onAddToQueue}
-          />
+      {/* Left: Stage + Inline Queue */}
+      <div className="relative z-10 flex min-h-[min(38svh,25rem)] w-full shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:flex-[3] lg:min-w-0">
+        <div className="flex h-full flex-col lg:flex-row">
+          {/* Queue sidebar inside the stage column */}
+          <div className="hidden lg:flex relative z-20 w-[280px] xl:w-[320px] shrink-0 min-h-0 flex-col border-r border-white/[0.04] overflow-hidden">
+            <div className="shrink-0 border-b border-white/5 px-5 py-4 xl:px-6 xl:py-5">
+              <h3 className="text-xs font-semibold text-white/60 uppercase tracking-wider">播放队列</h3>
+            </div>
+            <div className="hide-scrollbar flex-1 overflow-y-auto px-4 py-3 pb-12 xl:px-5">
+              <QueuePanel
+                queue={roomSnapshot.queue}
+                tracks={roomSnapshot.tracks}
+                currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
+                activeSession={activeSession}
+                hostId={roomSnapshot.room.hostId}
+                canControlPlayback={canControlPlayback}
+                canReorderQueue={canReorderQueue}
+                onPlayQueueItem={onPlayQueueItem}
+                onRemoveQueueItem={onRemoveQueueItem}
+                onReorderQueue={onReorderQueue}
+                onAddToQueue={onAddToQueue}
+              />
+            </div>
+          </div>
+
+          {/* Vinyl Stage */}
+          <div className="flex-1 min-w-0 min-h-0">
+            <RoomStage
+              roomSnapshot={roomSnapshot}
+              currentTrack={currentTrack}
+              currentTrackDuration={currentTrackDuration}
+              isPlaying={isPlaying}
+              activeSession={activeSession}
+              host={host}
+              canDeleteRoom={canDeleteRoom}
+              canDisbandRoom={canDisbandRoom}
+              currentSourceOwnerNickname={currentSourceOwnerNickname}
+              mediaConnectionState={mediaConnectionState}
+              mediaConnectedPeersCount={mediaConnectedPeersCount}
+              iceConfigSource={iceConfigSource}
+              onCopyJoinCode={onCopyJoinCode}
+              onLeaveRoom={onLeaveRoom}
+              onDeleteRoom={onDeleteRoom}
+              socket={socket}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="relative z-10 flex min-h-[min(38svh,25rem)] w-full shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:flex-1 lg:min-w-[340px]">
-        <RoomStage
-          roomSnapshot={roomSnapshot}
-          currentTrack={currentTrack}
-          currentTrackDuration={currentTrackDuration}
-          isPlaying={isPlaying}
-          activeSession={activeSession}
-          host={host}
-          canDeleteRoom={canDeleteRoom}
-          canDisbandRoom={canDisbandRoom}
-          currentSourceOwnerNickname={currentSourceOwnerNickname}
-          mediaConnectionState={mediaConnectionState}
-          mediaConnectedPeersCount={mediaConnectedPeersCount}
-          iceConfigSource={iceConfigSource}
-          onCopyJoinCode={onCopyJoinCode}
-          onLeaveRoom={onLeaveRoom}
-          onDeleteRoom={onDeleteRoom}
-          socket={socket}
-        />
-      </div>
-
-      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl lg:min-h-0 lg:w-[300px] xl:w-[360px] lg:flex-none lg:shrink-0 lg:rounded-2xl lg:border lg:shadow-xl">
+      {/* Right: Tabbed Panel */}
+      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl lg:min-h-0 lg:w-[420px] xl:w-[480px] lg:flex-none lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
         <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/72 px-4 pb-3 pt-3 sm:px-6 sm:pt-5">
           <div className="mb-3 hidden grid-cols-3 gap-2 text-[10px] font-medium text-foreground-muted sm:grid">
             <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
