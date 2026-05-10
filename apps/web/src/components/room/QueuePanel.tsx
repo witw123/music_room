@@ -237,12 +237,16 @@ function QueuePanelBase({
                     data-queue-item-id={item.id}
                     variant="ghost"
                     size="sm"
-                    className={isCurrent ? "pointer-events-none opacity-0" : ""}
+                    className={
+                      isCurrent
+                        ? "pointer-events-none border border-accent/20 bg-accent/10 text-accent"
+                        : ""
+                    }
                     disabled={!canControlPlayback || isCurrent}
                     onClick={() => void onPlayQueueItem(item.id)}
                     type="button"
                   >
-                    播放
+                    {isCurrent ? "播放中" : "播放"}
                   </Button>
                   <Button
                     data-testid="queue-item-remove-button"

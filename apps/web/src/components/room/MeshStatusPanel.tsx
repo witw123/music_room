@@ -423,11 +423,11 @@ function MeshStatusPanelBase({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
-            Developer
+            Advanced
           </p>
-          <h2 className="text-sm font-bold text-foreground">连接诊断</h2>
+          <h2 className="text-sm font-bold text-foreground">高级连接诊断</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            默认只展示摘要；展开后保留关键链路、音频和错误信息。
+            默认只展示摘要；播放无声或频繁重连时，再展开查看 ICE、音频轨道和最近错误。
           </p>
         </div>
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsOpen((value) => !value)}>
@@ -445,7 +445,13 @@ function MeshStatusPanelBase({
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           Media: {mediaReadyCount || mediaConnectedPeersCount}
         </span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
+        <span
+          className={`rounded border px-2 py-1 ${
+            degradedCount > 0
+              ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
+              : "border-surface-border bg-background/40"
+          }`}
+        >
           异常: {degradedCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">

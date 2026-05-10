@@ -10,8 +10,7 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { musicRoomApi } from "@/lib/music-room-api";
 import {
   buildAppEntryHref,
-  buildWorkspaceAuthHref,
-  githubReleasesUrl
+  buildWorkspaceAuthHref
 } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
@@ -155,35 +154,50 @@ export function HomeRoomSection() {
   }
 
   const visibleRooms = useMemo(
-    () => availableRooms.filter((room) => room.room.id !== recentRoom?.room.id).slice(0, 6),
+    () => availableRooms.filter((room) => room.room.id !== recentRoom?.room.id).slice(0, 3),
     [availableRooms, recentRoom?.room.id]
   );
 
   return (
-    <section className="mb-40 w-full">
-      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="rounded-[30px] border border-white/10 bg-[#050505] p-6 shadow-2xl sm:p-8">
+    <section id="try" className="mx-auto w-full max-w-[1120px] px-5 pb-24 sm:px-6 md:pb-32">
+      <div className="grid gap-8 border-y border-white/[0.05] py-12 md:grid-cols-[0.82fr_1.18fr] md:py-16">
+        <div>
+          <p className="font-mono text-xs font-bold uppercase tracking-[0.24em] text-accent">
+            Online trial
+          </p>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white md:text-5xl">
+            不下载也能先进入网页房间
+          </h2>
+          <p className="mt-5 text-base leading-8 text-white/[0.56]">
+            网页端保留创建房间、房间码加入、公开房大厅和最近房间恢复能力，适合快速演示项目主流程。
+          </p>
+          <div className="mt-8 grid gap-3 sm:grid-cols-3 md:grid-cols-1">
+            {["创建公开或私密房间", "用 6 位房间码加入", "恢复最近协作房间"].map((item) => (
+              <div key={item} className="flex items-center gap-3 text-sm text-white/70">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/[0.06] bg-[#05070a] p-5 shadow-2xl sm:p-6">
           {hydrated && activeSession ? (
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
+                  <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-emerald-300">
                     Signed in
                   </p>
-                  <h3 className="text-2xl font-bold text-white">
-                    {activeSession.nickname}
-                  </h3>
-                  <p className="mt-2 text-sm text-white/45">
-                    直接从网页创建或加入音乐房。
-                  </p>
+                  <h3 className="mt-2 text-2xl font-bold text-white">{activeSession.nickname}</h3>
+                  <p className="mt-2 text-sm text-white/[0.45]">可以直接创建、加入或恢复房间。</p>
                 </div>
-
                 <Link href={workspaceEntryHref as Route}>
                   <Button
-                    variant="ghost"
-                    className="border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    variant="outline"
+                    className="w-full border-white/[0.08] bg-white/[0.04] text-white hover:bg-white/[0.08] sm:w-auto"
                   >
-                    打开完整房间页
+                    打开房间页
                   </Button>
                 </Link>
               </div>
@@ -191,6 +205,7 @@ export function HomeRoomSection() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button
                   size="lg"
+                  disabled={isPending}
                   onClick={() => startTransition(() => void handleCreateRoom("public"))}
                   type="button"
                 >
@@ -199,7 +214,8 @@ export function HomeRoomSection() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  className="border-white/[0.08] bg-white/[0.04] text-white hover:bg-white/[0.08]"
+                  disabled={isPending}
                   onClick={() => startTransition(() => void handleCreateRoom("private"))}
                   type="button"
                 >
@@ -207,139 +223,110 @@ export function HomeRoomSection() {
                 </Button>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/45">
-                      Join with code
-                    </p>
-                    <p className="mt-1 text-sm text-white/55">
-                      输入房间码，直接进入音乐房。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 font-mono text-base uppercase text-white placeholder:font-sans placeholder:normal-case placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-accent"
-                    value={joinCode}
-                    onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-                    placeholder="输入 6 位房间码"
-                  />
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="border-white/10 bg-white/5 text-white hover:bg-white/10"
-                    disabled={!joinCode.trim()}
-                    onClick={() => startTransition(() => void handleJoinRoom(joinCode))}
-                    type="button"
-                  >
-                    立即加入
-                  </Button>
-                </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <input
+                  className="min-w-0 rounded-lg border border-white/[0.08] bg-black/40 px-4 py-3 font-mono text-base uppercase text-white placeholder:font-sans placeholder:normal-case placeholder:text-white/25 focus:outline-none focus:ring-2 focus:ring-accent"
+                  value={joinCode}
+                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                  placeholder="输入 6 位房间码"
+                />
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white/[0.08] bg-white/[0.04] text-white hover:bg-white/[0.08]"
+                  disabled={!joinCode.trim() || isPending}
+                  onClick={() => startTransition(() => void handleJoinRoom(joinCode))}
+                  type="button"
+                >
+                  立即加入
+                </Button>
               </div>
 
               {recentRoom ? (
-                <div className="rounded-2xl border border-accent/20 bg-accent/10 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-accent">
-                        Recent room
-                      </p>
-                      <h4 className="mt-2 font-mono text-lg font-bold text-white">
-                        {recentRoom.room.joinCode}
-                      </h4>
-                      <p className="mt-2 text-sm text-white/60">
-                        {getOnlineMemberCount(recentRoom.room.members)} 人在线，可继续恢复协作。
-                      </p>
-                    </div>
+                <button
+                  className="rounded-xl border border-accent/25 bg-accent/10 p-4 text-left transition-colors hover:bg-accent/15"
+                  disabled={isPending}
+                  onClick={() => startTransition(() => void handleReturnToRecentRoom())}
+                  type="button"
+                >
+                  <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent">
+                    Recent room
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-4">
+                    <span className="font-mono text-lg font-bold text-white">
+                      {recentRoom.room.joinCode}
+                    </span>
+                    <span className="text-sm text-white/[0.55]">
+                      {getOnlineMemberCount(recentRoom.room.members)} 人在线
+                    </span>
+                  </div>
+                </button>
+              ) : null}
 
-                    <Button
-                      variant="glass"
-                      className="border-accent/30 hover:border-accent hover:bg-accent/10"
-                      onClick={() => startTransition(() => void handleReturnToRecentRoom())}
-                      type="button"
-                    >
-                      回到最近房间
-                    </Button>
+              {visibleRooms.length > 0 ? (
+                <div>
+                  <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-white/[0.35]">
+                    Public rooms
+                  </p>
+                  <div className="grid gap-2">
+                    {visibleRooms.map((room) => (
+                      <button
+                        key={room.room.id}
+                        className="flex items-center justify-between rounded-lg border border-transparent bg-white/[0.025] px-4 py-3 text-left transition-colors hover:border-white/[0.05] hover:bg-white/[0.06]"
+                        disabled={isPending}
+                        onClick={() => startTransition(() => void handleJoinRoom(room.room.joinCode))}
+                        type="button"
+                      >
+                        <span className="font-mono text-sm font-semibold text-white">{room.room.joinCode}</span>
+                        <span className="text-xs text-white/[0.45]">
+                          {getOnlineMemberCount(room.room.members)} 人在线
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               ) : null}
 
-              {statusMessage ? (
-                <p className="text-sm text-red-400">{statusMessage}</p>
-              ) : null}
+              {statusMessage ? <p className="text-sm text-red-400">{statusMessage}</p> : null}
             </div>
           ) : (
-            <div className="flex h-full flex-col justify-between gap-8">
+            <div className="grid gap-6">
               <div>
-                
-                <h3 className="text-2xl font-bold text-white md:text-3xl">
-                  网页体验
-                </h3>
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-white/55 md:text-base">
-                  登录后可以直接在网页中创建房间、加入房间、恢复最近房间，再进入完整的实时音乐房。
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-white/[0.35]">
+                  Guest view
+                </p>
+                <h3 className="mt-2 text-2xl font-bold text-white">登录后体验完整网页房间</h3>
+                <p className="mt-3 text-sm leading-7 text-white/50">
+                  你可以先进入大厅，也可以登录后创建房间、导入本地音乐并邀请成员加入。
                 </p>
               </div>
-
               <div className="grid gap-3 sm:grid-cols-2">
                 <Link href={authEntryHref as Route}>
                   <Button size="lg" className="w-full">
-                    房间功能区
+                    在线体验
                   </Button>
                 </Link>
                 <Link href={workspaceEntryHref as Route}>
                   <Button
                     size="lg"
                     variant="outline"
-                    className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    className="w-full border-white/[0.08] bg-white/[0.04] text-white hover:bg-white/[0.08]"
                   >
                     浏览房间大厅
                   </Button>
                 </Link>
               </div>
-
               <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  {
-                    title: "创建房间",
-                    body: "公开房与私密房都能直接在网页里建立。"
-                  },
-                  {
-                    title: "房间码加入",
-                    body: "输入房间码后直达房间，不再要求客户端专用入口。"
-                  },
-                  {
-                    title: "恢复最近房间",
-                    body: "登录后继续上一场协作，不必重新找房。"
-                  }
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-2xl border border-white/8 bg-white/[0.03] p-4"
-                  >
-                    <h4 className="text-sm font-semibold text-white">{item.title}</h4>
-                    <p className="mt-2 text-xs leading-6 text-white/45">{item.body}</p>
+                {["创建房间", "导入音乐", "同步播放"].map((item) => (
+                  <div key={item} className="rounded-lg border border-transparent bg-white/[0.025] p-4">
+                    <p className="text-sm font-semibold text-white">{item}</p>
+                    <p className="mt-2 text-xs leading-5 text-white/[0.42]">网页端可验证核心流程。</p>
                   </div>
                 ))}
               </div>
-
-              <p className="text-sm text-white/35">
-                仍然建议下载客户端获得更稳定的本地播放与 P2P 体验。
-                <Link
-                  href={githubReleasesUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-2 text-accent hover:text-white"
-                >
-                  前往下载
-                </Link>
-              </p>
             </div>
           )}
         </div>
-
-        
       </div>
     </section>
   );

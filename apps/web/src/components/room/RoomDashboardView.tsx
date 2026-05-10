@@ -67,7 +67,7 @@ type RoomDashboardViewProps = {
 };
 
 const tabLabels: Record<TabId, string> = {
-  queue: "共享队列",
+  queue: "队列",
   library: "曲库",
   cache: "缓存",
   members: "成员"
@@ -172,7 +172,7 @@ function RoomDashboardViewBase({
         ) : null}
       </div>
 
-      <div className="relative z-10 flex min-h-[min(54svh,34rem)] w-full shrink-0 flex-col lg:h-full lg:w-[55%] xl:w-[60%]">
+      <div className="relative z-10 flex min-h-[min(38svh,25rem)] w-full shrink-0 flex-col sm:min-h-[min(50svh,32rem)] lg:h-full lg:min-h-0 lg:w-[55%] xl:w-[60%]">
         <RoomStage
           roomSnapshot={roomSnapshot}
           currentTrack={currentTrack}
@@ -193,8 +193,29 @@ function RoomDashboardViewBase({
         />
       </div>
 
-      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[28px] border-t border-white/8 bg-[#050505]/92 backdrop-blur-2xl lg:min-h-0 lg:rounded-none lg:rounded-tl-[28px] lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
-        <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/70 px-4 pb-3 pt-4 sm:px-6 sm:pt-5">
+      <div className="relative z-20 flex w-full min-h-0 flex-1 flex-col rounded-t-[24px] border-t border-white/[0.06] bg-[#050505]/94 backdrop-blur-2xl lg:min-h-0 lg:rounded-none lg:rounded-tl-[28px] lg:border-l lg:border-t-0 lg:shadow-[-20px_0_50px_rgba(0,0,0,0.5)]">
+        <div className="sticky top-0 z-30 shrink-0 border-b border-white/5 bg-gradient-to-b from-[#050505] via-[#050505]/98 to-[#050505]/72 px-4 pb-3 pt-3 sm:px-6 sm:pt-5">
+          <div className="mb-3 hidden grid-cols-3 gap-2 text-[10px] font-medium text-foreground-muted sm:grid">
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
+              <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">Audio</span>
+              <strong className="mt-1 block truncate text-xs font-semibold text-white">
+                {localMemberState?.playbackStatus.label ?? mediaConnectionState}
+              </strong>
+            </div>
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
+              <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">Peers</span>
+              <strong className="mt-1 block truncate text-xs font-semibold text-white">
+                Data {connectedPeersCount} / Media {mediaConnectedPeersCount}
+              </strong>
+            </div>
+            <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2.5 py-2">
+              <span className="block font-mono uppercase tracking-[0.16em] text-white/[0.35]">ICE</span>
+              <strong className="mt-1 block truncate text-xs font-semibold text-white">
+                {iceConfigSource}
+              </strong>
+            </div>
+          </div>
+
           <div className="flex items-center gap-1 rounded-xl bg-white/5 p-1">
             {(["queue", "library", "cache", "members"] as TabId[]).map((tab) => (
               <button

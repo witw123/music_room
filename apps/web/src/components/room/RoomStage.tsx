@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
 import { RoomChatOverlay } from "./RoomChatOverlay";
+import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -82,7 +83,82 @@ function getConnectionLabel(
   }
 }
 
-import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
+function getConnectionTone(
+  mediaConnectionState: RoomMediaConnectionState,
+  isSourceOwner: boolean,
+  mediaConnectedPeersCount: number,
+  onlineMemberCount: number
+) {
+  if (isSourceOwner) {
+    return mediaConnectedPeersCount > 0 || onlineMemberCount <= 1 ? "success" : "warning";
+  }
+
+  switch (mediaConnectionState) {
+    case "live":
+      return "success";
+    case "buffering":
+    case "connecting":
+    case "reconnecting":
+      return "warning";
+    case "failed":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+function getConnectionTitle(
+  mediaConnectionState: RoomMediaConnectionState,
+  isSourceOwner: boolean,
+  mediaConnectedPeersCount: number,
+  onlineMemberCount: number
+) {
+  if (isSourceOwner) {
+    return mediaConnectedPeersCount > 0 || onlineMemberCount <= 1 ? "本机音源正常" : "等待听众音频接入";
+  }
+
+  switch (mediaConnectionState) {
+    case "live":
+      return "可以听到远端音频";
+    case "buffering":
+      return "音频缓冲中";
+    case "connecting":
+      return "正在接入音频";
+    case "reconnecting":
+      return "音频重连中";
+    case "failed":
+      return "音频连接失败";
+    default:
+      return "等待音源";
+  }
+}
+
+function getSourceModeLabel(
+  mediaConnectionState: RoomMediaConnectionState,
+  isSourceOwner: boolean,
+  currentTrack: TrackMeta | null
+) {
+  if (!currentTrack) {
+    return "未选择歌曲";
+  }
+
+  if (isSourceOwner) {
+    return "本机发布";
+  }
+
+  if (mediaConnectionState === "live" || mediaConnectionState === "buffering") {
+    return "远端实时音频";
+  }
+
+  return "等待远端音频";
+}
+
+const connectionToneClasses = {
+  success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
+  warning: "border-amber-400/25 bg-amber-400/10 text-amber-200",
+  danger: "border-red-400/25 bg-red-400/10 text-red-200",
+  neutral: "border-white/[0.07] bg-white/[0.045] text-white/70"
+} as const;
 
 function RoomStageBase({
   roomSnapshot,
@@ -107,9 +183,29 @@ function RoomStageBase({
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const isSourceOwner =
     !!activeSession && activeSession.userId === roomSnapshot.room.playback.sourceSessionId;
-  const compactStage = viewportHeight !== null && viewportHeight < 820;
-  const ultraCompactStage = viewportHeight !== null && viewportHeight < 720;
+  const compactStage = viewportHeight !== null && viewportHeight < 900;
+  const ultraCompactStage = viewportHeight !== null && viewportHeight < 760;
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
+  const connectionLabel = getConnectionLabel(
+    mediaConnectionState,
+    isSourceOwner,
+    mediaConnectedPeersCount,
+    onlineMemberCount,
+    iceConfigSource
+  );
+  const connectionTone = getConnectionTone(
+    mediaConnectionState,
+    isSourceOwner,
+    mediaConnectedPeersCount,
+    onlineMemberCount
+  );
+  const connectionTitle = getConnectionTitle(
+    mediaConnectionState,
+    isSourceOwner,
+    mediaConnectedPeersCount,
+    onlineMemberCount
+  );
+  const sourceModeLabel = getSourceModeLabel(mediaConnectionState, isSourceOwner, currentTrack);
 
   useEffect(() => {
     const updateViewportHeight = () => {
@@ -181,18 +277,19 @@ function RoomStageBase({
               </>
             ) : null}
             <span>·</span>
-            <span
-              className={
-                mediaConnectionState === "live" || isSourceOwner ? "text-green-400" : "text-yellow-400"
-              }
-            >
-              {getConnectionLabel(
-                mediaConnectionState,
-                isSourceOwner,
-                mediaConnectedPeersCount,
-                onlineMemberCount,
-                iceConfigSource
-              )}
+            <span>{sourceModeLabel}</span>
+          </div>
+
+          <div
+            className={`flex max-w-full flex-col gap-1 rounded-xl border px-3 py-2 shadow-sm backdrop-blur-md sm:flex-row sm:items-center sm:gap-3 ${
+              connectionToneClasses[connectionTone]
+            }`}
+          >
+            <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em]">
+              {connectionTitle}
+            </span>
+            <span className="min-w-0 text-xs leading-5 text-white/[0.72] sm:truncate">
+              {connectionLabel}
             </span>
           </div>
         </div>
@@ -247,7 +344,7 @@ function RoomStageBase({
                     解散房间
                   </button>
                   {!canDisbandRoom ? (
-                    <p className="px-3 pb-2 text-[11px] leading-5 text-white/45">
+                    <p className="px-3 pb-2 text-[11px] leading-5 text-white/[0.45]">
                       只有全部上传者都在线时才能解散房间。
                     </p>
                   ) : null}
@@ -270,9 +367,9 @@ function RoomStageBase({
             <div
               className={`relative flex items-center justify-center overflow-hidden rounded-full border border-white/5 bg-gradient-to-tr from-[#020202] via-[#111111] to-[#1a1a1a] shadow-2xl transition-all duration-1000 ${
                 ultraCompactStage
-                  ? "h-[clamp(9.5rem,28vh,14rem)] w-[clamp(9.5rem,28vh,14rem)]"
+                  ? "h-[clamp(7.5rem,20vh,9.5rem)] w-[clamp(7.5rem,20vh,9.5rem)]"
                   : compactStage
-                    ? "h-[clamp(10.5rem,31vh,17rem)] w-[clamp(10.5rem,31vh,17rem)]"
+                    ? "h-[clamp(8rem,22vh,11rem)] w-[clamp(8rem,22vh,11rem)]"
                     : "h-[clamp(11rem,34vh,20rem)] w-[clamp(11rem,34vh,20rem)]"
               } ${isPlaying ? "animate-spin-slow" : ""}`}
             >
@@ -327,13 +424,13 @@ function RoomStageBase({
                   className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.22em] ${
                     isPlaying
                       ? "border border-accent/30 bg-accent/20 text-accent"
-                      : "border border-white/10 bg-white/10 text-white/55"
+                      : "border border-white/10 bg-white/10 text-white/[0.55]"
                   }`}
                 >
                   {isPlaying ? "正在播放" : "准备就绪"}
                 </span>
                 {currentSourceOwnerNickname ? (
-                  <span className={`flex items-center gap-1 text-white/45 ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
+                  <span className={`flex items-center gap-1 text-white/[0.45] ${compactStage ? "text-[9px]" : "text-[10px]"}`}>
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
@@ -346,9 +443,9 @@ function RoomStageBase({
               <h2
                 className={`max-w-[18ch] font-extrabold tracking-tight text-white drop-shadow-lg ${
                   ultraCompactStage
-                    ? "text-[2.2rem] leading-[0.96]"
+                    ? "text-[1.55rem] leading-[1]"
                     : compactStage
-                      ? "text-[2.7rem] leading-[0.98]"
+                      ? "text-[1.85rem] leading-[1]"
                       : "text-2xl leading-[1.06] sm:text-3xl md:text-[38px] lg:text-[44px]"
                 }`}
               >
@@ -372,7 +469,7 @@ function RoomStageBase({
           </p>
         </div>
 
-        <div className={`w-full ${ultraCompactStage ? "max-w-[460px]" : compactStage ? "max-w-[500px]" : "max-w-[540px]"}`}>
+        <div className={`hidden w-full sm:block ${ultraCompactStage ? "max-w-[460px]" : compactStage ? "max-w-[500px]" : "max-w-[540px]"}`}>
           <RoomChatOverlay
             roomId={roomSnapshot.room.id}
             activeSession={activeSession}

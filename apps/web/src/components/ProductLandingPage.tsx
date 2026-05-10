@@ -1,345 +1,370 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { HomeRoomSection } from "@/components/HomeRoomSection";
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
-import { githubReleasesUrl } from "@/lib/client-shell";
+import { buildAppEntryHref, githubReleasesUrl } from "@/lib/client-shell";
 
-const featureSections = [
+const githubRepositoryUrl = "https://github.com/witw123/music_room";
+
+const projectStats = [
+  { label: "Realtime stack", value: "WebRTC + WebSocket" },
+  { label: "Audio model", value: "Local-first" },
+  { label: "Client shells", value: "Web / Desktop / Android" },
+  { label: "Distribution", value: "Open source" }
+];
+
+const capabilities = [
   {
-    eyebrow: "房间系统",
-    title: "每一个房间都与众不同",
-    body: "所有成员将在同一播放序列，一起协作，构建音乐舞台。",
-    bullets: ["无限制创建房间", "可开放可私密的房间机制", "邀请码加入房间，一键直达"]
+    eyebrow: "Room workflow",
+    title: "房间、队列和成员状态在同一个工作台里完成",
+    body: "创建公开或私密房间后，成员用房间码加入，共享同一条播放队列、当前歌曲和在线状态。",
+    points: ["公开 / 私密房间", "房间码直达", "队列协作"]
   },
   {
-    eyebrow: "实时同步",
-    title: "歌曲状态始终保持一致",
-    body: "通过 WebRTC 与 WebSocket 的混合拓扑，房间开始播放后，每个成员看到的进度线和反馈都尽量保持一致。",
-    bullets: ["共享播放控制权", "播放 / 暂停 / 进度实时同步","重传机制实时保证体验"]
+    eyebrow: "Realtime playback",
+    title: "低延迟同步播放，而不是单机播放器加聊天",
+    body: "播放、暂停、seek、切歌和媒体时钟通过实时链路同步，弱网下保留远端流和本地缓存兜底。",
+    points: ["WebSocket 状态同步", "WebRTC 实时音频", "断线恢复策略"]
   },
   {
-    eyebrow: "本地音乐",
-    title: "带着你的本地曲库，无惧流媒体",
-    body: "你可以导入本地音频、快速入队，并把多人协作后的队列继续沉淀为歌单。",
-    bullets: ["支持导入本地音频文件", "队列与歌单可持续复用", "多人一同提交和管理"]
+    eyebrow: "Local music",
+    title: "音频本体留在成员设备，本地曲库仍能多人协作",
+    body: "导入本地音频后只同步元数据和分片可用性，播放时优先由拥有歌曲的成员提供音频链路。",
+    points: ["本地文件导入", "P2P 分片缓存", "不上传音频本体"]
   }
 ];
 
-export function ProductLandingPage() {
+const architectureItems = [
+  {
+    title: "Next.js Web",
+    body: "负责网页房间、播放器界面、上传入口和 P2P 调度状态展示。"
+  },
+  {
+    title: "NestJS Server",
+    body: "管理认证、房间快照、播放版本、队列和 Socket.IO 信令。"
+  },
+  {
+    title: "Redis Realtime",
+    body: "承载 presence、跨实例广播、可用性事件和恢复场景。"
+  },
+  {
+    title: "Tauri / Capacitor",
+    body: "桌面和 Android 壳复用同一套 Web 工作台，补齐本地体验。"
+  }
+];
+
+function ProductRoomPreview() {
+  const queue = [
+    { title: "Night Drive", owner: "Host local FLAC", active: true },
+    { title: "City Lights", owner: "Alice upload", active: false },
+    { title: "After Hours", owner: "Cached by Ben", active: false }
+  ];
+  const members = [
+    { name: "HOST", color: "bg-accent/20 text-accent" },
+    { name: "AL", color: "bg-emerald-400/15 text-emerald-300" },
+    { name: "BE", color: "bg-amber-400/15 text-amber-300" }
+  ];
+
   return (
-    <main className="relative flex min-h-screen flex-col bg-[#000000] pb-20 font-sans selection:bg-accent/30 selection:text-white">
-      <TopBar activeSession={null} />
-
-      <div className="fixed inset-0 -z-10 overflow-hidden bg-[#000000] pointer-events-none">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
-      </div>
-
-      <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col items-center px-6 pt-24 md:pt-36">
-        <section className="relative z-10 mb-20 flex w-full max-w-4xl animate-fade-in flex-col items-center text-center md:mb-32">
-          <div className="mb-8 inline-flex items-center justify-center rounded-full border border-accent/20 bg-accent/10 px-4 py-1.5 backdrop-blur-sm">
-            <span className="cursor-default font-mono text-xs font-bold tracking-widest text-accent">MUSIC ROOM 1.0</span>
+    <div className="relative w-full max-w-5xl animate-slide-up select-none">
+      <div className="absolute -inset-6 rounded-[2rem] bg-[radial-gradient(circle_at_35%_20%,rgba(0,112,243,0.22),transparent_34%),radial-gradient(circle_at_80%_45%,rgba(16,185,129,0.12),transparent_28%)] blur-2xl" />
+      <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#05070a] shadow-2xl">
+        <div className="flex h-11 items-center border-b border-white/[0.05] px-4">
+          <div className="flex gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-white/[0.12]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-white/[0.12]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-white/[0.12]" />
           </div>
-
-          <h1 className="mb-8 text-4xl font-extrabold leading-[1.1] tracking-tight text-white md:text-6xl lg:text-7xl">
-            让协作与本地音乐，
-            <br className="hidden md:block" />
-            重新回到<span className="text-accent">同频</span>的房间。
-          </h1>
-
-          <p className="max-w-2xl text-base leading-relaxed text-white/50 md:text-xl">
-            Music Room 专为对听歌协同有执念的用户而生。没有杂乱的聊天面板和冗余功能，所有设计都聚焦在音乐本身。
-          </p>
-
-          <p className="mt-6 hidden select-none font-mono text-xs text-white/30 md:block">
-            Requires modern browser. Peer-to-peer technology empowered.
-          </p>
-        </section>
-
-        <div className="relative mb-40 w-full max-w-6xl animate-slide-up select-none pointer-events-none">
-          <div className="absolute -inset-0.5 rounded-[1.6rem] bg-accent/20 blur opacity-30 transition duration-1000" />
-          <div className="relative flex aspect-video flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#050505] shadow-2xl">
-            <div className="flex h-12 items-center gap-2 border-b border-white/5 bg-[#0a0a0a] px-4">
-              <div className="flex gap-1.5">
-                <div className="h-3 w-3 rounded-full bg-white/10" />
-                <div className="h-3 w-3 rounded-full bg-white/10" />
-                <div className="h-3 w-3 rounded-full bg-white/10" />
-              </div>
-              <div className="mx-auto flex items-center gap-2 rounded-md border border-white/5 bg-[#111] px-10 py-1.5 font-mono text-[10px] text-white/30">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                room.local / wksp
-              </div>
-            </div>
-
-            <div className="flex flex-1 gap-6 p-5">
-              <div className="hidden h-full w-[300px] flex-col gap-2 overflow-hidden rounded-xl border border-white/5 bg-white/[0.02] p-4 lg:flex">
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-[10px] font-bold tracking-widest text-white/50">SHARED QUEUE</span>
-                  <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-white/50">14 TRACKS</span>
-                </div>
-                {[
-                  { title: "Lost in the Echo", artist: "Linkin Park", active: true },
-                  { title: "Starboy", artist: "The Weeknd", active: false },
-                  { title: "Instant Crush", artist: "Daft Punk", active: false },
-                  { title: "Midnight City", artist: "M83", active: false }
-                ].map((track, index) => (
-                  <div
-                    key={track.title}
-                    className={`flex w-full items-center justify-between rounded-xl p-3 transition-colors ${
-                      track.active ? "border border-accent/30 bg-accent/15" : "border border-transparent bg-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-                          track.active ? "bg-accent text-white shadow-lg shadow-accent/20" : "bg-white/5 text-white/40"
-                        }`}
-                      >
-                        {track.active ? (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        ) : (
-                          <span className="font-mono text-xs">{index + 1}</span>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className={`w-32 truncate text-sm font-semibold ${track.active ? "text-white" : "text-white/70"}`}>
-                          {track.title}
-                        </span>
-                        <span className="text-[10px] text-white/40">{track.artist}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="relative flex h-full flex-1 flex-col items-center justify-center overflow-hidden rounded-xl border border-white/5 bg-[radial-gradient(ellipse_at_center,rgba(0,112,243,0.05),transparent_70%)]">
-                <div className="absolute right-4 top-4 flex -space-x-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#050505] bg-blue-500/20 text-[10px] font-bold text-blue-400">WK</div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#050505] bg-purple-500/20 text-[10px] font-bold text-purple-400">AL</div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#050505] bg-emerald-500/20 text-[10px] font-bold text-emerald-400">BO</div>
-                </div>
-
-                <div className="relative mb-8 flex h-48 w-48 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-blue-600/20 to-indigo-600/20 shadow-2xl md:h-64 md:w-64">
-                  <div className="absolute inset-0 rounded-2xl bg-blue-500/5 backdrop-blur-3xl" />
-                  <div className="relative z-10 flex h-24 w-24 items-center justify-center rounded-full border border-white/20 bg-black/20">
-                    <div className="h-8 w-8 rounded-full bg-white/20" />
-                  </div>
-                </div>
-
-                <div className="w-full max-w-md px-6 text-center">
-                  <h2 className="mb-1 text-2xl font-bold text-white md:text-3xl">Lost in the Echo</h2>
-                  <p className="mb-8 text-sm text-white/50 md:text-base">Linkin Park</p>
-
-                  <div className="flex flex-col gap-2">
-                    <div className="relative h-1.5 w-full overflow-visible rounded-full bg-white/10">
-                      <div className="absolute left-0 top-0 h-full w-[45%] rounded-full bg-accent" />
-                    </div>
-                    <div className="flex justify-between font-mono text-[11px] tracking-wider text-white/40">
-                      <span>01:12</span>
-                      <span>03:25</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex items-center justify-center gap-8">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40">
-                      <path d="M19 20L9 12l10-8v16zM5 19V5" />
-                    </svg>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-lg">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                      </svg>
-                    </div>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40">
-                      <path d="M5 4l10 8-10 8V4zM19 5v14" />
-                    </svg>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="mx-auto hidden rounded-md border border-white/[0.05] bg-white/[0.03] px-8 py-1 font-mono text-[10px] text-white/[0.35] sm:block">
+            music-room / room_27A4
           </div>
         </div>
 
-        <HomeRoomSection />
-
-        <section className="mb-40 grid w-full grid-cols-2 gap-8 border-y border-white/5 bg-[#020202] py-12 md:grid-cols-4">
-          {[
-            { label: "毫秒级同步", val: "< 100ms" },
-            { label: "支持格式", val: "FLAC/MP3" },
-            { label: "依赖平台", val: "WEB" },
-            { label: "网络架构", val: "P2P WebRTC" }
-          ].map((stat) => (
-            <div key={stat.label} className="flex flex-col items-center justify-center text-center">
-              <span className="text-3xl font-extrabold tracking-tight text-white md:text-4xl">{stat.val}</span>
-              <span className="mt-2 font-mono text-xs uppercase tracking-widest text-white/40">{stat.label}</span>
+        <div className="grid min-h-[420px] gap-5 p-4 md:grid-cols-[240px_1fr_230px] md:p-5">
+          <aside className="hidden rounded-xl border border-white/[0.05] bg-white/[0.025] p-4 md:block">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-white/[0.45]">
+                Shared queue
+              </p>
+              <span className="rounded bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-300">
+                live
+              </span>
             </div>
-          ))}
-        </section>
-
-        <section className="mb-40 flex w-full flex-col gap-24 md:gap-32">
-          <div className="mb-10 flex w-full flex-col items-center text-center">
-            <h2 className="mb-6 text-3xl font-bold text-white md:text-4xl">不为功能而功能，只为核心工作流让路</h2>
-            <p className="max-w-2xl text-base text-white/50">所有重要界面都围绕房间、队列、同步播放和本地音乐管理展开，不让多余入口分散注意力。</p>
-          </div>
-
-          {featureSections.map((section, index) => {
-            const isEven = index % 2 === 0;
-
-            return (
-              <article
-                key={section.title}
-                className={`flex flex-col items-center gap-10 lg:gap-20 ${isEven ? "lg:flex-row" : "lg:flex-row-reverse"}`}
-              >
-                <div className="relative flex aspect-video w-full flex-1 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#050505] p-2 shadow-xl">
-                  <div className="pointer-events-none absolute -inset-10 rounded-[100%] bg-accent/5 blur-[100px]" />
-                  <div className="relative z-10 flex h-full max-h-64 w-full max-w-sm items-center justify-center p-6">
-                    {index === 0 ? (
-                      <div className="flex w-full flex-col gap-3">
-                        <div className="flex w-full items-center justify-between rounded-xl border border-accent/20 bg-accent/10 p-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded bg-accent/20">
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-accent">
-                                <path d="M8 5v14l11-7z" />
-                              </svg>
-                            </div>
-                            <div>
-                              <div className="mb-2 h-2 w-24 rounded bg-white/90" />
-                              <div className="h-1.5 w-16 rounded bg-white/50" />
-                            </div>
-                          </div>
-                          <div className="h-6 w-6 rounded-full border border-white/20 bg-white/10" />
-                        </div>
-                        <div className="flex w-full items-center justify-between rounded-xl border border-white/5 bg-white/5 p-4 opacity-50">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded bg-white/10" />
-                            <div>
-                              <div className="mb-2 h-2 w-32 rounded bg-white/60" />
-                              <div className="h-1.5 w-20 rounded bg-white/30" />
-                            </div>
-                          </div>
-                          <div className="h-6 w-6 rounded-full border border-white/20 bg-white/10" />
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {index === 1 ? (
-                      <div className="flex w-full flex-col items-center gap-6">
-                        <div className="mb-4 flex gap-4">
-                          {["W1", "YOU", "A2"].map((label, i) => (
-                            <div
-                              key={label}
-                              className={`relative flex h-12 w-12 items-center justify-center rounded-full border ${
-                                i === 1
-                                  ? "border-accent/50 bg-accent/10 text-accent shadow-[0_0_15px_rgba(0,112,243,0.3)]"
-                                  : "border-white/10 bg-[#111] text-white/40"
-                              } text-[10px] font-bold`}
-                            >
-                              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#111] bg-green-500" />
-                              {label}
-                            </div>
-                          ))}
-                        </div>
-                        <div className="w-full max-w-xs">
-                          <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                            <div className="h-full w-[60%] bg-accent" />
-                          </div>
-                          <div className="flex justify-between">
-                            <div className="h-1.5 w-8 rounded bg-accent/50" />
-                            <div className="h-1.5 w-8 rounded bg-white/20" />
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {index === 2 ? (
-                      <div className="flex h-full w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-white/[0.01]">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mb-4 text-white/30">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
+            <div className="space-y-2">
+              {queue.map((track, index) => (
+                <div
+                  key={track.title}
+                  className={`rounded-lg border p-3 ${
+                    track.active
+                      ? "border-accent/35 bg-accent/[0.12]"
+                      : "border-transparent bg-white/[0.025]"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${
+                        track.active ? "bg-accent text-white" : "bg-white/[0.06] text-white/[0.45]"
+                      }`}
+                    >
+                      {track.active ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
                         </svg>
-                        <div className="mb-2 h-2 w-24 rounded bg-white/40" />
-                        <div className="h-1 w-16 rounded bg-white/20" />
-                        <div className="mt-6 rounded-lg border border-white/5 bg-white/5 px-4 py-2">
-                          <div className="flex items-center gap-2 font-mono text-[10px] text-white/50">
-                            <div className="h-2 w-2 rounded-full bg-accent" />
-                            Audio_Track_Final.flac
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
+                      ) : (
+                        <span className="font-mono text-xs">{index + 1}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{track.title}</p>
+                      <p className="truncate text-[11px] text-white/40">{track.owner}</p>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          </aside>
 
-                <div className="flex flex-1 flex-col justify-center">
-                  <span className="mb-4 inline-flex items-center gap-3">
-                    <span className="font-mono text-xl font-bold text-accent">0{index + 1}</span>
-                    <span className="block h-px w-12 bg-white/10" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-white/50">{section.eyebrow}</span>
+          <section className="relative flex min-h-[330px] flex-col justify-between overflow-hidden rounded-xl border border-white/[0.05] bg-[radial-gradient(circle_at_center,rgba(0,112,243,0.12),transparent_60%)] p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/[0.35]">
+                  Now playing
+                </p>
+                <h2 className="mt-2 text-2xl font-bold text-white md:text-3xl">Night Drive</h2>
+              </div>
+              <div className="flex -space-x-2">
+                {members.map((member) => (
+                  <span
+                    key={member.name}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#05070a] text-[10px] font-bold ${member.color}`}
+                  >
+                    {member.name}
                   </span>
+                ))}
+              </div>
+            </div>
 
-                  <h3 className="mb-6 text-2xl font-bold leading-tight text-white md:text-3xl">{section.title}</h3>
-                  <p className="mb-8 text-base leading-relaxed text-white/60">{section.body}</p>
+            <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,rgba(0,112,243,0.38),rgba(8,13,29,0.88))] shadow-[0_24px_80px_rgba(0,112,243,0.22)] sm:h-56 sm:w-56">
+              <div className="flex h-28 w-28 items-center justify-center rounded-full border border-white/[0.12] bg-black/20">
+                <div className="h-8 w-8 rounded-full bg-white/25" />
+              </div>
+            </div>
 
-                  <ul className="flex flex-col gap-4">
-                    {section.bullets.map((bullet) => (
-                      <li key={bullet} className="flex items-center gap-3">
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full border border-accent/20 bg-accent/10">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="ml-0.5 text-accent">
-                            <path d="M20 6L9 17l-5-5" />
-                          </svg>
-                        </div>
-                        <span className="text-sm font-medium text-white/80">{bullet}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </article>
-            );
-          })}
-        </section>
+            <div>
+              <div className="mb-3 flex items-center justify-between font-mono text-[11px] text-white/40">
+                <span>01:46</span>
+                <span>04:12</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full w-[43%] rounded-full bg-accent" />
+              </div>
+              <div className="mt-5 flex items-center justify-center gap-6 text-white/[0.45]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 20L9 12l10-8v16zM5 19V5" />
+                </svg>
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-black">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                  </svg>
+                </span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 4l10 8-10 8V4zM19 5v14" />
+                </svg>
+              </div>
+            </div>
+          </section>
 
-        <section className="relative mt-10 flex w-full flex-col items-center justify-center overflow-hidden rounded-3xl border border-white/5 bg-[#050505] py-20 text-center">
-          <div className="absolute top-0 h-px w-full bg-gradient-to-r from-transparent via-accent to-transparent opacity-50" />
-          <div className="absolute bottom-0 h-px w-full bg-gradient-to-r from-transparent via-accent/20 to-transparent opacity-50" />
+          <aside className="grid gap-3 sm:grid-cols-3 md:grid-cols-1">
+            {[
+              { label: "Source owner", value: "Host", tone: "text-accent" },
+              { label: "Transport", value: "WebRTC ready", tone: "text-emerald-300" },
+              { label: "Cache", value: "18 / 24 chunks", tone: "text-amber-300" }
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-white/[0.05] bg-white/[0.025] p-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/[0.35]">
+                  {item.label}
+                </p>
+                <p className={`mt-3 text-lg font-semibold ${item.tone}`}>{item.value}</p>
+              </div>
+            ))}
+            <div className="hidden rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] p-4 md:block">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/[0.35]">
+                Local file
+              </p>
+              <p className="mt-3 truncate text-sm font-semibold text-white">night_drive.flac</p>
+              <p className="mt-1 text-xs text-white/40">音频本体保留在设备内</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-          <p className="mb-6 font-mono text-xs font-bold uppercase tracking-[0.2em] text-accent">Download</p>
-          <h2 className="mb-6 text-3xl font-extrabold tracking-tight text-white md:text-5xl">统一下载区</h2>
-         
+export function ProductLandingPage() {
+  const appHref = buildAppEntryHref(null);
 
-          <div className="grid w-full max-w-4xl gap-4 px-6 sm:grid-cols-2 sm:px-0">
-            <a
-              href={githubReleasesUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-2xl border border-white/10 bg-white/5 p-6 text-left transition-colors hover:border-accent/40 hover:bg-accent/10"
-            >
-              <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-accent">Desktop</p>
-              <h3 className="mb-2 text-xl font-semibold text-white">Windows / macOS</h3>
-              <p className="text-sm leading-relaxed text-white/55">桌面端</p>
-            </a>
-            <a
-              href={githubReleasesUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-2xl border border-white/10 bg-white/5 p-6 text-left transition-colors hover:border-accent/40 hover:bg-accent/10"
-            >
-              <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-accent">Mobile</p>
-              <h3 className="mb-2 text-xl font-semibold text-white">Android</h3>
-              <p className="text-sm leading-relaxed text-white/55">移动端</p>
-            </a>
-          </div>
+  return (
+    <main className="relative min-h-screen overflow-hidden bg-black font-sans selection:bg-accent/30 selection:text-white">
+      <TopBar activeSession={null} variant="marketing" />
 
-          <Link href={githubReleasesUrl} target="_blank" rel="noreferrer" className="mt-8">
-            <Button size="lg" className="h-14 rounded-xl bg-accent px-10 text-lg text-white transition-all hover:bg-accent-hover shadow-[0_4px_14px_0_rgba(0,112,243,0.39)] hover:shadow-[0_6px_20px_rgba(0,112,243,0.23)]">
-              前往 GitHub 支持我们的项目
+      <div className="fixed inset-0 -z-10 bg-black">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4.5rem_4.5rem] [mask-image:radial-gradient(ellipse_70%_55%_at_50%_0%,#000_60%,transparent_100%)]" />
+      </div>
+
+      <section id="project" className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-5 pb-20 pt-16 text-center sm:px-6 md:pb-28 md:pt-24">
+        <p className="mb-5 rounded-full border border-accent/25 bg-accent/10 px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent">
+          Open source local music room
+        </p>
+        <h1 className="max-w-5xl text-5xl font-extrabold leading-[0.95] tracking-tight text-white sm:text-6xl md:text-8xl">
+          Music Room
+        </h1>
+        <p className="mt-7 max-w-3xl text-base leading-8 text-white/[0.58] md:text-xl">
+          一个用于多人同步播放本地音乐的开源项目。房间、队列、实时播放、P2P 分片缓存和桌面 / Android 壳都在同一套工作流里。
+        </p>
+        <div className="mt-9 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
+          <Link href={githubRepositoryUrl} target="_blank" rel="noreferrer">
+            <Button size="lg" className="h-12 w-full rounded-lg px-7 text-base sm:w-auto">
+              查看 GitHub
             </Button>
           </Link>
-        </section>
-      </div>
+          <Link href="#download">
+            <Button
+              size="lg"
+              variant="outline"
+              className="h-12 w-full rounded-lg border-white/[0.08] bg-white/[0.04] px-7 text-base text-white hover:bg-white/[0.08] sm:w-auto"
+            >
+              下载客户端
+            </Button>
+          </Link>
+          <Link href={appHref as Route}>
+            <Button
+              size="lg"
+              variant="ghost"
+              className="h-12 w-full rounded-lg border border-white/[0.06] px-7 text-base text-white/[0.72] hover:bg-white/[0.06] hover:text-white sm:w-auto"
+            >
+              在线体验
+            </Button>
+          </Link>
+        </div>
+
+        <div className="mt-12 w-full md:mt-16">
+          <ProductRoomPreview />
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-[1120px] grid-cols-2 gap-px border-y border-white/[0.05] bg-white/[0.06] px-5 sm:px-6 md:grid-cols-4">
+        {projectStats.map((stat) => (
+          <div key={stat.label} className="bg-black px-3 py-7 text-center md:py-9">
+            <p className="text-lg font-bold text-white md:text-2xl">{stat.value}</p>
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-white/[0.38]">
+              {stat.label}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      <section id="features" className="mx-auto w-full max-w-[1120px] px-5 py-24 sm:px-6 md:py-32">
+        <div className="mb-14 max-w-2xl">
+          <p className="font-mono text-xs font-bold uppercase tracking-[0.24em] text-accent">
+            What it does
+          </p>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-white md:text-5xl">
+            把本地音乐变成一个可协作的实时房间
+          </h2>
+        </div>
+
+        <div className="grid gap-8">
+          {capabilities.map((section, index) => (
+            <article
+              key={section.title}
+              className="grid gap-6 border-t border-white/[0.05] pt-8 md:grid-cols-[0.62fr_1fr]"
+            >
+              <div>
+                <p className="font-mono text-sm font-bold text-accent">0{index + 1}</p>
+                <p className="mt-3 text-xs font-bold uppercase tracking-[0.2em] text-white/[0.38]">
+                  {section.eyebrow}
+                </p>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold leading-tight text-white md:text-3xl">
+                  {section.title}
+                </h3>
+                <p className="mt-4 max-w-3xl text-base leading-7 text-white/[0.56]">
+                  {section.body}
+                </p>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {section.points.map((point) => (
+                    <span
+                      key={point}
+                      className="rounded-full border border-white/[0.07] bg-white/[0.035] px-3 py-1.5 text-sm text-white/[0.72]"
+                    >
+                      {point}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="architecture" className="mx-auto w-full max-w-[1120px] px-5 pb-24 sm:px-6 md:pb-32">
+        <div className="grid gap-10 md:grid-cols-[0.85fr_1.15fr] md:items-start">
+          <div className="md:sticky md:top-24">
+            <p className="font-mono text-xs font-bold uppercase tracking-[0.24em] text-accent">
+              Architecture
+            </p>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-white md:text-5xl">
+              Web、Server、P2P 和客户端壳拆开治理
+            </h2>
+            <p className="mt-5 text-base leading-7 text-white/[0.55]">
+              项目不是把音频上传到服务端，而是用服务端同步房间状态与信令，让拥有音频的成员提供实时流和分片缓存。
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {architectureItems.map((item) => (
+              <div key={item.title} className="rounded-xl border border-white/[0.05] bg-white/[0.025] p-5">
+                <h3 className="text-lg font-semibold text-white">{item.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-white/50">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <HomeRoomSection />
+
+      <section id="download" className="mx-auto w-full max-w-[1120px] px-5 pb-24 sm:px-6 md:pb-32">
+        <div className="overflow-hidden rounded-2xl border border-white/[0.05] bg-[#05070a]">
+          <div className="grid gap-px bg-white/[0.06] md:grid-cols-[1fr_1fr_0.9fr]">
+            {[
+              { label: "Desktop", title: "Windows / macOS", body: "用于更稳定的本地文件、缓存和桌面播放体验。" },
+              { label: "Mobile", title: "Android", body: "通过 Capacitor 复用房间工作台，补充移动端协作入口。" },
+              { label: "Source", title: "GitHub", body: "查看代码、发布包和项目进展。" }
+            ].map((item) => (
+              <a
+                key={item.label}
+                href={githubReleasesUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="group bg-[#05070a] p-6 transition-colors hover:bg-white/[0.045]"
+              >
+                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent">
+                  {item.label}
+                </p>
+                <h3 className="mt-4 text-2xl font-bold text-white">{item.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-white/[0.52]">{item.body}</p>
+                <p className="mt-6 text-sm font-semibold text-white/[0.72] group-hover:text-accent">
+                  打开发布页
+                </p>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

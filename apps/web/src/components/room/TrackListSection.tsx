@@ -70,6 +70,11 @@ function TrackListSectionBase({
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
               const isInCacheLibrary = cachedLibraryFileHashes.includes(track.fileHash);
+              const availabilityDetail = isUploadedLocally
+                ? "你是这首歌的本机音源；播放时会向在线成员发布实时音频，并提供分片缓存。"
+                : isInCacheLibrary
+                  ? "本机已有完整缓存；可作为本地播放和分片兜底，不完全依赖上传者在线。"
+                  : "需要上传者在线或其他成员已有缓存；如果播放无声，先查看成员页的音频链路。";
 
               return (
                 <article
@@ -99,6 +104,9 @@ function TrackListSectionBase({
                           ? "已缓存到个人库"
                         : "房间可用"}{" "}
                       {track.ownerNickname} 上传
+                    </p>
+                    <p className="mt-2 text-[11px] leading-5 text-foreground-muted">
+                      {availabilityDetail}
                     </p>
                   </div>
 

@@ -419,6 +419,9 @@ function MembersPanelBase({
   const diagnosticsByPeerId = new Map(
     peerDiagnostics.map((snapshot) => [snapshot.peerId, snapshot])
   );
+  const localPlaybackToneClasses = localMemberState
+    ? getToneClasses(localMemberState.playbackStatus.tone)
+    : null;
 
   return (
     <section className="flex w-full flex-col gap-2.5">
@@ -426,6 +429,46 @@ function MembersPanelBase({
         在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
         不同成员看到的数值不一定相同。
       </div>
+
+      {localMemberState && localPlaybackToneClasses ? (
+        <div className="grid grid-cols-1 gap-2 rounded-xl border border-surface-border bg-surface/30 p-2.5 sm:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-lg border border-surface-border bg-background/35 px-3 py-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
+                本机可听状态
+              </span>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${localPlaybackToneClasses.badge}`}
+              >
+                {localMemberState.playbackStatus.badgeText}
+              </span>
+            </div>
+            <strong className="mt-2 block text-base font-semibold text-foreground">
+              {localMemberState.playbackStatus.label}
+            </strong>
+            <p className="mt-1 text-xs leading-5 text-foreground-muted">
+              {localMemberState.playbackStatus.detail}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-surface-border bg-background/35 px-3 py-2 text-xs text-foreground-muted">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
+              当前链路
+            </span>
+            <strong className="mt-2 block text-sm font-semibold text-foreground">
+              {localMemberState.transportLabel}
+            </strong>
+            <p className="mt-1 leading-5">
+              音频解锁：{localMemberState.audioUnlocked ? "已解锁" : "等待点击播放"}
+            </p>
+            {localMemberState.lastSourceStartError ? (
+              <p className="mt-1 leading-5 text-red-300">
+                音源错误：{localMemberState.lastSourceStartError}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {members.length > 0 ? (
         members.map((member) => {
