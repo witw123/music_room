@@ -34,7 +34,11 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 min-w-0 items-center gap-3 md:h-16">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-accent shadow-[0_8px_30px_rgba(0,112,243,0.28)]">
-            <div className="h-3 w-3 rounded-full border-2 border-white" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
           </div>
           <div className="min-w-0 leading-none">
             <span className="block truncate text-sm font-bold tracking-tight text-white">Music Room</span>
@@ -46,9 +50,9 @@ function TopBarBase({ activeSession, onLogout, variant = "app" }: TopBarProps) {
           {isMarketing ? (
             <>
               <nav className="hidden items-center gap-5 text-sm text-white/[0.55] md:flex">
-                <a className="transition-colors hover:text-white" href="#project">项目介绍</a>
-                <a className="transition-colors hover:text-white" href="#try">在线体验</a>
-                <a className="transition-colors hover:text-white" href="#download">下载</a>
+                <a className="transition-colors hover:text-white" href="#project">产品概览</a>
+                <a className="transition-colors hover:text-white" href="#features">核心特性</a>
+                <a className="transition-colors hover:text-white" href="#architecture">技术架构</a>
               </nav>
               <a
                 href="https://github.com/witw123/music_room"

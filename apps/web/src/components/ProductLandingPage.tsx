@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
-import { HomeRoomSection } from "@/components/HomeRoomSection";
+
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
 import { buildAppEntryHref, githubReleasesUrl } from "@/lib/client-shell";
@@ -8,49 +8,49 @@ import { buildAppEntryHref, githubReleasesUrl } from "@/lib/client-shell";
 const githubRepositoryUrl = "https://github.com/witw123/music_room";
 
 const projectStats = [
-  { label: "Realtime stack", value: "WebRTC + WebSocket" },
-  { label: "Audio model", value: "Local-first" },
-  { label: "Client shells", value: "Web / Desktop / Android" },
-  { label: "Distribution", value: "Open source" }
+  { label: "Latency", value: "< 50ms Sync" },
+  { label: "Audio Quality", value: "Lossless Ready" },
+  { label: "Platforms", value: "Web & Native" },
+  { label: "Privacy", value: "Local-First" }
 ];
 
 const capabilities = [
   {
-    eyebrow: "Room workflow",
-    title: "房间、队列和成员状态在同一个工作台里完成",
-    body: "创建公开或私密房间后，成员用房间码加入，共享同一条播放队列、当前歌曲和在线状态。",
-    points: ["公开 / 私密房间", "房间码直达", "队列协作"]
+    eyebrow: "Seamless Collaboration",
+    title: "一站式协作控制台，掌控派对全局",
+    body: "在同一个现代化工作台中管理房间、队列和成员状态。无论是公开派对还是私密分享，房间码一键直达，所有人共享同一条实时播放队列。",
+    points: ["沉浸式界面", "一键邀请加入", "多人队列协作"]
   },
   {
-    eyebrow: "Realtime playback",
-    title: "低延迟同步播放，而不是单机播放器加聊天",
-    body: "播放、暂停、seek、切歌和媒体时钟通过实时链路同步，弱网下保留远端流和本地缓存兜底。",
-    points: ["WebSocket 状态同步", "WebRTC 实时音频", "断线恢复策略"]
+    eyebrow: "Ultra-Low Latency",
+    title: "极低延迟的毫秒级状态同步",
+    body: "基于先进的 WebRTC 实时通信技术。播放、暂停、进度调节全员实时响应，智能应对弱网环境，绝非简单的单机播放器加聊天室。",
+    points: ["全员状态对齐", "实时音频分发", "智能断线恢复"]
   },
   {
-    eyebrow: "Local music",
-    title: "音频本体留在成员设备，本地曲库仍能多人协作",
-    body: "导入本地音频后只同步元数据和分片可用性，播放时优先由拥有歌曲的成员提供音频链路。",
-    points: ["本地文件导入", "P2P 分片缓存", "不上传音频本体"]
+    eyebrow: "Privacy & Performance",
+    title: "本地曲库，全球无缝共享",
+    body: "无需漫长的云端上传，您的音频文件始终保留在本地设备。通过创新的 P2P 调度算法，直接向房间内的其他成员分发高清音频流。",
+    points: ["本地文件直读", "P2P 分片缓存", "隐私数据保护"]
   }
 ];
 
 const architectureItems = [
   {
-    title: "Next.js Web",
-    body: "负责网页房间、播放器界面、上传入口和 P2P 调度状态展示。"
+    title: "Modern Web Experience",
+    body: "现代化的沉浸式 Web 界面，提供极致流畅的视觉与交互体验。"
   },
   {
-    title: "NestJS Server",
-    body: "管理认证、房间快照、播放版本、队列和 Socket.IO 信令。"
+    title: "Reliable Global Signaling",
+    body: "高可用分布式信令服务，确保房间元数据与状态永远保持一致。"
   },
   {
-    title: "Redis Realtime",
-    body: "承载 presence、跨实例广播、可用性事件和恢复场景。"
+    title: "High-Performance Cache",
+    body: "毫秒级实时状态广播机制，结合智能的端到端分片可用性追踪。"
   },
   {
-    title: "Tauri / Capacitor",
-    body: "桌面和 Android 壳复用同一套 Web 工作台，补齐本地体验。"
+    title: "Native Desktop & Mobile",
+    body: "跨平台的客户端支持，为您提供媲美原生应用的专属桌面与移动体验。"
   }
 ];
 
@@ -145,7 +145,7 @@ function ProductRoomPreview() {
               </div>
             </div>
 
-            <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,rgba(0,112,243,0.38),rgba(8,13,29,0.88))] shadow-[0_24px_80px_rgba(0,112,243,0.22)] sm:h-56 sm:w-56">
+            <div className="self-center flex h-44 w-44 items-center justify-center rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,rgba(0,112,243,0.38),rgba(8,13,29,0.88))] shadow-[0_24px_80px_rgba(0,112,243,0.22)] sm:h-56 sm:w-56">
               <div className="flex h-28 w-28 items-center justify-center rounded-full border border-white/[0.12] bg-black/20">
                 <div className="h-8 w-8 rounded-full bg-white/25" />
               </div>
@@ -215,36 +215,28 @@ export function ProductLandingPage() {
 
       <section id="project" className="mx-auto flex w-full max-w-[1240px] flex-col items-center px-5 pb-20 pt-16 text-center sm:px-6 md:pb-28 md:pt-24">
         <p className="mb-5 rounded-full border border-accent/25 bg-accent/10 px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent">
-          Open source local music room
+          Next-Generation Co-listening Experience
         </p>
         <h1 className="max-w-5xl text-5xl font-extrabold leading-[0.95] tracking-tight text-white sm:text-6xl md:text-8xl">
           Music Room
         </h1>
         <p className="mt-7 max-w-3xl text-base leading-8 text-white/[0.58] md:text-xl">
-          一个用于多人同步播放本地音乐的开源项目。房间、队列、实时播放、P2P 分片缓存和桌面 / Android 壳都在同一套工作流里。
+          打破空间距离，与好友实时同步收听本地高保真无损音乐库。支持极低延迟的 P2P 流媒体分发，为您带来无缝的跨设备协作收听体验。
         </p>
         <div className="mt-9 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
-          <Link href={githubRepositoryUrl} target="_blank" rel="noreferrer">
-            <Button size="lg" className="h-12 w-full rounded-lg px-7 text-base sm:w-auto">
-              查看 GitHub
-            </Button>
-          </Link>
-          <Link href="#download">
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-12 w-full rounded-lg border-white/[0.08] bg-white/[0.04] px-7 text-base text-white hover:bg-white/[0.08] sm:w-auto"
-            >
-              下载客户端
-            </Button>
-          </Link>
           <Link href={appHref as Route}>
+            <Button size="lg" className="h-12 w-full rounded-lg px-7 text-base sm:w-auto">
+              立即开始免费使用
+            </Button>
+          </Link>
+
+          <Link href="#features">
             <Button
               size="lg"
               variant="ghost"
               className="h-12 w-full rounded-lg border border-white/[0.06] px-7 text-base text-white/[0.72] hover:bg-white/[0.06] hover:text-white sm:w-auto"
             >
-              在线体验
+              了解核心特性
             </Button>
           </Link>
         </div>
@@ -317,10 +309,10 @@ export function ProductLandingPage() {
               Architecture
             </p>
             <h2 className="mt-4 text-3xl font-bold tracking-tight text-white md:text-5xl">
-              Web、Server、P2P 和客户端壳拆开治理
+              专为性能与隐私设计的底层架构
             </h2>
             <p className="mt-5 text-base leading-7 text-white/[0.55]">
-              项目不是把音频上传到服务端，而是用服务端同步房间状态与信令，让拥有音频的成员提供实时流和分片缓存。
+              Music Room 采用去中心化的流媒体分发策略，结合企业级实时信令引擎，在无需将文件上传至云端的情况下，为您提供稳定、安全、纯粹的收听体验。
             </p>
           </div>
 
@@ -335,36 +327,36 @@ export function ProductLandingPage() {
         </div>
       </section>
 
-      <HomeRoomSection />
+      <footer className="border-t border-white/[0.05] bg-black py-10 sm:py-14">
+        <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center justify-between gap-6 px-5 sm:flex-row sm:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-accent shadow-[0_0_15px_rgba(0,112,243,0.3)]">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+            </div>
+            <span className="font-bold tracking-tight text-white">Music Room</span>
+          </div>
 
-      <section id="download" className="mx-auto w-full max-w-[1120px] px-5 pb-24 sm:px-6 md:pb-32">
-        <div className="overflow-hidden rounded-2xl border border-white/[0.05] bg-[#05070a]">
-          <div className="grid gap-px bg-white/[0.06] md:grid-cols-[1fr_1fr_0.9fr]">
-            {[
-              { label: "Desktop", title: "Windows / macOS", body: "用于更稳定的本地文件、缓存和桌面播放体验。" },
-              { label: "Mobile", title: "Android", body: "通过 Capacitor 复用房间工作台，补充移动端协作入口。" },
-              { label: "Source", title: "GitHub", body: "查看代码、发布包和项目进展。" }
-            ].map((item) => (
-              <a
-                key={item.label}
-                href={githubReleasesUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="group bg-[#05070a] p-6 transition-colors hover:bg-white/[0.045]"
-              >
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent">
-                  {item.label}
-                </p>
-                <h3 className="mt-4 text-2xl font-bold text-white">{item.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-white/[0.52]">{item.body}</p>
-                <p className="mt-6 text-sm font-semibold text-white/[0.72] group-hover:text-accent">
-                  打开发布页
-                </p>
-              </a>
-            ))}
+          <p className="text-[13px] text-white/[0.45]">
+            &copy; {new Date().getFullYear()} Music Room. Open Source on GitHub.
+          </p>
+
+          <div className="flex items-center gap-6 text-[13px] font-medium text-white/[0.45]">
+            <Link href={githubRepositoryUrl} target="_blank" rel="noreferrer" className="transition-colors hover:text-white">
+              GitHub
+            </Link>
+            <Link href="#" className="transition-colors hover:text-white">
+              Privacy
+            </Link>
+            <Link href="#" className="transition-colors hover:text-white">
+              Terms
+            </Link>
           </div>
         </div>
-      </section>
+      </footer>
     </main>
   );
 }
