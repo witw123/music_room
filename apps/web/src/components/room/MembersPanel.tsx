@@ -56,6 +56,16 @@ export type LocalMemberPanelState = {
     | "localAudioReadyState"
     | "localAudioCurrentSrc"
     | "localAudioHasSrcObject"
+    | "pcmEngineStatus"
+    | "pcmAudioContextState"
+    | "pcmHasOutputStream"
+    | "pcmContiguousChunkCount"
+    | "pcmContiguousByteLength"
+    | "pcmDecodedSegmentCount"
+    | "pcmScheduledSegmentCount"
+    | "pcmBufferedAheadMs"
+    | "pcmPlayoutState"
+    | "pcmLastBlockedReason"
     | "lastPlayStartFailure"
     | "pendingPlaybackIntent"
   > | null;
@@ -669,6 +679,19 @@ function MembersPanelBase({
                             ? "media-src"
                             : "无"}
                       </span>
+                      {localMemberState.cachePlayback.engineType === "pcm" ? (
+                        <>
+                          <span>PCM: {localMemberState.cachePlayback.pcmEngineStatus ?? "未知"}</span>
+                          <span>ctx: {localMemberState.cachePlayback.pcmAudioContextState ?? "未知"}</span>
+                          <span>pcm ahead: {formatDurationMs(localMemberState.cachePlayback.pcmBufferedAheadMs)}</span>
+                          <span>pcm: {localMemberState.cachePlayback.pcmPlayoutState ?? "未知"}</span>
+                          <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>
+                          <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
+                          <span className="col-span-2 truncate">
+                            pcm block: {localMemberState.cachePlayback.pcmLastBlockedReason ?? "无"}
+                          </span>
+                        </>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>

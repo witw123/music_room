@@ -67,6 +67,10 @@ export class RoomAudioActivationManager {
     return this.activated;
   }
 
+  getSharedAudioContext() {
+    return this.getOrCreateSharedContext();
+  }
+
   private async primeAudioElement({
     element
   }: PrimeAudioElementInput): Promise<RoomAudioElementPlayResult> {

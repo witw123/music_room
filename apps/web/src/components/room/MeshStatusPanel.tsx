@@ -259,6 +259,15 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>本地 readyState: {formatMetric(playback.localAudioReadyState, "")}</span>
               <span>本地 srcObject: {formatBoolean(playback.localAudioHasSrcObject)}</span>
               <span>本地 src: {playback.localAudioCurrentSrc ? "media-src" : "无"}</span>
+              <span>PCM 状态: {playback.pcmEngineStatus ?? "未知"}</span>
+              <span>PCM ctx: {playback.pcmAudioContextState ?? "未知"}</span>
+              <span>PCM stream: {formatBoolean(playback.pcmHasOutputStream)}</span>
+              <span>PCM ahead: {formatDurationMs(playback.pcmBufferedAheadMs)}</span>
+              <span>PCM 播放: {playback.pcmPlayoutState ?? "未知"}</span>
+              <span>PCM 分片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>
+              <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
+              <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>
+              <span>PCM 阻塞: {playback.pcmLastBlockedReason ?? "无"}</span>
             </DiagnosticGrid>
             {playback.pendingPlaybackIntent ? (
               <p className="mt-2 text-[10px] text-amber-300">

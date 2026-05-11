@@ -28,7 +28,11 @@ import {
 } from "@/features/playback/playback-start-intent";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { getEffectivePlaybackPositionMs } from "@/features/playback/progressive-playback";
+import {
+  buildProgressiveTrackManifest,
+  getEffectivePlaybackPositionMs,
+  getProgressiveEngineType
+} from "@/features/playback/progressive-playback";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -762,6 +766,10 @@ export function MusicRoomApp({
 
       const track =
         roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? currentTrack ?? null;
+      const engineType = getProgressiveEngineType(buildProgressiveTrackManifest(track, null));
+      if (engineType === "pcm") {
+        return false;
+      }
       const playback = roomSnapshot?.room.playback ?? null;
       const positionMs =
         playback?.currentTrackId === trackId

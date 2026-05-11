@@ -41,6 +41,10 @@ export class RoomAudioOutput {
   isActivated() {
     return roomAudioActivationManager.isActivated();
   }
+
+  getSharedAudioContext() {
+    return roomAudioActivationManager.getSharedAudioContext();
+  }
 }
 
 export const roomAudioOutput = new RoomAudioOutput();

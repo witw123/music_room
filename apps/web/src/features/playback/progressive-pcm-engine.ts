@@ -29,9 +29,21 @@ type PcmEngineSyncResult = {
   localReady: boolean;
   driftMs: number;
   playbackPositionSeconds: number;
+  blockedReason: string | null;
 };
 
 export type PcmEnginePlayoutState = "playing" | "buffering" | "paused";
+export type ProgressivePcmEngineSnapshot = {
+  status: EngineStatus;
+  audioContextState: AudioContextState | null;
+  hasOutputStream: boolean;
+  contiguousChunkCount: number;
+  contiguousByteLength: number;
+  decodedSegmentCount: number;
+  scheduledSegmentCount: number;
+  bufferedAheadMs: number;
+  playoutState: PcmEnginePlayoutState;
+};
 
 const pcmScheduleAheadSeconds = 18;
 
@@ -60,7 +72,8 @@ export class ProgressivePcmEngine {
   constructor(
     private readonly audio: HTMLAudioElement,
     private readonly peerId: string,
-    private readonly manifest: ProgressiveTrackManifest
+    private readonly manifest: ProgressiveTrackManifest,
+    private readonly audioContextProvider?: () => AudioContext | null
   ) {}
 
   get engineStatus() {
@@ -85,11 +98,25 @@ export class ProgressivePcmEngine {
   }
 
   getPlayoutState(): PcmEnginePlayoutState {
-    if (!this.playing) {
+    if (!this.playing || this.audioContext?.state !== "running") {
       return "paused";
     }
 
     return this.getBufferedAheadMs() > 0 ? "playing" : "buffering";
+  }
+
+  getSnapshot(): ProgressivePcmEngineSnapshot {
+    return {
+      status: this.status,
+      audioContextState: this.audioContext?.state ?? null,
+      hasOutputStream: !!this.destinationNode?.stream,
+      contiguousChunkCount: this.contiguousChunkCount,
+      contiguousByteLength: this.contiguousByteLength,
+      decodedSegmentCount: this.decodedSegments.length,
+      scheduledSegmentCount: this.scheduledSegments.length,
+      bufferedAheadMs: Math.max(0, this.getBufferedAheadMs()),
+      playoutState: this.getPlayoutState()
+    };
   }
 
   getBufferedAheadMs(positionSeconds = this.getCurrentTimeSeconds()) {
@@ -125,7 +152,7 @@ export class ProgressivePcmEngine {
         return false;
       }
 
-      this.audioContext = new AudioContextCtor();
+      this.audioContext = this.audioContextProvider?.() ?? new AudioContextCtor();
       this.gainNode = this.audioContext.createGain();
       this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
       this.destinationNode = this.audioContext.createMediaStreamDestination();
@@ -171,7 +198,8 @@ export class ProgressivePcmEngine {
       return {
         localReady: this.hasBufferedPosition(positionSeconds),
         driftMs: 0,
-        playbackPositionSeconds: positionSeconds
+        playbackPositionSeconds: positionSeconds,
+        blockedReason: null
       };
     }
 
@@ -179,7 +207,8 @@ export class ProgressivePcmEngine {
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
-        playbackPositionSeconds: this.getCurrentTimeSeconds()
+        playbackPositionSeconds: this.getCurrentTimeSeconds(),
+        blockedReason: this.status !== "ready" ? `engine-${this.status}` : "missing-audio-context"
       };
     }
 
@@ -191,12 +220,25 @@ export class ProgressivePcmEngine {
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
-        playbackPositionSeconds: positionSeconds
+        playbackPositionSeconds: positionSeconds,
+        blockedReason: "pcm-buffer-missing"
       };
     }
 
     if (this.audioContext.state === "suspended") {
       await this.audioContext.resume().catch(() => undefined);
+    }
+    if (this.audioContext.state !== "running") {
+      this.playing = false;
+      this.pausedTrackTimeSec = positionSeconds;
+      this.stopScheduledSegments();
+      this.audio.pause();
+      return {
+        localReady: false,
+        driftMs: Number.POSITIVE_INFINITY,
+        playbackPositionSeconds: positionSeconds,
+        blockedReason: `audio-context-${this.audioContext.state}`
+      };
     }
 
     const driftMs = Math.abs(this.getCurrentTimeSeconds() - positionSeconds) * 1000;
@@ -213,7 +255,8 @@ export class ProgressivePcmEngine {
     return {
       localReady: true,
       driftMs: Math.abs(this.getCurrentTimeSeconds() - positionSeconds) * 1000,
-      playbackPositionSeconds: this.getCurrentTimeSeconds()
+      playbackPositionSeconds: this.getCurrentTimeSeconds(),
+      blockedReason: null
     };
   }
 
@@ -236,7 +279,9 @@ export class ProgressivePcmEngine {
       this.audio.srcObject = null;
       this.audio.load();
     }
-    void this.audioContext?.close().catch(() => undefined);
+    if (!this.audioContextProvider) {
+      void this.audioContext?.close().catch(() => undefined);
+    }
     this.audioContext = null;
     this.destinationNode = null;
     this.gainNode = null;

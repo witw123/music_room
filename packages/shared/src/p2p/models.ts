@@ -358,6 +358,19 @@ export const progressivePlaybackStatusSchema = z.object({
   localAudioReadyState: z.number().int().min(0).max(4).nullable().optional(),
   localAudioCurrentSrc: z.string().nullable().optional(),
   localAudioHasSrcObject: z.boolean().nullable().optional(),
+  pcmEngineStatus: z
+    .enum(["idle", "opening", "ready", "failed", "destroyed"])
+    .nullable()
+    .optional(),
+  pcmAudioContextState: z.enum(["suspended", "running", "closed", "interrupted"]).nullable().optional(),
+  pcmHasOutputStream: z.boolean().nullable().optional(),
+  pcmContiguousChunkCount: z.number().int().nonnegative().nullable().optional(),
+  pcmContiguousByteLength: z.number().int().nonnegative().nullable().optional(),
+  pcmDecodedSegmentCount: z.number().int().nonnegative().nullable().optional(),
+  pcmScheduledSegmentCount: z.number().int().nonnegative().nullable().optional(),
+  pcmBufferedAheadMs: z.number().int().nonnegative().nullable().optional(),
+  pcmPlayoutState: z.enum(["playing", "buffering", "paused"]).nullable().optional(),
+  pcmLastBlockedReason: z.string().nullable().optional(),
   startupBufferMs: z.number().int().nonnegative().nullable().optional(),
   comfortBufferedMs: z.number().int().nonnegative().nullable().optional(),
   averageDriftMs: z.number().nonnegative().nullable().optional(),

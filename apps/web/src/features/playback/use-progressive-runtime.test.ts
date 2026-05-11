@@ -10,9 +10,11 @@ import {
   resolveRemoteAudioHoldDurationMs,
   resolveRemoteStartupGateState,
   resolveSchedulerBudgetTier,
+  shouldPrepareProgressiveRuntimeForSource,
   shouldEnableAudibleLocalFallback,
   shouldPreferLocalTakeover,
   shouldRecoverPausedFullLocalPlayback,
+  shouldUsePcmEngineForFullLocal,
   shouldPollRemoteStartupGate
 } from "./use-progressive-runtime";
 
@@ -440,6 +442,57 @@ describe("shouldPollRemoteStartupGate", () => {
         localAudioReadyState: 4,
         localAudioHasSrc: true,
         localAudioHasSrcObject: false
+      })
+    ).toBe(false);
+  });
+
+  it("keeps the PCM progressive runtime prepared during full-local playback", () => {
+    expect(
+      shouldPrepareProgressiveRuntimeForSource({
+        activePlaybackSource: "full-local",
+        progressiveEngineType: "pcm"
+      })
+    ).toBe(true);
+    expect(
+      shouldPrepareProgressiveRuntimeForSource({
+        activePlaybackSource: "full-local",
+        progressiveEngineType: "mse"
+      })
+    ).toBe(false);
+    expect(
+      shouldPrepareProgressiveRuntimeForSource({
+        activePlaybackSource: "progressive-local",
+        progressiveEngineType: "mse"
+      })
+    ).toBe(true);
+  });
+
+  it("routes full-local PCM playback through the PCM engine instead of the native blob URL", () => {
+    expect(
+      shouldUsePcmEngineForFullLocal({
+        activePlaybackSource: "full-local",
+        forceSourceOwnerLocalPlayback: false,
+        sourceOwnerHasLocalTrack: false,
+        hasFullLocalTrack: true,
+        progressiveEngineType: "pcm"
+      })
+    ).toBe(true);
+    expect(
+      shouldUsePcmEngineForFullLocal({
+        activePlaybackSource: "full-local",
+        forceSourceOwnerLocalPlayback: false,
+        sourceOwnerHasLocalTrack: false,
+        hasFullLocalTrack: true,
+        progressiveEngineType: "mse"
+      })
+    ).toBe(false);
+    expect(
+      shouldUsePcmEngineForFullLocal({
+        activePlaybackSource: "remote-stream",
+        forceSourceOwnerLocalPlayback: false,
+        sourceOwnerHasLocalTrack: false,
+        hasFullLocalTrack: true,
+        progressiveEngineType: "pcm"
       })
     ).toBe(false);
   });

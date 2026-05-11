@@ -319,6 +319,26 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.localAudioCurrentSrc ?? null,
             localAudioHasSrcObject:
               systemDiagnostic.progressivePlaybackStatus.localAudioHasSrcObject ?? null,
+            pcmEngineStatus:
+              systemDiagnostic.progressivePlaybackStatus.pcmEngineStatus ?? null,
+            pcmAudioContextState:
+              systemDiagnostic.progressivePlaybackStatus.pcmAudioContextState ?? null,
+            pcmHasOutputStream:
+              systemDiagnostic.progressivePlaybackStatus.pcmHasOutputStream ?? null,
+            pcmContiguousChunkCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmContiguousChunkCount ?? null,
+            pcmContiguousByteLength:
+              systemDiagnostic.progressivePlaybackStatus.pcmContiguousByteLength ?? null,
+            pcmDecodedSegmentCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecodedSegmentCount ?? null,
+            pcmScheduledSegmentCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmScheduledSegmentCount ?? null,
+            pcmBufferedAheadMs:
+              systemDiagnostic.progressivePlaybackStatus.pcmBufferedAheadMs ?? null,
+            pcmPlayoutState:
+              systemDiagnostic.progressivePlaybackStatus.pcmPlayoutState ?? null,
+            pcmLastBlockedReason:
+              systemDiagnostic.progressivePlaybackStatus.pcmLastBlockedReason ?? null,
             lastPlayStartFailure:
               systemDiagnostic.progressivePlaybackStatus.lastPlayStartFailure ?? null,
             pendingPlaybackIntent:
@@ -659,6 +679,24 @@ function getLocalAudioPlaybackIssue(
 
   if (cachePlayback.localAudioPaused !== false) {
     return "尚未确认本地音频元素已经开始播放。";
+  }
+
+  if (cachePlayback.engineType === "pcm") {
+    if (cachePlayback.pcmAudioContextState && cachePlayback.pcmAudioContextState !== "running") {
+      return `PCM 音频上下文未运行: ${cachePlayback.pcmAudioContextState}。`;
+    }
+
+    if (cachePlayback.pcmLastBlockedReason) {
+      return `PCM 播放未就绪: ${cachePlayback.pcmLastBlockedReason}。`;
+    }
+
+    if ((cachePlayback.pcmDecodedSegmentCount ?? 0) <= 0) {
+      return "PCM 引擎尚未解码出可播放音频帧。";
+    }
+
+    if ((cachePlayback.pcmScheduledSegmentCount ?? 0) <= 0) {
+      return "PCM 引擎尚未调度音频帧到输出。";
+    }
   }
 
   return null;

@@ -60,6 +60,7 @@ function installFakeAudioContext() {
 
   class FakeAudioContext {
     currentTime = 0;
+    state = "running" as AudioContextState;
 
     createGain() {
       return gainNode;
@@ -94,6 +95,12 @@ function installFakeAudioContext() {
     }
 
     close() {
+      this.state = "closed";
+      return Promise.resolve();
+    }
+
+    resume() {
+      this.state = "running";
       return Promise.resolve();
     }
   }
@@ -308,6 +315,44 @@ describe("ProgressivePcmEngine", () => {
 
       expect(result.localReady).toBe(true);
       expect(audio.play).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("does not report localReady when the audio context cannot resume", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    try {
+      await engine.attach();
+      const context = Reflect.get(engine as object, "audioContext") as {
+        state: AudioContextState;
+        resume: () => Promise<void>;
+      };
+      context.state = "suspended";
+      context.resume = async () => {
+        throw new DOMException("blocked", "NotAllowedError");
+      };
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0,
+          endTimeSec: 1,
+          buffer: {}
+        }
+      ]);
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("audio-context-suspended");
+      expect(engine.getSnapshot()).toMatchObject({
+        audioContextState: "suspended",
+        playoutState: "paused"
+      });
     } finally {
       engine.destroy();
       audioContext.restore();
