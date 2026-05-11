@@ -209,7 +209,6 @@ export function captureAudioStream(
         const source = context.createMediaElementSource(audio);
         const destination = context.createMediaStreamDestination();
         source.connect(destination);
-        source.connect(context.destination);
         capturedAudioGraphs.set(audio, {
           context,
           stream: destination.stream,

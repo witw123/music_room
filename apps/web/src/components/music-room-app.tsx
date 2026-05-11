@@ -130,7 +130,7 @@ export function MusicRoomApp({
   const [playerResetEpoch, setPlayerResetEpoch] = useState(0);
   const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
   const [activePlaybackSource, setActivePlaybackSource] =
-    useState<ProgressivePlaybackSource>("remote-stream");
+    useState<ProgressivePlaybackSource>("progressive-local");
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
   const [authoritativeMediaClock, setAuthoritativeMediaClock] =
@@ -218,6 +218,7 @@ export function MusicRoomApp({
     handleFilesSelected: handleTrackFilesSelected,
     announceRoomTrackAvailability,
     startManualCacheDownload,
+    startPlaybackDemandCacheDownload,
     pauseManualCacheDownload,
     handleManualCachePieceReceived,
     handleManualCachePlan,
@@ -235,6 +236,7 @@ export function MusicRoomApp({
     onAvailability: mergeAvailability,
     emitAvailability: stableEmitAvailability
   });
+
   const hasFullLocalTrack = useMemo(
     () =>
       currentPlaybackTrackId
@@ -362,7 +364,7 @@ export function MusicRoomApp({
     setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
-    setActivePlaybackSource("remote-stream");
+    setActivePlaybackSource("progressive-local");
     setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
     setAuthoritativeMediaClock(null);
@@ -499,6 +501,7 @@ export function MusicRoomApp({
     uploadedTrackIds: Object.keys(uploadedTracks),
     uploadedTrackIdsRef,
     manualCacheTrackIds,
+    startPlaybackDemandCacheDownload,
     announceRoomTrackAvailability,
     handleManualCachePieceReceived,
     handleManualCachePlan,
@@ -533,7 +536,7 @@ export function MusicRoomApp({
 
   useEffect(() => {
     if (!currentPlaybackTrackId) {
-      setActivePlaybackSource("remote-stream");
+      setActivePlaybackSource("progressive-local");
       setProgressiveFallbackReason(null);
       return;
     }
@@ -541,7 +544,7 @@ export function MusicRoomApp({
     setActivePlaybackSource(
       isCurrentSourceOwner
         ? getInitialProgressivePlaybackSource(hasFullLocalTrack)
-        : "remote-stream"
+        : getInitialProgressivePlaybackSource(hasFullLocalTrack)
     );
     setProgressiveFallbackReason(null);
   }, [playbackSurfaceKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);

@@ -11,7 +11,6 @@ import type {
 } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import {
-  pickActiveMediaDiagnostic,
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement
 } from "@/features/p2p";
@@ -82,8 +81,8 @@ export function useRoomDerivedState({
       }),
     [availabilityByTrack, peerId, roomSnapshot]
   );
-  const remoteMediaDiagnostic = useMemo(
-    () => peerDiagnostics.find((peer) => peer.peerId === "remote-media") ?? null,
+  const systemDiagnostic = useMemo(
+    () => peerDiagnostics.find((peer) => peer.peerId === "system") ?? null,
     [peerDiagnostics]
   );
 
@@ -123,11 +122,6 @@ export function useRoomDerivedState({
   const currentTrackAvailability = currentTrack
     ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
     : null;
-  const activeMediaDiagnostic = useMemo(
-    () => pickActiveMediaDiagnostic(peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId ?? null),
-    [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]
-  );
-
   const memberTransferSummaries = useMemo(() => {
     if (!roomSnapshot || activeDashboardTab !== "members") {
       return [];
@@ -254,24 +248,7 @@ export function useRoomDerivedState({
       "pieceUploadRateKbps"
     );
     const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
-    const totalMediaSendRateKbps = sumDiagnosticsValue(activePeerDiagnostics, "mediaSendBitrateKbps");
-    const totalMediaReceiveRateKbps = sumDiagnosticsValue(
-      activePeerDiagnostics,
-      "mediaReceiveBitrateKbps"
-    );
-    const effectiveMediaReceiveRateKbps =
-      totalMediaReceiveRateKbps ??
-      activeMediaDiagnostic?.mediaReceiveBitrateKbps ??
-      (activeMediaDiagnostic?.mediaSendBitrateKbps === null
-        ? activeMediaDiagnostic?.availableOutgoingBitrateKbps ?? null
-        : null);
-    const effectiveMediaSendRateKbps =
-      totalMediaSendRateKbps ??
-      activeMediaDiagnostic?.mediaSendBitrateKbps ??
-      null;
     const hasTransportMetricSample = hasDiagnosticsMetricSample(activePeerDiagnostics, [
-      "mediaReceiveBitrateKbps",
-      "mediaSendBitrateKbps",
       "availableOutgoingBitrateKbps",
       "currentRoundTripTimeMs"
     ]);
@@ -280,17 +257,11 @@ export function useRoomDerivedState({
     const transportSampleAgeMs = getLatestMetricSampleAgeMs(
       activePeerDiagnostics,
       [
-        "mediaReceiveBitrateKbps",
-        "mediaSendBitrateKbps",
         "availableOutgoingBitrateKbps",
         "currentRoundTripTimeMs"
       ]
     );
     const pieceSampleAgeMs = getLatestPieceSampleAgeMs(activePeerDiagnostics);
-    const normalizedMediaReceiveRateKbps =
-      effectiveMediaReceiveRateKbps ?? (hasTransportMetricSample ? 0 : null);
-    const normalizedMediaSendRateKbps =
-      effectiveMediaSendRateKbps ?? (hasTransportMetricSample ? 0 : null);
     const normalizedPieceDownloadRateKbps =
       totalPieceDownloadRateKbps ?? (hasPieceMetricSample ? 0 : null);
     const normalizedPieceUploadRateKbps =
@@ -301,12 +272,14 @@ export function useRoomDerivedState({
       audioUnlocked,
       sourceStartState,
       lastSourceStartError,
-      transportLabel: isSourceOwner ? "实时音频分发（本机汇总）" : "远端流链路（本机）",
+      transportLabel: "缓存播放链路（本机）",
       transportSummary: {
-        totalRateKbps:
-          sumNullableNumbers(normalizedMediaReceiveRateKbps, normalizedMediaSendRateKbps),
-        receiveRateKbps: normalizedMediaReceiveRateKbps,
-        sendRateKbps: normalizedMediaSendRateKbps,
+        totalRateKbps: sumNullableNumbers(
+          normalizedPieceDownloadRateKbps,
+          normalizedPieceUploadRateKbps
+        ),
+        receiveRateKbps: null,
+        sendRateKbps: null,
         latencyMs: averageLatencyMs,
         sampleAgeMs: transportSampleAgeMs
       },
@@ -315,6 +288,30 @@ export function useRoomDerivedState({
         uploadRateKbps: normalizedPieceUploadRateKbps,
         sampleAgeMs: pieceSampleAgeMs
       },
+      cachePlayback: systemDiagnostic?.progressivePlaybackStatus
+        ? {
+            activeSource: systemDiagnostic.progressivePlaybackStatus.activeSource,
+            engineType: systemDiagnostic.progressivePlaybackStatus.engineType,
+            contiguousBufferedMs: systemDiagnostic.progressivePlaybackStatus.contiguousBufferedMs,
+            aheadBufferedMs: systemDiagnostic.progressivePlaybackStatus.aheadBufferedMs,
+            schedulerPolicy: systemDiagnostic.progressivePlaybackStatus.schedulerPolicy,
+            startupReady: systemDiagnostic.progressivePlaybackStatus.startupReady,
+            fallbackReason: systemDiagnostic.progressivePlaybackStatus.fallbackReason,
+            estimatedFillTimeMs: systemDiagnostic.progressivePlaybackStatus.estimatedFillTimeMs ?? null,
+            bufferSafetyMarginMs: systemDiagnostic.progressivePlaybackStatus.bufferSafetyMarginMs ?? null,
+            fullLocalReady: systemDiagnostic.progressivePlaybackStatus.fullLocalReady ?? false,
+            progressiveLocalEligible:
+              systemDiagnostic.progressivePlaybackStatus.progressiveLocalEligible ?? false,
+            progressiveLocalBlockedReason:
+              systemDiagnostic.progressivePlaybackStatus.progressiveLocalBlockedReason ?? null,
+            waitingEventsLast30s:
+              systemDiagnostic.progressivePlaybackStatus.waitingEventsLast30s ?? null,
+            stalledEventsLast30s:
+              systemDiagnostic.progressivePlaybackStatus.stalledEventsLast30s ?? null,
+            averageDriftMs: systemDiagnostic.progressivePlaybackStatus.averageDriftMs ?? null,
+            maxDriftMs: systemDiagnostic.progressivePlaybackStatus.maxDriftMs ?? null
+          }
+        : null,
       playbackStatus: getLocalPlaybackStatus({
         presenceState: localMember.presenceState,
         mediaConnectionState,
@@ -327,23 +324,24 @@ export function useRoomDerivedState({
           activeMemberPeerIds
         ),
         playbackStatus: roomSnapshot.room.playback.status,
-        remoteMediaPlaybackReady: isRemoteMediaPlaybackReady(remoteMediaDiagnostic),
-        remoteTrackReceived: !!remoteMediaDiagnostic?.remoteTrackStatus.received,
-        remoteTrackBound: !!remoteMediaDiagnostic?.remoteTrackStatus.boundToAudioElement
+        cachePlayback: systemDiagnostic?.progressivePlaybackStatus ?? null,
+        dataReadyCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
+        pieceDownloadRateKbps: normalizedPieceDownloadRateKbps,
+        pieceUploadRateKbps: normalizedPieceUploadRateKbps
       })
     };
   }, [
-    activeMediaDiagnostic,
     activeMemberPeerIds,
     activeSessionUserId,
     audioUnlocked,
+    connectedPeers,
     lastSourceStartError,
     mediaConnectedPeers,
     mediaConnectionState,
     peerDiagnostics,
-    remoteMediaDiagnostic,
     roomSnapshot,
-    sourceStartState
+    sourceStartState,
+    systemDiagnostic
   ]);
 
   const statusTone =
@@ -510,6 +508,18 @@ function sumNullableNumbers(...values: Array<number | null>) {
   return Math.round(numbers.reduce((sum, value) => sum + value, 0) * 10) / 10;
 }
 
+function formatDurationMs(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+
+  return `${(value / 1000).toFixed(1)}s`;
+}
+
 function averageDiagnosticsValue(
   diagnostics: PeerDiagnosticsSnapshot[],
   key: "currentRoundTripTimeMs"
@@ -610,13 +620,14 @@ function getLocalPlaybackStatus(input: {
   lastSourceStartError: string | null;
   mediaConnectedPeersCount: number;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
-  remoteMediaPlaybackReady: boolean;
-  remoteTrackReceived: boolean;
-  remoteTrackBound: boolean;
+  cachePlayback: PeerDiagnosticsSnapshot["progressivePlaybackStatus"] | null;
+  dataReadyCount: number;
+  pieceDownloadRateKbps: number | null;
+  pieceUploadRateKbps: number | null;
 }): LocalMemberPanelState["playbackStatus"] {
   if (input.presenceState === "offline") {
     return {
-      label: "未接入音频",
+      label: "未参与缓存播放",
       detail: "当前成员已离线。",
       tone: "warning",
       badgeText: "offline"
@@ -625,148 +636,94 @@ function getLocalPlaybackStatus(input: {
 
   if (input.presenceState === "reconnecting") {
     return {
-      label: "实时音频重连中",
-      detail: "本机正在恢复实时播放链路。",
+      label: "缓存链路重连中",
+      detail: "本机正在恢复房间状态和分片数据通道。",
       tone: "warning",
       badgeText: "reconnecting"
     };
   }
 
-  if (input.isSourceOwner) {
-    if (input.playbackStatus !== "playing") {
-      return {
-        label: "本地待机",
-        detail: "当前还没有在向房间持续分发实时音频。",
-        tone: "neutral",
-        badgeText: "source-idle"
-      };
-    }
+  if (input.playbackStatus !== "playing") {
+    return {
+      label: "本地待机",
+      detail: "当前房间未处于播放状态，缓存链路保持待命。",
+      tone: "neutral",
+      badgeText: "idle"
+    };
+  }
 
-    if (input.sourceStartState === "awaiting-unlock" || !input.audioUnlocked) {
-      return {
-        label: "等待本机音频启动",
-        detail: "当前设备尚未完成本机音频解锁，下一次任意交互后会自动开始实时分发。",
-        tone: "warning",
-        badgeText: "source-awaiting-unlock"
-      };
-    }
+  if (!input.audioUnlocked) {
+    return {
+      label: "等待本机音频解锁",
+      detail: "浏览器还未允许音频输出，点击播放或任意交互后继续。",
+      tone: "warning",
+      badgeText: "awaiting-unlock"
+    };
+  }
 
-    if (input.sourceStartState === "starting") {
-      return {
-        label: "正在启动实时分发",
-        detail: "本机已解锁，正在拉起本地音频并同步给房间。",
-        tone: "accent",
-        badgeText: "source-starting"
-      };
-    }
+  if (input.cachePlayback?.activeSource === "full-local") {
+    return {
+      label: "完整缓存播放",
+      detail: "当前使用完整本地缓存播放，网络只负责同步控制和分片回传。",
+      tone: "success",
+      badgeText: "full-local"
+    };
+  }
 
-    if (input.sourceStartState === "failed") {
+  if (input.cachePlayback?.activeSource === "progressive-local") {
+    if (input.cachePlayback.startupReady) {
       return {
-        label: "本机音频启动失败",
-        detail: input.lastSourceStartError
-          ? `本机音频启动被阻止：${input.lastSourceStartError}`
-          : "当前未能拉起本机音频输出，等待下一次交互后自动重试。",
-        tone: "warning",
-        badgeText: "source-failed"
-      };
-    }
-
-    if (input.mediaConnectedPeersCount > 0) {
-      return {
-        label: "本机分发中",
-        detail: `当前正在向 ${input.mediaConnectedPeersCount} 位成员分发实时音频。`,
+        label: "边下边播",
+        detail: `当前本地缓存窗口已可播，ahead ${formatDurationMs(input.cachePlayback.aheadBufferedMs)}。`,
         tone: "success",
-        badgeText: "source-live"
+        badgeText: "progressive"
       };
     }
 
     return {
-      label: "本机分发中",
+      label: "缓存启动中",
       detail:
-        input.sourceStartState === "live"
-          ? "当前真实音轨已发布，等待其他成员接入实时音频。"
-          : "当前曲目正在本机播放，等待其他成员接入实时音频。",
+        input.cachePlayback.fallbackReason ??
+        input.cachePlayback.progressiveLocalBlockedReason ??
+        "正在缓存当前播放位置所需分片。",
       tone: "accent",
-      badgeText: "source-waiting"
+      badgeText: "buffering"
     };
   }
 
-  switch (input.mediaConnectionState) {
-    case "live":
-      if (input.remoteMediaPlaybackReady) {
-        return {
-          label: "实时音频中",
-          detail: "当前已接入远端实时音频链路。",
-          tone: "success",
-          badgeText: "healthy"
-        };
-      }
+  if ((input.pieceDownloadRateKbps ?? 0) > 0 || (input.pieceUploadRateKbps ?? 0) > 0) {
+    return {
+      label: "正在缓存播放片段",
+      detail: "已开始按当前播放进度拉取分片，等待本地播放窗口满足启动条件。",
+      tone: "accent",
+      badgeText: "cache-fill"
+    };
+  }
+
+  if (input.dataReadyCount > 0) {
+    return {
+      label: "等待可播缓存",
+      detail: "数据通道已就绪，等待当前曲目的可请求分片或本地解码窗口。",
+      tone: "accent",
+      badgeText: "data-ready"
+    };
+  }
+
+  if (input.mediaConnectionState === "failed") {
       return {
-        label: "实时音频缓冲中",
-        detail: "链路已连接，但远端音频元素尚未进入实际播放。",
-        tone: "accent",
-        badgeText: "buffering"
-      };
-    case "buffering":
-      if (input.remoteMediaPlaybackReady) {
-        return {
-          label: "实时音频中",
-          detail: "当前已接入远端实时音频链路。",
-          tone: "success",
-          badgeText: "healthy"
-        };
-      }
-      if (input.remoteTrackReceived || input.remoteTrackBound) {
-        return {
-          label: "实时音频缓冲中",
-          detail: "已收到远端媒体，正在等待音频元素进入播放。",
-          tone: "accent",
-          badgeText: "buffering"
-        };
-      }
-      return {
-        label: "正在连接实时音频",
-        detail: "实时链路已建立，正在等待远端音频轨到达。",
-        tone: "accent",
-        badgeText: "connecting"
-      };
-    case "connecting":
-      return {
-        label: "正在连接实时音频",
-        detail: "当前正在接入房间实时音频。",
-        tone: "accent",
-        badgeText: "connecting"
-      };
-    case "reconnecting":
-      return {
-        label: "实时音频重连中",
-        detail: "链路状态正在恢复，音频可能暂时抖动。",
-        tone: "warning",
-        badgeText: "reconnecting"
-      };
-    case "failed":
-      return {
-        label: "实时音频连接失败",
-        detail: "当前实时音频链路恢复失败。",
-        tone: "warning",
-        badgeText: "failed"
-      };
-    default:
-      if (input.remoteMediaPlaybackReady) {
-        return {
-          label: "实时音频中",
-          detail: "当前已接入远端实时音频链路。",
-          tone: "success",
-          badgeText: "healthy"
-        };
-      }
-      return {
-        label: "未接入音频",
-        detail: "当前还没有稳定的实时音频链路。",
-        tone: "neutral",
-        badgeText: "idle"
+      label: "数据链路不可用",
+      detail: "当前缓存播放所需的数据链路尚未恢复。",
+      tone: "warning",
+      badgeText: "failed"
       };
   }
+
+  return {
+    label: "等待缓存链路",
+    detail: "正在等待当前播放曲目的分片来源和数据通道。",
+    tone: "neutral",
+    badgeText: "idle"
+  };
 }
 
 export function isRemoteMediaPlaybackReady(peer: PeerDiagnosticsSnapshot | null | undefined) {

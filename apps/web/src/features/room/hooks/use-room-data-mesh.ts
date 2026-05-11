@@ -10,7 +10,6 @@ import {
   resolveTrackPieceManifest
 } from "@/features/p2p";
 import {
-  cacheTrackPieces,
   getCachedLibraryTrack,
   getTrackPieceManifest,
   getTrackPieceManifestByFileHash,
@@ -156,7 +155,7 @@ export function createRoomDataMeshRuntime(input: {
           sourcePeerId
         );
         if (!shouldProcessPieceForCache) {
-          return true;
+          return false;
         }
         const currentTrack =
           input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
@@ -405,31 +404,6 @@ export function createRoomDataMeshRuntime(input: {
           .slice(chunkStart, Math.min(fallbackFile.size, chunkStart + manifest.chunkSize))
           .arrayBuffer();
         const hash = await hashArrayBuffer(payload);
-
-        await cacheTrackPieces([
-          {
-            pieceId: `${track.fileHash}:${manifest.chunkSize}:${localCacheOwnerKey}:${chunkIndex}`,
-            trackId,
-            fileHash: track.fileHash,
-            peerId: input.peerId,
-            ownerKey: localCacheOwnerKey,
-            chunkIndex,
-            chunkSize: payload.byteLength,
-            hash,
-            payload
-          }
-        ]);
-        void queueTrackPieceManifestUpsert({
-          trackId,
-          fileHash: track.fileHash,
-          mimeType: manifest.pieceMimeType,
-          codec: track.codec ?? null,
-          sizeBytes: track.sizeBytes ?? fallbackFile.size,
-          durationMs: track.durationMs,
-          totalChunks: manifest.totalChunks,
-          chunkSize: manifest.chunkSize,
-          pieceHashes: manifest.pieceHashes
-        });
 
         return {
           payload,

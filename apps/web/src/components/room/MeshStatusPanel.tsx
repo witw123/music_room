@@ -8,7 +8,6 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { isRemoteMediaPlaybackReady } from "@/components/room/hooks/use-room-derived-state";
 import type { LocalMemberPanelState } from "./MembersPanel";
 
 export type AvailabilityEntry = {
@@ -90,15 +89,6 @@ function formatCandidateType(value: string | null | undefined) {
   return value;
 }
 
-function formatMediaReadyState(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  const labels = ["0", "1 metadata", "2 current", "3 future", "4 enough"] as const;
-  return labels[value] ?? `${value}`;
-}
-
 function formatSampleAge(sampleAgeMs: number | null) {
   if (sampleAgeMs === null) {
     return "暂无样本";
@@ -124,24 +114,14 @@ function formatEventLabel(event: PeerRecentEvent) {
 }
 
 function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
-  if (peer.mediaCandidateType && peer.dataCandidateType) {
-    if (peer.mediaCandidateType !== peer.dataCandidateType) {
-      return "媒体和数据走不同链路";
-    }
-
-    if (peer.mediaCandidateType === "relay") {
-      return "媒体和数据都经过 relay";
-    }
-
-    return "媒体和数据都走 direct";
+  if (peer.dataCandidateType) {
+    return peer.dataCandidateType === "relay"
+      ? "数据通道经过 relay"
+      : `数据通道 direct (${peer.dataCandidateType})`;
   }
 
-  if (peer.mediaCandidateType === "relay" || peer.dataCandidateType === "relay") {
-    return "至少一条链路经过 relay";
-  }
-
-  if (peer.mediaCandidateType || peer.dataCandidateType) {
-    return "链路已进入 direct";
+  if (peer.dataConnectionState || peer.dataChannelState) {
+    return `数据 ${peer.dataConnectionState ?? "未知"} / channel ${peer.dataChannelState ?? "未知"}`;
   }
 
   return null;
@@ -201,7 +181,6 @@ function DiagnosticBlock({
 
 function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
   const playback = peer.progressivePlaybackStatus ?? null;
-  const remote = peer.remoteTrackStatus;
 
   return (
     <details className="overflow-hidden rounded-lg border border-surface-border bg-background/30 px-3 py-2">
@@ -211,7 +190,7 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
             <strong className="truncate text-xs font-semibold text-foreground">{peer.peerId}</strong>
             <p className="mt-1 text-[10px] text-foreground-muted">
               {describeCandidatePath(peer) ??
-                `数据 ${peer.dataConnectionState ?? "未知"} / 音频 ${peer.mediaConnectionState ?? "未知"}`}
+                `数据 ${peer.dataConnectionState ?? "未知"} / channel ${peer.dataChannelState ?? "未知"}`}
             </p>
           </div>
           <span
@@ -224,15 +203,15 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
       </summary>
 
       <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
-        <DiagnosticBlock title="连接">
+        <DiagnosticBlock title="数据链路">
           <DiagnosticGrid>
             <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
             <span>DataChannel: {peer.dataChannelState ?? "未知"}</span>
-            <span>音频连接: {peer.mediaConnectionState ?? "未知"}</span>
             <span>恢复级别: {peer.recoveryActionLevel ?? "observe"}</span>
             <span>数据候选: {formatCandidateType(peer.dataCandidateType)}</span>
-            <span>媒体候选: {formatCandidateType(peer.mediaCandidateType)}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
+            <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
+            <span>最近分片: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
             <span>更新: {formatTimestamp(peer.updatedAt)}</span>
           </DiagnosticGrid>
           {peer.degradedReason ? (
@@ -240,65 +219,40 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
           ) : null}
         </DiagnosticBlock>
 
-        <DiagnosticBlock title="吞吐">
+        <DiagnosticBlock title="分片质量">
           <DiagnosticGrid>
             <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>
-            <span>媒体接收: {formatMetric(peer.mediaReceiveBitrateKbps, " kbps")}</span>
-            <span>媒体发送: {formatMetric(peer.mediaSendBitrateKbps, " kbps")}</span>
-            <span>目标码率: {formatMetric(peer.targetAudioBitrateKbps, " kbps")}</span>
-            <span>已配置 sender: {formatMetric(peer.configuredAudioMaxBitrateKbps, " kbps")}</span>
-            <span>实际 sender: {formatMetric(peer.senderAudioMaxBitrateKbps, " kbps")}</span>
             <span>分片下载: {formatMetric(peer.pieceDownloadRateKbps, " kbps")}</span>
             <span>分片上传: {formatMetric(peer.pieceUploadRateKbps, " kbps")}</span>
+            <span>分片 RTT p50: {formatMetric(peer.pieceRttMsP50, "ms")}</span>
             <span>分片 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
-            <span>丢包率: {formatMetric(peer.packetLossRate, "%")}</span>
-            <span>抖动: {formatMetric(peer.jitterMs, "ms")}</span>
+            <span>请求超时率: {formatMetric(peer.pieceTimeoutRate, "%")}</span>
+            <span>最近数据活动: {formatMaybeTimestamp(peer.lastDataActivityAt)}</span>
           </DiagnosticGrid>
-          {peer.opusFmtpLine ? (
-            <p className="mt-2 break-all font-mono text-[10px] text-sky-300">
-              Opus fmtp: {peer.opusFmtpLine}
-            </p>
-          ) : null}
-        </DiagnosticBlock>
-
-        <DiagnosticBlock title="远端音频">
-          <DiagnosticGrid>
-            <span>收到 track: {formatBoolean(remote.received)}</span>
-            <span>已绑定: {formatBoolean(remote.boundToAudioElement)}</span>
-            <span>paused: {formatBoolean(remote.audioPaused)}</span>
-            <span>srcObject: {formatBoolean(remote.hasSrcObject)}</span>
-            <span>readyState: {formatMediaReadyState(remote.audioReadyState)}</span>
-            <span>最近事件: {remote.lastAudioEvent ?? "未知"}</span>
-            <span>最近 play(): {remote.lastPlayAttemptResult ?? "未知"}</span>
-            <span>最近可听推进: {formatMaybeTimestamp(peer.lastAudibleProgressAt)}</span>
-          </DiagnosticGrid>
-          {remote.lastPlayAttemptError ? (
-            <p className="mt-2 text-[10px] text-red-300">play() 失败: {remote.lastPlayAttemptError}</p>
-          ) : null}
         </DiagnosticBlock>
 
         {playback ? (
-          <DiagnosticBlock title="播放运行时">
+          <DiagnosticBlock title="缓存播放运行时">
             <DiagnosticGrid>
-              <span>播放源: {playback.activeSource ?? "未启用"}</span>
-              <span>连接代次: {playback.playbackConnectionKey ?? "未知"}</span>
+              <span>播放源: {playback.activeSource ?? "等待缓存"}</span>
+              <span>引擎: {playback.engineType ?? "none"}</span>
               <span>播放面: {playback.playbackSurfaceKey ?? "未知"}</span>
               <span>时间线: {playback.playbackTimelineKey ?? "未知"}</span>
-              <span>监听状态: {playback.listenerPlaybackState ?? "未知"}</span>
-              <span>传输状态: {playback.mediaTransportState ?? "未知"}</span>
               <span>房间变更: {playback.roomChangeKind ?? "未知"}</span>
-              <span>远端输出: {playback.remoteOutputMode ?? "未知"}</span>
-              <span>音源启动: {playback.sourceStartState ?? "未知"}</span>
               <span>恢复阶段: {playback.recoveryPhase ?? "未知"}</span>
-              <span>恢复动作: {playback.activeRecoveryActionType ?? "无"}</span>
-              <span>动作结果: {playback.activeRecoveryActionResult ?? "无"}</span>
-              <span>最近重置: {playback.sourceResetReason ?? "无"}</span>
-              <span>远端保流: {formatBoolean(playback.remoteSurfacePreserved)}</span>
-              <span>引擎: {playback.engineType ?? "none"}</span>
               <span>调度: {playback.schedulerPolicy ?? "未激活"}</span>
+              <span>启动就绪: {formatBoolean(playback.startupReady)}</span>
+              <span>连续缓存: {formatDurationMs(playback.contiguousBufferedMs)}</span>
               <span>前向缓冲: {formatDurationMs(playback.aheadBufferedMs)}</span>
+              <span>预计补齐: {formatDurationMs(playback.estimatedFillTimeMs)}</span>
+              <span>安全余量: {formatDurationMs(playback.bufferSafetyMarginMs)}</span>
+              <span>完整缓存: {formatBoolean(playback.fullLocalReady)}</span>
+              <span>渐进可播: {formatBoolean(playback.progressiveLocalEligible)}</span>
+              <span>平均漂移: {formatMetric(playback.averageDriftMs, "ms")}</span>
+              <span>最大漂移: {formatMetric(playback.maxDriftMs, "ms")}</span>
+              <span>waiting/30s: {formatMetric(playback.waitingEventsLast30s, "")}</span>
+              <span>stalled/30s: {formatMetric(playback.stalledEventsLast30s, "")}</span>
               <span>音频解锁: {formatBoolean(playback.audioUnlocked)}</span>
-              <span>Socket 保护: {formatBoolean(playback.socketDisconnectGraceActive)}</span>
             </DiagnosticGrid>
             {playback.lastSourceStartError ? (
               <p className="mt-2 text-[10px] text-red-300">
@@ -312,26 +266,12 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
             ) : null}
             {playback.fallbackReason ? (
               <p className="mt-1 text-[10px] text-amber-300">
-                回退原因: {playback.fallbackReason}
+                缓存播放阻塞: {playback.fallbackReason}
               </p>
             ) : null}
-            {playback.activeRecoveryActionReason ? (
+            {playback.progressiveLocalBlockedReason ? (
               <p className="mt-1 text-[10px] text-amber-300">
-                当前恢复原因: {playback.activeRecoveryActionReason}
-              </p>
-            ) : null}
-            {playback.lastRecoveryRecommendationLevel ? (
-              <p className="mt-1 text-[10px] text-sky-300">
-                最近建议: {playback.lastRecoveryRecommendationScope ?? "media"} /{" "}
-                {playback.lastRecoveryRecommendationLevel}
-                {playback.lastRecoveryRecommendationReason
-                  ? ` / ${playback.lastRecoveryRecommendationReason}`
-                  : ""}
-              </p>
-            ) : null}
-            {playback.recoveryDropReason ? (
-              <p className="mt-1 text-[10px] text-amber-300">
-                建议已丢弃: {playback.recoveryDropReason}
+                渐进播放未就绪: {playback.progressiveLocalBlockedReason}
               </p>
             ) : null}
           </DiagnosticBlock>
@@ -382,26 +322,6 @@ function MeshStatusPanelBase({
       ).length,
     [activePeerIds, peerDiagnostics]
   );
-  const mediaReadyCount = useMemo(() => {
-    const remoteMediaDiagnostic =
-      peerDiagnostics.find((peer) => peer.peerId === "remote-media") ?? null;
-    const hasConcreteRemoteMedia =
-      !!remoteMediaDiagnostic &&
-      (remoteMediaDiagnostic.remoteTrackStatus.currentTrackId !== null ||
-        remoteMediaDiagnostic.remoteTrackStatus.received ||
-        remoteMediaDiagnostic.remoteTrackStatus.boundToAudioElement ||
-        remoteMediaDiagnostic.remoteTrackStatus.hasSrcObject !== null ||
-        remoteMediaDiagnostic.mediaConnectionState !== null);
-    if (hasConcreteRemoteMedia) {
-      return isRemoteMediaPlaybackReady(remoteMediaDiagnostic) ? 1 : 0;
-    }
-
-    return peerDiagnostics.filter(
-      (peer) =>
-        activePeerIds.has(peer.peerId) &&
-        (peer.mediaConnectionState === "connected" || peer.mediaConnectionState === "live")
-    ).length;
-  }, [activePeerIds, peerDiagnostics]);
   const degradedCount = useMemo(
     () =>
       peerDiagnostics.filter(
@@ -425,9 +345,9 @@ function MeshStatusPanelBase({
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
             Advanced
           </p>
-          <h2 className="text-sm font-bold text-foreground">高级连接诊断</h2>
+          <h2 className="text-sm font-bold text-foreground">缓存播放诊断</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            默认只展示摘要；播放无声或频繁重连时，再展开查看 ICE、音频轨道和最近错误。
+            默认只展示摘要；播放缓冲或分片下载慢时，再展开查看缓存窗口、分片吞吐和数据通道。
           </p>
         </div>
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsOpen((value) => !value)}>
@@ -443,7 +363,7 @@ function MeshStatusPanelBase({
           Data: {dataReadyCount || connectedPeersCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          Media: {mediaReadyCount || mediaConnectedPeersCount}
+          缓存播放: {localMemberState?.cachePlayback?.activeSource ?? "等待缓存"}
         </span>
         <span
           className={`rounded border px-2 py-1 ${

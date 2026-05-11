@@ -3,6 +3,8 @@
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
 
+type ProgressiveStatus = NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
+
 export type MemberTransferSummary = {
   memberId: string;
   announcedTrackCount: number;
@@ -30,6 +32,25 @@ export type LocalMemberPanelState = {
     uploadRateKbps: number | null;
     sampleAgeMs: number | null;
   };
+  cachePlayback: Pick<
+    ProgressiveStatus,
+    | "activeSource"
+    | "engineType"
+    | "contiguousBufferedMs"
+    | "aheadBufferedMs"
+    | "schedulerPolicy"
+    | "startupReady"
+    | "fallbackReason"
+    | "estimatedFillTimeMs"
+    | "bufferSafetyMarginMs"
+    | "fullLocalReady"
+    | "progressiveLocalEligible"
+    | "progressiveLocalBlockedReason"
+    | "waitingEventsLast30s"
+    | "stalledEventsLast30s"
+    | "averageDriftMs"
+    | "maxDriftMs"
+  > | null;
   playbackStatus: {
     label: string;
     detail: string;
@@ -121,7 +142,7 @@ function getCurrentTrackStatus(
       label: summary?.announcedTrackCount ? "未提供当前曲目分片" : "未提供分片",
       detail: summary?.announcedTrackCount
         ? "本地持有其他房间曲目，但当前曲目还没有可供回传的分片。"
-        : "当前主要通过实时音频播放，本地没有可供回传的当前曲目文件。",
+        : "当前没有可供回传的当前曲目分片，需要从其他在线缓存源拉取。",
       progressPercent: 0,
       tone: "neutral" as const
     };
@@ -162,161 +183,88 @@ function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
   peerDiagnostics: PeerDiagnosticsSnapshot | undefined
 ) {
-  const recoveryPhase = peerDiagnostics?.progressivePlaybackStatus?.recoveryPhase ?? null;
-  const fullLocalRecoveryActive =
-    peerDiagnostics?.progressivePlaybackStatus?.fullLocalRecoveryActive ?? false;
-  const mediaTransportState =
-    peerDiagnostics?.progressivePlaybackStatus?.mediaTransportState ?? null;
-  const publishedTrackKind =
-    peerDiagnostics?.progressivePlaybackStatus?.publishedTrackKind ?? null;
-  const sourceStartState =
-    peerDiagnostics?.progressivePlaybackStatus?.sourceStartState ?? null;
-  const hostPublishSource =
-    peerDiagnostics?.progressivePlaybackStatus?.hostPublishSource ?? null;
-  const hostPublishReadiness =
-    peerDiagnostics?.progressivePlaybackStatus?.hostPublishReadiness ?? null;
-  const hostPublishFailureReason =
-    peerDiagnostics?.progressivePlaybackStatus?.hostPublishFailureReason ?? null;
-  const mediaFailureReason =
-    peerDiagnostics?.progressivePlaybackStatus?.mediaFailureReason ?? null;
-  const listenerAwaitingPublisherOffer =
-    peerDiagnostics?.progressivePlaybackStatus?.listenerAwaitingPublisherOffer ?? false;
-
   if (presenceState === "offline") {
     return {
-      label: "未接入音频",
-      detail: "该成员已离线，不参与实时播放。",
+      label: "未参与缓存播放",
+      detail: "该成员已离线，不参与分片下载或缓存回传。",
       tone: "warning" as const
     };
   }
 
   if (presenceState === "reconnecting") {
     return {
-      label: "实时音频重连中",
-      detail: "成员正在恢复房间实时链路。",
+      label: "数据链路重连中",
+      detail: "成员正在恢复房间状态和分片数据通道。",
       tone: "warning" as const
     };
   }
 
-  if (recoveryPhase === "joining" || recoveryPhase === "resyncing") {
+  const playback = peerDiagnostics?.progressivePlaybackStatus ?? null;
+  if (playback?.activeSource === "full-local") {
     return {
-      label: "同步房间状态中",
-      detail: "已进入房间，正在同步当前播放状态和成员拓扑。",
-      tone: "accent" as const
-    };
-  }
-
-  if (recoveryPhase === "bootstrapping-data") {
-    return {
-      label: "同步数据链路中",
-      detail: "当前曲目和来源已确认，正在恢复分片数据通道。",
-      tone: "accent" as const
-    };
-  }
-
-  if (recoveryPhase === "bootstrapping-media") {
-    if (
-      (mediaTransportState === "connected" || mediaTransportState === "prewarming") &&
-      publishedTrackKind !== "host-capture" &&
-      publishedTrackKind !== "relay-stream"
-    ) {
-      return {
-        label: "音频链路已接入",
-        detail: "实时音频传输已预连，正在等待房主发布当前音轨。",
-        tone: "accent" as const
-      };
-    }
-    return {
-      label: "连接实时音频中",
-      detail: "当前曲目和来源已确认，正在拉起远端实时音频。",
-      tone: "accent" as const
-    };
-  }
-
-  if (sourceStartState === "starting") {
-    return {
-      label: "正在启动实时分发",
-      detail:
-        hostPublishReadiness === "awaiting-audio"
-          ? `实时链路已预热，等待真实发布源就绪：${hostPublishSource ?? "未知"}`
-          : "本机已解锁，正在拉起本地音频并同步给房间。",
-      tone: "accent" as const
-    };
-  }
-
-  if (sourceStartState === "failed") {
-    return {
-      label: "实时分发启动失败",
-      detail: hostPublishFailureReason
-        ? `真实发布源异常：${hostPublishFailureReason}`
-        : "当前还没有可用于实时分发的真实音频源。",
-      tone: "warning" as const
-    };
-  }
-
-  if (listenerAwaitingPublisherOffer) {
-    return {
-      label: "等待房主重发音频",
-      detail: "本端已重置监听链路，正在等待房主重新发起实时音频协商。",
-      tone: "accent" as const
-    };
-  }
-
-  if (peerDiagnostics?.transportHealth === "degraded") {
-    return {
-      label: "播放中，链路波动",
-      detail: "当前仍在持续播放，检测到短时缓冲或 ICE 检查，暂不升级为硬重连。",
-      tone: "accent" as const
-    };
-  }
-
-  if (peerDiagnostics?.transportHealth === "recovering") {
-    return {
-      label: "后台恢复实时音频中",
-      detail: "当前可听源优先保持，实时链路正在后台恢复。",
-      tone: "accent" as const
-    };
-  }
-
-  if (
-    peerDiagnostics?.mediaConnectionState === "connected" ||
-    peerDiagnostics?.mediaConnectionState === "live" ||
-    peerDiagnostics?.transportHealth === "media-only"
-  ) {
-    return {
-      label: "实时音频中",
-      detail:
-        peerDiagnostics?.transportHealth === "media-only"
-          ? "当前通过远端实时音频播放，分片数据通道尚未就绪。"
-          : "当前已接入远端实时音频链路。",
+      label: "完整缓存播放",
+      detail: "本端观测到该成员使用完整本地缓存作为可听源。",
       tone: "success" as const
     };
   }
 
-  if (
-    peerDiagnostics?.mediaConnectionState === "buffering" ||
-    peerDiagnostics?.mediaConnectionState === "connecting"
-  ) {
+  if (playback?.activeSource === "progressive-local") {
+    const ahead = formatDurationMs(playback.aheadBufferedMs);
     return {
-      label: "实时音频缓冲中",
-      detail: "已接入音频链路，正在等待播放稳定。",
+      label: playback.startupReady ? "边下边播" : "缓存启动中",
+      detail: `本地渐进播放窗口 ahead ${ahead}，调度策略 ${playback.schedulerPolicy ?? "未知"}。`,
+      tone: playback.startupReady ? ("success" as const) : ("accent" as const)
+    };
+  }
+
+  if (playback?.fallbackReason || playback?.progressiveLocalBlockedReason) {
+    return {
+      label: "缓存播放受阻",
+      detail: playback.fallbackReason ?? playback.progressiveLocalBlockedReason ?? "本地缓存窗口暂不可播。",
+      tone: "warning" as const
+    };
+  }
+
+  if (peerDiagnostics?.dataChannelState === "open") {
+    if (
+      typeof peerDiagnostics.pieceDownloadRateKbps === "number" ||
+      typeof peerDiagnostics.pieceUploadRateKbps === "number"
+    ) {
+      return {
+        label: "分片传输中",
+        detail: "数据通道已打开，正在为缓存播放交换音频分片。",
+        tone: "success" as const
+      };
+    }
+    return {
+      label: "数据通道就绪",
+      detail: "可用于按需缓存下载和向其他成员回传分片。",
       tone: "accent" as const
     };
   }
 
-  if (peerDiagnostics?.transportHealth === "reconnecting") {
+  if (
+    peerDiagnostics?.dataConnectionState === "connecting" ||
+    peerDiagnostics?.dataIceState === "checking"
+  ) {
     return {
-      label: "实时音频重连中",
-      detail: "链路状态正在恢复，音频可能暂时抖动。",
+      label: "连接数据通道",
+      detail: "正在建立用于缓存下载的 P2P 数据链路。",
+      tone: "accent" as const
+    };
+  }
+
+  if (peerDiagnostics?.transportHealth === "failed") {
+    return {
+      label: "数据链路失败",
+      detail: peerDiagnostics.lastFailureReason ?? "缓存下载链路不可用，需要等待重连。",
       tone: "warning" as const
     };
   }
 
   return {
-    label: "未接入音频",
-    detail: mediaFailureReason
-      ? `当前还没有稳定的实时音频链路：${mediaFailureReason}`
-      : "当前还没有稳定的实时音频链路。",
+    label: "等待缓存链路",
+    detail: "当前还没有可观测的数据通道或本地播放状态。",
     tone: "neutral" as const
   };
 }
@@ -367,6 +315,18 @@ function formatMetric(value: number | null, unit: string) {
   return `${value}${unit}`;
 }
 
+function formatDurationMs(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+
+  return `${(value / 1000).toFixed(1)}s`;
+}
+
 function formatPreciseMetric(
   value: number | null,
   unit: string,
@@ -389,22 +349,6 @@ function formatSampleAge(sampleAgeMs: number | null) {
 
   const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
   return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
-}
-
-function getRemoteStreamRate(peer: PeerDiagnosticsSnapshot | undefined) {
-  if (!peer) {
-    return null;
-  }
-
-  if (peer.mediaReceiveBitrateKbps !== null) {
-    return peer.mediaReceiveBitrateKbps;
-  }
-
-  if (peer.mediaSendBitrateKbps !== null) {
-    return peer.mediaSendBitrateKbps;
-  }
-
-  return peer.availableOutgoingBitrateKbps;
 }
 
 function MembersPanelBase({
@@ -486,9 +430,6 @@ function MembersPanelBase({
           const toneClasses = getToneClasses(currentTrackStatus.tone);
           const playbackToneClasses = getToneClasses(playbackStatus.tone);
           const presenceBadge = getPresenceBadge(member);
-          const remoteStreamRateKbps = isLocalMember
-            ? localMemberState.transportSummary.totalRateKbps
-            : getRemoteStreamRate(peerDiagnosticsSnapshot);
           const latencyMs = isLocalMember
             ? localMemberState.transportSummary.latencyMs
             : peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null;
@@ -529,17 +470,21 @@ function MembersPanelBase({
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-2 text-[10px] leading-4 text-foreground-muted">
                   <span className="block text-foreground-muted">
-                    {isLocalMember ? localMemberState.transportLabel : "远端流链路（本端观测）"}
+                    {isLocalMember ? localMemberState.transportLabel : "数据链路（本端观测）"}
                   </span>
                   {isLocalMember ? (
                     <>
                       <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
                         <span>
-                          总传输:{" "}
+                          分片总速:{" "}
                           {formatPreciseMetric(
-                            localMemberState.transportSummary.totalRateKbps,
+                            localMemberState.pieceSummary.downloadRateKbps === null &&
+                              localMemberState.pieceSummary.uploadRateKbps === null
+                              ? null
+                              : (localMemberState.pieceSummary.downloadRateKbps ?? 0) +
+                                (localMemberState.pieceSummary.uploadRateKbps ?? 0),
                             " kbps",
-                            localMemberState.transportSummary.sampleAgeMs
+                            localMemberState.pieceSummary.sampleAgeMs
                           )}
                         </span>
                         <span>
@@ -551,7 +496,7 @@ function MembersPanelBase({
                           )}
                         </span>
                         <span>
-                          接收:{" "}
+                          Data 接收:{" "}
                           {formatPreciseMetric(
                             localMemberState.transportSummary.receiveRateKbps,
                             " kbps",
@@ -559,7 +504,7 @@ function MembersPanelBase({
                           )}
                         </span>
                         <span>
-                          发送:{" "}
+                          Data 发送:{" "}
                           {formatPreciseMetric(
                             localMemberState.transportSummary.sendRateKbps,
                             " kbps",
@@ -573,8 +518,12 @@ function MembersPanelBase({
                     </>
                   ) : (
                     <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-                      <span>传输速度: {formatMetric(remoteStreamRateKbps, " kbps")}</span>
+                      <span>DataChannel: {peerDiagnosticsSnapshot?.dataChannelState ?? "未知"}</span>
                       <span>延迟: {formatMetric(latencyMs, "ms")}</span>
+                      <span>
+                        buffered:{" "}
+                        {formatMetric(peerDiagnosticsSnapshot?.dataBufferedAmountBytes ?? null, " bytes")}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -631,6 +580,18 @@ function MembersPanelBase({
                   <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
                     {playbackStatus.detail}
                   </p>
+                  {isLocalMember && localMemberState.cachePlayback ? (
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
+                      <span>播放源: {localMemberState.cachePlayback.activeSource ?? "等待缓存"}</span>
+                      <span>引擎: {localMemberState.cachePlayback.engineType ?? "none"}</span>
+                      <span>ahead: {formatDurationMs(localMemberState.cachePlayback.aheadBufferedMs)}</span>
+                      <span>连续: {formatDurationMs(localMemberState.cachePlayback.contiguousBufferedMs)}</span>
+                      <span>调度: {localMemberState.cachePlayback.schedulerPolicy ?? "idle"}</span>
+                      <span>
+                        drift: {formatMetric(localMemberState.cachePlayback.maxDriftMs ?? null, "ms")}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
@@ -672,10 +633,8 @@ function MembersPanelBase({
               <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-1.5 text-[10px] leading-4 text-foreground-muted">
                 {sourceSummary ? (
                   <span>同步来源：{sourceSummary}</span>
-                ) : playbackStatus.label === "实时音频中" ? (
-                  <span>同步来源：当前通过实时音频持续播放。</span>
                 ) : member.presenceState === "online" ? (
-                  <span>同步来源：当前没有可供回传的房间分片。</span>
+                  <span>同步来源：当前没有可供回传的当前曲目分片，将依赖其他在线缓存源。</span>
                 ) : member.presenceState === "reconnecting" ? (
                   <span>同步来源：连接恢复后会重新评估该成员的分片能力。</span>
                 ) : (

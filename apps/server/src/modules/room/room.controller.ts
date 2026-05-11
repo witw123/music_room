@@ -126,8 +126,9 @@ export class RoomController {
       await this.playlistService.listPlaylistsForRoom(roomId)
     );
     const trackIds = snapshot.tracks.map((track) => track.id);
-    await this.playlistService.deletePlaylistsForRoom(roomId);
+    await this.roomService.assertCanDeleteRoom(roomId, userId);
     const result = await this.roomService.deleteRoom(roomId, userId);
+    await this.playlistService.deletePlaylistsForRoom(roomId);
     this.roomRealtimePublisher.emitRoomDeleted(roomId, trackIds);
     this.roomRealtimePublisher.emitRoomMissing(roomId);
     return result;

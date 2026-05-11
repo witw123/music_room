@@ -78,7 +78,7 @@ export function useRoomActions({
 
           try {
             const snapshot = await syncRoomSnapshot(roomId);
-            nextExpectedVersion = snapshot.room.playback.queueVersion;
+            nextExpectedVersion = snapshot.room.playback.playbackRevision;
           } catch (refreshError) {
             setStatusMessage(toUserFacingError(refreshError));
             return null;
@@ -212,7 +212,7 @@ export function useRoomActions({
 
       await runPlaybackMutation(
         roomSnapshot.room.id,
-        roomSnapshot.room.playback.queueVersion,
+        roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) =>
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
@@ -232,7 +232,7 @@ export function useRoomActions({
 
       await runPlaybackMutation(
         roomSnapshot.room.id,
-        roomSnapshot.room.playback.queueVersion,
+        roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) =>
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
@@ -252,7 +252,7 @@ export function useRoomActions({
 
       await runPlaybackMutation(
         roomSnapshot.room.id,
-        roomSnapshot.room.playback.queueVersion,
+        roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) =>
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "pause",
@@ -276,7 +276,7 @@ export function useRoomActions({
 
     await runPlaybackMutation(
       roomSnapshot.room.id,
-      roomSnapshot.room.playback.queueVersion,
+      roomSnapshot.room.playback.playbackRevision,
       (expectedVersion) =>
         musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "prev",
@@ -292,7 +292,7 @@ export function useRoomActions({
 
     await runPlaybackMutation(
       roomSnapshot.room.id,
-      roomSnapshot.room.playback.queueVersion,
+      roomSnapshot.room.playback.playbackRevision,
       (expectedVersion) =>
         musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "next",
@@ -436,7 +436,7 @@ export function useRoomActions({
 
       await runPlaybackMutation(
         roomSnapshot.room.id,
-        roomSnapshot.room.playback.queueVersion,
+        roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) =>
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "seek",

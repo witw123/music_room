@@ -360,6 +360,12 @@ export class ChunkScheduler {
 
     const manualPlans = this.buildManualTrackPlans();
     const isBackgroundHidden = !this.pageVisible;
+    const shouldPreserveRemotePlayback =
+      this.playbackClockSource === "remote" && this.playbackStatus === "playing";
+
+    if (shouldPreserveRemotePlayback) {
+      return [];
+    }
 
     if (
       this.mode === "idle" ||
@@ -393,8 +399,6 @@ export class ChunkScheduler {
     let comfortableCurrentTrackBufferMs = 0;
     let remotePrefetchReadyBufferedMs = 0;
     const shouldEnterOutrunRecovery = this.policy === "outrun-recovery";
-    const shouldPreserveRemotePlayback =
-      this.playbackClockSource === "remote" && this.playbackStatus === "playing";
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
       const localAnnouncement = this.availabilityByTrack[currentTrack.id]?.[this.localPeerId] ?? null;
@@ -434,7 +438,7 @@ export class ChunkScheduler {
           })
         : false;
       const shouldUseAggressiveRemoteFlacStartup =
-        shouldPreserveRemotePlayback &&
+        !shouldPreserveRemotePlayback &&
         !!currentTrackManifest &&
         isFlacTrack(currentTrackManifest) &&
         !isCurrentTrackComplete &&
@@ -1002,36 +1006,36 @@ function getTrackStreamingProfile(
     if (policy === "outrun-recovery") {
       if (remoteBootstrapConservative) {
         return {
-          maxConcurrent: streamProfile === "large-lossless" ? 20 : 16,
-          maxConcurrentPerPeer: 5,
+          maxConcurrent: streamProfile === "large-lossless" ? 6 : 4,
+          maxConcurrentPerPeer: 2,
           lookBehindMs: 0,
-          lookAheadMs: streamProfile === "large-lossless" ? 180_000 : 108_000,
-          timeoutMs: 1_200
+          lookAheadMs: streamProfile === "large-lossless" ? 48_000 : 32_000,
+          timeoutMs: 2_200
         };
       }
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 48 : 34,
-        maxConcurrentPerPeer: streamProfile === "large-lossless" ? 14 : 10,
+        maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
+        maxConcurrentPerPeer: 2,
         lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 360_000 : 220_000,
-        timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
+        lookAheadMs: streamProfile === "large-lossless" ? 64_000 : 40_000,
+        timeoutMs: 2_000
       };
     }
     if (remoteBootstrapConservative) {
       return {
-        maxConcurrent: streamProfile === "large-lossless" ? 18 : 12,
-        maxConcurrentPerPeer: 4,
+        maxConcurrent: streamProfile === "large-lossless" ? 4 : 3,
+        maxConcurrentPerPeer: 1,
         lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 128_000 : 72_000,
-        timeoutMs: 1_500
+        lookAheadMs: streamProfile === "large-lossless" ? 32_000 : 24_000,
+        timeoutMs: 2_600
       };
     }
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 36 : 24,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 10 : 7,
+      maxConcurrent: streamProfile === "large-lossless" ? 5 : 4,
+      maxConcurrentPerPeer: 1,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 220_000 : 128_000,
-      timeoutMs: 1_200
+      lookAheadMs: streamProfile === "large-lossless" ? 40_000 : 28_000,
+      timeoutMs: 2_400
     };
   }
 

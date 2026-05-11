@@ -15,7 +15,7 @@ type BufferedLocalWarmupTarget = Extract<
 >;
 
 export function getInitialProgressivePlaybackSource(hasFullLocalTrack: boolean) {
-  return hasFullLocalTrack ? "full-local" : ("remote-stream" satisfies ProgressivePlaybackSource);
+  return hasFullLocalTrack ? "full-local" : ("progressive-local" satisfies ProgressivePlaybackSource);
 }
 
 export function shouldForceSourceOwnerLocalPlayback(input: {
@@ -56,7 +56,7 @@ function resolveBufferedLocalWarmupDecision(input: {
 
   if (!stableEnough) {
     return {
-      nextSource: input.currentSource === input.targetSource ? input.targetSource : "remote-stream",
+      nextSource: input.targetSource,
       nextWarmupReadyAt: null,
       clearFallbackReason: false
     } satisfies ProgressiveWarmupDecision;
@@ -72,7 +72,7 @@ function resolveBufferedLocalWarmupDecision(input: {
 
   if (input.warmupReadyAt === null) {
     return {
-      nextSource: "remote-stream",
+      nextSource: input.targetSource,
       nextWarmupReadyAt: now,
       clearFallbackReason: false
     } satisfies ProgressiveWarmupDecision;
@@ -80,7 +80,7 @@ function resolveBufferedLocalWarmupDecision(input: {
 
   if (now - input.warmupReadyAt < switchDelayMs) {
     return {
-      nextSource: "remote-stream",
+      nextSource: input.targetSource,
       nextWarmupReadyAt: input.warmupReadyAt,
       clearFallbackReason: false
     } satisfies ProgressiveWarmupDecision;

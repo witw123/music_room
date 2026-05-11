@@ -33,6 +33,7 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
+import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
 
 export type ManualCacheTaskStatus =
   | "idle"
@@ -48,7 +49,7 @@ export type ManualCacheTaskStatus =
 export type ManualCacheTask = {
   trackId: string;
   status: ManualCacheTaskStatus;
-  mode: "manual" | "auto-played";
+  mode: "manual" | "playback-demand";
   fileHash: string;
   updatedAt: string;
   errorMessage: string | null;
@@ -69,6 +70,12 @@ export type ManualCacheTask = {
 };
 
 type RehydratableRoomTrack = Pick<TrackMeta, "id" | "fileHash" | "ownerSessionId">;
+
+function isManualCacheTaskRecord(
+  task: ManualCacheTaskRecord
+): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
+  return task.mode === "manual" || task.mode === "playback-demand";
+}
 
 export function resolveMissingOwnedUploadedTracks(input: {
   roomTracks: RehydratableRoomTrack[];
@@ -123,13 +130,15 @@ export function useTrackUploads(options: {
       Object.values(manualCacheTasks)
         .filter(
           (task) =>
-            task.status === "queued" ||
-            task.status === "downloading" ||
-            task.status === "blocked" ||
-            task.status === "assembling"
+            (task.mode === "manual" ||
+              task.trackId === roomSnapshot?.room.playback.currentTrackId) &&
+            (task.status === "queued" ||
+              task.status === "downloading" ||
+              task.status === "blocked" ||
+              task.status === "assembling")
         )
         .map((task) => task.trackId),
-    [manualCacheTasks]
+    [manualCacheTasks, roomSnapshot?.room.playback.currentTrackId]
   );
 
   const refreshCacheLibrary = useCallback(async () => {
@@ -198,19 +207,22 @@ export function useTrackUploads(options: {
       if (cancelled) {
         return;
       }
+      const currentPlaybackTrackId = roomSnapshot.room.playback.currentTrackId ?? null;
+      for (const task of tasks) {
+        if (
+          (task.mode !== "manual" && task.mode !== "playback-demand") ||
+          (task.mode === "playback-demand" && task.trackId !== currentPlaybackTrackId)
+        ) {
+          void deleteManualCacheTask(task.roomId, task.trackId);
+        }
+      }
       setManualCacheTasks(
         Object.fromEntries(
-          tasks.map((task) => {
-            const shouldPauseDisabledAutoTask =
-              task.mode === "auto-played" &&
-              (task.status === "queued" || task.status === "downloading" || task.status === "blocked");
-            const status = shouldPauseDisabledAutoTask ? "paused" : task.status;
-            if (shouldPauseDisabledAutoTask) {
-              void upsertManualCacheTask({
-                ...task,
-                status
-              });
-            }
+          tasks
+            .filter(isManualCacheTaskRecord)
+            .filter((task) => task.mode === "manual" || task.trackId === currentPlaybackTrackId)
+            .map((task) => {
+            const status = task.status;
             return [
               task.trackId,
               {
@@ -240,7 +252,10 @@ export function useTrackUploads(options: {
         )
       );
       for (const task of tasks) {
-        if (task.status === "queued" || task.status === "downloading" || task.status === "blocked") {
+        if (
+          task.mode === "manual" &&
+          (task.status === "queued" || task.status === "downloading" || task.status === "blocked")
+        ) {
           void getCachedPieceIndexes(task.trackId, peerId, {
             fileHash: task.fileHash,
             ownerKey: localCacheOwnerKey
@@ -778,7 +793,7 @@ export function useTrackUploads(options: {
   );
 
   const startManualCacheDownload = useCallback(
-    async (trackId: string, mode: ManualCacheTask["mode"] = "manual") => {
+    async (trackId: string) => {
       if (!enableManualTrackCaching || !roomSnapshot) {
         return;
       }
@@ -791,7 +806,7 @@ export function useTrackUploads(options: {
       if (cacheLibraryTracksRef.current.has(track.fileHash) || (await getCachedLibraryTrack(track.fileHash))) {
         updateManualCacheTask(trackId, {
           status: "ready",
-          mode,
+          mode: "manual",
           fileHash: track.fileHash,
           errorMessage: null,
           completedChunks: resolveTrackTotalChunks(track),
@@ -836,7 +851,7 @@ export function useTrackUploads(options: {
 
       updateManualCacheTask(trackId, {
         status,
-        mode,
+        mode: "manual",
         fileHash: track.fileHash,
         errorMessage: null,
         completedChunks,
@@ -854,6 +869,83 @@ export function useTrackUploads(options: {
       }
     },
     [assembleManualCacheTrack, peerId, roomSnapshot, setStatusMessage, updateManualCacheTask]
+  );
+
+  const startPlaybackDemandCacheDownload = useCallback(
+    async (trackId: string) => {
+      if (!enableManualTrackCaching || !roomSnapshot) {
+        return;
+      }
+
+      const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
+      if (!track) {
+        return;
+      }
+
+      if (cacheLibraryTracksRef.current.has(track.fileHash) || (await getCachedLibraryTrack(track.fileHash))) {
+        updateManualCacheTask(trackId, (current) => {
+          if (current?.mode === "manual") {
+            return null;
+          }
+
+          return {
+            status: "ready",
+            mode: "playback-demand",
+            fileHash: track.fileHash,
+            errorMessage: null,
+            completedChunks: resolveTrackTotalChunks(track),
+            totalChunks: resolveTrackTotalChunks(track),
+            mimeType: track.mimeType ?? null,
+            blockedReason: null,
+            lastError: null
+          };
+        });
+        return;
+      }
+
+      const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
+      const cachedManifest =
+        (await getTrackPieceManifestByFileHash(track.fileHash)) ??
+        (await getTrackPieceManifest(trackId));
+      const pieces = await getCachedPiecesForTrack(trackId, peerId, {
+        fileHash: track.fileHash,
+        ownerKey: localCacheOwnerKey,
+        chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize
+      });
+      const chunkIndexes = new Set(pieces.map((piece) => piece.chunkIndex));
+      manualCacheChunkIndexesRef.current.set(trackId, chunkIndexes);
+
+      const totalChunks =
+        cachedManifest?.totalChunks ??
+        expectedManifest?.totalChunks ??
+        Math.max(chunkIndexes.size, 0);
+      const completedChunks = chunkIndexes.size;
+      const mimeType = cachedManifest?.mimeType ?? track.mimeType ?? null;
+      updateManualCacheTask(trackId, (current) => {
+        if (current?.mode === "manual") {
+          return null;
+        }
+
+        return {
+          status: completedChunks > 0 ? "downloading" : "queued",
+          mode: "playback-demand",
+          fileHash: track.fileHash,
+          errorMessage: null,
+          completedChunks,
+          totalChunks,
+          mimeType,
+          manifestSource: cachedManifest ? "cache" : expectedManifest ? "snapshot" : null,
+          blockedReason: null,
+          integrityMode: cachedManifest?.pieceHashes?.length === totalChunks ? "strong" : "weak",
+          lastError: null
+        };
+      });
+
+      if (totalChunks > 0 && completedChunks >= totalChunks) {
+        void assembleManualCacheTrack(trackId, mimeType, totalChunks);
+      }
+    },
+    [assembleManualCacheTrack, peerId, roomSnapshot, updateManualCacheTask]
   );
 
   const pauseManualCacheDownload = useCallback(
@@ -1135,6 +1227,7 @@ export function useTrackUploads(options: {
     handleFilesSelected,
     announceRoomTrackAvailability,
     startManualCacheDownload,
+    startPlaybackDemandCacheDownload,
     pauseManualCacheDownload,
     handleManualCachePieceReceived,
     handleManualCachePlan,

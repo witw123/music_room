@@ -131,7 +131,7 @@ const fullLocalMaxDriftMs = 180;
 const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const remoteStartupGatePollMs = 60;
-const enableTrackCaching = false;
+const enableTrackCaching = true;
 const enableDirectProgressiveTakeover = enableTrackCaching;
 const enableListenerShadowWarmup = false;
 const enableListenerLocalTakeover = enableTrackCaching;
@@ -1405,21 +1405,19 @@ export function useProgressiveRuntime({
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
 
   useEffect(() => {
-    if (
-      enableListenerLocalTakeover ||
-      isCurrentSourceOwner ||
-      activePlaybackSource === "remote-stream" ||
-      (activePlaybackSource === "full-local" && canUseFullLocalForPlaybackSession)
-    ) {
+    if (activePlaybackSource !== "remote-stream") {
       return;
     }
 
-    setActivePlaybackSource("remote-stream");
+    setActivePlaybackSource(
+      canUseFullLocalForPlaybackSession ? "full-local" : "progressive-local"
+    );
+    setProgressiveFallbackReason(null);
   }, [
     activePlaybackSource,
     canUseFullLocalForPlaybackSession,
-    isCurrentSourceOwner,
-    setActivePlaybackSource
+    setActivePlaybackSource,
+    setProgressiveFallbackReason
   ]);
 
   useEffect(() => {
@@ -1515,17 +1513,6 @@ export function useProgressiveRuntime({
       setActivePlaybackSource,
       setProgressiveFallbackReason
     ]
-  );
-
-  const fallbackToRemoteStream = useCallback(
-    (reason: string, options?: { force?: boolean }) => {
-      transitionPlaybackSource("remote-stream", {
-        fallbackReason: reason,
-        force: options?.force,
-        armCooldown: activePlaybackSource !== "remote-stream"
-      });
-    },
-    [activePlaybackSource, transitionPlaybackSource]
   );
 
   const clearPlaybackStartRetry = useCallback(() => {
@@ -1727,9 +1714,6 @@ export function useProgressiveRuntime({
         }
 
         if (attempt >= maxPlaybackStartRetryAttempts) {
-          if (!isRemoteSource && !isCurrentSourceOwner) {
-            fallbackToRemoteStream(failureReason, { force: true });
-          }
           return;
         }
 
@@ -1743,7 +1727,6 @@ export function useProgressiveRuntime({
       attemptPlaybackStart,
       audioRef,
       clearPlaybackStartRetry,
-      fallbackToRemoteStream,
       isCurrentSourceOwner,
       playback?.status,
       playbackStartIntent,
@@ -1875,10 +1858,11 @@ export function useProgressiveRuntime({
           .syncPlayback(expectedSeconds, playback.status === "playing")
           .then((result) => {
             if (playback.status === "playing" && !result.localReady) {
-              fallbackToRemoteStream("buffer-underrun", { force: true });
+              setProgressiveFallbackReason("buffer-underrun");
+              setMediaConnectionState("buffering");
               markPlaybackStartFailure(
                 "progressive-local-buffer-underrun",
-                "本地缓冲不足，已回退实时音频。"
+                "本地缓冲不足，正在缓存播放所需片段。"
               );
               return;
             }
@@ -1888,10 +1872,11 @@ export function useProgressiveRuntime({
             }
           })
           .catch(() => {
-            fallbackToRemoteStream("progressive-init-failed", { force: true });
+            setProgressiveFallbackReason("progressive-init-failed");
+            setMediaConnectionState("buffering");
             markPlaybackStartFailure(
               "progressive-local-init-failed",
-              "本地解码初始化失败，已回退实时音频。"
+              "本地解码初始化失败，请等待完整缓存后播放。"
             );
           });
         return;
@@ -1942,14 +1927,9 @@ export function useProgressiveRuntime({
       }
 
       if (remoteAudio) {
-        if (playback.status === "playing") {
-          scheduleRemoteStartupGate();
-          ensurePlaybackStart("remote-stream");
-        } else if (playback.status === "paused") {
-          remoteAudio.pause();
-          remoteAudio.muted = false;
-          remoteAudio.volume = volume;
-        }
+        remoteAudio.pause();
+        remoteAudio.muted = true;
+        remoteAudio.volume = 0;
       }
       return;
     }
@@ -1972,7 +1952,6 @@ export function useProgressiveRuntime({
     setMediaConnectionState,
     destroyProgressiveRuntime,
     ensurePlaybackStart,
-    fallbackToRemoteStream,
     markPlaybackStartFailure,
     scheduleRemoteStartupGate,
     shadowWarmupActive,
@@ -2058,14 +2037,14 @@ export function useProgressiveRuntime({
         activePlaybackSource === "progressive-local" &&
         progressiveHealthSnapshot.aheadBufferedMs < getCriticalBufferThresholdMs() / 2
       ) {
-        fallbackToRemoteStream("buffer-underrun");
+        setProgressiveFallbackReason("buffer-underrun");
       }
       if (
         role === "audible-local" &&
         activePlaybackSource === "full-local" &&
         progressiveHealthSnapshot.aheadBufferedMs < getCriticalBufferThresholdMs() / 2
       ) {
-        fallbackToRemoteStream("buffer-underrun");
+        setProgressiveFallbackReason("buffer-underrun");
       }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
@@ -2092,7 +2071,7 @@ export function useProgressiveRuntime({
         setProgressiveFallbackReason("stalled");
       }
       if (role === "audible-local") {
-        fallbackToRemoteStream("stalled", { force: true });
+        setProgressiveFallbackReason("stalled");
       }
       setMediaConnectionState((current) => (current === "failed" ? current : "buffering"));
     };
@@ -2127,7 +2106,7 @@ export function useProgressiveRuntime({
 
       setSchedulerMode("conservative");
       setBufferHealth("critical");
-      fallbackToRemoteStream("seek-outside-buffer", { force: true });
+      setProgressiveFallbackReason("seek-outside-buffer");
     };
 
     localAudio?.addEventListener("playing", handlePlaying);
@@ -2164,7 +2143,6 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.aheadBufferedMs,
     roomSnapshot?.room.playback.currentTrackId,
     roomSnapshot?.room.playback.status,
-    fallbackToRemoteStream,
     scheduleRemoteStartupGate,
     setBufferHealth,
     setMediaConnectionState,
@@ -2194,7 +2172,6 @@ export function useProgressiveRuntime({
       if (activePlaybackSource === "remote-stream") {
         scheduleRemoteStartupGate();
       }
-      ensurePlaybackStart("remote-stream");
     };
 
     for (const eventName of localReadyEvents) {
@@ -2547,11 +2524,7 @@ export function useProgressiveRuntime({
         switchDelayMs: progressiveSwitchDelayMs
       });
       progressiveWarmupReadyAtRef.current = warmupDecision.nextWarmupReadyAt;
-      if (warmupDecision.nextSource !== activePlaybackSource) {
-        transitionPlaybackSource(warmupDecision.nextSource, {
-          clearFallbackReason: warmupDecision.clearFallbackReason
-        });
-      } else if (warmupDecision.clearFallbackReason) {
+      if (warmupDecision.clearFallbackReason) {
         setProgressiveFallbackReason(null);
       }
     };
@@ -2854,11 +2827,11 @@ export function useProgressiveRuntime({
       return;
     }
 
-    fallbackToRemoteStream("seek-outside-buffer");
+    setProgressiveFallbackReason("seek-outside-buffer");
   }, [
     activePlaybackSource,
     progressiveHealthSnapshot.aheadBufferedMs,
-    fallbackToRemoteStream
+    setProgressiveFallbackReason
   ]);
 
   useEffect(() => {

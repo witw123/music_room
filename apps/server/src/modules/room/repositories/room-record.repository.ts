@@ -82,16 +82,6 @@ export class RoomRecordRepository {
       record,
       this.roomCacheTtlSeconds
     );
-    await Promise.all(
-      record.room.members.map((member) =>
-        this.redis.setString(
-          this.sessionRecentRoomKey(member.id),
-          record.room.id,
-          this.sessionRecentRoomTtlSeconds
-        )
-      )
-    );
-
     if (!this.prisma.isAvailable()) {
       return;
     }

@@ -37,7 +37,10 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import {
   enableManualTrackCaching
 } from "@/features/cache/cache-policy";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import {
+  getEffectivePlaybackPositionMs,
+  type ProgressivePlaybackSource
+} from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
@@ -217,6 +220,7 @@ type UseRoomRuntimeInput = {
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIds: string[];
+  startPlaybackDemandCacheDownload: (trackId: string) => Promise<void>;
   announceRoomTrackAvailability: (trackId: string) => Promise<void>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
@@ -263,7 +267,7 @@ const stalledPieceSyncRecoveryThresholdMs = 20_000;
 const recoverySoftRetryThresholdMs = 5_000;
 const recoveryMediaRestartThresholdMs = 4_000;
 const recoveryDataRestartThresholdMs = 8_000;
-const enableTrackCaching = false;
+const enableTrackCaching = true;
 
 type ListenerMediaRecoveryReason =
   | "connected-but-no-track"
@@ -612,6 +616,7 @@ export function useRoomRuntime({
   uploadedTrackIds,
   uploadedTrackIdsRef,
   manualCacheTrackIds,
+  startPlaybackDemandCacheDownload,
   announceRoomTrackAvailability,
   handleManualCachePieceReceived,
   handleManualCachePlan,
@@ -1076,6 +1081,58 @@ export function useRoomRuntime({
     [roomListenerSetHash]
   );
   const roomListenerCount = roomListenerPeerIds.length;
+  const shouldPreserveRemotePlaybackForCache =
+    false;
+  const activePlaybackWindow = useMemo(() => {
+    const playback = roomSnapshot?.room.playback ?? null;
+    const track = playback?.currentTrackId
+      ? roomSnapshot?.tracks.find((entry) => entry.id === playback.currentTrackId) ?? null
+      : null;
+    if (!playback?.currentTrackId || !track) {
+      return null;
+    }
+
+    const positionMs = getEffectivePlaybackPositionMs(
+      playback,
+      track.durationMs,
+      Date.now()
+    );
+    return {
+      trackId: playback.currentTrackId,
+      positionMs,
+      revision: playback.playbackRevision,
+      mediaEpoch: playback.mediaEpoch,
+      status: playback.status,
+      policy:
+        playback.status === "paused"
+          ? "pause-fill"
+          : progressiveSchedulerPolicy ?? "startup"
+    };
+  }, [progressiveSchedulerPolicy, roomSnapshot?.room.playback, roomSnapshot?.tracks]);
+
+  useEffect(() => {
+    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+    if (!currentTrackId) {
+      return;
+    }
+    if (
+      roomSnapshot?.room.playback.status !== "playing" &&
+      roomSnapshot?.room.playback.status !== "buffering" &&
+      roomSnapshot?.room.playback.status !== "paused"
+    ) {
+      return;
+    }
+    void startPlaybackDemandCacheDownload(currentTrackId).catch((error) => {
+      setStatusMessage(toUserFacingError(error));
+    });
+  }, [
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.status,
+    roomSnapshot?.room.playback.playbackRevision,
+    roomSnapshot?.room.playback.mediaEpoch,
+    setStatusMessage,
+    startPlaybackDemandCacheDownload
+  ]);
   const { clearPendingPiece: clearManualCachePendingPiece } = useManualCacheDownloader({
     enableManualTrackCaching,
     manualCacheTrackIds,
@@ -1084,6 +1141,8 @@ export function useRoomRuntime({
     peerId,
     connectedPeers,
     dataMesh: dataMeshBridge,
+    preserveRemotePlayback: shouldPreserveRemotePlaybackForCache,
+    activePlaybackWindow,
     onRuntimeEvent: emitRuntimeEvent,
     onManualCachePlan: handleManualCachePlan
   });

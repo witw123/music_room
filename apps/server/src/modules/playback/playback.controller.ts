@@ -92,7 +92,7 @@ export class PlaybackController {
         actorSessionId: userId
       });
       this.logger.log(
-        `accepted playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} nextVersion=${playback.queueVersion}`
+        `accepted playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} nextVersion=${playback.playbackRevision}`
       );
       this.roomRealtimePublisher.emitPlaybackPatch(roomId, playback);
       return playback;

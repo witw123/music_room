@@ -107,8 +107,10 @@ const activeStatsSamplingIntervalMs = 1_000;
 const steadyStatsSamplingIntervalMs = 5_000;
 const receiverJitterWeakUpgradeWindowCount = 2;
 const receiverJitterHealthyDowngradeWindowCount = 3;
-const musicAudioMaxBitrateBps = 510_000;
-const musicAudioBootstrapBitrateBps = musicAudioMaxBitrateBps;
+const musicAudioMaxBitrateBps = 320_000;
+const musicAudioConstrainedBitrateBps = 192_000;
+const musicAudioWeakLinkBitrateBps = 128_000;
+const musicAudioBootstrapBitrateBps = musicAudioConstrainedBitrateBps;
 const audioBitrateRetuneHysteresisBps = 32_000;
 
 export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
@@ -141,7 +143,7 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
       );
       if (!hasExistingFmtp) {
         tunedLines.push(
-          `a=fmtp:${rtpMapMatch[1]} minptime=10;useinbandfec=1;maxaveragebitrate=${musicAudioMaxBitrateBps};stereo=1;sprop-stereo=1;cbr=1;usedtx=0`
+          `a=fmtp:${rtpMapMatch[1]} minptime=10;useinbandfec=1;maxaveragebitrate=${musicAudioMaxBitrateBps};stereo=1;sprop-stereo=1;cbr=0;usedtx=0`
         );
         seenFmtp.add(rtpMapMatch[1]);
       }
@@ -166,7 +168,7 @@ export function tuneOpusSdpForMusic(sdp: string | null | undefined) {
     paramMap.set("maxaveragebitrate", `${musicAudioMaxBitrateBps}`);
     paramMap.set("stereo", "1");
     paramMap.set("sprop-stereo", "1");
-    paramMap.set("cbr", "1");
+    paramMap.set("cbr", "0");
     paramMap.set("usedtx", "0");
     tunedLines[tunedLines.length - 1] =
       `a=fmtp:${fmtpMatch[1]} ` +
@@ -1223,14 +1225,18 @@ export class RoomMediaMesh {
 }
 
 export function resolvePreferredAudioMaxBitrateBps(
-  _sample: PeerConnectionStatsSample,
+  sample: PeerConnectionStatsSample,
   currentConfiguredBitrateBps: number | null = null
 ) {
-  const targetBitrateBps = musicAudioMaxBitrateBps;
+  const constrainedTransport = sample.protocol === "tcp" || sample.candidateType === "relay";
+  const targetBitrateBps = isSevereWeakLink(sample)
+    ? musicAudioWeakLinkBitrateBps
+    : isWeakLink(sample) || constrainedTransport
+      ? musicAudioConstrainedBitrateBps
+      : musicAudioMaxBitrateBps;
 
   if (
     currentConfiguredBitrateBps !== null &&
-    currentConfiguredBitrateBps <= musicAudioMaxBitrateBps &&
     Math.abs(currentConfiguredBitrateBps - targetBitrateBps) < audioBitrateRetuneHysteresisBps
   ) {
     return currentConfiguredBitrateBps;

@@ -68,7 +68,7 @@ export type ManualCacheTaskRecord = {
   trackId: string;
   fileHash: string;
   status: ManualCacheTaskStatusRecord;
-  mode: "manual" | "auto-played";
+  mode: "manual" | "playback-demand" | "auto-played";
   errorMessage: string | null;
   completedChunks: number;
   totalChunks: number;

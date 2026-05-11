@@ -35,8 +35,8 @@ export class QueueController {
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
-    await this.getCurrentUserId(sessionToken);
-    return this.roomService.getQueue(roomId);
+    const userId = await this.getCurrentUserId(sessionToken);
+    return this.roomService.getAccessibleQueue(roomId, userId);
   }
 
   @Post()

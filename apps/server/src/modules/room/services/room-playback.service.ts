@@ -69,7 +69,7 @@ export class RoomPlaybackService {
           record,
           nextTrackId,
           startPositionMs,
-          input.queueItemId ?? this.findQueueItemIdForTrack(record, nextTrackId)
+          input.queueItemId ?? null
         );
       }
     }
@@ -313,12 +313,7 @@ export class RoomPlaybackService {
     return record.queue.findIndex((item) => item.trackId === currentTrackId);
   }
 
-  private findQueueItemIdForTrack(record: RoomRecord, trackId: string) {
-    return record.queue.find((item) => item.trackId === trackId)?.id ?? null;
-  }
-
   private bumpPlaybackVersion(playback: PlaybackSnapshot) {
-    playback.queueVersion += 1;
     playback.playbackRevision += 1;
   }
 

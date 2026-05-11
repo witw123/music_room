@@ -10,6 +10,11 @@ import {
   type TrackPieceManifestRecord
 } from "@/lib/indexeddb";
 import {
+  getPriorityChunkIndexes,
+  type ProgressiveSchedulerPolicy,
+  type ProgressiveTrackManifest
+} from "@/features/playback/progressive-playback";
+import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement,
   type ResolvedTrackPieceManifest
@@ -50,6 +55,15 @@ export type ManualCacheTrackPlan = {
   requestableChunks: number[];
   pendingChunkCount: number;
   blockedReason: ManualCacheBlockedReason | null;
+};
+
+export type ActivePlaybackCacheWindow = {
+  trackId: string;
+  positionMs: number;
+  revision: number;
+  mediaEpoch: number;
+  status: RoomSnapshot["room"]["playback"]["status"];
+  policy: ProgressiveSchedulerPolicy;
 };
 
 export function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
@@ -386,6 +400,7 @@ export function resolveManualCacheTrackPlan(input: {
   localPieceIndexes: number[];
   pendingChunkIndexes: number[];
   maxRequestChunks?: number;
+  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
 }): ManualCacheTrackPlan {
   const trackId = input.track?.id ?? "";
   if (!input.track) {
@@ -461,12 +476,12 @@ export function resolveManualCacheTrackPlan(input: {
   const connectedProviderPeerIds = [
     ...new Set(connectedProviderCandidates.map((announcement) => announcement.ownerPeerId))
   ];
-  const missingChunks: number[] = [];
-  for (let chunkIndex = 0; chunkIndex < manifest.totalChunks; chunkIndex += 1) {
-    if (!localPieceSet.has(chunkIndex)) {
-      missingChunks.push(chunkIndex);
-    }
-  }
+  const missingChunks = resolveManualCacheRequestOrder({
+    manifest,
+    track: input.track,
+    localPieceIndexes: [...localPieceSet],
+    activePlaybackWindow: input.activePlaybackWindow ?? null
+  });
 
   if (providerCandidates.length === 0) {
     return {
@@ -545,6 +560,50 @@ export function resolveManualCacheTrackPlan(input: {
   };
 }
 
+function resolveManualCacheRequestOrder(input: {
+  manifest: ResolvedTrackPieceManifest;
+  track: TrackMeta;
+  localPieceIndexes: number[];
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+}) {
+  const localPieceSet = new Set(input.localPieceIndexes);
+  if (input.activePlaybackWindow?.trackId !== input.track.id) {
+    const missingChunks: number[] = [];
+    for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
+      if (!localPieceSet.has(chunkIndex)) {
+        missingChunks.push(chunkIndex);
+      }
+    }
+    return missingChunks;
+  }
+
+  const progressiveManifest: ProgressiveTrackManifest = {
+    trackId: input.track.id,
+    fileHash: input.track.fileHash,
+    mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
+    codec: input.track.codec ?? null,
+    sizeBytes: input.track.sizeBytes ?? null,
+    durationMs: input.track.durationMs,
+    totalChunks: input.manifest.totalChunks,
+    chunkSize: input.manifest.chunkSize
+  };
+  const priorityChunks = getPriorityChunkIndexes({
+    manifest: progressiveManifest,
+    availableChunks: input.localPieceIndexes,
+    playbackPositionMs: input.activePlaybackWindow.positionMs,
+    policy: input.activePlaybackWindow.policy,
+    lookBehindMs: 4_000
+  });
+  const seen = new Set(priorityChunks);
+  for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
+    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
+      priorityChunks.push(chunkIndex);
+      seen.add(chunkIndex);
+    }
+  }
+  return priorityChunks;
+}
+
 function emptyManualCacheTrackPlan(
   trackId: string,
   blockedReason: ManualCacheBlockedReason
@@ -573,6 +632,8 @@ export function useManualCacheDownloader(input: {
   peerId: string;
   connectedPeers: string[];
   dataMesh: DataMeshBridge | null;
+  preserveRemotePlayback?: boolean;
+  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
   onManualCachePlan?: (plan: ManualCacheTrackPlan) => void;
 }) {
@@ -622,7 +683,12 @@ export function useManualCacheDownloader(input: {
   );
 
   useEffect(() => {
-    if (!input.enableManualTrackCaching || providerPeerIds.length === 0 || !input.dataMesh) {
+    if (
+      input.preserveRemotePlayback ||
+      !input.enableManualTrackCaching ||
+      providerPeerIds.length === 0 ||
+      !input.dataMesh
+    ) {
       lastBootstrapKeyRef.current = null;
       return;
     }
@@ -657,11 +723,14 @@ export function useManualCacheDownloader(input: {
     input.enableManualTrackCaching,
     input.manualCacheTrackIds,
     input.onRuntimeEvent,
+    input.preserveRemotePlayback,
     providerPeerIds
   ]);
 
   useEffect(() => {
-    if (!input.dataMesh) {
+    if (input.preserveRemotePlayback || !input.dataMesh) {
+      recoverySinceAtRef.current = null;
+      lastRecoveryAtRef.current = null;
       return;
     }
 
@@ -722,6 +791,7 @@ export function useManualCacheDownloader(input: {
     input.manualCacheTrackIds,
     input.onRuntimeEvent,
     input.peerId,
+    input.preserveRemotePlayback,
     providerPeerIds,
     remotePeerIds,
     schedulerAvailabilityByTrack
@@ -733,6 +803,11 @@ export function useManualCacheDownloader(input: {
       if (!activeTrackIds.has(trackId)) {
         directPendingRef.current.delete(trackId);
       }
+    }
+
+    if (input.preserveRemotePlayback) {
+      directPendingRef.current.clear();
+      return;
     }
 
     if (input.manualCacheTrackIds.length === 0) {
@@ -823,9 +898,13 @@ export function useManualCacheDownloader(input: {
           }
           directPendingRef.current.set(trackId, pendingForTrack);
 
-          const remainingTrackSlots = Math.max(0, maxPendingPerTrack - pendingForTrack.size);
+          const pendingLimit = maxPendingPerTrack;
+          const peerPendingLimit = maxPendingPerPeer;
+          const requestBatchSize = directRequestBatchSize;
+          const refillLowWatermark = pendingRefillLowWatermark;
+          const remainingTrackSlots = Math.max(0, pendingLimit - pendingForTrack.size);
           const shouldRefillPendingWindow =
-            pendingForTrack.size === 0 || pendingForTrack.size <= pendingRefillLowWatermark;
+            pendingForTrack.size === 0 || pendingForTrack.size <= refillLowWatermark;
           const plan = resolveManualCacheTrackPlan({
             track,
             roomId: input.roomSnapshot.room.id,
@@ -835,8 +914,9 @@ export function useManualCacheDownloader(input: {
             cachedManifest,
             localPieceIndexes,
             pendingChunkIndexes: [...pendingForTrack.keys()],
+            activePlaybackWindow: input.activePlaybackWindow ?? null,
             maxRequestChunks: shouldRefillPendingWindow
-              ? Math.min(directRequestBatchSize, remainingTrackSlots, maxPendingPerPeer)
+              ? Math.min(requestBatchSize, remainingTrackSlots, peerPendingLimit)
               : 0
           });
           input.onManualCachePlan?.(plan);
@@ -902,7 +982,9 @@ export function useManualCacheDownloader(input: {
     input.onManualCachePlan,
     input.onRuntimeEvent,
     input.peerId,
+    input.preserveRemotePlayback,
     input.roomSnapshot,
+    input.activePlaybackWindow,
     schedulerAvailabilityByTrack
   ]);
 

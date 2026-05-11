@@ -223,23 +223,7 @@ export class RoomService {
 
   async deleteRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
-
-    if (record.room.hostId !== sessionId) {
-      throw new Error("Only the host can delete this room.");
-    }
-
-    const uploaderIds = new Set(record.tracks.map((t) => t.ownerSessionId));
-    const activePresence = await this.roomPresenceService.getActivePresence(
-      roomId,
-      record.room.members
-    );
-    if (
-      record.room.members.some(
-        (member) => uploaderIds.has(member.id) && !activePresence.has(member.id)
-      )
-    ) {
-      throw new Error("All track uploaders must be online before deleting the room.");
-    }
+    await this.assertCanDeleteRoomRecord(record, sessionId);
 
     await this.roomRecordRepository.deleteRecord(record);
     await Promise.all(
@@ -249,6 +233,30 @@ export class RoomService {
     );
 
     return { ok: true };
+  }
+
+  async assertCanDeleteRoom(roomId: string, sessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    await this.assertCanDeleteRoomRecord(record, sessionId);
+  }
+
+  private async assertCanDeleteRoomRecord(record: RoomRecord, sessionId: string) {
+    if (record.room.hostId !== sessionId) {
+      throw new Error("Only the host can delete this room.");
+    }
+
+    const uploaderIds = new Set(record.tracks.map((t) => t.ownerSessionId));
+    const activePresence = await this.roomPresenceService.getActivePresence(
+      record.room.id,
+      record.room.members
+    );
+    if (
+      record.room.members.some(
+        (member) => uploaderIds.has(member.id) && !activePresence.has(member.id)
+      )
+    ) {
+      throw new Error("All track uploaders must be online before deleting the room.");
+    }
   }
 
   async updatePeerPresence(
@@ -376,8 +384,8 @@ export class RoomService {
 
     const track: TrackMeta = {
       ...input,
-      ownerSessionId: input.ownerSessionId || sessionId,
-      ownerNickname: input.ownerNickname || (await this.authService.getSessionOrThrow(sessionId)).nickname,
+      ownerSessionId: sessionId,
+      ownerNickname: (await this.authService.getSessionOrThrow(sessionId)).nickname,
       id: input.id ?? `track_${randomUUID()}`
     };
 
@@ -395,7 +403,6 @@ export class RoomService {
         ...track,
         id: existingTrack.id
       };
-      this.incrementPlaybackVersion(record.room.playback);
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
       return record.tracks[duplicateByFileHashIndex];
@@ -407,7 +414,6 @@ export class RoomService {
       record.tracks.unshift(track);
     }
 
-    this.incrementPlaybackVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return track;
@@ -426,6 +432,7 @@ export class RoomService {
       throw new Error("Only the original uploader can delete this track.");
     }
 
+    const previousQueueLength = record.queue.length;
     record.tracks = record.tracks.filter((item) => item.id !== trackId);
     record.queue = record.queue
       .filter((item) => item.trackId !== trackId)
@@ -433,10 +440,11 @@ export class RoomService {
 
     if (record.room.playback.currentTrackId === trackId) {
       this.roomPlaybackService.clearPlayback(record.room.playback);
-    } else {
-      record.room.playback.queueVersion += 1;
     }
 
+    if (record.queue.length !== previousQueueLength) {
+      this.incrementQueueVersion(record.room.playback);
+    }
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return { ok: true };
@@ -461,7 +469,7 @@ export class RoomService {
     };
 
     record.queue.push(queueItem);
-    this.incrementPlaybackVersion(record.room.playback);
+    this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
 
@@ -506,7 +514,7 @@ export class RoomService {
     );
 
     record.queue.push(...nextItems);
-    this.incrementPlaybackVersion(record.room.playback);
+    this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
@@ -523,26 +531,31 @@ export class RoomService {
 
     await this.assertCanManageQueue(record, actorSessionId, removed);
 
-    record.queue = record.queue
+    const nextQueue = record.queue
       .filter((item) => item.id !== queueItemId)
       .map((item, index) => ({ ...item, position: index }));
 
     if (removed && record.room.playback.currentQueueItemId === removed.id) {
-      this.incrementRoomRevision(record.room);
-      const nextItem = record.queue[removed.position] ?? record.queue[removed.position - 1] ?? null;
+      const nextItem = nextQueue[removed.position] ?? nextQueue[removed.position - 1] ?? null;
       if (nextItem) {
-        await this.updatePlayback(roomId, {
-          action: "play",
-          queueItemId: nextItem.id,
-          actorSessionId,
-          expectedVersion: record.room.playback.queueVersion
-        });
+        await this.roomPlaybackService.applyTrackPlayback(record, nextItem.trackId, 0, nextItem.id);
+        this.incrementPlaybackRevision(record.room.playback);
+        record.queue = nextQueue;
+        this.incrementQueueVersion(record.room.playback);
+        this.incrementRoomRevision(record.room);
+        await this.roomRecordRepository.persistRecord(record);
         return record.queue;
       }
+      record.queue = nextQueue;
       this.roomPlaybackService.clearPlayback(record.room.playback);
+      this.incrementQueueVersion(record.room.playback);
+      this.incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      return record.queue;
     }
 
-    this.incrementPlaybackVersion(record.room.playback);
+    record.queue = nextQueue;
+    this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
@@ -570,7 +583,7 @@ export class RoomService {
       }));
 
     record.queue = nextQueue;
-    this.incrementPlaybackVersion(record.room.playback);
+    this.incrementQueueVersion(record.room.playback);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.queue;
@@ -596,8 +609,8 @@ export class RoomService {
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
     }
-    const expectedVersion = input.expectedVersion ?? record.room.playback.queueVersion;
-    if (record.room.playback.queueVersion !== expectedVersion) {
+    const expectedVersion = input.expectedVersion ?? record.room.playback.playbackRevision;
+    if (record.room.playback.playbackRevision !== expectedVersion) {
       throw new Error("Playback state version conflict.");
     }
     const playback = await this.roomPlaybackService.updatePlayback(record, input);
@@ -615,6 +628,12 @@ export class RoomService {
 
   async getQueue(roomId: string) {
     return (await this.roomRecordRepository.getRoomRecord(roomId)).queue;
+  }
+
+  async getAccessibleQueue(roomId: string, sessionId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    this.assertMember(record, sessionId);
+    return record.queue;
   }
 
   private buildJoinCode() {
@@ -676,8 +695,11 @@ export class RoomService {
     }
   }
 
-  private incrementPlaybackVersion(playback: PlaybackSnapshot) {
+  private incrementQueueVersion(playback: PlaybackSnapshot) {
     playback.queueVersion += 1;
+  }
+
+  private incrementPlaybackRevision(playback: PlaybackSnapshot) {
     playback.playbackRevision += 1;
   }
 
