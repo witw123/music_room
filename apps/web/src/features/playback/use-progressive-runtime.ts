@@ -18,7 +18,6 @@ import type {
 } from "@music-room/shared";
 import {
   pickActiveMediaDiagnostic,
-  resolveTransportHealth,
   selectCanonicalTrackAvailabilityAnnouncement
 } from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
@@ -36,7 +35,6 @@ import {
   getProgressiveEngineType,
   getRemoteFirstComfortBufferMs,
   isTakeoverReady,
-  shouldEnableRemoteFirstLock,
   type ProgressiveSchedulerPolicy,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
@@ -572,17 +570,7 @@ function resolveTransportGovernorMode(input: {
 
   if (
     input.progressiveFallbackReason ||
-    input.mediaConnectedPeersCount <= 0 ||
-    (input.remoteFirstLock &&
-      input.remoteFirstLockReason !== "cache-outrun-risk" &&
-      input.remoteFirstLockReason !== "data-channel-not-ready")
-  ) {
-    return "emergency-fallback" as const;
-  }
-
-  if (
     input.pendingPlaybackIntent ||
-    input.mediaConnectedPeersCount <= 0 ||
     input.connectedPeersCount <= 0 ||
     !input.progressiveLocalEligible
   ) {
@@ -774,7 +762,6 @@ export function useProgressiveRuntime({
   );
   const canPrepareProgressiveLocal =
     enableTrackCaching &&
-    !isCurrentSourceOwner &&
     activePlaybackSource !== "full-local" &&
     !!currentProgressiveManifest &&
     canUseProgressivePlayback() &&
@@ -784,95 +771,12 @@ export function useProgressiveRuntime({
     activePlaybackSource !== "full-local" &&
     canUseFullLocalForPlaybackSession;
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
-  const systemDiagnostics = useMemo(
-    () => peerDiagnostics.find((snapshot) => snapshot.peerId === "system") ?? null,
-    [peerDiagnostics]
-  );
   const sourceDiagnostics = useMemo(
     () => pickActiveMediaDiagnostic(peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId ?? null),
     [peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]
   );
-  const degradedIceMode = useMemo(
-    () =>
-      (roomSnapshot?.room.members.length ?? 0) > 1 &&
-      systemDiagnostics?.iceConfigSource === "stun-only",
-    [roomSnapshot?.room.members.length, systemDiagnostics?.iceConfigSource]
-  );
-  const sourceTransport = useMemo(
-    () => (sourceDiagnostics ? resolveTransportHealth(sourceDiagnostics) : { transportHealth: null, degradedReason: null }),
-    [sourceDiagnostics]
-  );
-  const remoteFirstLockReason = useMemo(() => {
-    if (degradedIceMode) {
-      return "stun-only-ice";
-    }
-
-    if (mediaConnectedPeersCount > 0 && connectedPeersCount === 0) {
-      return "data-channel-not-ready";
-    }
-
-    if (sourceDiagnostics && shouldEnableRemoteFirstLock({ diagnostics: sourceDiagnostics })) {
-      if (
-        typeof sourceDiagnostics.currentRoundTripTimeMs === "number" &&
-        sourceDiagnostics.currentRoundTripTimeMs >= 220
-      ) {
-        return "high-rtt";
-      }
-      if (
-        typeof sourceDiagnostics.availableOutgoingBitrateKbps === "number" &&
-        sourceDiagnostics.availableOutgoingBitrateKbps > 0 &&
-        sourceDiagnostics.availableOutgoingBitrateKbps <= 72
-      ) {
-        return "low-bitrate-headroom";
-      }
-      if (
-        typeof sourceDiagnostics.packetLossRate === "number" &&
-        sourceDiagnostics.packetLossRate >= 8
-      ) {
-        return "high-packet-loss-rate";
-      }
-      if (typeof sourceDiagnostics.jitterMs === "number" && sourceDiagnostics.jitterMs >= 45) {
-        return "high-jitter";
-      }
-      return "remote-transport-constrained";
-    }
-
-    if (progressiveFallbackReason === "buffer-underrun" || progressiveFallbackReason === "stalled") {
-      return progressiveFallbackReason;
-    }
-
-    if (
-      progressiveHealthSnapshot.schedulerPolicy === "outrun-recovery" ||
-      (progressiveHealthSnapshot.estimatedFillTimeMs !== null &&
-        progressiveHealthSnapshot.remainingPlaybackMs !== null &&
-        progressiveHealthSnapshot.remainingPlaybackMs > 0 &&
-        progressiveHealthSnapshot.estimatedFillTimeMs >=
-          progressiveHealthSnapshot.remainingPlaybackMs)
-    ) {
-      return "cache-outrun-risk";
-    }
-
-    if (sourceTransport.transportHealth === "media-only") {
-      return sourceTransport.degradedReason ?? "data-channel-not-ready";
-    }
-
-    return null;
-  }, [
-    connectedPeersCount,
-    currentProgressiveManifest,
-    currentTrackAvailabilityAnnouncement,
-    isProgressiveTakeoverReady,
-    mediaConnectedPeersCount,
-    progressiveFallbackReason,
-    progressiveHealthSnapshot.estimatedFillTimeMs,
-    progressiveHealthSnapshot.remainingPlaybackMs,
-    progressiveHealthSnapshot.schedulerPolicy,
-    degradedIceMode,
-    sourceDiagnostics,
-    sourceTransport.degradedReason,
-    sourceTransport.transportHealth
-  ]);
-  const remoteFirstLock = remoteFirstLockReason !== null;
+  const remoteFirstLockReason = null;
+  const remoteFirstLock = false;
   const startupBufferMs = useMemo(() => {
     const lastStablePlaybackAt = lastStablePlaybackAtRef.current;
     const hasRecentStablePlayback =
@@ -907,10 +811,6 @@ export function useProgressiveRuntime({
       return "playback-paused";
     }
 
-    if (remoteFirstLock) {
-      return remoteFirstLockReason ?? "remote-first-lock";
-    }
-
     if (progressiveFallbackReason) {
       return progressiveFallbackReason;
     }
@@ -921,10 +821,6 @@ export function useProgressiveRuntime({
 
     if (connectedPeersCount <= 0) {
       return "data-channel-not-ready";
-    }
-
-    if (mediaConnectedPeersCount <= 0) {
-      return "media-not-ready";
     }
 
     if (
@@ -947,11 +843,8 @@ export function useProgressiveRuntime({
     currentProgressiveManifest,
     isProgressiveTakeoverReady,
     localTakeoverCooldownMs,
-    mediaConnectedPeersCount,
     playback?.status,
-    progressiveFallbackReason,
-    remoteFirstLock,
-    remoteFirstLockReason
+    progressiveFallbackReason
   ]);
   const progressiveLocalEligible = progressiveLocalBlockedReason === null;
   const transportGovernorMode = useMemo(
@@ -1302,8 +1195,9 @@ export function useProgressiveRuntime({
       enableListenerLocalTakeover &&
       now >= localTakeoverCooldownUntilRef.current &&
       (immediateFullLocalRecoveryEligible ||
-        (connectedPeersCount > 0 && mediaConnectedPeersCount > 0)),
-    [connectedPeersCount, immediateFullLocalRecoveryEligible, mediaConnectedPeersCount]
+        canUseFullLocalForPlaybackSession ||
+        connectedPeersCount > 0),
+    [canUseFullLocalForPlaybackSession, connectedPeersCount, immediateFullLocalRecoveryEligible]
   );
   const audibleLocalFallbackActive =
     !isCurrentSourceOwner &&

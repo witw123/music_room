@@ -50,6 +50,14 @@ export type LocalMemberPanelState = {
     | "stalledEventsLast30s"
     | "averageDriftMs"
     | "maxDriftMs"
+    | "localAudioPaused"
+    | "localAudioMuted"
+    | "localAudioVolume"
+    | "localAudioReadyState"
+    | "localAudioCurrentSrc"
+    | "localAudioHasSrcObject"
+    | "lastPlayStartFailure"
+    | "pendingPlaybackIntent"
   > | null;
   playbackStatus: {
     label: string;
@@ -201,6 +209,15 @@ function getPlaybackStatus(
 
   const playback = peerDiagnostics?.progressivePlaybackStatus ?? null;
   if (playback?.activeSource === "full-local") {
+    const localAudioIssue = getLocalAudioPlaybackIssue(playback);
+    if (localAudioIssue) {
+      return {
+        label: "完整缓存待发声",
+        detail: localAudioIssue,
+        tone: "accent" as const
+      };
+    }
+
     return {
       label: "完整缓存播放",
       detail: "本端观测到该成员使用完整本地缓存作为可听源。",
@@ -210,6 +227,15 @@ function getPlaybackStatus(
 
   if (playback?.activeSource === "progressive-local") {
     const ahead = formatDurationMs(playback.aheadBufferedMs);
+    const localAudioIssue = getLocalAudioPlaybackIssue(playback);
+    if (playback.startupReady && localAudioIssue) {
+      return {
+        label: "缓存已就绪但未发声",
+        detail: localAudioIssue,
+        tone: "accent" as const
+      };
+    }
+
     return {
       label: playback.startupReady ? "边下边播" : "缓存启动中",
       detail: `本地渐进播放窗口 ahead ${ahead}，调度策略 ${playback.schedulerPolicy ?? "未知"}。`,
@@ -269,6 +295,40 @@ function getPlaybackStatus(
   };
 }
 
+function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
+  if (playback.lastPlayStartFailure) {
+    return `本地音频启动失败: ${playback.lastPlayStartFailure}。`;
+  }
+
+  if (playback.pendingPlaybackIntent) {
+    return `等待浏览器允许音频输出: ${playback.pendingPlaybackIntent}。`;
+  }
+
+  if (playback.localAudioMuted) {
+    return "本地音频元素处于静音状态。";
+  }
+
+  if (playback.localAudioVolume === 0) {
+    return "本地音频音量为 0。";
+  }
+
+  if (playback.localAudioPaused === true) {
+    return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
+  }
+
+  const readyState = playback.localAudioReadyState ?? 0;
+  const hasPlayableOutput = playback.localAudioHasSrcObject || readyState >= 2;
+  if (playback.localAudioPaused === false && !hasPlayableOutput) {
+    return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
+  }
+
+  if (playback.localAudioPaused !== false) {
+    return "尚未确认本地音频元素已经开始播放。";
+  }
+
+  return null;
+}
+
 function getLibraryStatus(summary: MemberTransferSummary | undefined) {
   if (!summary || summary.announcedTrackCount <= 0) {
     return {
@@ -313,6 +373,14 @@ function formatMetric(value: number | null, unit: string) {
   }
 
   return `${value}${unit}`;
+}
+
+function formatNullableBoolean(value: boolean | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+
+  return value ? "是" : "否";
 }
 
 function formatDurationMs(value: number | null | undefined) {
@@ -589,6 +657,17 @@ function MembersPanelBase({
                       <span>调度: {localMemberState.cachePlayback.schedulerPolicy ?? "idle"}</span>
                       <span>
                         drift: {formatMetric(localMemberState.cachePlayback.maxDriftMs ?? null, "ms")}
+                      </span>
+                      <span>paused: {formatNullableBoolean(localMemberState.cachePlayback.localAudioPaused)}</span>
+                      <span>muted: {formatNullableBoolean(localMemberState.cachePlayback.localAudioMuted)}</span>
+                      <span>音量: {formatMetric(localMemberState.cachePlayback.localAudioVolume ?? null, "")}</span>
+                      <span>readyState: {localMemberState.cachePlayback.localAudioReadyState ?? "未知"}</span>
+                      <span className="col-span-2 truncate">
+                        src: {localMemberState.cachePlayback.localAudioHasSrcObject
+                          ? "srcObject"
+                          : localMemberState.cachePlayback.localAudioCurrentSrc
+                            ? "media-src"
+                            : "无"}
                       </span>
                     </div>
                   ) : null}

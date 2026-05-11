@@ -253,7 +253,23 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>waiting/30s: {formatMetric(playback.waitingEventsLast30s, "")}</span>
               <span>stalled/30s: {formatMetric(playback.stalledEventsLast30s, "")}</span>
               <span>音频解锁: {formatBoolean(playback.audioUnlocked)}</span>
+              <span>本地暂停: {formatBoolean(playback.localAudioPaused)}</span>
+              <span>本地静音: {formatBoolean(playback.localAudioMuted)}</span>
+              <span>本地音量: {formatMetric(playback.localAudioVolume, "")}</span>
+              <span>本地 readyState: {formatMetric(playback.localAudioReadyState, "")}</span>
+              <span>本地 srcObject: {formatBoolean(playback.localAudioHasSrcObject)}</span>
+              <span>本地 src: {playback.localAudioCurrentSrc ? "media-src" : "无"}</span>
             </DiagnosticGrid>
+            {playback.pendingPlaybackIntent ? (
+              <p className="mt-2 text-[10px] text-amber-300">
+                等待音频启动: {playback.pendingPlaybackIntent}
+              </p>
+            ) : null}
+            {playback.lastPlayStartFailure ? (
+              <p className="mt-2 text-[10px] text-red-300">
+                本地音频启动失败: {playback.lastPlayStartFailure}
+              </p>
+            ) : null}
             {playback.lastSourceStartError ? (
               <p className="mt-2 text-[10px] text-red-300">
                 音源启动错误: {playback.lastSourceStartError}

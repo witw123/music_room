@@ -309,7 +309,20 @@ export function useRoomDerivedState({
             stalledEventsLast30s:
               systemDiagnostic.progressivePlaybackStatus.stalledEventsLast30s ?? null,
             averageDriftMs: systemDiagnostic.progressivePlaybackStatus.averageDriftMs ?? null,
-            maxDriftMs: systemDiagnostic.progressivePlaybackStatus.maxDriftMs ?? null
+            maxDriftMs: systemDiagnostic.progressivePlaybackStatus.maxDriftMs ?? null,
+            localAudioPaused: systemDiagnostic.progressivePlaybackStatus.localAudioPaused ?? null,
+            localAudioMuted: systemDiagnostic.progressivePlaybackStatus.localAudioMuted ?? null,
+            localAudioVolume: systemDiagnostic.progressivePlaybackStatus.localAudioVolume ?? null,
+            localAudioReadyState:
+              systemDiagnostic.progressivePlaybackStatus.localAudioReadyState ?? null,
+            localAudioCurrentSrc:
+              systemDiagnostic.progressivePlaybackStatus.localAudioCurrentSrc ?? null,
+            localAudioHasSrcObject:
+              systemDiagnostic.progressivePlaybackStatus.localAudioHasSrcObject ?? null,
+            lastPlayStartFailure:
+              systemDiagnostic.progressivePlaybackStatus.lastPlayStartFailure ?? null,
+            pendingPlaybackIntent:
+              systemDiagnostic.progressivePlaybackStatus.pendingPlaybackIntent ?? null
           }
         : null,
       playbackStatus: getLocalPlaybackStatus({
@@ -611,6 +624,46 @@ function hasPieceTransferSample(diagnostics: PeerDiagnosticsSnapshot[]) {
   );
 }
 
+function getLocalAudioPlaybackIssue(
+  cachePlayback: PeerDiagnosticsSnapshot["progressivePlaybackStatus"]
+) {
+  if (!cachePlayback) {
+    return null;
+  }
+
+  if (cachePlayback.lastPlayStartFailure) {
+    return `本地音频启动失败: ${cachePlayback.lastPlayStartFailure}。`;
+  }
+
+  if (cachePlayback.pendingPlaybackIntent) {
+    return `等待浏览器允许音频输出: ${cachePlayback.pendingPlaybackIntent}。`;
+  }
+
+  if (cachePlayback.localAudioMuted) {
+    return "本地音频元素处于静音状态。";
+  }
+
+  if (cachePlayback.localAudioVolume === 0) {
+    return "本地音频音量为 0。";
+  }
+
+  if (cachePlayback.localAudioPaused === true) {
+    return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
+  }
+
+  const readyState = cachePlayback.localAudioReadyState ?? 0;
+  const hasPlayableOutput = cachePlayback.localAudioHasSrcObject || readyState >= 2;
+  if (cachePlayback.localAudioPaused === false && !hasPlayableOutput) {
+    return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
+  }
+
+  if (cachePlayback.localAudioPaused !== false) {
+    return "尚未确认本地音频元素已经开始播放。";
+  }
+
+  return null;
+}
+
 function getLocalPlaybackStatus(input: {
   presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
   mediaConnectionState: RoomMediaConnectionState;
@@ -662,6 +715,16 @@ function getLocalPlaybackStatus(input: {
   }
 
   if (input.cachePlayback?.activeSource === "full-local") {
+    const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
+    if (localAudioIssue) {
+      return {
+        label: "完整缓存待发声",
+        detail: localAudioIssue,
+        tone: "accent",
+        badgeText: "audio-wait"
+      };
+    }
+
     return {
       label: "完整缓存播放",
       detail: "当前使用完整本地缓存播放，网络只负责同步控制和分片回传。",
@@ -672,6 +735,16 @@ function getLocalPlaybackStatus(input: {
 
   if (input.cachePlayback?.activeSource === "progressive-local") {
     if (input.cachePlayback.startupReady) {
+      const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
+      if (localAudioIssue) {
+        return {
+          label: "缓存已就绪但未发声",
+          detail: localAudioIssue,
+          tone: "accent",
+          badgeText: "audio-wait"
+        };
+      }
+
       return {
         label: "边下边播",
         detail: `当前本地缓存窗口已可播，ahead ${formatDurationMs(input.cachePlayback.aheadBufferedMs)}。`,
