@@ -24,6 +24,9 @@ type ScheduledSegment = {
 type EncodedAudioChunkCtor = typeof EncodedAudioChunk;
 
 type AudioDecoderCtor = typeof AudioDecoder;
+type AudioDecoderLike = AudioDecoder & {
+  flush?: () => Promise<void>;
+};
 
 type PcmEngineSyncResult = {
   localReady: boolean;
@@ -42,6 +45,9 @@ export type ProgressivePcmEngineSnapshot = {
   contiguousByteLength: number;
   decodedSegmentCount: number;
   scheduledSegmentCount: number;
+  decodedPacketCount: number;
+  decoderFlushCount: number;
+  lastDecodedAtMs: number | null;
   bufferedAheadMs: number;
   playoutState: PcmEnginePlayoutState;
 };
@@ -53,7 +59,7 @@ export class ProgressivePcmEngine {
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
   private gainNode: GainNode | null = null;
   private directOutputConnected = false;
-  private decoder: AudioDecoder | null = null;
+  private decoder: AudioDecoderLike | null = null;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
   private status: EngineStatus = "idle";
   private parsedOffset = 0;
@@ -63,6 +69,9 @@ export class ProgressivePcmEngine {
   private contiguousBytes = new Uint8Array(0);
   private decodedSegments: DecodedSegment[] = [];
   private scheduledSegments: ScheduledSegment[] = [];
+  private decodedPacketCount = 0;
+  private decoderFlushCount = 0;
+  private lastDecodedAtMs: number | null = null;
   private playing = false;
   private pausedTrackTimeSec = 0;
   private anchorTrackTimeSec = 0;
@@ -117,6 +126,9 @@ export class ProgressivePcmEngine {
       contiguousByteLength: this.contiguousByteLength,
       decodedSegmentCount: this.decodedSegments.length,
       scheduledSegmentCount: this.scheduledSegments.length,
+      decodedPacketCount: this.decodedPacketCount,
+      decoderFlushCount: this.decoderFlushCount,
+      lastDecodedAtMs: this.lastDecodedAtMs,
       bufferedAheadMs: Math.max(0, this.getBufferedAheadMs()),
       playoutState: this.getPlayoutState()
     };
@@ -208,6 +220,10 @@ export class ProgressivePcmEngine {
       };
     }
 
+    if (this.status !== "ready") {
+      await this.sync();
+    }
+
     if (!this.audioContext || this.status !== "ready") {
       return {
         localReady: false,
@@ -215,6 +231,14 @@ export class ProgressivePcmEngine {
         playbackPositionSeconds: this.getCurrentTimeSeconds(),
         blockedReason: this.status !== "ready" ? `engine-${this.status}` : "missing-audio-context"
       };
+    }
+
+    if (!this.hasBufferedPosition(positionSeconds)) {
+      await this.sync();
+    }
+
+    if (!this.hasBufferedPosition(positionSeconds)) {
+      await this.waitForDecodedPosition(positionSeconds);
     }
 
     if (!this.hasBufferedPosition(positionSeconds)) {
@@ -293,6 +317,9 @@ export class ProgressivePcmEngine {
     this.directOutputConnected = false;
     this.streamInfo = null;
     this.decodedSegments = [];
+    this.decodedPacketCount = 0;
+    this.decoderFlushCount = 0;
+    this.lastDecodedAtMs = null;
     this.contiguousChunkCount = 0;
     this.parsedOffset = 0;
     this.nextSampleIndex = 0;
@@ -337,6 +364,7 @@ export class ProgressivePcmEngine {
           }
 
           this.decodedSegments.push(segment);
+          this.lastDecodedAtMs = Date.now();
           this.decodedSegments.sort((left, right) => left.startTimeSec - right.startTimeSec);
           if (this.playing) {
             this.scheduleAhead(this.getCurrentTimeSeconds());
@@ -404,6 +432,11 @@ export class ProgressivePcmEngine {
           data: packet.data
         })
       );
+      this.decodedPacketCount += 1;
+    }
+
+    if (extraction.packets.length > 0) {
+      await this.flushDecoder();
     }
 
     this.parsedOffset = extraction.nextOffset;
@@ -454,6 +487,31 @@ export class ProgressivePcmEngine {
 
     this.contiguousBytes.set(nextBytes, this.contiguousByteLength);
     this.contiguousByteLength = nextLength;
+  }
+
+  private async flushDecoder() {
+    const decoder = this.decoder;
+    if (!decoder || typeof decoder.flush !== "function") {
+      await yieldToMicrotasks();
+      return;
+    }
+
+    try {
+      await decoder.flush();
+      this.decoderFlushCount += 1;
+    } catch {
+      this.status = "failed";
+      this.decoder = null;
+    }
+  }
+
+  private async waitForDecodedPosition(positionSeconds: number) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await yieldToMicrotasks();
+      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+        return;
+      }
+    }
   }
 
   private createDecodedSegment(audioData: unknown): DecodedSegment | null {
@@ -653,6 +711,12 @@ function getEncodedAudioChunkCtor() {
       EncodedAudioChunk?: EncodedAudioChunkCtor;
     }
   ).EncodedAudioChunk ?? null;
+}
+
+function yieldToMicrotasks() {
+  return new Promise<void>((resolve) => {
+    queueMicrotask(resolve);
+  });
 }
 
 function isTerminalEngineStatus(status: EngineStatus) {

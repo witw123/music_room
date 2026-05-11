@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCachedPiece } from "@/lib/indexeddb";
 import { ProgressivePcmEngine } from "./progressive-pcm-engine";
+import { extractFlacPacketsFromBitstream } from "./progressive-flac";
 
 vi.mock("@/lib/indexeddb", () => ({
   getCachedPiece: vi.fn(),
@@ -102,6 +103,17 @@ function installFakeAudioContext() {
       return Promise.resolve();
     }
 
+    createBuffer(numberOfChannels: number, numberOfFrames: number, sampleRate: number) {
+      return {
+        numberOfChannels,
+        numberOfFrames,
+        sampleRate,
+        copyToChannel() {
+          return undefined;
+        }
+      };
+    }
+
     resume() {
       this.state = "running";
       return Promise.resolve();
@@ -113,19 +125,46 @@ function installFakeAudioContext() {
       return { supported: true, config };
     }
 
+    private readonly callbacks: {
+      output: (audioData: unknown) => void;
+      error: (error: unknown) => void;
+    };
+    private pendingChunks = 0;
+
     constructor(
-      _callbacks: {
+      callbacks: {
         output: (audioData: unknown) => void;
         error: (error: unknown) => void;
       }
-    ) {}
+    ) {
+      this.callbacks = callbacks;
+    }
 
     configure() {
       return undefined;
     }
 
     decode() {
+      this.pendingChunks += 1;
       return undefined;
+    }
+
+    async flush() {
+      while (this.pendingChunks > 0) {
+        this.pendingChunks -= 1;
+        this.callbacks.output({
+          numberOfChannels: 2,
+          numberOfFrames: 44_100,
+          sampleRate: 44_100,
+          timestamp: 0,
+          copyTo(destination: Float32Array) {
+            destination.fill(0.25);
+          },
+          close() {
+            return undefined;
+          }
+        });
+      }
     }
 
     close() {
@@ -200,6 +239,19 @@ function createAudioElement() {
 describe("ProgressivePcmEngine", () => {
   beforeEach(() => {
     vi.mocked(getCachedPiece).mockReset();
+    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+      streamInfo: {
+        description: new Uint8Array([1, 2, 3]),
+        audioOffset: 0,
+        sampleRate: 44_100,
+        numberOfChannels: 2,
+        bitsPerSample: 16,
+        totalSamples: null
+      },
+      packets: [],
+      nextOffset: 0,
+      nextSampleIndex: 0
+    });
   });
 
   it("uses a gain node for volume when the audio context is attached", async () => {
@@ -323,6 +375,63 @@ describe("ProgressivePcmEngine", () => {
 
       expect(result.localReady).toBe(true);
       expect(audio.play).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("flushes decoded packets before reporting PCM playback ready", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+      streamInfo: {
+        description: new Uint8Array([1, 2, 3]),
+        audioOffset: 0,
+        sampleRate: 44_100,
+        numberOfChannels: 2,
+        bitsPerSample: 16,
+        totalSamples: null
+      },
+      packets: [
+        {
+          data: new Uint8Array([0xff, 0xf8]),
+          sampleCount: 44_100,
+          timestampUs: 0,
+          durationUs: 1_000_000
+        }
+      ],
+      nextOffset: 2,
+      nextSampleIndex: 44_100
+    });
+    vi.mocked(getCachedPiece)
+      .mockResolvedValueOnce({
+        pieceId: "piece_0",
+        trackId: manifest.trackId,
+        peerId: "peer_local",
+        chunkIndex: 0,
+        chunkSize: 2,
+        hash: "hash_0",
+        createdAt: new Date().toISOString(),
+        payload: new Uint8Array([0xff, 0xf8]).buffer
+      })
+      .mockResolvedValueOnce(null);
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 1,
+        decoderFlushCount: 1,
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1
+      });
     } finally {
       engine.destroy();
       audioContext.restore();

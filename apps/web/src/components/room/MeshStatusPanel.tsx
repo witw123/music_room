@@ -266,6 +266,8 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>PCM ahead: {formatDurationMs(playback.pcmBufferedAheadMs)}</span>
               <span>PCM 播放: {playback.pcmPlayoutState ?? "未知"}</span>
               <span>PCM 分片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>
+              <span>PCM 包: {formatMetric(playback.pcmDecodedPacketCount, "")}</span>
+              <span>PCM flush: {formatMetric(playback.pcmDecoderFlushCount, "")}</span>
               <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
               <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>
               <span>PCM 阻塞: {playback.pcmLastBlockedReason ?? "无"}</span>

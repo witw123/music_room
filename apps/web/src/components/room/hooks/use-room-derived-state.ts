@@ -335,6 +335,12 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmDecodedSegmentCount ?? null,
             pcmScheduledSegmentCount:
               systemDiagnostic.progressivePlaybackStatus.pcmScheduledSegmentCount ?? null,
+            pcmDecodedPacketCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecodedPacketCount ?? null,
+            pcmDecoderFlushCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecoderFlushCount ?? null,
+            pcmLastDecodedAtMs:
+              systemDiagnostic.progressivePlaybackStatus.pcmLastDecodedAtMs ?? null,
             pcmBufferedAheadMs:
               systemDiagnostic.progressivePlaybackStatus.pcmBufferedAheadMs ?? null,
             pcmPlayoutState:

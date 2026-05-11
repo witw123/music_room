@@ -64,6 +64,9 @@ export type LocalMemberPanelState = {
     | "pcmContiguousByteLength"
     | "pcmDecodedSegmentCount"
     | "pcmScheduledSegmentCount"
+    | "pcmDecodedPacketCount"
+    | "pcmDecoderFlushCount"
+    | "pcmLastDecodedAtMs"
     | "pcmBufferedAheadMs"
     | "pcmPlayoutState"
     | "pcmLastBlockedReason"
@@ -690,6 +693,8 @@ function MembersPanelBase({
                           <span>pcm: {localMemberState.cachePlayback.pcmPlayoutState ?? "未知"}</span>
                           <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>
                           <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
+                          <span>packets: {localMemberState.cachePlayback.pcmDecodedPacketCount ?? "未知"}</span>
+                          <span>flush: {localMemberState.cachePlayback.pcmDecoderFlushCount ?? "未知"}</span>
                           <span className="col-span-2 truncate">
                             pcm block: {localMemberState.cachePlayback.pcmLastBlockedReason ?? "无"}
                           </span>
