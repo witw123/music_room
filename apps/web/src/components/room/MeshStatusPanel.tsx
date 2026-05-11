@@ -53,6 +53,14 @@ function formatMetric(value: number | null | undefined, unit: string) {
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
+function formatLevel(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+
+  return value.toFixed(6);
+}
+
 function formatDurationMs(value: number | null | undefined) {
   if (value === null || typeof value === "undefined") {
     return "未知";
@@ -270,7 +278,11 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>PCM flush: {formatMetric(playback.pcmDecoderFlushCount, "")}</span>
               <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
               <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>
+              <span>PCM peak: {formatLevel(playback.pcmDecodedPeak)}</span>
+              <span>PCM RMS: {formatLevel(playback.pcmDecodedRms)}</span>
+              <span>PCM 非零: {formatMetric(playback.pcmDecodedNonZeroSampleCount, "")}</span>
               <span>PCM 阻塞: {playback.pcmLastBlockedReason ?? "无"}</span>
+              <span>PCM 错误: {playback.pcmLastDecodeError ?? "无"}</span>
             </DiagnosticGrid>
             {playback.pendingPlaybackIntent ? (
               <p className="mt-2 text-[10px] text-amber-300">

@@ -341,6 +341,14 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmDecoderFlushCount ?? null,
             pcmLastDecodedAtMs:
               systemDiagnostic.progressivePlaybackStatus.pcmLastDecodedAtMs ?? null,
+            pcmLastDecodeError:
+              systemDiagnostic.progressivePlaybackStatus.pcmLastDecodeError ?? null,
+            pcmDecodedPeak:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecodedPeak ?? null,
+            pcmDecodedRms:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecodedRms ?? null,
+            pcmDecodedNonZeroSampleCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecodedNonZeroSampleCount ?? null,
             pcmBufferedAheadMs:
               systemDiagnostic.progressivePlaybackStatus.pcmBufferedAheadMs ?? null,
             pcmPlayoutState:
@@ -694,7 +702,10 @@ function getLocalAudioPlaybackIssue(
       return `PCM 音频上下文未运行: ${cachePlayback.pcmAudioContextState}。`;
     }
 
-    if (cachePlayback.pcmLastBlockedReason) {
+    if (
+      cachePlayback.pcmLastBlockedReason &&
+      !(cachePlayback.pcmLastBlockedReason === "engine-failed" && (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0)
+    ) {
       return `PCM 播放未就绪: ${cachePlayback.pcmLastBlockedReason}。`;
     }
 

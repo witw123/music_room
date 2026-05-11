@@ -67,6 +67,10 @@ export type LocalMemberPanelState = {
     | "pcmDecodedPacketCount"
     | "pcmDecoderFlushCount"
     | "pcmLastDecodedAtMs"
+    | "pcmLastDecodeError"
+    | "pcmDecodedPeak"
+    | "pcmDecodedRms"
+    | "pcmDecodedNonZeroSampleCount"
     | "pcmBufferedAheadMs"
     | "pcmPlayoutState"
     | "pcmLastBlockedReason"
@@ -397,6 +401,14 @@ function formatNullableBoolean(value: boolean | null | undefined) {
   return value ? "是" : "否";
 }
 
+function formatNullableNumber(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+
+  return Number.isInteger(value) ? value.toString() : value.toFixed(6);
+}
+
 function formatDurationMs(value: number | null | undefined) {
   if (value === null || typeof value === "undefined") {
     return "未知";
@@ -695,8 +707,16 @@ function MembersPanelBase({
                           <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
                           <span>packets: {localMemberState.cachePlayback.pcmDecodedPacketCount ?? "未知"}</span>
                           <span>flush: {localMemberState.cachePlayback.pcmDecoderFlushCount ?? "未知"}</span>
+                          <span>peak: {formatNullableNumber(localMemberState.cachePlayback.pcmDecodedPeak)}</span>
+                          <span>rms: {formatNullableNumber(localMemberState.cachePlayback.pcmDecodedRms)}</span>
+                          <span className="col-span-2 truncate">
+                            nonzero: {localMemberState.cachePlayback.pcmDecodedNonZeroSampleCount ?? "未知"}
+                          </span>
                           <span className="col-span-2 truncate">
                             pcm block: {localMemberState.cachePlayback.pcmLastBlockedReason ?? "无"}
+                          </span>
+                          <span className="col-span-2 truncate">
+                            pcm error: {localMemberState.cachePlayback.pcmLastDecodeError ?? "无"}
                           </span>
                         </>
                       ) : null}

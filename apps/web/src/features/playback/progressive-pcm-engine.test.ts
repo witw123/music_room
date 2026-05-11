@@ -39,7 +39,9 @@ const manifest = {
   chunkSize: 256 * 1024
 } as const;
 
-function installFakeAudioContext() {
+function installFakeAudioContext(
+  options: { decodedTimestamp?: number; decodedSampleValue?: number } = {}
+) {
   const originalWindow = globalThis.window;
   const originalAudioDecoder = (
     globalThis as typeof globalThis & { AudioDecoder?: unknown }
@@ -156,9 +158,9 @@ function installFakeAudioContext() {
           numberOfChannels: 2,
           numberOfFrames: 44_100,
           sampleRate: 44_100,
-          timestamp: 0,
+          timestamp: options.decodedTimestamp ?? 0,
           copyTo(destination: Float32Array) {
-            destination.fill(0.25);
+            destination.fill(options.decodedSampleValue ?? 0.25);
           },
           close() {
             return undefined;
@@ -220,6 +222,41 @@ function installFakeAudioContext() {
       }
     }
   };
+}
+
+function mockSingleDecodedPacket() {
+  vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+    streamInfo: {
+      description: new Uint8Array([1, 2, 3]),
+      audioOffset: 0,
+      sampleRate: 44_100,
+      numberOfChannels: 2,
+      bitsPerSample: 16,
+      totalSamples: null
+    },
+    packets: [
+      {
+        data: new Uint8Array([0xff, 0xf8]),
+        sampleCount: 44_100,
+        timestampUs: 0,
+        durationUs: 1_000_000
+      }
+    ],
+    nextOffset: 2,
+    nextSampleIndex: 44_100
+  });
+  vi.mocked(getCachedPiece)
+    .mockResolvedValueOnce({
+      pieceId: "piece_0",
+      trackId: manifest.trackId,
+      peerId: "peer_local",
+      chunkIndex: 0,
+      chunkSize: 2,
+      hash: "hash_0",
+      createdAt: new Date().toISOString(),
+      payload: new Uint8Array([0xff, 0xf8]).buffer
+    })
+    .mockResolvedValueOnce(null);
 }
 
 function createAudioElement() {
@@ -386,38 +423,7 @@ describe("ProgressivePcmEngine", () => {
     const audio = createAudioElement();
     const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
 
-    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
-      streamInfo: {
-        description: new Uint8Array([1, 2, 3]),
-        audioOffset: 0,
-        sampleRate: 44_100,
-        numberOfChannels: 2,
-        bitsPerSample: 16,
-        totalSamples: null
-      },
-      packets: [
-        {
-          data: new Uint8Array([0xff, 0xf8]),
-          sampleCount: 44_100,
-          timestampUs: 0,
-          durationUs: 1_000_000
-        }
-      ],
-      nextOffset: 2,
-      nextSampleIndex: 44_100
-    });
-    vi.mocked(getCachedPiece)
-      .mockResolvedValueOnce({
-        pieceId: "piece_0",
-        trackId: manifest.trackId,
-        peerId: "peer_local",
-        chunkIndex: 0,
-        chunkSize: 2,
-        hash: "hash_0",
-        createdAt: new Date().toISOString(),
-        payload: new Uint8Array([0xff, 0xf8]).buffer
-      })
-      .mockResolvedValueOnce(null);
+    mockSingleDecodedPacket();
 
     try {
       await engine.attach();
@@ -430,7 +436,61 @@ describe("ProgressivePcmEngine", () => {
         decodedPacketCount: 1,
         decoderFlushCount: 1,
         decodedSegmentCount: 1,
-        scheduledSegmentCount: 1
+        scheduledSegmentCount: 1,
+        decodedPeak: 0.25,
+        decodedRms: 0.25,
+        decodedNonZeroSampleCount: 88_200
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("reports silent decoded PCM when every copied sample is zero", async () => {
+    const audioContext = installFakeAudioContext({ decodedSampleValue: 0 });
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    mockSingleDecodedPacket();
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(true);
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1,
+        decodedPeak: 0,
+        decodedRms: 0,
+        decodedNonZeroSampleCount: 0
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("reconstructs decoded segment timing when AudioData timestamp is not finite", async () => {
+    const audioContext = installFakeAudioContext({ decodedTimestamp: Number.NaN });
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    mockSingleDecodedPacket();
+
+    try {
+      await engine.attach();
+      const result = await engine.syncPlayback(Number.NaN, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(result.playbackPositionSeconds).not.toBeNaN();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1,
+        bufferedAheadMs: 1000
       });
     } finally {
       engine.destroy();
@@ -469,6 +529,37 @@ describe("ProgressivePcmEngine", () => {
       expect(engine.getSnapshot()).toMatchObject({
         audioContextState: "suspended",
         playoutState: "paused"
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("continues scheduling already decoded audio after a later decoder failure", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "failed");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0,
+          endTimeSec: 1,
+          buffer: {}
+        }
+      ]);
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "failed",
+        scheduledSegmentCount: 1,
+        playoutState: "playing"
       });
     } finally {
       engine.destroy();

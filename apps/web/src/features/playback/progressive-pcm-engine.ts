@@ -5,12 +5,15 @@ import {
   type ProgressiveFlacStreamInfo
 } from "./progressive-flac";
 
-type EngineStatus = "idle" | "opening" | "ready" | "failed" | "destroyed";
+type EngineStatus = "idle" | "opening" | "ready" | "failed" | "degraded" | "destroyed";
 
 type DecodedSegment = {
   startTimeSec: number;
   endTimeSec: number;
   buffer: AudioBuffer;
+  peak: number;
+  rms: number;
+  nonZeroSampleCount: number;
 };
 
 type ScheduledSegment = {
@@ -48,6 +51,10 @@ export type ProgressivePcmEngineSnapshot = {
   decodedPacketCount: number;
   decoderFlushCount: number;
   lastDecodedAtMs: number | null;
+  lastDecodeError: string | null;
+  decodedPeak: number;
+  decodedRms: number;
+  decodedNonZeroSampleCount: number;
   bufferedAheadMs: number;
   playoutState: PcmEnginePlayoutState;
 };
@@ -72,6 +79,12 @@ export class ProgressivePcmEngine {
   private decodedPacketCount = 0;
   private decoderFlushCount = 0;
   private lastDecodedAtMs: number | null = null;
+  private lastDecodeError: string | null = null;
+  private decodedPeak = 0;
+  private decodedSquareSum = 0;
+  private decodedSampleCount = 0;
+  private decodedNonZeroSampleCount = 0;
+  private nextDecodedStartTimeSec = 0;
   private playing = false;
   private pausedTrackTimeSec = 0;
   private anchorTrackTimeSec = 0;
@@ -97,11 +110,16 @@ export class ProgressivePcmEngine {
 
   getCurrentTimeSeconds() {
     if (!this.playing || !this.audioContext) {
-      return this.pausedTrackTimeSec;
+      return normalizeTrackTimeSeconds(this.pausedTrackTimeSec);
+    }
+
+    if (!Number.isFinite(this.audioContext.currentTime) || !Number.isFinite(this.anchorContextTimeSec)) {
+      return normalizeTrackTimeSeconds(this.pausedTrackTimeSec);
     }
 
     const elapsed = Math.max(0, this.audioContext.currentTime - this.anchorContextTimeSec);
-    return this.anchorTrackTimeSec + elapsed;
+    const currentTimeSeconds = this.anchorTrackTimeSec + elapsed;
+    return normalizeTrackTimeSeconds(currentTimeSeconds);
   }
 
   getOutputStream() {
@@ -129,18 +147,27 @@ export class ProgressivePcmEngine {
       decodedPacketCount: this.decodedPacketCount,
       decoderFlushCount: this.decoderFlushCount,
       lastDecodedAtMs: this.lastDecodedAtMs,
-      bufferedAheadMs: Math.max(0, this.getBufferedAheadMs()),
+      lastDecodeError: this.lastDecodeError,
+      decodedPeak: roundPcmLevel(this.decodedPeak),
+      decodedRms: roundPcmLevel(
+        this.decodedSampleCount > 0
+          ? Math.sqrt(this.decodedSquareSum / this.decodedSampleCount)
+          : 0
+      ),
+      decodedNonZeroSampleCount: this.decodedNonZeroSampleCount,
+      bufferedAheadMs: normalizeDurationMs(this.getBufferedAheadMs()),
       playoutState: this.getPlayoutState()
     };
   }
 
   getBufferedAheadMs(positionSeconds = this.getCurrentTimeSeconds()) {
-    const coverageEnd = this.findBufferedCoverageEnd(positionSeconds);
-    if (coverageEnd <= positionSeconds) {
+    const normalizedPositionSeconds = normalizeTrackTimeSeconds(positionSeconds);
+    const coverageEnd = this.findBufferedCoverageEnd(normalizedPositionSeconds);
+    if (coverageEnd <= normalizedPositionSeconds) {
       return 0;
     }
 
-    return Math.round((coverageEnd - positionSeconds) * 1000);
+    return normalizeDurationMs(Math.round((coverageEnd - normalizedPositionSeconds) * 1000));
   }
 
   setVolume(nextVolume: number) {
@@ -205,7 +232,7 @@ export class ProgressivePcmEngine {
   }
 
   async syncPlayback(expectedSeconds: number, isPlaying: boolean): Promise<PcmEngineSyncResult> {
-    const positionSeconds = Math.max(0, expectedSeconds);
+    const positionSeconds = normalizeTrackTimeSeconds(expectedSeconds);
 
     if (!isPlaying) {
       this.pausedTrackTimeSec = positionSeconds;
@@ -220,11 +247,11 @@ export class ProgressivePcmEngine {
       };
     }
 
-    if (this.status !== "ready") {
+    if (!this.canUseDecodedPlaybackAt(positionSeconds) && this.status !== "ready") {
       await this.sync();
     }
 
-    if (!this.audioContext || this.status !== "ready") {
+    if (!this.audioContext || (!this.canUseDecodedPlaybackAt(positionSeconds) && this.status !== "ready")) {
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -320,6 +347,12 @@ export class ProgressivePcmEngine {
     this.decodedPacketCount = 0;
     this.decoderFlushCount = 0;
     this.lastDecodedAtMs = null;
+    this.lastDecodeError = null;
+    this.decodedPeak = 0;
+    this.decodedSquareSum = 0;
+    this.decodedSampleCount = 0;
+    this.decodedNonZeroSampleCount = 0;
+    this.nextDecodedStartTimeSec = 0;
     this.contiguousChunkCount = 0;
     this.parsedOffset = 0;
     this.nextSampleIndex = 0;
@@ -370,8 +403,9 @@ export class ProgressivePcmEngine {
             this.scheduleAhead(this.getCurrentTimeSeconds());
           }
         },
-        error: () => {
-          this.status = "failed";
+        error: (error) => {
+          this.lastDecodeError = error instanceof Error ? error.message : "decode-error";
+          this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
           this.decoder = null;
         }
       });
@@ -385,7 +419,8 @@ export class ProgressivePcmEngine {
       this.status = "ready";
       return true;
     } catch {
-      this.status = "failed";
+      this.lastDecodeError = "decoder-config-failed";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       return false;
     }
   }
@@ -413,26 +448,34 @@ export class ProgressivePcmEngine {
 
     const decoderReady = await this.ensureDecoder(extraction.streamInfo);
     if (!decoderReady || !this.decoder) {
-      this.status = "failed";
+      this.lastDecodeError = "decoder-unavailable";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       return;
     }
 
     const EncodedAudioChunkCtor = getEncodedAudioChunkCtor();
     if (!EncodedAudioChunkCtor) {
-      this.status = "failed";
+      this.lastDecodeError = "encoded-audio-chunk-unavailable";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       return;
     }
 
     for (const packet of extraction.packets) {
-      this.decoder.decode(
-        new EncodedAudioChunkCtor({
-          type: "key",
-          timestamp: packet.timestampUs,
-          duration: packet.durationUs,
-          data: packet.data
-        })
-      );
-      this.decodedPacketCount += 1;
+      try {
+        this.decoder.decode(
+          new EncodedAudioChunkCtor({
+            type: "key",
+            timestamp: packet.timestampUs,
+            duration: packet.durationUs,
+            data: packet.data
+          })
+        );
+        this.decodedPacketCount += 1;
+      } catch (error) {
+        this.lastDecodeError = error instanceof Error ? error.message : "decode-throw";
+        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        break;
+      }
     }
 
     if (extraction.packets.length > 0) {
@@ -500,7 +543,8 @@ export class ProgressivePcmEngine {
       await decoder.flush();
       this.decoderFlushCount += 1;
     } catch {
-      this.status = "failed";
+      this.lastDecodeError = "decoder-flush-failed";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       this.decoder = null;
     }
   }
@@ -523,7 +567,7 @@ export class ProgressivePcmEngine {
       numberOfChannels: number;
       numberOfFrames: number;
       sampleRate: number;
-      timestamp: number;
+      timestamp?: number;
       copyTo: (destination: Float32Array, options: { planeIndex: number; format: string }) => void;
       close?: () => void;
     };
@@ -532,7 +576,12 @@ export class ProgressivePcmEngine {
       typeof data.numberOfChannels !== "number" ||
       typeof data.numberOfFrames !== "number" ||
       typeof data.sampleRate !== "number" ||
-      typeof data.timestamp !== "number" ||
+      !Number.isFinite(data.numberOfChannels) ||
+      !Number.isFinite(data.numberOfFrames) ||
+      !Number.isFinite(data.sampleRate) ||
+      data.numberOfChannels <= 0 ||
+      data.numberOfFrames <= 0 ||
+      data.sampleRate <= 0 ||
       typeof data.copyTo !== "function"
     ) {
       return null;
@@ -543,21 +592,57 @@ export class ProgressivePcmEngine {
       data.numberOfFrames,
       data.sampleRate
     );
+    let segmentPeak = 0;
+    let segmentSquareSum = 0;
+    let segmentSampleCount = 0;
+    let segmentNonZeroSampleCount = 0;
     for (let channelIndex = 0; channelIndex < data.numberOfChannels; channelIndex += 1) {
       const channelBuffer = new Float32Array(data.numberOfFrames);
       data.copyTo(channelBuffer, {
         planeIndex: channelIndex,
         format: "f32-planar"
       });
+      for (const sample of channelBuffer) {
+        if (!Number.isFinite(sample)) {
+          continue;
+        }
+
+        const absoluteSample = Math.abs(sample);
+        segmentPeak = Math.max(segmentPeak, absoluteSample);
+        segmentSquareSum += sample * sample;
+        segmentSampleCount += 1;
+        if (absoluteSample > 0.000001) {
+          segmentNonZeroSampleCount += 1;
+        }
+      }
       buffer.copyToChannel(channelBuffer, channelIndex);
     }
     data.close?.();
 
-    const startTimeSec = data.timestamp / 1_000_000;
+    const timestampSec =
+      typeof data.timestamp === "number" && Number.isFinite(data.timestamp)
+        ? data.timestamp / 1_000_000
+        : null;
+    const durationSec = data.numberOfFrames / data.sampleRate;
+    const startTimeSec =
+      timestampSec !== null && timestampSec >= 0 ? timestampSec : this.nextDecodedStartTimeSec;
+    const endTimeSec = startTimeSec + durationSec;
+    if (!Number.isFinite(startTimeSec) || !Number.isFinite(endTimeSec) || endTimeSec <= startTimeSec) {
+      return null;
+    }
+    this.nextDecodedStartTimeSec = Math.max(this.nextDecodedStartTimeSec, endTimeSec);
+    this.decodedPeak = Math.max(this.decodedPeak, segmentPeak);
+    this.decodedSquareSum += segmentSquareSum;
+    this.decodedSampleCount += segmentSampleCount;
+    this.decodedNonZeroSampleCount += segmentNonZeroSampleCount;
+
     return {
       startTimeSec,
-      endTimeSec: startTimeSec + data.numberOfFrames / data.sampleRate,
-      buffer
+      endTimeSec,
+      buffer,
+      peak: segmentPeak,
+      rms: segmentSampleCount > 0 ? Math.sqrt(segmentSquareSum / segmentSampleCount) : 0,
+      nonZeroSampleCount: segmentNonZeroSampleCount
     };
   }
 
@@ -567,7 +652,12 @@ export class ProgressivePcmEngine {
     }
 
     this.pruneScheduledSegments();
-    let scheduledUntilSec = Math.max(fromPositionSeconds, this.getCurrentTimeSeconds());
+    const currentTimeSeconds = this.getCurrentTimeSeconds();
+    if (!Number.isFinite(fromPositionSeconds) || !Number.isFinite(currentTimeSeconds)) {
+      return;
+    }
+
+    let scheduledUntilSec = Math.max(fromPositionSeconds, currentTimeSeconds);
     for (const scheduledSegment of this.scheduledSegments) {
       if (scheduledSegment.endTimeSec > scheduledUntilSec) {
         scheduledUntilSec = scheduledSegment.endTimeSec;
@@ -581,6 +671,10 @@ export class ProgressivePcmEngine {
 
     for (const segment of this.decodedSegments) {
       if (segment.endTimeSec <= scheduledUntilSec + 0.001) {
+        continue;
+      }
+
+      if (!Number.isFinite(segment.startTimeSec) || !Number.isFinite(segment.endTimeSec)) {
         continue;
       }
 
@@ -633,13 +727,24 @@ export class ProgressivePcmEngine {
   }
 
   private hasBufferedPosition(positionSeconds: number) {
+    if (!Number.isFinite(positionSeconds)) {
+      return false;
+    }
+
     return this.findBufferedCoverageEnd(positionSeconds) > positionSeconds + 0.02;
   }
 
   private findBufferedCoverageEnd(positionSeconds: number) {
+    if (!Number.isFinite(positionSeconds)) {
+      return 0;
+    }
+
     let coverageEnd = positionSeconds;
 
     for (const segment of this.decodedSegments) {
+      if (!Number.isFinite(segment.startTimeSec) || !Number.isFinite(segment.endTimeSec)) {
+        continue;
+      }
       if (segment.endTimeSec <= coverageEnd + 0.001) {
         continue;
       }
@@ -684,6 +789,13 @@ export class ProgressivePcmEngine {
       return stillActive;
     });
   }
+
+  private canUseDecodedPlaybackAt(positionSeconds: number) {
+    return (
+      (this.status === "ready" || this.status === "degraded" || this.status === "failed") &&
+      this.hasBufferedPosition(positionSeconds)
+    );
+  }
 }
 
 function getAudioContextCtor() {
@@ -721,4 +833,16 @@ function yieldToMicrotasks() {
 
 function isTerminalEngineStatus(status: EngineStatus) {
   return status === "destroyed" || status === "failed";
+}
+
+function normalizeTrackTimeSeconds(value: number) {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function normalizeDurationMs(value: number) {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function roundPcmLevel(value: number) {
+  return Number.isFinite(value) ? Math.round(Math.max(0, value) * 1_000_000) / 1_000_000 : 0;
 }
