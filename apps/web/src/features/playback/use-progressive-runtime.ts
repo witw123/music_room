@@ -473,6 +473,14 @@ export function shouldUsePcmEngineForFullLocal(input: {
   );
 }
 
+export function getAudibleElementVolume(userVolume: number) {
+  if (!Number.isFinite(userVolume) || userVolume <= 0) {
+    return 0.72;
+  }
+
+  return Math.min(1, userVolume);
+}
+
 export function resolvePlaybackRecoveryStage(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
@@ -1837,6 +1845,7 @@ export function useProgressiveRuntime({
         audio.load();
       }
       audio.muted = false;
+      audio.volume = getAudibleElementVolume(volume);
 
       syncLocalPlaybackWindow(audio, expectedSeconds, playback.status === "playing", {
         softDriftMs: 90,
@@ -2281,6 +2290,7 @@ export function useProgressiveRuntime({
         correctionMode: "audible-local-follow"
       });
       audio.muted = false;
+      audio.volume = getAudibleElementVolume(volume);
       recoveryInFlight = true;
       void attemptPlaybackStart(
         audio,

@@ -29,12 +29,13 @@ export class RoomAudioOutput {
   }
 
   applyVolume(input: ApplyRoomAudioVolumeInput) {
+    const safeVolume = normalizeOutputVolume(input.volume);
     if (input.localAudio) {
-      input.localAudio.volume = input.volume;
+      input.localAudio.volume = safeVolume;
     }
 
     if (input.remoteAudio) {
-      input.remoteAudio.volume = input.volume;
+      input.remoteAudio.volume = safeVolume;
     }
   }
 
@@ -48,3 +49,11 @@ export class RoomAudioOutput {
 }
 
 export const roomAudioOutput = new RoomAudioOutput();
+
+function normalizeOutputVolume(value: number) {
+  if (!Number.isFinite(value)) {
+    return 0.72;
+  }
+
+  return Math.min(1, Math.max(0, value));
+}

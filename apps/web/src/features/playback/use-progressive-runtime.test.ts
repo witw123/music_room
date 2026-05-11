@@ -15,7 +15,8 @@ import {
   shouldPreferLocalTakeover,
   shouldRecoverPausedFullLocalPlayback,
   shouldUsePcmEngineForFullLocal,
-  shouldPollRemoteStartupGate
+  shouldPollRemoteStartupGate,
+  getAudibleElementVolume
 } from "./use-progressive-runtime";
 
 describe("shouldPollRemoteStartupGate", () => {
@@ -122,6 +123,13 @@ describe("shouldPollRemoteStartupGate", () => {
     expect(result.shouldMute).toBe(false);
     expect(result.nextStableSinceMs).toBeNull();
     expect(result.volumeRamp).toBe(0.15);
+  });
+
+  it("uses a non-zero audible fallback when the local audio element was left at volume zero", () => {
+    expect(getAudibleElementVolume(0)).toBe(0.72);
+    expect(getAudibleElementVolume(Number.NaN)).toBe(0.72);
+    expect(getAudibleElementVolume(0.35)).toBe(0.35);
+    expect(getAudibleElementVolume(2)).toBe(1);
   });
 
   it("keeps the startup gate active while a bound remote stream still lacks current data", () => {
