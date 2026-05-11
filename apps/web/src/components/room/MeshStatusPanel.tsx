@@ -262,6 +262,7 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>PCM 状态: {playback.pcmEngineStatus ?? "未知"}</span>
               <span>PCM ctx: {playback.pcmAudioContextState ?? "未知"}</span>
               <span>PCM stream: {formatBoolean(playback.pcmHasOutputStream)}</span>
+              <span>PCM out: {formatBoolean(playback.pcmDirectOutputConnected)}</span>
               <span>PCM ahead: {formatDurationMs(playback.pcmBufferedAheadMs)}</span>
               <span>PCM 播放: {playback.pcmPlayoutState ?? "未知"}</span>
               <span>PCM 分片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>

@@ -316,6 +316,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       pcmEngineStatus: null,
       pcmAudioContextState: null,
       pcmHasOutputStream: null,
+      pcmDirectOutputConnected: null,
       pcmContiguousChunkCount: null,
       pcmContiguousByteLength: null,
       pcmDecodedSegmentCount: null,

@@ -325,6 +325,8 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmAudioContextState ?? null,
             pcmHasOutputStream:
               systemDiagnostic.progressivePlaybackStatus.pcmHasOutputStream ?? null,
+            pcmDirectOutputConnected:
+              systemDiagnostic.progressivePlaybackStatus.pcmDirectOutputConnected ?? null,
             pcmContiguousChunkCount:
               systemDiagnostic.progressivePlaybackStatus.pcmContiguousChunkCount ?? null,
             pcmContiguousByteLength:
@@ -688,6 +690,10 @@ function getLocalAudioPlaybackIssue(
 
     if (cachePlayback.pcmLastBlockedReason) {
       return `PCM 播放未就绪: ${cachePlayback.pcmLastBlockedReason}。`;
+    }
+
+    if (cachePlayback.pcmDirectOutputConnected === false) {
+      return "PCM 引擎尚未连接到本机音频输出。";
     }
 
     if ((cachePlayback.pcmDecodedSegmentCount ?? 0) <= 0) {

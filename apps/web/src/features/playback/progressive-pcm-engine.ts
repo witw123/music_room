@@ -37,6 +37,7 @@ export type ProgressivePcmEngineSnapshot = {
   status: EngineStatus;
   audioContextState: AudioContextState | null;
   hasOutputStream: boolean;
+  directOutputConnected: boolean;
   contiguousChunkCount: number;
   contiguousByteLength: number;
   decodedSegmentCount: number;
@@ -51,6 +52,7 @@ export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
   private gainNode: GainNode | null = null;
+  private directOutputConnected = false;
   private decoder: AudioDecoder | null = null;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
   private status: EngineStatus = "idle";
@@ -110,6 +112,7 @@ export class ProgressivePcmEngine {
       status: this.status,
       audioContextState: this.audioContext?.state ?? null,
       hasOutputStream: !!this.destinationNode?.stream,
+      directOutputConnected: this.directOutputConnected,
       contiguousChunkCount: this.contiguousChunkCount,
       contiguousByteLength: this.contiguousByteLength,
       decodedSegmentCount: this.decodedSegments.length,
@@ -157,6 +160,8 @@ export class ProgressivePcmEngine {
       this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
       this.destinationNode = this.audioContext.createMediaStreamDestination();
       this.gainNode.connect(this.destinationNode);
+      this.gainNode.connect(this.audioContext.destination);
+      this.directOutputConnected = true;
       this.audio.srcObject = this.destinationNode.stream;
       this.audio.volume = 1;
       return true;
@@ -285,6 +290,7 @@ export class ProgressivePcmEngine {
     this.audioContext = null;
     this.destinationNode = null;
     this.gainNode = null;
+    this.directOutputConnected = false;
     this.streamInfo = null;
     this.decodedSegments = [];
     this.contiguousChunkCount = 0;

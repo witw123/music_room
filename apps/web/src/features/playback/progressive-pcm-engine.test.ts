@@ -47,13 +47,15 @@ function installFakeAudioContext() {
     globalThis as typeof globalThis & { EncodedAudioChunk?: unknown }
   ).EncodedAudioChunk;
   const gainNode = {
+    connectCalls: [] as unknown[],
     gain: {
       value: 1,
       setValueAtTime(value: number) {
         this.value = value;
       }
     },
-    connect() {
+    connect(target: unknown) {
+      this.connectCalls.push(target);
       return undefined;
     }
   };
@@ -61,6 +63,7 @@ function installFakeAudioContext() {
   class FakeAudioContext {
     currentTime = 0;
     state = "running" as AudioContextState;
+    destination = {};
 
     createGain() {
       return gainNode;
@@ -212,6 +215,11 @@ describe("ProgressivePcmEngine", () => {
       expect(attached).toBe(true);
       expect(audio.volume).toBe(1);
       expect(audioContext.gainNode.gain.value).toBe(0.6);
+      expect(audioContext.gainNode.connectCalls).toHaveLength(2);
+      expect(engine.getSnapshot()).toMatchObject({
+        hasOutputStream: true,
+        directOutputConnected: true
+      });
     } finally {
       engine.destroy();
       audioContext.restore();

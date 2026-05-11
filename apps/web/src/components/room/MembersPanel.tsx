@@ -59,6 +59,7 @@ export type LocalMemberPanelState = {
     | "pcmEngineStatus"
     | "pcmAudioContextState"
     | "pcmHasOutputStream"
+    | "pcmDirectOutputConnected"
     | "pcmContiguousChunkCount"
     | "pcmContiguousByteLength"
     | "pcmDecodedSegmentCount"
@@ -683,6 +684,8 @@ function MembersPanelBase({
                         <>
                           <span>PCM: {localMemberState.cachePlayback.pcmEngineStatus ?? "未知"}</span>
                           <span>ctx: {localMemberState.cachePlayback.pcmAudioContextState ?? "未知"}</span>
+                          <span>out: {formatNullableBoolean(localMemberState.cachePlayback.pcmDirectOutputConnected)}</span>
+                          <span>stream: {formatNullableBoolean(localMemberState.cachePlayback.pcmHasOutputStream)}</span>
                           <span>pcm ahead: {formatDurationMs(localMemberState.cachePlayback.pcmBufferedAheadMs)}</span>
                           <span>pcm: {localMemberState.cachePlayback.pcmPlayoutState ?? "未知"}</span>
                           <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>

@@ -364,6 +364,7 @@ export const progressivePlaybackStatusSchema = z.object({
     .optional(),
   pcmAudioContextState: z.enum(["suspended", "running", "closed", "interrupted"]).nullable().optional(),
   pcmHasOutputStream: z.boolean().nullable().optional(),
+  pcmDirectOutputConnected: z.boolean().nullable().optional(),
   pcmContiguousChunkCount: z.number().int().nonnegative().nullable().optional(),
   pcmContiguousByteLength: z.number().int().nonnegative().nullable().optional(),
   pcmDecodedSegmentCount: z.number().int().nonnegative().nullable().optional(),

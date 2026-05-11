@@ -3230,6 +3230,7 @@ export function useProgressiveRuntime({
           pcmEngineStatus: pcmEngineDiagnostics?.status ?? null,
           pcmAudioContextState: pcmEngineDiagnostics?.audioContextState ?? null,
           pcmHasOutputStream: pcmEngineDiagnostics?.hasOutputStream ?? null,
+          pcmDirectOutputConnected: pcmEngineDiagnostics?.directOutputConnected ?? null,
           pcmContiguousChunkCount: pcmEngineDiagnostics?.contiguousChunkCount ?? null,
           pcmContiguousByteLength: pcmEngineDiagnostics?.contiguousByteLength ?? null,
           pcmDecodedSegmentCount: pcmEngineDiagnostics?.decodedSegmentCount ?? null,
