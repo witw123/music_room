@@ -642,6 +642,7 @@ export function useManualCacheDownloader(input: {
   const recoverySinceAtRef = useRef<number | null>(null);
   const lastRecoveryAtRef = useRef<number | null>(null);
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
+  const activePlaybackPendingKeyRef = useRef<string | null>(null);
   const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());
   const lastProviderRestartAtRef = useRef<Map<string, number>>(new Map());
 
@@ -803,6 +804,21 @@ export function useManualCacheDownloader(input: {
       if (!activeTrackIds.has(trackId)) {
         directPendingRef.current.delete(trackId);
       }
+    }
+
+    const nextPlaybackPendingKey = input.activePlaybackWindow
+      ? [
+          input.activePlaybackWindow.trackId,
+          input.activePlaybackWindow.revision,
+          input.activePlaybackWindow.mediaEpoch,
+          Math.floor(input.activePlaybackWindow.positionMs / 5_000)
+        ].join("|")
+      : null;
+    if (activePlaybackPendingKeyRef.current !== nextPlaybackPendingKey) {
+      if (input.activePlaybackWindow?.trackId) {
+        directPendingRef.current.delete(input.activePlaybackWindow.trackId);
+      }
+      activePlaybackPendingKeyRef.current = nextPlaybackPendingKey;
     }
 
     if (input.preserveRemotePlayback) {

@@ -178,12 +178,12 @@ export function mergeRoomSnapshot(
   );
   const acceptRoomTopology =
     (incoming.room.roomRevision ?? 0) >= (current.room.roomRevision ?? 0);
+  const playback = acceptPlayback ? incoming.room.playback : current.room.playback;
   const nextTracks = ensurePlaybackTrackMetadata(
     acceptRoomTopology ? incoming.tracks : current.tracks,
     current.tracks,
     incoming.tracks,
-    current.room.playback.currentTrackId,
-    incoming.room.playback.currentTrackId
+    playback.currentTrackId
   );
 
   return {
@@ -200,7 +200,7 @@ export function mergeRoomSnapshot(
       presenceRevision: acceptPresence
         ? getPresenceRevision(incoming.room)
         : getPresenceRevision(current.room),
-      playback: acceptPlayback ? incoming.room.playback : current.room.playback
+      playback
     }
   } satisfies RoomSnapshot;
 }
@@ -209,30 +209,19 @@ function ensurePlaybackTrackMetadata(
   preferredTracks: RoomSnapshot["tracks"],
   currentTracks: RoomSnapshot["tracks"],
   incomingTracks: RoomSnapshot["tracks"],
-  currentTrackId: string | null,
-  incomingTrackId: string | null
+  playbackTrackId: string | null
 ) {
   const nextTracks = [...preferredTracks];
   const knownTrackIds = new Set(nextTracks.map((track) => track.id));
-  const requiredTrackIds = [currentTrackId, incomingTrackId].filter(
-    (trackId): trackId is string => !!trackId
-  );
 
-  for (const trackId of requiredTrackIds) {
-    if (knownTrackIds.has(trackId)) {
-      continue;
-    }
-
+  if (playbackTrackId && !knownTrackIds.has(playbackTrackId)) {
     const fallbackTrack =
-      incomingTracks.find((track) => track.id === trackId) ??
-      currentTracks.find((track) => track.id === trackId) ??
+      incomingTracks.find((track) => track.id === playbackTrackId) ??
+      currentTracks.find((track) => track.id === playbackTrackId) ??
       null;
-    if (!fallbackTrack) {
-      continue;
+    if (fallbackTrack) {
+      nextTracks.unshift(fallbackTrack);
     }
-
-    nextTracks.unshift(fallbackTrack);
-    knownTrackIds.add(trackId);
   }
 
   return nextTracks;

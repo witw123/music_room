@@ -1732,8 +1732,22 @@ export function useProgressiveRuntime({
       });
 
       if (playback.status === "playing") {
-        ensurePlaybackStart("full-local");
-        setMediaConnectionState(isCurrentSourceOwner ? "live" : "buffering");
+        if (activePlaybackSource !== "full-local") {
+          setActivePlaybackSource("full-local");
+          setProgressiveFallbackReason(null);
+          void attemptPlaybackStart(
+            audio,
+            "full-local",
+            "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
+            "full-local-play-blocked",
+            { reportFailure: true }
+          ).then((ok) => {
+            setMediaConnectionState(ok ? "live" : "failed");
+          });
+        } else {
+          ensurePlaybackStart("full-local");
+          setMediaConnectionState(audio.paused ? "buffering" : "live");
+        }
       }
 
       if (playback.status === "paused") {
@@ -1845,10 +1859,13 @@ export function useProgressiveRuntime({
     setStatusMessage,
     setMediaConnectionState,
     destroyProgressiveRuntime,
+    attemptPlaybackStart,
     ensurePlaybackStart,
     markPlaybackStartFailure,
     scheduleRemoteStartupGate,
     shadowWarmupActive,
+    setActivePlaybackSource,
+    setProgressiveFallbackReason,
     setPlaybackStartIntent
   ]);
 

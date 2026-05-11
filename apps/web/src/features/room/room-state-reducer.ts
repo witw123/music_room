@@ -103,30 +103,19 @@ function ensurePlaybackTrackMetadata(
   preferredTracks: RoomSnapshot["tracks"],
   currentTracks: RoomSnapshot["tracks"],
   incomingTracks: RoomSnapshot["tracks"],
-  currentTrackId: string | null,
-  incomingTrackId: string | null
+  playbackTrackId: string | null
 ) {
   const nextTracks = [...preferredTracks];
   const knownTrackIds = new Set(nextTracks.map((track) => track.id));
-  const requiredTrackIds = [currentTrackId, incomingTrackId].filter(
-    (trackId): trackId is string => !!trackId
-  );
 
-  for (const trackId of requiredTrackIds) {
-    if (knownTrackIds.has(trackId)) {
-      continue;
-    }
-
+  if (playbackTrackId && !knownTrackIds.has(playbackTrackId)) {
     const fallbackTrack =
-      incomingTracks.find((track) => track.id === trackId) ??
-      currentTracks.find((track) => track.id === trackId) ??
+      incomingTracks.find((track) => track.id === playbackTrackId) ??
+      currentTracks.find((track) => track.id === playbackTrackId) ??
       null;
-    if (!fallbackTrack) {
-      continue;
+    if (fallbackTrack) {
+      nextTracks.unshift(fallbackTrack);
     }
-
-    nextTracks.unshift(fallbackTrack);
-    knownTrackIds.add(trackId);
   }
 
   return nextTracks;
@@ -153,8 +142,7 @@ function normalizeSnapshot(
       incomingSnapshot.tracks,
       currentSnapshot.tracks,
       incomingSnapshot.tracks,
-      currentSnapshot.room.playback.currentTrackId,
-      incomingSnapshot.room.playback.currentTrackId
+      playback.currentTrackId
     ),
     room: {
       ...incomingSnapshot.room,
@@ -311,8 +299,10 @@ export function roomStateReducer(
             event.tracks,
             snapshot.tracks,
             event.tracks,
-            snapshot.room.playback.currentTrackId,
-            event.playback.currentTrackId
+            (shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+              ? event.playback
+              : snapshot.room.playback
+            ).currentTrackId
           ),
           queue: event.queue,
           room: {
