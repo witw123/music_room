@@ -49,6 +49,7 @@ export type ProgressivePcmEngineSnapshot = {
   decodedSegmentCount: number;
   scheduledSegmentCount: number;
   decodedPacketCount: number;
+  decoderFlushAttemptCount: number;
   decoderFlushCount: number;
   lastDecodedAtMs: number | null;
   lastDecodeError: string | null;
@@ -77,6 +78,7 @@ export class ProgressivePcmEngine {
   private decodedSegments: DecodedSegment[] = [];
   private scheduledSegments: ScheduledSegment[] = [];
   private decodedPacketCount = 0;
+  private decoderFlushAttemptCount = 0;
   private decoderFlushCount = 0;
   private lastDecodedAtMs: number | null = null;
   private lastDecodeError: string | null = null;
@@ -145,6 +147,7 @@ export class ProgressivePcmEngine {
       decodedSegmentCount: this.decodedSegments.length,
       scheduledSegmentCount: this.scheduledSegments.length,
       decodedPacketCount: this.decodedPacketCount,
+      decoderFlushAttemptCount: this.decoderFlushAttemptCount,
       decoderFlushCount: this.decoderFlushCount,
       lastDecodedAtMs: this.lastDecodedAtMs,
       lastDecodeError: this.lastDecodeError,
@@ -345,6 +348,7 @@ export class ProgressivePcmEngine {
     this.streamInfo = null;
     this.decodedSegments = [];
     this.decodedPacketCount = 0;
+    this.decoderFlushAttemptCount = 0;
     this.decoderFlushCount = 0;
     this.lastDecodedAtMs = null;
     this.lastDecodeError = null;
@@ -540,6 +544,7 @@ export class ProgressivePcmEngine {
     }
 
     try {
+      this.decoderFlushAttemptCount += 1;
       await decoder.flush();
       this.decoderFlushCount += 1;
     } catch {

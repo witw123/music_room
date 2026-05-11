@@ -267,6 +267,7 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>本地 readyState: {formatMetric(playback.localAudioReadyState, "")}</span>
               <span>本地 srcObject: {formatBoolean(playback.localAudioHasSrcObject)}</span>
               <span>本地 src: {playback.localAudioCurrentSrc ? "media-src" : "无"}</span>
+              <span>full-local: {playback.fullLocalPlaybackMode ?? "无"}</span>
               <span>PCM 状态: {playback.pcmEngineStatus ?? "未知"}</span>
               <span>PCM ctx: {playback.pcmAudioContextState ?? "未知"}</span>
               <span>PCM stream: {formatBoolean(playback.pcmHasOutputStream)}</span>
@@ -275,6 +276,7 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>PCM 播放: {playback.pcmPlayoutState ?? "未知"}</span>
               <span>PCM 分片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>
               <span>PCM 包: {formatMetric(playback.pcmDecodedPacketCount, "")}</span>
+              <span>PCM flush try: {formatMetric(playback.pcmDecoderFlushAttemptCount, "")}</span>
               <span>PCM flush: {formatMetric(playback.pcmDecoderFlushCount, "")}</span>
               <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
               <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>

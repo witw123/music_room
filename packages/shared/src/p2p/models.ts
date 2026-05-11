@@ -358,6 +358,7 @@ export const progressivePlaybackStatusSchema = z.object({
   localAudioReadyState: z.number().int().min(0).max(4).nullable().optional(),
   localAudioCurrentSrc: z.string().nullable().optional(),
   localAudioHasSrcObject: z.boolean().nullable().optional(),
+  fullLocalPlaybackMode: z.enum(["native-blob", "pcm-engine", "none"]).nullable().optional(),
   pcmEngineStatus: z
     .enum(["idle", "opening", "ready", "failed", "degraded", "destroyed"])
     .nullable()
@@ -370,6 +371,7 @@ export const progressivePlaybackStatusSchema = z.object({
   pcmDecodedSegmentCount: z.number().int().nonnegative().nullable().optional(),
   pcmScheduledSegmentCount: z.number().int().nonnegative().nullable().optional(),
   pcmDecodedPacketCount: z.number().int().nonnegative().nullable().optional(),
+  pcmDecoderFlushAttemptCount: z.number().int().nonnegative().nullable().optional(),
   pcmDecoderFlushCount: z.number().int().nonnegative().nullable().optional(),
   pcmLastDecodedAtMs: z.number().int().nonnegative().nullable().optional(),
   pcmLastDecodeError: z.string().nullable().optional(),

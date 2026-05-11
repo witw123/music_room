@@ -319,6 +319,8 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.localAudioCurrentSrc ?? null,
             localAudioHasSrcObject:
               systemDiagnostic.progressivePlaybackStatus.localAudioHasSrcObject ?? null,
+            fullLocalPlaybackMode:
+              systemDiagnostic.progressivePlaybackStatus.fullLocalPlaybackMode ?? null,
             pcmEngineStatus:
               systemDiagnostic.progressivePlaybackStatus.pcmEngineStatus ?? null,
             pcmAudioContextState:
@@ -337,6 +339,8 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmScheduledSegmentCount ?? null,
             pcmDecodedPacketCount:
               systemDiagnostic.progressivePlaybackStatus.pcmDecodedPacketCount ?? null,
+            pcmDecoderFlushAttemptCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmDecoderFlushAttemptCount ?? null,
             pcmDecoderFlushCount:
               systemDiagnostic.progressivePlaybackStatus.pcmDecoderFlushCount ?? null,
             pcmLastDecodedAtMs:

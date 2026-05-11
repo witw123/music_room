@@ -446,13 +446,13 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(false);
   });
 
-  it("keeps the PCM progressive runtime prepared during full-local playback", () => {
+  it("does not prepare a progressive runtime while native full-local playback is active", () => {
     expect(
       shouldPrepareProgressiveRuntimeForSource({
         activePlaybackSource: "full-local",
         progressiveEngineType: "pcm"
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldPrepareProgressiveRuntimeForSource({
         activePlaybackSource: "full-local",
@@ -467,7 +467,7 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(true);
   });
 
-  it("routes full-local PCM playback through the PCM engine instead of the native blob URL", () => {
+  it("uses the native blob URL instead of the PCM engine when full-local cache exists", () => {
     expect(
       shouldUsePcmEngineForFullLocal({
         activePlaybackSource: "full-local",
@@ -476,7 +476,7 @@ describe("shouldPollRemoteStartupGate", () => {
         hasFullLocalTrack: true,
         progressiveEngineType: "pcm"
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldUsePcmEngineForFullLocal({
         activePlaybackSource: "full-local",
@@ -489,11 +489,11 @@ describe("shouldPollRemoteStartupGate", () => {
     expect(
       shouldUsePcmEngineForFullLocal({
         activePlaybackSource: "remote-stream",
-        forceSourceOwnerLocalPlayback: false,
+        forceSourceOwnerLocalPlayback: true,
         sourceOwnerHasLocalTrack: false,
-        hasFullLocalTrack: true,
+        hasFullLocalTrack: false,
         progressiveEngineType: "pcm"
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });

@@ -40,7 +40,11 @@ const manifest = {
 } as const;
 
 function installFakeAudioContext(
-  options: { decodedTimestamp?: number; decodedSampleValue?: number } = {}
+  options: {
+    decodedTimestamp?: number;
+    decodedSampleValue?: number;
+    rejectFlush?: boolean;
+  } = {}
 ) {
   const originalWindow = globalThis.window;
   const originalAudioDecoder = (
@@ -152,6 +156,10 @@ function installFakeAudioContext(
     }
 
     async flush() {
+      if (options.rejectFlush) {
+        throw new Error("flush failed");
+      }
+
       while (this.pendingChunks > 0) {
         this.pendingChunks -= 1;
         this.callbacks.output({
@@ -434,12 +442,41 @@ describe("ProgressivePcmEngine", () => {
       expect(result.blockedReason).toBeNull();
       expect(engine.getSnapshot()).toMatchObject({
         decodedPacketCount: 1,
+        decoderFlushAttemptCount: 1,
         decoderFlushCount: 1,
         decodedSegmentCount: 1,
         scheduledSegmentCount: 1,
         decodedPeak: 0.25,
         decodedRms: 0.25,
         decodedNonZeroSampleCount: 88_200
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("records a flush attempt when decoder flush rejects before output", async () => {
+    const audioContext = installFakeAudioContext({ rejectFlush: true });
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    mockSingleDecodedPacket();
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("engine-failed");
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "failed",
+        decodedPacketCount: 1,
+        decoderFlushAttemptCount: 1,
+        decoderFlushCount: 0,
+        decodedSegmentCount: 0,
+        lastDecodeError: "decoder-flush-failed"
       });
     } finally {
       engine.destroy();

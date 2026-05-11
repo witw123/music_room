@@ -56,6 +56,7 @@ export type LocalMemberPanelState = {
     | "localAudioReadyState"
     | "localAudioCurrentSrc"
     | "localAudioHasSrcObject"
+    | "fullLocalPlaybackMode"
     | "pcmEngineStatus"
     | "pcmAudioContextState"
     | "pcmHasOutputStream"
@@ -65,6 +66,7 @@ export type LocalMemberPanelState = {
     | "pcmDecodedSegmentCount"
     | "pcmScheduledSegmentCount"
     | "pcmDecodedPacketCount"
+    | "pcmDecoderFlushAttemptCount"
     | "pcmDecoderFlushCount"
     | "pcmLastDecodedAtMs"
     | "pcmLastDecodeError"
@@ -695,6 +697,9 @@ function MembersPanelBase({
                             ? "media-src"
                             : "无"}
                       </span>
+                      <span className="col-span-2 truncate">
+                        full-local: {localMemberState.cachePlayback.fullLocalPlaybackMode ?? "无"}
+                      </span>
                       {localMemberState.cachePlayback.engineType === "pcm" ? (
                         <>
                           <span>PCM: {localMemberState.cachePlayback.pcmEngineStatus ?? "未知"}</span>
@@ -706,6 +711,7 @@ function MembersPanelBase({
                           <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>
                           <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
                           <span>packets: {localMemberState.cachePlayback.pcmDecodedPacketCount ?? "未知"}</span>
+                          <span>flush try: {localMemberState.cachePlayback.pcmDecoderFlushAttemptCount ?? "未知"}</span>
                           <span>flush: {localMemberState.cachePlayback.pcmDecoderFlushCount ?? "未知"}</span>
                           <span>peak: {formatNullableNumber(localMemberState.cachePlayback.pcmDecodedPeak)}</span>
                           <span>rms: {formatNullableNumber(localMemberState.cachePlayback.pcmDecodedRms)}</span>
