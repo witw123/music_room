@@ -9,7 +9,6 @@ import type {
 import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
-import { RoomChatOverlay } from "./RoomChatOverlay";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 
 type RoomStageProps = {
@@ -29,7 +28,6 @@ type RoomStageProps = {
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   socket: RoomSocket | null;
-  hideChat?: boolean;
 };
 
 
@@ -72,8 +70,7 @@ function RoomStageBase({
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom,
-  socket,
-  hideChat
+  socket
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
@@ -336,18 +333,6 @@ function RoomStageBase({
               : "从曲库添加音乐，或导入本地音频，马上开始这场协作收听。"}
           </p>
         </div>
-
-        {!hideChat ? (
-          <div className={`hidden w-full sm:block ${ultraCompactStage ? "max-w-[460px]" : compactStage ? "max-w-[500px]" : "max-w-[540px]"}`}>
-            <RoomChatOverlay
-              roomId={roomSnapshot.room.id}
-              activeSession={activeSession}
-              socket={socket}
-              compact={compactStage}
-              ultraCompact={ultraCompactStage}
-            />
-          </div>
-        ) : null}
       </div>
     </section>
   );

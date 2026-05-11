@@ -13,7 +13,6 @@ import type {
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
-import { RoomChatOverlay } from "./RoomChatOverlay";
 import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
@@ -206,7 +205,6 @@ function RoomDashboardViewBase({
             onLeaveRoom={onLeaveRoom}
             onDeleteRoom={onDeleteRoom}
             socket={socket}
-            hideChat
           />
         </div>
 
@@ -233,15 +231,6 @@ function RoomDashboardViewBase({
           </div>
         </div>
 
-        {/* Chat — desktop only, pinned at bottom */}
-        <div className="hidden lg:block shrink-0 border-t border-white/[0.06] px-6 py-3 xl:px-8">
-          <RoomChatOverlay
-            roomId={roomSnapshot.room.id}
-            activeSession={activeSession}
-            socket={socket}
-            compact
-          />
-        </div>
       </div>
 
       {/* ══════ RIGHT: Management Panel ══════ */}
