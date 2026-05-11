@@ -28,6 +28,7 @@ import {
 } from "@/features/playback/playback-start-intent";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { getEffectivePlaybackPositionMs } from "@/features/playback/progressive-playback";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -747,6 +748,72 @@ export function MusicRoomApp({
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
   }, []);
 
+  const primeFullLocalTrackPlayback = useCallback(
+    async (trackId: string | null | undefined) => {
+      if (!trackId) {
+        return false;
+      }
+
+      const localTrack = fullLocalPlaybackTracks[trackId] ?? null;
+      const audio = audioRef.current;
+      if (!localTrack || !audio) {
+        return false;
+      }
+
+      const track =
+        roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? currentTrack ?? null;
+      const playback = roomSnapshot?.room.playback ?? null;
+      const positionMs =
+        playback?.currentTrackId === trackId
+          ? getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now())
+          : 0;
+
+      if (audio.srcObject) {
+        audio.srcObject = null;
+      }
+      if (audio.src !== localTrack.objectUrl) {
+        audio.src = localTrack.objectUrl;
+        audio.load();
+      }
+      audio.muted = false;
+      audio.volume = volume;
+      if (Number.isFinite(positionMs) && positionMs > 0) {
+        audio.currentTime = Math.max(0, positionMs / 1000);
+      }
+
+      const playResult = await roomAudioOutput.playElement(audio);
+      recordPeerDiagnostic({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: playResult.ok ? "full-local-prime-play" : "full-local-prime-play-failed",
+        level: playResult.ok ? "info" : "warning",
+        summary: playResult.ok
+          ? `点击手势内已预启动本地完整音频 ${trackId}`
+          : `点击手势内本地完整音频启动失败 ${trackId}: ${playResult.error ?? "play() failed"}`,
+        recordEvent: false
+      });
+      if (playResult.ok) {
+        setActivePlaybackSource("full-local");
+        setProgressiveFallbackReason(null);
+        setMediaConnectionState("live");
+      }
+      return playResult.ok;
+    },
+    [
+      audioRef,
+      currentTrack,
+      fullLocalPlaybackTracks,
+      recordPeerDiagnostic,
+      roomSnapshot?.room.playback,
+      roomSnapshot?.tracks,
+      setActivePlaybackSource,
+      setMediaConnectionState,
+      setProgressiveFallbackReason,
+      volume
+    ]
+  );
+
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {
       try {
@@ -833,13 +900,20 @@ export function MusicRoomApp({
 
   const handlePlayTrack = useCallback(
     async (trackId?: string) => {
+      const targetTrackId = trackId ?? roomSnapshot?.room.playback.currentTrackId ?? null;
       await armPlaybackStart({
         reason: trackId ? "track" : "resume-current",
-        trackId: trackId ?? roomSnapshot?.room.playback.currentTrackId ?? null
+        trackId: targetTrackId
       });
+      await primeFullLocalTrackPlayback(targetTrackId);
       await playTrack(trackId);
     },
-    [armPlaybackStart, playTrack, roomSnapshot?.room.playback.currentTrackId]
+    [
+      armPlaybackStart,
+      playTrack,
+      primeFullLocalTrackPlayback,
+      roomSnapshot?.room.playback.currentTrackId
+    ]
   );
 
   const handleAddCachedLibraryTrackToLibrary = useCallback(
@@ -868,9 +942,16 @@ export function MusicRoomApp({
         trackId: queueTrackId,
         previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
       });
+      await primeFullLocalTrackPlayback(queueTrackId);
       await playQueueItem(queueItemId);
     },
-    [armPlaybackStart, playQueueItem, roomSnapshot?.queue, roomSnapshot?.room.playback.currentTrackId]
+    [
+      armPlaybackStart,
+      playQueueItem,
+      primeFullLocalTrackPlayback,
+      roomSnapshot?.queue,
+      roomSnapshot?.room.playback.currentTrackId
+    ]
   );
 
   const handlePrevTrack = useCallback(async () => {

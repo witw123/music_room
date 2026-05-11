@@ -12,6 +12,7 @@ import {
   resolveSchedulerBudgetTier,
   shouldEnableAudibleLocalFallback,
   shouldPreferLocalTakeover,
+  shouldRecoverPausedFullLocalPlayback,
   shouldPollRemoteStartupGate
 } from "./use-progressive-runtime";
 
@@ -411,5 +412,35 @@ describe("shouldPollRemoteStartupGate", () => {
         hasRemoteSrcObject: false
       })
     ).toBe("inactive");
+  });
+
+  it("recovers full-local playback when the ready local audio element is paused", () => {
+    expect(
+      shouldRecoverPausedFullLocalPlayback({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        currentTrackId: "track_1",
+        audioUnlocked: true,
+        localAudioPaused: true,
+        localAudioReadyState: 4,
+        localAudioHasSrc: true,
+        localAudioHasSrcObject: false
+      })
+    ).toBe(true);
+  });
+
+  it("does not recover paused full-local playback while room playback is paused", () => {
+    expect(
+      shouldRecoverPausedFullLocalPlayback({
+        activePlaybackSource: "full-local",
+        playbackStatus: "paused",
+        currentTrackId: "track_1",
+        audioUnlocked: true,
+        localAudioPaused: true,
+        localAudioReadyState: 4,
+        localAudioHasSrc: true,
+        localAudioHasSrcObject: false
+      })
+    ).toBe(false);
   });
 });

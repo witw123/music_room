@@ -148,6 +148,7 @@ const shadowFallbackMaxDriftMs = 160;
 const shadowFallbackWaitingThreshold = 2;
 const shadowFallbackRemoteLockWaitingThreshold = 3;
 const shadowFallbackStalledThreshold = 1;
+const fullLocalPausedRecoveryIntervalMs = 500;
 
 export type PlaybackRecoveryStage =
   | "startup-buffering"
@@ -415,6 +416,34 @@ export function shouldEnableFullLocalHandoff(input: {
   }
 
   return input.playbackRecoveryStage !== "startup-buffering";
+}
+
+export function shouldRecoverPausedFullLocalPlayback(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  currentTrackId: string | null | undefined;
+  audioUnlocked: boolean;
+  localAudioPaused: boolean | null | undefined;
+  localAudioReadyState: number | null | undefined;
+  localAudioHasSrc: boolean;
+  localAudioHasSrcObject: boolean;
+}) {
+  if (
+    input.activePlaybackSource !== "full-local" ||
+    input.playbackStatus !== "playing" ||
+    !input.currentTrackId ||
+    !input.audioUnlocked ||
+    input.localAudioPaused !== true
+  ) {
+    return false;
+  }
+
+  return (
+    input.localAudioHasSrcObject ||
+    input.localAudioHasSrc ||
+    (typeof input.localAudioReadyState === "number" &&
+      input.localAudioReadyState >= haveCurrentDataReadyState)
+  );
 }
 
 export function resolvePlaybackRecoveryStage(input: {
@@ -1558,6 +1587,25 @@ export function useProgressiveRuntime({
 
       const playResult = await roomAudioOutput.playElement(element);
       if (!playResult.ok) {
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "local-play-start-failed",
+          level: "warning",
+          summary: `${failureReason}: ${playResult.error ?? "play() failed"}`,
+          recordEvent: false,
+          update: (snapshot) => ({
+            ...snapshot,
+            progressivePlaybackStatus: {
+              ...(
+                snapshot.progressivePlaybackStatus ??
+                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+              ),
+              lastPlayStartFailure: failureReason
+            }
+          })
+        });
         if (options?.reportFailure === false) {
           return false;
         }
@@ -1576,7 +1624,13 @@ export function useProgressiveRuntime({
 
       return true;
     },
-    [markPlaybackStartFailure, playback, playbackStartIntent, updatePlaybackStartIntent]
+    [
+      markPlaybackStartFailure,
+      playback,
+      playbackStartIntent,
+      recordPeerDiagnostic,
+      updatePlaybackStartIntent
+    ]
   );
   const ensurePlaybackStart = useCallback(
     (source: ProgressivePlaybackSource, attempt = 0) => {
@@ -1735,19 +1789,16 @@ export function useProgressiveRuntime({
         if (activePlaybackSource !== "full-local") {
           setActivePlaybackSource("full-local");
           setProgressiveFallbackReason(null);
-          void attemptPlaybackStart(
-            audio,
-            "full-local",
-            "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-            "full-local-play-blocked",
-            { reportFailure: true }
-          ).then((ok) => {
-            setMediaConnectionState(ok ? "live" : "failed");
-          });
-        } else {
-          ensurePlaybackStart("full-local");
-          setMediaConnectionState(audio.paused ? "buffering" : "live");
         }
+        void attemptPlaybackStart(
+          audio,
+          "full-local",
+          "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
+          "full-local-play-blocked",
+          { reportFailure: true }
+        ).then((ok) => {
+          setMediaConnectionState(ok ? "live" : "failed");
+        });
       }
 
       if (playback.status === "paused") {
@@ -2000,6 +2051,14 @@ export function useProgressiveRuntime({
       markContinuousPlaybackInterrupted();
       remoteStartupReadyAtRef.current = null;
       clearRemoteStartupBufferTimer();
+      recordPeerDiagnostic({
+        peerId: "system",
+        channelKind: "system",
+        direction: "local",
+        event: "local-audio-pause",
+        summary: `本地音频暂停 role=${role} source=${activePlaybackSource} status=${roomSnapshot?.room.playback.status ?? "unknown"}`,
+        recordEvent: false
+      });
       if (roomSnapshot?.room.playback.status !== "playing") {
         setSchedulerMode(isPageVisible ? "normal" : "idle");
         setBufferHealth("healthy");
@@ -2050,6 +2109,7 @@ export function useProgressiveRuntime({
     markContinuousPlaybackInterrupted,
     markContinuousPlaybackStarted,
     pushQualityEvent,
+    recordPeerDiagnostic,
     progressiveHealthSnapshot.contiguousBufferedMs,
     progressiveHealthSnapshot.aheadBufferedMs,
     roomSnapshot?.room.playback.currentTrackId,
@@ -2078,6 +2138,19 @@ export function useProgressiveRuntime({
       if (activePlaybackSource === "full-local" || activePlaybackSource === "progressive-local") {
         ensurePlaybackStart(activePlaybackSource);
       }
+      if (
+        activePlaybackSource === "full-local" &&
+        roomSnapshot?.room.playback.status === "playing" &&
+        localAudio?.paused
+      ) {
+        void attemptPlaybackStart(
+          localAudio,
+          "full-local",
+          "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
+          "full-local-play-blocked",
+          { reportFailure: true }
+        );
+      }
     };
     const handleRemoteReady = () => {
       if (activePlaybackSource === "remote-stream") {
@@ -2100,7 +2173,103 @@ export function useProgressiveRuntime({
         remoteAudio?.removeEventListener(eventName, handleRemoteReady);
       }
     };
-  }, [activePlaybackSource, audioRef, remoteAudioRef, ensurePlaybackStart, scheduleRemoteStartupGate]);
+  }, [
+    activePlaybackSource,
+    audioRef,
+    remoteAudioRef,
+    attemptPlaybackStart,
+    ensurePlaybackStart,
+    roomSnapshot?.room.playback.status,
+    scheduleRemoteStartupGate
+  ]);
+
+  useEffect(() => {
+    const playbackState = roomSnapshot?.room.playback;
+    const audio = audioRef.current;
+    if (!playbackState?.currentTrackId || !audio || activePlaybackSource !== "full-local") {
+      return;
+    }
+
+    let cancelled = false;
+    let recoveryInFlight = false;
+    const recoverPausedFullLocalPlayback = () => {
+      if (cancelled || recoveryInFlight) {
+        return;
+      }
+
+      if (
+        !shouldRecoverPausedFullLocalPlayback({
+          activePlaybackSource,
+          playbackStatus: playbackState.status,
+          currentTrackId: playbackState.currentTrackId,
+          audioUnlocked,
+          localAudioPaused: audio.paused,
+          localAudioReadyState: audio.readyState,
+          localAudioHasSrc: !!audio.currentSrc || !!audio.getAttribute("src"),
+          localAudioHasSrcObject: !!audio.srcObject
+        })
+      ) {
+        return;
+      }
+
+      const expectedSeconds =
+        getEffectivePlaybackPositionMs(playbackState, currentTrack?.durationMs ?? 0, Date.now()) /
+        1000;
+      syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+        softDriftMs: 90,
+        hardDriftMs: 720,
+        correctionMode: "audible-local-follow"
+      });
+      audio.muted = false;
+      recoveryInFlight = true;
+      void attemptPlaybackStart(
+        audio,
+        "full-local",
+        "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
+        "full-local-paused-recovery",
+        { reportFailure: false }
+      )
+        .then((ok) => {
+          if (cancelled) {
+            return;
+          }
+
+          setMediaConnectionState(ok ? "live" : "buffering");
+          if (ok) {
+            recordPeerDiagnostic({
+              peerId: "system",
+              channelKind: "system",
+              direction: "local",
+              event: "full-local-paused-recovered",
+              summary: "已自动恢复本地完整缓存播放",
+              recordEvent: false
+            });
+          }
+        })
+        .finally(() => {
+          recoveryInFlight = false;
+        });
+    };
+
+    recoverPausedFullLocalPlayback();
+    const timerId = window.setInterval(
+      recoverPausedFullLocalPlayback,
+      fullLocalPausedRecoveryIntervalMs
+    );
+    return () => {
+      cancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, [
+    activePlaybackSource,
+    audioRef,
+    audioUnlocked,
+    attemptPlaybackStart,
+    currentTrack?.durationMs,
+    recordPeerDiagnostic,
+    roomSnapshot?.room.playback,
+    setMediaConnectionState
+  ]);
 
   useEffect(() => {
     const nextPlayback = roomSnapshot?.room.playback;
