@@ -27,7 +27,6 @@ export type DataMeshBridge = {
 };
 
 export type MediaRuntimeBridge = {
-  scheduleRemotePlaybackRetry(attempt?: number, generation?: string | null): void;
   syncHostMediaStream(options?: { forceResync?: boolean; reason?: string }): Promise<void>;
   ensureSourcePlaybackStarted(): Promise<void>;
   getMediaConnectedPeerIds(): string[];
@@ -107,7 +106,6 @@ export type RoomRuntimeBaseContext = {
   activeSession: AuthSession | null;
   socketRef: MutableRefObject<RoomSocket | null>;
   audioRef: RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
   uploadedTracks: Record<string, UploadedTrack>;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
 };

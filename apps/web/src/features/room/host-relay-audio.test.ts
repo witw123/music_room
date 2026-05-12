@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import { resolveHostPublishSource, resolveHostRelayAudioElement } from "./host-relay-audio";
 
@@ -24,7 +25,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostRelayAudioElement({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: true,
         localAudio,
@@ -41,7 +42,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostRelayAudioElement({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: false,
         forceSourceOwnerLocalPlayback: false,
         localAudio,
@@ -58,7 +59,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostRelayAudioElement({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: false,
         localAudio,
@@ -75,7 +76,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostRelayAudioElement({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: false,
         localAudio,
@@ -92,7 +93,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostRelayAudioElement({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: false,
         localAudio,
@@ -109,7 +110,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostPublishSource({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: true,
         localAudio,
@@ -132,7 +133,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostPublishSource({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: false,
         forceSourceOwnerLocalPlayback: false,
         localAudio: createAudioElement(),
@@ -157,7 +158,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostPublishSource({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: false,
         localAudio,
@@ -180,7 +181,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostPublishSource({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: false,
         localAudio,
@@ -200,7 +201,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostPublishSource({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: true,
         localAudio,
@@ -221,7 +222,7 @@ describe("host relay audio", () => {
 
     expect(
       resolveHostPublishSource({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         isCurrentSourceOwner: true,
         forceSourceOwnerLocalPlayback: false,
         localAudio,

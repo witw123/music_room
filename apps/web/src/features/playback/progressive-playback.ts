@@ -1,9 +1,6 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 
-export type ProgressivePlaybackSource =
-  | "remote-stream"
-  | "progressive-local"
-  | "full-local";
+export type ProgressivePlaybackSource = "progressive-local" | "full-local";
 
 export type ProgressiveEngineType = "none" | "mse" | "pcm";
 
@@ -39,7 +36,7 @@ export type ProgressiveHealthSnapshot = {
 };
 
 function getPlaybackRiskWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
-  return Math.max(getTakeoverWindowMs(input), getRemoteFirstComfortBufferMs(input));
+  return Math.max(getTakeoverWindowMs(input), getStartupWindowMs(input));
 }
 
 const outrunRecoverySafetyFactor = 0.8;
@@ -100,13 +97,6 @@ export function getCriticalBufferThresholdMs() {
   return 3_000;
 }
 
-export function getRemoteFirstComfortBufferMs(input: {
-  mimeType?: string | null;
-  codec?: string | null;
-}) {
-  return isFlacTrack(input) ? 18_000 : 10_000;
-}
-
 export function getOutrunRecoverySafetyFactor() {
   return outrunRecoverySafetyFactor;
 }
@@ -120,10 +110,6 @@ export function getLocalTakeoverCooldownMs() {
 }
 
 export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
-  if (source === "remote-stream") {
-    return 0;
-  }
-
   return source === "full-local" ? 3_500 : 6_000;
 }
 
@@ -583,54 +569,6 @@ export function estimateTrackFillTimeMs(input: {
   return Math.ceil(missingBits / (input.downloadRateKbps * 1000) * 1000);
 }
 
-export function shouldEnableRemoteFirstLock(input: {
-  diagnostics: {
-    mediaCandidateType: string | null;
-    mediaProtocol: string | null;
-    currentRoundTripTimeMs: number | null;
-    availableOutgoingBitrateKbps: number | null;
-    packetLossRate?: number | null;
-    packetsLost: number | null;
-    jitterMs: number | null;
-  } | null;
-}) {
-  const diagnostics = input.diagnostics;
-  if (!diagnostics) {
-    return false;
-  }
-
-  if (
-    typeof diagnostics.currentRoundTripTimeMs === "number" &&
-    diagnostics.currentRoundTripTimeMs >= 360
-  ) {
-    return true;
-  }
-
-  if (
-    typeof diagnostics.packetLossRate === "number" &&
-    diagnostics.packetLossRate >= 12
-  ) {
-    return true;
-  }
-
-  if (
-    typeof diagnostics.availableOutgoingBitrateKbps === "number" &&
-    diagnostics.availableOutgoingBitrateKbps > 0 &&
-    diagnostics.availableOutgoingBitrateKbps <= 48
-  ) {
-    return true;
-  }
-
-  if (
-    typeof diagnostics.jitterMs === "number" &&
-    diagnostics.jitterMs >= 80
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
 export function getPriorityChunkIndexes(input: {
   manifest: ProgressiveTrackManifest;
   availableChunks: number[];
@@ -651,7 +589,7 @@ export function getPriorityChunkIndexes(input: {
     (policy === "pause-fill"
       ? manifest.durationMs
       : policy === "outrun-recovery"
-        ? Math.max(getRemoteFirstComfortBufferMs(manifest), getTargetSteadyBufferMs(manifest) * 2)
+        ? Math.max(getStartupWindowMs(manifest), getTargetSteadyBufferMs(manifest) * 2)
         : policy === "steady" || policy === "background"
           ? getTargetSteadyBufferMs(manifest)
           : getStartupWindowMs(manifest));

@@ -8,12 +8,10 @@ import {
 
 type PrimeRoomAudioOutputInput = {
   localAudio?: HTMLAudioElement | null;
-  remoteAudio?: HTMLAudioElement | null;
 };
 
 type ApplyRoomAudioVolumeInput = {
   localAudio?: HTMLAudioElement | null;
-  remoteAudio?: HTMLAudioElement | null;
   volume: number;
 };
 
@@ -32,10 +30,6 @@ export class RoomAudioOutput {
     const safeVolume = normalizeOutputVolume(input.volume);
     if (input.localAudio) {
       input.localAudio.volume = safeVolume;
-    }
-
-    if (input.remoteAudio) {
-      input.remoteAudio.volume = safeVolume;
     }
   }
 

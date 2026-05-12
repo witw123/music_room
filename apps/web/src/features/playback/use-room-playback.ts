@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
-import type { ProgressivePlaybackSource } from "./progressive-playback";
 import {
   getRoomMediaClockProgressMs,
   type ReceivedRoomMediaClock
@@ -14,8 +13,6 @@ const hiddenPlaybackProgressPollIntervalMs = 1_000;
 const playingProgressCommitThresholdMs = 80;
 const idleProgressCommitThresholdMs = 120;
 const displayClockTransitionWindowMs = 100;
-const remoteAudibleAnchorResetDriftMs = 3_500;
-const remoteAudibleAnchorBacktrackToleranceSeconds = 0.25;
 const monotonicProgressBacktrackToleranceMs = 180;
 const audibleClockFreezeWindowMs = 150;
 const audibleClockFallbackGraceMs = 1_500;
@@ -23,32 +20,20 @@ const authoritativeClockFreshnessMs = 600;
 const authoritativeClockMaxRoomDriftMs = 2_500;
 
 export type DisplayClockSource =
-  | "remote-audible"
   | "local-audible"
   | "authority-clock"
   | "room-fallback";
 
 type UseRoomPlaybackOptions = {
   audioRef: RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null | undefined;
   tracks: TrackMeta[];
-  shouldUseLocalAudio: boolean;
-  activePlaybackSource?: ProgressivePlaybackSource;
-  authoritativeMediaClock?: ReceivedRoomMediaClock | null;
   getLocalPlaybackPositionMs?: () => number | null;
 };
 
 type AudibleClockSample = {
   progressMs: number;
   source: DisplayClockSource;
-};
-
-type AudibleClockAnchorState = {
-  source: DisplayClockSource;
-  sessionKey: string;
-  anchorRoomClockMs: number;
-  anchorMediaTimeSeconds: number;
 };
 
 type DisplayClockTransitionState = {
@@ -76,123 +61,39 @@ function clampProgressMs(progressMs: number, durationMs: number) {
     : Math.max(0, progressMs);
 }
 
-function isRemoteAudioClockUnavailable(audio: HTMLAudioElement | null | undefined) {
-  if (!audio) {
-    return null;
-  }
-
-  if (audio.paused) {
-    return true;
-  }
-
-  if (audio.srcObject) {
-    return false;
-  }
-
-  return audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA;
-}
-
 export function resolveAudibleClockSample(input: {
-  activePlaybackSource?: ProgressivePlaybackSource;
-  shouldUseLocalAudio: boolean;
-  playbackSessionKey?: string;
-  roomClockMs?: number;
   localAudioCurrentTimeSeconds?: number | null;
   localAudioPaused?: boolean | null;
-  remoteAudioCurrentTimeSeconds?: number | null;
-  remoteAudioPaused?: boolean | null;
   localPlaybackPositionMs?: number | null;
-  previousAnchor?: AudibleClockAnchorState | null;
-}): { sample: AudibleClockSample | null; nextAnchor: AudibleClockAnchorState | null } {
-  const shouldReadLocalClock =
-    input.activePlaybackSource !== undefined
-      ? input.activePlaybackSource !== "remote-stream"
-      : input.shouldUseLocalAudio;
-
-  if (shouldReadLocalClock) {
-    if (
-      typeof input.localPlaybackPositionMs === "number" &&
-      Number.isFinite(input.localPlaybackPositionMs)
-    ) {
-      return {
-        sample: {
-          progressMs: Math.max(0, Math.round(input.localPlaybackPositionMs)),
-          source: "local-audible"
-        },
-        nextAnchor: null
-      };
-    }
-
-    if (
-      typeof input.localAudioCurrentTimeSeconds === "number" &&
-      Number.isFinite(input.localAudioCurrentTimeSeconds) &&
-      input.localAudioCurrentTimeSeconds >= 0 &&
-      input.localAudioPaused === false
-    ) {
-      return {
-        sample: {
-          progressMs: Math.floor(input.localAudioCurrentTimeSeconds * 1000),
-          source: "local-audible"
-        },
-        nextAnchor: null
-      };
-    }
-
+}): { sample: AudibleClockSample | null } {
+  if (
+    typeof input.localPlaybackPositionMs === "number" &&
+    Number.isFinite(input.localPlaybackPositionMs)
+  ) {
     return {
-      sample: null,
-      nextAnchor: null
+      sample: {
+        progressMs: Math.max(0, Math.round(input.localPlaybackPositionMs)),
+        source: "local-audible"
+      }
     };
   }
 
   if (
-    typeof input.remoteAudioCurrentTimeSeconds === "number" &&
-    Number.isFinite(input.remoteAudioCurrentTimeSeconds) &&
-    input.remoteAudioCurrentTimeSeconds >= 0 &&
-    input.remoteAudioPaused === false &&
-    typeof input.roomClockMs === "number" &&
-    Number.isFinite(input.roomClockMs)
+    typeof input.localAudioCurrentTimeSeconds === "number" &&
+    Number.isFinite(input.localAudioCurrentTimeSeconds) &&
+    input.localAudioCurrentTimeSeconds >= 0 &&
+    input.localAudioPaused === false
   ) {
-    const sessionKey = input.playbackSessionKey ?? "remote-stream";
-    const currentMediaTimeSeconds = input.remoteAudioCurrentTimeSeconds;
-    const previousAnchor = input.previousAnchor;
-    const anchoredProgressMs =
-      previousAnchor &&
-      previousAnchor.source === "remote-audible" &&
-      previousAnchor.sessionKey === sessionKey
-        ? previousAnchor.anchorRoomClockMs +
-          (currentMediaTimeSeconds - previousAnchor.anchorMediaTimeSeconds) * 1000
-        : null;
-    const shouldResetAnchor =
-      !previousAnchor ||
-      previousAnchor.source !== "remote-audible" ||
-      previousAnchor.sessionKey !== sessionKey ||
-      currentMediaTimeSeconds + remoteAudibleAnchorBacktrackToleranceSeconds <
-        previousAnchor.anchorMediaTimeSeconds ||
-      anchoredProgressMs === null ||
-      Math.abs(anchoredProgressMs - input.roomClockMs) > remoteAudibleAnchorResetDriftMs;
-    const nextAnchor = shouldResetAnchor
-      ? {
-          source: "remote-audible" as const,
-          sessionKey,
-          anchorRoomClockMs: Math.max(0, Math.round(input.roomClockMs)),
-          anchorMediaTimeSeconds: currentMediaTimeSeconds
-        }
-      : previousAnchor;
-
     return {
       sample: {
-        progressMs: shouldResetAnchor
-          ? Math.max(0, Math.round(input.roomClockMs))
-          : Math.max(0, Math.round(anchoredProgressMs ?? input.roomClockMs)),
-        source: "remote-audible"
-      },
-      nextAnchor
+        progressMs: Math.floor(input.localAudioCurrentTimeSeconds * 1000),
+        source: "local-audible"
+      }
     };
   }
 
   return {
-    sample: null,
-    nextAnchor: null
+    sample: null
   };
 }
 
@@ -216,15 +117,10 @@ export function resolveDisplayClockProgress(input: {
   const continuityAgeMs = input.previousContinuity ? now - input.previousContinuity.observedAtMs : null;
   const localAudibleSample =
     input.audibleClockSample?.source === "local-audible" ? input.audibleClockSample : null;
-  const remoteAudibleSample =
-    input.audibleClockSample?.source === "remote-audible" ? input.audibleClockSample : null;
 
   if (localAudibleSample) {
     targetSource = localAudibleSample.source;
     targetProgressMs = clampProgressMs(localAudibleSample.progressMs, input.durationMs);
-  } else if (remoteAudibleSample) {
-    targetSource = remoteAudibleSample.source;
-    targetProgressMs = clampProgressMs(remoteAudibleSample.progressMs, input.durationMs);
   } else if (
     input.playbackStatus === "playing" &&
     input.previousContinuity &&
@@ -357,12 +253,9 @@ function getPlaybackProgressPollIntervalMs(input: {
 export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const {
     audioRef,
-    remoteAudioRef,
     playback,
     tracks,
-    shouldUseLocalAudio,
-    activePlaybackSource,
-    authoritativeMediaClock,
+    
     getLocalPlaybackPositionMs
   } = options;
   const [progressMs, setProgressMs] = useState(0);
@@ -378,7 +271,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   const progressPollTimerRef = useRef<number | null>(null);
   const lastCommittedProgressRef = useRef(0);
   const lastCommittedSessionKeyRef = useRef("no-playback");
-  const audibleClockAnchorRef = useRef<AudibleClockAnchorState | null>(null);
   const audibleClockContinuityRef = useRef<AudibleClockContinuityState | null>(null);
   const displayClockTransitionRef = useRef<DisplayClockTransitionState>({
     source: "room-fallback",
@@ -424,7 +316,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
   useEffect(() => {
     const localAudio = audioRef.current;
-    const remoteAudio = remoteAudioRef.current;
 
     if (!acceptedPlayback || !progressTrack) {
       setProgressMs(0);
@@ -438,7 +329,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         anchorAtMs: Date.now(),
         hardDriftSamples: 0
       };
-      audibleClockAnchorRef.current = null;
       audibleClockContinuityRef.current = null;
       return;
     }
@@ -492,24 +382,16 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       const now = Date.now();
       const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
       const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
-      const remoteAudioBuffering = isRemoteAudioClockUnavailable(remoteAudio);
       const audibleClockResolution =
         currentPlayback.status === "playing"
           ? resolveAudibleClockSample({
-              activePlaybackSource,
-              shouldUseLocalAudio,
-              playbackSessionKey,
-              roomClockMs,
+              
               localAudioCurrentTimeSeconds: localAudio?.currentTime ?? null,
               localAudioPaused: localAudio?.paused ?? null,
-              remoteAudioCurrentTimeSeconds: remoteAudio?.currentTime ?? null,
-              remoteAudioPaused: remoteAudioBuffering,
               localPlaybackPositionMs:
-                typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null,
-              previousAnchor: audibleClockAnchorRef.current
+                typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null
             })
-          : { sample: null, nextAnchor: null };
-      audibleClockAnchorRef.current = audibleClockResolution.nextAnchor;
+          : { sample: null };
       const continuityResolution = resolveAudibleClockContinuitySample({
         audibleClockSample: audibleClockResolution.sample,
         previousContinuity: audibleClockContinuityRef.current,
@@ -518,15 +400,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         now
       });
       audibleClockContinuityRef.current = continuityResolution.continuityState;
-      const authoritativeClockSample = resolveAuthoritativeClockSample({
-        authoritativeMediaClock,
-        playback: currentPlayback,
-        durationMs: progressTrack.durationMs,
-        now
-      });
       const nextDisplayClock = resolveDisplayClockProgress({
         audibleClockSample: audibleClockResolution.sample,
-        authoritativeClockSample,
         previousContinuity: continuityResolution.continuityState,
         playbackStatus: currentPlayback.status,
         roomClockMs,
@@ -581,14 +456,11 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     };
   }, [
     audioRef,
-    remoteAudioRef,
     acceptedPlayback?.status,
     acceptedPlayback?.currentTrackId,
     acceptedPlayback?.mediaEpoch,
     progressTrack?.durationMs,
-    shouldUseLocalAudio,
-    activePlaybackSource,
-    authoritativeMediaClock,
+    
     getLocalPlaybackPositionMs,
     seekDraft,
     isPageVisible
@@ -603,15 +475,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     audio.volume = volume;
   }, [audioRef, volume]);
 
-  useEffect(() => {
-    const remoteAudio = remoteAudioRef.current;
-    if (!remoteAudio) {
-      return;
-    }
-
-    remoteAudio.volume = volume;
-  }, [remoteAudioRef, volume]);
-
   function syncProgressFromAudio(event?: SyntheticEvent<HTMLAudioElement>) {
     const currentPlayback = acceptedPlaybackRef.current;
     if (!currentPlayback || !progressTrack) {
@@ -619,12 +482,12 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const currentSessionKey = getPlaybackClockSessionKey(currentPlayback);
-    const selectedAudio = shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current;
+    const localAudio = audioRef.current;
 
     if (
       event?.type === "timeupdate" &&
       event.currentTarget &&
-      event.currentTarget !== selectedAudio
+      event.currentTarget !== localAudio
     ) {
       return;
     }
@@ -632,34 +495,20 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     const now = Date.now();
     const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
     const eventAudio = event?.currentTarget ?? null;
-    const preferredAudio = eventAudio === selectedAudio ? eventAudio : selectedAudio;
-    const localAudio = audioRef.current;
-    const remoteAudio = remoteAudioRef.current;
-    const remoteAudioBuffering = isRemoteAudioClockUnavailable(remoteAudio);
+    const preferredAudio = eventAudio === localAudio ? eventAudio : localAudio;
     const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
     const audibleClockResolution =
       currentPlayback.status === "playing"
         ? resolveAudibleClockSample({
-            activePlaybackSource,
-            shouldUseLocalAudio,
-            playbackSessionKey,
-            roomClockMs,
+            
             localAudioCurrentTimeSeconds:
-              shouldUseLocalAudio && preferredAudio ? preferredAudio.currentTime : localAudio?.currentTime ?? null,
+              preferredAudio ? preferredAudio.currentTime : localAudio?.currentTime ?? null,
             localAudioPaused:
-              shouldUseLocalAudio && preferredAudio ? preferredAudio.paused : localAudio?.paused ?? null,
-            remoteAudioCurrentTimeSeconds:
-              !shouldUseLocalAudio && preferredAudio ? preferredAudio.currentTime : remoteAudio?.currentTime ?? null,
-            remoteAudioPaused:
-              !shouldUseLocalAudio && preferredAudio
-                ? isRemoteAudioClockUnavailable(preferredAudio)
-                : remoteAudioBuffering,
+              preferredAudio ? preferredAudio.paused : localAudio?.paused ?? null,
             localPlaybackPositionMs:
-              typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null,
-            previousAnchor: audibleClockAnchorRef.current
+              typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null
           })
-        : { sample: null, nextAnchor: null };
-    audibleClockAnchorRef.current = audibleClockResolution.nextAnchor;
+        : { sample: null };
     const continuityResolution = resolveAudibleClockContinuitySample({
       audibleClockSample: audibleClockResolution.sample,
       previousContinuity: audibleClockContinuityRef.current,
@@ -668,15 +517,8 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       now
     });
     audibleClockContinuityRef.current = continuityResolution.continuityState;
-    const authoritativeClockSample = resolveAuthoritativeClockSample({
-      authoritativeMediaClock,
-      playback: currentPlayback,
-      durationMs: progressTrack.durationMs,
-      now
-    });
     const nextDisplayClock = resolveDisplayClockProgress({
       audibleClockSample: audibleClockResolution.sample,
-      authoritativeClockSample,
       previousContinuity: continuityResolution.continuityState,
       playbackStatus: currentPlayback.status,
       roomClockMs,
@@ -724,7 +566,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     }
 
     const audio =
-      event?.currentTarget ?? (shouldUseLocalAudio ? audioRef.current : remoteAudioRef.current);
+      event?.currentTarget ?? audioRef.current;
     if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
       if (progressTrack?.durationMs) {
         setAudioDurationMs(progressTrack.durationMs);
@@ -755,7 +597,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       anchorAtMs: Date.now(),
       hardDriftSamples: 0
     };
-    audibleClockAnchorRef.current = null;
     audibleClockContinuityRef.current = null;
     setAudioDurationMs(progressTrack?.durationMs ?? 0);
   }, [

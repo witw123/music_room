@@ -135,9 +135,7 @@ export function useRoomRuntimeMutableState(input: {
   );
   const hostMediaSyncRetryRef = useRef<number | null>(null);
   const lastHostCaptureRefreshAtRef = useRef<number>(0);
-  const remotePlaybackRetryRef = useRef<number | null>(null);
   const remotePlaybackResumeAfterUnlockKeyRef = useRef<string | null>(null);
-  const remoteStreamClearTimeoutRef = useRef<number | null>(null);
   const socketDisconnectGraceUntilRef = useRef<number | null>(null);
   const resubscribeRoomRef = useRef<(() => void) | null>(null);
   const recoveryGenerationRef = useRef<number | null>(input.roomRecoveryState.generation);
@@ -145,7 +143,6 @@ export function useRoomRuntimeMutableState(input: {
   const activePlaybackSourceRef = useRef(input.activePlaybackSource);
   const lastSubscribeAckAtRef = useRef<number | null>(null);
   const recoveryModeRef = useRef<"late-join" | "rejoin" | "steady">("steady");
-  const scheduleRemotePlaybackRetryRef = useRef<(attempt?: number, generation?: string | null) => void>(() => {});
   const mediaTransportOwnerKeyRef = useRef<string | null>(null);
   const lastRealtimeRoomEventAtRef = useRef<number>(Date.now());
   const lastDataActivityAtRef = useRef<number | null>(null);
@@ -209,13 +206,6 @@ export function useRoomRuntimeMutableState(input: {
   const clearAvailabilityForPeerRef = useRef(input.clearAvailabilityForPeer);
   const flushPendingAvailabilityRef = useRef(input.flushPendingAvailability);
   const recordPeerDiagnosticRef = useRef(input.recordPeerDiagnostic);
-
-  const clearPendingRemoteStreamClear = useCallback(() => {
-    if (remoteStreamClearTimeoutRef.current !== null) {
-      window.clearTimeout(remoteStreamClearTimeoutRef.current);
-      remoteStreamClearTimeoutRef.current = null;
-    }
-  }, []);
 
   const clearListenerMediaRecovery = useCallback(() => {
     if (listenerMediaRecoveryTimeoutRef.current !== null) {
@@ -653,9 +643,7 @@ export function useRoomRuntimeMutableState(input: {
     transportResetReasonRef,
     hostMediaSyncRetryRef,
     lastHostCaptureRefreshAtRef,
-    remotePlaybackRetryRef,
     remotePlaybackResumeAfterUnlockKeyRef,
-    remoteStreamClearTimeoutRef,
     socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
     recoveryGenerationRef,
@@ -663,7 +651,6 @@ export function useRoomRuntimeMutableState(input: {
     activePlaybackSourceRef,
     lastSubscribeAckAtRef,
     recoveryModeRef,
-    scheduleRemotePlaybackRetryRef,
     mediaTransportOwnerKeyRef,
     lastRealtimeRoomEventAtRef,
     lastDataActivityAtRef,
@@ -692,7 +679,6 @@ export function useRoomRuntimeMutableState(input: {
     clearAvailabilityForPeerRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
-    clearPendingRemoteStreamClear,
     clearListenerMediaRecovery,
     clearSocketDisconnectGrace,
     clearHostMediaSyncRetry,

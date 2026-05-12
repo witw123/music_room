@@ -21,12 +21,11 @@ export function resolveTransportHealth(
     | "mediaIceState"
     | "recoveryActionLevel"
     | "audibleSource"
-    | "bufferingWhileAudible"
   >
 ) {
   const dataReady = isDataChannelReady(snapshot);
   const mediaReady = isMediaConnectionReady(snapshot);
-  const audible = snapshot.audibleSource !== null || snapshot.bufferingWhileAudible === true;
+  const audible = snapshot.audibleSource !== null;
   const failed =
     snapshot.dataConnectionState === "failed" ||
     snapshot.mediaConnectionState === "failed" ||
@@ -37,7 +36,7 @@ export function resolveTransportHealth(
     snapshot.mediaIceState === "checking" ||
     (snapshot.mediaConnectionState === "connecting" && audible) ||
     (snapshot.dataConnectionState === "connecting" && audible) ||
-    snapshot.bufferingWhileAudible === true;
+    false;
   const reconnecting =
     snapshot.dataConnectionState === "connecting" ||
     snapshot.dataConnectionState === "disconnected" ||

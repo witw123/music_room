@@ -15,7 +15,6 @@ export type RoomAudioElementPlayResult = {
 export type PrimeRoomAudioOutputsResult = {
   ok: boolean;
   local: RoomAudioElementPlayResult;
-  remote: RoomAudioElementPlayResult;
 };
 
 export class RoomAudioActivationManager {
@@ -24,18 +23,15 @@ export class RoomAudioActivationManager {
 
   async activateOutputs(input: {
     localAudio?: HTMLAudioElement | null;
-    remoteAudio?: HTMLAudioElement | null;
   }): Promise<PrimeRoomAudioOutputsResult> {
-    const [contextReady, local, remote] = await Promise.all([
+    const [contextReady, local] = await Promise.all([
       this.resumeSharedContext().catch(() => false),
-      this.primeAudioElement({ element: input.localAudio }),
-      this.primeAudioElement({ element: input.remoteAudio })
+      this.primeAudioElement({ element: input.localAudio })
     ]);
-    this.activated = contextReady || local.ok || remote.ok;
+    this.activated = contextReady || local.ok;
     return {
       ok: this.activated,
-      local,
-      remote
+      local
     };
   }
 

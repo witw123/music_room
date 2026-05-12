@@ -5,7 +5,6 @@ import {
   useEffect,
   useRef,
   type MutableRefObject,
-  type RefObject,
   type Dispatch,
   type SetStateAction
 } from "react";
@@ -38,7 +37,6 @@ export type SourceRecoveryCoordinatorState = {
 
 const listenerHardRecoveryCooldownMs = 3_000;
 const connectionSupervisorHardRecreateNoProgressFloorMs = 45_000;
-const recentAudibleProgressGraceMs = 5_000;
 const recoveryBootstrapGraceMs = 5_000;
 const sourceGenerationBootstrapGraceMs = 3_500;
 const connectionSupervisorForegroundIntervalMs = 500;
@@ -118,7 +116,6 @@ export function useRoomConnectionSupervisor(input: {
   roomSnapshot: RoomSnapshot | null;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
   listenerMediaLifecycleRef: MutableRefObject<{
     currentGeneration: string | null;
     generationStartedAt: number | null;
@@ -211,41 +208,6 @@ export function useRoomConnectionSupervisor(input: {
     [buildSourceRecoveryActionKey]
   );
 
-  const resolveRemoteAudioContinuityState = useCallback(
-    (now = Date.now()) => {
-      const remoteAudio = input.remoteAudioRef.current;
-      const remoteStream = (remoteAudio?.srcObject as MediaStream | null | undefined) ?? null;
-      const remoteTrack =
-        typeof remoteStream?.getAudioTracks === "function"
-          ? (remoteStream.getAudioTracks()[0] ?? null)
-          : null;
-      const hasLiveRemoteTrack =
-        !!remoteTrack && remoteTrack.enabled && remoteTrack.readyState !== "ended";
-      const hasPlayableRemoteElement =
-        !!remoteAudio &&
-        !!remoteStream &&
-        remoteAudio.paused === false &&
-        remoteAudio.readyState >= 2;
-      const hasRecentPlayoutProgress =
-        input.listenerMediaLifecycleRef.current.lastPlayoutProgressAt !== null &&
-        now - input.listenerMediaLifecycleRef.current.lastPlayoutProgressAt <=
-          recentAudibleProgressGraceMs;
-      const hasRecentTransportProgress =
-        input.listenerMediaLifecycleRef.current.lastTransportProgressAt !== null &&
-        now - input.listenerMediaLifecycleRef.current.lastTransportProgressAt <=
-          recentAudibleProgressGraceMs;
-
-      return {
-        hasPlayableRemoteElement,
-        hasLiveRemoteTrack,
-        hasRecentPlayoutProgress,
-        hasRecentTransportProgress,
-        hasRecentRemoteProgress: hasRecentPlayoutProgress || hasRecentTransportProgress
-      };
-    },
-    [input.listenerMediaLifecycleRef, input.remoteAudioRef]
-  );
-
   const resolveCurrentAudibleSource = useCallback(
     (now = Date.now()): PeerDiagnosticsSnapshot["audibleSource"] => {
       const playback = input.currentRoomRef.current?.room.playback;
@@ -260,27 +222,14 @@ export function useRoomConnectionSupervisor(input: {
         return input.activePlaybackSource;
       }
 
-      if (
-        input.activePlaybackSource === "remote-stream" &&
-        resolveRemoteAudioContinuityState(now).hasRecentRemoteProgress
-      ) {
-        return "remote-stream";
-      }
-
       return null;
     },
-    [
-      input.activePlaybackSource,
-      input.currentRoomRef,
-      input.isCurrentSourceOwner,
-      resolveRemoteAudioContinuityState
-    ]
+    [input.activePlaybackSource, input.currentRoomRef, input.isCurrentSourceOwner]
   );
 
   const resolveSourceContinuityState = useCallback(
     (now = Date.now()) => {
       const audibleSource = resolveCurrentAudibleSource(now);
-      const remoteContinuity = resolveRemoteAudioContinuityState(now);
       const lastAudibleProgressAtMs = input.listenerMediaLifecycleRef.current.lastPlayoutProgressAt;
       const lastMediaStatsProgressAtMs =
         input.listenerMediaLifecycleRef.current.lastTransportProgressAt;
@@ -300,22 +249,13 @@ export function useRoomConnectionSupervisor(input: {
         lastAudibleProgressAtMs,
         lastMediaStatsProgressAtMs,
         lastDataActivityAtMs,
-        bufferingWhileAudible:
-          audibleSource === "remote-stream" &&
-          (input.mediaConnectionState === "buffering" ||
-            input.mediaConnectionState === "connecting"),
-        remoteAudioPlayable: remoteContinuity.hasPlayableRemoteElement,
-        remoteAudioHasLiveTrack: remoteContinuity.hasLiveRemoteTrack,
-        remoteAudioRecentlyProgressing: remoteContinuity.hasRecentRemoteProgress,
         consecutiveNoProgressMs
       };
     },
     [
       input.lastDataActivityAtRef,
       input.listenerMediaLifecycleRef,
-      input.mediaConnectionState,
-      resolveCurrentAudibleSource,
-      resolveRemoteAudioContinuityState
+      resolveCurrentAudibleSource
     ]
   );
 
@@ -343,11 +283,6 @@ export function useRoomConnectionSupervisor(input: {
       }
 
       const continuity = resolveSourceContinuityState(now);
-      const remoteNoProgressMs =
-        continuity.consecutiveNoProgressMs ??
-        (input.lastSubscribeAckAtRef.current !== null
-          ? now - input.lastSubscribeAckAtRef.current
-          : null);
       if (
         continuity.audibleSource === "progressive-local" ||
         continuity.audibleSource === "full-local"
@@ -356,28 +291,10 @@ export function useRoomConnectionSupervisor(input: {
       }
 
       if (
-        continuity.audibleSource === "remote-stream" &&
-        remoteNoProgressMs !== null &&
-        remoteNoProgressMs < connectionSupervisorHardRecreateNoProgressFloorMs
-      ) {
-        return continuity.remoteAudioRecentlyProgressing
-          ? "audible-progressing"
-          : "protected-audible-source";
-      }
-
-      if (
         input.lastSubscribeAckAtRef.current !== null &&
         now - input.lastSubscribeAckAtRef.current < recoveryBootstrapGraceMs
       ) {
         return "bootstrap-grace";
-      }
-
-      if (
-        continuity.remoteAudioHasLiveTrack &&
-        remoteNoProgressMs !== null &&
-        remoteNoProgressMs < connectionSupervisorHardRecreateNoProgressFloorMs
-      ) {
-        return "remote-track-present";
       }
 
       return null;
@@ -568,10 +485,6 @@ export function useRoomConnectionSupervisorRuntime(input: {
     lastAudibleProgressAtMs: number | null;
     lastMediaStatsProgressAtMs: number | null;
     lastDataActivityAtMs: number | null;
-    bufferingWhileAudible: boolean;
-    remoteAudioPlayable?: boolean;
-    remoteAudioHasLiveTrack?: boolean;
-    remoteAudioRecentlyProgressing?: boolean;
     consecutiveNoProgressMs: number | null;
   };
   resolveSourceRecoverySuppressedReason: (now?: number) => string | null;
@@ -770,7 +683,6 @@ export function useRoomConnectionSupervisorRuntime(input: {
                 sourceContinuity?.lastDataActivityAtMs ?? null
               ),
               audibleSource: sourceContinuity?.audibleSource ?? null,
-              bufferingWhileAudible: sourceContinuity?.bufferingWhileAudible ?? false,
               recoverySuppressedReason: sourceRecoverySuppressedReason
             })
           });
@@ -783,11 +695,6 @@ export function useRoomConnectionSupervisorRuntime(input: {
             consecutiveNoProgressMs >= hardRecreateNoProgressMs)) ||
           ((nextState.mediaConnectionState === "connecting" ||
             nextState.mediaIceState === "checking") &&
-            typeof consecutiveNoProgressMs === "number" &&
-            consecutiveNoProgressMs >= hardRecreateNoProgressMs) ||
-          (isSourcePeer &&
-            playback.status === "playing" &&
-            input.activePlaybackSource === "remote-stream" &&
             typeof consecutiveNoProgressMs === "number" &&
             consecutiveNoProgressMs >= hardRecreateNoProgressMs);
         const hasDataHardRecoverySignal =
@@ -1064,7 +971,6 @@ export function useRoomConnectionSupervisorRuntime(input: {
       window.clearInterval(timerId);
     };
   }, [
-    input.activePlaybackSource,
     input.beginSourceHardRecoveryAction,
     input.clearSourceHardRecoveryAction,
     input.commitConnectionSupervisorState,

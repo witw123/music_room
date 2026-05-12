@@ -195,7 +195,7 @@ export function createRoomSocketRuntime(input: {
   };
   reportRealtimeFailureRef: MutableRefObject<(input: any) => void>;
   activePlaybackSourceRef: MutableRefObject<
-    "none" | "remote-stream" | "progressive-local" | "full-local"
+    "none" | "progressive-local" | "full-local"
   >;
   roomRecoveryStateRef: MutableRefObject<{
     fullLocalRecoveryActive: boolean;
@@ -281,7 +281,7 @@ export function createRoomRealtimeRuntime(input: {
   };
   reportRealtimeFailureRef: MutableRefObject<(input: any) => void>;
   activePlaybackSourceRef: MutableRefObject<
-    "none" | "remote-stream" | "progressive-local" | "full-local"
+    "none" | "progressive-local" | "full-local"
   >;
   roomRecoveryStateRef: MutableRefObject<{
     fullLocalRecoveryActive: boolean;
@@ -321,7 +321,6 @@ export function createRoomRealtimeRuntime(input: {
   currentTrackId: string | null | undefined;
   bufferHealth: "healthy" | "low" | "critical";
   enableManualTrackCaching: boolean;
-  remoteAudioRef: MutableRefObject<HTMLAudioElement | null> | { current: HTMLAudioElement | null };
   mediaMeshRef: MutableRefObject<any>;
   listenerMediaLifecycleRef: MutableRefObject<any>;
   armListenerMediaRecoveryRef: MutableRefObject<(generation?: string | null) => void>;
@@ -334,8 +333,6 @@ export function createRoomRealtimeRuntime(input: {
     update?: (snapshot: any) => any,
     options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
   ) => void;
-  getRemoteAudioDiagnostics: () => any;
-  resetRemoteAudioElement: (stream: MediaStream | null, options?: any) => void;
   resolveMediaDiagnosticPeerId: (input: {
     remotePeerId: string;
     connectedPeerIds: string[];
@@ -466,22 +463,16 @@ export function createRoomRealtimeRuntime(input: {
     peerId: input.peerId,
     emitPeerSignal,
     iceServers,
-    remoteAudioRef: input.remoteAudioRef,
     currentRoomRef: input.currentRoomRef,
     mediaMeshRef: input.mediaMeshRef,
     listenerMediaLifecycleRef: input.listenerMediaLifecycleRef,
-    armListenerMediaRecoveryRef: input.armListenerMediaRecoveryRef,
-    scheduleRemotePlaybackRetryRef: input.scheduleRemotePlaybackRetryRef,
+    
     mediaTransportEpochRef: input.mediaTransportEpochRef,
     connectionSupervisorStatesRef: input.connectionSupervisorStatesRef,
     updateConnectionSupervisorSignalState: input.updateConnectionSupervisorSignalState,
     withResolvedTransportHealth: input.withResolvedTransportHealth,
     withSupervisorDiagnosticPatch: input.withSupervisorDiagnosticPatch,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
-    updateRemoteMediaDiagnostic: input.updateRemoteMediaDiagnostic,
-    getRemoteMediaTraceContext: input.getRemoteMediaTraceContext,
-    getRemoteAudioDiagnostics: input.getRemoteAudioDiagnostics,
-    resetRemoteAudioElement: input.resetRemoteAudioElement,
     resolveMediaDiagnosticPeerId: input.resolveMediaDiagnosticPeerId,
     resolveSoftRecoveryMediaState: input.resolveSoftRecoveryMediaState,
     setMediaConnectedPeers: input.setMediaConnectedPeers,
@@ -541,7 +532,6 @@ export function createRoomRealtimeRuntime(input: {
     clearHostMediaSyncRetry: input.clearHostMediaSyncRetry,
     bumpMediaTransportEpoch: input.bumpMediaTransportEpoch,
     mediaTransportEpochRef: input.mediaTransportEpochRef,
-    resetRemoteAudioElement: input.resetRemoteAudioElement,
     dispatchRoomStateEvent: input.dispatchRoomStateEvent,
     setConnectedPeers: input.setConnectedPeers,
     setMediaConnectedPeers: input.setMediaConnectedPeers,
@@ -563,7 +553,7 @@ export function createRoomRealtimeRuntime(input: {
     shouldAcceptIncomingPeerSignalRecoveryGeneration:
       input.shouldAcceptIncomingPeerSignalRecoveryGeneration,
     getRemoteMediaTraceContext: input.getRemoteMediaTraceContext,
-    updateRemoteMediaDiagnostic: input.updateRemoteMediaDiagnostic,
+    updateRemoteMediaDiagnostic: (() => {}) as any,
     withResolvedTransportHealth: input.withResolvedTransportHealth,
     resyncRealtimePeers
   });
@@ -614,7 +604,7 @@ export function useRoomRealtimeConnection(input: {
     reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
   ) => number;
   resolveSourceContinuityState: (now?: number) => {
-    audibleSource: "none" | "remote-stream" | "progressive-local" | "full-local" | null | undefined;
+    audibleSource: "none" | "progressive-local" | "full-local" | null | undefined;
     consecutiveNoProgressMs: number | null;
   };
   resolveSourceRecoverySuppressedReason: (now?: number) => string | null;
@@ -895,18 +885,9 @@ export function useRoomRealtimeConnection(input: {
     const dataReady =
       !input.enableTrackCaching || !!(sourcePeerId && input.connectedPeers.includes(sourcePeerId));
     const continuity = input.resolveSourceContinuityState();
-    const mediaNoProgressMs =
-      continuity.consecutiveNoProgressMs ??
-      (input.lastSubscribeAckAtRef.current !== null
-        ? Date.now() - input.lastSubscribeAckAtRef.current
-        : null);
-    const remoteMediaStillProtected =
-      continuity.audibleSource === "remote-stream" &&
-      (mediaNoProgressMs === null || mediaNoProgressMs < recoveryMediaRestartThresholdMs);
     const mediaReady =
       !!(sourcePeerId && input.mediaConnectedPeers.includes(sourcePeerId)) ||
       input.mediaConnectionState === "live" ||
-      remoteMediaStillProtected ||
       continuity.audibleSource === "progressive-local" ||
       continuity.audibleSource === "full-local";
 
@@ -1015,9 +996,7 @@ export function useRoomRealtimeConnection(input: {
         : null;
       const hasProtectedAudibleSource =
         continuity.audibleSource === "progressive-local" ||
-        continuity.audibleSource === "full-local" ||
-        (continuity.audibleSource === "remote-stream" &&
-          noProgressMs < recoveryMediaRestartThresholdMs);
+        continuity.audibleSource === "full-local";
       const latestMediaReady =
         input.mediaConnectedPeers.includes(latestSourcePeerId) ||
         input.mediaConnectionState === "live" ||
@@ -1280,7 +1259,6 @@ export function attachRoomSocketHandlers(input: {
     reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
   ) => number;
   mediaTransportEpochRef: MutableRefObject<number>;
-  resetRemoteAudioElement: (stream: MediaStream | null) => void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -1953,18 +1931,6 @@ export function attachRoomSocketHandlers(input: {
           return;
         }
         input.socketDisconnectGraceUntilRef.current = null;
-        if (playback?.status === "playing") {
-          input.resetRemoteAudioElement(null);
-          input.updateRemoteMediaDiagnostic(
-            "Socket 断线保护窗口超时，远端音频已清空等待重建",
-            undefined,
-            {
-              event: "socket-disconnect-grace-expired",
-              recordEvent: true,
-              level: "warning"
-            }
-          );
-        }
       }, socketDisconnectGraceMs);
     }
     input.hostMediaSyncStateRef.current.lastAppliedKey = null;

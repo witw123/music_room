@@ -6,7 +6,6 @@ import {
   useRef,
   type Dispatch,
   type MutableRefObject,
-  type RefObject,
   type SetStateAction
 } from "react";
 import type {
@@ -38,7 +37,6 @@ type PieceRequestSample = {
 };
 
 const pieceTransferWindowMs = 12_000;
-const listenerMediaSupervisorIntervalMs = 150;
 
 export function formatDiagnosticsTimestamp(timestampMs: number | null) {
   return typeof timestampMs === "number" && Number.isFinite(timestampMs)
@@ -119,7 +117,6 @@ export function useRoomRuntimeObservability(input: {
   roomSnapshot: RoomSnapshot | null;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   peerId: string;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
   mediaMeshRef: MutableRefObject<{ setStatsSamplingMode: (mode: "off" | "active" | "steady") => void } | null>;
   meshRef: MutableRefObject<{ setStatsSamplingMode: (mode: "off" | "active" | "steady") => void } | null>;
   recordPeerDiagnostic: (input: any) => void;
@@ -137,7 +134,6 @@ export function useRoomRuntimeObservability(input: {
   listenerMediaLifecycleRef: MutableRefObject<{
     lastPlayoutProgressAt: number | null;
     lastTransportProgressAt: number | null;
-    lastObservedRemoteCurrentTimeMs: number | null;
   }>;
   lastDataActivityAtRef: MutableRefObject<number | null>;
   activePlaybackSource: string;
@@ -148,16 +144,6 @@ export function useRoomRuntimeObservability(input: {
 }) {
   const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
   const pieceRequestSamplesRef = useRef<Map<string, PieceRequestSample[]>>(new Map());
-  const remoteStreamTrackingRef = useRef<{
-    trackKey: string | null;
-    accumulatedMs: number;
-    segmentStartedAt: number | null;
-  }>({
-    trackKey: null,
-    accumulatedMs: 0,
-    segmentStartedAt: null
-  });
-
   const updateDataTransportStats = useCallback(
     (transportInput: {
       peerId: string;
@@ -299,9 +285,6 @@ export function useRoomRuntimeObservability(input: {
             ),
             lastDataActivityAt: formatDiagnosticsTimestamp(input.lastDataActivityAtRef.current),
             audibleSource: input.resolveCurrentAudibleSource(now),
-            bufferingWhileAudible:
-              input.resolveCurrentAudibleSource(now) === "remote-stream" &&
-              input.mediaConnectionState === "buffering",
             consecutiveNoProgressMs: input.resolveSourceContinuityState(now).consecutiveNoProgressMs
           })
         })
@@ -423,24 +406,6 @@ export function useRoomRuntimeObservability(input: {
     [input]
   );
 
-  const updateRemoteStreamTime = useCallback(
-    (timeOnRemoteStreamMs: number | null) => {
-      input.recordPeerDiagnostic({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: "remote-stream-time",
-        summary: "Remote stream time updated",
-        recordEvent: false,
-        update: (snapshot: any) => ({
-          ...snapshot,
-          timeOnRemoteStreamMs
-        })
-      });
-    },
-    [input]
-  );
-
   const reportRealtimeFailure = useCallback(
     (failureInput: {
       peerId: string;
@@ -512,7 +477,6 @@ export function useRoomRuntimeObservability(input: {
       !hasActiveTrack || (!input.isPageVisible && !isPlaying)
         ? "off"
         : input.isCurrentSourceOwner ||
-            input.activePlaybackSource !== "remote-stream" ||
             input.bufferHealth !== "healthy"
           ? "active"
           : "steady";
@@ -526,7 +490,6 @@ export function useRoomRuntimeObservability(input: {
     input.mediaMeshRef.current?.setStatsSamplingMode(mediaStatsMode);
     input.meshRef.current?.setStatsSamplingMode(dataStatsMode);
   }, [
-    input.activePlaybackSource,
     input.bufferHealth,
     input.isCurrentSourceOwner,
     input.isPageVisible,
@@ -534,116 +497,6 @@ export function useRoomRuntimeObservability(input: {
     input.meshRef,
     input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.status
-  ]);
-
-  useEffect(() => {
-    const playback = input.roomSnapshot?.room.playback;
-    if (
-      input.isCurrentSourceOwner ||
-      input.activePlaybackSource !== "remote-stream" ||
-      !input.peerId ||
-      !input.roomSnapshot?.room.id ||
-      playback?.status !== "playing"
-    ) {
-      input.listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs = null;
-      return;
-    }
-
-    const timerId = window.setInterval(() => {
-      const remoteAudio = input.remoteAudioRef.current;
-      if (!remoteAudio?.srcObject || remoteAudio.paused) {
-        return;
-      }
-
-      const currentTimeMs =
-        Number.isFinite(remoteAudio.currentTime) && remoteAudio.currentTime >= 0
-          ? Math.round(remoteAudio.currentTime * 1000)
-          : null;
-      if (currentTimeMs === null) {
-        return;
-      }
-
-      const previousTimeMs = input.listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs;
-      input.listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs = currentTimeMs;
-      if (previousTimeMs === null || currentTimeMs > previousTimeMs + 20) {
-        input.listenerMediaLifecycleRef.current.lastPlayoutProgressAt = Date.now();
-        if (playback?.sourcePeerId) {
-          input.updateConnectionSupervisorPlayout(playback.sourcePeerId);
-        }
-      }
-    }, listenerMediaSupervisorIntervalMs);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [
-    input.activePlaybackSource,
-    input.isCurrentSourceOwner,
-    input.listenerMediaLifecycleRef,
-    input.peerId,
-    input.remoteAudioRef,
-    input.roomSnapshot?.room.id,
-    input.roomSnapshot?.room.playback.status,
-    input.updateConnectionSupervisorPlayout
-  ]);
-
-  useEffect(() => {
-    const currentTrackId = input.roomSnapshot?.room.playback.currentTrackId ?? null;
-    const mediaEpoch = input.roomSnapshot?.room.playback.mediaEpoch ?? 0;
-    const trackingKey = currentTrackId ? `${currentTrackId}:${mediaEpoch}` : null;
-    const tracking = remoteStreamTrackingRef.current;
-
-    if (tracking.trackKey !== trackingKey) {
-      tracking.trackKey = trackingKey;
-      tracking.accumulatedMs = 0;
-      tracking.segmentStartedAt = null;
-    }
-
-    if (!currentTrackId) {
-      updateRemoteStreamTime(null);
-      return;
-    }
-
-    const shouldTrackRemoteStream =
-      input.roomSnapshot?.room.playback.status === "playing" &&
-      input.activePlaybackSource === "remote-stream";
-
-    if (!shouldTrackRemoteStream) {
-      if (tracking.segmentStartedAt !== null) {
-        tracking.accumulatedMs += Date.now() - tracking.segmentStartedAt;
-        tracking.segmentStartedAt = null;
-      }
-      updateRemoteStreamTime(Math.max(0, Math.round(tracking.accumulatedMs)));
-      return;
-    }
-
-    if (tracking.segmentStartedAt === null) {
-      tracking.segmentStartedAt = Date.now();
-    }
-
-    const syncRemoteStreamTime = () => {
-      const activeSegmentMs =
-        tracking.segmentStartedAt === null ? 0 : Date.now() - tracking.segmentStartedAt;
-      updateRemoteStreamTime(Math.max(0, Math.round(tracking.accumulatedMs + activeSegmentMs)));
-    };
-
-    syncRemoteStreamTime();
-    const timerId = window.setInterval(syncRemoteStreamTime, 1_000);
-
-    return () => {
-      window.clearInterval(timerId);
-      if (tracking.segmentStartedAt !== null) {
-        tracking.accumulatedMs += Date.now() - tracking.segmentStartedAt;
-        tracking.segmentStartedAt = null;
-      }
-      updateRemoteStreamTime(Math.max(0, Math.round(tracking.accumulatedMs)));
-    };
-  }, [
-    input.activePlaybackSource,
-    input.roomSnapshot?.room.playback.currentTrackId,
-    input.roomSnapshot?.room.playback.mediaEpoch,
-    input.roomSnapshot?.room.playback.status,
-    updateRemoteStreamTime
   ]);
 
   return {

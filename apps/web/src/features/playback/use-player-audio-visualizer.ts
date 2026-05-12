@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PlaybackSnapshot } from "@music-room/shared";
 import { captureAudioStream } from "@/features/upload/audio-utils";
 import { audioVisualizerStore } from "./audio-visualizer-store";
-import type { ProgressivePlaybackSource } from "./progressive-playback";
 
 const analyserFftSize = 256;
 const analyserSmoothingTimeConstant = 0.75;
@@ -32,8 +31,6 @@ export type PlayerAudioVisualizerState = {
 
 type UsePlayerAudioVisualizerInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
-  activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: PlaybackSnapshot["status"] | null | undefined;
   currentTrackId: string | null | undefined;
   mediaEpoch?: number | null;
@@ -43,14 +40,14 @@ type UsePlayerAudioVisualizerInput = {
 
 type VisualizerSourceSelection =
   | {
-      kind: "remote-stream" | "local-stream";
+      kind: "local-stream";
       stream: MediaStream;
       element: HTMLAudioElement | null;
       graphKey: string;
       hasSignal: boolean;
     }
   | {
-      kind: "remote-element" | "local-element";
+      kind: "local-element";
       stream: null;
       element: HTMLAudioElement;
       graphKey: string;
@@ -128,7 +125,6 @@ function hasElementCaptureSource(audio: HTMLAudioElement | null | undefined) {
 
 function resolveVisualizerGraphKey(input: {
   currentTrackId: string;
-  activePlaybackSource: ProgressivePlaybackSource;
   mediaEpoch?: number | null;
   sourcePeerId?: string | null;
   sourceSessionId?: string | null;
@@ -136,7 +132,6 @@ function resolveVisualizerGraphKey(input: {
 }) {
   return [
     input.currentTrackId,
-    input.activePlaybackSource,
     typeof input.mediaEpoch === "number" ? input.mediaEpoch : "none",
     input.sourceSessionId ?? "none",
     input.sourcePeerId ?? "none",
@@ -146,60 +141,12 @@ function resolveVisualizerGraphKey(input: {
 
 export function resolveVisualizerSourceSelection(input: {
   audioElement: HTMLAudioElement | null | undefined;
-  remoteAudioElement: HTMLAudioElement | null | undefined;
-  activePlaybackSource: ProgressivePlaybackSource;
   currentTrackId: string | null | undefined;
   mediaEpoch?: number | null;
   sourcePeerId?: string | null;
   sourceSessionId?: string | null;
 }): VisualizerSourceSelection {
   if (!input.currentTrackId) {
-    return {
-      kind: "none",
-      stream: null,
-      element: null,
-      graphKey: "none",
-      hasSignal: false
-    };
-  }
-
-  if (input.activePlaybackSource === "remote-stream") {
-    const remoteElement = input.remoteAudioElement ?? null;
-    const remoteStream = asMediaStream(remoteElement?.srcObject ?? null);
-    if (remoteStream && hasLiveAudioTrack(remoteStream)) {
-      return {
-        kind: "remote-stream",
-        stream: remoteStream,
-        element: remoteElement,
-        graphKey: resolveVisualizerGraphKey({
-          currentTrackId: input.currentTrackId,
-          activePlaybackSource: input.activePlaybackSource,
-          mediaEpoch: input.mediaEpoch,
-          sourcePeerId: input.sourcePeerId,
-          sourceSessionId: input.sourceSessionId,
-          sourceIdentity: getMediaStreamIdentity(remoteStream)
-        }),
-        hasSignal: true
-      };
-    }
-
-    if (remoteElement && hasElementCaptureSource(remoteElement)) {
-      return {
-        kind: "remote-element",
-        stream: null,
-        element: remoteElement,
-        graphKey: resolveVisualizerGraphKey({
-          currentTrackId: input.currentTrackId,
-          activePlaybackSource: input.activePlaybackSource,
-          mediaEpoch: input.mediaEpoch,
-          sourcePeerId: input.sourcePeerId,
-          sourceSessionId: input.sourceSessionId,
-          sourceIdentity: getAudioElementSourceKey(remoteElement)
-        }),
-        hasSignal: true
-      };
-    }
-
     return {
       kind: "none",
       stream: null,
@@ -218,7 +165,6 @@ export function resolveVisualizerSourceSelection(input: {
       element: localElement,
       graphKey: resolveVisualizerGraphKey({
         currentTrackId: input.currentTrackId,
-        activePlaybackSource: input.activePlaybackSource,
         mediaEpoch: input.mediaEpoch,
         sourcePeerId: input.sourcePeerId,
         sourceSessionId: input.sourceSessionId,
@@ -235,7 +181,6 @@ export function resolveVisualizerSourceSelection(input: {
       element: localElement,
       graphKey: resolveVisualizerGraphKey({
         currentTrackId: input.currentTrackId,
-        activePlaybackSource: input.activePlaybackSource,
         mediaEpoch: input.mediaEpoch,
         sourcePeerId: input.sourcePeerId,
         sourceSessionId: input.sourceSessionId,
@@ -422,8 +367,6 @@ export function usePlayerAudioVisualizer(
   const idleSamples = useMemo(() => buildIdleWaveformSamples(sampleCount), [sampleCount]);
   const sourceSelection = resolveVisualizerSourceSelection({
     audioElement: input.audioRef.current,
-    remoteAudioElement: input.remoteAudioRef.current,
-    activePlaybackSource: input.activePlaybackSource,
     currentTrackId: input.currentTrackId,
     mediaEpoch: input.mediaEpoch,
     sourcePeerId: input.sourcePeerId,

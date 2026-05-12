@@ -5,10 +5,7 @@ import {
   getLowBufferThresholdMs,
   getProgressiveEngineType,
   getPriorityChunkIndexes,
-  getRemoteFirstComfortBufferMs,
   getTargetSteadyBufferMs,
-  isFlacTrack,
-  isStartupReady,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
 
@@ -16,7 +13,7 @@ export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
 export type ChunkSchedulerMode = "normal" | "conservative" | "idle";
 export type ChunkBufferHealth = "healthy" | "low" | "critical";
 export type TrackStreamProfile = "standard" | "large-lossless" | "large-compressed";
-export type PlaybackClockSource = "local" | "remote" | "snapshot";
+export type PlaybackClockSource = "local" | "snapshot";
 
 type ChunkSchedulerTrackState = {
   totalChunks: number;
@@ -111,8 +108,6 @@ const DEFAULTS = {
   ,
   minScheduleIntervalMs: 35
 } as const;
-const remotePrefetchComfortMultiplier = 1.5;
-const remotePrefetchComfortFloorMs = 12_000;
 
 export class ChunkScheduler {
   private roomSnapshot: RoomSnapshot | null = null;
@@ -360,12 +355,6 @@ export class ChunkScheduler {
 
     const manualPlans = this.buildManualTrackPlans();
     const isBackgroundHidden = !this.pageVisible;
-    const shouldPreserveRemotePlayback =
-      this.playbackClockSource === "remote" && this.playbackStatus === "playing";
-
-    if (shouldPreserveRemotePlayback) {
-      return [];
-    }
 
     if (
       this.mode === "idle" ||
@@ -397,7 +386,6 @@ export class ChunkScheduler {
     let currentTrackState: ChunkSchedulerTrackState | null = null;
     let currentTrackAheadBufferedMs = 0;
     let comfortableCurrentTrackBufferMs = 0;
-    let remotePrefetchReadyBufferedMs = 0;
     const shouldEnterOutrunRecovery = this.policy === "outrun-recovery";
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
@@ -417,55 +405,28 @@ export class ChunkScheduler {
       comfortableCurrentTrackBufferMs = currentTrackManifest
         ? Math.max(
             getLowBufferThresholdMs() * 2,
-            this.playbackClockSource === "remote"
-              ? getRemoteFirstComfortBufferMs(currentTrackManifest)
-              : Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
+            Math.round(getTargetSteadyBufferMs(currentTrackManifest) * 0.75)
           )
         : 0;
-      remotePrefetchReadyBufferedMs = Math.max(
-        comfortableCurrentTrackBufferMs + remotePrefetchComfortFloorMs,
-        Math.round(comfortableCurrentTrackBufferMs * remotePrefetchComfortMultiplier)
-      );
       const isCurrentTrackComplete = this.isTrackComplete(
         currentTrack.id,
         this.getTotalChunks(currentTrack.id)
       );
-      const currentTrackStartupReady = currentTrackManifest
-        ? isStartupReady({
-            manifest: currentTrackManifest,
-            availableChunks: [...currentTrackState.ownedChunks],
-            playbackPositionMs: this.playbackPositionMs
-          })
-        : false;
-      const shouldUseAggressiveRemoteFlacStartup =
-        !shouldPreserveRemotePlayback &&
-        !!currentTrackManifest &&
-        isFlacTrack(currentTrackManifest) &&
-        !isCurrentTrackComplete &&
-        !currentTrackStartupReady;
-      const currentTrackProfile = shouldUseAggressiveRemoteFlacStartup
-        ? getTrackStreamingProfile(currentTrack, this.mode, this.bufferHealth, "startup", "local")
-        : getTrackStreamingProfile(
-            currentTrack,
-            this.mode,
-            this.bufferHealth,
-            shouldEnterOutrunRecovery ? "outrun-recovery" : this.policy,
-            this.playbackClockSource
-          );
-      const currentTrackWantedPolicy = shouldUseAggressiveRemoteFlacStartup
-        ? "startup"
-        : shouldEnterOutrunRecovery
-          ? "outrun-recovery"
+      const currentTrackProfile = getTrackStreamingProfile(
+        currentTrack,
+        this.mode,
+        this.bufferHealth,
+        shouldEnterOutrunRecovery ? "outrun-recovery" : this.policy
+      );
+      const currentTrackWantedPolicy = shouldEnterOutrunRecovery
+        ? "outrun-recovery"
         : currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
           ? this.policy === "startup"
             ? "startup"
             : "pause-fill"
           : this.playbackStatus === "playing" &&
               !isCurrentTrackComplete &&
-              currentTrackAheadBufferedMs >=
-                (shouldPreserveRemotePlayback
-                  ? remotePrefetchReadyBufferedMs
-                  : comfortableCurrentTrackBufferMs) &&
+              currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs &&
               (this.policy === "steady" || this.policy === "background")
             ? "pause-fill"
           : this.policy === "background"
@@ -505,24 +466,13 @@ export class ChunkScheduler {
     const canPrefetchUpcomingTrack =
       !!currentTrackManifest &&
       !shouldEnterOutrunRecovery &&
-      this.playbackClockSource !== "remote" &&
       this.policy === "steady" &&
       this.playbackStatus === "playing" &&
       this.mode === "normal" &&
       this.bufferHealth === "healthy" &&
       currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs;
-    const canWeakPrefetchUpcomingTrackOnRemote =
-      !!currentTrackManifest &&
-      shouldPreserveRemotePlayback &&
-      !shouldEnterOutrunRecovery &&
-      this.policy === "steady" &&
-      this.mode === "normal" &&
-      this.bufferHealth === "healthy" &&
-      currentTrackAheadBufferedMs >= remotePrefetchReadyBufferedMs;
-
     if (
       !canPrefetchUpcomingTrack &&
-      !canWeakPrefetchUpcomingTrackOnRemote &&
       (this.policy !== "background" || !isCurrentTrackComplete)
     ) {
       return dedupeTrackPlans([...plans, ...manualPlans]).filter(
@@ -558,18 +508,10 @@ export class ChunkScheduler {
       plans.push({
         track: nextQueuedTrack,
         priority: "upcoming",
-        maxConcurrent: shouldPreserveRemotePlayback
-          ? this.bufferHealth === "healthy" && this.mode === "normal" && !isBackgroundHidden
-            ? 2
-            : 1
-          : this.policy === "background" && !isBackgroundHidden
+        maxConcurrent: this.policy === "background" && !isBackgroundHidden
             ? 4
             : 3,
-        maxConcurrentPerPeer: shouldPreserveRemotePlayback
-          ? this.bufferHealth === "healthy" && this.mode === "normal" && !isBackgroundHidden
-            ? 3
-            : 1
-          : this.policy === "background" && !isBackgroundHidden
+        maxConcurrentPerPeer: this.policy === "background" && !isBackgroundHidden
             ? 2
             : 3,
         preferredPeerId: null,
@@ -589,11 +531,7 @@ export class ChunkScheduler {
                 totalChunks: this.getTotalChunks(nextQueuedTrack.id),
                 prefetchMs: this.upcomingPrefetchMs()
               }),
-        timeoutMs: shouldPreserveRemotePlayback
-          ? this.bufferHealth === "healthy"
-            ? 2_600
-            : 3_000
-          : this.policy === "background"
+        timeoutMs: this.policy === "background"
             ? 2_500
             : 1_800
       });
@@ -611,15 +549,9 @@ export class ChunkScheduler {
         .filter((plan) => plan.wantedChunks.length > 0);
     }
 
-    const canBackgroundPrefetchOnRemote =
-      shouldPreserveRemotePlayback &&
-      this.mode === "normal" &&
-      this.bufferHealth === "healthy" &&
-      currentTrackAheadBufferedMs >= remotePrefetchReadyBufferedMs;
-
     if (
       isBackgroundHidden ||
-      (this.policy !== "background" && !canBackgroundPrefetchOnRemote) ||
+      this.policy !== "background" ||
       !isCurrentTrackComplete
     ) {
       return dedupeTrackPlans([...plans, ...manualPlans]).filter(
@@ -647,9 +579,9 @@ export class ChunkScheduler {
           totalChunks: this.getTotalChunks(track.id),
           ownedChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).ownedChunks,
           pendingChunks: this.ensureTrackState(track.id, this.getTotalChunks(track.id)).pendingChunks,
-          batchSize: shouldPreserveRemotePlayback ? 1 : this.backgroundChunkBatchSize()
+          batchSize: this.backgroundChunkBatchSize()
         }),
-        timeoutMs: shouldPreserveRemotePlayback ? 4_500 : 4_000
+        timeoutMs: 4_000
       });
       break;
     }
@@ -996,48 +928,9 @@ function getTrackStreamingProfile(
   track: TrackMeta,
   mode: ChunkSchedulerMode,
   bufferHealth: ChunkBufferHealth,
-  policy: ProgressiveSchedulerPolicy,
-  playbackClockSource: PlaybackClockSource
+  policy: ProgressiveSchedulerPolicy
 ) {
   const streamProfile = deriveTrackStreamProfile(track);
-
-  if (playbackClockSource === "remote") {
-    const remoteBootstrapConservative = mode === "conservative" || bufferHealth !== "healthy";
-    if (policy === "outrun-recovery") {
-      if (remoteBootstrapConservative) {
-        return {
-          maxConcurrent: streamProfile === "large-lossless" ? 6 : 4,
-          maxConcurrentPerPeer: 2,
-          lookBehindMs: 0,
-          lookAheadMs: streamProfile === "large-lossless" ? 48_000 : 32_000,
-          timeoutMs: 2_200
-        };
-      }
-      return {
-        maxConcurrent: streamProfile === "large-lossless" ? 8 : 6,
-        maxConcurrentPerPeer: 2,
-        lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 64_000 : 40_000,
-        timeoutMs: 2_000
-      };
-    }
-    if (remoteBootstrapConservative) {
-      return {
-        maxConcurrent: streamProfile === "large-lossless" ? 4 : 3,
-        maxConcurrentPerPeer: 1,
-        lookBehindMs: 0,
-        lookAheadMs: streamProfile === "large-lossless" ? 32_000 : 24_000,
-        timeoutMs: 2_600
-      };
-    }
-    return {
-      maxConcurrent: streamProfile === "large-lossless" ? 5 : 4,
-      maxConcurrentPerPeer: 1,
-      lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 40_000 : 28_000,
-      timeoutMs: 2_400
-    };
-  }
 
   if (policy === "outrun-recovery") {
     return {
