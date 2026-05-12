@@ -433,7 +433,6 @@ export function shouldRecoverPausedFullLocalPlayback(input: {
     input.activePlaybackSource !== "full-local" ||
     input.playbackStatus !== "playing" ||
     !input.currentTrackId ||
-    !input.audioUnlocked ||
     input.localAudioPaused !== true
   ) {
     return false;
@@ -443,7 +442,8 @@ export function shouldRecoverPausedFullLocalPlayback(input: {
     input.localAudioHasSrcObject ||
     input.localAudioHasSrc ||
     (typeof input.localAudioReadyState === "number" &&
-      input.localAudioReadyState >= haveCurrentDataReadyState)
+      input.localAudioReadyState >= haveCurrentDataReadyState) ||
+    input.audioUnlocked
   );
 }
 
@@ -2212,13 +2212,27 @@ export function useProgressiveRuntime({
         roomSnapshot?.room.playback.status === "playing" &&
         localAudio?.paused
       ) {
+        localAudio.muted = false;
+        localAudio.volume = getAudibleElementVolume(volume);
         void attemptPlaybackStart(
           localAudio,
           "full-local",
           "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
           "full-local-play-blocked",
           { reportFailure: true }
-        );
+        ).then((ok) => {
+          setMediaConnectionState(ok ? "live" : "buffering");
+          recordPeerDiagnostic({
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: ok ? "full-local-ready-played" : "full-local-ready-play-failed",
+            summary: ok
+              ? "本地完整缓存 ready 后已启动播放"
+              : "本地完整缓存 ready 后播放启动失败",
+            recordEvent: !ok
+          });
+        });
       }
     };
     const handleRemoteReady = () => {
@@ -2248,8 +2262,11 @@ export function useProgressiveRuntime({
     remoteAudioRef,
     attemptPlaybackStart,
     ensurePlaybackStart,
+    recordPeerDiagnostic,
     roomSnapshot?.room.playback.status,
-    scheduleRemoteStartupGate
+    scheduleRemoteStartupGate,
+    setMediaConnectionState,
+    volume
   ]);
 
   useEffect(() => {
@@ -2314,6 +2331,15 @@ export function useProgressiveRuntime({
               summary: "已自动恢复本地完整缓存播放",
               recordEvent: false
             });
+          } else {
+            recordPeerDiagnostic({
+              peerId: "system",
+              channelKind: "system",
+              direction: "local",
+              event: "full-local-paused-recovery-failed",
+              summary: "本地完整缓存自动恢复播放失败",
+              recordEvent: true
+            });
           }
         })
         .finally(() => {
@@ -2338,7 +2364,8 @@ export function useProgressiveRuntime({
     currentTrack?.durationMs,
     recordPeerDiagnostic,
     roomSnapshot?.room.playback,
-    setMediaConnectionState
+    setMediaConnectionState,
+    volume
   ]);
 
   useEffect(() => {

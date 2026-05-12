@@ -439,6 +439,21 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(true);
   });
 
+  it("recovers paused full-local playback from an already ready media element even if unlock state is stale", () => {
+    expect(
+      shouldRecoverPausedFullLocalPlayback({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        currentTrackId: "track_1",
+        audioUnlocked: false,
+        localAudioPaused: true,
+        localAudioReadyState: 4,
+        localAudioHasSrc: true,
+        localAudioHasSrcObject: false
+      })
+    ).toBe(true);
+  });
+
   it("does not recover paused full-local playback while room playback is paused", () => {
     expect(
       shouldRecoverPausedFullLocalPlayback({
