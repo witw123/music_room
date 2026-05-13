@@ -14,6 +14,7 @@ import type {
   PieceAvailabilityClearPayload,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
+  RoomChatInputPayload,
   RoomMediaClockPayload,
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
@@ -22,7 +23,7 @@ import type {
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
-import { errorCodes } from "@music-room/shared";
+import { errorCodes, roomChatInputPayloadSchema } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -472,17 +473,36 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   @SubscribeMessage("room.chat")
-  handleRoomChat(
+  async handleRoomChat(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { roomId: string; senderId: string; senderName: string; content: string; timestamp?: number }
+    @MessageBody() payload: RoomChatInputPayload
   ) {
-    this.assertRealtimeClient(client, payload.roomId);
-    
-    // Broadcast chat message to everyone in the room except sender (or including sender)?
-    // Usually we broadcast to all in room except sender, and sender updates their own state, 
-    // or just broadcast to everyone. Socket.io's `client.to(room).emit` broadcasts to everyone ELSE.
-    client.to(payload.roomId).emit("room.chat", payload);
-    return payload;
+    const parsed = roomChatInputPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid chat payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+
+    this.assertRealtimeClient(client, parsed.data.roomId);
+    const sessionId = client.data.sessionId as string | undefined;
+    if (!sessionId) {
+      throw new WsException("Unauthorized realtime request.");
+    }
+
+    const user = await this.authService.getUserOrThrow(sessionId);
+    const nextPayload = {
+      roomId: parsed.data.roomId,
+      senderId: user.id,
+      senderName: user.nickname,
+      content: parsed.data.content,
+      timestamp: parsed.data.timestamp ?? Date.now()
+    };
+
+    client.to(parsed.data.roomId).emit("room.chat", nextPayload);
+    return nextPayload;
   }
 
   @SubscribeMessage("room.media.clock")

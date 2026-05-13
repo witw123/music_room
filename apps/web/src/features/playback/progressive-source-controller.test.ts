@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import {
   getInitialProgressivePlaybackSource,
@@ -51,9 +50,9 @@ describe("progressive source controller", () => {
     ).toBe(false);
   });
 
-  it("requires a stable warmup window before switching to progressive local", () => {
+  it("keeps full-local active instead of switching back to progressive local", () => {
     const firstDecision = resolveProgressiveWarmupDecision({
-      currentSource: "progressive-local",
+      currentSource: "full-local",
       engineReady: true,
       activationReady: true,
       fallbackReason: null,
@@ -63,37 +62,9 @@ describe("progressive source controller", () => {
     });
 
     expect(firstDecision).toEqual({
-      nextSource: "progressive-local",
-      nextWarmupReadyAt: 5_000,
+      nextSource: "full-local",
+      nextWarmupReadyAt: null,
       clearFallbackReason: false
-    });
-
-    const secondDecision = resolveProgressiveWarmupDecision({
-      currentSource: "progressive-local",
-      engineReady: true,
-      activationReady: true,
-      fallbackReason: null,
-      driftMs: 80,
-      warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 5_000 + stableWindowMs - 100
-    });
-
-    expect(secondDecision.nextSource).toBe("progressive-local");
-
-    const thirdDecision = resolveProgressiveWarmupDecision({
-      currentSource: "progressive-local",
-      engineReady: true,
-      activationReady: true,
-      fallbackReason: null,
-      driftMs: 80,
-      warmupReadyAt: firstDecision.nextWarmupReadyAt,
-      now: 5_000 + stableWindowMs + 200
-    });
-
-    expect(thirdDecision).toEqual({
-      nextSource: "progressive-local",
-      nextWarmupReadyAt: 5_000,
-      clearFallbackReason: true
     });
   });
 
@@ -141,7 +112,7 @@ describe("progressive source controller", () => {
     });
 
     expect(firstDecision).toEqual({
-      nextSource: "progressive-local",
+      nextSource: "full-local",
       nextWarmupReadyAt: 9_000,
       clearFallbackReason: false
     });

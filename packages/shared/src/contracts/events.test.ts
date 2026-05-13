@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { roomChatEventSchema, websocketEventSchema } from "./events";
+import { roomChatEventSchema, roomChatInputPayloadSchema, websocketEventSchema } from "./events";
 
 describe("websocket event contracts", () => {
   it("accepts room.chat as a declared websocket event", () => {
@@ -27,5 +27,27 @@ describe("websocket event contracts", () => {
         content: "hello"
       }
     });
+  });
+
+  it("trims and validates client room.chat input", () => {
+    expect(
+      roomChatInputPayloadSchema.parse({
+        roomId: "room_1",
+        content: " hello ",
+        timestamp: 1
+      })
+    ).toEqual({
+      roomId: "room_1",
+      content: "hello",
+      timestamp: 1
+    });
+
+    expect(() =>
+      roomChatInputPayloadSchema.parse({
+        roomId: "room_1",
+        senderId: "forged",
+        content: ""
+      })
+    ).toThrow();
   });
 });

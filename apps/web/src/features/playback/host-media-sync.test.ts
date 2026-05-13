@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import {
   buildHostCaptureRefreshKey,
@@ -124,7 +123,7 @@ describe("hasHostMediaStreamTrack", () => {
         mediaEpoch: 3,
         activePlaybackSource: "progressive-local"
       })
-    ).toBe("track_1|3|remote-stream");
+    ).toBe("track_1|3|progressive-local");
   });
 
   it("forces a host capture refresh when the track or media epoch changes", () => {
@@ -133,10 +132,10 @@ describe("hasHostMediaStreamTrack", () => {
         currentTrackId: "track_2",
         mediaEpoch: 4,
         activePlaybackSource: "progressive-local",
-        lastCaptureRefreshKey: "track_1|4|remote-stream"
+        lastCaptureRefreshKey: "track_1|4|progressive-local"
       })
     ).toEqual({
-      captureRefreshKey: "track_2|4|remote-stream",
+      captureRefreshKey: "track_2|4|progressive-local",
       forceRefresh: true
     });
 
@@ -145,10 +144,10 @@ describe("hasHostMediaStreamTrack", () => {
         currentTrackId: "track_2",
         mediaEpoch: 5,
         activePlaybackSource: "progressive-local",
-        lastCaptureRefreshKey: "track_2|4|remote-stream"
+        lastCaptureRefreshKey: "track_2|4|progressive-local"
       })
     ).toEqual({
-      captureRefreshKey: "track_2|5|remote-stream",
+      captureRefreshKey: "track_2|5|progressive-local",
       forceRefresh: true
     });
   });

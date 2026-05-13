@@ -116,6 +116,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.smembers(key);
   }
 
+  async incrementWithTtlMs(key: string, ttlMs: number) {
+    this.assertReady(this.client, "publisher");
+
+    const count = await this.client.incr(key);
+    if (count === 1) {
+      await this.client.pexpire(key, ttlMs);
+    }
+    return count;
+  }
+
   async subscribe(channel: string, handler: (payload: unknown) => void) {
     // ioredis queues SUBSCRIBE commands until the lazy connection is actually ready.
     const handlers = this.messageHandlers.get(channel) ?? new Set<(payload: unknown) => void>();

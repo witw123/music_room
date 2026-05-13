@@ -65,6 +65,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      TRUST_PROXY: ${TRUST_PROXY:-loopback}
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-music_room}
       REDIS_MODE: ${REDIS_MODE:-single}
       REDIS_URL: redis://redis:6379

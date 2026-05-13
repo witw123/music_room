@@ -39,10 +39,6 @@ describe("RoomAudioActivationManager", () => {
       local: {
         ok: true,
         error: null
-      },
-      remote: {
-        ok: false,
-        error: "missing-audio-element"
       }
     });
 
@@ -72,10 +68,6 @@ describe("RoomAudioActivationManager", () => {
       local: {
         ok: false,
         error: "blocked"
-      },
-      remote: {
-        ok: false,
-        error: "missing-audio-element"
       }
     });
 
@@ -98,10 +90,6 @@ describe("RoomAudioActivationManager", () => {
       local: {
         ok: true,
         error: null
-      },
-      remote: {
-        ok: false,
-        error: "missing-audio-element"
       }
     });
   });

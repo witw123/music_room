@@ -1,124 +1,18 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import {
+  getAudibleElementVolume,
   resolveMediaElementPlaybackRole,
-  shouldEnableFullLocalHandoff,
-  shouldPreferImmediateFullLocalRecovery,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
-  shouldPrepareProgressiveRuntimeForSource,
+  shouldEnableFullLocalHandoff,
+  shouldPreferImmediateFullLocalRecovery,
   shouldPreferLocalTakeover,
+  shouldPrepareProgressiveRuntimeForSource,
   shouldRecoverPausedFullLocalPlayback,
-  shouldUsePcmEngineForFullLocal,
-  getAudibleElementVolume
+  shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
 
-describe("shouldPollRemoteStartupGate", () => {
-  it("keeps polling while remote-stream playback is waiting for current data", () => {
-    expect(shouldPollRemoteStartupGate("remote-stream", "playing", 1)).toBe(true);
-  });
-
-  it("stops polling once the remote audio element has current data", () => {
-    expect(shouldPollRemoteStartupGate("remote-stream", "playing", 2)).toBe(false);
-  });
-
-  it("does not poll outside active remote-stream playback", () => {
-    expect(shouldPollRemoteStartupGate("full-local", "playing", 0)).toBe(false);
-    expect(shouldPollRemoteStartupGate("remote-stream", "paused", 0)).toBe(false);
-  });
-
-  it("classifies shadow warmup events separately from the audible source", () => {
-    expect(
-      resolveMediaElementPlaybackRole({
-        target: "local",
-        activePlaybackSource: "remote-stream",
-        shadowWarmupActive: true
-      })
-    ).toBe("shadow-local");
-    expect(
-      resolveMediaElementPlaybackRole({
-        target: "remote",
-        activePlaybackSource: "remote-stream",
-        shadowWarmupActive: true
-      })
-    ).toBe("audible-remote");
-    expect(
-      resolveMediaElementPlaybackRole({
-        target: "remote",
-        activePlaybackSource: "full-local",
-        shadowWarmupActive: false
-      })
-    ).toBe("inactive");
-  });
-
-  it("uses a larger startup gate on weak constrained links", () => {
-    expect(
-      resolveAdaptiveStartupBufferMs({
-        sourceDiagnostics: {
-          currentRoundTripTimeMs: 210,
-          packetLossRate: 7.5,
-          jitterMs: 38,
-          mediaCandidateType: "relay",
-          mediaProtocol: "tcp"
-        },
-        hasRecentStablePlayback: false
-      })
-    ).toBe(180);
-  });
-
-  it("fades startup buffering down after recent stable playback", () => {
-    expect(
-      resolveAdaptiveStartupBufferMs({
-        sourceDiagnostics: {
-          currentRoundTripTimeMs: 90,
-          packetLossRate: 1.2,
-          jitterMs: 4,
-          mediaCandidateType: "relay",
-          mediaProtocol: "tcp"
-        },
-        hasRecentStablePlayback: true
-      })
-    ).toBe(80);
-  });
-
-  it("ramps volume up during the startup gate window instead of hard-muting", () => {
-    const result = resolveRemoteStartupGateState({
-      activePlaybackSource: "remote-stream",
-      playbackStatus: "playing",
-      readyState: 4,
-      paused: false,
-      hasSrcObject: true,
-      stableSinceMs: 1_000,
-      startupBufferMs: 320,
-      now: 1_200,
-      lastWaitingAtMs: null
-    });
-    expect(result.shouldPoll).toBe(true);
-    expect(result.shouldMute).toBe(false);
-    expect(result.nextStableSinceMs).toBe(1_000);
-    expect(result.volumeRamp).toBeGreaterThan(0.2);
-    expect(result.volumeRamp).toBeLessThan(1.0);
-  });
-
-  it("keeps recovery polling active without remuting an already established remote stream", () => {
-    const result = resolveRemoteStartupGateState({
-      activePlaybackSource: "remote-stream",
-      playbackStatus: "playing",
-      readyState: 1,
-      paused: false,
-      hasSrcObject: true,
-      stableSinceMs: 1_000,
-      startupBufferMs: 320,
-      muteDuringGate: false,
-      now: 1_200,
-      lastWaitingAtMs: 1_150
-    });
-    expect(result.shouldPoll).toBe(true);
-    expect(result.shouldMute).toBe(false);
-    expect(result.nextStableSinceMs).toBeNull();
-    expect(result.volumeRamp).toBe(0.15);
-  });
-
+describe("use-progressive-runtime policy helpers", () => {
   it("uses a non-zero audible fallback when the local audio element was left at volume zero", () => {
     expect(getAudibleElementVolume(0)).toBe(0.72);
     expect(getAudibleElementVolume(Number.NaN)).toBe(0.72);
@@ -126,60 +20,21 @@ describe("shouldPollRemoteStartupGate", () => {
     expect(getAudibleElementVolume(2)).toBe(1);
   });
 
-  it("keeps the startup gate active while a bound remote stream still lacks current data", () => {
-    const result = resolveRemoteStartupGateState({
-      activePlaybackSource: "remote-stream",
-      playbackStatus: "playing",
-      readyState: 1,
-      paused: false,
-      hasSrcObject: true,
-      stableSinceMs: 1_000,
-      startupBufferMs: 320,
-      now: 1_400,
-      lastWaitingAtMs: null
-    });
-    expect(result.shouldPoll).toBe(true);
-    expect(result.shouldMute).toBe(false);
-    expect(result.nextStableSinceMs).toBeNull();
-    expect(result.volumeRamp).toBe(0.15);
-  });
-
-  it("restarts the startup gate after a recent waiting event with low volume ramp", () => {
-    const result = resolveRemoteStartupGateState({
-      activePlaybackSource: "remote-stream",
-      playbackStatus: "playing",
-      readyState: 4,
-      paused: false,
-      hasSrcObject: true,
-      stableSinceMs: 1_000,
-      startupBufferMs: 320,
-      now: 1_500,
-      lastWaitingAtMs: 1_400
-    });
-    expect(result.shouldPoll).toBe(true);
-    expect(result.shouldMute).toBe(false);
-    expect(result.nextStableSinceMs).toBe(1_500);
-    expect(result.volumeRamp).toBe(0.3);
-  });
-
-  it("uses a longer remote hold when the path is recovering", () => {
+  it("treats the local element as the only audible media element in the current playback model", () => {
     expect(
-      resolveRemoteAudioHoldDurationMs({
-        activePlaybackSource: "full-local",
-        
-        waitingEventsLast30s: 0,
+      resolveMediaElementPlaybackRole({
+        target: "local",
+        activePlaybackSource: "progressive-local",
         shadowWarmupActive: true
       })
-    ).toBeGreaterThan(500);
-  });
-
-  it("does not prefer listener local takeover while remote-first lock is active", () => {
+    ).toBe("audible-local");
     expect(
-      shouldPreferLocalTakeover({
-        
-        progressiveFallbackReason: "stalled"
+      resolveMediaElementPlaybackRole({
+        target: "remote",
+        activePlaybackSource: "full-local",
+        shadowWarmupActive: false
       })
-    ).toBe(false);
+    ).toBe("inactive");
   });
 
   it("prefers immediate full-local recovery for late-join or rejoin when the full cache is already ready", () => {
@@ -210,7 +65,7 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(true);
   });
 
-  it("does not prefer immediate full-local recovery when the member is still locked, lacks a full cache, or is already steady", () => {
+  it("does not prefer immediate full-local recovery when locked, missing cache, or already steady", () => {
     expect(
       shouldPreferImmediateFullLocalRecovery({
         isCurrentSourceOwner: false,
@@ -246,99 +101,74 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(false);
   });
 
-  it("prefers listener local takeover only for explicit local fallback reasons", () => {
-    expect(
-      shouldPreferLocalTakeover({
-        
-        progressiveFallbackReason: "buffer-underrun"
-      })
-    ).toBe(true);
-    expect(
-      shouldPreferLocalTakeover({
-        
-        progressiveFallbackReason: null
-      })
-    ).toBe(false);
+  it("prefers local takeover only for explicit local fallback reasons", () => {
+    expect(shouldPreferLocalTakeover({ progressiveFallbackReason: "buffer-underrun" })).toBe(true);
+    expect(shouldPreferLocalTakeover({ progressiveFallbackReason: "stalled" })).toBe(true);
+    expect(shouldPreferLocalTakeover({ progressiveFallbackReason: "seek-outside-buffer" })).toBe(true);
+    expect(shouldPreferLocalTakeover({ progressiveFallbackReason: null })).toBe(false);
   });
 
-  it("requires repeated remote degradation before enabling audible local fallback", () => {
-    expect(
-      shouldEnableAudibleLocalFallback({
-        activePlaybackSource: "remote-stream",
-        
-        waitingEventsLast30s: 1,
-        stalledEventsLast30s: 0,
-        localReady: true,
-        driftMs: 80,
-        cooldownMs: 0
-      })
-    ).toBe(false);
-    expect(
-      shouldEnableAudibleLocalFallback({
-        activePlaybackSource: "remote-stream",
-        
-        waitingEventsLast30s: 2,
-        stalledEventsLast30s: 0,
-        localReady: true,
-        driftMs: 80,
-        cooldownMs: 0
-      })
-    ).toBe(true);
-  });
-
-  it("keeps remote-first lock from switching locally until degradation is persistent", () => {
-    expect(
-      shouldEnableAudibleLocalFallback({
-        activePlaybackSource: "remote-stream",
-        
-        waitingEventsLast30s: 2,
-        stalledEventsLast30s: 0,
-        localReady: true,
-        driftMs: 80,
-        cooldownMs: 0
-      })
-    ).toBe(false);
-    expect(
-      shouldEnableAudibleLocalFallback({
-        activePlaybackSource: "remote-stream",
-        
-        waitingEventsLast30s: 3,
-        stalledEventsLast30s: 0,
-        localReady: true,
-        driftMs: 80,
-        cooldownMs: 0
-      })
-    ).toBe(true);
-  });
-
-  it("reports shadow catchup while remote playback is degraded but warming locally", () => {
+  it("reports startup, degraded, audible fallback, and steady recovery stages", () => {
     expect(
       resolvePlaybackRecoveryStage({
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "paused",
         startupGatePending: false,
-        waitingEventsLast30s: 2,
+        waitingEventsLast30s: 0,
         stalledEventsLast30s: 0,
-        shadowWarmupActive: true,
+        shadowWarmupActive: false,
         audibleLocalFallbackActive: false
       })
-    ).toBe("shadow-catchup");
+    ).toBe("startup-buffering");
+    expect(
+      resolvePlaybackRecoveryStage({
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        startupGatePending: false,
+        waitingEventsLast30s: 1,
+        stalledEventsLast30s: 0,
+        shadowWarmupActive: false,
+        audibleLocalFallbackActive: false
+      })
+    ).toBe("degraded");
+    expect(
+      resolvePlaybackRecoveryStage({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        startupGatePending: false,
+        waitingEventsLast30s: 0,
+        stalledEventsLast30s: 0,
+        shadowWarmupActive: false,
+        audibleLocalFallbackActive: true
+      })
+    ).toBe("audible-local-fallback");
+    expect(
+      resolvePlaybackRecoveryStage({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        startupGatePending: false,
+        waitingEventsLast30s: 0,
+        stalledEventsLast30s: 0,
+        shadowWarmupActive: false,
+        audibleLocalFallbackActive: false
+      })
+    ).toBe("steady");
   });
 
-  it("maps degraded remote playback to a protected scheduler budget", () => {
+  it("maps degraded playback to a protected scheduler budget", () => {
     expect(
       resolveSchedulerBudgetTier({
         bufferHealth: "low",
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         playbackRecoveryStage: "degraded"
       })
     ).toBe("protected");
   });
 
-  it("allows a listener to hand off from remote-stream to full-local once the full cache is ready", () => {
+  it("allows full-local handoff from progressive-local after readiness and drift checks pass", () => {
     expect(
       shouldEnableFullLocalHandoff({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         playbackRecoveryStage: "steady",
         startupGatePending: false,
         localReady: true,
@@ -348,10 +178,10 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(true);
   });
 
-  it("keeps full-local handoff blocked until remote startup buffering is over", () => {
+  it("blocks full-local handoff while startup gate, cooldown, drift, or local readiness is bad", () => {
     expect(
       shouldEnableFullLocalHandoff({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         playbackRecoveryStage: "startup-buffering",
         startupGatePending: true,
         localReady: true,
@@ -359,63 +189,36 @@ describe("shouldPollRemoteStartupGate", () => {
         cooldownMs: 0
       })
     ).toBe(false);
-  });
-
-  it("does not keep full-local handoff blocked after an old waiting event has aged out", () => {
-    expect(
-      shouldBlockFullLocalHandoffForRecentRemoteRecovery({
-        lastRemoteWaitingAtMs: 1_000,
-        startupBufferMs: 680,
-        now: 3_000
-      })
-    ).toBe(false);
-  });
-
-  it("still blocks full-local handoff during the short post-waiting recovery window", () => {
-    expect(
-      shouldBlockFullLocalHandoffForRecentRemoteRecovery({
-        lastRemoteWaitingAtMs: 1_000,
-        startupBufferMs: 680,
-        now: 1_900
-      })
-    ).toBe(true);
-  });
-
-  it("keeps the low-level full-local handoff predicate independent from listener policy", () => {
     expect(
       shouldEnableFullLocalHandoff({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
+        playbackRecoveryStage: "steady",
+        startupGatePending: false,
+        localReady: false,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(false);
+    expect(
+      shouldEnableFullLocalHandoff({
+        activePlaybackSource: "progressive-local",
+        playbackRecoveryStage: "steady",
+        startupGatePending: false,
+        localReady: true,
+        driftMs: 400,
+        cooldownMs: 0
+      })
+    ).toBe(false);
+    expect(
+      shouldEnableFullLocalHandoff({
+        activePlaybackSource: "progressive-local",
         playbackRecoveryStage: "steady",
         startupGatePending: false,
         localReady: true,
         driftMs: 80,
-        cooldownMs: 0
+        cooldownMs: 1
       })
-    ).toBe(true);
-  });
-
-  it("classifies remote output mode separately from the active playback source", () => {
-    expect(
-      resolveRemoteOutputMode({
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        hasRemoteSrcObject: true
-      })
-    ).toBe("audible");
-    expect(
-      resolveRemoteOutputMode({
-        activePlaybackSource: "progressive-local",
-        playbackStatus: "playing",
-        hasRemoteSrcObject: true
-      })
-    ).toBe("held-silent");
-    expect(
-      resolveRemoteOutputMode({
-        activePlaybackSource: "full-local",
-        playbackStatus: "paused",
-        hasRemoteSrcObject: false
-      })
-    ).toBe("inactive");
+    ).toBe(false);
   });
 
   it("recovers full-local playback when the ready local audio element is paused", () => {
@@ -505,7 +308,7 @@ describe("shouldPollRemoteStartupGate", () => {
     ).toBe(false);
     expect(
       shouldUsePcmEngineForFullLocal({
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         forceSourceOwnerLocalPlayback: true,
         sourceOwnerHasLocalTrack: false,
         hasFullLocalTrack: false,

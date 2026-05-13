@@ -630,6 +630,24 @@ export function useRoomRuntime({
   refreshAvailableRooms,
   refreshPlaylists
 }: UseRoomRuntimeInput): UseRoomRuntimeResult {
+  const remoteStreamClearTimeoutRef = useRef<number | null>(null);
+  const remotePlaybackRetryRef = useRef<number | null>(null);
+  const scheduleRemotePlaybackRetryRef = useRef<
+    (attempt?: number, generation?: string | null) => void
+  >(() => undefined);
+  const clearRemoteStreamClearTimeout = useCallback(() => {
+    if (remoteStreamClearTimeoutRef.current !== null) {
+      window.clearTimeout(remoteStreamClearTimeoutRef.current);
+      remoteStreamClearTimeoutRef.current = null;
+    }
+  }, []);
+  const clearRemotePlaybackRetry = useCallback(() => {
+    if (remotePlaybackRetryRef.current !== null) {
+      window.clearTimeout(remotePlaybackRetryRef.current);
+      remotePlaybackRetryRef.current = null;
+    }
+  }, []);
+
   const {
     meshRef,
     mediaMeshRef,
@@ -734,8 +752,8 @@ export function useRoomRuntime({
     mediaTransportEpochRef,
     listenerMediaLifecycleRef,
     clearListenerMediaRecovery,
-    clearRemotePlaybackRetry: (() => {}) as any
-  } as any);
+    clearRemotePlaybackRetry
+  });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
   const lastRoomChangeKindRef = useRef<RoomChangeKind | null>(null);
   const lastSourceResetReasonRef = useRef<SourceResetReason | null>(null);
@@ -781,8 +799,6 @@ export function useRoomRuntime({
     roomSnapshot,
     currentRoomRef,
     peerId,
-    // @ts-expect-error remoteAudioRef removed
-    remoteAudioRef: undefined as any,
     mediaMeshRef,
     meshRef,
     recordPeerDiagnostic,
@@ -957,7 +973,7 @@ export function useRoomRuntime({
         if (generation && lifecycle.currentGeneration && generation !== lifecycle.currentGeneration) {
           return;
         }
-        (undefined as any)();
+        clearRemoteStreamClearTimeout();
         const traceContext = getRemoteMediaTraceContext();
         if (remoteAudio.srcObject !== stream || options?.forceRebind) {
           remoteAudio.pause();
@@ -996,7 +1012,7 @@ export function useRoomRuntime({
 
       const clearStream = () => {
         if (generation && listenerMediaLifecycleRef.current.currentGeneration !== generation) {
-          (undefined as any).current = null;
+          remoteStreamClearTimeoutRef.current = null;
           return;
         }
         remoteAudio.pause();
@@ -1004,7 +1020,7 @@ export function useRoomRuntime({
           remoteAudio.srcObject = null;
         }
         remoteAudio.load();
-        (undefined as any).current = null;
+        remoteStreamClearTimeoutRef.current = null;
         listenerMediaLifecycleRef.current.latestStream = null;
         listenerMediaLifecycleRef.current.boundGeneration = null;
         updateRemoteMediaDiagnostic(
@@ -1039,18 +1055,16 @@ export function useRoomRuntime({
       };
 
       if (options?.deferNullReset && remoteAudio.srcObject) {
-        (undefined as any)();
-        (undefined as any).current = window.setTimeout(
-          clearStream,
-          remoteStreamSwapGraceMs
-        );
+        clearRemoteStreamClearTimeout();
+        remoteStreamClearTimeoutRef.current = window.setTimeout(clearStream, remoteStreamSwapGraceMs);
         return;
       }
 
-      (undefined as any)();
+      clearRemoteStreamClearTimeout();
       clearStream();
     },
     [
+      clearRemoteStreamClearTimeout,
       getRemoteAudioDiagnostics,
       getRemoteMediaTraceContext,
       remoteAudioRef,
@@ -1279,7 +1293,7 @@ export function useRoomRuntime({
 
       const actionType = resolvePlaybackRecoveryActionType(recommendation);
       if (actionType === "retry-play") {
-        (undefined as any).current(
+        scheduleRemotePlaybackRetryRef.current(
           0,
           recommendation.playbackConnectionKey ?? currentPlaybackConnectionKey
         );
@@ -1669,7 +1683,7 @@ export function useRoomRuntime({
         }
 
         if (action === "retry-play" || action === "rebind-and-play") {
-          (undefined as any).current(0, expectedGeneration);
+          scheduleRemotePlaybackRetryRef.current(0, expectedGeneration);
           return;
         }
 
@@ -1699,7 +1713,7 @@ export function useRoomRuntime({
 
   const scheduleRemotePlaybackRetry = useCallback(
     (attempt = 0, expectedGeneration?: string | null) => {
-      (undefined as any)();
+      clearRemotePlaybackRetry();
 
       const remoteAudio = remoteAudioRef.current;
       const playback = currentRoomRef.current?.room.playback;
@@ -1801,7 +1815,7 @@ export function useRoomRuntime({
           return;
         }
 
-        (undefined as any).current = window.setTimeout(() => {
+        remotePlaybackRetryRef.current = window.setTimeout(() => {
           scheduleRemotePlaybackRetry(attempt + 1, generation);
         }, remotePlaybackRetryBackoffMs[Math.min(attempt, remotePlaybackRetryBackoffMs.length - 1)]);
       });
@@ -1809,6 +1823,7 @@ export function useRoomRuntime({
     [
       applyRecoveryAction,
       clearListenerMediaRecovery,
+      clearRemotePlaybackRetry,
       audioUnlockedRef,
       currentRoomRef,
       finishRecoveryAction,
@@ -1966,7 +1981,7 @@ export function useRoomRuntime({
         previousPlaybackConnectionKey !== playbackConnectionKey &&
         remoteAudio?.paused !== false
       ) {
-        (undefined as any).current(0, playbackConnectionKey);
+        scheduleRemotePlaybackRetryRef.current(0, playbackConnectionKey);
       }
     }
   }, [
@@ -2048,7 +2063,7 @@ export function useRoomRuntime({
   }, [requestRoomSnapshotResync]);
 
   useEffect(() => {
-    (undefined as any).current = scheduleRemotePlaybackRetry;
+    scheduleRemotePlaybackRetryRef.current = scheduleRemotePlaybackRetry;
   }, [scheduleRemotePlaybackRetry]);
 
   const {
@@ -2067,7 +2082,6 @@ export function useRoomRuntime({
     sourceStartState,
     uploadedTracks,
     audioRef,
-    remoteAudioRef: undefined as any,
     socketRef,
     mediaMeshRef,
     hostStreamRef,
@@ -2093,14 +2107,9 @@ export function useRoomRuntime({
     updateSourceStartState,
     updateHostCaptureDiagnostics,
     enableTrackCaching
-  } as any);
+  });
 
-  useEffect(
-    () => () => {
-      (undefined as any)();
-    },
-    [(undefined as any)]
-  );
+  useEffect(() => () => clearRemotePlaybackRetry(), [clearRemotePlaybackRetry]);
 
   useRoomConnectionSupervisorRuntime({
     roomSnapshot,
@@ -2136,11 +2145,9 @@ export function useRoomRuntime({
 
   useEffect(() => {
     return () => {
-      if ((undefined as any).current !== null) {
-        window.clearTimeout((undefined as any).current);
-      }
+      clearRemoteStreamClearTimeout();
     };
-  }, []);
+  }, [clearRemoteStreamClearTimeout]);
 
   useEffect(() => {
     if (!statusMessage) {
@@ -2198,7 +2205,6 @@ export function useRoomRuntime({
       currentTrackId: roomSnapshot?.room.playback.currentTrackId,
       bufferHealth,
       enableManualTrackCaching,
-      remoteAudioRef: undefined as any,
       mediaMeshRef,
       listenerMediaLifecycleRef,
       armListenerMediaRecoveryRef,
@@ -2295,8 +2301,6 @@ export function useRoomRuntime({
     activePlaybackSource,
     audioUnlocked,
     sourceStartState,
-    // @ts-expect-error remoteAudioRef removed
-    remoteAudioRef: undefined as any,
     mediaMeshRef,
     hostStreamRef,
     mediaTransportOwnerKeyRef,
@@ -2305,22 +2309,11 @@ export function useRoomRuntime({
     missingListenerSinceRef,
     lastListenerBootstrapKeyRef,
     lastHostCaptureRefreshAtRef,
-    remotePlaybackResumeAfterUnlockKeyRef,
     listenerMediaLifecycleRef,
-    armListenerMediaRecoveryRef,
     ensureMediaTransportConnectedRef,
     syncHostMediaStreamRef,
     bumpMediaTransportEpoch,
-    clearListenerMediaRecovery,
     clearHostMediaSyncRetry,
-    getRemoteAudioDiagnostics,
-    getRemoteMediaTraceContext,
-    updateRemoteMediaDiagnostic,
-    resetRemoteAudioElement,
-    scheduleRemotePlaybackRetry,
-    queuePlaybackRecoveryRecommendation,
-    getCurrentPlaybackConnectionKey,
-    shouldResumeRemotePlayback,
     ensureSourcePlaybackStarted,
     syncHostMediaStream,
     updateSourceStartState,

@@ -185,6 +185,14 @@ export const roomChatPayloadSchema = z.object({
   timestamp: z.number().optional()
 });
 
+export const roomChatInputPayloadSchema = z
+  .object({
+    roomId: z.string().trim().min(1).max(160),
+    content: z.string().trim().min(1).max(500),
+    timestamp: z.number().int().nonnegative().optional()
+  })
+  .strict();
+
 export const roomChatEventSchema = z.object({
   event: z.literal("room.chat"),
   payload: roomChatPayloadSchema
@@ -206,6 +214,7 @@ export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSche
 type RoomMediaClockPayload = z.infer<typeof roomMediaClockPayloadSchema>;
 export type PieceAvailabilityClearPayload = z.infer<typeof pieceAvailabilityClearPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
+export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
 
 export type ServerToClientEvents = {
@@ -236,5 +245,5 @@ export type ClientToServerEvents = {
   "room.media.clock": (payload: RoomMediaClockPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
-  "room.chat": (payload: RoomChatPayload) => void;
+  "room.chat": (payload: RoomChatInputPayload) => void;
 };

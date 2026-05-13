@@ -320,7 +320,7 @@ describe("room realtime regression", () => {
       {
         action: "play",
         trackId: track.id,
-        expectedVersion: queueState.playback.queueVersion
+        expectedVersion: queueState.playback.playbackRevision
       }
     );
     expect(playback).toMatchObject({

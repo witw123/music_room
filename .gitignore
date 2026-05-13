@@ -12,6 +12,7 @@ coverage/
 .env.local
 *.log
 apps/server/prisma/dev.db
+apps/server/src/generated/prisma/
 
 .gstack/
 .codex-tmp-tauri/

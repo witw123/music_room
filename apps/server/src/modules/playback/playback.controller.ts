@@ -10,7 +10,8 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
-import { createApiErrorResponse, errorCodes } from "@music-room/shared";
+import { createApiErrorResponse, errorCodes, updatePlaybackRequestSchema } from "@music-room/shared";
+import { parseRequestBody } from "../../common/validation/zod-validation";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
@@ -58,6 +59,7 @@ export class PlaybackController {
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(updatePlaybackRequestSchema, body);
 
     if (!this.roomService.isRealtimeAvailable()) {
       this.logger.warn(
@@ -69,36 +71,22 @@ export class PlaybackController {
       );
     }
 
-    if (typeof body.expectedVersion !== "number") {
-      this.logger.warn(
-        `rejected playback update room=${roomId} actor=${userId} reason=missing-expected-version`
-      );
-      this.metrics.incrementPlaybackConflict();
-      throw new HttpException(
-        createApiErrorResponse(
-          errorCodes.playbackVersionConflict,
-          "Playback state version conflict."
-        ),
-        HttpStatus.CONFLICT
-      );
-    }
-
-    this.assertPlaybackRateLimit(roomId, userId, body.action);
+    this.assertPlaybackRateLimit(roomId, userId, payload.action);
 
     try {
       const playback = await this.roomService.updatePlayback(roomId, {
-        ...body,
-        expectedVersion: body.expectedVersion,
+        ...payload,
+        expectedVersion: payload.expectedVersion,
         actorSessionId: userId
       });
       this.logger.log(
-        `accepted playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} nextVersion=${playback.playbackRevision}`
+        `accepted playback update room=${roomId} actor=${userId} action=${payload.action} expectedVersion=${payload.expectedVersion} nextVersion=${playback.playbackRevision}`
       );
       this.roomRealtimePublisher.emitPlaybackPatch(roomId, playback);
       return playback;
     } catch (error) {
       this.logger.warn(
-        `rejected playback update room=${roomId} actor=${userId} action=${body.action} expectedVersion=${body.expectedVersion} reason=${error instanceof Error ? error.message : "unknown"}`
+        `rejected playback update room=${roomId} actor=${userId} action=${payload.action} expectedVersion=${payload.expectedVersion} reason=${error instanceof Error ? error.message : "unknown"}`
       );
       this.rethrowPlaybackError(error);
     }

@@ -9,6 +9,13 @@ import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
 async function bootstrap() {
   validateRuntimeConfig();
   const app = await NestFactory.create(AppModule);
+  const trustProxy = resolveTrustProxy();
+  if (trustProxy !== false) {
+    const expressApp = app.getHttpAdapter().getInstance() as {
+      set?: (setting: string, value: unknown) => void;
+    };
+    expressApp.set?.("trust proxy", trustProxy);
+  }
   app.useGlobalFilters(new ApiExceptionFilter());
   app.enableCors({
     origin: getCorsOrigins(),
@@ -20,3 +27,19 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+function resolveTrustProxy() {
+  const configured = process.env.TRUST_PROXY?.trim();
+  if (configured) {
+    if (configured === "true") {
+      return true;
+    }
+    if (configured === "false") {
+      return false;
+    }
+    const numeric = Number(configured);
+    return Number.isInteger(numeric) && numeric >= 0 ? numeric : configured;
+  }
+
+  return process.env.NODE_ENV === "production" ? "loopback" : false;
+}

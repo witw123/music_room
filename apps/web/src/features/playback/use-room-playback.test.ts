@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import {
   resolveAuthoritativeClockSample,
@@ -9,27 +8,16 @@ import {
 } from "./use-room-playback";
 
 describe("resolveAudibleClockSample", () => {
-  it("uses the remote audio clock while remote-stream is audible", () => {
+  it("uses the local audio clock while local playback is audible", () => {
     expect(
       resolveAudibleClockSample({
-        activePlaybackSource: "remote-stream",
-        shouldUseLocalAudio: false,
-        playbackSessionKey: "track-a|3|9|started|playing",
-        roomClockMs: 42_250,
-        remoteAudioCurrentTimeSeconds: 42.25,
-        remoteAudioPaused: false,
-        previousAnchor: null
+        localAudioCurrentTimeSeconds: 42.25,
+        localAudioPaused: false
       })
     ).toEqual({
       sample: {
         progressMs: 42_250,
         source: "local-audible"
-      },
-      nextAnchor: {
-        source: "local-audible",
-        sessionKey: "track-a|3|9|started|playing",
-        anchorRoomClockMs: 42_250,
-        anchorMediaTimeSeconds: 42.25
       }
     });
   });
@@ -37,8 +25,6 @@ describe("resolveAudibleClockSample", () => {
   it("prefers the local playback position once local playback is audible", () => {
     expect(
       resolveAudibleClockSample({
-        activePlaybackSource: "full-local",
-        shouldUseLocalAudio: true,
         localPlaybackPositionMs: 18_420,
         localAudioCurrentTimeSeconds: 15,
         localAudioPaused: false
@@ -47,70 +33,18 @@ describe("resolveAudibleClockSample", () => {
       sample: {
         progressMs: 18_420,
         source: "local-audible"
-      },
-      nextAnchor: null
+      }
     });
   });
 
-  it("maps a newly joined remote stream onto the current room timeline", () => {
-    const joined = resolveAudibleClockSample({
-      activePlaybackSource: "remote-stream",
-      shouldUseLocalAudio: false,
-      playbackSessionKey: "track-b|7|11|started|playing",
-      roomClockMs: 96_000,
-      remoteAudioCurrentTimeSeconds: 0.2,
-      remoteAudioPaused: false,
-      previousAnchor: null
-    });
-
-    const advanced = resolveAudibleClockSample({
-      activePlaybackSource: "remote-stream",
-      shouldUseLocalAudio: false,
-      playbackSessionKey: "track-b|7|11|started|playing",
-      roomClockMs: 97_450,
-      remoteAudioCurrentTimeSeconds: 1.65,
-      remoteAudioPaused: false,
-      previousAnchor: joined.nextAnchor
-    });
-
-    expect(joined.sample).toEqual({
-      progressMs: 96_000,
-      source: "local-audible"
-    });
-    expect(advanced.sample).toEqual({
-      progressMs: 97_450,
-      source: "local-audible"
-    });
-  });
-
-  it("re-anchors the remote stream after a rejoin resets the media element clock", () => {
-    const previousAnchor = {
-      source: "local-audible" as const,
-      sessionKey: "track-c|9|14|started|playing",
-      anchorRoomClockMs: 120_000,
-      anchorMediaTimeSeconds: 8.4
-    };
-
-    const result = resolveAudibleClockSample({
-      activePlaybackSource: "remote-stream",
-      shouldUseLocalAudio: false,
-      playbackSessionKey: "track-c|9|14|started|playing",
-      roomClockMs: 131_500,
-      remoteAudioCurrentTimeSeconds: 0.1,
-      remoteAudioPaused: false,
-      previousAnchor
-    });
-
-    expect(result.sample).toEqual({
-      progressMs: 131_500,
-      source: "local-audible"
-    });
-    expect(result.nextAnchor).toEqual({
-      source: "local-audible",
-      sessionKey: "track-c|9|14|started|playing",
-      anchorRoomClockMs: 131_500,
-      anchorMediaTimeSeconds: 0.1
-    });
+  it("returns no audible sample when the local element is paused and no runtime position is available", () => {
+    expect(
+      resolveAudibleClockSample({
+        localAudioCurrentTimeSeconds: 42.25,
+        localAudioPaused: true,
+        localPlaybackPositionMs: null
+      })
+    ).toEqual({ sample: null });
   });
 });
 
@@ -289,7 +223,7 @@ describe("resolveDisplayClockProgress", () => {
       now: 2_400
     });
 
-    expect(firstFrame.progressMs).toBe(15_000);
+    expect(firstFrame.progressMs).toBe(15_600);
     expect(settledFrame.progressMs).toBe(15_600);
     expect(settledFrame.source).toBe("local-audible");
   });

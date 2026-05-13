@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
@@ -309,111 +308,6 @@ describe("shouldAcceptIncomingMediaSignal", () => {
         currentTransportEpoch: 2
       })
     ).toBe(true);
-  });
-});
-
-describe("shouldForceRemoteAudioElementRebind", () => {
-  it("forces a rebind when the same remote stream is reused for a new playback generation", () => {
-    const sharedStream = {} as MediaStream;
-
-    expect(
-      shouldForceRemoteAudioElementRebind({
-        incomingStream: sharedStream,
-        boundStream: sharedStream,
-        currentGeneration: "track_b|2|peer_source|peer_listener",
-        boundGeneration: "track_a|1|peer_source|peer_listener"
-      })
-    ).toBe(true);
-  });
-
-  it("does not force a rebind when the current generation is already bound", () => {
-    const sharedStream = {} as MediaStream;
-
-    expect(
-      shouldForceRemoteAudioElementRebind({
-        incomingStream: sharedStream,
-        boundStream: sharedStream,
-        currentGeneration: "track_b|2|peer_source|peer_listener",
-        boundGeneration: "track_b|2|peer_source|peer_listener"
-      })
-    ).toBe(false);
-  });
-
-  it("does not force a rebind when there is no currently bound stream", () => {
-    expect(
-      shouldForceRemoteAudioElementRebind({
-        incomingStream: {} as MediaStream,
-        boundStream: null,
-        currentGeneration: "track_b|2|peer_source|peer_listener",
-        boundGeneration: null
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldKickRemotePlaybackFromAudioEvent", () => {
-  it("kicks playback when remote audio becomes canplay but is still paused", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "canplay",
-        playbackStatus: "playing",
-        activePlaybackSource: "progressive-local",
-        isCurrentSourceOwner: false,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: null
-      })
-    ).toBe(true);
-  });
-
-  it("kicks playback when the element pauses during an active remote generation", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "pause",
-        playbackStatus: "playing",
-        activePlaybackSource: "progressive-local",
-        isCurrentSourceOwner: false,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: "track_a|1|peer_source|peer_listener"
-      })
-    ).toBe(true);
-  });
-
-  it("does not kick playback when the room is not expecting remote playback", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "canplay",
-        playbackStatus: "paused",
-        activePlaybackSource: "progressive-local",
-        isCurrentSourceOwner: false,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: null
-      })
-    ).toBe(false);
-  });
-
-  it("does not kick playback for the source owner", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "pause",
-        playbackStatus: "playing",
-        activePlaybackSource: "progressive-local",
-        isCurrentSourceOwner: true,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: null
-      })
-    ).toBe(false);
   });
 });
 
@@ -934,7 +828,7 @@ describe("resolveMediaDiagnosticPeerId", () => {
 });
 
 describe("shouldResumeRemotePlayback", () => {
-  it("resumes listener remote playback when a bound remote stream is paused while playback is active", () => {
+  it("does not resume remote playback in the local-cache playback model", () => {
     expect(
       shouldResumeRemotePlayback({
         audioUnlocked: true,
@@ -945,7 +839,7 @@ describe("shouldResumeRemotePlayback", () => {
         hasRemoteSrcObject: true,
         remoteAudioPaused: true
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not resume when the listener is already audibly playing", () => {

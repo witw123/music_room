@@ -117,7 +117,7 @@ export function useP2P({
       meshRef.current = null;
       setConnectedPeers([]);
     };
-  }, [roomId, peerId, sessionId, socket]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [roomId, peerId, sessionId, socket]);
 
   // Sync peers when room members change
   useEffect(() => {

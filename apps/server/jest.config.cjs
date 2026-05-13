@@ -17,6 +17,7 @@ module.exports = {
     ]
   },
   moduleNameMapper: {
+    "^@music-room/shared$": "<rootDir>/../../packages/shared/src/index.ts",
     "^@/(.*)$": "<rootDir>/src/$1"
   }
 };

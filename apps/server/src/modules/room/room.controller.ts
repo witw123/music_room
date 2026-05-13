@@ -8,7 +8,12 @@ import {
   Post,
   UnauthorizedException
 } from "@nestjs/common";
-import type { RoomSnapshot } from "@music-room/shared";
+import {
+  createRoomRequestSchema,
+  joinRoomByCodeRequestSchema,
+  registerTrackRequestSchema
+} from "@music-room/shared";
+import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomService } from "./room.service";
@@ -38,7 +43,8 @@ export class RoomController {
     @Body() body: { visibility?: "private" | "public" }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const snapshot = await this.roomService.createRoom(userId, body.visibility);
+    const payload = parseRequestBody(createRoomRequestSchema, body);
+    const snapshot = await this.roomService.createRoom(userId, payload.visibility);
     await this.roomRealtimePublisher.emitSnapshot(snapshot.room.id);
     return snapshot;
   }
@@ -89,7 +95,8 @@ export class RoomController {
     @Body() body: { joinCode: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const room = await this.roomService.findRoomByJoinCode(body.joinCode);
+    const payload = parseRequestBody(joinRoomByCodeRequestSchema, body);
+    const room = await this.roomService.findRoomByJoinCode(payload.joinCode);
     await this.roomService.joinRoom(room.id, userId);
     return this.roomRealtimePublisher.emitTopologySnapshot(room.id);
   }
@@ -167,10 +174,11 @@ export class RoomController {
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(registerTrackRequestSchema, body);
     const track = await this.roomService.registerTrack(roomId, userId, {
-      ...body,
-      ownerSessionId: body.ownerSessionId ?? userId,
-      ownerNickname: body.ownerNickname ?? ""
+      ...payload,
+      ownerSessionId: payload.ownerSessionId ?? userId,
+      ownerNickname: payload.ownerNickname ?? ""
     });
     await this.roomRealtimePublisher.emitLibrarySnapshot(roomId);
     return track;

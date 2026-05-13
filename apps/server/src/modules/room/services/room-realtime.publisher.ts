@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { PlaybackSnapshot, Playlist, RoomSnapshot } from "@music-room/shared";
+import type { PlaybackSnapshot, Playlist } from "@music-room/shared";
 import { RoomService } from "../room.service";
 import { RoomRealtimeBroadcaster } from "../../signaling/room-realtime.broadcaster";
 

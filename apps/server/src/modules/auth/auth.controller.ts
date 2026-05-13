@@ -8,12 +8,16 @@ import {
   HttpException,
   HttpStatus,
   Ip,
+  Optional,
   Post,
   Req,
   ServiceUnavailableException,
   UnauthorizedException
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
+import { loginRequestSchema, registerRequestSchema } from "@music-room/shared";
+import { RedisService } from "../../infra/redis/redis.service";
+import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "./auth.service";
 
 type AuthRateLimitBucket = {
@@ -26,7 +30,11 @@ export class AuthController {
   private readonly ipBuckets = new Map<string, AuthRateLimitBucket>();
   private readonly usernameBuckets = new Map<string, AuthRateLimitBucket>();
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @Optional()
+    private readonly redisService?: RedisService
+  ) {}
 
   @Post("register")
   async register(
@@ -39,15 +47,16 @@ export class AuthController {
     },
     @Ip() ipAddress?: string
   ) {
-    const username = body.username ?? "";
+    const payload = parseRequestBody(registerRequestSchema, body);
+    const username = payload.username;
     const clientIp = resolveClientIp(request, ipAddress);
-    this.assertAuthRateLimit("register", clientIp, username);
+    await this.assertAuthRateLimit("register", clientIp, username);
 
     try {
       const session = await this.authService.register({
         username,
-        password: body.password ?? "",
-        nickname: body.nickname ?? ""
+        password: payload.password,
+        nickname: payload.nickname
       });
       this.logger.log(
         this.buildAuthLog("register.accepted", clientIp, username, HttpStatus.CREATED)
@@ -79,14 +88,15 @@ export class AuthController {
     },
     @Ip() ipAddress?: string
   ) {
-    const username = body.username ?? "";
+    const payload = parseRequestBody(loginRequestSchema, body);
+    const username = payload.username;
     const clientIp = resolveClientIp(request, ipAddress);
-    this.assertAuthRateLimit("login", clientIp, username);
+    await this.assertAuthRateLimit("login", clientIp, username);
 
     try {
       const session = await this.authService.login({
         username,
-        password: body.password ?? ""
+        password: payload.password
       });
       this.logger.log(this.buildAuthLog("login.accepted", clientIp, username, HttpStatus.OK));
       return session;
@@ -116,13 +126,23 @@ export class AuthController {
     }
   }
 
-  private assertAuthRateLimit(action: "register" | "login", clientIp: string, username: string) {
+  private async assertAuthRateLimit(action: "register" | "login", clientIp: string, username: string) {
     const limits =
       action === "register"
         ? { perIp: 8, perUsername: 4, windowMs: 60_000 }
         : { perIp: 12, perUsername: 6, windowMs: 60_000 };
     const now = Date.now();
     const normalizedUsername = username.trim().toLowerCase() || "anonymous";
+
+    const redisLimited = await this.tryAssertRedisRateLimit(
+      action,
+      clientIp,
+      normalizedUsername,
+      limits
+    );
+    if (redisLimited === "accepted") {
+      return;
+    }
 
     const ipBucket = this.getRateLimitBucket(
       this.ipBuckets,
@@ -152,6 +172,65 @@ export class AuthController {
 
     ipBucket.timestamps.push(now);
     usernameBucket.timestamps.push(now);
+  }
+
+  private async tryAssertRedisRateLimit(
+    action: "register" | "login",
+    clientIp: string,
+    normalizedUsername: string,
+    limits: { perIp: number; perUsername: number; windowMs: number }
+  ): Promise<"accepted" | "fallback"> {
+    if (
+      !this.redisService ||
+      (typeof this.redisService.isAvailable === "function" && !this.redisService.isAvailable())
+    ) {
+      if (process.env.NODE_ENV === "production") {
+        throw new ServiceUnavailableException("Auth rate limit storage is temporarily unavailable.");
+      }
+      return "fallback";
+    }
+
+    try {
+      const [ipCount, usernameCount] = await Promise.all([
+        this.incrementRedisRateLimitKey(`auth:${action}:ip:${clientIp}`, limits.windowMs),
+        this.incrementRedisRateLimitKey(
+          `auth:${action}:username:${normalizedUsername}`,
+          limits.windowMs
+        )
+      ]);
+
+      if (ipCount > limits.perIp || usernameCount > limits.perUsername) {
+        this.logger.warn(
+          this.buildAuthLog(
+            `${action}.rate-limited`,
+            clientIp,
+            normalizedUsername,
+            HttpStatus.TOO_MANY_REQUESTS,
+            "Auth rate limit exceeded."
+          )
+        );
+        throw new HttpException("Auth rate limit exceeded.", HttpStatus.TOO_MANY_REQUESTS);
+      }
+
+      return "accepted";
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      if (process.env.NODE_ENV === "production") {
+        throw new ServiceUnavailableException("Auth rate limit storage is temporarily unavailable.");
+      }
+      this.logger.warn(`Auth redis rate limit unavailable; falling back to memory. ${String(error)}`);
+      return "fallback";
+    }
+  }
+
+  private async incrementRedisRateLimitKey(key: string, windowMs: number) {
+    if (!this.redisService) {
+      throw new Error("Redis service unavailable.");
+    }
+
+    return this.redisService.incrementWithTtlMs(key, windowMs);
   }
 
   private getRateLimitBucket(
@@ -192,17 +271,5 @@ function resolveClientIp(
   },
   ipAddress?: string
 ) {
-  const forwardedHeader = request.headers?.["x-forwarded-for"];
-  const forwarded = Array.isArray(forwardedHeader) ? forwardedHeader[0] : forwardedHeader;
-  if (forwarded) {
-    return forwarded.split(",")[0]?.trim() || "unknown";
-  }
-
-  const realIpHeader = request.headers?.["x-real-ip"];
-  const realIp = Array.isArray(realIpHeader) ? realIpHeader[0] : realIpHeader;
-  if (realIp) {
-    return realIp.trim();
-  }
-
   return ipAddress?.trim() || request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown";
 }

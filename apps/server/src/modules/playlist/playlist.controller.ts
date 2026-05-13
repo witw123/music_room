@@ -11,6 +11,13 @@ import {
   UnauthorizedException,
   forwardRef
 } from "@nestjs/common";
+import {
+  createPlaylistFromRoomRequestSchema,
+  createPlaylistRequestSchema,
+  importPlaylistToRoomRequestSchema,
+  updatePlaylistRequestSchema
+} from "@music-room/shared";
+import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
@@ -54,8 +61,9 @@ export class PlaylistController {
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(createPlaylistRequestSchema, body);
     return this.playlistService.createPlaylist({
-      ...body,
+      ...payload,
       ownerId: userId
     });
   }
@@ -74,8 +82,9 @@ export class PlaylistController {
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(updatePlaylistRequestSchema, body);
     return this.playlistService.updatePlaylist(playlistId, {
-      ...body,
+      ...payload,
       ownerId: userId
     });
   }
@@ -99,11 +108,12 @@ export class PlaylistController {
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(importPlaylistToRoomRequestSchema, body);
     const playlist = await this.playlistService.getPlaylistForOwner(playlistId, userId);
-    await this.roomService.importPlaylistToQueue(body.roomId, userId, playlist.trackIds);
+    await this.roomService.importPlaylistToQueue(payload.roomId, userId, playlist.trackIds);
     const snapshot = await this.roomRealtimePublisher.emitQueueSnapshot(
-      body.roomId,
-      await this.playlistService.listPlaylistsForRoom(body.roomId)
+      payload.roomId,
+      await this.playlistService.listPlaylistsForRoom(payload.roomId)
     );
     return {
       queue: snapshot.queue,
@@ -122,13 +132,14 @@ export class PlaylistController {
     }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    const payload = parseRequestBody(createPlaylistFromRoomRequestSchema, body);
     const playlist = await this.playlistService.createPlaylistFromRoom({
-      ...body,
+      ...payload,
       ownerId: userId
     });
     await this.roomRealtimePublisher.emitSnapshot(
-      body.roomId,
-      await this.playlistService.listPlaylistsForRoom(body.roomId)
+      payload.roomId,
+      await this.playlistService.listPlaylistsForRoom(payload.roomId)
     );
     return playlist;
   }

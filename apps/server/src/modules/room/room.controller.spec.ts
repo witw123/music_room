@@ -160,9 +160,30 @@ describe("RoomController", () => {
 
     expect(result).toEqual(snapshot);
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
-    expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("abc123");
+    expect(roomService.findRoomByJoinCode).toHaveBeenCalledWith("ABC123");
     expect(roomService.joinRoom).toHaveBeenCalledWith(snapshot.room.id, "guest_host");
     expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith(snapshot.room.id);
+  });
+
+  it("rejects invalid create room payloads before calling the service", async () => {
+    const roomService = {
+      createRoom: jest.fn()
+    };
+    const controller = new RoomController(
+      roomService as never,
+      createRoomRealtimePublisherMock() as never,
+      createAuthServiceMock() as never,
+      createPlaylistServiceMock() as never
+    );
+
+    await expect(
+      controller.createRoom("token", { visibility: "friends" as never })
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "VALIDATION_FAILED"
+      })
+    });
+    expect(roomService.createRoom).not.toHaveBeenCalled();
   });
 
   it("emits a topology snapshot after a member leaves an existing room", async () => {
@@ -206,6 +227,7 @@ describe("RoomController", () => {
     const snapshot = buildSnapshot();
     const roomService = {
       getRoomSnapshot: jest.fn().mockResolvedValue(snapshot),
+      assertCanDeleteRoom: jest.fn().mockResolvedValue(undefined),
       deleteRoom: jest.fn().mockResolvedValue({ ok: true })
     };
     const roomRealtimePublisher = createRoomRealtimePublisherMock();
@@ -224,6 +246,7 @@ describe("RoomController", () => {
 
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(playlistService.listPlaylistsForRoom).toHaveBeenCalledWith("room_1");
+    expect(roomService.assertCanDeleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
     expect(playlistService.deletePlaylistsForRoom).toHaveBeenCalledWith("room_1");
     expect(roomService.deleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
     expect(roomRealtimePublisher.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);

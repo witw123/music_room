@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { AuthSession, RoomChatPayload } from "@music-room/shared";
+import { AuthSession, RoomChatInputPayload, RoomChatPayload } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { RoomSocket } from "@/lib/ws-client";
 
@@ -65,17 +65,21 @@ export function RoomChatOverlay({
   const handleSend = () => {
     if (!inputValue.trim() || !socket || !activeSession) return;
 
-    const payload: RoomChatPayload = {
+    const trimmedContent = inputValue.trim();
+    const payload: RoomChatInputPayload = {
       roomId,
-      senderId: activeSession.userId,
-      senderName: activeSession.nickname,
-      content: inputValue.trim(),
+      content: trimmedContent,
       timestamp: Date.now(),
     };
 
     socket.emit("room.chat", payload);
-    
-    setMessages((prev) => [...prev.slice(-10), { ...payload, id: Math.random().toString(36).substring(7) }]);
+
+    setMessages((prev) => [...prev.slice(-10), {
+      ...payload,
+      senderId: activeSession.userId,
+      senderName: activeSession.nickname,
+      id: Math.random().toString(36).substring(7)
+    }]);
     setInputValue("");
   };
 

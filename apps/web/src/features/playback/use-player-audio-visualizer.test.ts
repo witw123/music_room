@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import {
   buildIdleWaveformSamples,
@@ -10,28 +9,26 @@ import {
 } from "./use-player-audio-visualizer";
 
 describe("resolveVisualizerSourceSelection", () => {
-  it("selects the remote audio element while remote-stream is active", () => {
-    const localAudio = {} as HTMLAudioElement;
-    const remoteStream = {
+  it("selects the local stream when the local audio element exposes a live MediaStream", () => {
+    const localStream = {
       getAudioTracks: () => [{ readyState: "live", enabled: true }]
     } as unknown as MediaStream;
-    const remoteAudio = {
-      srcObject: remoteStream
+    const localAudio = {
+      srcObject: localStream
     } as unknown as HTMLAudioElement;
 
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,
-        activePlaybackSource: "remote-stream",
         currentTrackId: "track-a",
         mediaEpoch: 3,
         sourcePeerId: "peer_source",
         sourceSessionId: "member_source"
       })
     ).toMatchObject({
-      kind: "remote-stream",
-      element: remoteAudio,
-      stream: remoteStream,
+      kind: "local-stream",
+      element: localAudio,
+      stream: localStream,
       hasSignal: true
     });
   });
@@ -48,7 +45,6 @@ describe("resolveVisualizerSourceSelection", () => {
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,
-        activePlaybackSource: "progressive-local",
         currentTrackId: "track-a",
         mediaEpoch: 3,
         sourcePeerId: "peer_source",
@@ -66,7 +62,6 @@ describe("resolveVisualizerSourceSelection", () => {
     expect(
       resolveVisualizerSourceSelection({
         audioElement: {} as HTMLAudioElement,
-        activePlaybackSource: "full-local",
         currentTrackId: null
       })
     ).toEqual({
@@ -86,7 +81,6 @@ describe("resolveVisualizerSourceSelection", () => {
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,
-        activePlaybackSource: "full-local",
         currentTrackId: "track-a",
         mediaEpoch: 5,
         sourcePeerId: "peer_source",
@@ -101,32 +95,30 @@ describe("resolveVisualizerSourceSelection", () => {
   });
 
   it("changes the graph key when the same track gets a new playback session", () => {
-    const remoteStream = {
+    const localStream = {
       getAudioTracks: () => [{ readyState: "live", enabled: true }]
     } as unknown as MediaStream;
-    const remoteAudio = {
-      srcObject: remoteStream
+    const localAudio = {
+      srcObject: localStream
     } as unknown as HTMLAudioElement;
 
     const first = resolveVisualizerSourceSelection({
-      audioElement: null,
-      activePlaybackSource: "remote-stream",
+      audioElement: localAudio,
       currentTrackId: "track-a",
       mediaEpoch: 1,
       sourcePeerId: "peer_source_a",
       sourceSessionId: "member_source"
     });
     const second = resolveVisualizerSourceSelection({
-      audioElement: null,
-      activePlaybackSource: "remote-stream",
+      audioElement: localAudio,
       currentTrackId: "track-a",
       mediaEpoch: 2,
       sourcePeerId: "peer_source_b",
       sourceSessionId: "member_source"
     });
 
-    expect(first.kind).toBe("remote-stream");
-    expect(second.kind).toBe("remote-stream");
+    expect(first.kind).toBe("local-stream");
+    expect(second.kind).toBe("local-stream");
     expect(first.graphKey).not.toBe(second.graphKey);
   });
 });

@@ -47,4 +47,30 @@ describe("PlaybackController", () => {
       });
     }
   });
+
+  it("rejects invalid playback payloads before calling the service", async () => {
+    const roomService = {
+      isRealtimeAvailable: jest.fn().mockReturnValue(true),
+      updatePlayback: jest.fn()
+    };
+    const controller = new PlaybackController(
+      roomService as never,
+      { emitPlaybackPatch: jest.fn() } as never,
+      createAuthServiceMock() as never,
+      new MetricsService()
+    );
+
+    await expect(
+      controller.updatePlayback("room_1", "token", {
+        action: "seek",
+        positionMs: -1,
+        expectedVersion: 1
+      })
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: "VALIDATION_FAILED"
+      })
+    });
+    expect(roomService.updatePlayback).not.toHaveBeenCalled();
+  });
 });

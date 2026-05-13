@@ -1326,10 +1326,11 @@ export function useProgressiveRuntime({
       forceSourceOwnerLocalPlayback ||
       sourceOwnerHasLocalTrack;
     if (wantsFullLocalPlayback && uploaded) {
+      const hadSrcObject = !!audio.srcObject;
       if (audio.srcObject) {
         audio.srcObject = null;
       }
-      if (audio.src !== uploaded.objectUrl) {
+      if (audio.src !== uploaded.objectUrl || hadSrcObject) {
         audio.src = uploaded.objectUrl;
         audio.load();
       }
@@ -1354,7 +1355,7 @@ export function useProgressiveRuntime({
           "full-local-play-blocked",
           { reportFailure: true }
         ).then((ok) => {
-          setMediaConnectionState(ok ? "live" : "failed");
+          setMediaConnectionState(ok ? "live" : "buffering");
         });
       }
 

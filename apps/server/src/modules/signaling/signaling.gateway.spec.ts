@@ -5,7 +5,12 @@ import { SignalingGateway } from "./signaling.gateway";
 
 function createAuthServiceMock() {
   return {
-    assertSessionToken: jest.fn().mockResolvedValue(undefined)
+    assertSessionToken: jest.fn().mockResolvedValue(undefined),
+    getUserOrThrow: jest.fn().mockResolvedValue({
+      id: "guest_host",
+      username: "host",
+      nickname: "Host"
+    })
   };
 }
 
@@ -542,6 +547,62 @@ describe("SignalingGateway", () => {
         }
       )
     ).rejects.toThrow("Unauthorized realtime request.");
+  });
+
+  it("derives chat sender identity from the authenticated socket session", async () => {
+    const { gateway, authService } = createGateway();
+    const emit = jest.fn();
+    const client = {
+      ...createClient({
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }),
+      to: jest.fn().mockReturnValue({ emit })
+    };
+
+    const result = await gateway.handleRoomChat(client as never, {
+      roomId: "room_1",
+      content: " hello ",
+      timestamp: 10
+    });
+
+    expect(authService.getUserOrThrow).toHaveBeenCalledWith("guest_host");
+    expect(result).toEqual({
+      roomId: "room_1",
+      senderId: "guest_host",
+      senderName: "Host",
+      content: "hello",
+      timestamp: 10
+    });
+    expect(emit).toHaveBeenCalledWith("room.chat", result);
+  });
+
+  it("rejects invalid chat payloads before broadcasting", async () => {
+    const { gateway } = createGateway();
+    const emit = jest.fn();
+    const client = {
+      ...createClient({
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host",
+        isRealtimeAuthenticated: true
+      }),
+      to: jest.fn().mockReturnValue({ emit })
+    };
+
+    await expect(
+      gateway.handleRoomChat(client as never, {
+        roomId: "room_1",
+        content: ""
+      })
+    ).rejects.toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED"
+      }
+    });
+    expect(emit).not.toHaveBeenCalled();
   });
 
   it("rejects room subscriptions when redis realtime is unavailable", async () => {

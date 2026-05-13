@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, it } from "vitest";
 import {
   buildProgressiveHealthSnapshot,
@@ -9,7 +8,6 @@ import {
   getContiguousBufferedMs,
   getProgressiveEngineType,
   getPriorityChunkIndexes,
-  shouldEnableRemoteFirstLock,
   isStartupReady,
   isTakeoverReady,
   resolveSchedulerPolicy
@@ -157,66 +155,6 @@ describe("progressive playback helpers", () => {
     ).toBe(true);
   });
 
-  it("locks remote-first on constrained relay or weak transport diagnostics", () => {
-    expect(
-      shouldEnableRemoteFirstLock({
-        diagnostics: {
-          mediaCandidateType: "relay",
-          mediaProtocol: "udp",
-          currentRoundTripTimeMs: 70,
-          availableOutgoingBitrateKbps: 320,
-          packetLossRate: 1.2,
-          packetsLost: 0,
-          jitterMs: 4
-        }
-      })
-    ).toBe(false);
-
-    expect(
-      shouldEnableRemoteFirstLock({
-        diagnostics: {
-          mediaCandidateType: "host",
-          mediaProtocol: "udp",
-          currentRoundTripTimeMs: 420,
-          availableOutgoingBitrateKbps: 40,
-          packetLossRate: 12.8,
-          packetsLost: 130,
-          jitterMs: 88
-        }
-      })
-    ).toBe(true);
-
-    expect(
-      shouldEnableRemoteFirstLock({
-        diagnostics: {
-          mediaCandidateType: "host",
-          mediaProtocol: "udp",
-          currentRoundTripTimeMs: 60,
-          availableOutgoingBitrateKbps: 320,
-          packetLossRate: 1.1,
-          packetsLost: 0,
-          jitterMs: 3
-        }
-      })
-    ).toBe(false);
-  });
-
-  it("does not treat cumulative packetsLost as a weak-link signal when short-window loss is healthy", () => {
-    expect(
-      shouldEnableRemoteFirstLock({
-        diagnostics: {
-          mediaCandidateType: "host",
-          mediaProtocol: "udp",
-          currentRoundTripTimeMs: 72,
-          availableOutgoingBitrateKbps: 420,
-          packetLossRate: 0.8,
-          packetsLost: 640,
-          jitterMs: 6
-        }
-      })
-    ).toBe(false);
-  });
-
   it("focuses current-track startup requests around the active playback window", () => {
     const manifest = buildProgressiveTrackManifest(track, availability)!;
     expect(
@@ -270,7 +208,7 @@ describe("progressive playback helpers", () => {
     ).toBe("background");
   });
 
-  it("switches into outrun-recovery when fill time is slower than the remaining playback window", () => {
+  it("stays steady once the startup risk window is locally available", () => {
     const outrunChunks = Array.from({ length: 13 }, (_, index) => index);
     const manifest = buildProgressiveTrackManifest({
       ...track,
@@ -299,18 +237,18 @@ describe("progressive playback helpers", () => {
     expect(
       resolveSchedulerPolicy({
         playback,
-        activeSource: "remote-stream",
+        activeSource: "progressive-local",
         manifest,
         availableChunks: outrunChunks,
         fallbackReason: null,
         currentTrackComplete: false,
         currentPieceDownloadRateKbps: 20
       })
-    ).toBe("outrun-recovery");
+    ).toBe("steady");
 
     const health = buildProgressiveHealthSnapshot({
       playback,
-      activeSource: "remote-stream",
+      activeSource: "progressive-local",
       manifest,
       localAvailability: {
         ...availability,
@@ -321,9 +259,47 @@ describe("progressive playback helpers", () => {
       currentPieceDownloadRateKbps: 20
     });
 
-    expect(health.schedulerPolicy).toBe("outrun-recovery");
+    expect(health.schedulerPolicy).toBe("steady");
     expect(health.estimatedFillTimeMs).not.toBeNull();
     expect(health.remainingPlaybackMs).toBe(70_000);
+  });
+
+  it("uses startup policy while the active playback window still has missing chunks", () => {
+    const manifest = buildProgressiveTrackManifest({
+      ...track,
+      codec: "flac",
+      mimeType: "audio/flac",
+      sizeBytes: 60 * 1024 * 1024
+    }, {
+      ...availability,
+      totalChunks: 24,
+      availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    });
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host_1",
+      sourcePeerId: "peer_host",
+      sourceTrackId: "track_1",
+      positionMs: 50_000,
+      startedAt: null,
+      queueVersion: 1,
+      playbackRevision: 1,
+      mediaEpoch: 1
+    };
+
+    expect(
+      resolveSchedulerPolicy({
+        playback,
+        activeSource: "progressive-local",
+        manifest,
+        availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        fallbackReason: null,
+        currentTrackComplete: false,
+        currentPieceDownloadRateKbps: 20
+      })
+    ).toBe("startup");
   });
 
   it("only enables MSE progressive playback for stream-safe mime types", () => {
