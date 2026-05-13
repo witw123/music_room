@@ -1,71 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import type { PeerDiagnosticsSnapshot, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import type { RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-import {
-  getHostMediaStreamTrackState
-} from "@/features/playback/host-media-sync";
 import {
   createSilentPrewarmHandle,
   type SilentPrewarmHandle
 } from "@/features/playback/silent-prewarm-stream";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { PlaybackConnectionKey } from "./room-runtime-types";
-import type {
-  HostPublishReadiness,
-  HostPublishSourceTarget,
-  HostPublishTrackKind,
-  ResolvedPublishElement,
-  ResolvedPublishStreamKind
-} from "@/features/room/host-relay-audio";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { AuthSession } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
-import type { P2PMesh, RoomMediaMesh } from "@/features/p2p";
-
-export type HostPublishStage = "idle" | "waiting-source-audio" | "capture-ready" | "published";
-type MediaTransportState = "idle" | "prewarming" | "connected" | "publishing" | "failed";
-type HostPublishedTrackKind = HostPublishTrackKind | "none";
-
-export type HostMediaSyncState = {
-  inFlight: boolean;
-  lastAppliedKey: string | null;
-  pendingKey: string | null;
-  lastCaptureRefreshKey: string | null;
-  lastPublishKey: string | null;
-  retryKey: string | null;
-  publishGeneration: number;
-  stage: HostPublishStage;
-  lastPublishedListenerSet: string | null;
-};
+import type { P2PMesh } from "@/features/p2p";
 
 export type ListenerMediaLifecycleState = {
   traceKey: string | null;
   sourcePeerId: string | null;
-  lastTrackTraceKey: string | null;
-  lastBoundTraceKey: string | null;
-  lastPlayAttemptTraceKey: string | null;
   lastPlayAttemptResult: "ok" | "rejected" | null;
   lastPlayAttemptError: string | null;
-  lastPlayingTraceKey: string | null;
   lastSoftRecoveryTraceKey: string | null;
   lastSoftRecoveryAt: number | null;
   lastHardRecoveryTraceKey: string | null;
   lastHardRecoveryAt: number | null;
-  latestStream: MediaStream | null;
   currentGeneration: PlaybackConnectionKey | null;
   generationStartedAt: number | null;
   boundGeneration: PlaybackConnectionKey | null;
   playingGeneration: PlaybackConnectionKey | null;
   lastPlayoutProgressAt: number | null;
   lastTransportProgressAt: number | null;
-  lastObservedRemoteCurrentTimeMs: number | null;
-  recoveryStage: "idle" | "waiting-track" | "rebind-element" | "retry-play" | "rebind-and-play";
-  restartAttempt: number;
-  bindAttempts: number;
-  playAttempts: number;
+  recoveryStage: "idle" | "waiting-data" | "recovering-data";
 };
 
 export function useRoomRuntimeMutableState(input: {
@@ -82,7 +47,6 @@ export function useRoomRuntimeMutableState(input: {
       | "joining"
       | "resyncing"
       | "bootstrapping-data"
-      | "bootstrapping-media"
       | "playing-local-fallback"
       | "steady";
     mode: "late-join" | "rejoin" | "steady";
@@ -123,18 +87,12 @@ export function useRoomRuntimeMutableState(input: {
   enableTrackCaching: boolean;
 }) {
   const meshRef = useRef<P2PMesh | null>(null);
-  const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
+  const mediaMeshRef = useRef<{ setStatsSamplingMode?: (mode: "off" | "active" | "steady") => void } | null>(null);
   const initialRecoveryAttemptRef = useRef<string | null>(null);
   const previousInitialRoomIdRef = useRef<string | null>(input.initialRoomId);
   const activeRouteRoomIdRef = useRef<string | null>(input.initialRoomId);
-  const hostStreamRef = useRef<MediaStream | null>(null);
   const silentPrewarmHandleRef = useRef<SilentPrewarmHandle | null>(null);
   const mediaTransportEpochRef = useRef(0);
-  const transportResetReasonRef = useRef<"source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none">(
-    "none"
-  );
-  const hostMediaSyncRetryRef = useRef<number | null>(null);
-  const lastHostCaptureRefreshAtRef = useRef<number>(0);
   const remotePlaybackResumeAfterUnlockKeyRef = useRef<string | null>(null);
   const socketDisconnectGraceUntilRef = useRef<number | null>(null);
   const resubscribeRoomRef = useRef<(() => void) | null>(null);
@@ -143,52 +101,29 @@ export function useRoomRuntimeMutableState(input: {
   const activePlaybackSourceRef = useRef(input.activePlaybackSource);
   const lastSubscribeAckAtRef = useRef<number | null>(null);
   const recoveryModeRef = useRef<"late-join" | "rejoin" | "steady">("steady");
-  const mediaTransportOwnerKeyRef = useRef<string | null>(null);
   const lastRealtimeRoomEventAtRef = useRef<number>(Date.now());
   const lastDataActivityAtRef = useRef<number | null>(null);
   const lastListenerBootstrapKeyRef = useRef<string | null>(null);
   const missingListenerSinceRef = useRef<Map<string, number>>(new Map());
-  const hostMediaSyncStateRef = useRef<HostMediaSyncState>({
-    inFlight: false,
-    lastAppliedKey: null,
-    pendingKey: null,
-    lastCaptureRefreshKey: null,
-    lastPublishKey: null,
-    retryKey: null,
-    publishGeneration: 0,
-    stage: "idle",
-    lastPublishedListenerSet: null
-  });
   const listenerMediaLifecycleRef = useRef<ListenerMediaLifecycleState>({
     traceKey: null,
     sourcePeerId: null,
-    lastTrackTraceKey: null,
-    lastBoundTraceKey: null,
-    lastPlayAttemptTraceKey: null,
     lastPlayAttemptResult: null,
     lastPlayAttemptError: null,
-    lastPlayingTraceKey: null,
     lastSoftRecoveryTraceKey: null,
     lastSoftRecoveryAt: null,
     lastHardRecoveryTraceKey: null,
     lastHardRecoveryAt: null,
-    latestStream: null,
     currentGeneration: null,
     generationStartedAt: null,
     boundGeneration: null,
     playingGeneration: null,
     lastPlayoutProgressAt: null,
     lastTransportProgressAt: null,
-    lastObservedRemoteCurrentTimeMs: null,
     recoveryStage: "idle",
-    restartAttempt: 0,
-    bindAttempts: 0,
-    playAttempts: 0
   });
   const listenerMediaRecoveryTimeoutRef = useRef<number | null>(null);
   const socketDisconnectGraceTimeoutRef = useRef<number | null>(null);
-  const hostMediaClockSequenceRef = useRef(0);
-  const armListenerMediaRecoveryRef = useRef<(generation?: string | null) => void>(() => undefined);
   const audioUnlockedRef = useRef(input.audioUnlocked);
   const setAudioUnlockedRef = useRef(input.setAudioUnlocked);
   const sourceStartStateRef = useRef(input.sourceStartState);
@@ -222,13 +157,6 @@ export function useRoomRuntimeMutableState(input: {
     socketDisconnectGraceUntilRef.current = null;
   }, []);
 
-  const clearHostMediaSyncRetry = useCallback(() => {
-    if (hostMediaSyncRetryRef.current !== null) {
-      window.clearTimeout(hostMediaSyncRetryRef.current);
-      hostMediaSyncRetryRef.current = null;
-    }
-  }, []);
-
   const getSilentPrewarmHandle = useCallback(() => {
     if (!silentPrewarmHandleRef.current) {
       silentPrewarmHandleRef.current = createSilentPrewarmHandle();
@@ -246,7 +174,6 @@ export function useRoomRuntimeMutableState(input: {
     (
       reason: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none" = "explicit-hard-reset"
     ) => {
-      transportResetReasonRef.current = reason;
       mediaTransportEpochRef.current += 1;
       return mediaTransportEpochRef.current;
     },
@@ -291,184 +218,12 @@ export function useRoomRuntimeMutableState(input: {
             ),
             audioUnlocked: audioUnlockedRef.current,
             sourceStartState: nextState,
-            lastSourceStartError: nextError,
-            hostPublishingReady: nextState === "live",
-            mediaBootstrapState:
-              nextState === "live"
-                ? "steady"
-                : nextState === "starting"
-                  ? "bootstrapping"
-                  : nextState === "failed"
-                    ? "failed"
-                    : snapshot.progressivePlaybackStatus?.mediaBootstrapState ?? "idle"
+            lastSourceStartError: nextError
           }
         })
       });
     },
     []
-  );
-
-  const updateHostCaptureDiagnostics = useCallback(
-    (inputValue: {
-      refreshKey: string | null;
-      forcedRefresh: boolean;
-      captureMode: "native" | "audio-context" | null;
-      mediaEpoch: number | null;
-      transportEpoch?: number | null;
-      mediaTransportState?: MediaTransportState | null;
-      usingSilentPrewarmTrack?: boolean;
-      publishedTrackKind?: HostPublishedTrackKind | null;
-      hostPublishSource?: HostPublishSourceTarget | null;
-      hostPublishReadiness?: HostPublishReadiness | null;
-      hostPublishFailureReason?: string | null;
-      resolvedPublishElement?: ResolvedPublishElement | null;
-      resolvedPublishStreamKind?: ResolvedPublishStreamKind | null;
-      mediaBootstrapState?: "idle" | "bootstrapping" | "recovering" | "failed" | "steady" | null;
-      mediaFailureReason?: string | null;
-      transportResetReason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none" | null;
-      hostPublishingReady?: boolean;
-      listenerRecoveryAttempt?: number | null;
-      mediaNegotiationRole?: "publisher" | "listener" | null;
-      listenerAwaitingPublisherOffer?: boolean;
-      lastIgnoredOfferReason?: "offer-collision" | "stale-generation" | "wrong-role" | "none" | null;
-      publisherBootstrapRequestedAt?: string | null;
-      publisherBootstrapAttempts?: number | null;
-      dataRequiredForPlayback?: boolean;
-      firstTransportConnectedAt?: string | null;
-      firstAudibleAt?: string | null;
-      captureTrackState?: ReturnType<typeof getHostMediaStreamTrackState> | null;
-      publishGeneration?: number | null;
-      publishKey?: string | null;
-      publishStage?: HostPublishStage;
-      publishedListenerSet?: string | null;
-      attachedTrackId?: string | null;
-      negotiatedTrackId?: string | null;
-      makingOffer?: boolean | null;
-      signalingState?: string | null;
-      summary: string;
-    }) => {
-      recordPeerDiagnosticRef.current({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: "host-capture-state",
-        summary: inputValue.summary,
-        recordEvent: false,
-        update: (snapshot) => ({
-          ...snapshot,
-          progressivePlaybackStatus: {
-            ...(
-              snapshot.progressivePlaybackStatus ??
-              createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-            ),
-            hostCaptureRefreshKey: inputValue.refreshKey,
-            hostCaptureForcedRefresh: inputValue.forcedRefresh,
-            hostCaptureMode: inputValue.captureMode,
-            hostCaptureMediaEpoch: inputValue.mediaEpoch,
-            mediaTransportState:
-              inputValue.mediaTransportState ??
-              snapshot.progressivePlaybackStatus?.mediaTransportState ??
-              "idle",
-            transportEpoch:
-              inputValue.transportEpoch ?? snapshot.progressivePlaybackStatus?.transportEpoch ?? null,
-            usingSilentPrewarmTrack:
-              inputValue.usingSilentPrewarmTrack ??
-              snapshot.progressivePlaybackStatus?.usingSilentPrewarmTrack ??
-              false,
-            publishedTrackKind:
-              inputValue.publishedTrackKind ??
-              snapshot.progressivePlaybackStatus?.publishedTrackKind ??
-              "none",
-            hostPublishSource:
-              inputValue.hostPublishSource ??
-              snapshot.progressivePlaybackStatus?.hostPublishSource ??
-              "none",
-            hostPublishReadiness:
-              inputValue.hostPublishReadiness ??
-              snapshot.progressivePlaybackStatus?.hostPublishReadiness ??
-              "idle",
-            hostPublishFailureReason:
-              inputValue.hostPublishFailureReason ??
-              snapshot.progressivePlaybackStatus?.hostPublishFailureReason ??
-              null,
-            resolvedPublishElement:
-              inputValue.resolvedPublishElement ??
-              snapshot.progressivePlaybackStatus?.resolvedPublishElement ??
-              "none",
-            resolvedPublishStreamKind:
-              inputValue.resolvedPublishStreamKind ??
-              snapshot.progressivePlaybackStatus?.resolvedPublishStreamKind ??
-              "none",
-            mediaBootstrapState:
-              inputValue.mediaBootstrapState ??
-              snapshot.progressivePlaybackStatus?.mediaBootstrapState ??
-              "idle",
-            mediaFailureReason:
-              inputValue.mediaFailureReason ??
-              snapshot.progressivePlaybackStatus?.mediaFailureReason ??
-              null,
-            transportResetReason:
-              inputValue.transportResetReason ??
-              snapshot.progressivePlaybackStatus?.transportResetReason ??
-              transportResetReasonRef.current,
-            hostPublishingReady:
-              inputValue.hostPublishingReady ??
-              snapshot.progressivePlaybackStatus?.hostPublishingReady ??
-              false,
-            listenerRecoveryAttempt:
-              inputValue.listenerRecoveryAttempt ??
-              snapshot.progressivePlaybackStatus?.listenerRecoveryAttempt ??
-              null,
-            mediaNegotiationRole:
-              inputValue.mediaNegotiationRole ??
-              snapshot.progressivePlaybackStatus?.mediaNegotiationRole ??
-              null,
-            listenerAwaitingPublisherOffer:
-              inputValue.listenerAwaitingPublisherOffer ??
-              snapshot.progressivePlaybackStatus?.listenerAwaitingPublisherOffer ??
-              false,
-            lastIgnoredOfferReason:
-              inputValue.lastIgnoredOfferReason ??
-              snapshot.progressivePlaybackStatus?.lastIgnoredOfferReason ??
-              "none",
-            publisherBootstrapRequestedAt:
-              inputValue.publisherBootstrapRequestedAt ??
-              snapshot.progressivePlaybackStatus?.publisherBootstrapRequestedAt ??
-              null,
-            publisherBootstrapAttempts:
-              inputValue.publisherBootstrapAttempts ??
-              snapshot.progressivePlaybackStatus?.publisherBootstrapAttempts ??
-              null,
-            dataRequiredForPlayback:
-              inputValue.dataRequiredForPlayback ??
-              snapshot.progressivePlaybackStatus?.dataRequiredForPlayback ??
-              input.enableTrackCaching,
-            firstTransportConnectedAt:
-              inputValue.firstTransportConnectedAt ??
-              snapshot.progressivePlaybackStatus?.firstTransportConnectedAt ??
-              null,
-            firstAudibleAt:
-              inputValue.firstAudibleAt ??
-              snapshot.progressivePlaybackStatus?.firstAudibleAt ??
-              null,
-            hostCaptureTrackId: inputValue.captureTrackState?.trackId ?? null,
-            hostCaptureTrackMuted: inputValue.captureTrackState?.trackMuted ?? null,
-            hostCaptureTrackEnabled: inputValue.captureTrackState?.trackEnabled ?? null,
-            hostCaptureTrackReadyState: inputValue.captureTrackState?.trackReadyState ?? null,
-            hostCaptureTrackCount: inputValue.captureTrackState?.trackCount ?? null,
-            publishGeneration: inputValue.publishGeneration ?? null,
-            hostPublishKey: inputValue.publishKey ?? null,
-            hostPublishStage: inputValue.publishStage ?? "idle",
-            hostPublishedListenerSet: inputValue.publishedListenerSet ?? null,
-            attachedTrackId: inputValue.attachedTrackId ?? null,
-            negotiatedTrackId: inputValue.negotiatedTrackId ?? null,
-            makingOffer: inputValue.makingOffer ?? null,
-            signalingState: inputValue.signalingState ?? null
-          }
-        })
-      });
-    },
-    [input.enableTrackCaching]
   );
 
   useEffect(() => {
@@ -514,7 +269,6 @@ export function useRoomRuntimeMutableState(input: {
           pendingMedia: input.roomRecoveryState.pendingMedia,
           dataRequiredForPlayback: input.enableTrackCaching,
           listenerBootstrapAttempts: input.roomRecoveryState.listenerBootstrapAttempts,
-          listenerRecoveryAttempt: input.roomRecoveryState.listenerBootstrapAttempts,
           fullLocalRecoveryActive: input.roomRecoveryState.fullLocalRecoveryActive
         }
       })
@@ -526,7 +280,6 @@ export function useRoomRuntimeMutableState(input: {
       return;
     }
 
-    hostMediaClockSequenceRef.current = 0;
     input.setAuthoritativeMediaClock(null);
   }, [input.roomSnapshot?.room.id, input.setAuthoritativeMediaClock]);
 
@@ -638,11 +391,7 @@ export function useRoomRuntimeMutableState(input: {
     initialRecoveryAttemptRef,
     previousInitialRoomIdRef,
     activeRouteRoomIdRef,
-    hostStreamRef,
     mediaTransportEpochRef,
-    transportResetReasonRef,
-    hostMediaSyncRetryRef,
-    lastHostCaptureRefreshAtRef,
     remotePlaybackResumeAfterUnlockKeyRef,
     socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
@@ -651,17 +400,13 @@ export function useRoomRuntimeMutableState(input: {
     activePlaybackSourceRef,
     lastSubscribeAckAtRef,
     recoveryModeRef,
-    mediaTransportOwnerKeyRef,
     lastRealtimeRoomEventAtRef,
     lastDataActivityAtRef,
     lastListenerBootstrapKeyRef,
     missingListenerSinceRef,
-    hostMediaSyncStateRef,
     listenerMediaLifecycleRef,
     listenerMediaRecoveryTimeoutRef,
     socketDisconnectGraceTimeoutRef,
-    hostMediaClockSequenceRef,
-    armListenerMediaRecoveryRef,
     audioUnlockedRef,
     setAudioUnlockedRef,
     sourceStartStateRef,
@@ -681,10 +426,8 @@ export function useRoomRuntimeMutableState(input: {
     recordPeerDiagnosticRef,
     clearListenerMediaRecovery,
     clearSocketDisconnectGrace,
-    clearHostMediaSyncRetry,
     getSilentPrewarmHandle,
     bumpMediaTransportEpoch,
-    updateSourceStartState,
-    updateHostCaptureDiagnostics
+    updateSourceStartState
   };
 }

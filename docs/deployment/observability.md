@@ -53,13 +53,10 @@
 
 前端房间页中的“成员与诊断”已经是当前最有价值的运行时排障入口。它可以直接观察：
 
-- Data / Media 连接状态
+- Data channel 连接状态
 - ICE 状态
 - `offer / answer / candidate` 收发
-- 是否收到远端 `track`
-- 远端音频元素 `playing / waiting / pause / error`
 - 当前播放源：
-  - `remote-stream`
   - `progressive-local`
   - `full-local`
 - 本地缓冲、调度策略、恢复阶段
@@ -94,13 +91,13 @@
 2. `/health/readiness`
 3. Server 日志
 
-### 多人实时音频或 P2P 不通
+### 多人缓存分片或 P2P 不通
 
 优先判断：
 
-- 是 Data 和 Media 都失败
-- 还是只有 Media 失败
-- 还是 Media 正常但本地缓存追不上
+- 是 data channel 建连失败
+- 还是 provider 没有分片可用性公告
+- 还是分片传输正常但本地缓存追不上
 
 不要先从播放器 UI 样式或单个组件入手。
 

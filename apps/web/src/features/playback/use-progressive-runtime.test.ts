@@ -83,7 +83,7 @@ describe("use-progressive-runtime policy helpers", () => {
         audioUnlocked: true,
         hasBufferedFullLocalTrack: false,
         fullLocalRecoveryActive: true,
-        recoveryPhase: "bootstrapping-media",
+        recoveryPhase: "bootstrapping-data",
         recoveryMode: "rejoin",
         playbackStatus: "playing"
       })

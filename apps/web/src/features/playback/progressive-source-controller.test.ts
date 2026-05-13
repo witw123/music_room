@@ -15,7 +15,7 @@ describe("progressive source controller", () => {
     expect(getInitialProgressivePlaybackSource(false)).toBe("progressive-local");
   });
 
-  it("forces source owners with a full local track out of remote-stream mode", () => {
+  it("keeps source owners on local playback when the full track is available", () => {
     expect(
       shouldForceSourceOwnerLocalPlayback({
         isCurrentSourceOwner: true,
@@ -32,7 +32,7 @@ describe("progressive source controller", () => {
     ).toBe(false);
   });
 
-  it("keeps forcing source owners onto full-local until they are fully off the remote path", () => {
+  it("keeps forcing source owners onto full-local until they are already full-local", () => {
     expect(
       shouldForceSourceOwnerLocalPlayback({
         isCurrentSourceOwner: true,

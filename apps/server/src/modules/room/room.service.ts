@@ -110,6 +110,7 @@ export class RoomService {
 
     this.rooms.set(room.id, record);
     await this.roomRecordRepository.persistRecord(record);
+    await this.roomRecordRepository.setRecentRoomForSession(hostSession.id, room.id);
 
     return this.getRoomSnapshot(room.id, []);
   }

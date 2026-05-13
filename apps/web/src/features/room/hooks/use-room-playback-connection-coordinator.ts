@@ -16,15 +16,8 @@ function getRecoveryActionPriority(actionType: PlaybackRecoveryAction["actionTyp
   switch (actionType) {
     case "full-resubscribe":
       return 5;
-    case "reset-listener-peer":
-      return 4;
     case "restart-data-peer":
-    case "restart-listener-ice":
       return 3;
-    case "rebind-element":
-      return 2;
-    case "retry-play":
-      return 1;
     default:
       return 0;
   }
@@ -52,19 +45,7 @@ export function resolvePlaybackRecoveryActionType(
     return "full-resubscribe";
   }
 
-  if (recommendation.scope === "data") {
-    return "restart-data-peer";
-  }
-
-  if (recommendation.level === "hard-recreate") {
-    return "reset-listener-peer";
-  }
-
-  if (recommendation.level === "ice-restart") {
-    return "restart-listener-ice";
-  }
-
-  return "retry-play";
+  return "restart-data-peer";
 }
 
 export function resolvePlaybackRecoveryDropReason(input: {
@@ -102,11 +83,10 @@ export function useRoomPlaybackConnectionCoordinator(input: {
     currentGeneration: string | null;
     boundGeneration: string | null;
     playingGeneration: string | null;
-    latestStream: MediaStream | null;
     recoveryStage: string;
   }>;
   clearListenerMediaRecovery: () => void;
-  clearRemotePlaybackRetry: () => void;
+  clearPlaybackRetry: () => void;
 }) {
   const playbackConnectionKeyRef = useRef<PlaybackConnectionKey | null>(null);
   const listenerPlaybackStateRef = useRef<ListenerPlaybackState>("idle");
@@ -130,11 +110,11 @@ export function useRoomPlaybackConnectionCoordinator(input: {
 
   const resetConnectionScopedRecovery = useCallback(() => {
     input.clearListenerMediaRecovery();
-    input.clearRemotePlaybackRetry();
+    input.clearPlaybackRetry();
     activeRecoveryActionRef.current = null;
     activeRecoveryActionResultRef.current = null;
     lastRecoveryDropReasonRef.current = null;
-  }, [input.clearListenerMediaRecovery, input.clearRemotePlaybackRetry]);
+  }, [input.clearListenerMediaRecovery, input.clearPlaybackRetry]);
 
   const beginPlaybackConnection = useCallback(
     (
@@ -150,11 +130,7 @@ export function useRoomPlaybackConnectionCoordinator(input: {
 
       resetConnectionScopedRecovery();
       playbackConnectionKeyRef.current = key;
-      listenerPlaybackStateRef.current = key
-        ? context?.hasExistingBoundStream
-          ? "stream-bound"
-          : "awaiting-offer"
-        : "idle";
+      listenerPlaybackStateRef.current = key ? "awaiting-data" : "idle";
       input.listenerMediaLifecycleRef.current.sourcePeerId = context?.sourcePeerId ?? null;
       return true;
     },
@@ -234,11 +210,7 @@ export function useRoomPlaybackConnectionCoordinator(input: {
       activeRecoveryActionResultRef.current = "running";
       lastRecoveryDropReasonRef.current = null;
 
-      if (action.actionType === "retry-play" || action.actionType === "rebind-element") {
-        listenerPlaybackStateRef.current = "recovering-soft";
-      } else {
-        listenerPlaybackStateRef.current = "recovering-hard";
-      }
+      listenerPlaybackStateRef.current = "recovering-hard";
 
       return action;
     },

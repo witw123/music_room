@@ -117,7 +117,6 @@ export function useRoomRuntimeObservability(input: {
   roomSnapshot: RoomSnapshot | null;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   peerId: string;
-  mediaMeshRef: MutableRefObject<{ setStatsSamplingMode: (mode: "off" | "active" | "steady") => void } | null>;
   meshRef: MutableRefObject<{ setStatsSamplingMode: (mode: "off" | "active" | "steady") => void } | null>;
   recordPeerDiagnostic: (input: any) => void;
   setMediaConnectionState: Dispatch<SetStateAction<RoomMediaConnectionState>>;
@@ -473,13 +472,6 @@ export function useRoomRuntimeObservability(input: {
     const playback = input.roomSnapshot?.room.playback;
     const hasActiveTrack = !!playback?.currentTrackId;
     const isPlaying = playback?.status === "playing";
-    const mediaStatsMode =
-      !hasActiveTrack || (!input.isPageVisible && !isPlaying)
-        ? "off"
-        : input.isCurrentSourceOwner ||
-            input.bufferHealth !== "healthy"
-          ? "active"
-          : "steady";
     const dataStatsMode =
       !hasActiveTrack || (!input.isPageVisible && !isPlaying)
         ? "off"
@@ -487,13 +479,10 @@ export function useRoomRuntimeObservability(input: {
           ? "active"
           : "steady";
 
-    input.mediaMeshRef.current?.setStatsSamplingMode(mediaStatsMode);
     input.meshRef.current?.setStatsSamplingMode(dataStatsMode);
   }, [
     input.bufferHealth,
-    input.isCurrentSourceOwner,
     input.isPageVisible,
-    input.mediaMeshRef,
     input.meshRef,
     input.roomSnapshot?.room.playback.currentTrackId,
     input.roomSnapshot?.room.playback.status

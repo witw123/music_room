@@ -632,7 +632,7 @@ export function useManualCacheDownloader(input: {
   peerId: string;
   connectedPeers: string[];
   dataMesh: DataMeshBridge | null;
-  preserveRemotePlayback?: boolean;
+  pauseDirectRequests?: boolean;
   activePlaybackWindow?: ActivePlaybackCacheWindow | null;
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
   onManualCachePlan?: (plan: ManualCacheTrackPlan) => void;
@@ -685,7 +685,7 @@ export function useManualCacheDownloader(input: {
 
   useEffect(() => {
     if (
-      input.preserveRemotePlayback ||
+      input.pauseDirectRequests ||
       !input.enableManualTrackCaching ||
       providerPeerIds.length === 0 ||
       !input.dataMesh
@@ -724,12 +724,12 @@ export function useManualCacheDownloader(input: {
     input.enableManualTrackCaching,
     input.manualCacheTrackIds,
     input.onRuntimeEvent,
-    input.preserveRemotePlayback,
+    input.pauseDirectRequests,
     providerPeerIds
   ]);
 
   useEffect(() => {
-    if (input.preserveRemotePlayback || !input.dataMesh) {
+    if (input.pauseDirectRequests || !input.dataMesh) {
       recoverySinceAtRef.current = null;
       lastRecoveryAtRef.current = null;
       return;
@@ -792,7 +792,7 @@ export function useManualCacheDownloader(input: {
     input.manualCacheTrackIds,
     input.onRuntimeEvent,
     input.peerId,
-    input.preserveRemotePlayback,
+    input.pauseDirectRequests,
     providerPeerIds,
     remotePeerIds,
     schedulerAvailabilityByTrack
@@ -821,7 +821,7 @@ export function useManualCacheDownloader(input: {
       activePlaybackPendingKeyRef.current = nextPlaybackPendingKey;
     }
 
-    if (input.preserveRemotePlayback) {
+    if (input.pauseDirectRequests) {
       directPendingRef.current.clear();
       return;
     }
@@ -998,7 +998,7 @@ export function useManualCacheDownloader(input: {
     input.onManualCachePlan,
     input.onRuntimeEvent,
     input.peerId,
-    input.preserveRemotePlayback,
+    input.pauseDirectRequests,
     input.roomSnapshot,
     input.activePlaybackWindow,
     schedulerAvailabilityByTrack

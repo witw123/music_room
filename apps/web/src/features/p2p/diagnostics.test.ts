@@ -26,24 +26,20 @@ describe("p2p diagnostics", () => {
   it("applies snapshot updates while recording an event", () => {
     const state = recordDiagnosticsEvent(createEmptyDiagnosticsState(), {
       peerId: "peer_a",
-      channelKind: "media",
+      channelKind: "data",
       direction: "local",
-      event: "remote-track",
-      summary: "received remote track",
+      event: "data-connected",
+      summary: "data channel connected",
       now: "2026-04-01T00:00:00.000Z",
       update: (snapshot) => ({
         ...snapshot,
-        mediaConnectionState: "connected",
-        remoteTrackStatus: {
-          ...snapshot.remoteTrackStatus,
-          received: true,
-          lastTrackAt: "2026-04-01T00:00:00.000Z"
-        }
+        dataConnectionState: "connected",
+        dataChannelState: "open"
       })
     });
 
-    expect(state.peers.peer_a?.mediaConnectionState).toBe("connected");
-    expect(state.peers.peer_a?.remoteTrackStatus.received).toBe(true);
+    expect(state.peers.peer_a?.dataConnectionState).toBe("connected");
+    expect(state.peers.peer_a?.dataChannelState).toBe("open");
   });
 
   it("collapses consecutive duplicate diagnostics entries while keeping the latest snapshot", () => {

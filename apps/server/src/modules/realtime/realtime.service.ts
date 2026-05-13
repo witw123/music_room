@@ -161,12 +161,15 @@ function resolveTurnHost(requestHost?: string | null) {
     return appDomain.startsWith("turn.") ? appDomain : `turn.${appDomain}`;
   }
 
-  // Use the request's Host header as a last-resort fallback.
-  // This handles cases where neither TURN_PUBLIC_HOST nor APP_DOMAIN is set
-  // but the ICE endpoint is reached via a known public hostname.
+  if (process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST !== "1") {
+    return null;
+  }
+
+  // Optional last-resort fallback for deployments that intentionally expose
+  // TURN on the same public host used to reach the ICE endpoint.
   const normalizedRequestHost = requestHost?.trim();
   if (normalizedRequestHost) {
-    return normalizedRequestHost;
+    return normalizedRequestHost.split(":")[0] || null;
   }
 
   return null;

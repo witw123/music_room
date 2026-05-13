@@ -43,7 +43,6 @@ import {
 } from "@/features/playback/progressive-playback";
 import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
-import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { useRoomDiagnosticsBridge } from "./use-room-diagnostics-bridge";
@@ -64,10 +63,6 @@ import {
   useRoomDataMesh
 } from "./use-room-data-mesh";
 import {
-  useRoomMediaPublicationRuntime,
-  useRoomMediaRuntime
-} from "./use-room-media-runtime";
-import {
   createRoomRealtimeRuntime,
   useRoomRealtimeConnection
 } from "./use-room-realtime-connection";
@@ -82,7 +77,6 @@ import {
   resolvePlaybackRecoveryActionType,
   useRoomPlaybackConnectionCoordinator
 } from "./use-room-playback-connection-coordinator";
-import { shouldMaintainRemotePlaybackSurface } from "./room-playback-policy";
 import {
   classifyRoomPlaybackChange,
   resolvePlaybackSurfaceKey,
@@ -99,7 +93,6 @@ export {
   resolveManualCacheMeshRecoveryMode,
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
-export { shouldManagePublishedMediaTransport } from "./use-room-media-runtime";
 export {
   shouldAcceptIncomingMediaSignal,
   shouldReannounceManualCacheAvailability
@@ -157,12 +150,6 @@ type UseRoomRuntimeInput = {
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
   getLocalPlaybackPositionMs?: () => number | null;
-  getHostRelayStream?: () => MediaStream | null;
-  getHostRelayClockState?: () => {
-    mediaTimeMs: number;
-    bufferedAheadMs: number;
-    playoutState: "playing" | "buffering" | "paused";
-  } | null;
   setAuthoritativeMediaClock?: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   roomRecoveryState: {
@@ -170,7 +157,6 @@ type UseRoomRuntimeInput = {
       | "joining"
       | "resyncing"
       | "bootstrapping-data"
-      | "bootstrapping-media"
       | "playing-local-fallback"
       | "steady";
     mode: "late-join" | "rejoin" | "steady";
@@ -186,12 +172,11 @@ type UseRoomRuntimeInput = {
   setRoomRecoveryState: Dispatch<
     SetStateAction<{
       phase:
-        | "joining"
-        | "resyncing"
-        | "bootstrapping-data"
-        | "bootstrapping-media"
-        | "playing-local-fallback"
-        | "steady";
+      | "joining"
+      | "resyncing"
+      | "bootstrapping-data"
+      | "playing-local-fallback"
+      | "steady";
       mode: "late-join" | "rejoin" | "steady";
       generation: number | null;
       bootstrapStartedAt: string | null;
@@ -231,7 +216,6 @@ type UseRoomRuntimeInput = {
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   audioRef: RefObject<HTMLAudioElement | null>;
-  remoteAudioRef?: RefObject<HTMLAudioElement | null>;
   socketRef: MutableRefObject<RoomSocket | null>;
   chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   resetPlayerSurface: () => void;
@@ -242,8 +226,6 @@ type UseRoomRuntimeInput = {
 };
 
 type UseRoomRuntimeResult = {
-  scheduleRemotePlaybackRetry: (attempt?: number) => void;
-  syncHostMediaStream: () => Promise<void>;
   ensureSourcePlaybackStarted: () => Promise<void>;
 };
 
@@ -251,149 +233,9 @@ const manualCacheDirectRequestIntervalMs = 450;
 const manualCacheDirectRequestBatchSize = 8;
 const manualCacheDirectRequestTimeoutMs = 5_000;
 const manualCacheDirectPendingTtlMs = 7_000;
-const remoteStreamSwapGraceMs = 900;
-const remotePlaybackRetryBackoffMs = [120, 240, 400] as const;
-const maxRemotePlaybackRetryAttempts = 3;
-const listenerSoftRecoveryDelayMs = 1_500;
-const listenerHardRecoveryDelayMs = 5_000;
-const listenerSoftRecoveryCooldownMs = 800;
 const connectionSupervisorIceRestartNoProgressFloorMs = 6_000;
 const connectionSupervisorHardRecreateNoProgressFloorMs = 45_000;
-const subscribeAckTimeoutMs = 4_000;
-const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
-const stalledPieceSyncRecoveryThresholdMs = 20_000;
-const recoverySoftRetryThresholdMs = 5_000;
-const recoveryMediaRestartThresholdMs = 4_000;
-const recoveryDataRestartThresholdMs = 8_000;
 const enableTrackCaching = true;
-
-type ListenerMediaRecoveryReason =
-  | "connected-but-no-track"
-  | "track-received-but-not-bound"
-  | "bound-but-not-playing"
-  | "bound-but-muted-track";
-
-type ListenerMediaRecoveryAction =
-  | "rebind-element"
-  | "retry-play"
-  | "rebind-and-play";
-
-export function resolveListenerMediaRecoveryReason(input: {
-  traceKey: string;
-  lastTrackTraceKey: string | null;
-  lastBoundTraceKey: string | null;
-  lastPlayAttemptTraceKey: string | null;
-  lastPlayAttemptResult: "ok" | "rejected" | null;
-  lastPlayingTraceKey: string | null;
-  remoteAudioPaused: boolean | null;
-  hasBoundSrcObject: boolean;
-  remoteTrackMuted: boolean | null;
-  remoteTrackEnabled: boolean | null;
-  remoteTrackReadyState: MediaStreamTrackState | null;
-}): ListenerMediaRecoveryReason | null {
-  if (input.lastTrackTraceKey !== input.traceKey) {
-    return "connected-but-no-track";
-  }
-
-  if (input.lastBoundTraceKey !== input.traceKey || !input.hasBoundSrcObject) {
-    return "track-received-but-not-bound";
-  }
-
-  if (
-    input.remoteTrackMuted === true ||
-    input.remoteTrackEnabled === false ||
-    input.remoteTrackReadyState === "ended"
-  ) {
-    return "bound-but-muted-track";
-  }
-
-  if (input.lastPlayingTraceKey === input.traceKey) {
-    return null;
-  }
-
-  if (
-    input.lastPlayAttemptTraceKey !== input.traceKey ||
-    input.lastPlayAttemptResult !== "ok" ||
-    input.remoteAudioPaused !== false
-  ) {
-    return "bound-but-not-playing";
-  }
-
-  return null;
-}
-
-export function resolveListenerMediaRecoveryAction(input: {
-  reason: ListenerMediaRecoveryReason | null;
-  bindAttempts: number;
-  playAttempts: number;
-}) {
-  if (!input.reason) {
-    return null;
-  }
-
-  if (input.reason === "connected-but-no-track") {
-    return null;
-  }
-
-  if (input.reason === "track-received-but-not-bound") {
-    return "rebind-element" satisfies ListenerMediaRecoveryAction;
-  }
-
-  if (input.reason === "bound-but-not-playing") {
-    return "retry-play" satisfies ListenerMediaRecoveryAction;
-  }
-
-  return "rebind-and-play" satisfies ListenerMediaRecoveryAction;
-}
-
-function resolveListenerRecoveryDelayMs(input: {
-  progressGapMs: number | null;
-  remoteTrackReadyState: MediaStreamTrackState | null;
-}) {
-  if (input.remoteTrackReadyState === "ended") {
-    return listenerHardRecoveryDelayMs;
-  }
-
-  if (typeof input.progressGapMs !== "number" || !Number.isFinite(input.progressGapMs)) {
-    return listenerSoftRecoveryDelayMs;
-  }
-
-  return input.progressGapMs >= listenerHardRecoveryDelayMs
-    ? listenerHardRecoveryDelayMs
-    : listenerSoftRecoveryDelayMs;
-}
-
-function resolveConsecutiveNoProgressMs(...values: Array<number | null>) {
-  const definedValues = values.filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0
-  );
-
-  if (definedValues.length === 0) {
-    return null;
-  }
-
-  return Math.max(0, Math.round(Math.min(...definedValues)));
-}
-
-export function shouldResumeRemotePlayback(input: {
-  audioUnlocked: boolean;
-  isCurrentSourceOwner: boolean;
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  currentTrackId: string | null;
-  hasRemoteSrcObject: boolean;
-  remoteAudioPaused: boolean | null;
-}) {
-  return (
-    input.audioUnlocked &&
-    !input.isCurrentSourceOwner &&
-    false && // remote-stream removed
-    input.playbackStatus === "playing" &&
-    !!input.currentTrackId &&
-    input.hasRemoteSrcObject &&
-    input.remoteAudioPaused !== false
-  );
-}
 
 export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
   payloadRecoveryGeneration: number | null | undefined;
@@ -493,7 +335,7 @@ export function resolveMediaDiagnosticPeerId(input: {
     input.remotePeerId ||
     input.connectedPeerIds[0] ||
     input.currentSourcePeerId ||
-    "remote-media"
+    "system"
   );
 }
 
@@ -570,7 +412,7 @@ export function useRoomRuntime({
   setPeerId,
   connectedPeers,
   setConnectedPeers,
-  mediaConnectedPeers,
+  mediaConnectedPeers: _mediaConnectedPeers,
   setMediaConnectedPeers,
   suppressRoomRecovery,
   setSuppressRoomRecovery,
@@ -585,18 +427,16 @@ export function useRoomRuntime({
   setMediaConnectionState,
   isPageVisible,
   setIsPageVisible,
-  schedulerMode,
+  schedulerMode: _schedulerMode,
   setSchedulerMode,
-  schedulerPlaybackBucketMs,
+  schedulerPlaybackBucketMs: _schedulerPlaybackBucketMs,
   bufferHealth,
-  transportGovernorMode,
+  transportGovernorMode: _transportGovernorMode,
   activePlaybackSource,
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
   audioUnlocked,
-  getLocalPlaybackPositionMs,
-  getHostRelayStream = () => null,
-  getHostRelayClockState = () => null,
+  getLocalPlaybackPositionMs: _getLocalPlaybackPositionMs,
   setAuthoritativeMediaClock = (() => {}) as Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>,
   setAudioUnlocked,
   roomRecoveryState,
@@ -620,8 +460,7 @@ export function useRoomRuntime({
   handleManualCachePlan,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
-  audioRef,
-  remoteAudioRef = { current: null } as RefObject<HTMLAudioElement | null>,
+  audioRef: _audioRef,
   socketRef,
   chunkSchedulerRef,
   resetPlayerSurface,
@@ -630,23 +469,7 @@ export function useRoomRuntime({
   refreshAvailableRooms,
   refreshPlaylists
 }: UseRoomRuntimeInput): UseRoomRuntimeResult {
-  const remoteStreamClearTimeoutRef = useRef<number | null>(null);
-  const remotePlaybackRetryRef = useRef<number | null>(null);
-  const scheduleRemotePlaybackRetryRef = useRef<
-    (attempt?: number, generation?: string | null) => void
-  >(() => undefined);
-  const clearRemoteStreamClearTimeout = useCallback(() => {
-    if (remoteStreamClearTimeoutRef.current !== null) {
-      window.clearTimeout(remoteStreamClearTimeoutRef.current);
-      remoteStreamClearTimeoutRef.current = null;
-    }
-  }, []);
-  const clearRemotePlaybackRetry = useCallback(() => {
-    if (remotePlaybackRetryRef.current !== null) {
-      window.clearTimeout(remotePlaybackRetryRef.current);
-      remotePlaybackRetryRef.current = null;
-    }
-  }, []);
+  const clearPlaybackRetry = useCallback(() => undefined, []);
 
   const {
     meshRef,
@@ -654,11 +477,7 @@ export function useRoomRuntime({
     initialRecoveryAttemptRef,
     previousInitialRoomIdRef,
     activeRouteRoomIdRef,
-    hostStreamRef,
     mediaTransportEpochRef,
-    transportResetReasonRef,
-    hostMediaSyncRetryRef,
-    lastHostCaptureRefreshAtRef,
     remotePlaybackResumeAfterUnlockKeyRef,
     socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
@@ -667,23 +486,11 @@ export function useRoomRuntime({
     activePlaybackSourceRef,
     lastSubscribeAckAtRef,
     recoveryModeRef,
-    mediaTransportOwnerKeyRef,
     lastRealtimeRoomEventAtRef,
     lastDataActivityAtRef,
-    lastListenerBootstrapKeyRef,
-    missingListenerSinceRef,
-    hostMediaSyncStateRef,
     listenerMediaLifecycleRef,
     listenerMediaRecoveryTimeoutRef,
     socketDisconnectGraceTimeoutRef,
-    hostMediaClockSequenceRef,
-    armListenerMediaRecoveryRef,
-    audioUnlockedRef,
-    setAudioUnlockedRef,
-    sourceStartStateRef,
-    setSourceStartStateRef,
-    lastSourceStartErrorRef,
-    setLastSourceStartErrorRef,
     manualCacheTrackIdsRef,
     uploadedTracksRef,
     announceRoomTrackAvailabilityRef,
@@ -697,11 +504,8 @@ export function useRoomRuntime({
     recordPeerDiagnosticRef,
     clearListenerMediaRecovery,
     clearSocketDisconnectGrace,
-    clearHostMediaSyncRetry,
-    getSilentPrewarmHandle,
     bumpMediaTransportEpoch,
-    updateSourceStartState,
-    updateHostCaptureDiagnostics
+    updateSourceStartState
   } = useRoomRuntimeMutableState({
     initialRoomId,
     roomSnapshot,
@@ -741,8 +545,6 @@ export function useRoomRuntime({
     lastRecoveryRecommendationRef,
     lastRecoveryDropReasonRef,
     getCurrentPlaybackConnectionKey,
-    beginPlaybackConnection,
-    disposePlaybackConnection,
     reportPlaybackState,
     applyRecoveryAction,
     finishRecoveryAction,
@@ -752,7 +554,7 @@ export function useRoomRuntime({
     mediaTransportEpochRef,
     listenerMediaLifecycleRef,
     clearListenerMediaRecovery,
-    clearRemotePlaybackRetry
+    clearPlaybackRetry
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
   const lastRoomChangeKindRef = useRef<RoomChangeKind | null>(null);
@@ -799,7 +601,6 @@ export function useRoomRuntime({
     roomSnapshot,
     currentRoomRef,
     peerId,
-    mediaMeshRef,
     meshRef,
     recordPeerDiagnostic,
     setMediaConnectionState,
@@ -816,54 +617,21 @@ export function useRoomRuntime({
     bufferHealth
   });
 
-  const resolveSoftRecoveryMediaState = useCallback(
-    (fallback: "buffering" | "reconnecting" = "reconnecting") => {
-      const continuity = resolveSourceContinuityState() as any;
-      if (continuity.audibleSource !== null || continuity) {
-        return "buffering" as const;
-      }
-
-      return fallback;
-    },
-    [resolveSourceContinuityState]
+  const getRemoteAudioDiagnostics = useCallback(
+    () => ({
+      audioPaused: null,
+      audioMuted: null,
+      audioReadyState: null,
+      hasSrcObject: null,
+      currentSrc: null,
+      audioVolume: null,
+      trackId: null,
+      trackMuted: null,
+      trackEnabled: null,
+      trackReadyState: null
+    }),
+    []
   );
-
-  const getRemoteAudioDiagnostics = useCallback(() => {
-    const remoteAudio = remoteAudioRef.current;
-    if (!remoteAudio) {
-      return {
-        audioPaused: null,
-        audioMuted: null,
-        audioReadyState: null,
-        hasSrcObject: null,
-        currentSrc: null,
-        audioVolume: null,
-        trackId: null,
-        trackMuted: null,
-        trackEnabled: null,
-        trackReadyState: null
-      };
-    }
-
-    const audioTracks =
-      typeof (remoteAudio.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
-        ? (remoteAudio.srcObject as MediaStream).getAudioTracks()
-        : [];
-    const primaryTrack = audioTracks[0] ?? null;
-
-    return {
-      audioPaused: remoteAudio.paused,
-      audioMuted: remoteAudio.muted,
-      audioReadyState: remoteAudio.readyState,
-      hasSrcObject: !!remoteAudio.srcObject,
-      currentSrc: remoteAudio.currentSrc || null,
-      audioVolume: remoteAudio.volume,
-      trackId: primaryTrack?.id ?? null,
-      trackMuted: primaryTrack?.muted ?? null,
-      trackEnabled: primaryTrack?.enabled ?? null,
-      trackReadyState: primaryTrack?.readyState ?? null
-    };
-  }, [remoteAudioRef]);
 
   const getRemoteMediaTraceContext = useCallback(
     (remotePeerId?: string | null) => {
@@ -885,6 +653,30 @@ export function useRoomRuntime({
     },
     [currentRoomRef, peerId]
   );
+
+  const resetListenerMediaLifecycle = useCallback(() => {
+    const lifecycle = listenerMediaLifecycleRef.current;
+    lifecycle.traceKey = null;
+    lifecycle.sourcePeerId = null;
+    lifecycle.lastPlayAttemptResult = null;
+    lifecycle.lastPlayAttemptError = null;
+    lifecycle.lastSoftRecoveryTraceKey = null;
+    lifecycle.lastSoftRecoveryAt = null;
+    lifecycle.lastHardRecoveryTraceKey = null;
+    lifecycle.lastHardRecoveryAt = null;
+    lifecycle.currentGeneration = null;
+    lifecycle.generationStartedAt = null;
+    lifecycle.boundGeneration = null;
+    lifecycle.playingGeneration = null;
+    lifecycle.lastPlayoutProgressAt = null;
+    lifecycle.lastTransportProgressAt = null;
+    lifecycle.recoveryStage = "idle";
+  }, [listenerMediaLifecycleRef]);
+
+  useEffect(() => {
+    clearListenerMediaRecovery();
+    resetListenerMediaLifecycle();
+  }, [clearListenerMediaRecovery, resetListenerMediaLifecycle]);
 
   const updateRemoteMediaDiagnostic = useCallback(
     (
@@ -925,10 +717,10 @@ export function useRoomRuntime({
         };
       };
       recordPeerDiagnosticRef.current({
-        peerId: "remote-media",
-        channelKind: "media",
+        peerId: "system",
+        channelKind: "system",
         direction: "local",
-        event: options?.event ?? "remote-media-state",
+        event: options?.event ?? "cache-playback-state",
         summary,
         recordEvent: options?.recordEvent ?? false,
         level: options?.level,
@@ -952,138 +744,12 @@ export function useRoomRuntime({
     ]
   );
 
-  const resetRemoteAudioElement = useCallback(
-    (
-      stream: MediaStream | null,
-      options?: {
-        deferNullReset?: boolean;
-        generation?: string | null;
-        reason?: string;
-        forceRebind?: boolean;
-      }
-    ) => {
-      const remoteAudio = remoteAudioRef.current;
-      if (!remoteAudio) {
-        return;
-      }
-      const lifecycle = listenerMediaLifecycleRef.current;
-      const generation = options?.generation ?? lifecycle.currentGeneration;
-
-      if (stream) {
-        if (generation && lifecycle.currentGeneration && generation !== lifecycle.currentGeneration) {
-          return;
-        }
-        clearRemoteStreamClearTimeout();
-        const traceContext = getRemoteMediaTraceContext();
-        if (remoteAudio.srcObject !== stream || options?.forceRebind) {
-          remoteAudio.pause();
-          if (remoteAudio.srcObject) {
-            remoteAudio.srcObject = null;
-          }
-          remoteAudio.srcObject = stream;
-        }
-        lifecycle.latestStream = stream;
-        lifecycle.boundGeneration = generation ?? null;
-        lifecycle.bindAttempts += 1;
-        listenerMediaLifecycleRef.current.lastBoundTraceKey = traceContext.traceKey;
-        updateRemoteMediaDiagnostic(
-          options?.reason ? `远端音频元素已绑定新流：${options.reason}` : "远端音频元素已绑定新流",
-          (snapshot) => ({
-            ...snapshot,
-            mediaConnectionState: "buffering",
-            remoteTrackStatus: {
-              ...snapshot.remoteTrackStatus,
-              ...traceContext,
-              ...getRemoteAudioDiagnostics(),
-              boundToAudioElement: true,
-              lastBoundAt: new Date().toISOString(),
-              boundGeneration: generation ?? null,
-              currentGeneration: lifecycle.currentGeneration,
-              recoveryStage: lifecycle.recoveryStage,
-              restartAttempt: lifecycle.restartAttempt
-            }
-          }),
-          {
-            event: "remote-audio-element-state"
-          }
-        );
-        return;
-      }
-
-      const clearStream = () => {
-        if (generation && listenerMediaLifecycleRef.current.currentGeneration !== generation) {
-          remoteStreamClearTimeoutRef.current = null;
-          return;
-        }
-        remoteAudio.pause();
-        if (remoteAudio.srcObject) {
-          remoteAudio.srcObject = null;
-        }
-        remoteAudio.load();
-        remoteStreamClearTimeoutRef.current = null;
-        listenerMediaLifecycleRef.current.latestStream = null;
-        listenerMediaLifecycleRef.current.boundGeneration = null;
-        updateRemoteMediaDiagnostic(
-          "远端音频元素已清空媒体流",
-          (snapshot) => ({
-            ...snapshot,
-            mediaConnectionState: "idle",
-            remoteTrackStatus: {
-              ...snapshot.remoteTrackStatus,
-              ...getRemoteMediaTraceContext(),
-              ...getRemoteAudioDiagnostics(),
-              boundToAudioElement: false,
-              boundGeneration: null,
-              currentGeneration: listenerMediaLifecycleRef.current.currentGeneration,
-              recoveryStage: listenerMediaLifecycleRef.current.recoveryStage,
-              restartAttempt: listenerMediaLifecycleRef.current.restartAttempt
-            },
-            progressivePlaybackStatus: {
-              ...(
-                snapshot.progressivePlaybackStatus ??
-                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-              ),
-              mediaTransportState: snapshot.progressivePlaybackStatus?.mediaTransportState ?? "idle",
-              dataRequiredForPlayback: enableTrackCaching,
-              firstAudibleAt: snapshot.progressivePlaybackStatus?.firstAudibleAt ?? null
-            }
-          }),
-          {
-            event: "remote-audio-element-state"
-          }
-        );
-      };
-
-      if (options?.deferNullReset && remoteAudio.srcObject) {
-        clearRemoteStreamClearTimeout();
-        remoteStreamClearTimeoutRef.current = window.setTimeout(clearStream, remoteStreamSwapGraceMs);
-        return;
-      }
-
-      clearRemoteStreamClearTimeout();
-      clearStream();
-    },
-    [
-      clearRemoteStreamClearTimeout,
-      getRemoteAudioDiagnostics,
-      getRemoteMediaTraceContext,
-      remoteAudioRef,
-      updateRemoteMediaDiagnostic
-    ]
-  );
-
   const rawRoomListenerPeerIds = useMemo(
     () => resolveRoomListenerPeerIds(roomSnapshot?.room.members, peerId),
     [roomSnapshot?.room.members, peerId]
   );
   const roomListenerSetHash = rawRoomListenerPeerIds.join(",");
-  const roomListenerPeerIds = useMemo(
-    () => (roomListenerSetHash ? roomListenerSetHash.split(",") : []),
-    [roomListenerSetHash]
-  );
-  const roomListenerCount = roomListenerPeerIds.length;
-  const shouldPreserveRemotePlaybackForCache =
-    false;
+  const shouldPauseManualCacheDirectRequests = false;
   const activePlaybackWindow = useMemo(() => {
     const playback = roomSnapshot?.room.playback ?? null;
     const track = playback?.currentTrackId
@@ -1142,7 +808,7 @@ export function useRoomRuntime({
     peerId,
     connectedPeers,
     dataMesh: dataMeshBridge,
-    preserveRemotePlayback: shouldPreserveRemotePlaybackForCache,
+    pauseDirectRequests: shouldPauseManualCacheDirectRequests,
     activePlaybackWindow,
     onRuntimeEvent: emitRuntimeEvent,
     onManualCachePlan: handleManualCachePlan
@@ -1267,7 +933,7 @@ export function useRoomRuntime({
     (recommendation: {
       playbackConnectionKey: string | null;
       peerId: string | null;
-      scope: "media" | "data" | "room";
+      scope: "data" | "room";
       level: "soft" | "ice-restart" | "hard-recreate" | "full-resubscribe";
       reason: string;
       observedNoProgressMs: number | null;
@@ -1291,16 +957,9 @@ export function useRoomRuntime({
         recordEvent: false
       });
 
-      const actionType = resolvePlaybackRecoveryActionType(recommendation);
-      if (actionType === "retry-play") {
-        scheduleRemotePlaybackRetryRef.current(
-          0,
-          recommendation.playbackConnectionKey ?? currentPlaybackConnectionKey
-        );
-        return;
-      }
+      const dataActionType = resolvePlaybackRecoveryActionType(recommendation);
 
-      if (actionType !== "full-resubscribe" && !recommendation.peerId) {
+      if (dataActionType !== "full-resubscribe" && !recommendation.peerId) {
         lastRecoveryDropReasonRef.current = "missing-peer";
         return;
       }
@@ -1308,7 +967,7 @@ export function useRoomRuntime({
       const action = applyRecoveryAction({
         playbackConnectionKey:
           recommendation.playbackConnectionKey ?? currentPlaybackConnectionKey,
-        actionType,
+        actionType: dataActionType,
         peerId: recommendation.peerId,
         reason: recommendation.reason
       });
@@ -1320,41 +979,7 @@ export function useRoomRuntime({
         playbackConnectionKey: action.playbackConnectionKey
       });
 
-      if (actionType === "restart-listener-ice" && recommendation.peerId) {
-        setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
-        void mediaMeshRef.current
-          ?.restartListenerIce(recommendation.peerId)
-          .then(() => {
-            finishRecoveryAction(action.actionId, "completed", {
-              nextState: "negotiating"
-            });
-          })
-          .catch(() => {
-            finishRecoveryAction(action.actionId, "failed", {
-              nextState: "failed"
-            });
-          });
-        return;
-      }
-
-      if (actionType === "reset-listener-peer" && recommendation.peerId) {
-        setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
-        void mediaMeshRef.current
-          ?.resetListenerPeer(recommendation.peerId)
-          .then(() => {
-            finishRecoveryAction(action.actionId, "completed", {
-              nextState: "negotiating"
-            });
-          })
-          .catch(() => {
-            finishRecoveryAction(action.actionId, "failed", {
-              nextState: "failed"
-            });
-          });
-        return;
-      }
-
-      if (actionType === "restart-data-peer" && recommendation.peerId) {
+      if (dataActionType === "restart-data-peer" && recommendation.peerId) {
         void meshRef.current
           ?.restartPeer(recommendation.peerId)
           .then(() => {
@@ -1370,33 +995,23 @@ export function useRoomRuntime({
         return;
       }
 
-      if (actionType === "full-resubscribe") {
+      if (dataActionType === "full-resubscribe") {
         resubscribeRoomRef.current?.();
         if (recommendation.peerId) {
           void meshRef.current?.restartPeer(recommendation.peerId);
         }
-        const nextTransportEpoch = bumpMediaTransportEpoch("explicit-hard-reset");
-        mediaMeshRef.current?.setTransportEpoch(nextTransportEpoch);
-        if (recommendation.peerId) {
-          void mediaMeshRef.current?.resetListenerPeer(recommendation.peerId);
-        }
-      finishRecoveryAction(action.actionId, "completed", {
-          nextState: "negotiating"
+        finishRecoveryAction(action.actionId, "completed", {
+          nextState: "recovering-hard"
         });
       }
     },
     [
       applyRecoveryAction,
-      bumpMediaTransportEpoch,
       finishRecoveryAction,
       getCurrentPlaybackConnectionKey,
-      listenerMediaLifecycleRef,
-      mediaMeshRef,
       meshRef,
       noteRecoveryRecommendation,
       reportPlaybackState,
-      resolveSoftRecoveryMediaState,
-      setMediaConnectionState,
       lastRecoveryDropReasonRef,
       updateRemoteMediaDiagnostic
     ]
@@ -1423,8 +1038,6 @@ export function useRoomRuntime({
       roomListenerSetHash,
       uploadedTrackIds,
       connectedPeers,
-      mediaConnectedPeers,
-      mediaConnectionState,
       roomRecoveryState,
       setRoomRecoveryState,
       isCurrentSourceOwner,
@@ -1435,7 +1048,6 @@ export function useRoomRuntime({
       lastDataActivityAtRef,
       recoveryGenerationRef,
       recoveryModeRef,
-      listenerMediaLifecycleRef,
       resubscribeRoomRef,
       meshRef,
       mediaMeshRef,
@@ -1484,632 +1096,33 @@ export function useRoomRuntime({
     setStatusMessage
   });
 
-  const armListenerMediaRecovery = useCallback(
-    (generation?: string | null) => {
-      clearListenerMediaRecovery();
-
-      const expectedGeneration = generation ?? getCurrentPlaybackConnectionKey();
-      const playback = currentRoomRef.current?.room.playback;
-      if (
-        !expectedGeneration ||
-        !playback?.currentTrackId ||
-        playback.status !== "playing" ||
-        isCurrentSourceOwner ||
-        (activePlaybackSource as string) !== 'remote-stream' ||
-        !playback.sourcePeerId
-      ) {
-        return;
-      }
-
-      const lastProgressAt = Math.max(
-        listenerMediaLifecycleRef.current.generationStartedAt ?? 0,
-        listenerMediaLifecycleRef.current.lastPlayoutProgressAt ?? 0,
-        listenerMediaLifecycleRef.current.lastTransportProgressAt ?? 0
-      );
-      const progressGapMs = lastProgressAt > 0 ? Date.now() - lastProgressAt : null;
-      const remoteTrackReadyState = getRemoteAudioDiagnostics().trackReadyState;
-      const recoveryDelayMs = resolveListenerRecoveryDelayMs({
-        progressGapMs,
-        remoteTrackReadyState
-      });
-
-      listenerMediaRecoveryTimeoutRef.current = window.setTimeout(() => {
-        const lifecycle = listenerMediaLifecycleRef.current;
-        const latestPlayback = currentRoomRef.current?.room.playback;
-        const remoteAudio = remoteAudioRef.current;
-        const latestPlaybackConnectionKey = getCurrentPlaybackConnectionKey();
-        const latestTraceContext = latestPlayback?.sourcePeerId
-          ? getRemoteMediaTraceContext(latestPlayback.sourcePeerId)
-          : null;
-        if (
-          !latestPlayback?.currentTrackId ||
-          latestPlayback.status !== "playing" ||
-          lifecycle.currentGeneration !== expectedGeneration ||
-          latestPlaybackConnectionKey !== expectedGeneration
-        ) {
-          return;
-        }
-
-        const now = Date.now();
-        const latestProgressAt = Math.max(
-          lifecycle.generationStartedAt ?? 0,
-          lifecycle.lastPlayoutProgressAt ?? 0,
-          lifecycle.lastTransportProgressAt ?? 0
-        );
-        const latestProgressGapMs = latestProgressAt > 0 ? now - latestProgressAt : null;
-        const remoteTrack =
-          typeof (remoteAudio?.srcObject as MediaStream | null | undefined)?.getAudioTracks === "function"
-            ? ((remoteAudio?.srcObject as MediaStream).getAudioTracks()[0] ?? null)
-            : null;
-        const reason = resolveListenerMediaRecoveryReason({
-          traceKey: latestTraceContext?.traceKey ?? expectedGeneration,
-          lastTrackTraceKey: lifecycle.lastTrackTraceKey,
-          lastBoundTraceKey: lifecycle.lastBoundTraceKey,
-          lastPlayAttemptTraceKey: lifecycle.lastPlayAttemptTraceKey,
-          lastPlayAttemptResult: lifecycle.lastPlayAttemptResult,
-          lastPlayingTraceKey: lifecycle.lastPlayingTraceKey,
-          remoteAudioPaused: remoteAudio?.paused ?? null,
-          hasBoundSrcObject: !!remoteAudio?.srcObject,
-          remoteTrackMuted: remoteTrack?.muted ?? null,
-          remoteTrackEnabled: remoteTrack?.enabled ?? null,
-          remoteTrackReadyState: remoteTrack?.readyState ?? null
-        });
-        const hardRecoveryRequired =
-          remoteTrack?.readyState === "ended" ||
-          (typeof latestProgressGapMs === "number" &&
-            latestProgressGapMs >= listenerHardRecoveryDelayMs);
-        if (
-          reason === "connected-but-no-track" &&
-          !hardRecoveryRequired
-        ) {
-          armListenerMediaRecoveryRef.current(expectedGeneration);
-          return;
-        }
-
-        if (
-          reason &&
-          !hardRecoveryRequired &&
-          typeof latestProgressGapMs === "number" &&
-          latestProgressGapMs < listenerSoftRecoveryDelayMs
-        ) {
-          armListenerMediaRecoveryRef.current(expectedGeneration);
-          return;
-        }
-
-        const action = resolveListenerMediaRecoveryAction({
-          reason,
-          bindAttempts: lifecycle.bindAttempts,
-          playAttempts: lifecycle.playAttempts
-        });
-        if (hardRecoveryRequired && !action) {
-          lifecycle.recoveryStage = "waiting-track";
-          setMediaConnectionState(resolveSoftRecoveryMediaState("reconnecting"));
-          reportPlaybackState("recovering-hard", {
-            playbackConnectionKey: getCurrentPlaybackConnectionKey()
-          });
-          updateRemoteMediaDiagnostic(
-            `监听端等待连接监督恢复媒体链路${reason ? ` · ${reason}` : ""}`,
-            (snapshot) => ({
-              ...snapshot,
-              mediaConnectionState: resolveSoftRecoveryMediaState("reconnecting"),
-              recoveryActionLevel: "observe",
-              remoteTrackStatus: {
-                ...snapshot.remoteTrackStatus,
-                ...getRemoteMediaTraceContext(latestPlayback.sourcePeerId),
-                ...getRemoteAudioDiagnostics(),
-                currentGeneration: lifecycle.currentGeneration,
-                boundGeneration: lifecycle.boundGeneration,
-                playingGeneration: lifecycle.playingGeneration,
-                recoveryStage: lifecycle.recoveryStage,
-                restartAttempt: lifecycle.restartAttempt
-              }
-            }),
-            {
-              event: "remote-media-await-supervisor",
-              recordEvent: false,
-              level: "warning"
-            }
-          );
-          return;
-        }
-        if (!action) {
-          lifecycle.recoveryStage = "idle";
-          reportPlaybackState("stream-bound", {
-            playbackConnectionKey: getCurrentPlaybackConnectionKey()
-          });
-          return;
-        }
-        const lastRecoveryTraceKey = lifecycle.lastSoftRecoveryTraceKey;
-        const lastRecoveryAt = lifecycle.lastSoftRecoveryAt;
-        const recoveryCooldownMs = listenerSoftRecoveryCooldownMs;
-        if (
-          lastRecoveryTraceKey === expectedGeneration &&
-          lastRecoveryAt !== null &&
-          now - lastRecoveryAt < recoveryCooldownMs
-        ) {
-          armListenerMediaRecoveryRef.current(expectedGeneration);
-          return;
-        }
-
-        lifecycle.lastSoftRecoveryTraceKey = expectedGeneration;
-        lifecycle.lastSoftRecoveryAt = now;
-        lifecycle.recoveryStage =
-          action === "rebind-element"
-            ? "rebind-element"
-            : action === "rebind-and-play"
-              ? "rebind-and-play"
-              : "retry-play";
-        const acceptedRecoveryAction = applyRecoveryAction({
-          playbackConnectionKey: expectedGeneration,
-          actionType: action === "rebind-element" ? "rebind-element" : "retry-play",
-          peerId: latestPlayback.sourcePeerId ?? null,
-          reason: reason ?? action
-        });
-        if (!acceptedRecoveryAction) {
-          armListenerMediaRecoveryRef.current(expectedGeneration);
-          return;
-        }
-
-        updateRemoteMediaDiagnostic(
-          `监听端执行媒体恢复：${action}${reason ? ` · ${reason}` : ""}`,
-          (snapshot) => ({
-            ...snapshot,
-            mediaConnectionState: "buffering",
-            recoveryActionLevel: "soft-media-retry",
-            remoteTrackStatus: {
-              ...snapshot.remoteTrackStatus,
-              ...getRemoteMediaTraceContext(latestPlayback.sourcePeerId),
-              ...getRemoteAudioDiagnostics(),
-              currentGeneration: lifecycle.currentGeneration,
-              boundGeneration: lifecycle.boundGeneration,
-              playingGeneration: lifecycle.playingGeneration,
-              recoveryStage: lifecycle.recoveryStage,
-              restartAttempt: lifecycle.restartAttempt
-            }
-          }),
-          {
-            event: "remote-media-recover",
-            recordEvent: true,
-            level: "warning"
-          }
-        );
-
-        if (lifecycle.latestStream) {
-          resetRemoteAudioElement(lifecycle.latestStream, {
-            generation: expectedGeneration,
-            reason: action,
-            forceRebind: action === "rebind-element" || action === "rebind-and-play"
-          });
-        }
-
-        if (action === "retry-play" || action === "rebind-and-play") {
-          scheduleRemotePlaybackRetryRef.current(0, expectedGeneration);
-          return;
-        }
-
-        finishRecoveryAction(acceptedRecoveryAction.actionId, "completed", {
-          nextState: "stream-bound"
-        });
-        armListenerMediaRecoveryRef.current(expectedGeneration);
-      }, recoveryDelayMs);
-    },
-    [
-      activePlaybackSource,
-      applyRecoveryAction,
-      clearListenerMediaRecovery,
-      currentRoomRef,
-      finishRecoveryAction,
-      getRemoteAudioDiagnostics,
-      getCurrentPlaybackConnectionKey,
-      getRemoteMediaTraceContext,
-      isCurrentSourceOwner,
-      remoteAudioRef,
-      resetRemoteAudioElement,
-      reportPlaybackState,
-      resolveSoftRecoveryMediaState,
-      updateRemoteMediaDiagnostic
-    ]
-  );
-
-  const scheduleRemotePlaybackRetry = useCallback(
-    (attempt = 0, expectedGeneration?: string | null) => {
-      clearRemotePlaybackRetry();
-
-      const remoteAudio = remoteAudioRef.current;
-      const playback = currentRoomRef.current?.room.playback;
-
-      if (
-        !remoteAudio ||
-        !remoteAudio.srcObject ||
-        !playback?.currentTrackId ||
-        playback.status !== "playing"
-      ) {
-        return;
-      }
-      const generation = expectedGeneration ?? getCurrentPlaybackConnectionKey();
-      if (
-        !generation ||
-        listenerMediaLifecycleRef.current.currentGeneration !== generation ||
-        getCurrentPlaybackConnectionKey() !== generation
-      ) {
-        return;
-      }
-      const acceptedRecoveryAction = applyRecoveryAction({
-        playbackConnectionKey: generation,
-        actionType: "retry-play",
-        peerId: playback.sourcePeerId ?? null,
-        reason: attempt === 0 ? "remote-playback-retry" : `remote-playback-retry-${attempt + 1}`
-      });
-      if (!acceptedRecoveryAction) {
-        return;
-      }
-      listenerMediaLifecycleRef.current.playAttempts += 1;
-      reportPlaybackState("playback-starting", {
-        playbackConnectionKey: acceptedRecoveryAction.playbackConnectionKey
-      });
-
-      void roomAudioOutput.playElement(remoteAudio).then((result) => {
-        const now = new Date().toISOString();
-        const traceContext = getRemoteMediaTraceContext();
-        listenerMediaLifecycleRef.current.lastPlayAttemptTraceKey = traceContext.traceKey;
-        listenerMediaLifecycleRef.current.lastPlayAttemptResult = result.ok ? "ok" : "rejected";
-        listenerMediaLifecycleRef.current.lastPlayAttemptError = result.ok
-          ? null
-          : result.error ?? "play-rejected";
-        if (result.ok) {
-          if (!audioUnlockedRef.current && roomAudioOutput.isActivated()) {
-            setAudioUnlockedRef.current(true);
-            audioUnlockedRef.current = true;
-          }
-          listenerMediaLifecycleRef.current.playingGeneration = generation;
-          listenerMediaLifecycleRef.current.recoveryStage = "idle";
-          listenerMediaLifecycleRef.current.lastPlayoutProgressAt = Date.now();
-          listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs =
-            Number.isFinite(remoteAudio.currentTime) && remoteAudio.currentTime >= 0
-              ? Math.round(remoteAudio.currentTime * 1000)
-              : listenerMediaLifecycleRef.current.lastObservedRemoteCurrentTimeMs;
-          finishRecoveryAction(acceptedRecoveryAction.actionId, "completed", {
-            nextState: "live"
-          });
-          reportPlaybackState("live", {
-            playbackConnectionKey: acceptedRecoveryAction.playbackConnectionKey
-          });
-        } else {
-          finishRecoveryAction(acceptedRecoveryAction.actionId, "failed", {
-            nextState: "recovering-soft"
-          });
-        }
-        updateRemoteMediaDiagnostic(
-          result.ok ? "远端音频自动拉起成功" : `远端音频自动拉起失败：${result.error ?? "未知错误"}`,
-          (snapshot) => ({
-            ...snapshot,
-            mediaConnectionState: result.ok && remoteAudio.paused === false ? "live" : "buffering",
-            recoveryActionLevel: result.ok ? "observe" : "soft-media-retry",
-            remoteTrackStatus: {
-              ...snapshot.remoteTrackStatus,
-              ...traceContext,
-              ...getRemoteAudioDiagnostics(),
-              lastPlayAttemptAt: now,
-              lastPlayAttemptResult: result.ok ? "ok" : "rejected",
-              lastPlayAttemptError: result.ok ? null : result.error ?? "play-rejected",
-              currentGeneration: listenerMediaLifecycleRef.current.currentGeneration,
-              boundGeneration: listenerMediaLifecycleRef.current.boundGeneration,
-              playingGeneration: listenerMediaLifecycleRef.current.playingGeneration,
-              recoveryStage: listenerMediaLifecycleRef.current.recoveryStage,
-              restartAttempt: listenerMediaLifecycleRef.current.restartAttempt
-            }
-          }),
-          {
-            event: "remote-play-attempt",
-            recordEvent: !result.ok,
-            level: result.ok ? "info" : "warning"
-          }
-        );
-        if (result.ok) {
-          clearListenerMediaRecovery();
-          return;
-        }
-
-        if (attempt >= maxRemotePlaybackRetryAttempts) {
-          setStatusMessage("远端音频连接已建立，但播放未稳定，请点击一次播放继续。");
-          return;
-        }
-
-        remotePlaybackRetryRef.current = window.setTimeout(() => {
-          scheduleRemotePlaybackRetry(attempt + 1, generation);
-        }, remotePlaybackRetryBackoffMs[Math.min(attempt, remotePlaybackRetryBackoffMs.length - 1)]);
-      });
-    },
-    [
-      applyRecoveryAction,
-      clearListenerMediaRecovery,
-      clearRemotePlaybackRetry,
-      audioUnlockedRef,
-      currentRoomRef,
-      finishRecoveryAction,
-      getRemoteAudioDiagnostics,
-      getCurrentPlaybackConnectionKey,
-      getRemoteMediaTraceContext,
-      remoteAudioRef,
-      reportPlaybackState,
-      setAudioUnlockedRef,
-      setStatusMessage,
-      updateRemoteMediaDiagnostic
-    ]
-  );
-
-  useEffect(() => {
-    armListenerMediaRecoveryRef.current = armListenerMediaRecovery;
-  }, [armListenerMediaRecovery]);
-
-
-  useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
-    const shouldMaintainRemotePlayback = shouldMaintainRemotePlaybackSurface();
-    const traceContext =
-      shouldMaintainRemotePlayback && playback?.sourcePeerId
-        ? getRemoteMediaTraceContext(playback.sourcePeerId)
-        : {
-            currentTrackId: null,
-            mediaEpoch: null,
-            sourcePeerId: null,
-            traceKey: null
-          };
-    const playbackConnectionKey = resolvePlaybackConnectionKey({
-      roomId: roomSnapshot?.room.id ?? null,
-      sourcePeerId: traceContext.sourcePeerId,
-      mediaEpoch: traceContext.mediaEpoch,
-      transportEpoch: mediaTransportEpochRef.current
-    });
-    const lifecycle = listenerMediaLifecycleRef.current;
-    if (
-      lifecycle.traceKey === traceContext.traceKey &&
-      lifecycle.currentGeneration === playbackConnectionKey
-    ) {
-      return;
-    }
-
-    const previousSourcePeerId = lifecycle.sourcePeerId;
-    const previousPlaybackConnectionKey = lifecycle.currentGeneration;
-    const remoteAudio = remoteAudioRef.current;
-    const existingRemoteStream =
-      (remoteAudio?.srcObject as MediaStream | null | undefined) ?? null;
-    const existingRemoteTrack =
-      typeof existingRemoteStream?.getAudioTracks === "function"
-        ? (existingRemoteStream.getAudioTracks()[0] ?? null)
-        : null;
-    const canReuseExistingRemoteStream =
-      !!playbackConnectionKey &&
-      !!traceContext.sourcePeerId &&
-      previousSourcePeerId === traceContext.sourcePeerId &&
-      !!existingRemoteStream &&
-      !!existingRemoteTrack &&
-      existingRemoteTrack.readyState !== "ended";
-    const shouldForceRebindReusedRemoteStream =
-      canReuseExistingRemoteStream && previousPlaybackConnectionKey !== playbackConnectionKey;
-    const existingRemoteAudioPlaying =
-      canReuseExistingRemoteStream &&
-      !shouldForceRebindReusedRemoteStream &&
-      remoteAudio?.paused === false;
-
-    lifecycle.traceKey = traceContext.traceKey;
-    lifecycle.sourcePeerId = traceContext.sourcePeerId;
-    lifecycle.lastTrackTraceKey = canReuseExistingRemoteStream ? traceContext.traceKey : null;
-    lifecycle.lastBoundTraceKey =
-      canReuseExistingRemoteStream && !shouldForceRebindReusedRemoteStream
-        ? traceContext.traceKey
-        : null;
-    lifecycle.lastPlayAttemptTraceKey = existingRemoteAudioPlaying ? traceContext.traceKey : null;
-    lifecycle.lastPlayAttemptResult = existingRemoteAudioPlaying ? "ok" : null;
-    lifecycle.lastPlayAttemptError = null;
-    lifecycle.lastPlayingTraceKey = existingRemoteAudioPlaying ? traceContext.traceKey : null;
-    lifecycle.lastSoftRecoveryTraceKey = null;
-    lifecycle.lastSoftRecoveryAt = null;
-    lifecycle.lastHardRecoveryTraceKey = null;
-    lifecycle.lastHardRecoveryAt = null;
-    lifecycle.latestStream = canReuseExistingRemoteStream ? existingRemoteStream : null;
-    lifecycle.currentGeneration = playbackConnectionKey;
-    lifecycle.generationStartedAt = playbackConnectionKey ? Date.now() : null;
-    lifecycle.boundGeneration =
-      canReuseExistingRemoteStream && !shouldForceRebindReusedRemoteStream
-        ? playbackConnectionKey
-        : null;
-    lifecycle.playingGeneration = existingRemoteAudioPlaying ? playbackConnectionKey : null;
-    lifecycle.lastPlayoutProgressAt = existingRemoteAudioPlaying ? Date.now() : null;
-    lifecycle.lastTransportProgressAt = canReuseExistingRemoteStream ? Date.now() : null;
-    lifecycle.lastObservedRemoteCurrentTimeMs = null;
-    lifecycle.recoveryStage = playbackConnectionKey
-      ? canReuseExistingRemoteStream
-        ? shouldForceRebindReusedRemoteStream
-          ? "rebind-and-play"
-          : "retry-play"
-        : "waiting-track"
-      : "idle";
-    lifecycle.restartAttempt = 0;
-    lifecycle.bindAttempts = canReuseExistingRemoteStream ? 1 : 0;
-    lifecycle.playAttempts = existingRemoteAudioPlaying ? 1 : 0;
-    clearListenerMediaRecovery();
-    if (playbackConnectionKey) {
-      beginPlaybackConnection(playbackConnectionKey, {
-        sourcePeerId: traceContext.sourcePeerId,
-        hasExistingBoundStream: canReuseExistingRemoteStream
-      });
-      reportPlaybackState(
-        canReuseExistingRemoteStream ? "stream-bound" : "awaiting-offer",
-        {
-          playbackConnectionKey
-        }
-      );
-    } else {
-      disposePlaybackConnection();
-    }
-
-    updateRemoteMediaDiagnostic(
-      traceContext.traceKey
-        ? canReuseExistingRemoteStream
-          ? "监听端播放 trace 已切换，并复用现有远端媒体流"
-          : "监听端播放 trace 已切换"
-        : "监听端播放 trace 已清空",
-      (snapshot) => ({
-        ...snapshot,
-        remoteTrackStatus: {
-          ...snapshot.remoteTrackStatus,
-          ...traceContext,
-          ...getRemoteAudioDiagnostics(),
-          currentGeneration: playbackConnectionKey,
-          boundGeneration: lifecycle.boundGeneration,
-          playingGeneration: lifecycle.playingGeneration,
-          recoveryStage: lifecycle.recoveryStage,
-          restartAttempt: lifecycle.restartAttempt
-        }
-      }),
-      {
-        event: "remote-media-trace"
-      }
-    );
-    if (playbackConnectionKey) {
-      if (shouldForceRebindReusedRemoteStream && existingRemoteStream) {
-        resetRemoteAudioElement(existingRemoteStream, {
-          generation: playbackConnectionKey,
-          reason: "trace-switch",
-          forceRebind: true
-        });
-      }
-      armListenerMediaRecoveryRef.current(playbackConnectionKey);
-      if (
-        canReuseExistingRemoteStream &&
-        previousPlaybackConnectionKey !== playbackConnectionKey &&
-        remoteAudio?.paused !== false
-      ) {
-        scheduleRemotePlaybackRetryRef.current(0, playbackConnectionKey);
-      }
-    }
-  }, [
-    activePlaybackSource,
-    armListenerMediaRecovery,
-    clearListenerMediaRecovery,
-    getRemoteAudioDiagnostics,
-    getRemoteMediaTraceContext,
-    isCurrentSourceOwner,
-    remoteAudioRef,
-    resetRemoteAudioElement,
-    beginPlaybackConnection,
-    disposePlaybackConnection,
-    mediaTransportEpochRef,
-    peerId,
-    reportPlaybackState,
-    roomSnapshot?.room.playback.currentTrackId,
-    roomSnapshot?.room.playback.mediaEpoch,
-    roomSnapshot?.room.id,
-    roomSnapshot?.room.playback.sourcePeerId,
-    roomSnapshot?.room.playback.status,
-    updateRemoteMediaDiagnostic
-  ]);
-
-  useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
-    if (
-      !roomSnapshot?.room.id ||
-      !peerId ||
-      isCurrentSourceOwner ||
-      (activePlaybackSource as string) !== 'remote-stream' ||
-      playback?.status !== "playing" ||
-      !playback.currentTrackId ||
-      !playback.sourcePeerId
-    ) {
-      clearListenerMediaRecovery();
-      return;
-    }
-
-    const playbackConnectionKey = getCurrentPlaybackConnectionKey();
-    if (!playbackConnectionKey) {
-      clearListenerMediaRecovery();
-      return;
-    }
-    armListenerMediaRecoveryRef.current(playbackConnectionKey);
-
-    return () => {
-      clearListenerMediaRecovery();
-    };
-  }, [
-    activePlaybackSource,
-    armListenerMediaRecovery,
-    clearListenerMediaRecovery,
-    getCurrentPlaybackConnectionKey,
-    isCurrentSourceOwner,
-    peerId,
-    roomSnapshot?.room.id,
-    roomSnapshot?.room.playback.currentTrackId,
-    roomSnapshot?.room.playback.mediaEpoch,
-    roomSnapshot?.room.playback.sourcePeerId,
-    roomSnapshot?.room.playback.status
-  ]);
-
   const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
-  const ensureMediaTransportConnectedRef = useRef<
-    (options?: {
-      preferPublishedTrack?: boolean;
-      forceResync?: boolean;
-      reason?: string;
-    }) => Promise<void>
-  >(async () => undefined);
-  const syncHostMediaStreamRef = useRef<
-    (options?: { forceResync?: boolean; reason?: string }) => Promise<void>
-  >(async () => undefined);
-  const ensureSourcePlaybackStartedRef = useRef<() => Promise<void>>(async () => undefined);
+  const ensureSourcePlaybackStarted = useCallback(async () => {
+    const currentRoom = currentRoomRef.current;
+    if (!currentRoom?.room.id || !peerId || !isCurrentSourceOwner) {
+      updateSourceStartState("idle");
+      return;
+    }
+
+    const playback = currentRoom.room.playback;
+    if (playback.status !== "playing" || !playback.currentTrackId) {
+      updateSourceStartState("idle");
+      return;
+    }
+
+    updateSourceStartState("live", {
+      summary: "音源端使用本地播放和缓存分片同步"
+    });
+  }, [currentRoomRef, isCurrentSourceOwner, peerId, updateSourceStartState]);
+  const ensureSourcePlaybackStartedRef = useRef<() => Promise<void>>(ensureSourcePlaybackStarted);
 
   useEffect(() => {
     requestRoomSnapshotResyncRef.current = requestRoomSnapshotResync;
   }, [requestRoomSnapshotResync]);
 
   useEffect(() => {
-    scheduleRemotePlaybackRetryRef.current = scheduleRemotePlaybackRetry;
-  }, [scheduleRemotePlaybackRetry]);
-
-  const {
-    ensureMediaTransportConnected,
-    syncHostMediaStream,
-    ensureSourcePlaybackStarted
-  } = useRoomMediaPublicationRuntime({
-    roomSnapshot,
-    currentRoomRef,
-    activeRouteRoomIdRef,
-    peerId,
-    roomListenerCount,
-    activePlaybackSource,
-    isCurrentSourceOwner,
-    audioUnlocked,
-    sourceStartState,
-    uploadedTracks,
-    audioRef,
-    socketRef,
-    mediaMeshRef,
-    hostStreamRef,
-    mediaTransportEpochRef,
-    transportResetReasonRef,
-    hostMediaSyncRetryRef,
-    hostMediaClockSequenceRef,
-    hostMediaSyncStateRef,
-    lastHostCaptureRefreshAtRef,
-    ensureMediaTransportConnectedRef,
-    syncHostMediaStreamRef,
-    ensureSourcePlaybackStartedRef,
-    audioUnlockedRef,
-    setAudioUnlockedRef,
-    setAuthoritativeMediaClock,
-    recordPeerDiagnosticRef,
-    clearHostMediaSyncRetry,
-    getSilentPrewarmHandle,
-    getHostRelayStream,
-    getHostRelayClockState,
-    getLocalPlaybackPositionMs,
-    setStatusMessage,
-    updateSourceStartState,
-    updateHostCaptureDiagnostics,
-    enableTrackCaching
-  });
-
-  useEffect(() => () => clearRemotePlaybackRetry(), [clearRemotePlaybackRetry]);
+    ensureSourcePlaybackStartedRef.current = ensureSourcePlaybackStarted;
+  }, [ensureSourcePlaybackStarted]);
 
   useRoomConnectionSupervisorRuntime({
     roomSnapshot,
@@ -2131,23 +1144,13 @@ export function useRoomRuntime({
     activePlaybackSource,
     isPageVisible,
     isCurrentSourceOwner,
-    resolveSoftRecoveryMediaState,
-    mediaMeshRef,
-    hostStreamRef,
     meshRef,
     reportRealtimeFailureRef,
-    setMediaConnectionState,
     lastRealtimeRoomEventAtRef,
     resubscribeRoomRef,
     getCurrentPlaybackConnectionKey,
     queuePlaybackRecoveryRecommendation
   });
-
-  useEffect(() => {
-    return () => {
-      clearRemoteStreamClearTimeout();
-    };
-  }, [clearRemoteStreamClearTimeout]);
 
   useEffect(() => {
     if (!statusMessage) {
@@ -2207,13 +1210,10 @@ export function useRoomRuntime({
       enableManualTrackCaching,
       mediaMeshRef,
       listenerMediaLifecycleRef,
-      armListenerMediaRecoveryRef,
       mediaTransportEpochRef,
       updateRemoteMediaDiagnostic,
       getRemoteAudioDiagnostics,
-      resetRemoteAudioElement,
       resolveMediaDiagnosticPeerId,
-      resolveSoftRecoveryMediaState,
       setMediaConnectedPeers,
       setMediaConnectionState,
       updateMediaTransportStatsRef,
@@ -2221,8 +1221,6 @@ export function useRoomRuntime({
       enableTrackCaching,
       activePlaybackSource,
       resubscribeRoomRef,
-      hostStreamRef,
-      hostMediaSyncStateRef,
       activeSessionRef,
       activeRouteRoomIdRef,
       requestRoomSnapshotResyncRef,
@@ -2242,7 +1240,6 @@ export function useRoomRuntime({
       stopRecoveryWatchdog,
       clearListenerMediaRecovery,
       clearSocketDisconnectGrace,
-      clearHostMediaSyncRetry,
       bumpMediaTransportEpoch,
       dispatchRoomStateEvent,
       setAuthoritativeMediaClock,
@@ -2266,7 +1263,6 @@ export function useRoomRuntime({
     activeSessionRef,
     currentRoomRef,
     uploadedTrackIdsRef,
-    clearHostMediaSyncRetry,
     clearListenerMediaRecovery,
     stopRecoveryWatchdog,
     startPresenceHeartbeat,
@@ -2275,8 +1271,6 @@ export function useRoomRuntime({
     emitPresence,
     getRemoteAudioDiagnostics,
     getRemoteMediaTraceContext,
-    remoteAudioRef,
-    resetRemoteAudioElement,
     isNavigatingRoomExit,
     setConnectedPeers,
     setMediaConnectedPeers,
@@ -2288,51 +1282,7 @@ export function useRoomRuntime({
     updateRemoteMediaDiagnostic
   ]);
 
-  useRoomMediaRuntime({
-    roomSnapshot,
-    currentRoomRef,
-    activeRouteRoomIdRef,
-    peerId,
-    roomListenerCount,
-    roomListenerPeerIds,
-    roomListenerSetHash,
-    mediaConnectedPeers,
-    isCurrentSourceOwner,
-    activePlaybackSource,
-    audioUnlocked,
-    sourceStartState,
-    mediaMeshRef,
-    hostStreamRef,
-    mediaTransportOwnerKeyRef,
-    mediaTransportEpochRef,
-    hostMediaSyncStateRef,
-    missingListenerSinceRef,
-    lastListenerBootstrapKeyRef,
-    lastHostCaptureRefreshAtRef,
-    listenerMediaLifecycleRef,
-    ensureMediaTransportConnectedRef,
-    syncHostMediaStreamRef,
-    bumpMediaTransportEpoch,
-    clearHostMediaSyncRetry,
-    ensureSourcePlaybackStarted,
-    syncHostMediaStream,
-    updateSourceStartState,
-    updateHostCaptureDiagnostics
-  });
-
-  const playbackClockSource = useMemo(
-    () =>
-      roomSnapshot?.room.playback.status === "playing"
-        ? (activePlaybackSource as string) !== 'remote-stream'
-          ? "local"
-          : "remote"
-        : "snapshot",
-    [roomSnapshot?.room.playback.status, activePlaybackSource]
-  );
-
   return {
-    scheduleRemotePlaybackRetry,
-    syncHostMediaStream,
     ensureSourcePlaybackStarted
   };
 }

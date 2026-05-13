@@ -384,7 +384,7 @@ export function toSupervisorDiagnosticPatch(state: PeerConnectionSupervisorState
     lastRecoveryAction: state.lastRecoveryAction,
     recoveryActionLevel:
       state.recoveryStage === "soft"
-        ? ("soft-media-retry" as const)
+        ? ("soft-data-retry" as const)
         : state.recoveryStage === "ice-restart"
           ? ("peer-restart" as const)
           : state.recoveryStage === "hard-recreate"

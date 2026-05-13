@@ -138,7 +138,6 @@ function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
 function getHealthClass(peer: PeerDiagnosticsSnapshot) {
   switch (peer.transportHealth) {
     case "healthy":
-    case "media-only":
       return "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
     case "degraded":
     case "recovering":
@@ -301,11 +300,6 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
                 音源启动错误: {playback.lastSourceStartError}
               </p>
             ) : null}
-            {playback.hostPublishFailureReason ? (
-              <p className="mt-1 text-[10px] text-amber-300">
-                发布源异常: {playback.hostPublishFailureReason}
-              </p>
-            ) : null}
             {playback.fallbackReason ? (
               <p className="mt-1 text-[10px] text-amber-300">
                 缓存播放阻塞: {playback.fallbackReason}
@@ -369,8 +363,7 @@ function MeshStatusPanelBase({
       peerDiagnostics.filter(
         (peer) =>
           activePeerIds.has(peer.peerId) &&
-          (peer.transportHealth === "media-only" ||
-            peer.transportHealth === "degraded" ||
+          (peer.transportHealth === "degraded" ||
             peer.transportHealth === "recovering" ||
             peer.transportHealth === "reconnecting" ||
             peer.transportHealth === "failed")

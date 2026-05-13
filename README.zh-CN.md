@@ -16,7 +16,7 @@ Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
 当前项目的核心目标是：
 
 - 让用户基于本地音频完成多人同步听歌
-- 用共享队列、P2P 分片和实时音频把房间体验串成闭环
+- 用共享队列、P2P 分片和本地缓存播放把房间体验串成闭环
 - 在不上传音频文件本体的前提下，尽量提供稳定的多人协作播放体验
 
 ## 当前进度
@@ -26,7 +26,7 @@ Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
 - 首页 `/` 为官网展示入口，`/app` 为客户端工作区入口
 - 账号注册 / 登录、房间创建 / 加入 / 恢复、共享队列、房主播放控制已打通
 - 房间主界面当前收敛为 `共享队列`、`曲库`、`缓存`、`成员`
-- P2P 分片缓存、房主实时音频推流、MP3/FLAC 渐进式本地播放均已接入
+- P2P 分片缓存、MP3/FLAC 渐进式本地播放均已接入
 - 桌面端已迁移到 Tauri 2，移动端当前提供 Capacitor Android 壳
 
 进度细节见：
@@ -62,7 +62,7 @@ Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
 - 多人共享播放队列、房主控制与播放同步
 - 本地音频导入、曲库管理、歌单管理
 - P2P 分片缓存同步
-- WebRTC 实时音频推流
+- WebRTC data channel 分片同步
 - 手动缓存、缓存回库与缓存导出
 - 成员级“连接与缓存诊断”面板
 - 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
@@ -159,6 +159,8 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 
 - `TURN_ENABLED`
 - `TURN_PUBLIC_HOST`
+- `TURN_PUBLIC_HOST_USE_APP_DOMAIN`
+- `TURN_PUBLIC_HOST_USE_REQUEST_HOST`
 - `TURN_PORT`
 - `TURN_TLS_PORT`
 - `TURN_SHARED_SECRET`
@@ -179,17 +181,16 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 成员页中的“连接与缓存诊断”现在会输出：
 
 - 每个 peer 的 `offer / answer / candidate` 收发事件
-- Data / Media 的 ICE 状态与连接状态
-- 是否收到远端 `track`
-- 是否已绑定到远端音频元素
-- 远端音频元素 `playing / waiting / pause / error`
+- Data channel 的 ICE 状态与连接状态
+- 分片可用性公告与请求/响应
+- 本地缓存播放源与缓冲状态
 - 最近事件流与错误摘要
 
 诊断判读原则：
 
 - 有 `offer / answer`，但没有 candidate 或 ICE 一直不 `connected`：优先检查 TURN、网络出口、防火墙
-- Media 已 `connected`，但没有 `remote track`：优先检查 host 侧媒体流注入
-- Data 正常、Media 全断：优先检查媒体协商、浏览器自动播放限制、TURN 媒体 candidate
+- Data 已连接但缓存追不上：优先检查 provider 在线状态、分片公告和请求超时
+- Data 全断：优先检查 WebRTC data channel、TURN、网络出口和防火墙
 
 ## Docker 部署
 

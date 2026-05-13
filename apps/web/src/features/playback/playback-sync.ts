@@ -50,7 +50,6 @@ export function syncLocalPlaybackWindow(
       | "rate"
       | "seek-only"
       | "muted-warmup"
-      | "audible-remote-follow"
       | "shadow-local-catchup"
       | "audible-local-follow";
   }
@@ -69,8 +68,7 @@ export function syncLocalPlaybackWindow(
   const hardDriftMs = options?.hardDriftMs ?? 1_200;
   const allowRateCorrection = options?.allowRateCorrection ?? true;
   const correctionMode = options?.correctionMode ?? (allowRateCorrection ? "rate" : "seek-only");
-  const disableAudibleRateCorrection =
-    correctionMode === "audible-remote-follow" || correctionMode === "audible-local-follow";
+  const disableAudibleRateCorrection = correctionMode === "audible-local-follow";
   const audibleLocalSoftDriftMs = 40;
   const audibleLocalHardDriftMs = 450;
   const driftMs = (expectedSeconds - audio.currentTime) * 1000;

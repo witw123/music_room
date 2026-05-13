@@ -6,8 +6,6 @@ import {
   recordPeerPlayoutProgress
 } from "@/features/p2p";
 import {
-  resolveListenerMediaRecoveryAction,
-  resolveListenerMediaRecoveryReason,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
   shouldForceManualCacheBootstrap,
@@ -16,146 +14,12 @@ import {
   resolvePeerConnectionNoProgressMs,
   shouldKickSourcePlaybackFromRealtimeEvent,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
-  shouldManagePublishedMediaTransport,
   shouldAcceptIncomingMediaSignal,
   shouldReannounceManualCacheAvailability,
   shouldRecoverManualCacheDataPeers,
-  shouldResumeRemotePlayback,
   shouldRedirectRoomRouteToAuth,
 } from "./use-room-runtime";
 import { shouldSuppressSourceRecoveryDuringGenerationBootstrap } from "./use-room-connection-supervisor";
-import {
-  resolveMediaTransportOwnerKey,
-  shouldBootstrapMissingListeners
-} from "./use-room-media-runtime";
-
-describe("resolveListenerMediaRecoveryReason", () => {
-  const traceKey = "track_a|3|peer_source|peer_listener";
-
-  it("requests recovery when the connection is up but no track arrived", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: null,
-        lastBoundTraceKey: null,
-        lastPlayAttemptTraceKey: null,
-        lastPlayAttemptResult: null,
-        lastPlayingTraceKey: null,
-        remoteAudioPaused: null,
-        hasBoundSrcObject: false,
-        remoteTrackMuted: null,
-        remoteTrackEnabled: null,
-        remoteTrackReadyState: null
-      })
-    ).toBe("connected-but-no-track");
-  });
-
-  it("requests recovery when track arrived but the audio element was not rebound", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: null,
-        lastPlayAttemptTraceKey: null,
-        lastPlayAttemptResult: null,
-        lastPlayingTraceKey: null,
-        remoteAudioPaused: null,
-        hasBoundSrcObject: false,
-        remoteTrackMuted: null,
-        remoteTrackEnabled: null,
-        remoteTrackReadyState: null
-      })
-    ).toBe("track-received-but-not-bound");
-  });
-
-  it("requests recovery when binding succeeded but playback never started", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: traceKey,
-        lastPlayAttemptTraceKey: traceKey,
-        lastPlayAttemptResult: "rejected",
-        lastPlayingTraceKey: null,
-        remoteAudioPaused: true,
-        hasBoundSrcObject: true,
-        remoteTrackMuted: false,
-        remoteTrackEnabled: true,
-        remoteTrackReadyState: "live"
-      })
-    ).toBe("bound-but-not-playing");
-  });
-
-  it("requests recovery when the bound remote track is muted or ended", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: traceKey,
-        lastPlayAttemptTraceKey: traceKey,
-        lastPlayAttemptResult: "ok",
-        lastPlayingTraceKey: traceKey,
-        remoteAudioPaused: false,
-        hasBoundSrcObject: true,
-        remoteTrackMuted: true,
-        remoteTrackEnabled: true,
-        remoteTrackReadyState: "live"
-      })
-    ).toBe("bound-but-muted-track");
-  });
-
-  it("does not request recovery after the current trace has already entered playing", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: traceKey,
-        lastPlayAttemptTraceKey: traceKey,
-        lastPlayAttemptResult: "ok",
-        lastPlayingTraceKey: traceKey,
-        remoteAudioPaused: false,
-        hasBoundSrcObject: true,
-        remoteTrackMuted: false,
-        remoteTrackEnabled: true,
-        remoteTrackReadyState: "live"
-      })
-    ).toBeNull();
-  });
-
-  it("rebinds before restarting when track arrived but the element was not rebound yet", () => {
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "track-received-but-not-bound",
-        bindAttempts: 0,
-        playAttempts: 0
-      })
-    ).toBe("rebind-element");
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "track-received-but-not-bound",
-        bindAttempts: 2,
-        playAttempts: 0
-      })
-    ).toBe("rebind-element");
-  });
-
-  it("retries play instead of escalating to a peer restart", () => {
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "bound-but-not-playing",
-        bindAttempts: 1,
-        playAttempts: 0
-      })
-    ).toBe("retry-play");
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "bound-but-not-playing",
-        bindAttempts: 1,
-        playAttempts: 2
-      })
-    ).toBe("retry-play");
-  });
-});
 
 describe("shouldReannounceManualCacheAvailability", () => {
   it("re-announces uploaded tracks when listeners are present and the broadcast key changed", () => {
@@ -270,7 +134,7 @@ describe("shouldAcceptIncomingMediaSignal", () => {
     ).toBe(false);
   });
 
-  it("accepts newer transport signals so the media mesh can advance epochs", () => {
+  it("accepts newer transport signals so legacy media signals can be dropped by epoch", () => {
     expect(
       shouldAcceptIncomingMediaSignal({
         payload: {
@@ -311,38 +175,8 @@ describe("shouldAcceptIncomingMediaSignal", () => {
   });
 });
 
-describe("resolveMediaTransportOwnerKey", () => {
-  it("changes the transport owner key when mediaEpoch changes for the same source peer", () => {
-    expect(
-      resolveMediaTransportOwnerKey({
-        roomId: "room_a",
-        sourcePeerId: "peer_source",
-        mediaEpoch: 3
-      })
-    ).toBe("room_a|peer_source|3");
-
-    expect(
-      resolveMediaTransportOwnerKey({
-        roomId: "room_a",
-        sourcePeerId: "peer_source",
-        mediaEpoch: 4
-      })
-    ).toBe("room_a|peer_source|4");
-  });
-
-  it("returns null when the room identity is missing", () => {
-    expect(
-      resolveMediaTransportOwnerKey({
-        roomId: null,
-        sourcePeerId: "peer_source",
-        mediaEpoch: 3
-      })
-    ).toBeNull();
-  });
-});
-
 describe("shouldSuppressSourceRecoveryDuringGenerationBootstrap", () => {
-  it("suppresses hard recovery while a fresh remote playback generation is still bootstrapping", () => {
+  it("suppresses hard recovery while a fresh playback generation is still bootstrapping", () => {
     expect(
       shouldSuppressSourceRecoveryDuringGenerationBootstrap({
         playbackStatus: "playing",
@@ -372,42 +206,6 @@ describe("shouldSuppressSourceRecoveryDuringGenerationBootstrap", () => {
         generationStartedAt: 10_000,
         playingGeneration: null,
         now: 14_000
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldBootstrapMissingListeners", () => {
-  it("keeps listener bootstrap enabled for a source owner even before the real track is marked live", () => {
-    expect(
-      shouldBootstrapMissingListeners({
-        roomId: "room_1",
-        peerId: "peer_member",
-        isCurrentSourceOwner: true,
-        playbackStatus: "playing",
-        roomListenerCount: 1
-      })
-    ).toBe(true);
-  });
-
-  it("does not bootstrap when the room is idle or the peer is not the current source owner", () => {
-    expect(
-      shouldBootstrapMissingListeners({
-        roomId: "room_1",
-        peerId: "peer_member",
-        isCurrentSourceOwner: true,
-        playbackStatus: "paused",
-        roomListenerCount: 1
-      })
-    ).toBe(false);
-
-    expect(
-      shouldBootstrapMissingListeners({
-        roomId: "room_1",
-        peerId: "peer_member",
-        isCurrentSourceOwner: false,
-        playbackStatus: "playing",
-        roomListenerCount: 1
       })
     ).toBe(false);
   });
@@ -792,7 +590,7 @@ describe("resolvePeerConnectionNoProgressMs", () => {
 });
 
 describe("resolveMediaDiagnosticPeerId", () => {
-  it("uses the media mesh callback peer before falling back to the playback source", () => {
+  it("uses the signal callback peer before falling back to the playback source", () => {
     expect(
       resolveMediaDiagnosticPeerId({
         remotePeerId: "peer_listener",
@@ -802,7 +600,7 @@ describe("resolveMediaDiagnosticPeerId", () => {
     ).toBe("peer_listener");
   });
 
-  it("falls back to connected peers, then source peer, then the synthetic remote row", () => {
+  it("falls back to connected peers, then source peer, then system diagnostics", () => {
     expect(
       resolveMediaDiagnosticPeerId({
         remotePeerId: null,
@@ -823,112 +621,7 @@ describe("resolveMediaDiagnosticPeerId", () => {
         connectedPeerIds: [],
         currentSourcePeerId: null
       })
-    ).toBe("remote-media");
-  });
-});
-
-describe("shouldResumeRemotePlayback", () => {
-  it("does not resume remote playback in the local-cache playback model", () => {
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "progressive-local",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-  });
-
-  it("does not resume when the listener is already audibly playing", () => {
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "progressive-local",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: false
-      })
-    ).toBe(false);
-  });
-
-  it("does not resume for local playback, room hosts, or missing bound streams", () => {
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: true,
-        activePlaybackSource: "progressive-local",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "full-local",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "progressive-local",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: false,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldManagePublishedMediaTransport", () => {
-  it("allows media publish management only for the current source owner", () => {
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: "room_a",
-        peerId: "peer_source",
-        isCurrentSourceOwner: true
-      })
-    ).toBe(true);
-  });
-
-  it("blocks media publish management for room hosts that are not the current source owner", () => {
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: "room_a",
-        peerId: "peer_host",
-        isCurrentSourceOwner: false
-      })
-    ).toBe(false);
-  });
-
-  it("blocks media publish management when room or peer identity is missing", () => {
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: null,
-        peerId: "peer_source",
-        isCurrentSourceOwner: true
-      })
-    ).toBe(false);
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: "room_a",
-        peerId: null,
-        isCurrentSourceOwner: true
-      })
-    ).toBe(false);
+    ).toBe("system");
   });
 });
 

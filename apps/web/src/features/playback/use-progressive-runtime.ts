@@ -17,7 +17,6 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import {
-  pickActiveMediaDiagnostic,
   selectCanonicalTrackAvailabilityAnnouncement
 } from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
@@ -84,7 +83,6 @@ type UseProgressiveRuntimeInput = {
       | "joining"
       | "resyncing"
       | "bootstrapping-data"
-      | "bootstrapping-media"
       | "playing-local-fallback"
       | "steady";
     mode: "late-join" | "rejoin" | "steady";
@@ -140,12 +138,10 @@ export type PlaybackRecoveryStage =
   | "steady"
   | "degraded"
   | "shadow-catchup"
-  | "audible-local-fallback"
-  | "remote-recovery";
+  | "audible-local-fallback";
 
 export type MediaElementPlaybackRole =
   | "audible-local"
-  | "audible-remote"
   | "shadow-local"
   | "inactive";
 
@@ -160,7 +156,6 @@ export function shouldPreferImmediateFullLocalRecovery(input: {
     | "joining"
     | "resyncing"
     | "bootstrapping-data"
-    | "bootstrapping-media"
     | "playing-local-fallback"
     | "steady";
   recoveryMode: "late-join" | "rejoin" | "steady";
@@ -1007,7 +1002,7 @@ export function useProgressiveRuntime({
     }
 
     if (startupGatePending && !roomRecoveryState.fullLocalRecoveryActive) {
-      return "remote-recovery-window";
+      return "cache-recovery-window";
     }
 
     return null;

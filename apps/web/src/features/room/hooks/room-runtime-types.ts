@@ -26,12 +26,6 @@ export type DataMeshBridge = {
   getConnectedPeerIds(): string[];
 };
 
-export type MediaRuntimeBridge = {
-  syncHostMediaStream(options?: { forceResync?: boolean; reason?: string }): Promise<void>;
-  ensureSourcePlaybackStarted(): Promise<void>;
-  getMediaConnectedPeerIds(): string[];
-};
-
 export type ManualCacheDownloadBridge = Pick<
   DataMeshBridge,
   "syncPeers" | "requestPieces" | "getConnectedPeerIds"
@@ -41,25 +35,15 @@ export type PlaybackConnectionKey = string;
 
 export type ListenerPlaybackState =
   | "idle"
-  | "awaiting-offer"
-  | "negotiating"
-  | "stream-bound"
-  | "playback-starting"
+  | "awaiting-data"
   | "live"
-  | "recovering-soft"
   | "recovering-hard"
   | "failed";
 
 export type PlaybackRecoveryAction = {
   actionId: string;
   playbackConnectionKey: PlaybackConnectionKey;
-  actionType:
-    | "retry-play"
-    | "rebind-element"
-    | "restart-listener-ice"
-    | "reset-listener-peer"
-    | "restart-data-peer"
-    | "full-resubscribe";
+  actionType: "restart-data-peer" | "full-resubscribe";
   peerId: string | null;
   startedAt: string;
   expiresAt: string;
@@ -76,7 +60,7 @@ export type PlaybackRecoveryDropReason =
 export type PlaybackRecoveryRecommendation = {
   playbackConnectionKey: PlaybackConnectionKey | null;
   peerId: string | null;
-  scope: "media" | "data" | "room";
+  scope: "data" | "room";
   level: "soft" | "ice-restart" | "hard-recreate" | "full-resubscribe";
   reason: string;
   observedNoProgressMs: number | null;

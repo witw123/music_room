@@ -16,7 +16,7 @@ Music Room is not a public licensed music catalog, and it is not a server-hosted
 The current goals are:
 
 - Let users listen together using their own local audio files
-- Build a complete room experience with a shared queue, P2P chunks, and realtime audio
+- Build a complete room experience with a shared queue, P2P chunks, and local cache playback
 - Keep audio files off the server while still providing stable collaborative playback
 
 ## Current Status
@@ -26,7 +26,7 @@ The core loop is already runnable. The project is in a "usable product, ongoing 
 - `/` is the public website entry, and `/app` is the client workspace
 - Registration/login, room creation/join/recovery, shared queue, and host playback control are connected
 - The room workspace currently focuses on `Queue`, `Library`, `Cache`, and `Members`
-- P2P chunk cache, host realtime audio relay, and progressive local playback for MP3/FLAC are integrated
+- P2P chunk cache and progressive local playback for MP3/FLAC are integrated
 - The desktop app has moved to Tauri 2, and the mobile app currently provides a Capacitor Android shell
 
 More details:
@@ -62,7 +62,7 @@ Recommended reading order:
 - Shared playback queue, host controls, and playback sync
 - Local audio import, library management, and playlist management
 - P2P chunk cache sync
-- WebRTC realtime audio relay
+- WebRTC data-channel chunk relay
 - Manual cache, cache restore to library, and cache export
 - Member-level connection and cache diagnostics
 - Server-issued short-lived TURN credentials with frontend fallback to static ICE config
@@ -159,6 +159,8 @@ Server:
 
 - `TURN_ENABLED`
 - `TURN_PUBLIC_HOST`
+- `TURN_PUBLIC_HOST_USE_APP_DOMAIN`
+- `TURN_PUBLIC_HOST_USE_REQUEST_HOST`
 - `TURN_PORT`
 - `TURN_TLS_PORT`
 - `TURN_SHARED_SECRET`
@@ -179,17 +181,16 @@ Frontend fallback:
 The member page's "connection and cache diagnostics" panel reports:
 
 - Per-peer `offer / answer / candidate` send/receive events
-- Data/media ICE state and connection state
-- Whether a remote `track` has been received
-- Whether the remote audio element has been bound
-- Remote audio element `playing / waiting / pause / error` events
+- Data-channel ICE state and connection state
+- Per-peer cache availability, piece transfer rate, request RTT, and timeout rate
+- Local progressive/full-cache playback engine state and buffer window
 - Recent event stream and error summary
 
 Diagnostic rules of thumb:
 
 - `offer / answer` exists, but no candidates or ICE never reaches `connected`: check TURN, network egress, and firewall rules first
-- Media is `connected`, but no `remote track`: check host-side media stream injection first
-- Data works but media is fully disconnected: check media negotiation, browser autoplay restrictions, and TURN media candidates
+- Data channel is open but no pieces arrive: check cache availability announcements and source peer membership
+- Pieces arrive but playback waits: check local buffer window, PCM/MSE engine state, and browser audio unlock
 
 ## Docker Deployment
 

@@ -42,14 +42,10 @@ function getSourceModeLabel(
   }
 
   if (isSourceOwner) {
-    return "本机发布";
+    return "本机音源";
   }
 
-  if (mediaConnectionState === "live" || mediaConnectionState === "buffering") {
-    return "远端实时音频";
-  }
-
-  return "等待远端音频";
+  return "本地缓存播放";
 }
 
 

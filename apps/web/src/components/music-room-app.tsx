@@ -56,7 +56,6 @@ type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
   | "bootstrapping-data"
-  | "bootstrapping-media"
   | "playing-local-fallback"
   | "steady";
 

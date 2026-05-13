@@ -462,7 +462,7 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.queue).toHaveLength(0);
   });
 
-  it("keeps playback patches ordered by queueVersion", () => {
+  it("keeps playback patches ordered by playbackRevision", () => {
     const state = applyEvents(
       {
         type: "server-snapshot",
@@ -471,7 +471,8 @@ describe("roomStateReducer", () => {
             roomRevision: 2,
             playback: createPlaybackSnapshot({
               status: "paused",
-              queueVersion: 3
+              queueVersion: 3,
+              playbackRevision: 3
             })
           }
         })
@@ -481,7 +482,8 @@ describe("roomStateReducer", () => {
         roomId: "room_1",
         playback: createPlaybackSnapshot({
           status: "playing",
-          queueVersion: 2
+          queueVersion: 4,
+          playbackRevision: 2
         })
       },
       {
@@ -489,12 +491,14 @@ describe("roomStateReducer", () => {
         roomId: "room_1",
         playback: createPlaybackSnapshot({
           status: "playing",
-          queueVersion: 4
+          queueVersion: 3,
+          playbackRevision: 4
         })
       }
     );
 
     expect(state.snapshot?.room.playback.status).toBe("playing");
-    expect(state.snapshot?.room.playback.queueVersion).toBe(4);
+    expect(state.snapshot?.room.playback.queueVersion).toBe(3);
+    expect(state.snapshot?.room.playback.playbackRevision).toBe(4);
   });
 });

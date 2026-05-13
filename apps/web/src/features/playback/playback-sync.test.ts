@@ -81,7 +81,7 @@ describe("syncLocalPlaybackWindow", () => {
     expect(audio.playbackRate).toBe(1);
   });
 
-  it("keeps audible remote follow at fixed pitch and rate for moderate drift", () => {
+  it("keeps audible local follow at fixed pitch and rate for moderate drift", () => {
     const audio = {
       currentTime: 10,
       playbackRate: 1,
@@ -91,7 +91,7 @@ describe("syncLocalPlaybackWindow", () => {
     syncLocalPlaybackWindow(audio, 10.28, true, {
       softDriftMs: 120,
       hardDriftMs: 1_200,
-      correctionMode: "audible-remote-follow"
+      correctionMode: "audible-local-follow"
     });
 
     expect(audio.currentTime).toBe(10);

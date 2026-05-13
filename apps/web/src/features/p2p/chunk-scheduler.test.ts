@@ -358,7 +358,7 @@ describe("ChunkScheduler", () => {
       uploadedTrackIds: [],
       playbackPositionMs: 30_000,
       bufferHealth: "low",
-      playbackClockSource: "remote"
+      playbackClockSource: "local"
     });
 
     expect(requestPiece).toHaveBeenCalled();
@@ -416,7 +416,7 @@ describe("ChunkScheduler", () => {
       playbackPositionMs: 15_000,
       policy: "steady",
       bufferHealth: "healthy",
-      playbackClockSource: "remote"
+      playbackClockSource: "local"
     });
 
     const requests = (requestPiece.mock.calls as unknown as Array<[{
@@ -495,7 +495,7 @@ describe("ChunkScheduler", () => {
     expect(requestedTrackIds).toContain("track_2:upcoming");
   });
 
-  it("allows a weak next-track prefetch once remote-stream playback is comfortably buffered", () => {
+  it("allows a weak next-track prefetch once local playback is comfortably buffered", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,
@@ -553,7 +553,7 @@ describe("ChunkScheduler", () => {
       playbackPositionMs: 15_000,
       policy: "steady",
       bufferHealth: "healthy",
-      playbackClockSource: "remote"
+      playbackClockSource: "local"
     });
 
     const requestedTrackIds = (requestPiece.mock.calls as unknown as Array<[{
@@ -595,7 +595,7 @@ describe("ChunkScheduler", () => {
       playbackPositionMs: 15_000,
       policy: "startup",
       bufferHealth: "healthy",
-      playbackClockSource: "remote",
+      playbackClockSource: "local",
       mode: "conservative"
     });
 

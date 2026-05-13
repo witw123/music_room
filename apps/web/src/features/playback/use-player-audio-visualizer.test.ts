@@ -40,8 +40,6 @@ describe("resolveVisualizerSourceSelection", () => {
     const localAudio = {
       srcObject: localStream
     } as unknown as HTMLAudioElement;
-    const remoteAudio = {} as HTMLAudioElement;
-
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,

@@ -1,8 +1,7 @@
 import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
-  PeerSignalStats,
-  RemoteTrackStatus
+  PeerSignalStats
 } from "@music-room/shared";
 
 export type DiagnosticsState = {
@@ -116,43 +115,6 @@ export function createEmptySignalStats(): PeerSignalStats {
   };
 }
 
-export function createEmptyRemoteTrackStatus(): RemoteTrackStatus {
-  return {
-    received: false,
-    boundToAudioElement: false,
-    lastTrackAt: null,
-    lastBoundAt: null,
-    lastAudioEvent: null,
-    currentTrackId: null,
-    mediaEpoch: null,
-    sourcePeerId: null,
-    traceKey: null,
-    trackId: null,
-    trackMuted: null,
-    trackEnabled: null,
-    trackReadyState: null,
-    audioPaused: null,
-    audioMuted: null,
-    audioReadyState: null,
-    hasSrcObject: null,
-    currentSrc: null,
-    audioVolume: null,
-    lastPlayAttemptAt: null,
-    lastPlayAttemptResult: null,
-    lastPlayAttemptError: null,
-    currentGeneration: null,
-    boundGeneration: null,
-    playingGeneration: null,
-    recoveryStage: "idle",
-    restartAttempt: null,
-    publishGeneration: null,
-    attachedTrackId: null,
-    negotiatedTrackId: null,
-    makingOffer: null,
-    signalingState: null
-  };
-}
-
 export function createPeerSnapshot(peerId: string, now = new Date().toISOString()): PeerDiagnosticsSnapshot {
   return {
     peerId,
@@ -205,7 +167,6 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     jitterMs: null,
     timeOnRemoteStreamMs: null,
     signalStats: createEmptySignalStats(),
-    remoteTrackStatus: createEmptyRemoteTrackStatus(),
     progressivePlaybackStatus: {
       activeSource: null,
       playbackConnectionKey: null,
@@ -224,25 +185,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       lastRecoveryRecommendationAt: null,
       recoveryDropReason: null,
       socketDisconnectGraceActive: false,
-      mediaTransportState: "idle",
       transportEpoch: null,
-      usingSilentPrewarmTrack: false,
-      publishedTrackKind: "none",
-      hostPublishSource: "none",
-      hostPublishReadiness: "idle",
-      hostPublishFailureReason: null,
-      resolvedPublishElement: "none",
-      resolvedPublishStreamKind: "none",
-      mediaBootstrapState: "idle",
-      mediaFailureReason: null,
-      transportResetReason: "none",
-      hostPublishingReady: false,
-      listenerRecoveryAttempt: null,
-      mediaNegotiationRole: null,
-      listenerAwaitingPublisherOffer: false,
-      lastIgnoredOfferReason: "none",
-      publisherBootstrapRequestedAt: null,
-      publisherBootstrapAttempts: null,
       dataRequiredForPlayback: true,
       firstAudibleAt: null,
       firstTransportConnectedAt: null,
@@ -280,23 +223,6 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       fullLocalBlockedReason: null,
       progressiveLocalEligible: false,
       progressiveLocalBlockedReason: null,
-      hostCaptureRefreshKey: null,
-      hostCaptureForcedRefresh: false,
-      hostCaptureMode: null,
-      hostCaptureMediaEpoch: null,
-      hostCaptureTrackId: null,
-      hostCaptureTrackMuted: null,
-      hostCaptureTrackEnabled: null,
-      hostCaptureTrackReadyState: null,
-      hostCaptureTrackCount: null,
-      publishGeneration: null,
-      hostPublishKey: null,
-      hostPublishStage: "idle",
-      hostPublishedListenerSet: null,
-      attachedTrackId: null,
-      negotiatedTrackId: null,
-      makingOffer: null,
-      signalingState: null,
       currentSessionUserId: null,
       playbackSourceSessionId: null,
       currentPeerId: null,

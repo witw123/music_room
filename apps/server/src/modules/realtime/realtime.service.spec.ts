@@ -81,6 +81,7 @@ describe("RealtimeService", () => {
     process.env.TURN_ENABLED = "true";
     delete process.env.TURN_PUBLIC_HOST;
     delete process.env.APP_DOMAIN;
+    delete process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST;
     process.env.TURN_SHARED_SECRET = "turn-secret";
     const service = new RealtimeService();
 
@@ -88,6 +89,22 @@ describe("RealtimeService", () => {
 
     expect(config.source).toBe("stun-only");
     expect(config.iceServers).toEqual([{ urls: "stun:stun.example.com:3478" }]);
+  });
+
+  it("can derive turn host from the request host when explicitly enabled", () => {
+    process.env.TURN_ENABLED = "true";
+    delete process.env.TURN_PUBLIC_HOST;
+    delete process.env.APP_DOMAIN;
+    process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST = "1";
+    process.env.TURN_SHARED_SECRET = "turn-secret";
+    const service = new RealtimeService();
+
+    const config = service.buildIceConfig("user_1", { requestHost: "example.com:3001" });
+
+    expect(config.source).toBe("ephemeral");
+    expect(config.iceServers[1]).toMatchObject({
+      urls: expect.arrayContaining(["turn:example.com:3478?transport=udp"])
+    });
   });
 
   it("falls back to static ICE servers when TURN credentials are unavailable but static TURN is configured", () => {

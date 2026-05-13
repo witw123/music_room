@@ -71,9 +71,8 @@
 6. 成员之间通过：
    - `peer.signal`
    - `piece.availability`
-   建立 WebRTC data / media 连接并交换分片
+   建立 WebRTC data channel 并交换分片
 7. 客户端根据缓存和浏览器能力选择播放源：
-   - `remote-stream`
    - `progressive-local`
    - `full-local`
 

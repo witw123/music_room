@@ -13,8 +13,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 - 房主导入本地音频，服务端只保存元数据，不保存音频文件
 - 房间内通过共享队列和房主权威播放状态进行同步
 - 成员之间使用 WebRTC DataChannel 分发歌曲分片
-- 房主同时通过 WebRTC Media 推送实时音频，保证新成员秒开
-- 客户端会根据缓存情况在 `remote-stream`、`progressive-local`、`full-local` 之间切换
+- 客户端会根据缓存情况在 `progressive-local`、`full-local` 之间切换
 - 房间默认工作区现在包含 `共享队列`、`曲库`、`缓存`、`成员`
 - 成员页已提供连接、缓存、ICE、播放源和最近事件诊断
 
@@ -29,7 +28,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 - 播放控制可用：播放、暂停、切歌、上一首、拖动进度
 - P2P 分片传输可用：分片请求、分片回传、可用性广播、本地 IndexedDB 持久化、手动缓存下载
 - 缓存链路可用：缓存浏览、回库、导出、删除
-- WebRTC 实时音频可用：房主向成员推实时音频，TURN 支持短期凭证
+- WebRTC data channel 分片同步可用，TURN 支持短期凭证
 - 渐进式本地播放已接入：
   - MP3 在 Chromium 浏览器中走 MSE
   - FLAC 在 Chromium 浏览器中走 PCM / WebCodecs + AudioContext
@@ -57,9 +56,9 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 
 - 直接在宿主机部署时，如果错误复用 Docker 版 Nginx upstream（`web:3000` / `server:3001`），会直接出现 `502 Bad Gateway`
 - 如果没有 `systemd`、`pm2` 或 Docker restart policy 守护 `web` / `server` 进程，服务掉线后用户侧会表现成“站点总是崩”
-- TURN 配置不完整时，多人实时音频和分片同步会一起失效，诊断面板通常会看到 `ICE: stun-only` 或 `disconnected / failed`
+- TURN 配置不完整时，复杂网络下分片同步会退化，诊断面板通常会看到 `ICE: stun-only` 或 `disconnected / failed`
 - 房间退出、重连恢复和队列播放仍有偶发竞态反馈，属于当前持续观察项
-- FLAC 的首次起播依然依赖实时流兜底，只有本地连续缓冲达到阈值后才会进入更稳定的本地播放
+- FLAC 的首次起播依赖本地连续缓冲，缓存追不上时会进入恢复和保守调度
 - 当前正式版按“单 server 实例 + Redis 广播增强”交付，不支持 server 水平扩容；多实例一致性需要后续 Redis CAS 或数据库事务化方案单独落地
 
 ## 当前建议的部署方式

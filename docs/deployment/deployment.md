@@ -144,6 +144,8 @@ curl http://127.0.0.1:3001/health
 
 - `TURN_ENABLED=true`
 - `TURN_PUBLIC_HOST=turn.example.com`
+- `TURN_PUBLIC_HOST_USE_APP_DOMAIN=0`
+- `TURN_PUBLIC_HOST_USE_REQUEST_HOST=0`
 - `TURN_PORT=3478`
 - `TURN_TLS_PORT=5349`
 - `TURN_SHARED_SECRET=<replace-me>`
@@ -165,7 +167,7 @@ curl http://127.0.0.1:3001/health
 
 - `offer / answer` 正常
 - `ICE disconnected` 或 `failed`
-- `实时音频: 0`
+- `分片传输: 0`
 - `P2P 节点: 0`
 
 优先检查 TURN，不要先怀疑播放器 UI。

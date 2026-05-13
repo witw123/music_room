@@ -453,10 +453,6 @@ function getDiagnosticPriority(peerId: string, sourcePeerId: string | null) {
     return 1;
   }
 
-  if (peerId === "remote-media") {
-    return 2;
-  }
-
   return 3;
 }
 
@@ -864,30 +860,12 @@ function getLocalPlaybackStatus(input: {
   };
 }
 
-export function isRemoteMediaPlaybackReady(peer: PeerDiagnosticsSnapshot | null | undefined) {
-  if (!peer || peer.peerId !== "remote-media") {
-    return false;
-  }
-
-  const status = peer.remoteTrackStatus;
-  return (
-    status.received &&
-    status.boundToAudioElement &&
-    status.hasSrcObject === true &&
-    status.audioPaused === false &&
-    status.trackMuted !== true &&
-    status.trackEnabled !== false &&
-    status.trackReadyState !== "ended" &&
-    (status.lastAudioEvent === "playing" || status.lastPlayAttemptResult === "ok")
-  );
-}
-
 export function filterVisiblePeerDiagnostics(
   peerDiagnostics: PeerDiagnosticsSnapshot[],
   activeMemberPeerIds: Set<string>,
   sourcePeerId: string | null
 ) {
-  const visiblePeerIds = new Set<string>(["system", "remote-media"]);
+  const visiblePeerIds = new Set<string>(["system"]);
   for (const peerId of activeMemberPeerIds) {
     visiblePeerIds.add(peerId);
   }

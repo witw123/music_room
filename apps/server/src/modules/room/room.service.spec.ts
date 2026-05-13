@@ -718,18 +718,18 @@ describe("RoomService", () => {
       sourceType: "local_upload"
     });
 
-    await roomService.updatePlayback(snapshot.room.id, {
+    const firstPlayback = await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
       trackId: track.id,
       actorSessionId: host.id,
-      expectedVersion: 2
+      expectedVersion: snapshot.room.playback.playbackRevision
     });
 
     await expect(
       roomService.updatePlayback(snapshot.room.id, {
         action: "pause",
         actorSessionId: host.id,
-        expectedVersion: 2
+        expectedVersion: firstPlayback.playbackRevision - 1
       })
     ).rejects.toThrow("Playback state version conflict.");
   });
@@ -765,7 +765,7 @@ describe("RoomService", () => {
       action: "play",
       trackId: memberTrack.id,
       actorSessionId: host.id,
-      expectedVersion: 2
+      expectedVersion: snapshot.room.playback.playbackRevision
     });
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, host.id);
 
@@ -1360,7 +1360,7 @@ describe("RoomService", () => {
     expect(roomAfterReconnect.playback.sourcePeerId).toBe("peer-host-reconnected");
     expect(roomAfterReconnect.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
     expect(roomAfterReconnect.playback.playbackRevision).toBe(playback.playbackRevision + 1);
-    expect(roomAfterReconnect.playback.queueVersion).toBe(playback.queueVersion + 1);
+    expect(roomAfterReconnect.playback.queueVersion).toBe(playback.queueVersion);
   });
 
   it("re-elects an online cached peer when the current source goes offline", async () => {
