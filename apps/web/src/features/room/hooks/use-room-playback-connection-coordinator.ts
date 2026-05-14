@@ -3,7 +3,6 @@
 import { useCallback, useRef, type MutableRefObject } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
 import type {
-  ListenerPlaybackState,
   PlaybackConnectionKey,
   PlaybackRecoveryAction,
   PlaybackRecoveryDropReason,
@@ -13,58 +12,30 @@ import type {
 const defaultRecoveryActionTtlMs = 8_000;
 
 function getRecoveryActionPriority(actionType: PlaybackRecoveryAction["actionType"]) {
-  switch (actionType) {
-    case "full-resubscribe":
-      return 5;
-    case "reset-listener-peer":
-      return 4;
-    case "restart-data-peer":
-    case "restart-listener-ice":
-      return 3;
-    case "rebind-element":
-      return 2;
-    case "retry-play":
-      return 1;
-    default:
-      return 0;
-  }
+  return actionType === "full-resubscribe" ? 2 : 1;
 }
 
 export function resolvePlaybackConnectionKey(input: {
   roomId: string | null | undefined;
   sourcePeerId: string | null | undefined;
   mediaEpoch: number | null | undefined;
-  transportEpoch: number | null | undefined;
+  transportEpoch?: number | null | undefined;
 }): PlaybackConnectionKey | null {
   if (!input.roomId || !input.sourcePeerId || typeof input.mediaEpoch !== "number") {
     return null;
   }
 
-  return `${input.roomId}|${input.sourcePeerId}|${input.mediaEpoch}|${
-    typeof input.transportEpoch === "number" ? input.transportEpoch : "none"
-  }`;
+  return `${input.roomId}|${input.sourcePeerId}|${input.mediaEpoch}`;
 }
 
 export function resolvePlaybackRecoveryActionType(
   recommendation: PlaybackRecoveryRecommendation
-): PlaybackRecoveryAction["actionType"] {
+): PlaybackRecoveryAction["actionType"] | null {
   if (recommendation.scope === "room" || recommendation.level === "full-resubscribe") {
     return "full-resubscribe";
   }
 
-  if (recommendation.scope === "data") {
-    return "restart-data-peer";
-  }
-
-  if (recommendation.level === "hard-recreate") {
-    return "reset-listener-peer";
-  }
-
-  if (recommendation.level === "ice-restart") {
-    return "restart-listener-ice";
-  }
-
-  return "retry-play";
+  return recommendation.scope === "data" ? "restart-data-peer" : null;
 }
 
 export function resolvePlaybackRecoveryDropReason(input: {
@@ -95,21 +66,8 @@ export function resolvePlaybackRecoveryDropReason(input: {
 
 export function useRoomPlaybackConnectionCoordinator(input: {
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
-  mediaTransportEpochRef: MutableRefObject<number>;
-  listenerMediaLifecycleRef: MutableRefObject<{
-    traceKey: string | null;
-    sourcePeerId: string | null;
-    currentGeneration: string | null;
-    boundGeneration: string | null;
-    playingGeneration: string | null;
-    latestStream: MediaStream | null;
-    recoveryStage: string;
-  }>;
-  clearListenerMediaRecovery: () => void;
-  clearRemotePlaybackRetry: () => void;
 }) {
   const playbackConnectionKeyRef = useRef<PlaybackConnectionKey | null>(null);
-  const listenerPlaybackStateRef = useRef<ListenerPlaybackState>("idle");
   const activeRecoveryActionRef = useRef<PlaybackRecoveryAction | null>(null);
   const activeRecoveryActionResultRef = useRef<PlaybackRecoveryAction["result"] | null>(null);
   const lastRecoveryRecommendationRef = useRef<
@@ -123,78 +81,32 @@ export function useRoomPlaybackConnectionCoordinator(input: {
     return resolvePlaybackConnectionKey({
       roomId: input.currentRoomRef.current?.room.id ?? null,
       sourcePeerId: playback?.sourcePeerId ?? null,
-      mediaEpoch: playback?.mediaEpoch ?? null,
-      transportEpoch: input.mediaTransportEpochRef.current
+      mediaEpoch: playback?.mediaEpoch ?? null
     });
-  }, [input.currentRoomRef, input.mediaTransportEpochRef]);
+  }, [input.currentRoomRef]);
 
-  const resetConnectionScopedRecovery = useCallback(() => {
-    input.clearListenerMediaRecovery();
-    input.clearRemotePlaybackRetry();
+  const beginPlaybackConnection = useCallback((key: PlaybackConnectionKey | null) => {
+    if (playbackConnectionKeyRef.current === key) {
+      return false;
+    }
+    playbackConnectionKeyRef.current = key;
     activeRecoveryActionRef.current = null;
     activeRecoveryActionResultRef.current = null;
     lastRecoveryDropReasonRef.current = null;
-  }, [input.clearListenerMediaRecovery, input.clearRemotePlaybackRetry]);
+    return true;
+  }, []);
 
-  const beginPlaybackConnection = useCallback(
-    (
-      key: PlaybackConnectionKey | null,
-      context?: {
-        sourcePeerId?: string | null;
-        hasExistingBoundStream?: boolean;
-      }
-    ) => {
-      if (playbackConnectionKeyRef.current === key) {
-        return false;
-      }
+  const disposePlaybackConnection = useCallback((key?: PlaybackConnectionKey | null) => {
+    if (typeof key !== "undefined" && key !== playbackConnectionKeyRef.current) {
+      return false;
+    }
+    playbackConnectionKeyRef.current = null;
+    activeRecoveryActionRef.current = null;
+    activeRecoveryActionResultRef.current = null;
+    return true;
+  }, []);
 
-      resetConnectionScopedRecovery();
-      playbackConnectionKeyRef.current = key;
-      listenerPlaybackStateRef.current = key
-        ? context?.hasExistingBoundStream
-          ? "stream-bound"
-          : "awaiting-offer"
-        : "idle";
-      input.listenerMediaLifecycleRef.current.sourcePeerId = context?.sourcePeerId ?? null;
-      return true;
-    },
-    [input.listenerMediaLifecycleRef, resetConnectionScopedRecovery]
-  );
-
-  const disposePlaybackConnection = useCallback(
-    (key?: PlaybackConnectionKey | null) => {
-      if (typeof key !== "undefined" && key !== playbackConnectionKeyRef.current) {
-        return false;
-      }
-
-      resetConnectionScopedRecovery();
-      playbackConnectionKeyRef.current = null;
-      listenerPlaybackStateRef.current = "idle";
-      return true;
-    },
-    [resetConnectionScopedRecovery]
-  );
-
-  const reportPlaybackState = useCallback(
-    (
-      state: ListenerPlaybackState,
-      options?: {
-        playbackConnectionKey?: PlaybackConnectionKey | null;
-      }
-    ) => {
-      const targetKey =
-        typeof options?.playbackConnectionKey === "undefined"
-          ? playbackConnectionKeyRef.current
-          : options.playbackConnectionKey;
-      if (targetKey !== playbackConnectionKeyRef.current) {
-        return false;
-      }
-
-      listenerPlaybackStateRef.current = state;
-      return true;
-    },
-    []
-  );
+  const reportPlaybackState = useCallback(() => true, []);
 
   const applyRecoveryAction = useCallback(
     (inputAction: {
@@ -233,60 +145,37 @@ export function useRoomPlaybackConnectionCoordinator(input: {
       activeRecoveryActionRef.current = action;
       activeRecoveryActionResultRef.current = "running";
       lastRecoveryDropReasonRef.current = null;
-
-      if (action.actionType === "retry-play" || action.actionType === "rebind-element") {
-        listenerPlaybackStateRef.current = "recovering-soft";
-      } else {
-        listenerPlaybackStateRef.current = "recovering-hard";
-      }
-
       return action;
     },
     []
   );
 
   const finishRecoveryAction = useCallback(
-    (
-      actionId: string,
-      result: PlaybackRecoveryAction["result"],
-      options?: {
-        nextState?: ListenerPlaybackState;
-      }
-    ) => {
+    (actionId: string, result: PlaybackRecoveryAction["result"]) => {
       const activeAction = activeRecoveryActionRef.current;
       if (!activeAction || activeAction.actionId !== actionId) {
         return false;
       }
 
-      activeRecoveryActionRef.current = {
-        ...activeAction,
-        result
-      };
+      activeRecoveryActionRef.current = result === "running"
+        ? { ...activeAction, result }
+        : null;
       activeRecoveryActionResultRef.current = result;
-      if (options?.nextState) {
-        listenerPlaybackStateRef.current = options.nextState;
-      }
-      if (result !== "running") {
-        activeRecoveryActionRef.current = null;
-      }
       return true;
     },
     []
   );
 
-  const noteRecoveryRecommendation = useCallback(
-    (recommendation: PlaybackRecoveryRecommendation) => {
-      lastRecoveryRecommendationRef.current = {
-        ...recommendation,
-        recommendedAt: new Date().toISOString()
-      };
-    },
-    []
-  );
+  const noteRecoveryRecommendation = useCallback((recommendation: PlaybackRecoveryRecommendation) => {
+    lastRecoveryRecommendationRef.current = {
+      ...recommendation,
+      recommendedAt: new Date().toISOString()
+    };
+  }, []);
 
   return {
     playbackConnectionKeyRef,
-    listenerPlaybackStateRef,
+    listenerPlaybackStateRef: useRef("idle"),
     activeRecoveryActionRef,
     activeRecoveryActionResultRef,
     lastRecoveryRecommendationRef,

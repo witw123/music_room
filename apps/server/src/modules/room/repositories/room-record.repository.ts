@@ -74,6 +74,10 @@ export class RoomRecordRepository {
   }
 
   async persistRecord(record: RoomRecord) {
+    if (this.prisma.isAvailable()) {
+      await this.persistRecordToDatabase(record);
+    }
+
     this.rooms.set(record.room.id, record);
     await this.redis.addToSet(this.roomRegistryKey, record.room.id);
     await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
@@ -91,33 +95,6 @@ export class RoomRecordRepository {
         )
       )
     );
-
-    if (!this.prisma.isAvailable()) {
-      return;
-    }
-
-    await this.prisma.roomState.upsert({
-      where: { id: record.room.id },
-      update: {
-        hostId: record.room.hostId,
-        joinCode: record.room.joinCode,
-        visibility: record.room.visibility,
-        playback: serializePlaybackForPersistence(record.room),
-        members: record.room.members,
-        tracks: record.tracks,
-        queue: record.queue
-      },
-      create: {
-        id: record.room.id,
-        hostId: record.room.hostId,
-        joinCode: record.room.joinCode,
-        visibility: record.room.visibility,
-        playback: serializePlaybackForPersistence(record.room),
-        members: record.room.members,
-        tracks: record.tracks,
-        queue: record.queue
-      }
-    });
   }
 
   async deleteRecord(record: RoomRecord) {
@@ -206,5 +183,47 @@ export class RoomRecordRepository {
 
   private joinCodeCacheKey(joinCode: string) {
     return `music-room:join-code:${joinCode}`;
+  }
+
+  private async persistRecordToDatabase(record: RoomRecord) {
+    const payload = {
+      hostId: record.room.hostId,
+      joinCode: record.room.joinCode,
+      visibility: record.room.visibility,
+      roomRevision: record.room.roomRevision ?? 0,
+      presenceRevision: record.room.presenceRevision,
+      playback: serializePlaybackForPersistence(record.room),
+      members: record.room.members,
+      tracks: record.tracks,
+      queue: record.queue
+    };
+    const existing = await this.prisma.roomState.findUnique({
+      where: { id: record.room.id },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      await this.prisma.roomState.create({
+        data: {
+          id: record.room.id,
+          ...payload
+        }
+      });
+      return;
+    }
+
+    const result = await this.prisma.roomState.updateMany({
+      where: {
+        id: record.room.id,
+        roomRevision: {
+          lt: record.room.roomRevision ?? 0
+        }
+      },
+      data: payload
+    });
+
+    if (result.count === 0) {
+      throw new Error("Room state revision conflict.");
+    }
   }
 }

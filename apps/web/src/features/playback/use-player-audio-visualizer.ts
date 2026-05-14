@@ -32,7 +32,6 @@ export type PlayerAudioVisualizerState = {
 
 type UsePlayerAudioVisualizerInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: PlaybackSnapshot["status"] | null | undefined;
   currentTrackId: string | null | undefined;
@@ -43,14 +42,14 @@ type UsePlayerAudioVisualizerInput = {
 
 type VisualizerSourceSelection =
   | {
-      kind: "remote-stream" | "local-stream";
+      kind: "local-stream";
       stream: MediaStream;
       element: HTMLAudioElement | null;
       graphKey: string;
       hasSignal: boolean;
     }
   | {
-      kind: "remote-element" | "local-element";
+      kind: "local-element";
       stream: null;
       element: HTMLAudioElement;
       graphKey: string;
@@ -146,7 +145,6 @@ function resolveVisualizerGraphKey(input: {
 
 export function resolveVisualizerSourceSelection(input: {
   audioElement: HTMLAudioElement | null | undefined;
-  remoteAudioElement: HTMLAudioElement | null | undefined;
   activePlaybackSource: ProgressivePlaybackSource;
   currentTrackId: string | null | undefined;
   mediaEpoch?: number | null;
@@ -154,52 +152,6 @@ export function resolveVisualizerSourceSelection(input: {
   sourceSessionId?: string | null;
 }): VisualizerSourceSelection {
   if (!input.currentTrackId) {
-    return {
-      kind: "none",
-      stream: null,
-      element: null,
-      graphKey: "none",
-      hasSignal: false
-    };
-  }
-
-  if (input.activePlaybackSource === "remote-stream") {
-    const remoteElement = input.remoteAudioElement ?? null;
-    const remoteStream = asMediaStream(remoteElement?.srcObject ?? null);
-    if (remoteStream && hasLiveAudioTrack(remoteStream)) {
-      return {
-        kind: "remote-stream",
-        stream: remoteStream,
-        element: remoteElement,
-        graphKey: resolveVisualizerGraphKey({
-          currentTrackId: input.currentTrackId,
-          activePlaybackSource: input.activePlaybackSource,
-          mediaEpoch: input.mediaEpoch,
-          sourcePeerId: input.sourcePeerId,
-          sourceSessionId: input.sourceSessionId,
-          sourceIdentity: getMediaStreamIdentity(remoteStream)
-        }),
-        hasSignal: true
-      };
-    }
-
-    if (remoteElement && hasElementCaptureSource(remoteElement)) {
-      return {
-        kind: "remote-element",
-        stream: null,
-        element: remoteElement,
-        graphKey: resolveVisualizerGraphKey({
-          currentTrackId: input.currentTrackId,
-          activePlaybackSource: input.activePlaybackSource,
-          mediaEpoch: input.mediaEpoch,
-          sourcePeerId: input.sourcePeerId,
-          sourceSessionId: input.sourceSessionId,
-          sourceIdentity: getAudioElementSourceKey(remoteElement)
-        }),
-        hasSignal: true
-      };
-    }
-
     return {
       kind: "none",
       stream: null,
@@ -422,7 +374,6 @@ export function usePlayerAudioVisualizer(
   const idleSamples = useMemo(() => buildIdleWaveformSamples(sampleCount), [sampleCount]);
   const sourceSelection = resolveVisualizerSourceSelection({
     audioElement: input.audioRef.current,
-    remoteAudioElement: input.remoteAudioRef.current,
     activePlaybackSource: input.activePlaybackSource,
     currentTrackId: input.currentTrackId,
     mediaEpoch: input.mediaEpoch,

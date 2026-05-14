@@ -5,7 +5,6 @@ export const roomPlaybackPatchChannel = "music-room:room-playback-patch";
 export const roomQueuePatchChannel = "music-room:room-queue-patch";
 export const roomPresencePatchChannel = "music-room:room-presence-patch";
 export const roomLibraryPatchChannel = "music-room:room-library-patch";
-export const roomMediaClockChannel = "music-room:room-media-clock";
 export const peerSignalChannel = "music-room:peer-signal";
 export const pieceAvailabilityChannel = "music-room:piece-availability";
 export const pieceAvailabilityClearChannel = "music-room:piece-availability-clear";

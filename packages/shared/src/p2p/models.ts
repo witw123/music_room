@@ -52,9 +52,7 @@ export const peerSignalMessageSchema = z.object({
   roomId: z.string(),
   fromPeerId: z.string(),
   toPeerId: z.string(),
-  channelKind: z.enum(["data", "media"]),
-  mediaEpoch: z.number().int().nonnegative().optional(),
-  transportEpoch: z.number().int().nonnegative().optional(),
+  channelKind: z.literal("data"),
   recoveryGeneration: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
@@ -151,7 +149,7 @@ export const remoteTrackStatusSchema = z.object({
 });
 
 export const progressivePlaybackStatusSchema = z.object({
-  activeSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable(),
+  activeSource: z.enum(["progressive-local", "full-local"]).nullable(),
   playbackConnectionKey: z.string().nullable().optional(),
   playbackSurfaceKey: z.string().nullable().optional(),
   playbackTimelineKey: z.string().nullable().optional(),
@@ -165,14 +163,12 @@ export const progressivePlaybackStatusSchema = z.object({
     ])
     .nullable()
     .optional(),
-  remoteOutputMode: z.enum(["audible", "held-silent", "inactive"]).nullable().optional(),
   sourceResetReason: z
     .enum([
       "track-changed",
       "source-session-changed",
       "source-peer-changed",
       "media-epoch-changed",
-      "transport-epoch-changed",
       "playback-stopped",
       "none"
     ])
@@ -182,9 +178,7 @@ export const progressivePlaybackStatusSchema = z.object({
   listenerPlaybackState: z
     .enum([
       "idle",
-      "awaiting-offer",
-      "negotiating",
-      "stream-bound",
+      "awaiting-cache",
       "playback-starting",
       "live",
       "recovering-soft",
@@ -195,10 +189,6 @@ export const progressivePlaybackStatusSchema = z.object({
     .optional(),
   activeRecoveryActionType: z
     .enum([
-      "retry-play",
-      "rebind-element",
-      "restart-listener-ice",
-      "reset-listener-peer",
       "restart-data-peer",
       "full-resubscribe"
     ])
@@ -210,9 +200,9 @@ export const progressivePlaybackStatusSchema = z.object({
     .optional(),
   activeRecoveryActionStartedAt: z.string().datetime().nullable().optional(),
   activeRecoveryActionReason: z.string().nullable().optional(),
-  lastRecoveryRecommendationScope: z.enum(["media", "data", "room"]).nullable().optional(),
+  lastRecoveryRecommendationScope: z.enum(["data", "room"]).nullable().optional(),
   lastRecoveryRecommendationLevel: z
-    .enum(["soft", "ice-restart", "hard-recreate", "full-resubscribe"])
+    .enum(["soft", "hard-recreate", "full-resubscribe"])
     .nullable()
     .optional(),
   lastRecoveryRecommendationReason: z.string().nullable().optional(),
@@ -227,27 +217,9 @@ export const progressivePlaybackStatusSchema = z.object({
     .nullable()
     .optional(),
   socketDisconnectGraceActive: z.boolean().optional(),
-  mediaTransportState: z
-    .enum(["idle", "prewarming", "connected", "publishing", "failed"])
-    .nullable()
-    .optional(),
-  transportEpoch: z.number().int().nonnegative().nullable().optional(),
-  usingSilentPrewarmTrack: z.boolean().optional(),
-  publishedTrackKind: z
-    .enum(["silent-prewarm", "host-capture", "relay-stream", "none"])
-    .nullable()
-    .optional(),
-  hostPublishSource: z
-    .enum(["local-audio", "remote-audio", "pcm-relay-stream", "silent-prewarm", "none"])
-    .nullable()
-    .optional(),
+  hostPublishSource: z.enum(["local-audio", "none"]).nullable().optional(),
   hostPublishReadiness: z.enum(["idle", "awaiting-audio", "ready", "failed"]).nullable().optional(),
   hostPublishFailureReason: z.string().nullable().optional(),
-  resolvedPublishElement: z.enum(["local-audio", "remote-audio", "none"]).nullable().optional(),
-  resolvedPublishStreamKind: z
-    .enum(["audio-element-capture", "pcm-relay-stream", "silent-prewarm", "none"])
-    .nullable()
-    .optional(),
   mediaBootstrapState: z
     .enum(["idle", "bootstrapping", "recovering", "failed", "steady"])
     .nullable()
@@ -258,15 +230,6 @@ export const progressivePlaybackStatusSchema = z.object({
     .nullable()
     .optional(),
   hostPublishingReady: z.boolean().optional(),
-  listenerRecoveryAttempt: z.number().int().nonnegative().nullable().optional(),
-  mediaNegotiationRole: z.enum(["publisher", "listener"]).nullable().optional(),
-  listenerAwaitingPublisherOffer: z.boolean().optional(),
-  lastIgnoredOfferReason: z
-    .enum(["offer-collision", "stale-generation", "wrong-role", "none"])
-    .nullable()
-    .optional(),
-  publisherBootstrapRequestedAt: z.string().datetime().nullable().optional(),
-  publisherBootstrapAttempts: z.number().int().nonnegative().nullable().optional(),
   dataRequiredForPlayback: z.boolean().optional(),
   firstAudibleAt: z.string().datetime().nullable().optional(),
   firstTransportConnectedAt: z.string().datetime().nullable().optional(),
@@ -275,7 +238,6 @@ export const progressivePlaybackStatusSchema = z.object({
       "joining",
       "resyncing",
       "bootstrapping-data",
-      "bootstrapping-media",
       "playing-local-fallback",
       "steady"
     ])
@@ -314,39 +276,17 @@ export const progressivePlaybackStatusSchema = z.object({
   bufferSafetyMarginMs: z.number().int().nullable().optional(),
   pendingPlaybackIntent: z.string().nullable().optional(),
   intentMatchedSource: z
-    .enum(["remote-stream", "progressive-local", "full-local"])
+    .enum(["progressive-local", "full-local"])
     .nullable()
     .optional(),
   lastPlayStartFailure: z.string().nullable().optional(),
   nextQueueTrackPrefetch: z.string().nullable().optional(),
-  remoteFirstLock: z.boolean().optional(),
-  remoteFirstLockReason: z.string().nullable().optional(),
   localTakeoverCooldownMs: z.number().int().nonnegative().nullable().optional(),
   fullLocalReady: z.boolean().optional(),
   fullLocalEligible: z.boolean().optional(),
   fullLocalBlockedReason: z.string().nullable().optional(),
   progressiveLocalEligible: z.boolean().optional(),
   progressiveLocalBlockedReason: z.string().nullable().optional(),
-  hostCaptureRefreshKey: z.string().nullable().optional(),
-  hostCaptureForcedRefresh: z.boolean().optional(),
-  hostCaptureMode: z.enum(["native", "audio-context"]).nullable().optional(),
-  hostCaptureMediaEpoch: z.number().int().nonnegative().nullable().optional(),
-  hostCaptureTrackId: z.string().nullable().optional(),
-  hostCaptureTrackMuted: z.boolean().nullable().optional(),
-  hostCaptureTrackEnabled: z.boolean().nullable().optional(),
-  hostCaptureTrackReadyState: z.enum(["live", "ended"]).nullable().optional(),
-  hostCaptureTrackCount: z.number().int().nonnegative().nullable().optional(),
-  publishGeneration: z.number().int().nonnegative().nullable().optional(),
-  hostPublishKey: z.string().nullable().optional(),
-  hostPublishStage: z
-    .enum(["idle", "waiting-source-audio", "capture-ready", "published"])
-    .nullable()
-    .optional(),
-  hostPublishedListenerSet: z.string().nullable().optional(),
-  attachedTrackId: z.string().nullable().optional(),
-  negotiatedTrackId: z.string().nullable().optional(),
-  makingOffer: z.boolean().nullable().optional(),
-  signalingState: z.string().nullable().optional(),
   currentSessionUserId: z.string().nullable().optional(),
   playbackSourceSessionId: z.string().nullable().optional(),
   currentPeerId: z.string().nullable().optional(),
@@ -433,14 +373,13 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   lastAudibleProgressAt: z.string().datetime().nullable().optional(),
   lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),
   lastDataActivityAt: z.string().datetime().nullable().optional(),
-  audibleSource: z.enum(["remote-stream", "progressive-local", "full-local"]).nullable().optional(),
+  audibleSource: z.enum(["progressive-local", "full-local"]).nullable().optional(),
   bufferingWhileAudible: z.boolean().optional(),
   recoverySuppressedReason: z.string().nullable().optional(),
   zeroProgressMs: z.number().int().nonnegative().nullable().optional(),
   consecutiveNoProgressMs: z.number().int().nonnegative().nullable().optional(),
   packetsLost: z.number().int().nullable(),
   jitterMs: z.number().nonnegative().nullable(),
-  timeOnRemoteStreamMs: z.number().int().nonnegative().nullable(),
   signalStats: peerSignalStatsSchema,
   remoteTrackStatus: remoteTrackStatusSchema,
   progressivePlaybackStatus: progressivePlaybackStatusSchema.optional(),

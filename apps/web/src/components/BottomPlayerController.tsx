@@ -3,19 +3,16 @@
 import { memo, useEffect } from "react";
 import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { BottomPlayer } from "@/components/BottomPlayer";
-import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-visualizer";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
 type BottomPlayerControllerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
   roomSnapshot: RoomSnapshot | null;
   activeSession: AuthSession | null;
   currentTrack: TrackMeta | null;
   activePlaybackSource: ProgressivePlaybackSource;
-  authoritativeMediaClock: ReceivedRoomMediaClock | null;
   resetEpoch: number;
   onPlaybackPositionChange: (positionMs: number) => void;
   onPlaybackBucketChange: (bucketMs: number) => void;
@@ -28,20 +25,14 @@ type BottomPlayerControllerProps = {
   onNext: () => void;
   onEnded: () => void;
   onLocalPlaybackReady: () => void;
-  onRemotePlaying: () => void;
-  onRemoteWaiting: () => void;
-  onRemotePause: () => void;
-  onRemoteError: () => void;
 };
 
 function BottomPlayerControllerBase({
   audioRef,
-  remoteAudioRef,
   roomSnapshot,
   activeSession,
   currentTrack,
   activePlaybackSource,
-  authoritativeMediaClock,
   resetEpoch,
   onPlaybackPositionChange,
   onPlaybackBucketChange,
@@ -53,14 +44,9 @@ function BottomPlayerControllerBase({
   onPrev,
   onNext,
   onEnded,
-  onLocalPlaybackReady,
-  onRemotePlaying,
-  onRemoteWaiting,
-  onRemotePause,
-  onRemoteError
+  onLocalPlaybackReady
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
-  const shouldUseLocalAudio = activePlaybackSource !== "remote-stream";
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const {
     progressTrack,
@@ -76,17 +62,14 @@ function BottomPlayerControllerBase({
     syncDurationFromAudio
   } = useRoomPlayback({
     audioRef,
-    remoteAudioRef,
     playback,
     tracks: roomSnapshot?.tracks ?? [],
-    shouldUseLocalAudio,
+    shouldUseLocalAudio: true,
     activePlaybackSource,
-    authoritativeMediaClock,
     getLocalPlaybackPositionMs
   });
   const visualizer = usePlayerAudioVisualizer({
     audioRef,
-    remoteAudioRef,
     activePlaybackSource,
     playbackStatus: playback?.status,
     currentTrackId: playback?.currentTrackId,
@@ -122,7 +105,6 @@ function BottomPlayerControllerBase({
   return (
     <BottomPlayer
       audioRef={audioRef}
-      remoteAudioRef={remoteAudioRef}
       playback={playback}
       canControlPlayback={canControlPlayback}
       progressMs={progressMs}
@@ -144,10 +126,6 @@ function BottomPlayerControllerBase({
       onNext={onNext}
       onEnded={onEnded}
       onLocalPlaybackReady={onLocalPlaybackReady}
-      onRemotePlaying={onRemotePlaying}
-      onRemoteWaiting={onRemoteWaiting}
-      onRemotePause={onRemotePause}
-      onRemoteError={onRemoteError}
     />
   );
 }

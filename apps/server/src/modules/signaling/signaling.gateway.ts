@@ -14,7 +14,6 @@ import type {
   PieceAvailabilityClearPayload,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
-  RoomMediaClockPayload,
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
   RoomPresencePatchPayload,
@@ -31,13 +30,13 @@ import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
+import { TrackAvailabilityRegistry } from "./track-availability.registry";
 import {
   peerSignalChannel,
   pieceAvailabilityChannel,
   pieceAvailabilityClearChannel,
   roomDeletedChannel,
   roomLibraryPatchChannel,
-  roomMediaClockChannel,
   roomPlaybackPatchChannel,
   roomPresencePatchChannel,
   roomQueuePatchChannel,
@@ -58,15 +57,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private readonly disconnectGracePeriodMs = 25_000;
   private readonly pendingPeerSignalTtlMs = 10_000;
   private readonly pendingPeerSignalLimit = 64;
-  private readonly availabilitySnapshotTtlSeconds = 15 * 60;
   private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
   private sequence = 0;
   private recoveryGenerationSequence = 0;
   private readonly pendingDisconnectCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly availabilityByRoom = new Map<
-    string,
-    Map<string, TrackAvailabilityAnnouncement>
-  >();
   private readonly peerSocketsByRoom = new Map<string, Map<string, Set<string>>>();
   private readonly activeSessionsByRoom = new Map<
     string,
@@ -83,6 +77,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @Inject(forwardRef(() => RoomRealtimePublisher))
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
+    private readonly trackAvailabilityRegistry: TrackAvailabilityRegistry,
     private readonly authService: AuthService,
     private readonly metrics: MetricsService
   ) {}
@@ -97,24 +92,22 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   emitRoomMissing(roomId: string) {
     this.ensureBroadcasterServer();
-    this.availabilityByRoom.delete(roomId);
+    this.trackAvailabilityRegistry.clearRoom(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
     this.metrics.clearRoom(roomId);
     this.clearRoomRecoveryState(roomId);
     this.roomRealtimeBroadcaster.emitRoomMissing(roomId);
-    void this.deleteAvailabilitySnapshot(roomId);
   }
 
   emitRoomDeleted(roomId: string, trackIds: string[]) {
     this.ensureBroadcasterServer();
-    this.availabilityByRoom.delete(roomId);
+    this.trackAvailabilityRegistry.clearRoom(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
     this.metrics.clearRoom(roomId);
     this.clearRoomRecoveryState(roomId);
     this.roomRealtimeBroadcaster.emitRoomDeleted(roomId, trackIds);
-    void this.deleteAvailabilitySnapshot(roomId);
   }
 
   emitPlaybackPatch(roomId: string, payload: Omit<RoomPlaybackPatchPayload, "roomId" | "updatedAt">) {
@@ -151,12 +144,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   getTrackAvailabilityAnnouncements(roomId: string, trackId: string) {
-    const roomAvailability = this.availabilityByRoom.get(roomId);
-    if (!roomAvailability) {
-      return [];
-    }
-
-    return [...roomAvailability.values()].filter((announcement) => announcement.trackId === trackId);
+    return this.trackAvailabilityRegistry.getTrackAnnouncements(roomId, trackId);
   }
 
   private emitPieceAvailabilityClear(roomId: string, ownerPeerId: string) {
@@ -212,8 +200,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return;
       }
 
-      this.availabilityByRoom.delete(message.roomId);
-      void this.deleteAvailabilitySnapshot(message.roomId);
+      this.trackAvailabilityRegistry.clearRoom(message.roomId);
       this.peerSocketsByRoom.delete(message.roomId);
       this.activeSessionsByRoom.delete(message.roomId);
       this.metrics.clearRoom(message.roomId);
@@ -236,8 +223,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return;
       }
 
-      this.availabilityByRoom.delete(message.roomId);
-      void this.deleteAvailabilitySnapshot(message.roomId);
+      this.trackAvailabilityRegistry.clearRoom(message.roomId);
       this.peerSocketsByRoom.delete(message.roomId);
       this.activeSessionsByRoom.delete(message.roomId);
       this.metrics.clearRoom(message.roomId);
@@ -323,25 +309,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.server.to(message.roomId).emit("room.library.patch", message.payload);
     });
 
-    void this.redisService.subscribe(roomMediaClockChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: RoomMediaClockPayload;
-      };
-
-      if (
-        !message.roomId ||
-        !message.payload ||
-        !message.sourceId ||
-        message.sourceId === this.roomRealtimeBroadcaster.instanceId
-      ) {
-        return;
-      }
-
-      this.server.to(message.roomId).emit("room.media.clock", message.payload);
-    });
-
     void this.redisService.subscribe(peerSignalChannel, (payload) => {
       const message = payload as {
         sourceId?: string;
@@ -377,13 +344,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           return;
         }
 
-      const roomAvailability = this.availabilityByRoom.get(message.roomId) ?? new Map();
-      roomAvailability.set(
-        `${message.payload.trackId}:${message.payload.ownerPeerId}`,
-        message.payload
-      );
-      this.availabilityByRoom.set(message.roomId, roomAvailability);
-      void this.persistAvailabilitySnapshot(message.roomId);
+      this.trackAvailabilityRegistry.setAnnouncement(message.roomId, message.payload);
       this.server.to(message.roomId).emit("piece.availability", message.payload);
     });
 
@@ -403,7 +364,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           return;
         }
 
-      this.removePeerAvailability(message.roomId, message.payload.ownerPeerId);
+      this.trackAvailabilityRegistry.removePeer(message.roomId, message.payload.ownerPeerId);
       this.server.to(message.roomId).emit("piece.availability.clear", message.payload);
     });
   }
@@ -458,10 +419,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       throw new WsException("Peer mismatch.");
     }
 
-    const roomAvailability = this.availabilityByRoom.get(payload.roomId) ?? new Map();
-    roomAvailability.set(`${payload.trackId}:${payload.ownerPeerId}`, payload);
-    this.availabilityByRoom.set(payload.roomId, roomAvailability);
-    void this.persistAvailabilitySnapshot(payload.roomId);
+    this.trackAvailabilityRegistry.setAnnouncement(payload.roomId, payload);
     client.to(payload.roomId).emit("piece.availability", payload);
     await this.redisService.publish(pieceAvailabilityChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
@@ -482,27 +440,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     // Usually we broadcast to all in room except sender, and sender updates their own state, 
     // or just broadcast to everyone. Socket.io's `client.to(room).emit` broadcasts to everyone ELSE.
     client.to(payload.roomId).emit("room.chat", payload);
-    return payload;
-  }
-
-  @SubscribeMessage("room.media.clock")
-  async handleRoomMediaClock(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: RoomMediaClockPayload
-  ) {
-    this.assertRealtimeClient(client, payload.roomId);
-    this.assertRealtimeAvailable();
-
-    if (client.data.peerId !== payload.sourcePeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-
-    this.server.to(payload.roomId).emit("room.media.clock", payload);
-    await this.redisService.publish(roomMediaClockChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: payload.roomId,
-      payload
-    });
     return payload;
   }
 
@@ -883,26 +820,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private async emitAvailabilitySnapshot(roomId: string, client: Socket) {
-    const roomAvailability = this.availabilityByRoom.get(roomId);
-    const emittedKeys = new Set<string>();
-    if (roomAvailability) {
-      for (const announcement of roomAvailability.values()) {
-        emittedKeys.add(`${announcement.trackId}:${announcement.ownerPeerId}`);
-        client.emit("piece.availability", announcement);
-      }
-    }
-
-    const persisted = await this.loadAvailabilitySnapshot(roomId);
-    for (const announcement of persisted) {
-      const key = `${announcement.trackId}:${announcement.ownerPeerId}`;
-      if (emittedKeys.has(key)) {
-        continue;
-      }
-      const nextAvailability = this.availabilityByRoom.get(roomId) ?? new Map();
-      nextAvailability.set(key, announcement);
-      this.availabilityByRoom.set(roomId, nextAvailability);
+    await this.trackAvailabilityRegistry.emitSnapshot(roomId, (announcement) => {
       client.emit("piece.availability", announcement);
-    }
+    });
   }
 
   private emitPeerSignalToPeer(roomId: string, peerId: string, payload: PeerSignalMessage) {
@@ -926,76 +846,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private clearPeerAvailability(roomId: string, peerId: string) {
-    const removed = this.removePeerAvailability(roomId, peerId);
+    const removed = this.trackAvailabilityRegistry.removePeer(roomId, peerId);
     if (!removed) {
       return false;
     }
 
     this.emitPieceAvailabilityClear(roomId, peerId);
     return true;
-  }
-
-  private removePeerAvailability(roomId: string, peerId: string) {
-    const roomAvailability = this.availabilityByRoom.get(roomId);
-    if (!roomAvailability) {
-      return false;
-    }
-
-    let removed = false;
-    for (const [key, announcement] of roomAvailability.entries()) {
-      if (announcement.ownerPeerId === peerId) {
-        roomAvailability.delete(key);
-        removed = true;
-      }
-    }
-
-    if (roomAvailability.size === 0) {
-      this.availabilityByRoom.delete(roomId);
-    }
-    void this.persistAvailabilitySnapshot(roomId);
-
-    return removed;
-  }
-
-  private availabilitySnapshotKey(roomId: string) {
-    return `music-room:availability:${roomId}`;
-  }
-
-  private async persistAvailabilitySnapshot(roomId: string) {
-    try {
-      const announcements = [...(this.availabilityByRoom.get(roomId)?.values() ?? [])];
-      if (announcements.length === 0) {
-        await this.deleteAvailabilitySnapshot(roomId);
-        return;
-      }
-      await this.redisService.setJson(
-        this.availabilitySnapshotKey(roomId),
-        announcements,
-        this.availabilitySnapshotTtlSeconds
-      );
-    } catch {
-      clientSafeNoop();
-    }
-  }
-
-  private async loadAvailabilitySnapshot(roomId: string) {
-    try {
-      return (
-        (await this.redisService.getJson<TrackAvailabilityAnnouncement[]>(
-          this.availabilitySnapshotKey(roomId)
-        )) ?? []
-      );
-    } catch {
-      return [];
-    }
-  }
-
-  private async deleteAvailabilitySnapshot(roomId: string) {
-    try {
-      await this.redisService.delete(this.availabilitySnapshotKey(roomId));
-    } catch {
-      clientSafeNoop();
-    }
   }
 
   private scheduleDisconnectCleanup(roomId: string, sessionId: string, peerId?: string) {

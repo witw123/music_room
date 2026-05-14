@@ -21,7 +21,6 @@ export type SourceResetReason =
   | "source-session-changed"
   | "source-peer-changed"
   | "media-epoch-changed"
-  | "transport-epoch-changed"
   | "playback-stopped"
   | "none";
 
@@ -53,18 +52,8 @@ export function resolvePlaybackTimelineKey(playback: PlaybackLike) {
 export function resolvePlaybackSourceResetReason(input: {
   previousPlayback: PlaybackLike;
   nextPlayback: PlaybackLike;
-  previousTransportEpoch?: number | null;
-  nextTransportEpoch?: number | null;
 }): SourceResetReason {
-  const { previousPlayback, nextPlayback, previousTransportEpoch, nextTransportEpoch } = input;
-
-  if (
-    typeof previousTransportEpoch === "number" &&
-    typeof nextTransportEpoch === "number" &&
-    previousTransportEpoch !== nextTransportEpoch
-  ) {
-    return "transport-epoch-changed";
-  }
+  const { previousPlayback, nextPlayback } = input;
 
   if (!nextPlayback?.currentTrackId) {
     return previousPlayback?.currentTrackId ? "playback-stopped" : "none";

@@ -26,13 +26,6 @@ export type DataMeshBridge = {
   getConnectedPeerIds(): string[];
 };
 
-export type MediaRuntimeBridge = {
-  scheduleRemotePlaybackRetry(attempt?: number, generation?: string | null): void;
-  syncHostMediaStream(options?: { forceResync?: boolean; reason?: string }): Promise<void>;
-  ensureSourcePlaybackStarted(): Promise<void>;
-  getMediaConnectedPeerIds(): string[];
-};
-
 export type ManualCacheDownloadBridge = Pick<
   DataMeshBridge,
   "syncPeers" | "requestPieces" | "getConnectedPeerIds"
@@ -40,27 +33,10 @@ export type ManualCacheDownloadBridge = Pick<
 
 export type PlaybackConnectionKey = string;
 
-export type ListenerPlaybackState =
-  | "idle"
-  | "awaiting-offer"
-  | "negotiating"
-  | "stream-bound"
-  | "playback-starting"
-  | "live"
-  | "recovering-soft"
-  | "recovering-hard"
-  | "failed";
-
 export type PlaybackRecoveryAction = {
   actionId: string;
   playbackConnectionKey: PlaybackConnectionKey;
-  actionType:
-    | "retry-play"
-    | "rebind-element"
-    | "restart-listener-ice"
-    | "reset-listener-peer"
-    | "restart-data-peer"
-    | "full-resubscribe";
+  actionType: "restart-data-peer" | "full-resubscribe";
   peerId: string | null;
   startedAt: string;
   expiresAt: string;
@@ -77,17 +53,39 @@ export type PlaybackRecoveryDropReason =
 export type PlaybackRecoveryRecommendation = {
   playbackConnectionKey: PlaybackConnectionKey | null;
   peerId: string | null;
-  scope: "media" | "data" | "room";
-  level: "soft" | "ice-restart" | "hard-recreate" | "full-resubscribe";
+  scope: "data" | "room";
+  level: "soft" | "hard-recreate" | "full-resubscribe";
   reason: string;
   observedNoProgressMs: number | null;
+};
+
+export type RoomRecoveryPhase =
+  | "joining"
+  | "resyncing"
+  | "bootstrapping-data"
+  | "playing-local-fallback"
+  | "steady";
+
+export type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
+
+export type RoomRecoveryState = {
+  phase: RoomRecoveryPhase;
+  mode: RoomRecoveryMode;
+  generation: number | null;
+  bootstrapStartedAt: string | null;
+  bootstrapSourcePeerId: string | null;
+  pendingSnapshot: boolean;
+  pendingData: boolean;
+  pendingMedia: boolean;
+  listenerBootstrapAttempts: number | null;
+  fullLocalRecoveryActive: boolean;
 };
 
 export type RoomRuntimeEvent =
   | {
       type: "diagnostic";
       peerId: string;
-      channelKind: "data" | "media" | "system";
+      channelKind: "data" | "system";
       direction: "local" | "sent" | "received";
       event: string;
       summary: string;
@@ -107,7 +105,6 @@ export type RoomRuntimeBaseContext = {
   activeSession: AuthSession | null;
   socketRef: MutableRefObject<RoomSocket | null>;
   audioRef: RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: RefObject<HTMLAudioElement | null>;
   uploadedTracks: Record<string, UploadedTrack>;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
 };

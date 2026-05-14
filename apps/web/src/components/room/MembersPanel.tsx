@@ -165,10 +165,6 @@ function getPlaybackStatus(
   const recoveryPhase = peerDiagnostics?.progressivePlaybackStatus?.recoveryPhase ?? null;
   const fullLocalRecoveryActive =
     peerDiagnostics?.progressivePlaybackStatus?.fullLocalRecoveryActive ?? false;
-  const mediaTransportState =
-    peerDiagnostics?.progressivePlaybackStatus?.mediaTransportState ?? null;
-  const publishedTrackKind =
-    peerDiagnostics?.progressivePlaybackStatus?.publishedTrackKind ?? null;
   const sourceStartState =
     peerDiagnostics?.progressivePlaybackStatus?.sourceStartState ?? null;
   const hostPublishSource =
@@ -179,21 +175,19 @@ function getPlaybackStatus(
     peerDiagnostics?.progressivePlaybackStatus?.hostPublishFailureReason ?? null;
   const mediaFailureReason =
     peerDiagnostics?.progressivePlaybackStatus?.mediaFailureReason ?? null;
-  const listenerAwaitingPublisherOffer =
-    peerDiagnostics?.progressivePlaybackStatus?.listenerAwaitingPublisherOffer ?? false;
 
   if (presenceState === "offline") {
     return {
-      label: "未接入音频",
-      detail: "该成员已离线，不参与实时播放。",
+      label: "成员离线",
+      detail: "该成员已离线，不参与缓存同步播放。",
       tone: "warning" as const
     };
   }
 
   if (presenceState === "reconnecting") {
     return {
-      label: "实时音频重连中",
-      detail: "成员正在恢复房间实时链路。",
+      label: "数据链路重连中",
+      detail: "成员正在恢复房间数据链路。",
       tone: "warning" as const
     };
   }
@@ -214,51 +208,24 @@ function getPlaybackStatus(
     };
   }
 
-  if (recoveryPhase === "bootstrapping-media") {
-    if (
-      (mediaTransportState === "connected" || mediaTransportState === "prewarming") &&
-      publishedTrackKind !== "host-capture" &&
-      publishedTrackKind !== "relay-stream"
-    ) {
-      return {
-        label: "音频链路已接入",
-        detail: "实时音频传输已预连，正在等待房主发布当前音轨。",
-        tone: "accent" as const
-      };
-    }
-    return {
-      label: "连接实时音频中",
-      detail: "当前曲目和来源已确认，正在拉起远端实时音频。",
-      tone: "accent" as const
-    };
-  }
-
   if (sourceStartState === "starting") {
     return {
-      label: "正在启动实时分发",
+      label: "正在启动本地播放",
       detail:
         hostPublishReadiness === "awaiting-audio"
-          ? `实时链路已预热，等待真实发布源就绪：${hostPublishSource ?? "未知"}`
-          : "本机已解锁，正在拉起本地音频并同步给房间。",
+          ? `等待本地缓存源就绪：${hostPublishSource ?? "未知"}`
+          : "本机已解锁，正在拉起本地缓存播放。",
       tone: "accent" as const
     };
   }
 
   if (sourceStartState === "failed") {
     return {
-      label: "实时分发启动失败",
+      label: "本地播放启动失败",
       detail: hostPublishFailureReason
-        ? `真实发布源异常：${hostPublishFailureReason}`
-        : "当前还没有可用于实时分发的真实音频源。",
+        ? `本地缓存源异常：${hostPublishFailureReason}`
+        : "当前还没有可用于播放的本地缓存源。",
       tone: "warning" as const
-    };
-  }
-
-  if (listenerAwaitingPublisherOffer) {
-    return {
-      label: "等待房主重发音频",
-      detail: "本端已重置监听链路，正在等待房主重新发起实时音频协商。",
-      tone: "accent" as const
     };
   }
 

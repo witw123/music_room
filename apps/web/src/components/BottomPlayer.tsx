@@ -11,7 +11,6 @@ import {
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  remoteAudioRef: React.RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null;
   canControlPlayback: boolean;
   progressMs: number;
@@ -33,10 +32,6 @@ type BottomPlayerProps = {
   onNext: () => void;
   onEnded: () => void;
   onLocalPlaybackReady: () => void;
-  onRemotePlaying: () => void;
-  onRemoteWaiting: () => void;
-  onRemotePause: () => void;
-  onRemoteError: () => void;
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -47,7 +42,6 @@ function clampProgressMs(progressMs: number, durationMs: number) {
 
 function BottomPlayerBase({
   audioRef,
-  remoteAudioRef,
   playback,
   canControlPlayback,
   progressMs,
@@ -68,11 +62,7 @@ function BottomPlayerBase({
   onPrev,
   onNext,
   onEnded,
-  onLocalPlaybackReady,
-  onRemotePlaying,
-  onRemoteWaiting,
-  onRemotePause,
-  onRemoteError
+  onLocalPlaybackReady
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
@@ -148,11 +138,10 @@ function BottomPlayerBase({
       setVolume(nextVolume);
       roomAudioOutput.applyVolume({
         localAudio: audioRef.current,
-        remoteAudio: remoteAudioRef.current,
         volume: nextVolume
       });
     },
-    [audioRef, remoteAudioRef, setVolume]
+    [audioRef, setVolume]
   );
 
   const togglePlayback = useCallback(() => {
@@ -229,29 +218,6 @@ function BottomPlayerBase({
         }}
         onPause={syncProgressFromAudio}
         onSeeked={syncProgressFromAudio}
-      />
-
-      <audio
-        ref={remoteAudioRef}
-        className="hidden"
-        autoPlay
-        playsInline
-        onLoadedMetadata={() => {
-          syncDurationFromAudio();
-          syncProgressFromAudio();
-        }}
-        onDurationChange={syncDurationFromAudio}
-        onPlaying={() => {
-          syncProgressFromAudio();
-          onRemotePlaying();
-        }}
-        onWaiting={onRemoteWaiting}
-        onPause={() => {
-          syncProgressFromAudio();
-          onRemotePause();
-        }}
-        onSeeked={syncProgressFromAudio}
-        onError={onRemoteError}
       />
 
       {isPending ? (

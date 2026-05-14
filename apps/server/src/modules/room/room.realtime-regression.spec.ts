@@ -5,6 +5,7 @@ import { QueueController } from "../queue/queue.controller";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { SignalingGateway } from "../signaling/signaling.gateway";
 import { RoomRealtimeBroadcaster } from "../signaling/room-realtime.broadcaster";
+import { TrackAvailabilityRegistry } from "../signaling/track-availability.registry";
 import { RoomController } from "./room.controller";
 import { RoomService } from "./room.service";
 
@@ -192,6 +193,7 @@ function createRealtimeHarness() {
   const authService = createFakeAuthService();
   const roomService = new RoomService(authService as never, prisma as never, redis as never);
   const broadcaster = new RoomRealtimeBroadcaster(redis as never);
+  const trackAvailabilityRegistry = new TrackAvailabilityRegistry(redis as never);
   const metrics = new MetricsService();
   const roomRealtimePublisher = new RoomRealtimePublisher(
     roomService as never,
@@ -202,6 +204,7 @@ function createRealtimeHarness() {
     roomService as never,
     roomRealtimePublisher as never,
     broadcaster as never,
+    trackAvailabilityRegistry,
     authService as never,
     metrics
   );
@@ -230,6 +233,7 @@ function createRealtimeHarness() {
     authService,
     roomService,
     broadcaster,
+    trackAvailabilityRegistry,
     roomRealtimePublisher,
     metrics,
     signalingGateway,

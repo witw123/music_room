@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getRoomPlaybackSurfaceSource,
   getInitialProgressivePlaybackSource,
   shouldForceSourceOwnerLocalPlayback,
   resolveFullLocalWarmupDecision,
@@ -10,23 +11,47 @@ import { getFullLocalStableWindowMs } from "./progressive-playback";
 describe("progressive source controller", () => {
   const stableWindowMs = getFullLocalStableWindowMs();
 
-  it("prefers full-local when the track is already cached in full", () => {
+  it("uses local playback sources only", () => {
     expect(getInitialProgressivePlaybackSource(true)).toBe("full-local");
-    expect(getInitialProgressivePlaybackSource(false)).toBe("remote-stream");
+    expect(getInitialProgressivePlaybackSource(false)).toBe("progressive-local");
   });
 
-  it("forces source owners with a full local track out of remote-stream mode", () => {
+  it("uses local playback for listeners when cache-only playback is enabled", () => {
+    expect(
+      getRoomPlaybackSurfaceSource({
+        hasFullLocalTrack: false
+      })
+    ).toBe("progressive-local");
+  });
+
+  it("uses local playback for listeners regardless of legacy cache policy", () => {
+    expect(
+      getRoomPlaybackSurfaceSource({
+        hasFullLocalTrack: false
+      })
+    ).toBe("progressive-local");
+  });
+
+  it("uses cache-only local playback as the inactive playback surface default", () => {
+    expect(
+      getRoomPlaybackSurfaceSource({
+        hasFullLocalTrack: false
+      })
+    ).toBe("progressive-local");
+  });
+
+  it("does not force source owners that already use local playback", () => {
     expect(
       shouldForceSourceOwnerLocalPlayback({
         isCurrentSourceOwner: true,
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         hasFullLocalTrack: true
       })
     ).toBe(true);
     expect(
       shouldForceSourceOwnerLocalPlayback({
         isCurrentSourceOwner: false,
-        activePlaybackSource: "remote-stream",
+        activePlaybackSource: "progressive-local",
         hasFullLocalTrack: true
       })
     ).toBe(false);
@@ -52,7 +77,7 @@ describe("progressive source controller", () => {
 
   it("requires a stable warmup window before switching to progressive local", () => {
     const firstDecision = resolveProgressiveWarmupDecision({
-      currentSource: "remote-stream",
+      currentSource: "progressive-local",
       engineReady: true,
       activationReady: true,
       fallbackReason: null,
@@ -62,44 +87,63 @@ describe("progressive source controller", () => {
     });
 
     expect(firstDecision).toEqual({
-      nextSource: "remote-stream",
-      nextWarmupReadyAt: 5_000,
+      nextSource: "progressive-local",
+      nextWarmupReadyAt: null,
       clearFallbackReason: false
     });
 
     const secondDecision = resolveProgressiveWarmupDecision({
-      currentSource: "remote-stream",
+      currentSource: "progressive-local",
       engineReady: true,
       activationReady: true,
       fallbackReason: null,
       driftMs: 80,
-      warmupReadyAt: firstDecision.nextWarmupReadyAt,
+      warmupReadyAt: 5_000,
       now: 5_000 + stableWindowMs - 100
     });
 
-    expect(secondDecision.nextSource).toBe("remote-stream");
+    expect(secondDecision.nextSource).toBe("progressive-local");
 
     const thirdDecision = resolveProgressiveWarmupDecision({
-      currentSource: "remote-stream",
+      currentSource: "progressive-local",
       engineReady: true,
       activationReady: true,
       fallbackReason: null,
       driftMs: 80,
-      warmupReadyAt: firstDecision.nextWarmupReadyAt,
+      warmupReadyAt: 5_000,
       now: 5_000 + stableWindowMs + 200
     });
 
     expect(thirdDecision).toEqual({
       nextSource: "progressive-local",
       nextWarmupReadyAt: 5_000,
-      clearFallbackReason: true
+      clearFallbackReason: false
+    });
+  });
+
+  it("stays on progressive local while cache-only progressive playback is still warming up", () => {
+    const decision = resolveProgressiveWarmupDecision({
+      currentSource: "progressive-local",
+      engineReady: false,
+      activationReady: false,
+      fallbackReason: "startup-buffering",
+      driftMs: Number.POSITIVE_INFINITY,
+      warmupReadyAt: null,
+      now: 5_000,
+      cacheOnlyPlayback: true
+    });
+
+    expect(decision).toEqual({
+      nextSource: "progressive-local",
+      nextWarmupReadyAt: null,
+      clearFallbackReason: false
     });
   });
 
   it("resets warmup when drift spikes or fallback is active", () => {
     expect(
       resolveProgressiveWarmupDecision({
-        currentSource: "remote-stream",
+        currentSource: "progressive-local",
         engineReady: true,
         activationReady: true,
         fallbackReason: "buffer-underrun",
@@ -108,14 +152,14 @@ describe("progressive source controller", () => {
         now: 8_000
       })
     ).toEqual({
-      nextSource: "remote-stream",
+      nextSource: "progressive-local",
       nextWarmupReadyAt: null,
       clearFallbackReason: false
     });
 
     expect(
       resolveProgressiveWarmupDecision({
-        currentSource: "remote-stream",
+        currentSource: "progressive-local",
         engineReady: true,
         activationReady: true,
         fallbackReason: null,
@@ -124,7 +168,7 @@ describe("progressive source controller", () => {
         now: 8_000
       })
     ).toEqual({
-      nextSource: "remote-stream",
+      nextSource: "progressive-local",
       nextWarmupReadyAt: null,
       clearFallbackReason: false
     });
@@ -132,7 +176,7 @@ describe("progressive source controller", () => {
 
   it("switches to full-local after a stable warmup once a full track becomes available", () => {
     const firstDecision = resolveFullLocalWarmupDecision({
-      currentSource: "remote-stream",
+      currentSource: "progressive-local",
       localReady: true,
       driftMs: 90,
       warmupReadyAt: null,
@@ -140,13 +184,13 @@ describe("progressive source controller", () => {
     });
 
     expect(firstDecision).toEqual({
-      nextSource: "remote-stream",
+      nextSource: "full-local",
       nextWarmupReadyAt: 9_000,
       clearFallbackReason: false
     });
 
     const secondDecision = resolveFullLocalWarmupDecision({
-      currentSource: "remote-stream",
+      currentSource: "progressive-local",
       localReady: true,
       driftMs: 70,
       warmupReadyAt: firstDecision.nextWarmupReadyAt,

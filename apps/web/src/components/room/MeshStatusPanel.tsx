@@ -285,9 +285,8 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>播放面: {playback.playbackSurfaceKey ?? "未知"}</span>
               <span>时间线: {playback.playbackTimelineKey ?? "未知"}</span>
               <span>监听状态: {playback.listenerPlaybackState ?? "未知"}</span>
-              <span>传输状态: {playback.mediaTransportState ?? "未知"}</span>
+              <span>缓存状态: {playback.mediaBootstrapState ?? "未知"}</span>
               <span>房间变更: {playback.roomChangeKind ?? "未知"}</span>
-              <span>远端输出: {playback.remoteOutputMode ?? "未知"}</span>
               <span>音源启动: {playback.sourceStartState ?? "未知"}</span>
               <span>恢复阶段: {playback.recoveryPhase ?? "未知"}</span>
               <span>恢复动作: {playback.activeRecoveryActionType ?? "无"}</span>

@@ -187,13 +187,13 @@ export function observePeerTransport(input: ObserveTransportInput) {
   );
   const windowClassification = classifyTransportWindow(samples);
 
-  let consecutiveDegradedWindows =
+  const consecutiveDegradedWindows =
     windowClassification === "degraded" ? input.state.consecutiveDegradedWindows + 1 : 0;
-  let consecutiveUnstableWindows =
+  const consecutiveUnstableWindows =
     windowClassification === "unstable" || windowClassification === "failed"
       ? input.state.consecutiveUnstableWindows + 1
       : 0;
-  let consecutiveHealthyWindows =
+  const consecutiveHealthyWindows =
     windowClassification === "healthy" ? input.state.consecutiveHealthyWindows + 1 : 0;
 
   let transportScore = input.state.transportScore;

@@ -26,7 +26,7 @@ import {
   createPlaybackStartIntent,
   type PlaybackStartIntent
 } from "@/features/playback/playback-start-intent";
-import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
+import { getRoomPlaybackSurfaceSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
@@ -36,7 +36,6 @@ import {
   resolvePlaybackSurfaceKey,
   resolvePlaybackTimelineKey
 } from "@/features/room/hooks/room-playback-topology";
-import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
@@ -54,7 +53,6 @@ type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
   | "bootstrapping-data"
-  | "bootstrapping-media"
   | "playing-local-fallback"
   | "steady";
 
@@ -82,6 +80,9 @@ export function MusicRoomApp({
   workspaceOnly = true,
   initialRoomId = null
 }: MusicRoomAppProps) {
+  const defaultPlaybackSource = getRoomPlaybackSurfaceSource({
+    hasFullLocalTrack: false
+  });
   const router = useRouter();
   const clientPlatform = getClientPlatformFromBrowser();
   const workspaceEntryHref = buildAppEntryHref(clientPlatform);
@@ -90,7 +91,6 @@ export function MusicRoomApp({
     redirectTo: initialRoomId ? `/room/${initialRoomId}` : workspaceEntryHref
   });
   const audioRef = useRef<HTMLAudioElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const currentPlaybackPositionRef = useRef(0);
@@ -130,11 +130,9 @@ export function MusicRoomApp({
   const [playerResetEpoch, setPlayerResetEpoch] = useState(0);
   const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
   const [activePlaybackSource, setActivePlaybackSource] =
-    useState<ProgressivePlaybackSource>("remote-stream");
+    useState<ProgressivePlaybackSource>(defaultPlaybackSource);
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
-  const [authoritativeMediaClock, setAuthoritativeMediaClock] =
-    useState<ReceivedRoomMediaClock | null>(null);
   const [audioUnlocked, setAudioUnlocked] = useState(() => roomAudioOutput.isActivated());
   const [sourceStartState, setSourceStartState] = useState<
     "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
@@ -273,31 +271,20 @@ export function MusicRoomApp({
     progressiveSchedulerPolicy,
     transportGovernorMode,
     getLocalPlaybackPositionMs,
-    getHostRelayStream,
-    getHostRelayClockState,
     destroyProgressiveRuntime
   } =
     useProgressiveRuntime({
       audioRef,
-      remoteAudioRef,
       roomSnapshot,
       currentTrack,
       peerId,
       availabilityByTrack,
-      uploadedTracks,
       fullLocalPlaybackTracks,
-      isCurrentSourceOwner,
       activePlaybackSource,
       setActivePlaybackSource,
       progressiveFallbackReason,
       setProgressiveFallbackReason,
-      playbackStartIntent,
-      setPlaybackStartIntent,
-      audioUnlocked,
-      roomRecoveryState,
-      isPageVisible,
       volume,
-      connectedPeersCount: connectedPeers.length,
       mediaConnectedPeersCount: mediaConnectedPeers.length,
       peerDiagnostics,
       recordPeerDiagnostic,
@@ -338,19 +325,12 @@ export function MusicRoomApp({
 
   const resetPlayerSurface = useCallback(() => {
     const localAudio = audioRef.current;
-    const remoteAudio = remoteAudioRef.current;
 
     if (localAudio) {
       localAudio.pause();
       localAudio.srcObject = null;
       localAudio.removeAttribute("src");
       localAudio.load();
-    }
-
-    if (remoteAudio) {
-      remoteAudio.pause();
-      remoteAudio.srcObject = null;
-      remoteAudio.load();
     }
 
     destroyProgressiveRuntime();
@@ -362,10 +342,9 @@ export function MusicRoomApp({
     setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
-    setActivePlaybackSource("remote-stream");
+    setActivePlaybackSource(defaultPlaybackSource);
     setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
-    setAuthoritativeMediaClock(null);
     setRoomRecoveryState({
       phase: "joining",
       mode: "steady",
@@ -379,6 +358,7 @@ export function MusicRoomApp({
       fullLocalRecoveryActive: false
     });
   }, [
+    defaultPlaybackSource,
     destroyProgressiveRuntime,
     resetAvailabilityState,
     resetPeerDiagnostics
@@ -436,7 +416,7 @@ export function MusicRoomApp({
     setIsNavigatingRoomExit
   });
 
-  const { scheduleRemotePlaybackRetry, ensureSourcePlaybackStarted } = useRoomRuntime({
+  const { ensureSourcePlaybackStarted } = useRoomRuntime({
     workspaceOnly,
     initialRoomId,
     hydrated,
@@ -480,9 +460,6 @@ export function MusicRoomApp({
     isCurrentSourceOwner,
     audioUnlocked,
     getLocalPlaybackPositionMs,
-    getHostRelayStream,
-    getHostRelayClockState,
-    setAuthoritativeMediaClock,
     setAudioUnlocked,
     roomRecoveryState,
     setRoomRecoveryState,
@@ -505,7 +482,6 @@ export function MusicRoomApp({
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     audioRef,
-    remoteAudioRef,
     socketRef,
     chunkSchedulerRef,
     resetPlayerSurface,
@@ -533,18 +509,24 @@ export function MusicRoomApp({
 
   useEffect(() => {
     if (!currentPlaybackTrackId) {
-      setActivePlaybackSource("remote-stream");
+      setActivePlaybackSource(defaultPlaybackSource);
       setProgressiveFallbackReason(null);
       return;
     }
 
     setActivePlaybackSource(
-      isCurrentSourceOwner
-        ? getInitialProgressivePlaybackSource(hasFullLocalTrack)
-        : "remote-stream"
+      getRoomPlaybackSurfaceSource({
+        hasFullLocalTrack
+      })
     );
     setProgressiveFallbackReason(null);
-  }, [playbackSurfaceKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);
+  }, [
+    defaultPlaybackSource,
+    playbackSurfaceKey,
+    currentPlaybackTrackId,
+    hasFullLocalTrack,
+    isCurrentSourceOwner
+  ]);
 
   const previousPlaybackRef = useRef(roomSnapshot?.room.playback ?? null);
 
@@ -644,8 +626,7 @@ export function MusicRoomApp({
 
       try {
         const primeResult = await roomAudioOutput.primeOutputs({
-          localAudio: audioRef.current,
-          remoteAudio: remoteAudioRef.current
+          localAudio: audioRef.current
         });
         setAudioUnlocked(primeResult.ok);
         if (!primeResult.ok) {
@@ -724,7 +705,6 @@ export function MusicRoomApp({
     },
     [
       audioRef,
-      remoteAudioRef,
       recordPeerDiagnostic,
       setAudioUnlocked,
       setLastSourceStartError,
@@ -894,123 +874,6 @@ export function MusicRoomApp({
     await nextTrack();
   }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
 
-  const getRemoteAudioDiagnostics = useCallback(() => {
-    const remoteAudio = remoteAudioRef.current;
-    if (!remoteAudio) {
-      return {
-        audioPaused: null,
-        audioMuted: null,
-        audioReadyState: null,
-        hasSrcObject: null,
-        currentSrc: null
-      };
-    }
-
-    return {
-      audioPaused: remoteAudio.paused,
-      audioMuted: remoteAudio.muted,
-      audioReadyState: remoteAudio.readyState,
-      hasSrcObject: !!remoteAudio.srcObject,
-      currentSrc: remoteAudio.currentSrc || null
-    };
-  }, [remoteAudioRef]);
-
-  const handleRemotePlaying = useCallback(() => {
-    recordPeerDiagnostic({
-      peerId: "remote-media",
-      channelKind: "media",
-      direction: "local",
-      event: "audio-playing",
-      summary: "远端音频元素开始播放",
-      update: (snapshot) => ({
-        ...snapshot,
-        remoteTrackStatus: {
-          ...snapshot.remoteTrackStatus,
-          ...getRemoteAudioDiagnostics(),
-          lastAudioEvent: "playing"
-        }
-      })
-    });
-    setMediaConnectionState("live");
-    if (isCurrentSourceOwner && activePlaybackSource === "remote-stream") {
-      void ensureSourcePlaybackStarted();
-    }
-  }, [
-    activePlaybackSource,
-    ensureSourcePlaybackStarted,
-    isCurrentSourceOwner,
-    getRemoteAudioDiagnostics,
-    recordPeerDiagnostic
-  ]);
-
-  const handleRemoteWaiting = useCallback(() => {
-    scheduleRemotePlaybackRetry();
-    recordPeerDiagnostic({
-      peerId: "remote-media",
-      channelKind: "media",
-      direction: "local",
-      event: "audio-waiting",
-      summary: "远端音频元素进入缓冲",
-      update: (snapshot) => ({
-        ...snapshot,
-        remoteTrackStatus: {
-          ...snapshot.remoteTrackStatus,
-          ...getRemoteAudioDiagnostics(),
-          lastAudioEvent: "waiting"
-        }
-      })
-    });
-    setMediaConnectionState("buffering");
-  }, [getRemoteAudioDiagnostics, recordPeerDiagnostic, scheduleRemotePlaybackRetry]);
-
-  const handleRemotePause = useCallback(() => {
-    scheduleRemotePlaybackRetry();
-    recordPeerDiagnostic({
-      peerId: "remote-media",
-      channelKind: "media",
-      direction: "local",
-      event: "audio-pause",
-      summary: "远端音频元素暂停",
-      update: (snapshot) => ({
-        ...snapshot,
-        remoteTrackStatus: {
-          ...snapshot.remoteTrackStatus,
-          ...getRemoteAudioDiagnostics(),
-          lastAudioEvent: "pause"
-        }
-      })
-    });
-    setMediaConnectionState((current) =>
-      roomSnapshot?.room.playback.status === "paused" ? current : "buffering"
-    );
-  }, [
-    getRemoteAudioDiagnostics,
-    recordPeerDiagnostic,
-    roomSnapshot?.room.playback.status,
-    scheduleRemotePlaybackRetry
-  ]);
-
-  const handleRemoteError = useCallback(() => {
-    recordPeerDiagnostic({
-      peerId: "remote-media",
-      channelKind: "media",
-      direction: "local",
-      event: "audio-error",
-      level: "error",
-      summary: "远端音频元素播放失败",
-      update: (snapshot) => ({
-        ...snapshot,
-        lastError: "远端音频元素播放失败",
-        remoteTrackStatus: {
-          ...snapshot.remoteTrackStatus,
-          ...getRemoteAudioDiagnostics(),
-          lastAudioEvent: "error"
-        }
-      })
-    });
-    setMediaConnectionState("failed");
-  }, [getRemoteAudioDiagnostics, recordPeerDiagnostic]);
-
   const {
     canDisbandRoom,
     connectedPeersCount,
@@ -1079,8 +942,7 @@ export function MusicRoomApp({
   const handleAudioUnlock = useCallback(async () => {
     setAudioBlockedOverlay(false);
     const primeResult = await roomAudioOutput.primeOutputs({
-      localAudio: audioRef.current,
-      remoteAudio: remoteAudioRef.current
+      localAudio: audioRef.current
     });
     setAudioUnlocked(primeResult.ok);
     if (primeResult.ok) {
@@ -1089,7 +951,7 @@ export function MusicRoomApp({
     }
     setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
     setAudioBlockedOverlay(true);
-  }, [audioRef, remoteAudioRef, setAudioUnlocked, setStatusMessage]);
+  }, [audioRef, setAudioUnlocked, setStatusMessage]);
 
   return (
     <>
@@ -1151,12 +1013,10 @@ export function MusicRoomApp({
         playerSlot={
           <BottomPlayerController
             audioRef={audioRef}
-            remoteAudioRef={remoteAudioRef}
             roomSnapshot={roomSnapshot}
             activeSession={activeSession}
             currentTrack={currentTrack}
             activePlaybackSource={activePlaybackSource}
-            authoritativeMediaClock={authoritativeMediaClock}
             resetEpoch={playerResetEpoch}
             onPlaybackPositionChange={handlePlaybackPositionChange}
             onPlaybackBucketChange={handlePlaybackBucketChange}
@@ -1169,10 +1029,6 @@ export function MusicRoomApp({
             onNext={handleNextTrack}
             onEnded={handlePlaybackEnded}
             onLocalPlaybackReady={handleLocalPlaybackReady}
-            onRemotePlaying={handleRemotePlaying}
-            onRemoteWaiting={handleRemoteWaiting}
-            onRemotePause={handleRemotePause}
-            onRemoteError={handleRemoteError}
           />
         }
       />

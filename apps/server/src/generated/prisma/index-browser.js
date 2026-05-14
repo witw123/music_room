@@ -143,6 +143,8 @@ exports.Prisma.RoomStateScalarFieldEnum = {
   hostId: 'hostId',
   joinCode: 'joinCode',
   visibility: 'visibility',
+  roomRevision: 'roomRevision',
+  presenceRevision: 'presenceRevision',
   playback: 'playback',
   members: 'members',
   tracks: 'tracks',

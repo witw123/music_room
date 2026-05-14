@@ -9,46 +9,17 @@ import {
 } from "./use-player-audio-visualizer";
 
 describe("resolveVisualizerSourceSelection", () => {
-  it("selects the remote audio element while remote-stream is active", () => {
-    const localAudio = {} as HTMLAudioElement;
-    const remoteStream = {
-      getAudioTracks: () => [{ readyState: "live", enabled: true }]
-    } as unknown as MediaStream;
-    const remoteAudio = {
-      srcObject: remoteStream
-    } as unknown as HTMLAudioElement;
-
-    expect(
-      resolveVisualizerSourceSelection({
-        audioElement: localAudio,
-        remoteAudioElement: remoteAudio,
-        activePlaybackSource: "remote-stream",
-        currentTrackId: "track-a",
-        mediaEpoch: 3,
-        sourcePeerId: "peer_source",
-        sourceSessionId: "member_source"
-      })
-    ).toMatchObject({
-      kind: "remote-stream",
-      element: remoteAudio,
-      stream: remoteStream,
-      hasSignal: true
-    });
-  });
-
-  it("selects the local audio element while local playback is audible", () => {
+  it("selects the local audio stream while local playback is active", () => {
     const localStream = {
       getAudioTracks: () => [{ readyState: "live", enabled: true }]
     } as unknown as MediaStream;
     const localAudio = {
       srcObject: localStream
     } as unknown as HTMLAudioElement;
-    const remoteAudio = {} as HTMLAudioElement;
 
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,
-        remoteAudioElement: remoteAudio,
         activePlaybackSource: "progressive-local",
         currentTrackId: "track-a",
         mediaEpoch: 3,
@@ -67,7 +38,6 @@ describe("resolveVisualizerSourceSelection", () => {
     expect(
       resolveVisualizerSourceSelection({
         audioElement: {} as HTMLAudioElement,
-        remoteAudioElement: {} as HTMLAudioElement,
         activePlaybackSource: "full-local",
         currentTrackId: null
       })
@@ -80,7 +50,7 @@ describe("resolveVisualizerSourceSelection", () => {
     });
   });
 
-  it("falls back to element capture when a local element has a src but no srcObject", () => {
+  it("falls back to local element capture when the element has a src but no stream", () => {
     const localAudio = {
       currentSrc: "blob:track-a"
     } as unknown as HTMLAudioElement;
@@ -88,7 +58,6 @@ describe("resolveVisualizerSourceSelection", () => {
     expect(
       resolveVisualizerSourceSelection({
         audioElement: localAudio,
-        remoteAudioElement: null,
         activePlaybackSource: "full-local",
         currentTrackId: "track-a",
         mediaEpoch: 5,
@@ -103,35 +72,33 @@ describe("resolveVisualizerSourceSelection", () => {
     });
   });
 
-  it("changes the graph key when the same track gets a new playback session", () => {
-    const remoteStream = {
+  it("changes the graph key when local playback enters a new session", () => {
+    const localStream = {
       getAudioTracks: () => [{ readyState: "live", enabled: true }]
     } as unknown as MediaStream;
-    const remoteAudio = {
-      srcObject: remoteStream
+    const localAudio = {
+      srcObject: localStream
     } as unknown as HTMLAudioElement;
 
     const first = resolveVisualizerSourceSelection({
-      audioElement: null,
-      remoteAudioElement: remoteAudio,
-      activePlaybackSource: "remote-stream",
+      audioElement: localAudio,
+      activePlaybackSource: "progressive-local",
       currentTrackId: "track-a",
       mediaEpoch: 1,
       sourcePeerId: "peer_source_a",
       sourceSessionId: "member_source"
     });
     const second = resolveVisualizerSourceSelection({
-      audioElement: null,
-      remoteAudioElement: remoteAudio,
-      activePlaybackSource: "remote-stream",
+      audioElement: localAudio,
+      activePlaybackSource: "progressive-local",
       currentTrackId: "track-a",
       mediaEpoch: 2,
       sourcePeerId: "peer_source_b",
       sourceSessionId: "member_source"
     });
 
-    expect(first.kind).toBe("remote-stream");
-    expect(second.kind).toBe("remote-stream");
+    expect(first.kind).toBe("local-stream");
+    expect(second.kind).toBe("local-stream");
     expect(first.graphKey).not.toBe(second.graphKey);
   });
 });
@@ -169,17 +136,6 @@ describe("resolvePlayerAudioVisualizerRenderMode", () => {
       })
     ).toBe("paused");
   });
-
-  it("falls back to idle mode without an active track", () => {
-    expect(
-      resolvePlayerAudioVisualizerRenderMode({
-        playbackStatus: "paused",
-        hasTrack: false,
-        reducedMotion: false,
-        hasLiveSignal: false
-      })
-    ).toBe("idle");
-  });
 });
 
 describe("normalizeWaveformSamples", () => {
@@ -192,23 +148,6 @@ describe("normalizeWaveformSamples", () => {
         sampleCount: 4
       }).map((sample) => Number(sample.toFixed(3)))
     ).toEqual([0.281, 0.281, 0.563, 0.563]);
-  });
-
-  it("softens the waveform when reduced motion is enabled", () => {
-    const timeDomainData = new Uint8Array([128, 200, 128, 56]);
-
-    const normal = normalizeWaveformSamples({
-      timeDomainData,
-      sampleCount: 2
-    });
-    const reduced = normalizeWaveformSamples({
-      timeDomainData,
-      sampleCount: 2,
-      reducedMotion: true
-    });
-
-    expect(reduced[0]).toBeLessThan(normal[0]!);
-    expect(reduced[1]).toBeLessThan(normal[1]!);
   });
 });
 

@@ -3143,8 +3143,20 @@ export namespace Prisma {
 
   export type AggregateRoomState = {
     _count: RoomStateCountAggregateOutputType | null
+    _avg: RoomStateAvgAggregateOutputType | null
+    _sum: RoomStateSumAggregateOutputType | null
     _min: RoomStateMinAggregateOutputType | null
     _max: RoomStateMaxAggregateOutputType | null
+  }
+
+  export type RoomStateAvgAggregateOutputType = {
+    roomRevision: number | null
+    presenceRevision: number | null
+  }
+
+  export type RoomStateSumAggregateOutputType = {
+    roomRevision: number | null
+    presenceRevision: number | null
   }
 
   export type RoomStateMinAggregateOutputType = {
@@ -3152,6 +3164,8 @@ export namespace Prisma {
     hostId: string | null
     joinCode: string | null
     visibility: string | null
+    roomRevision: number | null
+    presenceRevision: number | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -3161,6 +3175,8 @@ export namespace Prisma {
     hostId: string | null
     joinCode: string | null
     visibility: string | null
+    roomRevision: number | null
+    presenceRevision: number | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -3170,6 +3186,8 @@ export namespace Prisma {
     hostId: number
     joinCode: number
     visibility: number
+    roomRevision: number
+    presenceRevision: number
     playback: number
     members: number
     tracks: number
@@ -3180,11 +3198,23 @@ export namespace Prisma {
   }
 
 
+  export type RoomStateAvgAggregateInputType = {
+    roomRevision?: true
+    presenceRevision?: true
+  }
+
+  export type RoomStateSumAggregateInputType = {
+    roomRevision?: true
+    presenceRevision?: true
+  }
+
   export type RoomStateMinAggregateInputType = {
     id?: true
     hostId?: true
     joinCode?: true
     visibility?: true
+    roomRevision?: true
+    presenceRevision?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -3194,6 +3224,8 @@ export namespace Prisma {
     hostId?: true
     joinCode?: true
     visibility?: true
+    roomRevision?: true
+    presenceRevision?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -3203,6 +3235,8 @@ export namespace Prisma {
     hostId?: true
     joinCode?: true
     visibility?: true
+    roomRevision?: true
+    presenceRevision?: true
     playback?: true
     members?: true
     tracks?: true
@@ -3250,6 +3284,18 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
+     * Select which fields to average
+    **/
+    _avg?: RoomStateAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: RoomStateSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
      * Select which fields to find the minimum value
     **/
     _min?: RoomStateMinAggregateInputType
@@ -3280,6 +3326,8 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: RoomStateCountAggregateInputType | true
+    _avg?: RoomStateAvgAggregateInputType
+    _sum?: RoomStateSumAggregateInputType
     _min?: RoomStateMinAggregateInputType
     _max?: RoomStateMaxAggregateInputType
   }
@@ -3289,6 +3337,8 @@ export namespace Prisma {
     hostId: string
     joinCode: string
     visibility: string
+    roomRevision: number
+    presenceRevision: number
     playback: JsonValue
     members: JsonValue
     tracks: JsonValue
@@ -3296,6 +3346,8 @@ export namespace Prisma {
     createdAt: Date
     updatedAt: Date
     _count: RoomStateCountAggregateOutputType | null
+    _avg: RoomStateAvgAggregateOutputType | null
+    _sum: RoomStateSumAggregateOutputType | null
     _min: RoomStateMinAggregateOutputType | null
     _max: RoomStateMaxAggregateOutputType | null
   }
@@ -3319,6 +3371,8 @@ export namespace Prisma {
     hostId?: boolean
     joinCode?: boolean
     visibility?: boolean
+    roomRevision?: boolean
+    presenceRevision?: boolean
     playback?: boolean
     members?: boolean
     tracks?: boolean
@@ -3332,6 +3386,8 @@ export namespace Prisma {
     hostId?: boolean
     joinCode?: boolean
     visibility?: boolean
+    roomRevision?: boolean
+    presenceRevision?: boolean
     playback?: boolean
     members?: boolean
     tracks?: boolean
@@ -3345,6 +3401,8 @@ export namespace Prisma {
     hostId?: boolean
     joinCode?: boolean
     visibility?: boolean
+    roomRevision?: boolean
+    presenceRevision?: boolean
     playback?: boolean
     members?: boolean
     tracks?: boolean
@@ -3358,6 +3416,8 @@ export namespace Prisma {
     hostId?: boolean
     joinCode?: boolean
     visibility?: boolean
+    roomRevision?: boolean
+    presenceRevision?: boolean
     playback?: boolean
     members?: boolean
     tracks?: boolean
@@ -3366,7 +3426,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type RoomStateOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "hostId" | "joinCode" | "visibility" | "playback" | "members" | "tracks" | "queue" | "createdAt" | "updatedAt", ExtArgs["result"]["roomState"]>
+  export type RoomStateOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "hostId" | "joinCode" | "visibility" | "roomRevision" | "presenceRevision" | "playback" | "members" | "tracks" | "queue" | "createdAt" | "updatedAt", ExtArgs["result"]["roomState"]>
 
   export type $RoomStatePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "RoomState"
@@ -3376,6 +3436,8 @@ export namespace Prisma {
       hostId: string
       joinCode: string
       visibility: string
+      roomRevision: number
+      presenceRevision: number
       playback: Prisma.JsonValue
       members: Prisma.JsonValue
       tracks: Prisma.JsonValue
@@ -3809,6 +3871,8 @@ export namespace Prisma {
     readonly hostId: FieldRef<"RoomState", 'String'>
     readonly joinCode: FieldRef<"RoomState", 'String'>
     readonly visibility: FieldRef<"RoomState", 'String'>
+    readonly roomRevision: FieldRef<"RoomState", 'Int'>
+    readonly presenceRevision: FieldRef<"RoomState", 'Int'>
     readonly playback: FieldRef<"RoomState", 'Json'>
     readonly members: FieldRef<"RoomState", 'Json'>
     readonly tracks: FieldRef<"RoomState", 'Json'>
@@ -5288,6 +5352,8 @@ export namespace Prisma {
     hostId: 'hostId',
     joinCode: 'joinCode',
     visibility: 'visibility',
+    roomRevision: 'roomRevision',
+    presenceRevision: 'presenceRevision',
     playback: 'playback',
     members: 'members',
     tracks: 'tracks',
@@ -5390,6 +5456,20 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'Int'
+   */
+  export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
+    
+
+
+  /**
+   * Reference to a field of type 'Int[]'
+   */
+  export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
+    
+
+
+  /**
    * Reference to a field of type 'Json'
    */
   export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
@@ -5411,16 +5491,16 @@ export namespace Prisma {
 
 
   /**
-   * Reference to a field of type 'Int'
+   * Reference to a field of type 'Float'
    */
-  export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
+  export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
     
 
 
   /**
-   * Reference to a field of type 'Int[]'
+   * Reference to a field of type 'Float[]'
    */
-  export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>
+  export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
     
   /**
    * Deep Input Types
@@ -5544,6 +5624,8 @@ export namespace Prisma {
     hostId?: StringFilter<"RoomState"> | string
     joinCode?: StringFilter<"RoomState"> | string
     visibility?: StringFilter<"RoomState"> | string
+    roomRevision?: IntFilter<"RoomState"> | number
+    presenceRevision?: IntFilter<"RoomState"> | number
     playback?: JsonFilter<"RoomState">
     members?: JsonFilter<"RoomState">
     tracks?: JsonFilter<"RoomState">
@@ -5557,6 +5639,8 @@ export namespace Prisma {
     hostId?: SortOrder
     joinCode?: SortOrder
     visibility?: SortOrder
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
     playback?: SortOrder
     members?: SortOrder
     tracks?: SortOrder
@@ -5573,6 +5657,8 @@ export namespace Prisma {
     NOT?: RoomStateWhereInput | RoomStateWhereInput[]
     hostId?: StringFilter<"RoomState"> | string
     visibility?: StringFilter<"RoomState"> | string
+    roomRevision?: IntFilter<"RoomState"> | number
+    presenceRevision?: IntFilter<"RoomState"> | number
     playback?: JsonFilter<"RoomState">
     members?: JsonFilter<"RoomState">
     tracks?: JsonFilter<"RoomState">
@@ -5586,6 +5672,8 @@ export namespace Prisma {
     hostId?: SortOrder
     joinCode?: SortOrder
     visibility?: SortOrder
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
     playback?: SortOrder
     members?: SortOrder
     tracks?: SortOrder
@@ -5593,8 +5681,10 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: RoomStateCountOrderByAggregateInput
+    _avg?: RoomStateAvgOrderByAggregateInput
     _max?: RoomStateMaxOrderByAggregateInput
     _min?: RoomStateMinOrderByAggregateInput
+    _sum?: RoomStateSumOrderByAggregateInput
   }
 
   export type RoomStateScalarWhereWithAggregatesInput = {
@@ -5605,6 +5695,8 @@ export namespace Prisma {
     hostId?: StringWithAggregatesFilter<"RoomState"> | string
     joinCode?: StringWithAggregatesFilter<"RoomState"> | string
     visibility?: StringWithAggregatesFilter<"RoomState"> | string
+    roomRevision?: IntWithAggregatesFilter<"RoomState"> | number
+    presenceRevision?: IntWithAggregatesFilter<"RoomState"> | number
     playback?: JsonWithAggregatesFilter<"RoomState">
     members?: JsonWithAggregatesFilter<"RoomState">
     tracks?: JsonWithAggregatesFilter<"RoomState">
@@ -5819,6 +5911,8 @@ export namespace Prisma {
     hostId: string
     joinCode: string
     visibility: string
+    roomRevision?: number
+    presenceRevision?: number
     playback: JsonNullValueInput | InputJsonValue
     members: JsonNullValueInput | InputJsonValue
     tracks: JsonNullValueInput | InputJsonValue
@@ -5832,6 +5926,8 @@ export namespace Prisma {
     hostId: string
     joinCode: string
     visibility: string
+    roomRevision?: number
+    presenceRevision?: number
     playback: JsonNullValueInput | InputJsonValue
     members: JsonNullValueInput | InputJsonValue
     tracks: JsonNullValueInput | InputJsonValue
@@ -5845,6 +5941,8 @@ export namespace Prisma {
     hostId?: StringFieldUpdateOperationsInput | string
     joinCode?: StringFieldUpdateOperationsInput | string
     visibility?: StringFieldUpdateOperationsInput | string
+    roomRevision?: IntFieldUpdateOperationsInput | number
+    presenceRevision?: IntFieldUpdateOperationsInput | number
     playback?: JsonNullValueInput | InputJsonValue
     members?: JsonNullValueInput | InputJsonValue
     tracks?: JsonNullValueInput | InputJsonValue
@@ -5858,6 +5956,8 @@ export namespace Prisma {
     hostId?: StringFieldUpdateOperationsInput | string
     joinCode?: StringFieldUpdateOperationsInput | string
     visibility?: StringFieldUpdateOperationsInput | string
+    roomRevision?: IntFieldUpdateOperationsInput | number
+    presenceRevision?: IntFieldUpdateOperationsInput | number
     playback?: JsonNullValueInput | InputJsonValue
     members?: JsonNullValueInput | InputJsonValue
     tracks?: JsonNullValueInput | InputJsonValue
@@ -5871,6 +5971,8 @@ export namespace Prisma {
     hostId: string
     joinCode: string
     visibility: string
+    roomRevision?: number
+    presenceRevision?: number
     playback: JsonNullValueInput | InputJsonValue
     members: JsonNullValueInput | InputJsonValue
     tracks: JsonNullValueInput | InputJsonValue
@@ -5884,6 +5986,8 @@ export namespace Prisma {
     hostId?: StringFieldUpdateOperationsInput | string
     joinCode?: StringFieldUpdateOperationsInput | string
     visibility?: StringFieldUpdateOperationsInput | string
+    roomRevision?: IntFieldUpdateOperationsInput | number
+    presenceRevision?: IntFieldUpdateOperationsInput | number
     playback?: JsonNullValueInput | InputJsonValue
     members?: JsonNullValueInput | InputJsonValue
     tracks?: JsonNullValueInput | InputJsonValue
@@ -5897,6 +6001,8 @@ export namespace Prisma {
     hostId?: StringFieldUpdateOperationsInput | string
     joinCode?: StringFieldUpdateOperationsInput | string
     visibility?: StringFieldUpdateOperationsInput | string
+    roomRevision?: IntFieldUpdateOperationsInput | number
+    presenceRevision?: IntFieldUpdateOperationsInput | number
     playback?: JsonNullValueInput | InputJsonValue
     members?: JsonNullValueInput | InputJsonValue
     tracks?: JsonNullValueInput | InputJsonValue
@@ -6111,6 +6217,17 @@ export namespace Prisma {
     createdAt?: SortOrder
     expiresAt?: SortOrder
   }
+
+  export type IntFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntFilter<$PrismaModel> | number
+  }
   export type JsonFilter<$PrismaModel = never> =
     | PatchUndefined<
         Either<Required<JsonFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonFilterBase<$PrismaModel>>, 'path'>>,
@@ -6140,6 +6257,8 @@ export namespace Prisma {
     hostId?: SortOrder
     joinCode?: SortOrder
     visibility?: SortOrder
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
     playback?: SortOrder
     members?: SortOrder
     tracks?: SortOrder
@@ -6148,11 +6267,18 @@ export namespace Prisma {
     updatedAt?: SortOrder
   }
 
+  export type RoomStateAvgOrderByAggregateInput = {
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
+  }
+
   export type RoomStateMaxOrderByAggregateInput = {
     id?: SortOrder
     hostId?: SortOrder
     joinCode?: SortOrder
     visibility?: SortOrder
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -6162,8 +6288,31 @@ export namespace Prisma {
     hostId?: SortOrder
     joinCode?: SortOrder
     visibility?: SortOrder
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type RoomStateSumOrderByAggregateInput = {
+    roomRevision?: SortOrder
+    presenceRevision?: SortOrder
+  }
+
+  export type IntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntWithAggregatesFilter<$PrismaModel> | number
+    _count?: NestedIntFilter<$PrismaModel>
+    _avg?: NestedFloatFilter<$PrismaModel>
+    _sum?: NestedIntFilter<$PrismaModel>
+    _min?: NestedIntFilter<$PrismaModel>
+    _max?: NestedIntFilter<$PrismaModel>
   }
   export type JsonWithAggregatesFilter<$PrismaModel = never> =
     | PatchUndefined<
@@ -6289,6 +6438,14 @@ export namespace Prisma {
     set?: Date | string
   }
 
+  export type IntFieldUpdateOperationsInput = {
+    set?: number
+    increment?: number
+    decrement?: number
+    multiply?: number
+    divide?: number
+  }
+
   export type NullableStringFieldUpdateOperationsInput = {
     set?: string | null
   }
@@ -6362,6 +6519,33 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
+  }
+
+  export type NestedIntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>
+    lt?: number | IntFieldRefInput<$PrismaModel>
+    lte?: number | IntFieldRefInput<$PrismaModel>
+    gt?: number | IntFieldRefInput<$PrismaModel>
+    gte?: number | IntFieldRefInput<$PrismaModel>
+    not?: NestedIntWithAggregatesFilter<$PrismaModel> | number
+    _count?: NestedIntFilter<$PrismaModel>
+    _avg?: NestedFloatFilter<$PrismaModel>
+    _sum?: NestedIntFilter<$PrismaModel>
+    _min?: NestedIntFilter<$PrismaModel>
+    _max?: NestedIntFilter<$PrismaModel>
+  }
+
+  export type NestedFloatFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel>
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel>
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel>
+    lt?: number | FloatFieldRefInput<$PrismaModel>
+    lte?: number | FloatFieldRefInput<$PrismaModel>
+    gt?: number | FloatFieldRefInput<$PrismaModel>
+    gte?: number | FloatFieldRefInput<$PrismaModel>
+    not?: NestedFloatFilter<$PrismaModel> | number
   }
   export type NestedJsonFilter<$PrismaModel = never> =
     | PatchUndefined<

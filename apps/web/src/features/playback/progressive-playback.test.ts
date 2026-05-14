@@ -298,7 +298,7 @@ describe("progressive playback helpers", () => {
     expect(
       resolveSchedulerPolicy({
         playback,
-        activeSource: "remote-stream",
+        activeSource: "progressive-local",
         manifest,
         availableChunks: outrunChunks,
         fallbackReason: null,
@@ -309,7 +309,7 @@ describe("progressive playback helpers", () => {
 
     const health = buildProgressiveHealthSnapshot({
       playback,
-      activeSource: "remote-stream",
+      activeSource: "progressive-local",
       manifest,
       localAvailability: {
         ...availability,

@@ -1,1285 +1,178 @@
 import { describe, expect, it } from "vitest";
-import type { RoomSnapshot } from "@music-room/shared";
 import {
-  createPeerConnectionSupervisorState,
-  notePeerSignalState,
-  recordPeerPlayoutProgress
-} from "@/features/p2p";
-import {
-  resolveListenerMediaRecoveryAction,
-  resolveListenerMediaRecoveryReason,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
-  shouldForceManualCacheBootstrap,
-  resolveManualCacheMeshRecoveryMode,
-  resolveMediaDiagnosticPeerId,
-  resolvePeerConnectionNoProgressMs,
-  shouldKickSourcePlaybackFromRealtimeEvent,
+  shouldAcceptIncomingDataSignal,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
-  shouldManagePublishedMediaTransport,
-  shouldForceRemoteAudioElementRebind,
-  shouldKickRemotePlaybackFromAudioEvent,
-  shouldAcceptIncomingMediaSignal,
-  shouldReannounceManualCacheAvailability,
-  shouldRecoverManualCacheDataPeers,
-  shouldResumeRemotePlayback,
-  shouldRedirectRoomRouteToAuth,
+  shouldForceManualCacheBootstrap,
+  shouldKickSourcePlaybackFromRealtimeEvent,
+  shouldReannounceManualCacheAvailability
 } from "./use-room-runtime";
-import { shouldSuppressSourceRecoveryDuringGenerationBootstrap } from "./use-room-connection-supervisor";
-import {
-  resolveMediaTransportOwnerKey,
-  shouldBootstrapMissingListeners
-} from "./use-room-media-runtime";
 
-describe("resolveListenerMediaRecoveryReason", () => {
-  const traceKey = "track_a|3|peer_source|peer_listener";
+describe("pure cache room runtime helpers", () => {
+  it("accepts only data peer signals", () => {
+    const dataSignal = {
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b",
+      channelKind: "data" as const,
+      type: "offer" as const,
+      payload: {}
+    };
 
-  it("requests recovery when the connection is up but no track arrived", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: null,
-        lastBoundTraceKey: null,
-        lastPlayAttemptTraceKey: null,
-        lastPlayAttemptResult: null,
-        lastPlayingTraceKey: null,
-        remoteAudioPaused: null,
-        hasBoundSrcObject: false,
-        remoteTrackMuted: null,
-        remoteTrackEnabled: null,
-        remoteTrackReadyState: null
-      })
-    ).toBe("connected-but-no-track");
+    expect(shouldAcceptIncomingDataSignal({ payload: dataSignal })).toBe(true);
   });
 
-  it("requests recovery when track arrived but the audio element was not rebound", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: null,
-        lastPlayAttemptTraceKey: null,
-        lastPlayAttemptResult: null,
-        lastPlayingTraceKey: null,
-        remoteAudioPaused: null,
-        hasBoundSrcObject: false,
-        remoteTrackMuted: null,
-        remoteTrackEnabled: null,
-        remoteTrackReadyState: null
-      })
-    ).toBe("track-received-but-not-bound");
-  });
-
-  it("requests recovery when binding succeeded but playback never started", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: traceKey,
-        lastPlayAttemptTraceKey: traceKey,
-        lastPlayAttemptResult: "rejected",
-        lastPlayingTraceKey: null,
-        remoteAudioPaused: true,
-        hasBoundSrcObject: true,
-        remoteTrackMuted: false,
-        remoteTrackEnabled: true,
-        remoteTrackReadyState: "live"
-      })
-    ).toBe("bound-but-not-playing");
-  });
-
-  it("requests recovery when the bound remote track is muted or ended", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: traceKey,
-        lastPlayAttemptTraceKey: traceKey,
-        lastPlayAttemptResult: "ok",
-        lastPlayingTraceKey: traceKey,
-        remoteAudioPaused: false,
-        hasBoundSrcObject: true,
-        remoteTrackMuted: true,
-        remoteTrackEnabled: true,
-        remoteTrackReadyState: "live"
-      })
-    ).toBe("bound-but-muted-track");
-  });
-
-  it("does not request recovery after the current trace has already entered playing", () => {
-    expect(
-      resolveListenerMediaRecoveryReason({
-        traceKey,
-        lastTrackTraceKey: traceKey,
-        lastBoundTraceKey: traceKey,
-        lastPlayAttemptTraceKey: traceKey,
-        lastPlayAttemptResult: "ok",
-        lastPlayingTraceKey: traceKey,
-        remoteAudioPaused: false,
-        hasBoundSrcObject: true,
-        remoteTrackMuted: false,
-        remoteTrackEnabled: true,
-        remoteTrackReadyState: "live"
-      })
-    ).toBeNull();
-  });
-
-  it("rebinds before restarting when track arrived but the element was not rebound yet", () => {
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "track-received-but-not-bound",
-        bindAttempts: 0,
-        playAttempts: 0
-      })
-    ).toBe("rebind-element");
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "track-received-but-not-bound",
-        bindAttempts: 2,
-        playAttempts: 0
-      })
-    ).toBe("rebind-element");
-  });
-
-  it("retries play instead of escalating to a peer restart", () => {
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "bound-but-not-playing",
-        bindAttempts: 1,
-        playAttempts: 0
-      })
-    ).toBe("retry-play");
-    expect(
-      resolveListenerMediaRecoveryAction({
-        reason: "bound-but-not-playing",
-        bindAttempts: 1,
-        playAttempts: 2
-      })
-    ).toBe("retry-play");
-  });
-});
-
-describe("shouldReannounceManualCacheAvailability", () => {
-  it("re-announces uploaded tracks when listeners are present and the broadcast key changed", () => {
+  it("reannounces manual cache availability when listener set changes", () => {
     expect(
       shouldReannounceManualCacheAvailability({
         enableManualTrackCaching: true,
         roomId: "room_1",
-        roomListenerSetHash: "peer_a,peer_b",
-        uploadedTrackIds: ["track_b", "track_a"],
+        roomListenerSetHash: "peer_a|peer_b",
+        uploadedTrackIds: ["track_2", "track_1"],
         lastBroadcastKey: null
       })
-    ).toBe("room_1|peer_a,peer_b|track_a,track_b");
+    ).toBe("room_1|peer_a|peer_b|track_1,track_2");
   });
 
-  it("does not re-announce when nothing relevant changed", () => {
+  it("forces manual cache bootstrap when providers are not connected", () => {
     expect(
-      shouldReannounceManualCacheAvailability({
+      shouldForceManualCacheBootstrap({
         enableManualTrackCaching: true,
-        roomId: "room_1",
-        roomListenerSetHash: "peer_a,peer_b",
-        uploadedTrackIds: ["track_a", "track_b"],
-        lastBroadcastKey: "room_1|peer_a,peer_b|track_a,track_b"
-      })
-    ).toBeNull();
-  });
-
-  it("re-announces when listener peer ids changed even if the listener count stayed the same", () => {
-    expect(
-      shouldReannounceManualCacheAvailability({
-        enableManualTrackCaching: true,
-        roomId: "room_1",
-        roomListenerSetHash: "peer_b,peer_c",
-        uploadedTrackIds: ["track_a", "track_b"],
-        lastBroadcastKey: "room_1|peer_a,peer_b|track_a,track_b"
-      })
-    ).toBe("room_1|peer_b,peer_c|track_a,track_b");
-  });
-});
-
-describe("shouldAcceptIncomingMediaSignal", () => {
-  const currentPlayback: RoomSnapshot["room"]["playback"] = {
-    status: "playing",
-    currentTrackId: "track_a",
-    currentQueueItemId: null,
-    sourceSessionId: "session_host",
-    sourcePeerId: "peer_source",
-    sourceTrackId: "track_a",
-    positionMs: 0,
-    startedAt: "2026-04-24T00:00:00.000Z",
-    queueVersion: 4,
-    playbackRevision: 4,
-    mediaEpoch: 3
-  };
-
-  it("accepts current source media signals for the listener", () => {
-    expect(
-      shouldAcceptIncomingMediaSignal({
-        payload: {
-          roomId: "room_1",
-          fromPeerId: "peer_source",
-          toPeerId: "peer_listener",
-          channelKind: "media",
-          mediaEpoch: 3,
-          transportEpoch: 2,
-          type: "offer",
-          payload: {}
-        },
-        currentPlayback,
-        localPeerId: "peer_listener",
-        currentTransportEpoch: 2
-      })
-    ).toBe(true);
-  });
-
-  it("drops old media epoch signals", () => {
-    expect(
-      shouldAcceptIncomingMediaSignal({
-        payload: {
-          roomId: "room_1",
-          fromPeerId: "peer_source",
-          toPeerId: "peer_listener",
-          channelKind: "media",
-          mediaEpoch: 2,
-          transportEpoch: 2,
-          type: "offer",
-          payload: {}
-        },
-        currentPlayback,
-        localPeerId: "peer_listener",
-        currentTransportEpoch: 2
-      })
-    ).toBe(false);
-  });
-
-  it("drops stale transport signals even when media epoch matches", () => {
-    expect(
-      shouldAcceptIncomingMediaSignal({
-        payload: {
-          roomId: "room_1",
-          fromPeerId: "peer_source",
-          toPeerId: "peer_listener",
-          channelKind: "media",
-          mediaEpoch: 3,
-          transportEpoch: 1,
-          type: "candidate",
-          payload: {}
-        },
-        currentPlayback,
-        localPeerId: "peer_listener",
-        currentTransportEpoch: 2
-      })
-    ).toBe(false);
-  });
-
-  it("accepts newer transport signals so the media mesh can advance epochs", () => {
-    expect(
-      shouldAcceptIncomingMediaSignal({
-        payload: {
-          roomId: "room_1",
-          fromPeerId: "peer_source",
-          toPeerId: "peer_listener",
-          channelKind: "media",
-          mediaEpoch: 3,
-          transportEpoch: 3,
-          type: "offer",
-          payload: {}
-        },
-        currentPlayback,
-        localPeerId: "peer_listener",
-        currentTransportEpoch: 2
-      })
-    ).toBe(true);
-  });
-
-  it("accepts listener answers on the current source peer", () => {
-    expect(
-      shouldAcceptIncomingMediaSignal({
-        payload: {
-          roomId: "room_1",
-          fromPeerId: "peer_listener",
-          toPeerId: "peer_source",
-          channelKind: "media",
-          mediaEpoch: 3,
-          transportEpoch: 2,
-          type: "answer",
-          payload: {}
-        },
-        currentPlayback,
-        localPeerId: "peer_source",
-        currentTransportEpoch: 2
-      })
-    ).toBe(true);
-  });
-});
-
-describe("shouldForceRemoteAudioElementRebind", () => {
-  it("forces a rebind when the same remote stream is reused for a new playback generation", () => {
-    const sharedStream = {} as MediaStream;
-
-    expect(
-      shouldForceRemoteAudioElementRebind({
-        incomingStream: sharedStream,
-        boundStream: sharedStream,
-        currentGeneration: "track_b|2|peer_source|peer_listener",
-        boundGeneration: "track_a|1|peer_source|peer_listener"
-      })
-    ).toBe(true);
-  });
-
-  it("does not force a rebind when the current generation is already bound", () => {
-    const sharedStream = {} as MediaStream;
-
-    expect(
-      shouldForceRemoteAudioElementRebind({
-        incomingStream: sharedStream,
-        boundStream: sharedStream,
-        currentGeneration: "track_b|2|peer_source|peer_listener",
-        boundGeneration: "track_b|2|peer_source|peer_listener"
-      })
-    ).toBe(false);
-  });
-
-  it("does not force a rebind when there is no currently bound stream", () => {
-    expect(
-      shouldForceRemoteAudioElementRebind({
-        incomingStream: {} as MediaStream,
-        boundStream: null,
-        currentGeneration: "track_b|2|peer_source|peer_listener",
-        boundGeneration: null
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldKickRemotePlaybackFromAudioEvent", () => {
-  it("kicks playback when remote audio becomes canplay but is still paused", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "canplay",
-        playbackStatus: "playing",
-        activePlaybackSource: "remote-stream",
-        isCurrentSourceOwner: false,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: null
-      })
-    ).toBe(true);
-  });
-
-  it("kicks playback when the element pauses during an active remote generation", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "pause",
-        playbackStatus: "playing",
-        activePlaybackSource: "remote-stream",
-        isCurrentSourceOwner: false,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: "track_a|1|peer_source|peer_listener"
-      })
-    ).toBe(true);
-  });
-
-  it("does not kick playback when the room is not expecting remote playback", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "canplay",
-        playbackStatus: "paused",
-        activePlaybackSource: "remote-stream",
-        isCurrentSourceOwner: false,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: null
-      })
-    ).toBe(false);
-  });
-
-  it("does not kick playback for the source owner", () => {
-    expect(
-      shouldKickRemotePlaybackFromAudioEvent({
-        eventName: "pause",
-        playbackStatus: "playing",
-        activePlaybackSource: "remote-stream",
-        isCurrentSourceOwner: true,
-        traceKey: "track_a|1|peer_source|peer_listener",
-        hasSrcObject: true,
-        remoteAudioPaused: true,
-        currentGeneration: "track_a|1|peer_source|peer_listener",
-        playingGeneration: null
-      })
-    ).toBe(false);
-  });
-});
-
-describe("resolveMediaTransportOwnerKey", () => {
-  it("changes the transport owner key when mediaEpoch changes for the same source peer", () => {
-    expect(
-      resolveMediaTransportOwnerKey({
-        roomId: "room_a",
-        sourcePeerId: "peer_source",
-        mediaEpoch: 3
-      })
-    ).toBe("room_a|peer_source|3");
-
-    expect(
-      resolveMediaTransportOwnerKey({
-        roomId: "room_a",
-        sourcePeerId: "peer_source",
-        mediaEpoch: 4
-      })
-    ).toBe("room_a|peer_source|4");
-  });
-
-  it("returns null when the room identity is missing", () => {
-    expect(
-      resolveMediaTransportOwnerKey({
-        roomId: null,
-        sourcePeerId: "peer_source",
-        mediaEpoch: 3
-      })
-    ).toBeNull();
-  });
-});
-
-describe("shouldSuppressSourceRecoveryDuringGenerationBootstrap", () => {
-  it("suppresses hard recovery while a fresh remote playback generation is still bootstrapping", () => {
-    expect(
-      shouldSuppressSourceRecoveryDuringGenerationBootstrap({
-        playbackStatus: "playing",
-        currentGeneration: "track_b|4|peer_source|peer_listener",
-        generationStartedAt: 10_000,
-        playingGeneration: "track_a|3|peer_source|peer_listener",
-        now: 11_500
-      })
-    ).toBe(true);
-  });
-
-  it("stops suppressing once the new generation is already playing or the grace window expired", () => {
-    expect(
-      shouldSuppressSourceRecoveryDuringGenerationBootstrap({
-        playbackStatus: "playing",
-        currentGeneration: "track_b|4|peer_source|peer_listener",
-        generationStartedAt: 10_000,
-        playingGeneration: "track_b|4|peer_source|peer_listener",
-        now: 11_500
-      })
-    ).toBe(false);
-
-    expect(
-      shouldSuppressSourceRecoveryDuringGenerationBootstrap({
-        playbackStatus: "playing",
-        currentGeneration: "track_b|4|peer_source|peer_listener",
-        generationStartedAt: 10_000,
-        playingGeneration: null,
-        now: 14_000
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldBootstrapMissingListeners", () => {
-  it("keeps listener bootstrap enabled for a source owner even before the real track is marked live", () => {
-    expect(
-      shouldBootstrapMissingListeners({
-        roomId: "room_1",
-        peerId: "peer_member",
-        isCurrentSourceOwner: true,
-        playbackStatus: "playing",
-        roomListenerCount: 1
-      })
-    ).toBe(true);
-  });
-
-  it("does not bootstrap when the room is idle or the peer is not the current source owner", () => {
-    expect(
-      shouldBootstrapMissingListeners({
-        roomId: "room_1",
-        peerId: "peer_member",
-        isCurrentSourceOwner: true,
-        playbackStatus: "paused",
-        roomListenerCount: 1
-      })
-    ).toBe(false);
-
-    expect(
-      shouldBootstrapMissingListeners({
-        roomId: "room_1",
-        peerId: "peer_member",
-        isCurrentSourceOwner: false,
-        playbackStatus: "playing",
-        roomListenerCount: 1
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldRecoverManualCacheDataPeers", () => {
-  it("requests data peer recovery when a manual cache task has no connected remote peers", () => {
-    expect(
-      shouldRecoverManualCacheDataPeers({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        remotePeerIds: ["peer_owner"],
+        manualCacheTrackIds: ["track_1"],
+        providerPeerIds: ["peer_source"],
         connectedPeerIds: [],
-        availabilityByTrack: {},
-        localPeerId: "peer_local"
+        lastBootstrapKey: null
       })
-    ).toBe(true);
+    ).toBe("track_1|peer_source");
   });
 
-  it("requests recovery when the task still has no remote availability owners", () => {
-    expect(
-      shouldRecoverManualCacheDataPeers({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        remotePeerIds: ["peer_owner"],
-        connectedPeerIds: ["peer_owner"],
-        availabilityByTrack: {
-          track_a: {
-            peer_local: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_local",
-              nickname: "me",
-              availableChunks: [0],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "local_cache",
-              announcedAt: new Date(0).toISOString()
-            }
-          }
-        },
-        localPeerId: "peer_local"
-      })
-    ).toBe(true);
-  });
-
-  it("does not request recovery once a connected remote owner advertises the manual cache track", () => {
-    expect(
-      shouldRecoverManualCacheDataPeers({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        remotePeerIds: ["peer_owner"],
-        connectedPeerIds: ["peer_owner"],
-        availabilityByTrack: {
-          track_a: {
-            peer_owner: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_owner",
-              nickname: "owner",
-              availableChunks: [0, 1],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
-            }
-          }
-        },
-        localPeerId: "peer_local"
-      })
-    ).toBe(false);
-  });
-
-  it("still requests recovery when only a non-provider peer is connected", () => {
-    expect(
-      shouldRecoverManualCacheDataPeers({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        remotePeerIds: ["peer_owner", "peer_other"],
-        connectedPeerIds: ["peer_other"],
-        availabilityByTrack: {
-          track_a: {
-            peer_owner: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_owner",
-              nickname: "owner",
-              availableChunks: [0, 1],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
-            }
-          }
-        },
-        localPeerId: "peer_local"
-      })
-    ).toBe(true);
-  });
-});
-
-describe("resolveManualCacheProviderPeerIds", () => {
-  it("collects unique remote provider peer ids for active manual cache tasks", () => {
+  it("resolves provider peers from availability", () => {
     expect(
       resolveManualCacheProviderPeerIds({
-        manualCacheTrackIds: ["track_a", "track_b"],
+        manualCacheTrackIds: ["track_1"],
+        localPeerId: "peer_local",
         availabilityByTrack: {
-          track_a: {
-            peer_owner_b: {
+          track_1: {
+            peer_source: {
               roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_owner_b",
-              nickname: "owner_b",
-              availableChunks: [0],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
+              trackId: "track_1",
+              ownerPeerId: "peer_source",
+              nickname: "Host",
+              totalChunks: 2,
+              chunkSize: 1,
+              availableChunks: [0, 1],
+              source: "local_cache",
+              announcedAt: "2026-04-14T00:00:00.000Z"
+            }
+          }
+        }
+      })
+    ).toEqual(["peer_source"]);
+  });
+
+  it("resolves uploader peer ids from room members", () => {
+    expect(
+      resolveManualCacheUploaderPeerIds({
+        manualCacheTrackIds: ["track_1"],
+        localPeerId: "peer_local",
+        roomSnapshot: {
+          room: {
+            id: "room_1",
+            joinCode: "ABC123",
+            hostId: "host",
+            visibility: "private",
+            roomRevision: 1,
+            presenceRevision: 1,
+            members: [
+              {
+                id: "host",
+                nickname: "Host",
+                role: "host",
+                joinedAt: "2026-04-14T00:00:00.000Z",
+                peerId: "peer_source",
+                presenceState: "online"
+              }
+            ],
+            playback: {
+              status: "playing",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              sourceSessionId: "host",
+              sourcePeerId: "peer_source",
+              sourceTrackId: "track_1",
+              positionMs: 0,
+              startedAt: null,
+              queueVersion: 1,
+              playbackRevision: 1,
+              mediaEpoch: 1
             }
           },
-          track_b: {
-            peer_owner_a: {
-              roomId: "room_1",
-              trackId: "track_b",
-              ownerPeerId: "peer_owner_a",
-              nickname: "owner_a",
-              availableChunks: [0],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
+          tracks: [
+            {
+              id: "track_1",
+              title: "Track",
+              artist: "Artist",
+              album: null,
+              durationMs: 1000,
+              bitrate: null,
+              sizeBytes: 100,
+              codec: "flac",
+              mimeType: "audio/flac",
+              fileHash: "hash_1",
+              artworkUrl: null,
+              ownerSessionId: "host",
+              ownerNickname: "Host",
+              sourceType: "local_upload"
             }
-          }
-        },
-        localPeerId: "peer_local",
-        allowedPeerIds: ["peer_owner_a", "peer_owner_b"]
+          ],
+          queue: [],
+          playlists: []
+        }
       })
-    ).toEqual(["peer_owner_a", "peer_owner_b"]);
+    ).toEqual(["peer_source"]);
   });
 
-  it("filters out stale provider peer ids that are no longer in the room", () => {
-    expect(
-      resolveManualCacheProviderPeerIds({
-        manualCacheTrackIds: ["track_a"],
-        availabilityByTrack: {
-          track_a: {
-            peer_stale: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_stale",
-              nickname: "stale",
-              availableChunks: [0],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
-            },
-            peer_owner: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_owner",
-              nickname: "owner",
-              availableChunks: [0],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
-            }
-          }
-        },
-        localPeerId: "peer_local",
-        allowedPeerIds: ["peer_owner"]
-      })
-    ).toEqual(["peer_owner"]);
-  });
-
-  it("keeps an announced provider even before the room member snapshot catches up", () => {
-    expect(
-      resolveManualCacheProviderPeerIds({
-        manualCacheTrackIds: ["track_a"],
-        availabilityByTrack: {
-          track_a: {
-            peer_owner: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_owner",
-              nickname: "owner",
-              availableChunks: [0, 1, 2],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
-            }
-          }
-        },
-        localPeerId: "peer_local"
-      })
-    ).toEqual(["peer_owner"]);
-  });
-
-  it("ignores announcements that cannot serve any chunk", () => {
-    expect(
-      resolveManualCacheProviderPeerIds({
-        manualCacheTrackIds: ["track_a"],
-        availabilityByTrack: {
-          track_a: {
-            peer_owner: {
-              roomId: "room_1",
-              trackId: "track_a",
-              ownerPeerId: "peer_owner",
-              nickname: "owner",
-              availableChunks: [],
-              totalChunks: 4,
-              chunkSize: 128 * 1024,
-              source: "live_upload",
-              announcedAt: new Date(0).toISOString()
-            }
-          }
-        },
-        localPeerId: "peer_local"
-      })
-    ).toEqual([]);
-  });
-});
-
-describe("resolveManualCacheUploaderPeerIds", () => {
-  it("uses the current upload owner peer as the primary manual cache provider", () => {
-    expect(
-      resolveManualCacheUploaderPeerIds({
-        manualCacheTrackIds: ["track_a"],
-        roomSnapshot: buildManualCacheRoomSnapshot({
-          ownerPeerId: "peer_owner"
-        }),
-        localPeerId: "peer_local"
-      })
-    ).toEqual(["peer_owner"]);
-  });
-
-  it("does not use offline owners or the local peer as a remote provider", () => {
-    expect(
-      resolveManualCacheUploaderPeerIds({
-        manualCacheTrackIds: ["track_a"],
-        roomSnapshot: buildManualCacheRoomSnapshot({
-          ownerPeerId: "peer_owner",
-          ownerPresenceState: "offline"
-        }),
-        localPeerId: "peer_local"
-      })
-    ).toEqual([]);
-
-    expect(
-      resolveManualCacheUploaderPeerIds({
-        manualCacheTrackIds: ["track_a"],
-        roomSnapshot: buildManualCacheRoomSnapshot({
-          ownerPeerId: "peer_local"
-        }),
-        localPeerId: "peer_local"
-      })
-    ).toEqual([]);
-  });
-});
-
-describe("shouldForceManualCacheBootstrap", () => {
-  it("forces a bootstrap when a manual cache task starts without a connected provider", () => {
-    expect(
-      shouldForceManualCacheBootstrap({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        providerPeerIds: ["peer_owner"],
-        connectedPeerIds: [],
-        lastBootstrapKey: null
-      })
-    ).toBe("track_a|peer_owner");
-  });
-
-  it("does not repeat the same bootstrap key", () => {
-    expect(
-      shouldForceManualCacheBootstrap({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        providerPeerIds: ["peer_owner"],
-        connectedPeerIds: [],
-        lastBootstrapKey: "track_a|peer_owner"
-      })
-    ).toBeNull();
-  });
-
-  it("does not force a bootstrap when the provider is already connected", () => {
-    expect(
-      shouldForceManualCacheBootstrap({
-        enableManualTrackCaching: true,
-        manualCacheTrackIds: ["track_a"],
-        providerPeerIds: ["peer_owner"],
-        connectedPeerIds: ["peer_owner"],
-        lastBootstrapKey: null
-      })
-    ).toBeNull();
-  });
-});
-
-describe("resolveManualCacheMeshRecoveryMode", () => {
-  it("starts with a soft sync while manual cache peers are still bootstrapping", () => {
-    expect(
-      resolveManualCacheMeshRecoveryMode({
-        shouldRecover: true,
-        remotePeerIds: ["peer_owner"],
-        connectedPeerIds: [],
-        recoverySinceAt: 1_000,
-        now: 6_000
-      })
-    ).toBe("sync");
-  });
-
-  it("stays in soft sync when at least one remote peer is already connected", () => {
-    expect(
-      resolveManualCacheMeshRecoveryMode({
-        shouldRecover: true,
-        remotePeerIds: ["peer_owner"],
-        connectedPeerIds: ["peer_owner"],
-        recoverySinceAt: 1_000,
-        now: 20_000
-      })
-    ).toBe("sync");
-  });
-
-  it("escalates to a forced reconnect only after a long no-progress window", () => {
-    expect(
-      resolveManualCacheMeshRecoveryMode({
-        shouldRecover: true,
-        remotePeerIds: ["peer_owner"],
-        connectedPeerIds: [],
-        recoverySinceAt: 1_000,
-        now: 12_500
-      })
-    ).toBe("force-reconnect");
-  });
-});
-
-describe("resolvePeerConnectionNoProgressMs", () => {
-  it("tracks stalled host-to-listener media peers even when the listener is not the playback source", () => {
-    const state = createPeerConnectionSupervisorState({
-      roomId: "room_1",
-      peerId: "peer_listener",
-      now: 1_000
-    });
-
-    expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(8_500);
-  });
-
-  it("uses recent transport or playout progress before falling back to signal state age", () => {
-    let state = createPeerConnectionSupervisorState({
-      roomId: "room_1",
-      peerId: "peer_source",
-      now: 1_000
-    });
-    state = recordPeerPlayoutProgress(state, 7_000);
-
-    expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(2_500);
-  });
-
-  it("does not reset stalled checking duration on repeated signaling activity", () => {
-    let state = createPeerConnectionSupervisorState({
-      roomId: "room_1",
-      peerId: "peer_source",
-      now: 1_000
-    });
-    state = notePeerSignalState({
-      state,
-      mediaConnectionState: "connecting",
-      mediaIceState: "checking",
-      now: 2_000
-    });
-    state = notePeerSignalState({
-      state,
-      mediaConnectionState: "connecting",
-      mediaIceState: "checking",
-      now: 7_000
-    });
-
-    expect(resolvePeerConnectionNoProgressMs(state, 9_500)).toBe(7_500);
-  });
-});
-
-describe("resolveMediaDiagnosticPeerId", () => {
-  it("uses the media mesh callback peer before falling back to the playback source", () => {
-    expect(
-      resolveMediaDiagnosticPeerId({
-        remotePeerId: "peer_listener",
-        connectedPeerIds: [],
-        currentSourcePeerId: "peer_source"
-      })
-    ).toBe("peer_listener");
-  });
-
-  it("falls back to connected peers, then source peer, then the synthetic remote row", () => {
-    expect(
-      resolveMediaDiagnosticPeerId({
-        remotePeerId: null,
-        connectedPeerIds: ["peer_connected"],
-        currentSourcePeerId: "peer_source"
-      })
-    ).toBe("peer_connected");
-    expect(
-      resolveMediaDiagnosticPeerId({
-        remotePeerId: null,
-        connectedPeerIds: [],
-        currentSourcePeerId: "peer_source"
-      })
-    ).toBe("peer_source");
-    expect(
-      resolveMediaDiagnosticPeerId({
-        remotePeerId: null,
-        connectedPeerIds: [],
-        currentSourcePeerId: null
-      })
-    ).toBe("remote-media");
-  });
-});
-
-describe("shouldResumeRemotePlayback", () => {
-  it("resumes listener remote playback when a bound remote stream is paused while playback is active", () => {
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: true
-      })
-    ).toBe(true);
-  });
-
-  it("does not resume when the listener is already audibly playing", () => {
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: false
-      })
-    ).toBe(false);
-  });
-
-  it("does not resume for local playback, room hosts, or missing bound streams", () => {
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: true,
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "full-local",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: true,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-    expect(
-      shouldResumeRemotePlayback({
-        audioUnlocked: true,
-        isCurrentSourceOwner: false,
-        activePlaybackSource: "remote-stream",
-        playbackStatus: "playing",
-        currentTrackId: "track_a",
-        hasRemoteSrcObject: false,
-        remoteAudioPaused: true
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldManagePublishedMediaTransport", () => {
-  it("allows media publish management only for the current source owner", () => {
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: "room_a",
-        peerId: "peer_source",
-        isCurrentSourceOwner: true
-      })
-    ).toBe(true);
-  });
-
-  it("blocks media publish management for room hosts that are not the current source owner", () => {
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: "room_a",
-        peerId: "peer_host",
-        isCurrentSourceOwner: false
-      })
-    ).toBe(false);
-  });
-
-  it("blocks media publish management when room or peer identity is missing", () => {
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: null,
-        peerId: "peer_source",
-        isCurrentSourceOwner: true
-      })
-    ).toBe(false);
-    expect(
-      shouldManagePublishedMediaTransport({
-        roomId: "room_a",
-        peerId: null,
-        isCurrentSourceOwner: true
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldKickSourcePlaybackFromRealtimeEvent", () => {
-  const basePlayback = {
-    status: "playing" as const,
-    currentTrackId: "track_a",
-    currentQueueItemId: "queue_a",
-    startedAt: null,
-    positionMs: 0,
-    pauseRevision: 0,
-    queueVersion: 1,
-    mediaEpoch: 3,
-    playbackRevision: 1,
-    sourceSessionId: "member_1",
-    sourcePeerId: "peer_member",
-    sourceTrackId: "track_a"
-  };
-
-  it("does not re-kick source playback for presence-only patches while the same member remains source", () => {
+  it("kicks local source playback when the source owner receives a new playing epoch", () => {
     expect(
       shouldKickSourcePlaybackFromRealtimeEvent({
-        previousPlayback: basePlayback,
-        nextPlayback: {
-          ...basePlayback
-        },
-        activeSessionId: "member_1"
-      })
-    ).toBe(false);
-  });
-
-  it("kicks source playback when the active source member changes track, media epoch, or ownership", () => {
-    expect(
-      shouldKickSourcePlaybackFromRealtimeEvent({
-        previousPlayback: basePlayback,
-        nextPlayback: {
-          ...basePlayback,
-          currentTrackId: "track_b"
-        },
-        activeSessionId: "member_1"
-      })
-    ).toBe(true);
-
-    expect(
-      shouldKickSourcePlaybackFromRealtimeEvent({
-        previousPlayback: basePlayback,
-        nextPlayback: {
-          ...basePlayback,
-          mediaEpoch: 4
-        },
-        activeSessionId: "member_1"
-      })
-    ).toBe(true);
-
-    expect(
-      shouldKickSourcePlaybackFromRealtimeEvent({
+        activeSessionId: "host",
         previousPlayback: {
-          ...basePlayback,
-          sourceSessionId: "host_1",
-          sourcePeerId: "peer_host"
-        },
-        nextPlayback: basePlayback,
-        activeSessionId: "member_1"
-      })
-    ).toBe(true);
-  });
-
-  it("kicks source playback when a seek updates the active timeline without changing media epoch", () => {
-    expect(
-      shouldKickSourcePlaybackFromRealtimeEvent({
-        previousPlayback: basePlayback,
-        nextPlayback: {
-          ...basePlayback,
-          positionMs: 45_000,
-          startedAt: "2026-04-17T00:00:00.000Z",
-          playbackRevision: 2
-        },
-        activeSessionId: "member_1"
-      })
-    ).toBe(true);
-  });
-
-  it("does not kick source playback when a presence patch only carries timeline drift", () => {
-    expect(
-      shouldKickSourcePlaybackFromRealtimeEvent({
-        previousPlayback: basePlayback,
-        nextPlayback: {
-          ...basePlayback,
-          positionMs: 12_000,
-          startedAt: "2026-04-19T00:00:00.000Z"
-        },
-        activeSessionId: "member_1",
-        eventKind: "presence"
-      })
-    ).toBe(false);
-  });
-
-  it("does not kick source playback for paused timeline patches", () => {
-    expect(
-      shouldKickSourcePlaybackFromRealtimeEvent({
-        previousPlayback: basePlayback,
-        nextPlayback: {
-          ...basePlayback,
           status: "paused",
-          positionMs: 45_000,
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
           startedAt: null,
-          playbackRevision: 2
+          queueVersion: 1,
+          playbackRevision: 1,
+          mediaEpoch: 1
         },
-        activeSessionId: "member_1"
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldAcceptIncomingPeerSignalRecoveryGeneration", () => {
-  it("accepts signals when the payload generation matches the current recovery generation", () => {
-    expect(
-      shouldAcceptIncomingPeerSignalRecoveryGeneration({
-        payloadRecoveryGeneration: 7,
-        currentRecoveryGeneration: 7
-      })
-    ).toBe(true);
-  });
-
-  it("drops stale signals from an older recovery generation", () => {
-    expect(
-      shouldAcceptIncomingPeerSignalRecoveryGeneration({
-        payloadRecoveryGeneration: 6,
-        currentRecoveryGeneration: 7
-      })
-    ).toBe(false);
-  });
-
-  it("keeps rollout-compatible signals that do not carry a recovery generation yet", () => {
-    expect(
-      shouldAcceptIncomingPeerSignalRecoveryGeneration({
-        payloadRecoveryGeneration: undefined,
-        currentRecoveryGeneration: 7
-      })
-    ).toBe(true);
-  });
-});
-
-describe("shouldRedirectRoomRouteToAuth", () => {
-  it("redirects to auth only for an unauthenticated room route outside an exit flow", () => {
-    expect(
-      shouldRedirectRoomRouteToAuth({
-        workspaceOnly: true,
-        initialRoomId: "room_123",
-        hydrated: true,
-        hasActiveSession: false,
-        isNavigatingRoomExit: false,
-        suppressRoomRecovery: false
-      })
-    ).toBe(true);
-  });
-
-  it("does not redirect to auth while the room is exiting back to workspace home", () => {
-    expect(
-      shouldRedirectRoomRouteToAuth({
-        workspaceOnly: true,
-        initialRoomId: "room_123",
-        hydrated: true,
-        hasActiveSession: false,
-        isNavigatingRoomExit: true,
-        suppressRoomRecovery: true
-      })
-    ).toBe(false);
-  });
-});
-
-function buildManualCacheRoomSnapshot(input: {
-  ownerPeerId: string | null;
-  ownerPresenceState?: "online" | "reconnecting" | "offline";
-}): RoomSnapshot {
-  return {
-    room: {
-      id: "room_1",
-      hostId: "owner_1",
-      joinCode: "ABCD12",
-      visibility: "private",
-      members: [
-        {
-          id: "owner_1",
-          nickname: "owner",
-          role: "host",
-          joinedAt: new Date(0).toISOString(),
-          peerId: input.ownerPeerId,
-          presenceState: input.ownerPresenceState ?? "online"
-        },
-        {
-          id: "listener_1",
-          nickname: "listener",
-          role: "member",
-          joinedAt: new Date(0).toISOString(),
-          peerId: "peer_local",
-          presenceState: "online"
+        nextPlayback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 2
         }
-      ],
-      playback: {
-        status: "paused",
-        currentTrackId: null,
-        currentQueueItemId: null,
-        sourceSessionId: null,
-        sourcePeerId: null,
-        sourceTrackId: null,
-        positionMs: 0,
-        startedAt: null,
-        queueVersion: 1,
-        playbackRevision: 1,
-        mediaEpoch: 0
-      },
-      presenceRevision: 1,
-      roomRevision: 1
-    },
-    tracks: [
-      {
-        id: "track_a",
-        title: "Track A",
-        artist: "Artist",
-        album: null,
-        durationMs: 120_000,
-        bitrate: null,
-        sizeBytes: 4 * 128 * 1024,
-        codec: null,
-        mimeType: "audio/mpeg",
-        fileHash: "hash_a",
-        artworkUrl: null,
-        ownerSessionId: "owner_1",
-        ownerNickname: "owner",
-        sourceType: "local_upload",
-        pieceManifest: {
-          totalChunks: 4,
-          chunkSize: 128 * 1024,
-          pieceMimeType: "audio/mpeg"
-        },
-        relayManifest: {
-          totalChunks: 4,
-          chunkSize: 128 * 1024,
-          pieceMimeType: "audio/mpeg"
-        }
-      }
-    ],
-    queue: [],
-    playlists: []
-  };
-}
+      })
+    ).toBe(true);
+  });
+
+  it("drops stale recovery-generation peer signals", () => {
+    expect(
+      shouldAcceptIncomingPeerSignalRecoveryGeneration({
+        payloadRecoveryGeneration: 2,
+        currentRecoveryGeneration: 3
+      })
+    ).toBe(false);
+  });
+});

@@ -26,16 +26,18 @@ model UserSession {
 }
 
 model RoomState {
-  id         String   @id
-  hostId     String
-  joinCode   String   @unique
-  visibility String
-  playback   Json
-  members    Json
-  tracks     Json
-  queue      Json
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id               String   @id
+  hostId           String
+  joinCode         String   @unique
+  visibility       String
+  roomRevision     Int      @default(0)
+  presenceRevision Int      @default(0)
+  playback         Json
+  members          Json
+  tracks           Json
+  queue            Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model Playlist {

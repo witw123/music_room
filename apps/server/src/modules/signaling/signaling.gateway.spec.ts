@@ -2,6 +2,7 @@ import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher"
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
 import { SignalingGateway } from "./signaling.gateway";
+import { TrackAvailabilityRegistry } from "./track-availability.registry";
 
 function createAuthServiceMock() {
   return {
@@ -105,11 +106,13 @@ function createGateway(input?: {
   );
   const authService = createAuthServiceMock();
   const metrics = new MetricsService();
+  const trackAvailabilityRegistry = new TrackAvailabilityRegistry(redisService as never);
   const gateway = new SignalingGateway(
     redisService as never,
     roomService as never,
     roomRealtimePublisher as never,
     broadcaster as never,
+    trackAvailabilityRegistry,
     authService as never,
     metrics
   );
@@ -121,6 +124,7 @@ function createGateway(input?: {
     authService,
     broadcaster,
     roomRealtimePublisher,
+    trackAvailabilityRegistry,
     metrics
   };
 }
@@ -401,8 +405,7 @@ describe("SignalingGateway", () => {
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
-      channelKind: "media" as const,
-      mediaEpoch: 1,
+      channelKind: "data" as const,
       type: "offer" as const,
       payload: { type: "offer", sdp: "fake" }
     };
@@ -712,8 +715,7 @@ describe("SignalingGateway", () => {
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
-        channelKind: "media",
-        mediaEpoch: 1,
+        channelKind: "data",
         type: "offer",
         payload: { type: "offer", sdp: "fake" }
       }

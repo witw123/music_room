@@ -1,7 +1,6 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 
 export type ProgressivePlaybackSource =
-  | "remote-stream"
   | "progressive-local"
   | "full-local";
 
@@ -120,10 +119,6 @@ export function getLocalTakeoverCooldownMs() {
 }
 
 export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
-  if (source === "remote-stream") {
-    return 0;
-  }
-
   return source === "full-local" ? 3_500 : 6_000;
 }
 

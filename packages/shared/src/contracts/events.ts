@@ -5,7 +5,7 @@ import {
   trackAvailabilityAnnouncementSchema
 } from "../p2p/models";
 import { roomSnapshotSchema } from "../room/models";
-import { playbackSnapshotSchema, roomMediaClockPayloadSchema } from "../playback/models";
+import { playbackSnapshotSchema } from "../playback/models";
 import { queueItemSchema, trackMetaSchema } from "../playlist/models";
 
 export const websocketEventSchema = z.union([
@@ -19,7 +19,6 @@ export const websocketEventSchema = z.union([
   z.literal("room.queue.patch"),
   z.literal("room.presence.patch"),
   z.literal("room.library.patch"),
-  z.literal("room.media.clock"),
   z.literal("room.session.replaced"),
   z.literal("piece.availability"),
   z.literal("piece.availability.clear"),
@@ -111,11 +110,6 @@ export const roomLibraryPatchPayloadSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
-export const roomMediaClockEventSchema = z.object({
-  event: z.literal("room.media.clock"),
-  payload: roomMediaClockPayloadSchema
-});
-
 export const pieceAvailabilityClearPayloadSchema = z.object({
   roomId: z.string(),
   ownerPeerId: z.string(),
@@ -203,7 +197,6 @@ export type RoomPlaybackPatchPayload = z.infer<typeof roomPlaybackPatchPayloadSc
 export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
-type RoomMediaClockPayload = z.infer<typeof roomMediaClockPayloadSchema>;
 export type PieceAvailabilityClearPayload = z.infer<typeof pieceAvailabilityClearPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
@@ -217,7 +210,6 @@ export type ServerToClientEvents = {
   "room.queue.patch": (payload: RoomQueuePatchPayload) => void;
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
-  "room.media.clock": (payload: RoomMediaClockPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "piece.availability.clear": (payload: PieceAvailabilityClearPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
@@ -233,7 +225,6 @@ export type ClientToServerEvents = {
   ) => void;
   "room.presence": (payload: RoomPresencePayload) => void;
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
-  "room.media.clock": (payload: RoomMediaClockPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;

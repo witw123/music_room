@@ -1,39 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  resolveAuthoritativeClockSample,
   resolveAudibleClockSample,
   resolveAudibleClockContinuitySample,
-  resolveDisplayClockProgress,
-  type DisplayClockSource
+  resolveDisplayClockProgress
 } from "./use-room-playback";
 
 describe("resolveAudibleClockSample", () => {
-  it("uses the remote audio clock while remote-stream is audible", () => {
-    expect(
-      resolveAudibleClockSample({
-        activePlaybackSource: "remote-stream",
-        shouldUseLocalAudio: false,
-        playbackSessionKey: "track-a|3|9|started|playing",
-        roomClockMs: 42_250,
-        remoteAudioCurrentTimeSeconds: 42.25,
-        remoteAudioPaused: false,
-        previousAnchor: null
-      })
-    ).toEqual({
-      sample: {
-        progressMs: 42_250,
-        source: "remote-audible"
-      },
-      nextAnchor: {
-        source: "remote-audible",
-        sessionKey: "track-a|3|9|started|playing",
-        anchorRoomClockMs: 42_250,
-        anchorMediaTimeSeconds: 42.25
-      }
-    });
-  });
-
-  it("prefers the local playback position once local playback is audible", () => {
+  it("prefers the local playback position when available", () => {
     expect(
       resolveAudibleClockSample({
         activePlaybackSource: "full-local",
@@ -51,97 +24,23 @@ describe("resolveAudibleClockSample", () => {
     });
   });
 
-  it("maps a newly joined remote stream onto the current room timeline", () => {
-    const joined = resolveAudibleClockSample({
-      activePlaybackSource: "remote-stream",
-      shouldUseLocalAudio: false,
-      playbackSessionKey: "track-b|7|11|started|playing",
-      roomClockMs: 96_000,
-      remoteAudioCurrentTimeSeconds: 0.2,
-      remoteAudioPaused: false,
-      previousAnchor: null
-    });
-
-    const advanced = resolveAudibleClockSample({
-      activePlaybackSource: "remote-stream",
-      shouldUseLocalAudio: false,
-      playbackSessionKey: "track-b|7|11|started|playing",
-      roomClockMs: 97_450,
-      remoteAudioCurrentTimeSeconds: 1.65,
-      remoteAudioPaused: false,
-      previousAnchor: joined.nextAnchor
-    });
-
-    expect(joined.sample).toEqual({
-      progressMs: 96_000,
-      source: "remote-audible"
-    });
-    expect(advanced.sample).toEqual({
-      progressMs: 97_450,
-      source: "remote-audible"
-    });
-  });
-
-  it("re-anchors the remote stream after a rejoin resets the media element clock", () => {
-    const previousAnchor = {
-      source: "remote-audible" as const,
-      sessionKey: "track-c|9|14|started|playing",
-      anchorRoomClockMs: 120_000,
-      anchorMediaTimeSeconds: 8.4
-    };
-
-    const result = resolveAudibleClockSample({
-      activePlaybackSource: "remote-stream",
-      shouldUseLocalAudio: false,
-      playbackSessionKey: "track-c|9|14|started|playing",
-      roomClockMs: 131_500,
-      remoteAudioCurrentTimeSeconds: 0.1,
-      remoteAudioPaused: false,
-      previousAnchor
-    });
-
-    expect(result.sample).toEqual({
-      progressMs: 131_500,
-      source: "remote-audible"
-    });
-    expect(result.nextAnchor).toEqual({
-      source: "remote-audible",
-      sessionKey: "track-c|9|14|started|playing",
-      anchorRoomClockMs: 131_500,
-      anchorMediaTimeSeconds: 0.1
+  it("uses the local audio element clock when no explicit local position exists", () => {
+    expect(
+      resolveAudibleClockSample({
+        activePlaybackSource: "progressive-local",
+        shouldUseLocalAudio: true,
+        localAudioCurrentTimeSeconds: 42.25,
+        localAudioPaused: false
+      }).sample
+    ).toEqual({
+      progressMs: 42_250,
+      source: "local-audible"
     });
   });
 });
 
 describe("resolveDisplayClockProgress", () => {
-  const remoteSource: DisplayClockSource = "remote-audible";
-
-  it("keeps the display clock glued to the audible clock for small drift", () => {
-    const result = resolveDisplayClockProgress({
-      audibleClockSample: {
-        progressMs: 20_120,
-        source: remoteSource
-      },
-      roomClockMs: 20_180,
-      durationMs: 240_000,
-      previousDisplayMs: 20_000,
-      previousSource: remoteSource,
-      transitionState: {
-        source: remoteSource,
-        anchorDisplayMs: 20_000,
-        anchorAudibleMs: 20_000,
-        anchorAtMs: 1_000,
-        hardDriftSamples: 0
-      },
-      now: 1_120
-    });
-
-    expect(result.progressMs).toBe(20_120);
-    expect(result.source).toBe("remote-audible");
-    expect(result.displayDriftMs).toBe(60);
-  });
-
-  it("keeps local audible playback glued to the audible clock under moderate room drift", () => {
+  it("keeps local audible playback glued to the audible clock", () => {
     const result = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 20_000,
@@ -165,97 +64,7 @@ describe("resolveDisplayClockProgress", () => {
     expect(result.source).toBe("local-audible");
   });
 
-  it("keeps remote audible playback monotonic under moderate room drift", () => {
-    const result = resolveDisplayClockProgress({
-      audibleClockSample: {
-        progressMs: 20_000,
-        source: remoteSource
-      },
-      roomClockMs: 20_240,
-      durationMs: 240_000,
-      previousDisplayMs: 20_000,
-      previousSource: remoteSource,
-      transitionState: {
-        source: remoteSource,
-        anchorDisplayMs: 20_000,
-        anchorAudibleMs: 20_000,
-        anchorAtMs: 1_000,
-        hardDriftSamples: 0
-      },
-      now: 1_120
-    });
-
-    expect(result.progressMs).toBe(20_000);
-    expect(result.source).toBe("remote-audible");
-  });
-
-  it("prefers the remote audible clock over the authority clock when both are present", () => {
-    const result = resolveDisplayClockProgress({
-      audibleClockSample: {
-        progressMs: 20_000,
-        source: remoteSource
-      },
-      authoritativeClockSample: {
-        progressMs: 20_320,
-        source: "authority-clock"
-      },
-      roomClockMs: 20_240,
-      durationMs: 240_000,
-      previousDisplayMs: 20_000,
-      previousSource: remoteSource,
-      transitionState: {
-        source: remoteSource,
-        anchorDisplayMs: 20_000,
-        anchorAudibleMs: 20_000,
-        anchorAtMs: 1_000,
-        hardDriftSamples: 0
-      },
-      now: 1_200
-    });
-
-    expect(result.progressMs).toBe(20_000);
-    expect(result.source).toBe("remote-audible");
-  });
-
-  it("keeps following the audible clock even under severe room-clock drift", () => {
-    const firstFrame = resolveDisplayClockProgress({
-      audibleClockSample: {
-        progressMs: 20_000,
-        source: remoteSource
-      },
-      roomClockMs: 21_800,
-      durationMs: 240_000,
-      previousDisplayMs: 20_000,
-      previousSource: remoteSource,
-      transitionState: {
-        source: remoteSource,
-        anchorDisplayMs: 20_000,
-        anchorAudibleMs: 20_000,
-        anchorAtMs: 1_000,
-        hardDriftSamples: 0
-      },
-      now: 1_120
-    });
-
-    const secondFrame = resolveDisplayClockProgress({
-      audibleClockSample: {
-        progressMs: 20_120,
-        source: remoteSource
-      },
-      roomClockMs: 21_920,
-      durationMs: 240_000,
-      previousDisplayMs: firstFrame.progressMs,
-      previousSource: firstFrame.source,
-      transitionState: firstFrame.transitionState,
-      now: 1_240
-    });
-
-    expect(firstFrame.progressMs).toBe(20_000);
-    expect(secondFrame.progressMs).toBe(20_120);
-    expect(secondFrame.displayDriftMs).toBe(1_800);
-  });
-
-  it("keeps source switches continuous before converging to the new audible clock", () => {
+  it("keeps source switches continuous before converging to the new local audible clock", () => {
     const firstFrame = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 15_600,
@@ -264,9 +73,9 @@ describe("resolveDisplayClockProgress", () => {
       roomClockMs: 15_620,
       durationMs: 240_000,
       previousDisplayMs: 15_000,
-      previousSource: "remote-audible",
+      previousSource: "room-fallback",
       transitionState: {
-        source: "remote-audible",
+        source: "room-fallback",
         anchorDisplayMs: 15_000,
         anchorAudibleMs: 15_000,
         anchorAtMs: 2_000,
@@ -317,65 +126,11 @@ describe("resolveDisplayClockProgress", () => {
 });
 
 describe("resolveAudibleClockContinuitySample", () => {
-  it("retains the last audible anchor during short remote clock gaps", () => {
+  it("retains the last local audible anchor while playback is still active", () => {
     const previousContinuity = {
       sample: {
         progressMs: 42_000,
-        source: "remote-audible" as const
-      },
-      observedAtMs: 1_000,
-      sessionKey: "track-a|1|1|started|playing"
-    };
-
-    const result = resolveAudibleClockContinuitySample({
-      audibleClockSample: null,
-      previousContinuity,
-      playbackSessionKey: "track-a|1|1|started|playing",
-      playbackStatus: "playing",
-      now: 1_600
-    });
-
-    expect(result.sample).toBeNull();
-    expect(result.continuityState).toBe(previousContinuity);
-  });
-
-  it("keeps continuity metadata long enough to avoid falling back immediately", () => {
-    const previousContinuity = {
-      sample: {
-        progressMs: 42_000,
-        source: "remote-audible" as const
-      },
-      observedAtMs: 1_000,
-      sessionKey: "track-a|1|1|started|playing"
-    };
-
-    const result = resolveDisplayClockProgress({
-      audibleClockSample: null,
-      previousContinuity,
-      playbackStatus: "playing",
-      roomClockMs: 48_000,
-      durationMs: 240_000,
-      previousDisplayMs: 42_000,
-      previousSource: "remote-audible",
-      transitionState: {
-        source: "remote-audible",
-        anchorDisplayMs: 42_000,
-        anchorAudibleMs: 42_000,
-        anchorAtMs: 1_000,
-        hardDriftSamples: 0
-      },
-      now: 2_200
-    });
-
-    expect(result.progressMs).toBe(42_000);
-    expect(result.source).toBe("remote-audible");
-  });
-
-  it("keeps continuity metadata while playback is still active", () => {
-    const previousContinuity = {
-      sample: {
-        progressMs: 42_000,
-        source: "remote-audible" as const
+        source: "local-audible" as const
       },
       observedAtMs: 1_000,
       sessionKey: "track-a|1|1|started|playing"
@@ -391,67 +146,5 @@ describe("resolveAudibleClockContinuitySample", () => {
 
     expect(result.sample).toBeNull();
     expect(result.continuityState).toBe(previousContinuity);
-  });
-
-  it("drops continuity when a seek creates a new playback session", () => {
-    const previousContinuity = {
-      sample: {
-        progressMs: 42_000,
-        source: "remote-audible" as const
-      },
-      observedAtMs: 1_000,
-      sessionKey: "track-a|1|1|old-start|playing"
-    };
-
-    const result = resolveAudibleClockContinuitySample({
-      audibleClockSample: null,
-      previousContinuity,
-      playbackSessionKey: "track-a|1|2|new-start|playing",
-      playbackStatus: "playing",
-      now: 1_050
-    });
-
-    expect(result.sample).toBeNull();
-    expect(result.continuityState).toBeNull();
-  });
-});
-
-describe("resolveAuthoritativeClockSample", () => {
-  const playback = {
-    status: "playing" as const,
-    currentTrackId: "track-a",
-    currentQueueItemId: "queue-a",
-    sourceSessionId: "host",
-    sourcePeerId: "peer-host",
-    sourceTrackId: "track-a",
-    positionMs: 80_000,
-    startedAt: "2026-04-17T00:00:00.000Z",
-    queueVersion: 2,
-    playbackRevision: 2,
-    mediaEpoch: 3
-  };
-
-  it("rejects stale authority clocks that no longer match the room timeline after seek", () => {
-    const result = resolveAuthoritativeClockSample({
-      authoritativeMediaClock: {
-        roomId: "room-a",
-        mediaEpoch: 3,
-        sourcePeerId: "peer-host",
-        relayGeneration: 1,
-        mediaTimeMs: 42_000,
-        playbackRate: 1,
-        advancing: true,
-        playoutState: "playing",
-        bufferedAheadMs: 0,
-        sequence: 10,
-        emittedAt: "2026-04-17T00:00:00.000Z",
-        receivedAtMs: Date.parse("2026-04-17T00:00:00.000Z")
-      },
-      playback,
-      durationMs: 240_000,
-      now: Date.parse("2026-04-17T00:00:00.100Z")
-    });
-
-    expect(result).toBeNull();
   });
 });

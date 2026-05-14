@@ -10,7 +10,7 @@ describe("transport-health", () => {
         mediaConnectionState: "buffering",
         mediaIceState: "checking",
         recoveryActionLevel: "observe",
-        audibleSource: "remote-stream",
+        audibleSource: "progressive-local",
         bufferingWhileAudible: true
       })
     ).toMatchObject({
@@ -27,7 +27,7 @@ describe("transport-health", () => {
         mediaConnectionState: "connecting",
         mediaIceState: "connected",
         recoveryActionLevel: "peer-restart",
-        audibleSource: "remote-stream",
+        audibleSource: "progressive-local",
         bufferingWhileAudible: false
       })
     ).toMatchObject({
@@ -61,7 +61,7 @@ describe("transport-health", () => {
         mediaConnectionState: "live",
         mediaIceState: "connected",
         recoveryActionLevel: "observe",
-        audibleSource: "remote-stream",
+        audibleSource: "progressive-local",
         bufferingWhileAudible: false
       })
     ).toMatchObject({
