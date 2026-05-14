@@ -161,18 +161,30 @@ function resolveTurnHost(requestHost?: string | null) {
     return appDomain.startsWith("turn.") ? appDomain : `turn.${appDomain}`;
   }
 
-  if (process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST !== "1") {
-    return null;
-  }
-
-  // Optional last-resort fallback for deployments that intentionally expose
-  // TURN on the same public host used to reach the ICE endpoint.
-  const normalizedRequestHost = requestHost?.trim();
+  // Use the request's Host header as a last-resort fallback.
+  // This handles cases where neither TURN_PUBLIC_HOST nor APP_DOMAIN is set
+  // but the ICE endpoint is reached via a known public hostname.
+  const normalizedRequestHost = normalizeHostHeader(requestHost);
   if (normalizedRequestHost) {
-    return normalizedRequestHost.split(":")[0] || null;
+    return normalizedRequestHost;
   }
 
   return null;
+}
+
+function normalizeHostHeader(value?: string | null) {
+  const firstHost = value?.split(",")[0]?.trim();
+  if (!firstHost) {
+    return null;
+  }
+
+  if (firstHost.startsWith("[")) {
+    const closingBracketIndex = firstHost.indexOf("]");
+    return closingBracketIndex > 1 ? firstHost.slice(1, closingBracketIndex) : null;
+  }
+
+  const withoutPort = firstHost.split(":")[0]?.trim();
+  return withoutPort || null;
 }
 
 function hasTurnIceServer(iceServers: IceServerConfig[]) {

@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   type Dispatch,
   type MutableRefObject,
@@ -13,78 +12,49 @@ import {
 import type {
   AuthSession,
   IceConfigResponse,
-  PeerDiagnosticsSnapshot,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
-import {
-  ChunkScheduler,
-  resolveTrackPieceManifest,
-  selectCanonicalTrackAvailabilityAnnouncement,
-  type PeerConnectionSupervisorState
-} from "@/features/p2p";
-import {
-  createRoomSnapshotResyncController,
-  type RoomSnapshotResyncReason
-} from "@/features/room/room-snapshot-resync";
-import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import { toUserFacingError } from "@/lib/music-room-ui";
-import { musicRoomApi } from "@/lib/music-room-api";
-import {
-  enableManualTrackCaching
-} from "@/features/cache/cache-policy";
-import {
-  getEffectivePlaybackPositionMs,
-  type ProgressivePlaybackSource
-} from "@/features/playback/progressive-playback";
-import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
-import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
+import { ChunkScheduler } from "@/features/p2p";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import type { ProgressivePlaybackSource, ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
+import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
+import { musicRoomApi } from "@/lib/music-room-api";
+import { toUserFacingError } from "@/lib/music-room-ui";
+import { enableManualTrackCaching, enableTrackCaching } from "@/features/cache/cache-policy";
 import { useRoomDiagnosticsBridge } from "./use-room-diagnostics-bridge";
+import { useManualCacheDownloader, type ManualCacheTrackPlan } from "./use-manual-cache-downloader";
+import { useRoomDataMesh } from "./use-room-data-mesh";
 import {
-  useRoomConnectionSupervisor,
-  useRoomConnectionSupervisorRuntime,
-  withResolvedTransportHealth,
-  withSupervisorDiagnosticPatch
-} from "./use-room-connection-supervisor";
-import { useManualCacheDownloader } from "./use-manual-cache-downloader";
-import type { ManualCacheTrackPlan } from "./use-manual-cache-downloader";
-import {
-  formatDiagnosticsTimestamp,
   getPieceTransferRates,
   useRoomRuntimeObservability
 } from "./use-room-runtime-observability";
 import {
-  useRoomDataMesh
-} from "./use-room-data-mesh";
+  useRoomConnectionSupervisor,
+  withResolvedTransportHealth,
+  withSupervisorDiagnosticPatch
+} from "./use-room-connection-supervisor";
 import {
   createRoomRealtimeRuntime,
-  useRoomRealtimeConnection
+  useRoomRealtimeConnection,
+  shouldAcceptIncomingDataSignal,
+  shouldReannounceManualCacheAvailability
 } from "./use-room-realtime-connection";
-import {
-  useRoomRuntimeMutableState
-} from "./use-room-runtime-mutable-state";
-import {
-  useRoomRuntimeLifecycle
-} from "./use-room-runtime-lifecycle";
+import { useRoomRuntimeMutableState } from "./use-room-runtime-mutable-state";
+import { useRoomRuntimeLifecycle } from "./use-room-runtime-lifecycle";
 import {
   resolvePlaybackConnectionKey,
   resolvePlaybackRecoveryActionType,
+  resolvePlaybackRecoveryDropReason,
   useRoomPlaybackConnectionCoordinator
 } from "./use-room-playback-connection-coordinator";
-import {
-  classifyRoomPlaybackChange,
-  resolvePlaybackSurfaceKey,
-  resolvePlaybackTimelineKey,
-  type RoomChangeKind,
-  type RoomRealtimeEventKind,
-  type SourceResetReason
-} from "./room-playback-topology";
+import type { RoomRecoveryState } from "./room-runtime-types";
 
 export {
   resolveManualCacheProviderPeerIds,
@@ -93,11 +63,13 @@ export {
   resolveManualCacheMeshRecoveryMode,
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
-export {
-  shouldAcceptIncomingMediaSignal,
-  shouldReannounceManualCacheAvailability
-} from "./use-room-realtime-connection";
+export { shouldAcceptIncomingDataSignal, shouldReannounceManualCacheAvailability };
 export { shouldRedirectRoomRouteToAuth } from "./use-room-runtime-lifecycle";
+export {
+  resolvePlaybackConnectionKey,
+  resolvePlaybackRecoveryActionType,
+  resolvePlaybackRecoveryDropReason
+};
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -144,50 +116,13 @@ type UseRoomRuntimeInput = {
   bufferHealth: "healthy" | "low" | "critical";
   transportGovernorMode: "bootstrap" | "segment-catchup" | "local-primary" | "emergency-fallback";
   activePlaybackSource: ProgressivePlaybackSource;
-  progressiveSchedulerPolicy:
-    | ProgressiveSchedulerPolicy
-    | null;
+  progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
   getLocalPlaybackPositionMs?: () => number | null;
-  setAuthoritativeMediaClock?: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
-  roomRecoveryState: {
-    phase:
-      | "joining"
-      | "resyncing"
-      | "bootstrapping-data"
-      | "playing-local-fallback"
-      | "steady";
-    mode: "late-join" | "rejoin" | "steady";
-    generation: number | null;
-    bootstrapStartedAt: string | null;
-    bootstrapSourcePeerId: string | null;
-    pendingSnapshot: boolean;
-    pendingData: boolean;
-    pendingMedia: boolean;
-    listenerBootstrapAttempts: number | null;
-    fullLocalRecoveryActive: boolean;
-  };
-  setRoomRecoveryState: Dispatch<
-    SetStateAction<{
-      phase:
-      | "joining"
-      | "resyncing"
-      | "bootstrapping-data"
-      | "playing-local-fallback"
-      | "steady";
-      mode: "late-join" | "rejoin" | "steady";
-      generation: number | null;
-      bootstrapStartedAt: string | null;
-      bootstrapSourcePeerId: string | null;
-      pendingSnapshot: boolean;
-      pendingData: boolean;
-      pendingMedia: boolean;
-      listenerBootstrapAttempts: number | null;
-      fullLocalRecoveryActive: boolean;
-    }>
-  >;
+  roomRecoveryState: RoomRecoveryState;
+  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
   setSourceStartState: Dispatch<
     SetStateAction<"idle" | "awaiting-unlock" | "starting" | "live" | "failed">
@@ -203,7 +138,7 @@ type UseRoomRuntimeInput = {
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIds: string[];
-  startPlaybackDemandCacheDownload: (trackId: string) => Promise<void>;
+  startPlaybackDemandCacheDownload: (trackId: string) => void;
   announceRoomTrackAvailability: (trackId: string) => Promise<void>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
@@ -229,168 +164,37 @@ type UseRoomRuntimeResult = {
   ensureSourcePlaybackStarted: () => Promise<void>;
 };
 
-const manualCacheDirectRequestIntervalMs = 450;
-const manualCacheDirectRequestBatchSize = 8;
-const manualCacheDirectRequestTimeoutMs = 5_000;
-const manualCacheDirectPendingTtlMs = 7_000;
-const connectionSupervisorIceRestartNoProgressFloorMs = 6_000;
-const connectionSupervisorHardRecreateNoProgressFloorMs = 45_000;
-const enableTrackCaching = true;
+export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
+  previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
+  nextPlayback: RoomSnapshot["room"]["playback"];
+  activeSessionId: string | null | undefined;
+}) {
+  const { previousPlayback, nextPlayback, activeSessionId } = input;
+  if (!activeSessionId || nextPlayback.sourceSessionId !== activeSessionId) {
+    return false;
+  }
+  return (
+    previousPlayback?.currentTrackId !== nextPlayback.currentTrackId ||
+    previousPlayback?.status !== nextPlayback.status ||
+    previousPlayback?.mediaEpoch !== nextPlayback.mediaEpoch
+  );
+}
 
 export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
   payloadRecoveryGeneration: number | null | undefined;
   currentRecoveryGeneration: number | null;
 }) {
-  if (
-    typeof input.payloadRecoveryGeneration !== "number" ||
-    input.currentRecoveryGeneration === null
-  ) {
+  if (typeof input.payloadRecoveryGeneration !== "number") {
     return true;
   }
-
-  return input.payloadRecoveryGeneration === input.currentRecoveryGeneration;
-}
-
-function resolveCurrentRoomTrackTotalChunks(input: {
-  trackId: string | null;
-  roomSnapshot: RoomSnapshot | null;
-  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
-}) {
-  if (!input.trackId) {
-    return 0;
-  }
-
-  const roomId = input.roomSnapshot?.room.id ?? null;
-  const activeMemberPeerIds = new Set(
-    input.roomSnapshot?.room.members
-      .map((member) => member.peerId)
-      .filter((peerId): peerId is string => !!peerId) ?? []
-  );
-  const track = input.roomSnapshot?.tracks.find((entry) => entry.id === input.trackId) ?? null;
-  const availability = selectCanonicalTrackAvailabilityAnnouncement(
-    Object.values(input.availabilityByTrack[input.trackId] ?? {}).filter(
-      (announcement) =>
-        announcement.totalChunks > 0 &&
-        announcement.chunkSize > 0 &&
-        (!roomId || announcement.roomId === roomId) &&
-        activeMemberPeerIds.has(announcement.ownerPeerId)
-    )
-  );
-
-  return (
-    resolveTrackPieceManifest({
-      track,
-      availability
-    })?.totalChunks ?? 0
-  );
-}
-
-function getPeerMedianRttMs(state: PeerConnectionSupervisorState | null | undefined) {
-  if (!state?.samples?.length) {
-    return null;
-  }
-
-  const values = state.samples
-    .map((sample) => sample.currentRoundTripTimeMs)
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-    .sort((left, right) => left - right);
-  if (values.length === 0) {
-    return null;
-  }
-
-  return values[Math.floor(values.length / 2)] ?? null;
-}
-
-function resolveIceRestartNoProgressMs(state: PeerConnectionSupervisorState | null | undefined) {
-  const rttMs = getPeerMedianRttMs(state) ?? 0;
-  return Math.max(connectionSupervisorIceRestartNoProgressFloorMs, Math.round(rttMs * 4));
-}
-
-function resolveHardRecreateNoProgressMs(state: PeerConnectionSupervisorState | null | undefined) {
-  const rttMs = getPeerMedianRttMs(state) ?? 0;
-  return Math.max(connectionSupervisorHardRecreateNoProgressFloorMs, Math.round(rttMs * 8));
-}
-
-export function resolvePeerConnectionNoProgressMs(
-  state: PeerConnectionSupervisorState,
-  now = Date.now()
-) {
-  const latestProgressAt = Math.max(
-    state.lastTransportProgressAtMs ?? 0,
-    state.lastPlayoutProgressAtMs ?? 0
-  );
-  if (latestProgressAt > 0) {
-    return Math.max(0, now - latestProgressAt);
-  }
-
-  return Math.max(0, now - (state.unhealthySignalStateStartedAtMs ?? state.lastSignalStateAtMs));
-}
-
-export function resolveMediaDiagnosticPeerId(input: {
-  remotePeerId: string | null | undefined;
-  connectedPeerIds: string[];
-  currentSourcePeerId: string | null | undefined;
-}) {
-  return (
-    input.remotePeerId ||
-    input.connectedPeerIds[0] ||
-    input.currentSourcePeerId ||
-    "system"
-  );
-}
-
-function resolveRoomListenerPeerIds(
-  members: RoomSnapshot["room"]["members"] | null | undefined,
-  localPeerId: string | null | undefined
-) {
-  if (!members || !localPeerId) {
-    return [] as string[];
-  }
-
-  return members
-    .map((member) => member.peerId)
-    .filter((memberPeerId): memberPeerId is string => !!memberPeerId && memberPeerId !== localPeerId)
-    .sort();
-}
-
-export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
-  previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-  nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-  activeSessionId: string | null | undefined;
-  eventKind?: RoomRealtimeEventKind;
-}) {
-  const { previousPlayback, nextPlayback, activeSessionId } = input;
-  if (!activeSessionId || !nextPlayback || nextPlayback.sourceSessionId !== activeSessionId) {
-    return false;
-  }
-
-  const roomChangeKind = classifyRoomPlaybackChange({
-    eventKind: input.eventKind ?? "playback",
-    previousPlayback,
-    nextPlayback
-  });
-
-  if (roomChangeKind === "playback-topology" || roomChangeKind === "transport-topology") {
+  if (typeof input.currentRecoveryGeneration !== "number") {
     return true;
   }
+  return input.payloadRecoveryGeneration >= input.currentRecoveryGeneration;
+}
 
-  if (!previousPlayback) {
-    return true;
-  }
-
-  if (input.eventKind === "presence") {
-    return false;
-  }
-
-  if (roomChangeKind !== "playback-timeline" || nextPlayback.status !== "playing") {
-    return false;
-  }
-
-  return (
-    previousPlayback.status !== "playing" ||
-    previousPlayback.positionMs !== nextPlayback.positionMs ||
-    previousPlayback.startedAt !== nextPlayback.startedAt
-  );
+function getPeerMedianRttMs(state: any) {
+  return typeof state?.pieceRttMsP50 === "number" ? state.pieceRttMsP50 : null;
 }
 
 export function useRoomRuntime({
@@ -398,7 +202,6 @@ export function useRoomRuntime({
   initialRoomId,
   hydrated,
   authEntryHref,
-  workspaceEntryHref,
   router,
   lastRoomStorageKey,
   peerStorageKey,
@@ -412,7 +215,7 @@ export function useRoomRuntime({
   setPeerId,
   connectedPeers,
   setConnectedPeers,
-  mediaConnectedPeers: _mediaConnectedPeers,
+  mediaConnectedPeers,
   setMediaConnectedPeers,
   suppressRoomRecovery,
   setSuppressRoomRecovery,
@@ -427,17 +230,12 @@ export function useRoomRuntime({
   setMediaConnectionState,
   isPageVisible,
   setIsPageVisible,
-  schedulerMode: _schedulerMode,
   setSchedulerMode,
-  schedulerPlaybackBucketMs: _schedulerPlaybackBucketMs,
   bufferHealth,
-  transportGovernorMode: _transportGovernorMode,
   activePlaybackSource,
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
   audioUnlocked,
-  getLocalPlaybackPositionMs: _getLocalPlaybackPositionMs,
-  setAuthoritativeMediaClock = (() => {}) as Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>,
   setAudioUnlocked,
   roomRecoveryState,
   setRoomRecoveryState,
@@ -460,7 +258,7 @@ export function useRoomRuntime({
   handleManualCachePlan,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
-  audioRef: _audioRef,
+  audioRef,
   socketRef,
   chunkSchedulerRef,
   resetPlayerSurface,
@@ -469,16 +267,18 @@ export function useRoomRuntime({
   refreshAvailableRooms,
   refreshPlaylists
 }: UseRoomRuntimeInput): UseRoomRuntimeResult {
-  const clearPlaybackRetry = useCallback(() => undefined, []);
+  void mediaConnectedPeers;
+  void setMediaConnectedPeers;
+  void mediaConnectionState;
+  void progressiveSchedulerPolicy;
+  void isCurrentSourceOwner;
+  void startPlaybackDemandCacheDownload;
 
   const {
     meshRef,
-    mediaMeshRef,
     initialRecoveryAttemptRef,
     previousInitialRoomIdRef,
     activeRouteRoomIdRef,
-    mediaTransportEpochRef,
-    remotePlaybackResumeAfterUnlockKeyRef,
     socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
     recoveryGenerationRef,
@@ -488,9 +288,13 @@ export function useRoomRuntime({
     recoveryModeRef,
     lastRealtimeRoomEventAtRef,
     lastDataActivityAtRef,
-    listenerMediaLifecycleRef,
-    listenerMediaRecoveryTimeoutRef,
     socketDisconnectGraceTimeoutRef,
+    audioUnlockedRef,
+    setAudioUnlockedRef,
+    sourceStartStateRef,
+    setSourceStartStateRef,
+    lastSourceStartErrorRef,
+    setLastSourceStartErrorRef,
     manualCacheTrackIdsRef,
     uploadedTracksRef,
     announceRoomTrackAvailabilityRef,
@@ -502,9 +306,7 @@ export function useRoomRuntime({
     clearAvailabilityForPeerRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
-    clearListenerMediaRecovery,
     clearSocketDisconnectGrace,
-    bumpMediaTransportEpoch,
     updateSourceStartState
   } = useRoomRuntimeMutableState({
     initialRoomId,
@@ -534,476 +336,175 @@ export function useRoomRuntime({
     clearAvailabilityForPeer,
     flushPendingAvailability,
     recordPeerDiagnostic,
-    setAuthoritativeMediaClock,
     enableTrackCaching
   });
-  const {
-    playbackConnectionKeyRef,
-    listenerPlaybackStateRef,
-    activeRecoveryActionRef,
-    activeRecoveryActionResultRef,
-    lastRecoveryRecommendationRef,
-    lastRecoveryDropReasonRef,
-    getCurrentPlaybackConnectionKey,
-    reportPlaybackState,
-    applyRecoveryAction,
-    finishRecoveryAction,
-    noteRecoveryRecommendation
-  } = useRoomPlaybackConnectionCoordinator({
-    currentRoomRef,
-    mediaTransportEpochRef,
-    listenerMediaLifecycleRef,
-    clearListenerMediaRecovery,
-    clearPlaybackRetry
-  });
-  const dataMeshBridge = useRoomDataMesh({ meshRef });
-  const lastRoomChangeKindRef = useRef<RoomChangeKind | null>(null);
-  const lastSourceResetReasonRef = useRef<SourceResetReason | null>(null);
+
   const emitRuntimeEvent = useRoomDiagnosticsBridge({
     recordPeerDiagnostic,
     setStatusMessage
   });
+  const dataMeshBridge = useRoomDataMesh({ meshRef });
   const {
     connectionSupervisorStatesRef,
     sourceRecoveryCoordinatorRef,
-    beginSourceHardRecoveryAction,
-    clearSourceHardRecoveryAction,
-    resolveCurrentAudibleSource,
-    resolveSourceContinuityState,
-    resolveSourceRecoverySuppressedReason,
-    ensureConnectionSupervisorState,
-    commitConnectionSupervisorState,
     updateConnectionSupervisorSignalState,
     updateConnectionSupervisorTransport,
     updateConnectionSupervisorPlayout
-  } = useRoomConnectionSupervisor({
-    roomSnapshot,
-    currentRoomRef,
-    recordPeerDiagnostic,
-    listenerMediaLifecycleRef,
-    lastDataActivityAtRef,
-    mediaConnectionState,
-    activePlaybackSource,
-    isCurrentSourceOwner,
-    isPageVisible,
-    lastSubscribeAckAtRef
-  });
+  } = useRoomConnectionSupervisor({ lastSubscribeAckAtRef });
   const {
     pieceTransferRatesRef,
     pieceRequestSamplesRef,
     updateDataTransportStatsRef,
-    updateMediaTransportStatsRef,
     reportRealtimeFailureRef,
     recordPieceTransferRef,
     recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef
   } = useRoomRuntimeObservability({
     roomSnapshot,
-    currentRoomRef,
     peerId,
-    meshRef,
-    recordPeerDiagnostic,
-    setMediaConnectionState,
-    updateConnectionSupervisorTransport,
-    updateConnectionSupervisorPlayout,
-    resolveCurrentAudibleSource,
-    resolveSourceContinuityState,
-    listenerMediaLifecycleRef,
-    lastDataActivityAtRef,
-    activePlaybackSource,
-    isCurrentSourceOwner,
-    mediaConnectionState,
-    isPageVisible,
-    bufferHealth
+    recordPeerDiagnostic
+  });
+  const {
+    getCurrentPlaybackConnectionKey,
+    applyRecoveryAction,
+    finishRecoveryAction,
+    noteRecoveryRecommendation
+  } = useRoomPlaybackConnectionCoordinator({
+    currentRoomRef
   });
 
-  const getRemoteAudioDiagnostics = useCallback(
-    () => ({
-      audioPaused: null,
-      audioMuted: null,
-      audioReadyState: null,
-      hasSrcObject: null,
-      currentSrc: null,
-      audioVolume: null,
-      trackId: null,
-      trackMuted: null,
-      trackEnabled: null,
-      trackReadyState: null
-    }),
-    []
-  );
-
-  const getRemoteMediaTraceContext = useCallback(
-    (remotePeerId?: string | null) => {
-      const playback = currentRoomRef.current?.room.playback;
-      const currentTrackId = playback?.currentTrackId ?? null;
-      const mediaEpoch = playback?.mediaEpoch ?? null;
-      const sourcePeerId = playback?.sourcePeerId ?? null;
-      const resolvedRemotePeerId = remotePeerId ?? sourcePeerId ?? null;
-      return {
-        currentTrackId,
-        mediaEpoch,
-        sourcePeerId,
-        remotePeerId: resolvedRemotePeerId,
-        traceKey:
-          currentTrackId && mediaEpoch !== null
-            ? `${currentTrackId}|${mediaEpoch}|${sourcePeerId ?? "none"}|${peerId ?? "none"}`
-            : null
-      };
-    },
-    [currentRoomRef, peerId]
-  );
-
-  const resetListenerMediaLifecycle = useCallback(() => {
-    const lifecycle = listenerMediaLifecycleRef.current;
-    lifecycle.traceKey = null;
-    lifecycle.sourcePeerId = null;
-    lifecycle.lastPlayAttemptResult = null;
-    lifecycle.lastPlayAttemptError = null;
-    lifecycle.lastSoftRecoveryTraceKey = null;
-    lifecycle.lastSoftRecoveryAt = null;
-    lifecycle.lastHardRecoveryTraceKey = null;
-    lifecycle.lastHardRecoveryAt = null;
-    lifecycle.currentGeneration = null;
-    lifecycle.generationStartedAt = null;
-    lifecycle.boundGeneration = null;
-    lifecycle.playingGeneration = null;
-    lifecycle.lastPlayoutProgressAt = null;
-    lifecycle.lastTransportProgressAt = null;
-    lifecycle.recoveryStage = "idle";
-  }, [listenerMediaLifecycleRef]);
-
-  useEffect(() => {
-    clearListenerMediaRecovery();
-    resetListenerMediaLifecycle();
-  }, [clearListenerMediaRecovery, resetListenerMediaLifecycle]);
-
-  const updateRemoteMediaDiagnostic = useCallback(
-    (
-      summary: string,
-      update?: (snapshot: PeerDiagnosticsSnapshot) => PeerDiagnosticsSnapshot,
-      options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
-    ) => {
-      const withPlaybackConnectionDiagnostics = (snapshot: PeerDiagnosticsSnapshot) => {
-        const playback = currentRoomRef.current?.room.playback;
-        const baselineProgressiveStatus =
-          snapshot.progressivePlaybackStatus ??
-          createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!;
-        const activeRecoveryAction = activeRecoveryActionRef.current;
-        const lastRecoveryRecommendation = lastRecoveryRecommendationRef.current;
-        return {
-          ...snapshot,
-          progressivePlaybackStatus: {
-            ...baselineProgressiveStatus,
-            playbackConnectionKey: playbackConnectionKeyRef.current,
-            listenerPlaybackState: listenerPlaybackStateRef.current,
-            activeRecoveryActionType: activeRecoveryAction?.actionType ?? null,
-            activeRecoveryActionResult: activeRecoveryActionResultRef.current,
-            activeRecoveryActionStartedAt: activeRecoveryAction?.startedAt ?? null,
-            activeRecoveryActionReason: activeRecoveryAction?.reason ?? null,
-            lastRecoveryRecommendationScope: lastRecoveryRecommendation?.scope ?? null,
-            lastRecoveryRecommendationLevel: lastRecoveryRecommendation?.level ?? null,
-            lastRecoveryRecommendationReason: lastRecoveryRecommendation?.reason ?? null,
-            lastRecoveryRecommendationAt: lastRecoveryRecommendation?.recommendedAt ?? null,
-            recoveryDropReason: lastRecoveryDropReasonRef.current,
-            playbackSurfaceKey: resolvePlaybackSurfaceKey(playback),
-            playbackTimelineKey: resolvePlaybackTimelineKey(playback),
-            roomChangeKind: lastRoomChangeKindRef.current,
-            sourceResetReason: lastSourceResetReasonRef.current,
-            socketDisconnectGraceActive:
-              socketDisconnectGraceUntilRef.current !== null &&
-              socketDisconnectGraceUntilRef.current > Date.now()
-          }
-        };
-      };
-      recordPeerDiagnosticRef.current({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: options?.event ?? "cache-playback-state",
-        summary,
-        recordEvent: options?.recordEvent ?? false,
-        level: options?.level,
-        update: (snapshot) => {
-          const seededSnapshot = withPlaybackConnectionDiagnostics(snapshot);
-          return withPlaybackConnectionDiagnostics(update ? update(seededSnapshot) : seededSnapshot);
+  const roomSnapshotResyncController = useRef(
+    createRoomSnapshotResyncController({
+      loadSnapshot: (roomId) => musicRoomApi.getRoom(roomId),
+      applySnapshot: (_roomId, snapshot) => {
+        if (activeRouteRoomIdRef.current && snapshot.room.id !== activeRouteRoomIdRef.current) {
+          return;
         }
-      });
-    },
-    [
-      activeRecoveryActionRef,
-      activeRecoveryActionResultRef,
-      lastRecoveryRecommendationRef,
-      lastRecoveryDropReasonRef,
-      lastRoomChangeKindRef,
-      lastSourceResetReasonRef,
-      listenerPlaybackStateRef,
-      playbackConnectionKeyRef,
-      socketDisconnectGraceUntilRef,
-      currentRoomRef
-    ]
-  );
-
-  const rawRoomListenerPeerIds = useMemo(
-    () => resolveRoomListenerPeerIds(roomSnapshot?.room.members, peerId),
-    [roomSnapshot?.room.members, peerId]
-  );
-  const roomListenerSetHash = rawRoomListenerPeerIds.join(",");
-  const shouldPauseManualCacheDirectRequests = false;
-  const activePlaybackWindow = useMemo(() => {
-    const playback = roomSnapshot?.room.playback ?? null;
-    const track = playback?.currentTrackId
-      ? roomSnapshot?.tracks.find((entry) => entry.id === playback.currentTrackId) ?? null
-      : null;
-    if (!playback?.currentTrackId || !track) {
-      return null;
-    }
-
-    const positionMs = getEffectivePlaybackPositionMs(
-      playback,
-      track.durationMs,
-      Date.now()
-    );
-    return {
-      trackId: playback.currentTrackId,
-      positionMs,
-      revision: playback.playbackRevision,
-      mediaEpoch: playback.mediaEpoch,
-      status: playback.status,
-      policy:
-        playback.status === "paused"
-          ? "pause-fill"
-          : progressiveSchedulerPolicy ?? "startup"
-    };
-  }, [progressiveSchedulerPolicy, roomSnapshot?.room.playback, roomSnapshot?.tracks]);
-
-  useEffect(() => {
-    const currentTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
-    if (!currentTrackId) {
-      return;
-    }
-    if (
-      roomSnapshot?.room.playback.status !== "playing" &&
-      roomSnapshot?.room.playback.status !== "buffering" &&
-      roomSnapshot?.room.playback.status !== "paused"
-    ) {
-      return;
-    }
-    void startPlaybackDemandCacheDownload(currentTrackId).catch((error) => {
-      setStatusMessage(toUserFacingError(error));
-    });
-  }, [
-    roomSnapshot?.room.playback.currentTrackId,
-    roomSnapshot?.room.playback.status,
-    roomSnapshot?.room.playback.playbackRevision,
-    roomSnapshot?.room.playback.mediaEpoch,
-    setStatusMessage,
-    startPlaybackDemandCacheDownload
-  ]);
-  const { clearPendingPiece: clearManualCachePendingPiece } = useManualCacheDownloader({
-    enableManualTrackCaching,
-    manualCacheTrackIds,
-    roomSnapshot,
-    availabilityByTrack,
-    peerId,
-    connectedPeers,
-    dataMesh: dataMeshBridge,
-    pauseDirectRequests: shouldPauseManualCacheDirectRequests,
-    activePlaybackWindow,
-    onRuntimeEvent: emitRuntimeEvent,
-    onManualCachePlan: handleManualCachePlan
-  });
+        dispatchRoomStateEvent({
+          type: "recover-snapshot",
+          snapshot
+        });
+      },
+      onError: (_roomId, _reason, error) => {
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "snapshot-resync-failed",
+          summary: `房间快照同步失败：${toUserFacingError(error)}`,
+          level: "warning"
+        });
+      }
+    })
+  ).current;
 
   const exitCurrentRoom = useCallback(
     (message: string) => {
-      setIsNavigatingRoomExit(true);
-      setSuppressRoomRecovery(true);
-      dispatchRoomStateEvent({ type: "local-reset" });
-      resetPlayerSurface();
-      window.localStorage.removeItem(lastRoomStorageKey);
       setStatusMessage(message);
-      if (workspaceOnly) {
-        router.replace(workspaceEntryHref as Route);
+      setIsNavigatingRoomExit(true);
+      resetPlayerSurfaceRef.current();
+      dispatchRoomStateEvent({ type: "local-reset" });
+      router.replace(authEntryHref as Route);
+    },
+    [authEntryHref, dispatchRoomStateEvent, resetPlayerSurfaceRef, router, setIsNavigatingRoomExit, setStatusMessage]
+  );
+
+  const requestRoomSnapshotResync = useCallback(
+    async (reason: RoomSnapshotResyncReason, roomId?: string | null) => {
+      const targetRoomId = roomId ?? currentRoomRef.current?.room.id ?? initialRoomId;
+      if (!targetRoomId) {
         return;
       }
-
-      setIsNavigatingRoomExit(false);
+      try {
+        await roomSnapshotResyncController.request(targetRoomId, reason);
+      } catch (error) {
+        recordPeerDiagnostic({
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "snapshot-resync-failed",
+          summary: `房间快照同步失败：${toUserFacingError(error)}`,
+          level: "warning"
+        });
+      }
     },
     [
-      lastRoomStorageKey,
-      resetPlayerSurface,
-      router,
+      activeRouteRoomIdRef,
+      currentRoomRef,
       dispatchRoomStateEvent,
-      setIsNavigatingRoomExit,
-      setStatusMessage,
-      setSuppressRoomRecovery,
-      workspaceEntryHref,
-      workspaceOnly
+      initialRoomId,
+      recordPeerDiagnostic,
+      roomSnapshotResyncController
     ]
   );
 
-  const applyResyncedRoomSnapshot = useCallback(
-    (expectedRoomId: string, snapshot: RoomSnapshot, reason: RoomSnapshotResyncReason) => {
-      if (
-        snapshot.room.id !== expectedRoomId ||
-        activeRouteRoomIdRef.current !== expectedRoomId
-      ) {
-        return;
-      }
+  const ensureSourcePlaybackStarted = useCallback(async () => {
+    const playback = currentRoomRef.current?.room.playback ?? roomSnapshot?.room.playback ?? null;
+    if (!playback?.currentTrackId || playback.status !== "playing") {
+      updateSourceStartState("idle", { recordEvent: false });
+      return;
+    }
 
-      dispatchRoomStateEvent({
-        type: "recover-snapshot",
-        snapshot
+    const audio = audioRef.current;
+    if (!audio) {
+      updateSourceStartState("failed", {
+        error: "missing-audio-element",
+        summary: "本地音频元素不可用",
+        level: "error"
       });
+      return;
+    }
 
-      recordPeerDiagnostic({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: "room-snapshot-resync",
-        summary: `房间状态已全量刷新（${reason}）`,
+    try {
+      audio.muted = false;
+      await roomAudioOutput.playElement(audio);
+      updateSourceStartState("live", {
+        summary: "本地缓存播放已启动",
         recordEvent: false
       });
-    },
-    [dispatchRoomStateEvent, recordPeerDiagnostic]
-  );
-
-  const handleRoomSnapshotResyncError = useCallback(
-    (roomId: string, reason: RoomSnapshotResyncReason, error: unknown) => {
-      if (activeRouteRoomIdRef.current !== roomId || isNavigatingRoomExit) {
-        return;
-      }
-
-      const message = toUserFacingError(error);
-      recordPeerDiagnostic({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: "room-snapshot-resync-failed",
-        level: "warning",
-        summary: `房间状态刷新失败（${reason}）：${message}`,
-        update: (snapshot) => ({
-          ...snapshot,
-          lastError: `房间状态刷新失败：${message}`
-        })
+    } catch (error) {
+      updateSourceStartState("awaiting-unlock", {
+        error: toUserFacingError(error),
+        summary: "等待用户解锁本地音频播放",
+        level: "warning"
       });
+    }
+  }, [audioRef, currentRoomRef, roomSnapshot?.room.playback, updateSourceStartState]);
 
-      if (
-        message.includes("房间不存在") ||
-        message.includes("已经被删除") ||
-        message.includes("房间已不可用")
-      ) {
-        exitCurrentRoom("这个房间已不可用，请返回音乐房重新加入。");
-        return;
-      }
+  const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
+  const ensureSourcePlaybackStartedRef = useRef(ensureSourcePlaybackStarted);
+  useEffect(() => {
+    requestRoomSnapshotResyncRef.current = requestRoomSnapshotResync;
+  }, [requestRoomSnapshotResync]);
+  useEffect(() => {
+    ensureSourcePlaybackStartedRef.current = ensureSourcePlaybackStarted;
+  }, [ensureSourcePlaybackStarted]);
 
-      setStatusMessage(`房间状态刷新失败：${message}`);
-    },
-    [exitCurrentRoom, isNavigatingRoomExit, recordPeerDiagnostic, setStatusMessage]
-  );
-
-  const roomSnapshotResyncController = useMemo(
-    () =>
-      createRoomSnapshotResyncController({
-        loadSnapshot: (roomId: string) => musicRoomApi.getRoom(roomId),
-        applySnapshot: applyResyncedRoomSnapshot,
-        onError: handleRoomSnapshotResyncError
-      }),
-    [applyResyncedRoomSnapshot, handleRoomSnapshotResyncError]
-  );
-
-  useEffect(() => () => roomSnapshotResyncController.reset(), [roomSnapshotResyncController]);
-
-  const requestRoomSnapshotResync = useCallback(
-    async (reason: RoomSnapshotResyncReason, roomId = activeRouteRoomIdRef.current) => {
-      if (
-        !roomId ||
-        !hydrated ||
-        !activeSessionRef.current?.userId ||
-        isNavigatingRoomExit
-      ) {
-        return;
-      }
-
-      await roomSnapshotResyncController.request(roomId, reason);
-    },
-    [activeSessionRef, hydrated, isNavigatingRoomExit, roomSnapshotResyncController]
-  );
   const queuePlaybackRecoveryRecommendation = useCallback(
-    (recommendation: {
-      playbackConnectionKey: string | null;
-      peerId: string | null;
-      scope: "data" | "room";
-      level: "soft" | "ice-restart" | "hard-recreate" | "full-resubscribe";
-      reason: string;
-      observedNoProgressMs: number | null;
-      guardReason?: string | null;
-    }) => {
+    (recommendation: Parameters<typeof noteRecoveryRecommendation>[0]) => {
       noteRecoveryRecommendation(recommendation);
-      if (recommendation.guardReason) {
-        lastRecoveryDropReasonRef.current = "suppressed-by-guard";
+      const actionType = resolvePlaybackRecoveryActionType(recommendation);
+      if (!actionType) {
         return;
       }
-      const currentPlaybackConnectionKey = getCurrentPlaybackConnectionKey();
-      if (
-        recommendation.playbackConnectionKey &&
-        recommendation.playbackConnectionKey !== currentPlaybackConnectionKey
-      ) {
-        lastRecoveryDropReasonRef.current = "stale-connection-key";
-        return;
-      }
-      updateRemoteMediaDiagnostic("收到播放恢复建议", undefined, {
-        event: "playback-recovery-recommendation",
-        recordEvent: false
-      });
-
-      const dataActionType = resolvePlaybackRecoveryActionType(recommendation);
-
-      if (dataActionType !== "full-resubscribe" && !recommendation.peerId) {
-        lastRecoveryDropReasonRef.current = "missing-peer";
-        return;
-      }
-
       const action = applyRecoveryAction({
         playbackConnectionKey:
-          recommendation.playbackConnectionKey ?? currentPlaybackConnectionKey,
-        actionType: dataActionType,
+          recommendation.playbackConnectionKey ?? getCurrentPlaybackConnectionKey(),
+        actionType,
         peerId: recommendation.peerId,
         reason: recommendation.reason
       });
       if (!action) {
         return;
       }
-
-      reportPlaybackState("recovering-hard", {
-        playbackConnectionKey: action.playbackConnectionKey
-      });
-
-      if (dataActionType === "restart-data-peer" && recommendation.peerId) {
-        void meshRef.current
-          ?.restartPeer(recommendation.peerId)
-          .then(() => {
-            finishRecoveryAction(action.actionId, "completed", {
-              nextState: "recovering-hard"
-            });
-          })
-          .catch(() => {
-            finishRecoveryAction(action.actionId, "failed", {
-              nextState: "failed"
-            });
-          });
+      if (actionType === "restart-data-peer" && recommendation.peerId) {
+        void meshRef.current?.restartPeer(recommendation.peerId).finally(() => {
+          finishRecoveryAction(action.actionId, "completed");
+        });
         return;
       }
-
-      if (dataActionType === "full-resubscribe") {
-        resubscribeRoomRef.current?.();
-        if (recommendation.peerId) {
-          void meshRef.current?.restartPeer(recommendation.peerId);
-        }
-        finishRecoveryAction(action.actionId, "completed", {
-          nextState: "recovering-hard"
-        });
-      }
+      resubscribeRoomRef.current?.();
+      finishRecoveryAction(action.actionId, "completed");
     },
     [
       applyRecoveryAction,
@@ -1011,54 +512,44 @@ export function useRoomRuntime({
       getCurrentPlaybackConnectionKey,
       meshRef,
       noteRecoveryRecommendation,
-      reportPlaybackState,
-      lastRecoveryDropReasonRef,
-      updateRemoteMediaDiagnostic
+      resubscribeRoomRef
     ]
   );
+
   const {
     emitPresence,
     startPresenceHeartbeat,
     stopPresenceHeartbeat,
     stopRecoveryWatchdog
-  } =
-    useRoomRealtimeConnection({
-      roomSnapshot,
-      initialRoomId,
-      hydrated,
-      activeSession,
-      activeSessionRef,
-      currentRoomRef,
-      activeRouteRoomIdRef,
-      peerId,
-      socketRef,
-      isNavigatingRoomExit,
-      enableManualTrackCaching,
-      enableTrackCaching,
-      roomListenerSetHash,
-      uploadedTrackIds,
-      connectedPeers,
-      roomRecoveryState,
-      setRoomRecoveryState,
-      isCurrentSourceOwner,
-      uploadedTracks,
-      announceRoomTrackAvailabilityRef,
-      lastRealtimeRoomEventAtRef,
-      lastSubscribeAckAtRef,
-      lastDataActivityAtRef,
-      recoveryGenerationRef,
-      recoveryModeRef,
-      resubscribeRoomRef,
-      meshRef,
-      mediaMeshRef,
-      bumpMediaTransportEpoch,
-      resolveSourceContinuityState,
-      resolveSourceRecoverySuppressedReason,
-      socketDisconnectGraceUntilRef,
-      requestRoomSnapshotResync,
-      getCurrentPlaybackConnectionKey,
-      queuePlaybackRecoveryRecommendation
-    } as any);
+  } = useRoomRealtimeConnection({
+    roomSnapshot,
+    initialRoomId,
+    hydrated,
+    activeSession,
+    activeSessionRef,
+    currentRoomRef,
+    activeRouteRoomIdRef,
+    peerId,
+    socketRef,
+    isNavigatingRoomExit,
+    enableManualTrackCaching,
+    enableTrackCaching,
+    roomListenerSetHash: roomSnapshot?.room.members.map((member) => member.peerId ?? member.id).sort().join("|") ?? "",
+    uploadedTrackIds,
+    connectedPeers,
+    uploadedTracks,
+    announceRoomTrackAvailabilityRef,
+    lastRealtimeRoomEventAtRef,
+    lastSubscribeAckAtRef,
+    recoveryGenerationRef,
+    recoveryModeRef,
+    resubscribeRoomRef,
+    meshRef,
+    socketDisconnectGraceUntilRef,
+    requestRoomSnapshotResync,
+    getCurrentPlaybackConnectionKey,
+    queuePlaybackRecoveryRecommendation
+  });
 
   useRoomRuntimeLifecycle({
     workspaceOnly,
@@ -1096,71 +587,25 @@ export function useRoomRuntime({
     setStatusMessage
   });
 
-  const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
-  const ensureSourcePlaybackStarted = useCallback(async () => {
-    const currentRoom = currentRoomRef.current;
-    if (!currentRoom?.room.id || !peerId || !isCurrentSourceOwner) {
-      updateSourceStartState("idle");
-      return;
-    }
-
-    const playback = currentRoom.room.playback;
-    if (playback.status !== "playing" || !playback.currentTrackId) {
-      updateSourceStartState("idle");
-      return;
-    }
-
-    updateSourceStartState("live", {
-      summary: "音源端使用本地播放和缓存分片同步"
-    });
-  }, [currentRoomRef, isCurrentSourceOwner, peerId, updateSourceStartState]);
-  const ensureSourcePlaybackStartedRef = useRef<() => Promise<void>>(ensureSourcePlaybackStarted);
-
-  useEffect(() => {
-    requestRoomSnapshotResyncRef.current = requestRoomSnapshotResync;
-  }, [requestRoomSnapshotResync]);
-
-  useEffect(() => {
-    ensureSourcePlaybackStartedRef.current = ensureSourcePlaybackStarted;
-  }, [ensureSourcePlaybackStarted]);
-
-  useRoomConnectionSupervisorRuntime({
+  useManualCacheDownloader({
+    enableManualTrackCaching,
+    manualCacheTrackIds,
     roomSnapshot,
+    availabilityByTrack,
     peerId,
-    currentRoomRef,
-    connectionSupervisorStatesRef,
-    ensureConnectionSupervisorState,
-    commitConnectionSupervisorState,
-    resolveSourceContinuityState,
-    resolveSourceRecoverySuppressedReason,
-    beginSourceHardRecoveryAction,
-    clearSourceHardRecoveryAction,
-    listenerMediaLifecycleRef,
-    recordPeerDiagnosticRef,
-    formatDiagnosticsTimestamp,
-    resolvePeerConnectionNoProgressMs,
-    resolveIceRestartNoProgressMs,
-    resolveHardRecreateNoProgressMs,
-    activePlaybackSource,
-    isPageVisible,
-    isCurrentSourceOwner,
-    meshRef,
-    reportRealtimeFailureRef,
-    lastRealtimeRoomEventAtRef,
-    resubscribeRoomRef,
-    getCurrentPlaybackConnectionKey,
-    queuePlaybackRecoveryRecommendation
+    connectedPeers,
+    dataMesh: dataMeshBridge,
+    onRuntimeEvent: emitRuntimeEvent,
+    onManualCachePlan: handleManualCachePlan
   });
 
   useEffect(() => {
     if (!statusMessage) {
       return;
     }
-
     const timer = window.setTimeout(() => {
       setStatusMessage("");
     }, 4_000);
-
     return () => window.clearTimeout(timer);
   }, [setStatusMessage, statusMessage]);
 
@@ -1175,13 +620,6 @@ export function useRoomRuntime({
       iceConfig,
       socketRef,
       recordPeerDiagnosticRef,
-      getRemoteMediaTraceContext,
-      reportRealtimeFailureRef,
-      activePlaybackSourceRef,
-      roomRecoveryStateRef,
-      pieceTransferRatesRef,
-      pieceRequestSamplesRef,
-      sourceRecoveryCoordinatorRef,
       meshRef,
       chunkSchedulerRef,
       currentRoomRef,
@@ -1190,7 +628,7 @@ export function useRoomRuntime({
       manualCacheTrackIdsRef,
       announceRoomTrackAvailabilityRef,
       handleManualCachePieceReceivedRef,
-      clearManualCachePendingPiece,
+      clearManualCachePendingPiece: () => undefined,
       flushPendingAvailabilityRef,
       recordPieceTransferRef,
       recordPieceRequestSampleRef,
@@ -1201,25 +639,14 @@ export function useRoomRuntime({
       withResolvedTransportHealth,
       withSupervisorDiagnosticPatch,
       getPieceTransferRates,
+      pieceTransferRatesRef,
       getPeerMedianRttMs,
       setConnectedPeers,
       isPageVisible,
-      playbackStatus: roomSnapshot?.room.playback.status,
-      currentTrackId: roomSnapshot?.room.playback.currentTrackId,
+      playbackStatus: roomSnapshot.room.playback.status,
+      currentTrackId: roomSnapshot.room.playback.currentTrackId,
       bufferHealth,
       enableManualTrackCaching,
-      mediaMeshRef,
-      listenerMediaLifecycleRef,
-      mediaTransportEpochRef,
-      updateRemoteMediaDiagnostic,
-      getRemoteAudioDiagnostics,
-      resolveMediaDiagnosticPeerId,
-      setMediaConnectedPeers,
-      setMediaConnectionState,
-      updateMediaTransportStatsRef,
-      isCurrentSourceOwner,
-      enableTrackCaching,
-      activePlaybackSource,
       resubscribeRoomRef,
       activeSessionRef,
       activeRouteRoomIdRef,
@@ -1229,8 +656,6 @@ export function useRoomRuntime({
       clearAvailabilityForPeerRef,
       deleteRoomTrackArtifactsRef,
       lastRealtimeRoomEventAtRef,
-      lastRoomChangeKindRef,
-      lastSourceResetReasonRef,
       recoveryGenerationRef,
       lastSubscribeAckAtRef,
       recoveryModeRef,
@@ -1238,11 +663,8 @@ export function useRoomRuntime({
       socketDisconnectGraceTimeoutRef,
       stopPresenceHeartbeat,
       stopRecoveryWatchdog,
-      clearListenerMediaRecovery,
       clearSocketDisconnectGrace,
-      bumpMediaTransportEpoch,
       dispatchRoomStateEvent,
-      setAuthoritativeMediaClock,
       setRoomRecoveryState,
       setStatusMessage,
       isNavigatingRoomExit,
@@ -1253,7 +675,7 @@ export function useRoomRuntime({
       exitCurrentRoom,
       shouldKickSourcePlaybackFromRealtimeEvent,
       shouldAcceptIncomingPeerSignalRecoveryGeneration
-    } as any);
+    });
   }, [
     roomSnapshot?.room.id,
     hydrated,
@@ -1262,25 +684,34 @@ export function useRoomRuntime({
     peerId,
     activeSessionRef,
     currentRoomRef,
-    uploadedTrackIdsRef,
-    clearListenerMediaRecovery,
-    stopRecoveryWatchdog,
-    startPresenceHeartbeat,
-    stopPresenceHeartbeat,
     chunkSchedulerRef,
-    emitPresence,
-    getRemoteAudioDiagnostics,
-    getRemoteMediaTraceContext,
-    isNavigatingRoomExit,
+    stopPresenceHeartbeat,
+    stopRecoveryWatchdog,
+    clearSocketDisconnectGrace,
     setConnectedPeers,
-    setMediaConnectedPeers,
-    setAuthoritativeMediaClock,
-    setMediaConnectionState,
     setRoomRecoveryState,
-    exitCurrentRoom,
     setStatusMessage,
-    updateRemoteMediaDiagnostic
+    exitCurrentRoom,
+    emitPresence,
+    startPresenceHeartbeat,
+    isNavigatingRoomExit,
+    audioUnlocked
   ]);
+
+  useEffect(() => {
+    setMediaConnectionState(
+      roomSnapshot?.room.playback.currentTrackId
+        ? bufferHealth === "critical"
+          ? "buffering"
+          : "live"
+        : "idle"
+    );
+  }, [bufferHealth, roomSnapshot?.room.playback.currentTrackId, setMediaConnectionState]);
+
+  useEffect(() => {
+    updateConnectionSupervisorPlayout();
+    lastDataActivityAtRef.current = Date.now();
+  }, [lastDataActivityAtRef, updateConnectionSupervisorPlayout, connectedPeers.length]);
 
   return {
     ensureSourcePlaybackStarted

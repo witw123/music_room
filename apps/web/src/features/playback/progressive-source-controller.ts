@@ -14,8 +14,20 @@ type BufferedLocalWarmupTarget = Extract<
   "progressive-local" | "full-local"
 >;
 
-export function getInitialProgressivePlaybackSource(hasFullLocalTrack: boolean) {
-  return hasFullLocalTrack ? "full-local" : ("progressive-local" satisfies ProgressivePlaybackSource);
+export function getInitialProgressivePlaybackSource(
+  hasFullLocalTrack: boolean
+) {
+  if (hasFullLocalTrack) {
+    return "full-local" satisfies ProgressivePlaybackSource;
+  }
+
+  return "progressive-local" satisfies ProgressivePlaybackSource;
+}
+
+export function getRoomPlaybackSurfaceSource(input: {
+  hasFullLocalTrack: boolean;
+}) {
+  return getInitialProgressivePlaybackSource(input.hasFullLocalTrack);
 }
 
 export function shouldForceSourceOwnerLocalPlayback(input: {
@@ -40,6 +52,7 @@ function resolveBufferedLocalWarmupDecision(input: {
   now?: number;
   switchDelayMs?: number;
   maxDriftMs?: number;
+  cacheOnlyPlayback?: boolean;
 }) {
   if (input.currentSource === "full-local") {
     return {
@@ -103,6 +116,7 @@ export function resolveProgressiveWarmupDecision(input: {
   now?: number;
   switchDelayMs?: number;
   maxDriftMs?: number;
+  cacheOnlyPlayback?: boolean;
 }) {
   return resolveBufferedLocalWarmupDecision({
     currentSource: input.currentSource,
@@ -113,7 +127,8 @@ export function resolveProgressiveWarmupDecision(input: {
     warmupReadyAt: input.warmupReadyAt,
     now: input.now,
     switchDelayMs: input.switchDelayMs,
-    maxDriftMs: input.maxDriftMs
+    maxDriftMs: input.maxDriftMs,
+    cacheOnlyPlayback: input.cacheOnlyPlayback
   });
 }
 
@@ -125,6 +140,7 @@ export function resolveFullLocalWarmupDecision(input: {
   now?: number;
   switchDelayMs?: number;
   maxDriftMs?: number;
+  cacheOnlyPlayback?: boolean;
 }) {
   return resolveBufferedLocalWarmupDecision({
     currentSource: input.currentSource,
@@ -135,6 +151,7 @@ export function resolveFullLocalWarmupDecision(input: {
     warmupReadyAt: input.warmupReadyAt,
     now: input.now,
     switchDelayMs: input.switchDelayMs,
-    maxDriftMs: input.maxDriftMs
+    maxDriftMs: input.maxDriftMs,
+    cacheOnlyPlayback: input.cacheOnlyPlayback
   });
 }

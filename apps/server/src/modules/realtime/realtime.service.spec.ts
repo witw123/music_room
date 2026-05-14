@@ -77,7 +77,7 @@ describe("RealtimeService", () => {
     });
   });
 
-  it("falls back when TURN host is not explicitly configured", () => {
+  it("uses the request host as a last-resort TURN host", () => {
     process.env.TURN_ENABLED = "true";
     delete process.env.TURN_PUBLIC_HOST;
     delete process.env.APP_DOMAIN;
@@ -87,8 +87,10 @@ describe("RealtimeService", () => {
 
     const config = service.buildIceConfig("user_1", { requestHost: "example.com:3001" });
 
-    expect(config.source).toBe("stun-only");
-    expect(config.iceServers).toEqual([{ urls: "stun:stun.example.com:3478" }]);
+    expect(config.source).toBe("ephemeral");
+    expect(config.iceServers[1]).toMatchObject({
+      urls: expect.arrayContaining(["turn:example.com:3478?transport=udp"])
+    });
   });
 
   it("can derive turn host from the request host when explicitly enabled", () => {

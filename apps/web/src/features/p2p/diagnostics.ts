@@ -1,7 +1,8 @@
 import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
-  PeerSignalStats
+  PeerSignalStats,
+  RemoteTrackStatus
 } from "@music-room/shared";
 
 export type DiagnosticsState = {
@@ -115,6 +116,43 @@ export function createEmptySignalStats(): PeerSignalStats {
   };
 }
 
+export function createEmptyRemoteTrackStatus(): RemoteTrackStatus {
+  return {
+    received: false,
+    boundToAudioElement: false,
+    lastTrackAt: null,
+    lastBoundAt: null,
+    lastAudioEvent: null,
+    currentTrackId: null,
+    mediaEpoch: null,
+    sourcePeerId: null,
+    traceKey: null,
+    trackId: null,
+    trackMuted: null,
+    trackEnabled: null,
+    trackReadyState: null,
+    audioPaused: null,
+    audioMuted: null,
+    audioReadyState: null,
+    hasSrcObject: null,
+    currentSrc: null,
+    audioVolume: null,
+    lastPlayAttemptAt: null,
+    lastPlayAttemptResult: null,
+    lastPlayAttemptError: null,
+    currentGeneration: null,
+    boundGeneration: null,
+    playingGeneration: null,
+    recoveryStage: "idle",
+    restartAttempt: null,
+    publishGeneration: null,
+    attachedTrackId: null,
+    negotiatedTrackId: null,
+    makingOffer: null,
+    signalingState: null
+  };
+}
+
 export function createPeerSnapshot(peerId: string, now = new Date().toISOString()): PeerDiagnosticsSnapshot {
   return {
     peerId,
@@ -160,13 +198,14 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
     lastMediaStatsProgressAt: null,
     lastDataActivityAt: null,
     audibleSource: null,
+    bufferingWhileAudible: false,
     recoverySuppressedReason: null,
     zeroProgressMs: null,
     consecutiveNoProgressMs: null,
     packetsLost: null,
     jitterMs: null,
-    timeOnRemoteStreamMs: null,
     signalStats: createEmptySignalStats(),
+    remoteTrackStatus: createEmptyRemoteTrackStatus(),
     progressivePlaybackStatus: {
       activeSource: null,
       playbackConnectionKey: null,
@@ -174,6 +213,7 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       playbackTimelineKey: null,
       roomChangeKind: null,
       sourceResetReason: "none",
+      remoteSurfacePreserved: false,
       listenerPlaybackState: "idle",
       activeRecoveryActionType: null,
       activeRecoveryActionResult: null,
@@ -185,7 +225,13 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       lastRecoveryRecommendationAt: null,
       recoveryDropReason: null,
       socketDisconnectGraceActive: false,
-      transportEpoch: null,
+      hostPublishSource: "none",
+      hostPublishReadiness: "idle",
+      hostPublishFailureReason: null,
+      mediaBootstrapState: "idle",
+      mediaFailureReason: null,
+      transportResetReason: "none",
+      hostPublishingReady: false,
       dataRequiredForPlayback: true,
       firstAudibleAt: null,
       firstTransportConnectedAt: null,
@@ -234,26 +280,6 @@ export function createPeerSnapshot(peerId: string, now = new Date().toISOString(
       localAudioReadyState: null,
       localAudioCurrentSrc: null,
       localAudioHasSrcObject: null,
-      fullLocalPlaybackMode: null,
-      pcmEngineStatus: null,
-      pcmAudioContextState: null,
-      pcmHasOutputStream: null,
-      pcmDirectOutputConnected: null,
-      pcmContiguousChunkCount: null,
-      pcmContiguousByteLength: null,
-      pcmDecodedSegmentCount: null,
-      pcmScheduledSegmentCount: null,
-      pcmDecodedPacketCount: null,
-      pcmDecoderFlushAttemptCount: null,
-      pcmDecoderFlushCount: null,
-      pcmLastDecodedAtMs: null,
-      pcmLastDecodeError: null,
-      pcmDecodedPeak: null,
-      pcmDecodedRms: null,
-      pcmDecodedNonZeroSampleCount: null,
-      pcmBufferedAheadMs: null,
-      pcmPlayoutState: null,
-      pcmLastBlockedReason: null,
       startupBufferMs: null,
       comfortBufferedMs: null,
       averageDriftMs: null,

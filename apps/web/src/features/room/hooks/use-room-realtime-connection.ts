@@ -11,35 +11,19 @@ import {
 import type {
   AuthSession,
   PeerSignalMessage,
-  RoomMediaClockPayload,
   RoomSubscribeAckPayload,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
-import { toUserFacingError } from "@/lib/music-room-ui";
 import { getWebRTCIceServers } from "@/features/p2p";
-import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
-import type { ReceivedRoomMediaClock } from "@/features/playback/room-media-clock";
-import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
-import type { PlaybackRecoveryRecommendation } from "./room-runtime-types";
-import {
-  classifyRoomPlaybackChange,
-  resolvePlaybackSourceResetReason,
-  resolvePlaybackSurfaceKey,
-  resolvePlaybackTimelineKey,
-  type RoomChangeKind,
-  type RoomRealtimeEventKind,
-  type SourceResetReason
-} from "./room-playback-topology";
+import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
+import type { RoomStateEvent } from "@/features/room/room-state-reducer";
+import type { RoomRecoveryMode, RoomRecoveryState } from "./room-runtime-types";
 
 const subscribeAckTimeoutMs = 4_000;
 const subscribeRetryBackoffMs = [200, 500, 1_000, 2_000, 4_000] as const;
-const recoveryMediaRestartThresholdMs = 4_000;
-const recoveryDataRestartThresholdMs = 8_000;
-const recoveryFullResubscribeThresholdMs = 45_000;
 const socketDisconnectGraceMs = 6_000;
 
 export function isSocketDisconnectGraceActive(disconnectGraceUntilMs: number | null, now = Date.now()) {
@@ -70,44 +54,13 @@ export function shouldReannounceManualCacheAvailability(input: {
   }
 
   const nextKey = [input.roomId, input.roomListenerSetHash, sortedTrackIds.join(",")].join("|");
-  if (nextKey === input.lastBroadcastKey) {
-    return null;
-  }
-
-  return nextKey;
+  return nextKey === input.lastBroadcastKey ? null : nextKey;
 }
 
-export function shouldAcceptIncomingMediaSignal(input: {
+export function shouldAcceptIncomingDataSignal(input: {
   payload: PeerSignalMessage;
-  currentPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-  localPeerId: string;
-  currentTransportEpoch: number;
 }) {
-  if (input.payload.channelKind !== "media") {
-    return true;
-  }
-
-  const playback = input.currentPlayback;
-  if (!playback?.currentTrackId || !playback.sourcePeerId) {
-    return false;
-  }
-
-  if ((input.payload.mediaEpoch ?? 0) !== playback.mediaEpoch) {
-    return false;
-  }
-
-  if ((input.payload.transportEpoch ?? 0) < input.currentTransportEpoch) {
-    return false;
-  }
-
-  if (input.payload.fromPeerId === playback.sourcePeerId) {
-    return true;
-  }
-
-  return (
-    input.localPeerId === playback.sourcePeerId &&
-    input.payload.toPeerId === input.localPeerId
-  );
+  return input.payload.channelKind === "data";
 }
 
 function applyRoomSubscribeBootstrap(input: {
@@ -116,14 +69,9 @@ function applyRoomSubscribeBootstrap(input: {
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
-  recoveryModeRef: MutableRefObject<"late-join" | "rejoin" | "steady">;
-  sourceRecoveryCoordinatorRef: MutableRefObject<{
-    actionKey: string | null;
-    action: "ice-restart" | "hard-recreate" | "full-resubscribe" | null;
-    startedAtMs: number | null;
-  }>;
+  recoveryModeRef: MutableRefObject<RoomRecoveryMode>;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
-  setRoomRecoveryState: Dispatch<SetStateAction<any>>;
+  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   uploadedTracks: Record<string, unknown>;
   enableTrackCaching: boolean;
   audioUnlocked: boolean;
@@ -137,11 +85,6 @@ function applyRoomSubscribeBootstrap(input: {
     input.recoveryGenerationRef.current === null ? "late-join" : "rejoin";
   input.recoveryGenerationRef.current = input.ack.recoveryGeneration ?? null;
   input.recoveryModeRef.current = nextRecoveryMode;
-  input.sourceRecoveryCoordinatorRef.current = {
-    actionKey: null,
-    action: null,
-    startedAtMs: null
-  };
 
   const currentMembers = input.currentRoomRef.current?.room.members ?? [];
   const mergedMembers = input.ack.bootstrap.members.map((member) => {
@@ -168,7 +111,7 @@ function applyRoomSubscribeBootstrap(input: {
   const currentTrackId = input.ack.bootstrap.playback.currentTrackId ?? null;
   const hasFullLocalTrack =
     input.enableTrackCaching && !!(currentTrackId && input.uploadedTracks[currentTrackId]);
-  input.setRoomRecoveryState((current: any) => ({
+  input.setRoomRecoveryState((current) => ({
     ...current,
     phase: hasFullLocalTrack && input.audioUnlocked ? "playing-local-fallback" : "resyncing",
     mode: nextRecoveryMode,
@@ -177,7 +120,7 @@ function applyRoomSubscribeBootstrap(input: {
     bootstrapSourcePeerId: input.ack.bootstrap?.playback.sourcePeerId ?? null,
     pendingSnapshot: true,
     pendingData: input.enableTrackCaching && !hasFullLocalTrack,
-    pendingMedia: !hasFullLocalTrack,
+    pendingMedia: false,
     listenerBootstrapAttempts: current.listenerBootstrapAttempts ?? 0,
     fullLocalRecoveryActive: hasFullLocalTrack
   }));
@@ -188,45 +131,20 @@ function applyRoomSubscribeBootstrap(input: {
 export function createRoomSocketRuntime(input: {
   socketRef: MutableRefObject<RoomSocket | null>;
   recordPeerDiagnosticRef: MutableRefObject<(input: any) => void>;
-  getRemoteMediaTraceContext: (remotePeerId?: string | null) => {
-    traceKey: string | null;
-  };
-  reportRealtimeFailureRef: MutableRefObject<(input: any) => void>;
-  activePlaybackSourceRef: MutableRefObject<
-    "none" | "progressive-local" | "full-local"
-  >;
-  roomRecoveryStateRef: MutableRefObject<{
-    fullLocalRecoveryActive: boolean;
-  }>;
 }) {
   const socket = createRoomSocket();
   input.socketRef.current = socket;
 
-  const resolveSocketRecoveryMediaState = () => {
-    const source = input.activePlaybackSourceRef.current;
-    if (
-      source === "progressive-local" ||
-      source === "full-local" ||
-      input.roomRecoveryStateRef.current.fullLocalRecoveryActive
-    ) {
-      return "buffering" as const;
-    }
-
-    return "reconnecting" as const;
-  };
-
   const emitPeerSignal = (payload: PeerSignalMessage) => {
-    const traceContext =
-      payload.channelKind === "media" ? input.getRemoteMediaTraceContext(payload.toPeerId) : null;
+    if (payload.channelKind !== "data") {
+      return;
+    }
     input.recordPeerDiagnosticRef.current({
       peerId: payload.toPeerId,
-      channelKind: payload.channelKind,
+      channelKind: "data",
       direction: "sent",
       event: payload.type,
-      summary:
-        payload.channelKind === "media" && traceContext?.traceKey
-          ? `向 ${payload.toPeerId} 发送 ${payload.channelKind} ${payload.type} · ${traceContext.traceKey}`
-          : `向 ${payload.toPeerId} 发送 ${payload.channelKind} ${payload.type}`,
+      summary: `向 ${payload.toPeerId} 发送 data ${payload.type}`,
       update: (snapshot: any) => ({
         ...snapshot,
         signalStats: {
@@ -242,22 +160,20 @@ export function createRoomSocketRuntime(input: {
   };
 
   const handleSignalFailure = (payload: PeerSignalMessage, error: unknown) => {
-    input.reportRealtimeFailureRef.current({
+    input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,
-      channelKind: payload.channelKind,
+      channelKind: "data",
+      direction: "local",
       event: "signal-handle-failed",
-      summary: `Failed to apply ${payload.channelKind} ${payload.type} from ${payload.fromPeerId}`,
-      error,
-      mediaConnectionState:
-        payload.channelKind === "media" ? resolveSocketRecoveryMediaState() : undefined
+      summary: `Failed to apply data ${payload.type} from ${payload.fromPeerId}: ${String(error)}`,
+      level: "error"
     });
   };
 
   return {
     socket,
     emitPeerSignal,
-    handleSignalFailure,
-    resolveSocketRecoveryMediaState
+    handleSignalFailure
   };
 }
 
@@ -267,25 +183,6 @@ export function createRoomRealtimeRuntime(input: {
   iceConfig: any;
   socketRef: MutableRefObject<RoomSocket | null>;
   recordPeerDiagnosticRef: MutableRefObject<(input: any) => void>;
-  getRemoteMediaTraceContext: (remotePeerId?: string | null) => {
-    traceKey: string | null;
-  };
-  reportRealtimeFailureRef: MutableRefObject<(input: any) => void>;
-  activePlaybackSourceRef: MutableRefObject<
-    "none" | "progressive-local" | "full-local"
-  >;
-  roomRecoveryStateRef: MutableRefObject<{
-    fullLocalRecoveryActive: boolean;
-    generation: number | null;
-    mode: "late-join" | "rejoin" | "steady";
-  }>;
-  pieceTransferRatesRef: MutableRefObject<Map<string, any>>;
-  pieceRequestSamplesRef: MutableRefObject<Map<string, any>>;
-  sourceRecoveryCoordinatorRef: MutableRefObject<{
-    actionKey: string | null;
-    action: "ice-restart" | "hard-recreate" | "full-resubscribe" | null;
-    startedAtMs: number | null;
-  }>;
   meshRef: MutableRefObject<any>;
   chunkSchedulerRef: MutableRefObject<any>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
@@ -305,6 +202,7 @@ export function createRoomRealtimeRuntime(input: {
   withResolvedTransportHealth: (snapshot: any) => any;
   withSupervisorDiagnosticPatch: (snapshot: any, state: any) => any;
   getPieceTransferRates: (transferWindows: Map<string, any>, peerId: string, now?: number) => any;
+  pieceTransferRatesRef: MutableRefObject<Map<string, any>>;
   getPeerMedianRttMs: (state: any) => number | null;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   isPageVisible: boolean;
@@ -312,25 +210,6 @@ export function createRoomRealtimeRuntime(input: {
   currentTrackId: string | null | undefined;
   bufferHealth: "healthy" | "low" | "critical";
   enableManualTrackCaching: boolean;
-  mediaMeshRef: MutableRefObject<any>;
-  mediaTransportEpochRef: MutableRefObject<number>;
-  updateRemoteMediaDiagnostic: (
-    summary: string,
-    update?: (snapshot: any) => any,
-    options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
-  ) => void;
-  resolveMediaDiagnosticPeerId: (input: {
-    remotePeerId: string;
-    connectedPeerIds: string[];
-    currentSourcePeerId: string | null;
-  }) => string;
-  resolveSoftRecoveryMediaState: (state: any) => any;
-  setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
-  setMediaConnectionState: Dispatch<SetStateAction<any>>;
-  updateMediaTransportStatsRef: MutableRefObject<(input: { peerId: string; sample: any }) => void>;
-  isCurrentSourceOwner: boolean;
-  enableTrackCaching: boolean;
-  activePlaybackSource: any;
   resubscribeRoomRef: MutableRefObject<(() => void) | null>;
   activeSessionRef: MutableRefObject<AuthSession | null>;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -342,23 +221,16 @@ export function createRoomRealtimeRuntime(input: {
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
   deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[]) => Promise<void> | void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
-  lastRoomChangeKindRef: MutableRefObject<RoomChangeKind | null>;
-  lastSourceResetReasonRef: MutableRefObject<SourceResetReason | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
-  recoveryModeRef: MutableRefObject<"late-join" | "rejoin" | "steady">;
+  recoveryModeRef: MutableRefObject<RoomRecoveryMode>;
   socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
   socketDisconnectGraceTimeoutRef: MutableRefObject<number | null>;
   stopPresenceHeartbeat: () => void;
   stopRecoveryWatchdog: () => void;
-  clearListenerMediaRecovery: () => void;
   clearSocketDisconnectGrace: () => void;
-  bumpMediaTransportEpoch: (
-    reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
-  ) => number;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
-  setAuthoritativeMediaClock: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
-  setRoomRecoveryState: Dispatch<SetStateAction<any>>;
+  setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setStatusMessage: (value: string) => void;
   isNavigatingRoomExit: boolean;
   audioUnlocked: boolean;
@@ -370,32 +242,17 @@ export function createRoomRealtimeRuntime(input: {
     previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
     nextPlayback: RoomSnapshot["room"]["playback"];
     activeSessionId: string | null | undefined;
-    eventKind?: RoomRealtimeEventKind;
   }) => boolean;
   shouldAcceptIncomingPeerSignalRecoveryGeneration: (input: {
     payloadRecoveryGeneration: number | null | undefined;
     currentRecoveryGeneration: number | null;
   }) => boolean;
 }) {
-  input.pieceTransferRatesRef.current.clear();
-  input.pieceRequestSamplesRef.current.clear();
-  input.sourceRecoveryCoordinatorRef.current = {
-    actionKey: null,
-    action: null,
-    startedAtMs: null
-  };
-
   const iceServers = getWebRTCIceServers(input.iceConfig);
-  const { socket, emitPeerSignal, handleSignalFailure, resolveSocketRecoveryMediaState } =
-    createRoomSocketRuntime({
-      socketRef: input.socketRef,
-      recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
-      getRemoteMediaTraceContext: input.getRemoteMediaTraceContext,
-      reportRealtimeFailureRef: input.reportRealtimeFailureRef,
-      activePlaybackSourceRef: input.activePlaybackSourceRef,
-      roomRecoveryStateRef: input.roomRecoveryStateRef
-    });
-
+  const { socket, emitPeerSignal, handleSignalFailure } = createRoomSocketRuntime({
+    socketRef: input.socketRef,
+    recordPeerDiagnosticRef: input.recordPeerDiagnosticRef
+  });
   const { mesh, resyncRealtimePeers } = createRoomDataMeshRuntime({
     roomId: input.roomId,
     peerId: input.peerId,
@@ -430,82 +287,23 @@ export function createRoomRealtimeRuntime(input: {
     bufferHealth: input.bufferHealth,
     enableManualTrackCaching: input.enableManualTrackCaching,
     reportMeshResyncFailure: (error) => {
-      input.reportRealtimeFailureRef.current({
+      input.recordPeerDiagnosticRef.current({
         peerId: "system",
         channelKind: "system",
+        direction: "local",
         event: "mesh-resync-failed",
-        summary: "Failed to resync data peers",
-        error
+        summary: `Failed to resync data peers: ${String(error)}`,
+        level: "error"
       });
     }
   });
 
-  input.mediaMeshRef.current = null;
-
   return attachRoomSocketHandlers({
+    ...input,
     socket,
-    roomId: input.roomId,
-    peerId: input.peerId,
     mesh,
-    meshRef: input.meshRef,
-    socketRef: input.socketRef,
-    resubscribeRoomRef: input.resubscribeRoomRef,
-    chunkSchedulerRef: input.chunkSchedulerRef,
-    mediaMeshRef: input.mediaMeshRef,
-    connectionSupervisorStatesRef: input.connectionSupervisorStatesRef,
-    pieceRequestSamplesRef: input.pieceRequestSamplesRef,
-    sourceRecoveryCoordinatorRef: input.sourceRecoveryCoordinatorRef,
-    activeSessionRef: input.activeSessionRef,
-    activeRouteRoomIdRef: input.activeRouteRoomIdRef,
-    currentRoomRef: input.currentRoomRef,
-    uploadedTrackIdsRef: input.uploadedTrackIdsRef,
-    announceRoomTrackAvailabilityRef: input.announceRoomTrackAvailabilityRef,
-    flushPendingAvailabilityRef: input.flushPendingAvailabilityRef,
-    requestRoomSnapshotResyncRef: input.requestRoomSnapshotResyncRef,
-    ensureSourcePlaybackStartedRef: input.ensureSourcePlaybackStartedRef,
-    queueAvailabilityRef: input.queueAvailabilityRef,
-    clearAvailabilityForPeerRef: input.clearAvailabilityForPeerRef,
-    deleteRoomTrackArtifactsRef: input.deleteRoomTrackArtifactsRef,
-    recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
-    lastRealtimeRoomEventAtRef: input.lastRealtimeRoomEventAtRef,
-    lastRoomChangeKindRef: input.lastRoomChangeKindRef,
-    lastSourceResetReasonRef: input.lastSourceResetReasonRef,
-    recoveryGenerationRef: input.recoveryGenerationRef,
-    socketDisconnectGraceUntilRef: input.socketDisconnectGraceUntilRef,
-    socketDisconnectGraceTimeoutRef: input.socketDisconnectGraceTimeoutRef,
-    roomRecoveryStateRef: input.roomRecoveryStateRef,
-    lastSubscribeAckAtRef: input.lastSubscribeAckAtRef,
-    recoveryModeRef: input.recoveryModeRef,
-    stopPresenceHeartbeat: input.stopPresenceHeartbeat,
-    stopRecoveryWatchdog: input.stopRecoveryWatchdog,
-    clearListenerMediaRecovery: input.clearListenerMediaRecovery,
-    clearSocketDisconnectGrace: input.clearSocketDisconnectGrace,
-    bumpMediaTransportEpoch: input.bumpMediaTransportEpoch,
-    mediaTransportEpochRef: input.mediaTransportEpochRef,
-    dispatchRoomStateEvent: input.dispatchRoomStateEvent,
-    setConnectedPeers: input.setConnectedPeers,
-    setMediaConnectedPeers: input.setMediaConnectedPeers,
-    setAuthoritativeMediaClock: input.setAuthoritativeMediaClock,
-    setMediaConnectionState: input.setMediaConnectionState,
-    setRoomRecoveryState: input.setRoomRecoveryState,
-    setStatusMessage: input.setStatusMessage,
-    isNavigatingRoomExit: input.isNavigatingRoomExit,
-    audioUnlocked: input.audioUnlocked,
-    enableManualTrackCaching: input.enableManualTrackCaching,
-    enableTrackCaching: input.enableTrackCaching,
-    uploadedTracks: input.uploadedTracks,
-    emitPresence: input.emitPresence,
-    startPresenceHeartbeat: input.startPresenceHeartbeat,
-    exitCurrentRoom: input.exitCurrentRoom,
-    handleSignalFailure,
-    resolveSocketRecoveryMediaState,
-    shouldKickSourcePlaybackFromRealtimeEvent: input.shouldKickSourcePlaybackFromRealtimeEvent,
-    shouldAcceptIncomingPeerSignalRecoveryGeneration:
-      input.shouldAcceptIncomingPeerSignalRecoveryGeneration,
-    getRemoteMediaTraceContext: input.getRemoteMediaTraceContext,
-    updateRemoteMediaDiagnostic: (() => {}) as any,
-    withResolvedTransportHealth: input.withResolvedTransportHealth,
-    resyncRealtimePeers
+    resyncRealtimePeers,
+    handleSignalFailure
   });
 }
 
@@ -525,53 +323,26 @@ export function useRoomRealtimeConnection(input: {
   roomListenerSetHash: string;
   uploadedTrackIds: string[];
   connectedPeers: string[];
-  roomRecoveryState: any;
-  setRoomRecoveryState: Dispatch<SetStateAction<any>>;
-  isCurrentSourceOwner: boolean;
   uploadedTracks: Record<string, unknown>;
   announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
-  lastDataActivityAtRef: MutableRefObject<number | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
-  recoveryModeRef: MutableRefObject<"late-join" | "rejoin" | "steady">;
+  recoveryModeRef: MutableRefObject<RoomRecoveryMode>;
   resubscribeRoomRef: MutableRefObject<(() => void) | null>;
-  meshRef: MutableRefObject<{
-    restartPeer: (peerId: string) => Promise<unknown>;
-  } | null>;
-  mediaMeshRef: MutableRefObject<unknown>;
-  bumpMediaTransportEpoch: (
-    reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
-  ) => number;
-  resolveSourceContinuityState: (now?: number) => {
-    audibleSource: "none" | "progressive-local" | "full-local" | null | undefined;
-    consecutiveNoProgressMs: number | null;
-  };
-  resolveSourceRecoverySuppressedReason: (now?: number) => string | null;
+  meshRef: MutableRefObject<{ restartPeer: (peerId: string) => Promise<unknown> } | null>;
   socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
   requestRoomSnapshotResync: (
     reason: RoomSnapshotResyncReason,
     roomId?: string | null
   ) => Promise<void>;
   getCurrentPlaybackConnectionKey?: () => string | null;
-  queuePlaybackRecoveryRecommendation?: (
-    recommendation: PlaybackRecoveryRecommendation
-  ) => void;
+  queuePlaybackRecoveryRecommendation?: (recommendation: any) => void;
 }) {
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
   const recoveryWatchdogIntervalRef = useRef<number | null>(null);
-  const recoveryWatchdogActionsRef = useRef<{
-    snapshotResyncKey: string | null;
-    dataRestartKey: string | null;
-    fullResubscribeKey: string | null;
-  }>({
-    snapshotResyncKey: null,
-    dataRestartKey: null,
-    fullResubscribeKey: null
-  });
   const presenceRepairKeyRef = useRef<string | null>(null);
-  const trackMetadataRepairKeyRef = useRef<string | null>(null);
   const initialRoomSnapshotResyncKeyRef = useRef<string | null>(null);
   const lastManualCacheAvailabilityBroadcastKeyRef = useRef<string | null>(null);
 
@@ -644,18 +415,14 @@ export function useRoomRealtimeConnection(input: {
       if (!activeRoomId || activeRoomId !== input.roomSnapshot?.room.id || !socket?.connected) {
         return;
       }
-
       if (Date.now() - input.lastRealtimeRoomEventAtRef.current < 8_000) {
         return;
       }
-
       input.lastRealtimeRoomEventAtRef.current = Date.now();
       void input.requestRoomSnapshotResync("stale-watchdog", input.roomSnapshot.room.id);
     }, 4_000);
 
-    return () => {
-      stopRoomSnapshotWatchdog();
-    };
+    return () => stopRoomSnapshotWatchdog();
   }, [
     input.activeRouteRoomIdRef,
     input.activeSession?.userId,
@@ -673,7 +440,6 @@ export function useRoomRealtimeConnection(input: {
       presenceRepairKeyRef.current = null;
       return;
     }
-
     const localMember =
       input.roomSnapshot.room.members.find((member) => member.id === input.activeSession?.userId) ??
       null;
@@ -681,12 +447,10 @@ export function useRoomRealtimeConnection(input: {
       presenceRepairKeyRef.current = null;
       return;
     }
-
     if (localMember.presenceState === "online" && localMember.peerId === input.peerId) {
       presenceRepairKeyRef.current = null;
       return;
     }
-
     const repairKey = [
       input.roomSnapshot.room.id,
       input.roomSnapshot.room.presenceRevision,
@@ -698,12 +462,9 @@ export function useRoomRealtimeConnection(input: {
       return;
     }
     presenceRepairKeyRef.current = repairKey;
-
-    const socket = input.socketRef.current;
-    if (!socket?.connected) {
+    if (!input.socketRef.current?.connected) {
       return;
     }
-
     startPresenceHeartbeat();
     emitPresence();
     void input.requestRoomSnapshotResync("subscribe-ack", input.roomSnapshot.room.id);
@@ -712,9 +473,7 @@ export function useRoomRealtimeConnection(input: {
     input.activeSession?.userId,
     input.peerId,
     input.requestRoomSnapshotResync,
-    input.roomSnapshot?.room.id,
-    input.roomSnapshot?.room.members,
-    input.roomSnapshot?.room.presenceRevision,
+    input.roomSnapshot,
     input.socketRef,
     startPresenceHeartbeat
   ]);
@@ -732,13 +491,11 @@ export function useRoomRealtimeConnection(input: {
       }
       return;
     }
-
     const resyncKey = `${input.activeSession.userId}:${input.initialRoomId}`;
     if (initialRoomSnapshotResyncKeyRef.current === resyncKey) {
       return;
     }
     initialRoomSnapshotResyncKeyRef.current = resyncKey;
-
     void input.requestRoomSnapshotResync("subscribe-ack", input.initialRoomId);
   }, [
     input.activeSession?.userId,
@@ -750,36 +507,6 @@ export function useRoomRealtimeConnection(input: {
   ]);
 
   useEffect(() => {
-    const roomId = input.roomSnapshot?.room.id ?? null;
-    const currentTrackId = input.roomSnapshot?.room.playback.currentTrackId ?? null;
-    const playbackQueueVersion = input.roomSnapshot?.room.playback.queueVersion ?? 0;
-
-    if (!roomId || !currentTrackId) {
-      trackMetadataRepairKeyRef.current = null;
-      return;
-    }
-
-    if (input.roomSnapshot?.tracks.some((track) => track.id === currentTrackId)) {
-      trackMetadataRepairKeyRef.current = null;
-      return;
-    }
-
-    const repairKey = [roomId, currentTrackId, playbackQueueVersion].join("|");
-    if (trackMetadataRepairKeyRef.current === repairKey) {
-      return;
-    }
-    trackMetadataRepairKeyRef.current = repairKey;
-
-    void input.requestRoomSnapshotResync("subscribe-ack", roomId);
-  }, [
-    input.requestRoomSnapshotResync,
-    input.roomSnapshot?.room.id,
-    input.roomSnapshot?.room.playback.currentTrackId,
-    input.roomSnapshot?.room.playback.queueVersion,
-    input.roomSnapshot?.tracks
-  ]);
-
-  useEffect(() => {
     const nextBroadcastKey = shouldReannounceManualCacheAvailability({
       enableManualTrackCaching: input.enableManualTrackCaching,
       roomId: input.roomSnapshot?.room.id,
@@ -787,7 +514,6 @@ export function useRoomRealtimeConnection(input: {
       uploadedTrackIds: input.roomSnapshot?.tracks.map((track) => track.id) ?? input.uploadedTrackIds,
       lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
     });
-
     if (!nextBroadcastKey) {
       if (
         !input.roomSnapshot?.room.id ||
@@ -798,7 +524,6 @@ export function useRoomRealtimeConnection(input: {
       }
       return;
     }
-
     lastManualCacheAvailabilityBroadcastKeyRef.current = nextBroadcastKey;
     for (const trackId of input.roomSnapshot?.tracks.map((track) => track.id) ?? input.uploadedTrackIds) {
       void input.announceRoomTrackAvailabilityRef.current(trackId);
@@ -813,227 +538,33 @@ export function useRoomRealtimeConnection(input: {
   ]);
 
   useEffect(() => {
-    const playback = input.roomSnapshot?.room.playback ?? null;
-    const currentTrackId = playback?.currentTrackId ?? null;
-    const sourcePeerId = playback?.sourcePeerId ?? null;
-    const hasFullLocalTrack =
-      input.enableTrackCaching && !!(currentTrackId && input.uploadedTracks[currentTrackId]);
-    const dataReady =
-      !input.enableTrackCaching || !!(sourcePeerId && input.connectedPeers.includes(sourcePeerId));
-    const continuity = input.resolveSourceContinuityState();
-    const mediaReady =
-      continuity.audibleSource === "progressive-local" ||
-      continuity.audibleSource === "full-local";
-
-    if (
-      !input.roomSnapshot?.room.id ||
-      !playback ||
-      !playback.currentTrackId ||
-      !input.roomRecoveryState.generation ||
-      input.isCurrentSourceOwner
-    ) {
-      stopRecoveryWatchdog();
-      recoveryWatchdogActionsRef.current = {
-        snapshotResyncKey: null,
-        dataRestartKey: null,
-        fullResubscribeKey: null
-      };
-      return;
-    }
-
-    input.setRoomRecoveryState((current: any) => {
-      const nextPhase =
-        input.enableTrackCaching && current.fullLocalRecoveryActive && hasFullLocalTrack
-          ? "playing-local-fallback"
-            : current.pendingSnapshot
-              ? "resyncing"
-              : !dataReady
-                ? "bootstrapping-data"
-                : "steady";
-      const nextFullLocalRecoveryActive =
-        input.enableTrackCaching && (current.fullLocalRecoveryActive || hasFullLocalTrack);
-      if (
-        current.phase === nextPhase &&
-        current.pendingData === !dataReady &&
-        current.pendingMedia === !mediaReady &&
-        current.fullLocalRecoveryActive === nextFullLocalRecoveryActive
-      ) {
-        return current;
-      }
-
-      return {
-        ...current,
-        phase: nextPhase,
-        pendingData: !dataReady,
-        pendingMedia: !mediaReady,
-        fullLocalRecoveryActive: nextFullLocalRecoveryActive
-      };
-    });
-
-    if (playback.status !== "playing" || input.lastSubscribeAckAtRef.current === null) {
+    if (!input.roomSnapshot?.room.id) {
       stopRecoveryWatchdog();
       return;
     }
-
     stopRecoveryWatchdog();
     recoveryWatchdogIntervalRef.current = window.setInterval(() => {
-      const ackAt = input.lastSubscribeAckAtRef.current;
-      const currentPlayback = input.currentRoomRef.current?.room.playback;
-      const roomId = input.roomSnapshot?.room.id ?? null;
-      const latestTrackId = currentPlayback?.currentTrackId ?? null;
-      const latestSourcePeerId = currentPlayback?.sourcePeerId ?? null;
-      const latestGeneration = input.recoveryGenerationRef.current;
-      if (
-        !ackAt ||
-        !roomId ||
-        !currentPlayback ||
-        !latestTrackId ||
-        !latestSourcePeerId ||
-        latestGeneration === null
-      ) {
+      if (!input.roomSnapshot?.room.id || !input.enableTrackCaching) {
         return;
       }
-
-      const now = Date.now();
-      const ageMs = now - ackAt;
-      const recoveryKey = [
-        roomId,
-        latestTrackId,
-        currentPlayback.mediaEpoch,
-        latestGeneration,
-        latestSourcePeerId
-      ].join("|");
-      const latestHasFullLocalTrack =
-        input.enableTrackCaching && !!input.uploadedTracks[latestTrackId];
-      const latestDataReady =
-        !input.enableTrackCaching || input.connectedPeers.includes(latestSourcePeerId);
-      const continuity = input.resolveSourceContinuityState(now);
-      const noProgressMs = continuity.consecutiveNoProgressMs ?? ageMs;
-      const noDataProgressMs =
-        input.lastDataActivityAtRef.current !== null
-          ? now - input.lastDataActivityAtRef.current
-          : ageMs;
-      const recoverySuppressedReason = input.resolveSourceRecoverySuppressedReason(now);
-      const socketDisconnectGraceActive = isSocketDisconnectGraceActive(
-        input.socketDisconnectGraceUntilRef.current,
-        now
-      );
-      const escalationGuardReason = shouldSuppressPlaybackWatchdogEscalation({
-        recoverySuppressedReason,
-        socketDisconnectGraceActive
-      })
-        ? (recoverySuppressedReason ?? "socket-disconnect-grace")
-        : null;
-      const hasProtectedAudibleSource =
-        continuity.audibleSource === "progressive-local" ||
-        continuity.audibleSource === "full-local";
-      const latestMediaReady = hasProtectedAudibleSource;
-
-      if (input.roomRecoveryState.pendingSnapshot && ageMs >= 1_500) {
-        const snapshotResyncKey = `${recoveryKey}|snapshot`;
-        if (recoveryWatchdogActionsRef.current.snapshotResyncKey !== snapshotResyncKey) {
-          recoveryWatchdogActionsRef.current.snapshotResyncKey = snapshotResyncKey;
-          void input.requestRoomSnapshotResync("subscribe-ack", roomId);
-        }
+      if (input.connectedPeers.length === 0 && input.roomSnapshot.room.members.length > 1) {
+        input.queuePlaybackRecoveryRecommendation?.({
+          playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
+          peerId: null,
+          scope: "data",
+          level: "soft",
+          reason: "watchdog-data-stalled",
+          observedNoProgressMs: null
+        });
       }
-
-      if (
-        !escalationGuardReason &&
-        !latestDataReady &&
-        noDataProgressMs >= recoveryDataRestartThresholdMs
-      ) {
-        const dataRestartKey = `${recoveryKey}|data`;
-        if (recoveryWatchdogActionsRef.current.dataRestartKey !== dataRestartKey) {
-          recoveryWatchdogActionsRef.current.dataRestartKey = dataRestartKey;
-          input.setRoomRecoveryState((current: any) => ({
-            ...current,
-            phase: "bootstrapping-data",
-            listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
-          }));
-          if (input.queuePlaybackRecoveryRecommendation) {
-            input.queuePlaybackRecoveryRecommendation({
-              playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
-              peerId: latestSourcePeerId,
-              scope: "data",
-              level: "hard-recreate",
-              reason: "watchdog-data-stalled",
-              observedNoProgressMs: noDataProgressMs
-            });
-          } else {
-            void input.meshRef.current?.restartPeer(latestSourcePeerId);
-          }
-        }
-      }
-
-      if (!latestMediaReady && noProgressMs >= recoveryMediaRestartThresholdMs) {
-        if (latestHasFullLocalTrack) {
-          input.setRoomRecoveryState((current: any) => ({
-            ...current,
-            phase: "playing-local-fallback",
-            fullLocalRecoveryActive: true,
-            pendingMedia: true
-          }));
-        }
-      }
-
-      if (
-        !latestDataReady &&
-        !latestMediaReady &&
-        noProgressMs >= recoveryFullResubscribeThresholdMs &&
-        noDataProgressMs >= recoveryFullResubscribeThresholdMs &&
-        !hasProtectedAudibleSource &&
-        !latestHasFullLocalTrack &&
-        !escalationGuardReason
-      ) {
-        const fullResubscribeKey = `${recoveryKey}|resubscribe`;
-        if (recoveryWatchdogActionsRef.current.fullResubscribeKey !== fullResubscribeKey) {
-          recoveryWatchdogActionsRef.current.fullResubscribeKey = fullResubscribeKey;
-          input.setRoomRecoveryState((current: any) => ({
-            ...current,
-            phase: "resyncing",
-            pendingSnapshot: true,
-            listenerBootstrapAttempts: (current.listenerBootstrapAttempts ?? 0) + 1
-          }));
-          if (input.queuePlaybackRecoveryRecommendation) {
-            input.queuePlaybackRecoveryRecommendation({
-              playbackConnectionKey: input.getCurrentPlaybackConnectionKey?.() ?? null,
-              peerId: latestSourcePeerId,
-              scope: "room",
-              level: "full-resubscribe",
-              reason: "watchdog-full-resubscribe",
-              observedNoProgressMs: noProgressMs
-            });
-          } else {
-            input.resubscribeRoomRef.current?.();
-            void input.meshRef.current?.restartPeer(latestSourcePeerId);
-          }
-        }
-      }
-    }, 500);
-
-    return () => {
-      stopRecoveryWatchdog();
-    };
+    }, 5_000);
+    return () => stopRecoveryWatchdog();
   }, [
-    input.connectedPeers,
+    input.connectedPeers.length,
     input.enableTrackCaching,
-    input.isCurrentSourceOwner,
-    input.lastDataActivityAtRef,
-    input.lastSubscribeAckAtRef,
-    input.meshRef,
-    input.recoveryGenerationRef,
-    input.requestRoomSnapshotResync,
-    input.resolveSourceContinuityState,
-    input.resolveSourceRecoverySuppressedReason,
-    input.roomRecoveryState.fullLocalRecoveryActive,
-    input.roomRecoveryState.generation,
-    input.roomRecoveryState.pendingSnapshot,
+    input.getCurrentPlaybackConnectionKey,
+    input.queuePlaybackRecoveryRecommendation,
     input.roomSnapshot,
-    input.socketDisconnectGraceUntilRef,
-    input.setRoomRecoveryState,
-    input.uploadedTracks,
-    input.currentRoomRef,
-    input.resubscribeRoomRef,
     stopRecoveryWatchdog
   ]);
 
@@ -1045,108 +576,12 @@ export function useRoomRealtimeConnection(input: {
   };
 }
 
-export function attachRoomSocketHandlers(input: {
-  socket: RoomSocket;
-  roomId: string;
-  peerId: string;
-  mesh: {
-    syncPeers: (peerIds: string[]) => Promise<void>;
-    handleSignal: (payload: PeerSignalMessage) => Promise<void>;
-    destroy: () => void;
-  };
-  meshRef: MutableRefObject<unknown>;
-  socketRef: MutableRefObject<RoomSocket | null>;
-  resubscribeRoomRef: MutableRefObject<(() => void) | null>;
-  chunkSchedulerRef: MutableRefObject<unknown>;
-  mediaMeshRef: MutableRefObject<unknown>;
-  connectionSupervisorStatesRef: MutableRefObject<Map<string, unknown>>;
-  pieceRequestSamplesRef: MutableRefObject<Map<string, unknown>>;
-  sourceRecoveryCoordinatorRef: MutableRefObject<{
-    actionKey: string | null;
-    action: "ice-restart" | "hard-recreate" | "full-resubscribe" | null;
-    startedAtMs: number | null;
-  }>;
-  activeSessionRef: MutableRefObject<AuthSession | null>;
-  activeRouteRoomIdRef: MutableRefObject<string | null>;
-  currentRoomRef: MutableRefObject<RoomSnapshot | null>;
-  uploadedTrackIdsRef: MutableRefObject<string[]>;
-  announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
-  flushPendingAvailabilityRef: MutableRefObject<() => void>;
-  requestRoomSnapshotResyncRef: MutableRefObject<
-    (reason: RoomSnapshotResyncReason, roomId?: string | null) => Promise<void>
-  >;
-  ensureSourcePlaybackStartedRef: MutableRefObject<() => Promise<void>>;
-  queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
-  clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
-  deleteRoomTrackArtifactsRef: MutableRefObject<
-    (trackIds: string[]) => Promise<void> | void
-  >;
-  recordPeerDiagnosticRef: MutableRefObject<(input: any) => void>;
-  lastRealtimeRoomEventAtRef: MutableRefObject<number>;
-  lastRoomChangeKindRef: MutableRefObject<RoomChangeKind | null>;
-  lastSourceResetReasonRef: MutableRefObject<SourceResetReason | null>;
-  recoveryGenerationRef: MutableRefObject<number | null>;
-  socketDisconnectGraceUntilRef: MutableRefObject<number | null>;
-  socketDisconnectGraceTimeoutRef: MutableRefObject<number | null>;
-  roomRecoveryStateRef: MutableRefObject<{
-    fullLocalRecoveryActive: boolean;
-    generation: number | null;
-    mode: "late-join" | "rejoin" | "steady";
-  }>;
-  lastSubscribeAckAtRef: MutableRefObject<number | null>;
-  recoveryModeRef: MutableRefObject<"late-join" | "rejoin" | "steady">;
-  stopPresenceHeartbeat: () => void;
-  stopRecoveryWatchdog: () => void;
-  clearListenerMediaRecovery: () => void;
-  clearSocketDisconnectGrace: () => void;
-  bumpMediaTransportEpoch: (
-    reason?: "source-changed" | "socket-reconnect" | "explicit-hard-reset" | "none"
-  ) => number;
-  mediaTransportEpochRef: MutableRefObject<number>;
-  dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
-  setConnectedPeers: Dispatch<SetStateAction<string[]>>;
-  setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
-  setAuthoritativeMediaClock: Dispatch<SetStateAction<ReceivedRoomMediaClock | null>>;
-  setMediaConnectionState: Dispatch<SetStateAction<any>>;
-  setRoomRecoveryState: Dispatch<SetStateAction<any>>;
-  setStatusMessage: (value: string) => void;
-  isNavigatingRoomExit: boolean;
-  audioUnlocked: boolean;
-  enableManualTrackCaching: boolean;
-  enableTrackCaching: boolean;
-  uploadedTracks: Record<string, unknown>;
-  emitPresence: () => void;
-  startPresenceHeartbeat: () => void;
-  exitCurrentRoom: (message: string) => void;
-  handleSignalFailure: (payload: PeerSignalMessage, error: unknown) => void;
-  resolveSocketRecoveryMediaState: () => "buffering" | "reconnecting";
-  shouldKickSourcePlaybackFromRealtimeEvent: (input: {
-    previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-    nextPlayback: RoomSnapshot["room"]["playback"];
-    activeSessionId: string | null | undefined;
-    eventKind?: RoomRealtimeEventKind;
-  }) => boolean;
-  shouldAcceptIncomingPeerSignalRecoveryGeneration: (input: {
-    payloadRecoveryGeneration: number | null | undefined;
-    currentRecoveryGeneration: number | null;
-  }) => boolean;
-  getRemoteMediaTraceContext: (remotePeerId?: string | null) => {
-    traceKey: string | null;
-  };
-  updateRemoteMediaDiagnostic: (
-    summary: string,
-    update?: (snapshot: any) => any,
-    options?: { event?: string; recordEvent?: boolean; level?: "info" | "warning" | "error" }
-  ) => void;
-  withResolvedTransportHealth: (snapshot: any) => any;
-  resyncRealtimePeers: (
-    members?: Array<{ peerId: string | null }>
-  ) => void;
-}) {
+function attachRoomSocketHandlers(input: any) {
+  const socket = input.socket as RoomSocket;
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
 
-  const clearSubscribeRetry = () => {
+  const clearSubscribeTimers = () => {
     if (subscribeRetryId !== null) {
       window.clearTimeout(subscribeRetryId);
       subscribeRetryId = null;
@@ -1157,96 +592,23 @@ export function attachRoomSocketHandlers(input: {
     }
   };
 
-  const clearSocketDisconnectGrace = () => {
-    const hadGrace = isSocketDisconnectGraceActive(input.socketDisconnectGraceUntilRef.current);
-    input.clearSocketDisconnectGrace();
-    if (!hadGrace) {
-      return;
-    }
-    input.updateRemoteMediaDiagnostic(
-      "Socket 断线保护窗口结束",
-      undefined,
-      {
-        event: "socket-disconnect-grace",
-        recordEvent: false
-      }
-    );
-  };
-
-  const recordRoomChangeDiagnostics = (inputValue: {
-    eventKind: RoomRealtimeEventKind;
-    previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-    nextPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-  }) => {
-    const roomChangeKind = classifyRoomPlaybackChange({
-      eventKind: inputValue.eventKind,
-      previousPlayback: inputValue.previousPlayback,
-      nextPlayback: inputValue.nextPlayback
-    });
-    const sourceResetReason = resolvePlaybackSourceResetReason({
-      previousPlayback: inputValue.previousPlayback,
-      nextPlayback: inputValue.nextPlayback
-    });
-    input.lastRoomChangeKindRef.current = roomChangeKind;
-    input.lastSourceResetReasonRef.current = sourceResetReason;
-    input.recordPeerDiagnosticRef.current({
-      peerId: "system",
-      channelKind: "system",
-      direction: "local",
-      event: "room-change-kind",
-      summary: `房间变更 ${roomChangeKind}`,
-      recordEvent: false,
-      update: (snapshot: any) => ({
-        ...snapshot,
-        progressivePlaybackStatus: {
-          ...(
-            snapshot.progressivePlaybackStatus ??
-            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-          ),
-          playbackSurfaceKey: resolvePlaybackSurfaceKey(inputValue.nextPlayback),
-          playbackTimelineKey: resolvePlaybackTimelineKey(inputValue.nextPlayback),
-          roomChangeKind,
-          sourceResetReason
-        }
-      })
-    });
-
-    return roomChangeKind;
-  };
-
   const scheduleSubscribeRetry = (attempt: number) => {
     if (subscribeRetryId !== null) {
       return;
     }
-
-    const delay =
+    const delayMs =
       subscribeRetryBackoffMs[Math.min(attempt, subscribeRetryBackoffMs.length - 1)] ??
       subscribeRetryBackoffMs[subscribeRetryBackoffMs.length - 1];
     subscribeRetryId = window.setTimeout(() => {
       subscribeRetryId = null;
       subscribeToRoom(attempt);
-    }, delay);
+    }, delayMs);
   };
 
   const subscribeToRoom = (attempt = 0) => {
-    const currentSession = input.activeSessionRef.current;
-    if (!input.socket.connected || !currentSession?.userId || !input.peerId) {
-      scheduleSubscribeRetry(attempt + 1);
+    if (!input.activeSessionRef.current?.userId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-
-    input.setRoomRecoveryState((current: any) => ({
-      ...current,
-      phase: "joining",
-      mode: current.generation === null ? "late-join" : "rejoin",
-      pendingSnapshot: true,
-      pendingData: input.enableTrackCaching,
-      pendingMedia: true,
-      bootstrapStartedAt: null,
-      bootstrapSourcePeerId: null,
-      listenerBootstrapAttempts: 0,
-      fullLocalRecoveryActive: false
-    }));
 
     if (subscribeAckTimeoutId !== null) {
       window.clearTimeout(subscribeAckTimeoutId);
@@ -1256,82 +618,52 @@ export function attachRoomSocketHandlers(input: {
       scheduleSubscribeRetry(attempt + 1);
     }, subscribeAckTimeoutMs);
 
-    input.socket.emit(
+    socket.emit(
       "room.subscribe",
       {
         roomId: input.roomId,
-        sessionId: currentSession.userId,
         peerId: input.peerId
       },
-      (response?: RoomSubscribeAckPayload) => {
+      (ack: RoomSubscribeAckPayload) => {
         if (subscribeAckTimeoutId !== null) {
           window.clearTimeout(subscribeAckTimeoutId);
           subscribeAckTimeoutId = null;
         }
-        if (!response?.ok) {
+
+        if (!ack.ok) {
           scheduleSubscribeRetry(attempt + 1);
           return;
         }
 
-        clearSubscribeRetry();
-        clearSocketDisconnectGrace();
-        const appliedBootstrap = applyRoomSubscribeBootstrap({
-          ack: response,
+        applyRoomSubscribeBootstrap({
+          ack,
           activeRouteRoomIdRef: input.activeRouteRoomIdRef,
           currentRoomRef: input.currentRoomRef,
           lastSubscribeAckAtRef: input.lastSubscribeAckAtRef,
           recoveryGenerationRef: input.recoveryGenerationRef,
           recoveryModeRef: input.recoveryModeRef,
-          sourceRecoveryCoordinatorRef: input.sourceRecoveryCoordinatorRef,
           dispatchRoomStateEvent: input.dispatchRoomStateEvent,
           setRoomRecoveryState: input.setRoomRecoveryState,
           uploadedTracks: input.uploadedTracks,
           enableTrackCaching: input.enableTrackCaching,
           audioUnlocked: input.audioUnlocked
         });
-        if (!appliedBootstrap) {
-          scheduleSubscribeRetry(attempt + 1);
-          return;
-        }
-        input.startPresenceHeartbeat();
-        input.resyncRealtimePeers(response.bootstrap?.members ?? undefined);
-        input.flushPendingAvailabilityRef.current();
-        if (input.enableManualTrackCaching) {
-          for (const trackId of input.currentRoomRef.current?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
-            void input.announceRoomTrackAvailabilityRef.current(trackId);
-          }
-        }
-        if (
-          input.currentRoomRef.current?.room.playback.sourceSessionId ===
-          input.activeSessionRef.current?.userId
-        ) {
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-        void input.requestRoomSnapshotResyncRef.current("subscribe-ack", input.roomId);
       }
     );
   };
 
   input.resubscribeRoomRef.current = () => {
-    if (!input.socket.connected) {
-      input.socket.connect();
-    }
+    clearSubscribeTimers();
     subscribeToRoom();
-    input.emitPresence();
     void input.requestRoomSnapshotResyncRef.current("subscribe-ack", input.roomId);
   };
 
-  const exitAndStopPresence = (message: string) => {
-    input.stopPresenceHeartbeat();
-    input.exitCurrentRoom(message);
-  };
-
-  input.socket.on("connect", () => {
-    clearSocketDisconnectGrace();
+  socket.on("connect", () => {
+    input.clearSocketDisconnectGrace();
     subscribeToRoom();
     input.flushPendingAvailabilityRef.current();
     if (input.enableManualTrackCaching) {
-      for (const trackId of input.currentRoomRef.current?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
+      for (const trackId of input.currentRoomRef.current?.tracks.map((track: any) => track.id) ?? input.uploadedTrackIdsRef.current) {
         void input.announceRoomTrackAvailabilityRef.current(trackId);
       }
     }
@@ -1343,156 +675,64 @@ export function attachRoomSocketHandlers(input: {
       void input.ensureSourcePlaybackStartedRef.current();
     }
     void input.requestRoomSnapshotResyncRef.current("socket-connect", input.roomId);
-    const joinCode = input.currentRoomRef.current?.room.joinCode;
-    if (joinCode) {
-      input.setStatusMessage(`已连接到房间 ${joinCode}。`);
-    }
   });
 
-  let didReplayLocalAvailability = false;
+  const applyPlaybackKick = (previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined, nextPlayback: RoomSnapshot["room"]["playback"]) => {
+    const shouldKick = input.shouldKickSourcePlaybackFromRealtimeEvent({
+      previousPlayback,
+      nextPlayback,
+      activeSessionId: input.activeSessionRef.current?.userId
+    });
+    if (shouldKick) {
+      window.setTimeout(() => {
+        if (input.activeRouteRoomIdRef.current === input.roomId) {
+          void input.ensureSourcePlaybackStartedRef.current();
+        }
+      }, 0);
+    }
+  };
 
-  input.socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
+  socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
     if (snapshot.room.id !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
 
-    recordRoomChangeDiagnostics({
-      eventKind: "snapshot",
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: snapshot.room.playback
-    });
-    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: snapshot.room.playback,
-      activeSessionId: input.activeSessionRef.current?.userId,
-      eventKind: "snapshot"
-    });
-
+    const previousPlayback = input.currentRoomRef.current?.room.playback;
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.dispatchRoomStateEvent({
       type: "server-snapshot",
       snapshot
     });
-    input.setRoomRecoveryState((current: any) => ({
+    input.setRoomRecoveryState((current: RoomRecoveryState) => ({
       ...current,
-      phase:
-        input.enableTrackCaching && current.fullLocalRecoveryActive
-          ? "playing-local-fallback"
-          : "resyncing",
-      pendingSnapshot: false
+      phase: current.fullLocalRecoveryActive ? "playing-local-fallback" : "resyncing",
+      pendingSnapshot: false,
+      pendingMedia: false
     }));
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-
-    if (!didReplayLocalAvailability) {
-      didReplayLocalAvailability = true;
-      if (input.enableManualTrackCaching) {
-        for (const trackId of input.uploadedTrackIdsRef.current) {
-          void input.announceRoomTrackAvailabilityRef.current(trackId);
-        }
-      }
-    }
-
     input.flushPendingAvailabilityRef.current();
     input.resyncRealtimePeers(snapshot.room.members);
-    if (shouldKickSourcePlayback) {
-      window.setTimeout(() => {
-        if (input.activeRouteRoomIdRef.current === input.roomId) {
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-      }, 0);
-    }
+    applyPlaybackKick(previousPlayback, snapshot.room.playback);
   });
 
-  input.socket.on("room.playback.patch", ({ playback }) => {
+  socket.on("room.playback.patch", ({ playback }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-
-    recordRoomChangeDiagnostics({
-      eventKind: "playback",
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback
-    });
-    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId,
-      eventKind: "playback"
-    });
-
+    const previousPlayback = input.currentRoomRef.current?.room.playback;
     input.dispatchRoomStateEvent({
       type: "server-playback-patch",
       roomId: input.roomId,
       playback
     });
-
-    if (shouldKickSourcePlayback) {
-      window.setTimeout(() => {
-        if (input.activeRouteRoomIdRef.current === input.roomId) {
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-      }, 0);
-    }
+    applyPlaybackKick(previousPlayback, playback);
   });
 
-  input.socket.on("room.media.clock", (payload: RoomMediaClockPayload) => {
-    if (payload.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-
-    const currentPlayback = input.currentRoomRef.current?.room.playback;
-    if (
-      !currentPlayback ||
-      payload.mediaEpoch !== currentPlayback.mediaEpoch ||
-      (currentPlayback.sourcePeerId && payload.sourcePeerId !== currentPlayback.sourcePeerId)
-    ) {
-      return;
-    }
-
-    input.setAuthoritativeMediaClock((current: any) => {
-      if (
-        current &&
-        current.mediaEpoch === payload.mediaEpoch &&
-        current.sourcePeerId === payload.sourcePeerId &&
-        current.relayGeneration > payload.relayGeneration
-      ) {
-        return current;
-      }
-
-      if (
-        current &&
-        current.mediaEpoch === payload.mediaEpoch &&
-        current.sourcePeerId === payload.sourcePeerId &&
-        current.relayGeneration === payload.relayGeneration &&
-        current.sequence > payload.sequence
-      ) {
-        return current;
-      }
-
-      return {
-        ...payload,
-        receivedAtMs: Date.now()
-      };
-    });
-  });
-
-  input.socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
+  socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-
-    recordRoomChangeDiagnostics({
-      eventKind: "queue",
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback
-    });
-    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId,
-      eventKind: "queue"
-    });
-
+    const previousPlayback = input.currentRoomRef.current?.room.playback;
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.dispatchRoomStateEvent({
       type: "server-queue-patch",
@@ -1502,32 +742,14 @@ export function attachRoomSocketHandlers(input: {
       roomRevision
     });
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    if (shouldKickSourcePlayback) {
-      window.setTimeout(() => {
-        if (input.activeRouteRoomIdRef.current === input.roomId) {
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-      }, 0);
-    }
+    applyPlaybackKick(previousPlayback, playback);
   });
 
-  input.socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
+  socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-
-    recordRoomChangeDiagnostics({
-      eventKind: "presence",
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback
-    });
-    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId,
-      eventKind: "presence"
-    });
-
+    const previousPlayback = input.currentRoomRef.current?.room.playback;
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.dispatchRoomStateEvent({
       type: "server-presence-patch",
@@ -1539,32 +761,14 @@ export function attachRoomSocketHandlers(input: {
     });
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
     input.resyncRealtimePeers(members);
-    if (shouldKickSourcePlayback) {
-      window.setTimeout(() => {
-        if (input.activeRouteRoomIdRef.current === input.roomId) {
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-      }, 0);
-    }
+    applyPlaybackKick(previousPlayback, playback);
   });
 
-  input.socket.on("room.library.patch", ({ tracks, queue, playback, roomRevision }) => {
+  socket.on("room.library.patch", ({ tracks, queue, playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-
-    recordRoomChangeDiagnostics({
-      eventKind: "library",
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback
-    });
-    const shouldKickSourcePlayback = input.shouldKickSourcePlaybackFromRealtimeEvent({
-      previousPlayback: input.currentRoomRef.current?.room.playback,
-      nextPlayback: playback,
-      activeSessionId: input.activeSessionRef.current?.userId,
-      eventKind: "library"
-    });
-
+    const previousPlayback = input.currentRoomRef.current?.room.playback;
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.dispatchRoomStateEvent({
       type: "server-library-patch",
@@ -1575,20 +779,16 @@ export function attachRoomSocketHandlers(input: {
       roomRevision
     });
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    if (shouldKickSourcePlayback) {
-      window.setTimeout(() => {
-        if (input.activeRouteRoomIdRef.current === input.roomId) {
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-      }, 0);
-    }
+    applyPlaybackKick(previousPlayback, playback);
   });
 
-  input.socket.on("peer.signal", (payload) => {
+  socket.on("peer.signal", (payload) => {
     if (payload.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-
+    if (!shouldAcceptIncomingDataSignal({ payload })) {
+      return;
+    }
     if (
       !input.shouldAcceptIncomingPeerSignalRecoveryGeneration({
         payloadRecoveryGeneration: payload.recoveryGeneration,
@@ -1597,7 +797,7 @@ export function attachRoomSocketHandlers(input: {
     ) {
       input.recordPeerDiagnosticRef.current({
         peerId: payload.fromPeerId,
-        channelKind: payload.channelKind,
+        channelKind: "data",
         direction: "received",
         event: "stale-signal-dropped",
         summary: `丢弃旧恢复代次信令 ${payload.recoveryGeneration}`,
@@ -1607,45 +807,12 @@ export function attachRoomSocketHandlers(input: {
       return;
     }
 
-    if (
-      payload.channelKind === "media" &&
-      !shouldAcceptIncomingMediaSignal({
-        payload,
-        currentPlayback: input.currentRoomRef.current?.room.playback,
-        localPeerId: input.peerId,
-        currentTransportEpoch: input.mediaTransportEpochRef.current
-      })
-    ) {
-      input.recordPeerDiagnosticRef.current({
-        peerId: payload.fromPeerId,
-        channelKind: "media",
-        direction: "received",
-        event: "stale-media-signal-dropped",
-        summary: `丢弃旧媒体信令 source=${payload.fromPeerId} mediaEpoch=${payload.mediaEpoch ?? "none"} transportEpoch=${payload.transportEpoch ?? "none"}`,
-        level: "warning",
-        recordEvent: false
-      });
-      return;
-    }
-
-    if (payload.channelKind === "media") {
-      const incomingTransportEpoch = payload.transportEpoch ?? 0;
-      if (incomingTransportEpoch > input.mediaTransportEpochRef.current) {
-        input.mediaTransportEpochRef.current = incomingTransportEpoch;
-      }
-    }
-
-    const traceContext =
-      payload.channelKind === "media" ? input.getRemoteMediaTraceContext(payload.fromPeerId) : null;
     input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,
-      channelKind: payload.channelKind,
+      channelKind: "data",
       direction: "received",
       event: payload.type,
-      summary:
-        payload.channelKind === "media" && traceContext?.traceKey
-          ? `收到 ${payload.fromPeerId} 的 ${payload.channelKind} ${payload.type} · ${traceContext.traceKey}`
-          : `收到 ${payload.fromPeerId} 的 ${payload.channelKind} ${payload.type}`,
+      summary: `收到 ${payload.fromPeerId} 的 data ${payload.type}`,
       update: (snapshot: any) => ({
         ...snapshot,
         signalStats: {
@@ -1658,193 +825,69 @@ export function attachRoomSocketHandlers(input: {
         }
       })
     });
-    if (payload.channelKind === "media") {
-      input.recordPeerDiagnosticRef.current({
-        peerId: payload.fromPeerId,
-        channelKind: "media",
-        direction: "received",
-        event: "media-signal-dropped",
-        summary: "旧版媒体信令已停用，忽略 media 信令",
-        recordEvent: false
-      });
-      return;
-    }
-
-    void input.mesh.handleSignal(payload).catch((error) => {
+    void input.mesh.handleSignal(payload).catch((error: unknown) => {
       input.handleSignalFailure(payload, error);
     });
   });
 
-  input.socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
+  socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
     if (announcement.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
     if (!input.enableManualTrackCaching) {
       return;
     }
-    input.recordPeerDiagnosticRef.current({
-      peerId: announcement.ownerPeerId,
-      channelKind: "data",
-      direction: "received",
-      event: "piece-availability",
-      summary: `收到 ${announcement.ownerPeerId} 的分片公告`,
-      recordEvent: false,
-      update: (snapshot: any) => ({
-        ...input.withResolvedTransportHealth({
-          ...snapshot,
-          lastAvailabilitySeenAt: new Date().toISOString()
-        })
-      })
-    });
     input.queueAvailabilityRef.current(announcement);
   });
 
-  input.socket.on("piece.availability.clear", ({ roomId: clearedRoomId, ownerPeerId }) => {
-    if (clearedRoomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    if (!input.enableManualTrackCaching) {
+  socket.on("piece.availability.clear", ({ roomId, ownerPeerId }) => {
+    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
     input.clearAvailabilityForPeerRef.current(ownerPeerId);
   });
 
-  input.socket.on("room.session.replaced", ({ roomId: replacedRoomId }) => {
-    if (replacedRoomId !== input.roomId) {
+  socket.on("room.session.replaced", ({ roomId }) => {
+    if (roomId === input.roomId) {
+      input.exitCurrentRoom("当前账号已在其他窗口加入此房间。");
+    }
+  });
+
+  socket.on("room.deleted", ({ roomId, trackIds }) => {
+    if (roomId !== input.roomId) {
       return;
     }
-
-    input.socket.disconnect();
-    exitAndStopPresence("同一账号已在其他标签页或设备进入这个房间，当前页面已退出房间。");
+    void input.deleteRoomTrackArtifactsRef.current(trackIds);
+    input.exitCurrentRoom("这个房间已被删除。");
   });
 
-  input.socket.on("room.deleted", ({ roomId: deletedRoomId, trackIds }) => {
-    if (deletedRoomId !== input.roomId) {
-      return;
-    }
-
-    const roomTrackIds =
-      trackIds.length > 0
-        ? trackIds
-        : (input.currentRoomRef.current?.tracks.map((track) => track.id) ?? []);
-    void Promise.resolve(input.deleteRoomTrackArtifactsRef.current(roomTrackIds));
-    exitAndStopPresence("房间已解散，当前房间的歌单和本地缓存已清理。");
+  socket.on("room.snapshot.missing", () => {
+    void input.requestRoomSnapshotResyncRef.current("subscribe-ack", input.roomId);
   });
 
-  input.socket.on("room.snapshot.missing", () => {
-    if (input.isNavigatingRoomExit) {
-      return;
+  socket.on("disconnect", () => {
+    input.socketDisconnectGraceUntilRef.current = Date.now() + socketDisconnectGraceMs;
+    if (input.socketDisconnectGraceTimeoutRef.current !== null) {
+      window.clearTimeout(input.socketDisconnectGraceTimeoutRef.current);
     }
-
-    exitAndStopPresence("这个房间已不可用，请返回音乐房重新加入。");
+    input.socketDisconnectGraceTimeoutRef.current = window.setTimeout(() => {
+      input.socketDisconnectGraceUntilRef.current = null;
+      input.socketDisconnectGraceTimeoutRef.current = null;
+    }, socketDisconnectGraceMs);
   });
 
-  input.socket.on("connect_error", (error) => {
-    input.recordPeerDiagnosticRef.current({
-      peerId: "system",
-      channelKind: "system",
-      direction: "local",
-      event: "socket-connect-error",
-      level: "error",
-      summary: `实时连接失败：${toUserFacingError(error)}`,
-      update: (snapshot: any) => ({
-        ...snapshot,
-        lastError: toUserFacingError(error)
-      })
-    });
-    input.setStatusMessage(`实时连接失败：${toUserFacingError(error)}`);
-  });
-
-  input.socket.on("disconnect", (reason) => {
-    input.stopPresenceHeartbeat();
-    input.stopRecoveryWatchdog();
-    input.bumpMediaTransportEpoch("socket-reconnect");
-    input.clearSocketDisconnectGrace();
-    if (reason !== "io client disconnect") {
-      input.socketDisconnectGraceUntilRef.current = Date.now() + socketDisconnectGraceMs;
-      input.socketDisconnectGraceTimeoutRef.current = window.setTimeout(() => {
-        input.socketDisconnectGraceTimeoutRef.current = null;
-        const playback = input.currentRoomRef.current?.room.playback;
-        if (
-          input.socket.connected ||
-          !isSocketDisconnectGraceActive(input.socketDisconnectGraceUntilRef.current)
-        ) {
-          input.socketDisconnectGraceUntilRef.current = null;
-          return;
-        }
-        input.socketDisconnectGraceUntilRef.current = null;
-      }, socketDisconnectGraceMs);
-    }
-    input.setConnectedPeers([]);
-    input.setMediaConnectedPeers([]);
-    input.setAuthoritativeMediaClock(null);
-    if (reason !== "io client disconnect") {
-      input.updateRemoteMediaDiagnostic("Socket 已断开，等待控制面恢复", undefined, {
-        event: "socket-disconnect-grace",
-        recordEvent: false,
-        level: "warning"
-      });
-    }
-    input.setMediaConnectionState(
-      input.currentRoomRef.current?.room.playback.status === "playing"
-        ? input.resolveSocketRecoveryMediaState()
-        : "idle"
-    );
-    input.setRoomRecoveryState((current: any) => ({
-      ...current,
-      phase:
-        input.enableTrackCaching && current.fullLocalRecoveryActive
-          ? "playing-local-fallback"
-          : "joining",
-      mode: current.generation === null ? current.mode : "rejoin",
-      pendingSnapshot: true,
-      pendingData: input.enableTrackCaching,
-      pendingMedia: !(input.enableTrackCaching && current.fullLocalRecoveryActive)
-    }));
-
-    if (reason === "io client disconnect") {
-      return;
-    }
-    input.setStatusMessage("实时连接已断开，正在尝试重新连接…");
-  });
+  subscribeToRoom();
 
   return () => {
+    clearSubscribeTimers();
     input.stopPresenceHeartbeat();
     input.stopRecoveryWatchdog();
-    clearSubscribeRetry();
-    clearSocketDisconnectGrace();
-    input.clearListenerMediaRecovery();
-    input.socket.emit("room.unsubscribe", { roomId: input.roomId });
-    input.socket.disconnect();
-    input.socketRef.current = null;
     input.resubscribeRoomRef.current = null;
+    socket.emit("room.unsubscribe", { roomId: input.roomId });
+    socket.removeAllListeners();
     input.mesh.destroy();
     input.meshRef.current = null;
-    input.chunkSchedulerRef.current = null;
-    input.mediaMeshRef.current = null;
-    input.connectionSupervisorStatesRef.current.clear();
-    input.pieceRequestSamplesRef.current.clear();
-    input.sourceRecoveryCoordinatorRef.current = {
-      actionKey: null,
-      action: null,
-      startedAtMs: null
-    };
-    input.setConnectedPeers([]);
-    input.setMediaConnectedPeers([]);
-    input.setAuthoritativeMediaClock(null);
-    input.setMediaConnectionState("idle");
-    input.setRoomRecoveryState((current: any) => ({
-      ...current,
-      phase: "joining",
-      mode: "steady",
-      generation: null,
-      bootstrapStartedAt: null,
-      bootstrapSourcePeerId: null,
-      pendingSnapshot: false,
-      pendingData: false,
-      pendingMedia: false,
-      listenerBootstrapAttempts: null,
-      fullLocalRecoveryActive: false
-    }));
+    input.socketRef.current = null;
+    socket.disconnect();
   };
 }

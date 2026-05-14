@@ -208,7 +208,7 @@ describe("progressive playback helpers", () => {
     ).toBe("background");
   });
 
-  it("stays steady once the startup risk window is locally available", () => {
+  it("keeps filling when the comfort window can still outrun slow cache transfer", () => {
     const outrunChunks = Array.from({ length: 13 }, (_, index) => index);
     const manifest = buildProgressiveTrackManifest({
       ...track,
@@ -244,7 +244,7 @@ describe("progressive playback helpers", () => {
         currentTrackComplete: false,
         currentPieceDownloadRateKbps: 20
       })
-    ).toBe("steady");
+    ).toBe("outrun-recovery");
 
     const health = buildProgressiveHealthSnapshot({
       playback,
@@ -259,7 +259,7 @@ describe("progressive playback helpers", () => {
       currentPieceDownloadRateKbps: 20
     });
 
-    expect(health.schedulerPolicy).toBe("steady");
+    expect(health.schedulerPolicy).toBe("outrun-recovery");
     expect(health.estimatedFillTimeMs).not.toBeNull();
     expect(health.remainingPlaybackMs).toBe(70_000);
   });

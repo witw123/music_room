@@ -33,13 +33,6 @@ export type ManualCacheDownloadBridge = Pick<
 
 export type PlaybackConnectionKey = string;
 
-export type ListenerPlaybackState =
-  | "idle"
-  | "awaiting-data"
-  | "live"
-  | "recovering-hard"
-  | "failed";
-
 export type PlaybackRecoveryAction = {
   actionId: string;
   playbackConnectionKey: PlaybackConnectionKey;
@@ -61,16 +54,38 @@ export type PlaybackRecoveryRecommendation = {
   playbackConnectionKey: PlaybackConnectionKey | null;
   peerId: string | null;
   scope: "data" | "room";
-  level: "soft" | "ice-restart" | "hard-recreate" | "full-resubscribe";
+  level: "soft" | "hard-recreate" | "full-resubscribe";
   reason: string;
   observedNoProgressMs: number | null;
+};
+
+export type RoomRecoveryPhase =
+  | "joining"
+  | "resyncing"
+  | "bootstrapping-data"
+  | "playing-local-fallback"
+  | "steady";
+
+export type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
+
+export type RoomRecoveryState = {
+  phase: RoomRecoveryPhase;
+  mode: RoomRecoveryMode;
+  generation: number | null;
+  bootstrapStartedAt: string | null;
+  bootstrapSourcePeerId: string | null;
+  pendingSnapshot: boolean;
+  pendingData: boolean;
+  pendingMedia: boolean;
+  listenerBootstrapAttempts: number | null;
+  fullLocalRecoveryActive: boolean;
 };
 
 export type RoomRuntimeEvent =
   | {
       type: "diagnostic";
       peerId: string;
-      channelKind: "data" | "media" | "system";
+      channelKind: "data" | "system";
       direction: "local" | "sent" | "received";
       event: string;
       summary: string;

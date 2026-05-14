@@ -3,10 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
-import {
-  getRoomMediaClockProgressMs,
-  type ReceivedRoomMediaClock
-} from "./room-media-clock";
 
 const playbackProgressPollIntervalMs = 150;
 const hiddenPlaybackProgressPollIntervalMs = 1_000;
@@ -16,12 +12,9 @@ const displayClockTransitionWindowMs = 100;
 const monotonicProgressBacktrackToleranceMs = 180;
 const audibleClockFreezeWindowMs = 150;
 const audibleClockFallbackGraceMs = 1_500;
-const authoritativeClockFreshnessMs = 600;
-const authoritativeClockMaxRoomDriftMs = 2_500;
 
 export type DisplayClockSource =
   | "local-audible"
-  | "authority-clock"
   | "room-fallback";
 
 type UseRoomPlaybackOptions = {
@@ -48,11 +41,6 @@ type AudibleClockContinuityState = {
   sample: AudibleClockSample;
   observedAtMs: number;
   sessionKey: string;
-};
-
-type AuthoritativeClockSample = {
-  progressMs: number;
-  source: "authority-clock";
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -99,7 +87,6 @@ export function resolveAudibleClockSample(input: {
 
 export function resolveDisplayClockProgress(input: {
   audibleClockSample: AudibleClockSample | null;
-  authoritativeClockSample?: AuthoritativeClockSample | null;
   previousContinuity?: AudibleClockContinuityState | null;
   playbackStatus?: PlaybackSnapshot["status"] | null | undefined;
   roomClockMs: number;
@@ -129,9 +116,6 @@ export function resolveDisplayClockProgress(input: {
   ) {
     targetSource = input.previousContinuity.sample.source;
     targetProgressMs = clampProgressMs(input.previousContinuity.sample.progressMs, input.durationMs);
-  } else if (input.authoritativeClockSample) {
-    targetSource = input.authoritativeClockSample.source;
-    targetProgressMs = clampProgressMs(input.authoritativeClockSample.progressMs, input.durationMs);
   } else if (
     input.playbackStatus === "playing" &&
     input.previousContinuity &&
@@ -203,39 +187,6 @@ export function resolveAudibleClockContinuitySample(input: {
     sample: null,
     continuityState:
       input.playbackStatus === "playing" ? input.previousContinuity : null
-  };
-}
-
-export function resolveAuthoritativeClockSample(input: {
-  authoritativeMediaClock?: ReceivedRoomMediaClock | null;
-  playback: PlaybackSnapshot | null | undefined;
-  durationMs: number;
-  now?: number;
-}) {
-  const clock = input.authoritativeMediaClock;
-  const playback = input.playback;
-  const now = input.now ?? Date.now();
-  if (!clock || !playback) {
-    return null;
-  }
-
-  if (
-    clock.mediaEpoch !== playback.mediaEpoch ||
-    (playback.sourcePeerId && clock.sourcePeerId !== playback.sourcePeerId) ||
-    now - clock.receivedAtMs > authoritativeClockFreshnessMs
-  ) {
-    return null;
-  }
-
-  const clockProgressMs = getRoomMediaClockProgressMs(clock, now) ?? 0;
-  const roomClockMs = getPlaybackEffectivePositionMs(playback, input.durationMs, now);
-  if (Math.abs(clockProgressMs - roomClockMs) > authoritativeClockMaxRoomDriftMs) {
-    return null;
-  }
-
-  return {
-    source: "authority-clock" as const,
-    progressMs: clampProgressMs(clockProgressMs, input.durationMs)
   };
 }
 

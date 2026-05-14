@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  resolveAuthoritativeClockSample,
   resolveAudibleClockSample,
   resolveAudibleClockContinuitySample,
   resolveDisplayClockProgress,
@@ -124,15 +123,11 @@ describe("resolveDisplayClockProgress", () => {
     expect(result.source).toBe("local-audible");
   });
 
-  it("prefers the remote audible clock over the authority clock when both are present", () => {
+  it("prefers the remote audible clock over the room fallback clock", () => {
     const result = resolveDisplayClockProgress({
       audibleClockSample: {
         progressMs: 20_000,
         source: remoteSource
-      },
-      authoritativeClockSample: {
-        progressMs: 20_320,
-        source: "authority-clock"
       },
       roomClockMs: 20_240,
       durationMs: 240_000,
@@ -348,45 +343,5 @@ describe("resolveAudibleClockContinuitySample", () => {
 
     expect(result.sample).toBeNull();
     expect(result.continuityState).toBeNull();
-  });
-});
-
-describe("resolveAuthoritativeClockSample", () => {
-  const playback = {
-    status: "playing" as const,
-    currentTrackId: "track-a",
-    currentQueueItemId: "queue-a",
-    sourceSessionId: "host",
-    sourcePeerId: "peer-host",
-    sourceTrackId: "track-a",
-    positionMs: 80_000,
-    startedAt: "2026-04-17T00:00:00.000Z",
-    queueVersion: 2,
-    playbackRevision: 2,
-    mediaEpoch: 3
-  };
-
-  it("rejects stale authority clocks that no longer match the room timeline after seek", () => {
-    const result = resolveAuthoritativeClockSample({
-      authoritativeMediaClock: {
-        roomId: "room-a",
-        mediaEpoch: 3,
-        sourcePeerId: "peer-host",
-        relayGeneration: 1,
-        mediaTimeMs: 42_000,
-        playbackRate: 1,
-        advancing: true,
-        playoutState: "playing",
-        bufferedAheadMs: 0,
-        sequence: 10,
-        emittedAt: "2026-04-17T00:00:00.000Z",
-        receivedAtMs: Date.parse("2026-04-17T00:00:00.000Z")
-      },
-      playback,
-      durationMs: 240_000,
-      now: Date.parse("2026-04-17T00:00:00.100Z")
-    });
-
-    expect(result).toBeNull();
   });
 });
