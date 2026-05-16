@@ -39,6 +39,16 @@ export function shouldSuppressRoomRecoveryAfterFailure(input: {
   return !input.cancelled;
 }
 
+export function resetInitialRoomRecoveryAttemptOnCancellation(input: {
+  completed: boolean;
+  recoveryKey: string;
+  initialRecoveryAttemptRef: MutableRefObject<string | null> | { current: string | null };
+}) {
+  if (!input.completed && input.initialRecoveryAttemptRef.current === input.recoveryKey) {
+    input.initialRecoveryAttemptRef.current = null;
+  }
+}
+
 export function useRoomRuntimeLifecycle(input: {
   workspaceOnly: boolean;
   initialRoomId: string | null;
@@ -267,6 +277,7 @@ export function useRoomRuntimeLifecycle(input: {
     input.initialRecoveryAttemptRef.current = recoveryKey;
 
     let cancelled = false;
+    let completed = false;
     input.setIsRecoveringRoom(true);
 
     void (async () => {
@@ -293,6 +304,7 @@ export function useRoomRuntimeLifecycle(input: {
           input.setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
         }
       } finally {
+        completed = true;
         if (!cancelled) {
           input.setIsRecoveringRoom(false);
         }
@@ -301,6 +313,11 @@ export function useRoomRuntimeLifecycle(input: {
 
     return () => {
       cancelled = true;
+      resetInitialRoomRecoveryAttemptOnCancellation({
+        completed,
+        recoveryKey,
+        initialRecoveryAttemptRef: input.initialRecoveryAttemptRef
+      });
     };
   }, [
     input.workspaceOnly,

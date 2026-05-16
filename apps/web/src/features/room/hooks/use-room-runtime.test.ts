@@ -8,6 +8,7 @@ import {
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
   shouldReannounceManualCacheAvailability,
+  resetInitialRoomRecoveryAttemptOnCancellation,
   shouldStartRoomRealtimeRuntime,
   shouldSuppressRoomRecoveryAfterFailure
 } from "./use-room-runtime";
@@ -36,6 +37,30 @@ describe("pure cache room runtime helpers", () => {
   it("suppresses room recovery after an uncancelled recovery failure", () => {
     expect(shouldSuppressRoomRecoveryAfterFailure({ cancelled: false })).toBe(true);
     expect(shouldSuppressRoomRecoveryAfterFailure({ cancelled: true })).toBe(false);
+  });
+
+  it("allows initial room recovery to retry when an effect cleanup cancels the first attempt", () => {
+    const recoveryRef = { current: "user_1:room_1" };
+
+    resetInitialRoomRecoveryAttemptOnCancellation({
+      completed: false,
+      recoveryKey: "user_1:room_1",
+      initialRecoveryAttemptRef: recoveryRef
+    });
+
+    expect(recoveryRef.current).toBeNull();
+  });
+
+  it("keeps completed initial room recovery attempts marked", () => {
+    const recoveryRef = { current: "user_1:room_1" };
+
+    resetInitialRoomRecoveryAttemptOnCancellation({
+      completed: true,
+      recoveryKey: "user_1:room_1",
+      initialRecoveryAttemptRef: recoveryRef
+    });
+
+    expect(recoveryRef.current).toBe("user_1:room_1");
   });
 
   it("accepts only data peer signals", () => {

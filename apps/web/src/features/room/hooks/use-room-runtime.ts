@@ -65,6 +65,7 @@ export {
 } from "./use-manual-cache-downloader";
 export { shouldAcceptIncomingDataSignal, shouldReannounceManualCacheAvailability };
 export {
+  resetInitialRoomRecoveryAttemptOnCancellation,
   shouldRedirectRoomRouteToAuth,
   shouldSuppressRoomRecoveryAfterFailure
 } from "./use-room-runtime-lifecycle";
