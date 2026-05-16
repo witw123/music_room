@@ -3,6 +3,7 @@ import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
   buildRoomSubscribePayload,
   isSocketDisconnectGraceActive,
+  shouldExitRoomOnSnapshotMissing,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
 } from "./use-room-realtime-connection";
@@ -98,6 +99,35 @@ describe("buildRoomSubscribePayload", () => {
       peerId: "peer_1",
       sessionId: "user_1"
     });
+  });
+});
+
+describe("shouldExitRoomOnSnapshotMissing", () => {
+  it("exits the current room when the server reports its snapshot missing", () => {
+    expect(
+      shouldExitRoomOnSnapshotMissing({
+        currentRoomId: "room_1",
+        missingRoomId: "room_1"
+      })
+    ).toBe(true);
+  });
+
+  it("treats legacy missing payloads without a room id as current-room failures", () => {
+    expect(
+      shouldExitRoomOnSnapshotMissing({
+        currentRoomId: "room_1",
+        missingRoomId: null
+      })
+    ).toBe(true);
+  });
+
+  it("ignores missing snapshots for other rooms", () => {
+    expect(
+      shouldExitRoomOnSnapshotMissing({
+        currentRoomId: "room_1",
+        missingRoomId: "room_2"
+      })
+    ).toBe(false);
   });
 });
 

@@ -7,7 +7,8 @@ import {
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
-  shouldReannounceManualCacheAvailability
+  shouldReannounceManualCacheAvailability,
+  shouldSuppressRoomRecoveryAfterFailure
 } from "./use-room-runtime";
 
 describe("pure cache room runtime helpers", () => {
@@ -29,6 +30,11 @@ describe("pure cache room runtime helpers", () => {
         authEntryHref: "/auth?redirectTo=%2Froom%2Froom_1"
       })
     ).toBe("/auth?redirectTo=%2Froom%2Froom_1");
+  });
+
+  it("suppresses room recovery after an uncancelled recovery failure", () => {
+    expect(shouldSuppressRoomRecoveryAfterFailure({ cancelled: false })).toBe(true);
+    expect(shouldSuppressRoomRecoveryAfterFailure({ cancelled: true })).toBe(false);
   });
 
   it("accepts only data peer signals", () => {

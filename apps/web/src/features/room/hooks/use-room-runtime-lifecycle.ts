@@ -33,6 +33,12 @@ export function shouldRedirectRoomRouteToAuth(input: {
   );
 }
 
+export function shouldSuppressRoomRecoveryAfterFailure(input: {
+  cancelled: boolean;
+}) {
+  return !input.cancelled;
+}
+
 export function useRoomRuntimeLifecycle(input: {
   workspaceOnly: boolean;
   initialRoomId: string | null;
@@ -282,7 +288,8 @@ export function useRoomRuntimeLifecycle(input: {
         input.setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
         await input.refreshPlaylists();
       } catch {
-        if (!cancelled) {
+        if (shouldSuppressRoomRecoveryAfterFailure({ cancelled })) {
+          input.setSuppressRoomRecovery(true);
           input.setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
         }
       } finally {

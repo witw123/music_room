@@ -64,7 +64,10 @@ export {
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
 export { shouldAcceptIncomingDataSignal, shouldReannounceManualCacheAvailability };
-export { shouldRedirectRoomRouteToAuth } from "./use-room-runtime-lifecycle";
+export {
+  shouldRedirectRoomRouteToAuth,
+  shouldSuppressRoomRecoveryAfterFailure
+} from "./use-room-runtime-lifecycle";
 export {
   resolvePlaybackConnectionKey,
   resolvePlaybackRecoveryActionType,

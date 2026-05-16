@@ -12,6 +12,7 @@ import type {
   AuthSession,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
+  RoomSnapshotMissingPayload,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
@@ -85,6 +86,13 @@ export function buildRoomSubscribePayload(input: {
     sessionId: input.sessionId,
     peerId: input.peerId
   };
+}
+
+export function shouldExitRoomOnSnapshotMissing(input: {
+  currentRoomId: string;
+  missingRoomId?: string | null;
+}) {
+  return !input.missingRoomId || input.missingRoomId === input.currentRoomId;
 }
 
 function applyRoomSubscribeBootstrap(input: {
@@ -895,7 +903,17 @@ function attachRoomSocketHandlers(input: any) {
     input.exitCurrentRoom("这个房间已被删除。");
   });
 
-  socket.on("room.snapshot.missing", () => {
+  socket.on("room.snapshot.missing", (payload?: RoomSnapshotMissingPayload) => {
+    if (
+      shouldExitRoomOnSnapshotMissing({
+        currentRoomId: input.roomId,
+        missingRoomId: payload?.roomId
+      })
+    ) {
+      input.exitCurrentRoom("这个房间已不可用，请重新创建或加入房间。");
+      return;
+    }
+
     void input.requestRoomSnapshotResyncRef.current("subscribe-ack", input.roomId);
   });
 
