@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlaybackSnapshot, RoomMember, RoomSnapshot, TrackMeta } from "@music-room/shared";
-import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
+import { shouldAcceptPresenceSnapshot, shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
 
 type RoomStateSource = "bootstrap" | "authoritative";
 
@@ -135,6 +135,12 @@ function normalizeSnapshot(
   )
     ? incomingSnapshot.room.playback
     : currentSnapshot.room.playback;
+  const shouldApplyPresence = shouldAcceptPresenceSnapshot(
+    currentSnapshot.room.members,
+    currentSnapshot.room.presenceRevision,
+    incomingSnapshot.room.members,
+    incomingSnapshot.room.presenceRevision
+  );
 
   return {
     ...incomingSnapshot,
@@ -147,6 +153,10 @@ function normalizeSnapshot(
     room: {
       ...incomingSnapshot.room,
       roomRevision: getRoomRevision(incomingSnapshot),
+      members: shouldApplyPresence ? incomingSnapshot.room.members : currentSnapshot.room.members,
+      presenceRevision: shouldApplyPresence
+        ? incomingSnapshot.room.presenceRevision
+        : currentSnapshot.room.presenceRevision,
       playback
     }
   } satisfies RoomSnapshot;
