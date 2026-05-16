@@ -176,6 +176,7 @@ export function MusicRoomApp({
 
   const {
     activeSession,
+    hasStoredSession,
     hydrated,
     statusMessage,
     setStatusMessage,
@@ -454,6 +455,7 @@ export function MusicRoomApp({
     lastRoomStorageKey,
     peerStorageKey,
     activeSession,
+    hasStoredSession,
     activeSessionRef,
     refreshSession,
     roomSnapshot,

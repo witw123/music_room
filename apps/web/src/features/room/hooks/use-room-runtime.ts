@@ -98,6 +98,7 @@ type UseRoomRuntimeInput = {
   lastRoomStorageKey: string;
   peerStorageKey: string;
   activeSession: AuthSession | null;
+  hasStoredSession: boolean;
   activeSessionRef: MutableRefObject<AuthSession | null>;
   refreshSession: () => Promise<unknown>;
   roomSnapshot: RoomSnapshot | null;
@@ -228,6 +229,7 @@ export function useRoomRuntime({
   lastRoomStorageKey,
   peerStorageKey,
   activeSession,
+  hasStoredSession,
   activeSessionRef,
   refreshSession,
   roomSnapshot,
@@ -597,6 +599,7 @@ export function useRoomRuntime({
     lastRoomStorageKey,
     peerStorageKey,
     activeSession,
+    hasStoredSession,
     roomSnapshot,
     currentRoomRef,
     activeRouteRoomIdRef,

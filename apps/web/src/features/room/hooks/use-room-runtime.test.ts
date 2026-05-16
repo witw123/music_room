@@ -8,6 +8,7 @@ import {
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
   shouldReannounceManualCacheAvailability,
+  shouldRedirectRoomRouteToAuth,
   resetInitialRoomRecoveryAttemptOnCancellation,
   shouldStartRoomRealtimeRuntime,
   shouldSuppressRoomRecoveryAfterFailure
@@ -32,6 +33,34 @@ describe("pure cache room runtime helpers", () => {
         authEntryHref: "/auth?redirectTo=%2Froom%2Froom_1"
       })
     ).toBe("/auth?redirectTo=%2Froom%2Froom_1");
+  });
+
+  it("keeps a reloaded room route in place while stored session credentials can still recover", () => {
+    expect(
+      shouldRedirectRoomRouteToAuth({
+        workspaceOnly: true,
+        initialRoomId: "room_1",
+        hydrated: true,
+        hasActiveSession: false,
+        hasStoredSession: true,
+        isNavigatingRoomExit: false,
+        suppressRoomRecovery: false
+      })
+    ).toBe(false);
+  });
+
+  it("redirects a reloaded room route when no active or stored session exists", () => {
+    expect(
+      shouldRedirectRoomRouteToAuth({
+        workspaceOnly: true,
+        initialRoomId: "room_1",
+        hydrated: true,
+        hasActiveSession: false,
+        hasStoredSession: false,
+        isNavigatingRoomExit: false,
+        suppressRoomRecovery: false
+      })
+    ).toBe(true);
   });
 
   it("suppresses room recovery after an uncancelled recovery failure", () => {

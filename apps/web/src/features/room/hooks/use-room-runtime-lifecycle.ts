@@ -20,6 +20,7 @@ export function shouldRedirectRoomRouteToAuth(input: {
   initialRoomId: string | null;
   hydrated: boolean;
   hasActiveSession: boolean;
+  hasStoredSession: boolean;
   isNavigatingRoomExit: boolean;
   suppressRoomRecovery: boolean;
 }) {
@@ -28,6 +29,7 @@ export function shouldRedirectRoomRouteToAuth(input: {
     Boolean(input.initialRoomId) &&
     input.hydrated &&
     !input.hasActiveSession &&
+    !input.hasStoredSession &&
     !input.isNavigatingRoomExit &&
     !input.suppressRoomRecovery
   );
@@ -58,6 +60,7 @@ export function useRoomRuntimeLifecycle(input: {
   lastRoomStorageKey: string;
   peerStorageKey: string;
   activeSession: AuthSession | null;
+  hasStoredSession: boolean;
   roomSnapshot: RoomSnapshot | null;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -102,6 +105,7 @@ export function useRoomRuntimeLifecycle(input: {
         initialRoomId: input.initialRoomId,
         hydrated: input.hydrated,
         hasActiveSession: Boolean(input.activeSession),
+        hasStoredSession: input.hasStoredSession,
         isNavigatingRoomExit: input.isNavigatingRoomExit,
         suppressRoomRecovery: input.suppressRoomRecovery
       })
@@ -115,6 +119,7 @@ export function useRoomRuntimeLifecycle(input: {
     input.initialRoomId,
     input.hydrated,
     input.activeSession,
+    input.hasStoredSession,
     input.isNavigatingRoomExit,
     input.suppressRoomRecovery,
     input.router,
