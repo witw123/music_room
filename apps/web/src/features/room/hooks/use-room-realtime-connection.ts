@@ -75,6 +75,18 @@ export function shouldAcceptIncomingDataSignal(input: {
   return input.payload.channelKind === "data";
 }
 
+export function buildRoomSubscribePayload(input: {
+  roomId: string;
+  peerId: string;
+  sessionId: string;
+}) {
+  return {
+    roomId: input.roomId,
+    sessionId: input.sessionId,
+    peerId: input.peerId
+  };
+}
+
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -618,7 +630,8 @@ function attachRoomSocketHandlers(input: any) {
   };
 
   const subscribeToRoom = (attempt = 0) => {
-    if (!input.activeSessionRef.current?.userId || input.activeRouteRoomIdRef.current !== input.roomId) {
+    const activeSessionId = input.activeSessionRef.current?.userId;
+    if (!activeSessionId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
 
@@ -632,10 +645,11 @@ function attachRoomSocketHandlers(input: any) {
 
     socket.emit(
       "room.subscribe",
-      {
+      buildRoomSubscribePayload({
         roomId: input.roomId,
-        peerId: input.peerId
-      },
+        peerId: input.peerId,
+        sessionId: activeSessionId
+      }),
       (ack: RoomSubscribeAckPayload) => {
         if (subscribeAckTimeoutId !== null) {
           window.clearTimeout(subscribeAckTimeoutId);

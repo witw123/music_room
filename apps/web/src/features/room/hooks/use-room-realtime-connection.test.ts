@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
+  buildRoomSubscribePayload,
   isSocketDisconnectGraceActive,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
@@ -81,6 +82,22 @@ describe("shouldSuppressPlaybackWatchdogEscalation", () => {
         socketDisconnectGraceActive: false
       })
     ).toBe(false);
+  });
+});
+
+describe("buildRoomSubscribePayload", () => {
+  it("includes the authenticated session id required by the signaling gateway", () => {
+    expect(
+      buildRoomSubscribePayload({
+        roomId: "room_1",
+        peerId: "peer_1",
+        sessionId: "user_1"
+      })
+    ).toEqual({
+      roomId: "room_1",
+      peerId: "peer_1",
+      sessionId: "user_1"
+    });
   });
 });
 
