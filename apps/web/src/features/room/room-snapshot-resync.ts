@@ -27,6 +27,58 @@ export function createRoomSnapshotResyncController(
   let activeRequestToken = 0;
   let inFlightRoomId: string | null = null;
   let inFlightPromise: Promise<void> | null = null;
+  let pendingFollowUp: { roomId: string; reason: RoomSnapshotResyncReason } | null = null;
+
+  const shouldQueueFollowUp = (reason: RoomSnapshotResyncReason) =>
+    reason === "realtime-room-event" || reason === "stale-watchdog";
+
+  const consumePendingFollowUp = () => {
+    const followUp = pendingFollowUp;
+    pendingFollowUp = null;
+    return followUp;
+  };
+
+  const runRequestLoop = async (
+    roomId: string,
+    initialReason: RoomSnapshotResyncReason,
+    requestToken: number
+  ) => {
+    let reason = initialReason;
+
+    try {
+      while (true) {
+        consumePendingFollowUp();
+        const snapshot = await options.loadSnapshot(roomId);
+        if (requestToken !== activeRequestToken) {
+          return;
+        }
+
+        await options.applySnapshot(roomId, snapshot, reason);
+        if (requestToken !== activeRequestToken) {
+          return;
+        }
+
+        const followUp = consumePendingFollowUp();
+        if (!followUp || followUp.roomId !== roomId) {
+          return;
+        }
+
+        reason = followUp.reason;
+      }
+    } catch (error) {
+      if (requestToken !== activeRequestToken) {
+        return;
+      }
+
+      await options.onError(roomId, reason, error);
+    } finally {
+      if (requestToken === activeRequestToken) {
+        inFlightRoomId = null;
+        inFlightPromise = null;
+        pendingFollowUp = null;
+      }
+    }
+  };
 
   return {
     async request(roomId: string, reason: RoomSnapshotResyncReason) {
@@ -35,32 +87,15 @@ export function createRoomSnapshotResyncController(
       }
 
       if (inFlightPromise && inFlightRoomId === roomId) {
+        if (shouldQueueFollowUp(reason)) {
+          pendingFollowUp = { roomId, reason };
+        }
         return inFlightPromise;
       }
 
       const requestToken = ++activeRequestToken;
       inFlightRoomId = roomId;
-      inFlightPromise = (async () => {
-        try {
-          const snapshot = await options.loadSnapshot(roomId);
-          if (requestToken !== activeRequestToken) {
-            return;
-          }
-
-          await options.applySnapshot(roomId, snapshot, reason);
-        } catch (error) {
-          if (requestToken !== activeRequestToken) {
-            return;
-          }
-
-          await options.onError(roomId, reason, error);
-        } finally {
-          if (requestToken === activeRequestToken) {
-            inFlightRoomId = null;
-            inFlightPromise = null;
-          }
-        }
-      })();
+      inFlightPromise = runRequestLoop(roomId, reason, requestToken);
 
       return inFlightPromise;
     },
@@ -69,6 +104,7 @@ export function createRoomSnapshotResyncController(
       activeRequestToken += 1;
       inFlightRoomId = null;
       inFlightPromise = null;
+      pendingFollowUp = null;
     }
   };
 }

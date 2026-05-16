@@ -69,6 +69,43 @@ describe("room snapshot resync controller", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("runs one follow-up request when the same room asks to resync while a request is in flight", async () => {
+    let resolveFirstSnapshot: ((snapshot: RoomSnapshot) => void) | null = null;
+    const snapshots = [buildSnapshot("room_1", "OLD111"), buildSnapshot("room_1", "NEW222")];
+    const loadSnapshot = vi
+      .fn<() => Promise<RoomSnapshot>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<RoomSnapshot>((resolve) => {
+            resolveFirstSnapshot = resolve;
+          })
+      )
+      .mockResolvedValueOnce(snapshots[1]);
+    const applySnapshot = vi.fn();
+    const controller = createRoomSnapshotResyncController({
+      loadSnapshot,
+      applySnapshot,
+      onError: vi.fn()
+    });
+
+    const firstRequest = controller.request("room_1", "socket-connect");
+    const secondRequest = controller.request("room_1", "realtime-room-event");
+
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    expect(resolveFirstSnapshot).toBeTypeOf("function");
+    resolveFirstSnapshot!(snapshots[0]);
+    await Promise.all([firstRequest, secondRequest]);
+
+    expect(loadSnapshot).toHaveBeenCalledTimes(2);
+    expect(applySnapshot).toHaveBeenNthCalledWith(1, "room_1", snapshots[0], "socket-connect");
+    expect(applySnapshot).toHaveBeenNthCalledWith(
+      2,
+      "room_1",
+      snapshots[1],
+      "realtime-room-event"
+    );
+  });
+
   it("ignores stale responses after reset", async () => {
     let resolveSnapshot: ((snapshot: RoomSnapshot) => void) | null = null;
     const loadSnapshot = vi.fn(
