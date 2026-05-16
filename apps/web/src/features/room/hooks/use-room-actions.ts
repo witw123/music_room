@@ -18,6 +18,7 @@ type UseRoomActionsOptions = {
   resetRealtimePeer: () => void;
   lastRoomStorageKey: string;
   getCurrentPlaybackPositionMs: () => number;
+  getCurrentPeerId?: () => string | null;
   onTrackDeleted?: (trackId: string) => Promise<void> | void;
   onRoomDeleted?: (trackIds: string[]) => Promise<void> | void;
 };
@@ -34,6 +35,7 @@ export function useRoomActions({
   resetRealtimePeer,
   lastRoomStorageKey,
   getCurrentPlaybackPositionMs,
+  getCurrentPeerId,
   onTrackDeleted,
   onRoomDeleted
 }: UseRoomActionsOptions) {
@@ -217,6 +219,7 @@ export function useRoomActions({
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
             trackId,
+            actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
           })
       );
@@ -237,6 +240,7 @@ export function useRoomActions({
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
             queueItemId,
+            actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
           })
       );
@@ -257,6 +261,7 @@ export function useRoomActions({
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "pause",
             positionMs,
+            actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
           })
       );
@@ -280,6 +285,7 @@ export function useRoomActions({
       (expectedVersion) =>
         musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "prev",
+          actorPeerId: getCurrentPeerId?.() ?? undefined,
           expectedVersion
         })
     );
@@ -296,6 +302,7 @@ export function useRoomActions({
       (expectedVersion) =>
         musicRoomApi.updatePlayback(roomSnapshot.room.id, {
           action: "next",
+          actorPeerId: getCurrentPeerId?.() ?? undefined,
           expectedVersion
         })
     );
@@ -441,6 +448,7 @@ export function useRoomActions({
           musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "seek",
             positionMs,
+            actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
           })
       );

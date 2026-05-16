@@ -391,6 +391,7 @@ export function MusicRoomApp({
   ]);
 
   const getCurrentPlaybackPositionMs = useCallback(() => currentPlaybackPositionRef.current, []);
+  const getCurrentPeerId = useCallback(() => peerId || null, [peerId]);
 
   const {
     leaveRoom,
@@ -417,6 +418,7 @@ export function MusicRoomApp({
     resetRealtimePeer,
     lastRoomStorageKey,
     getCurrentPlaybackPositionMs,
+    getCurrentPeerId,
     onTrackDeleted: handleTrackDeleted,
     onRoomDeleted: handleRoomDeleted
   });

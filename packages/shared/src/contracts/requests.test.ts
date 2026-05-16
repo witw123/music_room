@@ -83,11 +83,13 @@ describe("request contracts", () => {
       updatePlaybackRequestSchema.parse({
         action: "seek",
         positionMs: 1000,
+        actorPeerId: "peer_1",
         expectedVersion: 1
       })
     ).toEqual({
       action: "seek",
       positionMs: 1000,
+      actorPeerId: "peer_1",
       expectedVersion: 1
     });
 

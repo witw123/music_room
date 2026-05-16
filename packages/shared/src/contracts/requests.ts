@@ -79,6 +79,7 @@ export const updatePlaybackRequestSchema = z
     trackId: stringId.optional(),
     queueItemId: stringId.optional(),
     positionMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000).optional(),
+    actorPeerId: stringId.optional(),
     expectedVersion: z.number().int().positive()
   })
   .strict();

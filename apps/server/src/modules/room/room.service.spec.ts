@@ -139,6 +139,42 @@ describe("RoomService", () => {
     });
   });
 
+  it("uses the actor peer as source when the uploader starts playback before presence settles", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Immediate Playback",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "immediate-playback",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: track.id,
+        actorSessionId: host.id,
+        actorPeerId: "peer-host"
+      } as Parameters<typeof roomService.updatePlayback>[1] & { actorPeerId: string })
+    ).resolves.toMatchObject({
+      status: "playing",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: "peer-host"
+    });
+  });
+
   it("only allows the host or requester to remove a queue item", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

@@ -55,6 +55,7 @@ export class PlaybackController {
       trackId?: string;
       queueItemId?: string;
       positionMs?: number;
+      actorPeerId?: string;
       expectedVersion?: number;
     }
   ) {

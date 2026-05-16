@@ -598,6 +598,7 @@ export class RoomService {
       queueItemId?: string;
       positionMs?: number;
       actorSessionId?: string;
+      actorPeerId?: string;
       expectedVersion?: number;
     }
   ): Promise<PlaybackSnapshot> {
@@ -609,6 +610,13 @@ export class RoomService {
 
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
+      if (input.actorPeerId) {
+        await this.roomPresenceService.touchRealtimePresence(
+          roomId,
+          input.actorSessionId,
+          input.actorPeerId
+        );
+      }
     }
     const expectedVersion = input.expectedVersion ?? record.room.playback.playbackRevision;
     if (record.room.playback.playbackRevision !== expectedVersion) {

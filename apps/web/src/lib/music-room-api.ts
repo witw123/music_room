@@ -211,6 +211,7 @@ export const musicRoomApi = {
       trackId?: string;
       queueItemId?: string;
       positionMs?: number;
+      actorPeerId?: string;
       expectedVersion: number;
     }
   ) =>
