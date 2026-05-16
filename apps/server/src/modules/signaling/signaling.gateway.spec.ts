@@ -236,6 +236,61 @@ describe("SignalingGateway", () => {
     expect(client.emit).toHaveBeenCalledWith("room.snapshot", snapshot);
   });
 
+  it("builds the subscribe snapshot after marking the peer online", async () => {
+    const offlineSnapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: null,
+          presenceState: "offline"
+        }
+      ],
+      sourcePeerId: null,
+      presenceRevision: 1
+    });
+    const onlineSnapshot = createSnapshot({
+      members: [
+        {
+          id: "guest_host",
+          nickname: "Host",
+          role: "host",
+          peerId: "peer_host",
+          presenceState: "online"
+        }
+      ],
+      sourcePeerId: "peer_host",
+      presenceRevision: 2
+    });
+    const roomService = createRoomServiceMock(offlineSnapshot);
+    roomService.updatePeerPresence.mockImplementation(async () => {
+      roomService.getAccessibleRoomSnapshot.mockResolvedValue(onlineSnapshot);
+    });
+    const { gateway } = createGateway({ roomService });
+    const client = createClient();
+
+    const response = await gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host"
+    });
+
+    expect(response).toMatchObject({
+      ok: true,
+      bootstrap: {
+        presenceRevision: 2,
+        members: [
+          {
+            id: "guest_host",
+            peerId: "peer_host",
+            presenceState: "online"
+          }
+        ]
+      }
+    });
+  });
+
   it("leaves the previous room and clears its presence when the same socket subscribes to another room", async () => {
     const { gateway, roomService } = createGateway();
     const client = createClient({

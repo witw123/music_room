@@ -191,6 +191,15 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   );
 }
 
+export function shouldStartRoomRealtimeRuntime(input: {
+  roomId: string | null | undefined;
+  hydrated: boolean;
+  iceConfigResolved: boolean;
+  peerId: string | null | undefined;
+}) {
+  return Boolean(input.roomId && input.hydrated && input.iceConfigResolved && input.peerId);
+}
+
 export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
   payloadRecoveryGeneration: number | null | undefined;
   currentRecoveryGeneration: number | null;
@@ -637,12 +646,24 @@ export function useRoomRuntime({
   }, [setStatusMessage, statusMessage]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !hydrated || !iceConfigResolved) {
+    const activeRoomId = roomSnapshot?.room.id ?? null;
+    if (
+      !shouldStartRoomRealtimeRuntime({
+        roomId: activeRoomId,
+        hydrated,
+        iceConfigResolved,
+        peerId
+      })
+    ) {
+      return;
+    }
+
+    if (!activeRoomId) {
       return;
     }
 
     return createRoomRealtimeRuntime({
-      roomId: roomSnapshot.room.id,
+      roomId: activeRoomId,
       peerId,
       iceConfig,
       socketRef,
@@ -670,8 +691,8 @@ export function useRoomRuntime({
       getPeerMedianRttMs,
       setConnectedPeers,
       isPageVisible,
-      playbackStatus: roomSnapshot.room.playback.status,
-      currentTrackId: roomSnapshot.room.playback.currentTrackId,
+      playbackStatus: roomSnapshot?.room.playback.status ?? "paused",
+      currentTrackId: roomSnapshot?.room.playback.currentTrackId ?? null,
       bufferHealth,
       enableManualTrackCaching,
       resubscribeRoomRef,

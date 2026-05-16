@@ -8,6 +8,7 @@ import {
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
   shouldReannounceManualCacheAvailability,
+  shouldStartRoomRealtimeRuntime,
   shouldSuppressRoomRecoveryAfterFailure
 } from "./use-room-runtime";
 
@@ -190,6 +191,26 @@ describe("pure cache room runtime helpers", () => {
           playbackRevision: 2,
           mediaEpoch: 2
         }
+      })
+    ).toBe(true);
+  });
+
+  it("waits for a stable peer id before starting the room realtime runtime", () => {
+    expect(
+      shouldStartRoomRealtimeRuntime({
+        roomId: "room_1",
+        hydrated: true,
+        iceConfigResolved: true,
+        peerId: ""
+      })
+    ).toBe(false);
+
+    expect(
+      shouldStartRoomRealtimeRuntime({
+        roomId: "room_1",
+        hydrated: true,
+        iceConfigResolved: true,
+        peerId: "peer_1"
       })
     ).toBe(true);
   });
