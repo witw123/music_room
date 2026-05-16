@@ -37,6 +37,18 @@ export function shouldSuppressPlaybackWatchdogEscalation(input: {
   return input.recoverySuppressedReason !== null || input.socketDisconnectGraceActive;
 }
 
+export function shouldResyncSnapshotForPlaybackPatch(input: {
+  currentSnapshot: RoomSnapshot | null | undefined;
+  playback: RoomSnapshot["room"]["playback"];
+}) {
+  const trackId = input.playback.currentTrackId;
+  if (!trackId) {
+    return false;
+  }
+
+  return !input.currentSnapshot?.tracks.some((track) => track.id === trackId);
+}
+
 export function shouldReannounceManualCacheAvailability(input: {
   enableManualTrackCaching: boolean;
   roomId: string | null | undefined;
@@ -725,6 +737,14 @@ function attachRoomSocketHandlers(input: any) {
       roomId: input.roomId,
       playback
     });
+    if (
+      shouldResyncSnapshotForPlaybackPatch({
+        currentSnapshot: input.currentRoomRef.current,
+        playback
+      })
+    ) {
+      void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+    }
     applyPlaybackKick(previousPlayback, playback);
   });
 

@@ -35,7 +35,7 @@ export function removeTracksFromUploads<T>(
 }
 
 export function getOnlineMembers(members: RoomMember[]) {
-  return members.filter((member) => member.presenceState === "online" && !!member.peerId);
+  return members.filter((member) => member.presenceState === "online");
 }
 
 export function getOnlineMemberCount(members: RoomMember[]) {

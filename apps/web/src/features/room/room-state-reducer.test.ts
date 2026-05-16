@@ -408,6 +408,70 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.presenceRevision).toBe(12);
   });
 
+  it("keeps playback patches carried by presence events even when presence revision is unchanged", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 12,
+            presenceRevision: 12,
+            playback: createPlaybackSnapshot({
+              status: "paused",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              queueVersion: 3,
+              playbackRevision: 3,
+              mediaEpoch: 2
+            })
+          }
+        })
+      },
+      {
+        type: "server-presence-patch",
+        roomId: "room_1",
+        members: [
+          {
+            id: "host",
+            nickname: "Host",
+            role: "host",
+            joinedAt: "2026-04-04T00:00:00.000Z",
+            peerId: "peer-host",
+            presenceState: "online"
+          },
+          {
+            id: "member",
+            nickname: "Member",
+            role: "member",
+            joinedAt: "2026-04-04T00:01:00.000Z",
+            peerId: "peer-member",
+            presenceState: "online"
+          }
+        ],
+        playback: createPlaybackSnapshot({
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: "track_1",
+          positionMs: 44_000,
+          startedAt: "2026-04-17T00:01:00.000Z",
+          queueVersion: 3,
+          playbackRevision: 4,
+          mediaEpoch: 2
+        }),
+        presenceRevision: 12,
+        roomRevision: 12
+      }
+    );
+
+    expect(state.snapshot?.room.presenceRevision).toBe(12);
+    expect(state.snapshot?.room.playback.status).toBe("playing");
+    expect(state.snapshot?.room.playback.positionMs).toBe(44_000);
+    expect(state.snapshot?.room.playback.playbackRevision).toBe(4);
+  });
+
   it("updates queue and library only when patch roomRevision is not stale", () => {
     const state = applyEvents(
       {
@@ -460,6 +524,94 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.roomRevision).toBe(4);
     expect(state.snapshot?.tracks[0]?.id).toBe("track_2");
     expect(state.snapshot?.queue).toHaveLength(0);
+  });
+
+  it("keeps playback patches carried by stale queue events without rewinding queue topology", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 7,
+            playback: createPlaybackSnapshot({
+              status: "paused",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              queueVersion: 3,
+              playbackRevision: 3
+            })
+          }
+        })
+      },
+      {
+        type: "server-queue-patch",
+        roomId: "room_1",
+        queue: [],
+        playback: createPlaybackSnapshot({
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: "track_1",
+          positionMs: 12_000,
+          startedAt: "2026-04-17T00:03:00.000Z",
+          queueVersion: 3,
+          playbackRevision: 4
+        }),
+        roomRevision: 6
+      }
+    );
+
+    expect(state.snapshot?.queue).toHaveLength(1);
+    expect(state.snapshot?.room.roomRevision).toBe(7);
+    expect(state.snapshot?.room.playback.status).toBe("playing");
+    expect(state.snapshot?.room.playback.playbackRevision).toBe(4);
+  });
+
+  it("keeps playback patches carried by stale library events without rewinding library topology", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 7,
+            playback: createPlaybackSnapshot({
+              status: "paused",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              queueVersion: 3,
+              playbackRevision: 3
+            })
+          }
+        })
+      },
+      {
+        type: "server-library-patch",
+        roomId: "room_1",
+        tracks: [],
+        queue: [],
+        playback: createPlaybackSnapshot({
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer-host",
+          sourceTrackId: "track_1",
+          positionMs: 16_000,
+          startedAt: "2026-04-17T00:04:00.000Z",
+          queueVersion: 3,
+          playbackRevision: 4
+        }),
+        roomRevision: 6
+      }
+    );
+
+    expect(state.snapshot?.tracks).toHaveLength(1);
+    expect(state.snapshot?.queue).toHaveLength(1);
+    expect(state.snapshot?.room.roomRevision).toBe(7);
+    expect(state.snapshot?.room.playback.status).toBe("playing");
+    expect(state.snapshot?.room.playback.playbackRevision).toBe(4);
   });
 
   it("keeps playback patches ordered by playbackRevision", () => {

@@ -49,7 +49,7 @@ describe("music-room-ui helpers", () => {
     });
   });
 
-  it("counts only members with active peer ids as online", () => {
+  it("counts room members marked online even before a data peer id is assigned", () => {
     expect(
       getOnlineMemberCount([
         {
@@ -57,7 +57,7 @@ describe("music-room-ui helpers", () => {
           nickname: "Host",
           role: "host",
           joinedAt: new Date().toISOString(),
-          peerId: "peer-host",
+          peerId: null,
           presenceState: "online"
         },
         {

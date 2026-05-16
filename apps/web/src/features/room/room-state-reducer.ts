@@ -232,7 +232,12 @@ export function roomStateReducer(
       }
 
       const currentPresenceRevision = snapshot.room.presenceRevision ?? 0;
-      if (event.presenceRevision <= currentPresenceRevision) {
+      const shouldApplyPresence = event.presenceRevision > currentPresenceRevision;
+      const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+        ? event.playback
+        : snapshot.room.playback;
+
+      if (!shouldApplyPresence && nextPlayback === snapshot.room.playback) {
         return current;
       }
 
@@ -242,12 +247,12 @@ export function roomStateReducer(
           ...snapshot,
           room: {
             ...snapshot.room,
-            members: event.members,
-            presenceRevision: event.presenceRevision,
+            members: shouldApplyPresence ? event.members : snapshot.room.members,
+            presenceRevision: shouldApplyPresence
+              ? event.presenceRevision
+              : currentPresenceRevision,
             roomRevision: Math.max(getRoomRevision(snapshot), event.roomRevision ?? 0),
-            playback: shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
-              ? event.playback
-              : snapshot.room.playback
+            playback: nextPlayback
           }
         }
       };
@@ -260,7 +265,12 @@ export function roomStateReducer(
       }
 
       const currentRevision = getRoomRevision(snapshot);
-      if ((event.roomRevision ?? currentRevision) < currentRevision) {
+      const shouldApplyTopology = (event.roomRevision ?? currentRevision) >= currentRevision;
+      const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+        ? event.playback
+        : snapshot.room.playback;
+
+      if (!shouldApplyTopology && nextPlayback === snapshot.room.playback) {
         return current;
       }
 
@@ -268,13 +278,11 @@ export function roomStateReducer(
         ...current,
         snapshot: {
           ...snapshot,
-          queue: event.queue,
+          queue: shouldApplyTopology ? event.queue : snapshot.queue,
           room: {
             ...snapshot.room,
             roomRevision: Math.max(currentRevision, event.roomRevision ?? 0),
-            playback: shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
-              ? event.playback
-              : snapshot.room.playback
+            playback: nextPlayback
           }
         }
       };
@@ -287,7 +295,12 @@ export function roomStateReducer(
       }
 
       const currentRevision = getRoomRevision(snapshot);
-      if ((event.roomRevision ?? currentRevision) < currentRevision) {
+      const shouldApplyTopology = (event.roomRevision ?? currentRevision) >= currentRevision;
+      const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+        ? event.playback
+        : snapshot.room.playback;
+
+      if (!shouldApplyTopology && nextPlayback === snapshot.room.playback) {
         return current;
       }
 
@@ -295,22 +308,22 @@ export function roomStateReducer(
         ...current,
         snapshot: {
           ...snapshot,
-          tracks: ensurePlaybackTrackMetadata(
+          tracks: shouldApplyTopology ? ensurePlaybackTrackMetadata(
             event.tracks,
             snapshot.tracks,
             event.tracks,
-            (shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
-              ? event.playback
-              : snapshot.room.playback
-            ).currentTrackId
+            nextPlayback.currentTrackId
+          ) : ensurePlaybackTrackMetadata(
+            snapshot.tracks,
+            snapshot.tracks,
+            event.tracks,
+            nextPlayback.currentTrackId
           ),
-          queue: event.queue,
+          queue: shouldApplyTopology ? event.queue : snapshot.queue,
           room: {
             ...snapshot.room,
             roomRevision: Math.max(currentRevision, event.roomRevision ?? 0),
-            playback: shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
-              ? event.playback
-              : snapshot.room.playback
+            playback: nextPlayback
           }
         }
       };
