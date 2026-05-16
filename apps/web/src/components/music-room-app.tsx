@@ -79,6 +79,23 @@ type MusicRoomAppProps = {
   initialRoomId?: string | null;
 };
 
+export function runPlaybackMutationAfterLocalPrime(input: {
+  primeLocalPlayback: () => Promise<unknown>;
+  mutatePlayback: () => Promise<unknown>;
+}) {
+  void input.primeLocalPlayback().catch(() => undefined);
+  return input.mutatePlayback();
+}
+
+export function startBestEffortPlaybackAudioUnlock(input: {
+  unlockAudio: () => Promise<unknown>;
+  onError?: (error: unknown) => void;
+}) {
+  void input.unlockAudio().catch((error) => {
+    input.onError?.(error);
+  });
+}
+
 export function MusicRoomApp({
   workspaceOnly = true,
   initialRoomId = null
@@ -831,24 +848,25 @@ export function MusicRoomApp({
         })
       );
       setStatusMessage("正在准备音源...");
-      try {
-        await ensureRoomAudioUnlocked(`playback-intent:${input.reason}`);
-      } catch (error) {
-        const message = toUserFacingError(error);
-        recordPeerDiagnostic({
-          peerId: "system",
-          channelKind: "system",
-          direction: "local",
-          event: "audio-prime-failed",
-          level: "error",
-          summary: `音频输出预激活失败：${message}`,
-          update: (snapshot) => ({
-            ...snapshot,
-            lastError: `音频输出预激活失败：${message}`
-          })
-        });
-        setStatusMessage("音频输出初始化失败，已跳过预激活并继续尝试播放。");
-      }
+      startBestEffortPlaybackAudioUnlock({
+        unlockAudio: () => ensureRoomAudioUnlocked(`playback-intent:${input.reason}`),
+        onError: (error) => {
+          const message = toUserFacingError(error);
+          recordPeerDiagnostic({
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: "audio-prime-failed",
+            level: "error",
+            summary: `音频输出预激活失败：${message}`,
+            update: (snapshot) => ({
+              ...snapshot,
+              lastError: `音频输出预激活失败：${message}`
+            })
+          });
+          setStatusMessage("音频输出初始化失败，已跳过预激活并继续尝试播放。");
+        }
+      });
     },
     [ensureRoomAudioUnlocked, recordPeerDiagnostic, setStatusMessage]
   );
@@ -886,8 +904,10 @@ export function MusicRoomApp({
         reason: trackId ? "track" : "resume-current",
         trackId: targetTrackId
       });
-      await primeFullLocalTrackPlayback(targetTrackId);
-      await playTrack(trackId);
+      await runPlaybackMutationAfterLocalPrime({
+        primeLocalPlayback: () => primeFullLocalTrackPlayback(targetTrackId),
+        mutatePlayback: () => playTrack(trackId)
+      });
     },
     [
       armPlaybackStart,
@@ -923,8 +943,10 @@ export function MusicRoomApp({
         trackId: queueTrackId,
         previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
       });
-      await primeFullLocalTrackPlayback(queueTrackId);
-      await playQueueItem(queueItemId);
+      await runPlaybackMutationAfterLocalPrime({
+        primeLocalPlayback: () => primeFullLocalTrackPlayback(queueTrackId),
+        mutatePlayback: () => playQueueItem(queueItemId)
+      });
     },
     [
       armPlaybackStart,
