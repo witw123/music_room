@@ -1,5 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { resolveMissingOwnedUploadedTracks } from "./use-track-uploads";
+import { buildRegisterTrackPayload, resolveMissingOwnedUploadedTracks } from "./use-track-uploads";
+
+describe("buildRegisterTrackPayload", () => {
+  it("does not include client-only session fields rejected by the strict server schema", () => {
+    const payload = buildRegisterTrackPayload({
+      id: "track_1",
+      title: "Tone",
+      artist: "本地上传",
+      album: null,
+      durationMs: 500,
+      bitrate: null,
+      sizeBytes: 44144,
+      codec: "wav",
+      mimeType: "audio/wav",
+      fileHash: "hash_1",
+      artworkUrl: null,
+      ownerSessionId: "user_1",
+      ownerNickname: "Host",
+      sourceType: "local_upload"
+    });
+
+    expect(payload).not.toHaveProperty("sessionId");
+    expect(payload).toMatchObject({
+      ownerSessionId: "user_1",
+      ownerNickname: "Host"
+    });
+  });
+});
 
 describe("resolveMissingOwnedUploadedTracks", () => {
   it("returns only the current user's room tracks that lost their playable upload binding", () => {

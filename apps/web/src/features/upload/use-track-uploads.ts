@@ -71,6 +71,27 @@ export type ManualCacheTask = {
 
 type RehydratableRoomTrack = Pick<TrackMeta, "id" | "fileHash" | "ownerSessionId">;
 
+export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
+  return {
+    ...(track.id ? { id: track.id } : {}),
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    durationMs: track.durationMs,
+    bitrate: track.bitrate,
+    sizeBytes: track.sizeBytes,
+    codec: track.codec,
+    mimeType: track.mimeType,
+    fileHash: track.fileHash,
+    artworkUrl: track.artworkUrl,
+    ownerSessionId: track.ownerSessionId,
+    ownerNickname: track.ownerNickname,
+    sourceType: track.sourceType,
+    pieceManifest: track.pieceManifest,
+    relayManifest: track.relayManifest
+  };
+}
+
 function isManualCacheTaskRecord(
   task: ManualCacheTaskRecord
 ): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
@@ -729,10 +750,7 @@ export function useTrackUploads(options: {
         inFlightUploadHashesRef.current.add(uploadHashKey);
         let registered: TrackMeta;
         try {
-          registered = await musicRoomApi.registerTrack(roomId, {
-            sessionId: activeSession.userId,
-            ...track
-          });
+          registered = await musicRoomApi.registerTrack(roomId, buildRegisterTrackPayload(track));
         } finally {
           inFlightUploadHashesRef.current.delete(uploadHashKey);
         }

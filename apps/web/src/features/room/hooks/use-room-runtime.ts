@@ -71,6 +71,14 @@ export {
   resolvePlaybackRecoveryDropReason
 };
 
+export function buildRoomExitHref(input: {
+  activeSession: Pick<AuthSession, "userId"> | null | undefined;
+  workspaceEntryHref: string;
+  authEntryHref: string;
+}) {
+  return input.activeSession ? input.workspaceEntryHref : input.authEntryHref;
+}
+
 type RoomRouter = {
   push: (href: Route) => void;
   replace: (href: Route) => void;
@@ -202,6 +210,7 @@ export function useRoomRuntime({
   initialRoomId,
   hydrated,
   authEntryHref,
+  workspaceEntryHref,
   router,
   lastRoomStorageKey,
   peerStorageKey,
@@ -404,9 +413,24 @@ export function useRoomRuntime({
       setIsNavigatingRoomExit(true);
       resetPlayerSurfaceRef.current();
       dispatchRoomStateEvent({ type: "local-reset" });
-      router.replace(authEntryHref as Route);
+      router.replace(
+        buildRoomExitHref({
+          activeSession,
+          workspaceEntryHref,
+          authEntryHref
+        }) as Route
+      );
     },
-    [authEntryHref, dispatchRoomStateEvent, resetPlayerSurfaceRef, router, setIsNavigatingRoomExit, setStatusMessage]
+    [
+      activeSession,
+      authEntryHref,
+      dispatchRoomStateEvent,
+      resetPlayerSurfaceRef,
+      router,
+      setIsNavigatingRoomExit,
+      setStatusMessage,
+      workspaceEntryHref
+    ]
   );
 
   const requestRoomSnapshotResync = useCallback(

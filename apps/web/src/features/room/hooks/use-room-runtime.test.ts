@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRoomExitHref,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
   shouldAcceptIncomingDataSignal,
@@ -10,6 +11,26 @@ import {
 } from "./use-room-runtime";
 
 describe("pure cache room runtime helpers", () => {
+  it("routes room deletion exits to the workspace instead of an auth redirect back to the deleted room", () => {
+    expect(
+      buildRoomExitHref({
+        activeSession: { userId: "user_1" },
+        workspaceEntryHref: "/app",
+        authEntryHref: "/auth?redirectTo=%2Froom%2Froom_1"
+      })
+    ).toBe("/app");
+  });
+
+  it("routes unauthenticated room exits through auth", () => {
+    expect(
+      buildRoomExitHref({
+        activeSession: null,
+        workspaceEntryHref: "/app",
+        authEntryHref: "/auth?redirectTo=%2Froom%2Froom_1"
+      })
+    ).toBe("/auth?redirectTo=%2Froom%2Froom_1");
+  });
+
   it("accepts only data peer signals", () => {
     const dataSignal = {
       roomId: "room_1",
