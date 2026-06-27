@@ -92,6 +92,10 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
   };
 }
 
+export function buildCachedLibraryTrackRegisterPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
+  return buildRegisterTrackPayload(track);
+}
+
 export function shouldAnnounceTrackAvailability(input: {
   peerId: string | null | undefined;
 }) {
@@ -1189,10 +1193,10 @@ export function useTrackUploads(options: {
         const tempObjectUrl = URL.createObjectURL(cachedTrack.file);
         try {
           const trackMeta = await buildTrackMeta(cachedTrack.file, tempObjectUrl, activeSession);
-          registeredTrack = await musicRoomApi.registerTrack(roomId, {
-            sessionId: activeSession.userId,
-            ...trackMeta
-          });
+          registeredTrack = await musicRoomApi.registerTrack(
+            roomId,
+            buildCachedLibraryTrackRegisterPayload(trackMeta)
+          );
         } finally {
           URL.revokeObjectURL(tempObjectUrl);
         }

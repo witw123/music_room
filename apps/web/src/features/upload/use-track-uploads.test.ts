@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { registerTrackRequestSchema } from "@music-room/shared";
 import {
+  buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
   resolveMissingOwnedUploadedTracks,
   shouldAnnounceTrackAvailability
@@ -26,6 +28,45 @@ describe("buildRegisterTrackPayload", () => {
 
     expect(payload).not.toHaveProperty("sessionId");
     expect(payload).toMatchObject({
+      ownerSessionId: "user_1",
+      ownerNickname: "Host"
+    });
+  });
+});
+
+describe("buildCachedLibraryTrackRegisterPayload", () => {
+  it("produces a strict server registration payload without client-only session fields", () => {
+    const payload = buildCachedLibraryTrackRegisterPayload({
+      id: "track_cached",
+      title: "Cached Tone",
+      artist: "本地缓存",
+      album: null,
+      durationMs: 500,
+      bitrate: null,
+      sizeBytes: 44144,
+      codec: "wav",
+      mimeType: "audio/wav",
+      fileHash: "hash_cached",
+      artworkUrl: null,
+      ownerSessionId: "user_1",
+      ownerNickname: "Host",
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 1,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/wav"
+      },
+      relayManifest: {
+        totalChunks: 1,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/wav"
+      }
+    });
+
+    expect(payload).not.toHaveProperty("sessionId");
+    expect(registerTrackRequestSchema.parse(payload)).toMatchObject({
+      title: "Cached Tone",
+      fileHash: "hash_cached",
       ownerSessionId: "user_1",
       ownerNickname: "Host"
     });
