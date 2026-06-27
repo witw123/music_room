@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PeerDiagnosticsSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import {
   countPeersWithinActiveMembers,
   filterAvailabilityAnnouncementsByActivePeers,
   filterAvailabilityAnnouncementsByCurrentRoomPeers,
   filterVisiblePeerDiagnostics,
   getActiveMemberPeerIds,
+  getLocalPlaybackStatus,
   resolveDerivedAvailabilityByTrack,
   resolveCurrentRoomTrackManifest
 } from "./use-room-derived-state";
@@ -276,5 +278,49 @@ describe("use-room-derived-state helpers", () => {
         null
       )
     ).toEqual([diagnostics[0], diagnostics[2]]);
+  });
+
+  it("treats ready native blob full-local playback as audible without PCM frames", () => {
+    const cachePlayback = {
+      ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,
+      activeSource: "full-local",
+      engineType: "pcm",
+      contiguousBufferedMs: 319_900,
+      aheadBufferedMs: 310_100,
+      schedulerPolicy: "background",
+      startupReady: true,
+      fullLocalReady: true,
+      fullLocalPlaybackMode: "native-blob",
+      localAudioPaused: false,
+      localAudioMuted: false,
+      localAudioVolume: 0.72,
+      localAudioReadyState: 4,
+      localAudioCurrentSrc: "blob:http://localhost/track",
+      localAudioHasSrcObject: false,
+      pcmDecodedSegmentCount: null,
+      pcmScheduledSegmentCount: null,
+      pcmDirectOutputConnected: null
+    } satisfies NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
+
+    expect(
+      getLocalPlaybackStatus({
+        presenceState: "online",
+        mediaConnectionState: "live",
+        isSourceOwner: false,
+        audioUnlocked: true,
+        sourceStartState: "live",
+        lastSourceStartError: null,
+        mediaConnectedPeersCount: 0,
+        playbackStatus: "playing",
+        cachePlayback,
+        dataReadyCount: 0,
+        pieceDownloadRateKbps: null,
+        pieceUploadRateKbps: null
+      })
+    ).toMatchObject({
+      label: "完整缓存播放",
+      tone: "success",
+      badgeText: "full-local"
+    });
   });
 });

@@ -697,7 +697,12 @@ function getLocalAudioPlaybackIssue(
     return "尚未确认本地音频元素已经开始播放。";
   }
 
-  if (cachePlayback.engineType === "pcm") {
+  const shouldInspectPcmOutput =
+    cachePlayback.engineType === "pcm" &&
+    (cachePlayback.activeSource !== "full-local" ||
+      cachePlayback.fullLocalPlaybackMode === "pcm-engine" ||
+      cachePlayback.localAudioHasSrcObject === true);
+  if (shouldInspectPcmOutput) {
     if (cachePlayback.pcmAudioContextState && cachePlayback.pcmAudioContextState !== "running") {
       return `PCM 音频上下文未运行: ${cachePlayback.pcmAudioContextState}。`;
     }
@@ -725,7 +730,7 @@ function getLocalAudioPlaybackIssue(
   return null;
 }
 
-function getLocalPlaybackStatus(input: {
+export function getLocalPlaybackStatus(input: {
   presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
   mediaConnectionState: RoomMediaConnectionState;
   isSourceOwner: boolean;

@@ -68,6 +68,7 @@ describe("captureAudioStream", () => {
     const close = vi.fn().mockResolvedValue(undefined);
     const connect = vi.fn();
     const createMediaElementSource = vi.fn(() => ({ connect }));
+    const speakerDestination = {};
     const createMediaStreamDestination = vi.fn(() => ({
       stream: destinationStream
     }));
@@ -80,7 +81,7 @@ describe("captureAudioStream", () => {
         close,
         createMediaElementSource,
         createMediaStreamDestination,
-        destination: {}
+        destination: speakerDestination
       }))
     } as unknown as Window;
     (globalThis as { window?: unknown }).window = testWindow;
@@ -94,6 +95,8 @@ describe("captureAudioStream", () => {
     expect(stream).toBe(destinationStream);
     expect(captureStream).not.toHaveBeenCalled();
     expect(createMediaElementSource).toHaveBeenCalledWith(audio);
+    expect(connect).toHaveBeenCalledWith(expect.objectContaining({ stream: destinationStream }));
+    expect(connect).toHaveBeenCalledWith(speakerDestination);
     expect(getCapturedAudioStreamMode(audio)).toBe("audio-context");
 
     (globalThis as { window?: unknown }).window = previousWindow;
