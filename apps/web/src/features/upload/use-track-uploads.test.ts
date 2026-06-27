@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildRegisterTrackPayload, resolveMissingOwnedUploadedTracks } from "./use-track-uploads";
+import {
+  buildRegisterTrackPayload,
+  resolveMissingOwnedUploadedTracks,
+  shouldAnnounceTrackAvailability
+} from "./use-track-uploads";
 
 describe("buildRegisterTrackPayload", () => {
   it("does not include client-only session fields rejected by the strict server schema", () => {
@@ -25,6 +29,22 @@ describe("buildRegisterTrackPayload", () => {
       ownerSessionId: "user_1",
       ownerNickname: "Host"
     });
+  });
+});
+
+describe("shouldAnnounceTrackAvailability", () => {
+  it("depends on peer identity rather than the manual cache feature flag", () => {
+    expect(
+      shouldAnnounceTrackAvailability({
+        peerId: "peer_1"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldAnnounceTrackAvailability({
+        peerId: null
+      })
+    ).toBe(false);
   });
 });
 

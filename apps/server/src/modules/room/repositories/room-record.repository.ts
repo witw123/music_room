@@ -21,7 +21,7 @@ export class RoomRecordRepository {
     const inMemoryRecord = [...this.rooms.values()].find(({ room }) => room.joinCode === code);
 
     if (inMemoryRecord) {
-      return inMemoryRecord.room;
+      return cloneRoomRecord(inMemoryRecord).room;
     }
 
     if (this.prisma.isAvailable()) {
@@ -31,15 +31,15 @@ export class RoomRecordRepository {
 
       if (persisted) {
         const record = deserializeRoomRecord(persisted);
-        this.rooms.set(record.room.id, record);
-        return record.room;
+        this.rooms.set(record.room.id, cloneRoomRecord(record));
+        return cloneRoomRecord(record).room;
       }
     }
 
     const redisRecord = await this.redis.getJson<RoomRecord>(this.joinCodeCacheKey(code));
     if (redisRecord) {
-      this.rooms.set(redisRecord.room.id, redisRecord);
-      return redisRecord.room;
+      this.rooms.set(redisRecord.room.id, cloneRoomRecord(redisRecord));
+      return cloneRoomRecord(redisRecord).room;
     }
 
     throw new Error(`Room not found for join code: ${joinCode}`);
@@ -49,7 +49,7 @@ export class RoomRecordRepository {
     const cached = this.rooms.get(roomId);
 
     if (cached) {
-      return cached;
+      return cloneRoomRecord(cached);
     }
 
     if (this.prisma.isAvailable()) {
@@ -59,15 +59,15 @@ export class RoomRecordRepository {
 
       if (persisted) {
         const record = deserializeRoomRecord(persisted);
-        this.rooms.set(roomId, record);
-        return record;
+        this.rooms.set(roomId, cloneRoomRecord(record));
+        return cloneRoomRecord(record);
       }
     }
 
     const redisRecord = await this.redis.getJson<RoomRecord>(this.roomCacheKey(roomId));
     if (redisRecord) {
-      this.rooms.set(roomId, redisRecord);
-      return redisRecord;
+      this.rooms.set(roomId, cloneRoomRecord(redisRecord));
+      return cloneRoomRecord(redisRecord);
     }
 
     throw new Error(`Room not found: ${roomId}`);
@@ -78,7 +78,6 @@ export class RoomRecordRepository {
       await this.persistRecordToDatabase(record);
     }
 
-    this.rooms.set(record.room.id, record);
     await this.redis.addToSet(this.roomRegistryKey, record.room.id);
     await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
     await this.redis.setJson(
@@ -95,30 +94,30 @@ export class RoomRecordRepository {
         )
       )
     );
+    this.rooms.set(record.room.id, cloneRoomRecord(record));
   }
 
   async deleteRecord(record: RoomRecord) {
-    this.rooms.delete(record.room.id);
     await Promise.all([
       this.redis.removeFromSet(this.roomRegistryKey, record.room.id),
       this.redis.delete(this.roomCacheKey(record.room.id)),
       this.redis.delete(this.joinCodeCacheKey(record.room.joinCode))
     ]);
 
-    if (!this.prisma.isAvailable()) {
-      return;
+    if (this.prisma.isAvailable()) {
+      await this.prisma.roomState.deleteMany({
+        where: { id: record.room.id }
+      });
     }
 
-    await this.prisma.roomState.deleteMany({
-      where: { id: record.room.id }
-    });
+    this.rooms.delete(record.room.id);
   }
 
   async listRecoverableRecords() {
     const records = new Map<string, RoomRecord>();
 
     for (const record of this.rooms.values()) {
-      records.set(record.room.id, record);
+      records.set(record.room.id, cloneRoomRecord(record));
     }
 
     if (this.prisma.isAvailable()) {
@@ -128,8 +127,8 @@ export class RoomRecordRepository {
 
       for (const item of persisted) {
         const record = deserializeRoomRecord(item);
-        this.rooms.set(record.room.id, record);
-        records.set(record.room.id, record);
+        this.rooms.set(record.room.id, cloneRoomRecord(record));
+        records.set(record.room.id, cloneRoomRecord(record));
       }
     }
 
@@ -145,8 +144,8 @@ export class RoomRecordRepository {
         continue;
       }
 
-      this.rooms.set(roomId, record);
-      records.set(roomId, record);
+      this.rooms.set(roomId, cloneRoomRecord(record));
+      records.set(roomId, cloneRoomRecord(record));
     }
 
     return [...records.values()].sort(
@@ -226,4 +225,8 @@ export class RoomRecordRepository {
       throw new Error("Room state revision conflict.");
     }
   }
+}
+
+function cloneRoomRecord(record: RoomRecord): RoomRecord {
+  return structuredClone(record);
 }

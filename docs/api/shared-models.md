@@ -78,7 +78,8 @@
   - `playbackRevision`
   - `mediaEpoch`
 - 测试关注点：
-  - `queueVersion` 是播放控制并发保护的核心版本
+  - `playbackRevision` 是播放控制并发保护的核心版本
+  - `queueVersion` 只表示队列结构版本
   - `mediaEpoch` 标识媒体发布代次，切源或重建 media 协商时会变化
 
 ### `TrackMeta`
@@ -274,15 +275,23 @@
 ### `queueVersion`
 
 - 所在对象：`PlaybackSnapshot`
-- 作用：播放控制并发保护版本
+- 作用：队列结构版本
 - 何时变化：
   - 加歌
   - 删歌
   - 重排
-  - 播放状态发生会影响当前播放条目的变更
+  - 删除当前播放条目时引发的队列结构变化
+
+### `playbackRevision`
+
+- 所在对象：`PlaybackSnapshot`
+- 作用：播放控制并发保护版本
+- 何时变化：
+  - 播放、暂停、seek、上一首、下一首
+  - source peer 重连或媒体拓扑重建
 - 测试策略：
-  - 发 `PATCH /playback` 前必须读取最新 `queueVersion`
-  - 服务端比较的是 `expectedVersion === queueVersion`
+  - 发 `PATCH /playback` 前必须读取最新 `playbackRevision`
+  - 服务端比较的是 `expectedVersion === playbackRevision`
 
 ### `mediaEpoch`
 

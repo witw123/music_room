@@ -181,7 +181,7 @@
 ### 前置条件
 
 - 队列至少有 2 项
-- 已知最新 `playback.queueVersion`
+- 已知最新 `playback.playbackRevision`
 
 ### 步骤
 
@@ -201,8 +201,8 @@
 
 ### 关键字段断言
 
-- `expectedVersion` 必须等于当前 `queueVersion`
-- 成功后新的 `queueVersion` 应递增
+- `expectedVersion` 必须等于当前 `playbackRevision`
+- 成功后新的 `playbackRevision` 应递增
 - `positionMs` 与动作匹配
 
 ### 异常分支

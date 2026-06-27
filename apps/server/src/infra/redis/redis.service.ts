@@ -7,6 +7,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly messageHandlers = new Map<string, Set<(payload: unknown) => void>>();
   private readonly mode: RedisConnectionMode = getRedisConnectionMode();
+  private subscriberMessageHandlerAttached = false;
   readonly client = createRedisClient();
   readonly subscriber = createRedisClient();
   private readonly handleSubscriberMessage = (messageChannel: string, message: string) => {
@@ -26,11 +27,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.registerLifecycleLogging(this.client, "publisher");
     this.registerLifecycleLogging(this.subscriber, "subscriber");
+    this.attachSubscriberMessageHandler();
     await this.connectSafely(this.client, "publisher");
     await this.connectSafely(this.subscriber, "subscriber");
-    if (this.subscriber.status === "ready") {
-      this.subscriber.on("message", this.handleSubscriberMessage);
-    }
   }
 
   async onModuleDestroy() {
@@ -169,6 +168,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private registerLifecycleLogging(client: Redis, label: string) {
     client.on("ready", () => {
       this.logger.log(`Redis ${label} ready`);
+      if (client === this.subscriber) {
+        this.attachSubscriberMessageHandler();
+      }
     });
     client.on("error", (error) => {
       this.logger.warn(`Redis ${label} error: ${String(error)}`);
@@ -190,6 +192,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     throw new Error(`Redis unavailable (${label}).`);
+  }
+
+  private attachSubscriberMessageHandler() {
+    if (this.subscriberMessageHandlerAttached) {
+      return;
+    }
+    this.subscriber.on("message", this.handleSubscriberMessage);
+    this.subscriberMessageHandlerAttached = true;
   }
 }
 

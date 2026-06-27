@@ -46,6 +46,43 @@ describe("validateRuntimeConfig", () => {
     ).toThrow("TURN requires TURN_PUBLIC_HOST or APP_DOMAIN in production startup.");
   });
 
+  it("allows production startup when TURN host is derived from request host", () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: "production",
+        JWT_SECRET: "super-secret-jwt",
+        TURN_ENABLED: "true",
+        TURN_PUBLIC_HOST_USE_REQUEST_HOST: "1",
+        TURN_SHARED_SECRET: "super-secret-turn"
+      })
+    ).not.toThrow();
+  });
+
+  it("allows request-host TURN derivation to replace a local TURN placeholder", () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: "production",
+        JWT_SECRET: "super-secret-jwt",
+        TURN_ENABLED: "true",
+        TURN_PUBLIC_HOST: "localhost",
+        TURN_PUBLIC_HOST_USE_REQUEST_HOST: "1",
+        TURN_SHARED_SECRET: "super-secret-turn"
+      })
+    ).not.toThrow();
+  });
+
+  it("rejects local TURN hosts in production when no static TURN fallback exists", () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: "production",
+        JWT_SECRET: "super-secret-jwt",
+        TURN_ENABLED: "true",
+        TURN_PUBLIC_HOST: "localhost",
+        TURN_SHARED_SECRET: "super-secret-turn"
+      })
+    ).toThrow("TURN_PUBLIC_HOST cannot be localhost in production startup.");
+  });
+
   it("rejects production startup when TURN is disabled without a static TURN server", () => {
     expect(() =>
       validateRuntimeConfig({

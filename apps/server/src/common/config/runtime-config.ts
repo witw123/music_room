@@ -34,7 +34,15 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const turnPublicHost = env.TURN_PUBLIC_HOST?.trim() ?? "";
   const appDomain = env.APP_DOMAIN?.trim() ?? "";
   const turnSecret = env.TURN_SHARED_SECRET?.trim() ?? "";
-  const hasEphemeralTurnConfig = (!!turnPublicHost || !!appDomain) && !!turnSecret;
+  const useRequestHostForTurn = env.TURN_PUBLIC_HOST_USE_REQUEST_HOST === "1";
+  const hasTurnHostSource = !!turnPublicHost || !!appDomain || useRequestHostForTurn;
+  if (turnPublicHost && !useRequestHostForTurn && isLocalHost(turnPublicHost)) {
+    throw new Error("TURN_PUBLIC_HOST cannot be localhost in production startup.");
+  }
+  if (!turnPublicHost && !useRequestHostForTurn && appDomain && isLocalHost(appDomain)) {
+    throw new Error("APP_DOMAIN cannot be localhost for TURN in production startup.");
+  }
+  const hasEphemeralTurnConfig = hasTurnHostSource && !!turnSecret;
   if (hasEphemeralTurnConfig) {
     if (insecureTurnSecrets.has(turnSecret.toLowerCase())) {
       throw new Error("Invalid TURN_SHARED_SECRET for production startup.");
@@ -46,7 +54,7 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     return;
   }
 
-  if (!turnPublicHost && !appDomain) {
+  if (!hasTurnHostSource) {
     throw new Error("TURN requires TURN_PUBLIC_HOST or APP_DOMAIN in production startup.");
   }
 
@@ -90,4 +98,21 @@ function hasStaticTurnIceConfig(env: NodeJS.ProcessEnv) {
 function isTurnUrl(value: string) {
   const normalized = value.trim().toLowerCase();
   return normalized.startsWith("turn:") || normalized.startsWith("turns:");
+}
+
+function isLocalHost(value: string) {
+  const firstHost = value.split(",")[0]?.trim().toLowerCase() ?? "";
+  const normalized = firstHost.startsWith("[")
+    ? firstHost.slice(1, firstHost.indexOf("]") > 0 ? firstHost.indexOf("]") : undefined)
+    : firstHost.includes(":") && firstHost.split(":").length <= 2
+      ? firstHost.split(":")[0]
+      : firstHost;
+
+  return (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    normalized === "127.0.0.1" ||
+    !!normalized?.startsWith("127.")
+  );
 }

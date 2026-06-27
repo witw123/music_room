@@ -16,6 +16,7 @@ module.exports = {
       }
     ]
   },
+  setupFilesAfterEnv: ["<rootDir>/src/test/setup.ts"],
   moduleNameMapper: {
     "^@music-room/shared$": "<rootDir>/../../packages/shared/src/index.ts",
     "^@/(.*)$": "<rootDir>/src/$1"

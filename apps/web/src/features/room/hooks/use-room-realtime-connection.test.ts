@@ -3,6 +3,7 @@ import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
   buildRoomSubscribePayload,
   isSocketDisconnectGraceActive,
+  shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
@@ -189,6 +190,28 @@ describe("shouldResyncSnapshotForPlaybackPatch", () => {
           playbackRevision: 2,
           queueVersion: 2
         })
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldQueueIncomingAvailability", () => {
+  it("accepts availability for the active room even when manual caching is disabled", () => {
+    expect(
+      shouldQueueIncomingAvailability({
+        announcementRoomId: "room_1",
+        runtimeRoomId: "room_1",
+        activeRouteRoomId: "room_1"
+      })
+    ).toBe(true);
+  });
+
+  it("ignores availability for inactive rooms", () => {
+    expect(
+      shouldQueueIncomingAvailability({
+        announcementRoomId: "room_2",
+        runtimeRoomId: "room_1",
+        activeRouteRoomId: "room_1"
       })
     ).toBe(false);
   });

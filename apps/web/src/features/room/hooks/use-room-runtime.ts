@@ -26,7 +26,7 @@ import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { toUserFacingError } from "@/lib/music-room-ui";
+import { getPlaybackConsistencyVersion, toUserFacingError } from "@/lib/music-room-ui";
 import { enableManualTrackCaching, enableTrackCaching } from "@/features/cache/cache-policy";
 import { useRoomDiagnosticsBridge } from "./use-room-diagnostics-bridge";
 import { useManualCacheDownloader, type ManualCacheTrackPlan } from "./use-manual-cache-downloader";
@@ -184,6 +184,12 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
 }) {
   const { previousPlayback, nextPlayback, activeSessionId } = input;
   if (!activeSessionId || nextPlayback.sourceSessionId !== activeSessionId) {
+    return false;
+  }
+  if (
+    previousPlayback &&
+    getPlaybackConsistencyVersion(nextPlayback) < getPlaybackConsistencyVersion(previousPlayback)
+  ) {
     return false;
   }
   return (

@@ -117,6 +117,18 @@ describe("pure cache room runtime helpers", () => {
     ).toBe("room_1|peer_a|peer_b|track_1,track_2");
   });
 
+  it("reannounces track availability when manual caching is disabled", () => {
+    expect(
+      shouldReannounceManualCacheAvailability({
+        enableManualTrackCaching: false,
+        roomId: "room_1",
+        roomListenerSetHash: "peer_a|peer_b",
+        uploadedTrackIds: ["track_1"],
+        lastBroadcastKey: null
+      })
+    ).toBe("room_1|peer_a|peer_b|track_1");
+  });
+
   it("forces manual cache bootstrap when providers are not connected", () => {
     expect(
       shouldForceManualCacheBootstrap({
@@ -247,6 +259,40 @@ describe("pure cache room runtime helpers", () => {
         }
       })
     ).toBe(true);
+  });
+
+  it("does not kick local source playback from a stale realtime playback event", () => {
+    expect(
+      shouldKickSourcePlaybackFromRealtimeEvent({
+        activeSessionId: "host",
+        previousPlayback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 30_000,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          queueVersion: 4,
+          playbackRevision: 4,
+          mediaEpoch: 2
+        },
+        nextPlayback: {
+          status: "paused",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 3,
+          playbackRevision: 3,
+          mediaEpoch: 1
+        }
+      })
+    ).toBe(false);
   });
 
   it("waits for a stable peer id before starting the room realtime runtime", () => {

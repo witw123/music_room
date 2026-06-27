@@ -403,7 +403,7 @@ null
   - 从房间曲库删除曲目
   - 清理队列中的对应条目
   - 删除所有歌单中的对应 `trackId`
-  - 若当前正在播放该曲目，会清空播放状态；否则递增 `queueVersion`
+  - 若当前正在播放该曲目，会清空播放状态并递增 `playbackRevision`；若只影响队列则递增 `queueVersion`
   - 触发 `room.snapshot`
   - 触发 `room.library.patch`
 - 测试要点：删除正在播放曲目后，`currentTrackId` 和 `currentQueueItemId` 应清空
@@ -614,7 +614,7 @@ null
   - `404`：`queueItemId` 或 `trackId` 不存在
   - `409`：
     - 缺失 `expectedVersion`
-    - `expectedVersion` 与当前 `queueVersion` 不一致
+    - `expectedVersion` 与当前 `playbackRevision` 不一致
     - 播放曲目上传者离线
   - `429`：播放控制限流
   - `503`：Realtime sync unavailable
@@ -623,7 +623,7 @@ null
   - `play/pause/next/prev`：每用户每秒 `4` 次；每房间每秒 `12` 次
 - 冲突语义：
   - `expectedVersion` 必填
-  - 服务端把它与当前 `playback.queueVersion` 比较
+  - 服务端把它与当前 `playback.playbackRevision` 比较
   - 不一致即拒绝本次控制，客户端应先用最新 `room.snapshot` 或 patch 重放 UI 状态
 - Realtime 失败语义：
   - 当前由 `roomService.isRealtimeAvailable()` 判断 Redis 是否可用
@@ -631,7 +631,7 @@ null
 - 副作用：
   - 成功后只广播 `room.playback.patch`
   - 不额外触发 `room.snapshot`
-- 测试要点：先取最新 `queueVersion` 再发控制；验证冲突和限流分支
+- 测试要点：先取最新 `playbackRevision` 再发控制；验证冲突和限流分支
 
 ## Realtime / ICE
 

@@ -50,6 +50,17 @@ export function shouldResyncSnapshotForPlaybackPatch(input: {
   return !input.currentSnapshot?.tracks.some((track) => track.id === trackId);
 }
 
+export function shouldQueueIncomingAvailability(input: {
+  announcementRoomId: string;
+  runtimeRoomId: string;
+  activeRouteRoomId: string | null | undefined;
+}) {
+  return (
+    input.announcementRoomId === input.runtimeRoomId &&
+    input.activeRouteRoomId === input.runtimeRoomId
+  );
+}
+
 export function shouldReannounceManualCacheAvailability(input: {
   enableManualTrackCaching: boolean;
   roomId: string | null | undefined;
@@ -57,7 +68,7 @@ export function shouldReannounceManualCacheAvailability(input: {
   uploadedTrackIds: string[];
   lastBroadcastKey: string | null;
 }) {
-  if (!input.enableManualTrackCaching || !input.roomId || !input.roomListenerSetHash) {
+  if (!input.roomId || !input.roomListenerSetHash) {
     return null;
   }
 
@@ -696,10 +707,8 @@ function attachRoomSocketHandlers(input: any) {
     input.clearSocketDisconnectGrace();
     subscribeToRoom();
     input.flushPendingAvailabilityRef.current();
-    if (input.enableManualTrackCaching) {
-      for (const trackId of input.currentRoomRef.current?.tracks.map((track: any) => track.id) ?? input.uploadedTrackIdsRef.current) {
-        void input.announceRoomTrackAvailabilityRef.current(trackId);
-      }
+    for (const trackId of input.currentRoomRef.current?.tracks.map((track: any) => track.id) ?? input.uploadedTrackIdsRef.current) {
+      void input.announceRoomTrackAvailabilityRef.current(trackId);
     }
     input.resyncRealtimePeers();
     if (
@@ -873,10 +882,11 @@ function attachRoomSocketHandlers(input: any) {
   });
 
   socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
-    if (announcement.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    if (!input.enableManualTrackCaching) {
+    if (!shouldQueueIncomingAvailability({
+      announcementRoomId: announcement.roomId,
+      runtimeRoomId: input.roomId,
+      activeRouteRoomId: input.activeRouteRoomIdRef.current
+    })) {
       return;
     }
     input.queueAvailabilityRef.current(announcement);

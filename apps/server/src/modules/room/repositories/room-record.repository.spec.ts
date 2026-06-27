@@ -45,6 +45,9 @@ function createRoomRecord(roomRevision: number): RoomRecord {
 function createRedisMock() {
   return {
     addToSet: jest.fn(),
+    delete: jest.fn(),
+    getJson: jest.fn(),
+    removeFromSet: jest.fn(),
     setJson: jest.fn(),
     setString: jest.fn()
   };
@@ -87,5 +90,68 @@ describe("RoomRecordRepository", () => {
     expect(redis.setJson).not.toHaveBeenCalled();
     expect(redis.setString).not.toHaveBeenCalled();
     expect(rooms.has("room_1")).toBe(false);
+  });
+
+  it("keeps the in-memory record unchanged when a persisted clone fails to save", async () => {
+    const storedRoomRevision = 1;
+    const existingRecord = createRoomRecord(storedRoomRevision);
+    const rooms = new Map<string, RoomRecord>([[existingRecord.room.id, existingRecord]]);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        findUnique: jest.fn(async () => ({ id: "room_1" })),
+        create: jest.fn(),
+        updateMany: jest.fn(async () => ({ count: 0 }))
+      }
+    };
+    const redis = createRedisMock();
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    const workingCopy = await repository.getRoomRecord("room_1");
+    workingCopy.queue.push({
+      id: "queue_1",
+      trackId: "track_1",
+      requestedBy: "Host",
+      requestedById: "host_1",
+      position: 0,
+      createdAt: "2026-01-01T00:00:00.000Z"
+    });
+    workingCopy.room.roomRevision = 2;
+
+    await expect(repository.persistRecord(workingCopy)).rejects.toThrow(
+      "Room state revision conflict."
+    );
+
+    expect(rooms.get("room_1")?.queue).toHaveLength(0);
+    expect(rooms.get("room_1")?.room.roomRevision).toBe(storedRoomRevision);
+  });
+
+  it("keeps the in-memory record when deleting external storage fails", async () => {
+    const existingRecord = createRoomRecord(1);
+    const rooms = new Map<string, RoomRecord>([[existingRecord.room.id, existingRecord]]);
+    const prisma = {
+      isAvailable: jest.fn(() => false)
+    };
+    const redis = createRedisMock();
+    redis.removeFromSet.mockRejectedValueOnce(new Error("Redis unavailable"));
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.deleteRecord(existingRecord)).rejects.toThrow("Redis unavailable");
+
+    expect(rooms.has("room_1")).toBe(true);
   });
 });

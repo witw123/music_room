@@ -279,7 +279,7 @@ io("http://localhost:3001", {
 - payload：`RoomPlaybackPatchPayload`
 - 触发时机：播放控制成功
 - 广播语义：广播给整个房间
-- 测试断言：`playback.queueVersion` 应等于最新权威版本
+- 测试断言：`playback.playbackRevision` 应等于最新权威版本
 
 ### `room.queue.patch`
 
@@ -380,7 +380,7 @@ io("http://localhost:3001", {
 播放控制不同：
 
 1. `PATCH /playback`
-2. 服务端校验 `expectedVersion`
+2. 服务端校验 `expectedVersion === playbackRevision`
 3. 成功后只广播 `room.playback.patch`
 
 ### 3. peer 不在线时的 `peer.signal`

@@ -49,7 +49,7 @@ export function toHttpApiError(exception: unknown): {
   const message = exception instanceof Error ? exception.message : "Internal server error.";
   const code = mapErrorCode(message, HttpStatus.INTERNAL_SERVER_ERROR);
   return {
-    status: code === errorCodes.roomNotFound ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR,
+    status: mapErrorStatus(code),
     body: createApiErrorResponse(code, message)
   };
 }
@@ -59,15 +59,27 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
     return errorCodes.realtimeUnavailable;
   }
 
-  if (message.includes("Playback state version conflict")) {
+  if (
+    message.includes("Playback state version conflict") ||
+    message.includes("Room state revision conflict")
+  ) {
     return errorCodes.playbackVersionConflict;
   }
 
-  if (message.includes("Track owner is not online")) {
+  if (
+    message.includes("Track owner is not online") ||
+    message.includes("All track uploaders must be online")
+  ) {
     return errorCodes.trackOwnerOffline;
   }
 
-  if (message.includes("Room not found") || message.includes("room.snapshot.missing")) {
+  if (
+    message.includes("Room not found") ||
+    message.includes("room.snapshot.missing") ||
+    message.includes("Track not found") ||
+    message.includes("Queue item not found") ||
+    message.includes("Playlist not found")
+  ) {
     return errorCodes.roomNotFound;
   }
 
@@ -92,7 +104,12 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
     return errorCodes.unauthorized;
   }
 
-  if (status === HttpStatus.BAD_REQUEST || message.includes("Username already exists")) {
+  if (
+    status === HttpStatus.BAD_REQUEST ||
+    message.includes("Username already exists") ||
+    message.includes("Queue reorder payload does not match") ||
+    message.includes("No tracks from this playlist are available")
+  ) {
     return errorCodes.validationFailed;
   }
 
@@ -113,6 +130,28 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
   }
 
   return errorCodes.internal;
+}
+
+export function mapErrorStatus(code: ErrorCode): number {
+  switch (code) {
+    case errorCodes.validationFailed:
+      return HttpStatus.BAD_REQUEST;
+    case errorCodes.unauthorized:
+      return HttpStatus.UNAUTHORIZED;
+    case errorCodes.rateLimited:
+      return HttpStatus.TOO_MANY_REQUESTS;
+    case errorCodes.roomNotFound:
+      return HttpStatus.NOT_FOUND;
+    case errorCodes.playbackVersionConflict:
+    case errorCodes.trackOwnerOffline:
+      return HttpStatus.CONFLICT;
+    case errorCodes.unauthorizedRoomAction:
+      return HttpStatus.FORBIDDEN;
+    case errorCodes.realtimeUnavailable:
+      return HttpStatus.SERVICE_UNAVAILABLE;
+    default:
+      return HttpStatus.INTERNAL_SERVER_ERROR;
+  }
 }
 
 function getApiErrorCode(response: string | object): ErrorCode | null {

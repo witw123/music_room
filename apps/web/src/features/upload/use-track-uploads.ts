@@ -92,6 +92,12 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
   };
 }
 
+export function shouldAnnounceTrackAvailability(input: {
+  peerId: string | null | undefined;
+}) {
+  return Boolean(input.peerId);
+}
+
 function isManualCacheTaskRecord(
   task: ManualCacheTaskRecord
 ): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
@@ -541,7 +547,7 @@ export function useTrackUploads(options: {
 
   const announceRoomTrackAvailability = useCallback(
     async (trackId: string) => {
-      if (!enableManualTrackCaching || !roomSnapshot || !activeSession || !peerId) {
+      if (!roomSnapshot || !activeSession || !peerId || !shouldAnnounceTrackAvailability({ peerId })) {
         return;
       }
 
@@ -771,7 +777,7 @@ export function useTrackUploads(options: {
           });
         }
 
-        if (enableManualTrackCaching && peerId) {
+        if (peerId && shouldAnnounceTrackAvailability({ peerId })) {
           const availability = await buildTrackAvailabilityFromFile({
             roomId,
             trackId: registered.id,
@@ -1203,7 +1209,7 @@ export function useTrackUploads(options: {
         }
       }));
 
-      if (enableManualTrackCaching && peerId) {
+      if (peerId && shouldAnnounceTrackAvailability({ peerId })) {
         const availability = await buildTrackAvailabilityFromFile({
           roomId,
           trackId: registeredTrack.id,

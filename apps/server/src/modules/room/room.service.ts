@@ -108,7 +108,6 @@ export class RoomService {
       queue: []
     };
 
-    this.rooms.set(room.id, record);
     await this.roomRecordRepository.persistRecord(record);
     await this.roomRecordRepository.setRecentRoomForSession(hostSession.id, room.id);
 
