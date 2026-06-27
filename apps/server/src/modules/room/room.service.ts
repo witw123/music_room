@@ -623,6 +623,7 @@ export class RoomService {
       throw new Error("Playback state version conflict.");
     }
     const playback = await this.roomPlaybackService.updatePlayback(record, input);
+    this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return playback;
   }

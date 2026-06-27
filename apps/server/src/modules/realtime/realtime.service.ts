@@ -145,28 +145,39 @@ function parsePositiveInt(value?: string | null) {
 }
 
 function resolveTurnHost(requestHost?: string | null) {
-  const explicitHost = process.env.TURN_PUBLIC_HOST?.trim();
-  if (explicitHost) {
+  const requestHostCandidate = normalizeHostHeader(requestHost);
+  if (
+    process.env.TURN_PUBLIC_HOST_USE_REQUEST_HOST === "1" &&
+    requestHostCandidate &&
+    isAllowedTurnHost(requestHostCandidate)
+  ) {
+    return requestHostCandidate;
+  }
+
+  const explicitHost = normalizeHostHeader(process.env.TURN_PUBLIC_HOST);
+  if (explicitHost && isAllowedTurnHost(explicitHost)) {
     return explicitHost;
   }
 
-  const appDomain = process.env.APP_DOMAIN?.trim();
+  const appDomain = normalizeHostHeader(process.env.APP_DOMAIN);
   if (appDomain) {
     // Allow TURN_PUBLIC_HOST_USE_APP_DOMAIN=1 to skip the "turn." prefix
     // so that TURN shares the same domain as the app (useful when the
     // reverse proxy / load balancer routes TURN ports on the same host).
-    if (process.env.TURN_PUBLIC_HOST_USE_APP_DOMAIN === "1") {
-      return appDomain;
+    const derivedHost =
+      process.env.TURN_PUBLIC_HOST_USE_APP_DOMAIN === "1" || appDomain.startsWith("turn.")
+        ? appDomain
+        : `turn.${appDomain}`;
+    if (isAllowedTurnHost(derivedHost)) {
+      return derivedHost;
     }
-    return appDomain.startsWith("turn.") ? appDomain : `turn.${appDomain}`;
   }
 
   // Use the request's Host header as a last-resort fallback.
   // This handles cases where neither TURN_PUBLIC_HOST nor APP_DOMAIN is set
   // but the ICE endpoint is reached via a known public hostname.
-  const normalizedRequestHost = normalizeHostHeader(requestHost);
-  if (normalizedRequestHost) {
-    return normalizedRequestHost;
+  if (requestHostCandidate && isAllowedTurnHost(requestHostCandidate)) {
+    return requestHostCandidate;
   }
 
   return null;
@@ -185,6 +196,21 @@ function normalizeHostHeader(value?: string | null) {
 
   const withoutPort = firstHost.split(":")[0]?.trim();
   return withoutPort || null;
+}
+
+function isAllowedTurnHost(host: string) {
+  return process.env.NODE_ENV !== "production" || !isLocalTurnHost(host);
+}
+
+function isLocalTurnHost(host: string) {
+  const normalized = host.trim().toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
+  return (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "0.0.0.0" ||
+    normalized === "127.0.0.1" ||
+    normalized.startsWith("127.")
+  );
 }
 
 function hasTurnIceServer(iceServers: IceServerConfig[]) {

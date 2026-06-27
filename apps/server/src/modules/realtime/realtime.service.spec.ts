@@ -62,6 +62,24 @@ describe("RealtimeService", () => {
     });
   });
 
+  it("does not expose localhost TURN URLs in production when a public request host is available", () => {
+    process.env.NODE_ENV = "production";
+    process.env.TURN_ENABLED = "true";
+    process.env.TURN_PUBLIC_HOST = "localhost";
+    delete process.env.APP_DOMAIN;
+    process.env.TURN_SHARED_SECRET = "turn-secret";
+    const service = new RealtimeService();
+
+    const config = service.buildIceConfig("user_1", {
+      requestHost: "musicroom.witw.top"
+    });
+
+    expect(config.source).toBe("ephemeral");
+    expect(config.iceServers[1]).toMatchObject({
+      urls: expect.arrayContaining(["turn:musicroom.witw.top:3478?transport=udp"])
+    });
+  });
+
   it("derives turn host from APP_DOMAIN when explicit TURN host is missing", () => {
     process.env.TURN_ENABLED = "true";
     delete process.env.TURN_PUBLIC_HOST;

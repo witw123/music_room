@@ -175,6 +175,41 @@ describe("RoomService", () => {
     });
   });
 
+  it("increments room revision when playback changes", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Revision Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "revision-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const beforePlayback = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id,
+      actorPeerId: "peer-host"
+    });
+
+    const afterPlayback = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(afterPlayback.room.roomRevision).toBe((beforePlayback.room.roomRevision ?? 0) + 1);
+    expect(afterPlayback.room.playback.status).toBe("playing");
+  });
+
   it("only allows the host or requester to remove a queue item", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
