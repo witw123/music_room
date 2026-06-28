@@ -26,7 +26,7 @@ export class RoomPlaybackService {
       if (nextItem) {
         await this.applyTrackPlayback(record, nextItem.trackId, input.positionMs ?? 0, nextItem.id);
       } else {
-        this.clearPlayback(playback);
+        this.clearPlayback(playback, { bumpVersion: false });
       }
     }
 
@@ -59,7 +59,7 @@ export class RoomPlaybackService {
         nextTrackId = queueItem.trackId;
       }
       if (!nextTrackId) {
-        this.clearPlayback(playback);
+        this.clearPlayback(playback, { bumpVersion: false });
       } else {
         const isTrackSwitch = nextTrackId !== playback.currentTrackId;
         const startPositionMs =
@@ -80,8 +80,13 @@ export class RoomPlaybackService {
             preferredSessionId: playback.sourceSessionId
           })
         : null;
+      const pausePositionMs = input.positionMs ?? this.getEffectivePlaybackPositionMs(record, playback);
       playback.status = "paused";
-      playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, input.positionMs ?? playback.positionMs);
+      playback.positionMs = this.clampPositionMs(
+        record,
+        playback.currentTrackId,
+        pausePositionMs
+      );
       playback.startedAt = null;
       playback.sourceSessionId = sourceCandidate?.sessionId ?? playback.sourceSessionId;
       playback.sourcePeerId = sourceCandidate?.peerId ?? null;
@@ -169,7 +174,7 @@ export class RoomPlaybackService {
     }
   }
 
-  clearPlayback(playback: PlaybackSnapshot) {
+  clearPlayback(playback: PlaybackSnapshot, options?: { bumpVersion?: boolean }) {
     playback.status = "paused";
     playback.currentTrackId = null;
     playback.currentQueueItemId = null;
@@ -179,7 +184,9 @@ export class RoomPlaybackService {
     playback.positionMs = 0;
     playback.startedAt = null;
     playback.mediaEpoch += 1;
-    this.bumpPlaybackVersion(playback);
+    if (options?.bumpVersion !== false) {
+      this.bumpPlaybackVersion(playback);
+    }
   }
 
   async handleSourceDeparture(record: RoomRecord, sessionId: string) {

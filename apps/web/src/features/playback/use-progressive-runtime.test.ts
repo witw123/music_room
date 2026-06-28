@@ -5,6 +5,7 @@ import {
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
   shouldEnableFullLocalHandoff,
+  resolveFullLocalPlaybackSessionState,
   shouldPreferImmediateFullLocalRecovery,
   shouldPreferLocalTakeover,
   shouldPrepareProgressiveRuntimeForSource,
@@ -176,6 +177,33 @@ describe("use-progressive-runtime policy helpers", () => {
         cooldownMs: 0
       })
     ).toBe(true);
+  });
+
+  it("allows full-local playback once the complete cache appears during the same playback session", () => {
+    const initialSession = resolveFullLocalPlaybackSessionState({
+      currentSession: {
+        key: null,
+        availableInSession: false
+      },
+      playbackSurfaceKey: "track_1:epoch_1",
+      hasBufferedFullLocalTrack: false
+    });
+
+    expect(initialSession).toEqual({
+      key: "track_1:epoch_1",
+      availableInSession: false
+    });
+
+    expect(
+      resolveFullLocalPlaybackSessionState({
+        currentSession: initialSession,
+        playbackSurfaceKey: "track_1:epoch_1",
+        hasBufferedFullLocalTrack: true
+      })
+    ).toEqual({
+      key: "track_1:epoch_1",
+      availableInSession: true
+    });
   });
 
   it("blocks full-local handoff while startup gate, cooldown, drift, or local readiness is bad", () => {

@@ -1023,6 +1023,91 @@ describe("RoomService", () => {
     expect(resumed.mediaEpoch).toBe(playing.mediaEpoch);
   });
 
+  it("pauses at the effective playback position when no client position is supplied", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-04-04T00:00:00.000Z"));
+    try {
+      const prisma = createPrismaMock();
+      const redis = createRedisMock();
+      const authService = new AuthService(prisma as never);
+      const roomService = new RoomService(authService, prisma as never, redis as never);
+
+      const host = await authService.createGuestSession("Host");
+      const snapshot = await roomService.createRoom(host.id);
+      await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+      const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+        title: "Pause Effective",
+        artist: "Artist",
+        album: null,
+        durationMs: 120000,
+        bitrate: null,
+        fileHash: "pause-effective-track",
+        artworkUrl: null,
+        ownerSessionId: host.id,
+        ownerNickname: host.nickname,
+        sourceType: "local_upload"
+      });
+
+      await roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: track.id,
+        actorSessionId: host.id,
+        positionMs: 4000
+      });
+
+      jest.setSystemTime(new Date("2026-04-04T00:00:09.500Z"));
+
+      const paused = await roomService.updatePlayback(snapshot.room.id, {
+        action: "pause",
+        actorSessionId: host.id
+      });
+
+      expect(paused.positionMs).toBe(13500);
+      expect(paused.startedAt).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("clears playback with a single playback revision bump when next has no queue item", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "No Queue",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "no-queue-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playing = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+
+    const cleared = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+
+    expect(cleared.currentTrackId).toBeNull();
+    expect(cleared.playbackRevision).toBe(playing.playbackRevision + 1);
+  });
+
   it("does not rewind an already playing track when play is submitted again", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-04-04T00:00:00.000Z"));

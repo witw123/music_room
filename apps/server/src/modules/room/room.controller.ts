@@ -128,12 +128,12 @@ export class RoomController {
     @Headers("x-session-token") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
+    await this.roomService.assertCanDeleteRoom(roomId, userId);
     const snapshot = await this.roomService.getRoomSnapshot(
       roomId,
       await this.playlistService.listPlaylistsForRoom(roomId)
     );
     const trackIds = snapshot.tracks.map((track) => track.id);
-    await this.roomService.assertCanDeleteRoom(roomId, userId);
     const result = await this.roomService.deleteRoom(roomId, userId);
     await this.playlistService.deletePlaylistsForRoom(roomId);
     this.roomRealtimePublisher.emitRoomDeleted(roomId, trackIds);

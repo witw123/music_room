@@ -252,4 +252,32 @@ describe("RoomController", () => {
     expect(roomRealtimePublisher.emitRoomDeleted).toHaveBeenCalledWith("room_1", []);
     expect(roomRealtimePublisher.emitRoomMissing).toHaveBeenCalledWith("room_1");
   });
+
+  it("checks delete permission before loading delete broadcast details", async () => {
+    const roomService = {
+      getRoomSnapshot: jest.fn(),
+      assertCanDeleteRoom: jest.fn().mockRejectedValue(new Error("Only the host can delete this room.")),
+      deleteRoom: jest.fn()
+    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
+    const authService = createAuthServiceMock();
+    const playlistService = createPlaylistServiceMock();
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      authService as never,
+      playlistService as never
+    );
+
+    await expect(controller.deleteRoom("room_1", "token")).rejects.toThrow(
+      "Only the host can delete this room."
+    );
+
+    expect(roomService.assertCanDeleteRoom).toHaveBeenCalledWith("room_1", "guest_host");
+    expect(playlistService.listPlaylistsForRoom).not.toHaveBeenCalled();
+    expect(roomService.getRoomSnapshot).not.toHaveBeenCalled();
+    expect(roomService.deleteRoom).not.toHaveBeenCalled();
+    expect(roomRealtimePublisher.emitRoomDeleted).not.toHaveBeenCalled();
+    expect(roomRealtimePublisher.emitRoomMissing).not.toHaveBeenCalled();
+  });
 });

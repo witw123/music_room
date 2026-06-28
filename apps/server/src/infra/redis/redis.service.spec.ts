@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 const mockRedisInstances: Array<{
   status: string;
   connect: jest.Mock;
@@ -10,8 +12,6 @@ const mockRedisInstances: Array<{
 }> = [];
 
 jest.mock("ioredis", () => {
-  const { EventEmitter } = require("node:events") as typeof import("node:events");
-
   return {
     __esModule: true,
     default: class MockRedis extends EventEmitter {

@@ -147,6 +147,30 @@ export type MediaElementPlaybackRole =
 
 export type SchedulerBudgetTier = "critical" | "protected" | "comfort" | "expanded";
 
+export type FullLocalPlaybackSessionState = {
+  key: string | null;
+  availableInSession: boolean;
+};
+
+export function resolveFullLocalPlaybackSessionState(input: {
+  currentSession: FullLocalPlaybackSessionState;
+  playbackSurfaceKey: string | null;
+  hasBufferedFullLocalTrack: boolean;
+}): FullLocalPlaybackSessionState {
+  if (input.currentSession.key !== input.playbackSurfaceKey) {
+    return {
+      key: input.playbackSurfaceKey,
+      availableInSession: input.hasBufferedFullLocalTrack
+    };
+  }
+
+  return {
+    key: input.playbackSurfaceKey,
+    availableInSession:
+      input.currentSession.availableInSession || input.hasBufferedFullLocalTrack
+  };
+}
+
 export function shouldPreferImmediateFullLocalRecovery(input: {
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
@@ -402,12 +426,9 @@ export function useProgressiveRuntime({
   const driftSamplesRef = useRef<Array<{ timestampMs: number; driftMs: number }>>([]);
   const continuousPlaybackStartedAtRef = useRef<number | null>(null);
   const continuousPlaybackSegmentsRef = useRef<Array<{ startedAtMs: number; endedAtMs: number }>>([]);
-  const fullLocalPlaybackSessionRef = useRef<{
-    key: string | null;
-    availableAtStart: boolean;
-  }>({
+  const fullLocalPlaybackSessionRef = useRef<FullLocalPlaybackSessionState>({
     key: null,
-    availableAtStart: false
+    availableInSession: false
   });
   const playback = roomSnapshot?.room.playback;
   const playbackRevision = playback?.playbackRevision ?? playback?.queueVersion ?? 0;
@@ -421,14 +442,13 @@ export function useProgressiveRuntime({
         : null,
     [currentTrack?.id, fullLocalPlaybackTracks, uploadedTracks]
   );
-  if (fullLocalPlaybackSessionRef.current.key !== playbackSurfaceKey) {
-    fullLocalPlaybackSessionRef.current = {
-      key: playbackSurfaceKey,
-      availableAtStart: !!currentBufferedFullLocalTrack
-    };
-  }
+  fullLocalPlaybackSessionRef.current = resolveFullLocalPlaybackSessionState({
+    currentSession: fullLocalPlaybackSessionRef.current,
+    playbackSurfaceKey,
+    hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack
+  });
   const canUseFullLocalForPlaybackSession =
-    fullLocalPlaybackSessionRef.current.availableAtStart && !!currentBufferedFullLocalTrack;
+    fullLocalPlaybackSessionRef.current.availableInSession && !!currentBufferedFullLocalTrack;
   const forceSourceOwnerLocalPlayback = useMemo(
     () =>
       shouldForceSourceOwnerLocalPlayback({
