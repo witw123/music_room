@@ -237,6 +237,10 @@ function isManualCacheTaskRecord(
   return task.mode === "manual" || task.mode === "playback-demand";
 }
 
+export function resolveAutomaticPlaybackCacheTaskMode(): ManualCacheTask["mode"] {
+  return "manual";
+}
+
 export function resolveMissingOwnedUploadedTracks(input: {
   roomTracks: RehydratableRoomTrack[];
   activeSessionId: string | null | undefined;
@@ -1063,94 +1067,12 @@ export function useTrackUploads(options: {
 
   const startPlaybackDemandCacheDownload = useCallback(
     async (trackId: string) => {
-      if (!enableManualTrackCaching || !roomSnapshot) {
+      if (resolveAutomaticPlaybackCacheTaskMode() !== "manual") {
         return;
       }
-
-      const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
-      if (!track) {
-        return;
-      }
-
-      if (cacheLibraryTracksRef.current.has(track.fileHash) || (await getCachedLibraryTrack(track.fileHash))) {
-        updateManualCacheTask(trackId, (current) => {
-          if (current?.mode === "manual") {
-            return null;
-          }
-
-          return {
-            status: "ready",
-            mode: "playback-demand",
-            fileHash: track.fileHash,
-            errorMessage: null,
-            completedChunks: resolveTrackTotalChunks(track),
-            totalChunks: resolveTrackTotalChunks(track),
-            mimeType: track.mimeType ?? null,
-            blockedReason: null,
-            lastError: null
-          };
-        });
-        return;
-      }
-
-      const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-      const rawCachedManifest =
-        (await getTrackPieceManifestByFileHash(track.fileHash)) ??
-        (await getTrackPieceManifest(trackId));
-      const cachedManifest = resolveReusableCachedPieceManifest({
-        cachedManifest: rawCachedManifest,
-        expectedManifest
-      });
-      if (
-        rawCachedManifest &&
-        !cachedManifest &&
-        expectedManifest &&
-        (rawCachedManifest.totalChunks !== expectedManifest.totalChunks ||
-          rawCachedManifest.chunkSize !== expectedManifest.chunkSize)
-      ) {
-        await deleteCachedPiecesForTrack(trackId);
-        manualCacheChunkIndexesRef.current.delete(trackId);
-      }
-
-      const pieces = await getCachedPiecesForTrack(trackId, peerId, {
-        fileHash: track.fileHash,
-        ownerKey: localCacheOwnerKey,
-        chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize
-      });
-      const chunkIndexes = new Set(pieces.map((piece) => piece.chunkIndex));
-      manualCacheChunkIndexesRef.current.set(trackId, chunkIndexes);
-
-      const totalChunks =
-        cachedManifest?.totalChunks ??
-        expectedManifest?.totalChunks ??
-        Math.max(chunkIndexes.size, 0);
-      const completedChunks = chunkIndexes.size;
-      const mimeType = cachedManifest?.mimeType ?? track.mimeType ?? null;
-      updateManualCacheTask(trackId, (current) => {
-        if (current?.mode === "manual") {
-          return null;
-        }
-
-        return {
-          status: completedChunks > 0 ? "downloading" : "queued",
-          mode: "playback-demand",
-          fileHash: track.fileHash,
-          errorMessage: null,
-          completedChunks,
-          totalChunks,
-          mimeType,
-          manifestSource: cachedManifest ? "cache" : expectedManifest ? "snapshot" : null,
-          blockedReason: null,
-          integrityMode: cachedManifest?.pieceHashes?.length === totalChunks ? "strong" : "weak",
-          lastError: null
-        };
-      });
-
-      if (totalChunks > 0 && completedChunks >= totalChunks) {
-        void assembleManualCacheTrack(trackId, mimeType, totalChunks);
-      }
+      await startManualCacheDownload(trackId);
     },
-    [assembleManualCacheTrack, peerId, roomSnapshot, updateManualCacheTask]
+    [startManualCacheDownload]
   );
 
   useEffect(() => {

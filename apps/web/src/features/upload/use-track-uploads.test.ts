@@ -8,6 +8,7 @@ import {
   mergeHydratedManualCacheTasks,
   resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
+  resolveAutomaticPlaybackCacheTaskMode,
   shouldAnnounceTrackAvailability,
   shouldEnsurePlaybackDemandCacheTask
 } from "./use-track-uploads";
@@ -430,6 +431,12 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         existingTask: null
       })
     ).toBe(true);
+  });
+});
+
+describe("resolveAutomaticPlaybackCacheTaskMode", () => {
+  it("uses the same manual cache task mode as the cache download button", () => {
+    expect(resolveAutomaticPlaybackCacheTaskMode()).toBe("manual");
   });
 });
 
