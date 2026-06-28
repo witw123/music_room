@@ -23,6 +23,39 @@ type UseRoomActionsOptions = {
   onRoomDeleted?: (trackIds: string[]) => Promise<void> | void;
 };
 
+export async function runBestEffortRoomLeave(input: {
+  roomId: string;
+  leaveRemote: (roomId: string) => Promise<unknown>;
+  completeLocalExit: () => Promise<void> | void;
+  remoteWaitMs?: number;
+}) {
+  const remoteLeave = Promise.resolve()
+    .then(() => input.leaveRemote(input.roomId))
+    .then(() => ({
+      remoteStatus: "confirmed" as const,
+      remoteError: null
+    }))
+    .catch((error) => ({
+      remoteStatus: "failed" as const,
+      remoteError: error
+    }));
+
+  await input.completeLocalExit();
+
+  const remoteWaitMs = input.remoteWaitMs ?? 1_200;
+  return Promise.race([
+    remoteLeave,
+    new Promise<{ remoteStatus: "pending"; remoteError: null }>((resolve) => {
+      globalThis.setTimeout(() => {
+        resolve({
+          remoteStatus: "pending",
+          remoteError: null
+        });
+      }, remoteWaitMs);
+    })
+  ]);
+}
+
 export function useRoomActions({
   activeSession,
   roomSnapshot,
@@ -99,14 +132,25 @@ export function useRoomActions({
     }
 
     try {
-      await musicRoomApi.leaveRoom(roomSnapshot.room.id);
-      setSuppressRoomRecovery(true);
-      dispatchRoomStateEvent({ type: "local-reset" });
-      resetPlayerSurface();
-      resetRealtimePeer();
-      window.localStorage.removeItem(lastRoomStorageKey);
-      await refreshAvailableRooms();
-      setStatusMessage("已离开房间。");
+      const result = await runBestEffortRoomLeave({
+        roomId: roomSnapshot.room.id,
+        leaveRemote: musicRoomApi.leaveRoom,
+        completeLocalExit: async () => {
+          setSuppressRoomRecovery(true);
+          dispatchRoomStateEvent({ type: "local-reset" });
+          resetPlayerSurface();
+          resetRealtimePeer();
+          window.localStorage.removeItem(lastRoomStorageKey);
+          void refreshAvailableRooms().catch(() => undefined);
+        }
+      });
+      setStatusMessage(
+        result.remoteStatus === "confirmed"
+          ? "已离开房间。"
+          : result.remoteStatus === "failed"
+            ? "已离开本地房间，服务器离开请求未确认。"
+            : "已离开房间，服务器确认仍在后台进行。"
+      );
       return true;
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -406,14 +450,20 @@ export function useRoomActions({
       }
 
       try {
-        await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
+        const result = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
+        dispatchRoomStateEvent({
+          type: "server-queue-patch",
+          roomId: roomSnapshot.room.id,
+          queue: result.queue,
+          playback: result.playback
+        });
         void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌曲已从队列中移除。");
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
       }
     },
-    [roomSnapshot, activeSession, setStatusMessage, syncRoomSnapshot]
+    [roomSnapshot, activeSession, dispatchRoomStateEvent, setStatusMessage, syncRoomSnapshot]
   );
 
   const reorderQueue = useCallback(

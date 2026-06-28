@@ -121,6 +121,32 @@ function ensurePlaybackTrackMetadata(
   return nextTracks;
 }
 
+function shouldUseTopologyPlaybackReset(input: {
+  currentSnapshot: RoomSnapshot;
+  incomingPlayback: PlaybackSnapshot;
+  nextTracks: RoomSnapshot["tracks"];
+  nextQueue: RoomSnapshot["queue"];
+  shouldApplyTopology: boolean;
+}) {
+  const currentPlayback = input.currentSnapshot.room.playback;
+  if (
+    !input.shouldApplyTopology ||
+    input.incomingPlayback.currentTrackId !== null ||
+    !currentPlayback.currentTrackId
+  ) {
+    return false;
+  }
+
+  const currentTrackStillExists = input.nextTracks.some(
+    (track) => track.id === currentPlayback.currentTrackId
+  );
+  const currentQueueItemStillExists = currentPlayback.currentQueueItemId
+    ? input.nextQueue.some((item) => item.id === currentPlayback.currentQueueItemId)
+    : true;
+
+  return !currentTrackStillExists || !currentQueueItemStillExists;
+}
+
 function normalizeSnapshot(
   currentSnapshot: RoomSnapshot | null,
   incomingSnapshot: RoomSnapshot
@@ -129,10 +155,19 @@ function normalizeSnapshot(
     return incomingSnapshot;
   }
 
-  const playback = shouldReplacePlaybackSnapshot(
-    currentSnapshot.room.playback,
-    incomingSnapshot.room.playback
-  )
+  const shouldApplyTopology = getRoomRevision(incomingSnapshot) >= getRoomRevision(currentSnapshot);
+  const playback = shouldUseTopologyPlaybackReset({
+    currentSnapshot,
+    incomingPlayback: incomingSnapshot.room.playback,
+    nextTracks: incomingSnapshot.tracks,
+    nextQueue: incomingSnapshot.queue,
+    shouldApplyTopology
+  })
+    ? incomingSnapshot.room.playback
+    : shouldReplacePlaybackSnapshot(
+        currentSnapshot.room.playback,
+        incomingSnapshot.room.playback
+      )
     ? incomingSnapshot.room.playback
     : currentSnapshot.room.playback;
   const shouldApplyPresence = shouldAcceptPresenceSnapshot(
@@ -276,9 +311,18 @@ export function roomStateReducer(
 
       const currentRevision = getRoomRevision(snapshot);
       const shouldApplyTopology = (event.roomRevision ?? currentRevision) >= currentRevision;
-      const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+      const nextQueue = shouldApplyTopology ? event.queue : snapshot.queue;
+      const nextPlayback = shouldUseTopologyPlaybackReset({
+        currentSnapshot: snapshot,
+        incomingPlayback: event.playback,
+        nextTracks: snapshot.tracks,
+        nextQueue,
+        shouldApplyTopology
+      })
         ? event.playback
-        : snapshot.room.playback;
+        : shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+          ? event.playback
+          : snapshot.room.playback;
 
       if (!shouldApplyTopology && nextPlayback === snapshot.room.playback) {
         return current;
@@ -288,7 +332,7 @@ export function roomStateReducer(
         ...current,
         snapshot: {
           ...snapshot,
-          queue: shouldApplyTopology ? event.queue : snapshot.queue,
+          queue: nextQueue,
           room: {
             ...snapshot.room,
             roomRevision: Math.max(currentRevision, event.roomRevision ?? 0),
@@ -306,9 +350,19 @@ export function roomStateReducer(
 
       const currentRevision = getRoomRevision(snapshot);
       const shouldApplyTopology = (event.roomRevision ?? currentRevision) >= currentRevision;
-      const nextPlayback = shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+      const nextTracks = shouldApplyTopology ? event.tracks : snapshot.tracks;
+      const nextQueue = shouldApplyTopology ? event.queue : snapshot.queue;
+      const nextPlayback = shouldUseTopologyPlaybackReset({
+        currentSnapshot: snapshot,
+        incomingPlayback: event.playback,
+        nextTracks,
+        nextQueue,
+        shouldApplyTopology
+      })
         ? event.playback
-        : snapshot.room.playback;
+        : shouldReplacePlaybackSnapshot(snapshot.room.playback, event.playback)
+          ? event.playback
+          : snapshot.room.playback;
 
       if (!shouldApplyTopology && nextPlayback === snapshot.room.playback) {
         return current;
@@ -318,18 +372,13 @@ export function roomStateReducer(
         ...current,
         snapshot: {
           ...snapshot,
-          tracks: shouldApplyTopology ? ensurePlaybackTrackMetadata(
-            event.tracks,
-            snapshot.tracks,
-            event.tracks,
-            nextPlayback.currentTrackId
-          ) : ensurePlaybackTrackMetadata(
-            snapshot.tracks,
+          tracks: ensurePlaybackTrackMetadata(
+            nextTracks,
             snapshot.tracks,
             event.tracks,
             nextPlayback.currentTrackId
           ),
-          queue: shouldApplyTopology ? event.queue : snapshot.queue,
+          queue: nextQueue,
           room: {
             ...snapshot.room,
             roomRevision: Math.max(currentRevision, event.roomRevision ?? 0),

@@ -679,6 +679,97 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.playback.playbackRevision).toBe(4);
   });
 
+  it("accepts a fresher library deletion reset even when its playback revision is older", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 7,
+            playback: createPlaybackSnapshot({
+              status: "playing",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              sourceSessionId: "host",
+              sourcePeerId: "peer-host",
+              sourceTrackId: "track_1",
+              queueVersion: 5,
+              playbackRevision: 5,
+              mediaEpoch: 3
+            })
+          }
+        })
+      },
+      {
+        type: "server-library-patch",
+        roomId: "room_1",
+        tracks: [],
+        queue: [],
+        playback: createPlaybackSnapshot({
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: null,
+          sourcePeerId: null,
+          sourceTrackId: null,
+          queueVersion: 4,
+          playbackRevision: 4,
+          mediaEpoch: 4
+        }),
+        roomRevision: 8
+      }
+    );
+
+    expect(state.snapshot?.tracks).toHaveLength(0);
+    expect(state.snapshot?.queue).toHaveLength(0);
+    expect(state.snapshot?.room.playback.currentTrackId).toBeNull();
+  });
+
+  it("accepts a fresher queue removal reset even when its playback revision is older", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 7,
+            playback: createPlaybackSnapshot({
+              status: "playing",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              sourceSessionId: "host",
+              sourcePeerId: "peer-host",
+              sourceTrackId: "track_1",
+              queueVersion: 5,
+              playbackRevision: 5,
+              mediaEpoch: 3
+            })
+          }
+        })
+      },
+      {
+        type: "server-queue-patch",
+        roomId: "room_1",
+        queue: [],
+        playback: createPlaybackSnapshot({
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: null,
+          sourcePeerId: null,
+          sourceTrackId: null,
+          queueVersion: 4,
+          playbackRevision: 4,
+          mediaEpoch: 4
+        }),
+        roomRevision: 8
+      }
+    );
+
+    expect(state.snapshot?.queue).toHaveLength(0);
+    expect(state.snapshot?.room.playback.currentTrackId).toBeNull();
+    expect(state.snapshot?.room.playback.currentQueueItemId).toBeNull();
+  });
+
   it("keeps playback patches ordered by playbackRevision", () => {
     const state = applyEvents(
       {

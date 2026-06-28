@@ -8,7 +8,8 @@ import {
   mergeHydratedManualCacheTasks,
   resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
-  shouldAnnounceTrackAvailability
+  shouldAnnounceTrackAvailability,
+  shouldEnsurePlaybackDemandCacheTask
 } from "./use-track-uploads";
 
 describe("buildRegisterTrackPayload", () => {
@@ -329,6 +330,75 @@ describe("mergeHydratedManualCacheTasks", () => {
         currentPlaybackTrackId: "track_2"
       })
     ).toEqual({});
+  });
+});
+
+describe("shouldEnsurePlaybackDemandCacheTask", () => {
+  const remotePlayback = {
+    status: "playing" as const,
+    currentTrackId: "track_1",
+    currentQueueItemId: "queue_1",
+    sourceSessionId: "host",
+    sourcePeerId: "peer_host",
+    sourceTrackId: "track_1",
+    positionMs: 0,
+    startedAt: "2026-06-28T09:00:00.000Z",
+    queueVersion: 1,
+    playbackRevision: 1,
+    mediaEpoch: 1
+  };
+
+  it("starts an automatic playback-demand cache once the remote playing track metadata is available", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        existingTask: null
+      })
+    ).toBe(true);
+  });
+
+  it("waits for track metadata and does not restart an existing ready playback-demand task", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: false,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        existingTask: null
+      })
+    ).toBe(false);
+
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        existingTask: {
+          mode: "playback-demand",
+          status: "ready"
+        }
+      })
+    ).toBe(false);
+  });
+
+  it("does not auto-cache on the source owner device", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_host",
+        activeSessionId: "host",
+        existingTask: null
+      })
+    ).toBe(false);
   });
 });
 

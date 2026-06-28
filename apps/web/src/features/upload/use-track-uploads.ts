@@ -34,6 +34,7 @@ import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
 import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
+import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 
 export type ManualCacheTaskStatus =
   | "idle"
@@ -249,6 +250,46 @@ export function resolveMissingOwnedUploadedTracks(input: {
       track.ownerSessionId === input.activeSessionId &&
       !input.uploadedTracks[track.id] &&
       !!track.fileHash
+  );
+}
+
+export function shouldEnsurePlaybackDemandCacheTask(input: {
+  enableManualTrackCaching: boolean;
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  trackExists: boolean;
+  peerId: string | null | undefined;
+  activeSessionId: string | null | undefined;
+  existingTask: Pick<ManualCacheTask, "mode" | "status"> | null | undefined;
+}) {
+  const playback = input.playback;
+  if (
+    !input.enableManualTrackCaching ||
+    !playback?.currentTrackId ||
+    !hasActivePlaybackIntent(playback) ||
+    !input.trackExists
+  ) {
+    return false;
+  }
+
+  if (
+    (input.peerId && playback.sourcePeerId === input.peerId) ||
+    (input.activeSessionId && playback.sourceSessionId === input.activeSessionId)
+  ) {
+    return false;
+  }
+
+  if (!input.existingTask) {
+    return true;
+  }
+
+  if (input.existingTask.mode === "manual") {
+    return false;
+  }
+
+  return (
+    input.existingTask.status === "idle" ||
+    input.existingTask.status === "failed" ||
+    input.existingTask.status === "failed-integrity"
   );
 }
 
@@ -1102,6 +1143,37 @@ export function useTrackUploads(options: {
     },
     [assembleManualCacheTrack, peerId, roomSnapshot, updateManualCacheTask]
   );
+
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback ?? null;
+    const trackId = playback?.currentTrackId ?? null;
+    if (!trackId) {
+      return;
+    }
+
+    const trackExists = roomSnapshot?.tracks.some((track) => track.id === trackId) ?? false;
+    if (
+      !shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching,
+        playback,
+        trackExists,
+        peerId,
+        activeSessionId: activeSession?.userId,
+        existingTask: manualCacheTasks[trackId] ?? null
+      })
+    ) {
+      return;
+    }
+
+    void startPlaybackDemandCacheDownload(trackId);
+  }, [
+    activeSession?.userId,
+    manualCacheTasks,
+    peerId,
+    roomSnapshot?.room.playback,
+    roomSnapshot?.tracks,
+    startPlaybackDemandCacheDownload
+  ]);
 
   const pauseManualCacheDownload = useCallback(
     (trackId: string) => {
