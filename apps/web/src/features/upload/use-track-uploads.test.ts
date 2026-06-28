@@ -418,6 +418,19 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
       })
     ).toBe(false);
   });
+
+  it("auto-caches on another device even when it is signed in as the source session", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_listener",
+        activeSessionId: "host",
+        existingTask: null
+      })
+    ).toBe(true);
+  });
 });
 
 describe("resolveMissingOwnedUploadedTracks", () => {

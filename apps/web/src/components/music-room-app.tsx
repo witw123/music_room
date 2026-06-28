@@ -26,6 +26,7 @@ import {
   createPlaybackStartIntent,
   type PlaybackStartIntent
 } from "@/features/playback/playback-start-intent";
+import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
@@ -209,9 +210,11 @@ export function MusicRoomApp({
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
-  const isCurrentSourceOwner =
-    (!!activeSession && roomSnapshot?.room.playback.sourceSessionId === activeSession.userId) ||
-    (!!peerId && roomSnapshot?.room.playback.sourcePeerId === peerId);
+  const isCurrentSourceOwner = isCurrentPlaybackSourceDevice({
+    playback: roomSnapshot?.room.playback,
+    peerId,
+    activeSessionId: activeSession?.userId
+  });
   const playbackSurfaceKey = useMemo(
     () => resolvePlaybackSurfaceKey(roomSnapshot?.room.playback),
     [roomSnapshot?.room.playback]

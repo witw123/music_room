@@ -5,6 +5,7 @@ import {
   buildRoomExitHref,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
+  isCurrentPlaybackSourceDevice,
   shouldAcceptIncomingDataSignal,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldForceManualCacheBootstrap,
@@ -347,6 +348,51 @@ describe("pure cache room runtime helpers", () => {
         enableManualTrackCaching: true
       })
     ).toBe(false);
+  });
+
+  it("starts playback-demand caching for another device signed in as the same user", () => {
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "user_shared",
+      sourcePeerId: "peer_source",
+      sourceTrackId: "track_1",
+      positionMs: 0,
+      startedAt: "2026-04-14T00:00:00.000Z",
+      queueVersion: 1,
+      playbackRevision: 2,
+      mediaEpoch: 3
+    };
+
+    expect(
+      isCurrentPlaybackSourceDevice({
+        playback,
+        peerId: "peer_listener",
+        activeSessionId: "user_shared"
+      })
+    ).toBe(false);
+
+    expect(
+      shouldStartPlaybackDemandCacheForPlayback({
+        playback,
+        peerId: "peer_listener",
+        activeSessionId: "user_shared",
+        manualCacheTrackIds: [],
+        enableManualTrackCaching: true
+      })
+    ).toBe(true);
+
+    expect(
+      resolveRuntimeManualCacheTrackIds({
+        playback,
+        peerId: "peer_listener",
+        activeSessionId: "user_shared",
+        manualCacheTrackIds: [],
+        hasLocalFullTrack: false,
+        enableManualTrackCaching: true
+      })
+    ).toEqual(["track_1"]);
   });
 
   it("keeps the current remote playback track active for downloader refs until a full local file exists", () => {

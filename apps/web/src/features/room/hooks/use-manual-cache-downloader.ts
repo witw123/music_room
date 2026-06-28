@@ -57,6 +57,11 @@ export type ManualCacheTrackPlan = {
   blockedReason: ManualCacheBlockedReason | null;
 };
 
+export type ManualCacheDirectRequestResult = {
+  plan: ManualCacheTrackPlan;
+  didRequest: boolean | null;
+};
+
 export type ActivePlaybackCacheWindow = {
   trackId: string;
   positionMs: number;
@@ -681,6 +686,108 @@ function emptyManualCacheTrackPlan(
   };
 }
 
+export async function planManualCacheDirectRequests(input: {
+  roomSnapshot: RoomSnapshot | null;
+  manualCacheTrackIds: string[];
+  peerId: string;
+  providerPeerIds: string[];
+  connectedPeerIds: string[];
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  pendingByTrack: Map<string, Map<number, number>>;
+  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+  now?: number;
+  getCachedManifest: (track: TrackMeta) => Promise<TrackPieceManifestRecord | null>;
+  getLocalPieceIndexes: (
+    track: TrackMeta,
+    cachedManifest: TrackPieceManifestRecord | null,
+    manifestHint: ResolvedTrackPieceManifest | null
+  ) => Promise<number[]>;
+  requestPieces: (
+    providerPeerId: string,
+    trackId: string,
+    chunkIndexes: number[],
+    totalChunks: number,
+    timeoutMs: number
+  ) => boolean;
+}) {
+  const results: ManualCacheDirectRequestResult[] = [];
+  const roomId = input.roomSnapshot?.room.id ?? null;
+  if (!roomId || !input.peerId || input.manualCacheTrackIds.length === 0) {
+    return results;
+  }
+
+  const now = input.now ?? Date.now();
+  for (const trackId of input.manualCacheTrackIds) {
+    const track = input.roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
+    if (!track) {
+      results.push({
+        plan: emptyManualCacheTrackPlan(trackId, "missing-track"),
+        didRequest: null
+      });
+      continue;
+    }
+
+    const cachedManifest = await input.getCachedManifest(track);
+    const manifestHint = resolveTrackPieceManifest({
+      track,
+      cacheManifest: cachedManifest
+    });
+    const localPieceIndexes = await input.getLocalPieceIndexes(
+      track,
+      cachedManifest,
+      manifestHint
+    );
+    const pendingForTrack = input.pendingByTrack.get(trackId) ?? new Map<number, number>();
+    for (const [chunkIndex, expiresAt] of pendingForTrack.entries()) {
+      if (expiresAt <= now || localPieceIndexes.includes(chunkIndex)) {
+        pendingForTrack.delete(chunkIndex);
+      }
+    }
+    input.pendingByTrack.set(trackId, pendingForTrack);
+
+    const remainingTrackSlots = Math.max(0, maxPendingPerTrack - pendingForTrack.size);
+    const shouldRefillPendingWindow =
+      pendingForTrack.size === 0 || pendingForTrack.size <= pendingRefillLowWatermark;
+    const plan = resolveManualCacheTrackPlan({
+      track,
+      roomId,
+      localPeerId: input.peerId,
+      availabilityByTrack: input.availabilityByTrack,
+      connectedPeerIds: input.connectedPeerIds,
+      cachedManifest,
+      localPieceIndexes,
+      pendingChunkIndexes: [...pendingForTrack.keys()],
+      activePlaybackWindow: input.activePlaybackWindow ?? null,
+      maxRequestChunks: shouldRefillPendingWindow
+        ? Math.min(directRequestBatchSize, remainingTrackSlots, maxPendingPerPeer)
+        : 0
+    });
+
+    if (!plan.selectedProviderPeerId || plan.requestableChunks.length === 0 || !plan.manifest) {
+      results.push({ plan, didRequest: null });
+      continue;
+    }
+
+    const didRequest = input.requestPieces(
+      plan.selectedProviderPeerId,
+      trackId,
+      plan.requestableChunks,
+      plan.manifest.totalChunks,
+      directRequestTimeoutMs
+    );
+    if (didRequest) {
+      const expiresAt = now + directPendingTtlMs;
+      for (const chunkIndex of plan.requestableChunks) {
+        pendingForTrack.set(chunkIndex, expiresAt);
+      }
+    }
+
+    results.push({ plan, didRequest });
+  }
+
+  return results;
+}
+
 export function useManualCacheDownloader(input: {
   enableManualTrackCaching: boolean;
   manualCacheTrackIds: string[];
@@ -1000,103 +1107,68 @@ export function useManualCacheDownloader(input: {
           }
         }
 
-        for (const trackId of input.manualCacheTrackIds) {
-          const track = input.roomSnapshot.tracks.find((entry) => entry.id === trackId) ?? null;
-          if (!track) {
-            input.onManualCachePlan?.(emptyManualCacheTrackPlan(trackId, "missing-track"));
-            continue;
-          }
-
-          const cachedManifest =
+        const requestResults = await planManualCacheDirectRequests({
+          roomSnapshot: input.roomSnapshot,
+          manualCacheTrackIds: input.manualCacheTrackIds,
+          peerId: input.peerId,
+          providerPeerIds,
+          connectedPeerIds,
+          availabilityByTrack: schedulerAvailabilityByTrack,
+          pendingByTrack: directPendingRef.current,
+          activePlaybackWindow: input.activePlaybackWindow ?? null,
+          now,
+          getCachedManifest: async (track) =>
             (await getTrackPieceManifestByFileHash(track.fileHash)) ??
-            (await getTrackPieceManifest(trackId)) ??
-            null;
-          const manifestHint = resolveTrackPieceManifest({
-            track,
-            cacheManifest: cachedManifest
-          });
-          const localPieceIndexes = await getCachedPieceIndexes(trackId, input.peerId, {
-            fileHash: track.fileHash,
-            ownerKey: localCacheOwnerKey,
-            chunkSize: manifestHint?.chunkSize
-          });
-          const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
-          for (const [chunkIndex, expiresAt] of pendingForTrack.entries()) {
-            if (expiresAt <= now || localPieceIndexes.includes(chunkIndex)) {
-              pendingForTrack.delete(chunkIndex);
-            }
-          }
-          directPendingRef.current.set(trackId, pendingForTrack);
+            (await getTrackPieceManifest(track.id)) ??
+            null,
+          getLocalPieceIndexes: (track, _cachedManifest, manifestHint) =>
+            getCachedPieceIndexes(track.id, input.peerId, {
+              fileHash: track.fileHash,
+              ownerKey: localCacheOwnerKey,
+              chunkSize: manifestHint?.chunkSize
+            }),
+          requestPieces: (providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs) =>
+            input.dataMesh!.requestPieces(providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs)
+        });
 
-          const pendingLimit = maxPendingPerTrack;
-          const peerPendingLimit = maxPendingPerPeer;
-          const requestBatchSize = directRequestBatchSize;
-          const refillLowWatermark = pendingRefillLowWatermark;
-          const remainingTrackSlots = Math.max(0, pendingLimit - pendingForTrack.size);
-          const shouldRefillPendingWindow =
-            pendingForTrack.size === 0 || pendingForTrack.size <= refillLowWatermark;
-          const plan = resolveManualCacheTrackPlan({
-            track,
-            roomId: input.roomSnapshot.room.id,
-            localPeerId: input.peerId,
-            availabilityByTrack: schedulerAvailabilityByTrack,
-            connectedPeerIds,
-            cachedManifest,
-            localPieceIndexes,
-            pendingChunkIndexes: [...pendingForTrack.keys()],
-            activePlaybackWindow: input.activePlaybackWindow ?? null,
-            maxRequestChunks: shouldRefillPendingWindow
-              ? Math.min(requestBatchSize, remainingTrackSlots, peerPendingLimit)
-              : 0
-          });
+        for (const { plan, didRequest } of requestResults) {
           input.onManualCachePlan?.(plan);
 
-          if (!plan.selectedProviderPeerId || plan.requestableChunks.length === 0 || !plan.manifest) {
-            if (plan.blockedReason && plan.blockedReason !== "complete") {
-              input.onRuntimeEvent?.({
-                type: "diagnostic",
-                peerId: "system",
-                channelKind: "data",
-                direction: "local",
-                event: "manual-cache-blocked",
-                summary: `缓存下载 ${trackId} 阻塞：${plan.blockedReason}`,
-                recordEvent: false
-              });
-            }
-            continue;
-          }
-
-          const didRequest = input.dataMesh.requestPieces(
-            plan.selectedProviderPeerId,
-            trackId,
-            plan.requestableChunks,
-            plan.manifest.totalChunks,
-            directRequestTimeoutMs
-          );
-          if (!didRequest) {
+          if (didRequest === false && plan.selectedProviderPeerId) {
             input.onRuntimeEvent?.(
               buildManualCacheRequestFailureEvent({
                 providerPeerId: plan.selectedProviderPeerId,
-                trackId,
+                trackId: plan.trackId,
                 requestableChunks: plan.requestableChunks
               })
             );
             continue;
           }
 
-          const expiresAt = Date.now() + directPendingTtlMs;
-          for (const chunkIndex of plan.requestableChunks) {
-            pendingForTrack.set(chunkIndex, expiresAt);
+          if (didRequest === true && plan.selectedProviderPeerId) {
+            input.onRuntimeEvent?.({
+              type: "diagnostic",
+              peerId: plan.selectedProviderPeerId,
+              channelKind: "data",
+              direction: "sent",
+              event: "manual-cache-request",
+              summary: `缓存下载请求分片 ${plan.trackId}#${plan.requestableChunks[0]}-${plan.requestableChunks[plan.requestableChunks.length - 1]}`,
+              recordEvent: false
+            });
+            continue;
           }
-          input.onRuntimeEvent?.({
-            type: "diagnostic",
-            peerId: plan.selectedProviderPeerId,
-            channelKind: "data",
-            direction: "sent",
-            event: "manual-cache-request",
-            summary: `缓存下载请求分片 ${trackId}#${plan.requestableChunks[0]}-${plan.requestableChunks[plan.requestableChunks.length - 1]}`,
-            recordEvent: false
-          });
+
+          if (plan.blockedReason && plan.blockedReason !== "complete") {
+            input.onRuntimeEvent?.({
+              type: "diagnostic",
+              peerId: "system",
+              channelKind: "data",
+              direction: "local",
+              event: "manual-cache-blocked",
+              summary: `缓存下载 ${plan.trackId} 阻塞：${plan.blockedReason}`,
+              recordEvent: false
+            });
+          }
         }
       } finally {
         inFlight = false;

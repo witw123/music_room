@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   buildManualCacheRequestFailureEvent,
   buildManualCacheSchedulerAvailability,
   buildManualCacheSchedulerAvailabilityFromParts,
+  planManualCacheDirectRequests,
   shouldRecordManualCacheBootstrapAttempt,
   resolveManualCacheTrackPlan,
   resolveManualCacheTrackProviderPeerId,
@@ -427,10 +428,58 @@ describe("buildManualCacheRequestFailureEvent", () => {
   });
 });
 
+describe("planManualCacheDirectRequests", () => {
+  it("requests pieces for a remote playback track even before a visible manual cache task exists", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing"
+    });
+    const requestPieces = vi.fn(() => true);
+
+    const plans = await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 0,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledWith(
+      "peer_owner",
+      "track_a",
+      [0, 1, 2, 3],
+      4,
+      expect.any(Number)
+    );
+    expect(plans[0]?.plan.blockedReason).toBeNull();
+    expect(plans[0]?.didRequest).toBe(true);
+  });
+});
+
 function buildManualCacheRoomSnapshot(input: {
   ownerPeerId: string | null;
   ownerPresenceState?: "online" | "reconnecting" | "offline";
   omitTrackManifest?: boolean;
+  playbackStatus?: "playing" | "paused" | "buffering";
 }): RoomSnapshot {
   return {
     room: {
@@ -457,12 +506,12 @@ function buildManualCacheRoomSnapshot(input: {
         }
       ],
       playback: {
-        status: "paused",
-        currentTrackId: null,
-        currentQueueItemId: null,
-        sourceSessionId: null,
-        sourcePeerId: null,
-        sourceTrackId: null,
+        status: input.playbackStatus ?? "paused",
+        currentTrackId: input.playbackStatus ? "track_a" : null,
+        currentQueueItemId: input.playbackStatus ? "queue_a" : null,
+        sourceSessionId: input.playbackStatus ? "owner_1" : null,
+        sourcePeerId: input.playbackStatus ? input.ownerPeerId : null,
+        sourceTrackId: input.playbackStatus ? "track_a" : null,
         positionMs: 0,
         startedAt: null,
         queueVersion: 1,

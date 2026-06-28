@@ -26,6 +26,7 @@ import {
   type ProgressivePlaybackSource,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
+import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
@@ -69,6 +70,7 @@ export {
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
 export { shouldAcceptIncomingDataSignal, shouldReannounceManualCacheAvailability };
+export { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 export {
   resetInitialRoomRecoveryAttemptOnCancellation,
   shouldRedirectRoomRouteToAuth,
@@ -221,10 +223,11 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
     return false;
   }
 
-  if (
-    (input.peerId && playback.sourcePeerId === input.peerId) ||
-    (input.activeSessionId && playback.sourceSessionId === input.activeSessionId)
-  ) {
+  if (isCurrentPlaybackSourceDevice({
+    playback,
+    peerId: input.peerId,
+    activeSessionId: input.activeSessionId
+  })) {
     return false;
   }
 
@@ -246,10 +249,11 @@ export function resolveRuntimeManualCacheTrackIds(input: {
     playback?.currentTrackId &&
     hasActivePlaybackIntent(playback) &&
     !input.hasLocalFullTrack &&
-    !(
-      (input.peerId && playback.sourcePeerId === input.peerId) ||
-      (input.activeSessionId && playback.sourceSessionId === input.activeSessionId)
-    )
+    !isCurrentPlaybackSourceDevice({
+      playback,
+      peerId: input.peerId,
+      activeSessionId: input.activeSessionId
+    })
   ) {
     trackIds.add(playback.currentTrackId);
   }

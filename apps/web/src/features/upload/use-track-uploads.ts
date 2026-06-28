@@ -35,6 +35,7 @@ import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/f
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
 import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
+import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 
 export type ManualCacheTaskStatus =
   | "idle"
@@ -273,8 +274,11 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
   }
 
   if (
-    (input.peerId && playback.sourcePeerId === input.peerId) ||
-    (input.activeSessionId && playback.sourceSessionId === input.activeSessionId)
+    isCurrentPlaybackSourceDevice({
+      playback,
+      peerId: input.peerId,
+      activeSessionId: input.activeSessionId
+    })
   ) {
     return false;
   }
