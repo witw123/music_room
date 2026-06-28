@@ -259,6 +259,7 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
   trackExists: boolean;
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
+  hasLocalFullTrack?: boolean;
   existingTask: Pick<ManualCacheTask, "mode" | "status"> | null | undefined;
 }) {
   const playback = input.playback;
@@ -284,6 +285,10 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
 
   if (input.existingTask.mode === "manual") {
     return false;
+  }
+
+  if (input.existingTask.status === "ready") {
+    return input.hasLocalFullTrack === false;
   }
 
   return (
@@ -1151,7 +1156,11 @@ export function useTrackUploads(options: {
       return;
     }
 
-    const trackExists = roomSnapshot?.tracks.some((track) => track.id === trackId) ?? false;
+    const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
+    const trackExists = !!track;
+    const hasLocalFullTrack =
+      !!uploadedTracks[trackId] ||
+      (!!track && cacheLibraryTracksRef.current.has(track.fileHash));
     if (
       !shouldEnsurePlaybackDemandCacheTask({
         enableManualTrackCaching,
@@ -1159,6 +1168,7 @@ export function useTrackUploads(options: {
         trackExists,
         peerId,
         activeSessionId: activeSession?.userId,
+        hasLocalFullTrack,
         existingTask: manualCacheTasks[trackId] ?? null
       })
     ) {

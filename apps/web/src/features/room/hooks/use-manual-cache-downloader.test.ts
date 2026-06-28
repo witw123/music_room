@@ -177,6 +177,42 @@ describe("resolveManualCacheTrackPlan", () => {
 
     expect(plan.requestableChunks).toEqual([3]);
   });
+
+  it("requests playback cache chunks from a connected peer that already has the full local cache", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+    const track = roomSnapshot.tracks[0];
+
+    const plan = resolveManualCacheTrackPlan({
+      track,
+      roomId: "room_1",
+      localPeerId: "peer_local",
+      availabilityByTrack: {
+        track_a: {
+          peer_cached: {
+            roomId: "room_1",
+            trackId: "track_a",
+            ownerPeerId: "peer_cached",
+            nickname: "cached",
+            totalChunks: 4,
+            chunkSize: 128 * 1024,
+            availableChunks: [0, 1, 2, 3],
+            source: "local_cache",
+            announcedAt: new Date(1_000).toISOString()
+          }
+        }
+      },
+      connectedPeerIds: ["peer_cached"],
+      cachedManifest: null,
+      localPieceIndexes: [],
+      pendingChunkIndexes: []
+    });
+
+    expect(plan.selectedProviderPeerId).toBe("peer_cached");
+    expect(plan.requestableChunks).toEqual([0, 1, 2, 3]);
+    expect(plan.blockedReason).toBeNull();
+  });
 });
 
 describe("resolveManualCacheTrackProviderPeerId", () => {

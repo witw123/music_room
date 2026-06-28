@@ -136,6 +136,7 @@ type UseRoomRuntimeInput = {
   activePlaybackSource: ProgressivePlaybackSource;
   progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
   isCurrentSourceOwner: boolean;
+  hasFullLocalTrack: boolean;
   audioUnlocked: boolean;
   getLocalPlaybackPositionMs?: () => number | null;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
@@ -228,6 +229,32 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
   }
 
   return !input.manualCacheTrackIds.includes(playback.currentTrackId);
+}
+
+export function resolveRuntimeManualCacheTrackIds(input: {
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  peerId: string | null | undefined;
+  activeSessionId: string | null | undefined;
+  manualCacheTrackIds: string[];
+  hasLocalFullTrack: boolean;
+  enableManualTrackCaching: boolean;
+}) {
+  const trackIds = new Set(input.manualCacheTrackIds.filter(Boolean));
+  const playback = input.playback;
+  if (
+    input.enableManualTrackCaching &&
+    playback?.currentTrackId &&
+    hasActivePlaybackIntent(playback) &&
+    !input.hasLocalFullTrack &&
+    !(
+      (input.peerId && playback.sourcePeerId === input.peerId) ||
+      (input.activeSessionId && playback.sourceSessionId === input.activeSessionId)
+    )
+  ) {
+    trackIds.add(playback.currentTrackId);
+  }
+
+  return [...trackIds].sort();
 }
 
 export function buildActivePlaybackCacheWindow(input: {
@@ -332,6 +359,7 @@ export function useRoomRuntime({
   activePlaybackSource,
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
+  hasFullLocalTrack,
   audioUnlocked,
   getLocalPlaybackPositionMs,
   setAudioUnlocked,
@@ -368,6 +396,25 @@ export function useRoomRuntime({
   void mediaConnectedPeers;
   void setMediaConnectedPeers;
   void mediaConnectionState;
+
+  const runtimeManualCacheTrackIds = useMemo(
+    () =>
+      resolveRuntimeManualCacheTrackIds({
+        playback: roomSnapshot?.room.playback,
+        peerId,
+        activeSessionId: activeSession?.userId,
+        manualCacheTrackIds,
+        hasLocalFullTrack: hasFullLocalTrack,
+        enableManualTrackCaching
+      }),
+    [
+      activeSession?.userId,
+      hasFullLocalTrack,
+      manualCacheTrackIds,
+      peerId,
+      roomSnapshot?.room.playback
+    ]
+  );
 
   const {
     meshRef,
@@ -420,7 +467,7 @@ export function useRoomRuntime({
     setSourceStartState,
     lastSourceStartError,
     setLastSourceStartError,
-    manualCacheTrackIds,
+    manualCacheTrackIds: runtimeManualCacheTrackIds,
     uploadedTracks,
     announceRoomTrackAvailability,
     handleManualCachePieceReceived,
@@ -708,7 +755,7 @@ export function useRoomRuntime({
 
   const manualCacheDownloader = useManualCacheDownloader({
     enableManualTrackCaching,
-    manualCacheTrackIds,
+    manualCacheTrackIds: runtimeManualCacheTrackIds,
     roomSnapshot,
     availabilityByTrack,
     peerId,

@@ -9,6 +9,7 @@ import {
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
+  resolveRuntimeManualCacheTrackIds,
   shouldStartPlaybackDemandCacheForPlayback,
   shouldReannounceManualCacheAvailability,
   shouldRedirectRoomRouteToAuth,
@@ -346,6 +347,56 @@ describe("pure cache room runtime helpers", () => {
         enableManualTrackCaching: true
       })
     ).toBe(false);
+  });
+
+  it("keeps the current remote playback track active for downloader refs until a full local file exists", () => {
+    expect(
+      resolveRuntimeManualCacheTrackIds({
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: "2026-04-14T00:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 3
+        },
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        manualCacheTrackIds: [],
+        hasLocalFullTrack: false,
+        enableManualTrackCaching: true
+      })
+    ).toEqual(["track_1"]);
+  });
+
+  it("does not add an implicit playback cache demand for the current source owner", () => {
+    expect(
+      resolveRuntimeManualCacheTrackIds({
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: "2026-04-14T00:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 3
+        },
+        peerId: "peer_source",
+        activeSessionId: "host",
+        manualCacheTrackIds: [],
+        hasLocalFullTrack: false,
+        enableManualTrackCaching: true
+      })
+    ).toEqual([]);
   });
 
   it("builds an active playback cache window for current listener downloads", () => {

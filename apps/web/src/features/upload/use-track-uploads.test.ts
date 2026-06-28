@@ -380,12 +380,30 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         trackExists: true,
         peerId: "peer_listener",
         activeSessionId: "listener",
+        hasLocalFullTrack: true,
         existingTask: {
           mode: "playback-demand",
           status: "ready"
         }
       })
     ).toBe(false);
+  });
+
+  it("restarts a stale ready playback-demand task when the full local file is missing", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        hasLocalFullTrack: false,
+        existingTask: {
+          mode: "playback-demand",
+          status: "ready"
+        }
+      })
+    ).toBe(true);
   });
 
   it("does not auto-cache on the source owner device", () => {

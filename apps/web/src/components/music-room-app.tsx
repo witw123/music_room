@@ -491,6 +491,7 @@ export function MusicRoomApp({
     activePlaybackSource,
     progressiveSchedulerPolicy,
     isCurrentSourceOwner,
+    hasFullLocalTrack,
     audioUnlocked,
     getLocalPlaybackPositionMs,
     setAudioUnlocked,
