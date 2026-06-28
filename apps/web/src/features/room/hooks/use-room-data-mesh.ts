@@ -18,6 +18,7 @@ import {
 } from "@/lib/indexeddb";
 import { hashArrayBuffer } from "@/features/p2p";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 import type { DataMeshBridge } from "./room-runtime-types";
 
 type DataMeshRuntime = Pick<
@@ -392,7 +393,14 @@ export function createRoomDataMeshRuntime(input: {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         const uploadedTrack = input.uploadedTracksRef.current[trackId] ?? null;
         const cachedLibraryTrack = track ? await getCachedLibraryTrack(track.fileHash) : null;
-        const fallbackFile = uploadedTrack?.file ?? cachedLibraryTrack?.file ?? null;
+        const fallbackFile =
+          uploadedTrack?.file ??
+          (isCachedLibraryTrackUsableForRoomTrack({
+            cachedTrack: cachedLibraryTrack,
+            roomTrack: track
+          })
+            ? cachedLibraryTrack?.file ?? null
+            : null);
         if (!track || !fallbackFile) {
           return null;
         }

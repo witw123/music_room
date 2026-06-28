@@ -213,6 +213,7 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
   manualCacheTrackIds: string[];
+  hasLocalFullTrack?: boolean;
   enableManualTrackCaching: boolean;
 }) {
   const playback = input.playback;
@@ -228,7 +229,7 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
     playback,
     peerId: input.peerId,
     activeSessionId: input.activeSessionId
-  })) {
+  }) && input.hasLocalFullTrack !== false) {
     return false;
   }
 
@@ -245,16 +246,16 @@ export function resolveRuntimeManualCacheTrackIds(input: {
 }) {
   const trackIds = new Set(input.manualCacheTrackIds.filter(Boolean));
   const playback = input.playback;
+  const isSourceDevice = isCurrentPlaybackSourceDevice({
+    playback,
+    peerId: input.peerId,
+    activeSessionId: input.activeSessionId
+  });
   if (
     input.enableManualTrackCaching &&
     playback?.currentTrackId &&
     hasActivePlaybackIntent(playback) &&
-    !input.hasLocalFullTrack &&
-    !isCurrentPlaybackSourceDevice({
-      playback,
-      peerId: input.peerId,
-      activeSessionId: input.activeSessionId
-    })
+    (!isSourceDevice || !input.hasLocalFullTrack)
   ) {
     trackIds.add(playback.currentTrackId);
   }
@@ -821,6 +822,7 @@ export function useRoomRuntime({
         peerId,
         activeSessionId: activeSessionRef.current?.userId,
         manualCacheTrackIds,
+        hasLocalFullTrack: hasFullLocalTrack,
         enableManualTrackCaching
       })
     ) {
@@ -830,6 +832,7 @@ export function useRoomRuntime({
     void startPlaybackDemandCacheDownload(playback!.currentTrackId!);
   }, [
     activeSessionRef,
+    hasFullLocalTrack,
     manualCacheTrackIds,
     peerId,
     roomSnapshot?.room.playback,

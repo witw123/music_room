@@ -568,6 +568,33 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
     ).toBe(false);
   });
 
+  it("creates a task from an incoming source-device piece when the full-local file is missing", () => {
+    expect(
+      shouldCreatePlaybackDemandTaskFromCachePiece({
+        playback: remotePlayback,
+        trackId: "track_1",
+        peerId: "peer_host",
+        activeSessionId: "host",
+        hasLocalFullTrack: false,
+        hasCurrentTask: false
+      })
+    ).toBe(true);
+  });
+
+  it("auto-caches on a selected source device when its trusted full-local file is missing", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_host",
+        activeSessionId: "host",
+        hasLocalFullTrack: false,
+        existingTask: null
+      })
+    ).toBe(true);
+  });
+
   it("auto-caches on another device even when it is signed in as the source session", () => {
     expect(
       shouldEnsurePlaybackDemandCacheTask({

@@ -32,6 +32,7 @@ import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   getEffectivePlaybackPositionMs
 } from "@/features/playback/progressive-playback";
+import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -261,11 +262,16 @@ export function MusicRoomApp({
 
   const hasFullLocalTrack = useMemo(
     () =>
-      currentPlaybackTrackId
+      currentPlaybackTrackId && currentTrack
         ? !!uploadedTracks[currentPlaybackTrackId] ||
-          !!cacheLibraryTracks.find((track) => track.fileHash === currentTrack?.fileHash)
+          !!cacheLibraryTracks.find((track) =>
+            isCachedLibraryTrackUsableForRoomTrack({
+              cachedTrack: track,
+              roomTrack: currentTrack
+            })
+          )
         : false,
-    [cacheLibraryTracks, currentPlaybackTrackId, currentTrack?.fileHash, uploadedTracks]
+    [cacheLibraryTracks, currentPlaybackTrackId, currentTrack, uploadedTracks]
   );
   const fullLocalPlaybackTracks = useMemo<Record<string, FullLocalPlaybackTrack>>(() => {
     const next: Record<string, FullLocalPlaybackTrack> = { ...uploadedTracks };
@@ -273,14 +279,16 @@ export function MusicRoomApp({
       return next;
     }
 
-    const cachedTracksByHash = new Map(
-      cacheLibraryTracks.map((track) => [track.fileHash, track] as const)
-    );
     for (const track of roomSnapshot.tracks) {
       if (next[track.id]) {
         continue;
       }
-      const cachedTrack = cachedTracksByHash.get(track.fileHash);
+      const cachedTrack = cacheLibraryTracks.find((entry) =>
+        isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: entry,
+          roomTrack: track
+        })
+      );
       if (!cachedTrack) {
         continue;
       }

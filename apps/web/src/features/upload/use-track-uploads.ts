@@ -36,6 +36,7 @@ import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cach
 import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
+import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 
 export type ManualCacheTaskStatus =
   | "idle"
@@ -262,6 +263,7 @@ export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
   trackId: string;
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
+  hasLocalFullTrack?: boolean;
   hasCurrentTask: boolean;
 }) {
   const playback = input.playback;
@@ -278,7 +280,7 @@ export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
     playback,
     peerId: input.peerId,
     activeSessionId: input.activeSessionId
-  });
+  }) || input.hasLocalFullTrack === false;
 }
 
 function isManualCacheTaskRecord(
@@ -332,7 +334,8 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
       playback,
       peerId: input.peerId,
       activeSessionId: input.activeSessionId
-    })
+    }) &&
+    input.hasLocalFullTrack !== false
   ) {
     return false;
   }
@@ -555,14 +558,20 @@ export function useTrackUploads(options: {
         const cachedTrack =
           cacheLibraryTracksRef.current.get(track.fileHash) ??
           (await getCachedLibraryTrack(track.fileHash));
-        if (!cachedTrack) {
+        const usableCachedTrack = isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack,
+          roomTrack: track
+        })
+          ? cachedTrack
+          : null;
+        if (!usableCachedTrack) {
           continue;
         }
         const cachedFile = toCachedLibraryFile({
-          file: cachedTrack.file,
-          title: cachedTrack.title,
-          mimeType: cachedTrack.mimeType,
-          fileHash: cachedTrack.fileHash
+          file: usableCachedTrack.file,
+          title: usableCachedTrack.title,
+          mimeType: usableCachedTrack.mimeType,
+          fileHash: usableCachedTrack.fileHash
         });
 
         rehydratedUploads[track.id] = {
@@ -786,7 +795,14 @@ export function useTrackUploads(options: {
         return;
       }
       const cachedLibraryTrack = await getCachedLibraryTrack(track.fileHash);
-      const fallbackFile = uploadedTrack?.file ?? cachedLibraryTrack?.file ?? null;
+      const fallbackFile =
+        uploadedTrack?.file ??
+        (isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: cachedLibraryTrack,
+          roomTrack: track
+        })
+          ? cachedLibraryTrack?.file ?? null
+          : null);
       const announcementKey = [
         roomSnapshot.room.id,
         trackId,
@@ -1061,7 +1077,15 @@ export function useTrackUploads(options: {
         return;
       }
 
-      if (cacheLibraryTracksRef.current.has(track.fileHash) || (await getCachedLibraryTrack(track.fileHash))) {
+      const cachedLibraryTrack =
+        cacheLibraryTracksRef.current.get(track.fileHash) ??
+        (await getCachedLibraryTrack(track.fileHash));
+      if (
+        isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: cachedLibraryTrack,
+          roomTrack: track
+        })
+      ) {
         updateManualCacheTask(trackId, {
           status: "ready",
           mode,
@@ -1159,9 +1183,15 @@ export function useTrackUploads(options: {
 
     const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
     const trackExists = !!track;
+    const cachedLibraryTrack = track
+      ? cacheLibraryTracksRef.current.get(track.fileHash)
+      : null;
     const hasLocalFullTrack =
       !!uploadedTracks[trackId] ||
-      (!!track && cacheLibraryTracksRef.current.has(track.fileHash));
+      isCachedLibraryTrackUsableForRoomTrack({
+        cachedTrack: cachedLibraryTrack,
+        roomTrack: track
+      });
     if (
       !shouldEnsurePlaybackDemandCacheTask({
         enableManualTrackCaching,
@@ -1183,7 +1213,8 @@ export function useTrackUploads(options: {
     peerId,
     roomSnapshot?.room.playback,
     roomSnapshot?.tracks,
-    startPlaybackDemandCacheDownload
+    startPlaybackDemandCacheDownload,
+    uploadedTracks
   ]);
 
   const pauseManualCacheDownload = useCallback(
@@ -1255,6 +1286,14 @@ export function useTrackUploads(options: {
 
       let shouldAssemble = false;
       updateManualCacheTask(input.trackId, (current) => {
+        const hasLocalFullTrack =
+          !!uploadedTracks[input.trackId] ||
+          isCachedLibraryTrackUsableForRoomTrack({
+            cachedTrack: track
+              ? cacheLibraryTracksRef.current.get(track.fileHash)
+              : null,
+            roomTrack: track
+          });
         if (
           !current &&
           shouldCreatePlaybackDemandTaskFromCachePiece({
@@ -1262,6 +1301,7 @@ export function useTrackUploads(options: {
             trackId: input.trackId,
             peerId,
             activeSessionId: activeSession?.userId,
+            hasLocalFullTrack,
             hasCurrentTask: false
           })
         ) {
@@ -1329,7 +1369,8 @@ export function useTrackUploads(options: {
       onAvailability,
       peerId,
       roomSnapshot,
-      updateManualCacheTask
+      updateManualCacheTask,
+      uploadedTracks
     ]
   );
 
@@ -1343,14 +1384,21 @@ export function useTrackUploads(options: {
         return;
       }
       updateManualCacheTask(plan.trackId, (current) => {
+        const hasLocalFullTrack =
+          !!uploadedTracks[plan.trackId] ||
+          isCachedLibraryTrackUsableForRoomTrack({
+            cachedTrack: cacheLibraryTracksRef.current.get(track.fileHash),
+            roomTrack: track
+          });
         const isCurrentPlaybackDemand =
           plan.trackId === roomSnapshot.room.playback.currentTrackId &&
           hasActivePlaybackIntent(roomSnapshot.room.playback) &&
-          !isCurrentPlaybackSourceDevice({
+          (!isCurrentPlaybackSourceDevice({
             playback: roomSnapshot.room.playback,
             peerId,
             activeSessionId: activeSession?.userId
-          });
+          }) ||
+            !hasLocalFullTrack);
         if (!current && !isCurrentPlaybackDemand) {
           return null;
         }
@@ -1387,7 +1435,7 @@ export function useTrackUploads(options: {
         };
       });
     },
-    [activeSession?.userId, peerId, roomSnapshot, updateManualCacheTask]
+    [activeSession?.userId, peerId, roomSnapshot, updateManualCacheTask, uploadedTracks]
   );
 
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {

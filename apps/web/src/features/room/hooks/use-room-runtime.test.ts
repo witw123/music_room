@@ -421,7 +421,32 @@ describe("pure cache room runtime helpers", () => {
     ).toEqual(["track_1"]);
   });
 
-  it("does not add an implicit playback cache demand for the current source owner", () => {
+  it("keeps listener playback cache active even when a stale full-local flag is present", () => {
+    expect(
+      resolveRuntimeManualCacheTrackIds({
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: "2026-04-14T00:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 3
+        },
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        manualCacheTrackIds: [],
+        hasLocalFullTrack: true,
+        enableManualTrackCaching: true
+      })
+    ).toEqual(["track_1"]);
+  });
+
+  it("keeps playback cache active for a selected source device when its local full file is missing", () => {
     expect(
       resolveRuntimeManualCacheTrackIds({
         playback: {
@@ -443,7 +468,7 @@ describe("pure cache room runtime helpers", () => {
         hasLocalFullTrack: false,
         enableManualTrackCaching: true
       })
-    ).toEqual([]);
+    ).toEqual(["track_1"]);
   });
 
   it("builds an active playback cache window for current listener downloads", () => {
