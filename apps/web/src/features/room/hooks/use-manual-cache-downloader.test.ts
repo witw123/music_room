@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   buildManualCacheSchedulerAvailability,
+  buildManualCacheSchedulerAvailabilityFromParts,
   resolveManualCacheTrackPlan,
   resolveManualCacheTrackProviderPeerId,
   shouldRestartManualCacheProviderPeer,
@@ -27,6 +28,29 @@ describe("buildManualCacheSchedulerAvailability", () => {
       ownerPeerId: "peer_owner",
       totalChunks: 4,
       chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3],
+      source: "live_upload"
+    });
+  });
+
+  it("can synthesize availability from stable room parts without depending on playback changes", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+
+    const availability = buildManualCacheSchedulerAvailabilityFromParts({
+      availabilityByTrack: {},
+      manualCacheTrackIds: ["track_a"],
+      roomId: roomSnapshot.room.id,
+      members: roomSnapshot.room.members,
+      tracks: roomSnapshot.tracks,
+      localPeerId: "peer_local"
+    });
+
+    expect(availability.track_a?.peer_owner).toMatchObject({
+      roomId: "room_1",
+      trackId: "track_a",
+      ownerPeerId: "peer_owner",
       availableChunks: [0, 1, 2, 3],
       source: "live_upload"
     });

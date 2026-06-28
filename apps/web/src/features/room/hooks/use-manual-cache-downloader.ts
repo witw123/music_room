@@ -285,15 +285,37 @@ export function buildManualCacheSchedulerAvailability(input: {
     return input.availabilityByTrack;
   }
 
+  return buildManualCacheSchedulerAvailabilityFromParts({
+    availabilityByTrack: input.availabilityByTrack,
+    manualCacheTrackIds: input.manualCacheTrackIds,
+    roomId: input.roomSnapshot.room.id,
+    members: input.roomSnapshot.room.members,
+    tracks: input.roomSnapshot.tracks,
+    localPeerId: input.localPeerId
+  });
+}
+
+export function buildManualCacheSchedulerAvailabilityFromParts(input: {
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  manualCacheTrackIds: string[];
+  roomId: string;
+  members: RoomSnapshot["room"]["members"];
+  tracks: RoomSnapshot["tracks"];
+  localPeerId: string | null | undefined;
+}) {
+  if (input.manualCacheTrackIds.length === 0) {
+    return input.availabilityByTrack;
+  }
+
   const activeMemberPeerIds = new Set(
-    input.roomSnapshot.room.members
+    input.members
       .map((member) => member.peerId)
       .filter((peerId): peerId is string => !!peerId)
   );
   const membersBySessionId = new Map(
-    input.roomSnapshot.room.members.map((member) => [member.id, member] as const)
+    input.members.map((member) => [member.id, member] as const)
   );
-  const tracksById = new Map(input.roomSnapshot.tracks.map((track) => [track.id, track] as const));
+  const tracksById = new Map(input.tracks.map((track) => [track.id, track] as const));
   const nextAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> = {};
 
   for (const trackId of input.manualCacheTrackIds) {
@@ -303,7 +325,7 @@ export function buildManualCacheSchedulerAvailability(input: {
 
     for (const announcement of Object.values(currentAvailability)) {
       if (
-        announcement.roomId === input.roomSnapshot.room.id &&
+        announcement.roomId === input.roomId &&
         activeMemberPeerIds.has(announcement.ownerPeerId)
       ) {
         nextTrackAvailability[announcement.ownerPeerId] = announcement;
@@ -329,7 +351,7 @@ export function buildManualCacheSchedulerAvailability(input: {
       !nextTrackAvailability[ownerPeerId]
     ) {
       nextTrackAvailability[ownerPeerId] = {
-        roomId: input.roomSnapshot.room.id,
+        roomId: input.roomId,
         trackId: track.id,
         ownerPeerId,
         nickname: owner.nickname,

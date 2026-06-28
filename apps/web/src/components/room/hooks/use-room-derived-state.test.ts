@@ -1,18 +1,133 @@
 import { describe, expect, it } from "vitest";
-import type { PeerDiagnosticsSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import type {
+  PeerDiagnosticsSnapshot,
+  PeerRecentEvent,
+  RoomSnapshot,
+  TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import {
   countPeersWithinActiveMembers,
+  buildAvailabilitySummary,
   filterAvailabilityAnnouncementsByActivePeers,
   filterAvailabilityAnnouncementsByCurrentRoomPeers,
   filterVisiblePeerDiagnostics,
   getActiveMemberPeerIds,
   getLocalPlaybackStatus,
   resolveDerivedAvailabilityByTrack,
-  resolveCurrentRoomTrackManifest
+  resolveCurrentRoomTrackManifest,
+  selectWorkspacePeerDiagnostics
 } from "./use-room-derived-state";
 
 describe("use-room-derived-state helpers", () => {
+  it("builds availability summaries from active peers without recreating room-wide state elsewhere", () => {
+    const activePeerIds = new Set(["peer_host", "peer_listener"]);
+    const track = {
+      id: "track_1",
+      title: "Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 120_000,
+      bitrate: null,
+      sizeBytes: 43_000_000,
+      codec: "flac",
+      mimeType: "audio/flac",
+      fileHash: "hash_1",
+      artworkUrl: null,
+      ownerSessionId: "host",
+      ownerNickname: "Host",
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 10,
+        chunkSize: 256 * 1024,
+        pieceMimeType: "audio/flac"
+      }
+    } satisfies RoomSnapshot["tracks"][number];
+
+    expect(
+      buildAvailabilitySummary({
+        tracks: [track],
+        availabilityByTrack: {
+          track_1: {
+            peer_host: {
+              roomId: "room_1",
+              trackId: "track_1",
+              ownerPeerId: "peer_host",
+              nickname: "Host",
+              totalChunks: 10,
+              chunkSize: 256 * 1024,
+              availableChunks: [0, 1, 2, 3],
+              source: "live_upload",
+              announcedAt: "2026-04-04T00:00:00.000Z"
+            },
+            peer_departed: {
+              roomId: "room_1",
+              trackId: "track_1",
+              ownerPeerId: "peer_departed",
+              nickname: "Departed",
+              totalChunks: 10,
+              chunkSize: 256 * 1024,
+              availableChunks: [0, 1, 2, 3, 4],
+              source: "local_cache",
+              announcedAt: "2026-04-04T00:01:00.000Z"
+            }
+          }
+        },
+        roomId: "room_1",
+        activeMemberPeerIds: activePeerIds,
+        localPeerId: "peer_host"
+      })
+    ).toEqual([
+      {
+        track,
+        peerCount: 1,
+        localChunkCount: 4,
+        totalChunks: 10,
+        sources: ["Host (live_upload)"]
+      }
+    ]);
+  });
+
+  it("keeps peer diagnostics out of inactive workspace tabs", () => {
+    const diagnostics = [
+      { peerId: "peer_host", updatedAt: "2026-04-04T00:00:00.000Z" }
+    ] as PeerDiagnosticsSnapshot[];
+    const recentEvents = [
+      {
+        id: "event_1",
+        peerId: "peer_host",
+        event: "connected",
+        channelKind: "data",
+        direction: "local",
+        summary: "connected",
+        timestamp: "2026-04-04T00:00:00.000Z",
+        level: "info"
+      }
+    ] satisfies PeerRecentEvent[];
+
+    expect(
+      selectWorkspacePeerDiagnostics({
+        activeDashboardTab: "queue",
+        visiblePeerDiagnostics: diagnostics,
+        visiblePeerRecentEvents: recentEvents
+      })
+    ).toEqual({
+      peerDiagnostics: [],
+      peerRecentEvents: []
+    });
+
+    expect(
+      selectWorkspacePeerDiagnostics({
+        activeDashboardTab: "members",
+        visiblePeerDiagnostics: diagnostics,
+        visiblePeerRecentEvents: recentEvents
+      })
+    ).toEqual({
+      peerDiagnostics: diagnostics,
+      peerRecentEvents: recentEvents
+    });
+  });
+
   it("drops stale availability announcements from peers that are no longer active room members", () => {
     const activePeerIds = getActiveMemberPeerIds([
       {

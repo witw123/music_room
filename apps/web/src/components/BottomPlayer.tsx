@@ -3,11 +3,14 @@
 import React, { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { PlayerAmbientAura } from "@/components/bottom-player/PlayerAmbientAura";
 import {
   DesktopBottomPlayerLayout,
   MobileBottomPlayerLayout
 } from "@/components/bottom-player/bottom-player-layout";
+import {
+  resolveAnchoredProgressMs,
+  resolveProgressRenderIntervalMs
+} from "@/features/playback/render-scheduler";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -66,6 +69,9 @@ function BottomPlayerBase({
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
+  const [isPageVisible, setIsPageVisible] = useState(
+    typeof document === "undefined" ? true : !document.hidden
+  );
   const progressAnchorRef = useRef({
     progressMs,
     receivedAtMs: Date.now()
@@ -81,6 +87,17 @@ function BottomPlayerBase({
     currentTrackDuration > 0 ? Math.min(boundedProgressMs / currentTrackDuration, 1) : 0;
   const title = currentTrack?.title ?? "等待选择歌曲";
   const artist = currentTrack?.artist ?? "从曲库或共享队列中选择一首歌";
+  const progressRenderIntervalMs = resolveProgressRenderIntervalMs({ isPageVisible });
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const handleVisibilityChange = () => setIsPageVisible(!document.hidden);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     progressAnchorRef.current = {
@@ -98,24 +115,24 @@ function BottomPlayerBase({
       return;
     }
 
-    let frameId = 0;
     const render = () => {
-      const elapsedMs = Math.max(0, Date.now() - progressAnchorRef.current.receivedAtMs);
-      const nextProgressMs = clampProgressMs(
-        progressAnchorRef.current.progressMs + elapsedMs,
-        currentTrackDuration
-      );
+      const nextProgressMs = resolveAnchoredProgressMs({
+        progressMs: progressAnchorRef.current.progressMs,
+        receivedAtMs: progressAnchorRef.current.receivedAtMs,
+        durationMs: currentTrackDuration,
+        nowMs: Date.now()
+      });
       setRenderedProgressMs((current) =>
-        Math.abs(current - nextProgressMs) >= 16 ? nextProgressMs : current
+        Math.abs(current - nextProgressMs) >= 200 ? nextProgressMs : current
       );
-      frameId = window.requestAnimationFrame(render);
     };
 
-    frameId = window.requestAnimationFrame(render);
+    render();
+    const timerId = window.setInterval(render, progressRenderIntervalMs);
     return () => {
-      window.cancelAnimationFrame(frameId);
+      window.clearInterval(timerId);
     };
-  }, [currentTrackDuration, isPlaying, seekDraft]);
+  }, [currentTrackDuration, isPlaying, progressRenderIntervalMs, seekDraft]);
 
   const commitSeek = useCallback(() => {
     if (seekDraft !== null && canControlPlayback) {
@@ -144,9 +161,20 @@ function BottomPlayerBase({
     [audioRef, setVolume]
   );
 
+  const getLiveProgressMs = useCallback(
+    () =>
+      resolveAnchoredProgressMs({
+        progressMs: progressAnchorRef.current.progressMs,
+        receivedAtMs: progressAnchorRef.current.receivedAtMs,
+        durationMs: currentTrackDuration,
+        nowMs: Date.now()
+      }),
+    [currentTrackDuration]
+  );
+
   const togglePlayback = useCallback(() => {
-    void (isPlaying ? onPause(boundedProgressMs) : onPlay());
-  }, [boundedProgressMs, isPlaying, onPause, onPlay]);
+    void (isPlaying ? onPause(getLiveProgressMs()) : onPlay());
+  }, [getLiveProgressMs, isPlaying, onPause, onPlay]);
 
   const playPrev = useCallback(() => {
     void onPrev();

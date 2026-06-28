@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useTransition } from "react";
+import { memo, useMemo, useTransition } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,10 @@ function TrackListSectionBase({
   onPlayTrack
 }: TrackListSectionProps) {
   const [isPending, startTransition] = useTransition();
+  const cachedLibraryFileHashSet = useMemo(
+    () => buildCachedLibraryFileHashSet(cachedLibraryFileHashes),
+    [cachedLibraryFileHashes]
+  );
 
   return (
     <section className="relative flex w-full flex-col gap-8">
@@ -69,7 +73,7 @@ function TrackListSectionBase({
               const isMine = track.ownerSessionId === activeSession?.userId;
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
-              const isInCacheLibrary = cachedLibraryFileHashes.includes(track.fileHash);
+              const isInCacheLibrary = cachedLibraryFileHashSet.has(track.fileHash);
               const availabilityDetail = isUploadedLocally
                 ? "你是这首歌的本机音源；播放时会向在线成员提供分片缓存。"
                 : isInCacheLibrary
@@ -189,3 +193,7 @@ function TrackListSectionBase({
 }
 
 export const TrackListSection = memo(TrackListSectionBase);
+
+export function buildCachedLibraryFileHashSet(cachedLibraryFileHashes: string[]) {
+  return new Set(cachedLibraryFileHashes);
+}

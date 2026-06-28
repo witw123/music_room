@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { TrackListSection } from "./TrackListSection";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
@@ -18,11 +18,16 @@ type LibraryTabPanelProps = {
 };
 
 function LibraryTabPanelBase(props: LibraryTabPanelProps) {
+  const cachedLibraryFileHashes = useMemo(
+    () => props.cacheLibraryTracks.map((track) => track.fileHash),
+    [props.cacheLibraryTracks]
+  );
+
   return (
     <div className="animate-fade-in flex w-full flex-col gap-8">
       <TrackListSection
         {...props}
-        cachedLibraryFileHashes={props.cacheLibraryTracks.map((track) => track.fileHash)}
+        cachedLibraryFileHashes={cachedLibraryFileHashes}
       />
     </div>
   );

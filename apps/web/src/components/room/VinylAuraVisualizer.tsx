@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { audioVisualizerStore } from "@/features/playback/audio-visualizer-store";
+import { resolveCanvasFrameDelayMs } from "@/features/playback/render-scheduler";
 
 type VinylAuraVisualizerProps = {
   isPlaying: boolean;
@@ -15,6 +16,19 @@ export function VinylAuraVisualizer({
   maxDevicePixelRatio = 1.5
 }: VinylAuraVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState(
+    typeof document === "undefined" ? true : !document.hidden
+  );
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const handleVisibilityChange = () => setIsPageVisible(!document.hidden);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -23,7 +37,17 @@ export function VinylAuraVisualizer({
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) return;
 
-    let animationFrameId: number;
+    const frameDelayMs = resolveCanvasFrameDelayMs({
+      isPageVisible,
+      isPlaying,
+      reducedMotion
+    });
+    if (frameDelayMs === null) {
+      return;
+    }
+
+    let animationFrameId: number | null = null;
+    let timeoutId: number | null = null;
     let phaseOffset = 0;
 
     // Smoothed values for fluid animation
@@ -42,6 +66,12 @@ export function VinylAuraVisualizer({
       }
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       return { width: bounds.width, height: bounds.height };
+    };
+
+    const scheduleNextFrame = () => {
+      timeoutId = window.setTimeout(() => {
+        animationFrameId = window.requestAnimationFrame(draw);
+      }, frameDelayMs);
     };
 
     const draw = () => {
@@ -146,15 +176,20 @@ export function VinylAuraVisualizer({
       context.fill();
       context.restore();
 
-      animationFrameId = requestAnimationFrame(draw);
+      scheduleNextFrame();
     };
 
-    animationFrameId = requestAnimationFrame(draw);
+    animationFrameId = window.requestAnimationFrame(draw);
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [isPlaying, reducedMotion, maxDevicePixelRatio]);
+  }, [isPageVisible, isPlaying, reducedMotion, maxDevicePixelRatio]);
 
   return (
     <canvas

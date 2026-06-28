@@ -14,7 +14,7 @@ import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement
 } from "@/features/p2p";
-import { buildManualCacheSchedulerAvailability } from "@/features/room/hooks/use-manual-cache-downloader";
+import { buildManualCacheSchedulerAvailabilityFromParts } from "@/features/room/hooks/use-manual-cache-downloader";
 
 type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
@@ -42,6 +42,9 @@ type UseRoomDerivedStateInput = {
   isRecoveringRoom: boolean;
 };
 
+const emptyWorkspacePeerDiagnostics: PeerDiagnosticsSnapshot[] = [];
+const emptyWorkspacePeerRecentEvents: PeerRecentEvent[] = [];
+
 export function useRoomDerivedState({
   roomSnapshot,
   peerId,
@@ -67,19 +70,30 @@ export function useRoomDerivedState({
   isNavigatingRoomExit,
   isRecoveringRoom
 }: UseRoomDerivedStateInput) {
-  const host = roomSnapshot?.room.members.find((member) => member.role === "host");
+  const roomId = roomSnapshot?.room.id ?? null;
+  const roomMembers = roomSnapshot?.room.members ?? null;
+  const roomTracks = roomSnapshot?.tracks ?? null;
+  const host = roomMembers?.find((member) => member.role === "host");
   const activeMemberPeerIds = useMemo(
-    () => getActiveMemberPeerIds(roomSnapshot?.room.members ?? []),
-    [roomSnapshot?.room.members]
+    () => getActiveMemberPeerIds(roomMembers ?? []),
+    [roomMembers]
   );
   const derivedAvailabilityByTrack = useMemo(
-    () =>
-      resolveDerivedAvailabilityByTrack({
-        roomSnapshot,
+    () => {
+      if (!roomId || !roomMembers || !roomTracks) {
+        return availabilityByTrack;
+      }
+
+      return buildManualCacheSchedulerAvailabilityFromParts({
         availabilityByTrack,
+        manualCacheTrackIds: roomTracks.map((track) => track.id),
+        roomId,
+        members: roomMembers,
+        tracks: roomTracks,
         localPeerId: peerId
-      }),
-    [availabilityByTrack, peerId, roomSnapshot]
+      });
+    },
+    [availabilityByTrack, peerId, roomId, roomMembers, roomTracks]
   );
   const systemDiagnostic = useMemo(
     () => peerDiagnostics.find((peer) => peer.peerId === "system") ?? null,
@@ -96,32 +110,27 @@ export function useRoomDerivedState({
       );
     })();
 
-  const availabilitySummary =
-    roomSnapshot?.tracks.map((track) => {
-      const peers = filterAvailabilityAnnouncementsByCurrentRoomPeers(
-        derivedAvailabilityByTrack[track.id] ?? {},
-        roomSnapshot.room.id,
-        activeMemberPeerIds
-      );
-      const local = peers.find((entry) => entry.ownerPeerId === peerId);
-      const manifest = resolveCurrentRoomTrackManifest(
-        track,
-        derivedAvailabilityByTrack[track.id] ?? {},
-        roomSnapshot.room.id,
-        activeMemberPeerIds
-      );
-      return {
-        track,
-        peerCount: peers.length,
-        localChunkCount: local?.availableChunks.length ?? 0,
-        totalChunks: manifest?.totalChunks ?? 0,
-        sources: peers.map((entry) => `${entry.nickname} (${entry.source})`)
-      };
-    }) ?? [];
+  const availabilitySummary = useMemo(
+    () =>
+      roomId && roomTracks
+        ? buildAvailabilitySummary({
+            tracks: roomTracks,
+            availabilityByTrack: derivedAvailabilityByTrack,
+            roomId,
+            activeMemberPeerIds,
+            localPeerId: peerId
+          })
+        : [],
+    [activeMemberPeerIds, derivedAvailabilityByTrack, peerId, roomId, roomTracks]
+  );
 
-  const currentTrackAvailability = currentTrack
-    ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
-    : null;
+  const currentTrackAvailability = useMemo(
+    () =>
+      currentTrack
+        ? availabilitySummary.find((entry) => entry.track.id === currentTrack.id) ?? null
+        : null,
+    [availabilitySummary, currentTrack]
+  );
   const memberTransferSummaries = useMemo(() => {
     if (!roomSnapshot || activeDashboardTab !== "members") {
       return [];
@@ -473,12 +482,64 @@ export function resolveDerivedAvailabilityByTrack(input: {
     return input.availabilityByTrack;
   }
 
-  return buildManualCacheSchedulerAvailability({
+  return buildManualCacheSchedulerAvailabilityFromParts({
     availabilityByTrack: input.availabilityByTrack,
     manualCacheTrackIds: input.roomSnapshot.tracks.map((track) => track.id),
-    roomSnapshot: input.roomSnapshot,
+    roomId: input.roomSnapshot.room.id,
+    members: input.roomSnapshot.room.members,
+    tracks: input.roomSnapshot.tracks,
     localPeerId: input.localPeerId
   });
+}
+
+export function buildAvailabilitySummary(input: {
+  tracks: RoomSnapshot["tracks"];
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  roomId: string;
+  activeMemberPeerIds: Set<string>;
+  localPeerId: string;
+}) {
+  return input.tracks.map((track) => {
+    const trackAvailability = input.availabilityByTrack[track.id] ?? {};
+    const peers = filterAvailabilityAnnouncementsByCurrentRoomPeers(
+      trackAvailability,
+      input.roomId,
+      input.activeMemberPeerIds
+    );
+    const local = peers.find((entry) => entry.ownerPeerId === input.localPeerId);
+    const manifest = resolveCurrentRoomTrackManifest(
+      track,
+      trackAvailability,
+      input.roomId,
+      input.activeMemberPeerIds
+    );
+
+    return {
+      track,
+      peerCount: peers.length,
+      localChunkCount: local?.availableChunks.length ?? 0,
+      totalChunks: manifest?.totalChunks ?? 0,
+      sources: peers.map((entry) => `${entry.nickname} (${entry.source})`)
+    };
+  });
+}
+
+export function selectWorkspacePeerDiagnostics(input: {
+  activeDashboardTab: "queue" | "library" | "cache" | "members";
+  visiblePeerDiagnostics: PeerDiagnosticsSnapshot[];
+  visiblePeerRecentEvents: PeerRecentEvent[];
+}) {
+  if (input.activeDashboardTab === "members") {
+    return {
+      peerDiagnostics: input.visiblePeerDiagnostics,
+      peerRecentEvents: input.visiblePeerRecentEvents
+    };
+  }
+
+  return {
+    peerDiagnostics: emptyWorkspacePeerDiagnostics,
+    peerRecentEvents: emptyWorkspacePeerRecentEvents
+  };
 }
 
 export function filterAvailabilityAnnouncementsByActivePeers(

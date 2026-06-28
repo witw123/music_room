@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { resolveCanvasFrameDelayMs } from "@/features/playback/render-scheduler";
 
 type PlayerAmbientAuraProps = {
   samples: number[];
@@ -16,6 +17,24 @@ export function PlayerAmbientAura({
   maxDevicePixelRatio = 1.5
 }: PlayerAmbientAuraProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const samplesRef = useRef(samples);
+  const [isPageVisible, setIsPageVisible] = useState(
+    typeof document === "undefined" ? true : !document.hidden
+  );
+
+  useEffect(() => {
+    samplesRef.current = samples;
+  }, [samples]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const handleVisibilityChange = () => setIsPageVisible(!document.hidden);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -24,7 +43,17 @@ export function PlayerAmbientAura({
     const context = canvas.getContext("2d", { alpha: true });
     if (!context) return;
 
-    let animationFrameId: number;
+    const frameDelayMs = resolveCanvasFrameDelayMs({
+      isPageVisible,
+      isPlaying,
+      reducedMotion
+    });
+    if (frameDelayMs === null) {
+      return;
+    }
+
+    let animationFrameId: number | null = null;
+    let timeoutId: number | null = null;
     let phaseOffset = 0;
 
     // Smoothed values for fluid animation
@@ -45,20 +74,27 @@ export function PlayerAmbientAura({
       return { width: bounds.width, height: bounds.height };
     };
 
+    const scheduleNextFrame = () => {
+      timeoutId = window.setTimeout(() => {
+        animationFrameId = window.requestAnimationFrame(draw);
+      }, frameDelayMs);
+    };
+
     const draw = () => {
       const { width, height } = updateSize();
 
       let currentPeak = 0;
       let currentAverage = 0;
+      const currentSamples = samplesRef.current;
 
-      if (samples.length > 0) {
+      if (currentSamples.length > 0) {
         let sum = 0;
-        for (let i = 0; i < samples.length; i++) {
-          const s = Math.max(0, samples[i]);
+        for (let i = 0; i < currentSamples.length; i++) {
+          const s = Math.max(0, currentSamples[i] ?? 0);
           sum += s;
           if (s > currentPeak) currentPeak = s;
         }
-        currentAverage = sum / samples.length;
+        currentAverage = sum / currentSamples.length;
       }
 
       // Smooth the energy values
@@ -121,15 +157,20 @@ export function PlayerAmbientAura({
       context.fillStyle = grad3;
       context.fillRect(0, 0, width, height);
 
-      animationFrameId = requestAnimationFrame(draw);
+      scheduleNextFrame();
     };
 
-    animationFrameId = requestAnimationFrame(draw);
+    animationFrameId = window.requestAnimationFrame(draw);
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [isPlaying, reducedMotion, maxDevicePixelRatio, samples]);
+  }, [isPageVisible, isPlaying, reducedMotion, maxDevicePixelRatio]);
 
   return (
     <canvas

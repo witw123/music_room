@@ -41,7 +41,10 @@ import {
 } from "@/features/room/hooks/room-playback-topology";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
-import { useRoomDerivedState } from "@/components/room/hooks/use-room-derived-state";
+import {
+  selectWorkspacePeerDiagnostics,
+  useRoomDerivedState
+} from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
@@ -1024,6 +1027,15 @@ export function MusicRoomApp({
     isNavigatingRoomExit,
     isRecoveringRoom
   });
+  const workspacePeerDiagnostics = useMemo(
+    () =>
+      selectWorkspacePeerDiagnostics({
+        activeDashboardTab,
+        visiblePeerDiagnostics,
+        visiblePeerRecentEvents
+      }),
+    [activeDashboardTab, visiblePeerDiagnostics, visiblePeerRecentEvents]
+  );
 
   // Show audio unlock overlay when playback is active but audio is blocked (listener only).
   useEffect(() => {
@@ -1090,8 +1102,8 @@ export function MusicRoomApp({
         availabilitySummary={availabilitySummary}
         memberTransferSummaries={memberTransferSummaries}
         localMemberState={localMemberState}
-        peerDiagnostics={visiblePeerDiagnostics}
-        peerRecentEvents={visiblePeerRecentEvents}
+        peerDiagnostics={workspacePeerDiagnostics.peerDiagnostics}
+        peerRecentEvents={workspacePeerDiagnostics.peerRecentEvents}
         iceConfigSource={iceConfigSource}
         iceConfigStatus={iceConfigStatus}
         workspaceEntryHref={workspaceEntryHref}
