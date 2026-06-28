@@ -265,6 +265,62 @@ export function shouldPrepareProgressiveRuntimeForSource(input: {
   return input.progressiveEngineType !== "none" && input.activePlaybackSource !== "full-local";
 }
 
+export function shouldStartListenerProgressivePlayback(input: {
+  isCurrentSourceOwner: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  engineType: ProgressiveEngineType;
+  startupReady: boolean;
+  hasFullLocalTrack: boolean;
+  progressiveFallbackReason: string | null | undefined;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  if (
+    input.isCurrentSourceOwner ||
+    input.activePlaybackSource !== "progressive-local" ||
+    !hasActiveIntent ||
+    input.engineType === "none" ||
+    input.hasFullLocalTrack ||
+    input.progressiveFallbackReason === "progressive-init-failed"
+  ) {
+    return false;
+  }
+
+  return input.startupReady;
+}
+
+function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
+  return reason === "buffer-underrun" || reason === "stalled" || reason === "seek-outside-buffer";
+}
+
+export function shouldAttemptProgressiveLocalPlayback(input: {
+  isCurrentSourceOwner: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  engineType: ProgressiveEngineType;
+  startupReady: boolean;
+  hasFullLocalTrack: boolean;
+  progressiveFallbackReason: string | null | undefined;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  if (
+    input.activePlaybackSource !== "progressive-local" ||
+    !hasActiveIntent ||
+    input.engineType === "none" ||
+    input.progressiveFallbackReason === "progressive-init-failed"
+  ) {
+    return false;
+  }
+
+  if (input.isCurrentSourceOwner) {
+    return true;
+  }
+
+  return shouldStartListenerProgressivePlayback(input);
+}
+
 export function shouldUsePcmEngineForFullLocal(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   forceSourceOwnerLocalPlayback: boolean;
@@ -595,8 +651,25 @@ export function useProgressiveRuntime({
       return "playback-paused";
     }
 
-    if (progressiveFallbackReason) {
+    if (
+      progressiveFallbackReason &&
+      !isRecoverableProgressiveFallbackReason(progressiveFallbackReason)
+    ) {
       return progressiveFallbackReason;
+    }
+
+    if (
+      shouldAttemptProgressiveLocalPlayback({
+        isCurrentSourceOwner,
+        activePlaybackSource,
+        playbackStatus: playback?.status,
+        engineType: currentProgressiveEngineType,
+        startupReady: progressiveHealthSnapshot.startupReady,
+        hasFullLocalTrack: canUseFullLocalForPlaybackSession,
+        progressiveFallbackReason
+      })
+    ) {
+      return null;
     }
 
     if (localTakeoverCooldownMs > 0) {
@@ -622,12 +695,16 @@ export function useProgressiveRuntime({
     return null;
   }, [
     aggregatePieceDownloadRateKbps,
+    activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
     connectedPeersCount,
     currentProgressiveEngineType,
     currentProgressiveManifest,
+    isCurrentSourceOwner,
     isProgressiveTakeoverReady,
     localTakeoverCooldownMs,
     playback?.status,
+    progressiveHealthSnapshot.startupReady,
     progressiveFallbackReason
   ]);
   const progressiveLocalEligible = progressiveLocalBlockedReason === null;
@@ -1402,6 +1479,8 @@ export function useProgressiveRuntime({
             }
 
             if (shouldPlayPlayback && result.localReady) {
+              setProgressiveFallbackReason(null);
+              setMediaConnectionState("live");
               ensurePlaybackStart("progressive-local");
             }
           })
@@ -1424,6 +1503,9 @@ export function useProgressiveRuntime({
       });
 
       if (shouldPlayPlayback) {
+        if (progressiveHealthSnapshot.startupReady) {
+          setProgressiveFallbackReason(null);
+        }
         ensurePlaybackStart("progressive-local");
       } else {
         audio.pause();
@@ -1979,7 +2061,15 @@ export function useProgressiveRuntime({
         }
       }
 
-      const shouldAttemptTakeover = isCurrentSourceOwner;
+      const shouldAttemptTakeover = shouldAttemptProgressiveLocalPlayback({
+        isCurrentSourceOwner,
+        activePlaybackSource,
+        playbackStatus: playbackState.status,
+        engineType: currentProgressiveEngineType,
+        startupReady: progressiveHealthSnapshot.startupReady,
+        hasFullLocalTrack: canUseFullLocalForPlaybackSession,
+        progressiveFallbackReason
+      });
       const takeoverBlockedReason = shouldAttemptTakeover ? null : progressiveLocalBlockedReason;
 
       if (
@@ -2012,7 +2102,7 @@ export function useProgressiveRuntime({
         if (
           progressiveFallbackReason &&
           isLocalTakeoverAllowed(now) &&
-          playbackRecoveryStage === "steady"
+          (playbackRecoveryStage === "steady" || shouldAttemptTakeover)
         ) {
           setProgressiveFallbackReason(null);
         }
@@ -2263,6 +2353,10 @@ export function useProgressiveRuntime({
       return;
     }
 
+    if (!hasActivePlaybackIntent(playback) || !progressiveHealthSnapshot.startupReady) {
+      return;
+    }
+
     if (progressiveHealthSnapshot.aheadBufferedMs >= getCriticalBufferThresholdMs()) {
       return;
     }
@@ -2270,7 +2364,10 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason("seek-outside-buffer");
   }, [
     activePlaybackSource,
+    playback?.currentTrackId,
+    playback?.status,
     progressiveHealthSnapshot.aheadBufferedMs,
+    progressiveHealthSnapshot.startupReady,
     setProgressiveFallbackReason
   ]);
 

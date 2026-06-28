@@ -22,6 +22,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { ChunkScheduler } from "@/features/p2p";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
+  getEffectivePlaybackPositionMs,
   hasActivePlaybackIntent,
   type ProgressivePlaybackSource,
   type ProgressiveSchedulerPolicy
@@ -288,6 +289,31 @@ export function buildActivePlaybackCacheWindow(input: {
   };
 }
 
+export function resolveActivePlaybackCacheWindowPosition(input: {
+  localPlaybackPositionMs: number | null | undefined;
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  durationMs: number;
+  schedulerPlaybackBucketMs: number;
+  now?: number;
+}) {
+  if (
+    typeof input.localPlaybackPositionMs === "number" &&
+    Number.isFinite(input.localPlaybackPositionMs)
+  ) {
+    return Math.max(0, input.localPlaybackPositionMs);
+  }
+
+  if (input.playback?.currentTrackId) {
+    return getEffectivePlaybackPositionMs(
+      input.playback,
+      input.durationMs,
+      input.now ?? Date.now()
+    );
+  }
+
+  return Math.max(0, input.schedulerPlaybackBucketMs);
+}
+
 export function buildManualCachePendingPieceClearer(
   clearPendingPieceRef: MutableRefObject<(trackId: string, chunkIndex: number) => void>
 ) {
@@ -490,12 +516,21 @@ export function useRoomRuntime({
     setStatusMessage
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
+  const activePlaybackTrackDurationMs =
+    roomSnapshot?.tracks.find(
+      (track) => track.id === roomSnapshot.room.playback.currentTrackId
+    )?.durationMs ?? 0;
   const activePlaybackCacheWindow = buildActivePlaybackCacheWindow({
     playback: roomSnapshot?.room.playback,
-    positionMs:
-      typeof getLocalPlaybackPositionMs === "function"
-        ? getLocalPlaybackPositionMs()
-        : schedulerPlaybackBucketMs,
+    positionMs: resolveActivePlaybackCacheWindowPosition({
+      localPlaybackPositionMs:
+        typeof getLocalPlaybackPositionMs === "function"
+          ? getLocalPlaybackPositionMs()
+          : null,
+      playback: roomSnapshot?.room.playback,
+      durationMs: activePlaybackTrackDurationMs,
+      schedulerPlaybackBucketMs
+    }),
     policy: progressiveSchedulerPolicy
   });
   const {

@@ -86,7 +86,7 @@ export function isFlacTrack(input: { mimeType?: string | null; codec?: string | 
 }
 
 export function getStartupWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
-  return isFlacTrack(input) ? 14_000 : 10_000;
+  return isFlacTrack(input) ? 8_000 : 8_000;
 }
 
 export function getTakeoverWindowMs(input: { mimeType?: string | null; codec?: string | null }) {

@@ -434,7 +434,15 @@ describe("planManualCacheDirectRequests", () => {
       ownerPeerId: "peer_owner",
       playbackStatus: "playing"
     });
-    const requestPieces = vi.fn(() => true);
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
 
     const plans = await planManualCacheDirectRequests({
       roomSnapshot,
@@ -473,6 +481,109 @@ describe("planManualCacheDirectRequests", () => {
     expect(plans[0]?.plan.blockedReason).toBeNull();
     expect(plans[0]?.didRequest).toBe(true);
   });
+
+  it("prefers the decode prefix before the active playback window for listener progressive startup", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 12,
+      sizeBytes: 12 * 128 * 1024
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 60_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledWith(
+      "peer_owner",
+      "track_a",
+      expect.arrayContaining([0, 1, 2, 3, 4, 5]),
+      12,
+      expect.any(Number)
+    );
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 6)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it("keeps automatic playback cache requests finite when duration metadata is missing", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 12,
+      durationMs: 0
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 60_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces.mock.calls[0]?.[2]).toEqual(
+      expect.arrayContaining([0, 1, 2, 3])
+    );
+  });
 });
 
 function buildManualCacheRoomSnapshot(input: {
@@ -480,7 +591,11 @@ function buildManualCacheRoomSnapshot(input: {
   ownerPresenceState?: "online" | "reconnecting" | "offline";
   omitTrackManifest?: boolean;
   playbackStatus?: "playing" | "paused" | "buffering";
+  totalChunks?: number;
+  sizeBytes?: number;
+  durationMs?: number;
 }): RoomSnapshot {
+  const totalChunks = input.totalChunks ?? 4;
   return {
     room: {
       id: "room_1",
@@ -527,9 +642,9 @@ function buildManualCacheRoomSnapshot(input: {
         title: "Track A",
         artist: "Artist",
         album: null,
-        durationMs: 120_000,
+        durationMs: input.durationMs ?? 120_000,
         bitrate: null,
-        sizeBytes: 4 * 128 * 1024,
+        sizeBytes: input.sizeBytes ?? totalChunks * 128 * 1024,
         codec: null,
         mimeType: "audio/mpeg",
         fileHash: "hash_a",
@@ -540,14 +655,14 @@ function buildManualCacheRoomSnapshot(input: {
         pieceManifest: input.omitTrackManifest
           ? undefined
           : {
-              totalChunks: 4,
+              totalChunks,
               chunkSize: 128 * 1024,
               pieceMimeType: "audio/mpeg"
             },
         relayManifest: input.omitTrackManifest
           ? undefined
           : {
-              totalChunks: 4,
+              totalChunks,
               chunkSize: 128 * 1024,
               pieceMimeType: "audio/mpeg"
             }

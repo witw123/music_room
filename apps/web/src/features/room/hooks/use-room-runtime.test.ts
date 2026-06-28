@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildActivePlaybackCacheWindow,
   buildManualCachePendingPieceClearer,
+  resolveActivePlaybackCacheWindowPosition,
   buildRoomExitHref,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
@@ -501,6 +502,30 @@ describe("pure cache room runtime helpers", () => {
       status: "buffering",
       policy: "catchup"
     });
+  });
+
+  it("uses the room playback clock for cache windows before local playback has started", () => {
+    expect(
+      resolveActivePlaybackCacheWindowPosition({
+        localPlaybackPositionMs: null,
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 10_000,
+          startedAt: "2026-06-28T10:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 4,
+          mediaEpoch: 7
+        },
+        durationMs: 120_000,
+        schedulerPlaybackBucketMs: 0,
+        now: new Date("2026-06-28T10:00:05.000Z").getTime()
+      })
+    ).toBe(15_000);
   });
 
   it("routes realtime piece completion to the current manual cache pending clearer", () => {

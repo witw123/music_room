@@ -656,14 +656,35 @@ function resolveManualCacheRequestOrder(input: {
     policy: input.activePlaybackWindow.policy,
     lookBehindMs: 4_000
   });
-  const seen = new Set(priorityChunks);
-  for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
-    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
-      priorityChunks.push(chunkIndex);
+  const playbackProgressRatio =
+    input.track.durationMs > 0
+      ? input.activePlaybackWindow.positionMs / input.track.durationMs
+      : 1;
+  const startupPrefixEndChunkIndex = Math.min(
+    input.manifest.totalChunks - 1,
+    Math.max(0, Math.ceil(playbackProgressRatio * input.manifest.totalChunks))
+  );
+  const decodePrefixChunks: number[] = [];
+  const seen = new Set<number>();
+  for (let chunkIndex = 0; chunkIndex <= startupPrefixEndChunkIndex; chunkIndex += 1) {
+    if (!localPieceSet.has(chunkIndex)) {
+      decodePrefixChunks.push(chunkIndex);
       seen.add(chunkIndex);
     }
   }
-  return priorityChunks;
+  for (const chunkIndex of priorityChunks) {
+    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
+      decodePrefixChunks.push(chunkIndex);
+      seen.add(chunkIndex);
+    }
+  }
+  for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
+    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
+      decodePrefixChunks.push(chunkIndex);
+      seen.add(chunkIndex);
+    }
+  }
+  return decodePrefixChunks;
 }
 
 function emptyManualCacheTrackPlan(

@@ -164,6 +164,21 @@ describe("progressive playback helpers", () => {
     ).toBe(true);
   });
 
+  it("allows listener startup after roughly eight seconds of contiguous buffered audio", () => {
+    const manifest = buildProgressiveTrackManifest(track, {
+      ...availability,
+      availableChunks: [0, 1, 2]
+    });
+
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 1, 2],
+        playbackPositionMs: 22_000
+      })
+    ).toBe(true);
+  });
+
   it("allows a shorter hot handoff window before cold startup is ready", () => {
     const manifest = buildProgressiveTrackManifest(track, {
       ...availability,
@@ -218,7 +233,7 @@ describe("progressive playback helpers", () => {
         playbackPositionMs: 40_000,
         policy: "startup"
       }).slice(0, 4)
-    ).toEqual([4, 5]);
+    ).toEqual([4]);
   });
 
   it("moves from startup to background once the current track is complete", () => {
@@ -318,7 +333,7 @@ describe("progressive playback helpers", () => {
     expect(health.remainingPlaybackMs).toBe(70_000);
   });
 
-  it("uses startup policy while the active playback window still has missing chunks", () => {
+  it("moves to outrun recovery after startup is ready but slow transfer can still underrun", () => {
     const manifest = buildProgressiveTrackManifest({
       ...track,
       codec: "flac",
@@ -353,7 +368,7 @@ describe("progressive playback helpers", () => {
         currentTrackComplete: false,
         currentPieceDownloadRateKbps: 20
       })
-    ).toBe("startup");
+    ).toBe("outrun-recovery");
   });
 
   it("only enables MSE progressive playback for stream-safe mime types", () => {

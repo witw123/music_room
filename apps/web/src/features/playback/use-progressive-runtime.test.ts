@@ -9,7 +9,9 @@ import {
   shouldPreferImmediateFullLocalRecovery,
   shouldPreferLocalTakeover,
   shouldPrepareProgressiveRuntimeForSource,
+  shouldAttemptProgressiveLocalPlayback,
   shouldRecoverPausedFullLocalPlayback,
+  shouldStartListenerProgressivePlayback,
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
 
@@ -343,5 +345,61 @@ describe("use-progressive-runtime policy helpers", () => {
         progressiveEngineType: "pcm"
       })
     ).toBe(true);
+  });
+
+  it("allows a listener to use progressive-local once startup buffering is ready", () => {
+    expect(
+      shouldStartListenerProgressivePlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: null
+      })
+    ).toBe(true);
+  });
+
+  it("keeps a listener buffering while progressive startup data is not ready", () => {
+    expect(
+      shouldStartListenerProgressivePlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: false,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: null
+      })
+    ).toBe(false);
+  });
+
+  it("allows a listener to attempt progressive playback after the startup window is ready", () => {
+    expect(
+      shouldAttemptProgressiveLocalPlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: "buffer-underrun"
+      })
+    ).toBe(true);
+  });
+
+  it("keeps listener progressive playback blocked for unrecoverable init failure", () => {
+    expect(
+      shouldAttemptProgressiveLocalPlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: "progressive-init-failed"
+      })
+    ).toBe(false);
   });
 });
