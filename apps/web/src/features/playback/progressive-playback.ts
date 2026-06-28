@@ -25,6 +25,12 @@ export type ProgressiveTrackManifest = {
   chunkSize: number;
 };
 
+export function hasActivePlaybackIntent(
+  playback: PlaybackSnapshot | null | undefined
+) {
+  return playback?.status === "playing" || playback?.status === "buffering";
+}
+
 export type ProgressiveHealthSnapshot = {
   activeSource: ProgressivePlaybackSource;
   engineType: ProgressiveEngineType;

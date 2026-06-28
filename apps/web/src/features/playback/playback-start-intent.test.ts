@@ -37,6 +37,30 @@ describe("playback start intent helpers", () => {
     expect(doesPlaybackMatchStartIntent(intent, playingPlayback, 1_500)).toBe(true);
   });
 
+  it("matches playback intents while the accepted playback snapshot is buffering", () => {
+    const intent = createPlaybackStartIntent({
+      reason: "queue-item",
+      queueItemId: "queue_2",
+      trackId: "track_2",
+      targetPlaybackRevision: 2,
+      previousQueueVersion: 1,
+      previousMediaEpoch: 1,
+      now: 1_000
+    });
+
+    expect(
+      doesPlaybackMatchStartIntent(
+        intent,
+        {
+          ...playingPlayback,
+          status: "buffering",
+          startedAt: null
+        },
+        1_500
+      )
+    ).toBe(true);
+  });
+
   it("requires the next track to differ when previous or next was requested", () => {
     const intent = createPlaybackStartIntent({
       reason: "next",

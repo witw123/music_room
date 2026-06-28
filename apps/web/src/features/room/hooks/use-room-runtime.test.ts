@@ -288,6 +288,30 @@ describe("pure cache room runtime helpers", () => {
     ).toBe(true);
   });
 
+  it("starts playback-demand caching for a listener while a remote track is buffering", () => {
+    expect(
+      shouldStartPlaybackDemandCacheForPlayback({
+        playback: {
+          status: "buffering",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 3
+        },
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        manualCacheTrackIds: [],
+        enableManualTrackCaching: true
+      })
+    ).toBe(true);
+  });
+
   it("does not start playback-demand caching on the source owner or for an already tracked cache task", () => {
     const playback = {
       status: "playing" as const,
@@ -349,6 +373,35 @@ describe("pure cache room runtime helpers", () => {
       revision: 4,
       mediaEpoch: 7,
       status: "playing",
+      policy: "catchup"
+    });
+  });
+
+  it("builds an active playback cache window while the current listener is buffering", () => {
+    expect(
+      buildActivePlaybackCacheWindow({
+        playback: {
+          status: "buffering",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 20_000,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 4,
+          mediaEpoch: 7
+        },
+        positionMs: null,
+        policy: "catchup"
+      })
+    ).toEqual({
+      trackId: "track_1",
+      positionMs: 20_000,
+      revision: 4,
+      mediaEpoch: 7,
+      status: "buffering",
       policy: "catchup"
     });
   });

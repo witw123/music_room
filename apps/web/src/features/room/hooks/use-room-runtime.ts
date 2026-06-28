@@ -21,7 +21,11 @@ import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
 import { ChunkScheduler } from "@/features/p2p";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import type { ProgressivePlaybackSource, ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
+import {
+  hasActivePlaybackIntent,
+  type ProgressivePlaybackSource,
+  type ProgressiveSchedulerPolicy
+} from "@/features/playback/progressive-playback";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
@@ -211,7 +215,7 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
   if (
     !input.enableManualTrackCaching ||
     !playback?.currentTrackId ||
-    playback.status !== "playing"
+    !hasActivePlaybackIntent(playback)
   ) {
     return false;
   }
@@ -232,7 +236,11 @@ export function buildActivePlaybackCacheWindow(input: {
   policy: ProgressiveSchedulerPolicy | null | undefined;
 }) {
   const playback = input.playback;
-  if (!playback?.currentTrackId || playback.status !== "playing" || !input.policy) {
+  if (
+    !playback?.currentTrackId ||
+    !hasActivePlaybackIntent(playback) ||
+    !input.policy
+  ) {
     return null;
   }
 

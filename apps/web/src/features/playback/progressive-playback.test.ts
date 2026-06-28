@@ -8,6 +8,7 @@ import {
   getContiguousBufferedMs,
   getProgressiveEngineType,
   getPriorityChunkIndexes,
+  hasActivePlaybackIntent,
   isStartupReady,
   isTakeoverReady,
   resolveSchedulerPolicy
@@ -42,7 +43,28 @@ const availability = {
   announcedAt: "2026-04-03T03:00:00.000Z"
 };
 
+const playingPlayback = {
+  status: "playing" as const,
+  currentTrackId: "track_1",
+  currentQueueItemId: "queue_1",
+  sourceSessionId: "host_1",
+  sourcePeerId: "peer_host",
+  sourceTrackId: "track_1",
+  positionMs: 10_000,
+  startedAt: null,
+  queueVersion: 1,
+  playbackRevision: 1,
+  mediaEpoch: 1
+};
+
 describe("progressive playback helpers", () => {
+  it("treats playing and buffering as active playback intent", () => {
+    expect(hasActivePlaybackIntent({ ...playingPlayback, status: "playing" })).toBe(true);
+    expect(hasActivePlaybackIntent({ ...playingPlayback, status: "buffering" })).toBe(true);
+    expect(hasActivePlaybackIntent({ ...playingPlayback, status: "paused" })).toBe(false);
+    expect(hasActivePlaybackIntent(null)).toBe(false);
+  });
+
   it("calculates contiguous and ahead buffer from local chunk availability", () => {
     const manifest = buildProgressiveTrackManifest(track, availability);
     expect(getContiguousBufferedMs(manifest, availability.availableChunks)).toBe(60_000);

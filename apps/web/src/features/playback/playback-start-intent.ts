@@ -1,5 +1,5 @@
 import type { PlaybackSnapshot } from "@music-room/shared";
-import type { ProgressivePlaybackSource } from "./progressive-playback";
+import { hasActivePlaybackIntent, type ProgressivePlaybackSource } from "./progressive-playback";
 
 export type PlaybackStartIntentReason =
   | "resume-current"
@@ -85,7 +85,7 @@ export function doesPlaybackMatchStartIntent(
 
   const activeIntent = intent as PlaybackStartIntent;
 
-  if (playback.status !== "playing") {
+  if (!hasActivePlaybackIntent(playback)) {
     return false;
   }
 
