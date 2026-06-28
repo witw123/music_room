@@ -14,7 +14,7 @@ export type DataMeshBridge = {
   syncPeers(
     peerIds: string[],
     options?: { forceReconnectDegraded?: boolean }
-  ): Promise<void>;
+  ): Promise<boolean>;
   restartPeer(peerId: string): Promise<unknown>;
   requestPieces(
     peerId: string,
@@ -24,6 +24,7 @@ export type DataMeshBridge = {
     timeoutMs?: number
   ): boolean;
   getConnectedPeerIds(): string[];
+  isReady(): boolean;
 };
 
 export type ManualCacheDownloadBridge = Pick<

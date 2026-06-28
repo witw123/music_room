@@ -20,34 +20,51 @@ import { hashArrayBuffer } from "@/features/p2p";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { DataMeshBridge } from "./room-runtime-types";
 
+type DataMeshRuntime = Pick<
+  P2PMesh,
+  "syncPeers" | "restartPeer" | "requestPieces" | "getConnectedPeerIds"
+>;
+
 export function useRoomDataMesh(input: {
   meshRef: MutableRefObject<P2PMesh | null>;
 }): DataMeshBridge | null {
   return useMemo<DataMeshBridge>(
-    () => ({
-      async syncPeers(peerIds, options) {
-        await input.meshRef.current?.syncPeers(peerIds, options);
-      },
-      restartPeer(peerId) {
-        return input.meshRef.current?.restartPeer(peerId) ?? Promise.resolve(null);
-      },
-      requestPieces(peerId, trackId, chunkIndexes, totalChunks, timeoutMs) {
-        return (
-          input.meshRef.current?.requestPieces(
-            peerId,
-            trackId,
-            chunkIndexes,
-            totalChunks,
-            timeoutMs
-          ) ?? false
-        );
-      },
-      getConnectedPeerIds() {
-        return input.meshRef.current?.getConnectedPeerIds() ?? [];
-      }
-    }),
+    () => createDataMeshBridge(input.meshRef),
     [input.meshRef]
   );
+}
+
+export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime | null>): DataMeshBridge {
+  return {
+    async syncPeers(peerIds, options) {
+      const mesh = meshRef.current;
+      if (!mesh) {
+        return false;
+      }
+      await mesh.syncPeers(peerIds, options);
+      return true;
+    },
+    restartPeer(peerId) {
+      return meshRef.current?.restartPeer(peerId) ?? Promise.resolve(null);
+    },
+    requestPieces(peerId, trackId, chunkIndexes, totalChunks, timeoutMs) {
+      return (
+        meshRef.current?.requestPieces(
+          peerId,
+          trackId,
+          chunkIndexes,
+          totalChunks,
+          timeoutMs
+        ) ?? false
+      );
+    },
+    getConnectedPeerIds() {
+      return meshRef.current?.getConnectedPeerIds() ?? [];
+    },
+    isReady() {
+      return !!meshRef.current;
+    }
+  };
 }
 
 export function createRoomDataMeshRuntime(input: {

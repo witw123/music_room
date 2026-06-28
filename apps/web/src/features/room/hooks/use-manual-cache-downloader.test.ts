@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
+  buildManualCacheRequestFailureEvent,
   buildManualCacheSchedulerAvailability,
   buildManualCacheSchedulerAvailabilityFromParts,
+  shouldRecordManualCacheBootstrapAttempt,
   resolveManualCacheTrackPlan,
   resolveManualCacheTrackProviderPeerId,
   shouldRestartManualCacheProviderPeer,
@@ -252,6 +254,26 @@ describe("resolveManualCacheTrackProviderPeerId", () => {
 });
 
 describe("shouldRetryManualCacheProviderBootstrap", () => {
+  it("does not burn the bootstrap cooldown when the mesh is not ready", () => {
+    expect(
+      shouldRecordManualCacheBootstrapAttempt({
+        syncStarted: false,
+        previousBootstrapKey: null,
+        nextBootstrapKey: "track_a|peer_owner"
+      })
+    ).toBe(false);
+  });
+
+  it("records a bootstrap attempt only after a mesh sync actually starts", () => {
+    expect(
+      shouldRecordManualCacheBootstrapAttempt({
+        syncStarted: true,
+        previousBootstrapKey: null,
+        nextBootstrapKey: "track_a|peer_owner"
+      })
+    ).toBe(true);
+  });
+
   it("retries bootstrap when a cache task exists but no provider peer is connected", () => {
     expect(
       shouldRetryManualCacheProviderBootstrap({
@@ -346,6 +368,26 @@ describe("shouldRestartManualCacheProviderPeer", () => {
         now: 10_000
       })
     ).toBe(false);
+  });
+});
+
+describe("buildManualCacheRequestFailureEvent", () => {
+  it("describes a request that could not be sent because the data channel was not ready", () => {
+    expect(
+      buildManualCacheRequestFailureEvent({
+        providerPeerId: "peer_owner",
+        trackId: "track_a",
+        requestableChunks: [4, 5, 6]
+      })
+    ).toMatchObject({
+      type: "diagnostic",
+      peerId: "peer_owner",
+      channelKind: "data",
+      direction: "local",
+      event: "manual-cache-request-not-sent",
+      level: "warning",
+      recordEvent: false
+    });
   });
 });
 

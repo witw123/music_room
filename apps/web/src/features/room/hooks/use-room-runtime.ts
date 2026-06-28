@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type Dispatch,
   type MutableRefObject,
@@ -245,6 +246,14 @@ export function buildActivePlaybackCacheWindow(input: {
     mediaEpoch: playback.mediaEpoch,
     status: playback.status,
     policy: input.policy
+  };
+}
+
+export function buildManualCachePendingPieceClearer(
+  clearPendingPieceRef: MutableRefObject<(trackId: string, chunkIndex: number) => void>
+) {
+  return (trackId: string, chunkIndex: number) => {
+    clearPendingPieceRef.current(trackId, chunkIndex);
   };
 }
 
@@ -689,7 +698,7 @@ export function useRoomRuntime({
     setStatusMessage
   });
 
-  useManualCacheDownloader({
+  const manualCacheDownloader = useManualCacheDownloader({
     enableManualTrackCaching,
     manualCacheTrackIds,
     roomSnapshot,
@@ -701,6 +710,14 @@ export function useRoomRuntime({
     onRuntimeEvent: emitRuntimeEvent,
     onManualCachePlan: handleManualCachePlan
   });
+  const clearManualCachePendingPieceRef = useRef(manualCacheDownloader.clearPendingPiece);
+  useEffect(() => {
+    clearManualCachePendingPieceRef.current = manualCacheDownloader.clearPendingPiece;
+  }, [manualCacheDownloader.clearPendingPiece]);
+  const clearManualCachePendingPiece = useMemo(
+    () => buildManualCachePendingPieceClearer(clearManualCachePendingPieceRef),
+    []
+  );
 
   useEffect(() => {
     const playback = roomSnapshot?.room.playback ?? null;
@@ -766,7 +783,7 @@ export function useRoomRuntime({
       manualCacheTrackIdsRef,
       announceRoomTrackAvailabilityRef,
       handleManualCachePieceReceivedRef,
-      clearManualCachePendingPiece: () => undefined,
+      clearManualCachePendingPiece,
       flushPendingAvailabilityRef,
       recordPieceTransferRef,
       recordPieceRequestSampleRef,

@@ -171,6 +171,18 @@ export function shouldForceManualCacheBootstrap(input: {
   return nextKey === input.lastBootstrapKey ? null : nextKey;
 }
 
+export function shouldRecordManualCacheBootstrapAttempt(input: {
+  syncStarted: boolean;
+  previousBootstrapKey: string | null;
+  nextBootstrapKey: string | null;
+}) {
+  return (
+    input.syncStarted &&
+    !!input.nextBootstrapKey &&
+    input.nextBootstrapKey !== input.previousBootstrapKey
+  );
+}
+
 export function resolveManualCacheMeshRecoveryMode(input: {
   shouldRecover: boolean;
   remotePeerIds: string[];
@@ -273,6 +285,29 @@ export function shouldRestartManualCacheProviderPeer(input: {
   }
 
   return input.lastRestartAt === null || now - input.lastRestartAt >= providerRestartCooldownMs;
+}
+
+export function buildManualCacheRequestFailureEvent(input: {
+  providerPeerId: string;
+  trackId: string;
+  requestableChunks: number[];
+}): RoomRuntimeEvent {
+  const chunkSummary =
+    input.requestableChunks.length === 0
+      ? "none"
+      : input.requestableChunks.length === 1
+      ? `${input.requestableChunks[0]}`
+      : `${input.requestableChunks[0]}-${input.requestableChunks[input.requestableChunks.length - 1]}`;
+  return {
+    type: "diagnostic",
+    peerId: input.providerPeerId,
+    channelKind: "data",
+    direction: "local",
+    event: "manual-cache-request-not-sent",
+    summary: `缓存下载请求未发出 ${input.trackId}#${chunkSummary}：DataChannel 未打开`,
+    level: "warning",
+    recordEvent: false
+  };
 }
 
 export function buildManualCacheSchedulerAvailability(input: {
@@ -727,19 +762,45 @@ export function useManualCacheDownloader(input: {
       return;
     }
 
-    lastBootstrapKeyRef.current = bootstrapKey;
-    lastBootstrapAttemptAtRef.current = Date.now();
-    void input.dataMesh.syncPeers(providerPeerIds).catch((error) => {
-      input.onRuntimeEvent?.({
-        type: "diagnostic",
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: "manual-cache-provider-sync-failed",
-        summary: `Failed to bootstrap manual cache providers: ${String(error)}`,
-        level: "error"
+    void input.dataMesh
+      .syncPeers(providerPeerIds)
+      .then((syncStarted) => {
+        if (
+          shouldRecordManualCacheBootstrapAttempt({
+            syncStarted,
+            previousBootstrapKey: lastBootstrapKeyRef.current,
+            nextBootstrapKey: bootstrapKey
+          })
+        ) {
+          lastBootstrapKeyRef.current = bootstrapKey;
+          lastBootstrapAttemptAtRef.current = Date.now();
+          return;
+        }
+
+        if (!syncStarted) {
+          input.onRuntimeEvent?.({
+            type: "diagnostic",
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: "manual-cache-mesh-not-ready",
+            summary: "缓存下载等待 Data mesh 初始化",
+            level: "warning",
+            recordEvent: false
+          });
+        }
+      })
+      .catch((error) => {
+        input.onRuntimeEvent?.({
+          type: "diagnostic",
+          peerId: "system",
+          channelKind: "system",
+          direction: "local",
+          event: "manual-cache-provider-sync-failed",
+          summary: `Failed to bootstrap manual cache providers: ${String(error)}`,
+          level: "error"
+        });
       });
-    });
   }, [
     input.connectedPeers,
     input.dataMesh,
@@ -796,6 +857,20 @@ export function useManualCacheDownloader(input: {
     lastRecoveryAtRef.current = now;
     void input.dataMesh
       .syncPeers(providerPeerIds, recoveryMode === "force-reconnect" ? { forceReconnectDegraded: true } : undefined)
+      .then((syncStarted) => {
+        if (!syncStarted) {
+          input.onRuntimeEvent?.({
+            type: "diagnostic",
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: "manual-cache-mesh-not-ready",
+            summary: "缓存下载恢复等待 Data mesh 初始化",
+            level: "warning",
+            recordEvent: false
+          });
+        }
+      })
       .catch((error) => {
         input.onRuntimeEvent?.({
           type: "diagnostic",
@@ -884,7 +959,19 @@ export function useManualCacheDownloader(input: {
           })
         ) {
           lastBootstrapAttemptAtRef.current = now;
-          await input.dataMesh.syncPeers(providerPeerIds);
+          const syncStarted = await input.dataMesh.syncPeers(providerPeerIds);
+          if (!syncStarted) {
+            input.onRuntimeEvent?.({
+              type: "diagnostic",
+              peerId: "system",
+              channelKind: "system",
+              direction: "local",
+              event: "manual-cache-mesh-not-ready",
+              summary: "缓存下载请求前等待 Data mesh 初始化",
+              level: "warning",
+              recordEvent: false
+            });
+          }
           connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
         }
         for (const providerPeerId of providerPeerIds) {
@@ -987,6 +1074,13 @@ export function useManualCacheDownloader(input: {
             directRequestTimeoutMs
           );
           if (!didRequest) {
+            input.onRuntimeEvent?.(
+              buildManualCacheRequestFailureEvent({
+                providerPeerId: plan.selectedProviderPeerId,
+                trackId,
+                requestableChunks: plan.requestableChunks
+              })
+            );
             continue;
           }
 

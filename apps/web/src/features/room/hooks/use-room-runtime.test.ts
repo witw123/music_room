@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildActivePlaybackCacheWindow,
+  buildManualCachePendingPieceClearer,
   buildRoomExitHref,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
@@ -350,6 +351,20 @@ describe("pure cache room runtime helpers", () => {
       status: "playing",
       policy: "catchup"
     });
+  });
+
+  it("routes realtime piece completion to the current manual cache pending clearer", () => {
+    const calls: Array<[string, number]> = [];
+    const clearPendingPieceRef = {
+      current: (trackId: string, chunkIndex: number) => {
+        calls.push([trackId, chunkIndex]);
+      }
+    };
+
+    const clearPendingPiece = buildManualCachePendingPieceClearer(clearPendingPieceRef);
+    clearPendingPiece("track_1", 7);
+
+    expect(calls).toEqual([["track_1", 7]]);
   });
 
   it("does not kick local source playback from a stale realtime playback event", () => {
