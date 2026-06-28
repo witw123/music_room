@@ -233,7 +233,7 @@ export function useRoomActions({
       try {
         await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
         await onTrackDeleted?.(trackId);
-        void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
+        await syncRoomSnapshot(roomSnapshot.room.id);
         await refreshPlaylists();
         setStatusMessage("歌曲已从房间曲库中删除。");
       } catch (error) {

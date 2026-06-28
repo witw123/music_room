@@ -9,6 +9,9 @@ import {
   resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
   resolveAutomaticPlaybackCacheTaskMode,
+  resolveStalePlaybackDemandTaskIds,
+  shouldCreatePlaybackDemandTaskFromCachePiece,
+  shouldHydrateCacheTaskPieceIndexes,
   shouldAnnounceTrackAvailability,
   shouldEnsurePlaybackDemandCacheTask
 } from "./use-track-uploads";
@@ -334,6 +337,134 @@ describe("mergeHydratedManualCacheTasks", () => {
   });
 });
 
+describe("resolveStalePlaybackDemandTaskIds", () => {
+  it("returns playback-demand tasks that no longer match the current playback track", () => {
+    expect(
+      resolveStalePlaybackDemandTaskIds({
+        currentTasks: {
+          track_1: {
+            trackId: "track_1",
+            status: "downloading",
+            mode: "playback-demand",
+            fileHash: "hash_1",
+            updatedAt: "2026-06-28T09:00:05.000Z",
+            errorMessage: null,
+            completedChunks: 4,
+            totalChunks: 169,
+            mimeType: "audio/flac",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: [],
+            connectedProviderPeerIds: [],
+            selectedProviderPeerId: null,
+            requestableChunkCount: 0,
+            pendingChunkCount: 0,
+            lastRequestedChunks: [],
+            lastPieceReceivedAt: null,
+            lastError: null
+          },
+          track_2: {
+            trackId: "track_2",
+            status: "downloading",
+            mode: "playback-demand",
+            fileHash: "hash_2",
+            updatedAt: "2026-06-28T09:00:06.000Z",
+            errorMessage: null,
+            completedChunks: 1,
+            totalChunks: 10,
+            mimeType: "audio/mpeg",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: [],
+            connectedProviderPeerIds: [],
+            selectedProviderPeerId: null,
+            requestableChunkCount: 0,
+            pendingChunkCount: 0,
+            lastRequestedChunks: [],
+            lastPieceReceivedAt: null,
+            lastError: null
+          }
+        },
+        currentPlaybackTrackId: "track_2"
+      })
+    ).toEqual(["track_1"]);
+  });
+});
+
+describe("shouldHydrateCacheTaskPieceIndexes", () => {
+  it("hydrates active manual and playback-demand tasks", () => {
+    expect(
+      shouldHydrateCacheTaskPieceIndexes({
+        mode: "manual",
+        status: "downloading"
+      })
+    ).toBe(true);
+    expect(
+      shouldHydrateCacheTaskPieceIndexes({
+        mode: "playback-demand",
+        status: "blocked"
+      })
+    ).toBe(true);
+    expect(
+      shouldHydrateCacheTaskPieceIndexes({
+        mode: "playback-demand",
+        status: "ready"
+      })
+    ).toBe(false);
+  });
+});
+
+describe("shouldCreatePlaybackDemandTaskFromCachePiece", () => {
+  const remotePlayback = {
+    status: "playing" as const,
+    currentTrackId: "track_1",
+    currentQueueItemId: "queue_1",
+    sourceSessionId: "host",
+    sourcePeerId: "peer_host",
+    sourceTrackId: "track_1",
+    positionMs: 0,
+    startedAt: "2026-06-28T09:00:00.000Z",
+    queueVersion: 1,
+    playbackRevision: 1,
+    mediaEpoch: 1
+  };
+
+  it("creates an automatic task when a current remote playback piece arrives before the task exists", () => {
+    expect(
+      shouldCreatePlaybackDemandTaskFromCachePiece({
+        playback: remotePlayback,
+        trackId: "track_1",
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        hasCurrentTask: false
+      })
+    ).toBe(true);
+  });
+
+  it("does not create a task on the source device or when a task already exists", () => {
+    expect(
+      shouldCreatePlaybackDemandTaskFromCachePiece({
+        playback: remotePlayback,
+        trackId: "track_1",
+        peerId: "peer_host",
+        activeSessionId: "host",
+        hasCurrentTask: false
+      })
+    ).toBe(false);
+    expect(
+      shouldCreatePlaybackDemandTaskFromCachePiece({
+        playback: remotePlayback,
+        trackId: "track_1",
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        hasCurrentTask: true
+      })
+    ).toBe(false);
+  });
+});
+
 describe("shouldEnsurePlaybackDemandCacheTask", () => {
   const remotePlayback = {
     status: "playing" as const,
@@ -407,6 +538,23 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
     ).toBe(true);
   });
 
+  it("restarts a stale ready manual task for the current remote playback when the full local file is missing", () => {
+    expect(
+      shouldEnsurePlaybackDemandCacheTask({
+        enableManualTrackCaching: true,
+        playback: remotePlayback,
+        trackExists: true,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        hasLocalFullTrack: false,
+        existingTask: {
+          mode: "manual",
+          status: "ready"
+        }
+      })
+    ).toBe(true);
+  });
+
   it("does not auto-cache on the source owner device", () => {
     expect(
       shouldEnsurePlaybackDemandCacheTask({
@@ -435,8 +583,8 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
 });
 
 describe("resolveAutomaticPlaybackCacheTaskMode", () => {
-  it("uses the same manual cache task mode as the cache download button", () => {
-    expect(resolveAutomaticPlaybackCacheTaskMode()).toBe("manual");
+  it("keeps automatic playback cache as playback-demand while reusing manual cache mechanics", () => {
+    expect(resolveAutomaticPlaybackCacheTaskMode()).toBe("playback-demand");
   });
 });
 

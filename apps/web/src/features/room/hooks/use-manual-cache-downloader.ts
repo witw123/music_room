@@ -1173,8 +1173,7 @@ export function useManualCacheDownloader(input: {
               channelKind: "data",
               direction: "sent",
               event: "manual-cache-request",
-              summary: `缓存下载请求分片 ${plan.trackId}#${plan.requestableChunks[0]}-${plan.requestableChunks[plan.requestableChunks.length - 1]}`,
-              recordEvent: false
+              summary: `缓存下载请求分片 ${plan.trackId}#${plan.requestableChunks[0]}-${plan.requestableChunks[plan.requestableChunks.length - 1]}`
             });
             continue;
           }
