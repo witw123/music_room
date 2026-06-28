@@ -139,6 +139,96 @@ export function isManualCachePieceCompatible(input: {
   );
 }
 
+export function buildManualCachePieceAvailabilityAnnouncement(input: {
+  existing?: TrackAvailabilityAnnouncement | null;
+  roomId: string;
+  trackId: string;
+  fileHash: string;
+  peerId: string;
+  nickname: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkSize: number;
+  availableChunks?: number[];
+}) {
+  const existing = input.existing ?? null;
+  const availableChunks = new Set(
+    [...(existing?.availableChunks ?? []), ...(input.availableChunks ?? [])].filter(
+      (chunkIndex) => chunkIndex >= 0 && chunkIndex < input.totalChunks
+    )
+  );
+  availableChunks.add(input.chunkIndex);
+
+  return {
+    roomId: input.roomId,
+    trackId: input.trackId,
+    ownerPeerId: input.peerId,
+    nickname: input.nickname,
+    assetKind: "relay",
+    assetHash: input.fileHash,
+    totalChunks: input.totalChunks,
+    chunkSize: input.chunkSize,
+    availableChunks: [...availableChunks].sort((left, right) => left - right),
+    source: "local_cache",
+    announcedAt: new Date().toISOString()
+  } satisfies TrackAvailabilityAnnouncement;
+}
+
+export function mergeHydratedManualCacheTasks(input: {
+  currentTasks: Record<string, ManualCacheTask>;
+  hydratedTasks: ManualCacheTaskRecord[];
+  currentPlaybackTrackId: string | null;
+}) {
+  const hydrated = Object.fromEntries(
+    input.hydratedTasks
+      .filter(isManualCacheTaskRecord)
+      .filter((task) => task.mode === "manual" || task.trackId === input.currentPlaybackTrackId)
+      .map((task) => {
+        const status = task.status;
+        return [
+          task.trackId,
+          {
+            trackId: task.trackId,
+            status,
+            mode: task.mode,
+            fileHash: task.fileHash,
+            updatedAt: task.updatedAt,
+            errorMessage: task.errorMessage,
+            completedChunks: task.completedChunks,
+            totalChunks: task.totalChunks,
+            mimeType: task.mimeType,
+            manifestSource: task.manifestSource,
+            blockedReason: task.blockedReason,
+            integrityMode: task.integrityMode,
+            providerPeerIds: task.providerPeerIds,
+            connectedProviderPeerIds: task.connectedProviderPeerIds,
+            selectedProviderPeerId: task.selectedProviderPeerId,
+            requestableChunkCount: task.requestableChunkCount,
+            pendingChunkCount: task.pendingChunkCount,
+            lastRequestedChunks: task.lastRequestedChunks,
+            lastPieceReceivedAt: task.lastPieceReceivedAt,
+            lastError: task.lastError
+          } satisfies ManualCacheTask
+        ];
+      })
+  );
+
+  const preservedCurrent = Object.fromEntries(
+    Object.entries(input.currentTasks).filter(([, task]) => {
+      if (task.mode === "manual") {
+        return true;
+      }
+
+      return task.mode === "playback-demand" && task.trackId === input.currentPlaybackTrackId;
+    })
+  );
+
+  return {
+    ...hydrated,
+    ...preservedCurrent
+  };
+}
+
 function isManualCacheTaskRecord(
   task: ManualCacheTaskRecord
 ): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
@@ -284,40 +374,12 @@ export function useTrackUploads(options: {
           void deleteManualCacheTask(task.roomId, task.trackId);
         }
       }
-      setManualCacheTasks(
-        Object.fromEntries(
-          tasks
-            .filter(isManualCacheTaskRecord)
-            .filter((task) => task.mode === "manual" || task.trackId === currentPlaybackTrackId)
-            .map((task) => {
-            const status = task.status;
-            return [
-              task.trackId,
-              {
-              trackId: task.trackId,
-              status,
-              mode: task.mode,
-              fileHash: task.fileHash,
-              updatedAt: task.updatedAt,
-              errorMessage: task.errorMessage,
-              completedChunks: task.completedChunks,
-              totalChunks: task.totalChunks,
-              mimeType: task.mimeType,
-              manifestSource: task.manifestSource,
-              blockedReason: task.blockedReason,
-              integrityMode: task.integrityMode,
-              providerPeerIds: task.providerPeerIds,
-              connectedProviderPeerIds: task.connectedProviderPeerIds,
-              selectedProviderPeerId: task.selectedProviderPeerId,
-              requestableChunkCount: task.requestableChunkCount,
-              pendingChunkCount: task.pendingChunkCount,
-              lastRequestedChunks: task.lastRequestedChunks,
-              lastPieceReceivedAt: task.lastPieceReceivedAt,
-              lastError: task.lastError
-              } satisfies ManualCacheTask
-            ];
-          })
-        )
+      setManualCacheTasks((current) =>
+        mergeHydratedManualCacheTasks({
+          currentTasks: current,
+          hydratedTasks: tasks,
+          currentPlaybackTrackId
+        })
       );
       for (const task of tasks) {
         if (
@@ -1091,6 +1153,23 @@ export function useTrackUploads(options: {
       chunkIndexes.add(input.chunkIndex);
       manualCacheChunkIndexesRef.current.set(input.trackId, chunkIndexes);
 
+      if (roomSnapshot?.room.id && activeSession && peerId && track) {
+        const availability = buildManualCachePieceAvailabilityAnnouncement({
+          existing: undefined,
+          roomId: roomSnapshot.room.id,
+          trackId: input.trackId,
+          fileHash: track.fileHash,
+          peerId,
+          nickname: activeSession.nickname,
+          chunkIndex: input.chunkIndex,
+          totalChunks: input.totalChunks,
+          chunkSize: input.chunkSize,
+          availableChunks: [...chunkIndexes]
+        });
+        onAvailability(availability);
+        emitAvailability(availability);
+      }
+
       let shouldAssemble = false;
       updateManualCacheTask(input.trackId, (current) => {
         if (!current) {
@@ -1127,7 +1206,15 @@ export function useTrackUploads(options: {
         );
       }
     },
-    [assembleManualCacheTrack, roomSnapshot?.tracks, updateManualCacheTask]
+    [
+      activeSession,
+      assembleManualCacheTrack,
+      emitAvailability,
+      onAvailability,
+      peerId,
+      roomSnapshot,
+      updateManualCacheTask
+    ]
   );
 
   const handleManualCachePlan = useCallback(

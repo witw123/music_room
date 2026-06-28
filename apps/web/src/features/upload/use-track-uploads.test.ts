@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { registerTrackRequestSchema } from "@music-room/shared";
 import {
+  buildManualCachePieceAvailabilityAnnouncement,
   buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
   isManualCachePieceCompatible,
+  mergeHydratedManualCacheTasks,
   resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
   shouldAnnounceTrackAvailability
@@ -151,6 +153,182 @@ describe("isManualCachePieceCompatible", () => {
         expectedManifest: null
       })
     ).toBe(true);
+  });
+});
+
+describe("buildManualCachePieceAvailabilityAnnouncement", () => {
+  it("publishes partial local cache availability as soon as a playback-demand piece arrives", () => {
+    const announcement = buildManualCachePieceAvailabilityAnnouncement({
+      existing: {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_listener",
+        nickname: "222",
+        assetKind: "relay",
+        assetHash: "hash_1",
+        totalChunks: 169,
+        chunkSize: 256 * 1024,
+        availableChunks: [0, 1],
+        source: "local_cache",
+        announcedAt: "2026-06-28T09:00:00.000Z"
+      },
+      roomId: "room_1",
+      trackId: "track_1",
+      fileHash: "hash_1",
+      peerId: "peer_listener",
+      nickname: "222",
+      chunkIndex: 2,
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    });
+
+    expect(announcement).toMatchObject({
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_listener",
+      nickname: "222",
+      assetKind: "relay",
+      assetHash: "hash_1",
+      totalChunks: 169,
+      chunkSize: 256 * 1024,
+      availableChunks: [0, 1, 2],
+      source: "local_cache"
+    });
+  });
+});
+
+describe("mergeHydratedManualCacheTasks", () => {
+  it("preserves a fresh playback-demand task when IndexedDB hydration returns before its async upsert", () => {
+    expect(
+      mergeHydratedManualCacheTasks({
+        currentTasks: {
+          track_1: {
+            trackId: "track_1",
+            status: "queued",
+            mode: "playback-demand",
+            fileHash: "hash_1",
+            updatedAt: "2026-06-28T09:00:05.000Z",
+            errorMessage: null,
+            completedChunks: 0,
+            totalChunks: 169,
+            mimeType: "audio/flac",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: [],
+            connectedProviderPeerIds: [],
+            selectedProviderPeerId: null,
+            requestableChunkCount: 0,
+            pendingChunkCount: 0,
+            lastRequestedChunks: [],
+            lastPieceReceivedAt: null,
+            lastError: null
+          }
+        },
+        hydratedTasks: [],
+        currentPlaybackTrackId: "track_1"
+      }).track_1
+    ).toMatchObject({
+      mode: "playback-demand",
+      status: "queued",
+      totalChunks: 169
+    });
+  });
+
+  it("keeps newer in-memory playback-demand progress over stale IndexedDB hydration", () => {
+    expect(
+      mergeHydratedManualCacheTasks({
+        currentTasks: {
+          track_1: {
+            trackId: "track_1",
+            status: "downloading",
+            mode: "playback-demand",
+            fileHash: "hash_1",
+            updatedAt: "2026-06-28T09:00:10.000Z",
+            errorMessage: null,
+            completedChunks: 8,
+            totalChunks: 169,
+            mimeType: "audio/flac",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: ["peer_uploader"],
+            connectedProviderPeerIds: ["peer_uploader"],
+            selectedProviderPeerId: "peer_uploader",
+            requestableChunkCount: 20,
+            pendingChunkCount: 2,
+            lastRequestedChunks: [8, 9],
+            lastPieceReceivedAt: "2026-06-28T09:00:09.000Z",
+            lastError: null
+          }
+        },
+        hydratedTasks: [
+          {
+            taskKey: "room_1:track_1",
+            roomId: "room_1",
+            trackId: "track_1",
+            status: "queued",
+            mode: "playback-demand",
+            fileHash: "hash_1",
+            updatedAt: "2026-06-28T09:00:00.000Z",
+            errorMessage: null,
+            completedChunks: 0,
+            totalChunks: 169,
+            mimeType: "audio/flac",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: [],
+            connectedProviderPeerIds: [],
+            selectedProviderPeerId: null,
+            requestableChunkCount: 0,
+            pendingChunkCount: 0,
+            lastRequestedChunks: [],
+            lastPieceReceivedAt: null,
+            lastError: null
+          }
+        ],
+        currentPlaybackTrackId: "track_1"
+      }).track_1
+    ).toMatchObject({
+      status: "downloading",
+      completedChunks: 8,
+      selectedProviderPeerId: "peer_uploader",
+      lastRequestedChunks: [8, 9]
+    });
+  });
+
+  it("drops playback-demand tasks for tracks that are no longer playing", () => {
+    expect(
+      mergeHydratedManualCacheTasks({
+        currentTasks: {
+          track_1: {
+            trackId: "track_1",
+            status: "downloading",
+            mode: "playback-demand",
+            fileHash: "hash_1",
+            updatedAt: "2026-06-28T09:00:05.000Z",
+            errorMessage: null,
+            completedChunks: 4,
+            totalChunks: 169,
+            mimeType: "audio/flac",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: [],
+            connectedProviderPeerIds: [],
+            selectedProviderPeerId: null,
+            requestableChunkCount: 0,
+            pendingChunkCount: 0,
+            lastRequestedChunks: [],
+            lastPieceReceivedAt: null,
+            lastError: null
+          }
+        },
+        hydratedTasks: [],
+        currentPlaybackTrackId: "track_2"
+      })
+    ).toEqual({});
   });
 });
 
