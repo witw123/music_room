@@ -117,6 +117,7 @@ type MeshOptions = {
     | {
         fileHash: string | null;
         ownerKey?: string | null;
+        chunkSize?: number | null;
       }
     | null
     | undefined;
@@ -873,6 +874,7 @@ export class P2PMesh {
     }
 
     const cacheIdentity = this.resolveTrackCacheIdentity?.(request.trackId) ?? null;
+    const expectedChunkSize = cacheIdentity?.chunkSize ?? null;
     let piece: {
       chunkIndex: number;
       chunkSize: number;
@@ -880,10 +882,11 @@ export class P2PMesh {
       payload: ArrayBuffer;
     } | null = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex, {
       fileHash: cacheIdentity?.fileHash,
-      ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey
+      ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey,
+      chunkSize: expectedChunkSize
     });
     let manifestHeader = piece
-      ? await this.resolveManifestHeader(request.trackId, piece.chunkSize)
+      ? await this.resolveManifestHeader(request.trackId, expectedChunkSize ?? piece.chunkSize)
       : null;
 
     if (!piece || !manifestHeader) {
@@ -977,7 +980,8 @@ export class P2PMesh {
       const cacheIdentity = this.resolveTrackCacheIdentity?.(trackId) ?? null;
       const chunkIndexes = await getCachedPieceIndexes(trackId, this.localPeerId, {
         fileHash: cacheIdentity?.fileHash,
-        ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey
+        ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey,
+        chunkSize: cacheIdentity?.chunkSize
       });
       totalChunks = chunkIndexes.length;
       manifestHeader = {

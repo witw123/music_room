@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildActivePlaybackCacheWindow,
   buildRoomExitHref,
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
@@ -7,6 +8,7 @@ import {
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
+  shouldStartPlaybackDemandCacheForPlayback,
   shouldReannounceManualCacheAvailability,
   shouldRedirectRoomRouteToAuth,
   resetInitialRoomRecoveryAttemptOnCancellation,
@@ -259,6 +261,95 @@ describe("pure cache room runtime helpers", () => {
         }
       })
     ).toBe(true);
+  });
+
+  it("starts playback-demand caching for a listener when a remote track starts playing", () => {
+    expect(
+      shouldStartPlaybackDemandCacheForPlayback({
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: "2026-04-14T00:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 3
+        },
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        manualCacheTrackIds: [],
+        enableManualTrackCaching: true
+      })
+    ).toBe(true);
+  });
+
+  it("does not start playback-demand caching on the source owner or for an already tracked cache task", () => {
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1",
+      sourceSessionId: "host",
+      sourcePeerId: "peer_source",
+      sourceTrackId: "track_1",
+      positionMs: 0,
+      startedAt: "2026-04-14T00:00:00.000Z",
+      queueVersion: 1,
+      playbackRevision: 2,
+      mediaEpoch: 3
+    };
+
+    expect(
+      shouldStartPlaybackDemandCacheForPlayback({
+        playback,
+        peerId: "peer_source",
+        activeSessionId: "host",
+        manualCacheTrackIds: [],
+        enableManualTrackCaching: true
+      })
+    ).toBe(false);
+
+    expect(
+      shouldStartPlaybackDemandCacheForPlayback({
+        playback,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        manualCacheTrackIds: ["track_1"],
+        enableManualTrackCaching: true
+      })
+    ).toBe(false);
+  });
+
+  it("builds an active playback cache window for current listener downloads", () => {
+    expect(
+      buildActivePlaybackCacheWindow({
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 15_000,
+          startedAt: null,
+          queueVersion: 1,
+          playbackRevision: 4,
+          mediaEpoch: 7
+        },
+        positionMs: 18_500,
+        policy: "catchup"
+      })
+    ).toEqual({
+      trackId: "track_1",
+      positionMs: 18_500,
+      revision: 4,
+      mediaEpoch: 7,
+      status: "playing",
+      policy: "catchup"
+    });
   });
 
   it("does not kick local source playback from a stale realtime playback event", () => {

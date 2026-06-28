@@ -199,6 +199,55 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   );
 }
 
+export function shouldStartPlaybackDemandCacheForPlayback(input: {
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  peerId: string | null | undefined;
+  activeSessionId: string | null | undefined;
+  manualCacheTrackIds: string[];
+  enableManualTrackCaching: boolean;
+}) {
+  const playback = input.playback;
+  if (
+    !input.enableManualTrackCaching ||
+    !playback?.currentTrackId ||
+    playback.status !== "playing"
+  ) {
+    return false;
+  }
+
+  if (
+    (input.peerId && playback.sourcePeerId === input.peerId) ||
+    (input.activeSessionId && playback.sourceSessionId === input.activeSessionId)
+  ) {
+    return false;
+  }
+
+  return !input.manualCacheTrackIds.includes(playback.currentTrackId);
+}
+
+export function buildActivePlaybackCacheWindow(input: {
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  positionMs: number | null | undefined;
+  policy: ProgressiveSchedulerPolicy | null | undefined;
+}) {
+  const playback = input.playback;
+  if (!playback?.currentTrackId || playback.status !== "playing" || !input.policy) {
+    return null;
+  }
+
+  return {
+    trackId: playback.currentTrackId,
+    positionMs:
+      typeof input.positionMs === "number" && Number.isFinite(input.positionMs)
+        ? Math.max(0, input.positionMs)
+        : Math.max(0, playback.positionMs),
+    revision: playback.playbackRevision ?? playback.queueVersion,
+    mediaEpoch: playback.mediaEpoch,
+    status: playback.status,
+    policy: input.policy
+  };
+}
+
 export function shouldStartRoomRealtimeRuntime(input: {
   roomId: string | null | undefined;
   hydrated: boolean;
@@ -261,11 +310,13 @@ export function useRoomRuntime({
   isPageVisible,
   setIsPageVisible,
   setSchedulerMode,
+  schedulerPlaybackBucketMs,
   bufferHealth,
   activePlaybackSource,
   progressiveSchedulerPolicy,
   isCurrentSourceOwner,
   audioUnlocked,
+  getLocalPlaybackPositionMs,
   setAudioUnlocked,
   roomRecoveryState,
   setRoomRecoveryState,
@@ -300,9 +351,6 @@ export function useRoomRuntime({
   void mediaConnectedPeers;
   void setMediaConnectedPeers;
   void mediaConnectionState;
-  void progressiveSchedulerPolicy;
-  void isCurrentSourceOwner;
-  void startPlaybackDemandCacheDownload;
 
   const {
     meshRef,
@@ -374,6 +422,14 @@ export function useRoomRuntime({
     setStatusMessage
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
+  const activePlaybackCacheWindow = buildActivePlaybackCacheWindow({
+    playback: roomSnapshot?.room.playback,
+    positionMs:
+      typeof getLocalPlaybackPositionMs === "function"
+        ? getLocalPlaybackPositionMs()
+        : schedulerPlaybackBucketMs,
+    policy: progressiveSchedulerPolicy
+  });
   const {
     connectionSupervisorStatesRef,
     sourceRecoveryCoordinatorRef,
@@ -641,9 +697,33 @@ export function useRoomRuntime({
     peerId,
     connectedPeers,
     dataMesh: dataMeshBridge,
+    activePlaybackWindow: activePlaybackCacheWindow,
     onRuntimeEvent: emitRuntimeEvent,
     onManualCachePlan: handleManualCachePlan
   });
+
+  useEffect(() => {
+    const playback = roomSnapshot?.room.playback ?? null;
+    if (
+      !shouldStartPlaybackDemandCacheForPlayback({
+        playback,
+        peerId,
+        activeSessionId: activeSessionRef.current?.userId,
+        manualCacheTrackIds,
+        enableManualTrackCaching
+      })
+    ) {
+      return;
+    }
+
+    void startPlaybackDemandCacheDownload(playback!.currentTrackId!);
+  }, [
+    activeSessionRef,
+    manualCacheTrackIds,
+    peerId,
+    roomSnapshot?.room.playback,
+    startPlaybackDemandCacheDownload
+  ]);
 
   useEffect(() => {
     if (!statusMessage) {

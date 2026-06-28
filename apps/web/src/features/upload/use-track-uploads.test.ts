@@ -3,6 +3,8 @@ import { registerTrackRequestSchema } from "@music-room/shared";
 import {
   buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
+  isManualCachePieceCompatible,
+  resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
   shouldAnnounceTrackAvailability
 } from "./use-track-uploads";
@@ -86,6 +88,69 @@ describe("shouldAnnounceTrackAvailability", () => {
         peerId: null
       })
     ).toBe(false);
+  });
+});
+
+describe("resolveReusableCachedPieceManifest", () => {
+  it("discards a cached manifest whose geometry does not match the current room track", () => {
+    expect(
+      resolveReusableCachedPieceManifest({
+        cachedManifest: {
+          totalChunks: 673,
+          chunkSize: 64 * 1024
+        },
+        expectedManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024
+        }
+      })
+    ).toEqual(null);
+  });
+
+  it("keeps a cached manifest when it matches the current room track geometry", () => {
+    const cachedManifest = {
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    };
+
+    expect(
+      resolveReusableCachedPieceManifest({
+        cachedManifest,
+        expectedManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024
+        }
+      })
+    ).toBe(cachedManifest);
+  });
+});
+
+describe("isManualCachePieceCompatible", () => {
+  it("rejects received cache pieces whose geometry does not match the current room track", () => {
+    expect(
+      isManualCachePieceCompatible({
+        piece: {
+          totalChunks: 673,
+          chunkSize: 64 * 1024
+        },
+        expectedManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024
+        }
+      })
+    ).toBe(false);
+  });
+
+  it("accepts received cache pieces when there is no current manifest to compare", () => {
+    expect(
+      isManualCachePieceCompatible({
+        piece: {
+          totalChunks: 2,
+          chunkSize: 128 * 1024
+        },
+        expectedManifest: null
+      })
+    ).toBe(true);
   });
 });
 

@@ -902,9 +902,14 @@ export function useManualCacheDownloader(input: {
             (await getTrackPieceManifestByFileHash(track.fileHash)) ??
             (await getTrackPieceManifest(trackId)) ??
             null;
+          const manifestHint = resolveTrackPieceManifest({
+            track,
+            cacheManifest: cachedManifest
+          });
           const localPieceIndexes = await getCachedPieceIndexes(trackId, input.peerId, {
             fileHash: track.fileHash,
-            ownerKey: localCacheOwnerKey
+            ownerKey: localCacheOwnerKey,
+            chunkSize: manifestHint?.chunkSize
           });
           const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
           for (const [chunkIndex, expiresAt] of pendingForTrack.entries()) {

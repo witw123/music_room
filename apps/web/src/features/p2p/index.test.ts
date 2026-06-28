@@ -8,6 +8,7 @@ import {
   getMissingChunkIndexes,
   parseIceConfigResponse,
   hashArrayBuffer,
+  resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement,
   selectChunkSource,
   summarizeTrackAvailability,
@@ -216,6 +217,109 @@ describe("p2p helpers", () => {
 
     expect(selected).toMatchObject({
       ownerPeerId: "peer_new",
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    });
+  });
+
+  it("ignores a cached manifest whose chunk geometry no longer matches the room track", () => {
+    const manifest = resolveTrackPieceManifest({
+      track: {
+        id: "track_1",
+        title: "Track",
+        artist: "Artist",
+        album: null,
+        durationMs: 1000,
+        bitrate: null,
+        sizeBytes: 43 * 1024 * 1024,
+        codec: "flac",
+        mimeType: "audio/flac",
+        fileHash: "hash_1",
+        artworkUrl: null,
+        ownerSessionId: "user_1",
+        ownerNickname: "Host",
+        sourceType: "local_upload",
+        pieceManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          pieceMimeType: "audio/flac"
+        },
+        relayManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          pieceMimeType: "audio/flac"
+        }
+      },
+      cacheManifest: {
+        totalChunks: 673,
+        chunkSize: 64 * 1024,
+        mimeType: "audio/flac"
+      }
+    });
+
+    expect(manifest).toMatchObject({
+      source: "snapshot",
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    });
+  });
+
+  it("uses the announced manifest geometry when a cached manifest has stale chunk geometry", () => {
+    const manifest = resolveTrackPieceManifest({
+      availability: {
+        totalChunks: 169,
+        chunkSize: 256 * 1024
+      },
+      cacheManifest: {
+        totalChunks: 673,
+        chunkSize: 64 * 1024,
+        mimeType: "audio/flac"
+      }
+    });
+
+    expect(manifest).toMatchObject({
+      source: "availability",
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    });
+  });
+
+  it("ignores announced chunk geometry that no longer matches the room track manifest", () => {
+    const manifest = resolveTrackPieceManifest({
+      track: {
+        id: "track_1",
+        title: "Track",
+        artist: "Artist",
+        album: null,
+        durationMs: 1000,
+        bitrate: null,
+        sizeBytes: 43 * 1024 * 1024,
+        codec: "flac",
+        mimeType: "audio/flac",
+        fileHash: "hash_1",
+        artworkUrl: null,
+        ownerSessionId: "user_1",
+        ownerNickname: "Host",
+        sourceType: "local_upload",
+        pieceManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          pieceMimeType: "audio/flac"
+        },
+        relayManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          pieceMimeType: "audio/flac"
+        }
+      },
+      availability: {
+        totalChunks: 673,
+        chunkSize: 64 * 1024
+      }
+    });
+
+    expect(manifest).toMatchObject({
+      source: "snapshot",
       totalChunks: 169,
       chunkSize: 256 * 1024
     });

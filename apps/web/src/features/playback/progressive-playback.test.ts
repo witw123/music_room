@@ -99,6 +99,38 @@ describe("progressive playback helpers", () => {
     });
   });
 
+  it("keeps the room snapshot relay manifest authoritative over stale local availability", () => {
+    const manifest = buildProgressiveTrackManifest(
+      {
+        ...track,
+        sizeBytes: 169 * 256 * 1024,
+        codec: "flac",
+        mimeType: "audio/flac",
+        pieceManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          pieceMimeType: "audio/flac"
+        },
+        relayManifest: {
+          totalChunks: 169,
+          chunkSize: 256 * 1024,
+          pieceMimeType: "audio/flac"
+        }
+      },
+      {
+        ...availability,
+        totalChunks: 673,
+        chunkSize: 64 * 1024,
+        availableChunks: [0, 1, 2]
+      }
+    );
+
+    expect(manifest).toMatchObject({
+      totalChunks: 169,
+      chunkSize: 256 * 1024
+    });
+  });
+
   it("treats a long enough contiguous prefix as startup ready", () => {
     const manifest = buildProgressiveTrackManifest(track, availability);
     expect(

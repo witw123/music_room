@@ -70,6 +70,10 @@ export type ManualCacheTask = {
 };
 
 type RehydratableRoomTrack = Pick<TrackMeta, "id" | "fileHash" | "ownerSessionId">;
+type TrackPieceManifestGeometry = {
+  totalChunks: number;
+  chunkSize: number;
+};
 
 export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
   return {
@@ -100,6 +104,39 @@ export function shouldAnnounceTrackAvailability(input: {
   peerId: string | null | undefined;
 }) {
   return Boolean(input.peerId);
+}
+
+export function resolveReusableCachedPieceManifest<T extends TrackPieceManifestGeometry>(input: {
+  cachedManifest: T | null | undefined;
+  expectedManifest: TrackPieceManifestGeometry | null | undefined;
+}) {
+  if (!input.cachedManifest) {
+    return null;
+  }
+
+  if (
+    input.expectedManifest &&
+    (input.cachedManifest.totalChunks !== input.expectedManifest.totalChunks ||
+      input.cachedManifest.chunkSize !== input.expectedManifest.chunkSize)
+  ) {
+    return null;
+  }
+
+  return input.cachedManifest;
+}
+
+export function isManualCachePieceCompatible(input: {
+  piece: TrackPieceManifestGeometry;
+  expectedManifest: TrackPieceManifestGeometry | null | undefined;
+}) {
+  if (!input.expectedManifest) {
+    return true;
+  }
+
+  return (
+    input.piece.totalChunks === input.expectedManifest.totalChunks &&
+    input.piece.chunkSize === input.expectedManifest.chunkSize
+  );
 }
 
 function isManualCacheTaskRecord(
@@ -287,9 +324,12 @@ export function useTrackUploads(options: {
           task.mode === "manual" &&
           (task.status === "queued" || task.status === "downloading" || task.status === "blocked")
         ) {
+          const track = roomSnapshot.tracks.find((entry) => entry.id === task.trackId) ?? null;
+          const expectedManifest = track?.relayManifest ?? track?.pieceManifest ?? null;
           void getCachedPieceIndexes(task.trackId, peerId, {
             fileHash: task.fileHash,
-            ownerKey: localCacheOwnerKey
+            ownerKey: localCacheOwnerKey,
+            chunkSize: expectedManifest?.chunkSize
           }).then((indexes) => {
             manualCacheChunkIndexesRef.current.set(task.trackId, new Set(indexes));
           });
@@ -579,9 +619,14 @@ export function useTrackUploads(options: {
       availabilityAnnouncementInFlightRef.current.add(announcementKey);
 
       try {
-        const cachedManifest =
+        const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
+        const rawCachedManifest =
           (await getTrackPieceManifestByFileHash(track.fileHash)) ??
           (await getTrackPieceManifest(trackId));
+        const cachedManifest = resolveReusableCachedPieceManifest({
+          cachedManifest: rawCachedManifest,
+          expectedManifest
+        });
         if (!fallbackFile) {
           const availabilityFromPieces = await buildTrackAvailabilityFromCache({
             roomId: roomSnapshot.room.id,
@@ -589,8 +634,8 @@ export function useTrackUploads(options: {
             fileHash: track.fileHash,
             peerId,
             nickname: activeSession.nickname,
-            totalChunks: cachedManifest?.totalChunks,
-            chunkSize: cachedManifest?.chunkSize,
+            totalChunks: cachedManifest?.totalChunks ?? expectedManifest?.totalChunks,
+            chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize,
             assetHash: track.fileHash
           });
           if (
@@ -847,14 +892,19 @@ export function useTrackUploads(options: {
       }
 
       const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-      const cachedManifest =
+      const rawCachedManifest =
         (await getTrackPieceManifestByFileHash(track.fileHash)) ??
         (await getTrackPieceManifest(trackId));
+      const cachedManifest = resolveReusableCachedPieceManifest({
+        cachedManifest: rawCachedManifest,
+        expectedManifest
+      });
       if (
-        cachedManifest &&
+        rawCachedManifest &&
+        !cachedManifest &&
         expectedManifest &&
-        (cachedManifest.totalChunks !== expectedManifest.totalChunks ||
-          cachedManifest.chunkSize !== expectedManifest.chunkSize)
+        (rawCachedManifest.totalChunks !== expectedManifest.totalChunks ||
+          rawCachedManifest.chunkSize !== expectedManifest.chunkSize)
       ) {
         await deleteCachedPiecesForTrack(trackId);
         manualCacheChunkIndexesRef.current.delete(trackId);
@@ -932,9 +982,24 @@ export function useTrackUploads(options: {
       }
 
       const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-      const cachedManifest =
+      const rawCachedManifest =
         (await getTrackPieceManifestByFileHash(track.fileHash)) ??
         (await getTrackPieceManifest(trackId));
+      const cachedManifest = resolveReusableCachedPieceManifest({
+        cachedManifest: rawCachedManifest,
+        expectedManifest
+      });
+      if (
+        rawCachedManifest &&
+        !cachedManifest &&
+        expectedManifest &&
+        (rawCachedManifest.totalChunks !== expectedManifest.totalChunks ||
+          rawCachedManifest.chunkSize !== expectedManifest.chunkSize)
+      ) {
+        await deleteCachedPiecesForTrack(trackId);
+        manualCacheChunkIndexesRef.current.delete(trackId);
+      }
+
       const pieces = await getCachedPiecesForTrack(trackId, peerId, {
         fileHash: track.fileHash,
         ownerKey: localCacheOwnerKey,
@@ -1010,6 +1075,17 @@ export function useTrackUploads(options: {
       chunkSize: number;
       mimeType: string;
     }) => {
+      const track = roomSnapshot?.tracks.find((entry) => entry.id === input.trackId) ?? null;
+      const expectedManifest = track?.relayManifest ?? track?.pieceManifest ?? null;
+      if (
+        !isManualCachePieceCompatible({
+          piece: input,
+          expectedManifest
+        })
+      ) {
+        return;
+      }
+
       const chunkIndexes =
         manualCacheChunkIndexesRef.current.get(input.trackId) ?? new Set<number>();
       chunkIndexes.add(input.chunkIndex);
@@ -1051,7 +1127,7 @@ export function useTrackUploads(options: {
         );
       }
     },
-    [assembleManualCacheTrack, updateManualCacheTask]
+    [assembleManualCacheTrack, roomSnapshot?.tracks, updateManualCacheTask]
   );
 
   const handleManualCachePlan = useCallback(

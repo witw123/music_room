@@ -310,10 +310,34 @@ export async function cacheTrackPieces(
   );
 }
 
+export function filterCachedPiecesByGeometry<T extends { pieceId: string }>(
+  pieces: T[],
+  options?: { fileHash?: string | null; chunkSize?: number | null }
+) {
+  return pieces.filter((piece) => cachedPieceMatchesGeometry(piece, options));
+}
+
+function cachedPieceMatchesGeometry(
+  piece: { pieceId: string },
+  options?: { fileHash?: string | null; chunkSize?: number | null }
+) {
+  const chunkSize = options?.chunkSize;
+  if (!chunkSize || chunkSize <= 0) {
+    return true;
+  }
+
+  const [identity, chunkSizeText] = piece.pieceId.split(":");
+  if (options?.fileHash && identity !== options.fileHash) {
+    return false;
+  }
+
+  return Number(chunkSizeText) === chunkSize;
+}
+
 export async function getCachedPieceIndexes(
   trackId: string,
   peerId: string,
-  options?: { fileHash?: string | null; ownerKey?: string | null }
+  options?: { fileHash?: string | null; ownerKey?: string | null; chunkSize?: number | null }
 ) {
   const ownerKey = options?.ownerKey ?? peerId;
   if (options?.fileHash) {
@@ -322,7 +346,7 @@ export async function getCachedPieceIndexes(
       .equals([options.fileHash, ownerKey])
       .toArray();
 
-    return uniqueSortedChunkIndexes(pieces);
+    return uniqueSortedChunkIndexes(filterCachedPiecesByGeometry(pieces, options));
   }
 
   const pieces = await musicRoomDatabase.trackPieces
@@ -330,7 +354,7 @@ export async function getCachedPieceIndexes(
     .equals([trackId, ownerKey])
     .toArray();
 
-  return uniqueSortedChunkIndexes(pieces);
+  return uniqueSortedChunkIndexes(filterCachedPiecesByGeometry(pieces, options));
 }
 
 export async function getCachedPiece(
@@ -338,24 +362,23 @@ export async function getCachedPiece(
   peerId: string,
   chunkIndex: number,
   options?: { fileHash?: string | null; ownerKey?: string | null; chunkSize?: number | null }
-) {
+): Promise<TrackPieceRecord | null> {
   const ownerKey = options?.ownerKey ?? peerId;
   if (options?.fileHash) {
-    const piece =
-      (await musicRoomDatabase.trackPieces
-        .where("[fileHash+ownerKey+chunkIndex]")
-        .equals([options.fileHash, ownerKey, chunkIndex])
-        .first()) ?? null;
+    const pieces = await musicRoomDatabase.trackPieces
+      .where("[fileHash+ownerKey+chunkIndex]")
+      .equals([options.fileHash, ownerKey, chunkIndex])
+      .toArray();
 
-    return piece;
+    return filterCachedPiecesByGeometry(pieces, options)[0] ?? null;
   }
 
-  return (
-    (await musicRoomDatabase.trackPieces
-      .where("[trackId+ownerKey+chunkIndex]")
-      .equals([trackId, ownerKey, chunkIndex])
-      .first()) ?? null
-  );
+  const pieces = await musicRoomDatabase.trackPieces
+    .where("[trackId+ownerKey+chunkIndex]")
+    .equals([trackId, ownerKey, chunkIndex])
+    .toArray();
+
+  return filterCachedPiecesByGeometry(pieces, options)[0] ?? null;
 }
 
 export async function getCachedPiecesForTrack(
@@ -374,7 +397,9 @@ export async function getCachedPiecesForTrack(
         .equals([trackId, ownerKey])
         .toArray();
 
-  return pieces.sort((left, right) => left.chunkIndex - right.chunkIndex);
+  return filterCachedPiecesByGeometry(pieces, options).sort(
+    (left, right) => left.chunkIndex - right.chunkIndex
+  );
 }
 
 export async function deleteCachedPiecesForTrack(trackId: string, peerId?: string) {

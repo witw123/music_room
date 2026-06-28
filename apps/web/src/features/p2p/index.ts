@@ -515,11 +515,27 @@ export function resolveTrackPieceManifest(input: {
   mimeType?: string | null;
   sizeBytes?: number | null;
 }): ResolvedTrackPieceManifest | null {
+  const relayManifest = input.track?.relayManifest ?? null;
+  const snapshotManifest = relayManifest ?? input.track?.pieceManifest ?? null;
+  const availabilityManifest =
+    input.availability &&
+    input.availability.totalChunks > 0 &&
+    input.availability.chunkSize > 0
+      ? input.availability
+      : null;
+  const availabilityMatchesSnapshot =
+    !relayManifest ||
+    (availabilityManifest?.totalChunks === relayManifest.totalChunks &&
+      availabilityManifest.chunkSize === relayManifest.chunkSize);
+  const expectedManifest = relayManifest ?? availabilityManifest ?? snapshotManifest;
   const cacheManifest = input.cacheManifest;
   if (
     cacheManifest &&
     cacheManifest.totalChunks > 0 &&
-    cacheManifest.chunkSize > 0
+    cacheManifest.chunkSize > 0 &&
+    (!expectedManifest ||
+      (cacheManifest.totalChunks === expectedManifest.totalChunks &&
+        cacheManifest.chunkSize === expectedManifest.chunkSize))
   ) {
     return {
       totalChunks: cacheManifest.totalChunks,
@@ -539,13 +555,12 @@ export function resolveTrackPieceManifest(input: {
   }
 
   if (
-    input.availability &&
-    input.availability.totalChunks > 0 &&
-    input.availability.chunkSize > 0
+    availabilityManifest &&
+    availabilityMatchesSnapshot
   ) {
     return {
-      totalChunks: input.availability.totalChunks,
-      chunkSize: input.availability.chunkSize,
+      totalChunks: availabilityManifest.totalChunks,
+      chunkSize: availabilityManifest.chunkSize,
       pieceMimeType:
         input.track?.relayManifest?.pieceMimeType ??
         input.track?.pieceManifest?.pieceMimeType ??
@@ -553,12 +568,11 @@ export function resolveTrackPieceManifest(input: {
         input.mimeType ??
         input.file?.type ??
         "audio/mpeg",
-      pieceHashes: input.availability.pieceHashes,
+      pieceHashes: availabilityManifest.pieceHashes,
       source: "availability"
     };
   }
 
-  const snapshotManifest = input.track?.relayManifest ?? input.track?.pieceManifest ?? null;
   if (
     snapshotManifest &&
     snapshotManifest.totalChunks > 0 &&
@@ -719,7 +733,8 @@ export async function buildTrackAvailabilityFromCache(input: {
 }) {
   const availableChunks = await getCachedPieceIndexes(input.trackId, input.peerId, {
     fileHash: input.fileHash,
-    ownerKey: localCacheOwnerKey
+    ownerKey: localCacheOwnerKey,
+    chunkSize: input.chunkSize
   });
 
   if (availableChunks.length === 0) {

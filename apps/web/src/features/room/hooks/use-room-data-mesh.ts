@@ -417,7 +417,8 @@ export function createRoomDataMeshRuntime(input: {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         return {
           fileHash: track?.fileHash ?? null,
-          ownerKey: localCacheOwnerKey
+          ownerKey: localCacheOwnerKey,
+          chunkSize: track?.relayManifest?.chunkSize ?? track?.pieceManifest?.chunkSize ?? null
         };
       }
     }
