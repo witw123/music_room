@@ -292,12 +292,14 @@ export function buildActivePlaybackCacheWindow(input: {
 
 export function resolveActivePlaybackCacheWindowPosition(input: {
   localPlaybackPositionMs: number | null | undefined;
+  mediaConnectionState?: RoomMediaConnectionState | null | undefined;
   playback: RoomSnapshot["room"]["playback"] | null | undefined;
   durationMs: number;
   schedulerPlaybackBucketMs: number;
   now?: number;
 }) {
   if (
+    input.mediaConnectionState === "live" &&
     typeof input.localPlaybackPositionMs === "number" &&
     Number.isFinite(input.localPlaybackPositionMs)
   ) {
@@ -528,6 +530,7 @@ export function useRoomRuntime({
         typeof getLocalPlaybackPositionMs === "function"
           ? getLocalPlaybackPositionMs()
           : null,
+      mediaConnectionState,
       playback: roomSnapshot?.room.playback,
       durationMs: activePlaybackTrackDurationMs,
       schedulerPlaybackBucketMs

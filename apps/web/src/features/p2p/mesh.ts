@@ -441,7 +441,9 @@ export class P2PMesh {
       return false;
     }
 
-    const normalizedChunkIndexes = [...new Set(chunkIndexes)].sort((left, right) => left - right);
+    const normalizedChunkIndexes = [...new Set(chunkIndexes)]
+      .filter((chunkIndex) => !this.pendingPieceRequests.has(this.buildRequestKey(trackId, chunkIndex)))
+      .sort((left, right) => left - right);
     if (normalizedChunkIndexes.length === 0) {
       return false;
     }
@@ -453,14 +455,6 @@ export class P2PMesh {
 
     for (const chunkIndex of normalizedChunkIndexes) {
       const requestKey = this.buildRequestKey(trackId, chunkIndex);
-      if (this.pendingPieceRequests.has(requestKey)) {
-        for (const pendingRequest of pendingRequests) {
-          clearTimeout(pendingRequest.timeoutId);
-          this.pendingPieceRequests.delete(pendingRequest.requestKey);
-        }
-        return false;
-      }
-
       const timeoutId = setTimeout(() => {
         this.pendingPieceRequests.delete(requestKey);
         this.callbacks.onPieceRequestTimeout?.({

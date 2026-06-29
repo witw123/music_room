@@ -331,6 +331,7 @@ export function buildManualCacheSchedulerAvailability(input: {
     manualCacheTrackIds: input.manualCacheTrackIds,
     roomId: input.roomSnapshot.room.id,
     members: input.roomSnapshot.room.members,
+    playback: input.roomSnapshot.room.playback,
     tracks: input.roomSnapshot.tracks,
     localPeerId: input.localPeerId
   });
@@ -341,6 +342,7 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
   manualCacheTrackIds: string[];
   roomId: string;
   members: RoomSnapshot["room"]["members"];
+  playback?: RoomSnapshot["room"]["playback"] | null;
   tracks: RoomSnapshot["tracks"];
   localPeerId: string | null | undefined;
 }) {
@@ -355,6 +357,11 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
   );
   const membersBySessionId = new Map(
     input.members.map((member) => [member.id, member] as const)
+  );
+  const membersByPeerId = new Map(
+    input.members
+      .filter((member) => !!member.peerId)
+      .map((member) => [member.peerId!, member] as const)
   );
   const tracksById = new Map(input.tracks.map((track) => [track.id, track] as const));
   const nextAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>> = {};
@@ -380,22 +387,35 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
       continue;
     }
 
-    const owner = membersBySessionId.get(track.ownerSessionId) ?? null;
-    const ownerPeerId = owner?.peerId ?? null;
     const manifest = track.relayManifest ?? track.pieceManifest ?? null;
-    if (
-      owner &&
-      ownerPeerId &&
-      ownerPeerId !== input.localPeerId &&
-      owner.presenceState !== "offline" &&
-      manifest &&
-      !nextTrackAvailability[ownerPeerId]
-    ) {
-      nextTrackAvailability[ownerPeerId] = {
+    const owner = membersBySessionId.get(track.ownerSessionId) ?? null;
+    const playbackSourcePeerId =
+      input.playback?.currentTrackId === track.id
+        ? input.playback.sourcePeerId
+        : null;
+    const playbackSourceMember =
+      playbackSourcePeerId ? membersByPeerId.get(playbackSourcePeerId) ?? null : null;
+    const implicitProviders = [owner, playbackSourceMember].filter(
+      (member, index, members): member is NonNullable<typeof member> =>
+        !!member &&
+        members.findIndex((candidate) => candidate?.peerId === member.peerId) === index
+    );
+    for (const provider of implicitProviders) {
+      const providerPeerId = provider.peerId ?? null;
+      if (
+        !providerPeerId ||
+        providerPeerId === input.localPeerId ||
+        provider.presenceState === "offline" ||
+        !manifest ||
+        nextTrackAvailability[providerPeerId]
+      ) {
+        continue;
+      }
+      nextTrackAvailability[providerPeerId] = {
         roomId: input.roomId,
         trackId: track.id,
-        ownerPeerId,
-        nickname: owner.nickname,
+        ownerPeerId: providerPeerId,
+        nickname: provider.nickname,
         assetKind: "relay",
         assetHash: track.fileHash,
         totalChunks: manifest.totalChunks,

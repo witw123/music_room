@@ -725,6 +725,51 @@ describe("roomStateReducer", () => {
     expect(state.snapshot?.room.playback.currentTrackId).toBeNull();
   });
 
+  it("does not keep deleted current track metadata after a fresh library patch resets playback", () => {
+    const state = applyEvents(
+      {
+        type: "server-snapshot",
+        snapshot: createRoomSnapshot({
+          room: {
+            roomRevision: 7,
+            playback: createPlaybackSnapshot({
+              status: "playing",
+              currentTrackId: "track_1",
+              currentQueueItemId: "queue_1",
+              sourceSessionId: "host",
+              sourcePeerId: "peer-host",
+              sourceTrackId: "track_1",
+              queueVersion: 5,
+              playbackRevision: 5,
+              mediaEpoch: 3
+            })
+          }
+        })
+      },
+      {
+        type: "server-library-patch",
+        roomId: "room_1",
+        tracks: [],
+        queue: [],
+        playback: createPlaybackSnapshot({
+          status: "paused",
+          currentTrackId: null,
+          currentQueueItemId: null,
+          sourceSessionId: null,
+          sourcePeerId: null,
+          sourceTrackId: null,
+          queueVersion: 4,
+          playbackRevision: 4,
+          mediaEpoch: 4
+        }),
+        roomRevision: 8
+      }
+    );
+
+    expect(state.snapshot?.tracks.map((track) => track.id)).toEqual([]);
+    expect(state.snapshot?.room.playback.currentTrackId).toBeNull();
+  });
+
   it("accepts a fresher queue removal reset even when its playback revision is older", () => {
     const state = applyEvents(
       {

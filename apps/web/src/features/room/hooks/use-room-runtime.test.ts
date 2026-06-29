@@ -533,6 +533,7 @@ describe("pure cache room runtime helpers", () => {
     expect(
       resolveActivePlaybackCacheWindowPosition({
         localPlaybackPositionMs: null,
+        mediaConnectionState: "buffering",
         playback: {
           status: "playing",
           currentTrackId: "track_1",
@@ -551,6 +552,56 @@ describe("pure cache room runtime helpers", () => {
         now: new Date("2026-06-28T10:00:05.000Z").getTime()
       })
     ).toBe(15_000);
+  });
+
+  it("uses the room playback clock while local progressive playback is still buffering", () => {
+    expect(
+      resolveActivePlaybackCacheWindowPosition({
+        localPlaybackPositionMs: 0,
+        mediaConnectionState: "buffering",
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 10_000,
+          startedAt: "2026-06-28T10:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 4,
+          mediaEpoch: 7
+        },
+        durationMs: 120_000,
+        schedulerPlaybackBucketMs: 0,
+        now: new Date("2026-06-28T10:00:05.000Z").getTime()
+      })
+    ).toBe(15_000);
+  });
+
+  it("uses the local playback clock once local playback is live", () => {
+    expect(
+      resolveActivePlaybackCacheWindowPosition({
+        localPlaybackPositionMs: 16_000,
+        mediaConnectionState: "live",
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 10_000,
+          startedAt: "2026-06-28T10:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 4,
+          mediaEpoch: 7
+        },
+        durationMs: 120_000,
+        schedulerPlaybackBucketMs: 0,
+        now: new Date("2026-06-28T10:00:05.000Z").getTime()
+      })
+    ).toBe(16_000);
   });
 
   it("routes realtime piece completion to the current manual cache pending clearer", () => {

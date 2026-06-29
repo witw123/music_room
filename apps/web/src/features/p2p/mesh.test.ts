@@ -194,6 +194,37 @@ describe("P2PMesh", () => {
     expect(onPieceRequestTimeout).not.toHaveBeenCalled();
   });
 
+  it("continues requesting new pieces when a batch overlaps an existing pending piece", async () => {
+    const onPieceRequestSent = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn(),
+      onPieceRequestSent
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    expect(mesh.requestPiece("peer_b", "track_1", 1, 4, 1_000)).toBe(true);
+    expect(mesh.requestPieces("peer_b", "track_1", [1, 2], 4, 1_000)).toBe(true);
+
+    expect(onPieceRequestSent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        peerId: "peer_b",
+        trackId: "track_1",
+        chunkIndexes: [2]
+      })
+    );
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
+    const pieceRequests = channel?.sentMessages
+      .filter((message): message is string => typeof message === "string")
+      .map((message) => JSON.parse(message))
+      .filter((message) => message.kind === "request-piece" || message.kind === "request-pieces");
+    expect(pieceRequests?.at(-1)).toMatchObject({
+      kind: "request-piece",
+      trackId: "track_1",
+      chunkIndex: 2
+    });
+  });
+
   it("only lets one side initiate the data channel offer", async () => {
     const sendSignalA = vi.fn();
     const sendSignalB = vi.fn();

@@ -59,6 +59,48 @@ describe("buildManualCacheSchedulerAvailability", () => {
     });
   });
 
+  it("synthesizes availability from the current playback source peer before source announcements arrive", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing"
+    });
+    const sourceMember = {
+      id: "listener_1",
+      nickname: "listener",
+      role: "member" as const,
+      joinedAt: new Date(0).toISOString(),
+      peerId: "peer_source",
+      presenceState: "online" as const
+    };
+    const snapshotWithSourcePeer = {
+      ...roomSnapshot,
+      room: {
+        ...roomSnapshot.room,
+        members: [...roomSnapshot.room.members, sourceMember],
+        playback: {
+          ...roomSnapshot.room.playback,
+          sourceSessionId: sourceMember.id,
+          sourcePeerId: sourceMember.peerId
+        }
+      }
+    };
+
+    const availability = buildManualCacheSchedulerAvailability({
+      availabilityByTrack: {},
+      manualCacheTrackIds: ["track_a"],
+      roomSnapshot: snapshotWithSourcePeer,
+      localPeerId: "peer_local"
+    });
+
+    expect(availability.track_a?.peer_source).toMatchObject({
+      roomId: "room_1",
+      trackId: "track_a",
+      ownerPeerId: "peer_source",
+      availableChunks: [0, 1, 2, 3],
+      source: "live_upload"
+    });
+  });
+
   it("drops stale availability from peers that are no longer active room members", () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner"
