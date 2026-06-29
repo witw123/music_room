@@ -87,6 +87,17 @@ export function isFlacTrack(input: { mimeType?: string | null; codec?: string | 
   return mimeType.includes("flac") || codec.includes("flac");
 }
 
+export function isWavTrack(input: { mimeType?: string | null; codec?: string | null }) {
+  const mimeType = input.mimeType?.toLowerCase() ?? "";
+  const codec = input.codec?.toLowerCase() ?? "";
+  return (
+    mimeType.includes("wav") ||
+    mimeType.includes("wave") ||
+    codec.includes("wav") ||
+    codec.includes("wave")
+  );
+}
+
 export function getStartupWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
   return isFlacTrack(input) ? 8_000 : 8_000;
 }
@@ -414,7 +425,7 @@ export function getProgressiveEngineType(manifest: ProgressiveTrackManifest | nu
 export function canUseProgressivePcm(
   manifest: Pick<ProgressiveTrackManifest, "mimeType" | "codec"> | null | undefined
 ) {
-  if (!manifest || !isFlacTrack(manifest) || !isChromeOrEdgeBrowser()) {
+  if (!manifest || (!isFlacTrack(manifest) && !isWavTrack(manifest))) {
     return false;
   }
 
@@ -424,6 +435,14 @@ export function canUseProgressivePcm(
       window.AudioContext ??
       (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     ) !== "undefined";
+  if (isWavTrack(manifest)) {
+    return audioContextSupported;
+  }
+
+  if (!isChromeOrEdgeBrowser()) {
+    return false;
+  }
+
   const webCodecsSupported =
     typeof globalThis !== "undefined" &&
     typeof (

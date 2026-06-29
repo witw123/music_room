@@ -21,6 +21,9 @@ export class ProgressiveMseEngine {
     try {
       this.sourceBuffer = this.mediaSource.addSourceBuffer(this.manifest.mimeType);
       this.sourceBuffer.mode = "sequence";
+      if (Number.isFinite(this.manifest.durationMs) && this.manifest.durationMs > 0) {
+        this.mediaSource.duration = this.manifest.durationMs / 1000;
+      }
       this.sourceBuffer.addEventListener("updateend", this.handleUpdateEnd);
       this.sourceBuffer.addEventListener("error", this.handleSourceBufferError);
       this.status = "ready";
@@ -48,6 +51,40 @@ export class ProgressiveMseEngine {
 
   get ready() {
     return this.status === "ready";
+  }
+
+  getBufferedAheadMs(positionSeconds = this.audio.currentTime) {
+    const normalizedPositionSeconds = Number.isFinite(positionSeconds)
+      ? Math.max(0, positionSeconds)
+      : 0;
+    const mediaBufferedEndSeconds = getBufferedCoverageEndSeconds(
+      this.audio.buffered,
+      normalizedPositionSeconds
+    );
+    const estimatedBufferedEndSeconds =
+      this.manifest.totalChunks > 0 && this.manifest.durationMs > 0
+        ? Math.min(
+            this.manifest.durationMs / 1000,
+            (this.appendedChunkCount / this.manifest.totalChunks) *
+              (this.manifest.durationMs / 1000)
+          )
+        : 0;
+    const bufferedEndSeconds = Math.max(
+      mediaBufferedEndSeconds,
+      estimatedBufferedEndSeconds
+    );
+
+    return Math.max(
+      0,
+      Math.floor((bufferedEndSeconds - normalizedPositionSeconds) * 1000)
+    );
+  }
+
+  isPlaybackReady(positionSeconds = this.audio.currentTime, minimumAheadMs = 1) {
+    return (
+      this.status === "ready" &&
+      this.getBufferedAheadMs(positionSeconds) >= Math.max(0, minimumAheadMs)
+    );
   }
 
   async attach() {
@@ -99,6 +136,10 @@ export class ProgressiveMseEngine {
         ownerKey: localCacheOwnerKey,
         chunkSize: this.manifest.chunkSize
       });
+      if (!this.sourceBuffer || this.status !== "ready") {
+        return;
+      }
+
       const piecesByChunkIndex = new Map(
         pieces.map((piece) => [piece.chunkIndex, piece] as const)
       );
@@ -120,6 +161,10 @@ export class ProgressiveMseEngine {
       }
 
       this.pumpAppendQueue();
+    } catch {
+      if (!isDestroyedEngineStatus(this.status)) {
+        this.status = "failed";
+      }
     } finally {
       this.syncing = false;
       if (this.syncRequested) {
@@ -187,4 +232,34 @@ export class ProgressiveMseEngine {
       this.status = "failed";
     }
   }
+}
+
+function getBufferedCoverageEndSeconds(
+  buffered: TimeRanges | null | undefined,
+  positionSeconds: number
+) {
+  if (!buffered || buffered.length <= 0) {
+    return 0;
+  }
+
+  let coverageEnd = positionSeconds;
+  for (let rangeIndex = 0; rangeIndex < buffered.length; rangeIndex += 1) {
+    const start = buffered.start(rangeIndex);
+    const end = buffered.end(rangeIndex);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= coverageEnd) {
+      continue;
+    }
+
+    if (start > coverageEnd + 0.12) {
+      continue;
+    }
+
+    coverageEnd = Math.max(coverageEnd, end);
+  }
+
+  return coverageEnd;
+}
+
+function isDestroyedEngineStatus(status: EngineStatus) {
+  return status === "destroyed";
 }

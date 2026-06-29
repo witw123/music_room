@@ -281,6 +281,40 @@ function createAudioElement() {
   } as unknown as HTMLAudioElement;
 }
 
+function buildPcmWavBytes(input: {
+  sampleRate: number;
+  channels: number;
+  bitsPerSample: number;
+  dataBytes: number;
+  availableDataBytes: number;
+}) {
+  const bytes = new Uint8Array(44 + input.availableDataBytes);
+  const view = new DataView(bytes.buffer);
+  writeAscii(bytes, 0, "RIFF");
+  view.setUint32(4, 36 + input.dataBytes, true);
+  writeAscii(bytes, 8, "WAVE");
+  writeAscii(bytes, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, input.channels, true);
+  view.setUint32(24, input.sampleRate, true);
+  view.setUint32(28, input.sampleRate * input.channels * input.bitsPerSample / 8, true);
+  view.setUint16(32, input.channels * input.bitsPerSample / 8, true);
+  view.setUint16(34, input.bitsPerSample, true);
+  writeAscii(bytes, 36, "data");
+  view.setUint32(40, input.dataBytes, true);
+  for (let offset = 44; offset + 1 < bytes.byteLength; offset += 2) {
+    view.setInt16(offset, 8_192, true);
+  }
+  return bytes;
+}
+
+function writeAscii(target: Uint8Array, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    target[offset + index] = value.charCodeAt(index);
+  }
+}
+
 describe("ProgressivePcmEngine", () => {
   beforeEach(() => {
     vi.mocked(getCachedPiece).mockReset();
@@ -449,6 +483,77 @@ describe("ProgressivePcmEngine", () => {
         decodedPeak: 0.25,
         decodedRms: 0.25,
         decodedNonZeroSampleCount: 88_200
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("plays WAV PCM from the first cached prefix chunk before the track is complete", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const wavManifest = {
+      ...manifest,
+      mimeType: "audio/wav",
+      codec: "wav",
+      durationMs: 1_000,
+      totalChunks: 2,
+      chunkSize: 1_044
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", wavManifest);
+
+    vi.mocked(getCachedPiece)
+      .mockResolvedValueOnce({
+        pieceId: "piece_0",
+        trackId: wavManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex: 0,
+        chunkSize: wavManifest.chunkSize,
+        hash: "hash_0",
+        createdAt: new Date().toISOString(),
+        payload: buildPcmWavBytes({
+          sampleRate: 1_000,
+          channels: 1,
+          bitsPerSample: 16,
+          dataBytes: 2_000,
+          availableDataBytes: 1_000
+        }).buffer
+      })
+      .mockResolvedValueOnce(null);
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(0.1, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1,
+        bufferedAheadMs: 400
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("marks PCM playback failed when cached pieces cannot be read", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    vi.mocked(getCachedPiece).mockRejectedValue(new Error("idb-failed"));
+
+    try {
+      await engine.attach();
+      await expect(engine.sync()).resolves.toBeUndefined();
+
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "failed",
+        lastDecodeError: "cache-read-failed"
       });
     } finally {
       engine.destroy();

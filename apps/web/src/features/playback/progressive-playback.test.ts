@@ -504,4 +504,39 @@ describe("progressive playback helpers", () => {
       }
     }
   });
+
+  it("uses PCM progressive playback for WAV when AudioContext is available", () => {
+    const originalWindow = globalThis.window;
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        AudioContext: class {}
+      }
+    });
+
+    try {
+      const manifest = {
+        trackId: "track_wav",
+        fileHash: "hash_wav",
+        mimeType: "audio/wav",
+        codec: "wav",
+        sizeBytes: 1,
+        durationMs: 1_000,
+        totalChunks: 4,
+        chunkSize: 256 * 1024
+      } as const;
+
+      expect(canUseProgressivePcm(manifest)).toBe(true);
+      expect(getProgressiveEngineType(manifest)).toBe("pcm");
+    } finally {
+      if (typeof originalWindow === "undefined") {
+        Reflect.deleteProperty(globalThis, "window");
+      } else {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: originalWindow
+        });
+      }
+    }
+  });
 });

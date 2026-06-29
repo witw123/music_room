@@ -1509,6 +1509,37 @@ export function useProgressiveRuntime({
       }
 
       audio.muted = false;
+      const mseEngine = progressiveEngineRef.current;
+      if (mseEngine) {
+        void mseEngine.sync().then(() => {
+          const localReady = mseEngine.isPlaybackReady(expectedSeconds, startupBufferMs);
+          if (shouldPlayPlayback && !localReady) {
+            setMediaConnectionState("buffering");
+            markPlaybackStartFailure(
+              `${activePlaybackSource}-buffer-underrun`,
+              "本地缓冲不足，正在缓存播放所需片段。"
+            );
+            return;
+          }
+
+          syncLocalPlaybackWindow(audio, expectedSeconds, shouldPlayPlayback, {
+            softDriftMs: 120,
+            hardDriftMs: 900,
+            correctionMode: "audible-local-follow"
+          });
+
+          if (shouldPlayPlayback) {
+            setProgressiveFallbackReason(null);
+            setMediaConnectionState("live");
+            ensurePlaybackStart(activePlaybackSource);
+          } else {
+            audio.pause();
+            audio.playbackRate = 1;
+          }
+        });
+        return;
+      }
+
       syncLocalPlaybackWindow(audio, expectedSeconds, shouldPlayPlayback, {
         softDriftMs: 120,
         hardDriftMs: 900,
@@ -1550,7 +1581,9 @@ export function useProgressiveRuntime({
     markPlaybackStartFailure,
     setActivePlaybackSource,
     setProgressiveFallbackReason,
-    setPlaybackStartIntent
+    setPlaybackStartIntent,
+    progressiveHealthSnapshot.startupReady,
+    startupBufferMs
   ]);
 
   useEffect(() => {
@@ -2059,10 +2092,11 @@ export function useProgressiveRuntime({
         driftMs = syncResult.driftMs;
         audio.muted = !isSlidingWindowPlaybackSource(activePlaybackSource);
       } else if (mseEngine) {
+        await mseEngine.sync();
         engineReady = mseEngine.engineStatus === "ready";
-        localReady = engineReady;
+        localReady = mseEngine.isPlaybackReady(expectedSeconds, startupBufferMs);
 
-        if (engineReady && (isSlidingWindowPlaybackSource(activePlaybackSource) || shadowWarmupReady)) {
+        if (localReady && (isSlidingWindowPlaybackSource(activePlaybackSource) || shadowWarmupReady)) {
           syncLocalPlaybackWindow(audio, expectedSeconds, true, {
             softDriftMs: 120,
             hardDriftMs: 900,
@@ -2176,6 +2210,7 @@ export function useProgressiveRuntime({
     currentProgressiveManifest,
     activePlaybackSource,
     progressiveHealthSnapshot.startupReady,
+    startupBufferMs,
     progressiveLocalBlockedReason,
     isProgressiveTakeoverReady,
     isLocalTakeoverAllowed,

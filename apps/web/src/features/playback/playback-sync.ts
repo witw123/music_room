@@ -74,30 +74,39 @@ export function syncLocalPlaybackWindow(
   const driftMs = (expectedSeconds - audio.currentTime) * 1000;
   const absDriftMs = Math.abs(driftMs);
   let didSeek = false;
+  let seekFailed = false;
+  const seekTo = (value: number) => {
+    try {
+      audio.currentTime = Math.max(0, value);
+      didSeek = true;
+    } catch {
+      seekFailed = true;
+    }
+  };
 
   if (correctionMode === "muted-warmup" || correctionMode === "shadow-local-catchup") {
     if (absDriftMs >= softDriftMs) {
-      audio.currentTime = Math.max(0, expectedSeconds);
-      didSeek = true;
+      seekTo(expectedSeconds);
     }
     audio.playbackRate = 1;
     return {
       driftMs,
       playbackRate: audio.playbackRate,
-      didSeek
+      didSeek,
+      seekFailed
     };
   }
 
   if (correctionMode === "seek-only" || !allowRateCorrection || disableAudibleRateCorrection) {
     if (correctionMode === "audible-local-follow") {
       if (!isPlaying || absDriftMs >= audibleLocalHardDriftMs) {
-        audio.currentTime = Math.max(0, expectedSeconds);
-        didSeek = true;
+        seekTo(expectedSeconds);
         audio.playbackRate = 1;
         return {
           driftMs,
           playbackRate: audio.playbackRate,
-          didSeek
+          didSeek,
+          seekFailed
         };
       }
 
@@ -106,7 +115,8 @@ export function syncLocalPlaybackWindow(
         return {
           driftMs,
           playbackRate: audio.playbackRate,
-          didSeek
+          didSeek,
+          seekFailed
         };
       }
 
@@ -114,29 +124,31 @@ export function syncLocalPlaybackWindow(
       return {
         driftMs,
         playbackRate: audio.playbackRate,
-        didSeek
+        didSeek,
+        seekFailed
       };
     }
 
     if (!isPlaying || absDriftMs >= hardDriftMs) {
-      audio.currentTime = Math.max(0, expectedSeconds);
-      didSeek = true;
+      seekTo(expectedSeconds);
     }
     audio.playbackRate = 1;
     return {
       driftMs,
       playbackRate: audio.playbackRate,
-      didSeek
+      didSeek,
+      seekFailed
     };
   }
 
   if (absDriftMs >= hardDriftMs) {
-    audio.currentTime = Math.max(0, expectedSeconds);
+    seekTo(expectedSeconds);
     audio.playbackRate = 1;
     return {
       driftMs,
       playbackRate: audio.playbackRate,
-      didSeek: true
+      didSeek,
+      seekFailed
     };
   }
 
@@ -145,7 +157,8 @@ export function syncLocalPlaybackWindow(
     return {
       driftMs,
       playbackRate: audio.playbackRate,
-      didSeek
+      didSeek,
+      seekFailed
     };
   }
 
@@ -160,6 +173,7 @@ export function syncLocalPlaybackWindow(
   return {
     driftMs,
     playbackRate: audio.playbackRate,
-    didSeek
+    didSeek,
+    seekFailed
   };
 }

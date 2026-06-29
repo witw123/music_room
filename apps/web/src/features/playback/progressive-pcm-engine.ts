@@ -1,9 +1,10 @@
 import { getCachedPiece, localCacheOwnerKey } from "@/lib/indexeddb";
-import type { ProgressiveTrackManifest } from "./progressive-playback";
+import { isWavTrack, type ProgressiveTrackManifest } from "./progressive-playback";
 import {
   extractFlacPacketsFromBitstream,
   type ProgressiveFlacStreamInfo
 } from "./progressive-flac";
+import { parseWavHeader, type WavHeader } from "./codecs/wav-parser";
 
 type EngineStatus = "idle" | "opening" | "ready" | "failed" | "degraded" | "destroyed";
 
@@ -69,6 +70,8 @@ export class ProgressivePcmEngine {
   private directOutputConnected = false;
   private decoder: AudioDecoderLike | null = null;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
+  private wavHeader: WavHeader | null = null;
+  private wavDecodedByteOffset = 0;
   private status: EngineStatus = "idle";
   private parsedOffset = 0;
   private nextSampleIndex = 0;
@@ -229,6 +232,11 @@ export class ProgressivePcmEngine {
         this.syncQueued = false;
         await this.performSync();
       } while (this.syncQueued && !isTerminalEngineStatus(this.status));
+    } catch {
+      if (!isDestroyedEngineStatus(this.status)) {
+        this.lastDecodeError = "cache-read-failed";
+        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+      }
     } finally {
       this.syncInFlight = false;
     }
@@ -346,6 +354,8 @@ export class ProgressivePcmEngine {
     this.gainNode = null;
     this.directOutputConnected = false;
     this.streamInfo = null;
+    this.wavHeader = null;
+    this.wavDecodedByteOffset = 0;
     this.decodedSegments = [];
     this.decodedPacketCount = 0;
     this.decoderFlushAttemptCount = 0;
@@ -431,7 +441,16 @@ export class ProgressivePcmEngine {
 
   private async performSync() {
     const appendedBytes = await this.appendAvailableContiguousPieces();
+    if (isTerminalEngineStatus(this.status)) {
+      return;
+    }
+
     if (!appendedBytes) {
+      return;
+    }
+
+    if (isWavTrack(this.manifest)) {
+      this.decodeAvailableWavPcm();
       return;
     }
 
@@ -490,6 +509,58 @@ export class ProgressivePcmEngine {
     this.nextSampleIndex = extraction.nextSampleIndex;
   }
 
+  private decodeAvailableWavPcm() {
+    if (!this.audioContext) {
+      return;
+    }
+
+    const bytes = this.contiguousBytes.subarray(0, this.contiguousByteLength);
+    const header = this.wavHeader ?? parseWavHeader(bytes);
+    if (!header) {
+      return;
+    }
+
+    this.wavHeader = header;
+    this.status = "ready";
+
+    const dataStartByte = header.dataOffset;
+    const dataEndByte = Math.min(
+      this.contiguousByteLength,
+      header.dataOffset + header.dataBytes
+    );
+    const decodeStartByte = Math.max(dataStartByte, this.wavDecodedByteOffset || dataStartByte);
+    const alignedStartByte =
+      dataStartByte +
+      Math.max(0, Math.floor((decodeStartByte - dataStartByte) / header.blockAlign)) *
+        header.blockAlign;
+    const alignedEndByte =
+      dataStartByte +
+      Math.max(0, Math.floor((dataEndByte - dataStartByte) / header.blockAlign)) *
+        header.blockAlign;
+    if (alignedEndByte <= alignedStartByte) {
+      return;
+    }
+
+    const segment = this.createDecodedWavSegment(
+      header,
+      bytes.subarray(alignedStartByte, alignedEndByte),
+      alignedStartByte
+    );
+    if (!segment) {
+      this.lastDecodeError = "wav-decode-failed";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+      return;
+    }
+
+    this.wavDecodedByteOffset = alignedEndByte;
+    this.decodedSegments.push(segment);
+    this.decodedSegments.sort((left, right) => left.startTimeSec - right.startTimeSec);
+    this.lastDecodedAtMs = Date.now();
+    if (this.playing) {
+      this.scheduleAhead(this.getCurrentTimeSeconds());
+    }
+  }
+
   private async appendAvailableContiguousPieces() {
     let appended = false;
 
@@ -504,6 +575,10 @@ export class ProgressivePcmEngine {
           chunkSize: this.manifest.chunkSize
         }
       );
+      if (isTerminalEngineStatus(this.status)) {
+        break;
+      }
+
       if (!piece) {
         break;
       }
@@ -561,6 +636,78 @@ export class ProgressivePcmEngine {
         return;
       }
     }
+  }
+
+  private createDecodedWavSegment(
+    header: WavHeader,
+    payload: Uint8Array,
+    absoluteStartByte: number
+  ): DecodedSegment | null {
+    if (!this.audioContext || payload.byteLength < header.blockAlign) {
+      return null;
+    }
+
+    const bytesPerSample = header.bitsPerSample / 8;
+    if (!Number.isInteger(bytesPerSample) || bytesPerSample <= 0) {
+      return null;
+    }
+
+    const frameCount = Math.floor(payload.byteLength / header.blockAlign);
+    if (frameCount <= 0) {
+      return null;
+    }
+
+    const buffer = this.audioContext.createBuffer(
+      header.channels,
+      frameCount,
+      header.sampleRate
+    );
+    const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+    let segmentPeak = 0;
+    let segmentSquareSum = 0;
+    let segmentSampleCount = 0;
+    let segmentNonZeroSampleCount = 0;
+
+    for (let channelIndex = 0; channelIndex < header.channels; channelIndex += 1) {
+      const channelBuffer = new Float32Array(frameCount);
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        const sampleOffset =
+          frameIndex * header.blockAlign + channelIndex * bytesPerSample;
+        const sample = decodeWavSample(view, sampleOffset, header);
+        if (!Number.isFinite(sample)) {
+          return null;
+        }
+
+        channelBuffer[frameIndex] = sample;
+        const absoluteSample = Math.abs(sample);
+        segmentPeak = Math.max(segmentPeak, absoluteSample);
+        segmentSquareSum += sample * sample;
+        segmentSampleCount += 1;
+        if (absoluteSample > 0.000001) {
+          segmentNonZeroSampleCount += 1;
+        }
+      }
+      buffer.copyToChannel(channelBuffer, channelIndex);
+    }
+
+    const startFrame = Math.floor(
+      Math.max(0, absoluteStartByte - header.dataOffset) / header.blockAlign
+    );
+    const startTimeSec = startFrame / header.sampleRate;
+    const endTimeSec = startTimeSec + frameCount / header.sampleRate;
+    this.decodedPeak = Math.max(this.decodedPeak, segmentPeak);
+    this.decodedSquareSum += segmentSquareSum;
+    this.decodedSampleCount += segmentSampleCount;
+    this.decodedNonZeroSampleCount += segmentNonZeroSampleCount;
+
+    return {
+      startTimeSec,
+      endTimeSec,
+      buffer,
+      peak: segmentPeak,
+      rms: segmentSampleCount > 0 ? Math.sqrt(segmentSquareSum / segmentSampleCount) : 0,
+      nonZeroSampleCount: segmentNonZeroSampleCount
+    };
   }
 
   private createDecodedSegment(audioData: unknown): DecodedSegment | null {
@@ -838,6 +985,43 @@ function yieldToMicrotasks() {
 
 function isTerminalEngineStatus(status: EngineStatus) {
   return status === "destroyed" || status === "failed";
+}
+
+function isDestroyedEngineStatus(status: EngineStatus) {
+  return status === "destroyed";
+}
+
+function decodeWavSample(view: DataView, offset: number, header: WavHeader) {
+  if (offset < 0 || offset + header.bitsPerSample / 8 > view.byteLength) {
+    return Number.NaN;
+  }
+
+  if (header.format === "float") {
+    return header.bitsPerSample === 32 ? view.getFloat32(offset, true) : Number.NaN;
+  }
+
+  if (header.bitsPerSample === 8) {
+    return (view.getUint8(offset) - 128) / 128;
+  }
+
+  if (header.bitsPerSample === 16) {
+    return Math.max(-1, view.getInt16(offset, true) / 32768);
+  }
+
+  if (header.bitsPerSample === 24) {
+    const value =
+      view.getUint8(offset) |
+      (view.getUint8(offset + 1) << 8) |
+      (view.getUint8(offset + 2) << 16);
+    const signed = value & 0x800000 ? value | 0xff000000 : value;
+    return Math.max(-1, signed / 8388608);
+  }
+
+  if (header.bitsPerSample === 32) {
+    return Math.max(-1, view.getInt32(offset, true) / 2147483648);
+  }
+
+  return Number.NaN;
 }
 
 function normalizeTrackTimeSeconds(value: number) {

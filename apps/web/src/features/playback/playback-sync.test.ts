@@ -116,6 +116,27 @@ describe("syncLocalPlaybackWindow", () => {
     expect(result.didSeek).toBe(true);
   });
 
+  it("does not throw when the media element rejects a seek before metadata is ready", () => {
+    const audio = {
+      get currentTime() {
+        return 0;
+      },
+      set currentTime(_value: number) {
+        throw new DOMException("metadata not loaded", "InvalidStateError");
+      },
+      playbackRate: 1
+    } as HTMLAudioElement;
+
+    const result = syncLocalPlaybackWindow(audio, 10, true, {
+      correctionMode: "audible-local-follow",
+      hardDriftMs: 900
+    });
+
+    expect(result.didSeek).toBe(false);
+    expect(result.seekFailed).toBe(true);
+    expect(audio.playbackRate).toBe(1);
+  });
+
   it("keeps audible local follow at fixed rate before hard drift to avoid pitch shift", () => {
     const audio = {
       currentTime: 10,
