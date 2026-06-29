@@ -1242,7 +1242,10 @@ export function useTrackUploads(options: {
         (rawCachedManifest.totalChunks !== expectedManifest.totalChunks ||
           rawCachedManifest.chunkSize !== expectedManifest.chunkSize)
       ) {
-        await deleteCachedPiecesForTrack(trackId);
+        await deleteCachedPiecesForTrack(trackId, undefined, {
+          fileHash: track.fileHash,
+          ownerKey: localCacheOwnerKey
+        });
         manualCacheChunkIndexesRef.current.delete(trackId);
       }
 

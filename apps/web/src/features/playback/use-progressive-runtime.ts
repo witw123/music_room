@@ -163,6 +163,20 @@ function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
     : "progressive-local-play-blocked";
 }
 
+export function resolvePlaybackSourceAfterProgressiveRuntimeFailure(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  hasProgressiveRuntimeFailure: boolean;
+}) {
+  if (
+    input.hasProgressiveRuntimeFailure &&
+    input.activePlaybackSource === "lossless-local"
+  ) {
+    return "progressive-local" satisfies ProgressivePlaybackSource;
+  }
+
+  return input.activePlaybackSource;
+}
+
 export function resolveFullLocalPlaybackSessionState(input: {
   currentSession: FullLocalPlaybackSessionState;
   playbackSurfaceKey: string | null;
@@ -996,9 +1010,21 @@ export function useProgressiveRuntime({
         progressivePcmEngineRef.current?.destroy();
         progressivePcmEngineRef.current = null;
         setProgressiveFallbackReason("progressive-init-failed");
+        const nextSource = resolvePlaybackSourceAfterProgressiveRuntimeFailure({
+          activePlaybackSource,
+          hasProgressiveRuntimeFailure: true
+        });
+        if (nextSource !== activePlaybackSource) {
+          setActivePlaybackSource(nextSource);
+        }
       }
     },
-    [currentProgressiveManifest?.trackId, setProgressiveFallbackReason]
+    [
+      activePlaybackSource,
+      currentProgressiveManifest?.trackId,
+      setActivePlaybackSource,
+      setProgressiveFallbackReason
+    ]
   );
 
   useEffect(() => {

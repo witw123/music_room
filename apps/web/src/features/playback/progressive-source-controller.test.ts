@@ -24,6 +24,23 @@ describe("progressive source controller", () => {
     expect(getSlidingWindowPlaybackSource({ format: "flac", hasFullLocalTrack: true })).toBe("full-local");
   });
 
+  it("does not select the lossless local source when the progressive engine is unavailable", () => {
+    expect(
+      getSlidingWindowPlaybackSource({
+        format: "flac",
+        hasFullLocalTrack: false,
+        progressiveEngineType: "none"
+      })
+    ).toBe("progressive-local");
+    expect(
+      getSlidingWindowPlaybackSource({
+        format: "wav",
+        hasFullLocalTrack: false,
+        progressiveEngineType: "none"
+      })
+    ).toBe("progressive-local");
+  });
+
   it("uses local playback for listeners when cache-only playback is enabled", () => {
     expect(
       getRoomPlaybackSurfaceSource({

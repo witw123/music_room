@@ -8,6 +8,7 @@ import {
   resolveFullLocalPlaybackSessionState,
   shouldPreferImmediateFullLocalRecovery,
   shouldPreferLocalTakeover,
+  resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   shouldPrepareProgressiveRuntimeForSource,
   shouldAttemptProgressiveLocalPlayback,
   shouldRecoverPausedFullLocalPlayback,
@@ -435,5 +436,20 @@ describe("use-progressive-runtime policy helpers", () => {
         progressiveFallbackReason: "progressive-init-failed"
       })
     ).toBe(false);
+  });
+
+  it("downgrades lossless local playback after the PCM runtime fails", () => {
+    expect(
+      resolvePlaybackSourceAfterProgressiveRuntimeFailure({
+        activePlaybackSource: "lossless-local",
+        hasProgressiveRuntimeFailure: true
+      })
+    ).toBe("progressive-local");
+    expect(
+      resolvePlaybackSourceAfterProgressiveRuntimeFailure({
+        activePlaybackSource: "full-local",
+        hasProgressiveRuntimeFailure: true
+      })
+    ).toBe("full-local");
   });
 });

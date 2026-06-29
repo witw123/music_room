@@ -352,6 +352,146 @@ describe("use-room-derived-state helpers", () => {
       chunkSize: 256 * 1024,
       source: "live_upload"
     });
+
+    expect(
+      buildAvailabilitySummary({
+        tracks: [
+          {
+            id: "track_1",
+            title: "Track",
+            artist: "Artist",
+            album: null,
+            durationMs: 120_000,
+            bitrate: null,
+            sizeBytes: 43_000_000,
+            codec: "flac",
+            mimeType: "audio/flac",
+            fileHash: "hash_1",
+            artworkUrl: null,
+            ownerSessionId: "host",
+            ownerNickname: "Host",
+            sourceType: "local_upload",
+            relayManifest: {
+              totalChunks: 169,
+              chunkSize: 256 * 1024,
+              pieceMimeType: "audio/flac"
+            },
+            pieceManifest: {
+              totalChunks: 169,
+              chunkSize: 256 * 1024,
+              pieceMimeType: "audio/flac"
+            }
+          }
+        ],
+        availabilityByTrack: availability,
+        roomId: "room_1",
+        activeMemberPeerIds: new Set(["peer_host", "peer_listener"]),
+        localPeerId: "peer_listener"
+      })[0]
+    ).toMatchObject({
+      peerCount: 1,
+      totalChunks: 169,
+      sources: ["Host (live_upload)"]
+    });
+  });
+
+  it("synthesizes current playback source availability for the cache summary", () => {
+    const track = {
+      id: "track_1",
+      title: "Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 120_000,
+      bitrate: null,
+      sizeBytes: 43_000_000,
+      codec: "flac",
+      mimeType: "audio/flac",
+      fileHash: "hash_1",
+      artworkUrl: null,
+      ownerSessionId: "host",
+      ownerNickname: "Host",
+      sourceType: "local_upload",
+      relayManifest: {
+        totalChunks: 169,
+        chunkSize: 256 * 1024,
+        pieceMimeType: "audio/flac"
+      },
+      pieceManifest: {
+        totalChunks: 169,
+        chunkSize: 256 * 1024,
+        pieceMimeType: "audio/flac"
+      }
+    } satisfies RoomSnapshot["tracks"][number];
+    const availability = resolveDerivedAvailabilityByTrack({
+      roomSnapshot: {
+        room: {
+          id: "room_1",
+          hostId: "host",
+          joinCode: "ABCD12",
+          visibility: "private",
+          members: [
+            {
+              id: "host",
+              nickname: "Host",
+              role: "host",
+              joinedAt: "2026-04-04T00:00:00.000Z",
+              peerId: "peer_host",
+              presenceState: "offline"
+            },
+            {
+              id: "source",
+              nickname: "Source",
+              role: "member",
+              joinedAt: "2026-04-04T00:01:00.000Z",
+              peerId: "peer_source",
+              presenceState: "online"
+            },
+            {
+              id: "listener",
+              nickname: "Listener",
+              role: "member",
+              joinedAt: "2026-04-04T00:02:00.000Z",
+              peerId: "peer_listener",
+              presenceState: "online"
+            }
+          ],
+          playback: {
+            status: "playing",
+            currentTrackId: "track_1",
+            currentQueueItemId: "queue_1",
+            sourceSessionId: "source",
+            sourcePeerId: "peer_source",
+            sourceTrackId: "track_1",
+            positionMs: 0,
+            startedAt: "2026-04-04T00:02:30.000Z",
+            queueVersion: 1,
+            playbackRevision: 2,
+            mediaEpoch: 1
+          },
+          presenceRevision: 1,
+          roomRevision: 1
+        },
+        tracks: [track],
+        queue: [],
+        playlists: []
+      },
+      availabilityByTrack: {},
+      localPeerId: "peer_listener"
+    });
+
+    expect(
+      buildAvailabilitySummary({
+        tracks: [track],
+        availabilityByTrack: availability,
+        roomId: "room_1",
+        activeMemberPeerIds: new Set(["peer_source", "peer_listener"]),
+        localPeerId: "peer_listener"
+      })[0]
+    ).toMatchObject({
+      peerCount: 1,
+      totalChunks: 169,
+      sources: ["Source (live_upload)"]
+    });
   });
 
   it("hides diagnostics from peers that have already left the room", () => {

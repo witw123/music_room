@@ -73,6 +73,7 @@ export function useRoomDerivedState({
   const roomId = roomSnapshot?.room.id ?? null;
   const roomMembers = roomSnapshot?.room.members ?? null;
   const roomTracks = roomSnapshot?.tracks ?? null;
+  const roomPlayback = roomSnapshot?.room.playback ?? null;
   const host = roomMembers?.find((member) => member.role === "host");
   const activeMemberPeerIds = useMemo(
     () => getActiveMemberPeerIds(roomMembers ?? []),
@@ -89,11 +90,12 @@ export function useRoomDerivedState({
         manualCacheTrackIds: roomTracks.map((track) => track.id),
         roomId,
         members: roomMembers,
+        playback: roomPlayback,
         tracks: roomTracks,
         localPeerId: peerId
       });
     },
-    [availabilityByTrack, peerId, roomId, roomMembers, roomTracks]
+    [availabilityByTrack, peerId, roomId, roomMembers, roomPlayback, roomTracks]
   );
   const systemDiagnostic = useMemo(
     () => peerDiagnostics.find((peer) => peer.peerId === "system") ?? null,
@@ -487,6 +489,7 @@ export function resolveDerivedAvailabilityByTrack(input: {
     manualCacheTrackIds: input.roomSnapshot.tracks.map((track) => track.id),
     roomId: input.roomSnapshot.room.id,
     members: input.roomSnapshot.room.members,
+    playback: input.roomSnapshot.room.playback,
     tracks: input.roomSnapshot.tracks,
     localPeerId: input.localPeerId
   });

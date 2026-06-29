@@ -1,5 +1,6 @@
 import {
   getFullLocalStableWindowMs,
+  type ProgressiveEngineType,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
 import type { SlidingWindowFormat } from "./sliding-window/format-detection";
@@ -28,12 +29,17 @@ export function getInitialProgressivePlaybackSource(
 export function getSlidingWindowPlaybackSource(input: {
   format: SlidingWindowFormat;
   hasFullLocalTrack: boolean;
+  progressiveEngineType?: ProgressiveEngineType | null;
 }) {
   if (input.hasFullLocalTrack) {
     return "full-local" satisfies ProgressivePlaybackSource;
   }
 
   if (input.format === "flac" || input.format === "wav") {
+    if (input.progressiveEngineType === "none") {
+      return "progressive-local" satisfies ProgressivePlaybackSource;
+    }
+
     return "lossless-local" satisfies ProgressivePlaybackSource;
   }
 

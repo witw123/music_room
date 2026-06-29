@@ -270,6 +270,25 @@ export async function deleteTrackPieceManifest(trackId: string) {
   await musicRoomDatabase.trackPieceManifests.delete(trackId);
 }
 
+export function selectTrackPieceManifestIdsForDeletion<
+  T extends { trackId: string; fileHash?: string | null }
+>(
+  manifests: T[],
+  input: { trackId: string; fileHash?: string | null }
+) {
+  return [
+    ...new Set(
+      manifests
+        .filter((manifest) =>
+          input.fileHash
+            ? manifest.fileHash === input.fileHash
+            : manifest.trackId === input.trackId
+        )
+        .map((manifest) => manifest.trackId)
+    )
+  ].sort();
+}
+
 export async function deleteTrackPieceManifests(trackIds: string[]) {
   if (trackIds.length === 0) {
     return;
@@ -315,6 +334,37 @@ export function filterCachedPiecesByGeometry<T extends { pieceId: string }>(
   options?: { fileHash?: string | null; chunkSize?: number | null }
 ) {
   return pieces.filter((piece) => cachedPieceMatchesGeometry(piece, options));
+}
+
+export function selectCachedPiecesForTrackDeletion<
+  T extends {
+    pieceId: string;
+    trackId: string;
+    fileHash?: string | null;
+    peerId?: string | null;
+    ownerKey?: string | null;
+  }
+>(
+  pieces: T[],
+  input: {
+    trackId: string;
+    fileHash?: string | null;
+    ownerKey?: string | null;
+  }
+) {
+  const ownerKey = input.ownerKey ?? null;
+  return pieces.filter((piece) => {
+    const pieceOwnerKey = piece.ownerKey ?? piece.peerId ?? null;
+    if (ownerKey && pieceOwnerKey !== ownerKey) {
+      return false;
+    }
+
+    if (input.fileHash) {
+      return piece.fileHash === input.fileHash || (!piece.fileHash && piece.trackId === input.trackId);
+    }
+
+    return piece.trackId === input.trackId;
+  });
 }
 
 function cachedPieceMatchesGeometry(
@@ -402,21 +452,64 @@ export async function getCachedPiecesForTrack(
   );
 }
 
-export async function deleteCachedPiecesForTrack(trackId: string, peerId?: string) {
-  const pieces = peerId
-    ? await musicRoomDatabase.trackPieces.where("[trackId+ownerKey]").equals([trackId, peerId]).toArray()
+export async function deleteCachedPiecesForTrack(
+  trackId: string,
+  peerId?: string,
+  options?: { fileHash?: string | null; ownerKey?: string | null }
+) {
+  const ownerKey = options?.ownerKey ?? peerId ?? null;
+  const trackPieces = ownerKey
+    ? await musicRoomDatabase.trackPieces.where("[trackId+ownerKey]").equals([trackId, ownerKey]).toArray()
     : await musicRoomDatabase.trackPieces.where("trackId").equals(trackId).toArray();
+  const fileHashPieces = options?.fileHash
+    ? ownerKey
+      ? await musicRoomDatabase.trackPieces
+          .where("[fileHash+ownerKey]")
+          .equals([options.fileHash, ownerKey])
+          .toArray()
+      : await musicRoomDatabase.trackPieces.where("fileHash").equals(options.fileHash).toArray()
+    : [];
+  const pieces = selectCachedPiecesForTrackDeletion(
+    [...new Map([...trackPieces, ...fileHashPieces].map((piece) => [piece.pieceId, piece])).values()],
+    {
+      trackId,
+      fileHash: options?.fileHash,
+      ownerKey
+    }
+  );
+  const shouldDeleteManifest = !peerId;
+  const trackManifest = shouldDeleteManifest
+    ? await musicRoomDatabase.trackPieceManifests.get(trackId)
+    : null;
+  const fileHashManifests =
+    shouldDeleteManifest && options?.fileHash
+      ? await musicRoomDatabase.trackPieceManifests.where("fileHash").equals(options.fileHash).toArray()
+      : [];
+  const manifestTrackIds = shouldDeleteManifest
+    ? selectTrackPieceManifestIdsForDeletion(
+        [
+          ...(trackManifest ? [trackManifest] : []),
+          ...fileHashManifests
+        ],
+        {
+          trackId,
+          fileHash: options?.fileHash
+        }
+      )
+    : [];
 
-  if (pieces.length === 0) {
-    if (!peerId) {
+  if (pieces.length === 0 && manifestTrackIds.length === 0) {
+    if (shouldDeleteManifest) {
       await deleteTrackPieceManifest(trackId);
     }
     return 0;
   }
 
-  if (!peerId) {
-    queuedManifestUpserts.delete(trackId);
-    clearQueuedTrackPieceManifestTimer(trackId);
+  if (shouldDeleteManifest) {
+    for (const manifestTrackId of manifestTrackIds.length > 0 ? manifestTrackIds : [trackId]) {
+      queuedManifestUpserts.delete(manifestTrackId);
+      clearQueuedTrackPieceManifestTimer(manifestTrackId);
+    }
   }
 
   await musicRoomDatabase.transaction(
@@ -424,9 +517,13 @@ export async function deleteCachedPiecesForTrack(trackId: string, peerId?: strin
     musicRoomDatabase.trackPieces,
     musicRoomDatabase.trackPieceManifests,
     async () => {
-      await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
-      if (!peerId) {
-        await musicRoomDatabase.trackPieceManifests.delete(trackId);
+      if (pieces.length > 0) {
+        await musicRoomDatabase.trackPieces.bulkDelete(pieces.map((piece) => piece.pieceId));
+      }
+      if (shouldDeleteManifest) {
+        await musicRoomDatabase.trackPieceManifests.bulkDelete(
+          manifestTrackIds.length > 0 ? manifestTrackIds : [trackId]
+        );
       }
     }
   );

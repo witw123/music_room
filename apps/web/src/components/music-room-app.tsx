@@ -7,7 +7,12 @@ import type {
   RoomMediaConnectionState,
   RoomSnapshot
 } from "@music-room/shared";
-import { ChunkScheduler, useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
+import {
+  ChunkScheduler,
+  selectCanonicalTrackAvailabilityAnnouncement,
+  useAvailabilityAnnouncements,
+  usePeerDiagnostics
+} from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -31,7 +36,9 @@ import { getSlidingWindowPlaybackSource } from "@/features/playback/progressive-
 import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
-  getEffectivePlaybackPositionMs
+  buildProgressiveTrackManifest,
+  getEffectivePlaybackPositionMs,
+  getProgressiveEngineType
 } from "@/features/playback/progressive-playback";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
@@ -302,6 +309,25 @@ export function MusicRoomApp({
     return next;
   }, [cacheLibraryTracks, roomSnapshot, uploadedTracks]);
 
+  const currentProgressiveEngineTypeForSource = useMemo(() => {
+    if (!currentTrack?.id) {
+      return "none";
+    }
+
+    const trackAvailability = availabilityByTrack[currentTrack.id] ?? {};
+    const localAvailability = trackAvailability[peerId] ?? null;
+    const manifestHint = selectCanonicalTrackAvailabilityAnnouncement(
+      Object.values(trackAvailability)
+    );
+    const manifest = buildProgressiveTrackManifest(
+      currentTrack,
+      localAvailability,
+      manifestHint
+    );
+
+    return getProgressiveEngineType(manifest);
+  }, [availabilityByTrack, currentTrack, peerId]);
+
   const {
     progressiveSchedulerPolicy,
     transportGovernorMode,
@@ -568,11 +594,18 @@ export function MusicRoomApp({
           mimeType: currentTrack?.mimeType ?? null,
           codec: currentTrack?.codec ?? null,
           title: currentTrack?.title ?? null
-        })
+        }),
+        progressiveEngineType: currentProgressiveEngineTypeForSource
       })
     );
     setProgressiveFallbackReason(null);
-  }, [playbackSurfaceKey, currentPlaybackTrackId, currentTrack, hasFullLocalTrack]);
+  }, [
+    playbackSurfaceKey,
+    currentPlaybackTrackId,
+    currentTrack,
+    currentProgressiveEngineTypeForSource,
+    hasFullLocalTrack
+  ]);
 
   const previousPlaybackRef = useRef(roomSnapshot?.room.playback ?? null);
 
