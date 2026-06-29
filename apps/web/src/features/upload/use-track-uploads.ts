@@ -359,6 +359,47 @@ export function mergeManualCachePlanTaskProgress(input: {
   };
 }
 
+export function mergeManualCachePieceTaskProgress(input: {
+  current:
+    | Pick<ManualCacheTask, "completedChunks" | "totalChunks" | "status">
+    | null
+    | undefined;
+  knownChunkIndexes: Set<number> | null | undefined;
+  receivedTotalChunks: number | null | undefined;
+}) {
+  const completedChunks = Math.max(
+    input.current?.completedChunks ?? 0,
+    input.knownChunkIndexes?.size ?? 0
+  );
+  const totalChunks = Math.max(input.current?.totalChunks ?? 0, input.receivedTotalChunks ?? 0);
+
+  return {
+    completedChunks,
+    totalChunks,
+    status:
+      input.current?.status === "paused" ||
+      input.current?.status === "ready" ||
+      input.current?.status === "assembling"
+        ? input.current.status
+        : ("downloading" as const)
+  };
+}
+
+export function shouldIgnoreManualCachePieceTaskUpdate(status: ManualCacheTaskStatus) {
+  return status === "ready" || status === "assembling";
+}
+
+export function pruneManualCacheChunkIndexesByActiveTracks(
+  chunkIndexesByTrack: Map<string, Set<number>>,
+  activeTrackIds: Set<string>
+) {
+  for (const trackId of chunkIndexesByTrack.keys()) {
+    if (!activeTrackIds.has(trackId)) {
+      chunkIndexesByTrack.delete(trackId);
+    }
+  }
+}
+
 export function shouldAssembleManualCachePlanProgress(input: {
   status: ManualCacheTaskStatus | null | undefined;
   completedChunks: number;
@@ -460,6 +501,10 @@ export function useTrackUploads(options: {
   const availabilityAnnouncementTtlRef = useRef<Map<string, number>>(new Map());
   const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
   const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
+  const roomTrackIdsKey = useMemo(
+    () => [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])].sort().join("|"),
+    [roomSnapshot?.tracks]
+  );
 
   const manualCacheTrackIds = useMemo(
     () =>
@@ -568,6 +613,9 @@ export function useTrackUploads(options: {
             ownerKey: localCacheOwnerKey,
             chunkSize: expectedManifest?.chunkSize
           }).then((indexes) => {
+            if (cancelled) {
+              return;
+            }
             manualCacheChunkIndexesRef.current.set(task.trackId, new Set(indexes));
           });
         }
@@ -585,10 +633,25 @@ export function useTrackUploads(options: {
       void clearTransientTrackCacheData();
       return;
     }
+    void clearTransientTrackCacheData();
+  }, [roomSnapshot?.room.id]);
 
+  useEffect(() => {
+    if (!roomSnapshot?.room.id) {
+      return;
+    }
+    const activeTrackIds = new Set(roomTrackIdsKey ? roomTrackIdsKey.split("|") : []);
+    pruneManualCacheChunkIndexesByActiveTracks(
+      manualCacheChunkIndexesRef.current,
+      activeTrackIds
+    );
+    for (const trackId of manualCacheAssemblingTrackIdsRef.current.keys()) {
+      if (!activeTrackIds.has(trackId)) {
+        manualCacheAssemblingTrackIdsRef.current.delete(trackId);
+      }
+    }
     setUploadedTracks((current) => {
       const next = { ...current };
-      const activeTrackIds = new Set(roomSnapshot?.tracks.map((track) => track.id) ?? []);
       for (const trackId of Object.keys(current)) {
         if (!activeTrackIds.has(trackId)) {
           delete next[trackId];
@@ -596,8 +659,7 @@ export function useTrackUploads(options: {
       }
       return next;
     });
-    void clearTransientTrackCacheData();
-  }, [roomSnapshot?.room.id, roomSnapshot?.tracks]);
+  }, [roomSnapshot?.room.id, roomTrackIdsKey]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession) {
@@ -964,9 +1026,11 @@ export function useTrackUploads(options: {
           mimeType
         });
 
+        const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
         const pieces = await getCachedPiecesForTrack(trackId, peerId, {
           fileHash: track.fileHash,
-          ownerKey: localCacheOwnerKey
+          ownerKey: localCacheOwnerKey,
+          chunkSize: expectedManifest?.chunkSize
         });
         if (pieces.length < totalChunks) {
           updateManualCacheTask(trackId, (current) =>
@@ -1394,9 +1458,17 @@ export function useTrackUploads(options: {
         if (!current) {
           return null;
         }
+        if (shouldIgnoreManualCachePieceTaskUpdate(current.status)) {
+          return null;
+        }
 
-        const nextCompletedChunks = chunkIndexes.size;
-        const nextTotalChunks = Math.max(current.totalChunks, input.totalChunks);
+        const progress = mergeManualCachePieceTaskProgress({
+          current,
+          knownChunkIndexes: chunkIndexes,
+          receivedTotalChunks: input.totalChunks
+        });
+        const nextCompletedChunks = progress.completedChunks;
+        const nextTotalChunks = progress.totalChunks;
         shouldAssemble =
           current.status !== "paused" &&
           nextTotalChunks > 0 &&
@@ -1406,7 +1478,7 @@ export function useTrackUploads(options: {
           status:
             current.status === "paused" || shouldAssemble
               ? current.status
-              : "downloading",
+              : progress.status,
           errorMessage: null,
           blockedReason: null,
           completedChunks: nextCompletedChunks,
@@ -1446,6 +1518,18 @@ export function useTrackUploads(options: {
       if (!track) {
         return;
       }
+      const knownChunkIndexes =
+        manualCacheChunkIndexesRef.current.get(plan.trackId) ?? new Set<number>();
+      const planTotalChunks = plan.manifest?.totalChunks ?? 0;
+      for (const chunkIndex of plan.localPieceIndexes) {
+        if (
+          chunkIndex >= 0 &&
+          (planTotalChunks <= 0 || chunkIndex < planTotalChunks)
+        ) {
+          knownChunkIndexes.add(chunkIndex);
+        }
+      }
+      manualCacheChunkIndexesRef.current.set(plan.trackId, knownChunkIndexes);
       let shouldAssembleFromPlan = false;
       let assembleMimeType: string | null = null;
       let assembleTotalChunks = 0;
@@ -1475,7 +1559,7 @@ export function useTrackUploads(options: {
         const progress = mergeManualCachePlanTaskProgress({
           current,
           planLocalPieceIndexes: plan.localPieceIndexes,
-          inMemoryPieceIndexes: manualCacheChunkIndexesRef.current.get(plan.trackId),
+          inMemoryPieceIndexes: knownChunkIndexes,
           planTotalChunks: plan.manifest?.totalChunks ?? current?.totalChunks ?? 0,
           planBlockedReason: plan.blockedReason
         });

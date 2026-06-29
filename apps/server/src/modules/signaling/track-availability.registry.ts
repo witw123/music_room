@@ -1,5 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import type { TrackAvailabilityAnnouncement } from "@music-room/shared";
+import {
+  mergeTrackAvailabilityAnnouncement,
+  type TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import { RedisService } from "../../infra/redis/redis.service";
 
 @Injectable()
@@ -23,9 +26,15 @@ export class TrackAvailabilityRegistry {
 
   setAnnouncement(roomId: string, announcement: TrackAvailabilityAnnouncement) {
     const roomAvailability = this.availabilityByRoom.get(roomId) ?? new Map();
-    roomAvailability.set(this.announcementKey(announcement), announcement);
+    const key = this.announcementKey(announcement);
+    const mergedAnnouncement = mergeTrackAvailabilityAnnouncement(
+      roomAvailability.get(key),
+      announcement
+    );
+    roomAvailability.set(key, mergedAnnouncement);
     this.availabilityByRoom.set(roomId, roomAvailability);
     void this.persistSnapshot(roomId);
+    return mergedAnnouncement;
   }
 
   removePeer(roomId: string, peerId: string) {
@@ -71,8 +80,7 @@ export class TrackAvailabilityRegistry {
       if (emittedKeys.has(key)) {
         continue;
       }
-      this.setAnnouncement(roomId, announcement);
-      emit(announcement);
+      emit(this.setAnnouncement(roomId, announcement));
     }
   }
 

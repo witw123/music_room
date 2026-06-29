@@ -6,12 +6,15 @@ import {
   buildRegisterTrackPayload,
   isManualCachePieceCompatible,
   mergeHydratedManualCacheTasks,
+  mergeManualCachePieceTaskProgress,
   mergeManualCachePlanTaskProgress,
+  pruneManualCacheChunkIndexesByActiveTracks,
   resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
   resolveAutomaticPlaybackCacheTaskMode,
   resolveStalePlaybackDemandTaskIds,
   shouldCreatePlaybackDemandTaskFromCachePiece,
+  shouldIgnoreManualCachePieceTaskUpdate,
   shouldAssembleManualCachePlanProgress,
   shouldHydrateCacheTaskPieceIndexes,
   shouldAnnounceTrackAvailability,
@@ -388,6 +391,67 @@ describe("mergeManualCachePlanTaskProgress", () => {
       blockedReason: null,
       lastError: null
     });
+  });
+});
+
+describe("mergeManualCachePieceTaskProgress", () => {
+  it("does not let a freshly received piece reset visible progress after in-memory indexes were pruned", () => {
+    expect(
+      mergeManualCachePieceTaskProgress({
+        current: {
+          completedChunks: 40,
+          totalChunks: 169,
+          status: "downloading"
+        },
+        knownChunkIndexes: new Set([80]),
+        receivedTotalChunks: 169
+      })
+    ).toMatchObject({
+      completedChunks: 40,
+      totalChunks: 169,
+      status: "downloading"
+    });
+  });
+
+  it("advances visible progress when the merged known piece set is ahead of the task", () => {
+    expect(
+      mergeManualCachePieceTaskProgress({
+        current: {
+          completedChunks: 40,
+          totalChunks: 169,
+          status: "downloading"
+        },
+        knownChunkIndexes: new Set(Array.from({ length: 41 }, (_, index) => index)),
+        receivedTotalChunks: 169
+      })
+    ).toMatchObject({
+      completedChunks: 41,
+      totalChunks: 169,
+      status: "downloading"
+    });
+  });
+});
+
+describe("shouldIgnoreManualCachePieceTaskUpdate", () => {
+  it("ignores late received pieces once a cache task is ready or already assembling", () => {
+    expect(shouldIgnoreManualCachePieceTaskUpdate("ready")).toBe(true);
+    expect(shouldIgnoreManualCachePieceTaskUpdate("assembling")).toBe(true);
+    expect(shouldIgnoreManualCachePieceTaskUpdate("downloading")).toBe(false);
+    expect(shouldIgnoreManualCachePieceTaskUpdate("paused")).toBe(false);
+  });
+});
+
+describe("pruneManualCacheChunkIndexesByActiveTracks", () => {
+  it("keeps cached chunk indexes for tracks still present in the same room snapshot", () => {
+    const chunkIndexesByTrack = new Map<string, Set<number>>([
+      ["track_1", new Set([0, 1, 2])],
+      ["track_2", new Set([0])]
+    ]);
+
+    pruneManualCacheChunkIndexesByActiveTracks(chunkIndexesByTrack, new Set(["track_1"]));
+
+    expect([...chunkIndexesByTrack.keys()]).toEqual(["track_1"]);
+    expect([...chunkIndexesByTrack.get("track_1") ?? []]).toEqual([0, 1, 2]);
   });
 });
 

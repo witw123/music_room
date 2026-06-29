@@ -77,6 +77,81 @@ describe("availability-state helpers", () => {
     expect(next).toBe(current);
   });
 
+  it("merges compatible partial announcements so availability never regresses", () => {
+    const current = {
+      track_1: {
+        peer_local: {
+          roomId: "room_1",
+          trackId: "track_1",
+          ownerPeerId: "peer_local",
+          nickname: "Listener",
+          assetKind: "relay" as const,
+          assetHash: "hash_1",
+          totalChunks: 8,
+          chunkSize: 128 * 1024,
+          availableChunks: [0, 1, 2, 3],
+          source: "local_cache" as const,
+          announcedAt: "2026-04-03T16:30:00.000Z"
+        }
+      }
+    };
+
+    const next = upsertAvailabilityAnnouncement(current, {
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_local",
+      nickname: "Listener",
+      assetKind: "relay",
+      assetHash: "hash_1",
+      totalChunks: 8,
+      chunkSize: 128 * 1024,
+      availableChunks: [4],
+      source: "local_cache",
+      announcedAt: "2026-04-03T16:31:00.000Z"
+    });
+
+    expect(next.track_1.peer_local.availableChunks).toEqual([0, 1, 2, 3, 4]);
+    expect(next.track_1.peer_local.announcedAt).toBe("2026-04-03T16:31:00.000Z");
+  });
+
+  it("replaces incompatible geometry instead of merging unrelated chunks", () => {
+    const current = {
+      track_1: {
+        peer_local: {
+          roomId: "room_1",
+          trackId: "track_1",
+          ownerPeerId: "peer_local",
+          nickname: "Listener",
+          assetKind: "relay" as const,
+          assetHash: "hash_old",
+          totalChunks: 8,
+          chunkSize: 128 * 1024,
+          availableChunks: [0, 1, 2, 3],
+          source: "local_cache" as const,
+          announcedAt: "2026-04-03T16:30:00.000Z"
+        }
+      }
+    };
+
+    const next = upsertAvailabilityAnnouncement(current, {
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_local",
+      nickname: "Listener",
+      assetKind: "relay",
+      assetHash: "hash_new",
+      totalChunks: 16,
+      chunkSize: 64 * 1024,
+      availableChunks: [4],
+      source: "local_cache",
+      announcedAt: "2026-04-03T16:31:00.000Z"
+    });
+
+    expect(next.track_1.peer_local.availableChunks).toEqual([4]);
+    expect(next.track_1.peer_local.totalChunks).toBe(16);
+    expect(next.track_1.peer_local.chunkSize).toBe(64 * 1024);
+  });
+
   it("removes every availability announcement owned by a cleared peer", () => {
     const current = {
       track_1: {

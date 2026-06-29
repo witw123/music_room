@@ -345,8 +345,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           return;
         }
 
-      this.trackAvailabilityRegistry.setAnnouncement(message.roomId, message.payload);
-      this.server.to(message.roomId).emit("piece.availability", message.payload);
+      const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(
+        message.roomId,
+        message.payload
+      );
+      this.server.to(message.roomId).emit("piece.availability", mergedAnnouncement);
     });
 
     void this.redisService.subscribe(pieceAvailabilityClearChannel, (payload) => {
@@ -420,14 +423,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       throw new WsException("Peer mismatch.");
     }
 
-    this.trackAvailabilityRegistry.setAnnouncement(payload.roomId, payload);
-    client.to(payload.roomId).emit("piece.availability", payload);
+    const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(payload.roomId, payload);
+    client.to(payload.roomId).emit("piece.availability", mergedAnnouncement);
     await this.redisService.publish(pieceAvailabilityChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId: payload.roomId,
-      payload
+      payload: mergedAnnouncement
     });
-    return payload;
+    return mergedAnnouncement;
   }
 
   @SubscribeMessage("room.chat")

@@ -1,4 +1,7 @@
-import type { TrackAvailabilityAnnouncement } from "@music-room/shared";
+import {
+  mergeTrackAvailabilityAnnouncement,
+  type TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 
 export type AvailabilityState = Record<string, Record<string, TrackAvailabilityAnnouncement>>;
 
@@ -50,14 +53,10 @@ export function upsertAvailabilityAnnouncement(
 ) {
   const trackAvailability = current[announcement.trackId] ?? {};
   const existing = trackAvailability[announcement.ownerPeerId];
+  const nextAnnouncement = mergeTrackAvailabilityAnnouncement(existing, announcement);
 
   if (
-    existing &&
-    existing.totalChunks === announcement.totalChunks &&
-    existing.chunkSize === announcement.chunkSize &&
-    existing.source === announcement.source &&
-    existing.availableChunks.length === announcement.availableChunks.length &&
-    existing.availableChunks.every((chunk, index) => chunk === announcement.availableChunks[index])
+    existing === nextAnnouncement
   ) {
     return current;
   }
@@ -66,7 +65,7 @@ export function upsertAvailabilityAnnouncement(
     ...current,
     [announcement.trackId]: {
       ...trackAvailability,
-      [announcement.ownerPeerId]: announcement
+      [announcement.ownerPeerId]: nextAnnouncement
     }
   };
 }
