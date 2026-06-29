@@ -19,6 +19,25 @@ export function chunkIndexForPlaybackPosition(
   );
 }
 
+export function getRequiredDecodablePrefixChunkCount(input: {
+  manifest: Pick<SlidingWindowManifest, "durationMs" | "totalChunks">;
+  playbackPositionMs: number;
+  lookAheadMs: number;
+}) {
+  if (input.manifest.durationMs <= 0 || input.manifest.totalChunks <= 0) {
+    return 0;
+  }
+
+  const prefixEndPositionMs = Math.min(
+    input.manifest.durationMs,
+    Math.max(0, input.playbackPositionMs) + Math.max(0, input.lookAheadMs)
+  );
+  return Math.min(
+    input.manifest.totalChunks,
+    chunkIndexForPlaybackPosition(input.manifest, prefixEndPositionMs) + 1
+  );
+}
+
 export function resolveSlidingWindowChunkOrder(input: {
   manifest: SlidingWindowManifest;
   playbackPositionMs: number;

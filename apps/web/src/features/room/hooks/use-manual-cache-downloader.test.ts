@@ -524,7 +524,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(plans[0]?.didRequest).toBe(true);
   });
 
-  it("prefers the active playback window before historical decode prefix for listener sync", async () => {
+  it("fills the decodable prefix through the active startup window before later chunks", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -575,7 +575,7 @@ describe("planManualCacheDirectRequests", () => {
       12,
       expect.any(Number)
     );
-    expect(requestPieces.mock.calls[0]?.[2].slice(0, 5)).toEqual([0, 5, 6, 7, 8]);
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 9)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
   it("keeps automatic playback cache requests finite when duration metadata is missing", async () => {

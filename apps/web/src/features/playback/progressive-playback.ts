@@ -1,4 +1,5 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import { getRequiredDecodablePrefixChunkCount } from "./sliding-window/playback-window-scheduler";
 
 export type ProgressivePlaybackSource =
   | "lossless-local"
@@ -347,6 +348,15 @@ export function getAheadBufferedMs(input: {
   return Math.max(0, Math.floor(bufferedEndMs - Math.max(0, input.playbackPositionMs)));
 }
 
+export function getDecodableAheadBufferedMs(input: {
+  manifest: ProgressiveTrackManifest | null;
+  availableChunks: number[];
+  playbackPositionMs: number;
+}) {
+  const contiguousBufferedMs = getContiguousBufferedMs(input.manifest, input.availableChunks);
+  return Math.max(0, Math.floor(contiguousBufferedMs - Math.max(0, input.playbackPositionMs)));
+}
+
 export function isStartupReady(input: {
   manifest: ProgressiveTrackManifest | null;
   availableChunks: number[];
@@ -380,7 +390,7 @@ function isProgressiveReady(
     manifest.durationMs,
     mode === "takeover" ? getTakeoverWindowMs(manifest) : getStartupWindowMs(manifest)
   );
-  const aheadBufferedMs = getAheadBufferedMs(input);
+  const aheadBufferedMs = getDecodableAheadBufferedMs(input);
 
   return aheadBufferedMs >= requiredBufferedMs;
 }
@@ -719,7 +729,13 @@ export function getPriorityChunkIndexes(input: {
     lookBehindMs: derivedLookBehindMs,
     lookAheadMs: derivedLookAheadMs
   });
+  const requiredPrefixChunkCount = getRequiredDecodablePrefixChunkCount({
+    manifest,
+    playbackPositionMs,
+    lookAheadMs: derivedLookAheadMs
+  });
 
+  appendMissingChunks(wantedChunks, owned, seen, 0, requiredPrefixChunkCount - 1, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex, endChunkIndex, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex - 1, startChunkIndex, -1);
 

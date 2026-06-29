@@ -13,7 +13,10 @@ import {
   getStartupWindowMs,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
-import { resolveSlidingWindowChunkOrder } from "@/features/playback/sliding-window/playback-window-scheduler";
+import {
+  getRequiredDecodablePrefixChunkCount,
+  resolveSlidingWindowChunkOrder
+} from "@/features/playback/sliding-window/playback-window-scheduler";
 import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement,
@@ -660,6 +663,10 @@ function resolveManualCacheRequestOrder(input: {
     return missingChunks;
   }
 
+  const startupLookAheadMs = getStartupWindowMs({
+    mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
+    codec: input.track.codec ?? null
+  });
   const orderedChunks = resolveSlidingWindowChunkOrder({
     manifest: {
       durationMs: input.track.durationMs,
@@ -668,12 +675,16 @@ function resolveManualCacheRequestOrder(input: {
     },
     playbackPositionMs: input.activePlaybackWindow.positionMs,
     availableChunks: input.localPieceIndexes,
-    requiredLeadingChunkCount: 1,
-    lookBehindMs: 4_000,
-    startupLookAheadMs: getStartupWindowMs({
-      mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
-      codec: input.track.codec ?? null
+    requiredLeadingChunkCount: getRequiredDecodablePrefixChunkCount({
+      manifest: {
+        durationMs: input.track.durationMs,
+        totalChunks: input.manifest.totalChunks
+      },
+      playbackPositionMs: input.activePlaybackWindow.positionMs,
+      lookAheadMs: startupLookAheadMs
     }),
+    lookBehindMs: 4_000,
+    startupLookAheadMs,
     steadyLookAheadMs: input.activePlaybackWindow.policy === "catchup" ? 60_000 : 30_000
   });
   const seen = new Set(orderedChunks);

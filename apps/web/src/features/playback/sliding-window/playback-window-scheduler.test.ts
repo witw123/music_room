@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chunkIndexForPlaybackPosition,
+  getRequiredDecodablePrefixChunkCount,
   resolveSlidingWindowChunkOrder
 } from "./playback-window-scheduler";
 
@@ -15,6 +16,16 @@ describe("sliding window scheduler", () => {
     expect(chunkIndexForPlaybackPosition(manifest, 0)).toBe(0);
     expect(chunkIndexForPlaybackPosition(manifest, 59_999)).toBe(59);
     expect(chunkIndexForPlaybackPosition(manifest, 120_000)).toBe(119);
+  });
+
+  it("calculates the decode prefix needed to play through a startup window", () => {
+    expect(
+      getRequiredDecodablePrefixChunkCount({
+        manifest,
+        playbackPositionMs: 60_000,
+        lookAheadMs: 8_000
+      })
+    ).toBe(69);
   });
 
   it("requests the current playback window before background chunks", () => {

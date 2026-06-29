@@ -218,7 +218,7 @@ describe("chunk scheduler helpers", () => {
 });
 
 describe("ChunkScheduler", () => {
-  it("prioritizes current playback chunks and respects per-peer concurrency", () => {
+  it("prioritizes current-track decode-prefix chunks before other work", () => {
     const requestPiece = vi.fn(
       (args: { peerId: string; trackId: string; chunkIndex: number; totalChunks: number; priority: string }) =>
         true
@@ -257,21 +257,17 @@ describe("ChunkScheduler", () => {
       playbackPositionMs: 30_000
     });
 
-    expect(requestPiece).toHaveBeenCalledTimes(3);
-    expect(requestPiece.mock.calls.map(([call]) => call)).toEqual([
-      expect.objectContaining({
-        trackId: "track_1",
-        priority: "current"
-      }),
-      expect.objectContaining({
-        trackId: "track_1",
-        priority: "current"
-      }),
-      expect.objectContaining({
-        trackId: "track_1",
-        priority: "current"
-      })
-    ]);
+    const calls = requestPiece.mock.calls.map(([call]) => call);
+    expect(calls.map((call) => call.chunkIndex)).toEqual([2, 3, 4, 5]);
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          trackId: "track_1",
+          priority: "current"
+        })
+      ])
+    );
+    expect(calls.every((call) => call.trackId === "track_1" && call.priority === "current")).toBe(true);
   });
 
   it("cools down timed-out peers before retrying on another source", async () => {

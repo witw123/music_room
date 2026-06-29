@@ -77,7 +77,7 @@ describe("progressive playback helpers", () => {
     ).toBe(30_000);
   });
 
-  it("calculates ahead buffer from the current playback window instead of requiring chunk zero", () => {
+  it("reports current-window buffer but waits for a decodable prefix before startup", () => {
     const manifest = buildProgressiveTrackManifest(track, availability);
     expect(
       getAheadBufferedMs({
@@ -90,6 +90,13 @@ describe("progressive playback helpers", () => {
       isStartupReady({
         manifest,
         availableChunks: [4, 5, 6],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(false);
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 1, 2, 3, 4],
         playbackPositionMs: 40_000
       })
     ).toBe(true);
@@ -242,7 +249,7 @@ describe("progressive playback helpers", () => {
     ).toBe(true);
   });
 
-  it("focuses current-track startup requests around the active playback window", () => {
+  it("fills the missing decode prefix before current-track startup requests", () => {
     const manifest = buildProgressiveTrackManifest(track, availability)!;
     expect(
       getPriorityChunkIndexes({
@@ -251,7 +258,7 @@ describe("progressive playback helpers", () => {
         playbackPositionMs: 40_000,
         policy: "startup"
       }).slice(0, 4)
-    ).toEqual([4]);
+    ).toEqual([2, 3, 4]);
   });
 
   it("moves from startup to background once the current track is complete", () => {
