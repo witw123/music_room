@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCachedPiecesForTrack } from "@/lib/indexeddb";
+import { getCachedPiece, getCachedPiecesForTrack } from "@/lib/indexeddb";
 import { ProgressiveMseEngine } from "./progressive-mse-engine";
 
 vi.mock("@/lib/indexeddb", () => ({
+  getCachedPiece: vi.fn(),
   getCachedPiecesForTrack: vi.fn(),
   localCacheOwnerKey: "__local__"
 }));
 
 describe("ProgressiveMseEngine", () => {
   afterEach(() => {
+    vi.mocked(getCachedPiece).mockReset();
     vi.mocked(getCachedPiecesForTrack).mockReset();
     vi.unstubAllGlobals();
   });
@@ -93,11 +95,9 @@ describe("ProgressiveMseEngine", () => {
       createObjectURL: vi.fn(() => "blob:progressive"),
       revokeObjectURL: vi.fn()
     });
-    vi.mocked(getCachedPiecesForTrack).mockResolvedValue([
-      buildCachedPiece(0),
-      buildCachedPiece(1),
-      buildCachedPiece(2)
-    ]);
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) =>
+      chunkIndex <= 2 ? buildCachedPiece(chunkIndex) : null
+    );
 
     const audio = {
       src: "",
@@ -119,6 +119,7 @@ describe("ProgressiveMseEngine", () => {
 
     await expect(engine.attach()).resolves.toBe(true);
     FakeMediaSource.latest?.open();
+    await flushMicrotasks(8);
     await engine.sync();
     FakeMediaSource.latest?.sourceBuffer.dispatchEvent(new Event("updateend"));
     FakeMediaSource.latest?.sourceBuffer.dispatchEvent(new Event("updateend"));
@@ -164,7 +165,7 @@ describe("ProgressiveMseEngine", () => {
       createObjectURL: vi.fn(() => "blob:progressive"),
       revokeObjectURL: vi.fn()
     });
-    vi.mocked(getCachedPiecesForTrack).mockRejectedValue(new Error("idb-failed"));
+    vi.mocked(getCachedPiece).mockRejectedValue(new Error("idb-failed"));
 
     const audio = {
       src: "",
@@ -192,6 +193,70 @@ describe("ProgressiveMseEngine", () => {
 
     expect(engine.engineStatus).toBe("failed");
   });
+
+  it("reads only the next contiguous cached pieces across sync calls", async () => {
+    class FakeSourceBuffer {
+      mode = "";
+      updating = false;
+      appendedBuffers: ArrayBuffer[] = [];
+
+      addEventListener() {
+        return undefined;
+      }
+
+      removeEventListener() {
+        return undefined;
+      }
+
+      appendBuffer(payload: ArrayBuffer) {
+        this.appendedBuffers.push(payload);
+      }
+    }
+
+    vi.mocked(getCachedPiece)
+      .mockResolvedValueOnce(buildCachedPiece(0))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(buildCachedPiece(1))
+      .mockResolvedValueOnce(null);
+
+    const audio = {
+      src: "",
+      load: vi.fn(),
+      pause: vi.fn(),
+      removeAttribute: vi.fn()
+    } as unknown as HTMLAudioElement;
+
+    const engine = new ProgressiveMseEngine(audio, "peer_local", {
+      trackId: "track_1",
+      fileHash: "hash_1",
+      mimeType: "audio/mpeg",
+      codec: "mpeg",
+      sizeBytes: 4 * 256,
+      durationMs: 40_000,
+      totalChunks: 4,
+      chunkSize: 256
+    });
+    const sourceBuffer = new FakeSourceBuffer();
+    Reflect.set(engine as object, "sourceBuffer", sourceBuffer);
+    Reflect.set(engine as object, "status", "ready");
+
+    await engine.sync();
+    await engine.sync();
+
+    const cacheOptions = {
+      fileHash: "hash_1",
+      ownerKey: "__local__",
+      chunkSize: 256
+    };
+    expect(vi.mocked(getCachedPiecesForTrack)).not.toHaveBeenCalled();
+    expect(vi.mocked(getCachedPiece).mock.calls).toEqual([
+      ["track_1", "peer_local", 0, cacheOptions],
+      ["track_1", "peer_local", 1, cacheOptions],
+      ["track_1", "peer_local", 1, cacheOptions],
+      ["track_1", "peer_local", 2, cacheOptions]
+    ]);
+    expect(sourceBuffer.appendedBuffers).toHaveLength(2);
+  });
 });
 
 function buildCachedPiece(chunkIndex: number) {
@@ -207,4 +272,10 @@ function buildCachedPiece(chunkIndex: number) {
     createdAt: new Date(0).toISOString(),
     payload: new Uint8Array([chunkIndex]).buffer
   };
+}
+
+async function flushMicrotasks(count: number) {
+  for (let index = 0; index < count; index += 1) {
+    await Promise.resolve();
+  }
 }

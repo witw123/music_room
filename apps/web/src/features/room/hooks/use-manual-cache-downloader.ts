@@ -35,6 +35,8 @@ const pendingRefillLowWatermark = maxPendingPerTrack - maxPendingPerPeer;
 const providerBootstrapRetryCooldownMs = 1_500;
 const providerRestartAfterMs = 6_000;
 const providerRestartCooldownMs = 5_000;
+const fullChunkIndexListCacheLimit = 64;
+const fullChunkIndexListCache = new Map<number, number[]>();
 
 export type ManualCacheManifestSource = ResolvedTrackPieceManifest["source"] | "none";
 export type ManualCacheBlockedReason =
@@ -85,6 +87,31 @@ export function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
     }
   }
   return [...peerIds].sort();
+}
+
+function getStableFullChunkIndexList(totalChunks: number) {
+  const normalizedTotalChunks = Math.max(0, Math.floor(totalChunks));
+  const cached = fullChunkIndexListCache.get(normalizedTotalChunks);
+  if (cached) {
+    return cached;
+  }
+
+  const availableChunks = Array.from(
+    { length: normalizedTotalChunks },
+    (_, chunkIndex) => chunkIndex
+  );
+  fullChunkIndexListCache.set(normalizedTotalChunks, availableChunks);
+  if (fullChunkIndexListCache.size > fullChunkIndexListCacheLimit) {
+    const oldestKey = fullChunkIndexListCache.keys().next().value;
+    if (typeof oldestKey === "number") {
+      fullChunkIndexListCache.delete(oldestKey);
+    }
+  }
+  return availableChunks;
+}
+
+function isStableFullChunkIndexList(availableChunks: number[], totalChunks: number) {
+  return fullChunkIndexListCache.get(Math.max(0, Math.floor(totalChunks))) === availableChunks;
 }
 
 export function resolveManualCacheProviderPeerIds(input: {
@@ -423,7 +450,7 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
         assetHash: track.fileHash,
         totalChunks: manifest.totalChunks,
         chunkSize: manifest.chunkSize,
-        availableChunks: Array.from({ length: manifest.totalChunks }, (_, chunkIndex) => chunkIndex),
+        availableChunks: getStableFullChunkIndexList(manifest.totalChunks),
         source: "live_upload",
         announcedAt: "1970-01-01T00:00:00.000Z"
       };
@@ -604,9 +631,17 @@ export function resolveManualCacheTrackPlan(input: {
   }
 
   for (const provider of connectedProviderCandidates) {
-    const availableChunkSet = new Set(provider.availableChunks);
+    const providerHasFullTrack = isStableFullChunkIndexList(
+      provider.availableChunks,
+      manifest.totalChunks
+    );
+    const availableChunkSet = providerHasFullTrack ? null : new Set(provider.availableChunks);
     const requestableChunks = missingChunks
-      .filter((chunkIndex) => availableChunkSet.has(chunkIndex) && !pendingChunkSet.has(chunkIndex))
+      .filter(
+        (chunkIndex) =>
+          (providerHasFullTrack || availableChunkSet?.has(chunkIndex)) &&
+          !pendingChunkSet.has(chunkIndex)
+      )
       .slice(0, input.maxRequestChunks ?? directRequestBatchSize);
     if (requestableChunks.length > 0) {
       return {

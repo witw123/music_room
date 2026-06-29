@@ -59,6 +59,29 @@ describe("buildManualCacheSchedulerAvailability", () => {
     });
   });
 
+  it("reuses synthesized full-track chunk lists for identical implicit providers", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      totalChunks: 4096
+    });
+    const input = {
+      availabilityByTrack: {},
+      manualCacheTrackIds: ["track_a"],
+      roomId: roomSnapshot.room.id,
+      members: roomSnapshot.room.members,
+      tracks: roomSnapshot.tracks,
+      localPeerId: "peer_local"
+    };
+
+    const first = buildManualCacheSchedulerAvailabilityFromParts(input);
+    const second = buildManualCacheSchedulerAvailabilityFromParts(input);
+
+    expect(first.track_a?.peer_owner.availableChunks).toHaveLength(4096);
+    expect(second.track_a?.peer_owner.availableChunks).toBe(
+      first.track_a?.peer_owner.availableChunks
+    );
+  });
+
   it("synthesizes availability from the current playback source peer before source announcements arrive", () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",

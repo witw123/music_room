@@ -1,7 +1,9 @@
-import { getCachedPiecesForTrack, localCacheOwnerKey } from "@/lib/indexeddb";
+import { getCachedPiece, localCacheOwnerKey } from "@/lib/indexeddb";
 import type { ProgressiveTrackManifest } from "./progressive-playback";
 
 type EngineStatus = "idle" | "opening" | "ready" | "failed" | "destroyed";
+const maxCachedPiecesToQueuePerSync = 64;
+const maxQueuedCachedPieces = 96;
 
 export class ProgressiveMseEngine {
   private mediaSource: MediaSource | null = null;
@@ -131,33 +133,44 @@ export class ProgressiveMseEngine {
         return;
       }
 
-      const pieces = await getCachedPiecesForTrack(this.manifest.trackId, this.peerId, {
+      const cacheOptions = {
         fileHash: this.manifest.fileHash,
         ownerKey: localCacheOwnerKey,
         chunkSize: this.manifest.chunkSize
-      });
-      if (!this.sourceBuffer || this.status !== "ready") {
-        return;
-      }
-
-      const piecesByChunkIndex = new Map(
-        pieces.map((piece) => [piece.chunkIndex, piece] as const)
-      );
+      };
       let nextChunkIndex = this.appendedChunkCount;
-      while (nextChunkIndex < this.manifest.totalChunks) {
-        const piece = piecesByChunkIndex.get(nextChunkIndex);
+      let queuedPiecesThisSync = 0;
+
+      while (
+        nextChunkIndex < this.manifest.totalChunks &&
+        queuedPiecesThisSync < maxCachedPiecesToQueuePerSync &&
+        this.appendQueue.length < maxQueuedCachedPieces
+      ) {
+        if (this.queuedChunkIndexes.has(nextChunkIndex)) {
+          nextChunkIndex += 1;
+          continue;
+        }
+
+        const piece = await getCachedPiece(
+          this.manifest.trackId,
+          this.peerId,
+          nextChunkIndex,
+          cacheOptions
+        );
+        if (!this.sourceBuffer || this.status !== "ready") {
+          return;
+        }
         if (!piece) {
           break;
         }
 
-        if (!this.queuedChunkIndexes.has(piece.chunkIndex)) {
-          this.appendQueue.push({
-            chunkIndex: piece.chunkIndex,
-            payload: piece.payload.slice(0)
-          });
-          this.queuedChunkIndexes.add(piece.chunkIndex);
-        }
+        this.appendQueue.push({
+          chunkIndex: piece.chunkIndex,
+          payload: piece.payload.slice(0)
+        });
+        this.queuedChunkIndexes.add(piece.chunkIndex);
         nextChunkIndex += 1;
+        queuedPiecesThisSync += 1;
       }
 
       this.pumpAppendQueue();
@@ -228,6 +241,7 @@ export class ProgressiveMseEngine {
     try {
       this.sourceBuffer.appendBuffer(nextPiece.payload.slice(0));
       this.appendedChunkCount = Math.max(this.appendedChunkCount, nextPiece.chunkIndex + 1);
+      this.queuedChunkIndexes.delete(nextPiece.chunkIndex);
     } catch {
       this.status = "failed";
     }

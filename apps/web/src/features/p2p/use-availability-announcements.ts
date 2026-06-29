@@ -15,6 +15,40 @@ type UseAvailabilityAnnouncementsOptions = {
   emitDelayMs?: number;
 };
 
+type AvailabilityEmitSocket = Pick<RoomSocket, "connected" | "emit"> | null | undefined;
+
+export function getAvailabilityAnnouncementKey(announcement: TrackAvailabilityAnnouncement) {
+  return `${announcement.trackId}:${announcement.ownerPeerId}`;
+}
+
+export function queueAvailabilityEmit(
+  pendingEmit: Map<string, TrackAvailabilityAnnouncement>,
+  announcement: TrackAvailabilityAnnouncement
+) {
+  pendingEmit.set(getAvailabilityAnnouncementKey(announcement), announcement);
+}
+
+export function flushAvailabilityEmitQueue(input: {
+  pendingEmit: Map<string, TrackAvailabilityAnnouncement>;
+  pendingDisconnected: Map<string, TrackAvailabilityAnnouncement>;
+  socket: AvailabilityEmitSocket;
+}) {
+  if (input.pendingEmit.size === 0) {
+    return;
+  }
+
+  for (const [key, announcement] of input.pendingEmit.entries()) {
+    if (!input.socket?.connected) {
+      input.pendingDisconnected.set(key, announcement);
+      continue;
+    }
+
+    input.socket.emit("piece.availability", announcement);
+  }
+
+  input.pendingEmit.clear();
+}
+
 export function useAvailabilityAnnouncements({
   socketRef,
   flushDelayMs = 90,
@@ -22,7 +56,7 @@ export function useAvailabilityAnnouncements({
 }: UseAvailabilityAnnouncementsOptions) {
   const pendingAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
   const pendingAvailabilityEmitRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
-  const queuedAvailabilityRef = useRef<TrackAvailabilityAnnouncement[]>([]);
+  const queuedAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
   const availabilityFlushTimerRef = useRef<number | null>(null);
   const availabilityEmitTimerRef = useRef<number | null>(null);
   const [availabilityByTrack, setAvailabilityByTrack] = useState<AvailabilityState>({});
@@ -38,11 +72,12 @@ export function useAvailabilityAnnouncements({
       availabilityFlushTimerRef.current = null;
     }
 
-    if (queuedAvailabilityRef.current.length === 0) {
+    if (queuedAvailabilityRef.current.size === 0) {
       return;
     }
 
-    const queued = queuedAvailabilityRef.current.splice(0, queuedAvailabilityRef.current.length);
+    const queued = [...queuedAvailabilityRef.current.values()];
+    queuedAvailabilityRef.current.clear();
     setAvailabilityByTrack((current) =>
       queued.reduce(
         (state, announcement) => upsertAvailabilityAnnouncement(state, announcement),
@@ -53,7 +88,7 @@ export function useAvailabilityAnnouncements({
 
   const queueAvailability = useCallback(
     (announcement: TrackAvailabilityAnnouncement) => {
-      queuedAvailabilityRef.current.push(announcement);
+      queueAvailabilityEmit(queuedAvailabilityRef.current, announcement);
       if (availabilityFlushTimerRef.current !== null) {
         return;
       }
@@ -78,27 +113,16 @@ export function useAvailabilityAnnouncements({
       availabilityEmitTimerRef.current = null;
     }
 
-    if (pendingAvailabilityEmitRef.current.size === 0) {
-      return;
-    }
-
-    const socket = socketRef.current;
-    for (const [key, announcement] of pendingAvailabilityEmitRef.current.entries()) {
-      if (!socket || !socket.connected) {
-        pendingAvailabilityRef.current.set(key, announcement);
-        continue;
-      }
-
-      socket.emit("piece.availability", announcement);
-    }
-
-    pendingAvailabilityEmitRef.current.clear();
+    flushAvailabilityEmitQueue({
+      pendingEmit: pendingAvailabilityEmitRef.current,
+      pendingDisconnected: pendingAvailabilityRef.current,
+      socket: socketRef.current
+    });
   }, [socketRef]);
 
   const scheduleAvailabilityEmit = useCallback(
     (announcement: TrackAvailabilityAnnouncement) => {
-      const key = `${announcement.trackId}:${announcement.ownerPeerId}`;
-      pendingAvailabilityEmitRef.current.set(key, announcement);
+      queueAvailabilityEmit(pendingAvailabilityEmitRef.current, announcement);
       if (availabilityEmitTimerRef.current !== null) {
         return;
       }
@@ -113,16 +137,18 @@ export function useAvailabilityAnnouncements({
   const emitAvailability = useCallback(
     (announcement: TrackAvailabilityAnnouncement) => {
       const socket = socketRef.current;
-      const key = `${announcement.trackId}:${announcement.ownerPeerId}`;
 
       if (!socket || !socket.connected) {
-        pendingAvailabilityRef.current.set(key, announcement);
+        pendingAvailabilityRef.current.set(
+          getAvailabilityAnnouncementKey(announcement),
+          announcement
+        );
         return;
       }
 
-      socket.emit("piece.availability", announcement);
+      scheduleAvailabilityEmit(announcement);
     },
-    [socketRef]
+    [scheduleAvailabilityEmit, socketRef]
   );
 
   const flushPendingAvailability = useCallback(() => {
@@ -139,9 +165,11 @@ export function useAvailabilityAnnouncements({
   }, [socketRef]);
 
   const clearAvailabilityForPeer = useCallback((ownerPeerId: string) => {
-    queuedAvailabilityRef.current = queuedAvailabilityRef.current.filter(
-      (announcement) => announcement.ownerPeerId !== ownerPeerId
-    );
+    for (const [key, announcement] of queuedAvailabilityRef.current.entries()) {
+      if (announcement.ownerPeerId === ownerPeerId) {
+        queuedAvailabilityRef.current.delete(key);
+      }
+    }
 
     for (const [key, announcement] of pendingAvailabilityEmitRef.current.entries()) {
       if (announcement.ownerPeerId === ownerPeerId) {
@@ -172,7 +200,7 @@ export function useAvailabilityAnnouncements({
       availabilityEmitTimerRef.current = null;
     }
 
-    queuedAvailabilityRef.current = [];
+    queuedAvailabilityRef.current.clear();
     pendingAvailabilityRef.current.clear();
     pendingAvailabilityEmitRef.current.clear();
     availabilityByTrackRef.current = {};
