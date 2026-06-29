@@ -30,6 +30,17 @@ type MeshCallbacks = {
     requestId?: string;
     requestRttMs?: number | null;
   }) => boolean | void;
+  onPiecePersisted?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    totalChunks: number;
+    chunkSize: number;
+    mimeType: string;
+    payloadBytes: number;
+    requestId?: string;
+    requestRttMs?: number | null;
+  }) => void;
   onPieceSent?: (payload: {
     peerId: string;
     trackId: string;
@@ -191,6 +202,24 @@ type IncomingPieceBatchItem = {
   peerId: string;
   message: BinaryPieceMessage;
   pendingRequest?: PendingPieceRequest;
+};
+
+type ReceivedPieceCallbackPayload = {
+  peerId: string;
+  trackId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  chunkSize: number;
+  mimeType: string;
+  payloadBytes: number;
+  requestId?: string;
+  requestRttMs?: number | null;
+};
+
+type PersistableIncomingPiece = {
+  item: IncomingPieceBatchItem;
+  expectedHash: string;
+  callbackPayload: ReceivedPieceCallbackPayload;
 };
 
 type PendingIncomingPieceFragments = {
@@ -1366,7 +1395,7 @@ export class P2PMesh {
         }))
       );
 
-      const persistablePieces: typeof batch = [];
+      const persistablePieces: PersistableIncomingPiece[] = [];
       for (const [index, item] of batch.entries()) {
         if (!(validationResults[index] ?? false)) {
           this.callbacks.onPieceRequestTimeout?.({
@@ -1389,7 +1418,7 @@ export class P2PMesh {
             (item.message.pieceHash ? undefined : undefined)
         });
 
-        const shouldPersistPiece = this.callbacks.onPieceReceived({
+        const callbackPayload = {
           peerId: item.peerId,
           trackId: item.message.header.trackId,
           chunkIndex: item.message.header.chunkIndex,
@@ -1400,14 +1429,19 @@ export class P2PMesh {
           requestId: item.message.header.requestId ?? item.pendingRequest?.requestId,
           requestRttMs:
             item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null
-        });
+        };
+        const shouldPersistPiece = this.callbacks.onPieceReceived(callbackPayload);
         if (shouldPersistPiece === true) {
-          persistablePieces.push(item);
+          persistablePieces.push({
+            item,
+            expectedHash: expectedHashes[index] ?? item.message.pieceHash,
+            callbackPayload
+          });
         }
       }
 
       if (persistablePieces.length > 0) {
-        const piecesToPersist = persistablePieces.map((item) => ({
+        const piecesToPersist = persistablePieces.map(({ item, expectedHash }) => ({
           pieceId: `${
             this.resolveTrackCacheIdentity?.(item.message.trackId)?.fileHash ?? item.message.trackId
           }:${item.message.header.chunkSize}:${localCacheOwnerKey}:${item.message.chunkIndex}`,
@@ -1417,13 +1451,17 @@ export class P2PMesh {
           ownerKey: localCacheOwnerKey,
           chunkIndex: item.message.chunkIndex,
           chunkSize: item.message.payload.byteLength,
-          hash: expectedHashes[batch.indexOf(item)] ?? item.message.pieceHash,
+          hash: expectedHash,
           payload: item.message.payload
         }));
+        const persistedPayloads = persistablePieces.map((piece) => piece.callbackPayload);
         this.piecePersistChain = this.piecePersistChain
           .catch(() => undefined)
           .then(async () => {
             await cacheTrackPieces(piecesToPersist);
+            for (const payload of persistedPayloads) {
+              this.callbacks.onPiecePersisted?.(payload);
+            }
           });
       }
     } finally {

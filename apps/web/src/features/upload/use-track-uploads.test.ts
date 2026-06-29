@@ -12,6 +12,7 @@ import {
   resolveAutomaticPlaybackCacheTaskMode,
   resolveStalePlaybackDemandTaskIds,
   shouldCreatePlaybackDemandTaskFromCachePiece,
+  shouldAssembleManualCachePlanProgress,
   shouldHydrateCacheTaskPieceIndexes,
   shouldAnnounceTrackAvailability,
   shouldEnsurePlaybackDemandCacheTask
@@ -387,6 +388,35 @@ describe("mergeManualCachePlanTaskProgress", () => {
       blockedReason: null,
       lastError: null
     });
+  });
+});
+
+describe("shouldAssembleManualCachePlanProgress", () => {
+  it("assembles when a plan scan discovers every cached piece", () => {
+    expect(
+      shouldAssembleManualCachePlanProgress({
+        status: "downloading",
+        completedChunks: 169,
+        totalChunks: 169
+      })
+    ).toBe(true);
+  });
+
+  it("does not assemble paused or incomplete cache tasks", () => {
+    expect(
+      shouldAssembleManualCachePlanProgress({
+        status: "paused",
+        completedChunks: 169,
+        totalChunks: 169
+      })
+    ).toBe(false);
+    expect(
+      shouldAssembleManualCachePlanProgress({
+        status: "downloading",
+        completedChunks: 168,
+        totalChunks: 169
+      })
+    ).toBe(false);
   });
 });
 

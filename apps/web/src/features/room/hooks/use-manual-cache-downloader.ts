@@ -21,7 +21,8 @@ import {
 } from "@/features/p2p";
 import type { DataMeshBridge, RoomRuntimeEvent } from "./room-runtime-types";
 
-const directRequestIntervalMs = 250;
+const directRequestIntervalMs = 750;
+const activePlaybackPendingRefreshBucketMs = 20_000;
 const directRequestBatchSize = 32;
 const directRequestTimeoutMs = 15_000;
 const directPendingTtlMs = 20_000;
@@ -1034,7 +1035,7 @@ export function useManualCacheDownloader(input: {
           input.activePlaybackWindow.trackId,
           input.activePlaybackWindow.revision,
           input.activePlaybackWindow.mediaEpoch,
-          Math.floor(input.activePlaybackWindow.positionMs / 5_000)
+          Math.floor(input.activePlaybackWindow.positionMs / activePlaybackPendingRefreshBucketMs)
         ].join("|")
       : null;
     if (activePlaybackPendingKeyRef.current !== nextPlaybackPendingKey) {

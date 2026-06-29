@@ -359,6 +359,20 @@ export function mergeManualCachePlanTaskProgress(input: {
   };
 }
 
+export function shouldAssembleManualCachePlanProgress(input: {
+  status: ManualCacheTaskStatus | null | undefined;
+  completedChunks: number;
+  totalChunks: number;
+}) {
+  return (
+    input.status !== "paused" &&
+    input.status !== "ready" &&
+    input.status !== "assembling" &&
+    input.totalChunks > 0 &&
+    input.completedChunks >= input.totalChunks
+  );
+}
+
 export function shouldEnsurePlaybackDemandCacheTask(input: {
   enableManualTrackCaching: boolean;
   playback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -1432,6 +1446,9 @@ export function useTrackUploads(options: {
       if (!track) {
         return;
       }
+      let shouldAssembleFromPlan = false;
+      let assembleMimeType: string | null = null;
+      let assembleTotalChunks = 0;
       updateManualCacheTask(plan.trackId, (current) => {
         const hasLocalFullTrack =
           !!uploadedTracks[plan.trackId] ||
@@ -1462,14 +1479,22 @@ export function useTrackUploads(options: {
           planTotalChunks: plan.manifest?.totalChunks ?? current?.totalChunks ?? 0,
           planBlockedReason: plan.blockedReason
         });
+        const mimeType = plan.manifest?.pieceMimeType ?? current?.mimeType ?? track.mimeType ?? null;
+        shouldAssembleFromPlan = shouldAssembleManualCachePlanProgress({
+          status: progress.status,
+          completedChunks: progress.completedChunks,
+          totalChunks: progress.totalChunks
+        });
+        assembleMimeType = mimeType;
+        assembleTotalChunks = progress.totalChunks;
 
         return {
-          status: progress.status,
+          status: shouldAssembleFromPlan ? "assembling" : progress.status,
           mode: current?.mode ?? resolveAutomaticPlaybackCacheTaskMode(),
           fileHash: track.fileHash,
           completedChunks: progress.completedChunks,
           totalChunks: progress.totalChunks,
-          mimeType: plan.manifest?.pieceMimeType ?? current?.mimeType ?? track.mimeType ?? null,
+          mimeType,
           manifestSource: plan.manifestSource === "none" ? null : plan.manifestSource,
           blockedReason: progress.blockedReason,
           integrityMode: plan.integrityMode,
@@ -1483,8 +1508,19 @@ export function useTrackUploads(options: {
           lastError: progress.lastError
         };
       });
+
+      if (shouldAssembleFromPlan) {
+        void assembleManualCacheTrack(plan.trackId, assembleMimeType, assembleTotalChunks);
+      }
     },
-    [activeSession?.userId, peerId, roomSnapshot, updateManualCacheTask, uploadedTracks]
+    [
+      activeSession?.userId,
+      assembleManualCacheTrack,
+      peerId,
+      roomSnapshot,
+      updateManualCacheTask,
+      uploadedTracks
+    ]
   );
 
   const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {

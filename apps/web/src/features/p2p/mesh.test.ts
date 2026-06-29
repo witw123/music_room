@@ -515,6 +515,56 @@ describe("P2PMesh", () => {
     expect(onPieceReceived).toHaveBeenCalledTimes(2);
   });
 
+  it("calls persisted piece callbacks only after IndexedDB writes finish", async () => {
+    let resolvePersist: () => void = () => undefined;
+    const persistPromise = new Promise<void>((resolve) => {
+      resolvePersist = resolve;
+    });
+    vi.mocked(cacheTrackPieces).mockImplementationOnce(() => persistPromise);
+    const onPieceReceived = vi.fn(() => true);
+    const onPiecePersisted = vi.fn();
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived,
+      onPiecePersisted
+    });
+    const payload = new TextEncoder().encode("piece-1").buffer;
+    const hash = await sha256Hex(payload);
+
+    (mesh as any).pendingIncomingPieces.push({
+      peerId: "peer_b",
+      message: buildIncomingPieceMessage({
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        mimeType: "audio/flac",
+        pieceHash: hash,
+        payload
+      })
+    });
+
+    await (mesh as any).flushIncomingPieces();
+    await Promise.resolve();
+
+    expect(onPieceReceived).toHaveBeenCalledTimes(1);
+    expect(cacheTrackPieces).toHaveBeenCalledTimes(1);
+    expect(onPiecePersisted).not.toHaveBeenCalled();
+
+    resolvePersist();
+    await (mesh as any).piecePersistChain;
+
+    expect(onPiecePersisted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        peerId: "peer_b",
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        chunkSize: payload.byteLength,
+        mimeType: "audio/flac",
+        payloadBytes: payload.byteLength
+      })
+    );
+  });
+
   it("skips IndexedDB writes when the runtime declines a received piece", async () => {
     const onPieceReceived = vi.fn(() => false);
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {

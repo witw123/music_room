@@ -195,6 +195,15 @@ export function createRoomDataMeshRuntime(input: {
             });
           })();
         }
+        return true;
+      },
+      onPiecePersisted: ({
+        trackId,
+        chunkIndex,
+        totalChunks,
+        chunkSize,
+        mimeType
+      }) => {
         input.clearManualCachePendingPiece(trackId, chunkIndex);
         input.handleManualCachePieceReceivedRef.current({
           trackId,
@@ -203,7 +212,6 @@ export function createRoomDataMeshRuntime(input: {
           chunkSize,
           mimeType
         });
-        return true;
       },
       onPieceSent: ({ peerId: targetPeerId, payloadBytes }) => {
         input.recordPieceTransferRef.current({
