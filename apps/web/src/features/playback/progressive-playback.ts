@@ -1,7 +1,7 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 
 export type ProgressivePlaybackSource =
-  | "media-stream"
+  | "lossless-local"
   | "progressive-local"
   | "full-local";
 
@@ -288,17 +288,63 @@ export function getContiguousBufferedMs(
   );
 }
 
+function getContiguousChunkCountFrom(input: {
+  availableChunks: number[];
+  startChunkIndex: number;
+  totalChunks: number;
+}) {
+  if (input.totalChunks <= 0) {
+    return 0;
+  }
+
+  const availableChunkSet = new Set(
+    input.availableChunks.filter(
+      (chunkIndex) => chunkIndex >= 0 && chunkIndex < input.totalChunks
+    )
+  );
+  let contiguousChunkCount = 0;
+  for (
+    let chunkIndex = Math.max(0, input.startChunkIndex);
+    chunkIndex < input.totalChunks;
+    chunkIndex += 1
+  ) {
+    if (!availableChunkSet.has(chunkIndex)) {
+      break;
+    }
+    contiguousChunkCount += 1;
+  }
+  return contiguousChunkCount;
+}
+
 export function getAheadBufferedMs(input: {
   manifest: ProgressiveTrackManifest | null;
   availableChunks: number[];
   playbackPositionMs: number;
 }) {
-  const contiguousBufferedMs = getContiguousBufferedMs(input.manifest, input.availableChunks);
-  if (contiguousBufferedMs <= input.playbackPositionMs) {
+  const { manifest } = input;
+  if (!manifest || manifest.totalChunks <= 0 || manifest.durationMs <= 0) {
     return 0;
   }
 
-  return contiguousBufferedMs - input.playbackPositionMs;
+  const currentChunkIndex = getChunkIndexForPositionMs(
+    manifest,
+    input.playbackPositionMs
+  );
+  const contiguousChunkCount = getContiguousChunkCountFrom({
+    availableChunks: input.availableChunks,
+    startChunkIndex: currentChunkIndex,
+    totalChunks: manifest.totalChunks
+  });
+  if (contiguousChunkCount <= 0) {
+    return 0;
+  }
+
+  const chunkDurationMs = manifest.durationMs / manifest.totalChunks;
+  const bufferedEndMs = Math.min(
+    manifest.durationMs,
+    (currentChunkIndex + contiguousChunkCount) * chunkDurationMs
+  );
+  return Math.max(0, Math.floor(bufferedEndMs - Math.max(0, input.playbackPositionMs)));
 }
 
 export function isStartupReady(input: {
@@ -330,17 +376,13 @@ function isProgressiveReady(
     return false;
   }
 
-  const contiguousChunkCount = getContiguousChunkCount(input.availableChunks);
-  const contiguousBufferedMs = getContiguousBufferedMs(manifest, input.availableChunks);
   const requiredBufferedMs = Math.min(
     manifest.durationMs,
-    Math.max(0, input.playbackPositionMs) +
-      (mode === "takeover" ? getTakeoverWindowMs(manifest) : getStartupWindowMs(manifest))
+    mode === "takeover" ? getTakeoverWindowMs(manifest) : getStartupWindowMs(manifest)
   );
-  const contiguousBytes = contiguousChunkCount * manifest.chunkSize;
-  const requiredBytes = mode === "takeover" ? 192 * 1024 : 768 * 1024;
+  const aheadBufferedMs = getAheadBufferedMs(input);
 
-  return contiguousBufferedMs >= requiredBufferedMs && contiguousBytes >= requiredBytes;
+  return aheadBufferedMs >= requiredBufferedMs;
 }
 
 export function getProgressiveEngineType(manifest: ProgressiveTrackManifest | null): ProgressiveEngineType {

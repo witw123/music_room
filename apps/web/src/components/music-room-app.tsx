@@ -8,7 +8,6 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import { ChunkScheduler, useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
-import type { RoomMediaMesh } from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -28,7 +27,8 @@ import {
   type PlaybackStartIntent
 } from "@/features/playback/playback-start-intent";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
-import { getInitialProgressivePlaybackSource } from "@/features/playback/progressive-source-controller";
+import { getSlidingWindowPlaybackSource } from "@/features/playback/progressive-source-controller";
+import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   getEffectivePlaybackPositionMs
@@ -37,7 +37,6 @@ import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
-import { useRoomMediaMesh } from "@/features/room/hooks/use-room-media-mesh";
 import {
   resolvePlaybackSourceResetReason,
   resolvePlaybackSurfaceKey,
@@ -116,7 +115,6 @@ export function MusicRoomApp({
   });
   const audioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
-  const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const currentPlaybackPositionRef = useRef(0);
   const activeSessionRef = useRef<ReturnType<typeof useSessionIdentity>["activeSession"]>(null);
@@ -531,7 +529,6 @@ export function MusicRoomApp({
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     audioRef,
-    mediaMeshRef,
     socketRef,
     chunkSchedulerRef,
     resetPlayerSurface,
@@ -539,22 +536,6 @@ export function MusicRoomApp({
     statusMessage,
     refreshAvailableRooms,
     refreshPlaylists
-  });
-
-  useRoomMediaMesh({
-    roomSnapshot,
-    peerId,
-    activeSessionId: activeSession?.userId,
-    audioRef,
-    mediaMeshRef,
-    socketRef,
-    iceConfig,
-    audioUnlocked,
-    activePlaybackSource,
-    setActivePlaybackSource,
-    setMediaConnectedPeers,
-    setMediaConnectionState,
-    recordPeerDiagnostic
   });
 
   useEffect(() => {
@@ -581,12 +562,17 @@ export function MusicRoomApp({
     }
 
     setActivePlaybackSource(
-      isCurrentSourceOwner || hasFullLocalTrack
-        ? getInitialProgressivePlaybackSource(hasFullLocalTrack)
-        : "media-stream"
+      getSlidingWindowPlaybackSource({
+        hasFullLocalTrack,
+        format: resolveSlidingWindowFormat({
+          mimeType: currentTrack?.mimeType ?? null,
+          codec: currentTrack?.codec ?? null,
+          title: currentTrack?.title ?? null
+        })
+      })
     );
     setProgressiveFallbackReason(null);
-  }, [playbackSurfaceKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);
+  }, [playbackSurfaceKey, currentPlaybackTrackId, currentTrack, hasFullLocalTrack]);
 
   const previousPlaybackRef = useRef(roomSnapshot?.room.playback ?? null);
 

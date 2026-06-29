@@ -98,7 +98,7 @@ describe("pure cache room runtime helpers", () => {
     expect(recoveryRef.current).toBe("user_1:room_1");
   });
 
-  it("accepts data and media peer signals", () => {
+  it("accepts data peer signals and rejects legacy media signals", () => {
     const dataSignal = {
       roomId: "room_1",
       fromPeerId: "peer_a",
@@ -113,7 +113,7 @@ describe("pure cache room runtime helpers", () => {
     };
 
     expect(shouldAcceptIncomingPeerSignal({ payload: dataSignal })).toBe(true);
-    expect(shouldAcceptIncomingPeerSignal({ payload: mediaSignal })).toBe(true);
+    expect(shouldAcceptIncomingPeerSignal({ payload: mediaSignal as unknown as typeof dataSignal })).toBe(false);
   });
 
   it("reannounces manual cache availability when listener set changes", () => {

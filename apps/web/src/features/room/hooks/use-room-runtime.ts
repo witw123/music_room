@@ -13,7 +13,6 @@ import {
 import type {
   AuthSession,
   IceConfigResponse,
-  PeerSignalMessage,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
@@ -174,9 +173,6 @@ type UseRoomRuntimeInput = {
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   audioRef: RefObject<HTMLAudioElement | null>;
-  mediaMeshRef?: MutableRefObject<{
-    handleSignal: (payload: PeerSignalMessage) => Promise<void>;
-  } | null>;
   socketRef: MutableRefObject<RoomSocket | null>;
   chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   resetPlayerSurface: () => void;
@@ -422,7 +418,6 @@ export function useRoomRuntime({
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
   audioRef,
-  mediaMeshRef,
   socketRef,
   chunkSchedulerRef,
   resetPlayerSurface,
@@ -911,7 +906,6 @@ export function useRoomRuntime({
       activeSessionRef,
       activeRouteRoomIdRef,
       requestRoomSnapshotResyncRef,
-      mediaMeshRef,
       ensureSourcePlaybackStartedRef,
       queueAvailabilityRef,
       clearAvailabilityForPeerRef,

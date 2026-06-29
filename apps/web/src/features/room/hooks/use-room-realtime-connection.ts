@@ -84,7 +84,7 @@ export function shouldReannounceManualCacheAvailability(input: {
 export function shouldAcceptIncomingPeerSignal(input: {
   payload: PeerSignalMessage;
 }) {
-  return input.payload.channelKind === "data" || input.payload.channelKind === "media";
+  return input.payload.channelKind === "data";
 }
 
 export function buildRoomSubscribePayload(input: {
@@ -256,9 +256,6 @@ export function createRoomRealtimeRuntime(input: {
   requestRoomSnapshotResyncRef: MutableRefObject<
     (reason: RoomSnapshotResyncReason, roomId?: string | null) => Promise<void>
   >;
-  mediaMeshRef?: MutableRefObject<{
-    handleSignal: (payload: PeerSignalMessage) => Promise<void>;
-  } | null>;
   ensureSourcePlaybackStartedRef: MutableRefObject<() => Promise<void>>;
   queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
@@ -876,12 +873,10 @@ function attachRoomSocketHandlers(input: any) {
         }
       })
     });
-    const targetMesh =
-      payload.channelKind === "media" ? input.mediaMeshRef?.current : input.mesh;
-    if (!targetMesh) {
+    if (!input.mesh) {
       return;
     }
-    void targetMesh.handleSignal(payload).catch((error: unknown) => {
+    void input.mesh.handleSignal(payload).catch((error: unknown) => {
       input.handleSignalFailure(payload, error);
     });
   });

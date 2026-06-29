@@ -438,4 +438,46 @@ describe("use-room-derived-state helpers", () => {
       badgeText: "full-local"
     });
   });
+
+  it("reports ready lossless sliding-window playback as audible", () => {
+    const cachePlayback = {
+      ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,
+      activeSource: "lossless-local",
+      engineType: "pcm",
+      contiguousBufferedMs: 0,
+      aheadBufferedMs: 12_000,
+      schedulerPolicy: "steady",
+      startupReady: true,
+      localAudioPaused: false,
+      localAudioMuted: false,
+      localAudioVolume: 0.72,
+      localAudioReadyState: 4,
+      localAudioHasSrcObject: true,
+      pcmHasOutputStream: true,
+      pcmDirectOutputConnected: true,
+      pcmDecodedSegmentCount: 2,
+      pcmScheduledSegmentCount: 1
+    } satisfies NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
+
+    expect(
+      getLocalPlaybackStatus({
+        presenceState: "online",
+        mediaConnectionState: "live",
+        isSourceOwner: false,
+        audioUnlocked: true,
+        sourceStartState: "live",
+        lastSourceStartError: null,
+        mediaConnectedPeersCount: 0,
+        playbackStatus: "playing",
+        cachePlayback,
+        dataReadyCount: 1,
+        pieceDownloadRateKbps: 320,
+        pieceUploadRateKbps: null
+      })
+    ).toMatchObject({
+      label: "无损滑动窗口播放",
+      tone: "success",
+      badgeText: "lossless-local"
+    });
+  });
 });

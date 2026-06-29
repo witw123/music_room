@@ -575,7 +575,7 @@ describe("planManualCacheDirectRequests", () => {
       12,
       expect.any(Number)
     );
-    expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([5, 6, 7, 8]);
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 5)).toEqual([0, 5, 6, 7, 8]);
   });
 
   it("keeps automatic playback cache requests finite when duration metadata is missing", async () => {

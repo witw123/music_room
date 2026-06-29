@@ -10,11 +10,10 @@ import {
   type TrackPieceManifestRecord
 } from "@/lib/indexeddb";
 import {
-  getPriorityChunkIndexes,
   getStartupWindowMs,
-  type ProgressiveSchedulerPolicy,
-  type ProgressiveTrackManifest
+  type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
+import { resolveSlidingWindowChunkOrder } from "@/features/playback/sliding-window/playback-window-scheduler";
 import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement,
@@ -660,78 +659,23 @@ function resolveManualCacheRequestOrder(input: {
     return missingChunks;
   }
 
-  const progressiveManifest: ProgressiveTrackManifest = {
-    trackId: input.track.id,
-    fileHash: input.track.fileHash,
-    mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
-    codec: input.track.codec ?? null,
-    sizeBytes: input.track.sizeBytes ?? null,
-    durationMs: input.track.durationMs,
-    totalChunks: input.manifest.totalChunks,
-    chunkSize: input.manifest.chunkSize
-  };
-  const currentChunkIndex = resolvePlaybackChunkIndex(
-    progressiveManifest,
-    input.activePlaybackWindow.positionMs
-  );
-  const startupChunkCount = resolveStartupChunkCount(progressiveManifest);
-  const startupStartChunkIndex = resolvePlaybackChunkIndex(
-    progressiveManifest,
-    input.activePlaybackWindow.positionMs - 4_000
-  );
-  const startupEndChunkIndex = Math.min(
-    input.manifest.totalChunks - 1,
-    Math.max(
-      resolvePlaybackChunkIndex(
-        progressiveManifest,
-        input.activePlaybackWindow.positionMs + getStartupWindowMs(progressiveManifest)
-      ),
-      currentChunkIndex + startupChunkCount - 1
-    )
-  );
-  const priorityChunks = getPriorityChunkIndexes({
-    manifest: progressiveManifest,
-    availableChunks: input.localPieceIndexes,
+  const orderedChunks = resolveSlidingWindowChunkOrder({
+    manifest: {
+      durationMs: input.track.durationMs,
+      totalChunks: input.manifest.totalChunks,
+      chunkSize: input.manifest.chunkSize
+    },
     playbackPositionMs: input.activePlaybackWindow.positionMs,
-    policy: input.activePlaybackWindow.policy,
-    lookBehindMs: 4_000
+    availableChunks: input.localPieceIndexes,
+    requiredLeadingChunkCount: 1,
+    lookBehindMs: 4_000,
+    startupLookAheadMs: getStartupWindowMs({
+      mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
+      codec: input.track.codec ?? null
+    }),
+    steadyLookAheadMs: input.activePlaybackWindow.policy === "catchup" ? 60_000 : 30_000
   });
-  const orderedChunks: number[] = [];
-  const seen = new Set<number>();
-  for (let chunkIndex = startupStartChunkIndex; chunkIndex <= startupEndChunkIndex; chunkIndex += 1) {
-    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
-      orderedChunks.push(chunkIndex);
-      seen.add(chunkIndex);
-    }
-  }
-
-  for (const chunkIndex of priorityChunks) {
-    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
-      orderedChunks.push(chunkIndex);
-      seen.add(chunkIndex);
-    }
-  }
-
-  const playbackProgressRatio =
-    input.track.durationMs > 0
-      ? input.activePlaybackWindow.positionMs / input.track.durationMs
-      : 1;
-  const startupPrefixEndChunkIndex = Math.min(
-    input.manifest.totalChunks - 1,
-    Math.max(0, Math.ceil(playbackProgressRatio * input.manifest.totalChunks))
-  );
-  const decodePrefixChunks: number[] = [];
-  for (let chunkIndex = 0; chunkIndex <= startupPrefixEndChunkIndex; chunkIndex += 1) {
-    if (!localPieceSet.has(chunkIndex)) {
-      decodePrefixChunks.push(chunkIndex);
-    }
-  }
-  for (const chunkIndex of decodePrefixChunks) {
-    if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
-      orderedChunks.push(chunkIndex);
-      seen.add(chunkIndex);
-    }
-  }
+  const seen = new Set(orderedChunks);
   for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
     if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
       orderedChunks.push(chunkIndex);
@@ -739,33 +683,6 @@ function resolveManualCacheRequestOrder(input: {
     }
   }
   return orderedChunks;
-}
-
-function resolvePlaybackChunkIndex(
-  manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">,
-  positionMs: number
-) {
-  if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
-    return 0;
-  }
-
-  return Math.min(
-    manifest.totalChunks - 1,
-    Math.max(0, Math.floor((Math.max(0, positionMs) / manifest.durationMs) * manifest.totalChunks))
-  );
-}
-
-function resolveStartupChunkCount(manifest: ProgressiveTrackManifest) {
-  if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
-    return 4;
-  }
-
-  const chunkDurationMs = manifest.durationMs / manifest.totalChunks;
-  if (!Number.isFinite(chunkDurationMs) || chunkDurationMs <= 0) {
-    return 4;
-  }
-
-  return Math.max(4, Math.ceil(getStartupWindowMs(manifest) / chunkDurationMs));
 }
 
 function emptyManualCacheTrackPlan(

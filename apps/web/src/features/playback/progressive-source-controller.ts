@@ -2,6 +2,7 @@ import {
   getFullLocalStableWindowMs,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
+import type { SlidingWindowFormat } from "./sliding-window/format-detection";
 
 export type ProgressiveWarmupDecision = {
   nextSource: ProgressivePlaybackSource;
@@ -19,6 +20,21 @@ export function getInitialProgressivePlaybackSource(
 ) {
   if (hasFullLocalTrack) {
     return "full-local" satisfies ProgressivePlaybackSource;
+  }
+
+  return "progressive-local" satisfies ProgressivePlaybackSource;
+}
+
+export function getSlidingWindowPlaybackSource(input: {
+  format: SlidingWindowFormat;
+  hasFullLocalTrack: boolean;
+}) {
+  if (input.hasFullLocalTrack) {
+    return "full-local" satisfies ProgressivePlaybackSource;
+  }
+
+  if (input.format === "flac" || input.format === "wav") {
+    return "lossless-local" satisfies ProgressivePlaybackSource;
   }
 
   return "progressive-local" satisfies ProgressivePlaybackSource;
@@ -62,7 +78,7 @@ function resolveBufferedLocalWarmupDecision(input: {
     } satisfies ProgressiveWarmupDecision;
   }
 
-  if (input.currentSource === "media-stream" && input.targetSource === "progressive-local") {
+  if (input.currentSource === "lossless-local" && input.targetSource === "progressive-local") {
     return {
       nextSource: input.currentSource,
       nextWarmupReadyAt: null,

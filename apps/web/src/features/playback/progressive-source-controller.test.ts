@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getRoomPlaybackSurfaceSource,
   getInitialProgressivePlaybackSource,
+  getSlidingWindowPlaybackSource,
   shouldForceSourceOwnerLocalPlayback,
   resolveFullLocalWarmupDecision,
   resolveProgressiveWarmupDecision
@@ -14,6 +15,13 @@ describe("progressive source controller", () => {
   it("uses local playback sources only", () => {
     expect(getInitialProgressivePlaybackSource(true)).toBe("full-local");
     expect(getInitialProgressivePlaybackSource(false)).toBe("progressive-local");
+  });
+
+  it("routes FLAC and WAV to lossless local playback and MP3 to progressive local playback", () => {
+    expect(getSlidingWindowPlaybackSource({ format: "flac", hasFullLocalTrack: false })).toBe("lossless-local");
+    expect(getSlidingWindowPlaybackSource({ format: "wav", hasFullLocalTrack: false })).toBe("lossless-local");
+    expect(getSlidingWindowPlaybackSource({ format: "mp3", hasFullLocalTrack: false })).toBe("progressive-local");
+    expect(getSlidingWindowPlaybackSource({ format: "flac", hasFullLocalTrack: true })).toBe("full-local");
   });
 
   it("uses local playback for listeners when cache-only playback is enabled", () => {

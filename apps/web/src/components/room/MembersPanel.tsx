@@ -228,19 +228,19 @@ function getPlaybackStatus(
   }
 
   const playback = peerDiagnostics?.progressivePlaybackStatus ?? null;
-  if (playback?.activeSource === "media-stream") {
+  if (playback?.activeSource === "lossless-local") {
     const localAudioIssue = getLocalAudioPlaybackIssue(playback);
     if (localAudioIssue) {
       return {
-        label: "实时同步流待发声",
+        label: "无损缓存待发声",
         detail: localAudioIssue,
         tone: "accent" as const
       };
     }
 
     return {
-      label: "实时同步播放",
-      detail: "本端观测到该成员正在通过上传端实时音频流发声，缓存分片仍在后台下载。",
+      label: "无损滑动窗口播放",
+      detail: "本端观测到该成员正在用本地缓存分片解码发声，并持续追随房间播放时钟。",
       tone: "success" as const
     };
   }

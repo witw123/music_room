@@ -15,7 +15,7 @@ describe("p2p signaling contracts", () => {
     ).toBe(true);
   });
 
-  it("accepts media peer signals for live audio bootstrap", () => {
+  it("rejects legacy media peer signals because playback uses original-piece data cache", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         roomId: "room_1",
@@ -25,6 +25,6 @@ describe("p2p signaling contracts", () => {
         type: "offer",
         payload: {}
       }).success
-    ).toBe(true);
+    ).toBe(false);
   });
 });

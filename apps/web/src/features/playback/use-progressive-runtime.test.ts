@@ -315,6 +315,12 @@ describe("use-progressive-runtime policy helpers", () => {
         progressiveEngineType: "mse"
       })
     ).toBe(true);
+    expect(
+      shouldPrepareProgressiveRuntimeForSource({
+        activePlaybackSource: "lossless-local",
+        progressiveEngineType: "pcm"
+      })
+    ).toBe(true);
   });
 
   it("uses the native blob URL instead of the PCM engine when full-local cache exists", () => {
@@ -361,6 +367,20 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
+  it("allows a listener to use lossless-local once startup buffering is ready", () => {
+    expect(
+      shouldStartListenerProgressivePlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: null
+      })
+    ).toBe(true);
+  });
+
   it("keeps a listener buffering while progressive startup data is not ready", () => {
     expect(
       shouldStartListenerProgressivePlayback({
@@ -380,6 +400,20 @@ describe("use-progressive-runtime policy helpers", () => {
       shouldAttemptProgressiveLocalPlayback({
         isCurrentSourceOwner: false,
         activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: "buffer-underrun"
+      })
+    ).toBe(true);
+  });
+
+  it("allows a listener to attempt lossless local playback after the startup window is ready", () => {
+    expect(
+      shouldAttemptProgressiveLocalPlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "lossless-local",
         playbackStatus: "playing",
         engineType: "pcm",
         startupReady: true,

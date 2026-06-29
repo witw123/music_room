@@ -841,22 +841,22 @@ export function getLocalPlaybackStatus(input: {
     };
   }
 
-  if (input.cachePlayback?.activeSource === "media-stream") {
+  if (input.cachePlayback?.activeSource === "lossless-local") {
     const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
     if (localAudioIssue) {
       return {
-        label: "实时同步流待发声",
+        label: "无损缓存待发声",
         detail: localAudioIssue,
         tone: "accent",
-        badgeText: "stream-wait"
+        badgeText: "lossless-wait"
       };
     }
 
     return {
-      label: "实时同步播放",
-      detail: "当前通过上传端实时音频流同步发声，缓存分片仍在后台落盘。",
+      label: "无损滑动窗口播放",
+      detail: "当前使用本地缓存分片解码发声，并持续追随房间播放时钟。",
       tone: "success",
-      badgeText: "media-stream"
+      badgeText: "lossless-local"
     };
   }
 

@@ -77,6 +77,24 @@ describe("progressive playback helpers", () => {
     ).toBe(30_000);
   });
 
+  it("calculates ahead buffer from the current playback window instead of requiring chunk zero", () => {
+    const manifest = buildProgressiveTrackManifest(track, availability);
+    expect(
+      getAheadBufferedMs({
+        manifest,
+        availableChunks: [4, 5, 6],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(30_000);
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [4, 5, 6],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(true);
+  });
+
   it("falls back to immutable track piece manifest when availability has not arrived yet", () => {
     const manifest = buildProgressiveTrackManifest(
       {
