@@ -17,38 +17,31 @@ function listSourceFiles(dir: string): string[] {
   });
 }
 
-describe("pure cache playback guard", () => {
-  it("does not keep realtime audio stream implementation files", () => {
+describe("hybrid media and cache playback guard", () => {
+  it("keeps realtime media bootstrap separate from cache downloading", () => {
     const files = listSourceFiles(webSrc).map((file) =>
       relative(webSrc, file).replace(/\\/g, "/")
     );
 
-    expect(files).not.toContain("features/p2p/media-mesh.ts");
+    expect(files).toContain("features/p2p/media-mesh.ts");
+    expect(files).toContain("features/room/hooks/use-manual-cache-downloader.ts");
     expect(files).not.toContain("features/room/host-relay-audio.ts");
     expect(files).not.toContain("features/playback/host-media-sync.ts");
     expect(files).not.toContain("features/playback/room-media-clock.ts");
     expect(files).not.toContain("features/playback/silent-prewarm-stream.ts");
   });
 
-  it("does not reference remote stream playback or media mesh runtime code", () => {
+  it("does not let the media mesh own piece cache persistence", () => {
     const forbiddenPatterns = [
-      "remote-stream",
-      "RoomMediaMesh",
-      "createRoomMediaMeshRuntime",
-      "remoteAudioRef",
-      "scheduleRemotePlaybackRetry",
-      "syncHostMediaStream",
-      "room.media.clock"
+      "cacheTrackPieces",
+      "getCachedPiece",
+      "requestPieces",
+      "ManualCache"
     ];
 
-    const offenders = listSourceFiles(webSrc)
-      .filter((file) => !file.endsWith("pure-cache-playback-guard.test.ts"))
-      .flatMap((file) => {
-        const text = readFileSync(file, "utf8");
-        return forbiddenPatterns
-          .filter((pattern) => text.includes(pattern))
-          .map((pattern) => `${relative(webSrc, file).replace(/\\/g, "/")}: ${pattern}`);
-      });
+    const mediaMeshFile = join(webSrc, "features/p2p/media-mesh.ts");
+    const text = readFileSync(mediaMeshFile, "utf8");
+    const offenders = forbiddenPatterns.filter((pattern) => text.includes(pattern));
 
     expect(offenders).toEqual([]);
   });

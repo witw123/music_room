@@ -81,10 +81,10 @@ export function shouldReannounceManualCacheAvailability(input: {
   return nextKey === input.lastBroadcastKey ? null : nextKey;
 }
 
-export function shouldAcceptIncomingDataSignal(input: {
+export function shouldAcceptIncomingPeerSignal(input: {
   payload: PeerSignalMessage;
 }) {
-  return input.payload.channelKind === "data";
+  return input.payload.channelKind === "data" || input.payload.channelKind === "media";
 }
 
 export function buildRoomSubscribePayload(input: {
@@ -179,15 +179,12 @@ export function createRoomSocketRuntime(input: {
   input.socketRef.current = socket;
 
   const emitPeerSignal = (payload: PeerSignalMessage) => {
-    if (payload.channelKind !== "data") {
-      return;
-    }
     input.recordPeerDiagnosticRef.current({
       peerId: payload.toPeerId,
-      channelKind: "data",
+      channelKind: payload.channelKind,
       direction: "sent",
       event: payload.type,
-      summary: `向 ${payload.toPeerId} 发送 data ${payload.type}`,
+      summary: `向 ${payload.toPeerId} 发送 ${payload.channelKind} ${payload.type}`,
       update: (snapshot: any) => ({
         ...snapshot,
         signalStats: {
@@ -205,10 +202,10 @@ export function createRoomSocketRuntime(input: {
   const handleSignalFailure = (payload: PeerSignalMessage, error: unknown) => {
     input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,
-      channelKind: "data",
+      channelKind: payload.channelKind,
       direction: "local",
       event: "signal-handle-failed",
-      summary: `Failed to apply data ${payload.type} from ${payload.fromPeerId}: ${String(error)}`,
+      summary: `Failed to apply ${payload.channelKind} ${payload.type} from ${payload.fromPeerId}: ${String(error)}`,
       level: "error"
     });
   };
@@ -259,6 +256,9 @@ export function createRoomRealtimeRuntime(input: {
   requestRoomSnapshotResyncRef: MutableRefObject<
     (reason: RoomSnapshotResyncReason, roomId?: string | null) => Promise<void>
   >;
+  mediaMeshRef?: MutableRefObject<{
+    handleSignal: (payload: PeerSignalMessage) => Promise<void>;
+  } | null>;
   ensureSourcePlaybackStartedRef: MutableRefObject<() => Promise<void>>;
   queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
@@ -837,7 +837,7 @@ function attachRoomSocketHandlers(input: any) {
     if (payload.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-    if (!shouldAcceptIncomingDataSignal({ payload })) {
+    if (!shouldAcceptIncomingPeerSignal({ payload })) {
       return;
     }
     if (
@@ -848,7 +848,7 @@ function attachRoomSocketHandlers(input: any) {
     ) {
       input.recordPeerDiagnosticRef.current({
         peerId: payload.fromPeerId,
-        channelKind: "data",
+        channelKind: payload.channelKind,
         direction: "received",
         event: "stale-signal-dropped",
         summary: `丢弃旧恢复代次信令 ${payload.recoveryGeneration}`,
@@ -860,10 +860,10 @@ function attachRoomSocketHandlers(input: any) {
 
     input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,
-      channelKind: "data",
+      channelKind: payload.channelKind,
       direction: "received",
       event: payload.type,
-      summary: `收到 ${payload.fromPeerId} 的 data ${payload.type}`,
+      summary: `收到 ${payload.fromPeerId} 的 ${payload.channelKind} ${payload.type}`,
       update: (snapshot: any) => ({
         ...snapshot,
         signalStats: {
@@ -876,7 +876,12 @@ function attachRoomSocketHandlers(input: any) {
         }
       })
     });
-    void input.mesh.handleSignal(payload).catch((error: unknown) => {
+    const targetMesh =
+      payload.channelKind === "media" ? input.mediaMeshRef?.current : input.mesh;
+    if (!targetMesh) {
+      return;
+    }
+    void targetMesh.handleSignal(payload).catch((error: unknown) => {
       input.handleSignalFailure(payload, error);
     });
   });

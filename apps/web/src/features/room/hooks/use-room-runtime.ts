@@ -13,6 +13,7 @@ import {
 import type {
   AuthSession,
   IceConfigResponse,
+  PeerSignalMessage,
   RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
@@ -50,7 +51,7 @@ import {
 import {
   createRoomRealtimeRuntime,
   useRoomRealtimeConnection,
-  shouldAcceptIncomingDataSignal,
+  shouldAcceptIncomingPeerSignal,
   shouldReannounceManualCacheAvailability
 } from "./use-room-realtime-connection";
 import { useRoomRuntimeMutableState } from "./use-room-runtime-mutable-state";
@@ -70,7 +71,7 @@ export {
   resolveManualCacheMeshRecoveryMode,
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
-export { shouldAcceptIncomingDataSignal, shouldReannounceManualCacheAvailability };
+export { shouldAcceptIncomingPeerSignal, shouldReannounceManualCacheAvailability };
 export { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 export {
   resetInitialRoomRecoveryAttemptOnCancellation,
@@ -173,6 +174,9 @@ type UseRoomRuntimeInput = {
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   audioRef: RefObject<HTMLAudioElement | null>;
+  mediaMeshRef?: MutableRefObject<{
+    handleSignal: (payload: PeerSignalMessage) => Promise<void>;
+  } | null>;
   socketRef: MutableRefObject<RoomSocket | null>;
   chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   resetPlayerSurface: () => void;
@@ -418,6 +422,7 @@ export function useRoomRuntime({
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
   audioRef,
+  mediaMeshRef,
   socketRef,
   chunkSchedulerRef,
   resetPlayerSurface,
@@ -906,6 +911,7 @@ export function useRoomRuntime({
       activeSessionRef,
       activeRouteRoomIdRef,
       requestRoomSnapshotResyncRef,
+      mediaMeshRef,
       ensureSourcePlaybackStartedRef,
       queueAvailabilityRef,
       clearAvailabilityForPeerRef,

@@ -841,6 +841,25 @@ export function getLocalPlaybackStatus(input: {
     };
   }
 
+  if (input.cachePlayback?.activeSource === "media-stream") {
+    const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
+    if (localAudioIssue) {
+      return {
+        label: "实时同步流待发声",
+        detail: localAudioIssue,
+        tone: "accent",
+        badgeText: "stream-wait"
+      };
+    }
+
+    return {
+      label: "实时同步播放",
+      detail: "当前通过上传端实时音频流同步发声，缓存分片仍在后台落盘。",
+      tone: "success",
+      badgeText: "media-stream"
+    };
+  }
+
   if (input.cachePlayback?.activeSource === "full-local") {
     const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
     if (localAudioIssue) {

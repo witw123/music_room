@@ -205,6 +205,7 @@ export function shouldEnableFullLocalHandoff(input: {
   cooldownMs: number;
 }) {
   if (
+    input.activePlaybackSource === "media-stream" ||
     input.activePlaybackSource !== "progressive-local" &&
     input.activePlaybackSource !== "full-local"
   ) {
@@ -262,7 +263,11 @@ export function shouldPrepareProgressiveRuntimeForSource(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   progressiveEngineType: ProgressiveEngineType;
 }) {
-  return input.progressiveEngineType !== "none" && input.activePlaybackSource !== "full-local";
+  return (
+    input.progressiveEngineType !== "none" &&
+    input.activePlaybackSource !== "full-local" &&
+    input.activePlaybackSource !== "media-stream"
+  );
 }
 
 export function shouldStartListenerProgressivePlayback(input: {
@@ -422,6 +427,7 @@ function resolveTransportGovernorMode(input: {
   progressiveLocalEligible: boolean;
 }) {
   if (
+    input.activePlaybackSource === "media-stream" ||
     input.activePlaybackSource === "progressive-local" ||
     input.activePlaybackSource === "full-local"
   ) {
@@ -1410,6 +1416,7 @@ export function useProgressiveRuntime({
     const shouldWarmBufferedFullLocal =
       !!uploaded &&
       !isCurrentSourceOwner &&
+      activePlaybackSource !== "media-stream" &&
       !progressiveEngineRef.current &&
       !progressivePcmEngineRef.current;
     const expectedSeconds =
@@ -1457,6 +1464,19 @@ export function useProgressiveRuntime({
         audio.pause();
         audio.playbackRate = 1;
         setMediaConnectionState("idle");
+      }
+      return;
+    }
+
+    if (activePlaybackSource === "media-stream") {
+      audio.muted = false;
+      audio.volume = getAudibleElementVolume(volume);
+      if (playback.status === "paused") {
+        audio.pause();
+        audio.playbackRate = 1;
+        setMediaConnectionState("idle");
+      } else if (audio.srcObject) {
+        setMediaConnectionState(audio.paused ? "buffering" : "live");
       }
       return;
     }

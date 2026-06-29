@@ -1,6 +1,7 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 
 export type ProgressivePlaybackSource =
+  | "media-stream"
   | "progressive-local"
   | "full-local";
 

@@ -52,7 +52,7 @@ export const peerSignalMessageSchema = z.object({
   roomId: z.string(),
   fromPeerId: z.string(),
   toPeerId: z.string(),
-  channelKind: z.literal("data"),
+  channelKind: z.enum(["data", "media"]),
   recoveryGeneration: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
@@ -149,7 +149,7 @@ export const remoteTrackStatusSchema = z.object({
 });
 
 export const progressivePlaybackStatusSchema = z.object({
-  activeSource: z.enum(["progressive-local", "full-local"]).nullable(),
+  activeSource: z.enum(["media-stream", "progressive-local", "full-local"]).nullable(),
   playbackConnectionKey: z.string().nullable().optional(),
   playbackSurfaceKey: z.string().nullable().optional(),
   playbackTimelineKey: z.string().nullable().optional(),
@@ -276,7 +276,7 @@ export const progressivePlaybackStatusSchema = z.object({
   bufferSafetyMarginMs: z.number().int().nullable().optional(),
   pendingPlaybackIntent: z.string().nullable().optional(),
   intentMatchedSource: z
-    .enum(["progressive-local", "full-local"])
+    .enum(["media-stream", "progressive-local", "full-local"])
     .nullable()
     .optional(),
   lastPlayStartFailure: z.string().nullable().optional(),
@@ -396,7 +396,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   lastAudibleProgressAt: z.string().datetime().nullable().optional(),
   lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),
   lastDataActivityAt: z.string().datetime().nullable().optional(),
-  audibleSource: z.enum(["progressive-local", "full-local"]).nullable().optional(),
+  audibleSource: z.enum(["media-stream", "progressive-local", "full-local"]).nullable().optional(),
   bufferingWhileAudible: z.boolean().optional(),
   recoverySuppressedReason: z.string().nullable().optional(),
   zeroProgressMs: z.number().int().nonnegative().nullable().optional(),

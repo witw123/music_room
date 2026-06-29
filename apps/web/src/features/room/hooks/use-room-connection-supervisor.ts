@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, type MutableRefObject } from "react";
 import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
+import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import {
   createPeerConnectionSupervisorState,
   notePeerSignalState,
@@ -140,12 +141,12 @@ export function useRoomConnectionSupervisor(input: {
   const updateConnectionSupervisorPlayout = useCallback(() => null, []);
 
   const resolveCurrentAudibleSource = useCallback(
-    () => "progressive-local" as const,
+    (activePlaybackSource: ProgressivePlaybackSource = "progressive-local") => activePlaybackSource,
     []
   );
   const resolveSourceContinuityState = useCallback(
-    () => ({
-      audibleSource: "progressive-local" as const,
+    (activePlaybackSource: ProgressivePlaybackSource = "progressive-local") => ({
+      audibleSource: activePlaybackSource,
       bufferingWhileAudible: false,
       recentAudioProgress: true,
       recentTransportProgress: true,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { peerSignalMessageSchema } from "./models";
 
-describe("pure cache p2p contracts", () => {
+describe("p2p signaling contracts", () => {
   it("accepts data peer signals", () => {
     expect(
       peerSignalMessageSchema.safeParse({
@@ -15,7 +15,7 @@ describe("pure cache p2p contracts", () => {
     ).toBe(true);
   });
 
-  it("rejects media peer signals", () => {
+  it("accepts media peer signals for live audio bootstrap", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         roomId: "room_1",
@@ -25,6 +25,6 @@ describe("pure cache p2p contracts", () => {
         type: "offer",
         payload: {}
       }).success
-    ).toBe(false);
+    ).toBe(true);
   });
 });

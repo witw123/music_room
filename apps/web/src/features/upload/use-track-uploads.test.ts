@@ -6,6 +6,7 @@ import {
   buildRegisterTrackPayload,
   isManualCachePieceCompatible,
   mergeHydratedManualCacheTasks,
+  mergeManualCachePlanTaskProgress,
   resolveReusableCachedPieceManifest,
   resolveMissingOwnedUploadedTracks,
   resolveAutomaticPlaybackCacheTaskMode,
@@ -334,6 +335,58 @@ describe("mergeHydratedManualCacheTasks", () => {
         currentPlaybackTrackId: "track_2"
       })
     ).toEqual({});
+  });
+});
+
+describe("mergeManualCachePlanTaskProgress", () => {
+  it("keeps received-piece progress when a slower IndexedDB plan scan reports fewer local pieces", () => {
+    expect(
+      mergeManualCachePlanTaskProgress({
+        current: {
+          completedChunks: 40,
+          totalChunks: 169,
+          status: "downloading",
+          lastPieceReceivedAt: "2026-06-28T09:00:20.000Z",
+          lastError: null,
+          blockedReason: null
+        },
+        planLocalPieceIndexes: Array.from({ length: 12 }, (_, index) => index),
+        inMemoryPieceIndexes: new Set(Array.from({ length: 41 }, (_, index) => index)),
+        planTotalChunks: 169,
+        planBlockedReason: "pending-window-full"
+      })
+    ).toMatchObject({
+      completedChunks: 41,
+      totalChunks: 169,
+      status: "downloading",
+      blockedReason: "pending-window-full",
+      lastPieceReceivedAt: "2026-06-28T09:00:20.000Z",
+      lastError: null
+    });
+  });
+
+  it("marks the task complete only when merged known pieces reach the manifest total", () => {
+    expect(
+      mergeManualCachePlanTaskProgress({
+        current: {
+          completedChunks: 168,
+          totalChunks: 169,
+          status: "downloading",
+          lastPieceReceivedAt: null,
+          lastError: null,
+          blockedReason: null
+        },
+        planLocalPieceIndexes: Array.from({ length: 169 }, (_, index) => index),
+        inMemoryPieceIndexes: new Set([0, 1]),
+        planTotalChunks: 169,
+        planBlockedReason: "complete"
+      })
+    ).toMatchObject({
+      completedChunks: 169,
+      totalChunks: 169,
+      blockedReason: null,
+      lastError: null
+    });
   });
 });
 

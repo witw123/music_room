@@ -310,6 +310,55 @@ export function resolveMissingOwnedUploadedTracks(input: {
   );
 }
 
+export function mergeManualCachePlanTaskProgress(input: {
+  current:
+    | Pick<
+        ManualCacheTask,
+        | "completedChunks"
+        | "totalChunks"
+        | "status"
+        | "blockedReason"
+        | "lastPieceReceivedAt"
+        | "lastError"
+      >
+    | null
+    | undefined;
+  planLocalPieceIndexes: number[];
+  inMemoryPieceIndexes: Set<number> | null | undefined;
+  planTotalChunks: number | null | undefined;
+  planBlockedReason: string | null | undefined;
+}) {
+  const currentCompletedChunks = input.current?.completedChunks ?? 0;
+  const indexedPieceCount = input.planLocalPieceIndexes.length;
+  const inMemoryPieceCount = input.inMemoryPieceIndexes?.size ?? 0;
+  const completedChunks = Math.max(
+    currentCompletedChunks,
+    indexedPieceCount,
+    inMemoryPieceCount
+  );
+  const totalChunks = Math.max(input.current?.totalChunks ?? 0, input.planTotalChunks ?? 0);
+  const isComplete = totalChunks > 0 && completedChunks >= totalChunks;
+  const pendingWindowFull = input.planBlockedReason === "pending-window-full";
+  const actuallyBlocked =
+    !!input.planBlockedReason && input.planBlockedReason !== "complete" && !pendingWindowFull;
+
+  return {
+    completedChunks,
+    totalChunks,
+    status:
+      actuallyBlocked && !isComplete
+        ? ("blocked" as const)
+        : !input.current ||
+            input.current.status === "queued" ||
+            input.current.status === "blocked"
+          ? ("downloading" as const)
+          : input.current.status,
+    blockedReason: input.planBlockedReason === "complete" || isComplete ? null : input.planBlockedReason,
+    lastPieceReceivedAt: input.current?.lastPieceReceivedAt ?? null,
+    lastError: actuallyBlocked && !isComplete ? input.planBlockedReason : (input.current?.lastError ?? null)
+  };
+}
+
 export function shouldEnsurePlaybackDemandCacheTask(input: {
   enableManualTrackCaching: boolean;
   playback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -1406,24 +1455,23 @@ export function useTrackUploads(options: {
           return null;
         }
 
-        const pendingWindowFull = plan.blockedReason === "pending-window-full";
-        const actuallyBlocked =
-          !!plan.blockedReason && plan.blockedReason !== "complete" && !pendingWindowFull;
+        const progress = mergeManualCachePlanTaskProgress({
+          current,
+          planLocalPieceIndexes: plan.localPieceIndexes,
+          inMemoryPieceIndexes: manualCacheChunkIndexesRef.current.get(plan.trackId),
+          planTotalChunks: plan.manifest?.totalChunks ?? current?.totalChunks ?? 0,
+          planBlockedReason: plan.blockedReason
+        });
 
         return {
-          status:
-            actuallyBlocked
-              ? "blocked"
-              : !current || current.status === "queued" || current.status === "blocked"
-                ? "downloading"
-                : current.status,
+          status: progress.status,
           mode: current?.mode ?? resolveAutomaticPlaybackCacheTaskMode(),
           fileHash: track.fileHash,
-          completedChunks: plan.localPieceIndexes.length,
-          totalChunks: plan.manifest?.totalChunks ?? current?.totalChunks ?? 0,
+          completedChunks: progress.completedChunks,
+          totalChunks: progress.totalChunks,
           mimeType: plan.manifest?.pieceMimeType ?? current?.mimeType ?? track.mimeType ?? null,
           manifestSource: plan.manifestSource === "none" ? null : plan.manifestSource,
-          blockedReason: plan.blockedReason === "complete" ? null : plan.blockedReason,
+          blockedReason: progress.blockedReason,
           integrityMode: plan.integrityMode,
           providerPeerIds: plan.providerPeerIds,
           connectedProviderPeerIds: plan.connectedProviderPeerIds,
@@ -1431,7 +1479,8 @@ export function useTrackUploads(options: {
           requestableChunkCount: plan.requestableChunks.length,
           pendingChunkCount: plan.pendingChunkCount,
           lastRequestedChunks: plan.requestableChunks,
-          lastError: actuallyBlocked ? plan.blockedReason : null
+          lastPieceReceivedAt: progress.lastPieceReceivedAt,
+          lastError: progress.lastError
         };
       });
     },

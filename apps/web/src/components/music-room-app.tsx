@@ -8,6 +8,7 @@ import type {
   RoomSnapshot
 } from "@music-room/shared";
 import { ChunkScheduler, useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
+import type { RoomMediaMesh } from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -36,6 +37,7 @@ import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
+import { useRoomMediaMesh } from "@/features/room/hooks/use-room-media-mesh";
 import {
   resolvePlaybackSourceResetReason,
   resolvePlaybackSurfaceKey,
@@ -114,6 +116,7 @@ export function MusicRoomApp({
   });
   const audioRef = useRef<HTMLAudioElement>(null);
   const socketRef = useRef<RoomSocket | null>(null);
+  const mediaMeshRef = useRef<RoomMediaMesh | null>(null);
   const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
   const currentPlaybackPositionRef = useRef(0);
   const activeSessionRef = useRef<ReturnType<typeof useSessionIdentity>["activeSession"]>(null);
@@ -528,6 +531,7 @@ export function MusicRoomApp({
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     audioRef,
+    mediaMeshRef,
     socketRef,
     chunkSchedulerRef,
     resetPlayerSurface,
@@ -535,6 +539,22 @@ export function MusicRoomApp({
     statusMessage,
     refreshAvailableRooms,
     refreshPlaylists
+  });
+
+  useRoomMediaMesh({
+    roomSnapshot,
+    peerId,
+    activeSessionId: activeSession?.userId,
+    audioRef,
+    mediaMeshRef,
+    socketRef,
+    iceConfig,
+    audioUnlocked,
+    activePlaybackSource,
+    setActivePlaybackSource,
+    setMediaConnectedPeers,
+    setMediaConnectionState,
+    recordPeerDiagnostic
   });
 
   useEffect(() => {
@@ -561,9 +581,9 @@ export function MusicRoomApp({
     }
 
     setActivePlaybackSource(
-      isCurrentSourceOwner
+      isCurrentSourceOwner || hasFullLocalTrack
         ? getInitialProgressivePlaybackSource(hasFullLocalTrack)
-        : getInitialProgressivePlaybackSource(hasFullLocalTrack)
+        : "media-stream"
     );
     setProgressiveFallbackReason(null);
   }, [playbackSurfaceKey, currentPlaybackTrackId, hasFullLocalTrack, isCurrentSourceOwner]);

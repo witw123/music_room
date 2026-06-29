@@ -228,6 +228,23 @@ function getPlaybackStatus(
   }
 
   const playback = peerDiagnostics?.progressivePlaybackStatus ?? null;
+  if (playback?.activeSource === "media-stream") {
+    const localAudioIssue = getLocalAudioPlaybackIssue(playback);
+    if (localAudioIssue) {
+      return {
+        label: "实时同步流待发声",
+        detail: localAudioIssue,
+        tone: "accent" as const
+      };
+    }
+
+    return {
+      label: "实时同步播放",
+      detail: "本端观测到该成员正在通过上传端实时音频流发声，缓存分片仍在后台下载。",
+      tone: "success" as const
+    };
+  }
+
   if (playback?.activeSource === "full-local") {
     const localAudioIssue = getLocalAudioPlaybackIssue(playback);
     if (localAudioIssue) {

@@ -7,7 +7,7 @@ import {
   resolveManualCacheProviderPeerIds,
   resolveManualCacheUploaderPeerIds,
   isCurrentPlaybackSourceDevice,
-  shouldAcceptIncomingDataSignal,
+  shouldAcceptIncomingPeerSignal,
   shouldAcceptIncomingPeerSignalRecoveryGeneration,
   shouldForceManualCacheBootstrap,
   shouldKickSourcePlaybackFromRealtimeEvent,
@@ -98,7 +98,7 @@ describe("pure cache room runtime helpers", () => {
     expect(recoveryRef.current).toBe("user_1:room_1");
   });
 
-  it("accepts only data peer signals", () => {
+  it("accepts data and media peer signals", () => {
     const dataSignal = {
       roomId: "room_1",
       fromPeerId: "peer_a",
@@ -107,8 +107,13 @@ describe("pure cache room runtime helpers", () => {
       type: "offer" as const,
       payload: {}
     };
+    const mediaSignal = {
+      ...dataSignal,
+      channelKind: "media" as const
+    };
 
-    expect(shouldAcceptIncomingDataSignal({ payload: dataSignal })).toBe(true);
+    expect(shouldAcceptIncomingPeerSignal({ payload: dataSignal })).toBe(true);
+    expect(shouldAcceptIncomingPeerSignal({ payload: mediaSignal })).toBe(true);
   });
 
   it("reannounces manual cache availability when listener set changes", () => {

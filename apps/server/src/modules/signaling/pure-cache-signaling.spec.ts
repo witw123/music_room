@@ -1,7 +1,7 @@
 import { peerSignalMessageSchema } from "@music-room/shared";
 
-describe("pure cache signaling", () => {
-  it("rejects media peer signals at the shared boundary", () => {
+describe("room media signaling", () => {
+  it("accepts media peer signals at the shared boundary", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         roomId: "room_1",
@@ -11,6 +11,6 @@ describe("pure cache signaling", () => {
         type: "offer",
         payload: {}
       }).success
-    ).toBe(false);
+    ).toBe(true);
   });
 });

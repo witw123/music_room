@@ -124,6 +124,7 @@ export async function testTurnConnectivity(
 }
 
 export * from "./mesh";
+export * from "./media-mesh";
 export * from "./chunk-scheduler";
 export * from "./diagnostics";
 export * from "./transport-health";

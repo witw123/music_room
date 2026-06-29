@@ -62,6 +62,14 @@ function resolveBufferedLocalWarmupDecision(input: {
     } satisfies ProgressiveWarmupDecision;
   }
 
+  if (input.currentSource === "media-stream" && input.targetSource === "progressive-local") {
+    return {
+      nextSource: input.currentSource,
+      nextWarmupReadyAt: null,
+      clearFallbackReason: false
+    } satisfies ProgressiveWarmupDecision;
+  }
+
   const switchDelayMs = input.switchDelayMs ?? getFullLocalStableWindowMs();
   const maxDriftMs = input.maxDriftMs ?? 180;
   const now = input.now ?? Date.now();
