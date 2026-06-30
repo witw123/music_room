@@ -62,6 +62,7 @@ export type ProgressivePcmEngineSnapshot = {
 };
 
 const pcmScheduleAheadSeconds = 18;
+const maxPcmCachedPiecesToAppendPerSync = 8;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
@@ -563,8 +564,12 @@ export class ProgressivePcmEngine {
 
   private async appendAvailableContiguousPieces() {
     let appended = false;
+    let appendedPieceCount = 0;
 
-    while (this.contiguousChunkCount < this.manifest.totalChunks) {
+    while (
+      this.contiguousChunkCount < this.manifest.totalChunks &&
+      appendedPieceCount < maxPcmCachedPiecesToAppendPerSync
+    ) {
       const piece = await getCachedPiece(
         this.manifest.trackId,
         this.peerId,
@@ -585,6 +590,7 @@ export class ProgressivePcmEngine {
 
       this.appendContiguousBytes(piece.payload);
       this.contiguousChunkCount += 1;
+      appendedPieceCount += 1;
       appended = true;
     }
 

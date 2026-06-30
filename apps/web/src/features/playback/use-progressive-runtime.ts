@@ -32,10 +32,12 @@ import {
   getEffectivePlaybackPositionMs,
   getMinimumSourceResidenceMs,
   getProgressiveEngineType,
+  getProgressiveTrackManifestKey,
   getStartupWindowMs,
   hasActivePlaybackIntent,
   isTakeoverReady,
   type ProgressiveEngineType,
+  type ProgressiveTrackManifest,
   type ProgressiveSchedulerPolicy,
   type ProgressivePlaybackSource
 } from "./progressive-playback";
@@ -155,6 +157,26 @@ export type FullLocalPlaybackSessionState = {
 
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
+}
+
+export function shouldHoldSlidingWindowPlaybackForEngine(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  hasPcmEngine: boolean;
+  hasMseEngine: boolean;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  return (
+    isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
+    hasActiveIntent &&
+    !input.hasPcmEngine &&
+    !input.hasMseEngine
+  );
+}
+
+export function shouldLatchPcmRuntimeFailure(reason: string | null | undefined) {
+  return reason === "decoder-flush-failed";
 }
 
 function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
@@ -514,6 +536,13 @@ export function useProgressiveRuntime({
     key: null,
     availableInSession: false
   });
+  const currentProgressiveManifestRef = useRef<{
+    key: string;
+    manifest: ProgressiveTrackManifest | null;
+  }>({
+    key: "none",
+    manifest: null
+  });
   const playback = roomSnapshot?.room.playback;
   const playbackRevision = playback?.playbackRevision ?? playback?.queueVersion ?? 0;
   const playbackSurfaceKey = useMemo(() => resolvePlaybackSurfaceKey(playback), [playback]);
@@ -576,15 +605,23 @@ export function useProgressiveRuntime({
     currentTrackAvailabilityAnnouncement,
     roomSnapshot
   ]);
-  const currentProgressiveManifest = useMemo(
-    () =>
-      buildProgressiveTrackManifest(
-        currentTrack,
-        currentTrackAvailabilityAnnouncement,
-        currentTrackAvailabilityManifestHint
-      ),
-    [currentTrack, currentTrackAvailabilityAnnouncement, currentTrackAvailabilityManifestHint]
+  const currentProgressiveManifestKey = getProgressiveTrackManifestKey(
+    currentTrack,
+    currentTrackAvailabilityAnnouncement,
+    currentTrackAvailabilityManifestHint
   );
+  const nextCurrentProgressiveManifest = buildProgressiveTrackManifest(
+    currentTrack,
+    currentTrackAvailabilityAnnouncement,
+    currentTrackAvailabilityManifestHint
+  );
+  if (currentProgressiveManifestRef.current.key !== currentProgressiveManifestKey) {
+    currentProgressiveManifestRef.current = {
+      key: currentProgressiveManifestKey,
+      manifest: nextCurrentProgressiveManifest
+    };
+  }
+  const currentProgressiveManifest = currentProgressiveManifestRef.current.manifest;
   const currentProgressiveEngineType = useMemo(
     () => getProgressiveEngineType(currentProgressiveManifest),
     [currentProgressiveManifest]
@@ -1002,14 +1039,18 @@ export function useProgressiveRuntime({
         return;
       }
 
-      if (reason === "engine-failed" || reason === "decoder-flush-failed") {
-        pcmRuntimeFailureRef.current = {
-          trackId: currentProgressiveManifest.trackId,
-          reason
-        };
+      if (reason === "engine-failed" || shouldLatchPcmRuntimeFailure(reason)) {
+        if (shouldLatchPcmRuntimeFailure(reason)) {
+          pcmRuntimeFailureRef.current = {
+            trackId: currentProgressiveManifest.trackId,
+            reason
+          };
+        }
         progressivePcmEngineRef.current?.destroy();
         progressivePcmEngineRef.current = null;
-        setProgressiveFallbackReason("progressive-init-failed");
+        setProgressiveFallbackReason(
+          shouldLatchPcmRuntimeFailure(reason) ? "progressive-init-failed" : "buffer-underrun"
+        );
         const nextSource = resolvePlaybackSourceAfterProgressiveRuntimeFailure({
           activePlaybackSource,
           hasProgressiveRuntimeFailure: true
@@ -1566,6 +1607,26 @@ export function useProgressiveRuntime({
         return;
       }
 
+      if (
+        shouldHoldSlidingWindowPlaybackForEngine({
+          activePlaybackSource,
+          playbackStatus: playback.status,
+          hasPcmEngine: false,
+          hasMseEngine: false
+        })
+      ) {
+        audio.pause();
+        audio.muted = false;
+        audio.playbackRate = 1;
+        if (audio.srcObject || audio.src || audio.getAttribute("src")) {
+          audio.srcObject = null;
+          audio.removeAttribute("src");
+          audio.load();
+        }
+        setMediaConnectionState("buffering");
+        return;
+      }
+
       syncLocalPlaybackWindow(audio, expectedSeconds, shouldPlayPlayback, {
         softDriftMs: 120,
         hardDriftMs: 900,
@@ -2017,20 +2078,37 @@ export function useProgressiveRuntime({
     void engine
       .attach()
       .then((attached) => {
+        const isCurrentEngine =
+          progressiveEngineRef.current === engine || progressivePcmEngineRef.current === engine;
+        if (!isCurrentEngine) {
+          return;
+        }
+
         if (!attached) {
-          setProgressiveFallbackReason("progressive-init-failed");
           if (engine instanceof ProgressivePcmEngine) {
             markPcmRuntimeFailure("engine-failed");
+          } else {
+            setProgressiveFallbackReason("progressive-init-failed");
           }
           return;
         }
 
+        setProgressiveFallbackReason((current) =>
+          current === "progressive-init-failed" ? null : current
+        );
         return engine.sync();
       })
       .catch(() => {
-        setProgressiveFallbackReason("progressive-init-failed");
+        const isCurrentEngine =
+          progressiveEngineRef.current === engine || progressivePcmEngineRef.current === engine;
+        if (!isCurrentEngine) {
+          return;
+        }
+
         if (engine instanceof ProgressivePcmEngine) {
           markPcmRuntimeFailure("engine-failed");
+        } else {
+          setProgressiveFallbackReason("progressive-init-failed");
         }
       });
 

@@ -7,6 +7,7 @@ import {
   getAheadBufferedMs,
   getContiguousBufferedMs,
   getProgressiveEngineType,
+  getProgressiveTrackManifestKey,
   getPriorityChunkIndexes,
   hasActivePlaybackIntent,
   isStartupReady,
@@ -58,6 +59,37 @@ const playingPlayback = {
 };
 
 describe("progressive playback helpers", () => {
+  it("keeps the manifest identity stable when only local cache progress changes", () => {
+    const initialKey = getProgressiveTrackManifestKey(track, availability, availability);
+    const progressOnlyKey = getProgressiveTrackManifestKey(
+      track,
+      {
+        ...availability,
+        availableChunks: [0, 1, 2, 3, 4, 5, 6, 7],
+        announcedAt: "2026-04-03T03:00:10.000Z"
+      },
+      {
+        ...availability,
+        availableChunks: [0, 1, 2, 3, 4, 5, 6, 7],
+        announcedAt: "2026-04-03T03:00:10.000Z"
+      }
+    );
+    const geometryKey = getProgressiveTrackManifestKey(
+      track,
+      {
+        ...availability,
+        totalChunks: 13
+      },
+      {
+        ...availability,
+        totalChunks: 13
+      }
+    );
+
+    expect(progressOnlyKey).toBe(initialKey);
+    expect(geometryKey).not.toBe(initialKey);
+  });
+
   it("treats playing and buffering as active playback intent", () => {
     expect(hasActivePlaybackIntent({ ...playingPlayback, status: "playing" })).toBe(true);
     expect(hasActivePlaybackIntent({ ...playingPlayback, status: "buffering" })).toBe(true);

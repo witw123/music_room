@@ -434,6 +434,42 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("limits contiguous cache reads per sync to keep large cached tracks responsive", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const largeManifest = {
+      ...manifest,
+      totalChunks: 64
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", largeManifest);
+
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) =>
+      chunkIndex < largeManifest.totalChunks
+        ? {
+            pieceId: `piece_${chunkIndex}`,
+            trackId: largeManifest.trackId,
+            peerId: "peer_local",
+            chunkIndex,
+            chunkSize: largeManifest.chunkSize,
+            hash: `hash_${chunkIndex}`,
+            createdAt: new Date().toISOString(),
+            payload: new Uint8Array([chunkIndex]).buffer
+          }
+        : null
+    );
+
+    try {
+      await engine.attach();
+      await engine.sync();
+
+      expect(vi.mocked(getCachedPiece).mock.calls).toHaveLength(8);
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(8);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("does not invoke the media element play path during sync playback", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();

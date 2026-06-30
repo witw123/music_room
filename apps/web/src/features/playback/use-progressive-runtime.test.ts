@@ -13,6 +13,8 @@ import {
   shouldAttemptProgressiveLocalPlayback,
   shouldRecoverPausedFullLocalPlayback,
   shouldStartListenerProgressivePlayback,
+  shouldHoldSlidingWindowPlaybackForEngine,
+  shouldLatchPcmRuntimeFailure,
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
 
@@ -322,6 +324,39 @@ describe("use-progressive-runtime policy helpers", () => {
         progressiveEngineType: "pcm"
       })
     ).toBe(true);
+  });
+
+  it("holds sliding-window playback when no local engine is attached", () => {
+    expect(
+      shouldHoldSlidingWindowPlaybackForEngine({
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        hasPcmEngine: false,
+        hasMseEngine: false
+      })
+    ).toBe(true);
+    expect(
+      shouldHoldSlidingWindowPlaybackForEngine({
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        hasPcmEngine: true,
+        hasMseEngine: false
+      })
+    ).toBe(false);
+    expect(
+      shouldHoldSlidingWindowPlaybackForEngine({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        hasPcmEngine: false,
+        hasMseEngine: false
+      })
+    ).toBe(false);
+  });
+
+  it("does not permanently latch transient PCM engine attach failures", () => {
+    expect(shouldLatchPcmRuntimeFailure("engine-failed")).toBe(false);
+    expect(shouldLatchPcmRuntimeFailure("engine-opening")).toBe(false);
+    expect(shouldLatchPcmRuntimeFailure("decoder-flush-failed")).toBe(true);
   });
 
   it("uses the native blob URL instead of the PCM engine when full-local cache exists", () => {

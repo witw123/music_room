@@ -27,6 +27,15 @@ export type ProgressiveTrackManifest = {
   chunkSize: number;
 };
 
+type ProgressiveManifestGeometryHint =
+  | {
+      totalChunks: number;
+      chunkSize: number;
+      [key: string]: unknown;
+    }
+  | null
+  | undefined;
+
 export function hasActivePlaybackIntent(
   playback: PlaybackSnapshot | null | undefined
 ) {
@@ -143,8 +152,8 @@ export function getMinimumSourceResidenceMs(source: ProgressivePlaybackSource) {
 
 export function buildProgressiveTrackManifest(
   track: TrackMeta | null | undefined,
-  availability: TrackAvailabilityAnnouncement | null | undefined,
-  manifestHint?: Pick<TrackAvailabilityAnnouncement, "totalChunks" | "chunkSize"> | null
+  availability: ProgressiveManifestGeometryHint,
+  manifestHint?: ProgressiveManifestGeometryHint
 ): ProgressiveTrackManifest | null {
   if (!track) {
     return null;
@@ -185,6 +194,28 @@ export function buildProgressiveTrackManifest(
     totalChunks,
     chunkSize
   };
+}
+
+export function getProgressiveTrackManifestKey(
+  track: TrackMeta | null | undefined,
+  availability: ProgressiveManifestGeometryHint,
+  manifestHint?: ProgressiveManifestGeometryHint
+) {
+  const manifest = buildProgressiveTrackManifest(track, availability, manifestHint);
+  if (!manifest) {
+    return "none";
+  }
+
+  return [
+    manifest.trackId,
+    manifest.fileHash,
+    manifest.mimeType,
+    manifest.codec ?? "",
+    manifest.sizeBytes ?? "",
+    manifest.durationMs,
+    manifest.totalChunks,
+    manifest.chunkSize
+  ].join("|");
 }
 
 export function getContiguousChunkCount(availableChunks: number[]) {
