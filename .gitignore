@@ -16,3 +16,5 @@ apps/server/src/generated/prisma/
 
 .gstack/
 .codex-tmp-tauri/
+outputs/
+.claude/
