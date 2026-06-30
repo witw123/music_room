@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type Dispatch,
   type RefObject,
   type SetStateAction
@@ -531,6 +532,7 @@ export function useProgressiveRuntime({
   const stalledEventTimestampsRef = useRef<number[]>([]);
   const driftSamplesRef = useRef<Array<{ timestampMs: number; driftMs: number }>>([]);
   const continuousPlaybackStartedAtRef = useRef<number | null>(null);
+  const [audioPaused, setAudioPaused] = useState<boolean | null>(null);
   const continuousPlaybackSegmentsRef = useRef<Array<{ startedAtMs: number; endedAtMs: number }>>([]);
   const fullLocalPlaybackSessionRef = useRef<FullLocalPlaybackSessionState>({
     key: null,
@@ -844,6 +846,25 @@ export function useProgressiveRuntime({
       roomSnapshot?.room.playback.sourceSessionId
     ]
   );
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      setAudioPaused(null);
+      return;
+    }
+
+    const handlePlay = () => setAudioPaused(false);
+    const handlePause = () => setAudioPaused(true);
+    setAudioPaused(audio.paused);
+
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    return () => {
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+    };
+  }, [audioRef, playback?.currentTrackId]);
+
   const localAudioDiagnostics = useMemo(() => {
     const localAudio = audioRef.current;
     if (!localAudio) {
@@ -858,14 +879,14 @@ export function useProgressiveRuntime({
     }
 
     return {
-      localAudioPaused: localAudio.paused,
+      localAudioPaused: audioPaused,
       localAudioMuted: localAudio.muted,
       localAudioVolume: localAudio.volume,
       localAudioReadyState: localAudio.readyState,
       localAudioCurrentSrc: localAudio.currentSrc || null,
       localAudioHasSrcObject: !!localAudio.srcObject
     };
-  }, [audioRef, playbackRevision, activePlaybackSource, playback?.currentTrackId, playback?.status]);
+  }, [audioRef, audioPaused, playbackRevision, activePlaybackSource, playback?.currentTrackId, playback?.status]);
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const shadowWarmupActive = false;
 
