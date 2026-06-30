@@ -196,22 +196,8 @@ export class RoomRecordRepository {
       tracks: record.tracks,
       queue: record.queue
     };
-    const existing = await this.prisma.roomState.findUnique({
-      where: { id: record.room.id },
-      select: { id: true }
-    });
 
-    if (!existing) {
-      await this.prisma.roomState.create({
-        data: {
-          id: record.room.id,
-          ...payload
-        }
-      });
-      return;
-    }
-
-    const result = await this.prisma.roomState.updateMany({
+    const updateResult = await this.prisma.roomState.updateMany({
       where: {
         id: record.room.id,
         roomRevision: {
@@ -221,12 +207,53 @@ export class RoomRecordRepository {
       data: payload
     });
 
-    if (result.count === 0) {
-      throw new Error("Room state revision conflict.");
+    if (updateResult.count > 0) {
+      return;
     }
+
+    // Row either doesn't exist yet or a concurrent write updated it.
+    // Check which case we're in to avoid a blind create race.
+    const existing = await this.prisma.roomState.findUnique({
+      where: { id: record.room.id },
+      select: { id: true }
+    });
+
+    if (!existing) {
+      try {
+        await this.prisma.roomState.create({
+          data: { id: record.room.id, ...payload }
+        });
+        return;
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          // Another process created the room concurrently; retry the
+          // optimistic update once so callers don't see a false conflict.
+          await this.prisma.roomState.updateMany({
+            where: {
+              id: record.room.id,
+              roomRevision: { lt: record.room.roomRevision ?? 0 }
+            },
+            data: payload
+          });
+          return;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error("Room state revision conflict.");
   }
 }
 
 function cloneRoomRecord(record: RoomRecord): RoomRecord {
   return structuredClone(record);
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "P2002"
+  );
 }

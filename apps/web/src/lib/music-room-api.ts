@@ -1,13 +1,14 @@
 import { apiBaseUrl } from "./api-client";
-import type {
-  ApiErrorResponse,
-  AuthSession,
-  IceConfigResponse,
-  PlaybackSnapshot,
-  Playlist,
-  QueueItem,
-  RoomSnapshot,
-  TrackMeta
+import {
+  errorCodes,
+  type ApiErrorResponse,
+  type AuthSession,
+  type IceConfigResponse,
+  type PlaybackSnapshot,
+  type Playlist,
+  type QueueItem,
+  type RoomSnapshot,
+  type TrackMeta
 } from "@music-room/shared";
 
 const sessionStorageKey = "music-room-session";
@@ -109,7 +110,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const rawErrorBody = await response.text();
     const apiError = extractApiError(rawErrorBody);
     const message = apiError?.message ?? extractApiErrorMessage(rawErrorBody);
-    if (response.status === 401 && typeof window !== "undefined") {
+    const shouldExpireSession =
+      response.status === 401 &&
+      apiError?.code === errorCodes.unauthorized &&
+      typeof window !== "undefined";
+    if (shouldExpireSession) {
       window.localStorage.removeItem(sessionStorageKey);
       window.dispatchEvent(
         new CustomEvent("music-room-auth-expired", {

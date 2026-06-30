@@ -239,10 +239,6 @@ export class AuthService {
     throw new Error(`Unknown user: ${userId}`);
   }
 
-  async getSessionOrThrow(userId: string) {
-    return this.getUserOrThrow(userId);
-  }
-
   async getUserByUsernameOrThrow(username: string): Promise<StoredUser> {
     await this.ensureFallbackStoreLoaded();
 

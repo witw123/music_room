@@ -53,22 +53,6 @@ export class PrismaService
     return this.connectPromise;
   }
 
-  get users() {
-    return (this as unknown as { user: any }).user;
-  }
-
-  get userSessions() {
-    return (this as unknown as { userSession: any }).userSession;
-  }
-
-  get roomStates() {
-    return (this as unknown as { roomState: any }).roomState;
-  }
-
-  get playlists() {
-    return (this as unknown as { playlist: any }).playlist;
-  }
-
   private async tryConnect() {
     try {
       await this.$connect();

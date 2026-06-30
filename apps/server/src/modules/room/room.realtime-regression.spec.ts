@@ -114,7 +114,7 @@ function createFakeAuthService() {
       return session;
     },
 
-    async getSessionOrThrow(userId: string) {
+    async getUserOrThrow(userId: string) {
       const user = usersById.get(userId);
       if (!user) {
         throw new Error(`Unknown user: ${userId}`);

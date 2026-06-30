@@ -546,9 +546,11 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return { ok: false };
       }
       this.metrics.bindRealtimeSocket(client.id, payload.roomId);
-      setTimeout(() => {
+      // Defer the snapshot emit to the next macrotask so the subscribe ack
+      // response is flushed before the (potentially large) snapshot payload.
+      setImmediate(() => {
         client.emit("room.snapshot", snapshot);
-      }, 0);
+      });
       await this.emitAvailabilitySnapshot(payload.roomId, client);
       this.flushPendingPeerSignals(payload.roomId, payload.peerId);
       return this.buildSubscribeAck(snapshot, recoveryGeneration);
@@ -664,7 +666,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       await this.roomService.updatePeerPresence(roomId, sessionId, peerId, presenceState);
       await this.roomRealtimePublisher.emitTopologySnapshot(roomId);
     } catch {
-      clientSafeNoop();
+      noop();
     }
   }
 
@@ -672,7 +674,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     try {
       await this.roomService.rememberRecentRoom(roomId, sessionId);
     } catch {
-      clientSafeNoop();
+      noop();
     }
   }
 
@@ -1055,4 +1057,4 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 }
 
-function clientSafeNoop() {}
+function noop() {}

@@ -823,7 +823,7 @@ export function useRoomRuntime({
       !shouldStartPlaybackDemandCacheForPlayback({
         playback,
         peerId,
-        activeSessionId: activeSessionRef.current?.userId,
+        activeSessionId: activeSession?.userId,
         manualCacheTrackIds,
         hasLocalFullTrack: hasFullLocalTrack,
         enableManualTrackCaching
@@ -834,7 +834,7 @@ export function useRoomRuntime({
 
     void startPlaybackDemandCacheDownload(playback!.currentTrackId!);
   }, [
-    activeSessionRef,
+    activeSession?.userId,
     hasFullLocalTrack,
     manualCacheTrackIds,
     peerId,

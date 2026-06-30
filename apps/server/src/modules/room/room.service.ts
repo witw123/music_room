@@ -78,7 +78,7 @@ export class RoomService {
     hostSessionId: string,
     visibility: Room["visibility"] = "public"
   ) {
-    const hostSession = await this.authService.getSessionOrThrow(hostSessionId);
+    const hostSession = await this.authService.getUserOrThrow(hostSessionId);
     const room: Room = {
       id: `room_${randomUUID()}`,
       hostId: hostSession.id,
@@ -206,7 +206,7 @@ export class RoomService {
 
   async joinRoom(roomId: string, sessionId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    const session = await this.authService.getSessionOrThrow(sessionId);
+    const session = await this.authService.getUserOrThrow(sessionId);
     this.assertUniqueNickname(record, session.id, session.nickname);
 
     if (!record.room.members.some((member) => member.id === session.id)) {
@@ -378,14 +378,14 @@ export class RoomService {
     sessionId: string,
     input: Omit<TrackMeta, "id"> & { id?: string }
   ) {
-    await this.authService.getSessionOrThrow(sessionId);
+    await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
 
     const track: TrackMeta = {
       ...input,
       ownerSessionId: sessionId,
-      ownerNickname: (await this.authService.getSessionOrThrow(sessionId)).nickname,
+      ownerNickname: (await this.authService.getUserOrThrow(sessionId)).nickname,
       id: input.id ?? `track_${randomUUID()}`
     };
 
@@ -451,7 +451,7 @@ export class RoomService {
   }
 
   async addQueueItem(roomId: string, sessionId: string, trackId: string) {
-    const session = await this.authService.getSessionOrThrow(sessionId);
+    const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
 
@@ -490,7 +490,7 @@ export class RoomService {
   }
 
   async importPlaylistToQueue(roomId: string, sessionId: string, trackIds: string[]) {
-    const session = await this.authService.getSessionOrThrow(sessionId);
+    const session = await this.authService.getUserOrThrow(sessionId);
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);
 
