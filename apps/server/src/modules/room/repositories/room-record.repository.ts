@@ -228,14 +228,17 @@ export class RoomRecordRepository {
         if (isUniqueConstraintError(error)) {
           // Another process created the room concurrently; retry the
           // optimistic update once so callers don't see a false conflict.
-          await this.prisma.roomState.updateMany({
+          const retryResult = await this.prisma.roomState.updateMany({
             where: {
               id: record.room.id,
               roomRevision: { lt: record.room.roomRevision ?? 0 }
             },
             data: payload
           });
-          return;
+          if (retryResult.count > 0) {
+            return;
+          }
+          throw new Error("Room state revision conflict.");
         }
         throw error;
       }

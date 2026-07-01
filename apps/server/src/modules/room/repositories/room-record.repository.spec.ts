@@ -133,6 +133,39 @@ describe("RoomRecordRepository", () => {
     expect(rooms.get("room_1")?.room.roomRevision).toBe(storedRoomRevision);
   });
 
+  it("rejects a unique-create race when the retry update does not write a newer revision", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        findUnique: jest.fn(async () => null),
+        create: jest.fn(async () => {
+          const error = new Error("Unique constraint failed");
+          Object.assign(error, { code: "P2002" });
+          throw error;
+        }),
+        updateMany: jest.fn(async () => ({ count: 0 }))
+      }
+    };
+    const redis = createRedisMock();
+    const rooms = new Map<string, RoomRecord>();
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.persistRecord(createRoomRecord(1))).rejects.toThrow(
+      "Room state revision conflict."
+    );
+
+    expect(prisma.roomState.updateMany).toHaveBeenCalledTimes(2);
+    expect(redis.addToSet).not.toHaveBeenCalled();
+    expect(rooms.has("room_1")).toBe(false);
+  });
+
   it("keeps the in-memory record when deleting external storage fails", async () => {
     const existingRecord = createRoomRecord(1);
     const rooms = new Map<string, RoomRecord>([[existingRecord.room.id, existingRecord]]);
