@@ -77,6 +77,23 @@ export type ActivePlaybackCacheWindow = {
   policy: ProgressiveSchedulerPolicy;
 };
 
+export function getActivePlaybackPendingKey(
+  activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined
+) {
+  if (!activePlaybackWindow) {
+    return null;
+  }
+
+  return [
+    activePlaybackWindow.trackId,
+    activePlaybackWindow.revision,
+    activePlaybackWindow.mediaEpoch,
+    activePlaybackWindow.status,
+    activePlaybackWindow.policy,
+    Math.floor(activePlaybackWindow.positionMs / activePlaybackPendingRefreshBucketMs)
+  ].join("|");
+}
+
 export function mergePeerIds(...peerIdGroups: Array<readonly string[]>) {
   const peerIds = new Set<string>();
   for (const group of peerIdGroups) {
@@ -873,8 +890,12 @@ export function useManualCacheDownloader(input: {
   const lastRecoveryAtRef = useRef<number | null>(null);
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
   const activePlaybackPendingKeyRef = useRef<string | null>(null);
+  const activePlaybackWindowRef = useRef<ActivePlaybackCacheWindow | null>(
+    input.activePlaybackWindow ?? null
+  );
   const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());
   const lastProviderRestartAtRef = useRef<Map<string, number>>(new Map());
+  activePlaybackWindowRef.current = input.activePlaybackWindow ?? null;
 
   const schedulerAvailabilityByTrack = useMemo(
     () =>
@@ -912,6 +933,7 @@ export function useManualCacheDownloader(input: {
     () => mergePeerIds(providerPeerIds),
     [providerPeerIds]
   );
+  const activePlaybackPendingKey = getActivePlaybackPendingKey(input.activePlaybackWindow);
 
   useEffect(() => {
     if (
@@ -1076,19 +1098,12 @@ export function useManualCacheDownloader(input: {
       }
     }
 
-    const nextPlaybackPendingKey = input.activePlaybackWindow
-      ? [
-          input.activePlaybackWindow.trackId,
-          input.activePlaybackWindow.revision,
-          input.activePlaybackWindow.mediaEpoch,
-          Math.floor(input.activePlaybackWindow.positionMs / activePlaybackPendingRefreshBucketMs)
-        ].join("|")
-      : null;
-    if (activePlaybackPendingKeyRef.current !== nextPlaybackPendingKey) {
-      if (input.activePlaybackWindow?.trackId) {
-        directPendingRef.current.delete(input.activePlaybackWindow.trackId);
+    if (activePlaybackPendingKeyRef.current !== activePlaybackPendingKey) {
+      const activeTrackId = activePlaybackWindowRef.current?.trackId;
+      if (activeTrackId) {
+        directPendingRef.current.delete(activeTrackId);
       }
-      activePlaybackPendingKeyRef.current = nextPlaybackPendingKey;
+      activePlaybackPendingKeyRef.current = activePlaybackPendingKey;
     }
 
     if (input.pauseDirectRequests) {
@@ -1181,7 +1196,7 @@ export function useManualCacheDownloader(input: {
           connectedPeerIds,
           availabilityByTrack: schedulerAvailabilityByTrack,
           pendingByTrack: directPendingRef.current,
-          activePlaybackWindow: input.activePlaybackWindow ?? null,
+          activePlaybackWindow: activePlaybackWindowRef.current,
           now,
           getCachedManifest: async (track) =>
             (await getTrackPieceManifestByFileHash(track.fileHash)) ??
@@ -1258,7 +1273,7 @@ export function useManualCacheDownloader(input: {
     input.peerId,
     input.pauseDirectRequests,
     input.roomSnapshot,
-    input.activePlaybackWindow,
+    activePlaybackPendingKey,
     schedulerAvailabilityByTrack
   ]);
 

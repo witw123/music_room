@@ -268,7 +268,12 @@ export class ProgressivePcmEngine {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
         playbackPositionSeconds: this.getCurrentTimeSeconds(),
-        blockedReason: this.status !== "ready" ? `engine-${this.status}` : "missing-audio-context"
+        blockedReason:
+          this.status === "failed" && this.lastDecodeError
+            ? this.lastDecodeError
+            : this.status !== "ready"
+              ? `engine-${this.status}`
+              : "missing-audio-context"
       };
     }
 

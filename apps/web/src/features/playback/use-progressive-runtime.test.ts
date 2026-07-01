@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getAudibleElementVolume,
+  getPcmEngineDiagnosticsKey,
   resolveMediaElementPlaybackRole,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
@@ -15,6 +16,8 @@ import {
   shouldStartListenerProgressivePlayback,
   shouldHoldSlidingWindowPlaybackForEngine,
   shouldLatchPcmRuntimeFailure,
+  shouldResetAudioForPlaybackSurfaceChange,
+  shouldRetryPcmRuntimeAfterFailure,
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
 
@@ -182,6 +185,40 @@ describe("use-progressive-runtime policy helpers", () => {
         cooldownMs: 0
       })
     ).toBe(true);
+  });
+
+  it("keeps the PCM diagnostics dependency stable when sampled values are unchanged", () => {
+    const snapshot = {
+      status: "ready" as const,
+      audioContextState: "running" as const,
+      hasOutputStream: true,
+      directOutputConnected: true,
+      contiguousChunkCount: 4,
+      contiguousByteLength: 1024,
+      decodedSegmentCount: 2,
+      scheduledSegmentCount: 1,
+      decodedPacketCount: 3,
+      decoderFlushAttemptCount: 1,
+      decoderFlushCount: 1,
+      lastDecodedAtMs: 100,
+      lastDecodeError: null,
+      decodedPeak: 0.5,
+      decodedRms: 0.25,
+      decodedNonZeroSampleCount: 4096,
+      bufferedAheadMs: 8000,
+      playoutState: "playing" as const
+    };
+
+    expect(getPcmEngineDiagnosticsKey(null)).toBe("none");
+    expect(getPcmEngineDiagnosticsKey(snapshot)).toBe(
+      getPcmEngineDiagnosticsKey({ ...snapshot })
+    );
+    expect(getPcmEngineDiagnosticsKey(snapshot)).not.toBe(
+      getPcmEngineDiagnosticsKey({
+        ...snapshot,
+        scheduledSegmentCount: 2
+      })
+    );
   });
 
   it("allows full-local playback once the complete cache appears during the same playback session", () => {
@@ -353,10 +390,61 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(false);
   });
 
-  it("does not permanently latch transient PCM engine attach failures", () => {
-    expect(shouldLatchPcmRuntimeFailure("engine-failed")).toBe(false);
+  it("clears the previous audio source only after the playback surface changes", () => {
+    expect(
+      shouldResetAudioForPlaybackSurfaceChange({
+        previousPlaybackSurfaceKey: null,
+        nextPlaybackSurfaceKey: "track_1:epoch_1"
+      })
+    ).toBe(false);
+    expect(
+      shouldResetAudioForPlaybackSurfaceChange({
+        previousPlaybackSurfaceKey: "track_1:epoch_1",
+        nextPlaybackSurfaceKey: "track_1:epoch_1"
+      })
+    ).toBe(false);
+    expect(
+      shouldResetAudioForPlaybackSurfaceChange({
+        previousPlaybackSurfaceKey: "track_1:epoch_1",
+        nextPlaybackSurfaceKey: "track_2:epoch_2"
+      })
+    ).toBe(true);
+  });
+
+  it("latches fatal PCM runtime failures while keeping cache misses recoverable", () => {
+    expect(shouldLatchPcmRuntimeFailure("engine-failed")).toBe(true);
+    expect(shouldLatchPcmRuntimeFailure("decoder-unavailable")).toBe(true);
+    expect(shouldLatchPcmRuntimeFailure("decoder-config-failed")).toBe(true);
+    expect(shouldLatchPcmRuntimeFailure("encoded-audio-chunk-unavailable")).toBe(true);
+    expect(shouldLatchPcmRuntimeFailure("cache-read-failed")).toBe(true);
     expect(shouldLatchPcmRuntimeFailure("engine-opening")).toBe(false);
+    expect(shouldLatchPcmRuntimeFailure("pcm-buffer-missing")).toBe(false);
+    expect(shouldLatchPcmRuntimeFailure("audio-context-suspended")).toBe(false);
     expect(shouldLatchPcmRuntimeFailure("decoder-flush-failed")).toBe(true);
+  });
+
+  it("does not recreate PCM for the same failed track until playback moves to another track", () => {
+    expect(
+      shouldRetryPcmRuntimeAfterFailure({
+        currentTrackId: "track_1",
+        failureTrackId: "track_1",
+        failureReason: "decoder-unavailable"
+      })
+    ).toBe(false);
+    expect(
+      shouldRetryPcmRuntimeAfterFailure({
+        currentTrackId: "track_2",
+        failureTrackId: "track_1",
+        failureReason: "decoder-unavailable"
+      })
+    ).toBe(true);
+    expect(
+      shouldRetryPcmRuntimeAfterFailure({
+        currentTrackId: "track_1",
+        failureTrackId: "track_1",
+        failureReason: "pcm-buffer-missing"
+      })
+    ).toBe(true);
   });
 
   it("uses the native blob URL instead of the PCM engine when full-local cache exists", () => {

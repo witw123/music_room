@@ -4,6 +4,7 @@ import {
   buildManualCacheRequestFailureEvent,
   buildManualCacheSchedulerAvailability,
   buildManualCacheSchedulerAvailabilityFromParts,
+  getActivePlaybackPendingKey,
   planManualCacheDirectRequests,
   shouldRecordManualCacheBootstrapAttempt,
   resolveManualCacheTrackPlan,
@@ -168,6 +169,66 @@ describe("buildManualCacheSchedulerAvailability", () => {
         localPeerId: "peer_local"
       })
     ).toEqual({});
+  });
+});
+
+describe("getActivePlaybackPendingKey", () => {
+  it("keeps direct cache request state stable inside one playback refresh bucket", () => {
+    const baseWindow = {
+      trackId: "track_a",
+      revision: 3,
+      mediaEpoch: 7,
+      status: "playing" as const,
+      policy: "startup" as const
+    };
+
+    expect(
+      getActivePlaybackPendingKey({
+        ...baseWindow,
+        positionMs: 1_000
+      })
+    ).toBe(
+      getActivePlaybackPendingKey({
+        ...baseWindow,
+        positionMs: 19_999
+      })
+    );
+    expect(
+      getActivePlaybackPendingKey({
+        ...baseWindow,
+        positionMs: 20_000
+      })
+    ).not.toBe(
+      getActivePlaybackPendingKey({
+        ...baseWindow,
+        positionMs: 19_999
+      })
+    );
+  });
+
+  it("separates playback cache pending state by track, revision, epoch and policy", () => {
+    const baseWindow = {
+      trackId: "track_a",
+      positionMs: 1_000,
+      revision: 3,
+      mediaEpoch: 7,
+      status: "playing" as const,
+      policy: "startup" as const
+    };
+
+    expect(getActivePlaybackPendingKey(null)).toBeNull();
+    expect(getActivePlaybackPendingKey(baseWindow)).not.toBe(
+      getActivePlaybackPendingKey({
+        ...baseWindow,
+        policy: "catchup"
+      })
+    );
+    expect(getActivePlaybackPendingKey(baseWindow)).not.toBe(
+      getActivePlaybackPendingKey({
+        ...baseWindow,
+        mediaEpoch: 8
+      })
+    );
   });
 });
 

@@ -610,7 +610,7 @@ describe("ProgressivePcmEngine", () => {
       const result = await engine.syncPlayback(0.2, true);
 
       expect(result.localReady).toBe(false);
-      expect(result.blockedReason).toBe("engine-failed");
+      expect(result.blockedReason).toBe("decoder-flush-failed");
       expect(engine.getSnapshot()).toMatchObject({
         status: "failed",
         decodedPacketCount: 1,

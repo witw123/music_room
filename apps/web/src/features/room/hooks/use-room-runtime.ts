@@ -21,6 +21,7 @@ import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
 import { ChunkScheduler } from "@/features/p2p";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
 import {
   getEffectivePlaybackPositionMs,
   hasActivePlaybackIntent,
@@ -234,6 +235,27 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
   }
 
   return !input.manualCacheTrackIds.includes(playback.currentTrackId);
+}
+
+export function shouldWaitForSourceAudioElementTrack(input: {
+  playbackTrackId: string | null | undefined;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  activePlaybackSource: ProgressivePlaybackSource;
+  uploadedTrackObjectUrl: string | null | undefined;
+  isCurrentSourceOwner: boolean;
+  audioCurrentSrc: string | null | undefined;
+  audioSrcObjectPresent: boolean;
+}) {
+  if (
+    !input.playbackTrackId ||
+    input.playbackStatus !== "playing" ||
+    (!input.isCurrentSourceOwner && input.activePlaybackSource !== "full-local") ||
+    !input.uploadedTrackObjectUrl
+  ) {
+    return false;
+  }
+
+  return input.audioSrcObjectPresent || input.audioCurrentSrc !== input.uploadedTrackObjectUrl;
 }
 
 export function resolveRuntimeManualCacheTrackIds(input: {
@@ -664,6 +686,37 @@ export function useRoomRuntime({
     }
 
     try {
+      const uploadedTrack = uploadedTracksRef.current[playback.currentTrackId] ?? null;
+      if (
+        shouldWaitForSourceAudioElementTrack({
+          playbackTrackId: playback.currentTrackId,
+          playbackStatus: playback.status,
+          activePlaybackSource: activePlaybackSourceRef.current,
+          uploadedTrackObjectUrl: uploadedTrack?.objectUrl,
+          isCurrentSourceOwner,
+          audioCurrentSrc: audio.currentSrc || audio.src || null,
+          audioSrcObjectPresent: !!audio.srcObject
+        }) &&
+        uploadedTrack
+      ) {
+        audio.pause();
+        audio.srcObject = null;
+        if (audio.src !== uploadedTrack.objectUrl) {
+          audio.src = uploadedTrack.objectUrl;
+          audio.load();
+        }
+        const track =
+          currentRoomRef.current?.tracks.find((entry) => entry.id === playback.currentTrackId) ??
+          roomSnapshot?.tracks.find((entry) => entry.id === playback.currentTrackId) ??
+          null;
+        const expectedSeconds =
+          getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now()) / 1000;
+        syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+          softDriftMs: 90,
+          hardDriftMs: 720,
+          correctionMode: "audible-local-follow"
+        });
+      }
       audio.muted = false;
       await roomAudioOutput.playElement(audio);
       updateSourceStartState("live", {
@@ -677,7 +730,16 @@ export function useRoomRuntime({
         level: "warning"
       });
     }
-  }, [audioRef, currentRoomRef, roomSnapshot?.room.playback, updateSourceStartState]);
+  }, [
+    activePlaybackSourceRef,
+    audioRef,
+    currentRoomRef,
+    roomSnapshot?.room.playback,
+    roomSnapshot?.tracks,
+    updateSourceStartState,
+    uploadedTracksRef,
+    isCurrentSourceOwner
+  ]);
 
   const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
   const ensureSourcePlaybackStartedRef = useRef(ensureSourcePlaybackStarted);

@@ -13,6 +13,7 @@ import {
   shouldKickSourcePlaybackFromRealtimeEvent,
   resolveRuntimeManualCacheTrackIds,
   shouldStartPlaybackDemandCacheForPlayback,
+  shouldWaitForSourceAudioElementTrack,
   shouldReannounceManualCacheAvailability,
   shouldRedirectRoomRouteToAuth,
   resetInitialRoomRecoveryAttemptOnCancellation,
@@ -96,6 +97,53 @@ describe("pure cache room runtime helpers", () => {
     });
 
     expect(recoveryRef.current).toBe("user_1:room_1");
+  });
+
+  it("waits for the source owner's audio element to switch away from the previous track", () => {
+    expect(
+      shouldWaitForSourceAudioElementTrack({
+        playbackTrackId: "track_2",
+        playbackStatus: "playing",
+        activePlaybackSource: "full-local",
+        uploadedTrackObjectUrl: "blob:track-2",
+        isCurrentSourceOwner: true,
+        audioCurrentSrc: "blob:track-1",
+        audioSrcObjectPresent: false
+      })
+    ).toBe(true);
+    expect(
+      shouldWaitForSourceAudioElementTrack({
+        playbackTrackId: "track_2",
+        playbackStatus: "playing",
+        activePlaybackSource: "full-local",
+        uploadedTrackObjectUrl: "blob:track-2",
+        isCurrentSourceOwner: true,
+        audioCurrentSrc: "blob:track-2",
+        audioSrcObjectPresent: false
+      })
+    ).toBe(false);
+    expect(
+      shouldWaitForSourceAudioElementTrack({
+        playbackTrackId: "track_2",
+        playbackStatus: "playing",
+        activePlaybackSource: "progressive-local",
+        uploadedTrackObjectUrl: "blob:track-2",
+        isCurrentSourceOwner: true,
+        audioCurrentSrc: "",
+        audioSrcObjectPresent: true
+      })
+    ).toBe(true);
+    expect(
+      shouldWaitForSourceAudioElementTrack({
+        playbackTrackId: "track_2",
+        playbackStatus: "playing",
+        activePlaybackSource: "lossless-local",
+        uploadedTrackObjectUrl: "blob:track-2",
+        isCurrentSourceOwner: false,
+        audioCurrentSrc: "",
+        audioSrcObjectPresent: true
+      })
+    ).toBe(false);
   });
 
   it("accepts data peer signals and rejects legacy media signals", () => {
