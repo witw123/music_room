@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
+  hasSufficientBackingForFullLocalWarmup,
   resolveMediaElementPlaybackRole,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
@@ -14,6 +15,8 @@ import {
   shouldAttemptProgressiveLocalPlayback,
   shouldRecoverPausedFullLocalPlayback,
   shouldStartListenerProgressivePlayback,
+  shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
+  shouldWarmFullLocalWithSharedAudioElement,
   shouldHoldSlidingWindowPlaybackForEngine,
   shouldLatchPcmRuntimeFailure,
   shouldResetAudioForPlaybackSurfaceChange,
@@ -184,6 +187,84 @@ describe("use-progressive-runtime policy helpers", () => {
         localReady: true,
         driftMs: 80,
         cooldownMs: 0
+      })
+    ).toBe(true);
+  });
+
+  it("does not warm full-local on the shared audio element while sliding-window playback owns it", () => {
+    expect(
+      shouldWarmFullLocalWithSharedAudioElement({
+        activePlaybackSource: "lossless-local",
+        progressiveEngineType: "pcm",
+        canUseFullLocalForPlaybackSession: true,
+        isCurrentSourceOwner: false
+      })
+    ).toBe(false);
+    expect(
+      shouldWarmFullLocalWithSharedAudioElement({
+        activePlaybackSource: "progressive-local",
+        progressiveEngineType: "mse",
+        canUseFullLocalForPlaybackSession: true,
+        isCurrentSourceOwner: false
+      })
+    ).toBe(false);
+    expect(
+      shouldWarmFullLocalWithSharedAudioElement({
+        activePlaybackSource: "progressive-local",
+        progressiveEngineType: "none",
+        canUseFullLocalForPlaybackSession: true,
+        isCurrentSourceOwner: false
+      })
+    ).toBe(true);
+  });
+
+  it("does not directly upgrade sliding-window playback to full-local while an engine owns the shared audio element", () => {
+    const readyInput = {
+      activePlaybackSource: "lossless-local" as const,
+      canUseFullLocalForPlaybackSession: true,
+      fullLocalBlockedReason: null,
+      localTakeoverAllowed: true,
+      aheadBufferedMs: 5000,
+      comfortBufferMs: 1000,
+      warmupReadyAt: 1000,
+      now: 2000,
+      switchDelayMs: 500
+    };
+
+    expect(
+      shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        ...readyInput,
+        progressiveEngineType: "pcm"
+      })
+    ).toBe(false);
+    expect(
+      shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        ...readyInput,
+        progressiveEngineType: "mse"
+      })
+    ).toBe(false);
+  });
+
+  it("does not require progressive ahead buffer when native full-local is the only playback path", () => {
+    expect(
+      hasSufficientBackingForFullLocalWarmup({
+        progressiveEngineType: "none",
+        aheadBufferedMs: 0,
+        requiredAheadMs: 1000
+      })
+    ).toBe(true);
+    expect(
+      hasSufficientBackingForFullLocalWarmup({
+        progressiveEngineType: "mse",
+        aheadBufferedMs: 0,
+        requiredAheadMs: 1000
+      })
+    ).toBe(false);
+    expect(
+      hasSufficientBackingForFullLocalWarmup({
+        progressiveEngineType: "pcm",
+        aheadBufferedMs: 1200,
+        requiredAheadMs: 1000
       })
     ).toBe(true);
   });

@@ -310,6 +310,68 @@ export function shouldEnableFullLocalHandoff(input: {
   return input.playbackRecoveryStage !== "startup-buffering";
 }
 
+export function shouldWarmFullLocalWithSharedAudioElement(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  progressiveEngineType: ProgressiveEngineType;
+  canUseFullLocalForPlaybackSession: boolean;
+  isCurrentSourceOwner: boolean;
+}) {
+  return (
+    input.canUseFullLocalForPlaybackSession &&
+    !input.isCurrentSourceOwner &&
+    input.activePlaybackSource !== "full-local" &&
+    input.progressiveEngineType === "none"
+  );
+}
+
+export function hasSufficientBackingForFullLocalWarmup(input: {
+  progressiveEngineType: ProgressiveEngineType;
+  aheadBufferedMs: number;
+  requiredAheadMs: number;
+}) {
+  if (input.progressiveEngineType === "none") {
+    return true;
+  }
+
+  return input.aheadBufferedMs >= input.requiredAheadMs;
+}
+
+export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  progressiveEngineType: ProgressiveEngineType;
+  canUseFullLocalForPlaybackSession: boolean;
+  fullLocalBlockedReason: string | null | undefined;
+  localTakeoverAllowed: boolean;
+  aheadBufferedMs: number;
+  comfortBufferMs: number;
+  warmupReadyAt: number | null;
+  now: number;
+  switchDelayMs: number;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    input.progressiveEngineType !== "none"
+  ) {
+    return false;
+  }
+
+  if (
+    !input.canUseFullLocalForPlaybackSession ||
+    input.fullLocalBlockedReason !== null ||
+    !input.localTakeoverAllowed ||
+    !hasSufficientBackingForFullLocalWarmup({
+      progressiveEngineType: input.progressiveEngineType,
+      aheadBufferedMs: input.aheadBufferedMs,
+      requiredAheadMs: input.comfortBufferMs
+    }) ||
+    input.warmupReadyAt === null
+  ) {
+    return false;
+  }
+
+  return input.now - input.warmupReadyAt >= input.switchDelayMs;
+}
+
 export function shouldRecoverPausedFullLocalPlayback(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
@@ -772,10 +834,12 @@ export function useProgressiveRuntime({
       activePlaybackSource,
       progressiveEngineType: currentProgressiveEngineType
     });
-  const canWarmBufferedFullLocal =
-    !isCurrentSourceOwner &&
-    activePlaybackSource !== "full-local" &&
-    canUseFullLocalForPlaybackSession;
+  const canWarmBufferedFullLocal = shouldWarmFullLocalWithSharedAudioElement({
+    activePlaybackSource,
+    progressiveEngineType: currentProgressiveEngineType,
+    canUseFullLocalForPlaybackSession,
+    isCurrentSourceOwner
+  });
   const pendingPlaybackIntent = isPlaybackStartIntentPending(playbackStartIntent);
   const startupBufferMs = adaptiveStartupBufferMs;
   const localTakeoverCooldownMs = useMemo(
@@ -2475,8 +2539,7 @@ export function useProgressiveRuntime({
       !playbackState?.currentTrackId ||
       !audio ||
       !currentBufferedFullLocalTrack ||
-      !canWarmBufferedFullLocal ||
-      currentProgressiveEngineType === "pcm"
+      !canWarmBufferedFullLocal
     ) {
       fullLocalWarmupReadyAtRef.current = null;
       return;
@@ -2516,13 +2579,16 @@ export function useProgressiveRuntime({
         localReady &&
         driftMs <= fullLocalMaxDriftMs &&
         fullLocalBlockedReason === null &&
-        progressiveHealthSnapshot.aheadBufferedMs >=
-          getStartupWindowMs(
+        hasSufficientBackingForFullLocalWarmup({
+          progressiveEngineType: currentProgressiveEngineType,
+          aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+          requiredAheadMs: getStartupWindowMs(
             currentTrack ?? {
               mimeType: null,
               codec: null
             }
-          );
+          )
+        });
 
       const shouldAttemptFullLocalHandoff = shouldEnableFullLocalHandoff({
         activePlaybackSource,
@@ -2581,9 +2647,10 @@ export function useProgressiveRuntime({
     if (
       !playbackState?.currentTrackId ||
       !currentBufferedFullLocalTrack ||
-      currentProgressiveEngineType === "none" ||
+      !canWarmBufferedFullLocal ||
       !isSlidingWindowPlaybackSource(activePlaybackSource)
     ) {
+      fullLocalWarmupReadyAtRef.current = null;
       return;
     }
 
@@ -2601,27 +2668,42 @@ export function useProgressiveRuntime({
 
     const syncUpgrade = () => {
       const now = Date.now();
-      const readyForFullLocal =
-        fullLocalBlockedReason === null &&
-        isLocalTakeoverAllowed(now) &&
-        progressiveHealthSnapshot.aheadBufferedMs >= comfortBufferMs;
+      const localTakeoverAllowed = isLocalTakeoverAllowed(now);
+      const shouldUpgrade = shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        activePlaybackSource,
+        progressiveEngineType: currentProgressiveEngineType,
+        canUseFullLocalForPlaybackSession,
+        fullLocalBlockedReason,
+        localTakeoverAllowed,
+        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+        comfortBufferMs,
+        warmupReadyAt: fullLocalWarmupReadyAtRef.current,
+        now,
+        switchDelayMs: fullLocalSwitchDelayMs
+      });
 
-      if (!readyForFullLocal) {
+      if (shouldUpgrade) {
+        transitionPlaybackSource("full-local");
+        return;
+      }
+
+      const canArmIdleFullLocalUpgrade =
+        currentProgressiveEngineType === "none" &&
+        canUseFullLocalForPlaybackSession &&
+        fullLocalBlockedReason === null &&
+        localTakeoverAllowed &&
+        hasSufficientBackingForFullLocalWarmup({
+          progressiveEngineType: currentProgressiveEngineType,
+          aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+          requiredAheadMs: comfortBufferMs
+        });
+      if (!canArmIdleFullLocalUpgrade) {
         fullLocalWarmupReadyAtRef.current = null;
         return;
       }
 
       if (fullLocalWarmupReadyAtRef.current === null) {
         fullLocalWarmupReadyAtRef.current = now;
-        return;
-      }
-
-      if (now - fullLocalWarmupReadyAtRef.current < fullLocalSwitchDelayMs) {
-        return;
-      }
-
-      if (isSlidingWindowPlaybackSource(activePlaybackSource)) {
-        transitionPlaybackSource("full-local");
       }
     };
 
@@ -2631,9 +2713,11 @@ export function useProgressiveRuntime({
   }, [
     roomSnapshot?.room.playback,
     currentBufferedFullLocalTrack,
+    canWarmBufferedFullLocal,
     currentProgressiveEngineType,
     activePlaybackSource,
     currentTrack,
+    canUseFullLocalForPlaybackSession,
     fullLocalBlockedReason,
     isLocalTakeoverAllowed,
     progressiveHealthSnapshot.aheadBufferedMs,
