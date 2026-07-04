@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  getCachedFullLocalPlaybackLoadKey,
+  resolveCachedFullLocalPlaybackLoadTarget,
   runPlaybackMutationAfterLocalPrime,
   selectFullLocalPlaybackTracks,
+  shouldClearCachedFullLocalPlaybackTrack,
   startBestEffortPlaybackAudioUnlock
 } from "./music-room-app";
 
@@ -30,6 +33,70 @@ describe("selectFullLocalPlaybackTracks", () => {
       file: cachedFile,
       objectUrl: "blob:cached"
     });
+  });
+});
+
+describe("resolveCachedFullLocalPlaybackLoadTarget", () => {
+  it("uses a stable load key when equivalent room track objects are refreshed", () => {
+    const cachedTrack = {
+      fileHash: "hash_cached",
+      title: "Cached",
+      artist: "Artist",
+      mimeType: "audio/flac",
+      durationMs: 120_000,
+      sizeBytes: 48_000_000,
+      cachedAt: "2026-07-04T00:00:00.000Z",
+      sourceTrackIds: ["track_cached"],
+      sourceRoomIds: ["room_1"],
+      lastSourceTrackId: "track_cached",
+      lastSourceRoomId: "room_1",
+      lastOwnerNickname: "Host"
+    };
+    const firstTarget = resolveCachedFullLocalPlaybackLoadTarget({
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        durationMs: 120_000,
+        sizeBytes: 48_000_000
+      },
+      uploadedTrack: null,
+      cachedPlaybackTrack: null,
+      cacheLibraryTracks: [cachedTrack]
+    });
+    const refreshedTarget = resolveCachedFullLocalPlaybackLoadTarget({
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        durationMs: 120_000,
+        sizeBytes: 48_000_000
+      },
+      uploadedTrack: null,
+      cachedPlaybackTrack: null,
+      cacheLibraryTracks: [cachedTrack]
+    });
+
+    expect(getCachedFullLocalPlaybackLoadKey(firstTarget)).toBe("track_cached:hash_cached");
+    expect(getCachedFullLocalPlaybackLoadKey(refreshedTarget)).toBe("track_cached:hash_cached");
+  });
+});
+
+describe("shouldClearCachedFullLocalPlaybackTrack", () => {
+  it("keeps the currently loaded cached full-local track while it still matches playback", () => {
+    expect(
+      shouldClearCachedFullLocalPlaybackTrack({
+        currentPlaybackTrackId: "track_cached",
+        currentTrackFileHash: "hash_cached",
+        uploadedTrack: null,
+        cachedPlaybackTrack: {
+          trackId: "track_cached",
+          fileHash: "hash_cached",
+          file: new File(["cached"], "cached.flac", { type: "audio/flac" }),
+          objectUrl: "blob:cached"
+        }
+      })
+    ).toBe(false);
   });
 });
 

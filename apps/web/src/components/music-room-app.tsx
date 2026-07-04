@@ -69,6 +69,17 @@ type CachedFullLocalPlaybackTrack = FullLocalPlaybackTrack & {
   trackId: string;
   fileHash: string;
 };
+type CachedFullLocalPlaybackLoadTarget = {
+  trackId: string;
+  fileHash: string;
+  cachedFileHash: string;
+  roomTrack: {
+    id: string;
+    fileHash: string;
+    durationMs?: number;
+    sizeBytes?: number;
+  };
+};
 type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
@@ -127,6 +138,90 @@ export function selectFullLocalPlaybackTracks(input: {
   }
 
   return next;
+}
+
+export function getCachedFullLocalPlaybackLoadKey(
+  target: CachedFullLocalPlaybackLoadTarget | null | undefined
+) {
+  return target ? `${target.trackId}:${target.fileHash}` : null;
+}
+
+export function resolveCachedFullLocalPlaybackLoadTarget(input: {
+  currentPlaybackTrackId: string | null | undefined;
+  currentTrack:
+    | {
+        id: string;
+        fileHash: string;
+        durationMs?: number | null;
+        sizeBytes?: number | null;
+      }
+    | null
+    | undefined;
+  uploadedTrack: FullLocalPlaybackTrack | null | undefined;
+  cachedPlaybackTrack: CachedFullLocalPlaybackTrack | null | undefined;
+  cacheLibraryTracks: Array<{
+    fileHash: string;
+    sourceTrackIds: string[];
+    lastSourceTrackId: string | null;
+    durationMs: number;
+    sizeBytes: number;
+  }>;
+}): CachedFullLocalPlaybackLoadTarget | null {
+  const { currentPlaybackTrackId, currentTrack } = input;
+  if (!currentPlaybackTrackId || !currentTrack || input.uploadedTrack) {
+    return null;
+  }
+
+  if (
+    input.cachedPlaybackTrack?.trackId === currentPlaybackTrackId &&
+    input.cachedPlaybackTrack.fileHash === currentTrack.fileHash
+  ) {
+    return null;
+  }
+
+  const roomTrack = {
+    id: currentTrack.id,
+    fileHash: currentTrack.fileHash,
+    durationMs: currentTrack.durationMs ?? undefined,
+    sizeBytes: currentTrack.sizeBytes ?? undefined
+  };
+  const cachedTrack = input.cacheLibraryTracks.find((entry) =>
+    isCachedLibraryTrackUsableForRoomTrack({
+      cachedTrack: entry,
+      roomTrack
+    })
+  );
+  if (!cachedTrack) {
+    return null;
+  }
+
+  return {
+    trackId: currentPlaybackTrackId,
+    fileHash: currentTrack.fileHash,
+    cachedFileHash: cachedTrack.fileHash,
+    roomTrack
+  };
+}
+
+export function shouldClearCachedFullLocalPlaybackTrack(input: {
+  currentPlaybackTrackId: string | null | undefined;
+  currentTrackFileHash: string | null | undefined;
+  uploadedTrack: FullLocalPlaybackTrack | null | undefined;
+  cachedPlaybackTrack: CachedFullLocalPlaybackTrack | null | undefined;
+}) {
+  const cachedPlaybackTrack = input.cachedPlaybackTrack;
+  if (!cachedPlaybackTrack) {
+    return false;
+  }
+
+  if (!input.currentPlaybackTrackId || input.uploadedTrack) {
+    return true;
+  }
+
+  return (
+    cachedPlaybackTrack.trackId !== input.currentPlaybackTrackId ||
+    cachedPlaybackTrack.fileHash !== input.currentTrackFileHash
+  );
 }
 
 export function MusicRoomApp({
@@ -388,36 +483,49 @@ export function MusicRoomApp({
     ]
   );
 
+  const currentUploadedPlaybackTrack = currentPlaybackTrackId
+    ? uploadedTracks[currentPlaybackTrackId] ?? null
+    : null;
+  const cachedFullLocalPlaybackLoadTarget = useMemo(
+    () =>
+      resolveCachedFullLocalPlaybackLoadTarget({
+        currentPlaybackTrackId,
+        currentTrack,
+        uploadedTrack: currentUploadedPlaybackTrack,
+        cachedPlaybackTrack: cachedFullLocalPlaybackTrack,
+        cacheLibraryTracks
+      }),
+    [
+      cacheLibraryTracks,
+      cachedFullLocalPlaybackTrack,
+      currentPlaybackTrackId,
+      currentTrack?.durationMs,
+      currentTrack?.fileHash,
+      currentTrack?.id,
+      currentTrack?.sizeBytes,
+      currentUploadedPlaybackTrack
+    ]
+  );
+  const cachedFullLocalPlaybackLoadKey = getCachedFullLocalPlaybackLoadKey(
+    cachedFullLocalPlaybackLoadTarget
+  );
+  const cachedFullLocalPlaybackLoadTargetRef =
+    useRef<CachedFullLocalPlaybackLoadTarget | null>(null);
   useEffect(() => {
-    const roomTrack = currentTrack;
-    if (!currentPlaybackTrackId || !roomTrack) {
-      replaceCachedFullLocalPlaybackTrack(null);
-      return;
-    }
+    cachedFullLocalPlaybackLoadTargetRef.current = cachedFullLocalPlaybackLoadTarget;
+  }, [cachedFullLocalPlaybackLoadTarget]);
 
-    const existing = cachedFullLocalPlaybackTrackRef.current;
-    if (uploadedTracks[currentPlaybackTrackId]) {
-      if (existing?.trackId === currentPlaybackTrackId) {
-        replaceCachedFullLocalPlaybackTrack(null);
-      }
-      return;
-    }
-
-    if (
-      existing?.trackId === currentPlaybackTrackId &&
-      existing.fileHash === roomTrack.fileHash
-    ) {
-      return;
-    }
-
-    const cachedTrack = cacheLibraryTracks.find((entry) =>
-      isCachedLibraryTrackUsableForRoomTrack({
-        cachedTrack: entry,
-        roomTrack
-      })
-    );
-    if (!cachedTrack) {
-      if (existing?.trackId === currentPlaybackTrackId) {
+  useEffect(() => {
+    const target = cachedFullLocalPlaybackLoadTargetRef.current;
+    if (!target || !cachedFullLocalPlaybackLoadKey) {
+      if (
+        shouldClearCachedFullLocalPlaybackTrack({
+          currentPlaybackTrackId,
+          currentTrackFileHash: currentTrack?.fileHash ?? null,
+          uploadedTrack: currentUploadedPlaybackTrack,
+          cachedPlaybackTrack: cachedFullLocalPlaybackTrackRef.current
+        })
+      ) {
         replaceCachedFullLocalPlaybackTrack(null);
       }
       return;
@@ -425,13 +533,15 @@ export function MusicRoomApp({
 
     let cancelled = false;
     void (async () => {
-      const cachedTrackFile = await loadCachedLibraryTrackFile(cachedTrack.fileHash);
+      const cachedTrackFile = await loadCachedLibraryTrackFile(target.cachedFileHash);
+      const latestTarget = cachedFullLocalPlaybackLoadTargetRef.current;
       if (
         cancelled ||
+        getCachedFullLocalPlaybackLoadKey(latestTarget) !== cachedFullLocalPlaybackLoadKey ||
         !cachedTrackFile ||
         !isCachedLibraryTrackUsableForRoomTrack({
           cachedTrack: cachedTrackFile,
-          roomTrack
+          roomTrack: target.roomTrack
         })
       ) {
         return;
@@ -444,8 +554,8 @@ export function MusicRoomApp({
       }
 
       replaceCachedFullLocalPlaybackTrack({
-        trackId: currentPlaybackTrackId,
-        fileHash: roomTrack.fileHash,
+        trackId: target.trackId,
+        fileHash: target.fileHash,
         file: cachedTrackFile.file,
         objectUrl
       });
@@ -455,12 +565,12 @@ export function MusicRoomApp({
       cancelled = true;
     };
   }, [
-    cacheLibraryTracks,
+    cachedFullLocalPlaybackLoadKey,
     currentPlaybackTrackId,
-    currentTrack,
+    currentTrack?.fileHash,
+    currentUploadedPlaybackTrack,
     loadCachedLibraryTrackFile,
-    replaceCachedFullLocalPlaybackTrack,
-    uploadedTracks
+    replaceCachedFullLocalPlaybackTrack
   ]);
 
   useEffect(
