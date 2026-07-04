@@ -18,6 +18,7 @@ import {
   shouldLatchPcmRuntimeFailure,
   shouldResetAudioForPlaybackSurfaceChange,
   shouldRetryPcmRuntimeAfterFailure,
+  shouldSkipSecondaryPcmWarmupSync,
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
 
@@ -185,6 +186,23 @@ describe("use-progressive-runtime policy helpers", () => {
         cooldownMs: 0
       })
     ).toBe(true);
+  });
+
+  it("skips the secondary idle sync after a PCM warmup miss", () => {
+    expect(
+      shouldSkipSecondaryPcmWarmupSync({
+        engineType: "pcm",
+        engineReady: true,
+        localReady: false
+      })
+    ).toBe(true);
+    expect(
+      shouldSkipSecondaryPcmWarmupSync({
+        engineType: "mse",
+        engineReady: true,
+        localReady: false
+      })
+    ).toBe(false);
   });
 
   it("keeps the PCM diagnostics dependency stable when sampled values are unchanged", () => {

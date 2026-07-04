@@ -481,6 +481,30 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
   );
 }
 
+export function hasUsableCachedLibraryFileForRoomTrack(input: {
+  cachedTrack:
+    | (CachedLibraryTrackRecord & { file?: Blob | null })
+    | (CachedLibraryTrackSummaryRecord & { file?: Blob | null })
+    | CachedLibraryTrack
+    | CachedLibraryTrackFile
+    | null
+    | undefined;
+  roomTrack:
+    | Pick<TrackMeta, "id" | "fileHash" | "durationMs" | "sizeBytes">
+    | null
+    | undefined;
+}) {
+  return !!(
+    input.cachedTrack &&
+    "file" in input.cachedTrack &&
+    input.cachedTrack.file &&
+    isCachedLibraryTrackUsableForRoomTrack({
+      cachedTrack: input.cachedTrack,
+      roomTrack: input.roomTrack
+    })
+  );
+}
+
 export function useTrackUploads(options: {
   peerId: string;
   activeSession: GuestSession | null;
@@ -1203,18 +1227,26 @@ export function useTrackUploads(options: {
           roomTrack: track
         })
       ) {
-        updateManualCacheTask(trackId, {
-          status: "ready",
-          mode,
-          fileHash: track.fileHash,
-          errorMessage: null,
-          completedChunks: resolveTrackTotalChunks(track),
-          totalChunks: resolveTrackTotalChunks(track),
-          mimeType: track.mimeType ?? null,
-          blockedReason: null,
-          lastError: null
-        });
-        return;
+        const cachedLibraryRecord = await getCachedLibraryTrack(track.fileHash);
+        if (
+          hasUsableCachedLibraryFileForRoomTrack({
+            cachedTrack: cachedLibraryRecord,
+            roomTrack: track
+          })
+        ) {
+          updateManualCacheTask(trackId, {
+            status: "ready",
+            mode,
+            fileHash: track.fileHash,
+            errorMessage: null,
+            completedChunks: resolveTrackTotalChunks(track),
+            totalChunks: resolveTrackTotalChunks(track),
+            mimeType: track.mimeType ?? null,
+            blockedReason: null,
+            lastError: null
+          });
+          return;
+        }
       }
 
       const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;

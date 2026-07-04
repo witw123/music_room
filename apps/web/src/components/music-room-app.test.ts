@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getCachedFullLocalPlaybackLoadKey,
+  hasPlayableFullLocalPlaybackTrack,
   resolveCachedFullLocalPlaybackLoadTarget,
   runPlaybackMutationAfterLocalPrime,
   selectFullLocalPlaybackTracks,
@@ -33,6 +34,29 @@ describe("selectFullLocalPlaybackTracks", () => {
       file: cachedFile,
       objectUrl: "blob:cached"
     });
+  });
+});
+
+describe("hasPlayableFullLocalPlaybackTrack", () => {
+  it("requires a loaded full-local playback source, not just cache metadata", () => {
+    expect(
+      hasPlayableFullLocalPlaybackTrack({
+        currentPlaybackTrackId: "track_cached",
+        fullLocalPlaybackTracks: {}
+      })
+    ).toBe(false);
+
+    expect(
+      hasPlayableFullLocalPlaybackTrack({
+        currentPlaybackTrackId: "track_cached",
+        fullLocalPlaybackTracks: {
+          track_cached: {
+            file: new File(["cached"], "cached.flac", { type: "audio/flac" }),
+            objectUrl: "blob:cached"
+          }
+        }
+      })
+    ).toBe(true);
   });
 });
 

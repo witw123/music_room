@@ -18,7 +18,8 @@ import {
   shouldAssembleManualCachePlanProgress,
   shouldHydrateCacheTaskPieceIndexes,
   shouldAnnounceTrackAvailability,
-  shouldEnsurePlaybackDemandCacheTask
+  shouldEnsurePlaybackDemandCacheTask,
+  hasUsableCachedLibraryFileForRoomTrack
 } from "./use-track-uploads";
 
 describe("buildRegisterTrackPayload", () => {
@@ -609,6 +610,48 @@ describe("shouldCreatePlaybackDemandTaskFromCachePiece", () => {
         hasCurrentTask: true
       })
     ).toBe(false);
+  });
+});
+
+describe("hasUsableCachedLibraryFileForRoomTrack", () => {
+  it("requires a real cached file instead of trusting metadata-only summaries", () => {
+    const roomTrack = {
+      id: "track_1",
+      fileHash: "hash_1",
+      durationMs: 120_000,
+      sizeBytes: 48_000_000
+    };
+    const summary = {
+      fileHash: "hash_1",
+      title: "Cached",
+      artist: "Artist",
+      mimeType: "audio/flac",
+      durationMs: 120_000,
+      sizeBytes: 48_000_000,
+      cachedAt: "2026-07-04T00:00:00.000Z",
+      sourceTrackIds: ["track_1"],
+      sourceRoomIds: ["room_1"],
+      lastSourceTrackId: "track_1",
+      lastSourceRoomId: "room_1",
+      lastOwnerNickname: "Host"
+    };
+
+    expect(
+      hasUsableCachedLibraryFileForRoomTrack({
+        cachedTrack: summary,
+        roomTrack
+      })
+    ).toBe(false);
+
+    expect(
+      hasUsableCachedLibraryFileForRoomTrack({
+        cachedTrack: {
+          ...summary,
+          file: new File(["cached"], "cached.flac", { type: "audio/flac" })
+        },
+        roomTrack
+      })
+    ).toBe(true);
   });
 });
 

@@ -348,6 +348,14 @@ export function shouldPrepareProgressiveRuntimeForSource(input: {
   );
 }
 
+export function shouldSkipSecondaryPcmWarmupSync(input: {
+  engineType: ProgressiveEngineType;
+  engineReady: boolean;
+  localReady: boolean;
+}) {
+  return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
+}
+
 export function shouldStartListenerProgressivePlayback(input: {
   isCurrentSourceOwner: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
@@ -2369,7 +2377,14 @@ export function useProgressiveRuntime({
         !engineReady ||
         !localReady
       ) {
-        if (pcmEngine) {
+        if (
+          pcmEngine &&
+          !shouldSkipSecondaryPcmWarmupSync({
+            engineType: currentProgressiveEngineType,
+            engineReady,
+            localReady
+          })
+        ) {
           const syncResult = await pcmEngine.syncPlayback(expectedSeconds, false).catch(() => null);
           pcmLastBlockedReasonRef.current = syncResult?.blockedReason ?? null;
           markPcmRuntimeFailure(
@@ -2381,7 +2396,7 @@ export function useProgressiveRuntime({
           if (cancelled) {
             return;
           }
-        } else {
+        } else if (!pcmEngine) {
           audio.pause();
         }
         audio.muted = false;

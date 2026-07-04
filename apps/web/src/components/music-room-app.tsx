@@ -140,6 +140,16 @@ export function selectFullLocalPlaybackTracks(input: {
   return next;
 }
 
+export function hasPlayableFullLocalPlaybackTrack(input: {
+  currentPlaybackTrackId: string | null | undefined;
+  fullLocalPlaybackTracks: Record<string, FullLocalPlaybackTrack>;
+}) {
+  return !!(
+    input.currentPlaybackTrackId &&
+    input.fullLocalPlaybackTracks[input.currentPlaybackTrackId]
+  );
+}
+
 export function getCachedFullLocalPlaybackLoadKey(
   target: CachedFullLocalPlaybackLoadTarget | null | undefined
 ) {
@@ -384,19 +394,6 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability
   });
 
-  const hasFullLocalTrack = useMemo(
-    () =>
-      currentPlaybackTrackId && currentTrack
-        ? !!uploadedTracks[currentPlaybackTrackId] ||
-          !!cacheLibraryTracks.find((track) =>
-            isCachedLibraryTrackUsableForRoomTrack({
-              cachedTrack: track,
-              roomTrack: currentTrack
-            })
-          )
-        : false,
-    [cacheLibraryTracks, currentPlaybackTrackId, currentTrack, uploadedTracks]
-  );
   const [cachedFullLocalPlaybackTrack, setCachedFullLocalPlaybackTrack] =
     useState<CachedFullLocalPlaybackTrack | null>(null);
   const cachedFullLocalPlaybackTrackRef = useRef<CachedFullLocalPlaybackTrack | null>(null);
@@ -418,6 +415,14 @@ export function MusicRoomApp({
         cachedPlaybackTrack: cachedFullLocalPlaybackTrack
       }),
     [cachedFullLocalPlaybackTrack, uploadedTracks]
+  );
+  const hasPlayableFullLocalTrack = useMemo(
+    () =>
+      hasPlayableFullLocalPlaybackTrack({
+        currentPlaybackTrackId,
+        fullLocalPlaybackTracks
+      }),
+    [currentPlaybackTrackId, fullLocalPlaybackTracks]
   );
 
   const loadCachedFullLocalPlaybackTrack = useCallback(
@@ -804,7 +809,7 @@ export function MusicRoomApp({
     activePlaybackSource,
     progressiveSchedulerPolicy,
     isCurrentSourceOwner,
-    hasFullLocalTrack,
+    hasFullLocalTrack: hasPlayableFullLocalTrack,
     audioUnlocked,
     getLocalPlaybackPositionMs,
     setAudioUnlocked,
@@ -882,7 +887,7 @@ export function MusicRoomApp({
 
     setActivePlaybackSource(
       getSlidingWindowPlaybackSource({
-        hasFullLocalTrack,
+        hasFullLocalTrack: hasPlayableFullLocalTrack,
         format: resolveSlidingWindowFormat({
           mimeType: currentTrack?.mimeType ?? null,
           codec: currentTrack?.codec ?? null,
@@ -897,7 +902,7 @@ export function MusicRoomApp({
     currentPlaybackTrackId,
     currentTrack,
     currentProgressiveEngineTypeForSource,
-    hasFullLocalTrack
+    hasPlayableFullLocalTrack
   ]);
 
   const previousPlaybackRef = useRef(roomSnapshot?.room.playback ?? null);
