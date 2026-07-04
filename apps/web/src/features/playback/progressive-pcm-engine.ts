@@ -218,7 +218,13 @@ export class ProgressivePcmEngine {
       this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
       this.destinationNode = this.audioContext.createMediaStreamDestination();
       this.gainNode.connect(this.destinationNode);
-      this.directOutputConnected = false;
+      // Route decoded PCM straight to the AudioContext destination. On
+      // Chrome/Edge a MediaStreamAudioDestinationNode stream attached to
+      // <audio srcObject> stays silent (it is only wired for WebRTC), so the
+      // element path alone produces "progress moves but no sound" for
+      // listeners. The direct connection is the only reliable output route.
+      this.gainNode.connect(this.audioContext.destination);
+      this.directOutputConnected = true;
       this.audio.srcObject = this.destinationNode.stream;
       this.audio.volume = 1;
       return true;
@@ -348,6 +354,21 @@ export class ProgressivePcmEngine {
 
     this.status = "destroyed";
     this.stopScheduledSegments();
+    // The engine runs on a shared AudioContext, so destroying it never closes
+    // the context. Explicitly disconnect the graph, otherwise stale gain nodes
+    // from previous engine instances stay wired to the destination and overlap
+    // their output with the new engine, which is heard as popping/clipping.
+    try {
+      this.gainNode?.disconnect();
+    } catch {
+      // The node may already be disconnected after a fatal graph teardown.
+    }
+    try {
+      this.destinationNode?.disconnect();
+    } catch {
+      // Ignore double-disconnect races during teardown.
+    }
+    this.directOutputConnected = false;
     const decoder = this.decoder;
     this.decoder = null;
     try {

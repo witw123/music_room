@@ -55,6 +55,7 @@ function installFakeAudioContext(
   ).EncodedAudioChunk;
   const gainNode = {
     connectCalls: [] as unknown[],
+    disconnectCalls: 0,
     gain: {
       value: 1,
       setValueAtTime(value: number) {
@@ -64,19 +65,29 @@ function installFakeAudioContext(
     connect(target: unknown) {
       this.connectCalls.push(target);
       return undefined;
+    },
+    disconnect() {
+      this.disconnectCalls += 1;
+      return undefined;
     }
   };
   const mediaStreamDestination = {
     stream: {},
+    disconnectCalls: 0,
     connect() {
+      return undefined;
+    },
+    disconnect() {
+      this.disconnectCalls += 1;
       return undefined;
     }
   };
+  const audioDestination = {};
 
   class FakeAudioContext {
     currentTime = 0;
     state = "running" as AudioContextState;
-    destination = {};
+    destination = audioDestination;
 
     createGain() {
       return gainNode;
@@ -218,6 +229,7 @@ function installFakeAudioContext(
   return {
     gainNode,
     mediaStreamDestination,
+    destination: audioDestination,
     restore() {
       if (typeof originalWindow === "undefined") {
         Reflect.deleteProperty(globalThis, "window");
@@ -375,7 +387,7 @@ describe("ProgressivePcmEngine", () => {
     });
   });
 
-  it("routes decoded PCM through the media element only to avoid duplicate output", async () => {
+  it("routes decoded PCM directly to the audio destination for audible playback", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
@@ -388,12 +400,14 @@ describe("ProgressivePcmEngine", () => {
       expect(attached).toBe(true);
       expect(audio.volume).toBe(1);
       expect(audioContext.gainNode.gain.value).toBe(0.6);
-      expect(audioContext.gainNode.connectCalls).toEqual([
+      expect(audioContext.gainNode.connectCalls).toHaveLength(2);
+      expect(audioContext.gainNode.connectCalls).toContain(
         audioContext.mediaStreamDestination
-      ]);
+      );
+      expect(audioContext.gainNode.connectCalls).toContain(audioContext.destination);
       expect(engine.getSnapshot()).toMatchObject({
         hasOutputStream: true,
-        directOutputConnected: false
+        directOutputConnected: true
       });
     } finally {
       engine.destroy();
@@ -419,6 +433,8 @@ describe("ProgressivePcmEngine", () => {
       expect(() => engine.destroy()).not.toThrow();
       expect(() => engine.destroy()).not.toThrow();
       expect(closeCalls).toBe(1);
+      expect(audioContext.gainNode.disconnectCalls).toBe(1);
+      expect(audioContext.mediaStreamDestination.disconnectCalls).toBe(1);
       expect(engine.engineStatus).toBe("destroyed");
     } finally {
       audioContext.restore();
