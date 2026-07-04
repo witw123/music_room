@@ -93,6 +93,7 @@ export class ProgressivePcmEngine {
   private scheduledSegments: ScheduledSegment[] = [];
   private decodedPacketCount = 0;
   private decodedFlacPacketTimestampUs = new Set<number>();
+  private pendingDecodedFlacPacketTimings: Array<{ timestampUs: number; durationUs: number }> = [];
   private decoderFlushAttemptCount = 0;
   private decoderFlushCount = 0;
   private lastDecodedAtMs: number | null = null;
@@ -372,6 +373,7 @@ export class ProgressivePcmEngine {
     this.decodedSegments = [];
     this.decodedPacketCount = 0;
     this.decodedFlacPacketTimestampUs.clear();
+    this.pendingDecodedFlacPacketTimings = [];
     this.decoderFlushAttemptCount = 0;
     this.decoderFlushCount = 0;
     this.lastDecodedAtMs = null;
@@ -435,6 +437,7 @@ export class ProgressivePcmEngine {
           this.lastDecodeError = error instanceof Error ? error.message : "decode-error";
           this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
           this.decoder = null;
+          this.pendingDecodedFlacPacketTimings = [];
         }
       });
       decoder.configure({
@@ -701,6 +704,10 @@ export class ProgressivePcmEngine {
           })
         );
         this.decodedFlacPacketTimestampUs.add(packet.timestampUs);
+        this.pendingDecodedFlacPacketTimings.push({
+          timestampUs: packet.timestampUs,
+          durationUs: packet.durationUs
+        });
         this.decodedPacketCount += 1;
         decodedAny = true;
       } catch (error) {
@@ -752,6 +759,7 @@ export class ProgressivePcmEngine {
       this.lastDecodeError = "decoder-flush-failed";
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       this.decoder = null;
+      this.pendingDecodedFlacPacketTimings = [];
     }
   }
 
@@ -920,9 +928,14 @@ export class ProgressivePcmEngine {
       typeof data.timestamp === "number" && Number.isFinite(data.timestamp)
         ? data.timestamp / 1_000_000
         : null;
+    const queuedFlacTiming = this.pendingDecodedFlacPacketTimings.shift() ?? null;
     const durationSec = data.numberOfFrames / data.sampleRate;
     const startTimeSec =
-      timestampSec !== null && timestampSec >= 0 ? timestampSec : this.nextDecodedStartTimeSec;
+      timestampSec !== null && timestampSec >= 0
+        ? timestampSec
+        : queuedFlacTiming
+          ? queuedFlacTiming.timestampUs / 1_000_000
+          : this.nextDecodedStartTimeSec;
     const endTimeSec = startTimeSec + durationSec;
     if (!Number.isFinite(startTimeSec) || !Number.isFinite(endTimeSec) || endTimeSec <= startTimeSec) {
       return null;
