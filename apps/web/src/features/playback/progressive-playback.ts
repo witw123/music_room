@@ -246,7 +246,7 @@ export function chunkIndexToPositionMs(
   return Math.floor((chunkIndex / manifest.totalChunks) * manifest.durationMs);
 }
 
-function getChunkIndexForPositionMs(
+export function getChunkIndexForPositionMs(
   manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">,
   positionMs: number
 ) {
@@ -395,6 +395,15 @@ export function getDecodableAheadBufferedMs(input: {
   availableChunks: number[];
   playbackPositionMs: number;
 }) {
+  if (!input.manifest) {
+    return 0;
+  }
+
+  if (isFlacTrack(input.manifest)) {
+    const hasStreamHeader = input.availableChunks.includes(0);
+    return hasStreamHeader ? getAheadBufferedMs(input) : 0;
+  }
+
   const contiguousBufferedMs = getContiguousBufferedMs(input.manifest, input.availableChunks);
   return Math.max(0, Math.floor(contiguousBufferedMs - Math.max(0, input.playbackPositionMs)));
 }
@@ -784,10 +793,17 @@ export function getPriorityChunkIndexes(input: {
     playbackPositionMs,
     lookAheadMs: derivedLookAheadMs
   });
+  const requiredLeadingChunkCount = isFlacTrack(manifest)
+    ? Math.min(manifest.totalChunks, 1)
+    : requiredPrefixChunkCount;
+  const currentDecodeStartChunkIndex = isFlacTrack(manifest)
+    ? Math.max(0, currentChunkIndex - 1)
+    : currentChunkIndex;
 
-  appendMissingChunks(wantedChunks, owned, seen, 0, requiredPrefixChunkCount - 1, 1);
+  appendMissingChunks(wantedChunks, owned, seen, 0, requiredLeadingChunkCount - 1, 1);
+  appendMissingChunks(wantedChunks, owned, seen, currentDecodeStartChunkIndex, currentChunkIndex - 1, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex, endChunkIndex, 1);
-  appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex - 1, startChunkIndex, -1);
+  appendMissingChunks(wantedChunks, owned, seen, currentDecodeStartChunkIndex - 1, startChunkIndex, -1);
 
   if (policy === "outrun-recovery" || policy === "pause-fill") {
     appendMissingChunks(wantedChunks, owned, seen, endChunkIndex + 1, manifest.totalChunks - 1, 1);

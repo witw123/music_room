@@ -1,6 +1,8 @@
 export type ProgressiveFlacStreamInfo = {
   description: Uint8Array;
   audioOffset: number;
+  minBlockSize: number;
+  maxBlockSize: number;
   sampleRate: number;
   numberOfChannels: number;
   bitsPerSample: number;
@@ -71,6 +73,8 @@ export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInf
     (streamInfoBlock[10] << 12) |
     (streamInfoBlock[11] << 4) |
     (streamInfoBlock[12] >> 4);
+  const minBlockSize = (streamInfoBlock[0] << 8) | streamInfoBlock[1];
+  const maxBlockSize = (streamInfoBlock[2] << 8) | streamInfoBlock[3];
   const numberOfChannels = ((streamInfoBlock[12] & 0x0e) >> 1) + 1;
   const bitsPerSample = (((streamInfoBlock[12] & 0x01) << 4) | (streamInfoBlock[13] >> 4)) + 1;
   const totalSamplesHigh = streamInfoBlock[13] & 0x0f;
@@ -88,6 +92,8 @@ export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInf
   return {
     description: bytes.slice(0, cursor),
     audioOffset: cursor,
+    minBlockSize,
+    maxBlockSize,
     sampleRate,
     numberOfChannels,
     bitsPerSample,
@@ -99,6 +105,7 @@ export function extractFlacPackets(input: {
   bytes: Uint8Array;
   startOffset: number;
   sampleRate: number;
+  streamInfo?: ProgressiveFlacStreamInfo | null;
   nextSampleIndex: number;
   finalChunk: boolean;
 }) {
@@ -130,15 +137,20 @@ export function extractFlacPackets(input: {
       break;
     }
 
+    const frameSampleIndex = resolveFrameSampleIndex(
+      input.streamInfo,
+      currentHeader,
+      nextSampleIndex
+    );
     const durationUs = Math.round((currentHeader.sampleCount / sampleRate) * 1_000_000);
-    const timestampUs = Math.round((nextSampleIndex / sampleRate) * 1_000_000);
+    const timestampUs = Math.round((frameSampleIndex / sampleRate) * 1_000_000);
     packets.push({
       data: bytes.slice(currentHeader.offset, packetEnd),
       sampleCount: currentHeader.sampleCount,
       timestampUs,
       durationUs
     });
-    nextSampleIndex += currentHeader.sampleCount;
+    nextSampleIndex = frameSampleIndex + currentHeader.sampleCount;
     cursor = packetEnd;
     currentHeader = nextHeader ?? null;
   }
@@ -170,6 +182,7 @@ export function extractFlacPacketsFromBitstream(input: {
     bytes: input.bytes,
     startOffset: Math.max(input.startOffset, streamInfo.audioOffset),
     sampleRate: streamInfo.sampleRate,
+    streamInfo,
     nextSampleIndex: input.nextSampleIndex,
     finalChunk: input.finalChunk
   });
@@ -182,9 +195,34 @@ export function extractFlacPacketsFromBitstream(input: {
   } satisfies ProgressiveFlacPacketExtraction;
 }
 
+export function extractFlacPacketsFromWindow(input: {
+  bytes: Uint8Array;
+  streamInfo: ProgressiveFlacStreamInfo;
+  absoluteStartOffset: number;
+  finalChunk: boolean;
+}) {
+  const packetExtraction = extractFlacPackets({
+    bytes: input.bytes,
+    startOffset: 0,
+    sampleRate: input.streamInfo.sampleRate,
+    streamInfo: input.streamInfo,
+    nextSampleIndex: 0,
+    finalChunk: input.finalChunk
+  });
+
+  return {
+    streamInfo: input.streamInfo,
+    packets: packetExtraction.packets,
+    nextOffset: input.absoluteStartOffset + packetExtraction.nextOffset,
+    nextSampleIndex: packetExtraction.nextSampleIndex
+  } satisfies ProgressiveFlacPacketExtraction;
+}
+
 type ParsedFlacFrameHeader = {
   offset: number;
   sampleCount: number;
+  codedNumber: number;
+  variableBlockSize: boolean;
 };
 
 function findNextFrameHeader(bytes: Uint8Array, startOffset: number): ParsedFlacFrameHeader | null {
@@ -262,7 +300,9 @@ function parseFrameHeader(bytes: Uint8Array, offset: number): ParsedFlacFrameHea
 
   return {
     offset,
-    sampleCount: blockSize.sampleCount
+    sampleCount: blockSize.sampleCount,
+    codedNumber: codedNumber.value,
+    variableBlockSize: (secondByte & 0x01) !== 0
   };
 }
 
@@ -301,7 +341,31 @@ function parseUtf8LikeNumber(bytes: Uint8Array, offset: number) {
     }
   }
 
-  return { byteLength };
+  let value = firstByte & ((1 << Math.max(0, 8 - byteLength - 1)) - 1);
+  if (byteLength === 1) {
+    value = firstByte;
+  }
+  for (let index = 1; index < byteLength; index += 1) {
+    value = value * 64 + (bytes[offset + index] & 0x3f);
+  }
+
+  return { byteLength, value };
+}
+
+function resolveFrameSampleIndex(
+  streamInfo: ProgressiveFlacStreamInfo | null | undefined,
+  header: ParsedFlacFrameHeader,
+  fallbackSampleIndex: number
+) {
+  if (!streamInfo) {
+    return fallbackSampleIndex;
+  }
+
+  if (!header.variableBlockSize) {
+    return header.codedNumber * header.sampleCount;
+  }
+
+  return header.codedNumber;
 }
 
 function decodeBlockSize(blockSizeCode: number, bytes: Uint8Array, offset: number) {

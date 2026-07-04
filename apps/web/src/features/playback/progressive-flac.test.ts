@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractFlacPacketsFromWindow,
   extractFlacPacketsFromBitstream,
   parseFlacStreamInfo
 } from "./progressive-flac";
@@ -79,6 +80,37 @@ describe("progressive flac helpers", () => {
     expect(packetExtraction.packets).toHaveLength(1);
     expect(packetExtraction.nextOffset).toBe(description.length + frameA.length);
     expect(packetExtraction.nextSampleIndex).toBe(256);
+  });
+
+  it("extracts timestamped frames from a cached playback window without requiring the full prefix", () => {
+    const streamInfoPayload = new Uint8Array(34);
+    streamInfoPayload[0] = 0x01;
+    streamInfoPayload[1] = 0x00;
+    streamInfoPayload[2] = 0x01;
+    streamInfoPayload[3] = 0x00;
+    streamInfoPayload[10] = 0x00;
+    streamInfoPayload[11] = 0x10;
+    streamInfoPayload[12] = 0x02;
+    streamInfoPayload[13] = 0xf0;
+    const description = new Uint8Array([
+      0x66, 0x4c, 0x61, 0x43,
+      0x80, 0x00, 0x00, 0x22,
+      ...streamInfoPayload
+    ]);
+    const streamInfo = parseFlacStreamInfo(description)!;
+    const frame4 = buildFlacFrame(4, [0x40, 0x41, 0x42]);
+    const frame5 = buildFlacFrame(5, [0x50, 0x51, 0x52]);
+
+    const packetExtraction = extractFlacPacketsFromWindow({
+      bytes: new Uint8Array([...frame4, ...frame5]),
+      streamInfo,
+      absoluteStartOffset: 256 * 1024 * 4,
+      finalChunk: false
+    });
+
+    expect(packetExtraction.packets).toHaveLength(1);
+    expect(packetExtraction.packets[0]?.timestampUs).toBe(4_000_000);
+    expect(packetExtraction.packets[0]?.durationUs).toBe(1_000_000);
   });
 });
 

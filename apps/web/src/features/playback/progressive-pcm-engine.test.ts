@@ -127,6 +127,8 @@ function installFakeAudioContext(
     }
   }
 
+  const pendingTimestamps: number[] = [];
+
   class FakeAudioDecoder {
     static async isConfigSupported(config: Record<string, unknown>) {
       return { supported: true, config };
@@ -151,8 +153,12 @@ function installFakeAudioContext(
       return undefined;
     }
 
-    decode() {
+    decode(chunk?: { timestamp?: number; duration?: number }) {
+      const timestamp = typeof chunk?.timestamp === "number" ? chunk.timestamp : null;
       this.pendingChunks += 1;
+      if (timestamp !== null) {
+        pendingTimestamps.push(timestamp);
+      }
       return undefined;
     }
 
@@ -163,11 +169,12 @@ function installFakeAudioContext(
 
       while (this.pendingChunks > 0) {
         this.pendingChunks -= 1;
+        const queuedTimestamp = pendingTimestamps.shift();
         this.callbacks.output({
           numberOfChannels: 2,
           numberOfFrames: 44_100,
           sampleRate: 44_100,
-          timestamp: options.decodedTimestamp ?? 0,
+          timestamp: options.decodedTimestamp ?? queuedTimestamp ?? 0,
           copyTo(destination: Float32Array) {
             destination.fill(options.decodedSampleValue ?? 0.25);
           },
@@ -184,7 +191,13 @@ function installFakeAudioContext(
   }
 
   class FakeEncodedAudioChunk {
-    constructor(_input: Record<string, unknown>) {}
+    timestamp: number;
+    duration: number;
+
+    constructor(input: { timestamp?: number; duration?: number }) {
+      this.timestamp = input.timestamp ?? 0;
+      this.duration = input.duration ?? 0;
+    }
   }
 
   Object.defineProperty(globalThis, "window", {
@@ -242,6 +255,8 @@ function mockSingleDecodedPacket() {
       sampleRate: 44_100,
       numberOfChannels: 2,
       bitsPerSample: 16,
+      minBlockSize: 44_100,
+      maxBlockSize: 44_100,
       totalSamples: null
     },
     packets: [
@@ -317,6 +332,29 @@ function writeAscii(target: Uint8Array, offset: number, value: string) {
   }
 }
 
+function buildFlacFrame(frameNumber: number, bodyBytes: number[]) {
+  const headerWithoutCrc = new Uint8Array([0xff, 0xf8, 0x80, 0x10, frameNumber & 0x7f]);
+  const header = new Uint8Array([...headerWithoutCrc, computeCrc8(headerWithoutCrc)]);
+  return new Uint8Array([...header, ...bodyBytes]);
+}
+
+function computeCrc8(bytes: Uint8Array) {
+  let crc = 0;
+
+  for (const value of bytes) {
+    crc ^= value;
+    for (let bit = 0; bit < 8; bit += 1) {
+      if ((crc & 0x80) !== 0) {
+        crc = ((crc << 1) ^ 0x07) & 0xff;
+      } else {
+        crc = (crc << 1) & 0xff;
+      }
+    }
+  }
+
+  return crc;
+}
+
 describe("ProgressivePcmEngine", () => {
   beforeEach(() => {
     vi.mocked(getCachedPiece).mockReset();
@@ -327,6 +365,8 @@ describe("ProgressivePcmEngine", () => {
         sampleRate: 44_100,
         numberOfChannels: 2,
         bitsPerSample: 16,
+        minBlockSize: 44_100,
+        maxBlockSize: 44_100,
         totalSamples: null
       },
       packets: [],
@@ -491,6 +531,8 @@ describe("ProgressivePcmEngine", () => {
         sampleRate: 44_100,
         numberOfChannels: 2,
         bitsPerSample: 16,
+        minBlockSize: 44_100,
+        maxBlockSize: 44_100,
         totalSamples: null
       },
       packets: [
@@ -581,6 +623,81 @@ describe("ProgressivePcmEngine", () => {
         decodedPeak: 0.25,
         decodedRms: 0.25,
         decodedNonZeroSampleCount: 88_200
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("plays FLAC from the current cached window without requiring every prefix chunk", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const windowManifest = {
+      ...manifest,
+      durationMs: 8_000,
+      totalChunks: 8,
+      chunkSize: 64
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", windowManifest);
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]);
+
+    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+      streamInfo: {
+        description,
+        audioOffset: description.byteLength,
+        sampleRate: 256,
+        numberOfChannels: 2,
+        bitsPerSample: 16,
+        minBlockSize: 256,
+        maxBlockSize: 256,
+        totalSamples: null
+      },
+      packets: [],
+      nextOffset: description.byteLength,
+      nextSampleIndex: 0
+    });
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      if (chunkIndex === 0) {
+        return {
+          pieceId: "piece_0",
+          trackId: windowManifest.trackId,
+          peerId: "peer_local",
+          chunkIndex,
+          chunkSize: windowManifest.chunkSize,
+          hash: "hash_0",
+          createdAt: new Date().toISOString(),
+          payload: description.buffer
+        };
+      }
+      if (chunkIndex === 4 || chunkIndex === 5) {
+        const frame = buildFlacFrame(chunkIndex, [chunkIndex, chunkIndex + 1]);
+        return {
+          pieceId: `piece_${chunkIndex}`,
+          trackId: windowManifest.trackId,
+          peerId: "peer_local",
+          chunkIndex,
+          chunkSize: windowManifest.chunkSize,
+          hash: `hash_${chunkIndex}`,
+          createdAt: new Date().toISOString(),
+          payload: frame.buffer
+        };
+      }
+      return null;
+    });
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(4.1, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(1);
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 1,
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1
       });
     } finally {
       engine.destroy();

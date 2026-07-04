@@ -1,7 +1,13 @@
 import { getCachedPiece, localCacheOwnerKey } from "@/lib/indexeddb";
-import { isWavTrack, type ProgressiveTrackManifest } from "./progressive-playback";
+import {
+  getChunkIndexForPositionMs,
+  isWavTrack,
+  type ProgressiveTrackManifest
+} from "./progressive-playback";
 import {
   extractFlacPacketsFromBitstream,
+  extractFlacPacketsFromWindow,
+  type ProgressiveFlacFramePacket,
   type ProgressiveFlacStreamInfo
 } from "./progressive-flac";
 import { parseWavHeader, type WavHeader } from "./codecs/wav-parser";
@@ -66,6 +72,7 @@ const pcmDecodedSegmentRetentionSeconds = 16;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
 const maxPcmCachedPiecesToAppendPerSync = 2;
 const maxPcmPlaybackCatchupSyncBatches = 8;
+const maxPcmPlaybackWindowPiecesToDecode = 4;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
@@ -85,6 +92,7 @@ export class ProgressivePcmEngine {
   private decodedSegments: DecodedSegment[] = [];
   private scheduledSegments: ScheduledSegment[] = [];
   private decodedPacketCount = 0;
+  private decodedFlacPacketTimestampUs = new Set<number>();
   private decoderFlushAttemptCount = 0;
   private decoderFlushCount = 0;
   private lastDecodedAtMs: number | null = null;
@@ -363,6 +371,7 @@ export class ProgressivePcmEngine {
     this.wavDecodedByteOffset = 0;
     this.decodedSegments = [];
     this.decodedPacketCount = 0;
+    this.decodedFlacPacketTimestampUs.clear();
     this.decoderFlushAttemptCount = 0;
     this.decoderFlushCount = 0;
     this.lastDecodedAtMs = null;
@@ -481,34 +490,7 @@ export class ProgressivePcmEngine {
       return true;
     }
 
-    const EncodedAudioChunkCtor = getEncodedAudioChunkCtor();
-    if (!EncodedAudioChunkCtor) {
-      this.lastDecodeError = "encoded-audio-chunk-unavailable";
-      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
-      return true;
-    }
-
-    for (const packet of extraction.packets) {
-      try {
-        this.decoder.decode(
-          new EncodedAudioChunkCtor({
-            type: "key",
-            timestamp: packet.timestampUs,
-            duration: packet.durationUs,
-            data: packet.data
-          })
-        );
-        this.decodedPacketCount += 1;
-      } catch (error) {
-        this.lastDecodeError = error instanceof Error ? error.message : "decode-throw";
-        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
-        break;
-      }
-    }
-
-    if (extraction.packets.length > 0) {
-      await this.flushDecoder();
-    }
+    await this.decodeFlacPackets(extraction.packets);
 
     this.parsedOffset = extraction.nextOffset;
     this.nextSampleIndex = extraction.nextSampleIndex;
@@ -603,6 +585,138 @@ export class ProgressivePcmEngine {
     return appended;
   }
 
+  private async decodeCachedFlacWindowAt(positionSeconds: number) {
+    if (!this.streamInfo || !this.decoder || isWavTrack(this.manifest)) {
+      return false;
+    }
+
+    const currentChunkIndex = getChunkIndexForPositionMs(this.manifest, positionSeconds * 1000);
+    const startCandidates = [
+      Math.max(0, currentChunkIndex - 1),
+      currentChunkIndex
+    ].filter((chunkIndex, index, chunks) => chunks.indexOf(chunkIndex) === index);
+
+    let decodedAny = false;
+    for (const startChunkIndex of startCandidates) {
+      const cachedWindow = await this.readCachedPieceWindow(
+        startChunkIndex,
+        maxPcmPlaybackWindowPiecesToDecode
+      );
+      if (!cachedWindow || cachedWindow.bytes.byteLength === 0) {
+        continue;
+      }
+
+      const extraction = extractFlacPacketsFromWindow({
+        bytes: cachedWindow.bytes,
+        streamInfo: this.streamInfo,
+        absoluteStartOffset: startChunkIndex * this.manifest.chunkSize,
+        finalChunk: cachedWindow.endChunkIndex >= this.manifest.totalChunks - 1
+      });
+      if (extraction.packets.length === 0) {
+        continue;
+      }
+
+      await this.decodeFlacPackets(extraction.packets);
+      decodedAny = true;
+      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+        break;
+      }
+    }
+
+    return decodedAny;
+  }
+
+  private async readCachedPieceWindow(startChunkIndex: number, maxPieceCount: number) {
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    let endChunkIndex = startChunkIndex - 1;
+
+    for (
+      let chunkIndex = Math.max(0, startChunkIndex);
+      chunkIndex < this.manifest.totalChunks && chunks.length < maxPieceCount;
+      chunkIndex += 1
+    ) {
+      const piece = await getCachedPiece(
+        this.manifest.trackId,
+        this.peerId,
+        chunkIndex,
+        {
+          fileHash: this.manifest.fileHash,
+          ownerKey: localCacheOwnerKey,
+          chunkSize: this.manifest.chunkSize
+        }
+      );
+      if (!piece) {
+        break;
+      }
+
+      const bytes = new Uint8Array(piece.payload);
+      chunks.push(bytes);
+      totalBytes += bytes.byteLength;
+      endChunkIndex = chunkIndex;
+    }
+
+    if (chunks.length === 0) {
+      return null;
+    }
+
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    return {
+      bytes,
+      endChunkIndex
+    };
+  }
+
+  private async decodeFlacPackets(packets: ProgressiveFlacFramePacket[]) {
+    if (packets.length === 0 || !this.decoder) {
+      return false;
+    }
+
+    const EncodedAudioChunkCtor = getEncodedAudioChunkCtor();
+    if (!EncodedAudioChunkCtor) {
+      this.lastDecodeError = "encoded-audio-chunk-unavailable";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+      return false;
+    }
+
+    let decodedAny = false;
+    for (const packet of packets) {
+      if (this.decodedFlacPacketTimestampUs.has(packet.timestampUs)) {
+        continue;
+      }
+
+      try {
+        this.decoder.decode(
+          new EncodedAudioChunkCtor({
+            type: "key",
+            timestamp: packet.timestampUs,
+            duration: packet.durationUs,
+            data: packet.data
+          })
+        );
+        this.decodedFlacPacketTimestampUs.add(packet.timestampUs);
+        this.decodedPacketCount += 1;
+        decodedAny = true;
+      } catch (error) {
+        this.lastDecodeError = error instanceof Error ? error.message : "decode-throw";
+        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        break;
+      }
+    }
+
+    if (decodedAny) {
+      await this.flushDecoder();
+    }
+
+    return decodedAny;
+  }
+
   private appendContiguousBytes(payload: ArrayBuffer) {
     const nextBytes = new Uint8Array(payload);
     const nextLength = this.contiguousByteLength + nextBytes.byteLength;
@@ -657,7 +771,11 @@ export class ProgressivePcmEngine {
       }
 
       const appended = await this.sync();
-      if (!appended) {
+      let decodedWindow = false;
+      if (!this.hasBufferedPosition(positionSeconds)) {
+        decodedWindow = await this.decodeCachedFlacWindowAt(positionSeconds);
+      }
+      if (!appended && !decodedWindow) {
         break;
       }
 

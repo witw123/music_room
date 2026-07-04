@@ -293,6 +293,36 @@ describe("progressive playback helpers", () => {
     ).toEqual([2, 3, 4]);
   });
 
+  it("treats FLAC startup as ready from the header chunk plus the current playback window", () => {
+    const manifest = buildProgressiveTrackManifest(
+      {
+        ...track,
+        codec: "flac",
+        mimeType: "audio/flac"
+      },
+      {
+        ...availability,
+        availableChunks: [0, 4, 5]
+      }
+    );
+
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 4, 5],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(true);
+    expect(
+      getPriorityChunkIndexes({
+        manifest: manifest!,
+        availableChunks: [],
+        playbackPositionMs: 40_000,
+        policy: "startup"
+      }).slice(0, 3)
+    ).toEqual([0, 3, 4]);
+  });
+
   it("moves from startup to background once the current track is complete", () => {
     const manifest = buildProgressiveTrackManifest(track, availability);
     const playback = {
