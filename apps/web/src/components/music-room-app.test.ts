@@ -100,7 +100,7 @@ describe("getPlaybackSourceInitializationKey", () => {
     ).toBe(false);
   });
 
-  it("reinitializes when the playable local source really changes", () => {
+  it("keeps the current source when full cache becomes playable during the same surface", () => {
     const pendingCacheKey = getPlaybackSourceInitializationKey({
       playbackSurfaceKey: "track_cached|host|1",
       currentPlaybackTrackId: "track_cached",
@@ -133,7 +133,7 @@ describe("getPlaybackSourceInitializationKey", () => {
         previousInitializationKey: pendingCacheKey,
         nextInitializationKey: readyCacheKey
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

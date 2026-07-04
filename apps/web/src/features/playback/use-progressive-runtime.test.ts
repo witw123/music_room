@@ -509,6 +509,20 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
+  it("keeps listener sliding-window playback available after the full cache appears", () => {
+    expect(
+      shouldStartListenerProgressivePlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: true,
+        progressiveFallbackReason: null
+      })
+    ).toBe(true);
+  });
+
   it("allows a listener to use lossless-local once startup buffering is ready", () => {
     expect(
       shouldStartListenerProgressivePlayback({

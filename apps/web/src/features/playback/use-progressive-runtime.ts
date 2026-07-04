@@ -372,7 +372,6 @@ export function shouldStartListenerProgressivePlayback(input: {
     !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
     !hasActiveIntent ||
     input.engineType === "none" ||
-    input.hasFullLocalTrack ||
     input.progressiveFallbackReason === "progressive-init-failed"
   ) {
     return false;
@@ -1326,28 +1325,6 @@ export function useProgressiveRuntime({
     startupGatePending
   ]);
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
-
-  useEffect(() => {
-    if (
-      !canUseFullLocalForPlaybackSession ||
-      isCurrentSourceOwner ||
-      activePlaybackSource === "full-local" ||
-      !playback?.currentTrackId
-    ) {
-      return;
-    }
-
-    setActivePlaybackSource("full-local");
-    setProgressiveFallbackReason(null);
-  }, [
-    activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
-    isCurrentSourceOwner,
-    playback?.currentTrackId,
-    playbackSurfaceKey,
-    setActivePlaybackSource,
-    setProgressiveFallbackReason
-  ]);
 
   useEffect(() => {
     if (

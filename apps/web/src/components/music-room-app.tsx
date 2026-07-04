@@ -185,8 +185,7 @@ export function getPlaybackSourceInitializationKey(input: {
     input.currentTrack?.id ?? "missing-track",
     input.currentTrack?.fileHash ?? "missing-hash",
     format,
-    input.currentProgressiveEngineTypeForSource ?? "none",
-    input.hasPlayableFullLocalTrack ? "full-local-ready" : "full-local-missing"
+    input.currentProgressiveEngineTypeForSource ?? "none"
   ].join("|");
 }
 

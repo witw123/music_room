@@ -731,6 +731,23 @@ function getLocalAudioPlaybackIssue(
     return null;
   }
 
+  const pcmDirectOutputAudible =
+    cachePlayback.engineType === "pcm" &&
+    cachePlayback.pcmAudioContextState === "running" &&
+    cachePlayback.pcmDirectOutputConnected !== false &&
+    (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0 &&
+    (cachePlayback.pcmScheduledSegmentCount ?? 0) > 0 &&
+    !(
+      cachePlayback.pcmLastBlockedReason &&
+      !(
+        cachePlayback.pcmLastBlockedReason === "engine-failed" &&
+        (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0
+      )
+    );
+  if (pcmDirectOutputAudible) {
+    return null;
+  }
+
   if (cachePlayback.lastPlayStartFailure) {
     return `本地音频启动失败: ${cachePlayback.lastPlayStartFailure}。`;
   }

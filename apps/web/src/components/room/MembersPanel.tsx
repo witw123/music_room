@@ -333,6 +333,23 @@ function getPlaybackStatus(
 }
 
 function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
+  const pcmDirectOutputAudible =
+    playback.engineType === "pcm" &&
+    playback.pcmAudioContextState === "running" &&
+    playback.pcmDirectOutputConnected !== false &&
+    (playback.pcmDecodedSegmentCount ?? 0) > 0 &&
+    (playback.pcmScheduledSegmentCount ?? 0) > 0 &&
+    !(
+      playback.pcmLastBlockedReason &&
+      !(
+        playback.pcmLastBlockedReason === "engine-failed" &&
+        (playback.pcmDecodedSegmentCount ?? 0) > 0
+      )
+    );
+  if (pcmDirectOutputAudible) {
+    return null;
+  }
+
   if (playback.lastPlayStartFailure) {
     return `本地音频启动失败: ${playback.lastPlayStartFailure}。`;
   }
