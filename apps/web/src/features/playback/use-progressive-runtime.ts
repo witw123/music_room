@@ -410,12 +410,17 @@ export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
     return false;
   }
 
-  const pcmDirectOutputAudible =
+  const pcmElementOutputAudible =
+    input.localAudioHasSrcObject &&
+    input.localAudioPaused === false &&
+    input.localAudioMuted !== true &&
+    input.localAudioVolume !== 0;
+  const pcmOutputAudible =
     input.pcmAudioContextState === "running" &&
-    input.pcmDirectOutputConnected !== false &&
     (input.pcmDecodedSegmentCount ?? 0) > 0 &&
-    (input.pcmScheduledSegmentCount ?? 0) > 0;
-  if (pcmDirectOutputAudible) {
+    (input.pcmScheduledSegmentCount ?? 0) > 0 &&
+    (input.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
+  if (pcmOutputAudible) {
     return false;
   }
 
@@ -2412,7 +2417,8 @@ export function useProgressiveRuntime({
         setProgressiveFallbackReason((current) =>
           current === "progressive-init-failed" ? null : current
         );
-        return engine.sync();
+        void engine.sync();
+        return undefined;
       })
       .catch(() => {
         const isCurrentEngine =

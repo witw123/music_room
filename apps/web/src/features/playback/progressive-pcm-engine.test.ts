@@ -680,6 +680,63 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("continues reading cached prefix chunks until the requested WAV position can play", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const wavManifest = {
+      ...manifest,
+      mimeType: "audio/wav",
+      codec: "wav",
+      durationMs: 1_000,
+      totalChunks: 6,
+      chunkSize: 444
+    };
+    const fullWav = buildPcmWavBytes({
+      sampleRate: 1_000,
+      channels: 1,
+      bitsPerSample: 16,
+      dataBytes: 2_000,
+      availableDataBytes: 2_000
+    });
+    const engine = new ProgressivePcmEngine(audio, "peer_local", wavManifest);
+
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      if (chunkIndex >= wavManifest.totalChunks) {
+        return null;
+      }
+
+      const start = chunkIndex === 0 ? 0 : 444 + (chunkIndex - 1) * 400;
+      const end = chunkIndex === 0 ? 444 : Math.min(fullWav.byteLength, start + 400);
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: wavManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: wavManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: fullWav.slice(start, end).buffer
+      };
+    });
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(0.9, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(6);
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedSegmentCount: 3,
+        scheduledSegmentCount: 1
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("marks PCM playback failed when cached pieces cannot be read", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
@@ -689,7 +746,7 @@ describe("ProgressivePcmEngine", () => {
 
     try {
       await engine.attach();
-      await expect(engine.sync()).resolves.toBeUndefined();
+      await expect(engine.sync()).resolves.toBe(false);
 
       expect(engine.getSnapshot()).toMatchObject({
         status: "failed",

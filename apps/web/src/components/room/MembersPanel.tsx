@@ -331,10 +331,9 @@ function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
     playback.fullLocalReady === true &&
     playback.localAudioPaused === false;
 
-  const pcmDirectOutputAudible =
+  const pcmHasScheduledOutput =
     playback.engineType === "pcm" &&
     playback.pcmAudioContextState === "running" &&
-    playback.pcmDirectOutputConnected !== false &&
     (playback.pcmDecodedSegmentCount ?? 0) > 0 &&
     (playback.pcmScheduledSegmentCount ?? 0) > 0 &&
     !(
@@ -344,7 +343,15 @@ function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
         (playback.pcmDecodedSegmentCount ?? 0) > 0
       )
     );
-  if (pcmDirectOutputAudible) {
+  const pcmElementOutputAudible =
+    playback.localAudioHasSrcObject === true &&
+    playback.localAudioPaused === false &&
+    playback.localAudioMuted !== true &&
+    playback.localAudioVolume !== 0;
+  const pcmOutputAudible =
+    pcmHasScheduledOutput &&
+    (playback.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
+  if (pcmOutputAudible) {
     return null;
   }
 

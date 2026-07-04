@@ -77,4 +77,28 @@ describe("MembersPanel playback status", () => {
       tone: "success"
     });
   });
+
+  it("treats PCM media-stream output as audible without direct output", () => {
+    const diagnostics = createPeerSnapshot("peer_1", "2026-07-04T00:00:00.000Z");
+    diagnostics.progressivePlaybackStatus = {
+      ...diagnostics.progressivePlaybackStatus!,
+      activeSource: "lossless-local",
+      engineType: "pcm",
+      startupReady: true,
+      localAudioPaused: false,
+      localAudioMuted: false,
+      localAudioVolume: 0.72,
+      localAudioReadyState: 0,
+      localAudioHasSrcObject: true,
+      pcmAudioContextState: "running",
+      pcmDecodedSegmentCount: 2,
+      pcmScheduledSegmentCount: 1,
+      pcmDirectOutputConnected: false
+    };
+
+    expect(getPlaybackStatus("online", diagnostics)).toMatchObject({
+      label: "无损滑动窗口播放",
+      tone: "success"
+    });
+  });
 });

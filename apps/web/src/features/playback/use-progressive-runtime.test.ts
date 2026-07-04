@@ -318,6 +318,19 @@ describe("use-progressive-runtime policy helpers", () => {
         pcmScheduledSegmentCount: 1
       })
     ).toBe(false);
+    expect(
+      shouldRecoverSilentSlidingWindowWithFullLocal({
+        ...readyInput,
+        activePlaybackSource: "lossless-local",
+        localAudioPaused: false,
+        localAudioHasSrcObject: true,
+        localAudioReadyState: 0,
+        pcmAudioContextState: "running",
+        pcmDirectOutputConnected: false,
+        pcmDecodedSegmentCount: 2,
+        pcmScheduledSegmentCount: 1
+      })
+    ).toBe(false);
   });
 
   it("publishes progressive diagnostics only when the stable signature changes", () => {

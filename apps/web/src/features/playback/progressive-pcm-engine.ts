@@ -65,6 +65,7 @@ const pcmScheduleAheadSeconds = 8;
 const pcmDecodedSegmentRetentionSeconds = 16;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
 const maxPcmCachedPiecesToAppendPerSync = 2;
+const maxPcmPlaybackCatchupSyncBatches = 8;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
@@ -220,19 +221,20 @@ export class ProgressivePcmEngine {
 
   async sync() {
     if (isTerminalEngineStatus(this.status)) {
-      return;
+      return false;
     }
 
     if (this.syncInFlight) {
       this.syncQueued = true;
-      return;
+      return false;
     }
 
     this.syncInFlight = true;
+    let appendedAny = false;
     try {
       do {
         this.syncQueued = false;
-        await this.performSync();
+        appendedAny = (await this.performSync()) || appendedAny;
       } while (this.syncQueued && !isTerminalEngineStatus(this.status));
     } catch {
       if (!isDestroyedEngineStatus(this.status)) {
@@ -242,6 +244,7 @@ export class ProgressivePcmEngine {
     } finally {
       this.syncInFlight = false;
     }
+    return appendedAny;
   }
 
   async syncPlayback(expectedSeconds: number, isPlaying: boolean): Promise<PcmEngineSyncResult> {
@@ -279,13 +282,7 @@ export class ProgressivePcmEngine {
       };
     }
 
-    if (!this.hasBufferedPosition(positionSeconds)) {
-      await this.sync();
-    }
-
-    if (!this.hasBufferedPosition(positionSeconds)) {
-      await this.waitForDecodedPosition(positionSeconds);
-    }
+    await this.syncUntilBufferedPosition(positionSeconds);
 
     if (!this.hasBufferedPosition(positionSeconds)) {
       this.playing = false;
@@ -450,16 +447,16 @@ export class ProgressivePcmEngine {
   private async performSync() {
     const appendedBytes = await this.appendAvailableContiguousPieces();
     if (isTerminalEngineStatus(this.status)) {
-      return;
+      return false;
     }
 
     if (!appendedBytes) {
-      return;
+      return false;
     }
 
     if (isWavTrack(this.manifest)) {
       this.decodeAvailableWavPcm();
-      return;
+      return true;
     }
 
     const extraction = extractFlacPacketsFromBitstream({
@@ -470,7 +467,7 @@ export class ProgressivePcmEngine {
     });
 
     if (!extraction.streamInfo) {
-      return;
+      return true;
     }
 
     if (!this.streamInfo) {
@@ -481,14 +478,14 @@ export class ProgressivePcmEngine {
     if (!decoderReady || !this.decoder) {
       this.lastDecodeError = "decoder-unavailable";
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
-      return;
+      return true;
     }
 
     const EncodedAudioChunkCtor = getEncodedAudioChunkCtor();
     if (!EncodedAudioChunkCtor) {
       this.lastDecodeError = "encoded-audio-chunk-unavailable";
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
-      return;
+      return true;
     }
 
     for (const packet of extraction.packets) {
@@ -516,6 +513,7 @@ export class ProgressivePcmEngine {
     this.parsedOffset = extraction.nextOffset;
     this.nextSampleIndex = extraction.nextSampleIndex;
     this.compactParsedFlacBytes(extraction.streamInfo);
+    return true;
   }
 
   private decodeAvailableWavPcm() {
@@ -649,6 +647,21 @@ export class ProgressivePcmEngine {
       if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
         return;
       }
+    }
+  }
+
+  private async syncUntilBufferedPosition(positionSeconds: number) {
+    for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
+      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+        return;
+      }
+
+      const appended = await this.sync();
+      if (!appended) {
+        break;
+      }
+
+      await this.waitForDecodedPosition(positionSeconds);
     }
   }
 

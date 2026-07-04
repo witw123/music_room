@@ -717,10 +717,9 @@ function getLocalAudioPlaybackIssue(
     cachePlayback.fullLocalReady === true &&
     cachePlayback.localAudioPaused === false;
 
-  const pcmDirectOutputAudible =
+  const pcmHasScheduledOutput =
     cachePlayback.engineType === "pcm" &&
     cachePlayback.pcmAudioContextState === "running" &&
-    cachePlayback.pcmDirectOutputConnected !== false &&
     (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0 &&
     (cachePlayback.pcmScheduledSegmentCount ?? 0) > 0 &&
     !(
@@ -730,7 +729,15 @@ function getLocalAudioPlaybackIssue(
         (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0
       )
     );
-  if (pcmDirectOutputAudible) {
+  const pcmElementOutputAudible =
+    cachePlayback.localAudioHasSrcObject === true &&
+    cachePlayback.localAudioPaused === false &&
+    cachePlayback.localAudioMuted !== true &&
+    cachePlayback.localAudioVolume !== 0;
+  const pcmOutputAudible =
+    pcmHasScheduledOutput &&
+    (cachePlayback.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
+  if (pcmOutputAudible) {
     return null;
   }
 
@@ -783,7 +790,10 @@ function getLocalAudioPlaybackIssue(
       return `PCM 播放未就绪: ${cachePlayback.pcmLastBlockedReason}。`;
     }
 
-    if (cachePlayback.pcmDirectOutputConnected === false) {
+    if (
+      cachePlayback.pcmDirectOutputConnected === false &&
+      cachePlayback.localAudioHasSrcObject !== true
+    ) {
       return "PCM 引擎尚未连接到本机音频输出。";
     }
 
