@@ -158,6 +158,7 @@ type UseRoomRuntimeInput = {
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   uploadedTracks: Record<string, UploadedTrack>;
+  fullLocalPlaybackTracks: Record<string, SourceLocalPlaybackTrack>;
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIds: string[];
@@ -186,6 +187,8 @@ type UseRoomRuntimeInput = {
 type UseRoomRuntimeResult = {
   ensureSourcePlaybackStarted: () => Promise<void>;
 };
+
+type SourceLocalPlaybackTrack = Pick<UploadedTrack, "objectUrl">;
 
 export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -256,6 +259,18 @@ export function shouldWaitForSourceAudioElementTrack(input: {
   }
 
   return input.audioSrcObjectPresent || input.audioCurrentSrc !== input.uploadedTrackObjectUrl;
+}
+
+export function resolveSourceLocalPlaybackTrack(input: {
+  trackId: string | null | undefined;
+  uploadedTracks: Record<string, SourceLocalPlaybackTrack>;
+  fullLocalPlaybackTracks: Record<string, SourceLocalPlaybackTrack>;
+}) {
+  if (!input.trackId) {
+    return null;
+  }
+
+  return input.uploadedTracks[input.trackId] ?? input.fullLocalPlaybackTracks[input.trackId] ?? null;
 }
 
 export function resolveRuntimeManualCacheTrackIds(input: {
@@ -430,6 +445,7 @@ export function useRoomRuntime({
   flushPendingAvailability,
   recordPeerDiagnostic,
   uploadedTracks,
+  fullLocalPlaybackTracks,
   uploadedTrackIds,
   uploadedTrackIdsRef,
   manualCacheTrackIds,
@@ -686,23 +702,27 @@ export function useRoomRuntime({
     }
 
     try {
-      const uploadedTrack = uploadedTracksRef.current[playback.currentTrackId] ?? null;
+      const sourceLocalTrack = resolveSourceLocalPlaybackTrack({
+        trackId: playback.currentTrackId,
+        uploadedTracks: uploadedTracksRef.current,
+        fullLocalPlaybackTracks
+      });
       if (
         shouldWaitForSourceAudioElementTrack({
           playbackTrackId: playback.currentTrackId,
           playbackStatus: playback.status,
           activePlaybackSource: activePlaybackSourceRef.current,
-          uploadedTrackObjectUrl: uploadedTrack?.objectUrl,
+          uploadedTrackObjectUrl: sourceLocalTrack?.objectUrl,
           isCurrentSourceOwner,
           audioCurrentSrc: audio.currentSrc || audio.src || null,
           audioSrcObjectPresent: !!audio.srcObject
         }) &&
-        uploadedTrack
+        sourceLocalTrack
       ) {
         audio.pause();
         audio.srcObject = null;
-        if (audio.src !== uploadedTrack.objectUrl) {
-          audio.src = uploadedTrack.objectUrl;
+        if (audio.src !== sourceLocalTrack.objectUrl) {
+          audio.src = sourceLocalTrack.objectUrl;
           audio.load();
         }
         const track =
@@ -738,6 +758,7 @@ export function useRoomRuntime({
     roomSnapshot?.tracks,
     updateSourceStartState,
     uploadedTracksRef,
+    fullLocalPlaybackTracks,
     isCurrentSourceOwner
   ]);
 

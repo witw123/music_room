@@ -545,6 +545,7 @@ export function MusicRoomApp({
     flushPendingAvailability,
     recordPeerDiagnostic,
     uploadedTracks,
+    fullLocalPlaybackTracks,
     uploadedTrackIds: Object.keys(uploadedTracks),
     uploadedTrackIdsRef,
     manualCacheTrackIds,

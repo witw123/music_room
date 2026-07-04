@@ -662,7 +662,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces.mock.calls[0]?.[2].slice(0, 9)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
-  it("starts large active playback cache downloads from the decodable prefix", async () => {
+  it("keeps large active playback cache downloads in a small batch from the decodable prefix", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -710,7 +710,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
-      Array.from({ length: 32 }, (_, index) => index),
+      Array.from({ length: 12 }, (_, index) => index),
       240,
       expect.any(Number)
     );

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildActivePlaybackCacheWindow,
   buildManualCachePendingPieceClearer,
+  resolveSourceLocalPlaybackTrack,
   resolveActivePlaybackCacheWindowPosition,
   buildRoomExitHref,
   resolveManualCacheProviderPeerIds,
@@ -144,6 +145,22 @@ describe("pure cache room runtime helpers", () => {
         audioSrcObjectPresent: true
       })
     ).toBe(false);
+  });
+
+  it("resolves source-owner local playback from the full local cache library", () => {
+    expect(
+      resolveSourceLocalPlaybackTrack({
+        trackId: "track_1",
+        uploadedTracks: {},
+        fullLocalPlaybackTracks: {
+          track_1: {
+            objectUrl: "blob:cached-track-1"
+          }
+        }
+      })
+    ).toMatchObject({
+      objectUrl: "blob:cached-track-1"
+    });
   });
 
   it("accepts data peer signals and rejects legacy media signals", () => {

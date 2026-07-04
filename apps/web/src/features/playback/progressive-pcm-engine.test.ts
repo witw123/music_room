@@ -66,6 +66,12 @@ function installFakeAudioContext(
       return undefined;
     }
   };
+  const mediaStreamDestination = {
+    stream: {},
+    connect() {
+      return undefined;
+    }
+  };
 
   class FakeAudioContext {
     currentTime = 0;
@@ -77,12 +83,7 @@ function installFakeAudioContext(
     }
 
     createMediaStreamDestination() {
-      return {
-        stream: {},
-        connect() {
-          return undefined;
-        }
-      };
+      return mediaStreamDestination;
     }
 
     createBufferSource() {
@@ -203,6 +204,7 @@ function installFakeAudioContext(
 
   return {
     gainNode,
+    mediaStreamDestination,
     restore() {
       if (typeof originalWindow === "undefined") {
         Reflect.deleteProperty(globalThis, "window");
@@ -333,7 +335,7 @@ describe("ProgressivePcmEngine", () => {
     });
   });
 
-  it("uses a gain node for volume when the audio context is attached", async () => {
+  it("routes decoded PCM through the media element only to avoid duplicate output", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
@@ -346,10 +348,12 @@ describe("ProgressivePcmEngine", () => {
       expect(attached).toBe(true);
       expect(audio.volume).toBe(1);
       expect(audioContext.gainNode.gain.value).toBe(0.6);
-      expect(audioContext.gainNode.connectCalls).toHaveLength(2);
+      expect(audioContext.gainNode.connectCalls).toEqual([
+        audioContext.mediaStreamDestination
+      ]);
       expect(engine.getSnapshot()).toMatchObject({
         hasOutputStream: true,
-        directOutputConnected: true
+        directOutputConnected: false
       });
     } finally {
       engine.destroy();
@@ -470,6 +474,64 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("compacts parsed FLAC bytes after decoding to avoid retaining consumed cache payload", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const compactManifest = {
+      ...manifest,
+      chunkSize: 1_000_000
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", compactManifest);
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]);
+
+    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+      streamInfo: {
+        description,
+        audioOffset: description.byteLength,
+        sampleRate: 44_100,
+        numberOfChannels: 2,
+        bitsPerSample: 16,
+        totalSamples: null
+      },
+      packets: [
+        {
+          data: new Uint8Array([0xff, 0xf8]),
+          sampleCount: 44_100,
+          timestampUs: 0,
+          durationUs: 1_000_000
+        }
+      ],
+      nextOffset: 900_000,
+      nextSampleIndex: 44_100
+    });
+    vi.mocked(getCachedPiece)
+      .mockResolvedValueOnce({
+        pieceId: "piece_0",
+        trackId: compactManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex: 0,
+        chunkSize: compactManifest.chunkSize,
+        hash: "hash_0",
+        createdAt: new Date().toISOString(),
+        payload: new Uint8Array(1_000_000).buffer
+      })
+      .mockResolvedValueOnce(null);
+
+    try {
+      await engine.attach();
+      await engine.sync();
+
+      expect(Reflect.get(engine as object, "contiguousByteLength")).toBe(100_008);
+      expect(Reflect.get(engine as object, "parsedOffset")).toBe(description.byteLength);
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedSegmentCount: 1
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("does not invoke the media element play path during sync playback", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
@@ -519,6 +581,48 @@ describe("ProgressivePcmEngine", () => {
         decodedPeak: 0.25,
         decodedRms: 0.25,
         decodedNonZeroSampleCount: 88_200
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("drops decoded PCM segments far behind the current playout position", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", {
+      ...manifest,
+      durationMs: 60_000
+    });
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0,
+          endTimeSec: 1,
+          buffer: {}
+        },
+        {
+          startTimeSec: 1,
+          endTimeSec: 2,
+          buffer: {}
+        },
+        {
+          startTimeSec: 40,
+          endTimeSec: 41,
+          buffer: {}
+        }
+      ]);
+
+      const result = await engine.syncPlayback(40.2, true);
+
+      expect(result.localReady).toBe(true);
+      expect(Reflect.get(engine as object, "decodedSegments")).toHaveLength(1);
+      expect(engine.getSnapshot()).toMatchObject({
+        scheduledSegmentCount: 1
       });
     } finally {
       engine.destroy();

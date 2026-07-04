@@ -27,11 +27,13 @@ import type { DataMeshBridge, RoomRuntimeEvent } from "./room-runtime-types";
 const directRequestIntervalMs = 750;
 const activePlaybackPendingRefreshBucketMs = 20_000;
 const directRequestBatchSize = 32;
+const activePlaybackDirectRequestBatchSize = 12;
 const directRequestTimeoutMs = 15_000;
 const directPendingTtlMs = 20_000;
 const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
-const pendingRefillLowWatermark = maxPendingPerTrack - maxPendingPerPeer;
+const activePlaybackMaxPendingPerTrack = 48;
+const activePlaybackMaxPendingPerPeer = 12;
 const providerBootstrapRetryCooldownMs = 1_500;
 const providerRestartAfterMs = 6_000;
 const providerRestartCooldownMs = 5_000;
@@ -66,6 +68,12 @@ export type ManualCacheTrackPlan = {
 export type ManualCacheDirectRequestResult = {
   plan: ManualCacheTrackPlan;
   didRequest: boolean | null;
+};
+
+type ManualCacheDirectRequestBudget = {
+  batchSize: number;
+  maxPendingPerTrack: number;
+  maxPendingPerPeer: number;
 };
 
 export type ActivePlaybackCacheWindow = {
@@ -530,6 +538,7 @@ export function resolveManualCacheTrackPlan(input: {
   localPieceIndexes: number[];
   pendingChunkIndexes: number[];
   maxRequestChunks?: number;
+  maxPendingChunks?: number;
   activePlaybackWindow?: ActivePlaybackCacheWindow | null;
 }): ManualCacheTrackPlan {
   const trackId = input.track?.id ?? "";
@@ -692,9 +701,29 @@ export function resolveManualCacheTrackPlan(input: {
     pendingChunkCount: pendingChunkSet.size,
     blockedReason:
       pendingChunkSet.size > 0 &&
-      (pendingChunkSet.size >= maxPendingPerTrack || (input.maxRequestChunks ?? directRequestBatchSize) <= 0)
+      (pendingChunkSet.size >= (input.maxPendingChunks ?? maxPendingPerTrack) ||
+        (input.maxRequestChunks ?? directRequestBatchSize) <= 0)
         ? "pending-window-full"
         : "provider-has-no-requestable-chunks"
+  };
+}
+
+function resolveManualCacheDirectRequestBudget(input: {
+  trackId: string;
+  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+}): ManualCacheDirectRequestBudget {
+  if (input.activePlaybackWindow?.trackId === input.trackId) {
+    return {
+      batchSize: activePlaybackDirectRequestBatchSize,
+      maxPendingPerTrack: activePlaybackMaxPendingPerTrack,
+      maxPendingPerPeer: activePlaybackMaxPendingPerPeer
+    };
+  }
+
+  return {
+    batchSize: directRequestBatchSize,
+    maxPendingPerTrack,
+    maxPendingPerPeer
   };
 }
 
@@ -828,7 +857,13 @@ export async function planManualCacheDirectRequests(input: {
     }
     input.pendingByTrack.set(trackId, pendingForTrack);
 
-    const remainingTrackSlots = Math.max(0, maxPendingPerTrack - pendingForTrack.size);
+    const requestBudget = resolveManualCacheDirectRequestBudget({
+      trackId,
+      activePlaybackWindow: input.activePlaybackWindow ?? null
+    });
+    const pendingRefillLowWatermark =
+      requestBudget.maxPendingPerTrack - requestBudget.maxPendingPerPeer;
+    const remainingTrackSlots = Math.max(0, requestBudget.maxPendingPerTrack - pendingForTrack.size);
     const shouldRefillPendingWindow =
       pendingForTrack.size === 0 || pendingForTrack.size <= pendingRefillLowWatermark;
     const plan = resolveManualCacheTrackPlan({
@@ -841,8 +876,13 @@ export async function planManualCacheDirectRequests(input: {
       localPieceIndexes,
       pendingChunkIndexes: [...pendingForTrack.keys()],
       activePlaybackWindow: input.activePlaybackWindow ?? null,
+      maxPendingChunks: requestBudget.maxPendingPerTrack,
       maxRequestChunks: shouldRefillPendingWindow
-        ? Math.min(directRequestBatchSize, remainingTrackSlots, maxPendingPerPeer)
+        ? Math.min(
+            requestBudget.batchSize,
+            remainingTrackSlots,
+            requestBudget.maxPendingPerPeer
+          )
         : 0
     });
 

@@ -62,6 +62,8 @@ export type ProgressivePcmEngineSnapshot = {
 };
 
 const pcmScheduleAheadSeconds = 18;
+const pcmDecodedSegmentRetentionSeconds = 30;
+const pcmParsedByteCompactionThreshold = 512 * 1024;
 const maxPcmCachedPiecesToAppendPerSync = 8;
 
 export class ProgressivePcmEngine {
@@ -206,8 +208,7 @@ export class ProgressivePcmEngine {
       this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
       this.destinationNode = this.audioContext.createMediaStreamDestination();
       this.gainNode.connect(this.destinationNode);
-      this.gainNode.connect(this.audioContext.destination);
-      this.directOutputConnected = true;
+      this.directOutputConnected = false;
       this.audio.srcObject = this.destinationNode.stream;
       this.audio.volume = 1;
       return true;
@@ -245,6 +246,7 @@ export class ProgressivePcmEngine {
 
   async syncPlayback(expectedSeconds: number, isPlaying: boolean): Promise<PcmEngineSyncResult> {
     const positionSeconds = normalizeTrackTimeSeconds(expectedSeconds);
+    this.pruneDecodedSegments(positionSeconds);
 
     if (!isPlaying) {
       this.pausedTrackTimeSec = positionSeconds;
@@ -513,6 +515,7 @@ export class ProgressivePcmEngine {
 
     this.parsedOffset = extraction.nextOffset;
     this.nextSampleIndex = extraction.nextSampleIndex;
+    this.compactParsedFlacBytes(extraction.streamInfo);
   }
 
   private decodeAvailableWavPcm() {
@@ -814,6 +817,7 @@ export class ProgressivePcmEngine {
       return;
     }
 
+    this.pruneDecodedSegments(fromPositionSeconds);
     this.pruneScheduledSegments();
     const currentTimeSeconds = this.getCurrentTimeSeconds();
     if (!Number.isFinite(fromPositionSeconds) || !Number.isFinite(currentTimeSeconds)) {
@@ -958,6 +962,54 @@ export class ProgressivePcmEngine {
       (this.status === "ready" || this.status === "degraded" || this.status === "failed") &&
       this.hasBufferedPosition(positionSeconds)
     );
+  }
+
+  private compactParsedFlacBytes(streamInfo: ProgressiveFlacStreamInfo | null) {
+    if (
+      !streamInfo ||
+      this.parsedOffset <= pcmParsedByteCompactionThreshold
+    ) {
+      return;
+    }
+
+    const description = streamInfo.description;
+    const safeParsedOffset = Math.min(this.parsedOffset, this.contiguousByteLength);
+    if (safeParsedOffset <= description.byteLength) {
+      return;
+    }
+    const remainingBytes = this.contiguousBytes.subarray(
+      safeParsedOffset,
+      this.contiguousByteLength
+    );
+    const compactedBytes = new Uint8Array(description.byteLength + remainingBytes.byteLength);
+    compactedBytes.set(description, 0);
+    compactedBytes.set(remainingBytes, description.byteLength);
+    this.contiguousBytes = compactedBytes;
+    this.contiguousByteLength = compactedBytes.byteLength;
+    this.parsedOffset = description.byteLength;
+  }
+
+  private pruneDecodedSegments(positionSeconds: number) {
+    if (!Number.isFinite(positionSeconds) || this.decodedSegments.length === 0) {
+      return;
+    }
+
+    const cutoffSeconds = Math.max(0, positionSeconds - pcmDecodedSegmentRetentionSeconds);
+    if (cutoffSeconds <= 0) {
+      return;
+    }
+
+    let firstRetainedIndex = 0;
+    while (
+      firstRetainedIndex < this.decodedSegments.length &&
+      this.decodedSegments[firstRetainedIndex]!.endTimeSec < cutoffSeconds
+    ) {
+      firstRetainedIndex += 1;
+    }
+
+    if (firstRetainedIndex > 0) {
+      this.decodedSegments = this.decodedSegments.slice(firstRetainedIndex);
+    }
   }
 }
 
