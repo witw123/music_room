@@ -65,6 +65,10 @@ import {
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
+type CachedFullLocalPlaybackTrack = FullLocalPlaybackTrack & {
+  trackId: string;
+  fileHash: string;
+};
 type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
@@ -107,6 +111,22 @@ export function startBestEffortPlaybackAudioUnlock(input: {
   void input.unlockAudio().catch((error) => {
     input.onError?.(error);
   });
+}
+
+export function selectFullLocalPlaybackTracks(input: {
+  uploadedTracks: Record<string, FullLocalPlaybackTrack>;
+  cachedPlaybackTrack: CachedFullLocalPlaybackTrack | null | undefined;
+}) {
+  const next: Record<string, FullLocalPlaybackTrack> = { ...input.uploadedTracks };
+  const cachedPlaybackTrack = input.cachedPlaybackTrack;
+  if (cachedPlaybackTrack && !next[cachedPlaybackTrack.trackId]) {
+    next[cachedPlaybackTrack.trackId] = {
+      file: cachedPlaybackTrack.file,
+      objectUrl: cachedPlaybackTrack.objectUrl
+    };
+  }
+
+  return next;
 }
 
 export function MusicRoomApp({
@@ -256,6 +276,7 @@ export function MusicRoomApp({
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     deleteCachedLibraryTrackEntry,
+    loadCachedLibraryTrackFile,
     exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom
   } = useTrackUploads({
@@ -281,33 +302,177 @@ export function MusicRoomApp({
         : false,
     [cacheLibraryTracks, currentPlaybackTrackId, currentTrack, uploadedTracks]
   );
-  const fullLocalPlaybackTracks = useMemo<Record<string, FullLocalPlaybackTrack>>(() => {
-    const next: Record<string, FullLocalPlaybackTrack> = { ...uploadedTracks };
-    if (!roomSnapshot) {
-      return next;
-    }
-
-    for (const track of roomSnapshot.tracks) {
-      if (next[track.id]) {
-        continue;
+  const [cachedFullLocalPlaybackTrack, setCachedFullLocalPlaybackTrack] =
+    useState<CachedFullLocalPlaybackTrack | null>(null);
+  const cachedFullLocalPlaybackTrackRef = useRef<CachedFullLocalPlaybackTrack | null>(null);
+  const replaceCachedFullLocalPlaybackTrack = useCallback(
+    (next: CachedFullLocalPlaybackTrack | null) => {
+      const previous = cachedFullLocalPlaybackTrackRef.current;
+      if (previous && previous.objectUrl !== next?.objectUrl) {
+        URL.revokeObjectURL(previous.objectUrl);
       }
+      cachedFullLocalPlaybackTrackRef.current = next;
+      setCachedFullLocalPlaybackTrack(next);
+    },
+    []
+  );
+  const fullLocalPlaybackTracks = useMemo(
+    () =>
+      selectFullLocalPlaybackTracks({
+        uploadedTracks,
+        cachedPlaybackTrack: cachedFullLocalPlaybackTrack
+      }),
+    [cachedFullLocalPlaybackTrack, uploadedTracks]
+  );
+
+  const loadCachedFullLocalPlaybackTrack = useCallback(
+    async (trackId: string | null | undefined) => {
+      if (!trackId) {
+        return null;
+      }
+
+      const uploadedTrack = uploadedTracks[trackId] ?? null;
+      if (uploadedTrack) {
+        return uploadedTrack;
+      }
+
+      const roomTrack =
+        roomSnapshot?.tracks.find((entry) => entry.id === trackId) ??
+        (currentTrack?.id === trackId ? currentTrack : null);
+      if (!roomTrack) {
+        return null;
+      }
+
+      const existing = cachedFullLocalPlaybackTrackRef.current;
+      if (existing?.trackId === trackId && existing.fileHash === roomTrack.fileHash) {
+        return existing;
+      }
+
       const cachedTrack = cacheLibraryTracks.find((entry) =>
         isCachedLibraryTrackUsableForRoomTrack({
           cachedTrack: entry,
-          roomTrack: track
+          roomTrack
         })
       );
       if (!cachedTrack) {
-        continue;
+        return null;
       }
-      next[track.id] = {
-        file: cachedTrack.file,
-        objectUrl: cachedTrack.objectUrl
+
+      const cachedTrackFile = await loadCachedLibraryTrackFile(cachedTrack.fileHash);
+      if (
+        !cachedTrackFile ||
+        !isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: cachedTrackFile,
+          roomTrack
+        })
+      ) {
+        return null;
+      }
+
+      const next = {
+        trackId,
+        fileHash: roomTrack.fileHash,
+        file: cachedTrackFile.file,
+        objectUrl: URL.createObjectURL(cachedTrackFile.file)
       };
+      replaceCachedFullLocalPlaybackTrack(next);
+      return next;
+    },
+    [
+      cacheLibraryTracks,
+      currentTrack,
+      loadCachedLibraryTrackFile,
+      replaceCachedFullLocalPlaybackTrack,
+      roomSnapshot?.tracks,
+      uploadedTracks
+    ]
+  );
+
+  useEffect(() => {
+    const roomTrack = currentTrack;
+    if (!currentPlaybackTrackId || !roomTrack) {
+      replaceCachedFullLocalPlaybackTrack(null);
+      return;
     }
 
-    return next;
-  }, [cacheLibraryTracks, roomSnapshot, uploadedTracks]);
+    const existing = cachedFullLocalPlaybackTrackRef.current;
+    if (uploadedTracks[currentPlaybackTrackId]) {
+      if (existing?.trackId === currentPlaybackTrackId) {
+        replaceCachedFullLocalPlaybackTrack(null);
+      }
+      return;
+    }
+
+    if (
+      existing?.trackId === currentPlaybackTrackId &&
+      existing.fileHash === roomTrack.fileHash
+    ) {
+      return;
+    }
+
+    const cachedTrack = cacheLibraryTracks.find((entry) =>
+      isCachedLibraryTrackUsableForRoomTrack({
+        cachedTrack: entry,
+        roomTrack
+      })
+    );
+    if (!cachedTrack) {
+      if (existing?.trackId === currentPlaybackTrackId) {
+        replaceCachedFullLocalPlaybackTrack(null);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const cachedTrackFile = await loadCachedLibraryTrackFile(cachedTrack.fileHash);
+      if (
+        cancelled ||
+        !cachedTrackFile ||
+        !isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: cachedTrackFile,
+          roomTrack
+        })
+      ) {
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(cachedTrackFile.file);
+      if (cancelled) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
+      replaceCachedFullLocalPlaybackTrack({
+        trackId: currentPlaybackTrackId,
+        fileHash: roomTrack.fileHash,
+        file: cachedTrackFile.file,
+        objectUrl
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    cacheLibraryTracks,
+    currentPlaybackTrackId,
+    currentTrack,
+    loadCachedLibraryTrackFile,
+    replaceCachedFullLocalPlaybackTrack,
+    uploadedTracks
+  ]);
+
+  useEffect(
+    () => () => {
+      const cachedTrack = cachedFullLocalPlaybackTrackRef.current;
+      if (cachedTrack) {
+        URL.revokeObjectURL(cachedTrack.objectUrl);
+        cachedFullLocalPlaybackTrackRef.current = null;
+      }
+    },
+    []
+  );
 
   const currentProgressiveEngineTypeForSource = useMemo(() => {
     if (!currentTrack?.id) {
@@ -566,6 +731,23 @@ export function MusicRoomApp({
   });
 
   useEffect(() => {
+    const playback = roomSnapshot?.room.playback;
+    if (
+      isCurrentSourceOwner &&
+      playback?.status === "playing" &&
+      playback.currentTrackId &&
+      cachedFullLocalPlaybackTrack?.trackId === playback.currentTrackId
+    ) {
+      void ensureSourcePlaybackStarted();
+    }
+  }, [
+    cachedFullLocalPlaybackTrack,
+    ensureSourcePlaybackStarted,
+    isCurrentSourceOwner,
+    roomSnapshot?.room.playback
+  ]);
+
+  useEffect(() => {
     if (!initialRoomId) {
       return;
     }
@@ -810,7 +992,8 @@ export function MusicRoomApp({
         return false;
       }
 
-      const localTrack = fullLocalPlaybackTracks[trackId] ?? null;
+      const localTrack =
+        fullLocalPlaybackTracks[trackId] ?? (await loadCachedFullLocalPlaybackTrack(trackId));
       const audio = audioRef.current;
       if (!localTrack || !audio) {
         return false;
@@ -861,6 +1044,7 @@ export function MusicRoomApp({
       audioRef,
       currentTrack,
       fullLocalPlaybackTracks,
+      loadCachedFullLocalPlaybackTrack,
       recordPeerDiagnostic,
       roomSnapshot?.room.playback,
       roomSnapshot?.tracks,

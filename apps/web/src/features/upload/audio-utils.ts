@@ -30,7 +30,9 @@ export type CachedLibraryTrack = {
   lastSourceTrackId: string | null;
   lastSourceRoomId: string | null;
   lastOwnerNickname: string | null;
-  objectUrl: string;
+};
+
+export type CachedLibraryTrackFile = CachedLibraryTrack & {
   file: File;
 };
 

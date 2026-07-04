@@ -38,6 +38,8 @@ export type CachedLibraryTrackRecord = {
   lastOwnerNickname: string | null;
 };
 
+export type CachedLibraryTrackSummaryRecord = Omit<CachedLibraryTrackRecord, "file">;
+
 export type TrackPieceManifestRecord = {
   trackId: string;
   fileHash: string;
@@ -95,6 +97,7 @@ export class MusicRoomDatabase extends Dexie {
   trackPieces!: Table<TrackPieceRecord, string>;
   trackPieceManifests!: Table<TrackPieceManifestRecord, string>;
   cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
+  cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
   manualCacheTasks!: Table<ManualCacheTaskRecord, string>;
 
   constructor() {
@@ -137,6 +140,29 @@ export class MusicRoomDatabase extends Dexie {
           piece.fileHash ??= "";
         });
       });
+    this.version(7)
+      .stores({
+        trackAssets: "&trackId, fileHash, cachedAt",
+        trackPieces:
+          "&pieceId, trackId, fileHash, peerId, ownerKey, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], [trackId+ownerKey], [trackId+ownerKey+chunkIndex], [fileHash+ownerKey], [fileHash+ownerKey+chunkIndex], createdAt",
+        trackPieceManifests: "&trackId, fileHash, updatedAt",
+        cachedTrackLibrary: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+        cachedTrackLibraryMetadata: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+        manualCacheTasks: "&taskKey, roomId, trackId, fileHash, status, updatedAt, [roomId+trackId]"
+      })
+      .upgrade(async (transaction) => {
+        const library = transaction.table<CachedLibraryTrackRecord, string>("cachedTrackLibrary");
+        const metadata = transaction.table<CachedLibraryTrackSummaryRecord, string>(
+          "cachedTrackLibraryMetadata"
+        );
+        const summaries: CachedLibraryTrackSummaryRecord[] = [];
+        await library.each((record) => {
+          summaries.push(toCachedLibraryTrackSummaryRecord(record));
+        });
+        if (summaries.length > 0) {
+          await metadata.bulkPut(summaries);
+        }
+      });
   }
 }
 
@@ -148,39 +174,119 @@ const manifestUpsertQueueDelayMs = 250;
 export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRecord, "cachedAt"> & {
   cachedAt?: string;
 }) {
-  const existing = await musicRoomDatabase.cachedTrackLibrary.get(input.fileHash);
-  const mergedTrackIds = new Set([...(existing?.sourceTrackIds ?? []), ...input.sourceTrackIds]);
-  const mergedRoomIds = new Set([...(existing?.sourceRoomIds ?? []), ...input.sourceRoomIds]);
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.cachedTrackLibrary,
+    musicRoomDatabase.cachedTrackLibraryMetadata,
+    async () => {
+      const existing = await musicRoomDatabase.cachedTrackLibrary.get(input.fileHash);
+      const existingSummary =
+        existing ?? (await musicRoomDatabase.cachedTrackLibraryMetadata.get(input.fileHash));
+      const mergedTrackIds = new Set([
+        ...(existingSummary?.sourceTrackIds ?? []),
+        ...input.sourceTrackIds
+      ]);
+      const mergedRoomIds = new Set([
+        ...(existingSummary?.sourceRoomIds ?? []),
+        ...input.sourceRoomIds
+      ]);
+      const record = {
+        ...existing,
+        ...input,
+        cachedAt: input.cachedAt ?? existingSummary?.cachedAt ?? new Date().toISOString(),
+        sourceTrackIds: [...mergedTrackIds],
+        sourceRoomIds: [...mergedRoomIds]
+      };
 
-  await musicRoomDatabase.cachedTrackLibrary.put({
-    ...existing,
-    ...input,
-    cachedAt: input.cachedAt ?? existing?.cachedAt ?? new Date().toISOString(),
-    sourceTrackIds: [...mergedTrackIds],
-    sourceRoomIds: [...mergedRoomIds]
-  });
+      await musicRoomDatabase.cachedTrackLibrary.put(record);
+      await musicRoomDatabase.cachedTrackLibraryMetadata.put(
+        toCachedLibraryTrackSummaryRecord(record)
+      );
+    }
+  );
 }
 
 export async function listCachedLibraryTracks() {
   return musicRoomDatabase.cachedTrackLibrary.orderBy("cachedAt").reverse().toArray();
 }
 
+export async function listCachedLibraryTrackSummaries() {
+  await backfillCachedLibraryTrackMetadataIfNeeded();
+  return musicRoomDatabase.cachedTrackLibraryMetadata.orderBy("cachedAt").reverse().toArray();
+}
+
 export async function getCachedLibraryTrack(fileHash: string) {
   return musicRoomDatabase.cachedTrackLibrary.get(fileHash);
 }
 
-export async function getCachedLibraryTrackCount() {
-  return musicRoomDatabase.cachedTrackLibrary.count();
-}
+export async function getCachedLibraryTrackSummary(fileHash: string) {
+  const summary = await musicRoomDatabase.cachedTrackLibraryMetadata.get(fileHash);
+  if (summary) {
+    return summary;
+  }
 
-export async function deleteCachedLibraryTrack(fileHash: string) {
   const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
   if (!record) {
     return null;
   }
 
-  await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
+  const backfilledSummary = toCachedLibraryTrackSummaryRecord(record);
+  await musicRoomDatabase.cachedTrackLibraryMetadata.put(backfilledSummary);
+  return backfilledSummary;
+}
+
+export async function getCachedLibraryTrackCount() {
+  await backfillCachedLibraryTrackMetadataIfNeeded();
+  return musicRoomDatabase.cachedTrackLibraryMetadata.count();
+}
+
+export async function deleteCachedLibraryTrack(fileHash: string) {
+  const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+  if (!record) {
+    await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
+    return null;
+  }
+
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.cachedTrackLibrary,
+    musicRoomDatabase.cachedTrackLibraryMetadata,
+    async () => {
+      await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
+      await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
+    }
+  );
   return record;
+}
+
+export function toCachedLibraryTrackSummaryRecord(
+  record: CachedLibraryTrackRecord
+): CachedLibraryTrackSummaryRecord {
+  const {
+    file: _file,
+    ...summary
+  } = record;
+  return summary;
+}
+
+async function backfillCachedLibraryTrackMetadataIfNeeded() {
+  const metadataCount = await musicRoomDatabase.cachedTrackLibraryMetadata.count();
+  if (metadataCount > 0) {
+    return;
+  }
+
+  const libraryCount = await musicRoomDatabase.cachedTrackLibrary.count();
+  if (libraryCount === 0) {
+    return;
+  }
+
+  const summaries: CachedLibraryTrackSummaryRecord[] = [];
+  await musicRoomDatabase.cachedTrackLibrary.each((record) => {
+    summaries.push(toCachedLibraryTrackSummaryRecord(record));
+  });
+  if (summaries.length > 0) {
+    await musicRoomDatabase.cachedTrackLibraryMetadata.bulkPut(summaries);
+  }
 }
 
 export async function upsertTrackPieceManifest(
@@ -570,15 +676,19 @@ export async function clearAllCachedTracks() {
 
   await musicRoomDatabase.transaction(
     "rw",
-    musicRoomDatabase.trackAssets,
-    musicRoomDatabase.trackPieces,
-    musicRoomDatabase.trackPieceManifests,
-    musicRoomDatabase.cachedTrackLibrary,
+    [
+      musicRoomDatabase.trackAssets,
+      musicRoomDatabase.trackPieces,
+      musicRoomDatabase.trackPieceManifests,
+      musicRoomDatabase.cachedTrackLibrary,
+      musicRoomDatabase.cachedTrackLibraryMetadata
+    ],
     async () => {
       await musicRoomDatabase.trackAssets.clear();
       await musicRoomDatabase.trackPieces.clear();
       await musicRoomDatabase.trackPieceManifests.clear();
       await musicRoomDatabase.cachedTrackLibrary.clear();
+      await musicRoomDatabase.cachedTrackLibraryMetadata.clear();
     }
   );
 }

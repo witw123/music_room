@@ -16,6 +16,7 @@ import {
   localCacheOwnerKey,
   queueTrackPieceManifestUpsert
 } from "@/lib/indexeddb";
+import type { CachedLibraryTrackRecord } from "@/lib/indexeddb";
 import { hashArrayBuffer } from "@/features/p2p";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
@@ -64,6 +65,49 @@ export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime |
     },
     isReady() {
       return !!meshRef.current;
+    }
+  };
+}
+
+export function createBoundedCachedLibraryTrackCache<T extends { fileHash: string }>(
+  maxEntries = 2,
+  ttlMs = 30_000
+) {
+  const entries = new Map<string, { value: T; lastUsedAt: number }>();
+
+  return {
+    get(fileHash: string, now = Date.now()) {
+      const entry = entries.get(fileHash);
+      if (!entry) {
+        return null;
+      }
+      if (now - entry.lastUsedAt > ttlMs) {
+        entries.delete(fileHash);
+        return null;
+      }
+      entries.delete(fileHash);
+      entries.set(fileHash, {
+        value: entry.value,
+        lastUsedAt: now
+      });
+      return entry.value;
+    },
+    set(value: T, now = Date.now()) {
+      entries.delete(value.fileHash);
+      entries.set(value.fileHash, {
+        value,
+        lastUsedAt: now
+      });
+      while (entries.size > maxEntries) {
+        const oldestKey = entries.keys().next().value;
+        if (!oldestKey) {
+          break;
+        }
+        entries.delete(oldestKey);
+      }
+    },
+    clear() {
+      entries.clear();
     }
   };
 }
@@ -138,6 +182,8 @@ export function createRoomDataMeshRuntime(input: {
   reportMeshResyncFailure: (error: unknown) => void;
 }) {
   const peerBufferedAmountBytes = new Map<string, number>();
+  const cachedLibraryTrackCache =
+    createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(2);
   const mesh = new P2PMesh(
     input.roomId,
     input.peerId,
@@ -400,7 +446,15 @@ export function createRoomDataMeshRuntime(input: {
       resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         const uploadedTrack = input.uploadedTracksRef.current[trackId] ?? null;
-        const cachedLibraryTrack = track ? await getCachedLibraryTrack(track.fileHash) : null;
+        let cachedLibraryTrack = track
+          ? cachedLibraryTrackCache.get(track.fileHash)
+          : null;
+        if (!cachedLibraryTrack && track) {
+          cachedLibraryTrack = (await getCachedLibraryTrack(track.fileHash)) ?? null;
+          if (cachedLibraryTrack) {
+            cachedLibraryTrackCache.set(cachedLibraryTrack);
+          }
+        }
         const fallbackFile =
           uploadedTrack?.file ??
           (isCachedLibraryTrackUsableForRoomTrack({

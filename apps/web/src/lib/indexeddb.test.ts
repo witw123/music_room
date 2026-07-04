@@ -2,8 +2,37 @@ import { describe, expect, it } from "vitest";
 import {
   filterCachedPiecesByGeometry,
   selectCachedPiecesForTrackDeletion,
-  selectTrackPieceManifestIdsForDeletion
+  selectTrackPieceManifestIdsForDeletion,
+  toCachedLibraryTrackSummaryRecord
 } from "./indexeddb";
+
+describe("toCachedLibraryTrackSummaryRecord", () => {
+  it("strips the full audio blob from cached-library list records", () => {
+    const summary = toCachedLibraryTrackSummaryRecord({
+      fileHash: "hash_1",
+      title: "Track",
+      artist: "Artist",
+      mimeType: "audio/flac",
+      durationMs: 120_000,
+      sizeBytes: 48_000_000,
+      file: new Blob(["audio"], { type: "audio/flac" }),
+      cachedAt: "2026-07-04T00:00:00.000Z",
+      sourceTrackIds: ["track_1"],
+      sourceRoomIds: ["room_1"],
+      lastSourceTrackId: "track_1",
+      lastSourceRoomId: "room_1",
+      lastOwnerNickname: "Host"
+    });
+
+    expect(summary).not.toHaveProperty("file");
+    expect(summary).toMatchObject({
+      fileHash: "hash_1",
+      title: "Track",
+      sizeBytes: 48_000_000,
+      sourceTrackIds: ["track_1"]
+    });
+  });
+});
 
 describe("filterCachedPiecesByGeometry", () => {
   it("keeps pieces for the requested file hash and manifest chunk size, including a short final chunk", () => {

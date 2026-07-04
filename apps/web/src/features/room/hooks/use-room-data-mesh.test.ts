@@ -1,5 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDataMeshBridge } from "./use-room-data-mesh";
+import {
+  createBoundedCachedLibraryTrackCache,
+  createDataMeshBridge
+} from "./use-room-data-mesh";
+
+describe("createBoundedCachedLibraryTrackCache", () => {
+  it("reuses recent cached-library records and evicts older full-file entries", () => {
+    const cache = createBoundedCachedLibraryTrackCache<{ fileHash: string; title: string }>(2);
+    const first = { fileHash: "hash_1", title: "First" };
+    const second = { fileHash: "hash_2", title: "Second" };
+    const third = { fileHash: "hash_3", title: "Third" };
+
+    cache.set(first);
+    cache.set(second);
+    expect(cache.get("hash_1")).toBe(first);
+
+    cache.set(third);
+
+    expect(cache.get("hash_1")).toBe(first);
+    expect(cache.get("hash_2")).toBeNull();
+    expect(cache.get("hash_3")).toBe(third);
+  });
+});
 
 describe("createDataMeshBridge", () => {
   it("reports syncPeers as not started before the mesh runtime exists", async () => {

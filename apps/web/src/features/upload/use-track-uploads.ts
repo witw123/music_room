@@ -19,21 +19,31 @@ import {
   deleteCachedPiecesForTracks,
   getCachedLibraryTrack,
   getCachedLibraryTrackCount,
+  getCachedLibraryTrackSummary,
   getCachedPieceIndexes,
   getCachedPiecesForTrack,
   getTrackPieceManifest,
   getTrackPieceManifestByFileHash,
   listManualCacheTasksForRoom,
-  listCachedLibraryTracks,
+  listCachedLibraryTrackSummaries,
   localCacheOwnerKey,
   upsertManualCacheTask,
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { removeTracksFromUploads } from "@/lib/music-room-ui";
-import { buildTrackMeta, type CachedLibraryTrack, type UploadedTrack } from "@/features/upload/audio-utils";
+import {
+  buildTrackMeta,
+  type CachedLibraryTrack,
+  type CachedLibraryTrackFile,
+  type UploadedTrack
+} from "@/features/upload/audio-utils";
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
-import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
+import type {
+  CachedLibraryTrackRecord,
+  CachedLibraryTrackSummaryRecord,
+  ManualCacheTaskRecord
+} from "@/lib/indexeddb";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
@@ -494,7 +504,6 @@ export function useTrackUploads(options: {
   const [cacheLibraryTracks, setCacheLibraryTracks] = useState<CachedLibraryTrack[]>([]);
   const [manualCacheTasks, setManualCacheTasks] = useState<Record<string, ManualCacheTask>>({});
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
-  const cacheLibraryUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
   const availabilityAnnouncementInFlightRef = useRef<Set<string>>(new Set());
@@ -523,37 +532,9 @@ export function useTrackUploads(options: {
   );
 
   const refreshCacheLibrary = useCallback(async () => {
-    const records = await listCachedLibraryTracks();
-    const nextUrlMap = new Map<string, string>();
-    const nextTracks: CachedLibraryTrack[] = records.map((record) => {
-      const existingUrl = cacheLibraryUrlsRef.current.get(record.fileHash);
-      const objectUrl = existingUrl ?? URL.createObjectURL(record.file);
-      nextUrlMap.set(record.fileHash, objectUrl);
-      return {
-        fileHash: record.fileHash,
-        title: record.title,
-        artist: record.artist,
-        mimeType: record.mimeType,
-        durationMs: record.durationMs,
-        sizeBytes: record.sizeBytes,
-        cachedAt: record.cachedAt,
-        sourceTrackIds: record.sourceTrackIds,
-        sourceRoomIds: record.sourceRoomIds,
-        lastSourceTrackId: record.lastSourceTrackId,
-        lastSourceRoomId: record.lastSourceRoomId,
-        lastOwnerNickname: record.lastOwnerNickname,
-        objectUrl,
-        file: toCachedLibraryFile(record)
-      };
-    });
+    const records = await listCachedLibraryTrackSummaries();
+    const nextTracks: CachedLibraryTrack[] = records.map(toCachedLibraryTrack);
 
-    for (const [fileHash, objectUrl] of cacheLibraryUrlsRef.current.entries()) {
-      if (!nextUrlMap.has(fileHash)) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    }
-
-    cacheLibraryUrlsRef.current = nextUrlMap;
     cacheLibraryTracksRef.current = new Map(
       nextTracks.map((track) => [track.fileHash, track] as const)
     );
@@ -680,23 +661,33 @@ export function useTrackUploads(options: {
       const rehydratedUploads: Record<string, UploadedTrack> = {};
 
       for (const track of missingOwnedTracks) {
-        const cachedTrack =
+        const cachedSummary =
           cacheLibraryTracksRef.current.get(track.fileHash) ??
-          (await getCachedLibraryTrack(track.fileHash));
-        const usableCachedTrack = isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack,
+          (await getCachedLibraryTrackSummary(track.fileHash));
+        if (
+          !isCachedLibraryTrackUsableForRoomTrack({
+            cachedTrack: cachedSummary,
+            roomTrack: track
+          })
+        ) {
+          continue;
+        }
+
+        const cachedRecord = await getCachedLibraryTrack(track.fileHash);
+        const usableCachedRecord = isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: cachedRecord,
           roomTrack: track
         })
-          ? cachedTrack
+          ? cachedRecord
           : null;
-        if (!usableCachedTrack) {
+        if (!usableCachedRecord) {
           continue;
         }
         const cachedFile = toCachedLibraryFile({
-          file: usableCachedTrack.file,
-          title: usableCachedTrack.title,
-          mimeType: usableCachedTrack.mimeType,
-          fileHash: usableCachedTrack.fileHash
+          file: usableCachedRecord.file,
+          title: usableCachedRecord.title,
+          mimeType: usableCachedRecord.mimeType,
+          fileHash: usableCachedRecord.fileHash
         });
 
         rehydratedUploads[track.id] = {
@@ -745,10 +736,6 @@ export function useTrackUploads(options: {
         URL.revokeObjectURL(objectUrl);
       }
       uploadedTrackUrlsRef.current.clear();
-      for (const objectUrl of cacheLibraryUrlsRef.current.values()) {
-        URL.revokeObjectURL(objectUrl);
-      }
-      cacheLibraryUrlsRef.current.clear();
       cacheLibraryTracksRef.current.clear();
     };
   }, []);
@@ -919,15 +906,18 @@ export function useTrackUploads(options: {
       if (!track) {
         return;
       }
-      const cachedLibraryTrack = await getCachedLibraryTrack(track.fileHash);
-      const fallbackFile =
-        uploadedTrack?.file ??
-        (isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: cachedLibraryTrack,
-          roomTrack: track
-        })
-          ? cachedLibraryTrack?.file ?? null
-          : null);
+      let fallbackFile: Blob | File | null = uploadedTrack?.file ?? null;
+      if (!fallbackFile) {
+        const cachedLibraryTrack = await getCachedLibraryTrackSummary(track.fileHash);
+        if (
+          isCachedLibraryTrackUsableForRoomTrack({
+            cachedTrack: cachedLibraryTrack,
+            roomTrack: track
+          })
+        ) {
+          fallbackFile = (await getCachedLibraryTrack(track.fileHash))?.file ?? null;
+        }
+      }
       const announcementKey = [
         roomSnapshot.room.id,
         trackId,
@@ -1206,7 +1196,7 @@ export function useTrackUploads(options: {
 
       const cachedLibraryTrack =
         cacheLibraryTracksRef.current.get(track.fileHash) ??
-        (await getCachedLibraryTrack(track.fileHash));
+        (await getCachedLibraryTrackSummary(track.fileHash));
       if (
         isCachedLibraryTrackUsableForRoomTrack({
           cachedTrack: cachedLibraryTrack,
@@ -1647,6 +1637,11 @@ export function useTrackUploads(options: {
     [roomSnapshot?.room.id]
   );
 
+  const loadCachedLibraryTrackFile = useCallback(async (fileHash: string) => {
+    const cachedTrack = await getCachedLibraryTrack(fileHash);
+    return cachedTrack ? toCachedLibraryTrackFile(cachedTrack) : null;
+  }, []);
+
   const deleteCachedLibraryTrackEntry = useCallback(
     async (fileHash: string) => {
       const record = await deleteCachedLibraryTrackRecord(fileHash);
@@ -1663,7 +1658,7 @@ export function useTrackUploads(options: {
 
   const exportCachedLibraryTrack = useCallback(
     async (fileHash: string) => {
-      const cachedTrack = cacheLibraryTracksRef.current.get(fileHash);
+      const cachedTrack = await loadCachedLibraryTrackFile(fileHash);
       if (!cachedTrack) {
         return;
       }
@@ -1677,7 +1672,7 @@ export function useTrackUploads(options: {
       anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
     },
-    []
+    [loadCachedLibraryTrackFile]
   );
 
   const importCachedLibraryTrackToRoom = useCallback(
@@ -1686,7 +1681,7 @@ export function useTrackUploads(options: {
         return null;
       }
 
-      const cachedTrack = cacheLibraryTracksRef.current.get(fileHash);
+      const cachedTrack = await loadCachedLibraryTrackFile(fileHash);
       if (!cachedTrack) {
         return null;
       }
@@ -1752,7 +1747,8 @@ export function useTrackUploads(options: {
       onAvailability,
       peerId,
       roomSnapshot,
-      syncRoomSnapshot
+      syncRoomSnapshot,
+      loadCachedLibraryTrackFile
     ]
   );
 
@@ -1773,6 +1769,7 @@ export function useTrackUploads(options: {
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     deleteCachedLibraryTrackEntry,
+    loadCachedLibraryTrackFile,
     exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom
   };
@@ -1807,6 +1804,34 @@ function toCachedLibraryFileFromBlob(
     mimeType: track.mimeType || file.type || "audio/mpeg",
     fileHash: track.fileHash
   });
+}
+
+function toCachedLibraryTrack(
+  record: CachedLibraryTrackSummaryRecord
+): CachedLibraryTrack {
+  return {
+    fileHash: record.fileHash,
+    title: record.title,
+    artist: record.artist,
+    mimeType: record.mimeType,
+    durationMs: record.durationMs,
+    sizeBytes: record.sizeBytes,
+    cachedAt: record.cachedAt,
+    sourceTrackIds: record.sourceTrackIds,
+    sourceRoomIds: record.sourceRoomIds,
+    lastSourceTrackId: record.lastSourceTrackId,
+    lastSourceRoomId: record.lastSourceRoomId,
+    lastOwnerNickname: record.lastOwnerNickname
+  };
+}
+
+function toCachedLibraryTrackFile(
+  record: CachedLibraryTrackRecord
+): CachedLibraryTrackFile {
+  return {
+    ...toCachedLibraryTrack(record),
+    file: toCachedLibraryFile(record)
+  };
 }
 
 function buildCachedLibraryFileName(input: {
