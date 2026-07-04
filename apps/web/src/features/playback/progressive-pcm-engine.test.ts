@@ -1013,8 +1013,11 @@ describe("ProgressivePcmEngine", () => {
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
       expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(6);
+      // Catch-up append pulls all cached prefix chunks in one pass to reach the
+      // requested position, so the WAV data decodes into fewer, larger segments
+      // than the old two-chunk-per-sync throttle produced.
       expect(engine.getSnapshot()).toMatchObject({
-        decodedSegmentCount: 3,
+        decodedSegmentCount: 2,
         scheduledSegmentCount: 1
       });
     } finally {
@@ -1186,6 +1189,97 @@ describe("ProgressivePcmEngine", () => {
         scheduledSegmentCount: 1,
         playoutState: "playing"
       });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("catches up to a far playback position in a single sync instead of only after full cache", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    // 41 chunks: chunk 0 is the FLAC header, chunks 1..40 each carry one frame.
+    // The requested position (chunk 30) sits far beyond the small two-chunk
+    // steady-state append cap, so catch-up append must pull enough chunks in a
+    // single syncPlayback pass. Regression guard for the streaming-cache bug
+    // where nothing was audible until the whole track finished caching.
+    const catchupManifest = {
+      ...manifest,
+      durationMs: 40_000,
+      totalChunks: 41,
+      chunkSize: 16
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", catchupManifest);
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]);
+
+    vi.mocked(extractFlacPacketsFromBitstream).mockImplementation((input) => {
+      // Emit one packet per contiguous frame present after the header, timed at
+      // one second per frame (sampleRate 256, 256 samples per frame).
+      const audioBytes = Math.max(0, input.bytes.byteLength - description.byteLength);
+      const frameSize = 8;
+      const frameCount = Math.floor(audioBytes / frameSize);
+      const startFrame = Math.floor(Math.max(0, input.startOffset - description.byteLength) / frameSize);
+      const packets = [] as Array<{
+        data: Uint8Array;
+        sampleCount: number;
+        timestampUs: number;
+        durationUs: number;
+      }>;
+      for (let frameIndex = startFrame; frameIndex < frameCount; frameIndex += 1) {
+        packets.push({
+          data: new Uint8Array([0xff, 0xf8]),
+          sampleCount: 256,
+          timestampUs: frameIndex * 1_000_000,
+          durationUs: 1_000_000
+        });
+      }
+      return {
+        streamInfo: {
+          description,
+          audioOffset: description.byteLength,
+          sampleRate: 256,
+          numberOfChannels: 2,
+          bitsPerSample: 16,
+          minBlockSize: 256,
+          maxBlockSize: 256,
+          totalSamples: null
+        },
+        packets,
+        nextOffset: description.byteLength + frameCount * frameSize,
+        nextSampleIndex: frameCount * 256
+      };
+    });
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      if (chunkIndex < 0 || chunkIndex >= catchupManifest.totalChunks) {
+        return null;
+      }
+
+      const payload =
+        chunkIndex === 0 ? description : new Uint8Array([0xff, 0xf8, 0, 0, 0, 0, 0, 0]);
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: catchupManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: catchupManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength)
+      };
+    });
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(30, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      // Reached the position chunk in one pass without decoding the whole track.
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeGreaterThanOrEqual(31);
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeLessThan(
+        catchupManifest.totalChunks
+      );
     } finally {
       engine.destroy();
       audioContext.restore();

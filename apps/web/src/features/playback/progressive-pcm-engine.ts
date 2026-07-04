@@ -70,7 +70,15 @@ export type ProgressivePcmEngineSnapshot = {
 const pcmScheduleAheadSeconds = 8;
 const pcmDecodedSegmentRetentionSeconds = 16;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
+// Steady-state prefetch stays small so switching tracks never blocks the main
+// thread decoding hundreds of chunks at once.
 const maxPcmCachedPiecesToAppendPerSync = 2;
+// When we still need to reach the live playback position (listener catching up
+// to the host, or a seek), the small per-sync cap would make decoding lag far
+// behind download and playback, so nothing becomes audible until the whole
+// track finishes caching. In that catch-up case we allow appending many more
+// contiguous chunks in one pass, bounded only by this safety cap.
+const maxPcmCatchupPiecesToAppendPerSync = 512;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 const maxPcmPlaybackWindowPiecesToDecode = 4;
 
@@ -110,6 +118,10 @@ export class ProgressivePcmEngine {
   private volume = 1;
   private syncInFlight = false;
   private syncQueued = false;
+  // Chunk index the decoder still needs to reach to cover the requested
+  // playback position. While set, contiguous append runs in catch-up mode and
+  // is not throttled by the small steady-state per-sync cap.
+  private catchupTargetChunkIndex: number | null = null;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -411,6 +423,7 @@ export class ProgressivePcmEngine {
     this.contiguousBytes = new Uint8Array(0);
     this.syncInFlight = false;
     this.syncQueued = false;
+    this.catchupTargetChunkIndex = null;
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
@@ -574,13 +587,24 @@ export class ProgressivePcmEngine {
     }
   }
 
+  private getAppendBudgetForCurrentSync() {
+    if (
+      this.catchupTargetChunkIndex !== null &&
+      this.contiguousChunkCount <= this.catchupTargetChunkIndex
+    ) {
+      return maxPcmCatchupPiecesToAppendPerSync;
+    }
+
+    return maxPcmCachedPiecesToAppendPerSync;
+  }
+
   private async appendAvailableContiguousPieces() {
     let appended = false;
     let appendedPieceCount = 0;
 
     while (
       this.contiguousChunkCount < this.manifest.totalChunks &&
-      appendedPieceCount < maxPcmCachedPiecesToAppendPerSync
+      appendedPieceCount < this.getAppendBudgetForCurrentSync()
     ) {
       const piece = await getCachedPiece(
         this.manifest.trackId,
@@ -794,21 +818,32 @@ export class ProgressivePcmEngine {
   }
 
   private async syncUntilBufferedPosition(positionSeconds: number) {
-    for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
-      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
-        return;
-      }
+    // Let contiguous append run at full catch-up speed until the decoder covers
+    // the requested position, instead of crawling two chunks per sync (which
+    // kept nothing audible until the whole track finished caching).
+    this.catchupTargetChunkIndex = getChunkIndexForPositionMs(
+      this.manifest,
+      positionSeconds * 1000
+    );
+    try {
+      for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
+        if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+          return;
+        }
 
-      const appended = await this.sync();
-      let decodedWindow = false;
-      if (!this.hasBufferedPosition(positionSeconds)) {
-        decodedWindow = await this.decodeCachedFlacWindowAt(positionSeconds);
-      }
-      if (!appended && !decodedWindow) {
-        break;
-      }
+        const appended = await this.sync();
+        let decodedWindow = false;
+        if (!this.hasBufferedPosition(positionSeconds)) {
+          decodedWindow = await this.decodeCachedFlacWindowAt(positionSeconds);
+        }
+        if (!appended && !decodedWindow) {
+          break;
+        }
 
-      await this.waitForDecodedPosition(positionSeconds);
+        await this.waitForDecodedPosition(positionSeconds);
+      }
+    } finally {
+      this.catchupTargetChunkIndex = null;
     }
   }
 

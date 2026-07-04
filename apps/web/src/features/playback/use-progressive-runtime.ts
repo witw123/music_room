@@ -54,6 +54,14 @@ import { ProgressiveMseEngine } from "./progressive-mse-engine";
 import { ProgressivePcmEngine, type ProgressivePcmEngineSnapshot } from "./progressive-pcm-engine";
 import { roomAudioOutput } from "./room-audio-output";
 import {
+  resolvePcmRuntimeFailureReason,
+  shouldLatchPcmRuntimeFailure,
+  shouldRetryPcmRuntimeAfterFailure
+} from "./pcm-runtime-failure";
+
+// Re-exported for backward compatibility with existing import sites/tests.
+export { shouldLatchPcmRuntimeFailure, shouldRetryPcmRuntimeAfterFailure };
+import {
   resolveFullLocalWarmupDecision,
   resolveProgressiveWarmupDecision,
   shouldForceSourceOwnerLocalPlayback
@@ -182,33 +190,6 @@ export function shouldHoldSlidingWindowPlaybackForEngine(input: {
     hasActiveIntent &&
     !input.hasPcmEngine &&
     !input.hasMseEngine
-  );
-}
-
-export function shouldLatchPcmRuntimeFailure(reason: string | null | undefined) {
-  return (
-    reason === "engine-failed" ||
-    reason === "decoder-unavailable" ||
-    reason === "decoder-config-failed" ||
-    reason === "encoded-audio-chunk-unavailable" ||
-    reason === "decoder-flush-failed" ||
-    reason === "cache-read-failed" ||
-    reason === "wav-decode-failed"
-  );
-}
-
-export function shouldRetryPcmRuntimeAfterFailure(input: {
-  currentTrackId: string | null | undefined;
-  failureTrackId: string | null | undefined;
-  failureReason: string | null | undefined;
-}) {
-  if (!input.currentTrackId || !input.failureTrackId) {
-    return true;
-  }
-
-  return (
-    input.currentTrackId !== input.failureTrackId ||
-    !shouldLatchPcmRuntimeFailure(input.failureReason)
   );
 }
 
@@ -604,17 +585,6 @@ export function getPcmEngineDiagnosticsKey(
     snapshot.scheduledSegmentCount > 0 ? "scheduled" : "no-scheduled",
     snapshot.lastDecodeError ?? "none"
   ].join("|");
-}
-
-function resolvePcmRuntimeFailureReason(input: {
-  blockedReason: string | null | undefined;
-  lastDecodeError: string | null | undefined;
-}) {
-  if (input.blockedReason === "engine-failed" && input.lastDecodeError) {
-    return input.lastDecodeError;
-  }
-
-  return input.blockedReason ?? input.lastDecodeError ?? null;
 }
 
 function bucketDiagnosticDurationMs(
