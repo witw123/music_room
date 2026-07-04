@@ -712,6 +712,10 @@ function getLocalAudioPlaybackIssue(
     cachePlayback.fullLocalPlaybackMode === "native-blob" &&
     !!cachePlayback.localAudioCurrentSrc &&
     hasPlayableOutput;
+  const playingFullLocalReady =
+    cachePlayback.activeSource === "full-local" &&
+    cachePlayback.fullLocalReady === true &&
+    cachePlayback.localAudioPaused === false;
 
   const pcmDirectOutputAudible =
     cachePlayback.engineType === "pcm" &&
@@ -746,7 +750,7 @@ function getLocalAudioPlaybackIssue(
     return "本地音频音量为 0。";
   }
 
-  if (nativeBlobFullLocalReady) {
+  if (nativeBlobFullLocalReady || playingFullLocalReady) {
     return null;
   }
 

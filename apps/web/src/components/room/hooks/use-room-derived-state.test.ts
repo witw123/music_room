@@ -623,6 +623,50 @@ describe("use-room-derived-state helpers", () => {
     });
   });
 
+  it("treats playing full-local playback as audible even if src diagnostics lag", () => {
+    const cachePlayback = {
+      ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,
+      activeSource: "full-local",
+      engineType: "pcm",
+      contiguousBufferedMs: 319_900,
+      aheadBufferedMs: 310_100,
+      schedulerPolicy: "background",
+      startupReady: true,
+      fullLocalReady: true,
+      fullLocalPlaybackMode: "none",
+      localAudioPaused: false,
+      localAudioMuted: false,
+      localAudioVolume: 0.72,
+      localAudioReadyState: 0,
+      localAudioCurrentSrc: null,
+      localAudioHasSrcObject: false,
+      pcmDecodedSegmentCount: null,
+      pcmScheduledSegmentCount: null,
+      pcmDirectOutputConnected: null
+    } satisfies NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
+
+    expect(
+      getLocalPlaybackStatus({
+        presenceState: "online",
+        mediaConnectionState: "live",
+        isSourceOwner: false,
+        audioUnlocked: true,
+        sourceStartState: "live",
+        lastSourceStartError: null,
+        mediaConnectedPeersCount: 0,
+        playbackStatus: "playing",
+        cachePlayback,
+        dataReadyCount: 0,
+        pieceDownloadRateKbps: null,
+        pieceUploadRateKbps: null
+      })
+    ).toMatchObject({
+      label: "完整缓存播放",
+      tone: "success",
+      badgeText: "full-local"
+    });
+  });
+
   it("reports ready lossless sliding-window playback as audible", () => {
     const cachePlayback = {
       ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,

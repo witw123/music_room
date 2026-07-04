@@ -137,6 +137,7 @@ const shadowFallbackMaxDriftMs = 160;
 const shadowFallbackWaitingThreshold = 2;
 const shadowFallbackStalledThreshold = 1;
 const fullLocalPausedRecoveryIntervalMs = 500;
+const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
 export type PlaybackRecoveryStage =
   | "startup-buffering"
@@ -477,6 +478,30 @@ export function shouldSkipSecondaryPcmWarmupSync(input: {
   return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
 }
 
+export function shouldStartPcmSlidingWindowAudioElement(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  localReady: boolean;
+  audioPaused: boolean;
+  lastAttemptAtMs: number | null;
+  nowMs: number;
+  retryIntervalMs: number;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    (input.playbackStatus !== "playing" && input.playbackStatus !== "buffering") ||
+    !input.localReady ||
+    !input.audioPaused
+  ) {
+    return false;
+  }
+
+  return (
+    input.lastAttemptAtMs === null ||
+    input.nowMs - input.lastAttemptAtMs >= input.retryIntervalMs
+  );
+}
+
 export function shouldStartListenerProgressivePlayback(input: {
   isCurrentSourceOwner: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
@@ -726,6 +751,7 @@ export function useProgressiveRuntime({
   const pcmRuntimeFailureRef = useRef<{ trackId: string; reason: string } | null>(null);
   const previousPlaybackSurfaceKeyRef = useRef<string | null>(null);
   const playbackStartRetryRef = useRef<number | null>(null);
+  const lastPcmSlidingWindowPlayAttemptAtRef = useRef<number | null>(null);
   const lastProgressiveDiagnosticSignatureRef = useRef<string | null>(null);
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
@@ -1250,6 +1276,7 @@ export function useProgressiveRuntime({
       window.clearTimeout(playbackStartRetryRef.current);
       playbackStartRetryRef.current = null;
     }
+    lastPcmSlidingWindowPlayAttemptAtRef.current = null;
     waitingEventTimestampsRef.current = [];
     stalledEventTimestampsRef.current = [];
     driftSamplesRef.current = [];
@@ -1343,6 +1370,7 @@ export function useProgressiveRuntime({
     driftSamplesRef.current = [];
     continuousPlaybackStartedAtRef.current = null;
     continuousPlaybackSegmentsRef.current = [];
+    lastPcmSlidingWindowPlayAttemptAtRef.current = null;
     setProgressiveFallbackReason(null);
   }, [playback?.currentTrackId, playback?.mediaEpoch, playbackRevision, setProgressiveFallbackReason]);
 
@@ -2486,6 +2514,32 @@ export function useProgressiveRuntime({
         localReady = syncResult.localReady;
         driftMs = syncResult.driftMs;
         audio.muted = !isSlidingWindowPlaybackSource(activePlaybackSource);
+        if (
+          shouldStartPcmSlidingWindowAudioElement({
+            activePlaybackSource,
+            playbackStatus: playbackState.status,
+            localReady,
+            audioPaused: audio.paused,
+            lastAttemptAtMs: lastPcmSlidingWindowPlayAttemptAtRef.current,
+            nowMs: now,
+            retryIntervalMs: pcmSlidingWindowPlayRetryIntervalMs
+          })
+        ) {
+          lastPcmSlidingWindowPlayAttemptAtRef.current = now;
+          void attemptPlaybackStart(
+            audio,
+            activePlaybackSource,
+            "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
+            getSlidingWindowPlayBlockedReason(activePlaybackSource),
+            { reportFailure: false }
+          ).then((ok) => {
+            if (cancelled || !ok) {
+              return;
+            }
+            setProgressiveFallbackReason(null);
+            setMediaConnectionState("live");
+          });
+        }
       } else if (mseEngine) {
         await mseEngine.sync();
         engineReady = mseEngine.engineStatus === "ready";
@@ -2627,7 +2681,9 @@ export function useProgressiveRuntime({
     playbackQualityMetrics.waitingEventsLast30s,
     playbackRecoveryStage,
     progressiveFallbackReason,
+    attemptPlaybackStart,
     markPcmRuntimeFailure,
+    setMediaConnectionState,
     transitionPlaybackSource,
     setProgressiveFallbackReason
   ]);

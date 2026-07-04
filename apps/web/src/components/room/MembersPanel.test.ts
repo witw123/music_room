@@ -52,4 +52,29 @@ describe("MembersPanel playback status", () => {
       tone: "success"
     });
   });
+
+  it("treats playing full-local playback as audible even if src diagnostics lag", () => {
+    const diagnostics = createPeerSnapshot("peer_1", "2026-07-04T00:00:00.000Z");
+    diagnostics.progressivePlaybackStatus = {
+      ...diagnostics.progressivePlaybackStatus!,
+      activeSource: "full-local",
+      engineType: "pcm",
+      fullLocalReady: true,
+      fullLocalPlaybackMode: "none",
+      localAudioPaused: false,
+      localAudioMuted: false,
+      localAudioVolume: 0.72,
+      localAudioReadyState: 0,
+      localAudioCurrentSrc: null,
+      localAudioHasSrcObject: false,
+      pcmDecodedSegmentCount: null,
+      pcmScheduledSegmentCount: null,
+      pcmDirectOutputConnected: null
+    };
+
+    expect(getPlaybackStatus("online", diagnostics)).toMatchObject({
+      label: "完整缓存播放",
+      tone: "success"
+    });
+  });
 });

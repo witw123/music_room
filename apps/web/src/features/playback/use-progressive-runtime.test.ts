@@ -23,6 +23,7 @@ import {
   shouldLatchPcmRuntimeFailure,
   shouldResetAudioForPlaybackSurfaceChange,
   shouldRetryPcmRuntimeAfterFailure,
+  shouldStartPcmSlidingWindowAudioElement,
   shouldSkipSecondaryPcmWarmupSync,
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
@@ -766,5 +767,52 @@ describe("use-progressive-runtime policy helpers", () => {
         hasProgressiveRuntimeFailure: true
       })
     ).toBe("full-local");
+  });
+
+  it("starts the PCM sliding-window media element once warmup has local audio", () => {
+    expect(
+      shouldStartPcmSlidingWindowAudioElement({
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        localReady: true,
+        audioPaused: true,
+        lastAttemptAtMs: null,
+        nowMs: 10_000,
+        retryIntervalMs: 1_000
+      })
+    ).toBe(true);
+    expect(
+      shouldStartPcmSlidingWindowAudioElement({
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        localReady: true,
+        audioPaused: false,
+        lastAttemptAtMs: null,
+        nowMs: 10_000,
+        retryIntervalMs: 1_000
+      })
+    ).toBe(false);
+    expect(
+      shouldStartPcmSlidingWindowAudioElement({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        localReady: true,
+        audioPaused: true,
+        lastAttemptAtMs: null,
+        nowMs: 10_000,
+        retryIntervalMs: 1_000
+      })
+    ).toBe(false);
+    expect(
+      shouldStartPcmSlidingWindowAudioElement({
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        localReady: true,
+        audioPaused: true,
+        lastAttemptAtMs: 9_500,
+        nowMs: 10_000,
+        retryIntervalMs: 1_000
+      })
+    ).toBe(false);
   });
 });
