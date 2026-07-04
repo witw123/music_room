@@ -4,6 +4,7 @@ import {
   buildManualCachePieceAvailabilityAnnouncement,
   buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
+  createInFlightCachedLibraryTrackFileLoader,
   isManualCachePieceCompatible,
   mergeHydratedManualCacheTasks,
   mergeManualCachePieceTaskProgress,
@@ -21,6 +22,50 @@ import {
   shouldEnsurePlaybackDemandCacheTask,
   hasUsableCachedLibraryFileForRoomTrack
 } from "./use-track-uploads";
+
+describe("createInFlightCachedLibraryTrackFileLoader", () => {
+  it("coalesces concurrent full-cache file loads for the same file hash", async () => {
+    const loads: Array<{
+      fileHash: string;
+      resolve: (value: Awaited<ReturnType<ReturnType<typeof createInFlightCachedLibraryTrackFileLoader>>>) => void;
+    }> = [];
+    const loader = createInFlightCachedLibraryTrackFileLoader(
+      (fileHash) =>
+        new Promise((resolve) => {
+          loads.push({ fileHash, resolve });
+        })
+    );
+    const cachedTrack = {
+      fileHash: "hash_1",
+      title: "Cached",
+      artist: "Artist",
+      mimeType: "audio/flac",
+      durationMs: 120_000,
+      sizeBytes: 48_000_000,
+      cachedAt: "2026-07-04T00:00:00.000Z",
+      sourceTrackIds: ["track_1"],
+      sourceRoomIds: ["room_1"],
+      lastSourceTrackId: "track_1",
+      lastSourceRoomId: "room_1",
+      lastOwnerNickname: "Host",
+      file: new File(["cached"], "cached.flac", { type: "audio/flac" })
+    };
+
+    const first = loader("hash_1");
+    const second = loader("hash_1");
+
+    expect(loads).toHaveLength(1);
+    expect(loads[0]?.fileHash).toBe("hash_1");
+    loads[0]?.resolve(cachedTrack);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([cachedTrack, cachedTrack]);
+
+    const third = loader("hash_1");
+    expect(loads).toHaveLength(2);
+    loads[1]?.resolve(null);
+    await expect(third).resolves.toBeNull();
+  });
+});
 
 describe("buildRegisterTrackPayload", () => {
   it("does not include client-only session fields rejected by the strict server schema", () => {

@@ -22,7 +22,10 @@ import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import type {
+  ProgressiveEngineType,
+  ProgressivePlaybackSource
+} from "@/features/playback/progressive-playback";
 import {
   useProgressiveRuntime,
   type FullLocalPlaybackTrack
@@ -148,6 +151,50 @@ export function hasPlayableFullLocalPlaybackTrack(input: {
     input.currentPlaybackTrackId &&
     input.fullLocalPlaybackTracks[input.currentPlaybackTrackId]
   );
+}
+
+export function getPlaybackSourceInitializationKey(input: {
+  playbackSurfaceKey: string | null | undefined;
+  currentPlaybackTrackId: string | null | undefined;
+  currentTrack:
+    | {
+        id: string;
+        fileHash: string;
+        mimeType?: string | null;
+        codec?: string | null;
+        title?: string | null;
+      }
+    | null
+    | undefined;
+  currentProgressiveEngineTypeForSource: ProgressiveEngineType | null | undefined;
+  hasPlayableFullLocalTrack: boolean;
+}) {
+  if (!input.currentPlaybackTrackId) {
+    return null;
+  }
+
+  const format = resolveSlidingWindowFormat({
+    mimeType: input.currentTrack?.mimeType ?? null,
+    codec: input.currentTrack?.codec ?? null,
+    title: input.currentTrack?.title ?? null
+  });
+
+  return [
+    input.playbackSurfaceKey ?? "no-surface",
+    input.currentPlaybackTrackId,
+    input.currentTrack?.id ?? "missing-track",
+    input.currentTrack?.fileHash ?? "missing-hash",
+    format,
+    input.currentProgressiveEngineTypeForSource ?? "none",
+    input.hasPlayableFullLocalTrack ? "full-local-ready" : "full-local-missing"
+  ].join("|");
+}
+
+export function shouldInitializePlaybackSource(input: {
+  previousInitializationKey: string | null;
+  nextInitializationKey: string | null;
+}) {
+  return input.previousInitializationKey !== input.nextInitializationKey;
 }
 
 export function getCachedFullLocalPlaybackLoadKey(
@@ -287,6 +334,7 @@ export function MusicRoomApp({
   const [activePlaybackSource, setActivePlaybackSource] =
     useState<ProgressivePlaybackSource>("progressive-local");
   const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
+  const playbackSourceInitializationKeyRef = useRef<string | null>(null);
   const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
   const [audioUnlocked, setAudioUnlocked] = useState(() => roomAudioOutput.isActivated());
   const [sourceStartState, setSourceStartState] = useState<
@@ -691,6 +739,7 @@ export function MusicRoomApp({
     setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
+    playbackSourceInitializationKeyRef.current = null;
     setActivePlaybackSource("progressive-local");
     setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
@@ -879,6 +928,23 @@ export function MusicRoomApp({
   }, [initialRoomId]);
 
   useEffect(() => {
+    const nextInitializationKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey,
+      currentPlaybackTrackId,
+      currentTrack,
+      currentProgressiveEngineTypeForSource,
+      hasPlayableFullLocalTrack
+    });
+    if (
+      !shouldInitializePlaybackSource({
+        previousInitializationKey: playbackSourceInitializationKeyRef.current,
+        nextInitializationKey
+      })
+    ) {
+      return;
+    }
+    playbackSourceInitializationKeyRef.current = nextInitializationKey;
+
     if (!currentPlaybackTrackId) {
       setActivePlaybackSource("progressive-local");
       setProgressiveFallbackReason(null);
@@ -900,7 +966,11 @@ export function MusicRoomApp({
   }, [
     playbackSurfaceKey,
     currentPlaybackTrackId,
-    currentTrack,
+    currentTrack?.codec,
+    currentTrack?.fileHash,
+    currentTrack?.id,
+    currentTrack?.mimeType,
+    currentTrack?.title,
     currentProgressiveEngineTypeForSource,
     hasPlayableFullLocalTrack
   ]);

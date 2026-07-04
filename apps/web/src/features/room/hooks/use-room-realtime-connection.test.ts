@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
   buildRoomSubscribePayload,
+  hasSubscribeBootstrapFullLocalTrack,
   isSocketDisconnectGraceActive,
   shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
@@ -100,6 +101,47 @@ describe("buildRoomSubscribePayload", () => {
       peerId: "peer_1",
       sessionId: "user_1"
     });
+  });
+});
+
+describe("hasSubscribeBootstrapFullLocalTrack", () => {
+  it("treats a loaded full-local cache as bootstrap-ready even without a live upload binding", () => {
+    expect(
+      hasSubscribeBootstrapFullLocalTrack({
+        enableTrackCaching: true,
+        currentTrackId: "track_cached",
+        uploadedTracks: {},
+        fullLocalPlaybackTracks: {
+          track_cached: {
+            objectUrl: "blob:cached"
+          }
+        }
+      })
+    ).toBe(true);
+  });
+
+  it("does not mark bootstrap data ready when caching is disabled or the track is missing", () => {
+    expect(
+      hasSubscribeBootstrapFullLocalTrack({
+        enableTrackCaching: false,
+        currentTrackId: "track_cached",
+        uploadedTracks: {
+          track_cached: {
+            objectUrl: "blob:uploaded"
+          }
+        },
+        fullLocalPlaybackTracks: {}
+      })
+    ).toBe(false);
+
+    expect(
+      hasSubscribeBootstrapFullLocalTrack({
+        enableTrackCaching: true,
+        currentTrackId: "track_cached",
+        uploadedTracks: {},
+        fullLocalPlaybackTracks: {}
+      })
+    ).toBe(false);
   });
 });
 

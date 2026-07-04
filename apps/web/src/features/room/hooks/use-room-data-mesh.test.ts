@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createBoundedCachedLibraryTrackCache,
+  createInFlightCachedLibraryTrackRecordLoader,
   createDataMeshBridge
 } from "./use-room-data-mesh";
 
@@ -20,6 +21,40 @@ describe("createBoundedCachedLibraryTrackCache", () => {
     expect(cache.get("hash_1")).toBe(first);
     expect(cache.get("hash_2")).toBeNull();
     expect(cache.get("hash_3")).toBe(third);
+  });
+});
+
+describe("createInFlightCachedLibraryTrackRecordLoader", () => {
+  it("coalesces concurrent cached-library record loads for piece fallback", async () => {
+    type CachedRecord = { fileHash: string; file: File };
+    const loads: Array<{
+      fileHash: string;
+      resolve: (value: CachedRecord | null) => void;
+    }> = [];
+    const loader = createInFlightCachedLibraryTrackRecordLoader<CachedRecord>((fileHash) =>
+      new Promise<CachedRecord | null>((resolve) => {
+        loads.push({ fileHash, resolve });
+      })
+    );
+    const cachedRecord = {
+      fileHash: "hash_1",
+      file: new File(["cached"], "cached.flac", { type: "audio/flac" })
+    };
+
+    const first = loader("hash_1");
+    const second = loader("hash_1");
+
+    expect(loads).toHaveLength(1);
+    loads[0]?.resolve(cachedRecord);
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      cachedRecord,
+      cachedRecord
+    ]);
+
+    const third = loader("hash_1");
+    expect(loads).toHaveLength(2);
+    loads[1]?.resolve(null);
+    await expect(third).resolves.toBeNull();
   });
 });
 

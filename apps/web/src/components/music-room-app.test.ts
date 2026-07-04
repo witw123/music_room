@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   getCachedFullLocalPlaybackLoadKey,
+  getPlaybackSourceInitializationKey,
   hasPlayableFullLocalPlaybackTrack,
   resolveCachedFullLocalPlaybackLoadTarget,
   runPlaybackMutationAfterLocalPrime,
   selectFullLocalPlaybackTracks,
   shouldClearCachedFullLocalPlaybackTrack,
+  shouldInitializePlaybackSource,
   startBestEffortPlaybackAudioUnlock
 } from "./music-room-app";
 
@@ -55,6 +57,81 @@ describe("hasPlayableFullLocalPlaybackTrack", () => {
             objectUrl: "blob:cached"
           }
         }
+      })
+    ).toBe(true);
+  });
+});
+
+describe("getPlaybackSourceInitializationKey", () => {
+  it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
+    const firstKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey: "track_cached|host|1",
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        mimeType: "audio/flac",
+        codec: "flac",
+        title: "Cached"
+      },
+      currentProgressiveEngineTypeForSource: "pcm",
+      hasPlayableFullLocalTrack: false
+    });
+    const refreshedKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey: "track_cached|host|1",
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        mimeType: "audio/flac",
+        codec: "flac",
+        title: "Cached"
+      },
+      currentProgressiveEngineTypeForSource: "pcm",
+      hasPlayableFullLocalTrack: false
+    });
+
+    expect(refreshedKey).toBe(firstKey);
+    expect(
+      shouldInitializePlaybackSource({
+        previousInitializationKey: firstKey,
+        nextInitializationKey: refreshedKey
+      })
+    ).toBe(false);
+  });
+
+  it("reinitializes when the playable local source really changes", () => {
+    const pendingCacheKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey: "track_cached|host|1",
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        mimeType: "audio/flac",
+        codec: "flac",
+        title: "Cached"
+      },
+      currentProgressiveEngineTypeForSource: "pcm",
+      hasPlayableFullLocalTrack: false
+    });
+    const readyCacheKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey: "track_cached|host|1",
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        mimeType: "audio/flac",
+        codec: "flac",
+        title: "Cached"
+      },
+      currentProgressiveEngineTypeForSource: "pcm",
+      hasPlayableFullLocalTrack: true
+    });
+
+    expect(
+      shouldInitializePlaybackSource({
+        previousInitializationKey: pendingCacheKey,
+        nextInitializationKey: readyCacheKey
       })
     ).toBe(true);
   });

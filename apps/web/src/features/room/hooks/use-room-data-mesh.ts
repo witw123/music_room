@@ -112,6 +112,27 @@ export function createBoundedCachedLibraryTrackCache<T extends { fileHash: strin
   };
 }
 
+export function createInFlightCachedLibraryTrackRecordLoader<T>(
+  loadCachedLibraryTrackRecord: (fileHash: string) => Promise<T | null>
+) {
+  const inFlightLoads = new Map<string, Promise<T | null>>();
+
+  return (fileHash: string) => {
+    const existingLoad = inFlightLoads.get(fileHash);
+    if (existingLoad) {
+      return existingLoad;
+    }
+
+    const nextLoad = loadCachedLibraryTrackRecord(fileHash).finally(() => {
+      if (inFlightLoads.get(fileHash) === nextLoad) {
+        inFlightLoads.delete(fileHash);
+      }
+    });
+    inFlightLoads.set(fileHash, nextLoad);
+    return nextLoad;
+  };
+}
+
 export function createRoomDataMeshRuntime(input: {
   roomId: string;
   peerId: string;
@@ -183,7 +204,10 @@ export function createRoomDataMeshRuntime(input: {
 }) {
   const peerBufferedAmountBytes = new Map<string, number>();
   const cachedLibraryTrackCache =
-    createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(2);
+    createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(1, 5_000);
+  const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
+    getCachedLibraryTrack
+  );
   const mesh = new P2PMesh(
     input.roomId,
     input.peerId,
@@ -450,7 +474,7 @@ export function createRoomDataMeshRuntime(input: {
           ? cachedLibraryTrackCache.get(track.fileHash)
           : null;
         if (!cachedLibraryTrack && track) {
-          cachedLibraryTrack = (await getCachedLibraryTrack(track.fileHash)) ?? null;
+          cachedLibraryTrack = (await loadCachedLibraryTrackRecord(track.fileHash)) ?? null;
           if (cachedLibraryTrack) {
             cachedLibraryTrackCache.set(cachedLibraryTrack);
           }

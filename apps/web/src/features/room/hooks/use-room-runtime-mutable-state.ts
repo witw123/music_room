@@ -10,6 +10,8 @@ import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { RoomRecoveryState } from "./room-runtime-types";
 
+type LocalPlaybackTrackRecord = Record<string, Pick<UploadedTrack, "objectUrl">>;
+
 export function useRoomRuntimeMutableState(input: {
   initialRoomId: string | null;
   roomSnapshot: RoomSnapshot | null;
@@ -29,6 +31,7 @@ export function useRoomRuntimeMutableState(input: {
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
   manualCacheTrackIds: string[];
   uploadedTracks: Record<string, UploadedTrack>;
+  fullLocalPlaybackTracks: LocalPlaybackTrackRecord;
   announceRoomTrackAvailability: (trackId: string) => Promise<void>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
@@ -68,6 +71,9 @@ export function useRoomRuntimeMutableState(input: {
   const setLastSourceStartErrorRef = useRef(input.setLastSourceStartError);
   const manualCacheTrackIdsRef = useRef(input.manualCacheTrackIds);
   const uploadedTracksRef = useRef(input.uploadedTracks);
+  const fullLocalPlaybackTracksRef = useRef<LocalPlaybackTrackRecord>(
+    input.fullLocalPlaybackTracks
+  );
   const announceRoomTrackAvailabilityRef = useRef(input.announceRoomTrackAvailability);
   const handleManualCachePieceReceivedRef = useRef(input.handleManualCachePieceReceived);
   const deleteUploadedTrackArtifactsRef = useRef(input.deleteUploadedTrackArtifacts);
@@ -178,6 +184,10 @@ export function useRoomRuntimeMutableState(input: {
   }, [input.uploadedTracks]);
 
   useEffect(() => {
+    fullLocalPlaybackTracksRef.current = input.fullLocalPlaybackTracks;
+  }, [input.fullLocalPlaybackTracks]);
+
+  useEffect(() => {
     announceRoomTrackAvailabilityRef.current = input.announceRoomTrackAvailability;
   }, [input.announceRoomTrackAvailability]);
 
@@ -236,6 +246,7 @@ export function useRoomRuntimeMutableState(input: {
     setLastSourceStartErrorRef,
     manualCacheTrackIdsRef,
     uploadedTracksRef,
+    fullLocalPlaybackTracksRef,
     announceRoomTrackAvailabilityRef,
     handleManualCachePieceReceivedRef,
     deleteUploadedTrackArtifactsRef,

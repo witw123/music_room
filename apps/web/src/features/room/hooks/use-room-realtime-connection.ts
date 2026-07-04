@@ -99,6 +99,20 @@ export function buildRoomSubscribePayload(input: {
   };
 }
 
+export function hasSubscribeBootstrapFullLocalTrack(input: {
+  enableTrackCaching: boolean;
+  currentTrackId: string | null | undefined;
+  uploadedTracks: Record<string, unknown>;
+  fullLocalPlaybackTracks: Record<string, unknown>;
+}) {
+  return !!(
+    input.enableTrackCaching &&
+    input.currentTrackId &&
+    (input.uploadedTracks[input.currentTrackId] ||
+      input.fullLocalPlaybackTracks[input.currentTrackId])
+  );
+}
+
 export function shouldExitRoomOnSnapshotMissing(input: {
   currentRoomId: string;
   missingRoomId?: string | null;
@@ -116,6 +130,7 @@ function applyRoomSubscribeBootstrap(input: {
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   uploadedTracks: Record<string, unknown>;
+  fullLocalPlaybackTracks: Record<string, unknown>;
   enableTrackCaching: boolean;
   audioUnlocked: boolean;
 }) {
@@ -152,8 +167,12 @@ function applyRoomSubscribeBootstrap(input: {
   });
 
   const currentTrackId = input.ack.bootstrap.playback.currentTrackId ?? null;
-  const hasFullLocalTrack =
-    input.enableTrackCaching && !!(currentTrackId && input.uploadedTracks[currentTrackId]);
+  const hasFullLocalTrack = hasSubscribeBootstrapFullLocalTrack({
+    enableTrackCaching: input.enableTrackCaching,
+    currentTrackId,
+    uploadedTracks: input.uploadedTracks,
+    fullLocalPlaybackTracks: input.fullLocalPlaybackTracks
+  });
   input.setRoomRecoveryState((current) => ({
     ...current,
     phase: hasFullLocalTrack && input.audioUnlocked ? "playing-local-fallback" : "resyncing",
@@ -227,6 +246,7 @@ export function createRoomRealtimeRuntime(input: {
   chunkSchedulerRef: MutableRefObject<any>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   uploadedTracksRef: MutableRefObject<Record<string, any>>;
+  fullLocalPlaybackTracksRef: MutableRefObject<Record<string, any>>;
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIdsRef: MutableRefObject<string[]>;
   announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
@@ -274,7 +294,6 @@ export function createRoomRealtimeRuntime(input: {
   setStatusMessage: (value: string) => void;
   isNavigatingRoomExit: boolean;
   audioUnlocked: boolean;
-  uploadedTracks: Record<string, unknown>;
   emitPresence: () => void;
   startPresenceHeartbeat: () => void;
   exitCurrentRoom: (message: string) => void;
@@ -363,7 +382,6 @@ export function useRoomRealtimeConnection(input: {
   roomListenerSetHash: string;
   uploadedTrackIds: string[];
   connectedPeers: string[];
-  uploadedTracks: Record<string, unknown>;
   announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
@@ -686,7 +704,8 @@ function attachRoomSocketHandlers(input: any) {
           recoveryModeRef: input.recoveryModeRef,
           dispatchRoomStateEvent: input.dispatchRoomStateEvent,
           setRoomRecoveryState: input.setRoomRecoveryState,
-          uploadedTracks: input.uploadedTracks,
+          uploadedTracks: input.uploadedTracksRef.current,
+          fullLocalPlaybackTracks: input.fullLocalPlaybackTracksRef.current,
           enableTrackCaching: input.enableTrackCaching,
           audioUnlocked: input.audioUnlocked
         });

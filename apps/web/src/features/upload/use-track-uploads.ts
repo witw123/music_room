@@ -119,6 +119,27 @@ export function shouldAnnounceTrackAvailability(input: {
   return Boolean(input.peerId);
 }
 
+export function createInFlightCachedLibraryTrackFileLoader(
+  loadCachedTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>
+) {
+  const inFlightLoads = new Map<string, Promise<CachedLibraryTrackFile | null>>();
+
+  return (fileHash: string) => {
+    const existingLoad = inFlightLoads.get(fileHash);
+    if (existingLoad) {
+      return existingLoad;
+    }
+
+    const nextLoad = loadCachedTrackFile(fileHash).finally(() => {
+      if (inFlightLoads.get(fileHash) === nextLoad) {
+        inFlightLoads.delete(fileHash);
+      }
+    });
+    inFlightLoads.set(fileHash, nextLoad);
+    return nextLoad;
+  };
+}
+
 export function resolveReusableCachedPieceManifest<T extends TrackPieceManifestGeometry>(input: {
   cachedManifest: T | null | undefined;
   expectedManifest: TrackPieceManifestGeometry | null | undefined;
@@ -1669,10 +1690,14 @@ export function useTrackUploads(options: {
     [roomSnapshot?.room.id]
   );
 
-  const loadCachedLibraryTrackFile = useCallback(async (fileHash: string) => {
-    const cachedTrack = await getCachedLibraryTrack(fileHash);
-    return cachedTrack ? toCachedLibraryTrackFile(cachedTrack) : null;
-  }, []);
+  const loadCachedLibraryTrackFile = useMemo(
+    () =>
+      createInFlightCachedLibraryTrackFileLoader(async (fileHash) => {
+        const cachedTrack = await getCachedLibraryTrack(fileHash);
+        return cachedTrack ? toCachedLibraryTrackFile(cachedTrack) : null;
+      }),
+    []
+  );
 
   const deleteCachedLibraryTrackEntry = useCallback(
     async (fileHash: string) => {
