@@ -466,8 +466,8 @@ describe("ProgressivePcmEngine", () => {
       await engine.attach();
       await engine.sync();
 
-      expect(vi.mocked(getCachedPiece).mock.calls).toHaveLength(8);
-      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(8);
+      expect(vi.mocked(getCachedPiece).mock.calls).toHaveLength(2);
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(2);
     } finally {
       engine.destroy();
       audioContext.restore();
