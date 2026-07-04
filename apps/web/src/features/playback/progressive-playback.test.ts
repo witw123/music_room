@@ -316,6 +316,13 @@ describe("progressive playback helpers", () => {
     expect(
       isStartupReady({
         manifest,
+        availableChunks: [0, 3, 4],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(false);
+    expect(
+      isStartupReady({
+        manifest,
         availableChunks: [0, 3, 4, 5],
         playbackPositionMs: 40_000
       })
@@ -326,8 +333,8 @@ describe("progressive playback helpers", () => {
         availableChunks: [],
         playbackPositionMs: 40_000,
         policy: "startup"
-      }).slice(0, 3)
-    ).toEqual([0, 3, 4]);
+      }).slice(0, 4)
+    ).toEqual([0, 3, 4, 5]);
   });
 
   it("moves from startup to background once the current track is complete", () => {
@@ -436,7 +443,7 @@ describe("progressive playback helpers", () => {
     }, {
       ...availability,
       totalChunks: 24,
-      availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+      availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     });
     const playback = {
       status: "playing" as const,
@@ -457,7 +464,7 @@ describe("progressive playback helpers", () => {
         playback,
         activeSource: "progressive-local",
         manifest,
-        availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         fallbackReason: null,
         currentTrackComplete: false,
         currentPieceDownloadRateKbps: 20

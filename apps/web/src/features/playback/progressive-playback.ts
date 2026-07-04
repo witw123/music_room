@@ -364,20 +364,26 @@ function getAheadBufferedMsFromChunk(input: {
   availableChunks: number[];
   playbackPositionMs: number;
   startChunkIndex: number;
+  trailingGuardChunkCount?: number;
 }) {
   const contiguousChunkCount = getContiguousChunkCountFrom({
     availableChunks: input.availableChunks,
     startChunkIndex: input.startChunkIndex,
     totalChunks: input.manifest.totalChunks
   });
-  if (contiguousChunkCount <= 0) {
+  const reachesTrackEnd = input.startChunkIndex + contiguousChunkCount >= input.manifest.totalChunks;
+  const playableChunkCount =
+    reachesTrackEnd
+      ? contiguousChunkCount
+      : contiguousChunkCount - Math.max(0, input.trailingGuardChunkCount ?? 0);
+  if (playableChunkCount <= 0) {
     return 0;
   }
 
   const chunkDurationMs = input.manifest.durationMs / input.manifest.totalChunks;
   const bufferedEndMs = Math.min(
     input.manifest.durationMs,
-    (input.startChunkIndex + contiguousChunkCount) * chunkDurationMs
+    (input.startChunkIndex + playableChunkCount) * chunkDurationMs
   );
   return Math.max(0, Math.floor(bufferedEndMs - Math.max(0, input.playbackPositionMs)));
 }
@@ -436,7 +442,8 @@ export function getDecodableAheadBufferedMs(input: {
       manifest: input.manifest,
       availableChunks: input.availableChunks,
       playbackPositionMs: input.playbackPositionMs,
-      startChunkIndex: Math.max(0, currentChunkIndex - 1)
+      startChunkIndex: Math.max(0, currentChunkIndex - 1),
+      trailingGuardChunkCount: 1
     });
   }
 
@@ -835,10 +842,13 @@ export function getPriorityChunkIndexes(input: {
   const currentDecodeStartChunkIndex = isFlacTrack(manifest)
     ? Math.max(0, currentChunkIndex - 1)
     : currentChunkIndex;
+  const playbackWindowEndChunkIndex = isFlacTrack(manifest)
+    ? Math.min(manifest.totalChunks - 1, endChunkIndex + 1)
+    : endChunkIndex;
 
   appendMissingChunks(wantedChunks, owned, seen, 0, requiredLeadingChunkCount - 1, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentDecodeStartChunkIndex, currentChunkIndex - 1, 1);
-  appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex, endChunkIndex, 1);
+  appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex, playbackWindowEndChunkIndex, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentDecodeStartChunkIndex - 1, startChunkIndex, -1);
 
   if (policy === "outrun-recovery" || policy === "pause-fill") {

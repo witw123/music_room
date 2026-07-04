@@ -769,6 +769,62 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces.mock.calls[0]?.[2]).not.toContain(1);
   });
 
+  it("continues filling the full FLAC cache after the active decode window is cached", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 24,
+      durationMs: 24_000,
+      sizeBytes: 24 * 128 * 1024,
+      mimeType: "audio/flac",
+      codec: "flac"
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [0, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 12_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledWith(
+      "peer_owner",
+      "track_a",
+      [1, 2, 3, 4, 5, 6, 7, 22, 23],
+      24,
+      expect.any(Number)
+    );
+  });
+
   it("keeps automatic playback cache requests finite when duration metadata is missing", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",

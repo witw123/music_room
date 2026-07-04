@@ -756,7 +756,7 @@ function resolveManualCacheRequestOrder(input: {
       codec: input.track.codec ?? null
     })
   ) {
-    return getPriorityChunkIndexes({
+    const orderedChunks = getPriorityChunkIndexes({
       manifest: {
         trackId: input.track.id,
         fileHash: input.track.fileHash,
@@ -773,6 +773,14 @@ function resolveManualCacheRequestOrder(input: {
       lookBehindMs: 4_000,
       lookAheadMs: input.activePlaybackWindow.policy === "catchup" ? 60_000 : startupLookAheadMs
     });
+    const seen = new Set(orderedChunks);
+    for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
+      if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
+        orderedChunks.push(chunkIndex);
+        seen.add(chunkIndex);
+      }
+    }
+    return orderedChunks;
   }
 
   const orderedChunks = resolveSlidingWindowChunkOrder({
