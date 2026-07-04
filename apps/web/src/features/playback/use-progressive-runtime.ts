@@ -372,6 +372,55 @@ export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: 
   return input.now - input.warmupReadyAt >= input.switchDelayMs;
 }
 
+export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  canUseFullLocalForPlaybackSession: boolean;
+  fullLocalBlockedReason: string | null | undefined;
+  localAudioPaused: boolean | null | undefined;
+  localAudioMuted: boolean | null | undefined;
+  localAudioVolume: number | null | undefined;
+  localAudioReadyState: number | null | undefined;
+  localAudioHasSrc: boolean;
+  localAudioHasSrcObject: boolean;
+  pcmAudioContextState: string | null | undefined;
+  pcmDirectOutputConnected: boolean | null | undefined;
+  pcmDecodedSegmentCount: number | null | undefined;
+  pcmScheduledSegmentCount: number | null | undefined;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  if (
+    !hasActiveIntent ||
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    !input.canUseFullLocalForPlaybackSession ||
+    input.fullLocalBlockedReason !== null
+  ) {
+    return false;
+  }
+
+  const pcmDirectOutputAudible =
+    input.pcmAudioContextState === "running" &&
+    input.pcmDirectOutputConnected !== false &&
+    (input.pcmDecodedSegmentCount ?? 0) > 0 &&
+    (input.pcmScheduledSegmentCount ?? 0) > 0;
+  if (pcmDirectOutputAudible) {
+    return false;
+  }
+
+  const hasPlayableElementOutput =
+    (input.localAudioReadyState ?? 0) >= haveCurrentDataReadyState ||
+    input.localAudioHasSrcObject ||
+    input.localAudioHasSrc;
+
+  return (
+    input.localAudioPaused !== false ||
+    input.localAudioMuted === true ||
+    input.localAudioVolume === 0 ||
+    !hasPlayableElementOutput
+  );
+}
+
 export function shouldRecoverPausedFullLocalPlayback(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
@@ -1443,6 +1492,44 @@ export function useProgressiveRuntime({
       setProgressiveFallbackReason
     ]
   );
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    const latestPcmDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
+    if (
+      !shouldRecoverSilentSlidingWindowWithFullLocal({
+        activePlaybackSource,
+        playbackStatus: playback?.status,
+        canUseFullLocalForPlaybackSession,
+        fullLocalBlockedReason,
+        localAudioPaused: audio?.paused ?? localAudioDiagnostics.localAudioPaused,
+        localAudioMuted: audio?.muted ?? localAudioDiagnostics.localAudioMuted,
+        localAudioVolume: audio?.volume ?? localAudioDiagnostics.localAudioVolume,
+        localAudioReadyState: audio?.readyState ?? localAudioDiagnostics.localAudioReadyState,
+        localAudioHasSrc: !!(audio?.currentSrc || audio?.getAttribute("src")),
+        localAudioHasSrcObject: !!audio?.srcObject,
+        pcmAudioContextState: latestPcmDiagnostics?.audioContextState ?? null,
+        pcmDirectOutputConnected: latestPcmDiagnostics?.directOutputConnected ?? null,
+        pcmDecodedSegmentCount: latestPcmDiagnostics?.decodedSegmentCount ?? null,
+        pcmScheduledSegmentCount: latestPcmDiagnostics?.scheduledSegmentCount ?? null
+      })
+    ) {
+      return;
+    }
+
+    transitionPlaybackSource("full-local", { clearFallbackReason: true });
+    setMediaConnectionState("buffering");
+  }, [
+    activePlaybackSource,
+    audioRef,
+    canUseFullLocalForPlaybackSession,
+    fullLocalBlockedReason,
+    localAudioDiagnostics,
+    pcmEngineDiagnosticsKey,
+    playback?.status,
+    setMediaConnectionState,
+    transitionPlaybackSource
+  ]);
 
   const clearPlaybackStartRetry = useCallback(() => {
     if (playbackStartRetryRef.current !== null) {

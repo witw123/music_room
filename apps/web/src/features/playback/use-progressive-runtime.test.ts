@@ -14,6 +14,7 @@ import {
   shouldPrepareProgressiveRuntimeForSource,
   shouldAttemptProgressiveLocalPlayback,
   shouldRecoverPausedFullLocalPlayback,
+  shouldRecoverSilentSlidingWindowWithFullLocal,
   shouldStartListenerProgressivePlayback,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
   shouldWarmFullLocalWithSharedAudioElement,
@@ -267,6 +268,46 @@ describe("use-progressive-runtime policy helpers", () => {
         requiredAheadMs: 1000
       })
     ).toBe(true);
+  });
+
+  it("recovers silent sliding-window playback with ready full-local cache", () => {
+    const readyInput = {
+      activePlaybackSource: "progressive-local" as const,
+      playbackStatus: "playing" as const,
+      canUseFullLocalForPlaybackSession: true,
+      fullLocalBlockedReason: null,
+      localAudioPaused: true,
+      localAudioMuted: false,
+      localAudioVolume: 0.72,
+      localAudioReadyState: 0,
+      localAudioHasSrc: false,
+      localAudioHasSrcObject: false,
+      pcmAudioContextState: null,
+      pcmDirectOutputConnected: null,
+      pcmDecodedSegmentCount: null,
+      pcmScheduledSegmentCount: null
+    };
+
+    expect(shouldRecoverSilentSlidingWindowWithFullLocal(readyInput)).toBe(true);
+    expect(
+      shouldRecoverSilentSlidingWindowWithFullLocal({
+        ...readyInput,
+        localAudioPaused: false,
+        localAudioReadyState: 4,
+        localAudioHasSrc: true
+      })
+    ).toBe(false);
+    expect(
+      shouldRecoverSilentSlidingWindowWithFullLocal({
+        ...readyInput,
+        activePlaybackSource: "lossless-local",
+        localAudioPaused: true,
+        pcmAudioContextState: "running",
+        pcmDirectOutputConnected: true,
+        pcmDecodedSegmentCount: 2,
+        pcmScheduledSegmentCount: 1
+      })
+    ).toBe(false);
   });
 
   it("skips the secondary idle sync after a PCM warmup miss", () => {
