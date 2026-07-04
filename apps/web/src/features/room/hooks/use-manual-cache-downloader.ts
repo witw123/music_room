@@ -10,7 +10,9 @@ import {
   type TrackPieceManifestRecord
 } from "@/lib/indexeddb";
 import {
+  getPriorityChunkIndexes,
   getStartupWindowMs,
+  isFlacTrack,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
 import {
@@ -748,6 +750,31 @@ function resolveManualCacheRequestOrder(input: {
     mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
     codec: input.track.codec ?? null
   });
+  if (
+    isFlacTrack({
+      mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/mpeg",
+      codec: input.track.codec ?? null
+    })
+  ) {
+    return getPriorityChunkIndexes({
+      manifest: {
+        trackId: input.track.id,
+        fileHash: input.track.fileHash,
+        mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? "audio/flac",
+        codec: input.track.codec ?? null,
+        sizeBytes: input.track.sizeBytes ?? null,
+        durationMs: input.track.durationMs,
+        totalChunks: input.manifest.totalChunks,
+        chunkSize: input.manifest.chunkSize
+      },
+      availableChunks: input.localPieceIndexes,
+      playbackPositionMs: input.activePlaybackWindow.positionMs,
+      policy: input.activePlaybackWindow.policy,
+      lookBehindMs: 4_000,
+      lookAheadMs: input.activePlaybackWindow.policy === "catchup" ? 60_000 : startupLookAheadMs
+    });
+  }
+
   const orderedChunks = resolveSlidingWindowChunkOrder({
     manifest: {
       durationMs: input.track.durationMs,

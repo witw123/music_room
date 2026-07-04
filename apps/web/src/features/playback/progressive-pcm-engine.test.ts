@@ -779,6 +779,85 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("plays a FLAC frame that starts in the previous chunk and crosses into the current chunk", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const windowManifest = {
+      ...manifest,
+      durationMs: 8_000,
+      totalChunks: 8,
+      chunkSize: 8
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", windowManifest);
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]);
+    const frame4 = buildFlacFrame(4, [0x40, 0x41, 0x42, 0x43]);
+    const frame5 = buildFlacFrame(5, [0x50, 0x51, 0x52, 0x53]);
+    const splitChunk3 = frame4.slice(0, 8);
+    const splitChunk4 = frame4.slice(8);
+
+    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+      streamInfo: {
+        description,
+        audioOffset: description.byteLength,
+        sampleRate: 256,
+        numberOfChannels: 2,
+        bitsPerSample: 16,
+        minBlockSize: 256,
+        maxBlockSize: 256,
+        totalSamples: null
+      },
+      packets: [],
+      nextOffset: description.byteLength,
+      nextSampleIndex: 0
+    });
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      const payload =
+        chunkIndex === 0
+          ? description
+          : chunkIndex === 3
+            ? splitChunk3
+            : chunkIndex === 4
+              ? splitChunk4
+              : chunkIndex === 5
+                ? frame5
+                : null;
+      if (!payload) {
+        return null;
+      }
+
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: windowManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: windowManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: payload.buffer.slice(
+          payload.byteOffset,
+          payload.byteOffset + payload.byteLength
+        )
+      };
+    });
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(4.1, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 1,
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("drops decoded PCM segments far behind the current playout position", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();

@@ -293,7 +293,7 @@ describe("progressive playback helpers", () => {
     ).toEqual([2, 3, 4]);
   });
 
-  it("treats FLAC startup as ready from the header chunk plus the current playback window", () => {
+  it("treats FLAC startup as ready from the header chunk plus the decodable playback window", () => {
     const manifest = buildProgressiveTrackManifest(
       {
         ...track,
@@ -310,6 +310,13 @@ describe("progressive playback helpers", () => {
       isStartupReady({
         manifest,
         availableChunks: [0, 4, 5],
+        playbackPositionMs: 40_000
+      })
+    ).toBe(false);
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 3, 4, 5],
         playbackPositionMs: 40_000
       })
     ).toBe(true);
