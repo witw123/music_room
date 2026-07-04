@@ -53,14 +53,6 @@ function formatMetric(value: number | null | undefined, unit: string) {
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
-function formatLevel(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  return value.toFixed(6);
-}
-
 function formatDurationMs(value: number | null | undefined) {
   if (value === null || typeof value === "undefined") {
     return "未知";
@@ -255,8 +247,6 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>安全余量: {formatDurationMs(playback.bufferSafetyMarginMs)}</span>
               <span>完整缓存: {formatBoolean(playback.fullLocalReady)}</span>
               <span>渐进可播: {formatBoolean(playback.progressiveLocalEligible)}</span>
-              <span>平均漂移: {formatMetric(playback.averageDriftMs, "ms")}</span>
-              <span>最大漂移: {formatMetric(playback.maxDriftMs, "ms")}</span>
               <span>waiting/30s: {formatMetric(playback.waitingEventsLast30s, "")}</span>
               <span>stalled/30s: {formatMetric(playback.stalledEventsLast30s, "")}</span>
               <span>音频解锁: {formatBoolean(playback.audioUnlocked)}</span>
@@ -269,19 +259,9 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>full-local: {playback.fullLocalPlaybackMode ?? "无"}</span>
               <span>PCM 状态: {playback.pcmEngineStatus ?? "未知"}</span>
               <span>PCM ctx: {playback.pcmAudioContextState ?? "未知"}</span>
-              <span>PCM stream: {formatBoolean(playback.pcmHasOutputStream)}</span>
               <span>PCM out: {formatBoolean(playback.pcmDirectOutputConnected)}</span>
-              <span>PCM ahead: {formatDurationMs(playback.pcmBufferedAheadMs)}</span>
-              <span>PCM 播放: {playback.pcmPlayoutState ?? "未知"}</span>
-              <span>PCM 分片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>
-              <span>PCM 包: {formatMetric(playback.pcmDecodedPacketCount, "")}</span>
-              <span>PCM flush try: {formatMetric(playback.pcmDecoderFlushAttemptCount, "")}</span>
-              <span>PCM flush: {formatMetric(playback.pcmDecoderFlushCount, "")}</span>
               <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
               <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>
-              <span>PCM peak: {formatLevel(playback.pcmDecodedPeak)}</span>
-              <span>PCM RMS: {formatLevel(playback.pcmDecodedRms)}</span>
-              <span>PCM 非零: {formatMetric(playback.pcmDecodedNonZeroSampleCount, "")}</span>
               <span>PCM 阻塞: {playback.pcmLastBlockedReason ?? "无"}</span>
               <span>PCM 错误: {playback.pcmLastDecodeError ?? "无"}</span>
             </DiagnosticGrid>

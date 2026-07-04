@@ -131,6 +131,7 @@ const enableListenerLocalTakeover = enableTrackCaching;
 const adaptiveStartupBufferMs = 60;
 const haveCurrentDataReadyState = 2;
 const playbackQualityWindowMs = 30_000;
+const playbackDriftSampleIntervalMs = 1_000;
 const stablePlaybackGraceWindowMs = 12_000;
 const shadowFallbackMaxDriftMs = 160;
 const shadowFallbackWaitingThreshold = 2;
@@ -155,6 +156,13 @@ export type FullLocalPlaybackSessionState = {
   key: string | null;
   availableInSession: boolean;
 };
+
+export function shouldPublishProgressiveDiagnostic(input: {
+  previousSignature: string | null;
+  nextSignature: string;
+}) {
+  return input.previousSignature !== input.nextSignature;
+}
 
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
@@ -377,6 +385,7 @@ export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
   canUseFullLocalForPlaybackSession: boolean;
   fullLocalBlockedReason: string | null | undefined;
+  slidingWindowStartupReady: boolean;
   localAudioPaused: boolean | null | undefined;
   localAudioMuted: boolean | null | undefined;
   localAudioVolume: number | null | undefined;
@@ -394,7 +403,8 @@ export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
     !hasActiveIntent ||
     !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
     !input.canUseFullLocalForPlaybackSession ||
-    input.fullLocalBlockedReason !== null
+    input.fullLocalBlockedReason !== null ||
+    !input.slidingWindowStartupReady
   ) {
     return false;
   }
@@ -559,22 +569,10 @@ export function getPcmEngineDiagnosticsKey(
   return [
     snapshot.status,
     snapshot.audioContextState ?? "none",
-    snapshot.hasOutputStream ? "stream" : "no-stream",
     snapshot.directOutputConnected ? "direct" : "no-direct",
-    snapshot.contiguousChunkCount,
-    snapshot.contiguousByteLength,
-    snapshot.decodedSegmentCount,
-    snapshot.scheduledSegmentCount,
-    snapshot.decodedPacketCount,
-    snapshot.decoderFlushAttemptCount,
-    snapshot.decoderFlushCount,
-    snapshot.lastDecodedAtMs ?? "none",
-    snapshot.lastDecodeError ?? "none",
-    snapshot.decodedPeak,
-    snapshot.decodedRms,
-    snapshot.decodedNonZeroSampleCount,
-    snapshot.bufferedAheadMs,
-    snapshot.playoutState
+    snapshot.decodedSegmentCount > 0 ? "decoded" : "no-decoded",
+    snapshot.scheduledSegmentCount > 0 ? "scheduled" : "no-scheduled",
+    snapshot.lastDecodeError ?? "none"
   ].join("|");
 }
 
@@ -587,6 +585,17 @@ function resolvePcmRuntimeFailureReason(input: {
   }
 
   return input.blockedReason ?? input.lastDecodeError ?? null;
+}
+
+function bucketDiagnosticDurationMs(
+  value: number | null | undefined,
+  bucketMs: number
+) {
+  if (value === null || typeof value === "undefined" || !Number.isFinite(value)) {
+    return "";
+  }
+
+  return Math.round(value / bucketMs) * bucketMs;
 }
 
 export function resolvePlaybackRecoveryStage(input: {
@@ -717,6 +726,7 @@ export function useProgressiveRuntime({
   const pcmRuntimeFailureRef = useRef<{ trackId: string; reason: string } | null>(null);
   const previousPlaybackSurfaceKeyRef = useRef<string | null>(null);
   const playbackStartRetryRef = useRef<number | null>(null);
+  const lastProgressiveDiagnosticSignatureRef = useRef<string | null>(null);
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
   const lastStablePlaybackAtRef = useRef<string | null>(null);
@@ -1077,7 +1087,7 @@ export function useProgressiveRuntime({
     }
 
     return {
-      localAudioPaused: audioPaused,
+      localAudioPaused: localAudio.paused,
       localAudioMuted: localAudio.muted,
       localAudioVolume: localAudio.volume,
       localAudioReadyState: localAudio.readyState,
@@ -1502,6 +1512,7 @@ export function useProgressiveRuntime({
         playbackStatus: playback?.status,
         canUseFullLocalForPlaybackSession,
         fullLocalBlockedReason,
+        slidingWindowStartupReady: progressiveHealthSnapshot.startupReady,
         localAudioPaused: audio?.paused ?? localAudioDiagnostics.localAudioPaused,
         localAudioMuted: audio?.muted ?? localAudioDiagnostics.localAudioMuted,
         localAudioVolume: audio?.volume ?? localAudioDiagnostics.localAudioVolume,
@@ -1527,6 +1538,7 @@ export function useProgressiveRuntime({
     localAudioDiagnostics,
     pcmEngineDiagnosticsKey,
     playback?.status,
+    progressiveHealthSnapshot.startupReady,
     setMediaConnectionState,
     transitionPlaybackSource
   ]);
@@ -1630,6 +1642,7 @@ export function useProgressiveRuntime({
       if (doesPlaybackMatchStartIntent(playbackStartIntent, playback)) {
         updatePlaybackStartIntent((current) => consumePlaybackStartIntent(current, source));
       }
+      setAudioPaused(false);
 
       return true;
     },
@@ -2303,7 +2316,7 @@ export function useProgressiveRuntime({
     };
 
     sampleDrift();
-    const timerId = window.setInterval(sampleDrift, progressiveRuntimeTickIntervalMs);
+    const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);
     return () => window.clearInterval(timerId);
   }, [
     activePlaybackSource,
@@ -2834,6 +2847,27 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason
   ]);
 
+  const diagnosticContiguousBufferedMs = bucketDiagnosticDurationMs(
+    progressiveHealthSnapshot.contiguousBufferedMs,
+    1_000
+  );
+  const diagnosticAheadBufferedMs = bucketDiagnosticDurationMs(
+    progressiveHealthSnapshot.aheadBufferedMs,
+    1_000
+  );
+  const diagnosticEstimatedFillTimeMs = bucketDiagnosticDurationMs(
+    progressiveHealthSnapshot.estimatedFillTimeMs,
+    2_000
+  );
+  const diagnosticRemainingPlaybackMs = bucketDiagnosticDurationMs(
+    progressiveHealthSnapshot.remainingPlaybackMs,
+    5_000
+  );
+  const diagnosticBufferSafetyMarginMs = bucketDiagnosticDurationMs(
+    bufferSafetyMarginMs,
+    1_000
+  );
+
   useEffect(() => {
     const nextCooldownMs = Math.max(0, localTakeoverCooldownUntilRef.current - Date.now());
     const comfortBufferedMs = getStartupWindowMs(
@@ -2843,6 +2877,71 @@ export function useProgressiveRuntime({
       }
     );
     const latestPcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
+    const progressiveDiagnosticSignature = [
+      progressiveHealthSnapshot.activeSource,
+      playbackSurfaceKey,
+      playbackTimelineKey,
+      roomRecoveryState.phase,
+      roomRecoveryState.mode,
+      roomRecoveryState.generation,
+      roomRecoveryState.fullLocalRecoveryActive || immediateFullLocalRecoveryEligible,
+      transportGovernorMode,
+      progressiveHealthSnapshot.engineType,
+      diagnosticContiguousBufferedMs,
+      diagnosticAheadBufferedMs,
+      progressiveHealthSnapshot.schedulerPolicy,
+      progressiveHealthSnapshot.startupReady,
+      progressiveHealthSnapshot.fallbackReason ?? "",
+      diagnosticEstimatedFillTimeMs,
+      diagnosticRemainingPlaybackMs,
+      diagnosticBufferSafetyMarginMs,
+      pendingPlaybackIntent ? getPlaybackStartIntentLabel(playbackStartIntent) : "",
+      playbackStartIntent?.matchedSource ?? "",
+      playbackStartIntent?.lastFailure ?? "",
+      nextQueueTrackPrefetch ?? "",
+      nextCooldownMs > 0 ? "cooldown" : "no-cooldown",
+      progressiveLocalEligible,
+      progressiveLocalBlockedReason ?? "",
+      fullLocalReady,
+      fullLocalEligible,
+      fullLocalBlockedReason ?? "",
+      sourceOwnerIdentity.currentSessionUserId ?? "",
+      sourceOwnerIdentity.playbackSourceSessionId ?? "",
+      sourceOwnerIdentity.currentPeerId ?? "",
+      sourceOwnerIdentity.playbackSourcePeerId ?? "",
+      sourceOwnerIdentity.isSourceOwner,
+      localAudioDiagnostics.localAudioPaused ?? "",
+      localAudioDiagnostics.localAudioMuted ?? "",
+      localAudioDiagnostics.localAudioVolume ?? "",
+      localAudioDiagnostics.localAudioReadyState ?? "",
+      localAudioDiagnostics.localAudioCurrentSrc ? "src" : "no-src",
+      localAudioDiagnostics.localAudioHasSrcObject ?? "",
+      latestPcmEngineDiagnostics?.status ?? "",
+      latestPcmEngineDiagnostics?.audioContextState ?? "",
+      latestPcmEngineDiagnostics?.directOutputConnected ?? "",
+      latestPcmEngineDiagnostics?.lastDecodeError ?? "",
+      (latestPcmEngineDiagnostics?.decodedSegmentCount ?? 0) > 0 ? "decoded" : "no-decoded",
+      (latestPcmEngineDiagnostics?.scheduledSegmentCount ?? 0) > 0 ? "scheduled" : "no-scheduled",
+      pcmLastBlockedReasonRef.current ?? "",
+      effectiveStartupBufferMs,
+      comfortBufferedMs,
+      playbackQualityMetrics.waitingEventsLast30s,
+      playbackQualityMetrics.stalledEventsLast30s,
+      shadowWarmupActive,
+      playbackRecoveryStage,
+      audibleLocalFallbackActive,
+      schedulerBudgetTier,
+      lastStablePlaybackAtRef.current ?? ""
+    ].join("|");
+    if (
+      !shouldPublishProgressiveDiagnostic({
+        previousSignature: lastProgressiveDiagnosticSignatureRef.current,
+        nextSignature: progressiveDiagnosticSignature
+      })
+    ) {
+      return;
+    }
+    lastProgressiveDiagnosticSignatureRef.current = progressiveDiagnosticSignature;
     recordPeerDiagnostic({
       peerId: "system",
       channelKind: "system",
@@ -2913,33 +3012,33 @@ export function useProgressiveRuntime({
               : null,
           pcmEngineStatus: latestPcmEngineDiagnostics?.status ?? null,
           pcmAudioContextState: latestPcmEngineDiagnostics?.audioContextState ?? null,
-          pcmHasOutputStream: latestPcmEngineDiagnostics?.hasOutputStream ?? null,
+          pcmHasOutputStream: null,
           pcmDirectOutputConnected: latestPcmEngineDiagnostics?.directOutputConnected ?? null,
-          pcmContiguousChunkCount: latestPcmEngineDiagnostics?.contiguousChunkCount ?? null,
-          pcmContiguousByteLength: latestPcmEngineDiagnostics?.contiguousByteLength ?? null,
+          pcmContiguousChunkCount: null,
+          pcmContiguousByteLength: null,
           pcmDecodedSegmentCount: latestPcmEngineDiagnostics?.decodedSegmentCount ?? null,
           pcmScheduledSegmentCount: latestPcmEngineDiagnostics?.scheduledSegmentCount ?? null,
-          pcmDecodedPacketCount: latestPcmEngineDiagnostics?.decodedPacketCount ?? null,
-          pcmDecoderFlushAttemptCount: latestPcmEngineDiagnostics?.decoderFlushAttemptCount ?? null,
-          pcmDecoderFlushCount: latestPcmEngineDiagnostics?.decoderFlushCount ?? null,
-          pcmLastDecodedAtMs: latestPcmEngineDiagnostics?.lastDecodedAtMs ?? null,
+          pcmDecodedPacketCount: null,
+          pcmDecoderFlushAttemptCount: null,
+          pcmDecoderFlushCount: null,
+          pcmLastDecodedAtMs: null,
           pcmLastDecodeError: latestPcmEngineDiagnostics?.lastDecodeError ?? null,
-          pcmDecodedPeak: latestPcmEngineDiagnostics?.decodedPeak ?? null,
-          pcmDecodedRms: latestPcmEngineDiagnostics?.decodedRms ?? null,
-          pcmDecodedNonZeroSampleCount: latestPcmEngineDiagnostics?.decodedNonZeroSampleCount ?? null,
-          pcmBufferedAheadMs: latestPcmEngineDiagnostics?.bufferedAheadMs ?? null,
-          pcmPlayoutState: latestPcmEngineDiagnostics?.playoutState ?? null,
+          pcmDecodedPeak: null,
+          pcmDecodedRms: null,
+          pcmDecodedNonZeroSampleCount: null,
+          pcmBufferedAheadMs: null,
+          pcmPlayoutState: null,
           pcmLastBlockedReason: pcmLastBlockedReasonRef.current,
           startupBufferMs: effectiveStartupBufferMs,
           comfortBufferedMs,
-          averageDriftMs: playbackQualityMetrics.averageDriftMs,
-          maxDriftMs: playbackQualityMetrics.maxDriftMs,
+          averageDriftMs: null,
+          maxDriftMs: null,
           waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
           stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
           shadowWarmupActive,
           playbackRecoveryStage,
           audibleLocalFallbackActive,
-          maxContinuousPlaybackMsLast30s: playbackQualityMetrics.maxContinuousPlaybackMsLast30s,
+          maxContinuousPlaybackMsLast30s: null,
           schedulerBudgetTier,
           lastStablePlaybackAt: lastStablePlaybackAtRef.current
         }
@@ -2947,8 +3046,13 @@ export function useProgressiveRuntime({
     });
   }, [
     currentTrack,
-    bufferSafetyMarginMs,
-    playbackQualityMetrics,
+    diagnosticAheadBufferedMs,
+    diagnosticBufferSafetyMarginMs,
+    diagnosticContiguousBufferedMs,
+    diagnosticEstimatedFillTimeMs,
+    diagnosticRemainingPlaybackMs,
+    playbackQualityMetrics.stalledEventsLast30s,
+    playbackQualityMetrics.waitingEventsLast30s,
     playbackSurfaceKey,
     playbackTimelineKey,
     fullLocalReady,
@@ -2962,13 +3066,9 @@ export function useProgressiveRuntime({
     progressiveLocalBlockedReason,
     progressiveHealthSnapshot.activeSource,
     progressiveHealthSnapshot.engineType,
-    progressiveHealthSnapshot.contiguousBufferedMs,
-    progressiveHealthSnapshot.aheadBufferedMs,
     progressiveHealthSnapshot.schedulerPolicy,
     progressiveHealthSnapshot.startupReady,
     progressiveHealthSnapshot.fallbackReason,
-    progressiveHealthSnapshot.estimatedFillTimeMs,
-    progressiveHealthSnapshot.remainingPlaybackMs,
     effectiveStartupBufferMs,
     playbackRecoveryStage,
     audibleLocalFallbackActive,

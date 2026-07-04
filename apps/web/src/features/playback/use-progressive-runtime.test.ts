@@ -13,6 +13,7 @@ import {
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   shouldPrepareProgressiveRuntimeForSource,
   shouldAttemptProgressiveLocalPlayback,
+  shouldPublishProgressiveDiagnostic,
   shouldRecoverPausedFullLocalPlayback,
   shouldRecoverSilentSlidingWindowWithFullLocal,
   shouldStartListenerProgressivePlayback,
@@ -276,6 +277,7 @@ describe("use-progressive-runtime policy helpers", () => {
       playbackStatus: "playing" as const,
       canUseFullLocalForPlaybackSession: true,
       fullLocalBlockedReason: null,
+      slidingWindowStartupReady: true,
       localAudioPaused: true,
       localAudioMuted: false,
       localAudioVolume: 0.72,
@@ -289,6 +291,13 @@ describe("use-progressive-runtime policy helpers", () => {
     };
 
     expect(shouldRecoverSilentSlidingWindowWithFullLocal(readyInput)).toBe(true);
+    expect(
+      shouldRecoverSilentSlidingWindowWithFullLocal({
+        ...readyInput,
+        slidingWindowStartupReady: false,
+        localAudioPaused: true
+      })
+    ).toBe(false);
     expect(
       shouldRecoverSilentSlidingWindowWithFullLocal({
         ...readyInput,
@@ -310,6 +319,21 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(false);
   });
 
+  it("publishes progressive diagnostics only when the stable signature changes", () => {
+    expect(
+      shouldPublishProgressiveDiagnostic({
+        previousSignature: "source=progressive-local|state=live",
+        nextSignature: "source=progressive-local|state=live"
+      })
+    ).toBe(false);
+    expect(
+      shouldPublishProgressiveDiagnostic({
+        previousSignature: "source=progressive-local|state=buffering",
+        nextSignature: "source=full-local|state=live"
+      })
+    ).toBe(true);
+  });
+
   it("skips the secondary idle sync after a PCM warmup miss", () => {
     expect(
       shouldSkipSecondaryPcmWarmupSync({
@@ -327,7 +351,7 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(false);
   });
 
-  it("keeps the PCM diagnostics dependency stable when sampled values are unchanged", () => {
+  it("keeps the PCM diagnostics dependency stable when playback health is unchanged", () => {
     const snapshot = {
       status: "ready" as const,
       audioContextState: "running" as const,
@@ -353,10 +377,24 @@ describe("use-progressive-runtime policy helpers", () => {
     expect(getPcmEngineDiagnosticsKey(snapshot)).toBe(
       getPcmEngineDiagnosticsKey({ ...snapshot })
     );
+    expect(getPcmEngineDiagnosticsKey(snapshot)).toBe(
+      getPcmEngineDiagnosticsKey({
+        ...snapshot,
+        scheduledSegmentCount: 2,
+        decodedPacketCount: 99,
+        decoderFlushAttemptCount: 10,
+        decoderFlushCount: 10,
+        lastDecodedAtMs: 200,
+        decodedPeak: 0.75,
+        decodedRms: 0.33,
+        decodedNonZeroSampleCount: 8192,
+        bufferedAheadMs: 8500
+      })
+    );
     expect(getPcmEngineDiagnosticsKey(snapshot)).not.toBe(
       getPcmEngineDiagnosticsKey({
         ...snapshot,
-        scheduledSegmentCount: 2
+        audioContextState: "suspended"
       })
     );
   });

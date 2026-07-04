@@ -2,8 +2,8 @@ import { getCachedPiece, localCacheOwnerKey } from "@/lib/indexeddb";
 import type { ProgressiveTrackManifest } from "./progressive-playback";
 
 type EngineStatus = "idle" | "opening" | "ready" | "failed" | "destroyed";
-const maxCachedPiecesToQueuePerSync = 64;
-const maxQueuedCachedPieces = 96;
+const maxCachedPiecesToQueuePerSync = 16;
+const maxQueuedCachedPieces = 32;
 
 export class ProgressiveMseEngine {
   private mediaSource: MediaSource | null = null;

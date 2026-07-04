@@ -319,8 +319,6 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.waitingEventsLast30s ?? null,
             stalledEventsLast30s:
               systemDiagnostic.progressivePlaybackStatus.stalledEventsLast30s ?? null,
-            averageDriftMs: systemDiagnostic.progressivePlaybackStatus.averageDriftMs ?? null,
-            maxDriftMs: systemDiagnostic.progressivePlaybackStatus.maxDriftMs ?? null,
             localAudioPaused: systemDiagnostic.progressivePlaybackStatus.localAudioPaused ?? null,
             localAudioMuted: systemDiagnostic.progressivePlaybackStatus.localAudioMuted ?? null,
             localAudioVolume: systemDiagnostic.progressivePlaybackStatus.localAudioVolume ?? null,
@@ -336,38 +334,14 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmEngineStatus ?? null,
             pcmAudioContextState:
               systemDiagnostic.progressivePlaybackStatus.pcmAudioContextState ?? null,
-            pcmHasOutputStream:
-              systemDiagnostic.progressivePlaybackStatus.pcmHasOutputStream ?? null,
             pcmDirectOutputConnected:
               systemDiagnostic.progressivePlaybackStatus.pcmDirectOutputConnected ?? null,
-            pcmContiguousChunkCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmContiguousChunkCount ?? null,
-            pcmContiguousByteLength:
-              systemDiagnostic.progressivePlaybackStatus.pcmContiguousByteLength ?? null,
             pcmDecodedSegmentCount:
               systemDiagnostic.progressivePlaybackStatus.pcmDecodedSegmentCount ?? null,
             pcmScheduledSegmentCount:
               systemDiagnostic.progressivePlaybackStatus.pcmScheduledSegmentCount ?? null,
-            pcmDecodedPacketCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecodedPacketCount ?? null,
-            pcmDecoderFlushAttemptCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecoderFlushAttemptCount ?? null,
-            pcmDecoderFlushCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecoderFlushCount ?? null,
-            pcmLastDecodedAtMs:
-              systemDiagnostic.progressivePlaybackStatus.pcmLastDecodedAtMs ?? null,
             pcmLastDecodeError:
               systemDiagnostic.progressivePlaybackStatus.pcmLastDecodeError ?? null,
-            pcmDecodedPeak:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecodedPeak ?? null,
-            pcmDecodedRms:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecodedRms ?? null,
-            pcmDecodedNonZeroSampleCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecodedNonZeroSampleCount ?? null,
-            pcmBufferedAheadMs:
-              systemDiagnostic.progressivePlaybackStatus.pcmBufferedAheadMs ?? null,
-            pcmPlayoutState:
-              systemDiagnostic.progressivePlaybackStatus.pcmPlayoutState ?? null,
             pcmLastBlockedReason:
               systemDiagnostic.progressivePlaybackStatus.pcmLastBlockedReason ?? null,
             lastPlayStartFailure:
@@ -731,6 +705,14 @@ function getLocalAudioPlaybackIssue(
     return null;
   }
 
+  const readyState = cachePlayback.localAudioReadyState ?? 0;
+  const hasPlayableOutput = cachePlayback.localAudioHasSrcObject || readyState >= 2;
+  const nativeBlobFullLocalReady =
+    cachePlayback.activeSource === "full-local" &&
+    cachePlayback.fullLocalPlaybackMode === "native-blob" &&
+    !!cachePlayback.localAudioCurrentSrc &&
+    hasPlayableOutput;
+
   const pcmDirectOutputAudible =
     cachePlayback.engineType === "pcm" &&
     cachePlayback.pcmAudioContextState === "running" &&
@@ -764,12 +746,14 @@ function getLocalAudioPlaybackIssue(
     return "本地音频音量为 0。";
   }
 
+  if (nativeBlobFullLocalReady) {
+    return null;
+  }
+
   if (cachePlayback.localAudioPaused === true) {
     return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
   }
 
-  const readyState = cachePlayback.localAudioReadyState ?? 0;
-  const hasPlayableOutput = cachePlayback.localAudioHasSrcObject || readyState >= 2;
   if (cachePlayback.localAudioPaused === false && !hasPlayableOutput) {
     return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
   }

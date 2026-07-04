@@ -61,10 +61,10 @@ export type ProgressivePcmEngineSnapshot = {
   playoutState: PcmEnginePlayoutState;
 };
 
-const pcmScheduleAheadSeconds = 18;
-const pcmDecodedSegmentRetentionSeconds = 30;
+const pcmScheduleAheadSeconds = 8;
+const pcmDecodedSegmentRetentionSeconds = 16;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
-const maxPcmCachedPiecesToAppendPerSync = 8;
+const maxPcmCachedPiecesToAppendPerSync = 2;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;

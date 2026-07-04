@@ -48,8 +48,6 @@ export type LocalMemberPanelState = {
     | "progressiveLocalBlockedReason"
     | "waitingEventsLast30s"
     | "stalledEventsLast30s"
-    | "averageDriftMs"
-    | "maxDriftMs"
     | "localAudioPaused"
     | "localAudioMuted"
     | "localAudioVolume"
@@ -59,22 +57,10 @@ export type LocalMemberPanelState = {
     | "fullLocalPlaybackMode"
     | "pcmEngineStatus"
     | "pcmAudioContextState"
-    | "pcmHasOutputStream"
     | "pcmDirectOutputConnected"
-    | "pcmContiguousChunkCount"
-    | "pcmContiguousByteLength"
     | "pcmDecodedSegmentCount"
     | "pcmScheduledSegmentCount"
-    | "pcmDecodedPacketCount"
-    | "pcmDecoderFlushAttemptCount"
-    | "pcmDecoderFlushCount"
-    | "pcmLastDecodedAtMs"
     | "pcmLastDecodeError"
-    | "pcmDecodedPeak"
-    | "pcmDecodedRms"
-    | "pcmDecodedNonZeroSampleCount"
-    | "pcmBufferedAheadMs"
-    | "pcmPlayoutState"
     | "pcmLastBlockedReason"
     | "lastPlayStartFailure"
     | "pendingPlaybackIntent"
@@ -207,7 +193,7 @@ function getCurrentTrackStatus(
   };
 }
 
-function getPlaybackStatus(
+export function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
   peerDiagnostics: PeerDiagnosticsSnapshot | undefined
 ) {
@@ -333,6 +319,14 @@ function getPlaybackStatus(
 }
 
 function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
+  const readyState = playback.localAudioReadyState ?? 0;
+  const hasPlayableOutput = playback.localAudioHasSrcObject || readyState >= 2;
+  const nativeBlobFullLocalReady =
+    playback.activeSource === "full-local" &&
+    playback.fullLocalPlaybackMode === "native-blob" &&
+    !!playback.localAudioCurrentSrc &&
+    hasPlayableOutput;
+
   const pcmDirectOutputAudible =
     playback.engineType === "pcm" &&
     playback.pcmAudioContextState === "running" &&
@@ -366,12 +360,14 @@ function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
     return "本地音频音量为 0。";
   }
 
+  if (nativeBlobFullLocalReady) {
+    return null;
+  }
+
   if (playback.localAudioPaused === true) {
     return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
   }
 
-  const readyState = playback.localAudioReadyState ?? 0;
-  const hasPlayableOutput = playback.localAudioHasSrcObject || readyState >= 2;
   if (playback.localAudioPaused === false && !hasPlayableOutput) {
     return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
   }
@@ -435,14 +431,6 @@ function formatNullableBoolean(value: boolean | null | undefined) {
   }
 
   return value ? "是" : "否";
-}
-
-function formatNullableNumber(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  return Number.isInteger(value) ? value.toString() : value.toFixed(6);
 }
 
 function formatDurationMs(value: number | null | undefined) {
@@ -717,9 +705,6 @@ function MembersPanelBase({
                       <span>ahead: {formatDurationMs(localMemberState.cachePlayback.aheadBufferedMs)}</span>
                       <span>连续: {formatDurationMs(localMemberState.cachePlayback.contiguousBufferedMs)}</span>
                       <span>调度: {localMemberState.cachePlayback.schedulerPolicy ?? "idle"}</span>
-                      <span>
-                        drift: {formatMetric(localMemberState.cachePlayback.maxDriftMs ?? null, "ms")}
-                      </span>
                       <span>paused: {formatNullableBoolean(localMemberState.cachePlayback.localAudioPaused)}</span>
                       <span>muted: {formatNullableBoolean(localMemberState.cachePlayback.localAudioMuted)}</span>
                       <span>音量: {formatMetric(localMemberState.cachePlayback.localAudioVolume ?? null, "")}</span>
@@ -739,19 +724,8 @@ function MembersPanelBase({
                           <span>PCM: {localMemberState.cachePlayback.pcmEngineStatus ?? "未知"}</span>
                           <span>ctx: {localMemberState.cachePlayback.pcmAudioContextState ?? "未知"}</span>
                           <span>out: {formatNullableBoolean(localMemberState.cachePlayback.pcmDirectOutputConnected)}</span>
-                          <span>stream: {formatNullableBoolean(localMemberState.cachePlayback.pcmHasOutputStream)}</span>
-                          <span>pcm ahead: {formatDurationMs(localMemberState.cachePlayback.pcmBufferedAheadMs)}</span>
-                          <span>pcm: {localMemberState.cachePlayback.pcmPlayoutState ?? "未知"}</span>
                           <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>
                           <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
-                          <span>packets: {localMemberState.cachePlayback.pcmDecodedPacketCount ?? "未知"}</span>
-                          <span>flush try: {localMemberState.cachePlayback.pcmDecoderFlushAttemptCount ?? "未知"}</span>
-                          <span>flush: {localMemberState.cachePlayback.pcmDecoderFlushCount ?? "未知"}</span>
-                          <span>peak: {formatNullableNumber(localMemberState.cachePlayback.pcmDecodedPeak)}</span>
-                          <span>rms: {formatNullableNumber(localMemberState.cachePlayback.pcmDecodedRms)}</span>
-                          <span className="col-span-2 truncate">
-                            nonzero: {localMemberState.cachePlayback.pcmDecodedNonZeroSampleCount ?? "未知"}
-                          </span>
                           <span className="col-span-2 truncate">
                             pcm block: {localMemberState.cachePlayback.pcmLastBlockedReason ?? "无"}
                           </span>
