@@ -301,6 +301,13 @@ describe("playback runtime pipeline keys", () => {
       ),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const warmupControllerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-warmup-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
     const intervalNeedle = [
       "const timerId = window.setInterval(() => {",
       "      void syncWarmup();",
@@ -316,12 +323,12 @@ describe("playback runtime pipeline keys", () => {
     );
     expect(runtimeTickHookSource).toContain("\"sync-progressive-warmup\"");
 
-    const warmupRefIndex = runtimeSource.indexOf("syncProgressiveWarmupRef.current = () => {");
+    const warmupRefIndex = warmupControllerSource.indexOf("syncProgressiveWarmupRef.current = () => {");
     expect(warmupRefIndex).toBeGreaterThan(-1);
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", warmupRefIndex);
-    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
-    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+    const dependencyStart = warmupControllerSource.indexOf("  }, [", warmupRefIndex);
+    const dependencyEnd = warmupControllerSource.indexOf("]);", dependencyStart);
+    const dependencies = warmupControllerSource.slice(dependencyStart, dependencyEnd);
 
     expect(dependencies).toContain("progressiveWarmupTimerKey");
     expect(dependencies).not.toContain("currentProgressiveManifest,");
@@ -713,6 +720,29 @@ describe("playback runtime pipeline keys", () => {
     expect(mainPlaybackController).toContain("resolveMainPlaybackPreflight");
     expect(mainPlaybackController).toContain("resolveFullLocalPlaybackSelection");
     expect(mainPlaybackController).toContain("resolvePcmSyncPlaybackOutcome");
+  });
+
+  it("hosts progressive warmup driving outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const warmupController = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-warmup-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useProgressiveWarmupController");
+    expect(runtimeSource).not.toContain("const warmupPreflight = resolveWarmupPreflight");
+    expect(runtimeSource).not.toContain("const syncWarmup = async () =>");
+    expect(runtimeSource).not.toContain("syncProgressiveWarmupRef.current = () =>");
+    expect(warmupController).toContain("export function useProgressiveWarmupController");
+    expect(warmupController).toContain("resolveWarmupPreflight");
+    expect(warmupController).toContain("resolveProgressiveWarmupDecision");
+    expect(warmupController).toContain("resolveWarmupInactivePlaybackAction");
   });
 
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
