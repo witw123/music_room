@@ -1285,4 +1285,115 @@ describe("ProgressivePcmEngine", () => {
       audioContext.restore();
     }
   });
+
+  it("decodes segments even when AudioData properties become invalid after close()", async () => {
+    // Real WebCodecs releases the backing frame on AudioData.close(), after
+    // which numberOfFrames/sampleRate/timestamp read back as 0/NaN. Regression
+    // guard for the silent-listener bug where reading geometry AFTER close()
+    // made durationSec NaN and every decoded segment was rejected.
+    const originalWindow = globalThis.window;
+    const originalAudioDecoder = (globalThis as typeof globalThis & { AudioDecoder?: unknown }).AudioDecoder;
+    const originalEncodedAudioChunk = (globalThis as typeof globalThis & { EncodedAudioChunk?: unknown }).EncodedAudioChunk;
+
+    const gainNode = {
+      gain: { value: 1, setValueAtTime() {} },
+      connect() {},
+      disconnect() {}
+    };
+    class FakeAudioContext {
+      currentTime = 0;
+      state = "running" as AudioContextState;
+      destination = {};
+      createGain() { return gainNode; }
+      createMediaStreamDestination() { return { stream: {}, connect() {}, disconnect() {} }; }
+      createBufferSource() {
+        return { buffer: null as unknown, onended: null as (() => void) | null, connect() {}, start() {}, stop() {}, disconnect() {} };
+      }
+      close() { return Promise.resolve(); }
+      createBuffer(numberOfChannels: number, numberOfFrames: number, sampleRate: number) {
+        return { numberOfChannels, numberOfFrames, sampleRate, copyToChannel() {} };
+      }
+      resume() { return Promise.resolve(); }
+    }
+
+    const pendingTimestamps: number[] = [];
+    class ClosingAudioDecoder {
+      static async isConfigSupported() { return { supported: true }; }
+      private readonly callbacks: { output: (audioData: unknown) => void; error: (error: unknown) => void };
+      private pendingChunks = 0;
+      constructor(callbacks: { output: (audioData: unknown) => void; error: (error: unknown) => void }) {
+        this.callbacks = callbacks;
+      }
+      configure() {}
+      decode(chunk?: { timestamp?: number }) {
+        this.pendingChunks += 1;
+        pendingTimestamps.push(typeof chunk?.timestamp === "number" ? chunk.timestamp : 0);
+      }
+      async flush() {
+        while (this.pendingChunks > 0) {
+          this.pendingChunks -= 1;
+          const timestamp = pendingTimestamps.shift() ?? 0;
+          let closed = false;
+          const audioData = {
+            get numberOfChannels() { return closed ? 0 : 2; },
+            get numberOfFrames() { return closed ? 0 : 44_100; },
+            get sampleRate() { return closed ? NaN : 44_100; },
+            get timestamp() { return closed ? NaN : timestamp; },
+            copyTo(destination: Float32Array) { destination.fill(0.25); },
+            close() { closed = true; }
+          };
+          this.callbacks.output(audioData);
+        }
+      }
+      close() {}
+    }
+    class FakeEncodedAudioChunk {
+      timestamp: number;
+      duration: number;
+      constructor(input: { timestamp?: number; duration?: number }) {
+        this.timestamp = input.timestamp ?? 0;
+        this.duration = input.duration ?? 0;
+      }
+    }
+
+    Object.defineProperty(globalThis, "window", { configurable: true, value: { AudioContext: FakeAudioContext } });
+    Object.defineProperty(globalThis, "AudioDecoder", { configurable: true, value: ClosingAudioDecoder });
+    Object.defineProperty(globalThis, "EncodedAudioChunk", { configurable: true, value: FakeEncodedAudioChunk });
+
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    mockSingleDecodedPacket();
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(0.2, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 1,
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1
+      });
+    } finally {
+      engine.destroy();
+      if (typeof originalWindow === "undefined") {
+        Reflect.deleteProperty(globalThis, "window");
+      } else {
+        Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+      }
+      if (typeof originalAudioDecoder === "undefined") {
+        Reflect.deleteProperty(globalThis, "AudioDecoder");
+      } else {
+        Object.defineProperty(globalThis, "AudioDecoder", { configurable: true, value: originalAudioDecoder });
+      }
+      if (typeof originalEncodedAudioChunk === "undefined") {
+        Reflect.deleteProperty(globalThis, "EncodedAudioChunk");
+      } else {
+        Object.defineProperty(globalThis, "EncodedAudioChunk", { configurable: true, value: originalEncodedAudioChunk });
+      }
+    }
+  });
 });

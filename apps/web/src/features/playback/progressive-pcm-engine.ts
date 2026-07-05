@@ -122,10 +122,6 @@ export class ProgressivePcmEngine {
   // playback position. While set, contiguous append runs in catch-up mode and
   // is not throttled by the small steady-state per-sync cap.
   private catchupTargetChunkIndex: number | null = null;
-  private lastBufferMissingLogAtMs = 0;
-  private outputCallbackCount = 0;
-  private segmentRejectCount = 0;
-  private lastRejectReason: string | null = null;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -320,33 +316,6 @@ export class ProgressivePcmEngine {
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
       this.audio.pause();
-      if (typeof console !== "undefined" && Date.now() - this.lastBufferMissingLogAtMs >= 1000) {
-        this.lastBufferMissingLogAtMs = Date.now();
-        const first = this.decodedSegments[0];
-        const last = this.decodedSegments[this.decodedSegments.length - 1];
-        console.warn(
-          "[pcm.syncPlayback] pcm-buffer-missing",
-          JSON.stringify({
-            pos: Number(positionSeconds.toFixed(3)),
-            contiguousChunks: this.contiguousChunkCount,
-            totalChunks: this.manifest.totalChunks,
-            submittedPackets: this.decodedPacketCount,
-            flushAttempts: this.decoderFlushAttemptCount,
-            flushDone: this.decoderFlushCount,
-            outputCallbacks: this.outputCallbackCount,
-            segmentRejects: this.segmentRejectCount,
-            lastReject: this.lastRejectReason,
-            decodedSegments: this.decodedSegments.length,
-            decodedRange: first && last ? [Number(first.startTimeSec.toFixed(2)), Number(last.endTimeSec.toFixed(2))] : null,
-            coverageEnd: Number(this.findBufferedCoverageEnd(positionSeconds).toFixed(3)),
-            hasStreamInfo: !!this.streamInfo,
-            hasDecoder: !!this.decoder,
-            status: this.status,
-            ctxState: this.audioContext?.state ?? null,
-            lastErr: this.lastDecodeError
-          })
-        );
-      }
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -455,10 +424,6 @@ export class ProgressivePcmEngine {
     this.syncInFlight = false;
     this.syncQueued = false;
     this.catchupTargetChunkIndex = null;
-    this.lastBufferMissingLogAtMs = 0;
-    this.outputCallbackCount = 0;
-    this.segmentRejectCount = 0;
-    this.lastRejectReason = null;
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
@@ -490,10 +455,8 @@ export class ProgressivePcmEngine {
     try {
       const decoder = new AudioDecoderCtor({
         output: (audioData) => {
-          this.outputCallbackCount += 1;
           const segment = this.createDecodedSegment(audioData);
           if (!segment) {
-            this.segmentRejectCount += 1;
             return;
           }
 
@@ -990,21 +953,30 @@ export class ProgressivePcmEngine {
       data.sampleRate <= 0 ||
       typeof data.copyTo !== "function"
     ) {
-      this.lastRejectReason = `invalid-shape:ch=${data?.numberOfChannels},fr=${data?.numberOfFrames},sr=${data?.sampleRate},copyTo=${typeof data?.copyTo}`;
       return null;
     }
 
+    // Capture the AudioData geometry BEFORE any close(). WebCodecs releases the
+    // backing frame on close() and subsequently reading numberOfFrames /
+    // sampleRate / timestamp yields 0 or NaN, which previously made durationSec
+    // NaN and caused every decoded segment to be rejected (progress advances but
+    // no audio is ever scheduled).
+    const numberOfChannels = data.numberOfChannels;
+    const numberOfFrames = data.numberOfFrames;
+    const sampleRate = data.sampleRate;
+    const rawTimestamp = data.timestamp;
+
     const buffer = this.audioContext.createBuffer(
-      data.numberOfChannels,
-      data.numberOfFrames,
-      data.sampleRate
+      numberOfChannels,
+      numberOfFrames,
+      sampleRate
     );
     let segmentPeak = 0;
     let segmentSquareSum = 0;
     let segmentSampleCount = 0;
     let segmentNonZeroSampleCount = 0;
-    for (let channelIndex = 0; channelIndex < data.numberOfChannels; channelIndex += 1) {
-      const channelBuffer = new Float32Array(data.numberOfFrames);
+    for (let channelIndex = 0; channelIndex < numberOfChannels; channelIndex += 1) {
+      const channelBuffer = new Float32Array(numberOfFrames);
       data.copyTo(channelBuffer, {
         planeIndex: channelIndex,
         format: "f32-planar"
@@ -1027,11 +999,11 @@ export class ProgressivePcmEngine {
     data.close?.();
 
     const timestampSec =
-      typeof data.timestamp === "number" && Number.isFinite(data.timestamp)
-        ? data.timestamp / 1_000_000
+      typeof rawTimestamp === "number" && Number.isFinite(rawTimestamp)
+        ? rawTimestamp / 1_000_000
         : null;
     const queuedFlacTiming = this.pendingDecodedFlacPacketTimings.shift() ?? null;
-    const durationSec = data.numberOfFrames / data.sampleRate;
+    const durationSec = numberOfFrames / sampleRate;
     const startTimeSec =
       timestampSec !== null && timestampSec >= 0
         ? timestampSec
@@ -1040,7 +1012,6 @@ export class ProgressivePcmEngine {
           : this.nextDecodedStartTimeSec;
     const endTimeSec = startTimeSec + durationSec;
     if (!Number.isFinite(startTimeSec) || !Number.isFinite(endTimeSec) || endTimeSec <= startTimeSec) {
-      this.lastRejectReason = `invalid-timing:ts=${timestampSec},queued=${queuedFlacTiming?.timestampUs},dur=${durationSec},start=${startTimeSec},end=${endTimeSec}`;
       return null;
     }
     this.nextDecodedStartTimeSec = Math.max(this.nextDecodedStartTimeSec, endTimeSec);
@@ -1137,27 +1108,6 @@ export class ProgressivePcmEngine {
       if (scheduledUntilSec >= scheduleTargetSec) {
         break;
       }
-    }
-
-    if (typeof console !== "undefined") {
-      const first = this.decodedSegments[0];
-      const last = this.decodedSegments[this.decodedSegments.length - 1];
-      console.warn(
-        "[pcm.scheduleAhead]",
-        JSON.stringify({
-          fromPos: Number(fromPositionSeconds.toFixed(3)),
-          curTime: Number(currentTimeSeconds.toFixed(3)),
-          anchorTrack: Number(this.anchorTrackTimeSec.toFixed(3)),
-          anchorCtx: Number(this.anchorContextTimeSec.toFixed(3)),
-          ctxNow: Number((this.audioContext?.currentTime ?? -1).toFixed(3)),
-          ctxState: this.audioContext?.state ?? null,
-          playing: this.playing,
-          decodedCount: this.decodedSegments.length,
-          decodedRange: first && last ? [Number(first.startTimeSec.toFixed(2)), Number(last.endTimeSec.toFixed(2))] : null,
-          scheduledCount: this.scheduledSegments.length,
-          coverageEnd: Number(this.findBufferedCoverageEnd(fromPositionSeconds).toFixed(3))
-        })
-      );
     }
   }
 
