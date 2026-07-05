@@ -13,6 +13,11 @@ export type PlaybackRecoveryStage =
 
 export type SchedulerBudgetTier = "critical" | "protected" | "comfort" | "expanded";
 
+export type FullLocalPlaybackSessionState = {
+  key: string | null;
+  availableInSession: boolean;
+};
+
 type TrackFormatInput = Pick<
   TrackMeta,
   "id" | "fileHash" | "durationMs" | "mimeType" | "codec"
@@ -49,6 +54,72 @@ export function buildAvailableChunksKey(chunks: readonly number[] | null | undef
 
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
+}
+
+export function shouldPublishProgressiveDiagnostic(input: {
+  previousSignature: string | null;
+  nextSignature: string;
+}) {
+  return input.previousSignature !== input.nextSignature;
+}
+
+export function shouldHoldSlidingWindowPlaybackForEngine(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  hasPcmEngine: boolean;
+  hasMseEngine: boolean;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  return (
+    isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
+    hasActiveIntent &&
+    !input.hasPcmEngine &&
+    !input.hasMseEngine
+  );
+}
+
+export function shouldResetAudioForPlaybackSurfaceChange(input: {
+  previousPlaybackSurfaceKey: string | null | undefined;
+  nextPlaybackSurfaceKey: string | null | undefined;
+}) {
+  return (
+    !!input.previousPlaybackSurfaceKey &&
+    input.previousPlaybackSurfaceKey !== input.nextPlaybackSurfaceKey
+  );
+}
+
+export function resolvePlaybackSourceAfterProgressiveRuntimeFailure(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  hasProgressiveRuntimeFailure: boolean;
+}) {
+  if (
+    input.hasProgressiveRuntimeFailure &&
+    input.activePlaybackSource === "lossless-local"
+  ) {
+    return "progressive-local" satisfies ProgressivePlaybackSource;
+  }
+
+  return input.activePlaybackSource;
+}
+
+export function resolveFullLocalPlaybackSessionState(input: {
+  currentSession: FullLocalPlaybackSessionState;
+  playbackSurfaceKey: string | null;
+  hasBufferedFullLocalTrack: boolean;
+}): FullLocalPlaybackSessionState {
+  if (input.currentSession.key !== input.playbackSurfaceKey) {
+    return {
+      key: input.playbackSurfaceKey,
+      availableInSession: input.hasBufferedFullLocalTrack
+    };
+  }
+
+  return {
+    key: input.playbackSurfaceKey,
+    availableInSession:
+      input.currentSession.availableInSession || input.hasBufferedFullLocalTrack
+  };
 }
 
 export function shouldWarmFullLocalWithSharedAudioElement(input: {

@@ -68,13 +68,19 @@ import {
 import {
   buildCurrentTrackFormatKey,
   hasSufficientBackingForFullLocalWarmup,
+  resolveFullLocalPlaybackSessionState,
+  resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback,
+  shouldHoldSlidingWindowPlaybackForEngine,
   shouldPrepareProgressiveRuntimeForSource,
+  shouldPublishProgressiveDiagnostic,
+  shouldResetAudioForPlaybackSurfaceChange,
   shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
   shouldWarmFullLocalWithSharedAudioElement,
+  type FullLocalPlaybackSessionState,
   type PlaybackRecoveryStage
 } from "./playback-orchestrator/pipeline";
 import {
@@ -153,14 +159,23 @@ const playbackDriftSampleIntervalMs = 1_000;
 const fullLocalPausedRecoveryIntervalMs = 500;
 const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
-export type { PlaybackRecoveryStage, SchedulerBudgetTier } from "./playback-orchestrator/pipeline";
+export type {
+  FullLocalPlaybackSessionState,
+  PlaybackRecoveryStage,
+  SchedulerBudgetTier
+} from "./playback-orchestrator/pipeline";
 export {
   hasSufficientBackingForFullLocalWarmup,
+  resolveFullLocalPlaybackSessionState,
+  resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback,
+  shouldHoldSlidingWindowPlaybackForEngine,
   shouldPreferLocalTakeover,
   shouldPrepareProgressiveRuntimeForSource,
+  shouldPublishProgressiveDiagnostic,
+  shouldResetAudioForPlaybackSurfaceChange,
   shouldStartListenerProgressivePlayback,
   shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
@@ -173,85 +188,14 @@ export type MediaElementPlaybackRole =
   | "shadow-local"
   | "inactive";
 
-export type FullLocalPlaybackSessionState = {
-  key: string | null;
-  availableInSession: boolean;
-};
-
-export function shouldPublishProgressiveDiagnostic(input: {
-  previousSignature: string | null;
-  nextSignature: string;
-}) {
-  return input.previousSignature !== input.nextSignature;
-}
-
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
-}
-
-export function shouldHoldSlidingWindowPlaybackForEngine(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  hasPcmEngine: boolean;
-  hasMseEngine: boolean;
-}) {
-  const hasActiveIntent =
-    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
-  return (
-    isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
-    hasActiveIntent &&
-    !input.hasPcmEngine &&
-    !input.hasMseEngine
-  );
-}
-
-export function shouldResetAudioForPlaybackSurfaceChange(input: {
-  previousPlaybackSurfaceKey: string | null | undefined;
-  nextPlaybackSurfaceKey: string | null | undefined;
-}) {
-  return (
-    !!input.previousPlaybackSurfaceKey &&
-    input.previousPlaybackSurfaceKey !== input.nextPlaybackSurfaceKey
-  );
 }
 
 function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
   return source === "lossless-local"
     ? "lossless-local-play-blocked"
     : "progressive-local-play-blocked";
-}
-
-export function resolvePlaybackSourceAfterProgressiveRuntimeFailure(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  hasProgressiveRuntimeFailure: boolean;
-}) {
-  if (
-    input.hasProgressiveRuntimeFailure &&
-    input.activePlaybackSource === "lossless-local"
-  ) {
-    return "progressive-local" satisfies ProgressivePlaybackSource;
-  }
-
-  return input.activePlaybackSource;
-}
-
-export function resolveFullLocalPlaybackSessionState(input: {
-  currentSession: FullLocalPlaybackSessionState;
-  playbackSurfaceKey: string | null;
-  hasBufferedFullLocalTrack: boolean;
-}): FullLocalPlaybackSessionState {
-  if (input.currentSession.key !== input.playbackSurfaceKey) {
-    return {
-      key: input.playbackSurfaceKey,
-      availableInSession: input.hasBufferedFullLocalTrack
-    };
-  }
-
-  return {
-    key: input.playbackSurfaceKey,
-    availableInSession:
-      input.currentSession.availableInSession || input.hasBufferedFullLocalTrack
-  };
 }
 
 export function shouldPreferImmediateFullLocalRecovery(input: {

@@ -6,10 +6,15 @@ import {
   buildProgressiveWarmupTimerKey,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
   resolvePlaybackRecoveryStage as pipelineResolvePlaybackRecoveryStage,
+  resolveFullLocalPlaybackSessionState as pipelineResolveFullLocalPlaybackSessionState,
+  resolvePlaybackSourceAfterProgressiveRuntimeFailure as pipelineResolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolveSchedulerBudgetTier as pipelineResolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
+  shouldHoldSlidingWindowPlaybackForEngine as pipelineShouldHoldSlidingWindowPlaybackForEngine,
   shouldPreferLocalTakeover as pipelineShouldPreferLocalTakeover,
+  shouldPublishProgressiveDiagnostic as pipelineShouldPublishProgressiveDiagnostic,
   shouldPrepareProgressiveRuntimeForSource as pipelineShouldPrepareProgressiveRuntimeForSource,
+  shouldResetAudioForPlaybackSurfaceChange as pipelineShouldResetAudioForPlaybackSurfaceChange,
   shouldStartListenerProgressivePlayback as pipelineShouldStartListenerProgressivePlayback,
   shouldStartPcmSlidingWindowAudioElement as pipelineShouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup as pipelineShouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
@@ -46,6 +51,48 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("hosts playback session and source guard policy in the pure pipeline module", () => {
+    expect(
+      pipelineShouldPublishProgressiveDiagnostic({
+        previousSignature: "old",
+        nextSignature: "new"
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldHoldSlidingWindowPlaybackForEngine({
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        hasPcmEngine: false,
+        hasMseEngine: false
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldResetAudioForPlaybackSurfaceChange({
+        previousPlaybackSurfaceKey: "track-1|1",
+        nextPlaybackSurfaceKey: "track-2|1"
+      })
+    ).toBe(true);
+    expect(
+      pipelineResolvePlaybackSourceAfterProgressiveRuntimeFailure({
+        activePlaybackSource: "lossless-local",
+        hasProgressiveRuntimeFailure: true
+      })
+    ).toBe("progressive-local");
+    expect(
+      pipelineResolveFullLocalPlaybackSessionState({
+        currentSession: {
+          key: "surface-a",
+          availableInSession: false
+        },
+        playbackSurfaceKey: "surface-a",
+        hasBufferedFullLocalTrack: true
+      })
+    ).toEqual({
+      key: "surface-a",
+      availableInSession: true
+    });
+  });
+
   it("hosts recovery and scheduler policy in the pure pipeline module", () => {
     const recoveryStage = pipelineResolvePlaybackRecoveryStage({
       activePlaybackSource: "progressive-local",
