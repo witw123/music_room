@@ -92,6 +92,27 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).not.toContain("transitionPlaybackSource,");
   });
 
+  it("drives the drift sampling interval from stable scalar dependencies", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const intervalNeedle =
+      "const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);";
+    const intervalIndex = runtimeSource.indexOf(intervalNeedle);
+    expect(intervalIndex).toBeGreaterThan(-1);
+
+    const dependencyStart = runtimeSource.indexOf("  }, [", intervalIndex);
+    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
+    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+
+    expect(dependencies).toContain("playbackCurrentTrackId");
+    expect(dependencies).toContain("playbackMediaEpoch");
+    expect(dependencies).toContain("playbackStatus");
+    expect(dependencies).not.toContain("playback,");
+    expect(dependencies).not.toContain("currentTrack");
+  });
+
   it("hosts diagnostic and media element helpers in the pure pipeline module", () => {
     expect(pipelineBucketDiagnosticDurationMs(null, 1000)).toBe("");
     expect(pipelineBucketDiagnosticDurationMs(Number.NaN, 1000)).toBe("");

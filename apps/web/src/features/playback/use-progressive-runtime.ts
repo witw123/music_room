@@ -1875,13 +1875,24 @@ export function useProgressiveRuntime({
   ]);
 
   useEffect(() => {
-    if (!playback?.currentTrackId || !hasActivePlaybackIntent(playback)) {
+    const playbackState = playbackRef.current;
+    if (!playbackCurrentTrackId || !playbackState || !hasActivePlaybackIntent(playbackState)) {
       return;
     }
 
     const sampleDrift = () => {
+      const latestPlayback = playbackRef.current;
+      const latestTrack = currentTrackRef.current;
+      if (!latestPlayback?.currentTrackId || !hasActivePlaybackIntent(latestPlayback)) {
+        return;
+      }
+
       const expectedSeconds =
-        getEffectivePlaybackPositionMs(playback, currentTrack?.durationMs ?? 0, Date.now()) / 1000;
+        getEffectivePlaybackPositionMs(
+          latestPlayback,
+          latestTrack?.durationMs ?? 0,
+          Date.now()
+        ) / 1000;
       let observedSeconds: number | null = null;
 
       if (isSlidingWindowPlaybackSource(activePlaybackSource)) {
@@ -1908,9 +1919,10 @@ export function useProgressiveRuntime({
   }, [
     activePlaybackSource,
     audioRef,
-    currentTrack?.durationMs,
     getLocalPlaybackPositionMs,
-    playback,
+    playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackStatus,
     recordDriftSample
   ]);
 
