@@ -691,6 +691,30 @@ describe("playback runtime pipeline keys", () => {
     expect(engineController).toContain("resolveProgressiveEngineAttachErrorAction");
   });
 
+  it("hosts main playback driving outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const mainPlaybackController = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/main-playback-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useMainPlaybackController");
+    expect(runtimeSource).not.toContain("const mainPlaybackPreflight = resolveMainPlaybackPreflight");
+    expect(runtimeSource).not.toContain("const resetIdleAction = resolveMainPlaybackResetIdleAction");
+    expect(runtimeSource).not.toContain("const wantsFullLocalPlayback = resolveFullLocalPlaybackSelection");
+    expect(runtimeSource).not.toContain("const playbackOutcome = resolvePcmSyncPlaybackOutcome");
+    expect(mainPlaybackController).toContain("export function useMainPlaybackController");
+    expect(mainPlaybackController).toContain("resolveMainPlaybackPreflight");
+    expect(mainPlaybackController).toContain("resolveFullLocalPlaybackSelection");
+    expect(mainPlaybackController).toContain("resolvePcmSyncPlaybackOutcome");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const publisherSource = readFileSync(
       join(
