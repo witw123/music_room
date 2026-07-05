@@ -24,6 +24,7 @@ import {
   shouldPublishProgressiveDiagnostic as pipelineShouldPublishProgressiveDiagnostic,
   shouldPrepareProgressiveRuntimeForSource as pipelineShouldPrepareProgressiveRuntimeForSource,
   shouldRecoverPausedFullLocalPlayback as pipelineShouldRecoverPausedFullLocalPlayback,
+  shouldRecoverSilentSlidingWindowWithFullLocal as pipelineShouldRecoverSilentSlidingWindowWithFullLocal,
   shouldResetAudioForPlaybackSurfaceChange as pipelineShouldResetAudioForPlaybackSurfaceChange,
   shouldSkipSecondaryPcmWarmupSync as pipelineShouldSkipSecondaryPcmWarmupSync,
   shouldStartListenerProgressivePlayback as pipelineShouldStartListenerProgressivePlayback,
@@ -660,6 +661,7 @@ describe("use-progressive-runtime policy helpers", () => {
     };
 
     expect(shouldRecoverSilentSlidingWindowWithFullLocal(readyInput)).toBe(true);
+    expect(pipelineShouldRecoverSilentSlidingWindowWithFullLocal(readyInput)).toBe(true);
     expect(
       shouldRecoverSilentSlidingWindowWithFullLocal({
         ...readyInput,

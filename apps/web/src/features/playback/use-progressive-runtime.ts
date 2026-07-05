@@ -83,6 +83,7 @@ import {
   shouldPrepareProgressiveRuntimeForSource,
   shouldPublishProgressiveDiagnostic,
   shouldRecoverPausedFullLocalPlayback,
+  shouldRecoverSilentSlidingWindowWithFullLocal,
   shouldResetAudioForPlaybackSurfaceChange,
   shouldSkipSecondaryPcmWarmupSync,
   shouldStartPcmSlidingWindowAudioElement,
@@ -189,6 +190,7 @@ export {
   shouldPrepareProgressiveRuntimeForSource,
   shouldPublishProgressiveDiagnostic,
   shouldRecoverPausedFullLocalPlayback,
+  shouldRecoverSilentSlidingWindowWithFullLocal,
   shouldResetAudioForPlaybackSurfaceChange,
   shouldSkipSecondaryPcmWarmupSync,
   shouldStartListenerProgressivePlayback,
@@ -206,62 +208,6 @@ function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
   return source === "lossless-local"
     ? "lossless-local-play-blocked"
     : "progressive-local-play-blocked";
-}
-
-export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  canUseFullLocalForPlaybackSession: boolean;
-  fullLocalBlockedReason: string | null | undefined;
-  slidingWindowStartupReady: boolean;
-  localAudioPaused: boolean | null | undefined;
-  localAudioMuted: boolean | null | undefined;
-  localAudioVolume: number | null | undefined;
-  localAudioReadyState: number | null | undefined;
-  localAudioHasSrc: boolean;
-  localAudioHasSrcObject: boolean;
-  pcmAudioContextState: string | null | undefined;
-  pcmDirectOutputConnected: boolean | null | undefined;
-  pcmDecodedSegmentCount: number | null | undefined;
-  pcmScheduledSegmentCount: number | null | undefined;
-}) {
-  const hasActiveIntent =
-    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
-  if (
-    !hasActiveIntent ||
-    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    !input.canUseFullLocalForPlaybackSession ||
-    input.fullLocalBlockedReason !== null ||
-    !input.slidingWindowStartupReady
-  ) {
-    return false;
-  }
-
-  const pcmElementOutputAudible =
-    input.localAudioHasSrcObject &&
-    input.localAudioPaused === false &&
-    input.localAudioMuted !== true &&
-    input.localAudioVolume !== 0;
-  const pcmOutputAudible =
-    input.pcmAudioContextState === "running" &&
-    (input.pcmDecodedSegmentCount ?? 0) > 0 &&
-    (input.pcmScheduledSegmentCount ?? 0) > 0 &&
-    (input.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
-  if (pcmOutputAudible) {
-    return false;
-  }
-
-  const hasPlayableElementOutput =
-    (input.localAudioReadyState ?? 0) >= haveCurrentDataReadyState ||
-    input.localAudioHasSrcObject ||
-    input.localAudioHasSrc;
-
-  return (
-    input.localAudioPaused !== false ||
-    input.localAudioMuted === true ||
-    input.localAudioVolume === 0 ||
-    !hasPlayableElementOutput
-  );
 }
 
 function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
