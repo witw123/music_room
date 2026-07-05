@@ -123,6 +123,9 @@ export class ProgressivePcmEngine {
   // is not throttled by the small steady-state per-sync cap.
   private catchupTargetChunkIndex: number | null = null;
   private lastBufferMissingLogAtMs = 0;
+  private outputCallbackCount = 0;
+  private segmentRejectCount = 0;
+  private lastRejectReason: string | null = null;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -330,6 +333,9 @@ export class ProgressivePcmEngine {
             submittedPackets: this.decodedPacketCount,
             flushAttempts: this.decoderFlushAttemptCount,
             flushDone: this.decoderFlushCount,
+            outputCallbacks: this.outputCallbackCount,
+            segmentRejects: this.segmentRejectCount,
+            lastReject: this.lastRejectReason,
             decodedSegments: this.decodedSegments.length,
             decodedRange: first && last ? [Number(first.startTimeSec.toFixed(2)), Number(last.endTimeSec.toFixed(2))] : null,
             coverageEnd: Number(this.findBufferedCoverageEnd(positionSeconds).toFixed(3)),
@@ -449,6 +455,10 @@ export class ProgressivePcmEngine {
     this.syncInFlight = false;
     this.syncQueued = false;
     this.catchupTargetChunkIndex = null;
+    this.lastBufferMissingLogAtMs = 0;
+    this.outputCallbackCount = 0;
+    this.segmentRejectCount = 0;
+    this.lastRejectReason = null;
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
@@ -480,8 +490,10 @@ export class ProgressivePcmEngine {
     try {
       const decoder = new AudioDecoderCtor({
         output: (audioData) => {
+          this.outputCallbackCount += 1;
           const segment = this.createDecodedSegment(audioData);
           if (!segment) {
+            this.segmentRejectCount += 1;
             return;
           }
 
@@ -978,6 +990,7 @@ export class ProgressivePcmEngine {
       data.sampleRate <= 0 ||
       typeof data.copyTo !== "function"
     ) {
+      this.lastRejectReason = `invalid-shape:ch=${data?.numberOfChannels},fr=${data?.numberOfFrames},sr=${data?.sampleRate},copyTo=${typeof data?.copyTo}`;
       return null;
     }
 
@@ -1027,6 +1040,7 @@ export class ProgressivePcmEngine {
           : this.nextDecodedStartTimeSec;
     const endTimeSec = startTimeSec + durationSec;
     if (!Number.isFinite(startTimeSec) || !Number.isFinite(endTimeSec) || endTimeSec <= startTimeSec) {
+      this.lastRejectReason = `invalid-timing:ts=${timestampSec},queued=${queuedFlacTiming?.timestampUs},dur=${durationSec},start=${startTimeSec},end=${endTimeSec}`;
       return null;
     }
     this.nextDecodedStartTimeSec = Math.max(this.nextDecodedStartTimeSec, endTimeSec);
