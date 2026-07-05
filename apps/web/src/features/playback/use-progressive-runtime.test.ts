@@ -289,7 +289,7 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
-  it("drives the progressive warmup interval from a stable dependency key", () => {
+  it("drives the progressive warmup loop through the playback orchestrator", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
@@ -299,10 +299,17 @@ describe("playback runtime pipeline keys", () => {
       "      void syncWarmup();",
       "    }, progressiveRuntimeTickIntervalMs);"
     ].join("\n");
-    const intervalIndex = runtimeSource.indexOf(intervalNeedle);
-    expect(intervalIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).not.toContain(intervalNeedle);
+    const orchestratorIndex = runtimeSource.indexOf(
+      "const runtimeTickOrchestrator = new PlaybackOrchestrator"
+    );
+    expect(orchestratorIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).toContain("\"sync-progressive-warmup\"");
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", intervalIndex);
+    const warmupRefIndex = runtimeSource.indexOf("syncProgressiveWarmupRef.current = () => {");
+    expect(warmupRefIndex).toBeGreaterThan(-1);
+
+    const dependencyStart = runtimeSource.indexOf("  }, [", warmupRefIndex);
     const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
     const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
 
@@ -316,17 +323,37 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).not.toContain("transitionPlaybackSource,");
   });
 
-  it("drives the drift sampling interval from stable scalar dependencies", () => {
+  it("drives migrated runtime loops through the playback orchestrator with stable scalar dependencies", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
-    const intervalNeedle =
-      "const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);";
-    const intervalIndex = runtimeSource.indexOf(intervalNeedle);
-    expect(intervalIndex).toBeGreaterThan(-1);
+    const orchestratorNeedle = "const runtimeTickOrchestrator = new PlaybackOrchestrator";
+    const orchestratorIndex = runtimeSource.indexOf(orchestratorNeedle);
+    expect(orchestratorIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).not.toContain("const driftSamplingOrchestrator = new PlaybackOrchestrator");
+    expect(runtimeSource).not.toContain(
+      "const fullLocalUpgradeOrchestrator = new PlaybackOrchestrator"
+    );
+    expect(runtimeSource).not.toContain(
+      "const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);"
+    );
+    expect(runtimeSource).not.toContain(
+      "const timerId = window.setInterval(syncUpgrade, progressiveRuntimeTickIntervalMs);"
+    );
+    expect(runtimeSource).not.toContain(
+      "const timerId = window.setInterval(syncWarmup, progressiveRuntimeTickIntervalMs);"
+    );
+    expect(runtimeSource).not.toContain(
+      [
+        "const timerId = window.setInterval(",
+        "      recoverPausedFullLocalPlayback,",
+        "      fullLocalPausedRecoveryIntervalMs",
+        "    );"
+      ].join("\n")
+    );
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", intervalIndex);
+    const dependencyStart = runtimeSource.indexOf("  }, [", orchestratorIndex);
     const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
     const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
 
@@ -334,7 +361,7 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).toContain("playbackMediaEpoch");
     expect(dependencies).toContain("playbackStatus");
     expect(dependencies).not.toContain("playback,");
-    expect(dependencies).not.toContain("currentTrack");
+    expect(dependencies).not.toMatch(/^\s+currentTrack,\s*$/m);
   });
 
   it("keeps hook dependency arrays free of snapshot object identities", () => {
