@@ -597,6 +597,52 @@ describe("playback runtime pipeline keys", () => {
     expect(eventControllerSource).toContain("resolveStalledPlaybackEventAction");
   });
 
+  it("hosts local playback readiness handling outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const readinessSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/local-playback-readiness-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useLocalPlaybackReadinessController");
+    expect(runtimeSource).not.toContain("const localReadyEvents: Array<keyof HTMLMediaElementEventMap>");
+    expect(runtimeSource).not.toContain("const localPlaybackReady = resolveLocalPlaybackReady");
+    expect(runtimeSource).not.toContain("const nextMediaConnectionState = resolveListenerMediaConnectionState");
+    expect(readinessSource).toContain("export function useLocalPlaybackReadinessController");
+    expect(readinessSource).toContain("resolveLocalReadyPlaybackAction");
+    expect(readinessSource).toContain("resolveListenerMediaConnectionState");
+  });
+
+  it("hosts playback source transition side effects outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const sourceController = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-source-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackSourceController");
+    expect(runtimeSource).not.toContain("const transitionPlaybackSource = useCallback");
+    expect(runtimeSource).not.toContain("const forceLocalAction =\n      resolveForceSourceOwnerLocalPlaybackAction");
+    expect(runtimeSource).not.toContain("const recoveryAction = resolveImmediateFullLocalRecoveryAction");
+    expect(runtimeSource).not.toContain("resolveSilentSlidingWindowFullLocalRecoveryAction(");
+    expect(sourceController).toContain("export function usePlaybackSourceController");
+    expect(sourceController).toContain("resolvePlaybackSourceTransitionAction");
+    expect(sourceController).toContain("resolveImmediateFullLocalRecoveryAction");
+    expect(sourceController).toContain("resolveSilentSlidingWindowFullLocalRecoveryAction");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const publisherSource = readFileSync(
       join(

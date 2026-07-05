@@ -42,6 +42,8 @@ import { usePlaybackSchedulerState } from "./playback-orchestrator/playback-sche
 import { usePlaybackQualityState } from "./playback-orchestrator/playback-quality-state";
 import { useLocalAudioPlaybackState } from "./playback-orchestrator/local-audio-playback-state";
 import { useLocalAudioEventController } from "./playback-orchestrator/local-audio-event-controller";
+import { useLocalPlaybackReadinessController } from "./playback-orchestrator/local-playback-readiness-controller";
+import { usePlaybackSourceController } from "./playback-orchestrator/playback-source-controller";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -95,11 +97,8 @@ import {
   resolveImmediateFullLocalRecoveryAction,
   resolveLocalTakeoverCooldownArmAction,
   resolveLocalTakeoverCooldownResetAction,
-  resolveLocalReadyPlaybackAction,
   resolveMainPlaybackPreflight,
-  resolveLocalPlaybackReady,
   resolveLocalPlaybackPositionMs,
-  resolveListenerMediaConnectionState,
   resolveMainPausedPlaybackAction,
   resolveMainPlaybackResetIdleAction,
   resolveMediaElementPlaybackRole,
@@ -237,12 +236,12 @@ export {
   resolveFullLocalPausedPlaybackAction,
   resolveFullLocalPausedRecoveryAttemptAction,
   resolveFullLocalPausedRecoveryPreflight,
-  resolveFullLocalReadyPlaybackResult,
   resolveFullLocalWarmupHoldState,
   resolveFullLocalWarmupMissingTrackAction,
   resolveFullLocalWarmupReadiness,
   resolveFullLocalWarmupTransitionAction,
   resolveFullLocalPausedRecoveryResult,
+  resolveFullLocalReadyPlaybackResult,
   resolveBufferingMediaConnectionState,
   resolveFullLocalUpgradeAction,
   resolveForceSourceOwnerLocalPlaybackAction,
@@ -828,16 +827,6 @@ export function useProgressiveRuntime({
   markPcmRuntimeFailureRef.current = markPcmRuntimeFailure;
 
   useEffect(() => {
-    const forceLocalAction =
-      resolveForceSourceOwnerLocalPlaybackAction(forceSourceOwnerLocalPlayback);
-    if (!forceLocalAction) {
-      return;
-    }
-
-    setActivePlaybackSource(forceLocalAction.nextSource);
-  }, [forceSourceOwnerLocalPlayback, setActivePlaybackSource]);
-
-  useEffect(() => {
     const cooldownAction = resolveLocalTakeoverCooldownResetAction();
     localTakeoverCooldownUntilRef.current = cooldownAction.nextCooldownUntilMs;
   }, [playback?.currentTrackId, playbackRevision]);
@@ -1008,112 +997,24 @@ export function useProgressiveRuntime({
     fullLocalBlockedReason
   });
 
-  useEffect(() => {
-    const recoveryAction = resolveImmediateFullLocalRecoveryAction({
-      immediateFullLocalRecoveryEligible,
-      activePlaybackSource,
-      hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack
-    });
-    if (!recoveryAction) {
-      return;
-    }
-
-    setActivePlaybackSource(recoveryAction.nextSource);
-    if (recoveryAction.clearFallbackReason) {
-      setProgressiveFallbackReason(null);
-    }
-  }, [
+  const { transitionPlaybackSource } = usePlaybackSourceController({
     activePlaybackSource,
-    currentBufferedFullLocalTrackObjectUrl,
-    immediateFullLocalRecoveryEligible,
-    setActivePlaybackSource,
-    setProgressiveFallbackReason
-  ]);
-
-  const transitionPlaybackSource = useCallback(
-    (
-      nextSource: ProgressivePlaybackSource,
-      options?: {
-        fallbackReason?: string | null;
-        clearFallbackReason?: boolean;
-        force?: boolean;
-        armCooldown?: boolean;
-      }
-    ) => {
-      const transitionAction = resolvePlaybackSourceTransitionAction({
-        currentSource: activePlaybackSource,
-        nextSource,
-        fallbackReason: options?.fallbackReason,
-        clearFallbackReason: options?.clearFallbackReason,
-        armCooldown: options?.armCooldown
-      });
-
-      if (transitionAction.shouldArmCooldown) {
-        armLocalTakeoverCooldown();
-      }
-
-      if (transitionAction.shouldClearFallbackReason) {
-        setProgressiveFallbackReason(null);
-      } else if (typeof transitionAction.fallbackReason === "string") {
-        setProgressiveFallbackReason(transitionAction.fallbackReason);
-      }
-
-      if (transitionAction.shouldSetSource) {
-        setActivePlaybackSource(nextSource);
-      }
-
-      return true;
-    },
-    [
-      activePlaybackSource,
-      armLocalTakeoverCooldown,
-      setActivePlaybackSource,
-      setProgressiveFallbackReason
-    ]
-  );
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    const latestPcmDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
-    const recoveryAction = resolveSilentSlidingWindowFullLocalRecoveryAction(
-      shouldRecoverSilentSlidingWindowWithFullLocal({
-        activePlaybackSource,
-        playbackStatus: playback?.status,
-        canUseFullLocalForPlaybackSession,
-        fullLocalBlockedReason,
-        slidingWindowStartupReady: progressiveHealthSnapshot.startupReady,
-        localAudioPaused: audio?.paused ?? localAudioDiagnostics.localAudioPaused,
-        localAudioMuted: audio?.muted ?? localAudioDiagnostics.localAudioMuted,
-        localAudioVolume: audio?.volume ?? localAudioDiagnostics.localAudioVolume,
-        localAudioReadyState: audio?.readyState ?? localAudioDiagnostics.localAudioReadyState,
-        localAudioHasSrc: !!(audio?.currentSrc || audio?.getAttribute("src")),
-        localAudioHasSrcObject: !!audio?.srcObject,
-        pcmAudioContextState: latestPcmDiagnostics?.audioContextState ?? null,
-        pcmDirectOutputConnected: latestPcmDiagnostics?.directOutputConnected ?? null,
-        pcmDecodedSegmentCount: latestPcmDiagnostics?.decodedSegmentCount ?? null,
-        pcmScheduledSegmentCount: latestPcmDiagnostics?.scheduledSegmentCount ?? null
-      })
-    );
-    if (!recoveryAction) {
-      return;
-    }
-
-    transitionPlaybackSource(recoveryAction.nextSource, {
-      clearFallbackReason: recoveryAction.clearFallbackReason
-    });
-    setMediaConnectionState(recoveryAction.mediaConnectionState);
-  }, [
-    activePlaybackSource,
+    armLocalTakeoverCooldown,
     audioRef,
     canUseFullLocalForPlaybackSession,
+    forceSourceOwnerLocalPlayback,
     fullLocalBlockedReason,
+    hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
+    immediateFullLocalRecoveryEligible,
     localAudioDiagnostics,
     pcmEngineDiagnosticsKey,
-    playback?.status,
-    progressiveHealthSnapshot.startupReady,
+    playbackStatus,
+    progressivePcmEngineRef,
+    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
+    setActivePlaybackSource,
     setMediaConnectionState,
-    transitionPlaybackSource
-  ]);
+    setProgressiveFallbackReason
+  });
 
   useEffect(() => {
     if (
@@ -1450,93 +1351,20 @@ export function useProgressiveRuntime({
     shadowWarmupActive
   });
 
-  useEffect(() => {
-    const localAudio = audioRef.current;
-    const localReadyEvents: Array<keyof HTMLMediaElementEventMap> = [
-      "loadedmetadata",
-      "canplay",
-      "playing"
-    ];
-    const handleLocalReady = () => {
-      const localReadyAction = resolveLocalReadyPlaybackAction({
-        activePlaybackSource,
-        playbackHasActiveIntent: hasActivePlaybackIntent(playbackRef.current),
-        localAudioPaused: !!localAudio?.paused
-      });
-      if (localReadyAction.shouldEnsurePlaybackStart) {
-        ensurePlaybackStart(activePlaybackSource);
-      }
-      if (localReadyAction.shouldAttemptFullLocalPlayback && localAudio) {
-        localAudio.muted = false;
-        localAudio.volume = getAudibleElementVolume(volume);
-        void attemptPlaybackStart(
-          localAudio,
-          "full-local",
-          "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-          "full-local-play-blocked",
-          { reportFailure: true }
-        ).then((ok) => {
-          const readyPlaybackResult = resolveFullLocalReadyPlaybackResult(ok);
-          setMediaConnectionState(readyPlaybackResult.mediaConnectionState);
-          recordPeerDiagnostic({
-            peerId: "system",
-            channelKind: "system",
-            direction: "local",
-            event: readyPlaybackResult.diagnosticEvent,
-            summary: readyPlaybackResult.diagnosticSummary,
-            recordEvent: readyPlaybackResult.recordEvent
-          });
-        });
-      }
-    };
-    for (const eventName of localReadyEvents) {
-      localAudio?.addEventListener(eventName, handleLocalReady);
-    }
-
-    return () => {
-      for (const eventName of localReadyEvents) {
-        localAudio?.removeEventListener(eventName, handleLocalReady);
-      }
-    };
-  }, [
+  useLocalPlaybackReadinessController({
     activePlaybackSource,
-    audioRef,
     attemptPlaybackStart,
+    audioRef,
     ensurePlaybackStart,
+    isCurrentSourceOwner,
+    mediaConnectedPeersCount,
+    playbackCurrentTrackId,
+    playbackRef,
+    playbackStatus,
     recordPeerDiagnostic,
     setMediaConnectionState,
     volume
-  ]);
-
-  useEffect(() => {
-    const nextPlayback = playbackRef.current;
-
-    const localAudio = audioRef.current;
-    const localPlaybackReady = resolveLocalPlaybackReady({
-      hasAudio: !!localAudio,
-      localAudioPaused: localAudio?.paused ?? true,
-      localAudioReadyState: localAudio?.readyState ?? 0,
-      localAudioHasSrcObject: !!localAudio?.srcObject,
-      localAudioHasCurrentSrc: !!localAudio?.currentSrc
-    });
-    const nextMediaConnectionState = resolveListenerMediaConnectionState({
-      currentTrackId: nextPlayback?.currentTrackId ?? null,
-      isCurrentSourceOwner,
-      playbackHasActiveIntent: hasActivePlaybackIntent(nextPlayback),
-      localPlaybackReady
-    });
-    if (nextMediaConnectionState !== null) {
-      setMediaConnectionState(nextMediaConnectionState);
-    }
-  }, [
-    audioRef,
-    playbackCurrentTrackId,
-    playbackStatus,
-    isCurrentSourceOwner,
-    mediaConnectedPeersCount,
-    activePlaybackSource,
-    setMediaConnectionState
-  ]);
+  });
 
   useEffect(() => {
     const playbackState = playbackRef.current;
