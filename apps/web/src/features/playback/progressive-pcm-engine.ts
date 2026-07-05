@@ -765,7 +765,22 @@ export class ProgressivePcmEngine {
         decodedAny = true;
       } catch (error) {
         this.lastDecodeError = error instanceof Error ? error.message : "decode-throw";
-        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        const hasDecodedBefore = this.decodedSegments.length > 0;
+        this.status = hasDecodedBefore ? "degraded" : "failed";
+        if (hasDecodedBefore) {
+          // A decode() throw usually means WebCodecs has already closed the
+          // decoder internally. Drop our handle so the next performSync rebuilds
+          // a fresh decoder and playback can recover, instead of hammering a
+          // dead decoder forever (which left playback stuck and silent even
+          // after pause/resume).
+          try {
+            this.decoder?.close?.();
+          } catch {
+            // Already closed by WebCodecs after the fatal decode error.
+          }
+          this.decoder = null;
+          this.pendingDecodedFlacPacketTimings = [];
+        }
         break;
       }
     }
@@ -840,8 +855,15 @@ export class ProgressivePcmEngine {
         }
 
         const appended = await this.sync();
+
+        // Only fall back to window decoding when the linear (from-chunk-0)
+        // decode can no longer make progress — i.e. the contiguous prefix is
+        // genuinely missing. Running both paths concurrently makes them decode
+        // overlapping time ranges into the same decoder + dedup set, which
+        // produced doubled/overlapping audio and left gaps that stalled
+        // playback until it went silent.
         let decodedWindow = false;
-        if (!this.hasBufferedPosition(positionSeconds)) {
+        if (!appended && !this.hasBufferedPosition(positionSeconds)) {
           decodedWindow = await this.decodeCachedFlacWindowAt(positionSeconds);
         }
         if (!appended && !decodedWindow) {

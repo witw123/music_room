@@ -2474,23 +2474,40 @@ export function useProgressiveRuntime({
       let driftMs = Number.POSITIVE_INFINITY;
 
       if (pcmEngine) {
-        const syncResult = await pcmEngine.syncPlayback(expectedSeconds, true);
-        pcmLastBlockedReasonRef.current = syncResult.blockedReason;
-        markPcmRuntimeFailure(
-          resolvePcmRuntimeFailureReason({
-            blockedReason: syncResult.blockedReason,
-            lastDecodeError: pcmEngine.getSnapshot().lastDecodeError
-          })
-        );
+        // The main playback effect already drives pcmEngine.syncPlayback every
+        // tick for sliding-window sources. Driving it a second time from this
+        // warmup loop means two independent 150ms timers reset the playback
+        // anchor and stop/reschedule segments against each other, which is heard
+        // as overlapping/doubled audio and eventually corrupts the timeline
+        // until playback stalls. In that case only read a snapshot here; never
+        // issue a competing syncPlayback.
+        const drivesPcmFromMainEffect = isSlidingWindowPlaybackSource(activePlaybackSource);
+        const syncResult = drivesPcmFromMainEffect
+          ? null
+          : await pcmEngine.syncPlayback(expectedSeconds, true);
+        if (syncResult) {
+          pcmLastBlockedReasonRef.current = syncResult.blockedReason;
+          markPcmRuntimeFailure(
+            resolvePcmRuntimeFailureReason({
+              blockedReason: syncResult.blockedReason,
+              lastDecodeError: pcmEngine.getSnapshot().lastDecodeError
+            })
+          );
+        }
         if (cancelled) {
           return;
         }
 
         engineReady = pcmEngine.engineStatus === "ready";
-        localReady = syncResult.localReady;
-        driftMs = syncResult.driftMs;
+        // When the main effect owns playback (sliding-window), read readiness
+        // from a snapshot instead of the (skipped) competing syncPlayback.
+        localReady = syncResult
+          ? syncResult.localReady
+          : pcmEngine.getSnapshot().bufferedAheadMs > 0;
+        driftMs = syncResult ? syncResult.driftMs : 0;
         audio.muted = !isSlidingWindowPlaybackSource(activePlaybackSource);
         if (
+          syncResult &&
           shouldStartPcmSlidingWindowAudioElement({
             activePlaybackSource,
             playbackStatus: playbackState.status,
