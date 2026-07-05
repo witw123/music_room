@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   buildAvailableChunksKey,
@@ -58,6 +61,33 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("drives the progressive warmup interval from a stable dependency key", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const intervalNeedle = [
+      "const timerId = window.setInterval(() => {",
+      "      void syncWarmup();",
+      "    }, progressiveRuntimeTickIntervalMs);"
+    ].join("\n");
+    const intervalIndex = runtimeSource.indexOf(intervalNeedle);
+    expect(intervalIndex).toBeGreaterThan(-1);
+
+    const dependencyStart = runtimeSource.indexOf("  }, [", intervalIndex);
+    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
+    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+
+    expect(dependencies).toContain("progressiveWarmupTimerKey");
+    expect(dependencies).not.toContain("currentProgressiveManifest,");
+    expect(dependencies).not.toContain("canUseFullLocalForPlaybackSession,");
+    expect(dependencies).not.toContain("progressiveHealthSnapshot.startupReady,");
+    expect(dependencies).not.toContain("attemptPlaybackStart,");
+    expect(dependencies).not.toContain("isLocalTakeoverAllowed,");
+    expect(dependencies).not.toContain("markPcmRuntimeFailure,");
+    expect(dependencies).not.toContain("transitionPlaybackSource,");
+  });
+
   it("hosts diagnostic and media element helpers in the pure pipeline module", () => {
     expect(pipelineGetAudibleElementVolume(0)).toBe(0.72);
     expect(

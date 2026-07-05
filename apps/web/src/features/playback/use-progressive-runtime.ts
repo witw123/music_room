@@ -66,6 +66,7 @@ import {
 } from "./progressive-source-controller";
 import {
   buildCurrentTrackFormatKey,
+  buildProgressiveWarmupTimerKey,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
@@ -933,6 +934,8 @@ export function useProgressiveRuntime({
       setProgressiveFallbackReason
     ]
   );
+  const markPcmRuntimeFailureRef = useRef(markPcmRuntimeFailure);
+  markPcmRuntimeFailureRef.current = markPcmRuntimeFailure;
 
   useEffect(() => {
     if (!forceSourceOwnerLocalPlayback) {
@@ -982,6 +985,8 @@ export function useProgressiveRuntime({
         connectedPeersCount > 0),
     [canUseFullLocalForPlaybackSession, connectedPeersCount, immediateFullLocalRecoveryEligible]
   );
+  const isLocalTakeoverAllowedRef = useRef(isLocalTakeoverAllowed);
+  isLocalTakeoverAllowedRef.current = isLocalTakeoverAllowed;
   const audibleLocalFallbackActive =
     !isCurrentSourceOwner &&
     (isSlidingWindowPlaybackSource(activePlaybackSource) || activePlaybackSource === "full-local") &&
@@ -1010,6 +1015,46 @@ export function useProgressiveRuntime({
       startupGatePending
     ]
   );
+  const progressiveWarmupTimerKey = buildProgressiveWarmupTimerKey({
+    playbackCurrentTrackId,
+    playbackStatus,
+    playbackMediaEpoch,
+    currentTrackFormatKey,
+    progressiveManifestKey: currentProgressiveManifestKey,
+    activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
+    progressiveEngineType: currentProgressiveEngineType,
+    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
+    startupBufferMs,
+    progressiveLocalBlockedReason,
+    isCurrentSourceOwner,
+    playbackRecoveryStage,
+    progressiveFallbackReason,
+    stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
+    waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s
+  });
+  const progressiveWarmupRuntimeRef = useRef({
+    activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
+    currentProgressiveEngineType,
+    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
+    startupBufferMs,
+    progressiveLocalBlockedReason,
+    isCurrentSourceOwner,
+    playbackRecoveryStage,
+    progressiveFallbackReason
+  });
+  progressiveWarmupRuntimeRef.current = {
+    activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
+    currentProgressiveEngineType,
+    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
+    startupBufferMs,
+    progressiveLocalBlockedReason,
+    isCurrentSourceOwner,
+    playbackRecoveryStage,
+    progressiveFallbackReason
+  };
   const schedulerBudgetTier = useMemo(
     () =>
       resolveSchedulerBudgetTier({
@@ -1265,6 +1310,8 @@ export function useProgressiveRuntime({
       updatePlaybackStartIntent
     ]
   );
+  const attemptPlaybackStartRef = useRef(attemptPlaybackStart);
+  attemptPlaybackStartRef.current = attemptPlaybackStart;
   const ensurePlaybackStart = useCallback(
     (source: ProgressivePlaybackSource, attempt = 0) => {
       clearPlaybackStartRetry();
@@ -2047,14 +2094,15 @@ export function useProgressiveRuntime({
   useEffect(() => {
     const playbackState = playbackRef.current;
     const audio = audioRef.current;
+    const manifestState = currentProgressiveManifestRef.current.manifest;
+    const warmupState = progressiveWarmupRuntimeRef.current;
 
     if (
-      !playbackCurrentTrackId ||
-      !playbackState ||
+      !playbackState?.currentTrackId ||
       !audio ||
       (!progressiveEngineRef.current && !progressivePcmEngineRef.current) ||
-      !currentProgressiveManifest ||
-      activePlaybackSource === "full-local"
+      !manifestState ||
+      warmupState.activePlaybackSource === "full-local"
     ) {
       progressiveWarmupReadyAtRef.current = null;
       return;
@@ -2073,11 +2121,17 @@ export function useProgressiveRuntime({
       if (!latestPlayback?.currentTrackId) {
         return;
       }
+      const latestManifest = currentProgressiveManifestRef.current.manifest;
+      if (!latestManifest) {
+        progressiveWarmupReadyAtRef.current = null;
+        return;
+      }
+      const latestWarmupState = progressiveWarmupRuntimeRef.current;
 
       const expectedSeconds =
         getEffectivePlaybackPositionMs(
           latestPlayback,
-          currentProgressiveManifest.durationMs,
+          latestManifest.durationMs,
           Date.now()
         ) / 1000;
       const now = Date.now();
@@ -2094,13 +2148,15 @@ export function useProgressiveRuntime({
         // as overlapping/doubled audio and eventually corrupts the timeline
         // until playback stalls. In that case only read a snapshot here; never
         // issue a competing syncPlayback.
-        const drivesPcmFromMainEffect = isSlidingWindowPlaybackSource(activePlaybackSource);
+        const drivesPcmFromMainEffect = isSlidingWindowPlaybackSource(
+          latestWarmupState.activePlaybackSource
+        );
         const syncResult = drivesPcmFromMainEffect
           ? null
           : await pcmEngine.syncPlayback(expectedSeconds, true);
         if (syncResult) {
           pcmLastBlockedReasonRef.current = syncResult.blockedReason;
-          markPcmRuntimeFailure(
+          markPcmRuntimeFailureRef.current(
             resolvePcmRuntimeFailureReason({
               blockedReason: syncResult.blockedReason,
               lastDecodeError: pcmEngine.getSnapshot().lastDecodeError
@@ -2118,11 +2174,11 @@ export function useProgressiveRuntime({
           ? syncResult.localReady
           : pcmEngine.getSnapshot().bufferedAheadMs > 0;
         driftMs = syncResult ? syncResult.driftMs : 0;
-        audio.muted = !isSlidingWindowPlaybackSource(activePlaybackSource);
+        audio.muted = !isSlidingWindowPlaybackSource(latestWarmupState.activePlaybackSource);
         if (
           syncResult &&
           shouldStartPcmSlidingWindowAudioElement({
-            activePlaybackSource,
+            activePlaybackSource: latestWarmupState.activePlaybackSource,
             playbackStatus: latestPlayback.status,
             localReady,
             audioPaused: audio.paused,
@@ -2132,11 +2188,11 @@ export function useProgressiveRuntime({
           })
         ) {
           lastPcmSlidingWindowPlayAttemptAtRef.current = now;
-          void attemptPlaybackStart(
+          void attemptPlaybackStartRef.current(
             audio,
-            activePlaybackSource,
+            latestWarmupState.activePlaybackSource,
             "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-            getSlidingWindowPlayBlockedReason(activePlaybackSource),
+            getSlidingWindowPlayBlockedReason(latestWarmupState.activePlaybackSource),
             { reportFailure: false }
           ).then((ok) => {
             if (cancelled || !ok) {
@@ -2149,30 +2205,36 @@ export function useProgressiveRuntime({
       } else if (mseEngine) {
         await mseEngine.sync();
         engineReady = mseEngine.engineStatus === "ready";
-        localReady = mseEngine.isPlaybackReady(expectedSeconds, startupBufferMs);
+        localReady = mseEngine.isPlaybackReady(expectedSeconds, latestWarmupState.startupBufferMs);
 
-        if (localReady && (isSlidingWindowPlaybackSource(activePlaybackSource) || shadowWarmupReady)) {
+        if (
+          localReady &&
+          (isSlidingWindowPlaybackSource(latestWarmupState.activePlaybackSource) ||
+            shadowWarmupReady)
+        ) {
           syncLocalPlaybackWindow(audio, expectedSeconds, true, {
             softDriftMs: 120,
             hardDriftMs: 900,
             correctionMode: "shadow-local-catchup"
           });
-          audio.muted = !isSlidingWindowPlaybackSource(activePlaybackSource);
+          audio.muted = !isSlidingWindowPlaybackSource(latestWarmupState.activePlaybackSource);
           void roomAudioOutput.playElement(audio);
           driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
         }
       }
 
       const shouldAttemptTakeover = shouldAttemptProgressiveLocalPlayback({
-        isCurrentSourceOwner,
-        activePlaybackSource,
+        isCurrentSourceOwner: latestWarmupState.isCurrentSourceOwner,
+        activePlaybackSource: latestWarmupState.activePlaybackSource,
         playbackStatus: latestPlayback.status,
-        engineType: currentProgressiveEngineType,
-        startupReady: progressiveHealthSnapshot.startupReady,
-        hasFullLocalTrack: canUseFullLocalForPlaybackSession,
-        progressiveFallbackReason
+        engineType: latestWarmupState.currentProgressiveEngineType,
+        startupReady: latestWarmupState.progressiveStartupReady,
+        hasFullLocalTrack: latestWarmupState.canUseFullLocalForPlaybackSession,
+        progressiveFallbackReason: latestWarmupState.progressiveFallbackReason
       });
-      const takeoverBlockedReason = shouldAttemptTakeover ? null : progressiveLocalBlockedReason;
+      const takeoverBlockedReason = shouldAttemptTakeover
+        ? null
+        : latestWarmupState.progressiveLocalBlockedReason;
 
       if (
         !engineReady ||
@@ -2181,14 +2243,14 @@ export function useProgressiveRuntime({
         if (
           pcmEngine &&
           !shouldSkipSecondaryPcmWarmupSync({
-            engineType: currentProgressiveEngineType,
+            engineType: latestWarmupState.currentProgressiveEngineType,
             engineReady,
             localReady
           })
         ) {
           const syncResult = await pcmEngine.syncPlayback(expectedSeconds, false).catch(() => null);
           pcmLastBlockedReasonRef.current = syncResult?.blockedReason ?? null;
-          markPcmRuntimeFailure(
+          markPcmRuntimeFailureRef.current(
             resolvePcmRuntimeFailureReason({
               blockedReason: syncResult?.blockedReason,
               lastDecodeError: pcmEngine.getSnapshot().lastDecodeError
@@ -2207,14 +2269,14 @@ export function useProgressiveRuntime({
 
       if (
         !enableDirectProgressiveTakeover ||
-        !isLocalTakeoverAllowed(now) ||
+        !isLocalTakeoverAllowedRef.current(now) ||
         !shouldAttemptTakeover
       ) {
         progressiveWarmupReadyAtRef.current = shadowWarmupReady && localReady ? now : null;
         if (
-          progressiveFallbackReason &&
-          isLocalTakeoverAllowed(now) &&
-          (playbackRecoveryStage === "steady" || shouldAttemptTakeover)
+          latestWarmupState.progressiveFallbackReason &&
+          isLocalTakeoverAllowedRef.current(now) &&
+          (latestWarmupState.playbackRecoveryStage === "steady" || shouldAttemptTakeover)
         ) {
           setProgressiveFallbackReason(null);
         }
@@ -2222,7 +2284,7 @@ export function useProgressiveRuntime({
       }
 
       const warmupDecision = resolveProgressiveWarmupDecision({
-        currentSource: activePlaybackSource,
+        currentSource: latestWarmupState.activePlaybackSource,
         engineReady: localReady,
         activationReady: takeoverBlockedReason === null && shadowWarmupReady,
         fallbackReason: takeoverBlockedReason,
@@ -2243,14 +2305,14 @@ export function useProgressiveRuntime({
           .syncPlayback(
             getEffectivePlaybackPositionMs(
               playbackState,
-              currentProgressiveManifest.durationMs,
+              manifestState.durationMs,
               Date.now()
             ) / 1000,
             false
           )
           .then((result) => {
             pcmLastBlockedReasonRef.current = result.blockedReason;
-            markPcmRuntimeFailure(
+            markPcmRuntimeFailureRef.current(
               resolvePcmRuntimeFailureReason({
                 blockedReason: result.blockedReason,
                 lastDecodeError: progressivePcmEngineRef.current?.getSnapshot().lastDecodeError
@@ -2274,28 +2336,9 @@ export function useProgressiveRuntime({
       window.clearInterval(timerId);
     };
   }, [
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackStatus,
-    currentProgressiveManifest,
-    activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
-    currentProgressiveEngineType,
-    progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
-    progressiveLocalBlockedReason,
-    isCurrentSourceOwner,
-    isProgressiveTakeoverReady,
-    isLocalTakeoverAllowed,
+    progressiveWarmupTimerKey,
     audioRef,
-    playbackQualityMetrics.stalledEventsLast30s,
-    playbackQualityMetrics.waitingEventsLast30s,
-    playbackRecoveryStage,
-    progressiveFallbackReason,
-    attemptPlaybackStart,
-    markPcmRuntimeFailure,
     setMediaConnectionState,
-    transitionPlaybackSource,
     setProgressiveFallbackReason
   ]);
 
