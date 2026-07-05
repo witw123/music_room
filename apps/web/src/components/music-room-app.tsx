@@ -467,20 +467,33 @@ export function MusicRoomApp({
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
+  const roomPlayback = roomSnapshot?.room.playback ?? null;
+  const currentPlaybackTrackId = roomPlayback?.currentTrackId ?? null;
+  const playbackMediaEpoch = roomPlayback?.mediaEpoch ?? null;
+  const playbackQueueVersion = roomPlayback?.queueVersion ?? null;
+  const playbackRevision = roomPlayback?.playbackRevision ?? null;
+  const playbackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
+  const playbackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
+  const playbackStatus = roomPlayback?.status ?? null;
   const isCurrentSourceOwner = isCurrentPlaybackSourceDevice({
-    playback: roomSnapshot?.room.playback,
+    playback: roomPlayback,
     peerId,
     activeSessionId: activeSession?.userId
   });
   const playbackSurfaceKey = useMemo(
-    () => resolvePlaybackSurfaceKey(roomSnapshot?.room.playback),
-    [roomSnapshot?.room.playback]
+    () => resolvePlaybackSurfaceKey(roomPlayback),
+    [currentPlaybackTrackId, playbackMediaEpoch, playbackSourcePeerId, playbackSourceSessionId]
   );
   const playbackTimelineKey = useMemo(
-    () => resolvePlaybackTimelineKey(roomSnapshot?.room.playback),
-    [roomSnapshot?.room.playback]
+    () => resolvePlaybackTimelineKey(roomPlayback),
+    [currentPlaybackTrackId, playbackMediaEpoch, playbackQueueVersion, playbackRevision]
   );
-  const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+  const playbackTopologySnapshot = useMemo(
+    () => roomPlayback,
+    [currentPlaybackTrackId, playbackMediaEpoch, playbackSourcePeerId, playbackSourceSessionId]
+  );
+  const roomPlaybackRef = useRef(roomPlayback);
+  roomPlaybackRef.current = roomPlayback;
   const currentTrackRef = useRef<RoomSnapshot["tracks"][number] | null>(null);
   const currentTrack = useMemo(
     () => resolveStableCurrentTrack(currentTrackRef.current, currentPlaybackTrackId, roomSnapshot?.tracks),
@@ -1042,11 +1055,11 @@ export function MusicRoomApp({
     hasPlayableFullLocalTrack
   ]);
 
-  const previousPlaybackRef = useRef(roomSnapshot?.room.playback ?? null);
+  const previousPlaybackRef = useRef(playbackTopologySnapshot);
 
   useEffect(() => {
     const previousPlayback = previousPlaybackRef.current;
-    const nextPlayback = roomSnapshot?.room.playback ?? null;
+    const nextPlayback = playbackTopologySnapshot;
     const sourceResetReason = resolvePlaybackSourceResetReason({
       previousPlayback,
       nextPlayback
@@ -1075,7 +1088,12 @@ export function MusicRoomApp({
         }
       })
     });
-  }, [playbackSurfaceKey, playbackTimelineKey, recordPeerDiagnostic, roomSnapshot?.room.playback]);
+  }, [
+    playbackSurfaceKey,
+    playbackTimelineKey,
+    recordPeerDiagnostic,
+    playbackTopologySnapshot
+  ]);
 
   const handleStartManualCacheDownload = useCallback(
     async (trackId: string) => {
@@ -1253,7 +1271,7 @@ export function MusicRoomApp({
 
       const track =
         roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? currentTrack ?? null;
-      const playback = roomSnapshot?.room.playback ?? null;
+      const playback = roomPlaybackRef.current;
       const positionMs =
         playback?.currentTrackId === trackId
           ? getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now())
@@ -1298,7 +1316,6 @@ export function MusicRoomApp({
       fullLocalPlaybackTracks,
       loadCachedFullLocalPlaybackTrack,
       recordPeerDiagnostic,
-      roomSnapshot?.room.playback,
       roomSnapshot?.tracks,
       setActivePlaybackSource,
       setMediaConnectionState,
@@ -1335,11 +1352,11 @@ export function MusicRoomApp({
           queueItemId: input.queueItemId,
           previousTrackId: input.previousTrackId,
           targetPlaybackRevision:
-            (roomSnapshot?.room.playback.playbackRevision ??
-              roomSnapshot?.room.playback.queueVersion ??
+            (playbackRevision ??
+              playbackQueueVersion ??
               0) + 1,
-          previousQueueVersion: roomSnapshot?.room.playback.queueVersion ?? null,
-          previousMediaEpoch: roomSnapshot?.room.playback.mediaEpoch ?? null
+          previousQueueVersion: playbackQueueVersion,
+          previousMediaEpoch: playbackMediaEpoch
         })
       );
       setStatusMessage("正在准备音源...");
@@ -1366,9 +1383,9 @@ export function MusicRoomApp({
     [
       ensureRoomAudioUnlocked,
       recordPeerDiagnostic,
-      roomSnapshot?.room.playback.mediaEpoch,
-      roomSnapshot?.room.playback.playbackRevision,
-      roomSnapshot?.room.playback.queueVersion,
+      playbackMediaEpoch,
+      playbackQueueVersion,
+      playbackRevision,
       setStatusMessage
     ]
   );
@@ -1534,12 +1551,11 @@ export function MusicRoomApp({
 
   // Show audio unlock overlay when playback is active but audio is blocked (listener only).
   useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
     if (
       !audioUnlocked &&
       !isCurrentSourceOwner &&
-      playback?.status === "playing" &&
-      playback.currentTrackId
+      playbackStatus === "playing" &&
+      currentPlaybackTrackId
     ) {
       const timer = window.setTimeout(() => {
         if (!roomAudioOutput.isActivated()) {
@@ -1552,10 +1568,9 @@ export function MusicRoomApp({
     setAudioBlockedOverlay(false);
   }, [
     audioUnlocked,
+    currentPlaybackTrackId,
     isCurrentSourceOwner,
-    roomSnapshot?.room.playback,
-    roomSnapshot?.room.playback?.status,
-    roomSnapshot?.room.playback?.currentTrackId
+    playbackStatus
   ]);
 
   const handleAudioUnlock = useCallback(async () => {

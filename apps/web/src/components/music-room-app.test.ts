@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   getCachedFullLocalPlaybackLoadKey,
@@ -107,6 +110,19 @@ describe("resolveStableCurrentTrack", () => {
     };
 
     expect(resolveStableCurrentTrack(track, "track_cached", [changedTrack])).toBe(changedTrack);
+  });
+});
+
+describe("playback snapshot dependency boundaries", () => {
+  it("keeps room playback object refreshes out of dependency arrays", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(source).not.toContain("[roomSnapshot?.room.playback]");
+    expect(source).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
+    expect(source).not.toMatch(/^\s+roomPlayback,\s*$/m);
   });
 });
 
