@@ -3,7 +3,10 @@ import {
   buildAvailableChunksKey,
   buildCurrentTrackFormatKey,
   buildPlaybackPositionKey,
-  buildProgressiveWarmupTimerKey
+  buildProgressiveWarmupTimerKey,
+  hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
+  shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup as pipelineShouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
+  shouldWarmFullLocalWithSharedAudioElement as pipelineShouldWarmFullLocalWithSharedAudioElement
 } from "./playback-orchestrator/pipeline";
 import {
   getAudibleElementVolume,
@@ -35,6 +38,38 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("hosts full-local warmup policy in the pure pipeline module", () => {
+    expect(
+      pipelineShouldWarmFullLocalWithSharedAudioElement({
+        activePlaybackSource: "progressive-local",
+        progressiveEngineType: "none",
+        canUseFullLocalForPlaybackSession: true,
+        isCurrentSourceOwner: false
+      })
+    ).toBe(true);
+    expect(
+      pipelineHasSufficientBackingForFullLocalWarmup({
+        progressiveEngineType: "none",
+        aheadBufferedMs: 0,
+        requiredAheadMs: 3000
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        activePlaybackSource: "progressive-local",
+        progressiveEngineType: "none",
+        canUseFullLocalForPlaybackSession: true,
+        fullLocalBlockedReason: null,
+        localTakeoverAllowed: true,
+        aheadBufferedMs: 5000,
+        comfortBufferMs: 1000,
+        warmupReadyAt: 1000,
+        now: 1800,
+        switchDelayMs: 500
+      })
+    ).toBe(true);
+  });
+
   it("keeps playback position and availability keys stable across cloned snapshots", () => {
     const playback = {
       status: "playing" as const,

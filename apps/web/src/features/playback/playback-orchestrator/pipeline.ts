@@ -45,6 +45,72 @@ export function buildAvailableChunksKey(chunks: readonly number[] | null | undef
   return chunks?.join(",") ?? "none";
 }
 
+function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
+  return source === "progressive-local" || source === "lossless-local";
+}
+
+export function shouldWarmFullLocalWithSharedAudioElement(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  progressiveEngineType: ProgressiveEngineType;
+  canUseFullLocalForPlaybackSession: boolean;
+  isCurrentSourceOwner: boolean;
+}) {
+  return (
+    input.canUseFullLocalForPlaybackSession &&
+    !input.isCurrentSourceOwner &&
+    input.activePlaybackSource !== "full-local" &&
+    input.progressiveEngineType === "none"
+  );
+}
+
+export function hasSufficientBackingForFullLocalWarmup(input: {
+  progressiveEngineType: ProgressiveEngineType;
+  aheadBufferedMs: number;
+  requiredAheadMs: number;
+}) {
+  if (input.progressiveEngineType === "none") {
+    return true;
+  }
+
+  return input.aheadBufferedMs >= input.requiredAheadMs;
+}
+
+export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  progressiveEngineType: ProgressiveEngineType;
+  canUseFullLocalForPlaybackSession: boolean;
+  fullLocalBlockedReason: string | null | undefined;
+  localTakeoverAllowed: boolean;
+  aheadBufferedMs: number;
+  comfortBufferMs: number;
+  warmupReadyAt: number | null;
+  now: number;
+  switchDelayMs: number;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    input.progressiveEngineType !== "none"
+  ) {
+    return false;
+  }
+
+  if (
+    !input.canUseFullLocalForPlaybackSession ||
+    input.fullLocalBlockedReason !== null ||
+    !input.localTakeoverAllowed ||
+    !hasSufficientBackingForFullLocalWarmup({
+      progressiveEngineType: input.progressiveEngineType,
+      aheadBufferedMs: input.aheadBufferedMs,
+      requiredAheadMs: input.comfortBufferMs
+    }) ||
+    input.warmupReadyAt === null
+  ) {
+    return false;
+  }
+
+  return input.now - input.warmupReadyAt >= input.switchDelayMs;
+}
+
 export function buildProgressiveWarmupTimerKey(input: {
   playbackCurrentTrackId: string | null;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null;
