@@ -481,13 +481,39 @@ describe("playback runtime pipeline keys", () => {
     expect(controllerSource).toContain("resolvePlaybackStartIntentTimeoutPreflight");
   });
 
-  it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
+  it("hosts progressive diagnostics publishing outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const publisherSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-diagnostics-publisher.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain(
+    expect(runtimeSource).toContain("useProgressiveDiagnosticsPublisher");
+    expect(runtimeSource).not.toContain('event: "progressive-status"');
+    expect(runtimeSource).not.toContain("const diagnosticBuckets = useMemo");
+    expect(runtimeSource).not.toContain("lastProgressiveDiagnosticSignatureRef");
+    expect(publisherSource).toContain("export function useProgressiveDiagnosticsPublisher");
+    expect(publisherSource).toContain("const diagnosticBuckets = useMemo");
+    expect(publisherSource).toContain('event: "progressive-status"');
+    expect(publisherSource).toContain("resolveProgressiveDiagnosticSignature");
+  });
+
+  it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
+    const publisherSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-diagnostics-publisher.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(publisherSource).toContain(
       "const diagnosticBuckets = useMemo(\n" +
         "    () =>\n" +
         "      resolveProgressiveDiagnosticBuckets({"
