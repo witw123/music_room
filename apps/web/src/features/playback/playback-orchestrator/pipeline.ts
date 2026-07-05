@@ -1,6 +1,7 @@
 import type {
   PeerDiagnosticsSnapshot,
   PlaybackSnapshot,
+  RoomMediaConnectionState,
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
@@ -160,6 +161,22 @@ export function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource)
   return source === "progressive-local" || source === "lossless-local";
 }
 
+export function resolveLocalPlaybackPositionMs(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  currentTimeSeconds: number | null | undefined;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
+    input.activePlaybackSource !== "full-local"
+  ) {
+    return null;
+  }
+
+  return Number.isFinite(input.currentTimeSeconds)
+    ? Math.round((input.currentTimeSeconds ?? 0) * 1000)
+    : null;
+}
+
 export function resolveTransportGovernorMode(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
@@ -208,6 +225,61 @@ export function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSou
   return source === "lossless-local"
     ? "lossless-local-play-blocked"
     : "progressive-local-play-blocked";
+}
+
+export function resolvePlaybackStartFailureReason(source: ProgressivePlaybackSource) {
+  return source === "full-local"
+    ? "full-local-play-blocked"
+    : getSlidingWindowPlayBlockedReason(source);
+}
+
+export function shouldReportPlaybackStartFailure(input: {
+  pendingIntent: boolean;
+  attempt: number;
+  maxRetryAttempts: number;
+}) {
+  return input.pendingIntent || input.attempt >= input.maxRetryAttempts;
+}
+
+export function resolveListenerMediaConnectionState(input: {
+  currentTrackId: string | null | undefined;
+  isCurrentSourceOwner: boolean;
+  playbackHasActiveIntent: boolean;
+  localPlaybackReady: boolean;
+}): RoomMediaConnectionState | null {
+  if (!input.currentTrackId) {
+    return "idle";
+  }
+
+  if (input.isCurrentSourceOwner) {
+    return null;
+  }
+
+  if (!input.playbackHasActiveIntent) {
+    return "idle";
+  }
+
+  return input.localPlaybackReady ? "live" : "buffering";
+}
+
+export function resolveObservedPlaybackSeconds(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  localPlaybackPositionMs: number | null | undefined;
+  audioCurrentTimeSeconds: number | null | undefined;
+  audioPaused: boolean;
+}) {
+  if (
+    isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
+    Number.isFinite(input.localPlaybackPositionMs)
+  ) {
+    return (input.localPlaybackPositionMs ?? 0) / 1000;
+  }
+
+  if (!input.audioPaused && Number.isFinite(input.audioCurrentTimeSeconds)) {
+    return input.audioCurrentTimeSeconds ?? null;
+  }
+
+  return null;
 }
 
 export function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
@@ -259,6 +331,18 @@ export function resolvePlaybackSourceAfterProgressiveRuntimeFailure(input: {
   }
 
   return input.activePlaybackSource;
+}
+
+export function resolvePlaybackSourceAfterLatchedPcmRuntimeFailure(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  canUseFullLocalForPlaybackSession: boolean;
+}) {
+  return input.canUseFullLocalForPlaybackSession
+    ? "full-local"
+    : resolvePlaybackSourceAfterProgressiveRuntimeFailure({
+        activePlaybackSource: input.activePlaybackSource,
+        hasProgressiveRuntimeFailure: true
+      });
 }
 
 export function resolveFullLocalPlaybackSessionState(input: {
@@ -1027,12 +1111,31 @@ export type ContinuousPlaybackSegment = {
   endedAtMs: number;
 };
 
+export function resolveContinuousPlaybackStart(input: {
+  activeStartedAtMs: number | null;
+  timestampMs: number;
+}) {
+  return input.activeStartedAtMs ?? input.timestampMs;
+}
+
 export function prunePlaybackQualityTimestamps(
   timestamps: readonly number[],
   nowMs: number,
   windowMs: number
 ) {
   return timestamps.filter((timestampMs) => nowMs - timestampMs <= windowMs);
+}
+
+export function appendPlaybackQualityTimestamp(input: {
+  timestamps: readonly number[];
+  timestampMs: number;
+  windowMs: number;
+}) {
+  return prunePlaybackQualityTimestamps(
+    [...input.timestamps, input.timestampMs],
+    input.timestampMs,
+    input.windowMs
+  );
 }
 
 export function pruneContinuousPlaybackSegments(
@@ -1042,6 +1145,35 @@ export function pruneContinuousPlaybackSegments(
 ) {
   const windowStart = nowMs - windowMs;
   return segments.filter((segment) => segment.endedAtMs >= windowStart);
+}
+
+export function resolveContinuousPlaybackInterruption(input: {
+  segments: readonly ContinuousPlaybackSegment[];
+  activeStartedAtMs: number | null;
+  timestampMs: number;
+  windowMs: number;
+}) {
+  if (input.activeStartedAtMs === null) {
+    return {
+      segments: input.segments,
+      activeStartedAtMs: null
+    };
+  }
+
+  return {
+    segments: pruneContinuousPlaybackSegments(
+      [
+        ...input.segments,
+        {
+          startedAtMs: input.activeStartedAtMs,
+          endedAtMs: input.timestampMs
+        }
+      ],
+      input.timestampMs,
+      input.windowMs
+    ),
+    activeStartedAtMs: null
+  };
 }
 
 export function resolveMaxContinuousPlaybackMs(input: {
@@ -1069,6 +1201,29 @@ export function resolveMaxContinuousPlaybackMs(input: {
   }
 
   return maxDurationMs;
+}
+
+export function resolveContinuousPlaybackWindowMetrics(input: {
+  segments: readonly ContinuousPlaybackSegment[];
+  activeStartedAtMs: number | null;
+  nowMs: number;
+  windowMs: number;
+}) {
+  const segments = pruneContinuousPlaybackSegments(
+    input.segments,
+    input.nowMs,
+    input.windowMs
+  );
+
+  return {
+    segments,
+    maxContinuousPlaybackMs: resolveMaxContinuousPlaybackMs({
+      segments,
+      activeStartedAtMs: input.activeStartedAtMs,
+      nowMs: input.nowMs,
+      windowMs: input.windowMs
+    })
+  };
 }
 
 export type PlaybackDriftSample = {
