@@ -66,6 +66,10 @@ import {
   shouldForceSourceOwnerLocalPlayback
 } from "./progressive-source-controller";
 import {
+  buildCurrentTrackFormatKey,
+  type PlaybackRecoveryStage
+} from "./playback-orchestrator/pipeline";
+import {
   resolvePlaybackSurfaceKey,
   resolvePlaybackTimelineKey
 } from "@/features/room/hooks/room-playback-topology";
@@ -141,12 +145,7 @@ const playbackDriftSampleIntervalMs = 1_000;
 const fullLocalPausedRecoveryIntervalMs = 500;
 const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
-export type PlaybackRecoveryStage =
-  | "startup-buffering"
-  | "steady"
-  | "degraded"
-  | "shadow-catchup"
-  | "audible-local-fallback";
+export type { PlaybackRecoveryStage } from "./playback-orchestrator/pipeline";
 
 export type MediaElementPlaybackRole =
   | "audible-local"
@@ -764,13 +763,7 @@ export function useProgressiveRuntime({
   const playbackStatus = playback?.status ?? null;
   const playbackMediaEpoch = playback?.mediaEpoch ?? null;
   const currentTrackDurationMs = currentTrack?.durationMs ?? null;
-  const currentTrackFormatKey = [
-    currentTrack?.id ?? "none",
-    currentTrack?.fileHash ?? "none",
-    currentTrack?.durationMs ?? "unknown-duration",
-    currentTrack?.mimeType ?? "unknown-mime",
-    currentTrack?.codec ?? "unknown-codec"
-  ].join("|");
+  const currentTrackFormatKey = buildCurrentTrackFormatKey(currentTrack);
   const currentBufferedFullLocalTrackObjectUrl =
     currentBufferedFullLocalTrack?.objectUrl ?? null;
   fullLocalPlaybackSessionRef.current = resolveFullLocalPlaybackSessionState({
@@ -802,6 +795,9 @@ export function useProgressiveRuntime({
     () => (currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null),
     [availabilityByTrack, currentTrack?.id, peerId]
   );
+  const currentTrackAvailableChunksRef = useRef<number[]>([]);
+  currentTrackAvailableChunksRef.current =
+    currentTrackAvailabilityAnnouncement?.availableChunks ?? [];
   const currentTrackAvailabilityManifestHint = useMemo(() => {
     if (!currentTrack?.id || !roomSnapshot) {
       return currentTrackAvailabilityAnnouncement;
@@ -884,15 +880,15 @@ export function useProgressiveRuntime({
 
       return isTakeoverReady({
         manifest: currentProgressiveManifest,
-        availableChunks: currentTrackAvailabilityAnnouncement?.availableChunks ?? [],
+        availableChunks: currentTrackAvailableChunksRef.current,
         playbackPositionMs: getEffectivePlaybackPositionMs(
-          playback,
+          playbackRef.current,
           currentProgressiveManifest.durationMs,
           now
         )
       });
     },
-    [currentProgressiveManifest, currentTrackAvailabilityAnnouncement?.availableChunks, playback]
+    [currentProgressiveManifest]
   );
   const canPrepareProgressiveLocal =
     enableTrackCaching &&
@@ -930,7 +926,7 @@ export function useProgressiveRuntime({
     progressiveHealthSnapshot.aheadBufferedMs,
     progressiveHealthSnapshot.estimatedFillTimeMs
   ]);
-  const progressiveLocalBlockedReason = useMemo(() => {
+  const progressiveLocalBlockedReason = (() => {
     if (!currentProgressiveManifest || currentProgressiveEngineType === "none") {
       return "progressive-engine-unavailable";
     }
@@ -981,20 +977,7 @@ export function useProgressiveRuntime({
     }
 
     return null;
-  }, [
-    aggregatePieceDownloadRateKbps,
-    activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
-    connectedPeersCount,
-    currentProgressiveEngineType,
-    currentProgressiveManifest,
-    isCurrentSourceOwner,
-    isProgressiveTakeoverReady,
-    localTakeoverCooldownMs,
-    playback,
-    progressiveHealthSnapshot.startupReady,
-    progressiveFallbackReason
-  ]);
+  })();
   const progressiveLocalEligible = progressiveLocalBlockedReason === null;
   const transportGovernorMode = useMemo(
     () =>

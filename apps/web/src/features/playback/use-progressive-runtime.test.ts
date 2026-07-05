@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildAvailableChunksKey,
+  buildCurrentTrackFormatKey,
+  buildPlaybackPositionKey,
+  buildProgressiveWarmupTimerKey
+} from "./playback-orchestrator/pipeline";
+import {
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
@@ -27,6 +33,87 @@ import {
   shouldSkipSecondaryPcmWarmupSync,
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
+
+describe("playback runtime pipeline keys", () => {
+  it("keeps playback position and availability keys stable across cloned snapshots", () => {
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track-1",
+      currentQueueItemId: "queue-1",
+      sourceSessionId: "session-1",
+      sourcePeerId: "peer-1",
+      sourceTrackId: "track-1",
+      positionMs: 12_000,
+      startedAt: "2026-07-05T09:00:00.000Z",
+      queueVersion: 3,
+      playbackRevision: 5,
+      mediaEpoch: 7
+    };
+
+    expect(buildPlaybackPositionKey({ ...playback })).toBe(buildPlaybackPositionKey(playback));
+    expect(buildAvailableChunksKey([0, 1, 2, 3])).toBe(buildAvailableChunksKey([0, 1, 2, 3]));
+  });
+
+  it("keeps warmup timer keys stable when only snapshot object references change", () => {
+    const track = {
+      id: "track-1",
+      title: "Warmup",
+      artist: null,
+      durationMs: 180_000,
+      mimeType: "audio/flac",
+      codec: "flac",
+      fileHash: "hash-1",
+      sizeBytes: 1024
+    };
+    const sameTrackFromNextSnapshot = {
+      ...track
+    };
+
+    const firstTrackKey = buildCurrentTrackFormatKey(track);
+    const nextTrackKey = buildCurrentTrackFormatKey(sameTrackFromNextSnapshot);
+
+    expect(nextTrackKey).toBe(firstTrackKey);
+    expect(
+      buildProgressiveWarmupTimerKey({
+        playbackCurrentTrackId: "track-1",
+        playbackStatus: "playing",
+        playbackMediaEpoch: 7,
+        currentTrackFormatKey: firstTrackKey,
+        progressiveManifestKey: "manifest:track-1:hash-1",
+        activePlaybackSource: "progressive-local",
+        canUseFullLocalForPlaybackSession: false,
+        progressiveEngineType: "pcm",
+        progressiveStartupReady: true,
+        startupBufferMs: 60,
+        progressiveLocalBlockedReason: null,
+        isCurrentSourceOwner: false,
+        playbackRecoveryStage: "steady",
+        progressiveFallbackReason: null,
+        stalledEventsLast30s: 0,
+        waitingEventsLast30s: 0
+      })
+    ).toBe(
+      buildProgressiveWarmupTimerKey({
+        playbackCurrentTrackId: "track-1",
+        playbackStatus: "playing",
+        playbackMediaEpoch: 7,
+        currentTrackFormatKey: nextTrackKey,
+        progressiveManifestKey: "manifest:track-1:hash-1",
+        activePlaybackSource: "progressive-local",
+        canUseFullLocalForPlaybackSession: false,
+        progressiveEngineType: "pcm",
+        progressiveStartupReady: true,
+        startupBufferMs: 60,
+        progressiveLocalBlockedReason: null,
+        isCurrentSourceOwner: false,
+        playbackRecoveryStage: "steady",
+        progressiveFallbackReason: null,
+        stalledEventsLast30s: 0,
+        waitingEventsLast30s: 0
+      })
+    );
+  });
+});
 
 describe("use-progressive-runtime policy helpers", () => {
   it("uses a non-zero audible fallback when the local audio element was left at volume zero", () => {
