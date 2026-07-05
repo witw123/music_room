@@ -122,6 +122,7 @@ export class ProgressivePcmEngine {
   // playback position. While set, contiguous append runs in catch-up mode and
   // is not throttled by the small steady-state per-sync cap.
   private catchupTargetChunkIndex: number | null = null;
+  private lastBufferMissingLogAtMs = 0;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -316,7 +317,8 @@ export class ProgressivePcmEngine {
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
       this.audio.pause();
-      if (typeof console !== "undefined") {
+      if (typeof console !== "undefined" && Date.now() - this.lastBufferMissingLogAtMs >= 1000) {
+        this.lastBufferMissingLogAtMs = Date.now();
         const first = this.decodedSegments[0];
         const last = this.decodedSegments[this.decodedSegments.length - 1];
         console.warn(
@@ -325,10 +327,17 @@ export class ProgressivePcmEngine {
             pos: Number(positionSeconds.toFixed(3)),
             contiguousChunks: this.contiguousChunkCount,
             totalChunks: this.manifest.totalChunks,
-            decodedCount: this.decodedSegments.length,
+            submittedPackets: this.decodedPacketCount,
+            flushAttempts: this.decoderFlushAttemptCount,
+            flushDone: this.decoderFlushCount,
+            decodedSegments: this.decodedSegments.length,
             decodedRange: first && last ? [Number(first.startTimeSec.toFixed(2)), Number(last.endTimeSec.toFixed(2))] : null,
             coverageEnd: Number(this.findBufferedCoverageEnd(positionSeconds).toFixed(3)),
-            hasStreamInfo: !!this.streamInfo
+            hasStreamInfo: !!this.streamInfo,
+            hasDecoder: !!this.decoder,
+            status: this.status,
+            ctxState: this.audioContext?.state ?? null,
+            lastErr: this.lastDecodeError
           })
         );
       }
@@ -670,9 +679,17 @@ export class ProgressivePcmEngine {
         continue;
       }
 
+      // The engine may have been torn down while awaiting the cache read, which
+      // nulls streamInfo/decoder. Re-check before using them so we never crash
+      // reading properties off a null streamInfo.
+      const streamInfo = this.streamInfo;
+      if (!streamInfo || !this.decoder || isTerminalEngineStatus(this.status)) {
+        break;
+      }
+
       const extraction = extractFlacPacketsFromWindow({
         bytes: cachedWindow.bytes,
-        streamInfo: this.streamInfo,
+        streamInfo,
         absoluteStartOffset: startChunkIndex * this.manifest.chunkSize,
         finalChunk: cachedWindow.endChunkIndex >= this.manifest.totalChunks - 1
       });
