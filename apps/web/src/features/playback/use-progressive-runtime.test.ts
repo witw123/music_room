@@ -294,6 +294,13 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const runtimeTickHookSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/use-runtime-tick-orchestrator.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
     const intervalNeedle = [
       "const timerId = window.setInterval(() => {",
       "      void syncWarmup();",
@@ -303,8 +310,11 @@ describe("playback runtime pipeline keys", () => {
     const orchestratorIndex = runtimeSource.indexOf(
       "const runtimeTickOrchestrator = new PlaybackOrchestrator"
     );
-    expect(orchestratorIndex).toBeGreaterThan(-1);
-    expect(runtimeSource).toContain("\"sync-progressive-warmup\"");
+    expect(orchestratorIndex).toBe(-1);
+    expect(runtimeTickHookSource).toContain(
+      "const runtimeTickOrchestrator = new PlaybackOrchestrator"
+    );
+    expect(runtimeTickHookSource).toContain("\"sync-progressive-warmup\"");
 
     const warmupRefIndex = runtimeSource.indexOf("syncProgressiveWarmupRef.current = () => {");
     expect(warmupRefIndex).toBeGreaterThan(-1);
@@ -328,9 +338,16 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const runtimeTickHookSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/use-runtime-tick-orchestrator.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
     const orchestratorNeedle = "const runtimeTickOrchestrator = new PlaybackOrchestrator";
-    const orchestratorIndex = runtimeSource.indexOf(orchestratorNeedle);
-    expect(orchestratorIndex).toBeGreaterThan(-1);
+    expect(runtimeSource.indexOf(orchestratorNeedle)).toBe(-1);
+    expect(runtimeTickHookSource.indexOf(orchestratorNeedle)).toBeGreaterThan(-1);
     expect(runtimeSource).not.toContain("const driftSamplingOrchestrator = new PlaybackOrchestrator");
     expect(runtimeSource).not.toContain(
       "const fullLocalUpgradeOrchestrator = new PlaybackOrchestrator"
@@ -390,17 +407,29 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const runtimeTickHookSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/use-runtime-tick-orchestrator.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useSyncExternalStore,");
-    expect(runtimeSource).toContain("const runtimeOrchestratorSnapshot = useSyncExternalStore(");
-    expect(runtimeSource).toContain("runtimeTickOrchestratorRef.current.subscribe");
-    expect(runtimeSource).toContain("runtimeTickOrchestratorRef.current.getSnapshot");
+    expect(runtimeSource).toContain("usePlaybackRuntimeTickOrchestrator");
+    expect(runtimeSource).toContain("noopPlaybackRuntimeTick");
+    expect(runtimeSource).not.toContain("useSyncExternalStore");
+    expect(runtimeSource).not.toContain("new PlaybackOrchestrator");
+    expect(runtimeSource).not.toContain("type RuntimeTickState");
+    expect(runtimeTickHookSource).toContain("useSyncExternalStore");
+    expect(runtimeTickHookSource).toContain("new PlaybackOrchestrator");
+    expect(runtimeTickHookSource).toContain("runtimeTickOrchestratorRef.current.subscribe");
+    expect(runtimeTickHookSource).toContain("runtimeTickOrchestratorRef.current.getSnapshot");
 
-    const mountIndex = runtimeSource.indexOf("runtimeTickOrchestratorRef.current.mount();");
+    const mountIndex = runtimeTickHookSource.indexOf("runtimeTickOrchestratorRef.current.mount();");
     expect(mountIndex).toBeGreaterThan(-1);
-    const dependencyStart = runtimeSource.indexOf("  }, [", mountIndex);
-    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
-    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+    const dependencyStart = runtimeTickHookSource.indexOf("  }, [", mountIndex);
+    const dependencyEnd = runtimeTickHookSource.indexOf("]);", dependencyStart);
+    const dependencies = runtimeTickHookSource.slice(dependencyStart, dependencyEnd);
 
     expect(dependencies).toContain("runtimeTickOrchestratorRef");
     expect(dependencies).not.toContain("playbackCurrentTrackId");
