@@ -754,6 +754,25 @@ export function useProgressiveRuntime({
         : null,
     [currentTrack?.id, fullLocalPlaybackTracks, uploadedTracks]
   );
+  const playbackRef = useRef(playback);
+  playbackRef.current = playback;
+  const currentTrackRef = useRef(currentTrack);
+  currentTrackRef.current = currentTrack;
+  const currentBufferedFullLocalTrackRef = useRef(currentBufferedFullLocalTrack);
+  currentBufferedFullLocalTrackRef.current = currentBufferedFullLocalTrack;
+  const playbackCurrentTrackId = playback?.currentTrackId ?? null;
+  const playbackStatus = playback?.status ?? null;
+  const playbackMediaEpoch = playback?.mediaEpoch ?? null;
+  const currentTrackDurationMs = currentTrack?.durationMs ?? null;
+  const currentTrackFormatKey = [
+    currentTrack?.id ?? "none",
+    currentTrack?.fileHash ?? "none",
+    currentTrack?.durationMs ?? "unknown-duration",
+    currentTrack?.mimeType ?? "unknown-mime",
+    currentTrack?.codec ?? "unknown-codec"
+  ].join("|");
+  const currentBufferedFullLocalTrackObjectUrl =
+    currentBufferedFullLocalTrack?.objectUrl ?? null;
   fullLocalPlaybackSessionRef.current = resolveFullLocalPlaybackSessionState({
     currentSession: fullLocalPlaybackSessionRef.current,
     playbackSurfaceKey,
@@ -2142,15 +2161,17 @@ export function useProgressiveRuntime({
   ]);
 
   useEffect(() => {
-    const playbackState = roomSnapshot?.room.playback;
+    const playbackState = playbackRef.current;
     const audio = audioRef.current;
-    if (!playbackState?.currentTrackId || !audio || activePlaybackSource !== "full-local") {
+    if (!playbackCurrentTrackId || !playbackState || !audio || activePlaybackSource !== "full-local") {
       return;
     }
 
     let cancelled = false;
     let recoveryInFlight = false;
     const recoverPausedFullLocalPlayback = () => {
+      const latestPlayback = playbackRef.current;
+      const latestTrack = currentTrackRef.current;
       if (cancelled || recoveryInFlight) {
         return;
       }
@@ -2158,8 +2179,8 @@ export function useProgressiveRuntime({
       if (
         !shouldRecoverPausedFullLocalPlayback({
           activePlaybackSource,
-          playbackStatus: playbackState.status,
-          currentTrackId: playbackState.currentTrackId,
+          playbackStatus: latestPlayback?.status ?? "paused",
+          currentTrackId: latestPlayback?.currentTrackId ?? null,
           audioUnlocked,
           localAudioPaused: audio.paused,
           localAudioReadyState: audio.readyState,
@@ -2171,7 +2192,7 @@ export function useProgressiveRuntime({
       }
 
       const expectedSeconds =
-        getEffectivePlaybackPositionMs(playbackState, currentTrack?.durationMs ?? 0, Date.now()) /
+        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
         1000;
       syncLocalPlaybackWindow(audio, expectedSeconds, true, {
         softDriftMs: 90,
@@ -2233,9 +2254,11 @@ export function useProgressiveRuntime({
     audioRef,
     audioUnlocked,
     attemptPlaybackStart,
-    currentTrack?.durationMs,
+    currentTrackDurationMs,
+    playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackStatus,
     recordPeerDiagnostic,
-    roomSnapshot?.room.playback,
     setMediaConnectionState,
     volume
   ]);
@@ -2419,11 +2442,12 @@ export function useProgressiveRuntime({
   }, [volume]);
 
   useEffect(() => {
-    const playbackState = roomSnapshot?.room.playback;
+    const playbackState = playbackRef.current;
     const audio = audioRef.current;
 
     if (
-      !playbackState?.currentTrackId ||
+      !playbackCurrentTrackId ||
+      !playbackState ||
       !audio ||
       (!progressiveEngineRef.current && !progressivePcmEngineRef.current) ||
       !currentProgressiveManifest ||
@@ -2442,9 +2466,14 @@ export function useProgressiveRuntime({
         return;
       }
 
+      const latestPlayback = playbackRef.current;
+      if (!latestPlayback?.currentTrackId) {
+        return;
+      }
+
       const expectedSeconds =
         getEffectivePlaybackPositionMs(
-          playbackState,
+          latestPlayback,
           currentProgressiveManifest.durationMs,
           Date.now()
         ) / 1000;
@@ -2491,7 +2520,7 @@ export function useProgressiveRuntime({
           syncResult &&
           shouldStartPcmSlidingWindowAudioElement({
             activePlaybackSource,
-            playbackStatus: playbackState.status,
+            playbackStatus: latestPlayback.status,
             localReady,
             audioPaused: audio.paused,
             lastAttemptAtMs: lastPcmSlidingWindowPlayAttemptAtRef.current,
@@ -2534,7 +2563,7 @@ export function useProgressiveRuntime({
       const shouldAttemptTakeover = shouldAttemptProgressiveLocalPlayback({
         isCurrentSourceOwner,
         activePlaybackSource,
-        playbackStatus: playbackState.status,
+        playbackStatus: latestPlayback.status,
         engineType: currentProgressiveEngineType,
         startupReady: progressiveHealthSnapshot.startupReady,
         hasFullLocalTrack: canUseFullLocalForPlaybackSession,
@@ -2642,13 +2671,13 @@ export function useProgressiveRuntime({
       window.clearInterval(timerId);
     };
   }, [
-    roomSnapshot?.room.playback,
+    playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackStatus,
     currentProgressiveManifest,
     activePlaybackSource,
     canUseFullLocalForPlaybackSession,
-    currentBufferedFullLocalTrack,
     currentProgressiveEngineType,
-    currentTrack,
     progressiveHealthSnapshot.startupReady,
     startupBufferMs,
     progressiveLocalBlockedReason,
@@ -2668,12 +2697,13 @@ export function useProgressiveRuntime({
   ]);
 
   useEffect(() => {
-    const playbackState = roomSnapshot?.room.playback;
+    const playbackState = playbackRef.current;
     const audio = audioRef.current;
     if (
-      !playbackState?.currentTrackId ||
+      !playbackCurrentTrackId ||
+      !playbackState ||
       !audio ||
-      !currentBufferedFullLocalTrack ||
+      !currentBufferedFullLocalTrackObjectUrl ||
       !canWarmBufferedFullLocal
     ) {
       fullLocalWarmupReadyAtRef.current = null;
@@ -2681,7 +2711,10 @@ export function useProgressiveRuntime({
     }
 
     const syncWarmup = () => {
-      if (!hasActivePlaybackIntent(playbackState)) {
+      const latestPlayback = playbackRef.current;
+      const latestTrack = currentTrackRef.current;
+      const latestBufferedFullLocalTrack = currentBufferedFullLocalTrackRef.current;
+      if (!latestBufferedFullLocalTrack || !hasActivePlaybackIntent(latestPlayback)) {
         audio.pause();
         audio.muted = false;
         fullLocalWarmupReadyAtRef.current = null;
@@ -2691,13 +2724,13 @@ export function useProgressiveRuntime({
       if (audio.srcObject) {
         audio.srcObject = null;
       }
-      if (audio.src !== currentBufferedFullLocalTrack.objectUrl) {
-        audio.src = currentBufferedFullLocalTrack.objectUrl;
+      if (audio.src !== latestBufferedFullLocalTrack.objectUrl) {
+        audio.src = latestBufferedFullLocalTrack.objectUrl;
         audio.load();
       }
 
       const expectedSeconds =
-        getEffectivePlaybackPositionMs(playbackState, currentTrack?.durationMs ?? 0, Date.now()) /
+        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
         1000;
       syncLocalPlaybackWindow(audio, expectedSeconds, true, {
         softDriftMs: 120,
@@ -2718,7 +2751,7 @@ export function useProgressiveRuntime({
           progressiveEngineType: currentProgressiveEngineType,
           aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
           requiredAheadMs: getStartupWindowMs(
-            currentTrack ?? {
+            latestTrack ?? {
               mimeType: null,
               codec: null
             }
@@ -2760,12 +2793,14 @@ export function useProgressiveRuntime({
     const timerId = window.setInterval(syncWarmup, progressiveRuntimeTickIntervalMs);
     return () => window.clearInterval(timerId);
   }, [
-    roomSnapshot?.room.playback,
-    currentBufferedFullLocalTrack,
+    playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackStatus,
+    currentBufferedFullLocalTrackObjectUrl,
     canWarmBufferedFullLocal,
     currentProgressiveEngineType,
     activePlaybackSource,
-    currentTrack,
+    currentTrackFormatKey,
     fullLocalBlockedReason,
     progressiveHealthSnapshot.aheadBufferedMs,
     isLocalTakeoverAllowed,
@@ -2778,10 +2813,11 @@ export function useProgressiveRuntime({
   ]);
 
   useEffect(() => {
-    const playbackState = roomSnapshot?.room.playback;
+    const playbackState = playbackRef.current;
     if (
-      !playbackState?.currentTrackId ||
-      !currentBufferedFullLocalTrack ||
+      !playbackCurrentTrackId ||
+      !playbackState ||
+      !currentBufferedFullLocalTrackObjectUrl ||
       !canWarmBufferedFullLocal ||
       !isSlidingWindowPlaybackSource(activePlaybackSource)
     ) {
@@ -2795,7 +2831,7 @@ export function useProgressiveRuntime({
     }
 
     const comfortBufferMs = getStartupWindowMs(
-      currentTrack ?? {
+      currentTrackRef.current ?? {
         mimeType: null,
         codec: null
       }
@@ -2846,12 +2882,14 @@ export function useProgressiveRuntime({
     const timerId = window.setInterval(syncUpgrade, progressiveRuntimeTickIntervalMs);
     return () => window.clearInterval(timerId);
   }, [
-    roomSnapshot?.room.playback,
-    currentBufferedFullLocalTrack,
+    playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackStatus,
+    currentBufferedFullLocalTrackObjectUrl,
     canWarmBufferedFullLocal,
     currentProgressiveEngineType,
     activePlaybackSource,
-    currentTrack,
+    currentTrackFormatKey,
     canUseFullLocalForPlaybackSession,
     fullLocalBlockedReason,
     isLocalTakeoverAllowed,

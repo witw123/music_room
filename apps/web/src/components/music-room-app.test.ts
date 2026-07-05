@@ -8,7 +8,8 @@ import {
   selectFullLocalPlaybackTracks,
   shouldClearCachedFullLocalPlaybackTrack,
   shouldInitializePlaybackSource,
-  startBestEffortPlaybackAudioUnlock
+  startBestEffortPlaybackAudioUnlock,
+  resolveStableCurrentTrack
 } from "./music-room-app";
 
 describe("selectFullLocalPlaybackTracks", () => {
@@ -59,6 +60,53 @@ describe("hasPlayableFullLocalPlaybackTrack", () => {
         }
       })
     ).toBe(true);
+  });
+});
+
+describe("resolveStableCurrentTrack", () => {
+  const track = {
+    id: "track_cached",
+    title: "Cached",
+    artist: "Artist",
+    album: null,
+    durationMs: 120_000,
+    bitrate: null,
+    sizeBytes: 48_000_000,
+    codec: "flac",
+    mimeType: "audio/flac",
+    fileHash: "hash_cached",
+    artworkUrl: null,
+    ownerSessionId: "host",
+    ownerNickname: "Host",
+    sourceType: "local_upload" as const,
+    pieceManifest: {
+      totalChunks: 12,
+      chunkSize: 256_000,
+      pieceMimeType: "audio/flac"
+    },
+    relayManifest: null
+  };
+
+  it("keeps the same currentTrack reference across equivalent snapshot refreshes", () => {
+    const refreshedTrack = {
+      ...track,
+      pieceManifest: {
+        totalChunks: 12,
+        chunkSize: 256_000,
+        pieceMimeType: "audio/flac"
+      }
+    };
+
+    expect(resolveStableCurrentTrack(track, "track_cached", [refreshedTrack])).toBe(track);
+  });
+
+  it("returns the refreshed track when playback-relevant metadata changes", () => {
+    const changedTrack = {
+      ...track,
+      fileHash: "hash_changed"
+    };
+
+    expect(resolveStableCurrentTrack(track, "track_cached", [changedTrack])).toBe(changedTrack);
   });
 });
 
