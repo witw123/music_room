@@ -457,6 +457,30 @@ describe("playback runtime pipeline keys", () => {
     expect(runtimeTypesSource).toContain("export type UseProgressiveRuntimeResult =");
   });
 
+  it("hosts playback start intent orchestration outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const controllerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-start-intent-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackStartIntentController");
+    expect(runtimeSource).not.toContain("const updatePlaybackStartIntent = useCallback");
+    expect(runtimeSource).not.toContain("const markPlaybackStartFailure = useCallback");
+    expect(runtimeSource).not.toContain("const attemptPlaybackStart = useCallback");
+    expect(runtimeSource).not.toContain("const ensurePlaybackStart = useCallback");
+    expect(controllerSource).toContain("export function usePlaybackStartIntentController");
+    expect(controllerSource).toContain("const attemptPlaybackStart = useCallback");
+    expect(controllerSource).toContain("const ensurePlaybackStart = useCallback");
+    expect(controllerSource).toContain("resolvePlaybackStartIntentTimeoutPreflight");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),

@@ -26,12 +26,8 @@ import {
   type ProgressivePlaybackSource
 } from "./progressive-playback";
 import {
-  consumePlaybackStartIntent,
-  doesPlaybackMatchStartIntent,
-  failPlaybackStartIntent,
   getPlaybackStartIntentLabel,
-  isPlaybackStartIntentPending,
-  type PlaybackStartIntent
+  isPlaybackStartIntentPending
 } from "./playback-start-intent";
 import { ProgressiveMseEngine } from "./progressive-mse-engine";
 import { ProgressivePcmEngine } from "./progressive-pcm-engine";
@@ -45,6 +41,7 @@ import {
   noopPlaybackRuntimeTick,
   usePlaybackRuntimeTickOrchestrator
 } from "./playback-orchestrator/use-runtime-tick-orchestrator";
+import { usePlaybackStartIntentController } from "./playback-orchestrator/playback-start-intent-controller";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -123,13 +120,7 @@ import {
   resolvePlaybackSurfaceResetAction,
   resolvePlaybackSurfaceResetMediaConnectionState,
   resolvePlaybackStartMediaConnectionState,
-  resolvePlaybackStartFailureIntentAction,
   resolvePlaybackStartFailureMessage,
-  resolvePlaybackStartIntentTimeoutPreflight,
-  resolvePlaybackStartIntentTimeoutResult,
-  resolvePlaybackStartRetryClearAction,
-  resolvePlaybackStartRetryPreflight,
-  resolvePlaybackStartRetryResult,
   resolvePlaybackTimelineResetAction,
   resolvePcmRuntimeFailureAction,
   resolvePcmRuntimeFailureResetAction,
@@ -216,8 +207,6 @@ export type {
 const progressiveSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalSwitchDelayMs = getFullLocalStableWindowMs();
 const fullLocalMaxDriftMs = 180;
-const playbackStartRetryDelayMs = 160;
-const maxPlaybackStartRetryAttempts = 18;
 const enableTrackCaching = true;
 const enableDirectProgressiveTakeover = enableTrackCaching;
 const enableListenerLocalTakeover = enableTrackCaching;
@@ -408,7 +397,6 @@ export function useProgressiveRuntime({
   const pcmLastBlockedReasonRef = useRef<string | null>(null);
   const pcmRuntimeFailureRef = useRef<{ trackId: string; reason: string } | null>(null);
   const previousPlaybackSurfaceKeyRef = useRef<string | null>(null);
-  const playbackStartRetryRef = useRef<number | null>(null);
   const lastPcmSlidingWindowPlayAttemptAtRef = useRef<number | null>(null);
   const {
     syncProgressiveWarmupRef,
@@ -476,6 +464,24 @@ export function useProgressiveRuntime({
   currentTrackRef.current = currentTrack;
   const currentBufferedFullLocalTrackRef = useRef(currentBufferedFullLocalTrack);
   currentBufferedFullLocalTrackRef.current = currentBufferedFullLocalTrack;
+  const {
+    attemptPlaybackStart,
+    attemptPlaybackStartRef,
+    clearPlaybackStartRetry,
+    ensurePlaybackStart,
+    markPlaybackStartFailure
+  } = usePlaybackStartIntentController({
+    activePlaybackSource,
+    audioRef,
+    playbackCurrentTrackId,
+    playbackStatus,
+    playbackRef,
+    playbackStartIntent,
+    setAudioPaused,
+    setPlaybackStartIntent,
+    setStatusMessage,
+    recordPeerDiagnostic
+  });
   const currentTrackDurationMs = currentTrack?.durationMs ?? null;
   const currentTrackFormatKey = buildCurrentTrackFormatKey(currentTrack);
   const currentBufferedFullLocalTrackObjectUrl =
@@ -831,17 +837,14 @@ export function useProgressiveRuntime({
     progressiveWarmupReadyAtRef.current = null;
     fullLocalWarmupReadyAtRef.current = null;
     pcmRuntimeFailureRef.current = null;
-    if (playbackStartRetryRef.current !== null) {
-      window.clearTimeout(playbackStartRetryRef.current);
-      playbackStartRetryRef.current = null;
-    }
+    clearPlaybackStartRetry();
     lastPcmSlidingWindowPlayAttemptAtRef.current = null;
     waitingEventTimestampsRef.current = [];
     stalledEventTimestampsRef.current = [];
     driftSamplesRef.current = [];
     continuousPlaybackStartedAtRef.current = null;
     continuousPlaybackSegmentsRef.current = [];
-  }, []);
+  }, [clearPlaybackStartRetry]);
 
   useEffect(() => destroyProgressiveRuntime, [destroyProgressiveRuntime]);
 
@@ -1203,13 +1206,6 @@ export function useProgressiveRuntime({
     transitionPlaybackSource
   ]);
 
-  const clearPlaybackStartRetry = useCallback(() => {
-    if (playbackStartRetryRef.current !== null) {
-      window.clearTimeout(playbackStartRetryRef.current);
-      playbackStartRetryRef.current = null;
-    }
-  }, []);
-
   useEffect(() => {
     if (
       resolvePcmRuntimeFailureResetAction({
@@ -1238,141 +1234,6 @@ export function useProgressiveRuntime({
     });
   }, [activePlaybackSource]);
 
-  const updatePlaybackStartIntent = useCallback(
-    (updater: (current: PlaybackStartIntent) => PlaybackStartIntent) => {
-      setPlaybackStartIntent((current) => (current ? updater(current) : current));
-    },
-    [setPlaybackStartIntent]
-  );
-
-  const markPlaybackStartFailure = useCallback(
-    (failure: string, fallbackMessage: string) => {
-      if (!playbackStartIntent || !isPlaybackStartIntentPending(playbackStartIntent)) {
-        return;
-      }
-
-      updatePlaybackStartIntent((current) => failPlaybackStartIntent(current, failure));
-      setStatusMessage(fallbackMessage);
-    },
-    [playbackStartIntent, setStatusMessage, updatePlaybackStartIntent]
-  );
-
-  const attemptPlaybackStart = useCallback(
-    async (
-      element: HTMLAudioElement | null,
-      source: ProgressivePlaybackSource,
-      blockedMessage: string,
-      failureReason: string,
-      options?: {
-        reportFailure?: boolean;
-      }
-    ) => {
-      if (!element) {
-        return false;
-      }
-
-      const playResult = await roomAudioOutput.playElement(element);
-      if (!playResult.ok) {
-        recordPeerDiagnostic({
-          peerId: "system",
-          channelKind: "system",
-          direction: "local",
-          event: "local-play-start-failed",
-          level: "warning",
-          summary: `${failureReason}: ${playResult.error ?? "play() failed"}`,
-          recordEvent: false,
-          update: (snapshot) => ({
-            ...snapshot,
-            progressivePlaybackStatus: {
-              ...(
-                snapshot.progressivePlaybackStatus ??
-                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-              ),
-              lastPlayStartFailure: failureReason
-            }
-          })
-        });
-        const matchedIntent = doesPlaybackMatchStartIntent(
-          playbackStartIntent,
-          playbackRef.current
-        );
-        const failureIntentAction = resolvePlaybackStartFailureIntentAction({
-          reportFailure: options?.reportFailure !== false,
-          intentMatchesPlayback: matchedIntent,
-          blockedMessage
-        });
-        if (failureIntentAction.shouldMarkFailure && failureIntentAction.statusMessage) {
-          markPlaybackStartFailure(failureReason, failureIntentAction.statusMessage);
-        }
-        return false;
-      }
-
-      if (doesPlaybackMatchStartIntent(playbackStartIntent, playbackRef.current)) {
-        updatePlaybackStartIntent((current) => consumePlaybackStartIntent(current, source));
-      }
-      setAudioPaused(false);
-
-      return true;
-    },
-    [
-      markPlaybackStartFailure,
-      playbackStartIntent,
-      recordPeerDiagnostic,
-      updatePlaybackStartIntent
-    ]
-  );
-  const attemptPlaybackStartRef = useRef(attemptPlaybackStart);
-  attemptPlaybackStartRef.current = attemptPlaybackStart;
-  const ensurePlaybackStart = useCallback(
-    (source: ProgressivePlaybackSource, attempt = 0) => {
-      clearPlaybackStartRetry();
-
-      const pendingIntent =
-        !!playbackStartIntent && isPlaybackStartIntentPending(playbackStartIntent);
-      const retryPreflight = resolvePlaybackStartRetryPreflight({
-        playbackHasActiveIntent: hasActivePlaybackIntent(playbackRef.current),
-        activePlaybackSource,
-        requestedSource: source,
-        pendingIntent,
-        attempt,
-        maxRetryAttempts: maxPlaybackStartRetryAttempts
-      });
-      if (!retryPreflight) {
-        return;
-      }
-
-      const targetElement = audioRef.current;
-      const blockedMessage = "浏览器阻止了本地音频自动播放，请手动点击播放恢复。";
-      void attemptPlaybackStart(targetElement, source, blockedMessage, retryPreflight.failureReason, {
-        reportFailure: retryPreflight.reportFailure
-      }).then((ok) => {
-        const retryResult = resolvePlaybackStartRetryResult({
-          playbackStarted: ok,
-          attempt,
-          maxRetryAttempts: maxPlaybackStartRetryAttempts
-        });
-        if (retryResult.shouldClearRetry) {
-          clearPlaybackStartRetry();
-        }
-
-        if (!retryResult.shouldScheduleRetry) {
-          return;
-        }
-
-        playbackStartRetryRef.current = window.setTimeout(() => {
-          ensurePlaybackStart(source, attempt + 1);
-        }, playbackStartRetryDelayMs);
-      });
-    },
-    [
-      activePlaybackSource,
-      attemptPlaybackStart,
-      audioRef,
-      clearPlaybackStartRetry,
-      playbackStartIntent
-    ]
-  );
-
   useEffect(() => {
     const schedulerAction = resolveInactivePlaybackSchedulerAction({
       currentTrackId: playbackCurrentTrackId,
@@ -1383,51 +1244,6 @@ export function useProgressiveRuntime({
       setSchedulerMode(schedulerAction.schedulerMode);
     }
   }, [isPageVisible, playbackCurrentTrackId, playbackStatus, setSchedulerMode]);
-
-  useEffect(() => {
-    const timeoutPreflight = resolvePlaybackStartIntentTimeoutPreflight({
-      hasIntent: !!playbackStartIntent,
-      intentPending: isPlaybackStartIntentPending(playbackStartIntent),
-      expiresAtMs: playbackStartIntent?.expiresAt ?? 0,
-      nowMs: Date.now()
-    });
-    if (!timeoutPreflight || !playbackStartIntent) {
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      setPlaybackStartIntent((current) => {
-        const timeoutResult = resolvePlaybackStartIntentTimeoutResult({
-          hasCurrentIntent: !!current,
-          currentIntentId: current?.id ?? null,
-          targetIntentId: playbackStartIntent.id,
-          currentIntentPending: isPlaybackStartIntentPending(current)
-        });
-        if (timeoutResult === "keep") {
-          return current;
-        }
-
-        if (!current) {
-          return current;
-        }
-
-        return failPlaybackStartIntent(current, "intent-timeout");
-      });
-      setStatusMessage("当前点击未能激活音频，请再次点击播放");
-    }, timeoutPreflight.timeoutMs);
-
-    return () => window.clearTimeout(timerId);
-  }, [playbackStartIntent, setPlaybackStartIntent, setStatusMessage]);
-
-  useEffect(() => {
-    if (resolvePlaybackStartRetryClearAction(hasActivePlaybackIntent(playbackRef.current))) {
-      clearPlaybackStartRetry();
-    }
-  }, [
-    clearPlaybackStartRetry,
-    playbackCurrentTrackId,
-    playbackStatus
-  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
