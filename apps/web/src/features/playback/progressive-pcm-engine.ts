@@ -316,6 +316,22 @@ export class ProgressivePcmEngine {
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
       this.audio.pause();
+      if (typeof console !== "undefined") {
+        const first = this.decodedSegments[0];
+        const last = this.decodedSegments[this.decodedSegments.length - 1];
+        console.warn(
+          "[pcm.syncPlayback] pcm-buffer-missing",
+          JSON.stringify({
+            pos: Number(positionSeconds.toFixed(3)),
+            contiguousChunks: this.contiguousChunkCount,
+            totalChunks: this.manifest.totalChunks,
+            decodedCount: this.decodedSegments.length,
+            decodedRange: first && last ? [Number(first.startTimeSec.toFixed(2)), Number(last.endTimeSec.toFixed(2))] : null,
+            coverageEnd: Number(this.findBufferedCoverageEnd(positionSeconds).toFixed(3)),
+            hasStreamInfo: !!this.streamInfo
+          })
+        );
+      }
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -1090,6 +1106,27 @@ export class ProgressivePcmEngine {
       if (scheduledUntilSec >= scheduleTargetSec) {
         break;
       }
+    }
+
+    if (typeof console !== "undefined") {
+      const first = this.decodedSegments[0];
+      const last = this.decodedSegments[this.decodedSegments.length - 1];
+      console.warn(
+        "[pcm.scheduleAhead]",
+        JSON.stringify({
+          fromPos: Number(fromPositionSeconds.toFixed(3)),
+          curTime: Number(currentTimeSeconds.toFixed(3)),
+          anchorTrack: Number(this.anchorTrackTimeSec.toFixed(3)),
+          anchorCtx: Number(this.anchorContextTimeSec.toFixed(3)),
+          ctxNow: Number((this.audioContext?.currentTime ?? -1).toFixed(3)),
+          ctxState: this.audioContext?.state ?? null,
+          playing: this.playing,
+          decodedCount: this.decodedSegments.length,
+          decodedRange: first && last ? [Number(first.startTimeSec.toFixed(2)), Number(last.endTimeSec.toFixed(2))] : null,
+          scheduledCount: this.scheduledSegments.length,
+          coverageEnd: Number(this.findBufferedCoverageEnd(fromPositionSeconds).toFixed(3))
+        })
+      );
     }
   }
 
