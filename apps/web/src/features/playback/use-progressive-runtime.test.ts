@@ -42,31 +42,48 @@ import {
   resolvePlaybackSourceAfterProgressiveRuntimeFailure as pipelineResolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolveListenerMediaConnectionState as pipelineResolveListenerMediaConnectionState,
   resolveBufferingMediaConnectionState as pipelineResolveBufferingMediaConnectionState,
+  resolveInactivePlaybackSchedulerAction as pipelineResolveInactivePlaybackSchedulerAction,
   resolveInactivePlaybackSchedulerMode as pipelineResolveInactivePlaybackSchedulerMode,
   resolveObservedPlaybackSeconds as pipelineResolveObservedPlaybackSeconds,
+  resolveDriftSampleAction as pipelineResolveDriftSampleAction,
+  resolveDriftSamplingPreflight as pipelineResolveDriftSamplingPreflight,
   resolvePausedPlaybackRecoveryState as pipelineResolvePausedPlaybackRecoveryState,
   resolvePlaybackSourceTransitionAction as pipelineResolvePlaybackSourceTransitionAction,
   resolvePlaybackSurfaceResetMediaConnectionState as pipelineResolvePlaybackSurfaceResetMediaConnectionState,
   resolvePlaybackStartMediaConnectionState as pipelineResolvePlaybackStartMediaConnectionState,
+  resolvePlaybackStartFailureIntentAction as pipelineResolvePlaybackStartFailureIntentAction,
   resolvePlaybackStartFailureMessage as pipelineResolvePlaybackStartFailureMessage,
+  resolvePlaybackStartIntentTimeoutPreflight as pipelineResolvePlaybackStartIntentTimeoutPreflight,
+  resolvePlaybackStartIntentTimeoutResult as pipelineResolvePlaybackStartIntentTimeoutResult,
+  resolvePlaybackStartRetryClearAction as pipelineResolvePlaybackStartRetryClearAction,
   resolvePlaybackStartRetryPreflight as pipelineResolvePlaybackStartRetryPreflight,
   resolvePlaybackStartRetryResult as pipelineResolvePlaybackStartRetryResult,
+  resolvePcmRuntimeFailureResetAction as pipelineResolvePcmRuntimeFailureResetAction,
   resolvePcmSyncPlaybackOutcome as pipelineResolvePcmSyncPlaybackOutcome,
+  resolveProgressiveEngineSetupPreflight as pipelineResolveProgressiveEngineSetupPreflight,
+  resolveProgressiveEngineAttachErrorAction as pipelineResolveProgressiveEngineAttachErrorAction,
   resolveProgressiveEngineAttachFailureAction as pipelineResolveProgressiveEngineAttachFailureAction,
+  resolveProgressiveEngineAttachResultAction as pipelineResolveProgressiveEngineAttachResultAction,
   resolveProgressiveEngineAttachSuccessFallbackReason as pipelineResolveProgressiveEngineAttachSuccessFallbackReason,
   resolvePlayingMediaConnectionState as pipelineResolvePlayingMediaConnectionState,
+  resolveTrackAvailabilityManifestHint as pipelineResolveTrackAvailabilityManifestHint,
   resolveLocalReadyPlaybackAction as pipelineResolveLocalReadyPlaybackAction,
   resolveMainPlaybackPreflight as pipelineResolveMainPlaybackPreflight,
   resolveSeekedPlaybackPolicy as pipelineResolveSeekedPlaybackPolicy,
   resolveSlidingWindowLowBufferFallbackReason as pipelineResolveSlidingWindowLowBufferFallbackReason,
+  resolveSlidingWindowFallbackPlaybackAction as pipelineResolveSlidingWindowFallbackPlaybackAction,
   resolveSlidingWindowNativeSyncOutcome as pipelineResolveSlidingWindowNativeSyncOutcome,
   resolveSlidingWindowNoEngineHoldAction as pipelineResolveSlidingWindowNoEngineHoldAction,
   resolveStalledFallbackReason as pipelineResolveStalledFallbackReason,
   resolveWaitingFallbackReason as pipelineResolveWaitingFallbackReason,
   resolveWarmupHoldState as pipelineResolveWarmupHoldState,
   resolveWarmupInactivePlaybackAction as pipelineResolveWarmupInactivePlaybackAction,
+  resolveWarmupMseCatchupAction as pipelineResolveWarmupMseCatchupAction,
   resolveWarmupPcmSyncMode as pipelineResolveWarmupPcmSyncMode,
+  resolveWarmupPcmAudioStartAction as pipelineResolveWarmupPcmAudioStartAction,
+  resolveWarmupPcmAudioStartResultAction as pipelineResolveWarmupPcmAudioStartResultAction,
   resolveWarmupPreflight as pipelineResolveWarmupPreflight,
+  resolveWarmupTakeoverBlockedReason as pipelineResolveWarmupTakeoverBlockedReason,
   resolveWarmupUnavailableAction as pipelineResolveWarmupUnavailableAction,
   resolveFullLocalUpgradePreflight as pipelineResolveFullLocalUpgradePreflight,
   resolveBufferSafetyMarginMs as pipelineResolveBufferSafetyMarginMs,
@@ -78,6 +95,9 @@ import {
   resolveProgressiveDiagnosticSignature as pipelineResolveProgressiveDiagnosticSignature,
   resolveProgressiveDiagnosticBuckets as pipelineResolveProgressiveDiagnosticBuckets,
   resolveFullLocalAudioSourceAction as pipelineResolveFullLocalAudioSourceAction,
+  resolveFullLocalPausedPlaybackAction as pipelineResolveFullLocalPausedPlaybackAction,
+  resolveFullLocalPausedRecoveryAttemptAction as pipelineResolveFullLocalPausedRecoveryAttemptAction,
+  resolveFullLocalPausedRecoveryPreflight as pipelineResolveFullLocalPausedRecoveryPreflight,
   resolveFullLocalPlaybackMode as pipelineResolveFullLocalPlaybackMode,
   resolveFullLocalPlaybackActivationAction as pipelineResolveFullLocalPlaybackActivationAction,
   resolveFullLocalReadyPlaybackResult as pipelineResolveFullLocalReadyPlaybackResult,
@@ -87,6 +107,7 @@ import {
   resolveProgressiveLocalBlockedReason as pipelineResolveProgressiveLocalBlockedReason,
   resolveProgressiveLocalReadinessPreflight as pipelineResolveProgressiveLocalReadinessPreflight,
   resolveLocalPlaybackReady as pipelineResolveLocalPlaybackReady,
+  resolveMainPausedPlaybackAction as pipelineResolveMainPausedPlaybackAction,
   resolveSchedulerBufferHealth as pipelineResolveSchedulerBufferHealth,
   resolveMaxContinuousPlaybackMs as pipelineResolveMaxContinuousPlaybackMs,
   resolveSchedulerBudgetTier as pipelineResolveSchedulerBudgetTier,
@@ -133,30 +154,47 @@ import {
   resolvePlaybackStartFailureReason,
   resolveListenerMediaConnectionState,
   resolveBufferingMediaConnectionState,
+  resolveInactivePlaybackSchedulerAction,
   resolveInactivePlaybackSchedulerMode,
   resolveObservedPlaybackSeconds,
+  resolveDriftSampleAction,
+  resolveDriftSamplingPreflight,
   resolvePausedPlaybackRecoveryState,
   resolvePlaybackSurfaceResetMediaConnectionState,
   resolvePlaybackStartMediaConnectionState,
+  resolvePlaybackStartFailureIntentAction,
   resolvePlaybackStartFailureMessage,
+  resolvePlaybackStartIntentTimeoutPreflight,
+  resolvePlaybackStartIntentTimeoutResult,
+  resolvePlaybackStartRetryClearAction,
   resolvePlaybackStartRetryPreflight,
   resolvePlaybackStartRetryResult,
+  resolvePcmRuntimeFailureResetAction,
   resolvePcmSyncPlaybackOutcome,
+  resolveProgressiveEngineSetupPreflight,
+  resolveProgressiveEngineAttachErrorAction,
   resolveProgressiveEngineAttachFailureAction,
+  resolveProgressiveEngineAttachResultAction,
   resolveProgressiveEngineAttachSuccessFallbackReason,
   resolvePlayingMediaConnectionState,
+  resolveTrackAvailabilityManifestHint,
   resolveLocalReadyPlaybackAction,
   resolveMainPlaybackPreflight,
   resolveSeekedPlaybackPolicy,
   resolveSlidingWindowLowBufferFallbackReason,
+  resolveSlidingWindowFallbackPlaybackAction,
   resolveSlidingWindowNativeSyncOutcome,
   resolveSlidingWindowNoEngineHoldAction,
   resolveStalledFallbackReason,
   resolveWaitingFallbackReason,
   resolveWarmupHoldState,
   resolveWarmupInactivePlaybackAction,
+  resolveWarmupMseCatchupAction,
   resolveWarmupPcmSyncMode,
+  resolveWarmupPcmAudioStartAction,
+  resolveWarmupPcmAudioStartResultAction,
   resolveWarmupPreflight,
+  resolveWarmupTakeoverBlockedReason,
   resolveWarmupUnavailableAction,
   resolveFullLocalUpgradePreflight,
   resolveSourceOwnerIdentity,
@@ -172,6 +210,9 @@ import {
   resolveProgressiveDiagnosticSignature,
   resolveProgressiveDiagnosticBuckets,
   resolveFullLocalAudioSourceAction,
+  resolveFullLocalPausedPlaybackAction,
+  resolveFullLocalPausedRecoveryAttemptAction,
+  resolveFullLocalPausedRecoveryPreflight,
   resolveFullLocalPlaybackMode,
   resolveFullLocalPlaybackActivationAction,
   resolveFullLocalReadyPlaybackResult,
@@ -181,6 +222,7 @@ import {
   resolveProgressiveLocalBlockedReason,
   resolveProgressiveLocalReadinessPreflight,
   resolveLocalPlaybackReady,
+  resolveMainPausedPlaybackAction,
   resolveSchedulerBufferHealth,
   resolveMaxContinuousPlaybackMs,
   resolveSchedulerBudgetTier,
@@ -354,6 +396,81 @@ describe("playback runtime pipeline keys", () => {
         peerId: "peer-a"
       })
     ).toEqual({ ownerPeerId: "peer-a" });
+    const fallbackAvailability = {
+      roomId: "room-1",
+      trackId: "track-1",
+      ownerPeerId: "peer-fallback",
+      nickname: "fallback",
+      totalChunks: 4,
+      chunkSize: 1024,
+      availableChunks: [0],
+      source: "local_cache" as const,
+      announcedAt: "2026-01-01T00:00:00.000Z"
+    };
+    expect(
+      pipelineResolveTrackAvailabilityManifestHint({
+        currentTrackId: null,
+        roomId: "room-1",
+        availabilityByTrack: {},
+        activeMemberPeerIds: new Set(["peer-a"]),
+        fallbackAnnouncement: fallbackAvailability
+      })
+    ).toEqual(fallbackAvailability);
+    expect(
+      resolveTrackAvailabilityManifestHint({
+        currentTrackId: "track-1",
+        roomId: "room-1",
+        availabilityByTrack: {
+          "track-1": {
+            "peer-a": {
+              roomId: "room-1",
+              trackId: "track-1",
+              ownerPeerId: "peer-a",
+              nickname: "A",
+              availableChunks: [0, 1],
+              totalChunks: 4,
+              chunkSize: 1024,
+              source: "local_cache",
+              announcedAt: "2026-01-01T00:00:01.000Z"
+            },
+            "peer-b": {
+              roomId: "room-1",
+              trackId: "track-1",
+              ownerPeerId: "peer-b",
+              nickname: "B",
+              availableChunks: [0, 1, 2],
+              totalChunks: 4,
+              chunkSize: 1024,
+              source: "local_cache",
+              announcedAt: "2026-01-01T00:00:02.000Z"
+            },
+            "peer-c": {
+              roomId: "room-2",
+              trackId: "track-1",
+              ownerPeerId: "peer-c",
+              nickname: "C",
+              availableChunks: [0, 1, 2, 3],
+              totalChunks: 4,
+              chunkSize: 1024,
+              source: "local_cache",
+              announcedAt: "2026-01-01T00:00:03.000Z"
+            }
+          }
+        },
+        activeMemberPeerIds: new Set(["peer-a", "peer-b"]),
+        fallbackAnnouncement: fallbackAvailability
+      })
+    ).toEqual({
+      roomId: "room-1",
+      trackId: "track-1",
+      ownerPeerId: "peer-b",
+      nickname: "B",
+      availableChunks: [0, 1, 2],
+      totalChunks: 4,
+      chunkSize: 1024,
+      source: "local_cache",
+      announcedAt: "2026-01-01T00:00:02.000Z"
+    });
     expect(pipelinePrunePlaybackQualityTimestamps([60, 70, 90, 100], 100, 30)).toEqual([
       70,
       90,
@@ -1586,6 +1703,8 @@ describe("use-progressive-runtime policy helpers", () => {
         maxRetryAttempts: 3
       })
     ).toBe(true);
+    expect(pipelineResolvePlaybackStartRetryClearAction(true)).toBe(false);
+    expect(resolvePlaybackStartRetryClearAction(false)).toBe(true);
     expect(
       pipelineResolvePlaybackStartRetryPreflight({
         playbackHasActiveIntent: false,
@@ -1661,6 +1780,106 @@ describe("use-progressive-runtime policy helpers", () => {
         blockedMessage: "blocked"
       })
     ).toBe("blocked");
+    expect(
+      pipelineResolvePlaybackStartFailureIntentAction({
+        reportFailure: false,
+        intentMatchesPlayback: true,
+        blockedMessage: "blocked"
+      })
+    ).toEqual({
+      shouldMarkFailure: false,
+      statusMessage: null
+    });
+    expect(
+      resolvePlaybackStartFailureIntentAction({
+        reportFailure: true,
+        intentMatchesPlayback: true,
+        blockedMessage: "blocked"
+      })
+    ).toEqual({
+      shouldMarkFailure: true,
+      statusMessage: "当前点击未能激活音频，请再次点击播放"
+    });
+    expect(
+      resolvePlaybackStartFailureIntentAction({
+        reportFailure: true,
+        intentMatchesPlayback: false,
+        blockedMessage: "blocked"
+      })
+    ).toEqual({
+      shouldMarkFailure: true,
+      statusMessage: "blocked"
+    });
+    expect(
+      pipelineResolvePlaybackStartIntentTimeoutPreflight({
+        hasIntent: false,
+        intentPending: true,
+        expiresAtMs: 1_500,
+        nowMs: 1_000
+      })
+    ).toBe(null);
+    expect(
+      resolvePlaybackStartIntentTimeoutPreflight({
+        hasIntent: true,
+        intentPending: false,
+        expiresAtMs: 1_500,
+        nowMs: 1_000
+      })
+    ).toBe(null);
+    expect(
+      resolvePlaybackStartIntentTimeoutPreflight({
+        hasIntent: true,
+        intentPending: true,
+        expiresAtMs: 900,
+        nowMs: 1_000
+      })
+    ).toEqual({ timeoutMs: 0 });
+    expect(
+      pipelineResolvePlaybackStartIntentTimeoutResult({
+        hasCurrentIntent: false,
+        currentIntentId: null,
+        targetIntentId: "intent-1",
+        currentIntentPending: true
+      })
+    ).toBe("keep");
+    expect(
+      resolvePlaybackStartIntentTimeoutResult({
+        hasCurrentIntent: true,
+        currentIntentId: "intent-2",
+        targetIntentId: "intent-1",
+        currentIntentPending: true
+      })
+    ).toBe("keep");
+    expect(
+      resolvePlaybackStartIntentTimeoutResult({
+        hasCurrentIntent: true,
+        currentIntentId: "intent-1",
+        targetIntentId: "intent-1",
+        currentIntentPending: false
+      })
+    ).toBe("keep");
+    expect(
+      resolvePlaybackStartIntentTimeoutResult({
+        hasCurrentIntent: true,
+        currentIntentId: "intent-1",
+        targetIntentId: "intent-1",
+        currentIntentPending: true
+      })
+    ).toBe("fail");
+    expect(
+      pipelineResolvePcmRuntimeFailureResetAction({
+        hasLatchedFailure: true,
+        latchedTrackId: "track-1",
+        currentManifestTrackId: "track-2"
+      })
+    ).toBe(true);
+    expect(
+      resolvePcmRuntimeFailureResetAction({
+        hasLatchedFailure: true,
+        latchedTrackId: "track-1",
+        currentManifestTrackId: "track-1"
+      })
+    ).toBe(false);
   });
 
   it("keeps listener media connection state policy in the pure pipeline module", () => {
@@ -1762,6 +1981,27 @@ describe("use-progressive-runtime policy helpers", () => {
     expect(resolveBufferingMediaConnectionState("live")).toBe("buffering");
     expect(pipelineResolveInactivePlaybackSchedulerMode(true)).toBe("normal");
     expect(resolveInactivePlaybackSchedulerMode(false)).toBe("idle");
+    expect(
+      pipelineResolveInactivePlaybackSchedulerAction({
+        currentTrackId: null,
+        playbackStatus: "playing",
+        isPageVisible: true
+      })
+    ).toEqual({ schedulerMode: "normal" });
+    expect(
+      resolveInactivePlaybackSchedulerAction({
+        currentTrackId: "track-1",
+        playbackStatus: "paused",
+        isPageVisible: false
+      })
+    ).toEqual({ schedulerMode: "idle" });
+    expect(
+      resolveInactivePlaybackSchedulerAction({
+        currentTrackId: "track-1",
+        playbackStatus: "playing",
+        isPageVisible: true
+      })
+    ).toBe(null);
     expect(pipelineResolvePlaybackSurfaceResetMediaConnectionState(true)).toBe("buffering");
     expect(resolvePlaybackSurfaceResetMediaConnectionState(false)).toBe("idle");
   });
@@ -1812,6 +2052,86 @@ describe("use-progressive-runtime policy helpers", () => {
   });
 
   it("keeps progressive engine attach fallback policy in the pure pipeline module", () => {
+    expect(
+      pipelineResolveProgressiveEngineSetupPreflight({
+        hasAudio: false,
+        canPrepareProgressiveLocal: true,
+        hasManifest: true
+      })
+    ).toBe("skip");
+    expect(
+      resolveProgressiveEngineSetupPreflight({
+        hasAudio: true,
+        canPrepareProgressiveLocal: false,
+        hasManifest: true
+      })
+    ).toBe("destroy-existing");
+    expect(
+      resolveProgressiveEngineSetupPreflight({
+        hasAudio: true,
+        canPrepareProgressiveLocal: true,
+        hasManifest: false
+      })
+    ).toBe("destroy-existing");
+    expect(
+      pipelineResolveProgressiveEngineSetupPreflight({
+        hasAudio: true,
+        canPrepareProgressiveLocal: true,
+        hasManifest: true
+      })
+    ).toBe("create");
+    expect(
+      pipelineResolveProgressiveEngineAttachResultAction({
+        isCurrentEngine: false,
+        attached: false,
+        isPcmEngine: true
+      })
+    ).toBe(null);
+    expect(
+      resolveProgressiveEngineAttachResultAction({
+        isCurrentEngine: true,
+        attached: false,
+        isPcmEngine: true
+      })
+    ).toEqual({
+      kind: "failure",
+      failureAction: "pcm-runtime-failure"
+    });
+    expect(
+      resolveProgressiveEngineAttachResultAction({
+        isCurrentEngine: true,
+        attached: false,
+        isPcmEngine: false
+      })
+    ).toEqual({
+      kind: "failure",
+      failureAction: "progressive-init-failed"
+    });
+    expect(
+      resolveProgressiveEngineAttachResultAction({
+        isCurrentEngine: true,
+        attached: true,
+        isPcmEngine: true
+      })
+    ).toEqual({
+      kind: "attached",
+      shouldSyncEngine: true
+    });
+    expect(
+      pipelineResolveProgressiveEngineAttachErrorAction({
+        isCurrentEngine: false,
+        isPcmEngine: true
+      })
+    ).toBe(null);
+    expect(
+      resolveProgressiveEngineAttachErrorAction({
+        isCurrentEngine: true,
+        isPcmEngine: false
+      })
+    ).toEqual({
+      kind: "failure",
+      failureAction: "progressive-init-failed"
+    });
     expect(pipelineResolveProgressiveEngineAttachFailureAction(true)).toBe(
       "pcm-runtime-failure"
     );
@@ -2021,6 +2341,12 @@ describe("use-progressive-runtime policy helpers", () => {
       shouldClearFallbackReason: false,
       shouldAttemptPlaybackStart: true
     });
+    expect(pipelineResolveFullLocalPausedPlaybackAction("playing")).toBe(null);
+    expect(resolveFullLocalPausedPlaybackAction("paused")).toEqual({
+      shouldPausePlayback: true,
+      shouldResetPlaybackRate: true,
+      mediaConnectionState: "idle"
+    });
     expect(
       pipelineResolveMainPlaybackPreflight({
         hasAudio: false,
@@ -2041,6 +2367,11 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe("run");
     expect(pipelineResolvePlaybackStartMediaConnectionState(true)).toBe("live");
     expect(resolvePlaybackStartMediaConnectionState(false)).toBe("buffering");
+    expect(resolveMainPausedPlaybackAction("playing")).toBe(null);
+    expect(pipelineResolveMainPausedPlaybackAction("paused")).toEqual({
+      shouldPausePlayback: true,
+      shouldResetPlaybackRate: true
+    });
   });
 
   it("keeps PCM sync playback outcomes in the pure pipeline module", () => {
@@ -2113,12 +2444,120 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toEqual({
       shouldPausePlayback: true
     });
+    expect(
+      pipelineResolveSlidingWindowFallbackPlaybackAction({
+        shouldPlayPlayback: true,
+        startupReady: true
+      })
+    ).toEqual({
+      shouldClearFallbackReason: true,
+      shouldEnsurePlaybackStart: true,
+      shouldPausePlayback: false
+    });
+    expect(
+      resolveSlidingWindowFallbackPlaybackAction({
+        shouldPlayPlayback: true,
+        startupReady: false
+      })
+    ).toEqual({
+      shouldClearFallbackReason: false,
+      shouldEnsurePlaybackStart: true,
+      shouldPausePlayback: false
+    });
+    expect(
+      resolveSlidingWindowFallbackPlaybackAction({
+        shouldPlayPlayback: false,
+        startupReady: true
+      })
+    ).toEqual({
+      shouldClearFallbackReason: false,
+      shouldEnsurePlaybackStart: false,
+      shouldPausePlayback: true
+    });
   });
 
   it("keeps progressive warmup PCM sync mode in the pure pipeline module", () => {
     expect(pipelineResolveWarmupPcmSyncMode("progressive-local")).toBe("snapshot-only");
     expect(resolveWarmupPcmSyncMode("lossless-local")).toBe("snapshot-only");
     expect(resolveWarmupPcmSyncMode("full-local")).toBe("sync-playback");
+    expect(
+      pipelineResolveWarmupPcmAudioStartAction({
+        hasSyncResult: false,
+        shouldStartAudioElement: true,
+        nowMs: 1_000
+      })
+    ).toBe(null);
+    expect(
+      resolveWarmupPcmAudioStartAction({
+        hasSyncResult: true,
+        shouldStartAudioElement: false,
+        nowMs: 1_000
+      })
+    ).toBe(null);
+    expect(
+      resolveWarmupPcmAudioStartAction({
+        hasSyncResult: true,
+        shouldStartAudioElement: true,
+        nowMs: 1_000
+      })
+    ).toEqual({
+      lastAttemptAtMs: 1_000,
+      shouldAttemptPlaybackStart: true
+    });
+    expect(
+      pipelineResolveWarmupPcmAudioStartResultAction({
+        cancelled: true,
+        playbackStarted: true
+      })
+    ).toBe(null);
+    expect(
+      resolveWarmupPcmAudioStartResultAction({
+        cancelled: false,
+        playbackStarted: false
+      })
+    ).toBe(null);
+    expect(
+      resolveWarmupPcmAudioStartResultAction({
+        cancelled: false,
+        playbackStarted: true
+      })
+    ).toEqual({
+      shouldClearFallbackReason: true,
+      mediaConnectionState: "live"
+    });
+    expect(
+      pipelineResolveWarmupMseCatchupAction({
+        localReady: false,
+        activePlaybackSource: "progressive-local",
+        shadowWarmupReady: true
+      })
+    ).toEqual({
+      shouldCatchup: false,
+      shouldMuteAudio: null,
+      shouldPlayElement: false
+    });
+    expect(
+      resolveWarmupMseCatchupAction({
+        localReady: true,
+        activePlaybackSource: "full-local",
+        shadowWarmupReady: true
+      })
+    ).toEqual({
+      shouldCatchup: true,
+      shouldMuteAudio: true,
+      shouldPlayElement: true
+    });
+    expect(
+      resolveWarmupMseCatchupAction({
+        localReady: true,
+        activePlaybackSource: "lossless-local",
+        shadowWarmupReady: false
+      })
+    ).toEqual({
+      shouldCatchup: true,
+      shouldMuteAudio: false,
+      shouldPlayElement: true
+    });
   });
 
   it("keeps progressive warmup preflight policy in the pure pipeline module", () => {
@@ -2456,6 +2895,34 @@ describe("use-progressive-runtime policy helpers", () => {
 
   it("keeps drift sampling observed position policy in the pure pipeline module", () => {
     expect(
+      pipelineResolveDriftSamplingPreflight({
+        currentTrackId: null,
+        hasPlaybackState: true,
+        playbackHasActiveIntent: true
+      })
+    ).toBe(false);
+    expect(
+      resolveDriftSamplingPreflight({
+        currentTrackId: "track-1",
+        hasPlaybackState: false,
+        playbackHasActiveIntent: true
+      })
+    ).toBe(false);
+    expect(
+      resolveDriftSamplingPreflight({
+        currentTrackId: "track-1",
+        hasPlaybackState: true,
+        playbackHasActiveIntent: false
+      })
+    ).toBe(false);
+    expect(
+      pipelineResolveDriftSamplingPreflight({
+        currentTrackId: "track-1",
+        hasPlaybackState: true,
+        playbackHasActiveIntent: true
+      })
+    ).toBe(true);
+    expect(
       pipelineResolveObservedPlaybackSeconds({
         activePlaybackSource: "lossless-local",
         localPlaybackPositionMs: 12_340,
@@ -2495,6 +2962,33 @@ describe("use-progressive-runtime policy helpers", () => {
         audioPaused: false
       })
     ).toBe(null);
+    expect(
+      pipelineResolveDriftSampleAction({
+        expectedSeconds: 12.5,
+        observedSeconds: null
+      })
+    ).toBe(null);
+    expect(
+      resolveDriftSampleAction({
+        expectedSeconds: 12.5,
+        observedSeconds: 12
+      })
+    ).toEqual({ driftMs: 500 });
+  });
+
+  it("keeps progressive warmup takeover blocked reason in the pure pipeline module", () => {
+    expect(
+      pipelineResolveWarmupTakeoverBlockedReason({
+        shouldAttemptTakeover: true,
+        progressiveLocalBlockedReason: "buffer-underrun"
+      })
+    ).toBe(null);
+    expect(
+      resolveWarmupTakeoverBlockedReason({
+        shouldAttemptTakeover: false,
+        progressiveLocalBlockedReason: "local-prefix-not-ready"
+      })
+    ).toBe("local-prefix-not-ready");
   });
 
   it("keeps continuous playback start state transitions in the pure pipeline module", () => {
@@ -3066,6 +3560,58 @@ describe("use-progressive-runtime policy helpers", () => {
   });
 
   it("recovers full-local playback when the ready local audio element is paused", () => {
+    expect(
+      pipelineResolveFullLocalPausedRecoveryPreflight({
+        currentTrackId: null,
+        hasPlaybackState: true,
+        hasAudio: true,
+        activePlaybackSource: "full-local"
+      })
+    ).toBe(false);
+    expect(
+      resolveFullLocalPausedRecoveryPreflight({
+        currentTrackId: "track_1",
+        hasPlaybackState: true,
+        hasAudio: true,
+        activePlaybackSource: "progressive-local"
+      })
+    ).toBe(false);
+    expect(
+      resolveFullLocalPausedRecoveryPreflight({
+        currentTrackId: "track_1",
+        hasPlaybackState: true,
+        hasAudio: true,
+        activePlaybackSource: "full-local"
+      })
+    ).toBe(true);
+    expect(
+      pipelineResolveFullLocalPausedRecoveryAttemptAction({
+        cancelled: true,
+        recoveryInFlight: false,
+        shouldRecover: true
+      })
+    ).toBe(false);
+    expect(
+      resolveFullLocalPausedRecoveryAttemptAction({
+        cancelled: false,
+        recoveryInFlight: true,
+        shouldRecover: true
+      })
+    ).toBe(false);
+    expect(
+      resolveFullLocalPausedRecoveryAttemptAction({
+        cancelled: false,
+        recoveryInFlight: false,
+        shouldRecover: false
+      })
+    ).toBe(false);
+    expect(
+      resolveFullLocalPausedRecoveryAttemptAction({
+        cancelled: false,
+        recoveryInFlight: false,
+        shouldRecover: true
+      })
+    ).toBe(true);
     expect(pipelineResolveFullLocalPausedRecoveryResult(true)).toEqual({
       mediaConnectionState: "live",
       diagnosticEvent: "full-local-paused-recovered",

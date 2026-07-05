@@ -3,8 +3,10 @@ import type {
   PlaybackSnapshot,
   RoomMediaConnectionState,
   RoomSnapshot,
+  TrackAvailabilityAnnouncement,
   TrackMeta
 } from "@music-room/shared";
+import { selectCanonicalTrackAvailabilityAnnouncement } from "@/features/p2p";
 import type {
   ProgressiveEngineType,
   ProgressivePlaybackSource
@@ -117,6 +119,28 @@ export function resolveTrackAvailabilityAnnouncement<TAnnouncement>(input: {
   return input.currentTrackId
     ? input.availabilityByTrack[input.currentTrackId]?.[input.peerId] ?? null
     : null;
+}
+
+export function resolveTrackAvailabilityManifestHint(input: {
+  currentTrackId: string | null | undefined;
+  roomId: string | null | undefined;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  activeMemberPeerIds: ReadonlySet<string>;
+  fallbackAnnouncement: TrackAvailabilityAnnouncement | null;
+}) {
+  if (!input.currentTrackId || !input.roomId) {
+    return input.fallbackAnnouncement;
+  }
+
+  return (
+    selectCanonicalTrackAvailabilityAnnouncement(
+      Object.values(input.availabilityByTrack[input.currentTrackId] ?? {}).filter(
+        (announcement) =>
+          announcement.roomId === input.roomId &&
+          input.activeMemberPeerIds.has(announcement.ownerPeerId)
+      )
+    ) ?? input.fallbackAnnouncement
+  );
 }
 
 export function resolveNextQueueTrackPrefetch(input: {
@@ -250,6 +274,55 @@ export function resolvePlaybackStartFailureMessage(input: {
     : input.blockedMessage;
 }
 
+export function resolvePlaybackStartFailureIntentAction(input: {
+  reportFailure: boolean;
+  intentMatchesPlayback: boolean;
+  blockedMessage: string;
+}) {
+  if (!input.reportFailure) {
+    return {
+      shouldMarkFailure: false,
+      statusMessage: null
+    };
+  }
+
+  return {
+    shouldMarkFailure: true,
+    statusMessage: resolvePlaybackStartFailureMessage({
+      intentMatchesPlayback: input.intentMatchesPlayback,
+      blockedMessage: input.blockedMessage
+    })
+  };
+}
+
+export function resolvePlaybackStartIntentTimeoutPreflight(input: {
+  hasIntent: boolean;
+  intentPending: boolean;
+  expiresAtMs: number;
+  nowMs: number;
+}) {
+  if (!input.hasIntent || !input.intentPending) {
+    return null;
+  }
+
+  return {
+    timeoutMs: Math.max(0, input.expiresAtMs - input.nowMs)
+  };
+}
+
+export function resolvePlaybackStartIntentTimeoutResult(input: {
+  hasCurrentIntent: boolean;
+  currentIntentId: string | null | undefined;
+  targetIntentId: string;
+  currentIntentPending: boolean;
+}) {
+  return input.hasCurrentIntent &&
+    input.currentIntentId === input.targetIntentId &&
+    input.currentIntentPending
+    ? "fail" as const
+    : "keep" as const;
+}
+
 export function resolvePlaybackStartRetryPreflight(input: {
   playbackHasActiveIntent: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
@@ -288,6 +361,21 @@ export function resolvePlaybackStartRetryResult(input: {
     shouldClearRetry: false,
     shouldScheduleRetry: input.attempt < input.maxRetryAttempts
   };
+}
+
+export function resolvePlaybackStartRetryClearAction(playbackHasActiveIntent: boolean) {
+  return !playbackHasActiveIntent;
+}
+
+export function resolvePcmRuntimeFailureResetAction(input: {
+  hasLatchedFailure: boolean;
+  latchedTrackId: string | null | undefined;
+  currentManifestTrackId: string | null | undefined;
+}) {
+  return (
+    input.hasLatchedFailure &&
+    input.latchedTrackId !== input.currentManifestTrackId
+  );
 }
 
 export function resolveListenerMediaConnectionState(input: {
@@ -342,6 +430,20 @@ export function resolveBufferingMediaConnectionState(
 
 export function resolveInactivePlaybackSchedulerMode(isPageVisible: boolean) {
   return isPageVisible ? "normal" as const : "idle" as const;
+}
+
+export function resolveInactivePlaybackSchedulerAction(input: {
+  currentTrackId: string | null | undefined;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  isPageVisible: boolean;
+}) {
+  if (input.currentTrackId && input.playbackStatus !== "paused" && input.playbackStatus !== null) {
+    return null;
+  }
+
+  return {
+    schedulerMode: resolveInactivePlaybackSchedulerMode(input.isPageVisible)
+  };
 }
 
 export function resolvePlaybackSurfaceResetMediaConnectionState(
@@ -431,6 +533,20 @@ export function resolveFullLocalPlaybackActivationAction(input: {
   };
 }
 
+export function resolveFullLocalPausedPlaybackAction(
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined
+) {
+  if (playbackStatus !== "paused") {
+    return null;
+  }
+
+  return {
+    shouldPausePlayback: true,
+    shouldResetPlaybackRate: true,
+    mediaConnectionState: "idle" as const
+  };
+}
+
 export function resolveMainPlaybackPreflight(input: {
   hasAudio: boolean;
   currentTrackId: string | null | undefined;
@@ -440,6 +556,19 @@ export function resolveMainPlaybackPreflight(input: {
   }
 
   return input.currentTrackId ? "run" as const : "reset-idle" as const;
+}
+
+export function resolveMainPausedPlaybackAction(
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined
+) {
+  if (playbackStatus !== "paused") {
+    return null;
+  }
+
+  return {
+    shouldPausePlayback: true,
+    shouldResetPlaybackRate: true
+  };
 }
 
 export function resolvePcmSyncPlaybackOutcome(input: {
@@ -497,6 +626,25 @@ export function resolveSlidingWindowNativeSyncOutcome(input: {
   };
 }
 
+export function resolveSlidingWindowFallbackPlaybackAction(input: {
+  shouldPlayPlayback: boolean;
+  startupReady: boolean;
+}) {
+  if (!input.shouldPlayPlayback) {
+    return {
+      shouldClearFallbackReason: false,
+      shouldEnsurePlaybackStart: false,
+      shouldPausePlayback: true
+    };
+  }
+
+  return {
+    shouldClearFallbackReason: input.startupReady,
+    shouldEnsurePlaybackStart: true,
+    shouldPausePlayback: false
+  };
+}
+
 export function resolveSlidingWindowNoEngineHoldAction(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
@@ -515,6 +663,58 @@ export function resolveSlidingWindowNoEngineHoldAction(input: {
 
 export function resolveProgressiveEngineAttachFailureAction(isPcmEngine: boolean) {
   return isPcmEngine ? "pcm-runtime-failure" as const : "progressive-init-failed" as const;
+}
+
+export function resolveProgressiveEngineAttachResultAction(input: {
+  isCurrentEngine: boolean;
+  attached: boolean;
+  isPcmEngine: boolean;
+}) {
+  if (!input.isCurrentEngine) {
+    return null;
+  }
+
+  if (!input.attached) {
+    return {
+      kind: "failure" as const,
+      failureAction: resolveProgressiveEngineAttachFailureAction(input.isPcmEngine)
+    };
+  }
+
+  return {
+    kind: "attached" as const,
+    shouldSyncEngine: true
+  };
+}
+
+export function resolveProgressiveEngineAttachErrorAction(input: {
+  isCurrentEngine: boolean;
+  isPcmEngine: boolean;
+}) {
+  if (!input.isCurrentEngine) {
+    return null;
+  }
+
+  return {
+    kind: "failure" as const,
+    failureAction: resolveProgressiveEngineAttachFailureAction(input.isPcmEngine)
+  };
+}
+
+export function resolveProgressiveEngineSetupPreflight(input: {
+  hasAudio: boolean;
+  canPrepareProgressiveLocal: boolean;
+  hasManifest: boolean;
+}) {
+  if (!input.hasAudio) {
+    return "skip" as const;
+  }
+
+  if (!input.canPrepareProgressiveLocal || !input.hasManifest) {
+    return "destroy-existing" as const;
+  }
+
+  return "create" as const;
 }
 
 export function resolveProgressiveEngineAttachSuccessFallbackReason(
@@ -620,6 +820,27 @@ export function resolveObservedPlaybackSeconds(input: {
   }
 
   return null;
+}
+
+export function resolveDriftSamplingPreflight(input: {
+  currentTrackId: string | null | undefined;
+  hasPlaybackState: boolean;
+  playbackHasActiveIntent: boolean;
+}) {
+  return !!input.currentTrackId && input.hasPlaybackState && input.playbackHasActiveIntent;
+}
+
+export function resolveDriftSampleAction(input: {
+  expectedSeconds: number;
+  observedSeconds: number | null;
+}) {
+  if (input.observedSeconds === null) {
+    return null;
+  }
+
+  return {
+    driftMs: (input.expectedSeconds - input.observedSeconds) * 1000
+  };
 }
 
 export function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
@@ -863,6 +1084,28 @@ export function shouldRecoverPausedFullLocalPlayback(input: {
   );
 }
 
+export function resolveFullLocalPausedRecoveryPreflight(input: {
+  currentTrackId: string | null | undefined;
+  hasPlaybackState: boolean;
+  hasAudio: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+}) {
+  return (
+    !!input.currentTrackId &&
+    input.hasPlaybackState &&
+    input.hasAudio &&
+    input.activePlaybackSource === "full-local"
+  );
+}
+
+export function resolveFullLocalPausedRecoveryAttemptAction(input: {
+  cancelled: boolean;
+  recoveryInFlight: boolean;
+  shouldRecover: boolean;
+}) {
+  return !input.cancelled && !input.recoveryInFlight && input.shouldRecover;
+}
+
 export function resolveFullLocalPausedRecoveryResult(playbackStarted: boolean) {
   return playbackStarted
     ? {
@@ -979,6 +1222,53 @@ export function resolveWarmupPcmSyncMode(source: ProgressivePlaybackSource) {
   return isSlidingWindowPlaybackSource(source) ? "snapshot-only" as const : "sync-playback" as const;
 }
 
+export function resolveWarmupPcmAudioStartAction(input: {
+  hasSyncResult: boolean;
+  shouldStartAudioElement: boolean;
+  nowMs: number;
+}) {
+  if (!input.hasSyncResult || !input.shouldStartAudioElement) {
+    return null;
+  }
+
+  return {
+    lastAttemptAtMs: input.nowMs,
+    shouldAttemptPlaybackStart: true
+  };
+}
+
+export function resolveWarmupPcmAudioStartResultAction(input: {
+  cancelled: boolean;
+  playbackStarted: boolean;
+}) {
+  if (input.cancelled || !input.playbackStarted) {
+    return null;
+  }
+
+  return {
+    shouldClearFallbackReason: true,
+    mediaConnectionState: "live" as const
+  };
+}
+
+export function resolveWarmupMseCatchupAction(input: {
+  localReady: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  shadowWarmupReady: boolean;
+}) {
+  const shouldCatchup =
+    input.localReady &&
+    (isSlidingWindowPlaybackSource(input.activePlaybackSource) || input.shadowWarmupReady);
+
+  return {
+    shouldCatchup,
+    shouldMuteAudio: shouldCatchup
+      ? !isSlidingWindowPlaybackSource(input.activePlaybackSource)
+      : null,
+    shouldPlayElement: shouldCatchup
+  };
+}
+
 export function resolveWarmupPreflight(input: {
   currentTrackId: string | null | undefined;
   hasAudio: boolean;
@@ -1042,6 +1332,13 @@ export function resolveWarmupInactivePlaybackAction(input: {
     shouldPauseAudio: true,
     shouldResetWarmupReadyAt: true
   };
+}
+
+export function resolveWarmupTakeoverBlockedReason(input: {
+  shouldAttemptTakeover: boolean;
+  progressiveLocalBlockedReason: string | null | undefined;
+}) {
+  return input.shouldAttemptTakeover ? null : input.progressiveLocalBlockedReason ?? null;
 }
 
 export function resolveWarmupHoldState(input: {
