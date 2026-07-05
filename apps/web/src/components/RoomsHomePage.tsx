@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { RoomSnapshot } from "@music-room/shared";
-import { TopBar } from "@/components/TopBar";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
@@ -53,6 +51,24 @@ export function RoomsHomePage() {
     }
   }, [activeSession, hydrated, router, authEntryHref]);
 
+  const refreshAvailableRooms = useCallback(async () => {
+    try {
+      const rooms = await musicRoomApi.listRooms();
+      setAvailableRooms(filterOpenPublicRooms(rooms));
+    } catch {
+      setAvailableRooms([]);
+    }
+  }, []);
+
+  const refreshRecentRoom = useCallback(async () => {
+    try {
+      const room = await musicRoomApi.getRecentRoom();
+      setRecentRoom(room);
+    } catch {
+      setRecentRoom(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!activeSession) {
       return;
@@ -61,7 +77,7 @@ export function RoomsHomePage() {
     void refreshSession();
     void refreshAvailableRooms();
     void refreshRecentRoom();
-  }, [activeSession?.id, refreshSession]);
+  }, [activeSession, refreshSession, refreshAvailableRooms, refreshRecentRoom]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -82,25 +98,7 @@ export function RoomsHomePage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [activeSession?.id]);
-
-  async function refreshAvailableRooms() {
-    try {
-      const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
-    } catch {
-      setAvailableRooms([]);
-    }
-  }
-
-  async function refreshRecentRoom() {
-    try {
-      const room = await musicRoomApi.getRecentRoom();
-      setRecentRoom(room);
-    } catch {
-      setRecentRoom(null);
-    }
-  }
+  }, [activeSession, refreshAvailableRooms, refreshRecentRoom]);
 
   async function handleCreateRoom(visibility: "public" | "private" = "public") {
     try {

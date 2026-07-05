@@ -259,10 +259,6 @@ export function useRoomDerivedState({
       "pieceUploadRateKbps"
     );
     const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
-    const hasTransportMetricSample = hasDiagnosticsMetricSample(activePeerDiagnostics, [
-      "availableOutgoingBitrateKbps",
-      "currentRoundTripTimeMs"
-    ]);
     const hasPieceMetricSample = hasPieceTransferSample(activePeerDiagnostics);
     const isSourceOwner = roomSnapshot.room.playback.sourceSessionId === activeSessionUserId;
     const transportSampleAgeMs = getLatestMetricSampleAgeMs(
@@ -649,20 +645,6 @@ function getLatestMetricSampleAgeMs(
   }, null);
 
   return latestTimestampMs === null ? null : Math.max(0, now - latestTimestampMs);
-}
-
-function hasDiagnosticsMetricSample(
-  diagnostics: PeerDiagnosticsSnapshot[],
-  keys: Array<
-    | "availableOutgoingBitrateKbps"
-    | "mediaReceiveBitrateKbps"
-    | "mediaSendBitrateKbps"
-    | "currentRoundTripTimeMs"
-  >
-) {
-  return diagnostics.some((diagnostic) =>
-    keys.some((key) => typeof diagnostic[key] === "number" && Number.isFinite(diagnostic[key]))
-  );
 }
 
 function getLatestPieceSampleAgeMs(diagnostics: PeerDiagnosticsSnapshot[], now = Date.now()) {

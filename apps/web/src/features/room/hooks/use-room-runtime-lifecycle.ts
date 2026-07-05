@@ -90,73 +90,110 @@ export function useRoomRuntimeLifecycle(input: {
   refreshPlaylists: () => Promise<void>;
   setStatusMessage: (value: string) => void;
 }) {
+  const {
+    activeRouteRoomIdRef,
+    activeSession,
+    authEntryHref,
+    currentRoomRef,
+    dispatchRoomStateEvent,
+    emitPresence,
+    hasStoredSession,
+    hydrated,
+    initialRecoveryAttemptRef,
+    initialRoomId,
+    isNavigatingRoomExit,
+    lastRoomStorageKey,
+    peerId,
+    peerStorageKey,
+    previousInitialRoomIdRef,
+    recordPeerDiagnostic,
+    refreshAvailableRooms,
+    refreshPlaylists,
+    refreshSession,
+    requestRoomSnapshotResync,
+    resetPlayerSurfaceRef,
+    roomSnapshot,
+    router,
+    setIceConfig,
+    setIceConfigResolved,
+    setIsNavigatingRoomExit,
+    setIsPageVisible,
+    setIsRecoveringRoom,
+    setPeerId,
+    setSchedulerMode,
+    setStatusMessage,
+    setSuppressRoomRecovery,
+    suppressRoomRecovery,
+    workspaceOnly
+  } = input;
+
   useEffect(() => {
-    if (!input.activeSession) {
+    if (!activeSession) {
       return;
     }
 
-    void input.refreshSession();
-  }, [input.activeSession, input.refreshSession]);
+    void refreshSession();
+  }, [activeSession, refreshSession]);
 
   useEffect(() => {
     if (
       !shouldRedirectRoomRouteToAuth({
-        workspaceOnly: input.workspaceOnly,
-        initialRoomId: input.initialRoomId,
-        hydrated: input.hydrated,
-        hasActiveSession: Boolean(input.activeSession),
-        hasStoredSession: input.hasStoredSession,
-        isNavigatingRoomExit: input.isNavigatingRoomExit,
-        suppressRoomRecovery: input.suppressRoomRecovery
+        workspaceOnly,
+        initialRoomId,
+        hydrated,
+        hasActiveSession: Boolean(activeSession),
+        hasStoredSession,
+        isNavigatingRoomExit,
+        suppressRoomRecovery
       })
     ) {
       return;
     }
 
-    input.router.replace(input.authEntryHref as Route);
+    router.replace(authEntryHref as Route);
   }, [
-    input.workspaceOnly,
-    input.initialRoomId,
-    input.hydrated,
-    input.activeSession,
-    input.hasStoredSession,
-    input.isNavigatingRoomExit,
-    input.suppressRoomRecovery,
-    input.router,
-    input.authEntryHref
+    workspaceOnly,
+    initialRoomId,
+    hydrated,
+    activeSession,
+    hasStoredSession,
+    isNavigatingRoomExit,
+    suppressRoomRecovery,
+    router,
+    authEntryHref
   ]);
 
   useEffect(() => {
-    const storedPeerId = window.sessionStorage.getItem(input.peerStorageKey);
+    const storedPeerId = window.sessionStorage.getItem(peerStorageKey);
     if (storedPeerId) {
-      input.setPeerId(storedPeerId);
+      setPeerId(storedPeerId);
       return;
     }
 
     const nextPeerId = `peer_${crypto.randomUUID()}`;
-    window.sessionStorage.setItem(input.peerStorageKey, nextPeerId);
-    input.setPeerId(nextPeerId);
-  }, [input.peerStorageKey, input.setPeerId]);
+    window.sessionStorage.setItem(peerStorageKey, nextPeerId);
+    setPeerId(nextPeerId);
+  }, [peerStorageKey, setPeerId]);
 
   useEffect(() => {
-    if (!input.activeSession) {
+    if (!activeSession) {
       return;
     }
 
-    void input.refreshAvailableRooms();
-    void input.refreshPlaylists();
-  }, [input.activeSession, input.refreshAvailableRooms, input.refreshPlaylists]);
+    void refreshAvailableRooms();
+    void refreshPlaylists();
+  }, [activeSession, refreshAvailableRooms, refreshPlaylists]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
       const nextVisible = !document.hidden;
-      input.setIsPageVisible(nextVisible);
+      setIsPageVisible(nextVisible);
       if (nextVisible) {
-        input.setSchedulerMode((current) => (current === "idle" ? "normal" : current));
-        input.emitPresence();
-        void input.requestRoomSnapshotResync(
+        setSchedulerMode((current) => (current === "idle" ? "normal" : current));
+        emitPresence();
+        void requestRoomSnapshotResync(
           "visibility-visible",
-          input.currentRoomRef.current?.room.id ?? null
+          currentRoomRef.current?.room.id ?? null
         );
       }
     };
@@ -164,22 +201,22 @@ export function useRoomRuntimeLifecycle(input: {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [
-    input.currentRoomRef,
-    input.emitPresence,
-    input.requestRoomSnapshotResync,
-    input.setIsPageVisible,
-    input.setSchedulerMode
+    currentRoomRef,
+    emitPresence,
+    requestRoomSnapshotResync,
+    setIsPageVisible,
+    setSchedulerMode
   ]);
 
   useEffect(() => {
-    if (!input.roomSnapshot?.room.id || !input.activeSession) {
-      input.setIceConfig(null);
-      input.setIceConfigResolved(false);
+    if (!roomSnapshot?.room.id || !activeSession) {
+      setIceConfig(null);
+      setIceConfigResolved(false);
       return;
     }
 
     let cancelled = false;
-    input.setIceConfigResolved(false);
+    setIceConfigResolved(false);
 
     void (async () => {
       try {
@@ -188,9 +225,9 @@ export function useRoomRuntimeLifecycle(input: {
           return;
         }
 
-        input.setIceConfig(nextIceConfig);
-        input.setIceConfigResolved(true);
-        input.recordPeerDiagnostic({
+        setIceConfig(nextIceConfig);
+        setIceConfigResolved(true);
+        recordPeerDiagnostic({
           peerId: "system",
           channelKind: "system",
           direction: "local",
@@ -208,7 +245,7 @@ export function useRoomRuntimeLifecycle(input: {
           void testTurnConnectivity(nextIceConfig.iceServers).then((result) => {
             if (cancelled) return;
             const level: "info" | "warning" | "error" = result.reachable ? "info" : "error";
-            input.recordPeerDiagnostic({
+            recordPeerDiagnostic({
               peerId: "system",
               channelKind: "system",
               direction: "local",
@@ -234,9 +271,9 @@ export function useRoomRuntimeLifecycle(input: {
           return;
         }
 
-        input.setIceConfig(null);
-        input.setIceConfigResolved(true);
-        input.recordPeerDiagnostic({
+        setIceConfig(null);
+        setIceConfigResolved(true);
+        recordPeerDiagnostic({
           peerId: "system",
           channelKind: "system",
           direction: "local",
@@ -256,62 +293,62 @@ export function useRoomRuntimeLifecycle(input: {
       cancelled = true;
     };
   }, [
-    input.roomSnapshot?.room.id,
-    input.activeSession?.userId,
-    input.setIceConfig,
-    input.setIceConfigResolved,
-    input.recordPeerDiagnostic
+    roomSnapshot?.room.id,
+    activeSession,
+    setIceConfig,
+    setIceConfigResolved,
+    recordPeerDiagnostic
   ]);
 
   useEffect(() => {
     if (
-      input.suppressRoomRecovery ||
-      !input.workspaceOnly ||
-      !input.initialRoomId ||
-      !input.hydrated ||
-      !input.activeSession ||
-      input.isNavigatingRoomExit
+      suppressRoomRecovery ||
+      !workspaceOnly ||
+      !initialRoomId ||
+      !hydrated ||
+      !activeSession ||
+      isNavigatingRoomExit
     ) {
       return;
     }
 
-    const recoveryKey = `${input.activeSession.userId}:${input.initialRoomId}`;
-    if (input.initialRecoveryAttemptRef.current === recoveryKey) {
+    const recoveryKey = `${activeSession.userId}:${initialRoomId}`;
+    if (initialRecoveryAttemptRef.current === recoveryKey) {
       return;
     }
-    input.initialRecoveryAttemptRef.current = recoveryKey;
+    initialRecoveryAttemptRef.current = recoveryKey;
 
     let cancelled = false;
     let completed = false;
-    input.setIsRecoveringRoom(true);
+    setIsRecoveringRoom(true);
 
     void (async () => {
       try {
-        const snapshot = await musicRoomApi.recoverRoom(input.initialRoomId!);
+        const snapshot = await musicRoomApi.recoverRoom(initialRoomId);
         if (!snapshot || cancelled) {
           if (!cancelled) {
-            input.setSuppressRoomRecovery(true);
-            input.setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
-            input.setIsRecoveringRoom(false);
+            setSuppressRoomRecovery(true);
+            setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
+            setIsRecoveringRoom(false);
           }
           return;
         }
 
-        input.dispatchRoomStateEvent({
+        dispatchRoomStateEvent({
           type: "recover-snapshot",
           snapshot
         });
-        input.setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
-        await input.refreshPlaylists();
+        setStatusMessage(`已进入房间 ${snapshot.room.joinCode}。`);
+        await refreshPlaylists();
       } catch {
         if (shouldSuppressRoomRecoveryAfterFailure({ cancelled })) {
-          input.setSuppressRoomRecovery(true);
-          input.setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
+          setSuppressRoomRecovery(true);
+          setStatusMessage("未找到可恢复的房间状态，请返回音乐房重新创建或加入房间。");
         }
       } finally {
         completed = true;
         if (!cancelled) {
-          input.setIsRecoveringRoom(false);
+          setIsRecoveringRoom(false);
         }
       }
     })();
@@ -321,65 +358,65 @@ export function useRoomRuntimeLifecycle(input: {
       resetInitialRoomRecoveryAttemptOnCancellation({
         completed,
         recoveryKey,
-        initialRecoveryAttemptRef: input.initialRecoveryAttemptRef
+        initialRecoveryAttemptRef
       });
     };
   }, [
-    input.workspaceOnly,
-    input.initialRoomId,
-    input.hydrated,
-    input.activeSession?.userId,
-    input.suppressRoomRecovery,
-    input.isNavigatingRoomExit,
-    input.refreshPlaylists,
-    input.dispatchRoomStateEvent,
-    input.setIsRecoveringRoom,
-    input.setSuppressRoomRecovery,
-    input.setStatusMessage,
-    input.initialRecoveryAttemptRef
+    workspaceOnly,
+    initialRoomId,
+    hydrated,
+    activeSession,
+    suppressRoomRecovery,
+    isNavigatingRoomExit,
+    refreshPlaylists,
+    dispatchRoomStateEvent,
+    setIsRecoveringRoom,
+    setSuppressRoomRecovery,
+    setStatusMessage,
+    initialRecoveryAttemptRef
   ]);
 
   useEffect(() => {
-    input.activeRouteRoomIdRef.current = input.initialRoomId;
+    activeRouteRoomIdRef.current = initialRoomId;
 
-    if (!input.workspaceOnly || !input.initialRoomId) {
-      input.previousInitialRoomIdRef.current = input.initialRoomId;
+    if (!workspaceOnly || !initialRoomId) {
+      previousInitialRoomIdRef.current = initialRoomId;
       return;
     }
 
-    if (input.previousInitialRoomIdRef.current === input.initialRoomId) {
+    if (previousInitialRoomIdRef.current === initialRoomId) {
       return;
     }
 
-    input.previousInitialRoomIdRef.current = input.initialRoomId;
-    input.initialRecoveryAttemptRef.current = null;
-    input.setSuppressRoomRecovery(false);
-    input.setIsRecoveringRoom(false);
-    input.setIsNavigatingRoomExit(false);
-    input.resetPlayerSurfaceRef.current();
+    previousInitialRoomIdRef.current = initialRoomId;
+    initialRecoveryAttemptRef.current = null;
+    setSuppressRoomRecovery(false);
+    setIsRecoveringRoom(false);
+    setIsNavigatingRoomExit(false);
+    resetPlayerSurfaceRef.current();
 
-    if (input.roomSnapshot?.room.id && input.roomSnapshot.room.id !== input.initialRoomId) {
-      input.dispatchRoomStateEvent({ type: "local-reset" });
+    if (roomSnapshot?.room.id && roomSnapshot.room.id !== initialRoomId) {
+      dispatchRoomStateEvent({ type: "local-reset" });
     }
   }, [
-    input.dispatchRoomStateEvent,
-    input.workspaceOnly,
-    input.initialRoomId,
-    input.roomSnapshot?.room.id,
-    input.setIsNavigatingRoomExit,
-    input.setIsRecoveringRoom,
-    input.setSuppressRoomRecovery,
-    input.activeRouteRoomIdRef,
-    input.previousInitialRoomIdRef,
-    input.initialRecoveryAttemptRef,
-    input.resetPlayerSurfaceRef
+    dispatchRoomStateEvent,
+    workspaceOnly,
+    initialRoomId,
+    roomSnapshot?.room.id,
+    setIsNavigatingRoomExit,
+    setIsRecoveringRoom,
+    setSuppressRoomRecovery,
+    activeRouteRoomIdRef,
+    previousInitialRoomIdRef,
+    initialRecoveryAttemptRef,
+    resetPlayerSurfaceRef
   ]);
 
   useEffect(() => {
-    if (!input.roomSnapshot?.room.id || !input.peerId) {
+    if (!roomSnapshot?.room.id || !peerId) {
       return;
     }
 
-    window.localStorage.setItem(input.lastRoomStorageKey, input.roomSnapshot.room.id);
-  }, [input.roomSnapshot?.room.id, input.peerId, input.lastRoomStorageKey]);
+    window.localStorage.setItem(lastRoomStorageKey, roomSnapshot.room.id);
+  }, [roomSnapshot?.room.id, peerId, lastRoomStorageKey]);
 }

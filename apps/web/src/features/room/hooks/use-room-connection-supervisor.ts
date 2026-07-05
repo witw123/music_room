@@ -65,7 +65,7 @@ export function useRoomConnectionSupervisor(input: {
     });
     connectionSupervisorStatesRef.current.set(peerId, next);
     return next;
-  }, []);
+  }, [input.roomId]);
 
   const commitConnectionSupervisorState = useCallback(
     (state: PeerConnectionSupervisorState | null | undefined) => {

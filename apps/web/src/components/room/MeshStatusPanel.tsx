@@ -301,7 +301,6 @@ function MeshStatusPanelBase({
   members,
   availabilitySummary,
   connectedPeersCount,
-  mediaConnectedPeersCount,
   cachedTrackCount,
   localMemberState,
   peerDiagnostics,

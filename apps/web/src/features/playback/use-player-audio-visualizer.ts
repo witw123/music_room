@@ -649,7 +649,9 @@ export function usePlayerAudioVisualizer(
     sampleIntervalMs,
     sourceSelection.graphKey,
     sourceSelection.hasSignal,
-    sourceSelection.kind
+    sourceSelection.kind,
+    sourceSelection.element,
+    sourceSelection.stream
   ]);
 
   return {

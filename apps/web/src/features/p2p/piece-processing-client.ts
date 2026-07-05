@@ -46,7 +46,7 @@ type WorkerResponse =
   | { id: number; ok: false; error: string };
 
 type PendingRequest = {
-  resolve: (value: any) => void;
+  resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
 };
 
@@ -104,7 +104,10 @@ async function runWorkerTask<T>(request: Omit<WorkerRequest, "id">) {
 
   const id = ++requestCounter;
   return new Promise<T>((resolve, reject) => {
-    pendingRequests.set(id, { resolve, reject });
+    pendingRequests.set(id, {
+      resolve: (value: unknown) => resolve(value as T),
+      reject
+    });
     worker.postMessage({
       id,
       ...request

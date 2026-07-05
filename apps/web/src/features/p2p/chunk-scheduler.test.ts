@@ -219,10 +219,7 @@ describe("chunk scheduler helpers", () => {
 
 describe("ChunkScheduler", () => {
   it("prioritizes current-track decode-prefix chunks before other work", () => {
-    const requestPiece = vi.fn(
-      (args: { peerId: string; trackId: string; chunkIndex: number; totalChunks: number; priority: string }) =>
-        true
-    );
+    const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,
       maxConcurrentCurrentTrack: 3,
@@ -272,10 +269,7 @@ describe("ChunkScheduler", () => {
 
   it("cools down timed-out peers before retrying on another source", async () => {
     vi.useFakeTimers();
-    const requestPiece = vi.fn(
-      (args: { peerId: string; trackId: string; chunkIndex: number; totalChunks: number; priority: string }) =>
-        true
-    );
+    const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,
       peerCooldownMs: 10_000,
