@@ -437,6 +437,26 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).not.toContain("currentTrack");
   });
 
+  it("hosts runtime hook boundary types outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const runtimeTypesSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "playback-orchestrator/runtime-types.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain('} from "./playback-orchestrator/runtime-types";');
+    expect(runtimeSource).toContain("FullLocalPlaybackTrack,");
+    expect(runtimeSource).toContain("UseProgressiveRuntimeInput,");
+    expect(runtimeSource).toContain("UseProgressiveRuntimeResult");
+    expect(runtimeSource).not.toContain("type UseProgressiveRuntimeInput =");
+    expect(runtimeSource).not.toContain("type UseProgressiveRuntimeResult =");
+    expect(runtimeTypesSource).toContain("export type UseProgressiveRuntimeInput =");
+    expect(runtimeTypesSource).toContain("export type UseProgressiveRuntimeResult =");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
