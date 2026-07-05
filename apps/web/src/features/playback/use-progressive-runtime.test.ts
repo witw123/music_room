@@ -353,7 +353,12 @@ describe("playback runtime pipeline keys", () => {
       ].join("\n")
     );
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", orchestratorIndex);
+    const callbackRefreshNeedle =
+      "recoverPausedFullLocalPlaybackRef.current = recoverPausedFullLocalPlayback;";
+    const callbackRefreshIndex = runtimeSource.indexOf(callbackRefreshNeedle);
+    expect(callbackRefreshIndex).toBeGreaterThan(-1);
+
+    const dependencyStart = runtimeSource.indexOf("  }, [", callbackRefreshIndex);
     const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
     const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
 
@@ -378,6 +383,29 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencySource).not.toMatch(/^\s+currentTrack,\s*$/m);
     expect(dependencySource).not.toMatch(/^\s+currentBufferedFullLocalTrack,\s*$/m);
     expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
+  });
+
+  it("subscribes to the playback orchestrator snapshot with useSyncExternalStore", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useSyncExternalStore,");
+    expect(runtimeSource).toContain("const runtimeOrchestratorSnapshot = useSyncExternalStore(");
+    expect(runtimeSource).toContain("runtimeTickOrchestratorRef.current.subscribe");
+    expect(runtimeSource).toContain("runtimeTickOrchestratorRef.current.getSnapshot");
+
+    const mountIndex = runtimeSource.indexOf("runtimeTickOrchestratorRef.current.mount();");
+    expect(mountIndex).toBeGreaterThan(-1);
+    const dependencyStart = runtimeSource.indexOf("  }, [", mountIndex);
+    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
+    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+
+    expect(dependencies).toContain("runtimeTickOrchestratorRef");
+    expect(dependencies).not.toContain("playbackCurrentTrackId");
+    expect(dependencies).not.toContain("playbackStatus");
+    expect(dependencies).not.toContain("currentTrack");
   });
 
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {

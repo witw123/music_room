@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type Dispatch,
   type RefObject,
   type SetStateAction
@@ -213,6 +214,29 @@ import {
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 export type FullLocalPlaybackTrack = Pick<UploadedTrack, "file" | "objectUrl">;
+
+type RuntimeTickState = {
+  lastDriftSampleAtMs: number;
+  lastPausedRecoveryAtMs: number;
+};
+
+type RuntimeTickEffect =
+  | "recover-paused-full-local"
+  | "sync-progressive-warmup"
+  | "sync-full-local-warmup"
+  | "sync-upgrade"
+  | "sample-drift";
+
+type RuntimeTickOrchestrator = PlaybackOrchestrator<
+  RuntimeTickState,
+  null,
+  null,
+  RuntimeTickEffect,
+  null,
+  number
+>;
+
+const noopRuntimeTick = () => undefined;
 
 type UseProgressiveRuntimeInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -466,7 +490,84 @@ export function useProgressiveRuntime({
   const previousPlaybackSurfaceKeyRef = useRef<string | null>(null);
   const playbackStartRetryRef = useRef<number | null>(null);
   const lastPcmSlidingWindowPlayAttemptAtRef = useRef<number | null>(null);
-  const syncProgressiveWarmupRef = useRef<() => void>(() => undefined);
+  const syncProgressiveWarmupRef = useRef<() => void>(noopRuntimeTick);
+  const recoverPausedFullLocalPlaybackRef = useRef<() => void>(noopRuntimeTick);
+  const sampleDriftRef = useRef<() => void>(noopRuntimeTick);
+  const syncFullLocalBufferedWarmupRef = useRef<() => void>(noopRuntimeTick);
+  const syncUpgradeRef = useRef<() => void>(noopRuntimeTick);
+  const [runtimeTickOrchestratorRef] = useState<{ current: RuntimeTickOrchestrator }>(() => {
+    const initialRuntimeTickAtMs = Date.now();
+    const runtimeTickOrchestrator = new PlaybackOrchestrator({
+      initialState: {
+        lastDriftSampleAtMs: initialRuntimeTickAtMs,
+        lastPausedRecoveryAtMs: initialRuntimeTickAtMs
+      },
+      initialInput: null,
+      initialSnapshot: null,
+      tickMs: progressiveRuntimeTickIntervalMs,
+      getEngineSnapshot: () => null,
+      reduceTick: ({ state, nowMs }) => {
+        const shouldSampleDrift =
+          nowMs - state.lastDriftSampleAtMs >= playbackDriftSampleIntervalMs;
+        const shouldRecoverPausedFullLocal =
+          nowMs - state.lastPausedRecoveryAtMs >= fullLocalPausedRecoveryIntervalMs;
+        return {
+          nextState: {
+            lastDriftSampleAtMs: shouldSampleDrift ? nowMs : state.lastDriftSampleAtMs,
+            lastPausedRecoveryAtMs: shouldRecoverPausedFullLocal
+              ? nowMs
+              : state.lastPausedRecoveryAtMs
+          },
+          effects: [
+            ...(shouldRecoverPausedFullLocal ? (["recover-paused-full-local"] as const) : []),
+            "sync-progressive-warmup",
+            "sync-full-local-warmup",
+            "sync-upgrade",
+            ...(shouldSampleDrift ? (["sample-drift"] as const) : [])
+          ] as const
+        };
+      },
+      runEffect: (effect) => {
+        if (effect === "sync-progressive-warmup") {
+          syncProgressiveWarmupRef.current();
+          return;
+        }
+        if (effect === "recover-paused-full-local") {
+          recoverPausedFullLocalPlaybackRef.current();
+          return;
+        }
+        if (effect === "sample-drift") {
+          sampleDriftRef.current();
+          return;
+        }
+        if (effect === "sync-full-local-warmup") {
+          syncFullLocalBufferedWarmupRef.current();
+          return;
+        }
+        syncUpgradeRef.current();
+      },
+      buildSnapshot: () => null,
+      scheduler: {
+        setInterval: (callback, delayMs) => window.setInterval(callback, delayMs),
+        clearInterval: (timerId) => window.clearInterval(timerId)
+      }
+    });
+    return { current: runtimeTickOrchestrator };
+  });
+  const subscribeRuntimeOrchestrator = useCallback(
+    (listener: () => void) => runtimeTickOrchestratorRef.current.subscribe(listener),
+    [runtimeTickOrchestratorRef]
+  );
+  const getRuntimeOrchestratorSnapshot = useCallback(
+    () => runtimeTickOrchestratorRef.current.getSnapshot(),
+    [runtimeTickOrchestratorRef]
+  );
+  const runtimeOrchestratorSnapshot = useSyncExternalStore(
+    subscribeRuntimeOrchestrator,
+    getRuntimeOrchestratorSnapshot,
+    getRuntimeOrchestratorSnapshot
+  );
+  void runtimeOrchestratorSnapshot;
   const lastProgressiveDiagnosticSignatureRef = useRef<string | null>(null);
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
@@ -2041,6 +2142,10 @@ export function useProgressiveRuntime({
       playbackHasActiveIntent: hasActivePlaybackIntent(playbackState)
     });
     if (!samplingPreflight) {
+      recoverPausedFullLocalPlaybackRef.current = noopRuntimeTick;
+      sampleDriftRef.current = noopRuntimeTick;
+      syncFullLocalBufferedWarmupRef.current = noopRuntimeTick;
+      syncUpgradeRef.current = noopRuntimeTick;
       return;
     }
 
@@ -2346,70 +2451,28 @@ export function useProgressiveRuntime({
       }
     };
 
-    const initialRuntimeTickAtMs = Date.now();
+    recoverPausedFullLocalPlaybackRef.current = recoverPausedFullLocalPlayback;
+    sampleDriftRef.current = sampleDrift;
+    syncFullLocalBufferedWarmupRef.current = syncFullLocalBufferedWarmup;
+    syncUpgradeRef.current = syncUpgrade;
     recoverPausedFullLocalPlayback();
     sampleDrift();
     syncFullLocalBufferedWarmup();
     syncUpgrade();
-    const runtimeTickOrchestrator = new PlaybackOrchestrator({
-      initialState: {
-        lastDriftSampleAtMs: initialRuntimeTickAtMs,
-        lastPausedRecoveryAtMs: initialRuntimeTickAtMs
-      },
-      initialInput: null,
-      initialSnapshot: null,
-      tickMs: progressiveRuntimeTickIntervalMs,
-      getEngineSnapshot: () => null,
-      reduceTick: ({ state, nowMs }) => {
-        const shouldSampleDrift =
-          nowMs - state.lastDriftSampleAtMs >= playbackDriftSampleIntervalMs;
-        const shouldRecoverPausedFullLocal =
-          nowMs - state.lastPausedRecoveryAtMs >= fullLocalPausedRecoveryIntervalMs;
-        return {
-          nextState: {
-            lastDriftSampleAtMs: shouldSampleDrift ? nowMs : state.lastDriftSampleAtMs,
-            lastPausedRecoveryAtMs: shouldRecoverPausedFullLocal
-              ? nowMs
-              : state.lastPausedRecoveryAtMs
-          },
-          effects: [
-            ...(shouldRecoverPausedFullLocal ? (["recover-paused-full-local"] as const) : []),
-            "sync-progressive-warmup",
-            "sync-full-local-warmup",
-            "sync-upgrade",
-            ...(shouldSampleDrift ? (["sample-drift"] as const) : [])
-          ] as const
-        };
-      },
-      runEffect: (effect) => {
-        if (effect === "sync-progressive-warmup") {
-          syncProgressiveWarmupRef.current();
-          return;
-        }
-        if (effect === "recover-paused-full-local") {
-          recoverPausedFullLocalPlayback();
-          return;
-        }
-        if (effect === "sample-drift") {
-          sampleDrift();
-          return;
-        }
-        if (effect === "sync-full-local-warmup") {
-          syncFullLocalBufferedWarmup();
-          return;
-        }
-        syncUpgrade();
-      },
-      buildSnapshot: () => null,
-      scheduler: {
-        setInterval: (callback, delayMs) => window.setInterval(callback, delayMs),
-        clearInterval: (timerId) => window.clearInterval(timerId)
-      }
-    });
-    runtimeTickOrchestrator.mount();
     return () => {
       runtimeTickCancelled = true;
-      runtimeTickOrchestrator.unmount();
+      if (recoverPausedFullLocalPlaybackRef.current === recoverPausedFullLocalPlayback) {
+        recoverPausedFullLocalPlaybackRef.current = noopRuntimeTick;
+      }
+      if (sampleDriftRef.current === sampleDrift) {
+        sampleDriftRef.current = noopRuntimeTick;
+      }
+      if (syncFullLocalBufferedWarmupRef.current === syncFullLocalBufferedWarmup) {
+        syncFullLocalBufferedWarmupRef.current = noopRuntimeTick;
+      }
+      if (syncUpgradeRef.current === syncUpgrade) {
+        syncUpgradeRef.current = noopRuntimeTick;
+      }
     };
   }, [
     activePlaybackSource,
@@ -2439,6 +2502,13 @@ export function useProgressiveRuntime({
     transitionPlaybackSource,
     volume
   ]);
+
+  useEffect(() => {
+    runtimeTickOrchestratorRef.current.mount();
+    return () => {
+      runtimeTickOrchestratorRef.current.unmount();
+    };
+  }, [runtimeTickOrchestratorRef]);
 
   useEffect(() => {
     const audio = audioRef.current;

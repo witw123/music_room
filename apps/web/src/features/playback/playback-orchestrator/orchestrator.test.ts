@@ -91,7 +91,46 @@ describe("PlaybackOrchestrator", () => {
     intervalCallbacks[0]?.();
 
     expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith({ count: 1 });
+    expect(listener).toHaveBeenCalledWith();
     expect(orchestrator.getSnapshot()).toEqual({ count: 2 });
+  });
+
+  it("supports useSyncExternalStore-style snapshot listeners", () => {
+    const intervalCallbacks: Array<() => void> = [];
+    const listener = vi.fn();
+    const orchestrator = new PlaybackOrchestrator({
+      initialState: { count: 0 },
+      initialInput: { delta: 2 },
+      initialSnapshot: { count: 0 },
+      tickMs: 150,
+      getEngineSnapshot: () => null,
+      reduceTick: ({ state, input }) => ({
+        nextState: {
+          count: state.count + input.delta
+        },
+        effects: []
+      }),
+      runEffect: () => undefined,
+      buildSnapshot: ({ state }) => ({ count: state.count }),
+      scheduler: {
+        setInterval: (callback) => {
+          intervalCallbacks.push(callback);
+          return intervalCallbacks.length;
+        },
+        clearInterval: () => undefined
+      }
+    });
+    const unsubscribe = orchestrator.subscribe(listener);
+
+    orchestrator.mount();
+    intervalCallbacks[0]?.();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith();
+    expect(orchestrator.getSnapshot()).toEqual({ count: 2 });
+
+    unsubscribe();
+    intervalCallbacks[0]?.();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(orchestrator.getSnapshot()).toEqual({ count: 4 });
   });
 });

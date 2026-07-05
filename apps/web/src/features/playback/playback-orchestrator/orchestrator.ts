@@ -58,7 +58,7 @@ export class PlaybackOrchestrator<
   private input: TInput;
   private snapshot: TSnapshot;
   private timerId: TTimerId | null = null;
-  private readonly listeners = new Set<(snapshot: TSnapshot) => void>();
+  private readonly listeners = new Set<() => void>();
   private readonly tickMs: number;
   private readonly getEngineSnapshot: () => TEngineSnapshot;
   private readonly reduceTick: (
@@ -118,7 +118,7 @@ export class PlaybackOrchestrator<
     return this.snapshot;
   }
 
-  subscribe(listener: (snapshot: TSnapshot) => void) {
+  subscribe(listener: () => void) {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -150,7 +150,7 @@ export class PlaybackOrchestrator<
 
   private notify() {
     for (const listener of this.listeners) {
-      listener(this.snapshot);
+      listener();
     }
   }
 }
