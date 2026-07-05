@@ -551,10 +551,7 @@ export function MusicRoomApp({
       cacheLibraryTracks,
       cachedFullLocalPlaybackTrack,
       currentPlaybackTrackId,
-      currentTrack?.durationMs,
-      currentTrack?.fileHash,
-      currentTrack?.id,
-      currentTrack?.sizeBytes,
+      currentTrack,
       currentUploadedPlaybackTrack
     ]
   );
@@ -965,11 +962,7 @@ export function MusicRoomApp({
   }, [
     playbackSurfaceKey,
     currentPlaybackTrackId,
-    currentTrack?.codec,
-    currentTrack?.fileHash,
-    currentTrack?.id,
-    currentTrack?.mimeType,
-    currentTrack?.title,
+    currentTrack,
     currentProgressiveEngineTypeForSource,
     hasPlayableFullLocalTrack
   ]);
@@ -1295,7 +1288,14 @@ export function MusicRoomApp({
         }
       });
     },
-    [ensureRoomAudioUnlocked, recordPeerDiagnostic, setStatusMessage]
+    [
+      ensureRoomAudioUnlocked,
+      recordPeerDiagnostic,
+      roomSnapshot?.room.playback.mediaEpoch,
+      roomSnapshot?.room.playback.playbackRevision,
+      roomSnapshot?.room.playback.queueVersion,
+      setStatusMessage
+    ]
   );
 
   useEffect(() => {
@@ -1478,6 +1478,7 @@ export function MusicRoomApp({
   }, [
     audioUnlocked,
     isCurrentSourceOwner,
+    roomSnapshot?.room.playback,
     roomSnapshot?.room.playback?.status,
     roomSnapshot?.room.playback?.currentTrackId
   ]);

@@ -6,6 +6,7 @@ import {
   getTrackPieceManifest
 } from "@/lib/indexeddb";
 import { P2PMesh } from "./mesh";
+import type { BinaryPieceFragmentMessage, BinaryPieceMessage } from "./piece-frame-codec";
 import { getMissingChunkIndexes, summarizeTrackAvailability } from "./index";
 
 describe("p2p feature helpers", () => {
@@ -137,6 +138,17 @@ class FakeRTCPeerConnection {
   close() {
     this.connectionState = "closed";
   }
+}
+
+type MeshTestAccess = {
+  pendingIncomingPieces: Array<{ peerId: string; message: BinaryPieceMessage }>;
+  flushIncomingPieces(): Promise<void>;
+  piecePersistChain: Promise<void>;
+  handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage): void;
+};
+
+function getMeshTestAccess(mesh: P2PMesh): MeshTestAccess {
+  return mesh as unknown as MeshTestAccess;
 }
 
 vi.mock("@/lib/indexeddb", () => ({
@@ -469,8 +481,9 @@ describe("P2PMesh", () => {
     const secondPayload = new TextEncoder().encode("piece-2").buffer;
     const firstHash = await sha256Hex(firstPayload);
     const secondHash = await sha256Hex(secondPayload);
+    const meshAccess = getMeshTestAccess(mesh);
 
-    (mesh as any).pendingIncomingPieces.push(
+    meshAccess.pendingIncomingPieces.push(
       {
         peerId: "peer_b",
         message: buildIncomingPieceMessage({
@@ -495,8 +508,8 @@ describe("P2PMesh", () => {
       }
     );
 
-    await (mesh as any).flushIncomingPieces();
-    await (mesh as any).piecePersistChain;
+    await meshAccess.flushIncomingPieces();
+    await meshAccess.piecePersistChain;
 
     expect(cacheTrackPieces).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -529,8 +542,9 @@ describe("P2PMesh", () => {
     });
     const payload = new TextEncoder().encode("piece-1").buffer;
     const hash = await sha256Hex(payload);
+    const meshAccess = getMeshTestAccess(mesh);
 
-    (mesh as any).pendingIncomingPieces.push({
+    meshAccess.pendingIncomingPieces.push({
       peerId: "peer_b",
       message: buildIncomingPieceMessage({
         trackId: "track_1",
@@ -542,7 +556,7 @@ describe("P2PMesh", () => {
       })
     });
 
-    await (mesh as any).flushIncomingPieces();
+    await meshAccess.flushIncomingPieces();
     await Promise.resolve();
 
     expect(onPieceReceived).toHaveBeenCalledTimes(1);
@@ -550,7 +564,7 @@ describe("P2PMesh", () => {
     expect(onPiecePersisted).not.toHaveBeenCalled();
 
     resolvePersist();
-    await (mesh as any).piecePersistChain;
+    await meshAccess.piecePersistChain;
 
     expect(onPiecePersisted).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -572,8 +586,9 @@ describe("P2PMesh", () => {
     });
     const payload = new TextEncoder().encode("piece-1").buffer;
     const hash = await sha256Hex(payload);
+    const meshAccess = getMeshTestAccess(mesh);
 
-    (mesh as any).pendingIncomingPieces.push({
+    meshAccess.pendingIncomingPieces.push({
       peerId: "peer_b",
       message: buildIncomingPieceMessage({
         trackId: "track_1",
@@ -585,8 +600,8 @@ describe("P2PMesh", () => {
       })
     });
 
-    await (mesh as any).flushIncomingPieces();
-    await (mesh as any).piecePersistChain;
+    await meshAccess.flushIncomingPieces();
+    await meshAccess.piecePersistChain;
 
     expect(onPieceReceived).toHaveBeenCalledTimes(1);
     expect(cacheTrackPieces).not.toHaveBeenCalled();
@@ -770,14 +785,15 @@ describe("P2PMesh", () => {
       pieceHash,
       payload: piecePayload
     });
+    const meshAccess = getMeshTestAccess(mesh);
 
     for (const fragmentMessage of fragmentMessages) {
-      (mesh as any).handleIncomingPieceFragment("peer_b", fragmentMessage);
+      meshAccess.handleIncomingPieceFragment("peer_b", fragmentMessage);
     }
 
-    expect((mesh as any).pendingIncomingPieces).toHaveLength(1);
-    await (mesh as any).flushIncomingPieces();
-    await (mesh as any).piecePersistChain;
+    expect(meshAccess.pendingIncomingPieces).toHaveLength(1);
+    await meshAccess.flushIncomingPieces();
+    await meshAccess.piecePersistChain;
 
     expect(onPieceReceived).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -802,35 +818,6 @@ async function sha256Hex(buffer: ArrayBuffer) {
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function buildBinaryPieceMessage(input: {
-  trackId: string;
-  chunkIndex: number;
-  totalChunks: number;
-  chunkSize?: number;
-  mimeType: string;
-  pieceHash: string;
-  payload: ArrayBuffer;
-}) {
-  const header = {
-    kind: "send-piece" as const,
-    trackId: input.trackId,
-    chunkIndex: input.chunkIndex,
-    totalChunks: input.totalChunks,
-    chunkSize: input.chunkSize ?? input.payload.byteLength,
-    mimeType: input.mimeType,
-    pieceHash: input.pieceHash
-  };
-  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-  const payloadBytes = new Uint8Array(input.payload);
-  const frame = new Uint8Array(4 + headerBytes.byteLength + payloadBytes.byteLength);
-
-  new DataView(frame.buffer).setUint32(0, headerBytes.byteLength, false);
-  frame.set(headerBytes, 4);
-  frame.set(payloadBytes, 4 + headerBytes.byteLength);
-
-  return frame.buffer;
 }
 
 function buildIncomingPieceMessage(input: {
@@ -861,49 +848,6 @@ function buildIncomingPieceMessage(input: {
     },
     payload: input.payload
   };
-}
-
-function buildBinaryPieceFragmentMessages(input: {
-  trackId: string;
-  chunkIndex: number;
-  totalChunks: number;
-  chunkSize?: number;
-  mimeType: string;
-  pieceHash: string;
-  payload: ArrayBuffer;
-}) {
-  const maxPayloadBytes = 48 * 1024;
-  const fragmentPayloadSize = Math.max(8 * 1024, maxPayloadBytes - 1024);
-  const payloadBytes = new Uint8Array(input.payload);
-  const fragmentCount = Math.ceil(payloadBytes.byteLength / fragmentPayloadSize);
-  const frames: ArrayBuffer[] = [];
-
-  for (let fragmentIndex = 0; fragmentIndex < fragmentCount; fragmentIndex += 1) {
-    const fragmentStart = fragmentIndex * fragmentPayloadSize;
-    const fragmentEnd = Math.min(payloadBytes.byteLength, fragmentStart + fragmentPayloadSize);
-    const fragmentPayload = payloadBytes.slice(fragmentStart, fragmentEnd).buffer;
-    const header = {
-      kind: "send-piece-fragment" as const,
-      trackId: input.trackId,
-      chunkIndex: input.chunkIndex,
-      totalChunks: input.totalChunks,
-      chunkSize: input.chunkSize ?? input.payload.byteLength,
-      mimeType: input.mimeType,
-      pieceHash: input.pieceHash,
-      fragmentIndex,
-      fragmentCount
-    };
-    const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-    const framePayloadBytes = new Uint8Array(fragmentPayload);
-    const frame = new Uint8Array(4 + headerBytes.byteLength + framePayloadBytes.byteLength);
-
-    new DataView(frame.buffer).setUint32(0, headerBytes.byteLength, false);
-    frame.set(headerBytes, 4);
-    frame.set(framePayloadBytes, 4 + headerBytes.byteLength);
-    frames.push(frame.buffer);
-  }
-
-  return frames;
 }
 
 function buildIncomingPieceFragmentMessages(input: {

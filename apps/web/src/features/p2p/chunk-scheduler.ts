@@ -374,13 +374,6 @@ export class ChunkScheduler {
       : currentTrack
         ? this.roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id)
         : -1;
-    const upcomingTrack =
-      currentQueueIndex >= 0
-        ? this.roomSnapshot.tracks.find(
-            (track) => track.id === this.roomSnapshot?.queue[currentQueueIndex + 1]?.trackId
-          ) ?? null
-        : null;
-
     const plans: TrackPlan[] = [];
     let currentTrackManifest: ReturnType<typeof buildProgressiveTrackManifest> = null;
     let currentTrackState: ChunkSchedulerTrackState | null = null;

@@ -34,12 +34,7 @@ type UseAudioPlayerReturn = {
 
 export function useAudioPlayer({
   roomSnapshot,
-  uploadedTracks,
-  canControlPlayback,
-  onPlay,
-  onPause,
-  onSeek,
-  onEnded
+  uploadedTracks
 }: UseAudioPlayerOptions): UseAudioPlayerReturn {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [progressMs, setProgressMs] = useState(0);

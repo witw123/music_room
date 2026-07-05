@@ -31,7 +31,6 @@ import {
   getLocalTakeoverCooldownMs,
   getCriticalBufferThresholdMs,
   getEffectivePlaybackPositionMs,
-  getMinimumSourceResidenceMs,
   getProgressiveEngineType,
   getProgressiveTrackManifestKey,
   getStartupWindowMs,
@@ -134,16 +133,11 @@ const playbackStartRetryDelayMs = 160;
 const maxPlaybackStartRetryAttempts = 18;
 const enableTrackCaching = true;
 const enableDirectProgressiveTakeover = enableTrackCaching;
-const enableListenerShadowWarmup = false;
 const enableListenerLocalTakeover = enableTrackCaching;
 const adaptiveStartupBufferMs = 60;
 const haveCurrentDataReadyState = 2;
 const playbackQualityWindowMs = 30_000;
 const playbackDriftSampleIntervalMs = 1_000;
-const stablePlaybackGraceWindowMs = 12_000;
-const shadowFallbackMaxDriftMs = 160;
-const shadowFallbackWaitingThreshold = 2;
-const shadowFallbackStalledThreshold = 1;
 const fullLocalPausedRecoveryIntervalMs = 500;
 const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
@@ -735,7 +729,7 @@ export function useProgressiveRuntime({
   const stalledEventTimestampsRef = useRef<number[]>([]);
   const driftSamplesRef = useRef<Array<{ timestampMs: number; driftMs: number }>>([]);
   const continuousPlaybackStartedAtRef = useRef<number | null>(null);
-  const [audioPaused, setAudioPaused] = useState<boolean | null>(null);
+  const [, setAudioPaused] = useState<boolean | null>(null);
   const continuousPlaybackSegmentsRef = useRef<Array<{ startedAtMs: number; endedAtMs: number }>>([]);
   const fullLocalPlaybackSessionRef = useRef<FullLocalPlaybackSessionState>({
     key: null,
@@ -904,7 +898,7 @@ export function useProgressiveRuntime({
   const startupBufferMs = adaptiveStartupBufferMs;
   const localTakeoverCooldownMs = useMemo(
     () => Math.max(0, localTakeoverCooldownUntilRef.current - Date.now()),
-    [playbackRevision, playback?.currentTrackId, activePlaybackSource]
+    []
   );
   const fullLocalReady = canUseFullLocalForPlaybackSession;
   const bufferSafetyMarginMs = useMemo(() => {
@@ -978,7 +972,7 @@ export function useProgressiveRuntime({
     isCurrentSourceOwner,
     isProgressiveTakeoverReady,
     localTakeoverCooldownMs,
-    playback?.status,
+    playback,
     progressiveHealthSnapshot.startupReady,
     progressiveFallbackReason
   ]);
@@ -1095,7 +1089,7 @@ export function useProgressiveRuntime({
       localAudioCurrentSrc: localAudio.currentSrc || null,
       localAudioHasSrcObject: !!localAudio.srcObject
     };
-  }, [audioRef, audioPaused, playbackRevision, activePlaybackSource, playback?.currentTrackId, playback?.status]);
+  }, [audioRef]);
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
   const shadowWarmupActive = false;
@@ -1215,14 +1209,7 @@ export function useProgressiveRuntime({
         maxDriftMs,
         maxContinuousPlaybackMsLast30s: getMaxContinuousPlaybackMsLast30s(now)
       };
-  }, [
-    activePlaybackSource,
-    getMaxContinuousPlaybackMsLast30s,
-    playback?.currentTrackId,
-    playback?.status,
-    playbackRevision,
-    pruneWindow
-  ]);
+  }, [getMaxContinuousPlaybackMsLast30s, pruneWindow]);
   const effectiveStartupBufferMs = useMemo(() => {
     let nextStartupBufferMs = startupBufferMs;
     if (playbackQualityMetrics.stalledEventsLast30s > 0) {
@@ -1500,7 +1487,6 @@ export function useProgressiveRuntime({
     [
       activePlaybackSource,
       armLocalTakeoverCooldown,
-      isLocalTakeoverAllowed,
       setActivePlaybackSource,
       setProgressiveFallbackReason
     ]
@@ -1695,8 +1681,7 @@ export function useProgressiveRuntime({
       attemptPlaybackStart,
       audioRef,
       clearPlaybackStartRetry,
-      isCurrentSourceOwner,
-      playback?.status,
+      playback,
       playbackStartIntent
     ]
   );
@@ -1705,7 +1690,7 @@ export function useProgressiveRuntime({
     if (!playback?.currentTrackId || !hasActivePlaybackIntent(playback)) {
       setSchedulerMode(isPageVisible ? "normal" : "idle");
     }
-  }, [isPageVisible, playback?.currentTrackId, playback?.status, setSchedulerMode]);
+  }, [isPageVisible, playback, setSchedulerMode]);
 
   useEffect(() => {
     if (!playbackStartIntent || !isPlaybackStartIntentPending(playbackStartIntent)) {
@@ -1737,9 +1722,7 @@ export function useProgressiveRuntime({
     }
   }, [
     clearPlaybackStartRetry,
-    playback?.status,
-    playback?.currentTrackId,
-    playback?.mediaEpoch
+    playback
   ]);
 
   useEffect(() => {
@@ -1764,11 +1747,6 @@ export function useProgressiveRuntime({
       uploadedTracks[playback.currentTrackId] ??
       null;
     const sourceOwnerHasLocalTrack = isCurrentSourceOwner && !!uploaded;
-    const shouldWarmBufferedFullLocal =
-      !!uploaded &&
-      !isCurrentSourceOwner &&
-      !progressiveEngineRef.current &&
-      !progressivePcmEngineRef.current;
     const expectedSeconds =
       getEffectivePlaybackPositionMs(playback, currentTrack?.durationMs ?? 0, Date.now()) / 1000;
     const shouldPlayPlayback = hasActivePlaybackIntent(playback);
@@ -1957,11 +1935,13 @@ export function useProgressiveRuntime({
     attemptPlaybackStart,
     ensurePlaybackStart,
     markPlaybackStartFailure,
+    markPcmRuntimeFailure,
     setActivePlaybackSource,
     setProgressiveFallbackReason,
     setPlaybackStartIntent,
     progressiveHealthSnapshot.startupReady,
-    startupBufferMs
+    startupBufferMs,
+    volume
   ]);
 
   useEffect(() => {
@@ -2084,6 +2064,7 @@ export function useProgressiveRuntime({
     };
   }, [
     activePlaybackSource,
+    audioRef,
     currentProgressiveManifest,
     isPageVisible,
     isCurrentSourceOwner,
@@ -2093,12 +2074,12 @@ export function useProgressiveRuntime({
     recordPeerDiagnostic,
     progressiveHealthSnapshot.contiguousBufferedMs,
     progressiveHealthSnapshot.aheadBufferedMs,
-    roomSnapshot?.room.playback.currentTrackId,
-    roomSnapshot?.room.playback.status,
+    roomSnapshot?.room.playback,
     setBufferHealth,
     setMediaConnectionState,
     setProgressiveFallbackReason,
-    setSchedulerMode
+    setSchedulerMode,
+    shadowWarmupActive
   ]);
 
   useEffect(() => {
@@ -2155,7 +2136,7 @@ export function useProgressiveRuntime({
     attemptPlaybackStart,
     ensurePlaybackStart,
     recordPeerDiagnostic,
-    roomSnapshot?.room.playback.status,
+    roomSnapshot?.room.playback,
     setMediaConnectionState,
     volume
   ]);
@@ -2664,9 +2645,14 @@ export function useProgressiveRuntime({
     roomSnapshot?.room.playback,
     currentProgressiveManifest,
     activePlaybackSource,
+    canUseFullLocalForPlaybackSession,
+    currentBufferedFullLocalTrack,
+    currentProgressiveEngineType,
+    currentTrack,
     progressiveHealthSnapshot.startupReady,
     startupBufferMs,
     progressiveLocalBlockedReason,
+    isCurrentSourceOwner,
     isProgressiveTakeoverReady,
     isLocalTakeoverAllowed,
     audioRef,
@@ -2775,11 +2761,11 @@ export function useProgressiveRuntime({
     return () => window.clearInterval(timerId);
   }, [
     roomSnapshot?.room.playback,
-    currentBufferedFullLocalTrack?.objectUrl,
+    currentBufferedFullLocalTrack,
     canWarmBufferedFullLocal,
     currentProgressiveEngineType,
     activePlaybackSource,
-    currentTrack?.durationMs,
+    currentTrack,
     fullLocalBlockedReason,
     progressiveHealthSnapshot.aheadBufferedMs,
     isLocalTakeoverAllowed,
@@ -2889,8 +2875,7 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason("seek-outside-buffer");
   }, [
     activePlaybackSource,
-    playback?.currentTrackId,
-    playback?.status,
+    playback,
     progressiveHealthSnapshot.aheadBufferedMs,
     progressiveHealthSnapshot.startupReady,
     setProgressiveFallbackReason
@@ -3095,6 +3080,7 @@ export function useProgressiveRuntime({
     });
   }, [
     currentTrack,
+    bufferSafetyMarginMs,
     diagnosticAheadBufferedMs,
     diagnosticBufferSafetyMarginMs,
     diagnosticContiguousBufferedMs,
@@ -3114,7 +3100,11 @@ export function useProgressiveRuntime({
     progressiveLocalEligible,
     progressiveLocalBlockedReason,
     progressiveHealthSnapshot.activeSource,
+    progressiveHealthSnapshot.aheadBufferedMs,
     progressiveHealthSnapshot.engineType,
+    progressiveHealthSnapshot.contiguousBufferedMs,
+    progressiveHealthSnapshot.estimatedFillTimeMs,
+    progressiveHealthSnapshot.remainingPlaybackMs,
     progressiveHealthSnapshot.schedulerPolicy,
     progressiveHealthSnapshot.startupReady,
     progressiveHealthSnapshot.fallbackReason,

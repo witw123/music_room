@@ -3,7 +3,7 @@ import type { Route } from "next";
 
 import { TopBar } from "@/components/TopBar";
 import { Button } from "@/components/ui/button";
-import { buildAppEntryHref, githubReleasesUrl } from "@/lib/client-shell";
+import { buildAppEntryHref } from "@/lib/client-shell";
 
 const githubRepositoryUrl = "https://github.com/witw123/music_room";
 

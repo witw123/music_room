@@ -650,7 +650,12 @@ export function useTrackUploads(options: {
     return () => {
       cancelled = true;
     };
-  }, [peerId, roomSnapshot?.room.id]);
+  }, [
+    peerId,
+    roomSnapshot?.room.id,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.tracks
+  ]);
 
   useEffect(() => {
     manualCacheChunkIndexesRef.current.clear();

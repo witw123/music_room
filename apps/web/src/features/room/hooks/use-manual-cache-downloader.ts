@@ -959,6 +959,19 @@ export function useManualCacheDownloader(input: {
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
   onManualCachePlan?: (plan: ManualCacheTrackPlan) => void;
 }) {
+  const {
+    activePlaybackWindow,
+    availabilityByTrack,
+    connectedPeers,
+    dataMesh,
+    enableManualTrackCaching,
+    manualCacheTrackIds,
+    onManualCachePlan,
+    onRuntimeEvent,
+    pauseDirectRequests,
+    peerId,
+    roomSnapshot
+  } = input;
   const lastBootstrapKeyRef = useRef<string | null>(null);
   const lastBootstrapAttemptAtRef = useRef<number | null>(null);
   const recoverySinceAtRef = useRef<number | null>(null);
@@ -966,39 +979,39 @@ export function useManualCacheDownloader(input: {
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
   const activePlaybackPendingKeyRef = useRef<string | null>(null);
   const activePlaybackWindowRef = useRef<ActivePlaybackCacheWindow | null>(
-    input.activePlaybackWindow ?? null
+    activePlaybackWindow ?? null
   );
   const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());
   const lastProviderRestartAtRef = useRef<Map<string, number>>(new Map());
-  activePlaybackWindowRef.current = input.activePlaybackWindow ?? null;
+  activePlaybackWindowRef.current = activePlaybackWindow ?? null;
 
   const schedulerAvailabilityByTrack = useMemo(
     () =>
       buildManualCacheSchedulerAvailability({
-        availabilityByTrack: input.availabilityByTrack,
-        manualCacheTrackIds: input.manualCacheTrackIds,
-        roomSnapshot: input.roomSnapshot,
-        localPeerId: input.peerId
+        availabilityByTrack,
+        manualCacheTrackIds,
+        roomSnapshot,
+        localPeerId: peerId
       }),
-    [input.availabilityByTrack, input.manualCacheTrackIds, input.peerId, input.roomSnapshot]
+    [availabilityByTrack, manualCacheTrackIds, peerId, roomSnapshot]
   );
   const availabilityProviderPeerIds = useMemo(
     () =>
       resolveManualCacheProviderPeerIds({
-        manualCacheTrackIds: input.manualCacheTrackIds,
+        manualCacheTrackIds,
         availabilityByTrack: schedulerAvailabilityByTrack,
-        localPeerId: input.peerId
+        localPeerId: peerId
       }),
-    [input.manualCacheTrackIds, input.peerId, schedulerAvailabilityByTrack]
+    [manualCacheTrackIds, peerId, schedulerAvailabilityByTrack]
   );
   const uploaderPeerIds = useMemo(
     () =>
       resolveManualCacheUploaderPeerIds({
-        manualCacheTrackIds: input.manualCacheTrackIds,
-        roomSnapshot: input.roomSnapshot,
-        localPeerId: input.peerId
+        manualCacheTrackIds,
+        roomSnapshot,
+        localPeerId: peerId
       }),
-    [input.manualCacheTrackIds, input.peerId, input.roomSnapshot]
+    [manualCacheTrackIds, peerId, roomSnapshot]
   );
   const providerPeerIds = useMemo(
     () => mergePeerIds(uploaderPeerIds, availabilityProviderPeerIds),
@@ -1008,31 +1021,31 @@ export function useManualCacheDownloader(input: {
     () => mergePeerIds(providerPeerIds),
     [providerPeerIds]
   );
-  const activePlaybackPendingKey = getActivePlaybackPendingKey(input.activePlaybackWindow);
+  const activePlaybackPendingKey = getActivePlaybackPendingKey(activePlaybackWindow);
 
   useEffect(() => {
     if (
-      input.pauseDirectRequests ||
-      !input.enableManualTrackCaching ||
+      pauseDirectRequests ||
+      !enableManualTrackCaching ||
       providerPeerIds.length === 0 ||
-      !input.dataMesh
+      !dataMesh
     ) {
       lastBootstrapKeyRef.current = null;
       return;
     }
 
     const bootstrapKey = shouldForceManualCacheBootstrap({
-      enableManualTrackCaching: input.enableManualTrackCaching,
-      manualCacheTrackIds: input.manualCacheTrackIds,
+      enableManualTrackCaching,
+      manualCacheTrackIds,
       providerPeerIds,
-      connectedPeerIds: input.connectedPeers,
+      connectedPeerIds: connectedPeers,
       lastBootstrapKey: lastBootstrapKeyRef.current
     });
     if (!bootstrapKey) {
       return;
     }
 
-    void input.dataMesh
+    void dataMesh
       .syncPeers(providerPeerIds)
       .then((syncStarted) => {
         if (
@@ -1048,7 +1061,7 @@ export function useManualCacheDownloader(input: {
         }
 
         if (!syncStarted) {
-          input.onRuntimeEvent?.({
+          onRuntimeEvent?.({
             type: "diagnostic",
             peerId: "system",
             channelKind: "system",
@@ -1061,7 +1074,7 @@ export function useManualCacheDownloader(input: {
         }
       })
       .catch((error) => {
-        input.onRuntimeEvent?.({
+        onRuntimeEvent?.({
           type: "diagnostic",
           peerId: "system",
           channelKind: "system",
@@ -1072,29 +1085,29 @@ export function useManualCacheDownloader(input: {
         });
       });
   }, [
-    input.connectedPeers,
-    input.dataMesh,
-    input.enableManualTrackCaching,
-    input.manualCacheTrackIds,
-    input.onRuntimeEvent,
-    input.pauseDirectRequests,
+    connectedPeers,
+    dataMesh,
+    enableManualTrackCaching,
+    manualCacheTrackIds,
+    onRuntimeEvent,
+    pauseDirectRequests,
     providerPeerIds
   ]);
 
   useEffect(() => {
-    if (input.pauseDirectRequests || !input.dataMesh) {
+    if (pauseDirectRequests || !dataMesh) {
       recoverySinceAtRef.current = null;
       lastRecoveryAtRef.current = null;
       return;
     }
 
     const shouldRecover = shouldRecoverManualCacheDataPeers({
-      enableManualTrackCaching: input.enableManualTrackCaching,
-      manualCacheTrackIds: input.manualCacheTrackIds,
+      enableManualTrackCaching,
+      manualCacheTrackIds,
       remotePeerIds,
-      connectedPeerIds: input.connectedPeers,
+      connectedPeerIds: connectedPeers,
       availabilityByTrack: schedulerAvailabilityByTrack,
-      localPeerId: input.peerId
+      localPeerId: peerId
     });
 
     if (!shouldRecover) {
@@ -1111,7 +1124,7 @@ export function useManualCacheDownloader(input: {
     const recoveryMode = resolveManualCacheMeshRecoveryMode({
       shouldRecover,
       remotePeerIds,
-      connectedPeerIds: input.connectedPeers,
+      connectedPeerIds: connectedPeers,
       recoverySinceAt: recoverySinceAtRef.current,
       now
     });
@@ -1125,11 +1138,11 @@ export function useManualCacheDownloader(input: {
     }
 
     lastRecoveryAtRef.current = now;
-    void input.dataMesh
+    void dataMesh
       .syncPeers(providerPeerIds, recoveryMode === "force-reconnect" ? { forceReconnectDegraded: true } : undefined)
       .then((syncStarted) => {
         if (!syncStarted) {
-          input.onRuntimeEvent?.({
+          onRuntimeEvent?.({
             type: "diagnostic",
             peerId: "system",
             channelKind: "system",
@@ -1142,7 +1155,7 @@ export function useManualCacheDownloader(input: {
         }
       })
       .catch((error) => {
-        input.onRuntimeEvent?.({
+        onRuntimeEvent?.({
           type: "diagnostic",
           peerId: "system",
           channelKind: "system",
@@ -1153,20 +1166,20 @@ export function useManualCacheDownloader(input: {
         });
       });
   }, [
-    input.connectedPeers,
-    input.dataMesh,
-    input.enableManualTrackCaching,
-    input.manualCacheTrackIds,
-    input.onRuntimeEvent,
-    input.peerId,
-    input.pauseDirectRequests,
+    connectedPeers,
+    dataMesh,
+    enableManualTrackCaching,
+    manualCacheTrackIds,
+    onRuntimeEvent,
+    peerId,
+    pauseDirectRequests,
     providerPeerIds,
     remotePeerIds,
     schedulerAvailabilityByTrack
   ]);
 
   useEffect(() => {
-    const activeTrackIds = new Set(input.manualCacheTrackIds);
+    const activeTrackIds = new Set(manualCacheTrackIds);
     for (const trackId of directPendingRef.current.keys()) {
       if (!activeTrackIds.has(trackId)) {
         directPendingRef.current.delete(trackId);
@@ -1181,12 +1194,12 @@ export function useManualCacheDownloader(input: {
       activePlaybackPendingKeyRef.current = activePlaybackPendingKey;
     }
 
-    if (input.pauseDirectRequests) {
+    if (pauseDirectRequests) {
       directPendingRef.current.clear();
       return;
     }
 
-    if (input.manualCacheTrackIds.length === 0) {
+    if (manualCacheTrackIds.length === 0) {
       return;
     }
 
@@ -1194,13 +1207,13 @@ export function useManualCacheDownloader(input: {
     let inFlight = false;
 
     const requestMissingPieces = async () => {
-      if (stopped || inFlight || !input.roomSnapshot?.room.id || !input.peerId || !input.dataMesh) {
+      if (stopped || inFlight || !roomSnapshot?.room.id || !peerId || !dataMesh) {
         return;
       }
 
       inFlight = true;
       try {
-        let connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
+        let connectedPeerIds = mergePeerIds(connectedPeers, dataMesh.getConnectedPeerIds());
         const now = Date.now();
         for (const providerPeerId of providerPeerIds) {
           if (connectedPeerIds.includes(providerPeerId)) {
@@ -1214,7 +1227,7 @@ export function useManualCacheDownloader(input: {
         }
         if (
           shouldRetryManualCacheProviderBootstrap({
-            manualCacheTrackIds: input.manualCacheTrackIds,
+            manualCacheTrackIds,
             providerPeerIds,
             connectedPeerIds,
             lastBootstrapAttemptAt: lastBootstrapAttemptAtRef.current,
@@ -1222,9 +1235,9 @@ export function useManualCacheDownloader(input: {
           })
         ) {
           lastBootstrapAttemptAtRef.current = now;
-          const syncStarted = await input.dataMesh.syncPeers(providerPeerIds);
+          const syncStarted = await dataMesh.syncPeers(providerPeerIds);
           if (!syncStarted) {
-            input.onRuntimeEvent?.({
+            onRuntimeEvent?.({
               type: "diagnostic",
               peerId: "system",
               channelKind: "system",
@@ -1235,7 +1248,7 @@ export function useManualCacheDownloader(input: {
               recordEvent: false
             });
           }
-          connectedPeerIds = mergePeerIds(input.connectedPeers, input.dataMesh.getConnectedPeerIds());
+          connectedPeerIds = mergePeerIds(connectedPeers, dataMesh.getConnectedPeerIds());
         }
         for (const providerPeerId of providerPeerIds) {
           if (
@@ -1249,8 +1262,8 @@ export function useManualCacheDownloader(input: {
             })
           ) {
             lastProviderRestartAtRef.current.set(providerPeerId, now);
-            await input.dataMesh.restartPeer(providerPeerId).catch((error) => {
-              input.onRuntimeEvent?.({
+            await dataMesh.restartPeer(providerPeerId).catch((error) => {
+              onRuntimeEvent?.({
                 type: "diagnostic",
                 peerId: providerPeerId,
                 channelKind: "data",
@@ -1264,9 +1277,9 @@ export function useManualCacheDownloader(input: {
         }
 
         const requestResults = await planManualCacheDirectRequests({
-          roomSnapshot: input.roomSnapshot,
-          manualCacheTrackIds: input.manualCacheTrackIds,
-          peerId: input.peerId,
+          roomSnapshot,
+          manualCacheTrackIds,
+          peerId,
           providerPeerIds,
           connectedPeerIds,
           availabilityByTrack: schedulerAvailabilityByTrack,
@@ -1278,20 +1291,20 @@ export function useManualCacheDownloader(input: {
             (await getTrackPieceManifest(track.id)) ??
             null,
           getLocalPieceIndexes: (track, _cachedManifest, manifestHint) =>
-            getCachedPieceIndexes(track.id, input.peerId, {
+            getCachedPieceIndexes(track.id, peerId, {
               fileHash: track.fileHash,
               ownerKey: localCacheOwnerKey,
               chunkSize: manifestHint?.chunkSize
             }),
           requestPieces: (providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs) =>
-            input.dataMesh!.requestPieces(providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs)
+            dataMesh.requestPieces(providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs)
         });
 
         for (const { plan, didRequest } of requestResults) {
-          input.onManualCachePlan?.(plan);
+          onManualCachePlan?.(plan);
 
           if (didRequest === false && plan.selectedProviderPeerId) {
-            input.onRuntimeEvent?.(
+            onRuntimeEvent?.(
               buildManualCacheRequestFailureEvent({
                 providerPeerId: plan.selectedProviderPeerId,
                 trackId: plan.trackId,
@@ -1302,7 +1315,7 @@ export function useManualCacheDownloader(input: {
           }
 
           if (didRequest === true && plan.selectedProviderPeerId) {
-            input.onRuntimeEvent?.({
+            onRuntimeEvent?.({
               type: "diagnostic",
               peerId: plan.selectedProviderPeerId,
               channelKind: "data",
@@ -1314,7 +1327,7 @@ export function useManualCacheDownloader(input: {
           }
 
           if (plan.blockedReason && plan.blockedReason !== "complete") {
-            input.onRuntimeEvent?.({
+            onRuntimeEvent?.({
               type: "diagnostic",
               peerId: "system",
               channelKind: "data",
@@ -1340,33 +1353,34 @@ export function useManualCacheDownloader(input: {
       window.clearInterval(timerId);
     };
   }, [
-    input.connectedPeers,
-    input.dataMesh,
-    input.manualCacheTrackIds,
-    input.onManualCachePlan,
-    input.onRuntimeEvent,
-    input.peerId,
-    input.pauseDirectRequests,
-    input.roomSnapshot,
+    connectedPeers,
+    dataMesh,
+    manualCacheTrackIds,
+    onManualCachePlan,
+    onRuntimeEvent,
+    peerId,
+    pauseDirectRequests,
+    providerPeerIds,
+    roomSnapshot,
     activePlaybackPendingKey,
     schedulerAvailabilityByTrack
   ]);
 
   useEffect(() => {
-    if (input.manualCacheTrackIds.length === 0) {
+    if (manualCacheTrackIds.length === 0) {
       return;
     }
 
-    for (const trackId of input.manualCacheTrackIds) {
+    for (const trackId of manualCacheTrackIds) {
       const availability = schedulerAvailabilityByTrack[trackId] ?? {};
       const hasProviderWithChunks = Object.values(availability).some(
         (announcement) =>
-          announcement.ownerPeerId !== input.peerId &&
+          announcement.ownerPeerId !== peerId &&
           announcement.totalChunks > 0 &&
           announcement.availableChunks.length > 0
       );
       if (!hasProviderWithChunks) {
-        input.onRuntimeEvent?.({
+        onRuntimeEvent?.({
           type: "diagnostic",
           peerId: "system",
           channelKind: "data",
@@ -1378,9 +1392,9 @@ export function useManualCacheDownloader(input: {
       }
     }
   }, [
-    input.manualCacheTrackIds,
-    input.onRuntimeEvent,
-    input.peerId,
+    manualCacheTrackIds,
+    onRuntimeEvent,
+    peerId,
     schedulerAvailabilityByTrack
   ]);
 

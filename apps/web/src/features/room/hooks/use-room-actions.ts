@@ -268,7 +268,7 @@ export function useRoomActions({
           })
       );
     },
-    [roomSnapshot, activeSession, runPlaybackMutation]
+    [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]
   );
 
   const playQueueItem = useCallback(
@@ -289,7 +289,7 @@ export function useRoomActions({
           })
       );
     },
-    [roomSnapshot, activeSession, runPlaybackMutation]
+    [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]
   );
 
   const pauseTrack = useCallback(
@@ -314,6 +314,7 @@ export function useRoomActions({
       roomSnapshot,
       activeSession,
       getCurrentPlaybackPositionMs,
+      getCurrentPeerId,
       runPlaybackMutation
     ]
   );
@@ -333,7 +334,7 @@ export function useRoomActions({
           expectedVersion
         })
     );
-  }, [roomSnapshot, activeSession, runPlaybackMutation]);
+  }, [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]);
 
   const nextTrack = useCallback(async () => {
     if (!roomSnapshot || !activeSession) {
@@ -350,7 +351,7 @@ export function useRoomActions({
           expectedVersion
         })
     );
-  }, [roomSnapshot, activeSession, runPlaybackMutation]);
+  }, [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]);
 
   const savePlaylistFromQueue = useCallback(
     async (title: string) => {
@@ -503,7 +504,7 @@ export function useRoomActions({
           })
       );
     },
-    [roomSnapshot, activeSession, runPlaybackMutation]
+    [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]
   );
 
   const handleEnded = useCallback(async () => {

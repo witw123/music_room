@@ -1,7 +1,3 @@
-const minimumAudibleRate = 0.994;
-const maximumAudibleRate = 1.006;
-const minimumLocalAudibleRate = 0.992;
-const maximumLocalAudibleRate = 1.008;
 const minimumGeneralRate = 0.982;
 const maximumGeneralRate = 1.018;
 

@@ -17,6 +17,7 @@ import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPane
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
+import type { RoomSocket } from "@/lib/ws-client";
 
 type TabId = "queue" | "library" | "cache" | "members";
 
@@ -61,7 +62,7 @@ type RoomDashboardViewProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  socket: any;
+  socket: RoomSocket | null;
   onTabChange?: (tab: TabId) => void;
   onDiagnosticsVisibilityChange?: (open: boolean) => void;
 };

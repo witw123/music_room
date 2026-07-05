@@ -26,19 +26,7 @@ export function RoomChatOverlay({
 }: RoomChatOverlayProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
-  const [isVisible, setIsVisible] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const lastActivityRef = useRef<number>(Date.now());
-
-  // Auto-hide logic ONLY for messages, not the input
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // If messages stale, we can still keep them but maybe dim them? 
-      // Actually per "弹幕流" request, let's keep the stream active but fade out old ones
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     if (!socket) return;

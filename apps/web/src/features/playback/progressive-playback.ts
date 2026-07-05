@@ -612,7 +612,6 @@ export function resolveSchedulerPolicy(input: {
     availableChunks: input.availableChunks,
     playbackPositionMs: positionMs
   });
-  const remainingPlaybackMs = Math.max(0, input.manifest.durationMs - positionMs);
   const estimatedFillTimeMs = estimateTrackFillTimeMs({
     manifest: input.manifest,
     availableChunks: input.availableChunks,

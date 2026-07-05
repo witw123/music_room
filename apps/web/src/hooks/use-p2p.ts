@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PeerSignalMessage, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
 import {
   P2PMesh,
@@ -36,8 +36,7 @@ export function useP2P({
   roomSnapshot,
   uploadedTracks,
   socket,
-  onPieceReceived,
-  onStatusMessage
+  onPieceReceived
 }: UseP2POptions): UseP2PReturn {
   const meshRef = useRef<P2PMesh | null>(null);
   const requestedPiecesRef = useRef<Map<string, number>>(new Map());
@@ -117,7 +116,7 @@ export function useP2P({
       meshRef.current = null;
       setConnectedPeers([]);
     };
-  }, [roomId, peerId, sessionId, socket]);
+  }, [roomId, peerId, sessionId, socket, onPieceReceived]);
 
   // Sync peers when room members change
   useEffect(() => {
@@ -210,16 +209,6 @@ export function useP2P({
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, []);
-
-  const mergeAvailability = useCallback((announcement: TrackAvailabilityAnnouncement) => {
-    setAvailabilityByTrack((current) => ({
-      ...current,
-      [announcement.trackId]: {
-        ...(current[announcement.trackId] ?? {}),
-        [announcement.ownerPeerId]: announcement
-      }
-    }));
   }, []);
 
   return {

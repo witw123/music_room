@@ -62,7 +62,7 @@ import {
   resolvePlaybackRecoveryDropReason,
   useRoomPlaybackConnectionCoordinator
 } from "./use-room-playback-connection-coordinator";
-import type { RoomRecoveryState } from "./room-runtime-types";
+import type { PeerRoundTripTimeSource, RoomRecoveryState } from "./room-runtime-types";
 
 export {
   resolveManualCacheProviderPeerIds,
@@ -384,8 +384,11 @@ export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
   return input.payloadRecoveryGeneration >= input.currentRecoveryGeneration;
 }
 
-function getPeerMedianRttMs(state: any) {
-  return typeof state?.pieceRttMsP50 === "number" ? state.pieceRttMsP50 : null;
+function getPeerMedianRttMs(state: PeerRoundTripTimeSource) {
+  if (!state || !("pieceRttMsP50" in state)) {
+    return null;
+  }
+  return typeof state.pieceRttMsP50 === "number" ? state.pieceRttMsP50 : null;
 }
 
 export function useRoomRuntime({
@@ -495,25 +498,17 @@ export function useRoomRuntime({
     socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
     recoveryGenerationRef,
-    roomRecoveryStateRef,
     activePlaybackSourceRef,
     lastSubscribeAckAtRef,
     recoveryModeRef,
     lastRealtimeRoomEventAtRef,
     lastDataActivityAtRef,
     socketDisconnectGraceTimeoutRef,
-    audioUnlockedRef,
-    setAudioUnlockedRef,
-    sourceStartStateRef,
-    setSourceStartStateRef,
-    lastSourceStartErrorRef,
-    setLastSourceStartErrorRef,
     manualCacheTrackIdsRef,
     uploadedTracksRef,
     fullLocalPlaybackTracksRef,
     announceRoomTrackAvailabilityRef,
     handleManualCachePieceReceivedRef,
-    deleteUploadedTrackArtifactsRef,
     deleteRoomTrackArtifactsRef,
     resetPlayerSurfaceRef,
     queueAvailabilityRef,
@@ -579,16 +574,12 @@ export function useRoomRuntime({
   });
   const {
     connectionSupervisorStatesRef,
-    sourceRecoveryCoordinatorRef,
     updateConnectionSupervisorSignalState,
-    updateConnectionSupervisorTransport,
     updateConnectionSupervisorPlayout
   } = useRoomConnectionSupervisor({ lastSubscribeAckAtRef });
   const {
     pieceTransferRatesRef,
-    pieceRequestSamplesRef,
     updateDataTransportStatsRef,
-    reportRealtimeFailureRef,
     recordPieceTransferRef,
     recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef
@@ -677,9 +668,7 @@ export function useRoomRuntime({
       }
     },
     [
-      activeRouteRoomIdRef,
       currentRoomRef,
-      dispatchRoomStateEvent,
       initialRoomId,
       recordPeerDiagnostic,
       roomSnapshotResyncController
@@ -987,6 +976,7 @@ export function useRoomRuntime({
       currentTrackId: roomSnapshot?.room.playback.currentTrackId ?? null,
       bufferHealth,
       enableManualTrackCaching,
+      enableTrackCaching,
       resubscribeRoomRef,
       activeSessionRef,
       activeRouteRoomIdRef,
@@ -1017,19 +1007,53 @@ export function useRoomRuntime({
     });
   }, [
     roomSnapshot?.room.id,
+    roomSnapshot?.room.playback.currentTrackId,
+    roomSnapshot?.room.playback.status,
     hydrated,
     iceConfig,
     iceConfigResolved,
     peerId,
     activeSessionRef,
+    activeRouteRoomIdRef,
+    announceRoomTrackAvailabilityRef,
+    bufferHealth,
+    clearAvailabilityForPeerRef,
+    clearManualCachePendingPiece,
     currentRoomRef,
     chunkSchedulerRef,
+    connectionSupervisorStatesRef,
+    deleteRoomTrackArtifactsRef,
+    dispatchRoomStateEvent,
+    flushPendingAvailabilityRef,
+    fullLocalPlaybackTracksRef,
+    handleManualCachePieceReceivedRef,
+    isPageVisible,
+    lastRealtimeRoomEventAtRef,
+    lastSubscribeAckAtRef,
+    manualCacheTrackIdsRef,
+    meshRef,
+    pieceTransferRatesRef,
+    queueAvailabilityRef,
+    recordPeerDiagnosticRef,
+    recordPieceRequestSampleRef,
+    recordPieceTransferRef,
+    recoveryGenerationRef,
+    recoveryModeRef,
+    resubscribeRoomRef,
+    socketDisconnectGraceTimeoutRef,
+    socketDisconnectGraceUntilRef,
+    socketRef,
     stopPresenceHeartbeat,
     stopRecoveryWatchdog,
     clearSocketDisconnectGrace,
     setConnectedPeers,
     setRoomRecoveryState,
     setStatusMessage,
+    updateConnectionSupervisorSignalState,
+    updateDataTransportStatsRef,
+    updatePeerBufferedAmountRef,
+    uploadedTrackIdsRef,
+    uploadedTracksRef,
     exitCurrentRoom,
     emitPresence,
     startPresenceHeartbeat,

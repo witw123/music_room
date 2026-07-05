@@ -8,9 +8,7 @@ import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics
 import type { RoomSocket } from "@/lib/ws-client";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
-import type { RoomRecoveryState } from "./room-runtime-types";
-
-type LocalPlaybackTrackRecord = Record<string, Pick<UploadedTrack, "objectUrl">>;
+import type { FullLocalPlaybackTrackRecord, RoomRecoveryState } from "./room-runtime-types";
 
 export function useRoomRuntimeMutableState(input: {
   initialRoomId: string | null;
@@ -31,7 +29,7 @@ export function useRoomRuntimeMutableState(input: {
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
   manualCacheTrackIds: string[];
   uploadedTracks: Record<string, UploadedTrack>;
-  fullLocalPlaybackTracks: LocalPlaybackTrackRecord;
+  fullLocalPlaybackTracks: FullLocalPlaybackTrackRecord;
   announceRoomTrackAvailability: (trackId: string) => Promise<void>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
@@ -71,7 +69,7 @@ export function useRoomRuntimeMutableState(input: {
   const setLastSourceStartErrorRef = useRef(input.setLastSourceStartError);
   const manualCacheTrackIdsRef = useRef(input.manualCacheTrackIds);
   const uploadedTracksRef = useRef(input.uploadedTracks);
-  const fullLocalPlaybackTracksRef = useRef<LocalPlaybackTrackRecord>(
+  const fullLocalPlaybackTracksRef = useRef<FullLocalPlaybackTrackRecord>(
     input.fullLocalPlaybackTracks
   );
   const announceRoomTrackAvailabilityRef = useRef(input.announceRoomTrackAvailability);

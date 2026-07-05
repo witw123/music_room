@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
 import {
   ChunkScheduler,
   P2PMesh,
@@ -20,7 +20,11 @@ import type { CachedLibraryTrackRecord } from "@/lib/indexeddb";
 import { hashArrayBuffer } from "@/features/p2p";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
-import type { DataMeshBridge } from "./room-runtime-types";
+import type {
+  DataMeshBridge,
+  ManualCachePieceReceivedInput,
+  RoomDataMeshDiagnosticsRefs
+} from "./room-runtime-types";
 
 type DataMeshRuntime = Pick<
   P2PMesh,
@@ -145,55 +149,9 @@ export function createRoomDataMeshRuntime(input: {
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIdsRef: MutableRefObject<string[]>;
   announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
-  handleManualCachePieceReceivedRef: MutableRefObject<
-    (input: {
-      trackId: string;
-      chunkIndex: number;
-      totalChunks: number;
-      chunkSize: number;
-      mimeType: string;
-    }) => void
-  >;
+  handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
-  recordPeerDiagnosticRef: MutableRefObject<(input: any) => void>;
-  recordPieceTransferRef: MutableRefObject<
-    (input: { peerId: string; direction: "download" | "upload"; bytes: number }) => void
-  >;
-  recordPieceRequestSampleRef: MutableRefObject<
-    (input: {
-      peerId: string;
-      outcome: "completed" | "timeout";
-      durationMs: number;
-    }) => void
-  >;
-  updatePeerBufferedAmountRef: MutableRefObject<
-    (peerId: string, bufferedAmountBytes: number) => void
-  >;
-  updateDataTransportStatsRef: MutableRefObject<(input: any) => void>;
-  connectionSupervisorStatesRef: MutableRefObject<Map<string, any>>;
-  updateConnectionSupervisorSignalState: (input: {
-    peerId: string;
-    channelKind: "data" | "media";
-    dataConnectionState?: string;
-    dataIceState?: string;
-    dataChannelState?: string;
-    lastFailureReason?: string;
-    mediaConnectionState?: string;
-    mediaIceState?: string;
-  }) => any;
-  withResolvedTransportHealth: (snapshot: any) => any;
-  withSupervisorDiagnosticPatch: (snapshot: any, state: any) => any;
-  getPieceTransferRates: (
-    transferWindows: Map<string, any>,
-    peerId: string,
-    now?: number
-  ) => {
-    downloadRateKbps: number | null;
-    uploadRateKbps: number | null;
-  };
-  pieceTransferRatesRef: MutableRefObject<Map<string, any>>;
-  getPeerMedianRttMs: (state: any) => number | null;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   isPageVisible: boolean;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
@@ -201,7 +159,7 @@ export function createRoomDataMeshRuntime(input: {
   bufferHealth: "healthy" | "low" | "critical";
   enableManualTrackCaching: boolean;
   reportMeshResyncFailure: (error: unknown) => void;
-}) {
+} & RoomDataMeshDiagnosticsRefs) {
   const peerBufferedAmountBytes = new Map<string, number>();
   const cachedLibraryTrackCache =
     createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(1, 5_000);
@@ -364,7 +322,7 @@ export function createRoomDataMeshRuntime(input: {
           direction: "local",
           event: "connection-state",
           summary: `Data 连接状态：${state}`,
-          update: (snapshot: any) => ({
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
             ...input.withResolvedTransportHealth({
               ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
               dataConnectionState: state
@@ -390,7 +348,7 @@ export function createRoomDataMeshRuntime(input: {
           direction: "local",
           event: "ice-state",
           summary: `Data ICE 状态：${state}`,
-          update: (snapshot: any) => ({
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
             ...input.withResolvedTransportHealth({
               ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
               dataIceState: state
@@ -411,7 +369,7 @@ export function createRoomDataMeshRuntime(input: {
           direction: "local",
           event: "data-channel",
           summary: `DataChannel 状态：${state}`,
-          update: (snapshot: any) => ({
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
             ...input.withResolvedTransportHealth({
               ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
               dataChannelState: state

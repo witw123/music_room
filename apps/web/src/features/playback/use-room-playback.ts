@@ -407,9 +407,11 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
     };
   }, [
     audioRef,
+    acceptedPlayback,
     acceptedPlayback?.status,
     acceptedPlayback?.currentTrackId,
     acceptedPlayback?.mediaEpoch,
+    progressTrack,
     progressTrack?.durationMs,
     
     getLocalPlaybackPositionMs,
@@ -553,6 +555,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [
     progressTrack?.id,
     progressTrack?.durationMs,
+    progressTrack,
     acceptedPlayback?.mediaEpoch
   ]);
 

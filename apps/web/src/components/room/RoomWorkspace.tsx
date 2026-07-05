@@ -10,7 +10,6 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
-import { TopBar } from "@/components/TopBar";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/room/MembersPanel";
@@ -102,7 +101,6 @@ function RoomWorkspaceBase({
   isNavigatingRoomExit,
   isRecoveringRoom,
   isRoomTransitionPending,
-  onLogout,
   onClearIdentity,
   onCopyJoinCode,
   onLeaveRoom,

@@ -76,9 +76,12 @@ const maxPcmCachedPiecesToAppendPerSync = 2;
 // When we still need to reach the live playback position (listener catching up
 // to the host, or a seek), the small per-sync cap would make decoding lag far
 // behind download and playback, so nothing becomes audible until the whole
-// track finishes caching. In that catch-up case we allow appending many more
-// contiguous chunks in one pass, bounded only by this safety cap.
-const maxPcmCatchupPiecesToAppendPerSync = 512;
+// track finishes caching. In that catch-up case we allow appending more
+// contiguous chunks per pass. Kept moderate (not hundreds) because every chunk
+// is a separate IndexedDB read transaction; issuing hundreds in one burst
+// contends with the downloader's write transactions and triggers AbortError.
+// 64 per sync × maxPcmPlaybackCatchupSyncBatches still covers large seeks.
+const maxPcmCatchupPiecesToAppendPerSync = 64;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 const maxPcmPlaybackWindowPiecesToDecode = 4;
 
@@ -263,10 +266,16 @@ export class ProgressivePcmEngine {
         this.syncQueued = false;
         appendedAny = (await this.performSync()) || appendedAny;
       } while (this.syncQueued && !isTerminalEngineStatus(this.status));
-    } catch {
+    } catch (error) {
       if (!isDestroyedEngineStatus(this.status)) {
-        this.lastDecodeError = "cache-read-failed";
-        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        // IndexedDB AbortError is transient (write/read transaction contention
+        // or a page-lifecycle abort). Do NOT mark the engine failed for it —
+        // that would permanently stop playback for a recoverable hiccup. Leave
+        // state intact so the next tick simply retries the cache read.
+        if (!isTransientCacheReadError(error)) {
+          this.lastDecodeError = "cache-read-failed";
+          this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        }
       }
     } finally {
       this.syncInFlight = false;
@@ -1288,6 +1297,17 @@ function yieldToMicrotasks() {
 
 function isTerminalEngineStatus(status: EngineStatus) {
   return status === "destroyed" || status === "failed";
+}
+
+function isTransientCacheReadError(error: unknown) {
+  // IndexedDB aborts a transaction (AbortError) on contention with concurrent
+  // writes or during page-lifecycle teardown. These are recoverable and should
+  // be retried, not treated as a fatal engine failure.
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? (error as { name?: unknown }).name
+      : undefined;
+  return name === "AbortError" || name === "TransactionInactiveError";
 }
 
 function isDestroyedEngineStatus(status: EngineStatus) {

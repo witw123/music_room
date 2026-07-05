@@ -61,12 +61,9 @@ function RoomStageBase({
   canDisbandRoom,
   currentSourceOwnerNickname,
   mediaConnectionState,
-  mediaConnectedPeersCount,
-  iceConfigSource,
   onCopyJoinCode,
   onLeaveRoom,
-  onDeleteRoom,
-  socket
+  onDeleteRoom
 }: RoomStageProps) {
   const [isPending, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);

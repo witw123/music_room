@@ -1,19 +1,14 @@
 "use client";
 
-import { useCallback, useRef, type MutableRefObject } from "react";
+import { useCallback, useRef } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-
-type PieceTransferSample = {
-  timestampMs: number;
-  bytes: number;
-};
-
-type PieceTransferWindow = {
-  downloads: PieceTransferSample[];
-  uploads: PieceTransferSample[];
-};
+import type {
+  DataTransportStatsInput,
+  PieceTransferSample,
+  PieceTransferWindow
+} from "./room-runtime-types";
 
 const pieceTransferWindowMs = 12_000;
 
@@ -64,6 +59,7 @@ export function useRoomRuntimeObservability(input: {
   peerId: string;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
 }) {
+  const { recordPeerDiagnostic } = input;
   const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
   const pieceRequestSamplesRef = useRef<Map<string, unknown>>(new Map());
 
@@ -79,7 +75,7 @@ export function useRoomRuntimeObservability(input: {
       pieceTransferRatesRef.current.set(value.peerId, current);
 
       const rates = getPieceTransferRates(pieceTransferRatesRef.current, value.peerId, now);
-      input.recordPeerDiagnostic({
+      recordPeerDiagnostic({
         peerId: value.peerId,
         channelKind: "data",
         direction: value.direction === "download" ? "received" : "sent",
@@ -104,7 +100,7 @@ export function useRoomRuntimeObservability(input: {
   );
 
   const updatePeerBufferedAmountRef = useRef((peerId: string, bufferedAmountBytes: number) => {
-    input.recordPeerDiagnostic({
+    recordPeerDiagnostic({
       peerId,
       channelKind: "data",
       direction: "local",
@@ -118,8 +114,8 @@ export function useRoomRuntimeObservability(input: {
     });
   });
 
-  const updateDataTransportStatsRef = useRef((value: { peerId: string; sample?: any }) => {
-    input.recordPeerDiagnostic({
+  const updateDataTransportStatsRef = useRef((value: DataTransportStatsInput) => {
+    recordPeerDiagnostic({
       peerId: value.peerId,
       channelKind: "data",
       direction: "local",
@@ -145,7 +141,7 @@ export function useRoomRuntimeObservability(input: {
       summary: string;
       error?: unknown;
     }) => {
-      input.recordPeerDiagnostic({
+      recordPeerDiagnostic({
         peerId: value.peerId,
         channelKind: value.channelKind,
         direction: "local",
@@ -162,7 +158,7 @@ export function useRoomRuntimeObservability(input: {
 
   const updateSystemProgressiveStatus = useCallback(
     (patch: Record<string, unknown>) => {
-      input.recordPeerDiagnostic({
+      recordPeerDiagnostic({
         peerId: "system",
         channelKind: "system",
         direction: "local",
@@ -181,7 +177,7 @@ export function useRoomRuntimeObservability(input: {
         })
       });
     },
-    [input.recordPeerDiagnostic]
+    [recordPeerDiagnostic]
   );
 
   return {

@@ -1047,6 +1047,88 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("keeps playing and retries when a cache read hits a transient AbortError", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const wavManifest = {
+      ...manifest,
+      mimeType: "audio/wav",
+      codec: "wav",
+      durationMs: 1_000,
+      totalChunks: 6,
+      chunkSize: 444
+    };
+    const fullWav = buildPcmWavBytes({
+      sampleRate: 1_000,
+      channels: 1,
+      bitsPerSample: 16,
+      dataBytes: 2_000,
+      availableDataBytes: 2_000
+    });
+    const engine = new ProgressivePcmEngine(audio, "peer_local", wavManifest);
+
+    const readCachedChunk = (chunkIndex: number) => {
+      if (chunkIndex >= wavManifest.totalChunks) {
+        return null;
+      }
+
+      const start = chunkIndex === 0 ? 0 : 444 + (chunkIndex - 1) * 400;
+      const end = chunkIndex === 0 ? 444 : Math.min(fullWav.byteLength, start + 400);
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: wavManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: wavManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: fullWav.slice(start, end).buffer
+      };
+    };
+
+    // The first sync aborts partway through reading the cached prefix (IndexedDB
+    // transaction contention with the concurrent downloader). Subsequent reads
+    // succeed once the contention clears.
+    let shouldAbort = true;
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      if (shouldAbort) {
+        const abortError = new Error("The transaction was aborted.");
+        abortError.name = "AbortError";
+        throw abortError;
+      }
+
+      return readCachedChunk(chunkIndex);
+    });
+
+    try {
+      await engine.attach();
+
+      // Transient abort must not latch a failure — the engine keeps its
+      // pre-abort status (never "failed"/"degraded") so the next tick retries.
+      await expect(engine.sync()).resolves.toBe(false);
+      const afterAbort = engine.getSnapshot();
+      expect(afterAbort.status).not.toBe("failed");
+      expect(afterAbort.status).not.toBe("degraded");
+      expect(afterAbort.lastDecodeError).toBeNull();
+      expect(afterAbort.decodedSegmentCount).toBe(0);
+
+      // Once the abort clears, the next sync catches up and produces audio.
+      shouldAbort = false;
+      const result = await engine.syncPlayback(0.9, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "ready",
+        lastDecodeError: null,
+        decodedSegmentCount: 2
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("records a flush attempt when decoder flush rejects before output", async () => {
     const audioContext = installFakeAudioContext({ rejectFlush: true });
     const audio = createAudioElement();
