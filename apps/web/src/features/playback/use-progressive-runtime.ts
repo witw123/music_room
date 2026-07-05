@@ -23,8 +23,8 @@ import {
   type ProgressivePlaybackSource
 } from "./progressive-playback";
 import { isPlaybackStartIntentPending } from "./playback-start-intent";
-import { ProgressiveMseEngine } from "./progressive-mse-engine";
-import { ProgressivePcmEngine } from "./progressive-pcm-engine";
+import type { ProgressiveMseEngine } from "./progressive-mse-engine";
+import type { ProgressivePcmEngine } from "./progressive-pcm-engine";
 import { roomAudioOutput } from "./room-audio-output";
 import {
   resolvePcmRuntimeFailureReason,
@@ -44,6 +44,7 @@ import { useLocalAudioEventController } from "./playback-orchestrator/local-audi
 import { useLocalPlaybackReadinessController } from "./playback-orchestrator/local-playback-readiness-controller";
 import { usePlaybackSourceController } from "./playback-orchestrator/playback-source-controller";
 import { usePlaybackRuntimeLifecycleController } from "./playback-orchestrator/playback-runtime-lifecycle-controller";
+import { useProgressiveEngineController } from "./playback-orchestrator/progressive-engine-controller";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -109,11 +110,7 @@ import {
   resolvePlaybackStartMediaConnectionState,
   resolvePlaybackStartFailureMessage,
   resolvePcmSyncPlaybackOutcome,
-  resolveProgressiveEngineSetupPreflight,
-  resolveProgressiveEngineAttachErrorAction,
   resolveProgressiveEngineAttachFailureAction,
-  resolveProgressiveEngineAttachResultAction,
-  resolveProgressiveEngineAttachSuccessFallbackReason,
   resolvePlayingPlaybackEventAction,
   resolvePlayingMediaConnectionState,
   resolveSeekedPlaybackEventAction,
@@ -495,6 +492,8 @@ export function useProgressiveRuntime({
   const currentTrackAvailableChunksRef = useRef<number[]>([]);
   currentTrackAvailableChunksRef.current =
     currentTrackAvailabilityAnnouncement?.availableChunks ?? [];
+  const currentTrackAvailableChunksKey =
+    currentTrackAvailabilityAnnouncement?.availableChunks.join(",") ?? "";
   const currentTrackAvailabilityManifestHint = useMemo(
     () =>
       resolveTrackAvailabilityManifestHint({
@@ -1620,119 +1619,19 @@ export function useProgressiveRuntime({
     volume
   ]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    const setupPreflight = resolveProgressiveEngineSetupPreflight({
-      hasAudio: !!audio,
-      canPrepareProgressiveLocal,
-      hasManifest: !!currentProgressiveManifest
-    });
-    if (setupPreflight === "skip") {
-      return;
-    }
-
-    progressiveEngineRef.current?.destroy();
-    progressiveEngineRef.current = null;
-    progressivePcmEngineRef.current?.destroy();
-    progressivePcmEngineRef.current = null;
-    if (setupPreflight === "destroy-existing" || !audio || !currentProgressiveManifest) {
-      return;
-    }
-
-    const engine =
-      currentProgressiveEngineType === "pcm"
-        ? new ProgressivePcmEngine(
-            audio,
-            peerId,
-            currentProgressiveManifest,
-            () => roomAudioOutput.getSharedAudioContext()
-          )
-        : new ProgressiveMseEngine(audio, peerId, currentProgressiveManifest);
-
-    if (engine instanceof ProgressivePcmEngine) {
-      progressivePcmEngineRef.current = engine;
-      engine.setVolume(volume);
-    } else {
-      progressiveEngineRef.current = engine;
-    }
-
-    void engine
-      .attach()
-      .then((attached) => {
-        const attachAction = resolveProgressiveEngineAttachResultAction({
-          isCurrentEngine:
-            progressiveEngineRef.current === engine || progressivePcmEngineRef.current === engine,
-          attached,
-          isPcmEngine: engine instanceof ProgressivePcmEngine
-        });
-        if (!attachAction) {
-          return;
-        }
-
-        if (attachAction.kind === "failure") {
-          if (attachAction.failureAction === "pcm-runtime-failure") {
-            markPcmRuntimeFailure("engine-failed");
-          } else {
-            setProgressiveFallbackReason(attachAction.failureAction);
-          }
-          return;
-        }
-
-        setProgressiveFallbackReason(resolveProgressiveEngineAttachSuccessFallbackReason);
-        if (attachAction.shouldSyncEngine) {
-          void engine.sync();
-        }
-        return undefined;
-      })
-      .catch(() => {
-        const attachAction = resolveProgressiveEngineAttachErrorAction({
-          isCurrentEngine:
-            progressiveEngineRef.current === engine || progressivePcmEngineRef.current === engine,
-          isPcmEngine: engine instanceof ProgressivePcmEngine
-        });
-        if (!attachAction) {
-          return;
-        }
-
-        if (attachAction.failureAction === "pcm-runtime-failure") {
-          markPcmRuntimeFailure("engine-failed");
-        } else {
-          setProgressiveFallbackReason(attachAction.failureAction);
-        }
-      });
-
-    return () => {
-      if (progressiveEngineRef.current === engine) {
-        progressiveEngineRef.current = null;
-      }
-      if (progressivePcmEngineRef.current === engine) {
-        progressivePcmEngineRef.current = null;
-      }
-      engine.destroy();
-    };
-  }, [
+  useProgressiveEngineController({
     audioRef,
     canPrepareProgressiveLocal,
-    currentProgressiveManifest,
     currentProgressiveEngineType,
-    peerId,
-    volume,
+    currentProgressiveManifest,
+    currentTrackAvailableChunksKey,
     markPcmRuntimeFailure,
-    setProgressiveFallbackReason
-  ]);
-
-  useEffect(() => {
-    if (!currentProgressiveManifest) {
-      return;
-    }
-
-    void progressiveEngineRef.current?.sync();
-    void progressivePcmEngineRef.current?.sync();
-  }, [currentProgressiveManifest, currentTrackAvailabilityAnnouncement?.availableChunks]);
-
-  useEffect(() => {
-    progressivePcmEngineRef.current?.setVolume(volume);
-  }, [volume]);
+    peerId,
+    progressiveEngineRef,
+    progressivePcmEngineRef,
+    setProgressiveFallbackReason,
+    volume
+  });
 
   useEffect(() => {
     const playbackState = playbackRef.current;

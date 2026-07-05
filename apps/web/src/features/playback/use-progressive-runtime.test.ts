@@ -667,6 +667,30 @@ describe("playback runtime pipeline keys", () => {
     expect(sourceController).toContain("resolveSilentSlidingWindowFullLocalRecoveryAction");
   });
 
+  it("hosts progressive engine attachment outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const engineController = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-engine-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useProgressiveEngineController");
+    expect(runtimeSource).not.toContain("const setupPreflight = resolveProgressiveEngineSetupPreflight");
+    expect(runtimeSource).not.toContain("new ProgressivePcmEngine(");
+    expect(runtimeSource).not.toContain("new ProgressiveMseEngine(");
+    expect(runtimeSource).not.toContain("progressivePcmEngineRef.current?.setVolume(volume)");
+    expect(engineController).toContain("export function useProgressiveEngineController");
+    expect(engineController).toContain("resolveProgressiveEngineSetupPreflight");
+    expect(engineController).toContain("resolveProgressiveEngineAttachResultAction");
+    expect(engineController).toContain("resolveProgressiveEngineAttachErrorAction");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const publisherSource = readFileSync(
       join(
