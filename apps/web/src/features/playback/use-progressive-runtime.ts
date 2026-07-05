@@ -67,6 +67,7 @@ import {
 import {
   buildCurrentTrackFormatKey,
   buildProgressiveWarmupTimerKey,
+  bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
@@ -171,6 +172,7 @@ export type {
   SchedulerBudgetTier
 } from "./playback-orchestrator/pipeline";
 export {
+  bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
@@ -264,17 +266,6 @@ export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
 
 function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
   return reason === "buffer-underrun" || reason === "stalled" || reason === "seek-outside-buffer";
-}
-
-function bucketDiagnosticDurationMs(
-  value: number | null | undefined,
-  bucketMs: number
-) {
-  if (value === null || typeof value === "undefined" || !Number.isFinite(value)) {
-    return "";
-  }
-
-  return Math.round(value / bucketMs) * bucketMs;
 }
 
 function resolveTransportGovernorMode(input: {

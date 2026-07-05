@@ -228,6 +228,17 @@ export function getAudibleElementVolume(userVolume: number) {
   return Math.min(1, userVolume);
 }
 
+export function bucketDiagnosticDurationMs(
+  value: number | null | undefined,
+  bucketMs: number
+) {
+  if (value === null || typeof value === "undefined" || !Number.isFinite(value)) {
+    return "";
+  }
+
+  return Math.round(value / bucketMs) * bucketMs;
+}
+
 export function getPcmEngineDiagnosticsKey(
   snapshot: ProgressivePcmEngineSnapshot | null | undefined
 ) {

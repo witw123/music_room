@@ -7,6 +7,7 @@ import {
   buildCurrentTrackFormatKey,
   buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
+  bucketDiagnosticDurationMs as pipelineBucketDiagnosticDurationMs,
   getAudibleElementVolume as pipelineGetAudibleElementVolume,
   getPcmEngineDiagnosticsKey as pipelineGetPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
@@ -89,6 +90,10 @@ describe("playback runtime pipeline keys", () => {
   });
 
   it("hosts diagnostic and media element helpers in the pure pipeline module", () => {
+    expect(pipelineBucketDiagnosticDurationMs(null, 1000)).toBe("");
+    expect(pipelineBucketDiagnosticDurationMs(Number.NaN, 1000)).toBe("");
+    expect(pipelineBucketDiagnosticDurationMs(1499, 1000)).toBe(1000);
+    expect(pipelineBucketDiagnosticDurationMs(1500, 1000)).toBe(2000);
     expect(pipelineGetAudibleElementVolume(0)).toBe(0.72);
     expect(
       pipelineGetPcmEngineDiagnosticsKey({
