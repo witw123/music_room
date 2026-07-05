@@ -5,7 +5,12 @@ import {
   buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
+  shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
+  shouldPrepareProgressiveRuntimeForSource as pipelineShouldPrepareProgressiveRuntimeForSource,
+  shouldStartListenerProgressivePlayback as pipelineShouldStartListenerProgressivePlayback,
+  shouldStartPcmSlidingWindowAudioElement as pipelineShouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup as pipelineShouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
+  shouldUsePcmEngineForFullLocal as pipelineShouldUsePcmEngineForFullLocal,
   shouldWarmFullLocalWithSharedAudioElement as pipelineShouldWarmFullLocalWithSharedAudioElement
 } from "./playback-orchestrator/pipeline";
 import {
@@ -38,6 +43,57 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("hosts listener sliding-window playback policy in the pure pipeline module", () => {
+    expect(
+      pipelineShouldPrepareProgressiveRuntimeForSource({
+        activePlaybackSource: "progressive-local",
+        progressiveEngineType: "pcm"
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldStartListenerProgressivePlayback({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: null
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldAttemptProgressiveLocalPlayback({
+        isCurrentSourceOwner: true,
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "buffering",
+        engineType: "pcm",
+        startupReady: false,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: null
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldStartPcmSlidingWindowAudioElement({
+        activePlaybackSource: "lossless-local",
+        playbackStatus: "playing",
+        localReady: true,
+        audioPaused: true,
+        lastAttemptAtMs: 1000,
+        nowMs: 2100,
+        retryIntervalMs: 1000
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldUsePcmEngineForFullLocal({
+        activePlaybackSource: "full-local",
+        forceSourceOwnerLocalPlayback: false,
+        sourceOwnerHasLocalTrack: false,
+        hasFullLocalTrack: false,
+        progressiveEngineType: "pcm"
+      })
+    ).toBe(true);
+  });
+
   it("hosts full-local warmup policy in the pure pipeline module", () => {
     expect(
       pipelineShouldWarmFullLocalWithSharedAudioElement({

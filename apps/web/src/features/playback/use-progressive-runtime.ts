@@ -68,6 +68,9 @@ import {
 import {
   buildCurrentTrackFormatKey,
   hasSufficientBackingForFullLocalWarmup,
+  shouldAttemptProgressiveLocalPlayback,
+  shouldPrepareProgressiveRuntimeForSource,
+  shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
   shouldWarmFullLocalWithSharedAudioElement,
   type PlaybackRecoveryStage
@@ -151,7 +154,12 @@ const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 export type { PlaybackRecoveryStage } from "./playback-orchestrator/pipeline";
 export {
   hasSufficientBackingForFullLocalWarmup,
+  shouldAttemptProgressiveLocalPlayback,
+  shouldPrepareProgressiveRuntimeForSource,
+  shouldStartListenerProgressivePlayback,
+  shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
+  shouldUsePcmEngineForFullLocal,
   shouldWarmFullLocalWithSharedAudioElement
 } from "./playback-orchestrator/pipeline";
 
@@ -385,16 +393,6 @@ export function shouldRecoverPausedFullLocalPlayback(input: {
   );
 }
 
-export function shouldPrepareProgressiveRuntimeForSource(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  progressiveEngineType: ProgressiveEngineType;
-}) {
-  return (
-    input.progressiveEngineType !== "none" &&
-    input.activePlaybackSource !== "full-local"
-  );
-}
-
 export function shouldSkipSecondaryPcmWarmupSync(input: {
   engineType: ProgressiveEngineType;
   engineReady: boolean;
@@ -403,102 +401,8 @@ export function shouldSkipSecondaryPcmWarmupSync(input: {
   return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
 }
 
-export function shouldStartPcmSlidingWindowAudioElement(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  localReady: boolean;
-  audioPaused: boolean;
-  lastAttemptAtMs: number | null;
-  nowMs: number;
-  retryIntervalMs: number;
-}) {
-  if (
-    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    (input.playbackStatus !== "playing" && input.playbackStatus !== "buffering") ||
-    !input.localReady ||
-    !input.audioPaused
-  ) {
-    return false;
-  }
-
-  return (
-    input.lastAttemptAtMs === null ||
-    input.nowMs - input.lastAttemptAtMs >= input.retryIntervalMs
-  );
-}
-
-export function shouldStartListenerProgressivePlayback(input: {
-  isCurrentSourceOwner: boolean;
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  engineType: ProgressiveEngineType;
-  startupReady: boolean;
-  hasFullLocalTrack: boolean;
-  progressiveFallbackReason: string | null | undefined;
-}) {
-  const hasActiveIntent =
-    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
-  if (
-    input.isCurrentSourceOwner ||
-    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    !hasActiveIntent ||
-    input.engineType === "none" ||
-    input.progressiveFallbackReason === "progressive-init-failed"
-  ) {
-    return false;
-  }
-
-  return input.startupReady;
-}
-
 function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
   return reason === "buffer-underrun" || reason === "stalled" || reason === "seek-outside-buffer";
-}
-
-export function shouldAttemptProgressiveLocalPlayback(input: {
-  isCurrentSourceOwner: boolean;
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  engineType: ProgressiveEngineType;
-  startupReady: boolean;
-  hasFullLocalTrack: boolean;
-  progressiveFallbackReason: string | null | undefined;
-}) {
-  const hasActiveIntent =
-    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
-  if (
-    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    !hasActiveIntent ||
-    input.engineType === "none" ||
-    input.progressiveFallbackReason === "progressive-init-failed"
-  ) {
-    return false;
-  }
-
-  if (input.isCurrentSourceOwner) {
-    return true;
-  }
-
-  return shouldStartListenerProgressivePlayback(input);
-}
-
-export function shouldUsePcmEngineForFullLocal(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  forceSourceOwnerLocalPlayback: boolean;
-  sourceOwnerHasLocalTrack: boolean;
-  hasFullLocalTrack: boolean;
-  progressiveEngineType: ProgressiveEngineType;
-}) {
-  const wantsFullLocalPlayback =
-    input.activePlaybackSource === "full-local" ||
-    input.forceSourceOwnerLocalPlayback ||
-    input.sourceOwnerHasLocalTrack;
-
-  return (
-    wantsFullLocalPlayback &&
-    !input.hasFullLocalTrack &&
-    input.progressiveEngineType === "pcm"
-  );
 }
 
 export function getAudibleElementVolume(userVolume: number) {

@@ -111,6 +111,110 @@ export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: 
   return input.now - input.warmupReadyAt >= input.switchDelayMs;
 }
 
+export function shouldPrepareProgressiveRuntimeForSource(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  progressiveEngineType: ProgressiveEngineType;
+}) {
+  return (
+    input.progressiveEngineType !== "none" &&
+    input.activePlaybackSource !== "full-local"
+  );
+}
+
+export function shouldStartListenerProgressivePlayback(input: {
+  isCurrentSourceOwner: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  engineType: ProgressiveEngineType;
+  startupReady: boolean;
+  hasFullLocalTrack: boolean;
+  progressiveFallbackReason: string | null | undefined;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  if (
+    input.isCurrentSourceOwner ||
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    !hasActiveIntent ||
+    input.engineType === "none" ||
+    input.progressiveFallbackReason === "progressive-init-failed"
+  ) {
+    return false;
+  }
+
+  return input.startupReady;
+}
+
+export function shouldAttemptProgressiveLocalPlayback(input: {
+  isCurrentSourceOwner: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  engineType: ProgressiveEngineType;
+  startupReady: boolean;
+  hasFullLocalTrack: boolean;
+  progressiveFallbackReason: string | null | undefined;
+}) {
+  const hasActiveIntent =
+    input.playbackStatus === "playing" || input.playbackStatus === "buffering";
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    !hasActiveIntent ||
+    input.engineType === "none" ||
+    input.progressiveFallbackReason === "progressive-init-failed"
+  ) {
+    return false;
+  }
+
+  if (input.isCurrentSourceOwner) {
+    return true;
+  }
+
+  return shouldStartListenerProgressivePlayback(input);
+}
+
+export function shouldStartPcmSlidingWindowAudioElement(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  localReady: boolean;
+  audioPaused: boolean;
+  lastAttemptAtMs: number | null;
+  nowMs: number;
+  retryIntervalMs: number;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+    (input.playbackStatus !== "playing" && input.playbackStatus !== "buffering") ||
+    !input.localReady ||
+    !input.audioPaused
+  ) {
+    return false;
+  }
+
+  return (
+    input.lastAttemptAtMs === null ||
+    input.nowMs - input.lastAttemptAtMs >= input.retryIntervalMs
+  );
+}
+
+export function shouldUsePcmEngineForFullLocal(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  forceSourceOwnerLocalPlayback: boolean;
+  sourceOwnerHasLocalTrack: boolean;
+  hasFullLocalTrack: boolean;
+  progressiveEngineType: ProgressiveEngineType;
+}) {
+  const wantsFullLocalPlayback =
+    input.activePlaybackSource === "full-local" ||
+    input.forceSourceOwnerLocalPlayback ||
+    input.sourceOwnerHasLocalTrack;
+
+  return (
+    wantsFullLocalPlayback &&
+    !input.hasFullLocalTrack &&
+    input.progressiveEngineType === "pcm"
+  );
+}
+
 export function buildProgressiveWarmupTimerKey(input: {
   playbackCurrentTrackId: string | null;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null;
