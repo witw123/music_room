@@ -83,6 +83,82 @@ type CachedFullLocalPlaybackLoadTarget = {
     sizeBytes?: number;
   };
 };
+
+type StableTrackMeta = Pick<
+  RoomSnapshot["tracks"][number],
+  | "id"
+  | "title"
+  | "artist"
+  | "album"
+  | "durationMs"
+  | "bitrate"
+  | "sizeBytes"
+  | "codec"
+  | "mimeType"
+  | "fileHash"
+  | "artworkUrl"
+  | "ownerSessionId"
+  | "ownerNickname"
+  | "sourceType"
+  | "pieceManifest"
+  | "relayManifest"
+>;
+
+function areTrackPieceManifestsEqual(
+  previous: StableTrackMeta["pieceManifest"] | StableTrackMeta["relayManifest"],
+  next: StableTrackMeta["pieceManifest"] | StableTrackMeta["relayManifest"]
+) {
+  if (previous === next) {
+    return true;
+  }
+
+  if (!previous || !next) {
+    return previous === next;
+  }
+
+  return (
+    previous.totalChunks === next.totalChunks &&
+    previous.chunkSize === next.chunkSize &&
+    previous.pieceMimeType === next.pieceMimeType
+  );
+}
+
+function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
+  return (
+    previous.id === next.id &&
+    previous.title === next.title &&
+    previous.artist === next.artist &&
+    previous.album === next.album &&
+    previous.durationMs === next.durationMs &&
+    previous.bitrate === next.bitrate &&
+    previous.sizeBytes === next.sizeBytes &&
+    previous.codec === next.codec &&
+    previous.mimeType === next.mimeType &&
+    previous.fileHash === next.fileHash &&
+    previous.artworkUrl === next.artworkUrl &&
+    previous.ownerSessionId === next.ownerSessionId &&
+    previous.ownerNickname === next.ownerNickname &&
+    previous.sourceType === next.sourceType &&
+    areTrackPieceManifestsEqual(previous.pieceManifest, next.pieceManifest) &&
+    areTrackPieceManifestsEqual(previous.relayManifest, next.relayManifest)
+  );
+}
+
+export function resolveStableCurrentTrack<TTrack extends StableTrackMeta>(
+  previousTrack: TTrack | null,
+  currentPlaybackTrackId: string | null | undefined,
+  tracks: TTrack[] | null | undefined
+) {
+  const nextTrack = currentPlaybackTrackId
+    ? tracks?.find((track) => track.id === currentPlaybackTrackId) ?? null
+    : null;
+  if (previousTrack && nextTrack && areTrackMetasEqual(previousTrack, nextTrack)) {
+    return previousTrack;
+  }
+
+  return nextTrack;
+}
+
 type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
@@ -405,13 +481,12 @@ export function MusicRoomApp({
     [roomSnapshot?.room.playback]
   );
   const currentPlaybackTrackId = roomSnapshot?.room.playback.currentTrackId ?? null;
+  const currentTrackRef = useRef<RoomSnapshot["tracks"][number] | null>(null);
   const currentTrack = useMemo(
-    () =>
-      currentPlaybackTrackId
-        ? roomSnapshot?.tracks.find((track) => track.id === currentPlaybackTrackId) ?? null
-        : null,
+    () => resolveStableCurrentTrack(currentTrackRef.current, currentPlaybackTrackId, roomSnapshot?.tracks),
     [currentPlaybackTrackId, roomSnapshot?.tracks]
   );
+  currentTrackRef.current = currentTrack;
   const {
     uploadedTracks,
     cachedTrackCount,
