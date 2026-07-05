@@ -3,6 +3,7 @@ import type {
   ProgressiveEngineType,
   ProgressivePlaybackSource
 } from "../progressive-playback";
+import type { ProgressivePcmEngineSnapshot } from "../progressive-pcm-engine";
 
 export type PlaybackRecoveryStage =
   | "startup-buffering"
@@ -217,6 +218,43 @@ export function shouldSkipSecondaryPcmWarmupSync(input: {
   localReady: boolean;
 }) {
   return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
+}
+
+export function getAudibleElementVolume(userVolume: number) {
+  if (!Number.isFinite(userVolume) || userVolume <= 0) {
+    return 0.72;
+  }
+
+  return Math.min(1, userVolume);
+}
+
+export function getPcmEngineDiagnosticsKey(
+  snapshot: ProgressivePcmEngineSnapshot | null | undefined
+) {
+  if (!snapshot) {
+    return "none";
+  }
+
+  return [
+    snapshot.status,
+    snapshot.audioContextState ?? "none",
+    snapshot.directOutputConnected ? "direct" : "no-direct",
+    snapshot.decodedSegmentCount > 0 ? "decoded" : "no-decoded",
+    snapshot.scheduledSegmentCount > 0 ? "scheduled" : "no-scheduled",
+    snapshot.lastDecodeError ?? "none"
+  ].join("|");
+}
+
+export function resolveMediaElementPlaybackRole(input: {
+  target: "local" | "remote";
+  activePlaybackSource: ProgressivePlaybackSource;
+  shadowWarmupActive: boolean;
+}) {
+  if (input.target === "local") {
+    return "audible-local" as const;
+  }
+
+  return "inactive" as const;
 }
 
 export function shouldWarmFullLocalWithSharedAudioElement(input: {

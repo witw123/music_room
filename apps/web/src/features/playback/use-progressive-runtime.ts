@@ -49,7 +49,7 @@ import {
   type PlaybackStartIntent
 } from "./playback-start-intent";
 import { ProgressiveMseEngine } from "./progressive-mse-engine";
-import { ProgressivePcmEngine, type ProgressivePcmEngineSnapshot } from "./progressive-pcm-engine";
+import { ProgressivePcmEngine } from "./progressive-pcm-engine";
 import { roomAudioOutput } from "./room-audio-output";
 import {
   resolvePcmRuntimeFailureReason,
@@ -66,8 +66,11 @@ import {
 } from "./progressive-source-controller";
 import {
   buildCurrentTrackFormatKey,
+  getAudibleElementVolume,
+  getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
   resolveFullLocalPlaybackSessionState,
+  resolveMediaElementPlaybackRole,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
@@ -167,8 +170,11 @@ export type {
   SchedulerBudgetTier
 } from "./playback-orchestrator/pipeline";
 export {
+  getAudibleElementVolume,
+  getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
   resolveFullLocalPlaybackSessionState,
+  resolveMediaElementPlaybackRole,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
@@ -188,11 +194,6 @@ export {
   shouldUsePcmEngineForFullLocal,
   shouldWarmFullLocalWithSharedAudioElement
 } from "./playback-orchestrator/pipeline";
-
-export type MediaElementPlaybackRole =
-  | "audible-local"
-  | "shadow-local"
-  | "inactive";
 
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
@@ -264,31 +265,6 @@ function isRecoverableProgressiveFallbackReason(reason: string | null | undefine
   return reason === "buffer-underrun" || reason === "stalled" || reason === "seek-outside-buffer";
 }
 
-export function getAudibleElementVolume(userVolume: number) {
-  if (!Number.isFinite(userVolume) || userVolume <= 0) {
-    return 0.72;
-  }
-
-  return Math.min(1, userVolume);
-}
-
-export function getPcmEngineDiagnosticsKey(
-  snapshot: ProgressivePcmEngineSnapshot | null | undefined
-) {
-  if (!snapshot) {
-    return "none";
-  }
-
-  return [
-    snapshot.status,
-    snapshot.audioContextState ?? "none",
-    snapshot.directOutputConnected ? "direct" : "no-direct",
-    snapshot.decodedSegmentCount > 0 ? "decoded" : "no-decoded",
-    snapshot.scheduledSegmentCount > 0 ? "scheduled" : "no-scheduled",
-    snapshot.lastDecodeError ?? "none"
-  ].join("|");
-}
-
 function bucketDiagnosticDurationMs(
   value: number | null | undefined,
   bucketMs: number
@@ -298,18 +274,6 @@ function bucketDiagnosticDurationMs(
   }
 
   return Math.round(value / bucketMs) * bucketMs;
-}
-
-export function resolveMediaElementPlaybackRole(input: {
-  target: "local" | "remote";
-  activePlaybackSource: ProgressivePlaybackSource;
-  shadowWarmupActive: boolean;
-}) {
-  if (input.target === "local") {
-    return "audible-local" as const;
-  }
-
-  return "inactive" as const;
 }
 
 function resolveTransportGovernorMode(input: {

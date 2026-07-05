@@ -4,9 +4,12 @@ import {
   buildCurrentTrackFormatKey,
   buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
+  getAudibleElementVolume as pipelineGetAudibleElementVolume,
+  getPcmEngineDiagnosticsKey as pipelineGetPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
   resolvePlaybackRecoveryStage as pipelineResolvePlaybackRecoveryStage,
   resolveFullLocalPlaybackSessionState as pipelineResolveFullLocalPlaybackSessionState,
+  resolveMediaElementPlaybackRole as pipelineResolveMediaElementPlaybackRole,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure as pipelineResolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolveSchedulerBudgetTier as pipelineResolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
@@ -55,6 +58,39 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("hosts diagnostic and media element helpers in the pure pipeline module", () => {
+    expect(pipelineGetAudibleElementVolume(0)).toBe(0.72);
+    expect(
+      pipelineGetPcmEngineDiagnosticsKey({
+        status: "ready",
+        audioContextState: "running",
+        hasOutputStream: true,
+        directOutputConnected: true,
+        contiguousChunkCount: 1,
+        contiguousByteLength: 1024,
+        decodedSegmentCount: 1,
+        scheduledSegmentCount: 1,
+        decodedPacketCount: 1,
+        decoderFlushAttemptCount: 0,
+        decoderFlushCount: 0,
+        lastDecodedAtMs: 1000,
+        lastDecodeError: null,
+        decodedPeak: 0.5,
+        decodedRms: 0.2,
+        decodedNonZeroSampleCount: 100,
+        bufferedAheadMs: 5000,
+        playoutState: "playing"
+      })
+    ).toBe("ready|running|direct|decoded|scheduled|none");
+    expect(
+      pipelineResolveMediaElementPlaybackRole({
+        target: "remote",
+        activePlaybackSource: "full-local",
+        shadowWarmupActive: false
+      })
+    ).toBe("inactive");
+  });
+
   it("hosts recovery guard policy in the pure pipeline module", () => {
     expect(
       pipelineShouldPreferImmediateFullLocalRecovery({
