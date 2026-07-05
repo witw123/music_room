@@ -10,11 +10,15 @@ import {
   resolvePlaybackSourceAfterProgressiveRuntimeFailure as pipelineResolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolveSchedulerBudgetTier as pipelineResolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
+  shouldEnableFullLocalHandoff as pipelineShouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine as pipelineShouldHoldSlidingWindowPlaybackForEngine,
   shouldPreferLocalTakeover as pipelineShouldPreferLocalTakeover,
+  shouldPreferImmediateFullLocalRecovery as pipelineShouldPreferImmediateFullLocalRecovery,
   shouldPublishProgressiveDiagnostic as pipelineShouldPublishProgressiveDiagnostic,
   shouldPrepareProgressiveRuntimeForSource as pipelineShouldPrepareProgressiveRuntimeForSource,
+  shouldRecoverPausedFullLocalPlayback as pipelineShouldRecoverPausedFullLocalPlayback,
   shouldResetAudioForPlaybackSurfaceChange as pipelineShouldResetAudioForPlaybackSurfaceChange,
+  shouldSkipSecondaryPcmWarmupSync as pipelineShouldSkipSecondaryPcmWarmupSync,
   shouldStartListenerProgressivePlayback as pipelineShouldStartListenerProgressivePlayback,
   shouldStartPcmSlidingWindowAudioElement as pipelineShouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup as pipelineShouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
@@ -51,6 +55,49 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("hosts recovery guard policy in the pure pipeline module", () => {
+    expect(
+      pipelineShouldPreferImmediateFullLocalRecovery({
+        isCurrentSourceOwner: false,
+        audioUnlocked: true,
+        hasBufferedFullLocalTrack: true,
+        fullLocalRecoveryActive: true,
+        recoveryPhase: "resyncing",
+        recoveryMode: "rejoin",
+        playbackStatus: "playing"
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldEnableFullLocalHandoff({
+        activePlaybackSource: "progressive-local",
+        playbackRecoveryStage: "steady",
+        startupGatePending: false,
+        localReady: true,
+        driftMs: 80,
+        cooldownMs: 0
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldRecoverPausedFullLocalPlayback({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        currentTrackId: "track-1",
+        audioUnlocked: false,
+        localAudioPaused: true,
+        localAudioReadyState: 2,
+        localAudioHasSrc: false,
+        localAudioHasSrcObject: false
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldSkipSecondaryPcmWarmupSync({
+        engineType: "pcm",
+        engineReady: false,
+        localReady: true
+      })
+    ).toBe(true);
+  });
+
   it("hosts playback session and source guard policy in the pure pipeline module", () => {
     expect(
       pipelineShouldPublishProgressiveDiagnostic({

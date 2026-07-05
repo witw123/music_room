@@ -36,7 +36,6 @@ import {
   getStartupWindowMs,
   hasActivePlaybackIntent,
   isTakeoverReady,
-  type ProgressiveEngineType,
   type ProgressiveTrackManifest,
   type ProgressiveSchedulerPolicy,
   type ProgressivePlaybackSource
@@ -73,15 +72,18 @@ import {
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback,
+  shouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine,
+  shouldPreferImmediateFullLocalRecovery,
   shouldPrepareProgressiveRuntimeForSource,
   shouldPublishProgressiveDiagnostic,
+  shouldRecoverPausedFullLocalPlayback,
   shouldResetAudioForPlaybackSurfaceChange,
+  shouldSkipSecondaryPcmWarmupSync,
   shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
   shouldWarmFullLocalWithSharedAudioElement,
-  type FullLocalPlaybackSessionState,
-  type PlaybackRecoveryStage
+  type FullLocalPlaybackSessionState
 } from "./playback-orchestrator/pipeline";
 import {
   resolvePlaybackSurfaceKey,
@@ -171,11 +173,15 @@ export {
   resolvePlaybackRecoveryStage,
   resolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback,
+  shouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine,
   shouldPreferLocalTakeover,
+  shouldPreferImmediateFullLocalRecovery,
   shouldPrepareProgressiveRuntimeForSource,
   shouldPublishProgressiveDiagnostic,
+  shouldRecoverPausedFullLocalPlayback,
   shouldResetAudioForPlaybackSurfaceChange,
+  shouldSkipSecondaryPcmWarmupSync,
   shouldStartListenerProgressivePlayback,
   shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
@@ -196,64 +202,6 @@ function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
   return source === "lossless-local"
     ? "lossless-local-play-blocked"
     : "progressive-local-play-blocked";
-}
-
-export function shouldPreferImmediateFullLocalRecovery(input: {
-  isCurrentSourceOwner: boolean;
-  audioUnlocked: boolean;
-  hasBufferedFullLocalTrack: boolean;
-  fullLocalRecoveryActive: boolean;
-  recoveryPhase:
-    | "joining"
-    | "resyncing"
-    | "bootstrapping-data"
-    | "playing-local-fallback"
-    | "steady";
-  recoveryMode: "late-join" | "rejoin" | "steady";
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-}) {
-  return (
-    !input.isCurrentSourceOwner &&
-    input.audioUnlocked &&
-    input.hasBufferedFullLocalTrack &&
-    input.fullLocalRecoveryActive &&
-    input.recoveryPhase !== "steady" &&
-    input.playbackStatus === "playing"
-  );
-}
-
-export function shouldEnableFullLocalHandoff(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackRecoveryStage: PlaybackRecoveryStage;
-  startupGatePending: boolean;
-  localReady: boolean;
-  driftMs: number;
-  cooldownMs: number;
-}) {
-  if (
-    !isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
-    input.activePlaybackSource !== "full-local"
-  ) {
-    return false;
-  }
-
-  if (!input.localReady || input.cooldownMs > 0 || !Number.isFinite(input.driftMs)) {
-    return false;
-  }
-
-  if (Math.abs(input.driftMs) > fullLocalMaxDriftMs) {
-    return false;
-  }
-
-  if (input.activePlaybackSource === "full-local") {
-    return true;
-  }
-
-  if (input.startupGatePending) {
-    return false;
-  }
-
-  return input.playbackRecoveryStage !== "startup-buffering";
 }
 
 export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
@@ -310,42 +258,6 @@ export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
     input.localAudioVolume === 0 ||
     !hasPlayableElementOutput
   );
-}
-
-export function shouldRecoverPausedFullLocalPlayback(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  currentTrackId: string | null | undefined;
-  audioUnlocked: boolean;
-  localAudioPaused: boolean | null | undefined;
-  localAudioReadyState: number | null | undefined;
-  localAudioHasSrc: boolean;
-  localAudioHasSrcObject: boolean;
-}) {
-  if (
-    input.activePlaybackSource !== "full-local" ||
-    input.playbackStatus !== "playing" ||
-    !input.currentTrackId ||
-    input.localAudioPaused !== true
-  ) {
-    return false;
-  }
-
-  return (
-    input.localAudioHasSrcObject ||
-    input.localAudioHasSrc ||
-    (typeof input.localAudioReadyState === "number" &&
-      input.localAudioReadyState >= haveCurrentDataReadyState) ||
-    input.audioUnlocked
-  );
-}
-
-export function shouldSkipSecondaryPcmWarmupSync(input: {
-  engineType: ProgressiveEngineType;
-  engineReady: boolean;
-  localReady: boolean;
-}) {
-  return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
 }
 
 function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {

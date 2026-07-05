@@ -18,6 +18,9 @@ export type FullLocalPlaybackSessionState = {
   availableInSession: boolean;
 };
 
+const fullLocalMaxDriftMs = 180;
+const haveCurrentDataReadyState = 2;
+
 type TrackFormatInput = Pick<
   TrackMeta,
   "id" | "fileHash" | "durationMs" | "mimeType" | "codec"
@@ -120,6 +123,100 @@ export function resolveFullLocalPlaybackSessionState(input: {
     availableInSession:
       input.currentSession.availableInSession || input.hasBufferedFullLocalTrack
   };
+}
+
+export function shouldPreferImmediateFullLocalRecovery(input: {
+  isCurrentSourceOwner: boolean;
+  audioUnlocked: boolean;
+  hasBufferedFullLocalTrack: boolean;
+  fullLocalRecoveryActive: boolean;
+  recoveryPhase:
+    | "joining"
+    | "resyncing"
+    | "bootstrapping-data"
+    | "playing-local-fallback"
+    | "steady";
+  recoveryMode: "late-join" | "rejoin" | "steady";
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+}) {
+  return (
+    !input.isCurrentSourceOwner &&
+    input.audioUnlocked &&
+    input.hasBufferedFullLocalTrack &&
+    input.fullLocalRecoveryActive &&
+    input.recoveryPhase !== "steady" &&
+    input.playbackStatus === "playing"
+  );
+}
+
+export function shouldEnableFullLocalHandoff(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackRecoveryStage: PlaybackRecoveryStage;
+  startupGatePending: boolean;
+  localReady: boolean;
+  driftMs: number;
+  cooldownMs: number;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
+    input.activePlaybackSource !== "full-local"
+  ) {
+    return false;
+  }
+
+  if (!input.localReady || input.cooldownMs > 0 || !Number.isFinite(input.driftMs)) {
+    return false;
+  }
+
+  if (Math.abs(input.driftMs) > fullLocalMaxDriftMs) {
+    return false;
+  }
+
+  if (input.activePlaybackSource === "full-local") {
+    return true;
+  }
+
+  if (input.startupGatePending) {
+    return false;
+  }
+
+  return input.playbackRecoveryStage !== "startup-buffering";
+}
+
+export function shouldRecoverPausedFullLocalPlayback(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  currentTrackId: string | null | undefined;
+  audioUnlocked: boolean;
+  localAudioPaused: boolean | null | undefined;
+  localAudioReadyState: number | null | undefined;
+  localAudioHasSrc: boolean;
+  localAudioHasSrcObject: boolean;
+}) {
+  if (
+    input.activePlaybackSource !== "full-local" ||
+    input.playbackStatus !== "playing" ||
+    !input.currentTrackId ||
+    input.localAudioPaused !== true
+  ) {
+    return false;
+  }
+
+  return (
+    input.localAudioHasSrcObject ||
+    input.localAudioHasSrc ||
+    (typeof input.localAudioReadyState === "number" &&
+      input.localAudioReadyState >= haveCurrentDataReadyState) ||
+    input.audioUnlocked
+  );
+}
+
+export function shouldSkipSecondaryPcmWarmupSync(input: {
+  engineType: ProgressiveEngineType;
+  engineReady: boolean;
+  localReady: boolean;
+}) {
+  return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
 }
 
 export function shouldWarmFullLocalWithSharedAudioElement(input: {
