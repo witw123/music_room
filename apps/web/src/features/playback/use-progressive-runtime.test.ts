@@ -289,7 +289,7 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
-  it("drives the progressive warmup interval from a stable dependency key", () => {
+  it("drives the progressive warmup loop through the playback orchestrator", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
@@ -299,10 +299,17 @@ describe("playback runtime pipeline keys", () => {
       "      void syncWarmup();",
       "    }, progressiveRuntimeTickIntervalMs);"
     ].join("\n");
-    const intervalIndex = runtimeSource.indexOf(intervalNeedle);
-    expect(intervalIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).not.toContain(intervalNeedle);
+    const orchestratorIndex = runtimeSource.indexOf(
+      "const runtimeTickOrchestrator = new PlaybackOrchestrator"
+    );
+    expect(orchestratorIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).toContain("\"sync-progressive-warmup\"");
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", intervalIndex);
+    const warmupRefIndex = runtimeSource.indexOf("syncProgressiveWarmupRef.current = () => {");
+    expect(warmupRefIndex).toBeGreaterThan(-1);
+
+    const dependencyStart = runtimeSource.indexOf("  }, [", warmupRefIndex);
     const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
     const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
 
@@ -316,17 +323,42 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).not.toContain("transitionPlaybackSource,");
   });
 
-  it("drives the drift sampling interval from stable scalar dependencies", () => {
+  it("drives migrated runtime loops through the playback orchestrator with stable scalar dependencies", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
-    const intervalNeedle =
-      "const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);";
-    const intervalIndex = runtimeSource.indexOf(intervalNeedle);
-    expect(intervalIndex).toBeGreaterThan(-1);
+    const orchestratorNeedle = "const runtimeTickOrchestrator = new PlaybackOrchestrator";
+    const orchestratorIndex = runtimeSource.indexOf(orchestratorNeedle);
+    expect(orchestratorIndex).toBeGreaterThan(-1);
+    expect(runtimeSource).not.toContain("const driftSamplingOrchestrator = new PlaybackOrchestrator");
+    expect(runtimeSource).not.toContain(
+      "const fullLocalUpgradeOrchestrator = new PlaybackOrchestrator"
+    );
+    expect(runtimeSource).not.toContain(
+      "const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);"
+    );
+    expect(runtimeSource).not.toContain(
+      "const timerId = window.setInterval(syncUpgrade, progressiveRuntimeTickIntervalMs);"
+    );
+    expect(runtimeSource).not.toContain(
+      "const timerId = window.setInterval(syncWarmup, progressiveRuntimeTickIntervalMs);"
+    );
+    expect(runtimeSource).not.toContain(
+      [
+        "const timerId = window.setInterval(",
+        "      recoverPausedFullLocalPlayback,",
+        "      fullLocalPausedRecoveryIntervalMs",
+        "    );"
+      ].join("\n")
+    );
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", intervalIndex);
+    const callbackRefreshNeedle =
+      "recoverPausedFullLocalPlaybackRef.current = recoverPausedFullLocalPlayback;";
+    const callbackRefreshIndex = runtimeSource.indexOf(callbackRefreshNeedle);
+    expect(callbackRefreshIndex).toBeGreaterThan(-1);
+
+    const dependencyStart = runtimeSource.indexOf("  }, [", callbackRefreshIndex);
     const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
     const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
 
@@ -334,7 +366,7 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).toContain("playbackMediaEpoch");
     expect(dependencies).toContain("playbackStatus");
     expect(dependencies).not.toContain("playback,");
-    expect(dependencies).not.toContain("currentTrack");
+    expect(dependencies).not.toMatch(/^\s+currentTrack,\s*$/m);
   });
 
   it("keeps hook dependency arrays free of snapshot object identities", () => {
@@ -351,6 +383,29 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencySource).not.toMatch(/^\s+currentTrack,\s*$/m);
     expect(dependencySource).not.toMatch(/^\s+currentBufferedFullLocalTrack,\s*$/m);
     expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
+  });
+
+  it("subscribes to the playback orchestrator snapshot with useSyncExternalStore", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useSyncExternalStore,");
+    expect(runtimeSource).toContain("const runtimeOrchestratorSnapshot = useSyncExternalStore(");
+    expect(runtimeSource).toContain("runtimeTickOrchestratorRef.current.subscribe");
+    expect(runtimeSource).toContain("runtimeTickOrchestratorRef.current.getSnapshot");
+
+    const mountIndex = runtimeSource.indexOf("runtimeTickOrchestratorRef.current.mount();");
+    expect(mountIndex).toBeGreaterThan(-1);
+    const dependencyStart = runtimeSource.indexOf("  }, [", mountIndex);
+    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
+    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+
+    expect(dependencies).toContain("runtimeTickOrchestratorRef");
+    expect(dependencies).not.toContain("playbackCurrentTrackId");
+    expect(dependencies).not.toContain("playbackStatus");
+    expect(dependencies).not.toContain("currentTrack");
   });
 
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {

@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type Dispatch,
   type RefObject,
   type SetStateAction
@@ -53,6 +54,7 @@ import {
   shouldLatchPcmRuntimeFailure,
   shouldRetryPcmRuntimeAfterFailure
 } from "./pcm-runtime-failure";
+import { PlaybackOrchestrator } from "./playback-orchestrator/orchestrator";
 
 // Re-exported for backward compatibility with existing import sites/tests.
 export { shouldLatchPcmRuntimeFailure, shouldRetryPcmRuntimeAfterFailure };
@@ -212,6 +214,29 @@ import {
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 export type FullLocalPlaybackTrack = Pick<UploadedTrack, "file" | "objectUrl">;
+
+type RuntimeTickState = {
+  lastDriftSampleAtMs: number;
+  lastPausedRecoveryAtMs: number;
+};
+
+type RuntimeTickEffect =
+  | "recover-paused-full-local"
+  | "sync-progressive-warmup"
+  | "sync-full-local-warmup"
+  | "sync-upgrade"
+  | "sample-drift";
+
+type RuntimeTickOrchestrator = PlaybackOrchestrator<
+  RuntimeTickState,
+  null,
+  null,
+  RuntimeTickEffect,
+  null,
+  number
+>;
+
+const noopRuntimeTick = () => undefined;
 
 type UseProgressiveRuntimeInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -465,6 +490,84 @@ export function useProgressiveRuntime({
   const previousPlaybackSurfaceKeyRef = useRef<string | null>(null);
   const playbackStartRetryRef = useRef<number | null>(null);
   const lastPcmSlidingWindowPlayAttemptAtRef = useRef<number | null>(null);
+  const syncProgressiveWarmupRef = useRef<() => void>(noopRuntimeTick);
+  const recoverPausedFullLocalPlaybackRef = useRef<() => void>(noopRuntimeTick);
+  const sampleDriftRef = useRef<() => void>(noopRuntimeTick);
+  const syncFullLocalBufferedWarmupRef = useRef<() => void>(noopRuntimeTick);
+  const syncUpgradeRef = useRef<() => void>(noopRuntimeTick);
+  const [runtimeTickOrchestratorRef] = useState<{ current: RuntimeTickOrchestrator }>(() => {
+    const initialRuntimeTickAtMs = Date.now();
+    const runtimeTickOrchestrator = new PlaybackOrchestrator({
+      initialState: {
+        lastDriftSampleAtMs: initialRuntimeTickAtMs,
+        lastPausedRecoveryAtMs: initialRuntimeTickAtMs
+      },
+      initialInput: null,
+      initialSnapshot: null,
+      tickMs: progressiveRuntimeTickIntervalMs,
+      getEngineSnapshot: () => null,
+      reduceTick: ({ state, nowMs }) => {
+        const shouldSampleDrift =
+          nowMs - state.lastDriftSampleAtMs >= playbackDriftSampleIntervalMs;
+        const shouldRecoverPausedFullLocal =
+          nowMs - state.lastPausedRecoveryAtMs >= fullLocalPausedRecoveryIntervalMs;
+        return {
+          nextState: {
+            lastDriftSampleAtMs: shouldSampleDrift ? nowMs : state.lastDriftSampleAtMs,
+            lastPausedRecoveryAtMs: shouldRecoverPausedFullLocal
+              ? nowMs
+              : state.lastPausedRecoveryAtMs
+          },
+          effects: [
+            ...(shouldRecoverPausedFullLocal ? (["recover-paused-full-local"] as const) : []),
+            "sync-progressive-warmup",
+            "sync-full-local-warmup",
+            "sync-upgrade",
+            ...(shouldSampleDrift ? (["sample-drift"] as const) : [])
+          ] as const
+        };
+      },
+      runEffect: (effect) => {
+        if (effect === "sync-progressive-warmup") {
+          syncProgressiveWarmupRef.current();
+          return;
+        }
+        if (effect === "recover-paused-full-local") {
+          recoverPausedFullLocalPlaybackRef.current();
+          return;
+        }
+        if (effect === "sample-drift") {
+          sampleDriftRef.current();
+          return;
+        }
+        if (effect === "sync-full-local-warmup") {
+          syncFullLocalBufferedWarmupRef.current();
+          return;
+        }
+        syncUpgradeRef.current();
+      },
+      buildSnapshot: () => null,
+      scheduler: {
+        setInterval: (callback, delayMs) => window.setInterval(callback, delayMs),
+        clearInterval: (timerId) => window.clearInterval(timerId)
+      }
+    });
+    return { current: runtimeTickOrchestrator };
+  });
+  const subscribeRuntimeOrchestrator = useCallback(
+    (listener: () => void) => runtimeTickOrchestratorRef.current.subscribe(listener),
+    [runtimeTickOrchestratorRef]
+  );
+  const getRuntimeOrchestratorSnapshot = useCallback(
+    () => runtimeTickOrchestratorRef.current.getSnapshot(),
+    [runtimeTickOrchestratorRef]
+  );
+  const runtimeOrchestratorSnapshot = useSyncExternalStore(
+    subscribeRuntimeOrchestrator,
+    getRuntimeOrchestratorSnapshot,
+    getRuntimeOrchestratorSnapshot
+  );
+  void runtimeOrchestratorSnapshot;
   const lastProgressiveDiagnosticSignatureRef = useRef<string | null>(null);
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
@@ -2002,105 +2105,6 @@ export function useProgressiveRuntime({
   ]);
 
   useEffect(() => {
-    const playbackState = playbackRef.current;
-    const audio = audioRef.current;
-    const recoveryPreflight = resolveFullLocalPausedRecoveryPreflight({
-      currentTrackId: playbackCurrentTrackId,
-      hasPlaybackState: !!playbackState,
-      hasAudio: !!audio,
-      activePlaybackSource
-    });
-    if (!recoveryPreflight || !playbackState || !audio) {
-      return;
-    }
-
-    let cancelled = false;
-    let recoveryInFlight = false;
-    const recoverPausedFullLocalPlayback = () => {
-      const latestPlayback = playbackRef.current;
-      const latestTrack = currentTrackRef.current;
-      const shouldRecover = shouldRecoverPausedFullLocalPlayback({
-          activePlaybackSource,
-          playbackStatus: latestPlayback?.status ?? "paused",
-          currentTrackId: latestPlayback?.currentTrackId ?? null,
-          audioUnlocked,
-          localAudioPaused: audio.paused,
-          localAudioReadyState: audio.readyState,
-          localAudioHasSrc: !!audio.currentSrc || !!audio.getAttribute("src"),
-          localAudioHasSrcObject: !!audio.srcObject
-      });
-      const attemptRecovery = resolveFullLocalPausedRecoveryAttemptAction({
-        cancelled,
-        recoveryInFlight,
-        shouldRecover
-      });
-      if (!attemptRecovery) {
-        return;
-      }
-
-      const expectedSeconds =
-        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
-        1000;
-      syncLocalPlaybackWindow(audio, expectedSeconds, true, {
-        softDriftMs: 90,
-        hardDriftMs: 720,
-        correctionMode: "audible-local-follow"
-      });
-      audio.muted = false;
-      audio.volume = getAudibleElementVolume(volume);
-      recoveryInFlight = true;
-      void attemptPlaybackStart(
-        audio,
-        "full-local",
-        "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
-        "full-local-paused-recovery",
-        { reportFailure: false }
-      )
-        .then((ok) => {
-          if (cancelled) {
-            return;
-          }
-
-          const recoveryResult = resolveFullLocalPausedRecoveryResult(ok);
-          setMediaConnectionState(recoveryResult.mediaConnectionState);
-          recordPeerDiagnostic({
-            peerId: "system",
-            channelKind: "system",
-            direction: "local",
-            event: recoveryResult.diagnosticEvent,
-            summary: recoveryResult.diagnosticSummary,
-            recordEvent: recoveryResult.recordEvent
-          });
-        })
-        .finally(() => {
-          recoveryInFlight = false;
-        });
-    };
-
-    recoverPausedFullLocalPlayback();
-    const timerId = window.setInterval(
-      recoverPausedFullLocalPlayback,
-      fullLocalPausedRecoveryIntervalMs
-    );
-    return () => {
-      cancelled = true;
-      window.clearInterval(timerId);
-    };
-  }, [
-    activePlaybackSource,
-    audioRef,
-    audioUnlocked,
-    attemptPlaybackStart,
-    currentTrackDurationMs,
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackStatus,
-    recordPeerDiagnostic,
-    setMediaConnectionState,
-    volume
-  ]);
-
-  useEffect(() => {
     const nextPlayback = playbackRef.current;
 
     const localAudio = audioRef.current;
@@ -2138,8 +2142,87 @@ export function useProgressiveRuntime({
       playbackHasActiveIntent: hasActivePlaybackIntent(playbackState)
     });
     if (!samplingPreflight) {
+      recoverPausedFullLocalPlaybackRef.current = noopRuntimeTick;
+      sampleDriftRef.current = noopRuntimeTick;
+      syncFullLocalBufferedWarmupRef.current = noopRuntimeTick;
+      syncUpgradeRef.current = noopRuntimeTick;
       return;
     }
+
+    let runtimeTickCancelled = false;
+    let fullLocalPausedRecoveryInFlight = false;
+
+    const recoverPausedFullLocalPlayback = () => {
+      const latestPlayback = playbackRef.current;
+      const latestTrack = currentTrackRef.current;
+      const audio = audioRef.current;
+      const recoveryPreflight = resolveFullLocalPausedRecoveryPreflight({
+        currentTrackId: latestPlayback?.currentTrackId ?? null,
+        hasPlaybackState: !!latestPlayback,
+        hasAudio: !!audio,
+        activePlaybackSource
+      });
+      if (!recoveryPreflight || !audio) {
+        return;
+      }
+
+      const shouldRecover = shouldRecoverPausedFullLocalPlayback({
+        activePlaybackSource,
+        playbackStatus: latestPlayback?.status ?? "paused",
+        currentTrackId: latestPlayback?.currentTrackId ?? null,
+        audioUnlocked,
+        localAudioPaused: audio.paused,
+        localAudioReadyState: audio.readyState,
+        localAudioHasSrc: !!audio.currentSrc || !!audio.getAttribute("src"),
+        localAudioHasSrcObject: !!audio.srcObject
+      });
+      const attemptRecovery = resolveFullLocalPausedRecoveryAttemptAction({
+        cancelled: runtimeTickCancelled,
+        recoveryInFlight: fullLocalPausedRecoveryInFlight,
+        shouldRecover
+      });
+      if (!attemptRecovery) {
+        return;
+      }
+
+      const expectedSeconds =
+        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
+        1000;
+      syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+        softDriftMs: 90,
+        hardDriftMs: 720,
+        correctionMode: "audible-local-follow"
+      });
+      audio.muted = false;
+      audio.volume = getAudibleElementVolume(volume);
+      fullLocalPausedRecoveryInFlight = true;
+      void attemptPlaybackStart(
+        audio,
+        "full-local",
+        "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
+        "full-local-paused-recovery",
+        { reportFailure: false }
+      )
+        .then((ok) => {
+          if (runtimeTickCancelled) {
+            return;
+          }
+
+          const recoveryResult = resolveFullLocalPausedRecoveryResult(ok);
+          setMediaConnectionState(recoveryResult.mediaConnectionState);
+          recordPeerDiagnostic({
+            peerId: "system",
+            channelKind: "system",
+            direction: "local",
+            event: recoveryResult.diagnosticEvent,
+            summary: recoveryResult.diagnosticSummary,
+            recordEvent: recoveryResult.recordEvent
+          });
+        })
+        .finally(() => {
+          fullLocalPausedRecoveryInFlight = false;
+        });
+    };
 
     const sampleDrift = () => {
       const latestPlayback = playbackRef.current;
@@ -2178,18 +2261,254 @@ export function useProgressiveRuntime({
       recordDriftSample(sampleAction.driftMs);
     };
 
+    const syncUpgrade = () => {
+      const playbackState = playbackRef.current;
+      const upgradePreflight = resolveFullLocalUpgradePreflight({
+        currentTrackId: playbackState?.currentTrackId ?? null,
+        hasPlaybackState: !!playbackState,
+        hasBufferedFullLocalObjectUrl: !!currentBufferedFullLocalTrackObjectUrl,
+        canWarmBufferedFullLocal,
+        activePlaybackSource,
+        playbackHasActiveIntent: hasActivePlaybackIntent(playbackState)
+      });
+      if (!upgradePreflight.shouldRun) {
+        fullLocalWarmupReadyAtRef.current = null;
+        return;
+      }
+
+      const comfortBufferMs = getStartupWindowMs(
+        currentTrackRef.current ?? {
+          mimeType: null,
+          codec: null
+        }
+      );
+      const now = Date.now();
+      const localTakeoverAllowed = isLocalTakeoverAllowed(now);
+      const shouldUpgrade = shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        activePlaybackSource,
+        progressiveEngineType: currentProgressiveEngineType,
+        canUseFullLocalForPlaybackSession,
+        fullLocalBlockedReason,
+        localTakeoverAllowed,
+        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+        comfortBufferMs,
+        warmupReadyAt: fullLocalWarmupReadyAtRef.current,
+        now,
+        switchDelayMs: fullLocalSwitchDelayMs
+      });
+
+      if (shouldUpgrade) {
+        transitionPlaybackSource("full-local");
+        return;
+      }
+
+      const canArmIdleFullLocalUpgrade = resolveIdleFullLocalUpgradeArmState({
+        progressiveEngineType: currentProgressiveEngineType,
+        canUseFullLocalForPlaybackSession,
+        fullLocalBlockedReason,
+        localTakeoverAllowed,
+        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+        comfortBufferMs
+      });
+      const upgradeAction = resolveFullLocalUpgradeAction({
+        shouldUpgrade,
+        canArmIdleFullLocalUpgrade,
+        currentWarmupReadyAt: fullLocalWarmupReadyAtRef.current,
+        now
+      });
+      if (upgradeAction.kind === "transition") {
+        transitionPlaybackSource(upgradeAction.nextSource);
+        return;
+      }
+      if (upgradeAction.kind === "set-warmup-ready-at") {
+        fullLocalWarmupReadyAtRef.current = upgradeAction.nextWarmupReadyAt;
+      }
+    };
+
+    const syncFullLocalBufferedWarmup = () => {
+      const playbackState = playbackRef.current;
+      const audio = audioRef.current;
+      const warmupPreflight = resolveFullLocalBufferedWarmupPreflight({
+        currentTrackId: playbackState?.currentTrackId ?? null,
+        hasPlaybackState: !!playbackState,
+        hasAudio: !!audio,
+        hasBufferedFullLocalObjectUrl: !!currentBufferedFullLocalTrackObjectUrl,
+        canWarmBufferedFullLocal
+      });
+      if (!warmupPreflight.shouldRun) {
+        fullLocalWarmupReadyAtRef.current = null;
+        return;
+      }
+      if (!audio) {
+        return;
+      }
+
+      const latestPlayback = playbackRef.current;
+      const latestTrack = currentTrackRef.current;
+      const latestBufferedFullLocalTrack = currentBufferedFullLocalTrackRef.current;
+      const missingTrackAction = resolveFullLocalWarmupMissingTrackAction({
+        hasBufferedFullLocalTrack: !!latestBufferedFullLocalTrack,
+        playbackHasActiveIntent: hasActivePlaybackIntent(latestPlayback)
+      });
+      if (missingTrackAction) {
+        if (missingTrackAction.shouldPauseAudio) {
+          audio.pause();
+          audio.muted = false;
+        }
+        if (missingTrackAction.shouldResetWarmupReadyAt) {
+          fullLocalWarmupReadyAtRef.current = null;
+        }
+        return;
+      }
+      if (!latestBufferedFullLocalTrack) {
+        return;
+      }
+
+      const audioSourceAction = resolveFullLocalAudioSourceAction({
+        hasSrcObject: !!audio.srcObject,
+        currentSrc: audio.src,
+        nextSrc: latestBufferedFullLocalTrack.objectUrl
+      });
+      if (audioSourceAction.shouldClearSrcObject) {
+        audio.srcObject = null;
+      }
+      if (audioSourceAction.shouldAssignSource) {
+        audio.src = latestBufferedFullLocalTrack.objectUrl;
+      }
+      if (audioSourceAction.shouldLoadSource) {
+        audio.load();
+      }
+
+      const expectedSeconds =
+        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
+        1000;
+      syncLocalPlaybackWindow(audio, expectedSeconds, true, {
+        softDriftMs: 120,
+        hardDriftMs: 900,
+        correctionMode: "shadow-local-catchup"
+      });
+      audio.muted = true;
+      void roomAudioOutput.playElement(audio);
+
+      const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+      const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
+      const now = Date.now();
+      const readyForFullLocal = resolveFullLocalWarmupReadiness({
+        localReady,
+        driftMs,
+        maxDriftMs: fullLocalMaxDriftMs,
+        fullLocalBlockedReason,
+        progressiveEngineType: currentProgressiveEngineType,
+        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+        requiredAheadMs: getStartupWindowMs(
+          latestTrack ?? {
+            mimeType: null,
+            codec: null
+          }
+        )
+      });
+
+      const shouldAttemptFullLocalHandoff = shouldEnableFullLocalHandoff({
+        activePlaybackSource,
+        playbackRecoveryStage,
+        startupGatePending,
+        localReady: readyForFullLocal,
+        driftMs,
+        cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
+      });
+
+      const holdState = resolveFullLocalWarmupHoldState({
+        localTakeoverAllowed: isLocalTakeoverAllowed(now),
+        shouldAttemptFullLocalHandoff,
+        readyForFullLocal,
+        nowMs: now
+      });
+      if (holdState.shouldHold) {
+        fullLocalWarmupReadyAtRef.current = holdState.nextWarmupReadyAt;
+        return;
+      }
+
+      const warmupDecision = resolveFullLocalWarmupDecision({
+        currentSource: activePlaybackSource,
+        localReady: readyForFullLocal,
+        driftMs,
+        warmupReadyAt: fullLocalWarmupReadyAtRef.current,
+        now,
+        switchDelayMs: fullLocalSwitchDelayMs,
+        maxDriftMs: fullLocalMaxDriftMs
+      });
+      const transitionAction = resolveFullLocalWarmupTransitionAction({
+        currentSource: activePlaybackSource,
+        nextSource: warmupDecision.nextSource,
+        nextWarmupReadyAt: warmupDecision.nextWarmupReadyAt,
+        clearFallbackReason: warmupDecision.clearFallbackReason
+      });
+      fullLocalWarmupReadyAtRef.current = transitionAction.nextWarmupReadyAt;
+      if (transitionAction.transition) {
+        transitionPlaybackSource(transitionAction.transition.nextSource, {
+          clearFallbackReason: transitionAction.transition.clearFallbackReason
+        });
+      }
+    };
+
+    recoverPausedFullLocalPlaybackRef.current = recoverPausedFullLocalPlayback;
+    sampleDriftRef.current = sampleDrift;
+    syncFullLocalBufferedWarmupRef.current = syncFullLocalBufferedWarmup;
+    syncUpgradeRef.current = syncUpgrade;
+    recoverPausedFullLocalPlayback();
     sampleDrift();
-    const timerId = window.setInterval(sampleDrift, playbackDriftSampleIntervalMs);
-    return () => window.clearInterval(timerId);
+    syncFullLocalBufferedWarmup();
+    syncUpgrade();
+    return () => {
+      runtimeTickCancelled = true;
+      if (recoverPausedFullLocalPlaybackRef.current === recoverPausedFullLocalPlayback) {
+        recoverPausedFullLocalPlaybackRef.current = noopRuntimeTick;
+      }
+      if (sampleDriftRef.current === sampleDrift) {
+        sampleDriftRef.current = noopRuntimeTick;
+      }
+      if (syncFullLocalBufferedWarmupRef.current === syncFullLocalBufferedWarmup) {
+        syncFullLocalBufferedWarmupRef.current = noopRuntimeTick;
+      }
+      if (syncUpgradeRef.current === syncUpgrade) {
+        syncUpgradeRef.current = noopRuntimeTick;
+      }
+    };
   }, [
     activePlaybackSource,
+    attemptPlaybackStart,
     audioRef,
+    audioUnlocked,
+    canUseFullLocalForPlaybackSession,
+    canWarmBufferedFullLocal,
+    currentBufferedFullLocalTrackObjectUrl,
+    currentProgressiveEngineType,
+    currentTrackDurationMs,
+    currentTrackFormatKey,
+    fullLocalBlockedReason,
     getLocalPlaybackPositionMs,
+    isLocalTakeoverAllowed,
     playbackCurrentTrackId,
     playbackMediaEpoch,
     playbackStatus,
-    recordDriftSample
+    playbackQualityMetrics.stalledEventsLast30s,
+    playbackQualityMetrics.waitingEventsLast30s,
+    playbackRecoveryStage,
+    progressiveHealthSnapshot.aheadBufferedMs,
+    recordDriftSample,
+    recordPeerDiagnostic,
+    setMediaConnectionState,
+    startupGatePending,
+    transitionPlaybackSource,
+    volume
   ]);
+
+  useEffect(() => {
+    runtimeTickOrchestratorRef.current.mount();
+    return () => {
+      runtimeTickOrchestratorRef.current.unmount();
+    };
+  }, [runtimeTickOrchestratorRef]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -2561,255 +2880,22 @@ export function useProgressiveRuntime({
       return;
     }
 
-    void syncWarmup();
-    const timerId = window.setInterval(() => {
+    syncProgressiveWarmupRef.current = () => {
       void syncWarmup();
-    }, progressiveRuntimeTickIntervalMs);
+    };
+    syncProgressiveWarmupRef.current();
 
     return () => {
       cancelled = true;
-      window.clearInterval(timerId);
+      if (syncProgressiveWarmupRef.current) {
+        syncProgressiveWarmupRef.current = () => undefined;
+      }
     };
   }, [
     progressiveWarmupTimerKey,
     audioRef,
     setMediaConnectionState,
     setProgressiveFallbackReason
-  ]);
-
-  useEffect(() => {
-    const playbackState = playbackRef.current;
-    const audio = audioRef.current;
-    const warmupPreflight = resolveFullLocalBufferedWarmupPreflight({
-      currentTrackId: playbackCurrentTrackId,
-      hasPlaybackState: !!playbackState,
-      hasAudio: !!audio,
-      hasBufferedFullLocalObjectUrl: !!currentBufferedFullLocalTrackObjectUrl,
-      canWarmBufferedFullLocal
-    });
-    if (!warmupPreflight.shouldRun) {
-      fullLocalWarmupReadyAtRef.current = null;
-      return;
-    }
-    if (!playbackState || !audio) {
-      return;
-    }
-
-    const syncWarmup = () => {
-      const latestPlayback = playbackRef.current;
-      const latestTrack = currentTrackRef.current;
-      const latestBufferedFullLocalTrack = currentBufferedFullLocalTrackRef.current;
-      const missingTrackAction = resolveFullLocalWarmupMissingTrackAction({
-        hasBufferedFullLocalTrack: !!latestBufferedFullLocalTrack,
-        playbackHasActiveIntent: hasActivePlaybackIntent(latestPlayback)
-      });
-      if (missingTrackAction) {
-        if (missingTrackAction.shouldPauseAudio) {
-          audio.pause();
-          audio.muted = false;
-        }
-        if (missingTrackAction.shouldResetWarmupReadyAt) {
-          fullLocalWarmupReadyAtRef.current = null;
-        }
-        return;
-      }
-      if (!latestBufferedFullLocalTrack) {
-        return;
-      }
-
-      const audioSourceAction = resolveFullLocalAudioSourceAction({
-        hasSrcObject: !!audio.srcObject,
-        currentSrc: audio.src,
-        nextSrc: latestBufferedFullLocalTrack.objectUrl
-      });
-      if (audioSourceAction.shouldClearSrcObject) {
-        audio.srcObject = null;
-      }
-      if (audioSourceAction.shouldAssignSource) {
-        audio.src = latestBufferedFullLocalTrack.objectUrl;
-      }
-      if (audioSourceAction.shouldLoadSource) {
-        audio.load();
-      }
-
-      const expectedSeconds =
-        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
-        1000;
-      syncLocalPlaybackWindow(audio, expectedSeconds, true, {
-        softDriftMs: 120,
-        hardDriftMs: 900,
-        correctionMode: "shadow-local-catchup"
-      });
-      audio.muted = true;
-      void roomAudioOutput.playElement(audio);
-
-      const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
-      const driftMs = Math.abs(expectedSeconds * 1000 - audio.currentTime * 1000);
-      const now = Date.now();
-      const readyForFullLocal = resolveFullLocalWarmupReadiness({
-        localReady,
-        driftMs,
-        maxDriftMs: fullLocalMaxDriftMs,
-        fullLocalBlockedReason,
-        progressiveEngineType: currentProgressiveEngineType,
-        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-        requiredAheadMs: getStartupWindowMs(
-          latestTrack ?? {
-            mimeType: null,
-            codec: null
-          }
-        )
-      });
-
-      const shouldAttemptFullLocalHandoff = shouldEnableFullLocalHandoff({
-        activePlaybackSource,
-        playbackRecoveryStage,
-        startupGatePending,
-        localReady: readyForFullLocal,
-        driftMs,
-        cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
-      });
-
-      const holdState = resolveFullLocalWarmupHoldState({
-        localTakeoverAllowed: isLocalTakeoverAllowed(now),
-        shouldAttemptFullLocalHandoff,
-        readyForFullLocal,
-        nowMs: now
-      });
-      if (holdState.shouldHold) {
-        fullLocalWarmupReadyAtRef.current = holdState.nextWarmupReadyAt;
-        return;
-      }
-
-      const warmupDecision = resolveFullLocalWarmupDecision({
-        currentSource: activePlaybackSource,
-        localReady: readyForFullLocal,
-        driftMs,
-        warmupReadyAt: fullLocalWarmupReadyAtRef.current,
-        now,
-        switchDelayMs: fullLocalSwitchDelayMs,
-        maxDriftMs: fullLocalMaxDriftMs
-      });
-      const transitionAction = resolveFullLocalWarmupTransitionAction({
-        currentSource: activePlaybackSource,
-        nextSource: warmupDecision.nextSource,
-        nextWarmupReadyAt: warmupDecision.nextWarmupReadyAt,
-        clearFallbackReason: warmupDecision.clearFallbackReason
-      });
-      fullLocalWarmupReadyAtRef.current = transitionAction.nextWarmupReadyAt;
-      if (transitionAction.transition) {
-        transitionPlaybackSource(transitionAction.transition.nextSource, {
-          clearFallbackReason: transitionAction.transition.clearFallbackReason
-        });
-      }
-    };
-
-    syncWarmup();
-    const timerId = window.setInterval(syncWarmup, progressiveRuntimeTickIntervalMs);
-    return () => window.clearInterval(timerId);
-  }, [
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackStatus,
-    currentBufferedFullLocalTrackObjectUrl,
-    canWarmBufferedFullLocal,
-    currentProgressiveEngineType,
-    activePlaybackSource,
-    currentTrackFormatKey,
-    fullLocalBlockedReason,
-    progressiveHealthSnapshot.aheadBufferedMs,
-    isLocalTakeoverAllowed,
-    playbackQualityMetrics.stalledEventsLast30s,
-    playbackQualityMetrics.waitingEventsLast30s,
-    playbackRecoveryStage,
-    startupGatePending,
-    audioRef,
-    transitionPlaybackSource
-  ]);
-
-  useEffect(() => {
-    const playbackState = playbackRef.current;
-    const upgradePreflight = resolveFullLocalUpgradePreflight({
-      currentTrackId: playbackCurrentTrackId,
-      hasPlaybackState: !!playbackState,
-      hasBufferedFullLocalObjectUrl: !!currentBufferedFullLocalTrackObjectUrl,
-      canWarmBufferedFullLocal,
-      activePlaybackSource,
-      playbackHasActiveIntent: hasActivePlaybackIntent(playbackState)
-    });
-    if (!upgradePreflight.shouldRun) {
-      fullLocalWarmupReadyAtRef.current = null;
-      return;
-    }
-
-    const comfortBufferMs = getStartupWindowMs(
-      currentTrackRef.current ?? {
-        mimeType: null,
-        codec: null
-      }
-    );
-
-    const syncUpgrade = () => {
-      const now = Date.now();
-      const localTakeoverAllowed = isLocalTakeoverAllowed(now);
-      const shouldUpgrade = shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
-        activePlaybackSource,
-        progressiveEngineType: currentProgressiveEngineType,
-        canUseFullLocalForPlaybackSession,
-        fullLocalBlockedReason,
-        localTakeoverAllowed,
-        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-        comfortBufferMs,
-        warmupReadyAt: fullLocalWarmupReadyAtRef.current,
-        now,
-        switchDelayMs: fullLocalSwitchDelayMs
-      });
-
-      if (shouldUpgrade) {
-        transitionPlaybackSource("full-local");
-        return;
-      }
-
-      const canArmIdleFullLocalUpgrade = resolveIdleFullLocalUpgradeArmState({
-        progressiveEngineType: currentProgressiveEngineType,
-        canUseFullLocalForPlaybackSession,
-        fullLocalBlockedReason,
-        localTakeoverAllowed,
-        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-        comfortBufferMs
-      });
-      const upgradeAction = resolveFullLocalUpgradeAction({
-        shouldUpgrade,
-        canArmIdleFullLocalUpgrade,
-        currentWarmupReadyAt: fullLocalWarmupReadyAtRef.current,
-        now
-      });
-      if (upgradeAction.kind === "transition") {
-        transitionPlaybackSource(upgradeAction.nextSource);
-        return;
-      }
-      if (upgradeAction.kind === "set-warmup-ready-at") {
-        fullLocalWarmupReadyAtRef.current = upgradeAction.nextWarmupReadyAt;
-      }
-    };
-
-    syncUpgrade();
-    const timerId = window.setInterval(syncUpgrade, progressiveRuntimeTickIntervalMs);
-    return () => window.clearInterval(timerId);
-  }, [
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackStatus,
-    currentBufferedFullLocalTrackObjectUrl,
-    canWarmBufferedFullLocal,
-    currentProgressiveEngineType,
-    activePlaybackSource,
-    currentTrackFormatKey,
-    canUseFullLocalForPlaybackSession,
-    fullLocalBlockedReason,
-    isLocalTakeoverAllowed,
-    progressiveHealthSnapshot.aheadBufferedMs,
-    transitionPlaybackSource
   ]);
 
   useEffect(() => {
