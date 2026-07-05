@@ -597,6 +597,30 @@ describe("playback runtime pipeline keys", () => {
     expect(eventControllerSource).toContain("resolveStalledPlaybackEventAction");
   });
 
+  it("hosts playback runtime lifecycle resets outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const lifecycleSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-runtime-lifecycle-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackRuntimeLifecycleController");
+    expect(runtimeSource).not.toContain("const destroyProgressiveRuntime = useCallback");
+    expect(runtimeSource).not.toContain("const resetAction = resolvePlaybackSurfaceResetAction");
+    expect(runtimeSource).not.toContain("const resetAction = resolvePlaybackTimelineResetAction");
+    expect(runtimeSource).not.toContain("resolvePcmRuntimeFailureResetAction({");
+    expect(lifecycleSource).toContain("export function usePlaybackRuntimeLifecycleController");
+    expect(lifecycleSource).toContain("resolvePlaybackSurfaceResetAction");
+    expect(lifecycleSource).toContain("resolvePlaybackTimelineResetAction");
+    expect(lifecycleSource).toContain("resolvePcmRuntimeFailureResetAction");
+  });
+
   it("hosts local playback readiness handling outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),

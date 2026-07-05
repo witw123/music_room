@@ -12,7 +12,6 @@ import {
   buildProgressiveTrackManifest,
   canUseProgressivePlayback,
   getFullLocalStableWindowMs,
-  getLocalTakeoverCooldownMs,
   getCriticalBufferThresholdMs,
   getEffectivePlaybackPositionMs,
   getProgressiveEngineType,
@@ -44,6 +43,7 @@ import { useLocalAudioPlaybackState } from "./playback-orchestrator/local-audio-
 import { useLocalAudioEventController } from "./playback-orchestrator/local-audio-event-controller";
 import { useLocalPlaybackReadinessController } from "./playback-orchestrator/local-playback-readiness-controller";
 import { usePlaybackSourceController } from "./playback-orchestrator/playback-source-controller";
+import { usePlaybackRuntimeLifecycleController } from "./playback-orchestrator/playback-runtime-lifecycle-controller";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -95,8 +95,6 @@ import {
   resolveIdleFullLocalUpgradeArmState,
   resolveInactivePlaybackSchedulerMode,
   resolveImmediateFullLocalRecoveryAction,
-  resolveLocalTakeoverCooldownArmAction,
-  resolveLocalTakeoverCooldownResetAction,
   resolveMainPlaybackPreflight,
   resolveLocalPlaybackPositionMs,
   resolveMainPausedPlaybackAction,
@@ -107,13 +105,9 @@ import {
   resolvePausedPlaybackEventAction,
   resolvePausedPlaybackRecoveryState,
   resolvePlaybackSourceTransitionAction,
-  resolvePlaybackSurfaceResetAction,
   resolvePlaybackSurfaceResetMediaConnectionState,
   resolvePlaybackStartMediaConnectionState,
   resolvePlaybackStartFailureMessage,
-  resolvePlaybackTimelineResetAction,
-  resolvePcmRuntimeFailureAction,
-  resolvePcmRuntimeFailureResetAction,
   resolvePcmSyncPlaybackOutcome,
   resolveProgressiveEngineSetupPreflight,
   resolveProgressiveEngineAttachErrorAction,
@@ -733,135 +727,38 @@ export function useProgressiveRuntime({
     ]
   );
 
-  const destroyProgressiveRuntime = useCallback(() => {
-    progressiveEngineRef.current?.destroy();
-    progressiveEngineRef.current = null;
-    progressivePcmEngineRef.current?.destroy();
-    progressivePcmEngineRef.current = null;
-    progressiveWarmupReadyAtRef.current = null;
-    fullLocalWarmupReadyAtRef.current = null;
-    pcmRuntimeFailureRef.current = null;
-    clearPlaybackStartRetry();
-    lastPcmSlidingWindowPlayAttemptAtRef.current = null;
-    resetPlaybackQualityState();
-  }, [clearPlaybackStartRetry, resetPlaybackQualityState]);
-
-  useEffect(() => destroyProgressiveRuntime, [destroyProgressiveRuntime]);
-
-  useEffect(() => {
-    const previousPlaybackSurfaceKey = previousPlaybackSurfaceKeyRef.current;
-    previousPlaybackSurfaceKeyRef.current = playbackSurfaceKey;
-    const audio = audioRef.current;
-    const resetAction = resolvePlaybackSurfaceResetAction({
-      previousPlaybackSurfaceKey,
-      nextPlaybackSurfaceKey: playbackSurfaceKey,
-      hasAudio: !!audio,
-      playbackHasActiveIntent: hasActivePlaybackIntent(playbackRef.current)
-    });
-    if (!resetAction) {
-      return;
-    }
-
-    if (resetAction.shouldDestroyRuntime) {
-      destroyProgressiveRuntime();
-    }
-    if (resetAction.shouldClearPcmLastBlockedReason) {
-      pcmLastBlockedReasonRef.current = null;
-    }
-    if (!audio || !resetAction.shouldResetAudioElement) {
-      return;
-    }
-
-    audio.pause();
-    audio.srcObject = null;
-    audio.removeAttribute("src");
-    audio.load();
-    if (resetAction.mediaConnectionState !== null) {
-      setMediaConnectionState(resetAction.mediaConnectionState);
-    }
-  }, [
-    audioRef,
+  const {
+    armLocalTakeoverCooldown,
     destroyProgressiveRuntime,
+    markPcmRuntimeFailure,
+    markPcmRuntimeFailureRef
+  } = usePlaybackRuntimeLifecycleController({
+    activePlaybackSource,
+    activeSourceActivatedAtRef,
+    audioRef,
+    canUseFullLocalForPlaybackSession,
+    clearPlaybackStartRetry,
+    currentProgressiveManifest,
+    fullLocalWarmupReadyAtRef,
+    lastPcmSlidingWindowPlayAttemptAtRef,
+    localTakeoverCooldownUntilRef,
+    pcmLastBlockedReasonRef,
+    pcmRuntimeFailureRef,
     playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackRef,
+    playbackRevision,
     playbackStatus,
     playbackSurfaceKey,
-    setMediaConnectionState
-  ]);
-
-  useEffect(() => {
-    activeSourceActivatedAtRef.current = Date.now();
-  }, [activePlaybackSource, playback?.currentTrackId, playbackRevision]);
-
-  const markPcmRuntimeFailure = useCallback(
-    (reason: string | null | undefined) => {
-      const failureAction = resolvePcmRuntimeFailureAction({
-        currentManifestTrackId: currentProgressiveManifest?.trackId,
-        reason,
-        shouldLatchFailure: shouldLatchPcmRuntimeFailure(reason),
-        activePlaybackSource,
-        canUseFullLocalForPlaybackSession
-      });
-      if (!failureAction) {
-        return;
-      }
-
-      pcmRuntimeFailureRef.current = failureAction.latchedFailure;
-      if (failureAction.shouldDestroyPcmEngine) {
-        progressivePcmEngineRef.current?.destroy();
-        progressivePcmEngineRef.current = null;
-      }
-      setProgressiveFallbackReason(failureAction.fallbackReason);
-      if (failureAction.nextSource !== activePlaybackSource) {
-        setActivePlaybackSource(failureAction.nextSource);
-      }
-    },
-    [
-      activePlaybackSource,
-      canUseFullLocalForPlaybackSession,
-      currentProgressiveManifest?.trackId,
-      setActivePlaybackSource,
-      setProgressiveFallbackReason
-    ]
-  );
-  const markPcmRuntimeFailureRef = useRef(markPcmRuntimeFailure);
-  markPcmRuntimeFailureRef.current = markPcmRuntimeFailure;
-
-  useEffect(() => {
-    const cooldownAction = resolveLocalTakeoverCooldownResetAction();
-    localTakeoverCooldownUntilRef.current = cooldownAction.nextCooldownUntilMs;
-  }, [playback?.currentTrackId, playbackRevision]);
-
-  useEffect(() => {
-    const resetAction = resolvePlaybackTimelineResetAction();
-    progressiveWarmupReadyAtRef.current = resetAction.nextProgressiveWarmupReadyAt;
-    fullLocalWarmupReadyAtRef.current = resetAction.nextFullLocalWarmupReadyAt;
-    resetPlaybackQualityState({
-      waitingEventTimestamps: resetAction.nextWaitingEventTimestamps,
-      stalledEventTimestamps: resetAction.nextStalledEventTimestamps,
-      driftSamples: resetAction.nextDriftSamples,
-      continuousPlaybackStartedAt: resetAction.nextContinuousPlaybackStartedAt,
-      continuousPlaybackSegments: resetAction.nextContinuousPlaybackSegments
-    });
-    lastPcmSlidingWindowPlayAttemptAtRef.current =
-      resetAction.nextPcmSlidingWindowPlayAttemptAt;
-    if (resetAction.shouldClearFallbackReason) {
-      setProgressiveFallbackReason(null);
-    }
-  }, [
-    playback?.currentTrackId,
-    playback?.mediaEpoch,
-    playbackRevision,
+    previousPlaybackSurfaceKeyRef,
+    progressiveEngineRef,
+    progressivePcmEngineRef,
+    progressiveWarmupReadyAtRef,
     resetPlaybackQualityState,
+    setActivePlaybackSource,
+    setMediaConnectionState,
     setProgressiveFallbackReason
-  ]);
-
-  const armLocalTakeoverCooldown = useCallback(() => {
-    const cooldownAction = resolveLocalTakeoverCooldownArmAction({
-      nowMs: Date.now(),
-      cooldownMs: getLocalTakeoverCooldownMs()
-    });
-    localTakeoverCooldownUntilRef.current = cooldownAction.nextCooldownUntilMs;
-  }, []);
+  });
 
   const immediateFullLocalRecoveryEligible =
     shouldPreferImmediateFullLocalRecovery({
@@ -1015,18 +912,6 @@ export function useProgressiveRuntime({
     setMediaConnectionState,
     setProgressiveFallbackReason
   });
-
-  useEffect(() => {
-    if (
-      resolvePcmRuntimeFailureResetAction({
-        hasLatchedFailure: !!pcmRuntimeFailureRef.current,
-        latchedTrackId: pcmRuntimeFailureRef.current?.trackId ?? null,
-        currentManifestTrackId: currentProgressiveManifest?.trackId ?? null
-      })
-    ) {
-      pcmRuntimeFailureRef.current = null;
-    }
-  }, [currentProgressiveManifest?.trackId]);
 
   const getLocalPlaybackPositionMs = useCallback(() => {
     if (!isSlidingWindowPlaybackSource(activePlaybackSource) && activePlaybackSource !== "full-local") {
