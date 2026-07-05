@@ -11,6 +11,8 @@ export type PlaybackRecoveryStage =
   | "shadow-catchup"
   | "audible-local-fallback";
 
+export type SchedulerBudgetTier = "critical" | "protected" | "comfort" | "expanded";
+
 type TrackFormatInput = Pick<
   TrackMeta,
   "id" | "fileHash" | "durationMs" | "mimeType" | "codec"
@@ -212,6 +214,59 @@ export function shouldUsePcmEngineForFullLocal(input: {
     wantsFullLocalPlayback &&
     !input.hasFullLocalTrack &&
     input.progressiveEngineType === "pcm"
+  );
+}
+
+export function resolvePlaybackRecoveryStage(input: {
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  startupGatePending: boolean;
+  waitingEventsLast30s: number;
+  stalledEventsLast30s: number;
+  shadowWarmupActive: boolean;
+  audibleLocalFallbackActive: boolean;
+}) {
+  if (input.audibleLocalFallbackActive) {
+    return "audible-local-fallback" as const;
+  }
+
+  if (input.playbackStatus !== "playing" || input.startupGatePending) {
+    return "startup-buffering" as const;
+  }
+
+  if (input.stalledEventsLast30s > 0 || input.waitingEventsLast30s > 0) {
+    return "degraded" as const;
+  }
+
+  return "steady" as const;
+}
+
+export function resolveSchedulerBudgetTier(input: {
+  bufferHealth: "healthy" | "low" | "critical";
+  activePlaybackSource: ProgressivePlaybackSource;
+  playbackRecoveryStage: PlaybackRecoveryStage;
+}) {
+  if (input.bufferHealth === "critical" || input.playbackRecoveryStage === "audible-local-fallback") {
+    return "critical" as const;
+  }
+
+  if (
+    input.playbackRecoveryStage === "startup-buffering" ||
+    input.playbackRecoveryStage === "degraded"
+  ) {
+    return "protected" as const;
+  }
+
+  return "expanded" as const;
+}
+
+export function shouldPreferLocalTakeover(input: {
+  progressiveFallbackReason: string | null | undefined;
+}) {
+  return (
+    input.progressiveFallbackReason === "buffer-underrun" ||
+    input.progressiveFallbackReason === "stalled" ||
+    input.progressiveFallbackReason === "seek-outside-buffer"
   );
 }
 

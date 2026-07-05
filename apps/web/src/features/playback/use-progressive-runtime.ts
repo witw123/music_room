@@ -68,6 +68,8 @@ import {
 import {
   buildCurrentTrackFormatKey,
   hasSufficientBackingForFullLocalWarmup,
+  resolvePlaybackRecoveryStage,
+  resolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback,
   shouldPrepareProgressiveRuntimeForSource,
   shouldStartPcmSlidingWindowAudioElement,
@@ -151,10 +153,13 @@ const playbackDriftSampleIntervalMs = 1_000;
 const fullLocalPausedRecoveryIntervalMs = 500;
 const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
-export type { PlaybackRecoveryStage } from "./playback-orchestrator/pipeline";
+export type { PlaybackRecoveryStage, SchedulerBudgetTier } from "./playback-orchestrator/pipeline";
 export {
   hasSufficientBackingForFullLocalWarmup,
+  resolvePlaybackRecoveryStage,
+  resolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback,
+  shouldPreferLocalTakeover,
   shouldPrepareProgressiveRuntimeForSource,
   shouldStartListenerProgressivePlayback,
   shouldStartPcmSlidingWindowAudioElement,
@@ -167,8 +172,6 @@ export type MediaElementPlaybackRole =
   | "audible-local"
   | "shadow-local"
   | "inactive";
-
-export type SchedulerBudgetTier = "critical" | "protected" | "comfort" | "expanded";
 
 export type FullLocalPlaybackSessionState = {
   key: string | null;
@@ -441,30 +444,6 @@ function bucketDiagnosticDurationMs(
   return Math.round(value / bucketMs) * bucketMs;
 }
 
-export function resolvePlaybackRecoveryStage(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  startupGatePending: boolean;
-  waitingEventsLast30s: number;
-  stalledEventsLast30s: number;
-  shadowWarmupActive: boolean;
-  audibleLocalFallbackActive: boolean;
-}) {
-  if (input.audibleLocalFallbackActive) {
-    return "audible-local-fallback" as const;
-  }
-
-  if (input.playbackStatus !== "playing" || input.startupGatePending) {
-    return "startup-buffering" as const;
-  }
-
-  if (input.stalledEventsLast30s > 0 || input.waitingEventsLast30s > 0) {
-    return "degraded" as const;
-  }
-
-  return "steady" as const;
-}
-
 export function resolveMediaElementPlaybackRole(input: {
   target: "local" | "remote";
   activePlaybackSource: ProgressivePlaybackSource;
@@ -475,35 +454,6 @@ export function resolveMediaElementPlaybackRole(input: {
   }
 
   return "inactive" as const;
-}
-
-export function resolveSchedulerBudgetTier(input: {
-  bufferHealth: "healthy" | "low" | "critical";
-  activePlaybackSource: ProgressivePlaybackSource;
-  playbackRecoveryStage: PlaybackRecoveryStage;
-}) {
-  if (input.bufferHealth === "critical" || input.playbackRecoveryStage === "audible-local-fallback") {
-    return "critical" as const;
-  }
-
-  if (
-    input.playbackRecoveryStage === "startup-buffering" ||
-    input.playbackRecoveryStage === "degraded"
-  ) {
-    return "protected" as const;
-  }
-
-  return "expanded" as const;
-}
-
-export function shouldPreferLocalTakeover(input: {
-  progressiveFallbackReason: string | null | undefined;
-}) {
-  return (
-    input.progressiveFallbackReason === "buffer-underrun" ||
-    input.progressiveFallbackReason === "stalled" ||
-    input.progressiveFallbackReason === "seek-outside-buffer"
-  );
 }
 
 function resolveTransportGovernorMode(input: {

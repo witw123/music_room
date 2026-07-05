@@ -5,7 +5,10 @@ import {
   buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
+  resolvePlaybackRecoveryStage as pipelineResolvePlaybackRecoveryStage,
+  resolveSchedulerBudgetTier as pipelineResolveSchedulerBudgetTier,
   shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
+  shouldPreferLocalTakeover as pipelineShouldPreferLocalTakeover,
   shouldPrepareProgressiveRuntimeForSource as pipelineShouldPrepareProgressiveRuntimeForSource,
   shouldStartListenerProgressivePlayback as pipelineShouldStartListenerProgressivePlayback,
   shouldStartPcmSlidingWindowAudioElement as pipelineShouldStartPcmSlidingWindowAudioElement,
@@ -43,6 +46,28 @@ import {
 } from "./use-progressive-runtime";
 
 describe("playback runtime pipeline keys", () => {
+  it("hosts recovery and scheduler policy in the pure pipeline module", () => {
+    const recoveryStage = pipelineResolvePlaybackRecoveryStage({
+      activePlaybackSource: "progressive-local",
+      playbackStatus: "playing",
+      startupGatePending: false,
+      waitingEventsLast30s: 1,
+      stalledEventsLast30s: 0,
+      shadowWarmupActive: false,
+      audibleLocalFallbackActive: false
+    });
+
+    expect(recoveryStage).toBe("degraded");
+    expect(
+      pipelineResolveSchedulerBudgetTier({
+        bufferHealth: "low",
+        activePlaybackSource: "progressive-local",
+        playbackRecoveryStage: recoveryStage
+      })
+    ).toBe("protected");
+    expect(pipelineShouldPreferLocalTakeover({ progressiveFallbackReason: "stalled" })).toBe(true);
+  });
+
   it("hosts listener sliding-window playback policy in the pure pipeline module", () => {
     expect(
       pipelineShouldPrepareProgressiveRuntimeForSource({
