@@ -66,19 +66,41 @@ import {
 } from "./progressive-source-controller";
 import {
   buildCurrentTrackFormatKey,
+  buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
+  appendPlaybackDriftSample,
   bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   getSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup,
   isRecoverableProgressiveFallbackReason,
+  isSlidingWindowPlaybackSource,
+  pruneContinuousPlaybackSegments,
+  prunePlaybackQualityTimestamps,
+  resolveActiveMemberPeerIds,
+  resolveAggregatePieceDownloadRateKbps,
+  resolveCurrentBufferedFullLocalTrack,
   resolveFullLocalPlaybackSessionState,
+  resolveFullLocalBlockedReason,
+  resolveLocalAudioDiagnostics,
   resolveMediaElementPlaybackRole,
+  resolveNextQueueTrackPrefetch,
+  resolveSourceOwnerIdentity,
+  resolveTrackAvailabilityAnnouncement,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
+  resolveBufferSafetyMarginMs,
+  resolveEffectiveStartupBufferMs,
+  resolvePlaybackQualityMetrics,
   resolvePlaybackRecoveryStage,
+  resolveAudibleLocalFallbackActive,
+  resolveProgressiveDiagnosticSignature,
+  resolveProgressiveLocalBlockedReason,
+  resolveMaxContinuousPlaybackMs,
   resolveSchedulerBudgetTier,
+  resolveTransportGovernorMode,
   shouldAttemptProgressiveLocalPlayback,
+  shouldAllowLocalTakeover,
   shouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine,
   shouldPreferImmediateFullLocalRecovery,
@@ -91,7 +113,9 @@ import {
   shouldStartPcmSlidingWindowAudioElement,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
   shouldWarmFullLocalWithSharedAudioElement,
-  type FullLocalPlaybackSessionState
+  type FullLocalPlaybackSessionState,
+  type PlaybackDriftSample,
+  type TransportGovernorMode
 } from "./playback-orchestrator/pipeline";
 import {
   resolvePlaybackSurfaceKey,
@@ -148,7 +172,7 @@ type UseProgressiveRuntimeInput = {
 
 type UseProgressiveRuntimeResult = {
   progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
-  transportGovernorMode: "bootstrap" | "segment-catchup" | "local-primary" | "emergency-fallback";
+  transportGovernorMode: TransportGovernorMode;
   getLocalPlaybackPositionMs: () => number | null;
   destroyProgressiveRuntime: () => void;
 };
@@ -172,20 +196,42 @@ const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 export type {
   FullLocalPlaybackSessionState,
   PlaybackRecoveryStage,
-  SchedulerBudgetTier
+  SchedulerBudgetTier,
+  TransportGovernorMode
 } from "./playback-orchestrator/pipeline";
 export {
+  appendPlaybackDriftSample,
   bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   getSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup,
+  isSlidingWindowPlaybackSource,
+  pruneContinuousPlaybackSegments,
+  prunePlaybackQualityTimestamps,
+  resolveActiveMemberPeerIds,
+  resolveAggregatePieceDownloadRateKbps,
+  resolveCurrentBufferedFullLocalTrack,
   resolveFullLocalPlaybackSessionState,
+  resolveFullLocalBlockedReason,
+  resolveLocalAudioDiagnostics,
   resolveMediaElementPlaybackRole,
+  resolveNextQueueTrackPrefetch,
+  resolveSourceOwnerIdentity,
+  resolveTrackAvailabilityAnnouncement,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
+  resolveBufferSafetyMarginMs,
+  resolveEffectiveStartupBufferMs,
+  resolvePlaybackQualityMetrics,
   resolvePlaybackRecoveryStage,
+  resolveAudibleLocalFallbackActive,
+  resolveProgressiveDiagnosticSignature,
+  resolveProgressiveLocalBlockedReason,
+  resolveMaxContinuousPlaybackMs,
   resolveSchedulerBudgetTier,
+  resolveTransportGovernorMode,
   shouldAttemptProgressiveLocalPlayback,
+  shouldAllowLocalTakeover,
   shouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine,
   shouldPreferLocalTakeover,
@@ -202,37 +248,6 @@ export {
   shouldUsePcmEngineForFullLocal,
   shouldWarmFullLocalWithSharedAudioElement
 } from "./playback-orchestrator/pipeline";
-
-function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
-  return source === "progressive-local" || source === "lossless-local";
-}
-
-function resolveTransportGovernorMode(input: {
-  activePlaybackSource: ProgressivePlaybackSource;
-  mediaConnectedPeersCount: number;
-  connectedPeersCount: number;
-  pendingPlaybackIntent: boolean;
-  progressiveFallbackReason: string | null;
-  progressiveLocalEligible: boolean;
-}) {
-  if (
-    isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    input.activePlaybackSource === "full-local"
-  ) {
-    return "local-primary" as const;
-  }
-
-  if (
-    input.progressiveFallbackReason ||
-    input.pendingPlaybackIntent ||
-    input.connectedPeersCount <= 0 ||
-    !input.progressiveLocalEligible
-  ) {
-    return "bootstrap" as const;
-  }
-
-  return "segment-catchup" as const;
-}
 
 export function useProgressiveRuntime({
   audioRef,
@@ -277,7 +292,7 @@ export function useProgressiveRuntime({
   const lastStablePlaybackAtRef = useRef<string | null>(null);
   const waitingEventTimestampsRef = useRef<number[]>([]);
   const stalledEventTimestampsRef = useRef<number[]>([]);
-  const driftSamplesRef = useRef<Array<{ timestampMs: number; driftMs: number }>>([]);
+  const driftSamplesRef = useRef<readonly PlaybackDriftSample[]>([]);
   const continuousPlaybackStartedAtRef = useRef<number | null>(null);
   const [, setAudioPaused] = useState<boolean | null>(null);
   const continuousPlaybackSegmentsRef = useRef<Array<{ startedAtMs: number; endedAtMs: number }>>([]);
@@ -292,16 +307,36 @@ export function useProgressiveRuntime({
     key: "none",
     manifest: null
   });
+  const roomId = roomSnapshot?.room.id ?? null;
   const playback = roomSnapshot?.room.playback;
   const playbackRevision = playback?.playbackRevision ?? playback?.queueVersion ?? 0;
-  const playbackSurfaceKey = useMemo(() => resolvePlaybackSurfaceKey(playback), [playback]);
-  const playbackTimelineKey = useMemo(() => resolvePlaybackTimelineKey(playback), [playback]);
+  const playbackCurrentTrackId = playback?.currentTrackId ?? null;
+  const playbackStatus = playback?.status ?? null;
+  const playbackMediaEpoch = playback?.mediaEpoch ?? null;
+  const playbackSourceSessionId = playback?.sourceSessionId ?? null;
+  const playbackSourcePeerId = playback?.sourcePeerId ?? null;
+  const playbackPositionKey = buildPlaybackPositionKey(playback);
+  const playbackSurfaceKey = useMemo(
+    () => resolvePlaybackSurfaceKey(playback),
+    [
+      playbackCurrentTrackId,
+      playbackMediaEpoch,
+      playbackSourcePeerId,
+      playbackSourceSessionId
+    ]
+  );
+  const playbackTimelineKey = useMemo(
+    () => resolvePlaybackTimelineKey(playback),
+    [playbackCurrentTrackId, playbackMediaEpoch, playbackRevision]
+  );
 
   const currentBufferedFullLocalTrack = useMemo(
     () =>
-      currentTrack?.id
-        ? fullLocalPlaybackTracks[currentTrack.id] ?? uploadedTracks[currentTrack.id] ?? null
-        : null,
+      resolveCurrentBufferedFullLocalTrack({
+        currentTrackId: currentTrack?.id,
+        fullLocalPlaybackTracks,
+        uploadedTracks
+      }),
     [currentTrack?.id, fullLocalPlaybackTracks, uploadedTracks]
   );
   const playbackRef = useRef(playback);
@@ -310,9 +345,6 @@ export function useProgressiveRuntime({
   currentTrackRef.current = currentTrack;
   const currentBufferedFullLocalTrackRef = useRef(currentBufferedFullLocalTrack);
   currentBufferedFullLocalTrackRef.current = currentBufferedFullLocalTrack;
-  const playbackCurrentTrackId = playback?.currentTrackId ?? null;
-  const playbackStatus = playback?.status ?? null;
-  const playbackMediaEpoch = playback?.mediaEpoch ?? null;
   const currentTrackDurationMs = currentTrack?.durationMs ?? null;
   const currentTrackFormatKey = buildCurrentTrackFormatKey(currentTrack);
   const currentBufferedFullLocalTrackObjectUrl =
@@ -331,26 +363,26 @@ export function useProgressiveRuntime({
         activePlaybackSource,
         hasFullLocalTrack: !!currentBufferedFullLocalTrack
       }),
-    [activePlaybackSource, currentBufferedFullLocalTrack, isCurrentSourceOwner]
+    [activePlaybackSource, currentBufferedFullLocalTrackObjectUrl, isCurrentSourceOwner]
   );
   const activeMemberPeerIds = useMemo(
-    () =>
-      new Set(
-        roomSnapshot?.room.members
-          .map((member) => member.peerId)
-          .filter((memberPeerId): memberPeerId is string => !!memberPeerId) ?? []
-      ),
+    () => resolveActiveMemberPeerIds(roomSnapshot?.room.members),
     [roomSnapshot?.room.members]
   );
   const currentTrackAvailabilityAnnouncement = useMemo(
-    () => (currentTrack?.id ? availabilityByTrack[currentTrack.id]?.[peerId] ?? null : null),
+    () =>
+      resolveTrackAvailabilityAnnouncement({
+        currentTrackId: currentTrack?.id,
+        availabilityByTrack,
+        peerId
+      }),
     [availabilityByTrack, currentTrack?.id, peerId]
   );
   const currentTrackAvailableChunksRef = useRef<number[]>([]);
   currentTrackAvailableChunksRef.current =
     currentTrackAvailabilityAnnouncement?.availableChunks ?? [];
   const currentTrackAvailabilityManifestHint = useMemo(() => {
-    if (!currentTrack?.id || !roomSnapshot) {
+    if (!currentTrack?.id || !roomId) {
       return currentTrackAvailabilityAnnouncement;
     }
 
@@ -358,7 +390,7 @@ export function useProgressiveRuntime({
       selectCanonicalTrackAvailabilityAnnouncement(
         Object.values(availabilityByTrack[currentTrack.id] ?? {}).filter(
           (announcement) =>
-            announcement.roomId === roomSnapshot.room.id &&
+            announcement.roomId === roomId &&
             activeMemberPeerIds.has(announcement.ownerPeerId)
         )
       ) ?? currentTrackAvailabilityAnnouncement
@@ -368,7 +400,7 @@ export function useProgressiveRuntime({
     availabilityByTrack,
     currentTrack?.id,
     currentTrackAvailabilityAnnouncement,
-    roomSnapshot
+    roomId
   ]);
   const currentProgressiveManifestKey = getProgressiveTrackManifestKey(
     currentTrack,
@@ -391,18 +423,14 @@ export function useProgressiveRuntime({
     () => getProgressiveEngineType(currentProgressiveManifest),
     [currentProgressiveManifest]
   );
-  const aggregatePieceDownloadRateKbps = useMemo(() => {
-    const values = peerDiagnostics
-      .filter((snapshot) => activeMemberPeerIds.has(snapshot.peerId))
-      .map((snapshot) => snapshot.pieceDownloadRateKbps)
-      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-    if (values.length === 0) {
-      return null;
-    }
-
-    return Math.round(values.reduce((sum, value) => sum + value, 0));
-  }, [activeMemberPeerIds, peerDiagnostics]);
+  const aggregatePieceDownloadRateKbps = useMemo(
+    () =>
+      resolveAggregatePieceDownloadRateKbps({
+        activeMemberPeerIds,
+        peerDiagnostics
+      }),
+    [activeMemberPeerIds, peerDiagnostics]
+  );
   const progressiveHealthSnapshot = useMemo(
     () =>
       buildProgressiveHealthSnapshot({
@@ -414,7 +442,7 @@ export function useProgressiveRuntime({
         currentPieceDownloadRateKbps: aggregatePieceDownloadRateKbps
       }),
     [
-      playback,
+      playbackPositionKey,
       activePlaybackSource,
       currentProgressiveManifest,
       currentTrackAvailabilityAnnouncement,
@@ -467,67 +495,62 @@ export function useProgressiveRuntime({
     []
   );
   const fullLocalReady = canUseFullLocalForPlaybackSession;
-  const bufferSafetyMarginMs = useMemo(() => {
-    if (progressiveHealthSnapshot.estimatedFillTimeMs === null) {
-      return null;
-    }
-
-    return progressiveHealthSnapshot.aheadBufferedMs - progressiveHealthSnapshot.estimatedFillTimeMs;
-  }, [
-    progressiveHealthSnapshot.aheadBufferedMs,
-    progressiveHealthSnapshot.estimatedFillTimeMs
-  ]);
+  const bufferSafetyMarginMs = useMemo(
+    () =>
+      resolveBufferSafetyMarginMs({
+        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+        estimatedFillTimeMs: progressiveHealthSnapshot.estimatedFillTimeMs
+      }),
+    [
+      progressiveHealthSnapshot.aheadBufferedMs,
+      progressiveHealthSnapshot.estimatedFillTimeMs
+    ]
+  );
   const progressiveLocalBlockedReason = (() => {
-    if (!currentProgressiveManifest || currentProgressiveEngineType === "none") {
-      return "progressive-engine-unavailable";
+    const shouldAttemptPlayback = shouldAttemptProgressiveLocalPlayback({
+      isCurrentSourceOwner,
+      activePlaybackSource,
+      playbackStatus: playback?.status,
+      engineType: currentProgressiveEngineType,
+      startupReady: progressiveHealthSnapshot.startupReady,
+      hasFullLocalTrack: canUseFullLocalForPlaybackSession,
+      progressiveFallbackReason
+    });
+    const staticBlockedReason = resolveProgressiveLocalBlockedReason({
+      hasManifest: !!currentProgressiveManifest,
+      isCurrentSourceOwner,
+      activePlaybackSource,
+      playbackStatus: playback?.status,
+      engineType: currentProgressiveEngineType,
+      startupReady: progressiveHealthSnapshot.startupReady,
+      hasFullLocalTrack: canUseFullLocalForPlaybackSession,
+      progressiveFallbackReason,
+      localTakeoverCooldownMs,
+      connectedPeersCount,
+      aggregatePieceDownloadRateKbps,
+      progressiveTakeoverReady: true
+    });
+    if (staticBlockedReason !== null) {
+      return staticBlockedReason;
     }
-
-    if (!hasActivePlaybackIntent(playback)) {
-      return "playback-paused";
-    }
-
-    if (
-      progressiveFallbackReason &&
-      !isRecoverableProgressiveFallbackReason(progressiveFallbackReason)
-    ) {
-      return progressiveFallbackReason;
-    }
-
-    if (
-      shouldAttemptProgressiveLocalPlayback({
-        isCurrentSourceOwner,
-        activePlaybackSource,
-        playbackStatus: playback?.status,
-        engineType: currentProgressiveEngineType,
-        startupReady: progressiveHealthSnapshot.startupReady,
-        hasFullLocalTrack: canUseFullLocalForPlaybackSession,
-        progressiveFallbackReason
-      })
-    ) {
+    if (shouldAttemptPlayback) {
       return null;
     }
 
-    if (localTakeoverCooldownMs > 0) {
-      return "takeover-cooldown";
-    }
-
-    if (connectedPeersCount <= 0) {
-      return "data-channel-not-ready";
-    }
-
-    if (
-      aggregatePieceDownloadRateKbps === null ||
-      !Number.isFinite(aggregatePieceDownloadRateKbps) ||
-      aggregatePieceDownloadRateKbps <= 0
-    ) {
-      return "piece-download-not-ready";
-    }
-
-    if (!isProgressiveTakeoverReady()) {
-      return "local-prefix-not-ready";
-    }
-
-    return null;
+    return resolveProgressiveLocalBlockedReason({
+      hasManifest: true,
+      isCurrentSourceOwner,
+      activePlaybackSource,
+      playbackStatus: playback?.status,
+      engineType: currentProgressiveEngineType,
+      startupReady: progressiveHealthSnapshot.startupReady,
+      hasFullLocalTrack: canUseFullLocalForPlaybackSession,
+      progressiveFallbackReason,
+      localTakeoverCooldownMs,
+      connectedPeersCount,
+      aggregatePieceDownloadRateKbps,
+      progressiveTakeoverReady: isProgressiveTakeoverReady()
+    });
   })();
   const progressiveLocalEligible = progressiveLocalBlockedReason === null;
   const transportGovernorMode = useMemo(
@@ -550,50 +573,31 @@ export function useProgressiveRuntime({
     ]
   );
   const nextQueueTrackPrefetch = useMemo(() => {
-    if (!roomSnapshot?.queue.length) {
-      return null;
-    }
-
-    const currentQueueIndex = roomSnapshot.room.playback.currentQueueItemId
-      ? roomSnapshot.queue.findIndex(
-          (item) => item.id === roomSnapshot.room.playback.currentQueueItemId
-        )
-      : currentTrack
-        ? roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id)
-        : -1;
-    const nextQueueItem =
-      currentQueueIndex >= 0 ? roomSnapshot.queue[currentQueueIndex + 1] ?? null : null;
-    if (!nextQueueItem) {
-      return null;
-    }
-
-    const nextTrack = roomSnapshot.tracks.find((track) => track.id === nextQueueItem.trackId) ?? null;
-    if (!nextTrack) {
-      return null;
-    }
-
-    const localAvailability = availabilityByTrack[nextTrack.id]?.[peerId] ?? null;
-    const bufferedChunks = localAvailability?.availableChunks.length ?? 0;
-    const totalChunks = localAvailability?.totalChunks ?? 0;
-
-    return `${nextTrack.title} ${bufferedChunks}/${totalChunks}`;
+    return resolveNextQueueTrackPrefetch({
+      queue: roomSnapshot?.queue,
+      currentQueueItemId: roomSnapshot?.room.playback.currentQueueItemId,
+      currentTrackId: currentTrack?.id,
+      tracks: roomSnapshot?.tracks,
+      availabilityByTrack,
+      peerId
+    });
   }, [
     roomSnapshot?.queue,
     roomSnapshot?.room.playback.currentQueueItemId,
     roomSnapshot?.tracks,
-    currentTrack,
+    currentTrack?.id,
     availabilityByTrack,
     peerId
   ]);
   const sourceOwnerIdentity = useMemo(
-    () => ({
-      currentSessionUserId:
-        roomSnapshot?.room.members.find((member) => member.peerId === peerId)?.id ?? null,
-      playbackSourceSessionId: roomSnapshot?.room.playback.sourceSessionId ?? null,
-      currentPeerId: peerId || null,
-      playbackSourcePeerId: roomSnapshot?.room.playback.sourcePeerId ?? null,
-      isSourceOwner: isCurrentSourceOwner
-    }),
+    () =>
+      resolveSourceOwnerIdentity({
+        members: roomSnapshot?.room.members,
+        peerId,
+        playbackSourceSessionId: roomSnapshot?.room.playback.sourceSessionId,
+        playbackSourcePeerId: roomSnapshot?.room.playback.sourcePeerId,
+        isSourceOwner: isCurrentSourceOwner
+      }),
     [
       isCurrentSourceOwner,
       peerId,
@@ -622,48 +626,20 @@ export function useProgressiveRuntime({
   }, [audioRef, playback?.currentTrackId]);
 
   const localAudioDiagnostics = useMemo(() => {
-    const localAudio = audioRef.current;
-    if (!localAudio) {
-      return {
-        localAudioPaused: null,
-        localAudioMuted: null,
-        localAudioVolume: null,
-        localAudioReadyState: null,
-        localAudioCurrentSrc: null,
-        localAudioHasSrcObject: null
-      };
-    }
-
-    return {
-      localAudioPaused: localAudio.paused,
-      localAudioMuted: localAudio.muted,
-      localAudioVolume: localAudio.volume,
-      localAudioReadyState: localAudio.readyState,
-      localAudioCurrentSrc: localAudio.currentSrc || null,
-      localAudioHasSrcObject: !!localAudio.srcObject
-    };
+    return resolveLocalAudioDiagnostics(audioRef.current);
   }, [audioRef]);
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
   const shadowWarmupActive = false;
 
-  const pruneWindow = useCallback(
-    (timestamps: number[], now = Date.now()) =>
-      timestamps.filter((timestampMs) => now - timestampMs <= playbackQualityWindowMs),
-    []
-  );
-
   const pushQualityEvent = useCallback(
     (targetRef: typeof waitingEventTimestampsRef, timestampMs = Date.now()) => {
-      targetRef.current = pruneWindow([...targetRef.current, timestampMs], timestampMs);
+      targetRef.current = prunePlaybackQualityTimestamps(
+        [...targetRef.current, timestampMs],
+        timestampMs,
+        playbackQualityWindowMs
+      );
     },
-    [pruneWindow]
-  );
-  const pruneContinuitySegments = useCallback(
-    (
-      segments: Array<{ startedAtMs: number; endedAtMs: number }>,
-      now = Date.now()
-    ) => segments.filter((segment) => segment.endedAtMs >= now - playbackQualityWindowMs),
     []
   );
   const markContinuousPlaybackStarted = useCallback((timestampMs = Date.now()) => {
@@ -677,7 +653,7 @@ export function useProgressiveRuntime({
         return;
       }
 
-      continuousPlaybackSegmentsRef.current = pruneContinuitySegments(
+      continuousPlaybackSegmentsRef.current = pruneContinuousPlaybackSegments(
         [
           ...continuousPlaybackSegmentsRef.current,
           {
@@ -685,99 +661,67 @@ export function useProgressiveRuntime({
             endedAtMs: timestampMs
           }
         ],
-        timestampMs
+        timestampMs,
+        playbackQualityWindowMs
       );
       continuousPlaybackStartedAtRef.current = null;
     },
-    [pruneContinuitySegments]
+    []
   );
   const getMaxContinuousPlaybackMsLast30s = useCallback(
     (now = Date.now()) => {
-      const windowStart = now - playbackQualityWindowMs;
-      const segments = pruneContinuitySegments(continuousPlaybackSegmentsRef.current, now);
+      const segments = pruneContinuousPlaybackSegments(
+        continuousPlaybackSegmentsRef.current,
+        now,
+        playbackQualityWindowMs
+      );
       continuousPlaybackSegmentsRef.current = segments;
-      let maxDurationMs = 0;
-
-      for (const segment of segments) {
-        const startedAtMs = Math.max(segment.startedAtMs, windowStart);
-        const endedAtMs = Math.min(segment.endedAtMs, now);
-        if (endedAtMs > startedAtMs) {
-          maxDurationMs = Math.max(maxDurationMs, endedAtMs - startedAtMs);
-        }
-      }
-
-      if (continuousPlaybackStartedAtRef.current !== null) {
-        maxDurationMs = Math.max(
-          maxDurationMs,
-          now - Math.max(continuousPlaybackStartedAtRef.current, windowStart)
-        );
-      }
-
-      return maxDurationMs;
+      return resolveMaxContinuousPlaybackMs({
+        segments,
+        activeStartedAtMs: continuousPlaybackStartedAtRef.current,
+        nowMs: now,
+        windowMs: playbackQualityWindowMs
+      });
     },
-    [pruneContinuitySegments]
+    []
   );
 
   const recordDriftSample = useCallback(
     (driftMs: number, timestampMs = Date.now()) => {
-      if (!Number.isFinite(driftMs)) {
-        return;
-      }
-
-      driftSamplesRef.current = [
-        ...driftSamplesRef.current,
-        {
-          timestampMs,
-          driftMs: Math.abs(driftMs)
-        }
-      ].filter((sample) => timestampMs - sample.timestampMs <= playbackQualityWindowMs);
+      driftSamplesRef.current = appendPlaybackDriftSample({
+        samples: driftSamplesRef.current,
+      driftMs,
+      timestampMs,
+      windowMs: playbackQualityWindowMs
+      });
     },
     []
   );
 
   const playbackQualityMetrics = useMemo(() => {
     const now = Date.now();
-    const waitingEvents = pruneWindow(waitingEventTimestampsRef.current, now);
-    const stalledEvents = pruneWindow(stalledEventTimestampsRef.current, now);
-    const driftSamples = driftSamplesRef.current.filter(
-      (sample) => now - sample.timestampMs <= playbackQualityWindowMs
-    );
-    const averageDriftMs =
-      driftSamples.length > 0
-        ? Math.round(
-            driftSamples.reduce((sum, sample) => sum + sample.driftMs, 0) / driftSamples.length
-          )
-        : null;
-    const maxDriftMs =
-      driftSamples.length > 0
-        ? Math.round(
-            driftSamples.reduce((max, sample) => Math.max(max, sample.driftMs), 0)
-          )
-        : null;
-
-      return {
-        waitingEventsLast30s: waitingEvents.length,
-        stalledEventsLast30s: stalledEvents.length,
-        averageDriftMs,
-        maxDriftMs,
-        maxContinuousPlaybackMsLast30s: getMaxContinuousPlaybackMsLast30s(now)
-      };
-  }, [getMaxContinuousPlaybackMsLast30s, pruneWindow]);
-  const effectiveStartupBufferMs = useMemo(() => {
-    let nextStartupBufferMs = startupBufferMs;
-    if (playbackQualityMetrics.stalledEventsLast30s > 0) {
-      nextStartupBufferMs += 220;
-    } else if (playbackQualityMetrics.waitingEventsLast30s >= 2) {
-      nextStartupBufferMs += 140;
-    } else if (playbackQualityMetrics.waitingEventsLast30s > 0) {
-      nextStartupBufferMs += 80;
-    }
-    return nextStartupBufferMs;
-  }, [
-    playbackQualityMetrics.stalledEventsLast30s,
-    playbackQualityMetrics.waitingEventsLast30s,
-    startupBufferMs
-  ]);
+    return resolvePlaybackQualityMetrics({
+      nowMs: now,
+      windowMs: playbackQualityWindowMs,
+      waitingEventTimestamps: waitingEventTimestampsRef.current,
+      stalledEventTimestamps: stalledEventTimestampsRef.current,
+      driftSamples: driftSamplesRef.current,
+      maxContinuousPlaybackMsLast30s: getMaxContinuousPlaybackMsLast30s(now)
+    });
+  }, [getMaxContinuousPlaybackMsLast30s]);
+  const effectiveStartupBufferMs = useMemo(
+    () =>
+      resolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: startupBufferMs,
+        waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
+        stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s
+      }),
+    [
+      playbackQualityMetrics.stalledEventsLast30s,
+      playbackQualityMetrics.waitingEventsLast30s,
+      startupBufferMs
+    ]
+  );
 
   const destroyProgressiveRuntime = useCallback(() => {
     progressiveEngineRef.current?.destroy();
@@ -824,8 +768,15 @@ export function useProgressiveRuntime({
     audio.srcObject = null;
     audio.removeAttribute("src");
     audio.load();
-    setMediaConnectionState(hasActivePlaybackIntent(playback) ? "buffering" : "idle");
-  }, [audioRef, destroyProgressiveRuntime, playback, playbackSurfaceKey, setMediaConnectionState]);
+    setMediaConnectionState(hasActivePlaybackIntent(playbackRef.current) ? "buffering" : "idle");
+  }, [
+    audioRef,
+    destroyProgressiveRuntime,
+    playbackCurrentTrackId,
+    playbackStatus,
+    playbackSurfaceKey,
+    setMediaConnectionState
+  ]);
 
   useEffect(() => {
     activeSourceActivatedAtRef.current = Date.now();
@@ -908,21 +859,23 @@ export function useProgressiveRuntime({
 
   const isLocalTakeoverAllowed = useCallback(
     (now = Date.now()) =>
-      enableListenerLocalTakeover &&
-      now >= localTakeoverCooldownUntilRef.current &&
-      (immediateFullLocalRecoveryEligible ||
-        canUseFullLocalForPlaybackSession ||
-        connectedPeersCount > 0),
+      shouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: enableListenerLocalTakeover,
+        nowMs: now,
+        cooldownUntilMs: localTakeoverCooldownUntilRef.current,
+        immediateFullLocalRecoveryEligible,
+        canUseFullLocalForPlaybackSession,
+        connectedPeersCount
+      }),
     [canUseFullLocalForPlaybackSession, connectedPeersCount, immediateFullLocalRecoveryEligible]
   );
   const isLocalTakeoverAllowedRef = useRef(isLocalTakeoverAllowed);
   isLocalTakeoverAllowedRef.current = isLocalTakeoverAllowed;
-  const audibleLocalFallbackActive =
-    !isCurrentSourceOwner &&
-    (isSlidingWindowPlaybackSource(activePlaybackSource) || activePlaybackSource === "full-local") &&
-    (progressiveFallbackReason === "buffer-underrun" ||
-      progressiveFallbackReason === "stalled" ||
-      progressiveFallbackReason === "seek-outside-buffer");
+  const audibleLocalFallbackActive = resolveAudibleLocalFallbackActive({
+    isCurrentSourceOwner,
+    activePlaybackSource,
+    progressiveFallbackReason
+  });
   const startupGatePending = false;
   const playbackRecoveryStage = useMemo(
     () =>
@@ -1004,36 +957,26 @@ export function useProgressiveRuntime({
       playbackRecoveryStage
     ]
   );
-  const fullLocalBlockedReason = useMemo(() => {
-    if (!currentBufferedFullLocalTrack) {
-      return "track-not-fully-cached";
-    }
-
-    if (!canUseFullLocalForPlaybackSession) {
-      return "full-local-not-available-at-playback-start";
-    }
-
-    if (
-      !isCurrentSourceOwner &&
-      !enableListenerLocalTakeover &&
-      activePlaybackSource !== "full-local"
-    ) {
-      return "listener-handoff-disabled";
-    }
-
-    if (startupGatePending && !roomRecoveryState.fullLocalRecoveryActive) {
-      return "cache-recovery-window";
-    }
-
-    return null;
-  }, [
-    canUseFullLocalForPlaybackSession,
-    currentBufferedFullLocalTrack,
-    activePlaybackSource,
-    isCurrentSourceOwner,
-    roomRecoveryState.fullLocalRecoveryActive,
-    startupGatePending
-  ]);
+  const fullLocalBlockedReason = useMemo(
+    () =>
+      resolveFullLocalBlockedReason({
+        hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
+        canUseFullLocalForPlaybackSession,
+        isCurrentSourceOwner,
+        listenerLocalTakeoverEnabled: enableListenerLocalTakeover,
+        activePlaybackSource,
+        startupGatePending,
+        fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive
+      }),
+    [
+      activePlaybackSource,
+      canUseFullLocalForPlaybackSession,
+      currentBufferedFullLocalTrackObjectUrl,
+      isCurrentSourceOwner,
+      roomRecoveryState.fullLocalRecoveryActive,
+      startupGatePending
+    ]
+  );
   const fullLocalEligible = fullLocalReady && fullLocalBlockedReason === null;
 
   useEffect(() => {
@@ -1049,7 +992,7 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason(null);
   }, [
     activePlaybackSource,
-    currentBufferedFullLocalTrack,
+    currentBufferedFullLocalTrackObjectUrl,
     immediateFullLocalRecoveryEligible,
     setActivePlaybackSource,
     setProgressiveFallbackReason
@@ -1217,7 +1160,10 @@ export function useProgressiveRuntime({
           return false;
         }
 
-        const matchedIntent = doesPlaybackMatchStartIntent(playbackStartIntent, playback);
+        const matchedIntent = doesPlaybackMatchStartIntent(
+          playbackStartIntent,
+          playbackRef.current
+        );
         markPlaybackStartFailure(
           failureReason,
           matchedIntent ? "当前点击未能激活音频，请再次点击播放" : blockedMessage
@@ -1225,7 +1171,7 @@ export function useProgressiveRuntime({
         return false;
       }
 
-      if (doesPlaybackMatchStartIntent(playbackStartIntent, playback)) {
+      if (doesPlaybackMatchStartIntent(playbackStartIntent, playbackRef.current)) {
         updatePlaybackStartIntent((current) => consumePlaybackStartIntent(current, source));
       }
       setAudioPaused(false);
@@ -1234,7 +1180,6 @@ export function useProgressiveRuntime({
     },
     [
       markPlaybackStartFailure,
-      playback,
       playbackStartIntent,
       recordPeerDiagnostic,
       updatePlaybackStartIntent
@@ -1246,7 +1191,7 @@ export function useProgressiveRuntime({
     (source: ProgressivePlaybackSource, attempt = 0) => {
       clearPlaybackStartRetry();
 
-      if (!hasActivePlaybackIntent(playback) || activePlaybackSource !== source) {
+      if (!hasActivePlaybackIntent(playbackRef.current) || activePlaybackSource !== source) {
         return;
       }
 
@@ -1280,16 +1225,15 @@ export function useProgressiveRuntime({
       attemptPlaybackStart,
       audioRef,
       clearPlaybackStartRetry,
-      playback,
       playbackStartIntent
     ]
   );
 
   useEffect(() => {
-    if (!playback?.currentTrackId || !hasActivePlaybackIntent(playback)) {
+    if (!playbackCurrentTrackId || playbackStatus === "paused" || playbackStatus === null) {
       setSchedulerMode(isPageVisible ? "normal" : "idle");
     }
-  }, [isPageVisible, playback, setSchedulerMode]);
+  }, [isPageVisible, playbackCurrentTrackId, playbackStatus, setSchedulerMode]);
 
   useEffect(() => {
     if (!playbackStartIntent || !isPlaybackStartIntentPending(playbackStartIntent)) {
@@ -1316,21 +1260,23 @@ export function useProgressiveRuntime({
   }, [playbackStartIntent, setPlaybackStartIntent, setStatusMessage]);
 
   useEffect(() => {
-    if (!hasActivePlaybackIntent(playback)) {
+    if (!hasActivePlaybackIntent(playbackRef.current)) {
       clearPlaybackStartRetry();
     }
   }, [
     clearPlaybackStartRetry,
-    playback
+    playbackCurrentTrackId,
+    playbackStatus
   ]);
 
   useEffect(() => {
     const audio = audioRef.current;
+    const playbackState = playbackRef.current;
     if (!audio) {
       return;
     }
 
-    if (!playback?.currentTrackId) {
+    if (!playbackState?.currentTrackId) {
       destroyProgressiveRuntime();
       audio.pause();
       audio.srcObject = null;
@@ -1342,13 +1288,14 @@ export function useProgressiveRuntime({
     }
 
     const uploaded =
-      fullLocalPlaybackTracks[playback.currentTrackId] ??
-      uploadedTracks[playback.currentTrackId] ??
+      fullLocalPlaybackTracks[playbackState.currentTrackId] ??
+      uploadedTracks[playbackState.currentTrackId] ??
       null;
     const sourceOwnerHasLocalTrack = isCurrentSourceOwner && !!uploaded;
     const expectedSeconds =
-      getEffectivePlaybackPositionMs(playback, currentTrack?.durationMs ?? 0, Date.now()) / 1000;
-    const shouldPlayPlayback = hasActivePlaybackIntent(playback);
+      getEffectivePlaybackPositionMs(playbackState, currentTrackDurationMs ?? 0, Date.now()) /
+      1000;
+    const shouldPlayPlayback = hasActivePlaybackIntent(playbackState);
     const wantsFullLocalPlayback =
       activePlaybackSource === "full-local" ||
       forceSourceOwnerLocalPlayback ||
@@ -1387,7 +1334,7 @@ export function useProgressiveRuntime({
         });
       }
 
-      if (playback.status === "paused") {
+      if (playbackState.status === "paused") {
         audio.pause();
         audio.playbackRate = 1;
         setMediaConnectionState("idle");
@@ -1478,7 +1425,7 @@ export function useProgressiveRuntime({
       if (
         shouldHoldSlidingWindowPlaybackForEngine({
           activePlaybackSource,
-          playbackStatus: playback.status,
+          playbackStatus: playbackState.status,
           hasPcmEngine: false,
           hasMseEngine: false
         })
@@ -1514,14 +1461,14 @@ export function useProgressiveRuntime({
       return;
     }
 
-    if (playback.status === "paused") {
+    if (playbackState.status === "paused") {
       audio.pause();
       audio.playbackRate = 1;
     }
   }, [
     audioRef,
-    playback,
-    currentTrack?.durationMs,
+    playbackPositionKey,
+    currentTrackDurationMs,
     uploadedTracks,
     fullLocalPlaybackTracks,
     activePlaybackSource,
@@ -1567,7 +1514,7 @@ export function useProgressiveRuntime({
       markContinuousPlaybackStarted();
       lastStablePlaybackAtRef.current = new Date().toISOString();
       setMediaConnectionState((current) =>
-        current === "idle" && !roomSnapshot?.room.playback.currentTrackId ? current : "live"
+        current === "idle" && !playbackRef.current?.currentTrackId ? current : "live"
       );
     };
     const handleWaiting = (event: Event) => {
@@ -1625,10 +1572,10 @@ export function useProgressiveRuntime({
         channelKind: "system",
         direction: "local",
         event: "local-audio-pause",
-        summary: `本地音频暂停 role=${role} source=${activePlaybackSource} status=${roomSnapshot?.room.playback.status ?? "unknown"}`,
+        summary: `本地音频暂停 role=${role} source=${activePlaybackSource} status=${playbackRef.current?.status ?? "unknown"}`,
         recordEvent: false
       });
-      if (!hasActivePlaybackIntent(roomSnapshot?.room.playback)) {
+      if (!hasActivePlaybackIntent(playbackRef.current)) {
         setSchedulerMode(isPageVisible ? "normal" : "idle");
         setBufferHealth("healthy");
       }
@@ -1673,7 +1620,6 @@ export function useProgressiveRuntime({
     recordPeerDiagnostic,
     progressiveHealthSnapshot.contiguousBufferedMs,
     progressiveHealthSnapshot.aheadBufferedMs,
-    roomSnapshot?.room.playback,
     setBufferHealth,
     setMediaConnectionState,
     setProgressiveFallbackReason,
@@ -1694,7 +1640,7 @@ export function useProgressiveRuntime({
       }
       if (
         activePlaybackSource === "full-local" &&
-        hasActivePlaybackIntent(roomSnapshot?.room.playback) &&
+        hasActivePlaybackIntent(playbackRef.current) &&
         localAudio?.paused
       ) {
         localAudio.muted = false;
@@ -1735,7 +1681,6 @@ export function useProgressiveRuntime({
     attemptPlaybackStart,
     ensurePlaybackStart,
     recordPeerDiagnostic,
-    roomSnapshot?.room.playback,
     setMediaConnectionState,
     volume
   ]);
@@ -1844,7 +1789,7 @@ export function useProgressiveRuntime({
   ]);
 
   useEffect(() => {
-    const nextPlayback = roomSnapshot?.room.playback;
+    const nextPlayback = playbackRef.current;
 
     if (!nextPlayback?.currentTrackId) {
       setMediaConnectionState("idle");
@@ -1867,7 +1812,8 @@ export function useProgressiveRuntime({
     );
   }, [
     audioRef,
-    roomSnapshot?.room.playback,
+    playbackCurrentTrackId,
+    playbackStatus,
     isCurrentSourceOwner,
     mediaConnectedPeersCount,
     activePlaybackSource,
@@ -2490,7 +2436,7 @@ export function useProgressiveRuntime({
       return;
     }
 
-    if (!hasActivePlaybackIntent(playback) || !progressiveHealthSnapshot.startupReady) {
+    if (!hasActivePlaybackIntent(playbackRef.current) || !progressiveHealthSnapshot.startupReady) {
       return;
     }
 
@@ -2501,7 +2447,8 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason("seek-outside-buffer");
   }, [
     activePlaybackSource,
-    playback,
+    playbackCurrentTrackId,
+    playbackStatus,
     progressiveHealthSnapshot.aheadBufferedMs,
     progressiveHealthSnapshot.startupReady,
     setProgressiveFallbackReason
@@ -2531,68 +2478,71 @@ export function useProgressiveRuntime({
   useEffect(() => {
     const nextCooldownMs = Math.max(0, localTakeoverCooldownUntilRef.current - Date.now());
     const comfortBufferedMs = getStartupWindowMs(
-      currentTrack ?? {
+      currentTrackRef.current ?? {
         mimeType: null,
         codec: null
       }
     );
     const latestPcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
-    const progressiveDiagnosticSignature = [
-      progressiveHealthSnapshot.activeSource,
+    const progressiveDiagnosticSignature = resolveProgressiveDiagnosticSignature({
+      activeSource: progressiveHealthSnapshot.activeSource,
       playbackSurfaceKey,
       playbackTimelineKey,
-      roomRecoveryState.phase,
-      roomRecoveryState.mode,
-      roomRecoveryState.generation,
-      roomRecoveryState.fullLocalRecoveryActive || immediateFullLocalRecoveryEligible,
+      recoveryPhase: roomRecoveryState.phase,
+      recoveryMode: roomRecoveryState.mode,
+      recoveryGeneration: roomRecoveryState.generation,
+      fullLocalRecoveryActive:
+        roomRecoveryState.fullLocalRecoveryActive || immediateFullLocalRecoveryEligible,
       transportGovernorMode,
-      progressiveHealthSnapshot.engineType,
-      diagnosticContiguousBufferedMs,
-      diagnosticAheadBufferedMs,
-      progressiveHealthSnapshot.schedulerPolicy,
-      progressiveHealthSnapshot.startupReady,
-      progressiveHealthSnapshot.fallbackReason ?? "",
-      diagnosticEstimatedFillTimeMs,
-      diagnosticRemainingPlaybackMs,
-      diagnosticBufferSafetyMarginMs,
-      pendingPlaybackIntent ? getPlaybackStartIntentLabel(playbackStartIntent) : "",
-      playbackStartIntent?.matchedSource ?? "",
-      playbackStartIntent?.lastFailure ?? "",
-      nextQueueTrackPrefetch ?? "",
-      nextCooldownMs > 0 ? "cooldown" : "no-cooldown",
+      engineType: progressiveHealthSnapshot.engineType,
+      contiguousBufferedMs: diagnosticContiguousBufferedMs,
+      aheadBufferedMs: diagnosticAheadBufferedMs,
+      schedulerPolicy: progressiveHealthSnapshot.schedulerPolicy,
+      startupReady: progressiveHealthSnapshot.startupReady,
+      fallbackReason: progressiveHealthSnapshot.fallbackReason,
+      estimatedFillTimeMs: diagnosticEstimatedFillTimeMs,
+      remainingPlaybackMs: diagnosticRemainingPlaybackMs,
+      bufferSafetyMarginMs: diagnosticBufferSafetyMarginMs,
+      playbackStartIntentLabel: pendingPlaybackIntent
+        ? getPlaybackStartIntentLabel(playbackStartIntent)
+        : null,
+      intentMatchedSource: playbackStartIntent?.matchedSource,
+      lastPlayStartFailure: playbackStartIntent?.lastFailure,
+      nextQueueTrackPrefetch,
+      localTakeoverCooldownActive: nextCooldownMs > 0,
       progressiveLocalEligible,
-      progressiveLocalBlockedReason ?? "",
+      progressiveLocalBlockedReason,
       fullLocalReady,
       fullLocalEligible,
-      fullLocalBlockedReason ?? "",
-      sourceOwnerIdentity.currentSessionUserId ?? "",
-      sourceOwnerIdentity.playbackSourceSessionId ?? "",
-      sourceOwnerIdentity.currentPeerId ?? "",
-      sourceOwnerIdentity.playbackSourcePeerId ?? "",
-      sourceOwnerIdentity.isSourceOwner,
-      localAudioDiagnostics.localAudioPaused ?? "",
-      localAudioDiagnostics.localAudioMuted ?? "",
-      localAudioDiagnostics.localAudioVolume ?? "",
-      localAudioDiagnostics.localAudioReadyState ?? "",
-      localAudioDiagnostics.localAudioCurrentSrc ? "src" : "no-src",
-      localAudioDiagnostics.localAudioHasSrcObject ?? "",
-      latestPcmEngineDiagnostics?.status ?? "",
-      latestPcmEngineDiagnostics?.audioContextState ?? "",
-      latestPcmEngineDiagnostics?.directOutputConnected ?? "",
-      latestPcmEngineDiagnostics?.lastDecodeError ?? "",
-      (latestPcmEngineDiagnostics?.decodedSegmentCount ?? 0) > 0 ? "decoded" : "no-decoded",
-      (latestPcmEngineDiagnostics?.scheduledSegmentCount ?? 0) > 0 ? "scheduled" : "no-scheduled",
-      pcmLastBlockedReasonRef.current ?? "",
-      effectiveStartupBufferMs,
+      fullLocalBlockedReason,
+      currentSessionUserId: sourceOwnerIdentity.currentSessionUserId,
+      playbackSourceSessionId: sourceOwnerIdentity.playbackSourceSessionId,
+      currentPeerId: sourceOwnerIdentity.currentPeerId,
+      playbackSourcePeerId: sourceOwnerIdentity.playbackSourcePeerId,
+      isSourceOwner: sourceOwnerIdentity.isSourceOwner,
+      localAudioPaused: localAudioDiagnostics.localAudioPaused,
+      localAudioMuted: localAudioDiagnostics.localAudioMuted,
+      localAudioVolume: localAudioDiagnostics.localAudioVolume,
+      localAudioReadyState: localAudioDiagnostics.localAudioReadyState,
+      localAudioCurrentSrc: localAudioDiagnostics.localAudioCurrentSrc,
+      localAudioHasSrcObject: localAudioDiagnostics.localAudioHasSrcObject,
+      pcmEngineStatus: latestPcmEngineDiagnostics?.status,
+      pcmAudioContextState: latestPcmEngineDiagnostics?.audioContextState,
+      pcmDirectOutputConnected: latestPcmEngineDiagnostics?.directOutputConnected,
+      pcmLastDecodeError: latestPcmEngineDiagnostics?.lastDecodeError,
+      pcmDecodedSegmentCount: latestPcmEngineDiagnostics?.decodedSegmentCount,
+      pcmScheduledSegmentCount: latestPcmEngineDiagnostics?.scheduledSegmentCount,
+      pcmLastBlockedReason: pcmLastBlockedReasonRef.current,
+      startupBufferMs: effectiveStartupBufferMs,
       comfortBufferedMs,
-      playbackQualityMetrics.waitingEventsLast30s,
-      playbackQualityMetrics.stalledEventsLast30s,
+      waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
+      stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
       shadowWarmupActive,
       playbackRecoveryStage,
       audibleLocalFallbackActive,
       schedulerBudgetTier,
-      lastStablePlaybackAtRef.current ?? ""
-    ].join("|");
+      lastStablePlaybackAt: lastStablePlaybackAtRef.current
+    });
     if (
       !shouldPublishProgressiveDiagnostic({
         previousSignature: lastProgressiveDiagnosticSignatureRef.current,
@@ -2705,7 +2655,7 @@ export function useProgressiveRuntime({
       })
     });
   }, [
-    currentTrack,
+    currentTrackFormatKey,
     bufferSafetyMarginMs,
     diagnosticAheadBufferedMs,
     diagnosticBufferSafetyMarginMs,

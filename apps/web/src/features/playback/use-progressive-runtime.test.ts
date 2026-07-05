@@ -7,16 +7,37 @@ import {
   buildCurrentTrackFormatKey,
   buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
+  appendPlaybackDriftSample as pipelineAppendPlaybackDriftSample,
+  resolveActiveMemberPeerIds as pipelineResolveActiveMemberPeerIds,
+  resolveAggregatePieceDownloadRateKbps as pipelineResolveAggregatePieceDownloadRateKbps,
+  resolveCurrentBufferedFullLocalTrack as pipelineResolveCurrentBufferedFullLocalTrack,
+  pruneContinuousPlaybackSegments as pipelinePruneContinuousPlaybackSegments,
+  prunePlaybackQualityTimestamps as pipelinePrunePlaybackQualityTimestamps,
+  resolveTrackAvailabilityAnnouncement as pipelineResolveTrackAvailabilityAnnouncement,
+  resolveNextQueueTrackPrefetch as pipelineResolveNextQueueTrackPrefetch,
   bucketDiagnosticDurationMs as pipelineBucketDiagnosticDurationMs,
   getAudibleElementVolume as pipelineGetAudibleElementVolume,
   getPcmEngineDiagnosticsKey as pipelineGetPcmEngineDiagnosticsKey,
+  resolveLocalAudioDiagnostics as pipelineResolveLocalAudioDiagnostics,
   getSlidingWindowPlayBlockedReason as pipelineGetSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
+  isSlidingWindowPlaybackSource as pipelineIsSlidingWindowPlaybackSource,
+  resolveSourceOwnerIdentity as pipelineResolveSourceOwnerIdentity,
   resolvePlaybackRecoveryStage as pipelineResolvePlaybackRecoveryStage,
+  resolveAudibleLocalFallbackActive as pipelineResolveAudibleLocalFallbackActive,
+  resolveFullLocalBlockedReason as pipelineResolveFullLocalBlockedReason,
+  shouldAllowLocalTakeover as pipelineShouldAllowLocalTakeover,
   resolveFullLocalPlaybackSessionState as pipelineResolveFullLocalPlaybackSessionState,
   resolveMediaElementPlaybackRole as pipelineResolveMediaElementPlaybackRole,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure as pipelineResolvePlaybackSourceAfterProgressiveRuntimeFailure,
+  resolveBufferSafetyMarginMs as pipelineResolveBufferSafetyMarginMs,
+  resolveEffectiveStartupBufferMs as pipelineResolveEffectiveStartupBufferMs,
+  resolvePlaybackQualityMetrics as pipelineResolvePlaybackQualityMetrics,
+  resolveProgressiveDiagnosticSignature as pipelineResolveProgressiveDiagnosticSignature,
+  resolveProgressiveLocalBlockedReason as pipelineResolveProgressiveLocalBlockedReason,
+  resolveMaxContinuousPlaybackMs as pipelineResolveMaxContinuousPlaybackMs,
   resolveSchedulerBudgetTier as pipelineResolveSchedulerBudgetTier,
+  resolveTransportGovernorMode as pipelineResolveTransportGovernorMode,
   shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
   shouldEnableFullLocalHandoff as pipelineShouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine as pipelineShouldHoldSlidingWindowPlaybackForEngine,
@@ -39,10 +60,31 @@ import {
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
   hasSufficientBackingForFullLocalWarmup,
+  appendPlaybackDriftSample,
+  isSlidingWindowPlaybackSource,
+  resolveActiveMemberPeerIds,
+  resolveAggregatePieceDownloadRateKbps,
+  resolveCurrentBufferedFullLocalTrack,
+  pruneContinuousPlaybackSegments,
+  prunePlaybackQualityTimestamps,
+  resolveTrackAvailabilityAnnouncement,
+  resolveNextQueueTrackPrefetch,
+  resolveLocalAudioDiagnostics,
   resolveMediaElementPlaybackRole,
+  resolveSourceOwnerIdentity,
   resolvePlaybackRecoveryStage,
+  resolveAudibleLocalFallbackActive,
+  shouldAllowLocalTakeover,
+  resolveBufferSafetyMarginMs,
+  resolveEffectiveStartupBufferMs,
+  resolvePlaybackQualityMetrics,
+  resolveProgressiveDiagnosticSignature,
+  resolveProgressiveLocalBlockedReason,
+  resolveMaxContinuousPlaybackMs,
   resolveSchedulerBudgetTier,
+  resolveTransportGovernorMode,
   shouldEnableFullLocalHandoff,
+  resolveFullLocalBlockedReason,
   resolveFullLocalPlaybackSessionState,
   shouldPreferImmediateFullLocalRecovery,
   shouldPreferLocalTakeover,
@@ -113,12 +155,356 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).not.toContain("currentTrack");
   });
 
+  it("keeps hook dependency arrays free of snapshot object identities", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    const dependencySource = [...runtimeSource.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)]
+      .map((match) => match.groups?.deps ?? "")
+      .join("\n");
+
+    expect(dependencySource).not.toMatch(/^\s+playback,\s*$/m);
+    expect(dependencySource).not.toMatch(/^\s+currentTrack,\s*$/m);
+    expect(dependencySource).not.toMatch(/^\s+currentBufferedFullLocalTrack,\s*$/m);
+    expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
+  });
+
   it("hosts diagnostic and media element helpers in the pure pipeline module", () => {
+    expect(
+      Array.from(
+        pipelineResolveActiveMemberPeerIds([
+          { peerId: "peer-a" },
+          { peerId: null },
+          { peerId: "" },
+          { peerId: "peer-b" }
+        ])
+      )
+    ).toEqual(["peer-a", "peer-b"]);
+    expect(
+      pipelineResolveAggregatePieceDownloadRateKbps({
+        activeMemberPeerIds: new Set(["peer-a", "peer-c"]),
+        peerDiagnostics: [
+          { peerId: "peer-a", pieceDownloadRateKbps: 10.4 },
+          { peerId: "peer-b", pieceDownloadRateKbps: 100 },
+          { peerId: "peer-c", pieceDownloadRateKbps: 20.2 },
+          { peerId: "peer-c", pieceDownloadRateKbps: Number.NaN }
+        ]
+      })
+    ).toBe(31);
+    expect(
+      pipelineResolveAggregatePieceDownloadRateKbps({
+        activeMemberPeerIds: new Set(["peer-a"]),
+        peerDiagnostics: [{ peerId: "peer-b", pieceDownloadRateKbps: 100 }]
+      })
+    ).toBe(null);
+    expect(
+      pipelineResolveCurrentBufferedFullLocalTrack({
+        currentTrackId: "track-1",
+        fullLocalPlaybackTracks: { "track-1": { objectUrl: "full" } },
+        uploadedTracks: { "track-1": { objectUrl: "uploaded" } }
+      })
+    ).toEqual({ objectUrl: "full" });
+    expect(
+      pipelineResolveCurrentBufferedFullLocalTrack({
+        currentTrackId: "track-2",
+        fullLocalPlaybackTracks: {},
+        uploadedTracks: { "track-2": { objectUrl: "uploaded" } }
+      })
+    ).toEqual({ objectUrl: "uploaded" });
+    expect(
+      pipelineResolveCurrentBufferedFullLocalTrack({
+        currentTrackId: null,
+        fullLocalPlaybackTracks: { "track-1": { objectUrl: "full" } },
+        uploadedTracks: { "track-1": { objectUrl: "uploaded" } }
+      })
+    ).toBe(null);
+    expect(
+      pipelineResolveTrackAvailabilityAnnouncement({
+        currentTrackId: "track-1",
+        availabilityByTrack: {
+          "track-1": {
+            "peer-a": { ownerPeerId: "peer-a" }
+          }
+        },
+        peerId: "peer-a"
+      })
+    ).toEqual({ ownerPeerId: "peer-a" });
+    expect(pipelinePrunePlaybackQualityTimestamps([60, 70, 90, 100], 100, 30)).toEqual([
+      70,
+      90,
+      100
+    ]);
+    expect(prunePlaybackQualityTimestamps([60, 69, 70, 101], 100, 30)).toEqual([
+      70,
+      101
+    ]);
+    expect(
+      pipelinePruneContinuousPlaybackSegments(
+        [
+          { startedAtMs: 10, endedAtMs: 60 },
+          { startedAtMs: 40, endedAtMs: 69 },
+          { startedAtMs: 50, endedAtMs: 70 },
+          { startedAtMs: 90, endedAtMs: 110 }
+        ],
+        100,
+        30
+      )
+    ).toEqual([
+      { startedAtMs: 50, endedAtMs: 70 },
+      { startedAtMs: 90, endedAtMs: 110 }
+    ]);
+    expect(
+      pruneContinuousPlaybackSegments(
+        [
+          { startedAtMs: 10, endedAtMs: 60 },
+          { startedAtMs: 50, endedAtMs: 70 }
+        ],
+        100,
+        30
+      )
+    ).toEqual([{ startedAtMs: 50, endedAtMs: 70 }]);
+    expect(
+      pipelineResolveMaxContinuousPlaybackMs({
+        segments: [
+          { startedAtMs: 20, endedAtMs: 80 },
+          { startedAtMs: 90, endedAtMs: 120 }
+        ],
+        activeStartedAtMs: 50,
+        nowMs: 100,
+        windowMs: 30
+      })
+    ).toBe(30);
+    expect(
+      resolveMaxContinuousPlaybackMs({
+        segments: [{ startedAtMs: 90, endedAtMs: 95 }],
+        activeStartedAtMs: 60,
+        nowMs: 100,
+        windowMs: 30
+      })
+    ).toBe(30);
+    expect(
+      pipelineAppendPlaybackDriftSample({
+        samples: [
+          { timestampMs: 10, driftMs: 3 },
+          { timestampMs: 80, driftMs: 5 }
+        ],
+        driftMs: -12.4,
+        timestampMs: 100,
+        windowMs: 30
+      })
+    ).toEqual([
+      { timestampMs: 80, driftMs: 5 },
+      { timestampMs: 100, driftMs: 12.4 }
+    ]);
+    const existingDriftSamples = [{ timestampMs: 80, driftMs: 5 }];
+    expect(
+      appendPlaybackDriftSample({
+        samples: existingDriftSamples,
+        driftMs: Number.NaN,
+        timestampMs: 100,
+        windowMs: 30
+      })
+    ).toBe(existingDriftSamples);
+    expect(
+      pipelineResolveTrackAvailabilityAnnouncement({
+        currentTrackId: "track-1",
+        availabilityByTrack: {},
+        peerId: "peer-a"
+      })
+    ).toBe(null);
+    expect(
+      pipelineResolveNextQueueTrackPrefetch({
+        queue: [
+          { id: "queue-1", trackId: "track-1" },
+          { id: "queue-2", trackId: "track-2" }
+        ],
+        currentQueueItemId: "queue-1",
+        currentTrackId: null,
+        tracks: [
+          { id: "track-1", title: "Current" },
+          { id: "track-2", title: "Next" }
+        ],
+        availabilityByTrack: {
+          "track-2": {
+            "peer-a": { availableChunks: [0, 1, 2], totalChunks: 8 }
+          }
+        },
+        peerId: "peer-a"
+      })
+    ).toBe("Next 3/8");
+    expect(
+      pipelineResolveNextQueueTrackPrefetch({
+        queue: [
+          { id: "queue-1", trackId: "track-1" },
+          { id: "queue-2", trackId: "track-2" }
+        ],
+        currentQueueItemId: null,
+        currentTrackId: "track-1",
+        tracks: [{ id: "track-2", title: "Next" }],
+        availabilityByTrack: {},
+        peerId: "peer-a"
+      })
+    ).toBe("Next 0/0");
+    expect(
+      pipelineResolveNextQueueTrackPrefetch({
+        queue: [{ id: "queue-1", trackId: "track-1" }],
+        currentQueueItemId: "queue-1",
+        currentTrackId: null,
+        tracks: [{ id: "track-1", title: "Current" }],
+        availabilityByTrack: {},
+        peerId: "peer-a"
+      })
+    ).toBe(null);
     expect(pipelineBucketDiagnosticDurationMs(null, 1000)).toBe("");
     expect(pipelineBucketDiagnosticDurationMs(Number.NaN, 1000)).toBe("");
     expect(pipelineBucketDiagnosticDurationMs(1499, 1000)).toBe(1000);
     expect(pipelineBucketDiagnosticDurationMs(1500, 1000)).toBe(2000);
     expect(pipelineGetAudibleElementVolume(0)).toBe(0.72);
+    expect(pipelineResolveLocalAudioDiagnostics(null)).toEqual({
+      localAudioPaused: null,
+      localAudioMuted: null,
+      localAudioVolume: null,
+      localAudioReadyState: null,
+      localAudioCurrentSrc: null,
+      localAudioHasSrcObject: null
+    });
+    expect(
+      pipelineResolveLocalAudioDiagnostics({
+        paused: false,
+        muted: true,
+        volume: 0.4,
+        readyState: 3,
+        currentSrc: "",
+        srcObject: {} as MediaStream
+      })
+    ).toEqual({
+      localAudioPaused: false,
+      localAudioMuted: true,
+      localAudioVolume: 0.4,
+      localAudioReadyState: 3,
+      localAudioCurrentSrc: null,
+      localAudioHasSrcObject: true
+    });
+    const diagnosticSignatureInput = {
+      activeSource: "progressive-local" as const,
+      playbackSurfaceKey: "surface",
+      playbackTimelineKey: "timeline",
+      recoveryPhase: "steady",
+      recoveryMode: "rejoin",
+      recoveryGeneration: 3,
+      fullLocalRecoveryActive: true,
+      transportGovernorMode: "local-primary" as const,
+      engineType: "pcm" as const,
+      contiguousBufferedMs: 2000,
+      aheadBufferedMs: 3000,
+      schedulerPolicy: "steady",
+      startupReady: true,
+      fallbackReason: null,
+      estimatedFillTimeMs: "",
+      remainingPlaybackMs: 120000,
+      bufferSafetyMarginMs: -1000,
+      playbackStartIntentLabel: "恢复播放",
+      intentMatchedSource: "full-local" as const,
+      lastPlayStartFailure: "blocked",
+      nextQueueTrackPrefetch: "Next 1/8",
+      localTakeoverCooldownActive: true,
+      progressiveLocalEligible: false,
+      progressiveLocalBlockedReason: "piece-download-not-ready",
+      fullLocalReady: true,
+      fullLocalEligible: false,
+      fullLocalBlockedReason: "cache-recovery-window",
+      currentSessionUserId: "user",
+      playbackSourceSessionId: null,
+      currentPeerId: "peer",
+      playbackSourcePeerId: "source-peer",
+      isSourceOwner: false,
+      localAudioPaused: false,
+      localAudioMuted: true,
+      localAudioVolume: 0.4,
+      localAudioReadyState: 4,
+      localAudioCurrentSrc: "blob:local",
+      localAudioHasSrcObject: false,
+      pcmEngineStatus: "ready",
+      pcmAudioContextState: "running",
+      pcmDirectOutputConnected: true,
+      pcmLastDecodeError: null,
+      pcmDecodedSegmentCount: 0,
+      pcmScheduledSegmentCount: 2,
+      pcmLastBlockedReason: null,
+      startupBufferMs: 60,
+      comfortBufferedMs: 5000,
+      waitingEventsLast30s: 1,
+      stalledEventsLast30s: 0,
+      shadowWarmupActive: true,
+      playbackRecoveryStage: "steady" as const,
+      audibleLocalFallbackActive: false,
+      schedulerBudgetTier: "comfort" as const,
+      lastStablePlaybackAt: "2026-07-05T00:00:00.000Z"
+    };
+    const expectedDiagnosticSignature = [
+      "progressive-local",
+      "surface",
+      "timeline",
+      "steady",
+      "rejoin",
+      3,
+      true,
+      "local-primary",
+      "pcm",
+      2000,
+      3000,
+      "steady",
+      true,
+      "",
+      "",
+      120000,
+      -1000,
+      "恢复播放",
+      "full-local",
+      "blocked",
+      "Next 1/8",
+      "cooldown",
+      false,
+      "piece-download-not-ready",
+      true,
+      false,
+      "cache-recovery-window",
+      "user",
+      "",
+      "peer",
+      "source-peer",
+      false,
+      false,
+      true,
+      0.4,
+      4,
+      "src",
+      false,
+      "ready",
+      "running",
+      true,
+      "",
+      "no-decoded",
+      "scheduled",
+      "",
+      60,
+      5000,
+      1,
+      0,
+      true,
+      "steady",
+      false,
+      "comfort",
+      "2026-07-05T00:00:00.000Z"
+    ].join("|");
+    expect(pipelineResolveProgressiveDiagnosticSignature(diagnosticSignatureInput)).toBe(
+      expectedDiagnosticSignature
+    );
+    expect(resolveProgressiveDiagnosticSignature(diagnosticSignatureInput)).toBe(
+      expectedDiagnosticSignature
+    );
     expect(
       pipelineGetPcmEngineDiagnosticsKey({
         status: "ready",
@@ -151,6 +537,130 @@ describe("playback runtime pipeline keys", () => {
   });
 
   it("hosts recovery guard policy in the pure pipeline module", () => {
+    expect(
+      pipelineResolveAudibleLocalFallbackActive({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        progressiveFallbackReason: "buffer-underrun"
+      })
+    ).toBe(true);
+    expect(
+      resolveAudibleLocalFallbackActive({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "full-local",
+        progressiveFallbackReason: "stalled"
+      })
+    ).toBe(true);
+    expect(
+      pipelineResolveAudibleLocalFallbackActive({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "lossless-local",
+        progressiveFallbackReason: "seek-outside-buffer"
+      })
+    ).toBe(true);
+    expect(
+      pipelineResolveAudibleLocalFallbackActive({
+        isCurrentSourceOwner: true,
+        activePlaybackSource: "progressive-local",
+        progressiveFallbackReason: "buffer-underrun"
+      })
+    ).toBe(false);
+    expect(
+      pipelineResolveAudibleLocalFallbackActive({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "remote",
+        progressiveFallbackReason: "buffer-underrun"
+      })
+    ).toBe(false);
+    expect(
+      pipelineResolveAudibleLocalFallbackActive({
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "full-local",
+        progressiveFallbackReason: "progressive-init-failed"
+      })
+    ).toBe(false);
+    expect(
+      pipelineShouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: false,
+        nowMs: 1000,
+        cooldownUntilMs: 0,
+        immediateFullLocalRecoveryEligible: true,
+        canUseFullLocalForPlaybackSession: false,
+        connectedPeersCount: 0
+      })
+    ).toBe(false);
+    expect(
+      pipelineShouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: true,
+        nowMs: 1000,
+        cooldownUntilMs: 1001,
+        immediateFullLocalRecoveryEligible: true,
+        canUseFullLocalForPlaybackSession: true,
+        connectedPeersCount: 1
+      })
+    ).toBe(false);
+    expect(
+      pipelineShouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: true,
+        nowMs: 1000,
+        cooldownUntilMs: 1000,
+        immediateFullLocalRecoveryEligible: true,
+        canUseFullLocalForPlaybackSession: false,
+        connectedPeersCount: 0
+      })
+    ).toBe(true);
+    expect(
+      shouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: true,
+        nowMs: 1000,
+        cooldownUntilMs: 0,
+        immediateFullLocalRecoveryEligible: false,
+        canUseFullLocalForPlaybackSession: true,
+        connectedPeersCount: 0
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: true,
+        nowMs: 1000,
+        cooldownUntilMs: 0,
+        immediateFullLocalRecoveryEligible: false,
+        canUseFullLocalForPlaybackSession: false,
+        connectedPeersCount: 1
+      })
+    ).toBe(true);
+    expect(
+      pipelineShouldAllowLocalTakeover({
+        listenerLocalTakeoverEnabled: true,
+        nowMs: 1000,
+        cooldownUntilMs: 0,
+        immediateFullLocalRecoveryEligible: false,
+        canUseFullLocalForPlaybackSession: false,
+        connectedPeersCount: 0
+      })
+    ).toBe(false);
+    expect(
+      pipelineResolveFullLocalBlockedReason({
+        hasBufferedFullLocalTrack: true,
+        canUseFullLocalForPlaybackSession: false,
+        isCurrentSourceOwner: false,
+        listenerLocalTakeoverEnabled: true,
+        activePlaybackSource: "progressive-local",
+        startupGatePending: false,
+        fullLocalRecoveryActive: false
+      })
+    ).toBe("full-local-not-available-at-playback-start");
+    expect(
+      pipelineResolveFullLocalBlockedReason({
+        hasBufferedFullLocalTrack: true,
+        canUseFullLocalForPlaybackSession: true,
+        isCurrentSourceOwner: false,
+        listenerLocalTakeoverEnabled: true,
+        activePlaybackSource: "progressive-local",
+        startupGatePending: false,
+        fullLocalRecoveryActive: false
+      })
+    ).toBe(null);
     expect(
       pipelineShouldPreferImmediateFullLocalRecovery({
         isCurrentSourceOwner: false,
@@ -194,6 +704,37 @@ describe("playback runtime pipeline keys", () => {
   });
 
   it("hosts playback session and source guard policy in the pure pipeline module", () => {
+    expect(pipelineIsSlidingWindowPlaybackSource("progressive-local")).toBe(true);
+    expect(pipelineIsSlidingWindowPlaybackSource("lossless-local")).toBe(true);
+    expect(pipelineIsSlidingWindowPlaybackSource("full-local")).toBe(false);
+    expect(
+      pipelineResolveTransportGovernorMode({
+        activePlaybackSource: "full-local",
+        mediaConnectedPeersCount: 0,
+        connectedPeersCount: 0,
+        pendingPlaybackIntent: true,
+        progressiveFallbackReason: "stalled",
+        progressiveLocalEligible: false
+      })
+    ).toBe("local-primary");
+    expect(
+      pipelineResolveSourceOwnerIdentity({
+        members: [
+          { id: "session-a", peerId: "peer-a" },
+          { id: "session-b", peerId: "peer-b" }
+        ],
+        peerId: "peer-b",
+        playbackSourceSessionId: "session-a",
+        playbackSourcePeerId: "peer-a",
+        isSourceOwner: false
+      })
+    ).toEqual({
+      currentSessionUserId: "session-b",
+      playbackSourceSessionId: "session-a",
+      currentPeerId: "peer-b",
+      playbackSourcePeerId: "peer-a",
+      isSourceOwner: false
+    });
     expect(
       pipelineShouldPublishProgressiveDiagnostic({
         previousSignature: "old",
@@ -236,6 +777,85 @@ describe("playback runtime pipeline keys", () => {
   });
 
   it("hosts recovery and scheduler policy in the pure pipeline module", () => {
+    expect(
+      pipelineResolveBufferSafetyMarginMs({
+        aheadBufferedMs: 5_000,
+        estimatedFillTimeMs: null
+      })
+    ).toBe(null);
+    expect(
+      pipelineResolveBufferSafetyMarginMs({
+        aheadBufferedMs: 5_000,
+        estimatedFillTimeMs: 2_000
+      })
+    ).toBe(3_000);
+    expect(
+      pipelineResolveBufferSafetyMarginMs({
+        aheadBufferedMs: 1_000,
+        estimatedFillTimeMs: 2_000
+      })
+    ).toBe(-1_000);
+    expect(
+      pipelineResolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: 60,
+        waitingEventsLast30s: 0,
+        stalledEventsLast30s: 1
+      })
+    ).toBe(280);
+    expect(
+      pipelineResolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: 60,
+        waitingEventsLast30s: 2,
+        stalledEventsLast30s: 0
+      })
+    ).toBe(200);
+    expect(
+      pipelineResolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: 60,
+        waitingEventsLast30s: 1,
+        stalledEventsLast30s: 0
+      })
+    ).toBe(140);
+    expect(
+      pipelineResolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: 60,
+        waitingEventsLast30s: 0,
+        stalledEventsLast30s: 0
+      })
+    ).toBe(60);
+    expect(
+      pipelineResolvePlaybackQualityMetrics({
+        nowMs: 10_000,
+        windowMs: 1_000,
+        waitingEventTimestamps: [8_999, 9_000, 9_500],
+        stalledEventTimestamps: [9_200],
+        driftSamples: [
+          { timestampMs: 8_999, driftMs: 100 },
+          { timestampMs: 9_100, driftMs: 100 },
+          { timestampMs: 9_800, driftMs: 250 }
+        ],
+        maxContinuousPlaybackMsLast30s: 7_000
+      })
+    ).toEqual({
+      waitingEventsLast30s: 2,
+      stalledEventsLast30s: 1,
+      averageDriftMs: 175,
+      maxDriftMs: 250,
+      maxContinuousPlaybackMsLast30s: 7_000
+    });
+    expect(
+      pipelineResolvePlaybackQualityMetrics({
+        nowMs: 10_000,
+        windowMs: 1_000,
+        waitingEventTimestamps: [],
+        stalledEventTimestamps: [],
+        driftSamples: [],
+        maxContinuousPlaybackMsLast30s: 0
+      })
+    ).toMatchObject({
+      averageDriftMs: null,
+      maxDriftMs: null
+    });
     const recoveryStage = pipelineResolvePlaybackRecoveryStage({
       activePlaybackSource: "progressive-local",
       playbackStatus: "playing",
@@ -297,6 +917,68 @@ describe("playback runtime pipeline keys", () => {
         progressiveFallbackReason: null
       })
     ).toBe(true);
+    const baseProgressiveLocalBlockInput = {
+      hasManifest: true,
+      isCurrentSourceOwner: false,
+      activePlaybackSource: "progressive-local" as const,
+      playbackStatus: "playing" as const,
+      engineType: "pcm" as const,
+      startupReady: false,
+      hasFullLocalTrack: false,
+      progressiveFallbackReason: null,
+      localTakeoverCooldownMs: 0,
+      connectedPeersCount: 1,
+      aggregatePieceDownloadRateKbps: 64,
+      progressiveTakeoverReady: true
+    };
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        hasManifest: false
+      })
+    ).toBe("progressive-engine-unavailable");
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        playbackStatus: "paused"
+      })
+    ).toBe("playback-paused");
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        progressiveFallbackReason: "progressive-init-failed"
+      })
+    ).toBe("progressive-init-failed");
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        startupReady: true
+      })
+    ).toBe(null);
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        localTakeoverCooldownMs: 1
+      })
+    ).toBe("takeover-cooldown");
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        connectedPeersCount: 0
+      })
+    ).toBe("data-channel-not-ready");
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        aggregatePieceDownloadRateKbps: null
+      })
+    ).toBe("piece-download-not-ready");
+    expect(
+      pipelineResolveProgressiveLocalBlockedReason({
+        ...baseProgressiveLocalBlockInput,
+        progressiveTakeoverReady: false
+      })
+    ).toBe("local-prefix-not-ready");
     expect(
       pipelineShouldStartPcmSlidingWindowAudioElement({
         activePlaybackSource: "lossless-local",
@@ -433,10 +1115,65 @@ describe("playback runtime pipeline keys", () => {
 
 describe("use-progressive-runtime policy helpers", () => {
   it("uses a non-zero audible fallback when the local audio element was left at volume zero", () => {
+    expect(Array.from(resolveActiveMemberPeerIds([{ peerId: "peer-a" }]))).toEqual(["peer-a"]);
+    expect(
+      resolveCurrentBufferedFullLocalTrack({
+        currentTrackId: "track-1",
+        fullLocalPlaybackTracks: {},
+        uploadedTracks: { "track-1": { objectUrl: "uploaded" } }
+      })
+    ).toEqual({ objectUrl: "uploaded" });
+    expect(
+      resolveTrackAvailabilityAnnouncement({
+        currentTrackId: "track-1",
+        availabilityByTrack: {
+          "track-1": {
+            "peer-a": { ownerPeerId: "peer-a" }
+          }
+        },
+        peerId: "peer-a"
+      })
+    ).toEqual({ ownerPeerId: "peer-a" });
+    expect(
+      resolveNextQueueTrackPrefetch({
+        queue: [
+          { id: "queue-1", trackId: "track-1" },
+          { id: "queue-2", trackId: "track-2" }
+        ],
+        currentQueueItemId: "queue-1",
+        currentTrackId: null,
+        tracks: [{ id: "track-2", title: "Next" }],
+        availabilityByTrack: {},
+        peerId: "peer-a"
+      })
+    ).toBe("Next 0/0");
+    expect(
+      resolveAggregatePieceDownloadRateKbps({
+        activeMemberPeerIds: new Set(["peer-a"]),
+        peerDiagnostics: [{ peerId: "peer-a", pieceDownloadRateKbps: 12.6 }]
+      })
+    ).toBe(13);
     expect(getAudibleElementVolume(0)).toBe(0.72);
     expect(getAudibleElementVolume(Number.NaN)).toBe(0.72);
     expect(getAudibleElementVolume(0.35)).toBe(0.35);
     expect(getAudibleElementVolume(2)).toBe(1);
+    expect(
+      resolveLocalAudioDiagnostics({
+        paused: true,
+        muted: false,
+        volume: 1,
+        readyState: 4,
+        currentSrc: "blob:track",
+        srcObject: null
+      })
+    ).toEqual({
+      localAudioPaused: true,
+      localAudioMuted: false,
+      localAudioVolume: 1,
+      localAudioReadyState: 4,
+      localAudioCurrentSrc: "blob:track",
+      localAudioHasSrcObject: false
+    });
   });
 
   it("treats the local element as the only audible media element in the current playback model", () => {
@@ -584,6 +1321,38 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe("protected");
   });
 
+  it("keeps effective startup buffer policy available through the runtime module", () => {
+    expect(
+      resolveBufferSafetyMarginMs({
+        aheadBufferedMs: 5_000,
+        estimatedFillTimeMs: 2_000
+      })
+    ).toBe(3_000);
+    expect(
+      resolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: 60,
+        waitingEventsLast30s: 2,
+        stalledEventsLast30s: 0
+      })
+    ).toBe(200);
+    expect(
+      resolvePlaybackQualityMetrics({
+        nowMs: 1_000,
+        windowMs: 500,
+        waitingEventTimestamps: [400, 700],
+        stalledEventTimestamps: [],
+        driftSamples: [{ timestampMs: 900, driftMs: 40 }],
+        maxContinuousPlaybackMsLast30s: 120
+      })
+    ).toEqual({
+      waitingEventsLast30s: 1,
+      stalledEventsLast30s: 0,
+      averageDriftMs: 40,
+      maxDriftMs: 40,
+      maxContinuousPlaybackMsLast30s: 120
+    });
+  });
+
   it("allows full-local handoff from progressive-local after readiness and drift checks pass", () => {
     expect(
       shouldEnableFullLocalHandoff({
@@ -595,6 +1364,46 @@ describe("use-progressive-runtime policy helpers", () => {
         cooldownMs: 0
       })
     ).toBe(true);
+  });
+
+  it("keeps migrated source and full-local policies available through the runtime module", () => {
+    expect(isSlidingWindowPlaybackSource("lossless-local")).toBe(true);
+    expect(
+      resolveTransportGovernorMode({
+        activePlaybackSource: "progressive-local",
+        mediaConnectedPeersCount: 2,
+        connectedPeersCount: 2,
+        pendingPlaybackIntent: false,
+        progressiveFallbackReason: null,
+        progressiveLocalEligible: true
+      })
+    ).toBe("local-primary");
+    expect(
+      resolveFullLocalBlockedReason({
+        hasBufferedFullLocalTrack: false,
+        canUseFullLocalForPlaybackSession: false,
+        isCurrentSourceOwner: true,
+        listenerLocalTakeoverEnabled: true,
+        activePlaybackSource: "full-local",
+        startupGatePending: false,
+        fullLocalRecoveryActive: false
+      })
+    ).toBe("track-not-fully-cached");
+    expect(
+      resolveSourceOwnerIdentity({
+        members: [{ id: "session-a", peerId: "peer-a" }],
+        peerId: "",
+        playbackSourceSessionId: null,
+        playbackSourcePeerId: null,
+        isSourceOwner: true
+      })
+    ).toEqual({
+      currentSessionUserId: null,
+      playbackSourceSessionId: null,
+      currentPeerId: null,
+      playbackSourcePeerId: null,
+      isSourceOwner: true
+    });
   });
 
   it("does not warm full-local on the shared audio element while sliding-window playback owns it", () => {
@@ -1074,6 +1883,22 @@ describe("use-progressive-runtime policy helpers", () => {
   });
 
   it("allows a listener to use progressive-local once startup buffering is ready", () => {
+    expect(
+      resolveProgressiveLocalBlockedReason({
+        hasManifest: true,
+        isCurrentSourceOwner: false,
+        activePlaybackSource: "progressive-local",
+        playbackStatus: "playing",
+        engineType: "pcm",
+        startupReady: true,
+        hasFullLocalTrack: false,
+        progressiveFallbackReason: null,
+        localTakeoverCooldownMs: 0,
+        connectedPeersCount: 1,
+        aggregatePieceDownloadRateKbps: 64,
+        progressiveTakeoverReady: false
+      })
+    ).toBe(null);
     expect(
       shouldStartListenerProgressivePlayback({
         isCurrentSourceOwner: false,
