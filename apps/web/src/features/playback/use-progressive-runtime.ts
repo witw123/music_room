@@ -4,8 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
-  useState
+  useRef
 } from "react";
 import { syncLocalPlaybackWindow } from "./playback-sync";
 import {
@@ -40,6 +39,9 @@ import {
 import { usePlaybackStartIntentController } from "./playback-orchestrator/playback-start-intent-controller";
 import { useProgressiveDiagnosticsPublisher } from "./playback-orchestrator/progressive-diagnostics-publisher";
 import { usePlaybackSchedulerState } from "./playback-orchestrator/playback-scheduler-state";
+import { usePlaybackQualityState } from "./playback-orchestrator/playback-quality-state";
+import { useLocalAudioPlaybackState } from "./playback-orchestrator/local-audio-playback-state";
+import { useLocalAudioEventController } from "./playback-orchestrator/local-audio-event-controller";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -54,11 +56,9 @@ import {
   shouldForceSourceOwnerLocalPlayback
 } from "./progressive-source-controller";
 import {
-  appendPlaybackQualityTimestamp,
   buildCurrentTrackFormatKey,
   buildPlaybackPositionKey,
   buildProgressiveWarmupTimerKey,
-  appendPlaybackDriftSample,
   bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
@@ -66,13 +66,8 @@ import {
   hasSufficientBackingForFullLocalWarmup,
   isRecoverableProgressiveFallbackReason,
   isSlidingWindowPlaybackSource,
-  pruneContinuousPlaybackSegments,
-  prunePlaybackQualityTimestamps,
   resolveActiveMemberPeerIds,
   resolveAggregatePieceDownloadRateKbps,
-  resolveContinuousPlaybackInterruption,
-  resolveContinuousPlaybackStart,
-  resolveContinuousPlaybackWindowMetrics,
   resolveCurrentBufferedFullLocalTrack,
   resolveDriftSampleAction,
   resolveDriftSamplingPreflight,
@@ -102,7 +97,6 @@ import {
   resolveLocalTakeoverCooldownResetAction,
   resolveLocalReadyPlaybackAction,
   resolveMainPlaybackPreflight,
-  resolveLocalAudioDiagnostics,
   resolveLocalPlaybackReady,
   resolveLocalPlaybackPositionMs,
   resolveListenerMediaConnectionState,
@@ -156,7 +150,6 @@ import {
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
   resolveBufferSafetyMarginMs,
   resolveEffectiveStartupBufferMs,
-  resolvePlaybackQualityMetrics,
   resolvePlaybackRecoveryStage,
   resolveAudibleLocalFallbackActive,
   resolveProgressiveDiagnosticSignature,
@@ -186,7 +179,6 @@ import {
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
   shouldWarmFullLocalWithSharedAudioElement,
   type FullLocalPlaybackSessionState,
-  type PlaybackDriftSample,
   type TransportGovernorMode
 } from "./playback-orchestrator/pipeline";
 import {
@@ -208,7 +200,6 @@ const enableDirectProgressiveTakeover = enableTrackCaching;
 const enableListenerLocalTakeover = enableTrackCaching;
 const adaptiveStartupBufferMs = 60;
 const haveCurrentDataReadyState = 2;
-const playbackQualityWindowMs = 30_000;
 const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
 export type {
@@ -404,12 +395,6 @@ export function useProgressiveRuntime({
   const activeSourceActivatedAtRef = useRef<number>(Date.now());
   const localTakeoverCooldownUntilRef = useRef<number>(0);
   const lastStablePlaybackAtRef = useRef<string | null>(null);
-  const waitingEventTimestampsRef = useRef<number[]>([]);
-  const stalledEventTimestampsRef = useRef<number[]>([]);
-  const driftSamplesRef = useRef<readonly PlaybackDriftSample[]>([]);
-  const continuousPlaybackStartedAtRef = useRef<number | null>(null);
-  const [, setAudioPaused] = useState<boolean | null>(null);
-  const continuousPlaybackSegmentsRef = useRef<Array<{ startedAtMs: number; endedAtMs: number }>>([]);
   const fullLocalPlaybackSessionRef = useRef<FullLocalPlaybackSessionState>({
     key: null,
     availableInSession: false
@@ -459,6 +444,10 @@ export function useProgressiveRuntime({
   currentTrackRef.current = currentTrack;
   const currentBufferedFullLocalTrackRef = useRef(currentBufferedFullLocalTrack);
   currentBufferedFullLocalTrackRef.current = currentBufferedFullLocalTrack;
+  const { setAudioPaused } = useLocalAudioPlaybackState({
+    audioRef,
+    playbackCurrentTrackId
+  });
   const {
     attemptPlaybackStart,
     attemptPlaybackStartRef,
@@ -718,98 +707,19 @@ export function useProgressiveRuntime({
       roomSnapshot?.room.playback.sourceSessionId
     ]
   );
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      setAudioPaused(null);
-      return;
-    }
-
-    const handlePlay = () => setAudioPaused(false);
-    const handlePause = () => setAudioPaused(true);
-    setAudioPaused(audio.paused);
-
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    return () => {
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-    };
-  }, [audioRef, playback?.currentTrackId]);
-
-  const localAudioDiagnostics = useMemo(() => {
-    return resolveLocalAudioDiagnostics(audioRef.current);
-  }, [audioRef]);
+  const {
+    localAudioDiagnostics,
+    markContinuousPlaybackInterrupted,
+    markContinuousPlaybackStarted,
+    playbackQualityMetrics,
+    recordDriftSample,
+    recordStalledEvent,
+    recordWaitingEvent,
+    resetPlaybackQualityState
+  } = usePlaybackQualityState({ audioRef });
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
   const shadowWarmupActive = false;
-
-  const pushQualityEvent = useCallback(
-    (targetRef: typeof waitingEventTimestampsRef, timestampMs = Date.now()) => {
-      targetRef.current = appendPlaybackQualityTimestamp({
-        timestamps: targetRef.current,
-        timestampMs,
-        windowMs: playbackQualityWindowMs
-      });
-    },
-    []
-  );
-  const markContinuousPlaybackStarted = useCallback((timestampMs = Date.now()) => {
-    continuousPlaybackStartedAtRef.current = resolveContinuousPlaybackStart({
-      activeStartedAtMs: continuousPlaybackStartedAtRef.current,
-      timestampMs
-    });
-  }, []);
-  const markContinuousPlaybackInterrupted = useCallback(
-    (timestampMs = Date.now()) => {
-      const nextState = resolveContinuousPlaybackInterruption({
-        segments: continuousPlaybackSegmentsRef.current,
-        activeStartedAtMs: continuousPlaybackStartedAtRef.current,
-        timestampMs,
-        windowMs: playbackQualityWindowMs
-      });
-      continuousPlaybackSegmentsRef.current = nextState.segments;
-      continuousPlaybackStartedAtRef.current = nextState.activeStartedAtMs;
-    },
-    []
-  );
-  const getMaxContinuousPlaybackMsLast30s = useCallback(
-    (now = Date.now()) => {
-      const nextState = resolveContinuousPlaybackWindowMetrics({
-        segments: continuousPlaybackSegmentsRef.current,
-        activeStartedAtMs: continuousPlaybackStartedAtRef.current,
-        nowMs: now,
-        windowMs: playbackQualityWindowMs
-      });
-      continuousPlaybackSegmentsRef.current = nextState.segments;
-      return nextState.maxContinuousPlaybackMs;
-    },
-    []
-  );
-
-  const recordDriftSample = useCallback(
-    (driftMs: number, timestampMs = Date.now()) => {
-      driftSamplesRef.current = appendPlaybackDriftSample({
-        samples: driftSamplesRef.current,
-      driftMs,
-      timestampMs,
-      windowMs: playbackQualityWindowMs
-      });
-    },
-    []
-  );
-
-  const playbackQualityMetrics = useMemo(() => {
-    const now = Date.now();
-    return resolvePlaybackQualityMetrics({
-      nowMs: now,
-      windowMs: playbackQualityWindowMs,
-      waitingEventTimestamps: waitingEventTimestampsRef.current,
-      stalledEventTimestamps: stalledEventTimestampsRef.current,
-      driftSamples: driftSamplesRef.current,
-      maxContinuousPlaybackMsLast30s: getMaxContinuousPlaybackMsLast30s(now)
-    });
-  }, [getMaxContinuousPlaybackMsLast30s]);
   const effectiveStartupBufferMs = useMemo(
     () =>
       resolveEffectiveStartupBufferMs({
@@ -834,12 +744,8 @@ export function useProgressiveRuntime({
     pcmRuntimeFailureRef.current = null;
     clearPlaybackStartRetry();
     lastPcmSlidingWindowPlayAttemptAtRef.current = null;
-    waitingEventTimestampsRef.current = [];
-    stalledEventTimestampsRef.current = [];
-    driftSamplesRef.current = [];
-    continuousPlaybackStartedAtRef.current = null;
-    continuousPlaybackSegmentsRef.current = [];
-  }, [clearPlaybackStartRetry]);
+    resetPlaybackQualityState();
+  }, [clearPlaybackStartRetry, resetPlaybackQualityState]);
 
   useEffect(() => destroyProgressiveRuntime, [destroyProgressiveRuntime]);
 
@@ -940,17 +846,25 @@ export function useProgressiveRuntime({
     const resetAction = resolvePlaybackTimelineResetAction();
     progressiveWarmupReadyAtRef.current = resetAction.nextProgressiveWarmupReadyAt;
     fullLocalWarmupReadyAtRef.current = resetAction.nextFullLocalWarmupReadyAt;
-    waitingEventTimestampsRef.current = resetAction.nextWaitingEventTimestamps;
-    stalledEventTimestampsRef.current = resetAction.nextStalledEventTimestamps;
-    driftSamplesRef.current = resetAction.nextDriftSamples;
-    continuousPlaybackStartedAtRef.current = resetAction.nextContinuousPlaybackStartedAt;
-    continuousPlaybackSegmentsRef.current = resetAction.nextContinuousPlaybackSegments;
+    resetPlaybackQualityState({
+      waitingEventTimestamps: resetAction.nextWaitingEventTimestamps,
+      stalledEventTimestamps: resetAction.nextStalledEventTimestamps,
+      driftSamples: resetAction.nextDriftSamples,
+      continuousPlaybackStartedAt: resetAction.nextContinuousPlaybackStartedAt,
+      continuousPlaybackSegments: resetAction.nextContinuousPlaybackSegments
+    });
     lastPcmSlidingWindowPlayAttemptAtRef.current =
       resetAction.nextPcmSlidingWindowPlayAttemptAt;
     if (resetAction.shouldClearFallbackReason) {
       setProgressiveFallbackReason(null);
     }
-  }, [playback?.currentTrackId, playback?.mediaEpoch, playbackRevision, setProgressiveFallbackReason]);
+  }, [
+    playback?.currentTrackId,
+    playback?.mediaEpoch,
+    playbackRevision,
+    resetPlaybackQualityState,
+    setProgressiveFallbackReason
+  ]);
 
   const armLocalTakeoverCooldown = useCallback(() => {
     const cooldownAction = resolveLocalTakeoverCooldownArmAction({
@@ -1516,184 +1430,25 @@ export function useProgressiveRuntime({
     volume
   ]);
 
-  useEffect(() => {
-    const localAudio = audioRef.current;
-    const resolveEventRole = (target: EventTarget | null) => {
-      if (target === localAudio) {
-        return resolveMediaElementPlaybackRole({
-          target: "local",
-          activePlaybackSource,
-          shadowWarmupActive
-        });
-      }
-
-      return "inactive" as const;
-    };
-    const handlePlaying = (event: Event) => {
-      const role = resolveEventRole(event.currentTarget);
-      const nowIso = new Date().toISOString();
-      const playingAction = resolvePlayingPlaybackEventAction({
-        role,
-        currentMediaConnectionState: "live",
-        currentTrackId: playbackRef.current?.currentTrackId ?? null,
-        nowIso
-      });
-      if (!playingAction) {
-        return;
-      }
-
-      setSchedulerMode(playingAction.schedulerMode);
-      setBufferHealth(playingAction.bufferHealth);
-      if (playingAction.shouldMarkContinuousPlaybackStarted) {
-        markContinuousPlaybackStarted();
-      }
-      lastStablePlaybackAtRef.current = playingAction.nextStablePlaybackAt;
-      setMediaConnectionState((current) => {
-        const nextAction = resolvePlayingPlaybackEventAction({
-          role,
-          currentMediaConnectionState: current,
-          currentTrackId: playbackRef.current?.currentTrackId ?? null,
-          nowIso
-        });
-        return nextAction?.mediaConnectionState ?? current;
-      });
-    };
-    const handleWaiting = (event: Event) => {
-      const role = resolveEventRole(event.currentTarget);
-      const waitingAction = resolveWaitingPlaybackEventAction({
-        role,
-        activePlaybackSource,
-        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-        criticalBufferThresholdMs: getCriticalBufferThresholdMs()
-      });
-      if (!waitingAction) {
-        return;
-      }
-
-      const now = Date.now();
-      if (waitingAction.shouldMarkContinuousPlaybackInterrupted) {
-        markContinuousPlaybackInterrupted(now);
-      }
-      if (waitingAction.qualityEvent === "waiting") {
-        pushQualityEvent(waitingEventTimestampsRef, now);
-      }
-      setSchedulerMode(waitingAction.schedulerMode);
-      setBufferHealth(waitingAction.bufferHealth);
-      if (waitingAction.fallbackReason) {
-        setProgressiveFallbackReason(waitingAction.fallbackReason);
-      }
-      setMediaConnectionState((current) => {
-        const nextAction = resolveWaitingPlaybackEventAction({
-          role,
-          activePlaybackSource,
-          aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-          criticalBufferThresholdMs: getCriticalBufferThresholdMs(),
-          currentMediaConnectionState: current
-        });
-        return nextAction?.mediaConnectionState ?? current;
-      });
-    };
-    const handleStalled = (event: Event) => {
-      const role = resolveEventRole(event.currentTarget);
-      const stalledAction = resolveStalledPlaybackEventAction(role);
-      if (!stalledAction) {
-        return;
-      }
-
-      const now = Date.now();
-      if (stalledAction.shouldMarkContinuousPlaybackInterrupted) {
-        markContinuousPlaybackInterrupted(now);
-      }
-      if (stalledAction.qualityEvent === "stalled") {
-        pushQualityEvent(stalledEventTimestampsRef, now);
-      }
-      setSchedulerMode(stalledAction.schedulerMode);
-      setBufferHealth(stalledAction.bufferHealth);
-      if (stalledAction.fallbackReason) {
-        setProgressiveFallbackReason(stalledAction.fallbackReason);
-      }
-      setMediaConnectionState((current) => {
-        const nextAction = resolveStalledPlaybackEventAction(role, current);
-        return nextAction?.mediaConnectionState ?? current;
-      });
-    };
-    const handlePause = (event: Event) => {
-      const role = resolveEventRole(event.currentTarget);
-      const pauseAction = resolvePausedPlaybackEventAction({
-        role,
-        playbackHasActiveIntent: hasActivePlaybackIntent(playbackRef.current),
-        isPageVisible,
-        activePlaybackSource,
-        playbackStatus: playbackRef.current?.status
-      });
-      if (!pauseAction) {
-        return;
-      }
-
-      if (pauseAction.shouldMarkContinuousPlaybackInterrupted) {
-        markContinuousPlaybackInterrupted();
-      }
-      recordPeerDiagnostic({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: pauseAction.diagnosticEvent,
-        summary: pauseAction.diagnosticSummary,
-        recordEvent: pauseAction.recordEvent
-      });
-      if (pauseAction.schedulerMode !== undefined && pauseAction.bufferHealth !== undefined) {
-        setSchedulerMode(pauseAction.schedulerMode);
-        setBufferHealth(pauseAction.bufferHealth);
-      }
-    };
-    const handleLocalSeeked = () => {
-      const seekAction = resolveSeekedPlaybackEventAction({
-        hasAudio: !!localAudio,
-        activePlaybackSource,
-        hasProgressiveManifest: !!currentProgressiveManifest,
-        soughtPositionMs: Math.round((localAudio?.currentTime ?? 0) * 1000),
-        contiguousBufferedMs: progressiveHealthSnapshot.contiguousBufferedMs
-      });
-      if (!seekAction) {
-        return;
-      }
-
-      setSchedulerMode(seekAction.schedulerMode);
-      setBufferHealth(seekAction.bufferHealth);
-      setProgressiveFallbackReason(seekAction.fallbackReason);
-    };
-
-    localAudio?.addEventListener("playing", handlePlaying);
-    localAudio?.addEventListener("waiting", handleWaiting);
-    localAudio?.addEventListener("stalled", handleStalled);
-    localAudio?.addEventListener("pause", handlePause);
-    localAudio?.addEventListener("seeked", handleLocalSeeked);
-
-    return () => {
-      localAudio?.removeEventListener("playing", handlePlaying);
-      localAudio?.removeEventListener("waiting", handleWaiting);
-      localAudio?.removeEventListener("stalled", handleStalled);
-      localAudio?.removeEventListener("pause", handlePause);
-      localAudio?.removeEventListener("seeked", handleLocalSeeked);
-    };
-  }, [
+  useLocalAudioEventController({
     activePlaybackSource,
     audioRef,
     currentProgressiveManifest,
     isPageVisible,
-    isCurrentSourceOwner,
+    lastStablePlaybackAtRef,
     markContinuousPlaybackInterrupted,
     markContinuousPlaybackStarted,
-    pushQualityEvent,
+    playbackRef,
+    progressiveHealthSnapshot,
     recordPeerDiagnostic,
-    progressiveHealthSnapshot.contiguousBufferedMs,
-    progressiveHealthSnapshot.aheadBufferedMs,
+    recordStalledEvent,
+    recordWaitingEvent,
     setBufferHealth,
     setMediaConnectionState,
     setProgressiveFallbackReason,
     setSchedulerMode,
     shadowWarmupActive
-  ]);
+  });
 
   useEffect(() => {
     const localAudio = audioRef.current;

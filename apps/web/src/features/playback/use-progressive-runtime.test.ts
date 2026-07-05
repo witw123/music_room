@@ -525,6 +525,78 @@ describe("playback runtime pipeline keys", () => {
     expect(schedulerSource).toContain("resolveSlidingWindowLowBufferFallbackReason");
   });
 
+  it("hosts playback quality metrics state outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const qualityStateSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-quality-state.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackQualityState");
+    expect(runtimeSource).not.toContain("waitingEventTimestampsRef");
+    expect(runtimeSource).not.toContain("stalledEventTimestampsRef");
+    expect(runtimeSource).not.toContain("driftSamplesRef");
+    expect(runtimeSource).not.toContain("continuousPlaybackStartedAtRef");
+    expect(runtimeSource).not.toContain("const pushQualityEvent = useCallback");
+    expect(runtimeSource).not.toContain("const recordDriftSample = useCallback");
+    expect(qualityStateSource).toContain("export function usePlaybackQualityState");
+    expect(qualityStateSource).toContain("recordWaitingEvent");
+    expect(qualityStateSource).toContain("recordStalledEvent");
+    expect(qualityStateSource).toContain("resetPlaybackQualityState");
+  });
+
+  it("hosts local audio play-pause state outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const audioStateSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/local-audio-playback-state.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useLocalAudioPlaybackState");
+    expect(runtimeSource).not.toContain("useState<boolean | null>");
+    expect(runtimeSource).not.toContain("const handlePlay = () => setAudioPaused(false)");
+    expect(runtimeSource).not.toContain("const handlePause = () => setAudioPaused(true)");
+    expect(audioStateSource).toContain("export function useLocalAudioPlaybackState");
+    expect(audioStateSource).toContain("audio.addEventListener(\"play\"");
+    expect(audioStateSource).toContain("audio.addEventListener(\"pause\"");
+  });
+
+  it("hosts local audio event handling outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const eventControllerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/local-audio-event-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useLocalAudioEventController");
+    expect(runtimeSource).not.toContain("const handlePlaying = (event: Event)");
+    expect(runtimeSource).not.toContain("const handleWaiting = (event: Event)");
+    expect(runtimeSource).not.toContain("const handleStalled = (event: Event)");
+    expect(runtimeSource).not.toContain("localAudio?.addEventListener(\"playing\"");
+    expect(eventControllerSource).toContain("export function useLocalAudioEventController");
+    expect(eventControllerSource).toContain("resolvePlayingPlaybackEventAction");
+    expect(eventControllerSource).toContain("resolveWaitingPlaybackEventAction");
+    expect(eventControllerSource).toContain("resolveStalledPlaybackEventAction");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const publisherSource = readFileSync(
       join(
