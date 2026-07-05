@@ -504,6 +504,27 @@ describe("playback runtime pipeline keys", () => {
     expect(publisherSource).toContain("resolveProgressiveDiagnosticSignature");
   });
 
+  it("hosts playback scheduler and low-buffer fallback state outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const schedulerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-scheduler-state.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackSchedulerState");
+    expect(runtimeSource).not.toContain("const schedulerAction = resolveInactivePlaybackSchedulerAction");
+    expect(runtimeSource).not.toContain("const fallbackReason = resolveSlidingWindowLowBufferFallbackReason");
+    expect(schedulerSource).toContain("export function usePlaybackSchedulerState");
+    expect(schedulerSource).toContain("resolveInactivePlaybackSchedulerAction");
+    expect(schedulerSource).toContain("resolveSlidingWindowLowBufferFallbackReason");
+  });
+
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
     const publisherSource = readFileSync(
       join(

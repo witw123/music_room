@@ -39,6 +39,7 @@ import {
 } from "./playback-orchestrator/use-runtime-tick-orchestrator";
 import { usePlaybackStartIntentController } from "./playback-orchestrator/playback-start-intent-controller";
 import { useProgressiveDiagnosticsPublisher } from "./playback-orchestrator/progressive-diagnostics-publisher";
+import { usePlaybackSchedulerState } from "./playback-orchestrator/playback-scheduler-state";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -95,7 +96,6 @@ import {
   resolveFullLocalUpgradeAction,
   resolveForceSourceOwnerLocalPlaybackAction,
   resolveIdleFullLocalUpgradeArmState,
-  resolveInactivePlaybackSchedulerAction,
   resolveInactivePlaybackSchedulerMode,
   resolveImmediateFullLocalRecoveryAction,
   resolveLocalTakeoverCooldownArmAction,
@@ -135,7 +135,6 @@ import {
   resolveSourceOwnerIdentity,
   resolvePlaybackStartFailureReason,
   resolveSlidingWindowFallbackPlaybackAction,
-  resolveSlidingWindowLowBufferFallbackReason,
   resolveSlidingWindowNativeSyncOutcome,
   resolveSlidingWindowNoEngineHoldAction,
   resolveStalledPlaybackEventAction,
@@ -1229,17 +1228,6 @@ export function useProgressiveRuntime({
       currentTimeSeconds: pcmEngine.getCurrentTimeSeconds()
     });
   }, [activePlaybackSource]);
-
-  useEffect(() => {
-    const schedulerAction = resolveInactivePlaybackSchedulerAction({
-      currentTrackId: playbackCurrentTrackId,
-      playbackStatus,
-      isPageVisible
-    });
-    if (schedulerAction) {
-      setSchedulerMode(schedulerAction.schedulerMode);
-    }
-  }, [isPageVisible, playbackCurrentTrackId, playbackStatus, setSchedulerMode]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -2552,25 +2540,16 @@ export function useProgressiveRuntime({
     setProgressiveFallbackReason
   ]);
 
-  useEffect(() => {
-    const fallbackReason = resolveSlidingWindowLowBufferFallbackReason({
-      activePlaybackSource,
-      playbackHasActiveIntent: hasActivePlaybackIntent(playbackRef.current),
-      startupReady: progressiveHealthSnapshot.startupReady,
-      aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-      criticalBufferThresholdMs: getCriticalBufferThresholdMs()
-    });
-    if (fallbackReason) {
-      setProgressiveFallbackReason(fallbackReason);
-    }
-  }, [
+  usePlaybackSchedulerState({
     activePlaybackSource,
+    isPageVisible,
     playbackCurrentTrackId,
+    playbackRef,
     playbackStatus,
-    progressiveHealthSnapshot.aheadBufferedMs,
-    progressiveHealthSnapshot.startupReady,
-    setProgressiveFallbackReason
-  ]);
+    progressiveHealthSnapshot,
+    setProgressiveFallbackReason,
+    setSchedulerMode
+  });
 
   useProgressiveDiagnosticsPublisher({
     audibleLocalFallbackActive,
