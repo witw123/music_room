@@ -20,6 +20,7 @@ import {
   shouldAttemptProgressiveLocalPlayback as pipelineShouldAttemptProgressiveLocalPlayback,
   shouldEnableFullLocalHandoff as pipelineShouldEnableFullLocalHandoff,
   shouldHoldSlidingWindowPlaybackForEngine as pipelineShouldHoldSlidingWindowPlaybackForEngine,
+  isRecoverableProgressiveFallbackReason as pipelineIsRecoverableProgressiveFallbackReason,
   shouldPreferLocalTakeover as pipelineShouldPreferLocalTakeover,
   shouldPreferImmediateFullLocalRecovery as pipelineShouldPreferImmediateFullLocalRecovery,
   shouldPublishProgressiveDiagnostic as pipelineShouldPublishProgressiveDiagnostic,
@@ -236,6 +237,11 @@ describe("playback runtime pipeline keys", () => {
   });
 
   it("hosts listener sliding-window playback policy in the pure pipeline module", () => {
+    expect(pipelineIsRecoverableProgressiveFallbackReason("buffer-underrun")).toBe(true);
+    expect(pipelineIsRecoverableProgressiveFallbackReason("stalled")).toBe(true);
+    expect(pipelineIsRecoverableProgressiveFallbackReason("seek-outside-buffer")).toBe(true);
+    expect(pipelineIsRecoverableProgressiveFallbackReason("progressive-init-failed")).toBe(false);
+    expect(pipelineIsRecoverableProgressiveFallbackReason(null)).toBe(false);
     expect(pipelineGetSlidingWindowPlayBlockedReason("progressive-local")).toBe(
       "progressive-local-play-blocked"
     );

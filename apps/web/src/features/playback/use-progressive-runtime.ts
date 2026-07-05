@@ -72,6 +72,7 @@ import {
   getPcmEngineDiagnosticsKey,
   getSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup,
+  isRecoverableProgressiveFallbackReason,
   resolveFullLocalPlaybackSessionState,
   resolveMediaElementPlaybackRole,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
@@ -204,10 +205,6 @@ export {
 
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
-}
-
-function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
-  return reason === "buffer-underrun" || reason === "stalled" || reason === "seek-outside-buffer";
 }
 
 function resolveTransportGovernorMode(input: {

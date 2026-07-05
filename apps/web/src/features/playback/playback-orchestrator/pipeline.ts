@@ -66,6 +66,10 @@ export function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSou
     : "progressive-local-play-blocked";
 }
 
+export function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {
+  return reason === "buffer-underrun" || reason === "stalled" || reason === "seek-outside-buffer";
+}
+
 export function shouldPublishProgressiveDiagnostic(input: {
   previousSignature: string | null;
   nextSignature: string;
