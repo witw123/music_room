@@ -70,6 +70,7 @@ import {
   bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
+  getSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup,
   resolveFullLocalPlaybackSessionState,
   resolveMediaElementPlaybackRole,
@@ -176,6 +177,7 @@ export {
   bucketDiagnosticDurationMs,
   getAudibleElementVolume,
   getPcmEngineDiagnosticsKey,
+  getSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup,
   resolveFullLocalPlaybackSessionState,
   resolveMediaElementPlaybackRole,
@@ -202,12 +204,6 @@ export {
 
 function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
-}
-
-function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
-  return source === "lossless-local"
-    ? "lossless-local-play-blocked"
-    : "progressive-local-play-blocked";
 }
 
 function isRecoverableProgressiveFallbackReason(reason: string | null | undefined) {

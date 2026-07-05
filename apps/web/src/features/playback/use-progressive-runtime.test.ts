@@ -10,6 +10,7 @@ import {
   bucketDiagnosticDurationMs as pipelineBucketDiagnosticDurationMs,
   getAudibleElementVolume as pipelineGetAudibleElementVolume,
   getPcmEngineDiagnosticsKey as pipelineGetPcmEngineDiagnosticsKey,
+  getSlidingWindowPlayBlockedReason as pipelineGetSlidingWindowPlayBlockedReason,
   hasSufficientBackingForFullLocalWarmup as pipelineHasSufficientBackingForFullLocalWarmup,
   resolvePlaybackRecoveryStage as pipelineResolvePlaybackRecoveryStage,
   resolveFullLocalPlaybackSessionState as pipelineResolveFullLocalPlaybackSessionState,
@@ -235,6 +236,12 @@ describe("playback runtime pipeline keys", () => {
   });
 
   it("hosts listener sliding-window playback policy in the pure pipeline module", () => {
+    expect(pipelineGetSlidingWindowPlayBlockedReason("progressive-local")).toBe(
+      "progressive-local-play-blocked"
+    );
+    expect(pipelineGetSlidingWindowPlayBlockedReason("lossless-local")).toBe(
+      "lossless-local-play-blocked"
+    );
     expect(
       pipelineShouldPrepareProgressiveRuntimeForSource({
         activePlaybackSource: "progressive-local",

@@ -60,6 +60,12 @@ function isSlidingWindowPlaybackSource(source: ProgressivePlaybackSource) {
   return source === "progressive-local" || source === "lossless-local";
 }
 
+export function getSlidingWindowPlayBlockedReason(source: ProgressivePlaybackSource) {
+  return source === "lossless-local"
+    ? "lossless-local-play-blocked"
+    : "progressive-local-play-blocked";
+}
+
 export function shouldPublishProgressiveDiagnostic(input: {
   previousSignature: string | null;
   nextSignature: string;
