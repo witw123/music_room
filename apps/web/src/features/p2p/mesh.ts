@@ -30,6 +30,11 @@ import {
   toIceCandidateInit,
   toSessionDescriptionInit
 } from "./signaling-transport";
+import {
+  resolveDataChannelClosedAction,
+  shouldFlushDataChannelQueue,
+  shouldSendQueuedDataChannelItem
+} from "./data-channel-manager";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -779,14 +784,17 @@ export class P2PMesh {
         peerId,
         state: "closed"
       });
-      if (entry.releasing) {
-        return;
-      }
-      this.callbacks.onPeerStalled?.({
-        peerId,
-        reason: "data-channel-closed"
+      const closedAction = resolveDataChannelClosedAction({
+        releasing: entry.releasing,
+        autoReconnect: this.autoReconnect
       });
-      if (this.autoReconnect) {
+      if (closedAction.shouldReportStalled) {
+        this.callbacks.onPeerStalled?.({
+          peerId,
+          reason: "data-channel-closed"
+        });
+      }
+      if (closedAction.shouldScheduleReconnect) {
         this.schedulePeerReconnect(peerId, entry);
       }
     };
@@ -944,11 +952,21 @@ export class P2PMesh {
 
   private flushSendQueue(peerId: string, entry: PeerEntry) {
     const channel = entry.channel;
-    if (!channel || channel.readyState !== "open" || entry.releasing) {
+    if (!channel || !shouldFlushDataChannelQueue({
+      hasChannel: true,
+      readyState: channel.readyState,
+      releasing: entry.releasing
+    })) {
       return;
     }
 
-    while (entry.sendQueue.length > 0 && channel.bufferedAmount < this.sendQueueHighWatermarkBytes) {
+    while (
+      shouldSendQueuedDataChannelItem({
+        queueLength: entry.sendQueue.length,
+        bufferedAmountBytes: channel.bufferedAmount,
+        highWatermarkBytes: this.sendQueueHighWatermarkBytes
+      })
+    ) {
       const nextItem = entry.sendQueue.shift()!;
       try {
         if (typeof nextItem.data === "string") {
