@@ -115,19 +115,39 @@ describe("resolveStableCurrentTrack", () => {
 
 describe("playback snapshot dependency boundaries", () => {
   it("keeps room playback object refreshes out of dependency arrays", () => {
-    const source = readFileSync(
+    const appSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const pageDerivedSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-page-derived.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const dependencySource = [appSource, pageDerivedSource]
+      .flatMap((source) => [...source.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)])
+      .map((match) => match.groups?.deps ?? "")
+      .join("\n");
 
-    expect(source).not.toContain("[roomSnapshot?.room.playback]");
-    expect(
-      source
-        .split("\n")
-        .map((line) => line.trim().replace(/,$/, ""))
-    ).not.toContain("roomSnapshot?.room.playback");
-    expect(source).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
-    expect(source).not.toMatch(/^\s+roomPlayback,\s*$/m);
+    expect(appSource).not.toContain("[roomSnapshot?.room.playback]");
+    expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
+    expect(dependencySource).not.toMatch(/^\s+roomPlayback,\s*$/m);
+  });
+});
+
+describe("room page cached full-local playback boundary", () => {
+  it("hosts cached full-local playback orchestration outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const cachedPlaybackSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-cached-full-local-playback.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("cachedFullLocalPlaybackLoadTargetRef");
+    expect(appSource).not.toContain("replaceCachedFullLocalPlaybackTrack");
+    expect(cachedPlaybackSource).toContain("export function useRoomCachedFullLocalPlayback");
   });
 });
 

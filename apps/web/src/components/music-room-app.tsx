@@ -1,12 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type {
-  IceConfigResponse,
-  Playlist,
-  RoomMediaConnectionState,
-  RoomSnapshot
-} from "@music-room/shared";
+import type { RoomSnapshot } from "@music-room/shared";
 import {
   ChunkScheduler,
   selectCanonicalTrackAvailabilityAnnouncement,
@@ -22,28 +17,19 @@ import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import type {
-  ProgressiveEngineType,
-  ProgressivePlaybackSource
-} from "@/features/playback/progressive-playback";
-import {
-  useProgressiveRuntime,
-  type FullLocalPlaybackTrack
-} from "@/features/playback/use-progressive-runtime";
+import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
 import {
   createPlaybackStartIntent,
   type PlaybackStartIntent
 } from "@/features/playback/playback-start-intent";
-import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import { getSlidingWindowPlaybackSource } from "@/features/playback/progressive-source-controller";
-import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   buildProgressiveTrackManifest,
   getEffectivePlaybackPositionMs,
   getProgressiveEngineType
 } from "@/features/playback/progressive-playback";
-import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
+import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
@@ -63,121 +49,27 @@ import {
   initialRoomStateStore,
   roomStateReducer
 } from "@/features/room/room-state-reducer";
+import {
+  getPlaybackSourceInitializationKey,
+  shouldInitializePlaybackSource,
+  useRoomPageDerived
+} from "@/components/room/hooks/use-room-page-derived";
+import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
+import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
+
+export {
+  getCachedFullLocalPlaybackLoadKey,
+  getPlaybackSourceInitializationKey,
+  hasPlayableFullLocalPlaybackTrack,
+  resolveCachedFullLocalPlaybackLoadTarget,
+  resolveStableCurrentTrack,
+  selectFullLocalPlaybackTracks,
+  shouldClearCachedFullLocalPlaybackTrack,
+  shouldInitializePlaybackSource
+} from "@/components/room/hooks/use-room-page-derived";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
-type CachedFullLocalPlaybackTrack = FullLocalPlaybackTrack & {
-  trackId: string;
-  fileHash: string;
-};
-type CachedFullLocalPlaybackLoadTarget = {
-  trackId: string;
-  fileHash: string;
-  cachedFileHash: string;
-  roomTrack: {
-    id: string;
-    fileHash: string;
-    durationMs?: number;
-    sizeBytes?: number;
-  };
-};
-
-type StableTrackMeta = Pick<
-  RoomSnapshot["tracks"][number],
-  | "id"
-  | "title"
-  | "artist"
-  | "album"
-  | "durationMs"
-  | "bitrate"
-  | "sizeBytes"
-  | "codec"
-  | "mimeType"
-  | "fileHash"
-  | "artworkUrl"
-  | "ownerSessionId"
-  | "ownerNickname"
-  | "sourceType"
-  | "pieceManifest"
-  | "relayManifest"
->;
-
-function areTrackPieceManifestsEqual(
-  previous: StableTrackMeta["pieceManifest"] | StableTrackMeta["relayManifest"],
-  next: StableTrackMeta["pieceManifest"] | StableTrackMeta["relayManifest"]
-) {
-  if (previous === next) {
-    return true;
-  }
-
-  if (!previous || !next) {
-    return previous === next;
-  }
-
-  return (
-    previous.totalChunks === next.totalChunks &&
-    previous.chunkSize === next.chunkSize &&
-    previous.pieceMimeType === next.pieceMimeType
-  );
-}
-
-function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
-  return (
-    previous.id === next.id &&
-    previous.title === next.title &&
-    previous.artist === next.artist &&
-    previous.album === next.album &&
-    previous.durationMs === next.durationMs &&
-    previous.bitrate === next.bitrate &&
-    previous.sizeBytes === next.sizeBytes &&
-    previous.codec === next.codec &&
-    previous.mimeType === next.mimeType &&
-    previous.fileHash === next.fileHash &&
-    previous.artworkUrl === next.artworkUrl &&
-    previous.ownerSessionId === next.ownerSessionId &&
-    previous.ownerNickname === next.ownerNickname &&
-    previous.sourceType === next.sourceType &&
-    areTrackPieceManifestsEqual(previous.pieceManifest, next.pieceManifest) &&
-    areTrackPieceManifestsEqual(previous.relayManifest, next.relayManifest)
-  );
-}
-
-export function resolveStableCurrentTrack<TTrack extends StableTrackMeta>(
-  previousTrack: TTrack | null,
-  currentPlaybackTrackId: string | null | undefined,
-  tracks: TTrack[] | null | undefined
-) {
-  const nextTrack = currentPlaybackTrackId
-    ? tracks?.find((track) => track.id === currentPlaybackTrackId) ?? null
-    : null;
-  if (previousTrack && nextTrack && areTrackMetasEqual(previousTrack, nextTrack)) {
-    return previousTrack;
-  }
-
-  return nextTrack;
-}
-
-type RoomRecoveryPhase =
-  | "joining"
-  | "resyncing"
-  | "bootstrapping-data"
-  | "playing-local-fallback"
-  | "steady";
-
-type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
-
-type RoomRecoveryState = {
-  phase: RoomRecoveryPhase;
-  mode: RoomRecoveryMode;
-  generation: number | null;
-  bootstrapStartedAt: string | null;
-  bootstrapSourcePeerId: string | null;
-  pendingSnapshot: boolean;
-  pendingData: boolean;
-  pendingMedia: boolean;
-  listenerBootstrapAttempts: number | null;
-  fullLocalRecoveryActive: boolean;
-};
 
 type MusicRoomAppProps = {
   workspaceOnly?: boolean;
@@ -199,159 +91,6 @@ export function startBestEffortPlaybackAudioUnlock(input: {
   void input.unlockAudio().catch((error) => {
     input.onError?.(error);
   });
-}
-
-export function selectFullLocalPlaybackTracks(input: {
-  uploadedTracks: Record<string, FullLocalPlaybackTrack>;
-  cachedPlaybackTrack: CachedFullLocalPlaybackTrack | null | undefined;
-}) {
-  const next: Record<string, FullLocalPlaybackTrack> = { ...input.uploadedTracks };
-  const cachedPlaybackTrack = input.cachedPlaybackTrack;
-  if (cachedPlaybackTrack && !next[cachedPlaybackTrack.trackId]) {
-    next[cachedPlaybackTrack.trackId] = {
-      file: cachedPlaybackTrack.file,
-      objectUrl: cachedPlaybackTrack.objectUrl
-    };
-  }
-
-  return next;
-}
-
-export function hasPlayableFullLocalPlaybackTrack(input: {
-  currentPlaybackTrackId: string | null | undefined;
-  fullLocalPlaybackTracks: Record<string, FullLocalPlaybackTrack>;
-}) {
-  return !!(
-    input.currentPlaybackTrackId &&
-    input.fullLocalPlaybackTracks[input.currentPlaybackTrackId]
-  );
-}
-
-export function getPlaybackSourceInitializationKey(input: {
-  playbackSurfaceKey: string | null | undefined;
-  currentPlaybackTrackId: string | null | undefined;
-  currentTrack:
-    | {
-        id: string;
-        fileHash: string;
-        mimeType?: string | null;
-        codec?: string | null;
-        title?: string | null;
-      }
-    | null
-    | undefined;
-  currentProgressiveEngineTypeForSource: ProgressiveEngineType | null | undefined;
-  hasPlayableFullLocalTrack: boolean;
-}) {
-  if (!input.currentPlaybackTrackId) {
-    return null;
-  }
-
-  const format = resolveSlidingWindowFormat({
-    mimeType: input.currentTrack?.mimeType ?? null,
-    codec: input.currentTrack?.codec ?? null,
-    title: input.currentTrack?.title ?? null
-  });
-
-  return [
-    input.playbackSurfaceKey ?? "no-surface",
-    input.currentPlaybackTrackId,
-    input.currentTrack?.id ?? "missing-track",
-    input.currentTrack?.fileHash ?? "missing-hash",
-    format,
-    input.currentProgressiveEngineTypeForSource ?? "none"
-  ].join("|");
-}
-
-export function shouldInitializePlaybackSource(input: {
-  previousInitializationKey: string | null;
-  nextInitializationKey: string | null;
-}) {
-  return input.previousInitializationKey !== input.nextInitializationKey;
-}
-
-export function getCachedFullLocalPlaybackLoadKey(
-  target: CachedFullLocalPlaybackLoadTarget | null | undefined
-) {
-  return target ? `${target.trackId}:${target.fileHash}` : null;
-}
-
-export function resolveCachedFullLocalPlaybackLoadTarget(input: {
-  currentPlaybackTrackId: string | null | undefined;
-  currentTrack:
-    | {
-        id: string;
-        fileHash: string;
-        durationMs?: number | null;
-        sizeBytes?: number | null;
-      }
-    | null
-    | undefined;
-  uploadedTrack: FullLocalPlaybackTrack | null | undefined;
-  cachedPlaybackTrack: CachedFullLocalPlaybackTrack | null | undefined;
-  cacheLibraryTracks: Array<{
-    fileHash: string;
-    sourceTrackIds: string[];
-    lastSourceTrackId: string | null;
-    durationMs: number;
-    sizeBytes: number;
-  }>;
-}): CachedFullLocalPlaybackLoadTarget | null {
-  const { currentPlaybackTrackId, currentTrack } = input;
-  if (!currentPlaybackTrackId || !currentTrack || input.uploadedTrack) {
-    return null;
-  }
-
-  if (
-    input.cachedPlaybackTrack?.trackId === currentPlaybackTrackId &&
-    input.cachedPlaybackTrack.fileHash === currentTrack.fileHash
-  ) {
-    return null;
-  }
-
-  const roomTrack = {
-    id: currentTrack.id,
-    fileHash: currentTrack.fileHash,
-    durationMs: currentTrack.durationMs ?? undefined,
-    sizeBytes: currentTrack.sizeBytes ?? undefined
-  };
-  const cachedTrack = input.cacheLibraryTracks.find((entry) =>
-    isCachedLibraryTrackUsableForRoomTrack({
-      cachedTrack: entry,
-      roomTrack
-    })
-  );
-  if (!cachedTrack) {
-    return null;
-  }
-
-  return {
-    trackId: currentPlaybackTrackId,
-    fileHash: currentTrack.fileHash,
-    cachedFileHash: cachedTrack.fileHash,
-    roomTrack
-  };
-}
-
-export function shouldClearCachedFullLocalPlaybackTrack(input: {
-  currentPlaybackTrackId: string | null | undefined;
-  currentTrackFileHash: string | null | undefined;
-  uploadedTrack: FullLocalPlaybackTrack | null | undefined;
-  cachedPlaybackTrack: CachedFullLocalPlaybackTrack | null | undefined;
-}) {
-  const cachedPlaybackTrack = input.cachedPlaybackTrack;
-  if (!cachedPlaybackTrack) {
-    return false;
-  }
-
-  if (!input.currentPlaybackTrackId || input.uploadedTrack) {
-    return true;
-  }
-
-  return (
-    cachedPlaybackTrack.trackId !== input.currentPlaybackTrackId ||
-    cachedPlaybackTrack.fileHash !== input.currentTrackFileHash
-  );
 }
 
 export function MusicRoomApp({
@@ -378,54 +117,61 @@ export function MusicRoomApp({
     initialRoomStateStore
   );
   const roomSnapshot = roomState.snapshot;
-  const [, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [, setPlaylists] = useState<Playlist[]>([]);
-  const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
-  const [mediaConnectedPeers, setMediaConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
-  const [suppressRoomRecovery, setSuppressRoomRecovery] = useState(false);
-  const [isRecoveringRoom, setIsRecoveringRoom] = useState(false);
-  const [isNavigatingRoomExit, setIsNavigatingRoomExit] = useState(false);
-  const [mediaConnectionState, setMediaConnectionState] =
-    useState<RoomMediaConnectionState>("idle");
-  const [iceConfig, setIceConfig] = useState<IceConfigResponse | null>(null);
-  const [iceConfigResolved, setIceConfigResolved] = useState(false);
-  const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "cache" | "members">(
-    "queue"
-  );
-  const [isDiagnosticsPanelOpen, setIsDiagnosticsPanelOpen] = useState(false);
-  const [isPageVisible, setIsPageVisible] = useState(
-    typeof document === "undefined" ? true : !document.hidden
-  );
-  const [volume, setVolume] = useState(0.72);
-  const [schedulerMode, setSchedulerMode] = useState<"normal" | "conservative" | "idle">(
-    "normal"
-  );
-  const [schedulerPlaybackBucketMs, setSchedulerPlaybackBucketMs] = useState(0);
-  const [playerResetEpoch, setPlayerResetEpoch] = useState(0);
-  const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
-  const [activePlaybackSource, setActivePlaybackSource] =
-    useState<ProgressivePlaybackSource>("progressive-local");
-  const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const playbackSourceInitializationKeyRef = useRef<string | null>(null);
-  const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
-  const [audioUnlocked, setAudioUnlocked] = useState(() => roomAudioOutput.isActivated());
-  const [sourceStartState, setSourceStartState] = useState<
-    "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
-  >("idle");
-  const [lastSourceStartError, setLastSourceStartError] = useState<string | null>(null);
-  const [audioBlockedOverlay, setAudioBlockedOverlay] = useState(false);
-  const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>({
-    phase: "joining",
-    mode: "steady",
-    generation: null,
-    bootstrapStartedAt: null,
-    bootstrapSourcePeerId: null,
-    pendingSnapshot: false,
-    pendingData: false,
-    pendingMedia: false,
-    listenerBootstrapAttempts: null,
-    fullLocalRecoveryActive: false
+  const {
+    setAvailableRooms,
+    setPlaylists,
+    connectedPeers,
+    setConnectedPeers,
+    mediaConnectedPeers,
+    setMediaConnectedPeers,
+    suppressRoomRecovery,
+    setSuppressRoomRecovery,
+    isRecoveringRoom,
+    setIsRecoveringRoom,
+    isNavigatingRoomExit,
+    setIsNavigatingRoomExit,
+    mediaConnectionState,
+    setMediaConnectionState,
+    iceConfig,
+    setIceConfig,
+    iceConfigResolved,
+    setIceConfigResolved,
+    activeDashboardTab,
+    setActiveDashboardTab,
+    activePlaybackSource,
+    setActivePlaybackSource,
+    progressiveFallbackReason,
+    setProgressiveFallbackReason,
+    playbackStartIntent,
+    setPlaybackStartIntent,
+    roomRecoveryState,
+    setRoomRecoveryState,
+    isDiagnosticsPanelOpen,
+    setIsDiagnosticsPanelOpen,
+    isPageVisible,
+    setIsPageVisible,
+    schedulerMode,
+    setSchedulerMode,
+    volume,
+    setVolume,
+    schedulerPlaybackBucketMs,
+    setSchedulerPlaybackBucketMs,
+    playerResetEpoch,
+    setPlayerResetEpoch,
+    bufferHealth,
+    setBufferHealth,
+    audioUnlocked,
+    setAudioUnlocked,
+    sourceStartState,
+    setSourceStartState,
+    lastSourceStartError,
+    setLastSourceStartError,
+    audioBlockedOverlay,
+    setAudioBlockedOverlay
+  } = useRoomPageState({
+    audioUnlocked: roomAudioOutput.isActivated()
   });
   const resetRealtimePeer = useCallback(() => {
     const nextPeerId = `peer_${crypto.randomUUID()}`;
@@ -465,64 +211,25 @@ export function MusicRoomApp({
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canDeleteRoom;
-  const roomPlayback = roomSnapshot?.room.playback ?? null;
-  const currentPlaybackTrackId = roomPlayback?.currentTrackId ?? null;
-  const playbackMediaEpoch = roomPlayback?.mediaEpoch ?? null;
-  const playbackQueueVersion = roomPlayback?.queueVersion ?? null;
-  const playbackRevision = roomPlayback?.playbackRevision ?? null;
-  const playbackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
-  const playbackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
-  const playbackStatus = roomPlayback?.status ?? null;
+  const {
+    roomPlayback,
+    currentPlaybackTrackId,
+    playbackMediaEpoch,
+    playbackQueueVersion,
+    playbackRevision,
+    playbackStatus,
+    isCurrentSourceOwner,
+    playbackSurfaceKey,
+    playbackTimelineKey,
+    playbackTopologySnapshot,
+    currentTrack
+  } = useRoomPageDerived({
+    activeSessionId: activeSession?.userId,
+    peerId,
+    roomSnapshot
+  });
   const roomPlaybackRef = useRef(roomPlayback);
   roomPlaybackRef.current = roomPlayback;
-  const isCurrentSourceOwner = isCurrentPlaybackSourceDevice({
-    playback: roomPlayback,
-    peerId,
-    activeSessionId: activeSession?.userId
-  });
-  const playbackSurfaceKey = useMemo(
-    () => {
-      if (!currentPlaybackTrackId) {
-        return null;
-      }
-
-      const sourceIdentity = playbackSourceSessionId ?? playbackSourcePeerId ?? "none";
-      const mediaEpoch = typeof playbackMediaEpoch === "number" ? playbackMediaEpoch : "none";
-      return [currentPlaybackTrackId, sourceIdentity, mediaEpoch].join("|");
-    },
-    [currentPlaybackTrackId, playbackMediaEpoch, playbackSourcePeerId, playbackSourceSessionId]
-  );
-  const playbackTimelineKey = useMemo(
-    () => {
-      if (!currentPlaybackTrackId) {
-        return null;
-      }
-
-      const playbackTimelineRevision =
-        typeof playbackRevision === "number" ? playbackRevision : playbackQueueVersion;
-      const mediaEpoch = typeof playbackMediaEpoch === "number" ? playbackMediaEpoch : "none";
-      return [currentPlaybackTrackId, playbackTimelineRevision, mediaEpoch].join("|");
-    },
-    [currentPlaybackTrackId, playbackMediaEpoch, playbackQueueVersion, playbackRevision]
-  );
-  const playbackTopologySnapshot = useMemo(
-    () =>
-      currentPlaybackTrackId
-        ? {
-            currentTrackId: currentPlaybackTrackId,
-            mediaEpoch: playbackMediaEpoch,
-            sourcePeerId: playbackSourcePeerId,
-            sourceSessionId: playbackSourceSessionId
-          }
-        : null,
-    [currentPlaybackTrackId, playbackMediaEpoch, playbackSourcePeerId, playbackSourceSessionId]
-  );
-  const currentTrackRef = useRef<RoomSnapshot["tracks"][number] | null>(null);
-  const currentTrack = useMemo(
-    () => resolveStableCurrentTrack(currentTrackRef.current, currentPlaybackTrackId, roomSnapshot?.tracks),
-    [currentPlaybackTrackId, roomSnapshot?.tracks]
-  );
-  currentTrackRef.current = currentTrack;
   const {
     uploadedTracks,
     cachedTrackCount,
@@ -552,197 +259,19 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability
   });
 
-  const [cachedFullLocalPlaybackTrack, setCachedFullLocalPlaybackTrack] =
-    useState<CachedFullLocalPlaybackTrack | null>(null);
-  const cachedFullLocalPlaybackTrackRef = useRef<CachedFullLocalPlaybackTrack | null>(null);
-  const replaceCachedFullLocalPlaybackTrack = useCallback(
-    (next: CachedFullLocalPlaybackTrack | null) => {
-      const previous = cachedFullLocalPlaybackTrackRef.current;
-      if (previous && previous.objectUrl !== next?.objectUrl) {
-        URL.revokeObjectURL(previous.objectUrl);
-      }
-      cachedFullLocalPlaybackTrackRef.current = next;
-      setCachedFullLocalPlaybackTrack(next);
-    },
-    []
-  );
-  const fullLocalPlaybackTracks = useMemo(
-    () =>
-      selectFullLocalPlaybackTracks({
-        uploadedTracks,
-        cachedPlaybackTrack: cachedFullLocalPlaybackTrack
-      }),
-    [cachedFullLocalPlaybackTrack, uploadedTracks]
-  );
-  const hasPlayableFullLocalTrack = useMemo(
-    () =>
-      hasPlayableFullLocalPlaybackTrack({
-        currentPlaybackTrackId,
-        fullLocalPlaybackTracks
-      }),
-    [currentPlaybackTrackId, fullLocalPlaybackTracks]
-  );
-
-  const loadCachedFullLocalPlaybackTrack = useCallback(
-    async (trackId: string | null | undefined) => {
-      if (!trackId) {
-        return null;
-      }
-
-      const uploadedTrack = uploadedTracks[trackId] ?? null;
-      if (uploadedTrack) {
-        return uploadedTrack;
-      }
-
-      const roomTrack =
-        roomSnapshot?.tracks.find((entry) => entry.id === trackId) ??
-        (currentTrack?.id === trackId ? currentTrack : null);
-      if (!roomTrack) {
-        return null;
-      }
-
-      const existing = cachedFullLocalPlaybackTrackRef.current;
-      if (existing?.trackId === trackId && existing.fileHash === roomTrack.fileHash) {
-        return existing;
-      }
-
-      const cachedTrack = cacheLibraryTracks.find((entry) =>
-        isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: entry,
-          roomTrack
-        })
-      );
-      if (!cachedTrack) {
-        return null;
-      }
-
-      const cachedTrackFile = await loadCachedLibraryTrackFile(cachedTrack.fileHash);
-      if (
-        !cachedTrackFile ||
-        !isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: cachedTrackFile,
-          roomTrack
-        })
-      ) {
-        return null;
-      }
-
-      const next = {
-        trackId,
-        fileHash: roomTrack.fileHash,
-        file: cachedTrackFile.file,
-        objectUrl: URL.createObjectURL(cachedTrackFile.file)
-      };
-      replaceCachedFullLocalPlaybackTrack(next);
-      return next;
-    },
-    [
-      cacheLibraryTracks,
-      currentTrack,
-      loadCachedLibraryTrackFile,
-      replaceCachedFullLocalPlaybackTrack,
-      roomSnapshot?.tracks,
-      uploadedTracks
-    ]
-  );
-
-  const currentUploadedPlaybackTrack = currentPlaybackTrackId
-    ? uploadedTracks[currentPlaybackTrackId] ?? null
-    : null;
-  const cachedFullLocalPlaybackLoadTarget = useMemo(
-    () =>
-      resolveCachedFullLocalPlaybackLoadTarget({
-        currentPlaybackTrackId,
-        currentTrack,
-        uploadedTrack: currentUploadedPlaybackTrack,
-        cachedPlaybackTrack: cachedFullLocalPlaybackTrack,
-        cacheLibraryTracks
-      }),
-    [
-      cacheLibraryTracks,
-      cachedFullLocalPlaybackTrack,
-      currentPlaybackTrackId,
-      currentTrack,
-      currentUploadedPlaybackTrack
-    ]
-  );
-  const cachedFullLocalPlaybackLoadKey = getCachedFullLocalPlaybackLoadKey(
-    cachedFullLocalPlaybackLoadTarget
-  );
-  const cachedFullLocalPlaybackLoadTargetRef =
-    useRef<CachedFullLocalPlaybackLoadTarget | null>(null);
-  useEffect(() => {
-    cachedFullLocalPlaybackLoadTargetRef.current = cachedFullLocalPlaybackLoadTarget;
-  }, [cachedFullLocalPlaybackLoadTarget]);
-
-  useEffect(() => {
-    const target = cachedFullLocalPlaybackLoadTargetRef.current;
-    if (!target || !cachedFullLocalPlaybackLoadKey) {
-      if (
-        shouldClearCachedFullLocalPlaybackTrack({
-          currentPlaybackTrackId,
-          currentTrackFileHash: currentTrack?.fileHash ?? null,
-          uploadedTrack: currentUploadedPlaybackTrack,
-          cachedPlaybackTrack: cachedFullLocalPlaybackTrackRef.current
-        })
-      ) {
-        replaceCachedFullLocalPlaybackTrack(null);
-      }
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      const cachedTrackFile = await loadCachedLibraryTrackFile(target.cachedFileHash);
-      const latestTarget = cachedFullLocalPlaybackLoadTargetRef.current;
-      if (
-        cancelled ||
-        getCachedFullLocalPlaybackLoadKey(latestTarget) !== cachedFullLocalPlaybackLoadKey ||
-        !cachedTrackFile ||
-        !isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: cachedTrackFile,
-          roomTrack: target.roomTrack
-        })
-      ) {
-        return;
-      }
-
-      const objectUrl = URL.createObjectURL(cachedTrackFile.file);
-      if (cancelled) {
-        URL.revokeObjectURL(objectUrl);
-        return;
-      }
-
-      replaceCachedFullLocalPlaybackTrack({
-        trackId: target.trackId,
-        fileHash: target.fileHash,
-        file: cachedTrackFile.file,
-        objectUrl
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    cachedFullLocalPlaybackLoadKey,
-    currentPlaybackTrackId,
-    currentTrack?.fileHash,
-    currentUploadedPlaybackTrack,
+  const {
+    cachedFullLocalPlaybackTrack,
+    fullLocalPlaybackTracks,
+    hasPlayableFullLocalTrack,
+    loadCachedFullLocalPlaybackTrack
+  } = useRoomCachedFullLocalPlayback({
+    uploadedTracks,
+    cacheLibraryTracks,
     loadCachedLibraryTrackFile,
-    replaceCachedFullLocalPlaybackTrack
-  ]);
-
-  useEffect(
-    () => () => {
-      const cachedTrack = cachedFullLocalPlaybackTrackRef.current;
-      if (cachedTrack) {
-        URL.revokeObjectURL(cachedTrack.objectUrl);
-        cachedFullLocalPlaybackTrackRef.current = null;
-      }
-    },
-    []
-  );
+    roomSnapshot,
+    currentTrack,
+    currentPlaybackTrackId
+  });
 
   const currentProgressiveEngineTypeForSource = useMemo(() => {
     if (!currentTrack?.id) {
@@ -805,7 +334,7 @@ export function MusicRoomApp({
     } catch {
       setAvailableRooms([]);
     }
-  }, []);
+  }, [setAvailableRooms]);
 
   const refreshPlaylists = useCallback(async () => {
     try {
@@ -814,7 +343,7 @@ export function MusicRoomApp({
     } catch {
       setPlaylists([]);
     }
-  }, []);
+  }, [setPlaylists]);
 
   const handleTrackDeleted = useCallback(
     (trackId: string) => deleteUploadedTrackArtifacts(trackId),
@@ -865,7 +394,16 @@ export function MusicRoomApp({
   }, [
     destroyProgressiveRuntime,
     resetAvailabilityState,
-    resetPeerDiagnostics
+    resetPeerDiagnostics,
+    setActivePlaybackSource,
+    setBufferHealth,
+    setMediaConnectedPeers,
+    setMediaConnectionState,
+    setPlaybackStartIntent,
+    setPlayerResetEpoch,
+    setProgressiveFallbackReason,
+    setRoomRecoveryState,
+    setSchedulerPlaybackBucketMs
   ]);
 
   const getCurrentPlaybackPositionMs = useCallback(() => currentPlaybackPositionRef.current, []);
@@ -1075,7 +613,9 @@ export function MusicRoomApp({
     currentPlaybackTrackId,
     currentTrack,
     currentProgressiveEngineTypeForSource,
-    hasPlayableFullLocalTrack
+    hasPlayableFullLocalTrack,
+    setActivePlaybackSource,
+    setProgressiveFallbackReason
   ]);
 
   const previousPlaybackRef = useRef(playbackTopologySnapshot);
@@ -1277,7 +817,7 @@ export function MusicRoomApp({
 
   const handlePlaybackBucketChange = useCallback((bucketMs: number) => {
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
-  }, []);
+  }, [setSchedulerPlaybackBucketMs]);
 
   const primeFullLocalTrackPlayback = useCallback(
     async (trackId: string | null | undefined) => {
@@ -1409,6 +949,7 @@ export function MusicRoomApp({
       playbackMediaEpoch,
       playbackQueueVersion,
       playbackRevision,
+      setPlaybackStartIntent,
       setStatusMessage
     ]
   );
@@ -1593,7 +1134,8 @@ export function MusicRoomApp({
     audioUnlocked,
     currentPlaybackTrackId,
     isCurrentSourceOwner,
-    playbackStatus
+    playbackStatus,
+    setAudioBlockedOverlay
   ]);
 
   const handleAudioUnlock = useCallback(async () => {
@@ -1608,7 +1150,7 @@ export function MusicRoomApp({
     }
     setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
     setAudioBlockedOverlay(true);
-  }, [audioRef, setAudioUnlocked, setStatusMessage]);
+  }, [audioRef, setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
 
   return (
     <>
