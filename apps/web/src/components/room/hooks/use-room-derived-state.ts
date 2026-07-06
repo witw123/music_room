@@ -16,7 +16,7 @@ import {
 } from "@/features/p2p";
 import { buildManualCacheSchedulerAvailabilityFromParts } from "@/features/room/hooks/use-manual-cache-downloader";
 
-type UseRoomDerivedStateInput = {
+export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   peerId: string;
   connectedPeers: string[];

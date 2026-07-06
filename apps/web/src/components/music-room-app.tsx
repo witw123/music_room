@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useReducer, useRef, useState } from "react";
+import { useReducer, useRef, useState } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   ChunkScheduler,
-  selectCanonicalTrackAvailabilityAnnouncement,
   useAvailabilityAnnouncements,
   usePeerDiagnostics
 } from "@/features/p2p";
@@ -16,23 +15,16 @@ import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import {
-  buildProgressiveTrackManifest,
-  getProgressiveEngineType
-} from "@/features/playback/progressive-playback";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import {
-  selectWorkspacePeerDiagnostics,
-  useRoomDerivedState
-} from "@/components/room/hooks/use-room-derived-state";
-import {
   initialRoomStateStore,
   roomStateReducer
 } from "@/features/room/room-state-reducer";
 import {
+  useCurrentProgressiveEngineTypeForSource,
   useRoomPageDerived
 } from "@/components/room/hooks/use-room-page-derived";
 import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
@@ -41,6 +33,8 @@ import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playbac
 import { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
 import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
+import { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
+import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
 
 export {
   getCachedFullLocalPlaybackLoadKey,
@@ -240,24 +234,11 @@ export function MusicRoomApp({
     currentPlaybackTrackId
   });
 
-  const currentProgressiveEngineTypeForSource = useMemo(() => {
-    if (!currentTrack?.id) {
-      return "none";
-    }
-
-    const trackAvailability = availabilityByTrack[currentTrack.id] ?? {};
-    const localAvailability = trackAvailability[peerId] ?? null;
-    const manifestHint = selectCanonicalTrackAvailabilityAnnouncement(
-      Object.values(trackAvailability)
-    );
-    const manifest = buildProgressiveTrackManifest(
-      currentTrack,
-      localAvailability,
-      manifestHint
-    );
-
-    return getProgressiveEngineType(manifest);
-  }, [availabilityByTrack, currentTrack, peerId]);
+  const currentProgressiveEngineTypeForSource = useCurrentProgressiveEngineTypeForSource({
+    currentTrack,
+    availabilityByTrack,
+    peerId
+  });
 
   const {
     progressiveSchedulerPolicy,
@@ -508,18 +489,10 @@ export function MusicRoomApp({
     setProgressiveFallbackReason
   });
 
-  const handleCopyJoinCode = useCallback(async () => {
-    if (!roomSnapshot) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(roomSnapshot.room.joinCode);
-      setStatusMessage(`已复制房间码 ${roomSnapshot.room.joinCode}。`);
-    } catch {
-      setStatusMessage("复制房间码失败，请手动复制。");
-    }
-  }, [roomSnapshot, setStatusMessage]);
+  const { handleCopyJoinCode } = useRoomClipboardActions({
+    roomSnapshot,
+    setStatusMessage
+  });
 
   const {
     canDisbandRoom,
@@ -528,14 +501,13 @@ export function MusicRoomApp({
     availabilitySummary,
     memberTransferSummaries,
     localMemberState,
-    visiblePeerDiagnostics,
-    visiblePeerRecentEvents,
     statusTone,
     iceConfigStatus,
     iceConfigSource,
     isRoomTransitionPending,
-    showRoomTransitionState
-  } = useRoomDerivedState({
+    showRoomTransitionState,
+    workspacePeerDiagnostics
+  } = useRoomWorkspaceViewModel({
     roomSnapshot,
     peerId,
     connectedPeers,
@@ -560,15 +532,6 @@ export function MusicRoomApp({
     isNavigatingRoomExit,
     isRecoveringRoom
   });
-  const workspacePeerDiagnostics = useMemo(
-    () =>
-      selectWorkspacePeerDiagnostics({
-        activeDashboardTab,
-        visiblePeerDiagnostics,
-        visiblePeerRecentEvents
-      }),
-    [activeDashboardTab, visiblePeerDiagnostics, visiblePeerRecentEvents]
-  );
 
   return (
     <>

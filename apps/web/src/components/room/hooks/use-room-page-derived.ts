@@ -1,9 +1,14 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
-import type { ProgressiveEngineType } from "@/features/playback/progressive-playback";
+import type { RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import {
+  buildProgressiveTrackManifest,
+  getProgressiveEngineType,
+  type ProgressiveEngineType
+} from "@/features/playback/progressive-playback";
 import type { FullLocalPlaybackTrack } from "@/features/playback/use-progressive-runtime";
+import { selectCanonicalTrackAvailabilityAnnouncement } from "@/features/p2p";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
@@ -240,6 +245,32 @@ export function useRoomPageDerived({
     playbackTopologySnapshot,
     currentTrack
   };
+}
+
+export function useCurrentProgressiveEngineTypeForSource(input: {
+  currentTrack: RoomSnapshot["tracks"][number] | null;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  peerId: string;
+}) {
+  return useMemo(() => {
+    const currentTrack = input.currentTrack;
+    if (!currentTrack?.id) {
+      return "none";
+    }
+
+    const trackAvailability = input.availabilityByTrack[currentTrack.id] ?? {};
+    const localAvailability = trackAvailability[input.peerId] ?? null;
+    const manifestHint = selectCanonicalTrackAvailabilityAnnouncement(
+      Object.values(trackAvailability)
+    );
+    const manifest = buildProgressiveTrackManifest(
+      currentTrack,
+      localAvailability,
+      manifestHint
+    );
+
+    return getProgressiveEngineType(manifest);
+  }, [input.availabilityByTrack, input.currentTrack, input.peerId]);
 }
 
 export function selectFullLocalPlaybackTracks(input: {

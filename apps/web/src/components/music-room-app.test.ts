@@ -223,6 +223,60 @@ describe("room page room actions boundary", () => {
   });
 });
 
+describe("room page workspace view model boundary", () => {
+  it("hosts workspace derived view state outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const workspaceViewModelSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "room/hooks/use-room-workspace-view-model.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("useRoomDerivedState({");
+    expect(appSource).not.toContain("selectWorkspacePeerDiagnostics({");
+    expect(workspaceViewModelSource).toContain("export function useRoomWorkspaceViewModel");
+  });
+});
+
+describe("room page playback engine type boundary", () => {
+  it("hosts current playback source engine derivation outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const pageDerivedSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-page-derived.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("buildProgressiveTrackManifest(");
+    expect(appSource).not.toContain("getProgressiveEngineType(");
+    expect(pageDerivedSource).toContain("export function useCurrentProgressiveEngineTypeForSource");
+  });
+});
+
+describe("room page clipboard actions boundary", () => {
+  it("hosts join code clipboard action outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const clipboardActionsSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-clipboard-actions.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("navigator.clipboard.writeText");
+    expect(appSource).not.toContain("const handleCopyJoinCode = useCallback");
+    expect(clipboardActionsSource).toContain("export function useRoomClipboardActions");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({
