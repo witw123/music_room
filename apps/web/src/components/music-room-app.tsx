@@ -1,12 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type {
-  IceConfigResponse,
-  Playlist,
-  RoomMediaConnectionState,
-  RoomSnapshot
-} from "@music-room/shared";
+import type { RoomSnapshot } from "@music-room/shared";
 import {
   ChunkScheduler,
   selectCanonicalTrackAvailabilityAnnouncement,
@@ -22,7 +17,6 @@ import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
 import {
   createPlaybackStartIntent,
@@ -84,28 +78,6 @@ export {
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 
-type RoomRecoveryPhase =
-  | "joining"
-  | "resyncing"
-  | "bootstrapping-data"
-  | "playing-local-fallback"
-  | "steady";
-
-type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
-
-type RoomRecoveryState = {
-  phase: RoomRecoveryPhase;
-  mode: RoomRecoveryMode;
-  generation: number | null;
-  bootstrapStartedAt: string | null;
-  bootstrapSourcePeerId: string | null;
-  pendingSnapshot: boolean;
-  pendingData: boolean;
-  pendingMedia: boolean;
-  listenerBootstrapAttempts: number | null;
-  fullLocalRecoveryActive: boolean;
-};
-
 type MusicRoomAppProps = {
   workspaceOnly?: boolean;
   initialRoomId?: string | null;
@@ -152,60 +124,61 @@ export function MusicRoomApp({
     initialRoomStateStore
   );
   const roomSnapshot = roomState.snapshot;
-  const [, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [, setPlaylists] = useState<Playlist[]>([]);
-  const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
-  const [mediaConnectedPeers, setMediaConnectedPeers] = useState<string[]>([]);
   const [peerId, setPeerId] = useState("");
-  const [suppressRoomRecovery, setSuppressRoomRecovery] = useState(false);
-  const [isRecoveringRoom, setIsRecoveringRoom] = useState(false);
-  const [isNavigatingRoomExit, setIsNavigatingRoomExit] = useState(false);
-  const [mediaConnectionState, setMediaConnectionState] =
-    useState<RoomMediaConnectionState>("idle");
-  const [iceConfig, setIceConfig] = useState<IceConfigResponse | null>(null);
-  const [iceConfigResolved, setIceConfigResolved] = useState(false);
-  const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "cache" | "members">(
-    "queue"
-  );
-  const [schedulerMode, setSchedulerMode] = useState<"normal" | "conservative" | "idle">(
-    "normal"
-  );
-  const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
-  const [activePlaybackSource, setActivePlaybackSource] =
-    useState<ProgressivePlaybackSource>("progressive-local");
-  const [progressiveFallbackReason, setProgressiveFallbackReason] = useState<string | null>(null);
   const playbackSourceInitializationKeyRef = useRef<string | null>(null);
-  const [playbackStartIntent, setPlaybackStartIntent] = useState<PlaybackStartIntent | null>(null);
-  const [audioUnlocked, setAudioUnlocked] = useState(() => roomAudioOutput.isActivated());
-  const [sourceStartState, setSourceStartState] = useState<
-    "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
-  >("idle");
-  const [lastSourceStartError, setLastSourceStartError] = useState<string | null>(null);
   const {
+    setAvailableRooms,
+    setPlaylists,
+    connectedPeers,
+    setConnectedPeers,
+    mediaConnectedPeers,
+    setMediaConnectedPeers,
+    suppressRoomRecovery,
+    setSuppressRoomRecovery,
+    isRecoveringRoom,
+    setIsRecoveringRoom,
+    isNavigatingRoomExit,
+    setIsNavigatingRoomExit,
+    mediaConnectionState,
+    setMediaConnectionState,
+    iceConfig,
+    setIceConfig,
+    iceConfigResolved,
+    setIceConfigResolved,
+    activeDashboardTab,
+    setActiveDashboardTab,
+    activePlaybackSource,
+    setActivePlaybackSource,
+    progressiveFallbackReason,
+    setProgressiveFallbackReason,
+    playbackStartIntent,
+    setPlaybackStartIntent,
+    roomRecoveryState,
+    setRoomRecoveryState,
     isDiagnosticsPanelOpen,
     setIsDiagnosticsPanelOpen,
     isPageVisible,
     setIsPageVisible,
+    schedulerMode,
+    setSchedulerMode,
     volume,
     setVolume,
     schedulerPlaybackBucketMs,
     setSchedulerPlaybackBucketMs,
     playerResetEpoch,
     setPlayerResetEpoch,
+    bufferHealth,
+    setBufferHealth,
+    audioUnlocked,
+    setAudioUnlocked,
+    sourceStartState,
+    setSourceStartState,
+    lastSourceStartError,
+    setLastSourceStartError,
     audioBlockedOverlay,
     setAudioBlockedOverlay
-  } = useRoomPageState();
-  const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>({
-    phase: "joining",
-    mode: "steady",
-    generation: null,
-    bootstrapStartedAt: null,
-    bootstrapSourcePeerId: null,
-    pendingSnapshot: false,
-    pendingData: false,
-    pendingMedia: false,
-    listenerBootstrapAttempts: null,
-    fullLocalRecoveryActive: false
+  } = useRoomPageState({
+    audioUnlocked: roomAudioOutput.isActivated()
   });
   const resetRealtimePeer = useCallback(() => {
     const nextPeerId = `peer_${crypto.randomUUID()}`;
@@ -546,7 +519,7 @@ export function MusicRoomApp({
     } catch {
       setAvailableRooms([]);
     }
-  }, []);
+  }, [setAvailableRooms]);
 
   const refreshPlaylists = useCallback(async () => {
     try {
@@ -555,7 +528,7 @@ export function MusicRoomApp({
     } catch {
       setPlaylists([]);
     }
-  }, []);
+  }, [setPlaylists]);
 
   const handleTrackDeleted = useCallback(
     (trackId: string) => deleteUploadedTrackArtifacts(trackId),
@@ -607,7 +580,14 @@ export function MusicRoomApp({
     destroyProgressiveRuntime,
     resetAvailabilityState,
     resetPeerDiagnostics,
+    setActivePlaybackSource,
+    setBufferHealth,
+    setMediaConnectedPeers,
+    setMediaConnectionState,
+    setPlaybackStartIntent,
     setPlayerResetEpoch,
+    setProgressiveFallbackReason,
+    setRoomRecoveryState,
     setSchedulerPlaybackBucketMs
   ]);
 
@@ -818,7 +798,9 @@ export function MusicRoomApp({
     currentPlaybackTrackId,
     currentTrack,
     currentProgressiveEngineTypeForSource,
-    hasPlayableFullLocalTrack
+    hasPlayableFullLocalTrack,
+    setActivePlaybackSource,
+    setProgressiveFallbackReason
   ]);
 
   const previousPlaybackRef = useRef(playbackTopologySnapshot);
@@ -1152,6 +1134,7 @@ export function MusicRoomApp({
       playbackMediaEpoch,
       playbackQueueVersion,
       playbackRevision,
+      setPlaybackStartIntent,
       setStatusMessage
     ]
   );
