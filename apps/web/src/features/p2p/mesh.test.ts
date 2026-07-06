@@ -6,7 +6,7 @@ import {
   getTrackPieceManifest
 } from "@/lib/indexeddb";
 import { P2PMesh } from "./mesh";
-import type { BinaryPieceFragmentMessage, BinaryPieceMessage } from "./piece-frame-codec";
+import { buildPieceFrames, type BinaryPieceMessage } from "./piece-frame-codec";
 import { getMissingChunkIndexes, summarizeTrackAvailability } from "./index";
 
 describe("p2p feature helpers", () => {
@@ -57,7 +57,7 @@ describe("p2p feature helpers", () => {
 
 class FakeDataChannel {
   readyState: RTCDataChannelState = "open";
-  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onmessage: ((event: MessageEvent<unknown>) => void) | null = null;
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onbufferedamountlow: (() => void) | null = null;
@@ -147,7 +147,6 @@ type MeshTestAccess = {
     awaitPersistence(): Promise<void>;
     pendingCount(): number;
   };
-  handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage): void;
 };
 
 function getMeshTestAccess(mesh: P2PMesh): MeshTestAccess {
@@ -780,22 +779,30 @@ describe("P2PMesh", () => {
 
     await mesh.syncPeers(["peer_b"]);
     expect(mesh.requestPiece("peer_b", "track_1", 0, 1, 1_000)).toBe(true);
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
 
-    const fragmentMessages = buildIncomingPieceFragmentMessages({
-      trackId: "track_1",
-      chunkIndex: 0,
-      totalChunks: 1,
-      chunkSize: piecePayload.byteLength,
-      mimeType: "audio/flac",
-      pieceHash,
-      payload: piecePayload
-    });
+    const fragmentFrames = buildPieceFrames(
+      {
+        requestId: "request-1",
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        chunkSize: piecePayload.byteLength,
+        mimeType: "audio/flac",
+        pieceHash
+      },
+      piecePayload,
+      48 * 1024
+    );
     const meshAccess = getMeshTestAccess(mesh);
 
-    for (const fragmentMessage of fragmentMessages) {
-      meshAccess.handleIncomingPieceFragment("peer_b", fragmentMessage);
+    for (const fragmentFrame of fragmentFrames) {
+      await channel?.onmessage?.({
+        data: fragmentFrame.data
+      } as MessageEvent<ArrayBuffer>);
     }
 
+    expect(fragmentFrames.length).toBeGreaterThan(1);
     expect(meshAccess.inboundPieces.pendingCount()).toBe(1);
     await meshAccess.inboundPieces.flush();
     await meshAccess.inboundPieces.awaitPersistence();
@@ -853,67 +860,4 @@ function buildIncomingPieceMessage(input: {
     },
     payload: input.payload
   };
-}
-
-function buildIncomingPieceFragmentMessages(input: {
-  trackId: string;
-  chunkIndex: number;
-  totalChunks: number;
-  chunkSize?: number;
-  mimeType: string;
-  pieceHash: string;
-  payload: ArrayBuffer;
-}) {
-  const maxPayloadBytes = 48 * 1024;
-  const fragmentPayloadSize = Math.max(8 * 1024, maxPayloadBytes - 1024);
-  const payloadBytes = new Uint8Array(input.payload);
-  const fragmentCount = Math.ceil(payloadBytes.byteLength / fragmentPayloadSize);
-  const messages: Array<{
-    kind: "send-piece-fragment";
-    trackId: string;
-    chunkIndex: number;
-    totalChunks: number;
-    chunkSize: number;
-    mimeType: string;
-    pieceHash: string;
-    fragmentIndex: number;
-    fragmentCount: number;
-    header: {
-      kind: "send-piece-fragment";
-      trackId: string;
-      chunkIndex: number;
-      totalChunks: number;
-      chunkSize: number;
-      mimeType: string;
-      pieceHash: string;
-      fragmentIndex: number;
-      fragmentCount: number;
-    };
-    payload: ArrayBuffer;
-  }> = [];
-
-  for (let fragmentIndex = 0; fragmentIndex < fragmentCount; fragmentIndex += 1) {
-    const fragmentStart = fragmentIndex * fragmentPayloadSize;
-    const fragmentEnd = Math.min(payloadBytes.byteLength, fragmentStart + fragmentPayloadSize);
-    const fragmentPayload = payloadBytes.slice(fragmentStart, fragmentEnd).buffer;
-    const header = {
-      kind: "send-piece-fragment" as const,
-      trackId: input.trackId,
-      chunkIndex: input.chunkIndex,
-      totalChunks: input.totalChunks,
-      chunkSize: input.chunkSize ?? input.payload.byteLength,
-      mimeType: input.mimeType,
-      pieceHash: input.pieceHash,
-      fragmentIndex,
-      fragmentCount
-    };
-
-    messages.push({
-      ...header,
-      header,
-      payload: fragmentPayload
-    });
-  }
-
-  return messages;
 }
