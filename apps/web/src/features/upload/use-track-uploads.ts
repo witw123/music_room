@@ -55,6 +55,7 @@ import {
   toCachedLibraryTrackFile
 } from "./cache-library";
 import {
+  announceRoomTrackAvailability as announceRoomTrackAvailabilityFromSources,
   buildManualCachePieceAvailabilityAnnouncement,
   isManualCachePieceCompatible,
   resolveMissingOwnedUploadedTracks,
@@ -90,6 +91,7 @@ export {
   hasUsableCachedLibraryFileForRoomTrack
 } from "./cache-library";
 export {
+  announceRoomTrackAvailability,
   buildManualCachePieceAvailabilityAnnouncement,
   isManualCachePieceCompatible,
   resolveMissingOwnedUploadedTracks,
@@ -503,99 +505,26 @@ export function useTrackUploads(options: {
 
   const announceRoomTrackAvailability = useCallback(
     async (trackId: string) => {
-      if (!roomSnapshot || !activeSession || !peerId || !shouldAnnounceTrackAvailability({ peerId })) {
-        return;
-      }
-
-      const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
-      const uploadedTrack = uploadedTracks[trackId] ?? null;
-      if (!track) {
-        return;
-      }
-      let fallbackFile: Blob | File | null = uploadedTrack?.file ?? null;
-      if (!fallbackFile) {
-        const cachedLibraryTrack = await getCachedLibraryTrackSummary(track.fileHash);
-        if (
-          isCachedLibraryTrackUsableForRoomTrack({
-            cachedTrack: cachedLibraryTrack,
-            roomTrack: track
-          })
-        ) {
-          fallbackFile = (await getCachedLibraryTrack(track.fileHash))?.file ?? null;
-        }
-      }
-      const announcementKey = [
-        roomSnapshot.room.id,
+      await announceRoomTrackAvailabilityFromSources({
+        roomId: roomSnapshot?.room.id,
+        roomTracks: roomSnapshot?.tracks ?? [],
+        activeSession,
+        peerId,
         trackId,
-        track.fileHash,
-        peerId
-      ].join("|");
-      const now = Date.now();
-      const lastAnnouncedAt = availabilityAnnouncementTtlRef.current.get(announcementKey) ?? 0;
-      if (
-        availabilityAnnouncementInFlightRef.current.has(announcementKey) ||
-        now - lastAnnouncedAt < 5_000
-      ) {
-        return;
-      }
-      availabilityAnnouncementInFlightRef.current.add(announcementKey);
-
-      try {
-        const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-        const rawCachedManifest =
-          (await getTrackPieceManifestByFileHash(track.fileHash)) ??
-          (await getTrackPieceManifest(trackId));
-        const cachedManifest = resolveReusableCachedPieceManifest({
-          cachedManifest: rawCachedManifest,
-          expectedManifest
-        });
-        if (!fallbackFile) {
-          const availabilityFromPieces = await buildTrackAvailabilityFromCache({
-            roomId: roomSnapshot.room.id,
-            trackId,
-            fileHash: track.fileHash,
-            peerId,
-            nickname: activeSession.nickname,
-            totalChunks: cachedManifest?.totalChunks ?? expectedManifest?.totalChunks,
-            chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize,
-            assetHash: track.fileHash
-          });
-          if (
-            availabilityFromPieces &&
-            availabilityFromPieces.availableChunks.length >= availabilityFromPieces.totalChunks
-          ) {
-            availabilityAnnouncementTtlRef.current.set(announcementKey, Date.now());
-            onAvailability(availabilityFromPieces);
-            emitAvailability(availabilityFromPieces);
-          }
-          return;
-        }
-
-        const availability = buildTrackAvailabilityFromManifest({
-          roomId: roomSnapshot.room.id,
-          trackId,
-          fileHash: track.fileHash,
-          track,
-          file: fallbackFile,
-          cacheManifest: cachedManifest,
-          peerId,
-          nickname: activeSession.nickname,
-          source: uploadedTrack ? "live_upload" : "local_cache",
-          mimeType: track.mimeType,
-          codec: track.codec ?? null,
-          sizeBytes: track.sizeBytes ?? fallbackFile.size,
-          durationMs: track.durationMs,
-          totalChunks: track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks,
-          chunkSize: track.relayManifest?.chunkSize ?? track.pieceManifest?.chunkSize
-        });
-        if (availability) {
-          availabilityAnnouncementTtlRef.current.set(announcementKey, Date.now());
+        uploadedTrack: uploadedTracks[trackId] ?? null,
+        inFlightAnnouncements: availabilityAnnouncementInFlightRef.current,
+        announcementTtl: availabilityAnnouncementTtlRef.current,
+        getCachedLibraryTrackSummary,
+        getCachedLibraryTrack,
+        getTrackPieceManifestByFileHash,
+        getTrackPieceManifest,
+        buildTrackAvailabilityFromCache,
+        buildTrackAvailabilityFromManifest,
+        publishAvailability: (availability) => {
           onAvailability(availability);
           emitAvailability(availability);
         }
-      } finally {
-        availabilityAnnouncementInFlightRef.current.delete(announcementKey);
-      }
+      });
     },
     [activeSession, emitAvailability, onAvailability, peerId, roomSnapshot, uploadedTracks]
   );
