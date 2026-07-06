@@ -19,16 +19,6 @@
     "deploy:check": "node scripts/deploy-check.mjs",
     "deploy:linux": "sh scripts/deploy-linux.sh"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@nestjs/core",
-      "@prisma/client",
-      "@prisma/engines",
-      "esbuild",
-      "prisma",
-      "sharp"
-    ]
-  },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "@next/eslint-plugin-next": "^15.2.2",

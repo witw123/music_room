@@ -14,6 +14,10 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     env:
       MUSIC_ROOM_PUBLIC_ORIGIN: ${{ vars.MUSIC_ROOM_PUBLIC_ORIGIN || secrets.MUSIC_ROOM_PUBLIC_ORIGIN }}
+      MUSIC_ROOM_UPDATER_ENDPOINT: https://github.com/witw123/music_room/releases/latest/download/latest.json
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_SIGNING_PUBLIC_KEY: ${{ vars.TAURI_SIGNING_PUBLIC_KEY || secrets.TAURI_SIGNING_PUBLIC_KEY }}
     strategy:
       fail-fast: false
       matrix:
@@ -24,12 +28,16 @@ jobs:
             release_glob: |
               apps/desktop/release/*.exe
               apps/desktop/release/*.msi
+              apps/desktop/release/*.json
+              apps/desktop/release/*.sig
           - name: macos
             runner: macos-latest
             artifact: desktop-macos
             release_glob: |
               apps/desktop/release/*.dmg
               apps/desktop/release/*.tar.gz
+              apps/desktop/release/*.json
+              apps/desktop/release/*.sig
           - name: linux
             runner: ubuntu-latest
             artifact: desktop-linux
@@ -37,6 +45,8 @@ jobs:
               apps/desktop/release/*.AppImage
               apps/desktop/release/*.deb
               apps/desktop/release/*.rpm
+              apps/desktop/release/*.json
+              apps/desktop/release/*.sig
 
     steps:
       - name: Checkout
@@ -146,6 +156,9 @@ jobs:
         with:
           path: release-assets
 
+      - name: Generate Tauri updater manifest
+        run: node scripts/write-tauri-latest-json.mjs release-assets
+
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
@@ -159,3 +172,5 @@ jobs:
             release-assets/**/*.deb
             release-assets/**/*.rpm
             release-assets/**/*.apk
+            release-assets/**/*.json
+            release-assets/**/*.sig

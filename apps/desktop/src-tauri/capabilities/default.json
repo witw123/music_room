@@ -15,6 +15,8 @@
   },
   "permissions": [
     "core:default",
-    "default"
+    "default",
+    "process:default",
+    "updater:default"
   ]
 }

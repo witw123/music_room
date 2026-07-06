@@ -19,7 +19,9 @@ const allowedFileNames = [
   ".deb",
   ".rpm",
   ".zip",
-  ".tar.gz"
+  ".tar.gz",
+  ".json",
+  ".sig"
 ];
 
 fs.mkdirSync(releaseDir, { recursive: true });

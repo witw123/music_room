@@ -13,6 +13,8 @@ const targetDir = path.join(
 const tauriConfigPath = path.join(rootDir, "src-tauri", "tauri.conf.json");
 const tauriCapabilityPath = path.join(rootDir, "src-tauri", "capabilities", "default.json");
 const defaultPublicOrigin = "https://example.com";
+const defaultUpdaterEndpoint =
+  "https://github.com/witw123/music_room/releases/latest/download/latest.json";
 const tauriBin =
   process.platform === "win32"
     ? path.join(rootDir, "node_modules", ".bin", "tauri.cmd")
@@ -44,6 +46,15 @@ async function prepareRemoteShellConfig(publicOrigin) {
   tauriConfig.build = {
     ...tauriConfig.build,
     frontendDist: `${publicOrigin}/app?client=desktop`
+  };
+
+  tauriConfig.plugins = {
+    ...tauriConfig.plugins,
+    updater: {
+      ...(tauriConfig.plugins?.updater ?? {}),
+      endpoints: [process.env.MUSIC_ROOM_UPDATER_ENDPOINT || defaultUpdaterEndpoint],
+      pubkey: process.env.TAURI_SIGNING_PUBLIC_KEY || tauriConfig.plugins?.updater?.pubkey || ""
+    }
   };
 
   capabilityConfig.remote = {
@@ -81,6 +92,9 @@ async function main() {
     throw new Error(
       "MUSIC_ROOM_PUBLIC_ORIGIN is required when building desktop release bundles."
     );
+  }
+  if (isBuildCommand && !process.env.TAURI_SIGNING_PUBLIC_KEY) {
+    throw new Error("TAURI_SIGNING_PUBLIC_KEY is required when building updater-enabled desktop bundles.");
   }
 
   const publicOrigin = normalizePublicOrigin(process.env.MUSIC_ROOM_PUBLIC_ORIGIN);

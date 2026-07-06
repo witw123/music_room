@@ -12,12 +12,14 @@ import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
+import { useClientUpdateControls } from "@/components/ClientUpdateManager";
 
 const lastRoomStorageKey = "music-room-last-room";
 
 export function RoomsHomePage() {
   const router = useRouter();
   const clientPlatform = getClientPlatformFromBrowser();
+  const updateControls = useClientUpdateControls();
   const workspaceEntryHref = buildAppEntryHref(clientPlatform);
   const buildRoomHref = (roomId: string) =>
     clientPlatform ? `/room/${roomId}?client=${clientPlatform}` : `/room/${roomId}`;
@@ -179,14 +181,31 @@ export function RoomsHomePage() {
       </div>
 
       <div className="absolute right-4 top-6 z-20 sm:right-6 lg:right-8">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleLogout}
-          className="font-medium text-white/40 transition-all hover:bg-white/5 hover:text-white"
-        >
-          退出登录
-        </Button>
+        <div className="flex items-center gap-2">
+          {clientPlatform ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void updateControls?.checkForUpdates("manual")}
+              disabled={updateControls?.checking}
+              className="font-medium text-white/40 transition-all hover:bg-white/5 hover:text-white"
+              type="button"
+            >
+              {updateControls?.checking ? "检查中..." : "检查更新"}
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleLogout}
+            className="font-medium text-white/40 transition-all hover:bg-white/5 hover:text-white"
+          >
+            退出登录
+          </Button>
+        </div>
+        {updateControls?.statusMessage ? (
+          <p className="mt-2 text-right text-xs text-white/40">{updateControls.statusMessage}</p>
+        ) : null}
       </div>
 
 
