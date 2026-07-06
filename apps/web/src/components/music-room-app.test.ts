@@ -187,6 +187,24 @@ describe("room page cache library actions boundary", () => {
   });
 });
 
+describe("room page playback effects boundary", () => {
+  it("hosts playback effect orchestration outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const playbackEffectsSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-playback-effects.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("getPlaybackSourceInitializationKey({");
+    expect(appSource).not.toContain("resolvePlaybackSourceResetReason({");
+    expect(appSource).not.toContain("consumeRoomSnapshotHandoff(initialRoomId)");
+    expect(playbackEffectsSource).toContain("export function useRoomPlaybackEffects");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({

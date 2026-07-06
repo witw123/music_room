@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useMemo, useReducer, useRef, useState } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
 import {
   ChunkScheduler,
@@ -8,7 +8,6 @@ import {
   useAvailabilityAnnouncements,
   usePeerDiagnostics
 } from "@/features/p2p";
-import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
@@ -17,19 +16,14 @@ import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
-import { getSlidingWindowPlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   buildProgressiveTrackManifest,
   getProgressiveEngineType
 } from "@/features/playback/progressive-playback";
-import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
-import {
-  resolvePlaybackSourceResetReason
-} from "@/features/room/hooks/room-playback-topology";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import {
@@ -37,19 +31,17 @@ import {
   useRoomDerivedState
 } from "@/components/room/hooks/use-room-derived-state";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
-import { consumeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import {
   initialRoomStateStore,
   roomStateReducer
 } from "@/features/room/room-state-reducer";
 import {
-  getPlaybackSourceInitializationKey,
-  shouldInitializePlaybackSource,
   useRoomPageDerived
 } from "@/components/room/hooks/use-room-page-derived";
 import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
 import { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
+import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playback-effects";
 import { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 
@@ -583,124 +575,25 @@ export function MusicRoomApp({
     setStatusMessage
   });
 
-  useEffect(() => {
-    if (
-      isCurrentSourceOwner &&
-      playbackStatus === "playing" &&
-      currentPlaybackTrackId &&
-      cachedFullLocalPlaybackTrack?.trackId === currentPlaybackTrackId
-    ) {
-      void ensureSourcePlaybackStarted();
-    }
-  }, [
-    cachedFullLocalPlaybackTrack?.trackId,
+  useRoomPlaybackEffects({
+    cachedFullLocalPlaybackTrack,
     currentPlaybackTrackId,
-    ensureSourcePlaybackStarted,
-    isCurrentSourceOwner,
-    playbackStatus
-  ]);
-
-  useEffect(() => {
-    if (!initialRoomId) {
-      return;
-    }
-
-    const handoffSnapshot = consumeRoomSnapshotHandoff(initialRoomId);
-    if (!handoffSnapshot) {
-      return;
-    }
-
-    dispatchRoomStateEvent({
-      type: "bootstrap-handoff",
-      snapshot: handoffSnapshot
-    });
-  }, [initialRoomId]);
-
-  useEffect(() => {
-    const nextInitializationKey = getPlaybackSourceInitializationKey({
-      playbackSurfaceKey,
-      currentPlaybackTrackId,
-      currentTrack,
-      currentProgressiveEngineTypeForSource,
-      hasPlayableFullLocalTrack
-    });
-    if (
-      !shouldInitializePlaybackSource({
-        previousInitializationKey: playbackSourceInitializationKeyRef.current,
-        nextInitializationKey
-      })
-    ) {
-      return;
-    }
-    playbackSourceInitializationKeyRef.current = nextInitializationKey;
-
-    if (!currentPlaybackTrackId) {
-      setActivePlaybackSource("progressive-local");
-      setProgressiveFallbackReason(null);
-      return;
-    }
-
-    setActivePlaybackSource(
-      getSlidingWindowPlaybackSource({
-        hasFullLocalTrack: hasPlayableFullLocalTrack,
-        format: resolveSlidingWindowFormat({
-          mimeType: currentTrack?.mimeType ?? null,
-          codec: currentTrack?.codec ?? null,
-          title: currentTrack?.title ?? null
-        }),
-        progressiveEngineType: currentProgressiveEngineTypeForSource
-      })
-    );
-    setProgressiveFallbackReason(null);
-  }, [
-    playbackSurfaceKey,
-    currentPlaybackTrackId,
-    currentTrack,
     currentProgressiveEngineTypeForSource,
+    currentTrack,
+    dispatchRoomStateEvent,
+    ensureSourcePlaybackStarted,
     hasPlayableFullLocalTrack,
-    setActivePlaybackSource,
-    setProgressiveFallbackReason
-  ]);
-
-  const previousPlaybackRef = useRef(playbackTopologySnapshot);
-
-  useEffect(() => {
-    const previousPlayback = previousPlaybackRef.current;
-    const nextPlayback = playbackTopologySnapshot;
-    const sourceResetReason = resolvePlaybackSourceResetReason({
-      previousPlayback,
-      nextPlayback
-    });
-    previousPlaybackRef.current = nextPlayback;
-
-    recordPeerDiagnostic({
-      peerId: "system",
-      channelKind: "system",
-      direction: "local",
-      event: "playback-surface-state",
-      summary: playbackSurfaceKey
-        ? `播放面 ${playbackSurfaceKey}`
-        : "当前没有活跃播放面",
-      recordEvent: false,
-      update: (snapshot) => ({
-        ...snapshot,
-        progressivePlaybackStatus: {
-          ...(
-            snapshot.progressivePlaybackStatus ??
-            createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-          ),
-          playbackSurfaceKey,
-          playbackTimelineKey,
-          sourceResetReason
-        }
-      })
-    });
-  }, [
+    initialRoomId,
+    isCurrentSourceOwner,
+    playbackSourceInitializationKeyRef,
+    playbackStatus,
     playbackSurfaceKey,
     playbackTimelineKey,
+    playbackTopologySnapshot,
     recordPeerDiagnostic,
-    playbackTopologySnapshot
-  ]);
+    setActivePlaybackSource,
+    setProgressiveFallbackReason
+  });
 
   const handleCopyJoinCode = useCallback(async () => {
     if (!roomSnapshot) {
