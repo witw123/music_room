@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
@@ -9,6 +12,12 @@ import {
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
 } from "./use-room-realtime-connection";
+
+const readRoomRealtimeConnectionSource = () =>
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "use-room-realtime-connection.ts"),
+    "utf8"
+  ).replace(/\r\n/g, "\n");
 
 function createPlayback(overrides: Partial<PlaybackSnapshot> = {}): PlaybackSnapshot {
   return {
@@ -256,5 +265,16 @@ describe("shouldQueueIncomingAvailability", () => {
         activeRouteRoomId: "room_1"
       })
     ).toBe(false);
+  });
+});
+
+describe("room realtime timer dependencies", () => {
+  it("keeps watchdog and presence timers free of room snapshot object identity", () => {
+    const source = readRoomRealtimeConnectionSource();
+    const dependencySource = [...source.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)]
+      .map((match) => match.groups?.deps ?? "")
+      .join("\n");
+
+    expect(dependencySource).not.toMatch(/^\s+roomSnapshot,\s*$/m);
   });
 });
