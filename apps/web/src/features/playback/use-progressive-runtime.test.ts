@@ -466,7 +466,13 @@ describe("playback runtime pipeline keys", () => {
     expect(runtimeTickHookSource).toContain("runtimeTickOrchestratorRef.current.subscribe");
     expect(runtimeTickHookSource).toContain("runtimeTickOrchestratorRef.current.getSnapshot");
 
-    const mountIndex = runtimeTickHookSource.indexOf("runtimeTickOrchestratorRef.current.mount();");
+    expect(runtimeTickHookSource).toContain(
+      "const runtimeTickOrchestrator = runtimeTickOrchestratorRef.current;"
+    );
+    expect(runtimeTickHookSource).toContain("runtimeTickOrchestrator.mount();");
+    expect(runtimeTickHookSource).toContain("runtimeTickOrchestrator.unmount();");
+
+    const mountIndex = runtimeTickHookSource.indexOf("runtimeTickOrchestrator.mount();");
     expect(mountIndex).toBeGreaterThan(-1);
     const dependencyStart = runtimeTickHookSource.indexOf("  }, [", mountIndex);
     const dependencyEnd = runtimeTickHookSource.indexOf("]);", dependencyStart);

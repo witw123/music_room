@@ -127,9 +127,10 @@ export function usePlaybackRuntimeTickOrchestrator(): PlaybackRuntimeTickRefs {
   void runtimeOrchestratorSnapshot;
 
   useEffect(() => {
-    runtimeTickOrchestratorRef.current.mount();
+    const runtimeTickOrchestrator = runtimeTickOrchestratorRef.current;
+    runtimeTickOrchestrator.mount();
     return () => {
-      runtimeTickOrchestratorRef.current.unmount();
+      runtimeTickOrchestrator.unmount();
     };
   }, [runtimeTickOrchestratorRef]);
 
