@@ -1,11 +1,12 @@
-import type { TrackMeta } from "@music-room/shared";
+import type { TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
 } from "@/lib/indexeddb";
 import type {
   CachedLibraryTrack,
-  CachedLibraryTrackFile
+  CachedLibraryTrackFile,
+  UploadedTrack
 } from "@/features/upload/audio-utils";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 
@@ -39,6 +40,8 @@ type CacheLibraryTrackUpsertRecord = {
   lastSourceRoomId: string;
   lastOwnerNickname: string | null;
 };
+
+type TrackRegistrationDraft = Omit<TrackMeta, "id"> & { id?: string };
 
 export function createInFlightCachedLibraryTrackFileLoader(
   loadCachedTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>
@@ -209,6 +212,131 @@ export async function exportCachedLibraryTrackFile(input: {
   input.clickDownload(downloadUrl, buildCachedLibraryFileName(cachedTrack));
   input.defer(() => input.revokeObjectUrl(downloadUrl));
   return true;
+}
+
+export async function deleteUploadedTrackArtifacts(input: {
+  trackId: string;
+  roomId: string | null | undefined;
+  deleteCachedPiecesForTrack: (trackId: string) => Promise<unknown>;
+  deleteManualCacheTask: (roomId: string, trackId: string) => Promise<unknown>;
+}) {
+  await input.deleteCachedPiecesForTrack(input.trackId);
+  if (input.roomId) {
+    await input.deleteManualCacheTask(input.roomId, input.trackId);
+  }
+
+  return { removedTrackIds: [input.trackId] };
+}
+
+export async function deleteRoomTrackArtifacts(input: {
+  trackIds: string[];
+  roomId: string | null | undefined;
+  deleteCachedPiecesForTracks: (trackIds: string[]) => Promise<unknown>;
+  deleteManualCacheTasksForTracks: (roomId: string, trackIds: string[]) => Promise<unknown>;
+}) {
+  const removedTrackIds = [...new Set(input.trackIds.filter(Boolean))];
+  if (removedTrackIds.length === 0) {
+    return { removedTrackIds };
+  }
+
+  await input.deleteCachedPiecesForTracks(removedTrackIds);
+  if (input.roomId) {
+    await input.deleteManualCacheTasksForTracks(input.roomId, removedTrackIds);
+  }
+
+  return { removedTrackIds };
+}
+
+export async function importCachedLibraryTrackToRoom(input: {
+  fileHash: string;
+  activeSession: { userId: string; nickname: string } | null;
+  roomId: string | null | undefined;
+  roomTracks: TrackMeta[];
+  peerId: string;
+  shouldAnnounceAvailability: boolean;
+  loadCachedLibraryTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>;
+  createObjectUrl: (file: File) => string;
+  revokeObjectUrl: (href: string) => void;
+  buildTrackMeta: (file: File, objectUrl: string) => Promise<TrackRegistrationDraft>;
+  buildRegisterTrackPayload: (track: TrackRegistrationDraft) => unknown;
+  registerTrack: (roomId: string, payload: unknown) => Promise<TrackMeta>;
+  syncRoomSnapshot: (roomId: string) => Promise<void>;
+  buildTrackAvailabilityFromFile: (input: {
+    roomId: string;
+    trackId: string;
+    fileHash: string;
+    file: File;
+    peerId: string;
+    nickname: string;
+    source: "live_upload";
+    mimeType: string | null;
+    codec: string | null;
+    sizeBytes: number;
+    durationMs: number;
+    totalChunks?: number;
+    chunkSize?: number;
+  }) => Promise<TrackAvailabilityAnnouncement>;
+  publishAvailability: (availability: TrackAvailabilityAnnouncement) => void;
+}): Promise<{ trackId: string; upload: UploadedTrack } | null> {
+  if (!input.activeSession || !input.roomId) {
+    return null;
+  }
+
+  const cachedTrack = await input.loadCachedLibraryTrackFile(input.fileHash);
+  if (!cachedTrack) {
+    return null;
+  }
+
+  let registeredTrack =
+    input.roomTracks.find(
+      (track) =>
+        track.ownerSessionId === input.activeSession?.userId &&
+        track.fileHash === input.fileHash
+    ) ?? null;
+
+  if (!registeredTrack) {
+    const tempObjectUrl = input.createObjectUrl(cachedTrack.file);
+    try {
+      const trackMeta = await input.buildTrackMeta(cachedTrack.file, tempObjectUrl);
+      registeredTrack = await input.registerTrack(
+        input.roomId,
+        input.buildRegisterTrackPayload(trackMeta)
+      );
+    } finally {
+      input.revokeObjectUrl(tempObjectUrl);
+    }
+    await input.syncRoomSnapshot(input.roomId);
+  }
+
+  const uploadObjectUrl = input.createObjectUrl(cachedTrack.file);
+  if (input.peerId && input.shouldAnnounceAvailability) {
+    input.publishAvailability(
+      await input.buildTrackAvailabilityFromFile({
+        roomId: input.roomId,
+        trackId: registeredTrack.id,
+        fileHash: registeredTrack.fileHash,
+        file: cachedTrack.file,
+        peerId: input.peerId,
+        nickname: input.activeSession.nickname,
+        source: "live_upload",
+        mimeType: registeredTrack.mimeType ?? null,
+        codec: registeredTrack.codec ?? null,
+        sizeBytes: registeredTrack.sizeBytes ?? cachedTrack.file.size,
+        durationMs: registeredTrack.durationMs,
+        totalChunks: registeredTrack.pieceManifest?.totalChunks,
+        chunkSize: registeredTrack.pieceManifest?.chunkSize
+      })
+    );
+  }
+
+  return {
+    trackId: registeredTrack.id,
+    upload: {
+      file: cachedTrack.file,
+      objectUrl: uploadObjectUrl,
+      origin: "live-upload"
+    }
+  };
 }
 
 export function buildCachedLibraryFileName(input: {

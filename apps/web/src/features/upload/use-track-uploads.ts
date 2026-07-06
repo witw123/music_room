@@ -44,9 +44,12 @@ import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-sour
 import {
   buildCachedLibraryTrackUpsertRecord,
   createInFlightCachedLibraryTrackFileLoader,
+  deleteRoomTrackArtifacts as deleteRoomTrackArtifactsFromLibrary,
   deleteCachedLibraryTrackEntry as deleteCachedLibraryTrackEntryFromLibrary,
+  deleteUploadedTrackArtifacts as deleteUploadedTrackArtifactsFromLibrary,
   exportCachedLibraryTrackFile,
   hasUsableCachedLibraryFileForRoomTrack,
+  importCachedLibraryTrackToRoom as importCachedLibraryTrackToRoomFromLibrary,
   loadCacheLibrarySnapshot,
   toCachedLibraryFile,
   toCachedLibraryTrackFile
@@ -1183,39 +1186,43 @@ export function useTrackUploads(options: {
     ]
   );
 
-  const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
-    await deleteCachedPiecesForTrack(trackId);
-    if (roomSnapshot?.room.id) {
-      await deleteManualCacheTask(roomSnapshot.room.id, trackId);
-    }
-    manualCacheChunkIndexesRef.current.delete(trackId);
-    manualCacheAssemblingTrackIdsRef.current.delete(trackId);
-    setUploadedTracks((current) => removeTracksFromUploads(current, [trackId]));
-  }, [roomSnapshot?.room.id]);
+  const deleteUploadedTrackArtifacts = useCallback(
+    async (trackId: string) => {
+      const result = await deleteUploadedTrackArtifactsFromLibrary({
+        trackId,
+        roomId: roomSnapshot?.room.id,
+        deleteCachedPiecesForTrack,
+        deleteManualCacheTask
+      });
+      for (const removedTrackId of result.removedTrackIds) {
+        manualCacheChunkIndexesRef.current.delete(removedTrackId);
+        manualCacheAssemblingTrackIdsRef.current.delete(removedTrackId);
+      }
+      setUploadedTracks((current) => removeTracksFromUploads(current, result.removedTrackIds));
+    },
+    [roomSnapshot?.room.id]
+  );
 
   const deleteRoomTrackArtifacts = useCallback(
     async (trackIds: string[]) => {
-      const uniqueTrackIds = [...new Set(trackIds.filter(Boolean))];
-      if (uniqueTrackIds.length === 0) {
-        return;
-      }
-
-      await deleteCachedPiecesForTracks(uniqueTrackIds);
-      for (const trackId of uniqueTrackIds) {
+      const result = await deleteRoomTrackArtifactsFromLibrary({
+        trackIds,
+        roomId: roomSnapshot?.room.id,
+        deleteCachedPiecesForTracks,
+        deleteManualCacheTasksForTracks
+      });
+      for (const trackId of result.removedTrackIds) {
         manualCacheChunkIndexesRef.current.delete(trackId);
         manualCacheAssemblingTrackIdsRef.current.delete(trackId);
       }
-      setUploadedTracks((current) => removeTracksFromUploads(current, uniqueTrackIds));
+      setUploadedTracks((current) => removeTracksFromUploads(current, result.removedTrackIds));
       setManualCacheTasks((current) => {
         const next = { ...current };
-        for (const trackId of uniqueTrackIds) {
+        for (const trackId of result.removedTrackIds) {
           delete next[trackId];
         }
         return next;
       });
-      if (roomSnapshot?.room.id) {
-        await deleteManualCacheTasksForTracks(roomSnapshot.room.id, uniqueTrackIds);
-      }
     },
     [roomSnapshot?.room.id]
   );
@@ -1273,65 +1280,39 @@ export function useTrackUploads(options: {
         return null;
       }
 
-      const cachedTrack = await loadCachedLibraryTrackFile(fileHash);
-      if (!cachedTrack) {
+      const result = await importCachedLibraryTrackToRoomFromLibrary({
+        fileHash,
+        activeSession,
+        roomId: roomSnapshot.room.id,
+        roomTracks: roomSnapshot.tracks,
+        peerId,
+        shouldAnnounceAvailability: shouldAnnounceTrackAvailability({ peerId }),
+        loadCachedLibraryTrackFile,
+        createObjectUrl: (file) => URL.createObjectURL(file),
+        revokeObjectUrl: (href) => URL.revokeObjectURL(href),
+        buildTrackMeta: (file, objectUrl) => buildTrackMeta(file, objectUrl, activeSession),
+        buildRegisterTrackPayload: buildCachedLibraryTrackRegisterPayload,
+        registerTrack: (roomId, payload) =>
+          musicRoomApi.registerTrack(
+            roomId,
+            payload as Parameters<typeof musicRoomApi.registerTrack>[1]
+          ),
+        syncRoomSnapshot,
+        buildTrackAvailabilityFromFile,
+        publishAvailability: (availability) => {
+          onAvailability(availability);
+          emitAvailability(availability);
+        }
+      });
+      if (!result) {
         return null;
       }
 
-      const roomId = roomSnapshot.room.id;
-      const existingTrack =
-        roomSnapshot.tracks.find(
-          (track) =>
-            track.ownerSessionId === activeSession.userId &&
-            track.fileHash === fileHash
-        ) ?? null;
-
-      let registeredTrack = existingTrack;
-      if (!registeredTrack) {
-        const tempObjectUrl = URL.createObjectURL(cachedTrack.file);
-        try {
-          const trackMeta = await buildTrackMeta(cachedTrack.file, tempObjectUrl, activeSession);
-          registeredTrack = await musicRoomApi.registerTrack(
-            roomId,
-            buildCachedLibraryTrackRegisterPayload(trackMeta)
-          );
-        } finally {
-          URL.revokeObjectURL(tempObjectUrl);
-        }
-        await syncRoomSnapshot(roomId);
-      }
-
-      const uploadedObjectUrl = URL.createObjectURL(cachedTrack.file);
       setUploadedTracks((current) => ({
         ...current,
-        [registeredTrack.id]: {
-          file: cachedTrack.file,
-          objectUrl: uploadedObjectUrl,
-          origin: "live-upload"
-        }
+        [result.trackId]: result.upload
       }));
-
-      if (peerId && shouldAnnounceTrackAvailability({ peerId })) {
-        const availability = await buildTrackAvailabilityFromFile({
-          roomId,
-          trackId: registeredTrack.id,
-          fileHash: registeredTrack.fileHash,
-          file: cachedTrack.file,
-          peerId,
-          nickname: activeSession.nickname,
-          source: "live_upload",
-          mimeType: registeredTrack.mimeType,
-          codec: registeredTrack.codec ?? null,
-          sizeBytes: registeredTrack.sizeBytes ?? cachedTrack.file.size,
-          durationMs: registeredTrack.durationMs,
-          totalChunks: registeredTrack.pieceManifest?.totalChunks,
-          chunkSize: registeredTrack.pieceManifest?.chunkSize
-        });
-        onAvailability(availability);
-        emitAvailability(availability);
-      }
-
-      return registeredTrack.id;
+      return result.trackId;
     },
     [
       activeSession,
