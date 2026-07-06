@@ -12,6 +12,21 @@ import {
   shouldRestartManualCacheProviderPeer,
   shouldRetryManualCacheProviderBootstrap
 } from "./use-manual-cache-downloader";
+import { resolveManualCacheTrackPlan as resolveManualCacheTrackPlanFromQueue } from "./manual-cache-download-queue";
+import { buildManualCacheSchedulerAvailability as buildManualCacheSchedulerAvailabilityFromProgress } from "./manual-cache-download-progress";
+import { useManualCacheDownloadEffects } from "./manual-cache-download-effects";
+import { planManualCacheDirectRequests as planManualCacheDirectRequestsFromPieceFetch } from "./manual-cache-piece-fetch";
+
+describe("manual cache downloader module boundaries", () => {
+  it("hosts queue planning and progress derivation outside the hook module", () => {
+    expect(resolveManualCacheTrackPlanFromQueue).toBe(resolveManualCacheTrackPlan);
+    expect(buildManualCacheSchedulerAvailabilityFromProgress).toBe(
+      buildManualCacheSchedulerAvailability
+    );
+    expect(planManualCacheDirectRequestsFromPieceFetch).toBe(planManualCacheDirectRequests);
+    expect(typeof useManualCacheDownloadEffects).toBe("function");
+  });
+});
 
 describe("buildManualCacheSchedulerAvailability", () => {
   it("synthesizes current online uploader availability from the room manifest", () => {
