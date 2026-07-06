@@ -151,6 +151,42 @@ describe("room page cached full-local playback boundary", () => {
   });
 });
 
+describe("room page playback actions boundary", () => {
+  it("hosts playback action orchestration outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const playbackActionsSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-playback-actions.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("const ensureRoomAudioUnlocked = useCallback");
+    expect(appSource).not.toContain("const primeFullLocalTrackPlayback = useCallback");
+    expect(appSource).not.toContain("const armPlaybackStart = useCallback");
+    expect(playbackActionsSource).toContain("export function useRoomPlaybackActions");
+  });
+});
+
+describe("room page cache library actions boundary", () => {
+  it("hosts cache and library action orchestration outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const cacheActionsSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-cache-library-actions.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("const handleStartManualCacheDownload = useCallback");
+    expect(appSource).not.toContain("const handleDeleteCachedLibraryTrack = useCallback");
+    expect(appSource).not.toContain("const handleAddCachedLibraryTrackToLibrary = useCallback");
+    expect(cacheActionsSource).toContain("export function useRoomCacheLibraryActions");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({

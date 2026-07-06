@@ -9,7 +9,6 @@ import {
   usePeerDiagnostics
 } from "@/features/p2p";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-import { toUserFacingError } from "@/lib/music-room-ui";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
@@ -18,15 +17,10 @@ import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
-import {
-  createPlaybackStartIntent,
-  type PlaybackStartIntent
-} from "@/features/playback/playback-start-intent";
 import { getSlidingWindowPlaybackSource } from "@/features/playback/progressive-source-controller";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   buildProgressiveTrackManifest,
-  getEffectivePlaybackPositionMs,
   getProgressiveEngineType
 } from "@/features/playback/progressive-playback";
 import { resolveSlidingWindowFormat } from "@/features/playback/sliding-window/format-detection";
@@ -55,6 +49,8 @@ import {
   useRoomPageDerived
 } from "@/components/room/hooks/use-room-page-derived";
 import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
+import { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
+import { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 
 export {
@@ -67,6 +63,10 @@ export {
   shouldClearCachedFullLocalPlaybackTrack,
   shouldInitializePlaybackSource
 } from "@/components/room/hooks/use-room-page-derived";
+export {
+  runPlaybackMutationAfterLocalPrime,
+  startBestEffortPlaybackAudioUnlock
+} from "@/components/room/hooks/use-room-playback-actions";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
@@ -75,23 +75,6 @@ type MusicRoomAppProps = {
   workspaceOnly?: boolean;
   initialRoomId?: string | null;
 };
-
-export function runPlaybackMutationAfterLocalPrime(input: {
-  primeLocalPlayback: () => Promise<unknown>;
-  mutatePlayback: () => Promise<unknown>;
-}) {
-  void input.primeLocalPlayback().catch(() => undefined);
-  return input.mutatePlayback();
-}
-
-export function startBestEffortPlaybackAudioUnlock(input: {
-  unlockAudio: () => Promise<unknown>;
-  onError?: (error: unknown) => void;
-}) {
-  void input.unlockAudio().catch((error) => {
-    input.onError?.(error);
-  });
-}
 
 export function MusicRoomApp({
   workspaceOnly = true,
@@ -539,6 +522,67 @@ export function MusicRoomApp({
     refreshPlaylists
   });
 
+  const {
+    handleAudioUnlock,
+    handleFilesSelected,
+    handleLocalPlaybackReady,
+    handleNextTrack,
+    handlePlayQueueItem,
+    handlePlaybackBucketChange,
+    handlePlaybackEnded,
+    handlePlaybackPositionChange,
+    handlePlayTrack,
+    handlePrevTrack
+  } = useRoomPlaybackActions({
+    audioRef,
+    currentPlaybackPositionRef,
+    roomPlaybackRef,
+    roomSnapshot,
+    currentTrack,
+    currentPlaybackTrackId,
+    playbackMediaEpoch,
+    playbackQueueVersion,
+    playbackRevision,
+    playbackStatus,
+    isCurrentSourceOwner,
+    audioUnlocked,
+    volume,
+    fullLocalPlaybackTracks,
+    loadCachedFullLocalPlaybackTrack,
+    ensureSourcePlaybackStarted,
+    handleTrackFilesSelected,
+    playTrack,
+    playQueueItem,
+    prevTrack,
+    nextTrack,
+    recordPeerDiagnostic,
+    setActivePlaybackSource,
+    setAudioBlockedOverlay,
+    setAudioUnlocked,
+    setLastSourceStartError,
+    setMediaConnectionState,
+    setPlaybackStartIntent,
+    setProgressiveFallbackReason,
+    setSchedulerPlaybackBucketMs,
+    setStatusMessage
+  });
+
+  const {
+    handleAddCachedLibraryTrackToLibrary,
+    handleDeleteCachedLibraryTrack,
+    handleExportCachedLibraryTrack,
+    handlePauseManualCacheDownload,
+    handleStartManualCacheDownload
+  } = useRoomCacheLibraryActions({
+    roomSnapshot,
+    startManualCacheDownload,
+    pauseManualCacheDownload,
+    deleteCachedLibraryTrackEntry,
+    exportCachedLibraryTrack,
+    importCachedLibraryTrackToRoom,
+    setStatusMessage
+  });
+
   useEffect(() => {
     if (
       isCurrentSourceOwner &&
@@ -658,46 +702,6 @@ export function MusicRoomApp({
     playbackTopologySnapshot
   ]);
 
-  const handleStartManualCacheDownload = useCallback(
-    async (trackId: string) => {
-      try {
-        await startManualCacheDownload(trackId);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
-    },
-    [setStatusMessage, startManualCacheDownload]
-  );
-
-  const handlePauseManualCacheDownload = useCallback((trackId: string) => {
-    pauseManualCacheDownload(trackId);
-    const trackTitle = roomSnapshot?.tracks.find((track) => track.id === trackId)?.title ?? "歌曲";
-    setStatusMessage(`已暂停《${trackTitle}》的缓存下载。`);
-  }, [pauseManualCacheDownload, roomSnapshot?.tracks, setStatusMessage]);
-
-  const handleDeleteCachedLibraryTrack = useCallback(
-    async (fileHash: string) => {
-      try {
-        await deleteCachedLibraryTrackEntry(fileHash);
-        setStatusMessage("已从我的缓存库移除歌曲。");
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
-    },
-    [deleteCachedLibraryTrackEntry, setStatusMessage]
-  );
-
-  const handleExportCachedLibraryTrack = useCallback(
-    async (fileHash: string) => {
-      try {
-        await exportCachedLibraryTrack(fileHash);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
-    },
-    [exportCachedLibraryTrack, setStatusMessage]
-  );
-
   const handleCopyJoinCode = useCallback(async () => {
     if (!roomSnapshot) {
       return;
@@ -710,359 +714,6 @@ export function MusicRoomApp({
       setStatusMessage("复制房间码失败，请手动复制。");
     }
   }, [roomSnapshot, setStatusMessage]);
-
-  const ensureRoomAudioUnlocked = useCallback(
-    async (reason: string) => {
-      if (roomAudioOutput.isActivated()) {
-        setAudioUnlocked(true);
-        setLastSourceStartError(null);
-        return true;
-      }
-
-      try {
-        const primeResult = await roomAudioOutput.primeOutputs({
-          localAudio: audioRef.current
-        });
-        setAudioUnlocked(primeResult.ok);
-        if (!primeResult.ok) {
-          const message = "浏览器仍未允许房间音频输出";
-          setLastSourceStartError(message);
-          setStatusMessage(message);
-          recordPeerDiagnostic({
-            peerId: "system",
-            channelKind: "system",
-            direction: "local",
-            event: "audio-unlock-failed",
-            level: "warning",
-            summary: message,
-            update: (snapshot) => ({
-              ...snapshot,
-              lastError: message,
-              progressivePlaybackStatus: {
-                ...(
-                  snapshot.progressivePlaybackStatus ??
-                  createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-                ),
-                audioUnlocked: false,
-                lastSourceStartError: message
-              }
-            })
-          });
-          return false;
-        }
-        setLastSourceStartError(null);
-        recordPeerDiagnostic({
-          peerId: "system",
-          channelKind: "system",
-          direction: "local",
-          event: "audio-unlocked",
-          summary: `房间音频已解锁：${reason}`,
-          recordEvent: false,
-          update: (snapshot) => ({
-            ...snapshot,
-            progressivePlaybackStatus: {
-              ...(
-                snapshot.progressivePlaybackStatus ??
-                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-              ),
-              audioUnlocked: true,
-              lastSourceStartError: null
-            }
-          })
-        });
-        return true;
-      } catch (error) {
-        const message = toUserFacingError(error);
-        setAudioUnlocked(roomAudioOutput.isActivated());
-        setLastSourceStartError(message);
-        recordPeerDiagnostic({
-          peerId: "system",
-          channelKind: "system",
-          direction: "local",
-          event: "audio-unlock-failed",
-          level: "error",
-          summary: `房间音频解锁失败：${message}`,
-          update: (snapshot) => ({
-            ...snapshot,
-            lastError: `房间音频解锁失败：${message}`,
-            progressivePlaybackStatus: {
-              ...(
-                snapshot.progressivePlaybackStatus ??
-                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-              ),
-              audioUnlocked: roomAudioOutput.isActivated(),
-              lastSourceStartError: message
-            }
-          })
-        });
-        return false;
-      }
-    },
-    [
-      audioRef,
-      recordPeerDiagnostic,
-      setAudioUnlocked,
-      setLastSourceStartError,
-      setStatusMessage
-    ]
-  );
-
-  const handleLocalPlaybackReady = useCallback(() => {
-    void ensureSourcePlaybackStarted();
-  }, [ensureSourcePlaybackStarted]);
-
-  const handlePlaybackPositionChange = useCallback((positionMs: number) => {
-    currentPlaybackPositionRef.current = positionMs;
-  }, []);
-
-  const handlePlaybackBucketChange = useCallback((bucketMs: number) => {
-    setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
-  }, [setSchedulerPlaybackBucketMs]);
-
-  const primeFullLocalTrackPlayback = useCallback(
-    async (trackId: string | null | undefined) => {
-      if (!trackId) {
-        return false;
-      }
-
-      const localTrack =
-        fullLocalPlaybackTracks[trackId] ?? (await loadCachedFullLocalPlaybackTrack(trackId));
-      const audio = audioRef.current;
-      if (!localTrack || !audio) {
-        return false;
-      }
-
-      const track =
-        roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? currentTrack ?? null;
-      const playback = roomPlaybackRef.current;
-      const positionMs =
-        playback?.currentTrackId === trackId
-          ? getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now())
-          : 0;
-
-      const hadSrcObject = !!audio.srcObject;
-      if (audio.srcObject) {
-        audio.srcObject = null;
-      }
-      if (audio.src !== localTrack.objectUrl || hadSrcObject) {
-        audio.src = localTrack.objectUrl;
-        audio.load();
-      }
-      audio.muted = false;
-      audio.volume = volume;
-      if (Number.isFinite(positionMs) && positionMs > 0) {
-        audio.currentTime = Math.max(0, positionMs / 1000);
-      }
-
-      const playResult = await roomAudioOutput.playElement(audio);
-      recordPeerDiagnostic({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: playResult.ok ? "full-local-prime-play" : "full-local-prime-play-failed",
-        level: playResult.ok ? "info" : "warning",
-        summary: playResult.ok
-          ? `点击手势内已预启动本地完整音频 ${trackId}`
-          : `点击手势内本地完整音频启动失败 ${trackId}: ${playResult.error ?? "play() failed"}`,
-        recordEvent: false
-      });
-      if (playResult.ok) {
-        setActivePlaybackSource("full-local");
-        setProgressiveFallbackReason(null);
-        setMediaConnectionState("live");
-      }
-      return playResult.ok;
-    },
-    [
-      audioRef,
-      currentTrack,
-      fullLocalPlaybackTracks,
-      loadCachedFullLocalPlaybackTrack,
-      recordPeerDiagnostic,
-      roomSnapshot?.tracks,
-      setActivePlaybackSource,
-      setMediaConnectionState,
-      setProgressiveFallbackReason,
-      volume
-    ]
-  );
-
-  const handleFilesSelected = useCallback(
-    async (files: FileList | File[] | null) => {
-      try {
-        if (files && Array.from(files).length > 0) {
-          await ensureRoomAudioUnlocked("track-upload");
-        }
-        await handleTrackFilesSelected(files);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
-    },
-    [ensureRoomAudioUnlocked, handleTrackFilesSelected, setStatusMessage]
-  );
-
-  const armPlaybackStart = useCallback(
-    async (input: {
-      reason: PlaybackStartIntent["reason"];
-      trackId?: string | null;
-      queueItemId?: string | null;
-      previousTrackId?: string | null;
-    }) => {
-      setPlaybackStartIntent(
-        createPlaybackStartIntent({
-          reason: input.reason,
-          trackId: input.trackId,
-          queueItemId: input.queueItemId,
-          previousTrackId: input.previousTrackId,
-          targetPlaybackRevision:
-            (playbackRevision ??
-              playbackQueueVersion ??
-              0) + 1,
-          previousQueueVersion: playbackQueueVersion,
-          previousMediaEpoch: playbackMediaEpoch
-        })
-      );
-      setStatusMessage("正在准备音源...");
-      startBestEffortPlaybackAudioUnlock({
-        unlockAudio: () => ensureRoomAudioUnlocked(`playback-intent:${input.reason}`),
-        onError: (error) => {
-          const message = toUserFacingError(error);
-          recordPeerDiagnostic({
-            peerId: "system",
-            channelKind: "system",
-            direction: "local",
-            event: "audio-prime-failed",
-            level: "error",
-            summary: `音频输出预激活失败：${message}`,
-            update: (snapshot) => ({
-              ...snapshot,
-              lastError: `音频输出预激活失败：${message}`
-            })
-          });
-          setStatusMessage("音频输出初始化失败，已跳过预激活并继续尝试播放。");
-        }
-      });
-    },
-    [
-      ensureRoomAudioUnlocked,
-      recordPeerDiagnostic,
-      playbackMediaEpoch,
-      playbackQueueVersion,
-      playbackRevision,
-      setPlaybackStartIntent,
-      setStatusMessage
-    ]
-  );
-
-  useEffect(() => {
-    if (!roomSnapshot?.room.id || audioUnlocked) {
-      return;
-    }
-
-    const handleFirstInteraction = () => {
-      void ensureRoomAudioUnlocked("natural-room-interaction");
-    };
-
-    window.addEventListener("pointerdown", handleFirstInteraction, {
-      capture: true,
-      passive: true
-    });
-    window.addEventListener("touchstart", handleFirstInteraction, {
-      capture: true,
-      passive: true
-    });
-    window.addEventListener("keydown", handleFirstInteraction, true);
-
-    return () => {
-      window.removeEventListener("pointerdown", handleFirstInteraction, true);
-      window.removeEventListener("touchstart", handleFirstInteraction, true);
-      window.removeEventListener("keydown", handleFirstInteraction, true);
-    };
-  }, [audioUnlocked, ensureRoomAudioUnlocked, roomSnapshot?.room.id]);
-
-  const handlePlayTrack = useCallback(
-    async (trackId?: string) => {
-      const targetTrackId = trackId ?? roomSnapshot?.room.playback.currentTrackId ?? null;
-      await armPlaybackStart({
-        reason: trackId ? "track" : "resume-current",
-        trackId: targetTrackId
-      });
-      await runPlaybackMutationAfterLocalPrime({
-        primeLocalPlayback: () => primeFullLocalTrackPlayback(targetTrackId),
-        mutatePlayback: () => playTrack(trackId)
-      });
-    },
-    [
-      armPlaybackStart,
-      playTrack,
-      primeFullLocalTrackPlayback,
-      roomSnapshot?.room.playback.currentTrackId
-    ]
-  );
-
-  const handleAddCachedLibraryTrackToLibrary = useCallback(
-    async (fileHash: string) => {
-      try {
-        const trackId = await importCachedLibraryTrackToRoom(fileHash);
-        if (!trackId) {
-          return;
-        }
-        const importedTrack = roomSnapshot?.tracks.find((track) => track.id === trackId)?.title ?? "歌曲";
-        setStatusMessage(`已将《${importedTrack}》添加到当前曲库。`);
-      } catch (error) {
-        setStatusMessage(toUserFacingError(error));
-      }
-    },
-    [importCachedLibraryTrackToRoom, roomSnapshot?.tracks, setStatusMessage]
-  );
-
-  const handlePlayQueueItem = useCallback(
-    async (queueItemId: string) => {
-      const queueTrackId =
-        roomSnapshot?.queue.find((item) => item.id === queueItemId)?.trackId ?? null;
-      await armPlaybackStart({
-        reason: "queue-item",
-        queueItemId,
-        trackId: queueTrackId,
-        previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
-      });
-      await runPlaybackMutationAfterLocalPrime({
-        primeLocalPlayback: () => primeFullLocalTrackPlayback(queueTrackId),
-        mutatePlayback: () => playQueueItem(queueItemId)
-      });
-    },
-    [
-      armPlaybackStart,
-      playQueueItem,
-      primeFullLocalTrackPlayback,
-      roomSnapshot?.queue,
-      roomSnapshot?.room.playback.currentTrackId
-    ]
-  );
-
-  const handlePrevTrack = useCallback(async () => {
-    await armPlaybackStart({
-      reason: "prev",
-      previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
-    });
-    await prevTrack();
-  }, [armPlaybackStart, prevTrack, roomSnapshot?.room.playback.currentTrackId]);
-
-  const handleNextTrack = useCallback(async () => {
-    await armPlaybackStart({
-      reason: "next",
-      previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
-    });
-    await nextTrack();
-  }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
-
-  const handlePlaybackEnded = useCallback(async () => {
-    await armPlaybackStart({
-      reason: "next",
-      previousTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
-    });
-    await nextTrack();
-  }, [armPlaybackStart, nextTrack, roomSnapshot?.room.playback.currentTrackId]);
 
   const {
     canDisbandRoom,
@@ -1112,45 +763,6 @@ export function MusicRoomApp({
       }),
     [activeDashboardTab, visiblePeerDiagnostics, visiblePeerRecentEvents]
   );
-
-  // Show audio unlock overlay when playback is active but audio is blocked (listener only).
-  useEffect(() => {
-    if (
-      !audioUnlocked &&
-      !isCurrentSourceOwner &&
-      playbackStatus === "playing" &&
-      currentPlaybackTrackId
-    ) {
-      const timer = window.setTimeout(() => {
-        if (!roomAudioOutput.isActivated()) {
-          setAudioBlockedOverlay(true);
-        }
-      }, 1500);
-      return () => window.clearTimeout(timer);
-    }
-
-    setAudioBlockedOverlay(false);
-  }, [
-    audioUnlocked,
-    currentPlaybackTrackId,
-    isCurrentSourceOwner,
-    playbackStatus,
-    setAudioBlockedOverlay
-  ]);
-
-  const handleAudioUnlock = useCallback(async () => {
-    setAudioBlockedOverlay(false);
-    const primeResult = await roomAudioOutput.primeOutputs({
-      localAudio: audioRef.current
-    });
-    setAudioUnlocked(primeResult.ok);
-    if (primeResult.ok) {
-      setStatusMessage("");
-      return;
-    }
-    setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
-    setAudioBlockedOverlay(true);
-  }, [audioRef, setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
 
   return (
     <>
