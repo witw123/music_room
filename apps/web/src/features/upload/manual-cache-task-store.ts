@@ -180,6 +180,45 @@ export function applyManualCacheTaskDrop(input: {
   });
 }
 
+export function applyManualCacheDownloadStartResult(input: {
+  trackId: string;
+  result: {
+    shouldClearChunkIndexes: boolean;
+    chunkIndexes: Set<number> | null;
+    taskPatch: Partial<ManualCacheTask> | null;
+    statusMessage: string | null;
+    assembleRequest: { trackId: string; mimeType: string | null; totalChunks: number } | null;
+  };
+  chunkIndexesByTrack: Map<string, Set<number>>;
+  updateManualCacheTask: (trackId: string, patch: Partial<ManualCacheTask>) => void;
+  setStatusMessage: (message: string) => void;
+  assembleManualCacheTrack: (
+    trackId: string,
+    mimeType: string | null,
+    totalChunks: number
+  ) => void;
+}) {
+  if (input.result.shouldClearChunkIndexes) {
+    input.chunkIndexesByTrack.delete(input.trackId);
+  }
+  if (input.result.chunkIndexes) {
+    input.chunkIndexesByTrack.set(input.trackId, input.result.chunkIndexes);
+  }
+  if (input.result.taskPatch) {
+    input.updateManualCacheTask(input.trackId, input.result.taskPatch);
+  }
+  if (input.result.statusMessage) {
+    input.setStatusMessage(input.result.statusMessage);
+  }
+  if (input.result.assembleRequest) {
+    input.assembleManualCacheTrack(
+      input.result.assembleRequest.trackId,
+      input.result.assembleRequest.mimeType,
+      input.result.assembleRequest.totalChunks
+    );
+  }
+}
+
 export function buildManualCacheTaskRecord(input: {
   roomId: string;
   task: ManualCacheTask;

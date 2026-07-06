@@ -67,6 +67,7 @@ import {
   type ManualCacheTask
 } from "./upload-ui-state";
 import {
+  applyManualCacheDownloadStartResult,
   applyManualCacheTaskDrop,
   applyManualCacheTaskUpdate,
   hydrateManualCacheTasksForRoom
@@ -549,25 +550,16 @@ export function useTrackUploads(options: {
         getCachedPiecesForTrack,
         localCacheOwnerKey
       });
-      if (result.shouldClearChunkIndexes) {
-        manualCacheChunkIndexesRef.current.delete(trackId);
-      }
-      if (result.chunkIndexes) {
-        manualCacheChunkIndexesRef.current.set(trackId, result.chunkIndexes);
-      }
-      if (result.taskPatch) {
-        updateManualCacheTask(trackId, result.taskPatch);
-      }
-      if (result.statusMessage) {
-        setStatusMessage(result.statusMessage);
-      }
-      if (result.assembleRequest) {
-        void assembleManualCacheTrack(
-          result.assembleRequest.trackId,
-          result.assembleRequest.mimeType,
-          result.assembleRequest.totalChunks
-        );
-      }
+      applyManualCacheDownloadStartResult({
+        trackId,
+        result,
+        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+        updateManualCacheTask,
+        setStatusMessage,
+        assembleManualCacheTrack: (assembleTrackId, mimeType, totalChunks) => {
+          void assembleManualCacheTrack(assembleTrackId, mimeType, totalChunks);
+        }
+      });
     },
     [assembleManualCacheTrack, peerId, roomSnapshot, setStatusMessage, updateManualCacheTask]
   );

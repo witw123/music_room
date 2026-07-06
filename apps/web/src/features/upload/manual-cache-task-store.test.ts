@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyManualCacheTaskDrop,
+  applyManualCacheDownloadStartResult,
   applyManualCacheTaskUpdate,
   buildManualCacheTaskRecord,
   buildNextManualCacheTask,
@@ -222,6 +223,61 @@ describe("manual cache task store helpers", () => {
     expect([...chunkIndexesByTrack.keys()]).toEqual([]);
     expect([...assemblingTrackIdsByTrack.keys()]).toEqual([]);
     expect(deletedTasks).toEqual([{ roomId: "room_1", trackId: "track_1" }]);
+  });
+
+  it("applies cache download start results to runtime state and callbacks", () => {
+    const chunkIndexesByTrack = new Map<string, Set<number>>([
+      ["track_1", new Set([9])]
+    ]);
+    const taskPatches: Array<Partial<ManualCacheTask>> = [];
+    const statusMessages: string[] = [];
+    const assembleRequests: Array<{ trackId: string; mimeType: string | null; totalChunks: number }> = [];
+
+    applyManualCacheDownloadStartResult({
+      trackId: "track_1",
+      result: {
+        shouldClearChunkIndexes: true,
+        chunkIndexes: new Set([0, 1]),
+        taskPatch: {
+          status: "downloading",
+          completedChunks: 2,
+          totalChunks: 3
+        },
+        statusMessage: "已开始缓存《Cached》。",
+        assembleRequest: {
+          trackId: "track_1",
+          mimeType: "audio/flac",
+          totalChunks: 3
+        }
+      },
+      chunkIndexesByTrack,
+      updateManualCacheTask: (_trackId, patch) => {
+        taskPatches.push(patch);
+      },
+      setStatusMessage: (message) => {
+        statusMessages.push(message);
+      },
+      assembleManualCacheTrack: (trackId, mimeType, totalChunks) => {
+        assembleRequests.push({ trackId, mimeType, totalChunks });
+      }
+    });
+
+    expect(chunkIndexesByTrack.get("track_1")).toEqual(new Set([0, 1]));
+    expect(taskPatches).toEqual([
+      {
+        status: "downloading",
+        completedChunks: 2,
+        totalChunks: 3
+      }
+    ]);
+    expect(statusMessages).toEqual(["已开始缓存《Cached》。"]);
+    expect(assembleRequests).toEqual([
+      {
+        trackId: "track_1",
+        mimeType: "audio/flac",
+        totalChunks: 3
+      }
+    ]);
   });
 
   it("loads room manual cache tasks with stale task cleanup and cached piece indexes", async () => {
