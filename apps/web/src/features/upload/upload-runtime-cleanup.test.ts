@@ -3,7 +3,8 @@ import {
   applyUploadRuntimePruneForActiveTracks,
   applyUploadRuntimeTrackRemoval,
   pruneUploadRuntimeStateForActiveTracks,
-  removeUploadRuntimeTrackIds
+  removeUploadRuntimeTrackIds,
+  syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
 
 describe("upload runtime cleanup helpers", () => {
@@ -139,5 +140,33 @@ describe("upload runtime cleanup helpers", () => {
     expect(manualCacheTasks).toEqual({
       track_keep: "task"
     });
+  });
+
+  it("syncs uploaded track object urls and revokes stale urls", () => {
+    const revokedUrls: string[] = [];
+    const nextUrls = syncUploadedTrackObjectUrls({
+      currentUrls: new Map([
+        ["track_keep", "blob:keep"],
+        ["track_changed", "blob:old"],
+        ["track_removed", "blob:removed"]
+      ]),
+      uploadedTracks: {
+        track_keep: {
+          objectUrl: "blob:keep"
+        },
+        track_changed: {
+          objectUrl: "blob:new"
+        }
+      },
+      revokeObjectUrl: (objectUrl) => {
+        revokedUrls.push(objectUrl);
+      }
+    });
+
+    expect([...nextUrls.entries()]).toEqual([
+      ["track_keep", "blob:keep"],
+      ["track_changed", "blob:new"]
+    ]);
+    expect(revokedUrls).toEqual(["blob:old", "blob:removed"]);
   });
 });

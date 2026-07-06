@@ -10,6 +10,9 @@ import type {
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 import { toCachedLibraryFile } from "./cache-library";
 
+type UploadedTracksState = Record<string, UploadedTrack>;
+type UploadedTracksStateSetter = (updater: (current: UploadedTracksState) => UploadedTracksState) => void;
+
 type MissingOwnedRoomTrack = Pick<
   TrackMeta,
   "id" | "fileHash"
@@ -76,4 +79,36 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
     uploads,
     createdObjectUrls
   };
+}
+
+export function applyOwnedUploadRehydrationResult(input: {
+  cancelled: boolean;
+  result: {
+    uploads: UploadedTracksState;
+    createdObjectUrls: string[];
+  };
+  setUploadedTracks: UploadedTracksStateSetter;
+  revokeObjectUrl: (objectUrl: string) => void;
+}) {
+  if (input.cancelled || Object.keys(input.result.uploads).length === 0) {
+    for (const objectUrl of input.result.createdObjectUrls) {
+      input.revokeObjectUrl(objectUrl);
+    }
+    return false;
+  }
+
+  input.setUploadedTracks((current) => {
+    let changed = false;
+    const next = { ...current };
+    for (const [trackId, upload] of Object.entries(input.result.uploads)) {
+      if (next[trackId]) {
+        input.revokeObjectUrl(upload.objectUrl);
+        continue;
+      }
+      next[trackId] = upload;
+      changed = true;
+    }
+    return changed ? next : current;
+  });
+  return true;
 }

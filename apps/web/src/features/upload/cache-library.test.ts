@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyCachedLibraryRoomImportResult,
   buildCachedLibraryTrackUpsertRecord,
   buildCachedLibraryFileName,
   deleteRoomTrackArtifacts,
@@ -13,6 +14,7 @@ import {
   toCachedLibraryTrack,
   toCachedLibraryTrackFile
 } from "./cache-library";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 describe("cache-library adapters", () => {
   const roomTrack = {
@@ -338,6 +340,50 @@ describe("cache-library adapters", () => {
     expect(registeredPayloads).toEqual(["room_1:Cached"]);
     expect(syncedRooms).toEqual(["room_1"]);
     expect(publishedAvailability).toEqual(["room_1:track_registered"]);
+  });
+
+  it("applies cached library room import results to uploaded track state", () => {
+    const file = new File(["cached"], "cached.flac", { type: "audio/flac" });
+    let uploadedTracks: Record<string, UploadedTrack> = {
+      track_existing: {
+        file: new File(["existing"], "existing.flac", { type: "audio/flac" }),
+        objectUrl: "blob:existing",
+        origin: "live-upload" as const
+      }
+    };
+
+    const trackId = applyCachedLibraryRoomImportResult({
+      result: {
+        trackId: "track_imported",
+        upload: {
+          file,
+          objectUrl: "blob:imported",
+          origin: "live-upload"
+        }
+      },
+      setUploadedTracks: (updater) => {
+        uploadedTracks = updater(uploadedTracks);
+      }
+    });
+
+    expect(trackId).toBe("track_imported");
+    expect(uploadedTracks).toMatchObject({
+      track_existing: {
+        objectUrl: "blob:existing"
+      },
+      track_imported: {
+        objectUrl: "blob:imported",
+        origin: "live-upload"
+      }
+    });
+    expect(
+      applyCachedLibraryRoomImportResult({
+        result: null,
+        setUploadedTracks: () => {
+          throw new Error("empty imports should not update uploads");
+        }
+      })
+    ).toBeNull();
   });
 
   it("starts cache downloads as ready when a usable full cached file exists", async () => {

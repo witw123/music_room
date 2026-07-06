@@ -58,6 +58,8 @@ type CacheLibraryTrackUpsertRecord = {
 };
 
 type TrackRegistrationDraft = Omit<TrackMeta, "id"> & { id?: string };
+type UploadedTracksState = Record<string, UploadedTrack>;
+type UploadedTracksStateSetter = (updater: (current: UploadedTracksState) => UploadedTracksState) => void;
 
 type CachedPieceIndex = {
   chunkIndex: number;
@@ -270,6 +272,22 @@ export async function importCachedLibraryTrackToRoom(input: {
       origin: "live-upload"
     }
   };
+}
+
+export function applyCachedLibraryRoomImportResult(input: {
+  result: { trackId: string; upload: UploadedTrack } | null;
+  setUploadedTracks: UploadedTracksStateSetter;
+}) {
+  const result = input.result;
+  if (!result) {
+    return null;
+  }
+
+  input.setUploadedTracks((current) => ({
+    ...current,
+    [result.trackId]: result.upload
+  }));
+  return result.trackId;
 }
 
 export async function startCacheDownload(input: {

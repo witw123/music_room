@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyHydratedManualCacheTasksResult,
   applyManualCacheTaskDrop,
   applyManualCacheDownloadStartResult,
   applyManualCacheProgressResult,
@@ -7,6 +8,7 @@ import {
   buildManualCacheTaskRecord,
   buildNextManualCacheTask,
   hydrateManualCacheTasksForRoom,
+  resolveManualCachePausePatch,
   resolveManualCacheTaskStateUpdate,
   resolveStalePlaybackDemandTaskIds,
   shouldHydrateCacheTaskPieceIndexes
@@ -335,6 +337,45 @@ describe("manual cache task store helpers", () => {
     ]);
   });
 
+  it("resolves pause patches only for active manual cache tasks", () => {
+    const downloadingTask = buildNextManualCacheTask({
+      trackId: "track_1",
+      existing: null,
+      track: {
+        fileHash: "hash_1",
+        mimeType: "audio/flac"
+      },
+      patch: {
+        status: "downloading",
+        blockedReason: "waiting-for-peer",
+        selectedProviderPeerId: "peer_2",
+        requestableChunkCount: 3,
+        pendingChunkCount: 2,
+        lastRequestedChunks: [0, 1],
+        lastError: "timeout"
+      },
+      updatedAt: "2026-07-06T00:00:00.000Z"
+    });
+
+    expect(resolveManualCachePausePatch(downloadingTask)).toEqual({
+      status: "paused",
+      blockedReason: null,
+      selectedProviderPeerId: null,
+      requestableChunkCount: 0,
+      pendingChunkCount: 0,
+      lastRequestedChunks: [],
+      lastError: null
+    });
+    expect(resolveManualCachePausePatch({ ...downloadingTask!, status: "queued" })).toMatchObject({
+      status: "paused"
+    });
+    expect(resolveManualCachePausePatch({ ...downloadingTask!, status: "blocked" })).toMatchObject({
+      status: "paused"
+    });
+    expect(resolveManualCachePausePatch({ ...downloadingTask!, status: "ready" })).toBeNull();
+    expect(resolveManualCachePausePatch(null)).toBeNull();
+  });
+
   it("skips rejected manual cache progress results", () => {
     const chunkIndexesByTrack = new Map<string, Set<number>>();
 
@@ -472,5 +513,85 @@ describe("manual cache task store helpers", () => {
         chunkSize: undefined
       }
     ]);
+  });
+
+  it("applies hydrated manual cache task results to state, cleanup, and runtime indexes", () => {
+    let currentTasks: Record<string, ManualCacheTask> = {};
+    const deletedTasks: Array<{ roomId: string; trackId: string }> = [];
+    const chunkIndexesByTrack = new Map<string, Set<number>>();
+
+    const applied = applyHydratedManualCacheTasksResult({
+      cancelled: false,
+      result: {
+        tasks: [
+          {
+            taskKey: "room_1:track_manual",
+            roomId: "room_1",
+            trackId: "track_manual",
+            fileHash: "hash_manual",
+            status: "queued",
+            mode: "manual",
+            errorMessage: null,
+            completedChunks: 0,
+            totalChunks: 2,
+            mimeType: "audio/flac",
+            manifestSource: "snapshot",
+            blockedReason: null,
+            integrityMode: "weak",
+            providerPeerIds: [],
+            connectedProviderPeerIds: [],
+            selectedProviderPeerId: null,
+            requestableChunkCount: 0,
+            pendingChunkCount: 0,
+            lastRequestedChunks: [],
+            lastPieceReceivedAt: null,
+            lastError: null,
+            updatedAt: "2026-07-06T00:00:00.000Z"
+          }
+        ],
+        staleTasks: [
+          {
+            roomId: "room_1",
+            trackId: "track_stale"
+          }
+        ],
+        chunkIndexesByTrack: new Map([["track_manual", new Set([0, 1])]])
+      },
+      currentPlaybackTrackId: "track_playing",
+      setManualCacheTasks: (updater) => {
+        currentTasks = updater(currentTasks);
+      },
+      chunkIndexesByTrack,
+      deleteManualCacheTask: (roomId, trackId) => {
+        deletedTasks.push({ roomId, trackId });
+      }
+    });
+
+    expect(applied).toBe(true);
+    expect(currentTasks.track_manual).toMatchObject({
+      trackId: "track_manual",
+      status: "queued",
+      fileHash: "hash_manual"
+    });
+    expect([...chunkIndexesByTrack.get("track_manual") ?? []]).toEqual([0, 1]);
+    expect(deletedTasks).toEqual([{ roomId: "room_1", trackId: "track_stale" }]);
+    expect(
+      applyHydratedManualCacheTasksResult({
+        cancelled: true,
+        result: {
+          tasks: [],
+          staleTasks: [{ roomId: "room_1", trackId: "ignored" }],
+          chunkIndexesByTrack: new Map()
+        },
+        currentPlaybackTrackId: null,
+        setManualCacheTasks: () => {
+          throw new Error("cancelled hydration should not update tasks");
+        },
+        chunkIndexesByTrack,
+        deleteManualCacheTask: () => {
+          throw new Error("cancelled hydration should not delete stale tasks");
+        }
+      })
+    ).toBe(false);
   });
 });

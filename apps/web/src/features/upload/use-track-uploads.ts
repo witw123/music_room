@@ -42,6 +42,7 @@ import { hasActivePlaybackIntent } from "@/features/playback/progressive-playbac
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
   buildCachedLibraryTrackUpsertRecord,
+  applyCachedLibraryRoomImportResult,
   createInFlightCachedLibraryTrackFileLoader,
   deleteRoomTrackArtifacts as deleteRoomTrackArtifactsFromLibrary,
   deleteCachedLibraryTrackEntry as deleteCachedLibraryTrackEntryFromLibrary,
@@ -58,7 +59,6 @@ import {
   shouldAnnounceTrackAvailability
 } from "./track-availability";
 import {
-  mergeHydratedManualCacheTasks,
   resolveAutomaticPlaybackCacheTaskMode,
   resolveManualCachePieceReceivedAction,
   resolveManualCachePlanReceivedAction,
@@ -67,11 +67,13 @@ import {
   type ManualCacheTask
 } from "./upload-ui-state";
 import {
+  applyHydratedManualCacheTasksResult,
   applyManualCacheDownloadStartResult,
   applyManualCacheProgressResult,
   applyManualCacheTaskDrop,
   applyManualCacheTaskUpdate,
-  hydrateManualCacheTasksForRoom
+  hydrateManualCacheTasksForRoom,
+  resolveManualCachePausePatch
 } from "./manual-cache-task-store";
 import {
   applySelectedTrackFilesResult,
@@ -80,10 +82,14 @@ import {
   processSelectedTrackFiles
 } from "./upload-pipeline";
 import { assembleManualCacheTrackFromPieces } from "./manual-cache-assembly";
-import { rehydrateOwnedUploadedTracksFromCache } from "./upload-rehydration";
+import {
+  applyOwnedUploadRehydrationResult,
+  rehydrateOwnedUploadedTracksFromCache
+} from "./upload-rehydration";
 import {
   applyUploadRuntimePruneForActiveTracks,
-  applyUploadRuntimeTrackRemoval
+  applyUploadRuntimeTrackRemoval,
+  syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
 
 export {
@@ -184,17 +190,11 @@ export function useTrackUploads(options: {
   }, []);
 
   useEffect(() => {
-    const nextUrls = new Map(
-      Object.entries(uploadedTracks).map(([trackId, upload]) => [trackId, upload.objectUrl])
-    );
-
-    for (const [trackId, objectUrl] of uploadedTrackUrlsRef.current.entries()) {
-      if (nextUrls.get(trackId) !== objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    }
-
-    uploadedTrackUrlsRef.current = nextUrls;
+    uploadedTrackUrlsRef.current = syncUploadedTrackObjectUrls({
+      currentUrls: uploadedTrackUrlsRef.current,
+      uploadedTracks,
+      revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl)
+    });
   }, [uploadedTracks]);
 
   useEffect(() => {
@@ -215,22 +215,14 @@ export function useTrackUploads(options: {
       getCachedPieceIndexes,
       localCacheOwnerKey
     }).then((result) => {
-      if (cancelled) {
-        return;
-      }
-      for (const task of result.staleTasks) {
-        void deleteManualCacheTask(task.roomId, task.trackId);
-      }
-      setManualCacheTasks((current) =>
-        mergeHydratedManualCacheTasks({
-          currentTasks: current,
-          hydratedTasks: result.tasks,
-          currentPlaybackTrackId: roomSnapshot.room.playback.currentTrackId ?? null
-        })
-      );
-      for (const [trackId, indexes] of result.chunkIndexesByTrack) {
-        manualCacheChunkIndexesRef.current.set(trackId, indexes);
-      }
+      applyHydratedManualCacheTasksResult({
+        cancelled,
+        result,
+        currentPlaybackTrackId: roomSnapshot.room.playback.currentTrackId ?? null,
+        setManualCacheTasks,
+        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+        deleteManualCacheTask
+      });
     });
     return () => {
       cancelled = true;
@@ -289,25 +281,11 @@ export function useTrackUploads(options: {
         createObjectUrl: (file) => URL.createObjectURL(file)
       });
 
-      if (cancelled || Object.keys(result.uploads).length === 0) {
-        for (const objectUrl of result.createdObjectUrls) {
-          URL.revokeObjectURL(objectUrl);
-        }
-        return;
-      }
-
-      setUploadedTracks((current) => {
-        let changed = false;
-        const next = { ...current };
-        for (const [trackId, upload] of Object.entries(result.uploads)) {
-          if (next[trackId]) {
-            URL.revokeObjectURL(upload.objectUrl);
-            continue;
-          }
-          next[trackId] = upload;
-          changed = true;
-        }
-        return changed ? next : current;
+      applyOwnedUploadRehydrationResult({
+        cancelled,
+        result,
+        setUploadedTracks,
+        revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl)
       });
     })();
 
@@ -621,26 +599,7 @@ export function useTrackUploads(options: {
 
   const pauseManualCacheDownload = useCallback(
     (trackId: string) => {
-      updateManualCacheTask(trackId, (current) => {
-        if (
-          !current ||
-          (current.status !== "queued" &&
-            current.status !== "downloading" &&
-            current.status !== "blocked")
-        ) {
-          return null;
-        }
-
-        return {
-          status: "paused",
-          blockedReason: null,
-          selectedProviderPeerId: null,
-          requestableChunkCount: 0,
-          pendingChunkCount: 0,
-          lastRequestedChunks: [],
-          lastError: null
-        };
-      });
+      updateManualCacheTask(trackId, resolveManualCachePausePatch);
     },
     [updateManualCacheTask]
   );
@@ -871,15 +830,10 @@ export function useTrackUploads(options: {
           emitAvailability(availability);
         }
       });
-      if (!result) {
-        return null;
-      }
-
-      setUploadedTracks((current) => ({
-        ...current,
-        [result.trackId]: result.upload
-      }));
-      return result.trackId;
+      return applyCachedLibraryRoomImportResult({
+        result,
+        setUploadedTracks
+      });
     },
     [
       activeSession,

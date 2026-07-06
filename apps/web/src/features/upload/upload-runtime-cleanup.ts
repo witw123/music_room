@@ -5,6 +5,24 @@ type TrackIdRuntimeStore = {
 
 type StateSetter<TState> = (updater: (current: TState) => TState) => void;
 
+export function syncUploadedTrackObjectUrls(input: {
+  currentUrls: Map<string, string>;
+  uploadedTracks: Record<string, { objectUrl: string }>;
+  revokeObjectUrl: (objectUrl: string) => void;
+}) {
+  const nextUrls = new Map(
+    Object.entries(input.uploadedTracks).map(([trackId, upload]) => [trackId, upload.objectUrl])
+  );
+
+  for (const [trackId, objectUrl] of input.currentUrls.entries()) {
+    if (nextUrls.get(trackId) !== objectUrl) {
+      input.revokeObjectUrl(objectUrl);
+    }
+  }
+
+  return nextUrls;
+}
+
 export function pruneUploadRuntimeStateForActiveTracks<TUpload>(input: {
   activeTrackIds: Set<string>;
   uploadedTracks: Record<string, TUpload>;

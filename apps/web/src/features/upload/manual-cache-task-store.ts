@@ -262,6 +262,27 @@ export function applyManualCacheProgressResult<TAvailability>(input: {
   return true;
 }
 
+export function resolveManualCachePausePatch(current: ManualCacheTask | null) {
+  if (
+    !current ||
+    (current.status !== "queued" &&
+      current.status !== "downloading" &&
+      current.status !== "blocked")
+  ) {
+    return null;
+  }
+
+  return {
+    status: "paused" as const,
+    blockedReason: null,
+    selectedProviderPeerId: null,
+    requestableChunkCount: 0,
+    pendingChunkCount: 0,
+    lastRequestedChunks: [],
+    lastError: null
+  } satisfies Partial<ManualCacheTask>;
+}
+
 export function buildManualCacheTaskRecord(input: {
   roomId: string;
   task: ManualCacheTask;
@@ -422,6 +443,38 @@ export async function hydrateManualCacheTasksForRoom(input: {
     staleTasks,
     chunkIndexesByTrack
   };
+}
+
+export function applyHydratedManualCacheTasksResult(input: {
+  cancelled: boolean;
+  result: {
+    tasks: ManualCacheTaskRecord[];
+    staleTasks: Array<{ roomId: string; trackId: string }>;
+    chunkIndexesByTrack: Map<string, Set<number>>;
+  };
+  currentPlaybackTrackId: string | null;
+  setManualCacheTasks: ManualCacheTaskStateSetter;
+  chunkIndexesByTrack: Map<string, Set<number>>;
+  deleteManualCacheTask: (roomId: string, trackId: string) => void | Promise<void>;
+}) {
+  if (input.cancelled) {
+    return false;
+  }
+
+  for (const task of input.result.staleTasks) {
+    void input.deleteManualCacheTask(task.roomId, task.trackId);
+  }
+  input.setManualCacheTasks((current) =>
+    mergeHydratedManualCacheTasks({
+      currentTasks: current,
+      hydratedTasks: input.result.tasks,
+      currentPlaybackTrackId: input.currentPlaybackTrackId
+    })
+  );
+  for (const [trackId, indexes] of input.result.chunkIndexesByTrack) {
+    input.chunkIndexesByTrack.set(trackId, indexes);
+  }
+  return true;
 }
 
 export function resolveAutomaticPlaybackCacheTaskMode(): ManualCacheTask["mode"] {
