@@ -8,9 +8,7 @@ import {
   usePeerDiagnostics
 } from "@/features/p2p";
 import type { RoomSocket } from "@/lib/ws-client";
-import { BottomPlayerController } from "@/components/BottomPlayerController";
-import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
-import { RoomWorkspace } from "@/components/room/RoomWorkspace";
+import { RoomAppShell } from "@/components/room/RoomAppShell";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
@@ -406,83 +404,26 @@ export function MusicRoomApp({
   });
 
   return (
-    <>
-      <AudioUnlockOverlay
-        visible={pageState.audioBlockedOverlay}
-        onUnlock={playbackActions.handleAudioUnlock}
-      />
-      <RoomWorkspace
-        activeSession={activeSession}
-        statusMessage={statusMessage}
-        statusTone={workspaceViewModel.statusTone}
-        roomSnapshot={roomSnapshot}
-        currentTrack={currentTrack}
-        canControlPlayback={canControlPlayback}
-        canDeleteRoom={canDeleteRoom}
-        canDisbandRoom={workspaceViewModel.canDisbandRoom}
-        canReorderQueue={canReorderQueue}
-        uploadedTracks={uploads.uploadedTracks}
-        connectedPeersCount={workspaceViewModel.connectedPeersCount}
-        mediaConnectionState={pageState.mediaConnectionState}
-        mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
-        cachedTrackCount={uploads.cachedTrackCount}
-        cacheLibraryTracks={uploads.cacheLibraryTracks}
-        manualCacheTasks={uploads.manualCacheTasks}
-        availabilitySummary={workspaceViewModel.availabilitySummary}
-        memberTransferSummaries={workspaceViewModel.memberTransferSummaries}
-        localMemberState={workspaceViewModel.localMemberState}
-        peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
-        peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}
-        iceConfigSource={workspaceViewModel.iceConfigSource}
-        iceConfigStatus={workspaceViewModel.iceConfigStatus}
-        workspaceEntryHref={workspaceEntryHref}
-        authEntryHref={authEntryHref}
-        showRoomTransitionState={workspaceViewModel.showRoomTransitionState}
-        isNavigatingRoomExit={pageState.isNavigatingRoomExit}
-        isRecoveringRoom={pageState.isRecoveringRoom}
-        isRoomTransitionPending={workspaceViewModel.isRoomTransitionPending}
-        onLogout={roomActions.handleLogout}
-        onClearIdentity={roomActions.handleClearIdentity}
-        onCopyJoinCode={clipboardActions.handleCopyJoinCode}
-        onLeaveRoom={roomActions.handleLeaveRoomAction}
-        onDeleteRoom={roomActions.handleDeleteRoomAction}
-        onFilesSelected={playbackActions.handleFilesSelected}
-        onAddToQueue={roomActions.addToQueue}
-        onDeleteTrack={roomActions.deleteTrack}
-        onPlayTrack={playbackActions.handlePlayTrack}
-        onStartManualCacheDownload={cacheActions.handleStartManualCacheDownload}
-        onPauseManualCacheDownload={cacheActions.handlePauseManualCacheDownload}
-        onAddCachedLibraryTrackToLibrary={cacheActions.handleAddCachedLibraryTrackToLibrary}
-        onExportCachedLibraryTrack={cacheActions.handleExportCachedLibraryTrack}
-        onDeleteCachedLibraryTrack={cacheActions.handleDeleteCachedLibraryTrack}
-        onPlayQueueItem={playbackActions.handlePlayQueueItem}
-        onRemoveQueueItem={roomActions.removeQueueItem}
-        onReorderQueue={roomActions.reorderQueue}
-        onTabChange={pageState.setActiveDashboardTab}
-        onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
-        socket={socketRef.current}
-        isSyncPending={false}
-        playerSlot={
-          <BottomPlayerController
-            audioRef={audioRef}
-            roomSnapshot={roomSnapshot}
-            activeSession={activeSession}
-            currentTrack={currentTrack}
-            resetEpoch={pageState.playerResetEpoch}
-            onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
-            onPlaybackBucketChange={playbackActions.handlePlaybackBucketChange}
-            onVolumeChange={pageState.setVolume}
-            getLocalPlaybackPositionMs={progressiveRuntime.getLocalPlaybackPositionMs}
-            onPlay={playbackActions.handlePlayTrack}
-            onPause={roomActions.pauseTrack}
-            onSeek={roomActions.seekTrack}
-            onPrev={playbackActions.handlePrevTrack}
-            onNext={playbackActions.handleNextTrack}
-            onEnded={playbackActions.handlePlaybackEnded}
-            onLocalPlaybackReady={playbackActions.handleLocalPlaybackReady}
-          />
-        }
-      />
-    </>
+    <RoomAppShell
+      activeSession={activeSession}
+      audioRef={audioRef}
+      authEntryHref={authEntryHref}
+      cacheActions={cacheActions}
+      canControlPlayback={canControlPlayback}
+      canDeleteRoom={canDeleteRoom}
+      canReorderQueue={canReorderQueue}
+      clipboardActions={clipboardActions}
+      currentTrack={currentTrack}
+      pageState={pageState}
+      playbackActions={playbackActions}
+      progressiveRuntime={progressiveRuntime}
+      roomActions={roomActions}
+      roomSnapshot={roomSnapshot}
+      socket={socketRef.current}
+      statusMessage={statusMessage}
+      uploads={uploads}
+      workspaceEntryHref={workspaceEntryHref}
+      workspaceViewModel={workspaceViewModel}
+    />
   );
 }

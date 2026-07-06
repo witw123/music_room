@@ -292,6 +292,25 @@ describe("room page feature assembly shape", () => {
   });
 });
 
+describe("room page render shell boundary", () => {
+  it("hosts the workspace render shell outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const shellSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/RoomAppShell.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("<AudioUnlockOverlay");
+    expect(appSource).not.toContain("<RoomWorkspace");
+    expect(appSource).not.toContain("<BottomPlayerController");
+    expect(appSource.split("\n").length).toBeLessThanOrEqual(430);
+    expect(shellSource).toContain("export function RoomAppShell");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({
