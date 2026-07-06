@@ -24,6 +24,17 @@ import {
   type BinaryPieceMessage,
   type PendingIncomingPieceFragments
 } from "./piece-frame-codec";
+import {
+  SignalingTransport,
+  shouldIgnoreStaleAnswerError,
+  toIceCandidateInit,
+  toSessionDescriptionInit
+} from "./signaling-transport";
+import {
+  DataChannelManager,
+  shouldFlushDataChannelQueue,
+  shouldSendQueuedDataChannelItem
+} from "./data-channel-manager";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -235,6 +246,8 @@ export class P2PMesh {
   private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
   private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
+  private readonly signaling: SignalingTransport;
+  private readonly dataChannels: DataChannelManager;
 
   constructor(
     private readonly roomId: string,
@@ -248,6 +261,20 @@ export class P2PMesh {
     this.resolveConnectionConfig = options.resolveConnectionConfig;
     this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
     this.resolveTrackCacheIdentity = options.resolveTrackCacheIdentity;
+    this.signaling = new SignalingTransport({
+      roomId: this.roomId,
+      localPeerId: this.localPeerId,
+      sendSignal: this.sendSignal,
+      onSignal: this.callbacks.onSignal
+    });
+    this.dataChannels = new DataChannelManager({
+      autoReconnect: this.autoReconnect,
+      sendQueueLowWatermarkBytes: this.sendQueueLowWatermarkBytes,
+      onDataChannelStateChange: this.callbacks.onDataChannelStateChange,
+      onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
+      onPeerConnectionChange: this.callbacks.onPeerConnectionChange,
+      onPeerStalled: this.callbacks.onPeerStalled
+    });
   }
 
   async syncPeers(
@@ -297,11 +324,7 @@ export class P2PMesh {
 
     if (payload.type === "offer") {
       await this.enqueuePeerOperation(entry, async () => {
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "received",
-          type: "offer"
-        });
+        this.signaling.markReceived(payload.fromPeerId, "offer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
           return;
@@ -319,30 +342,14 @@ export class P2PMesh {
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = Date.now();
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "sent",
-          type: "answer"
-        });
-        this.sendSignal({
-          roomId: this.roomId,
-          fromPeerId: this.localPeerId,
-          toPeerId: payload.fromPeerId,
-          channelKind: "data",
-          type: "answer",
-          payload: answer as unknown as Record<string, unknown>
-        });
+        this.signaling.send(payload.fromPeerId, "answer", answer as unknown as Record<string, unknown>);
       });
       return;
     }
 
     if (payload.type === "answer") {
       await this.enqueuePeerOperation(entry, async () => {
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "received",
-          type: "answer"
-        });
+        this.signaling.markReceived(payload.fromPeerId, "answer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
           return;
@@ -361,11 +368,7 @@ export class P2PMesh {
 
     if (payload.type === "candidate") {
       await this.enqueuePeerOperation(entry, async () => {
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "received",
-          type: "candidate"
-        });
+        this.signaling.markReceived(payload.fromPeerId, "candidate");
         const candidate = toIceCandidateInit(payload.payload);
         if (!candidate) {
           return;
@@ -520,19 +523,7 @@ export class P2PMesh {
       const offer = await entry.connection.createOffer({ iceRestart: true });
       await entry.connection.setLocalDescription(offer);
       entry.lastSignalProgressAtMs = Date.now();
-      this.callbacks.onSignal?.({
-        peerId,
-        direction: "sent",
-        type: "offer"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "data",
-        type: "offer",
-        payload: offer as unknown as Record<string, unknown>
-      });
+      this.signaling.send(peerId, "offer", offer as unknown as Record<string, unknown>);
       return entry;
     });
   }
@@ -603,19 +594,11 @@ export class P2PMesh {
       }
       entry.lastSignalProgressAtMs = Date.now();
 
-      this.callbacks.onSignal?.({
+      this.signaling.send(
         peerId,
-        direction: "sent",
-        type: "candidate"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "data",
-        type: "candidate",
-        payload: event.candidate.toJSON() as unknown as Record<string, unknown>
-      });
+        "candidate",
+        event.candidate.toJSON() as unknown as Record<string, unknown>
+      );
     };
 
     connection.onconnectionstatechange = () => {
@@ -678,19 +661,7 @@ export class P2PMesh {
         const offer = await connection.createOffer();
         await connection.setLocalDescription(offer);
         entry.lastSignalProgressAtMs = Date.now();
-        this.callbacks.onSignal?.({
-          peerId,
-          direction: "sent",
-          type: "offer"
-        });
-        this.sendSignal({
-          roomId: this.roomId,
-          fromPeerId: this.localPeerId,
-          toPeerId: peerId,
-          channelKind: "data",
-          type: "offer",
-          payload: offer as unknown as Record<string, unknown>
-        });
+        this.signaling.send(peerId, "offer", offer as unknown as Record<string, unknown>);
       }
 
       return entry;
@@ -703,136 +674,78 @@ export class P2PMesh {
   }
 
   private bindChannel(peerId: string, entry: PeerEntry, channel: RTCDataChannel) {
-    channel.binaryType = "arraybuffer";
-    channel.bufferedAmountLowThreshold = this.sendQueueLowWatermarkBytes;
-    entry.dataChannelState = channel.readyState;
-    entry.lastSignalProgressAtMs = Date.now();
-    this.callbacks.onDataChannelStateChange?.({
+    this.dataChannels.bind({
       peerId,
-      state: channel.readyState
-    });
-    this.callbacks.onDataBufferedAmountChange?.({
-      peerId,
-      bufferedAmountBytes: channel.bufferedAmount
-    });
-    this.schedulePeerWatchdog(peerId, entry);
-
-    channel.onopen = () => {
-      entry.dataChannelState = channel.readyState;
-      entry.lastSignalProgressAtMs = Date.now();
-      entry.reconnectAttempts = 0;
-      this.callbacks.onDataChannelStateChange?.({
-        peerId,
-        state: channel.readyState
-      });
-      this.callbacks.onDataBufferedAmountChange?.({
-        peerId,
-        bufferedAmountBytes: channel.bufferedAmount
-      });
-      this.flushSendQueue(peerId, entry);
-      this.schedulePeerWatchdog(peerId, entry);
-    };
-
-    channel.onbufferedamountlow = () => {
-      this.callbacks.onDataBufferedAmountChange?.({
-        peerId,
-        bufferedAmountBytes: channel.bufferedAmount
-      });
-      this.flushSendQueue(peerId, entry);
-    };
-
-    channel.onmessage = async (event) => {
-      entry.lastSignalProgressAtMs = Date.now();
-      const message = await parseIncomingMessage(event.data);
-      if (!message) {
-        return;
-      }
-
-      if (message.kind === "request-piece") {
-        this.callbacks.onPieceRequestReceived?.({
-          peerId,
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex
-        });
-        await this.handlePieceRequest(peerId, entry, {
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex
-        });
-        return;
-      }
-
-      if (message.kind === "request-pieces") {
-        const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
-        for (let offset = 0; offset < chunkIndexes.length; offset += this.pieceServeBatchConcurrency) {
-          const batch = chunkIndexes.slice(offset, offset + this.pieceServeBatchConcurrency);
-          await Promise.all(
-            batch.map(async (chunkIndex) => {
-              this.callbacks.onPieceRequestReceived?.({
-                peerId,
-                trackId: message.trackId,
-                chunkIndex,
-                requestId: message.requestId
-              });
-              await this.handlePieceRequest(peerId, entry, {
-                trackId: message.trackId,
-                chunkIndex,
-                requestId: message.requestId
-              });
-            })
-          );
-        }
-        return;
-      }
-
-      if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
-        const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
-        const pendingRequest = this.pendingPieceRequests.get(requestKey);
-        if (pendingRequest) {
-          clearTimeout(pendingRequest.timeoutId);
-          this.pendingPieceRequests.delete(requestKey);
+      entry,
+      channel,
+      flushSendQueue: () => this.flushSendQueue(peerId, entry),
+      schedulePeerWatchdog: () => this.schedulePeerWatchdog(peerId, entry),
+      clearPendingRequestsForPeer: (closedPeerId) => this.clearPendingRequestsForPeer(closedPeerId),
+      schedulePeerReconnect: () => this.schedulePeerReconnect(peerId, entry),
+      onMessage: async (event) => {
+        const message = await parseIncomingMessage(event.data);
+        if (!message) {
+          return;
         }
 
-        this.pendingIncomingPieces.push({
-          peerId,
-          message,
-          pendingRequest
-        });
-        this.scheduleIncomingPieceFlush();
-        return;
-      }
+        if (message.kind === "request-piece") {
+          this.callbacks.onPieceRequestReceived?.({
+            peerId,
+            trackId: message.trackId,
+            chunkIndex: message.chunkIndex
+          });
+          await this.handlePieceRequest(peerId, entry, {
+            trackId: message.trackId,
+            chunkIndex: message.chunkIndex
+          });
+          return;
+        }
 
-      if (message.kind === "send-piece-fragment" && isBinaryPieceFragmentMessage(message)) {
-        this.handleIncomingPieceFragment(peerId, message);
-      }
-    };
+        if (message.kind === "request-pieces") {
+          const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
+          for (let offset = 0; offset < chunkIndexes.length; offset += this.pieceServeBatchConcurrency) {
+            const batch = chunkIndexes.slice(offset, offset + this.pieceServeBatchConcurrency);
+            await Promise.all(
+              batch.map(async (chunkIndex) => {
+                this.callbacks.onPieceRequestReceived?.({
+                  peerId,
+                  trackId: message.trackId,
+                  chunkIndex,
+                  requestId: message.requestId
+                });
+                await this.handlePieceRequest(peerId, entry, {
+                  trackId: message.trackId,
+                  chunkIndex,
+                  requestId: message.requestId
+                });
+              })
+            );
+          }
+          return;
+        }
 
-    channel.onclose = () => {
-      entry.dataChannelState = "closed";
-      entry.sendQueue = [];
-      this.callbacks.onDataChannelStateChange?.({
-        peerId,
-        state: "closed"
-      });
-      this.callbacks.onDataBufferedAmountChange?.({
-        peerId,
-        bufferedAmountBytes: 0
-      });
-      this.clearPendingRequestsForPeer(peerId);
-      this.callbacks.onPeerConnectionChange?.({
-        peerId,
-        state: "closed"
-      });
-      if (entry.releasing) {
-        return;
+        if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
+          const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
+          const pendingRequest = this.pendingPieceRequests.get(requestKey);
+          if (pendingRequest) {
+            clearTimeout(pendingRequest.timeoutId);
+            this.pendingPieceRequests.delete(requestKey);
+          }
+
+          this.pendingIncomingPieces.push({
+            peerId,
+            message,
+            pendingRequest
+          });
+          this.scheduleIncomingPieceFlush();
+          return;
+        }
+
+        if (message.kind === "send-piece-fragment" && isBinaryPieceFragmentMessage(message)) {
+          this.handleIncomingPieceFragment(peerId, message);
+        }
       }
-      this.callbacks.onPeerStalled?.({
-        peerId,
-        reason: "data-channel-closed"
-      });
-      if (this.autoReconnect) {
-        this.schedulePeerReconnect(peerId, entry);
-      }
-    };
+    });
   }
 
   private async handlePieceRequest(
@@ -987,11 +900,21 @@ export class P2PMesh {
 
   private flushSendQueue(peerId: string, entry: PeerEntry) {
     const channel = entry.channel;
-    if (!channel || channel.readyState !== "open" || entry.releasing) {
+    if (!channel || !shouldFlushDataChannelQueue({
+      hasChannel: true,
+      readyState: channel.readyState,
+      releasing: entry.releasing
+    })) {
       return;
     }
 
-    while (entry.sendQueue.length > 0 && channel.bufferedAmount < this.sendQueueHighWatermarkBytes) {
+    while (
+      shouldSendQueuedDataChannelItem({
+        queueLength: entry.sendQueue.length,
+        bufferedAmountBytes: channel.bufferedAmount,
+        highWatermarkBytes: this.sendQueueHighWatermarkBytes
+      })
+    ) {
       const nextItem = entry.sendQueue.shift()!;
       try {
         if (typeof nextItem.data === "string") {
@@ -1270,22 +1193,12 @@ export class P2PMesh {
     } catch (error) {
       if (
         remoteDescription.type === "answer" &&
-        this.shouldIgnoreStaleAnswerError(entry, error)
+        shouldIgnoreStaleAnswerError(entry.connection.signalingState, error)
       ) {
         return;
       }
       throw error;
     }
-  }
-
-  private shouldIgnoreStaleAnswerError(entry: PeerEntry, error: unknown) {
-    if (entry.connection.signalingState === "have-local-offer") {
-      return false;
-    }
-
-    const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : "";
-    return /wrong state:\s*stable/i.test(message) || /Called in wrong state:\s*stable/i.test(message);
   }
 
   private clearPendingRequestsForPeer(peerId: string) {
@@ -1626,30 +1539,4 @@ function isBinaryPieceFragmentMessage(
     "payload" in value &&
     value.header.kind === "send-piece-fragment"
   );
-}
-
-function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {
-  if (typeof payload.type !== "string") {
-    return null;
-  }
-
-  return {
-    type: payload.type as RTCSdpType,
-    sdp: typeof payload.sdp === "string" ? payload.sdp : undefined
-  };
-}
-
-function toIceCandidateInit(payload: Record<string, unknown>): RTCIceCandidateInit | null {
-  if (typeof payload.candidate !== "string") {
-    return null;
-  }
-
-  return {
-    candidate: payload.candidate,
-    sdpMid: typeof payload.sdpMid === "string" ? payload.sdpMid : undefined,
-    sdpMLineIndex:
-      typeof payload.sdpMLineIndex === "number" ? payload.sdpMLineIndex : undefined,
-    usernameFragment:
-      typeof payload.usernameFragment === "string" ? payload.usernameFragment : undefined
-  };
 }
