@@ -154,6 +154,58 @@ export function resolveRoomRealtimeSnapshotInputs(input: {
   };
 }
 
+export function resolvePresenceRepairAction(input: {
+  snapshotRoomId: string | null;
+  activeSessionId: string | null | undefined;
+  peerId: string;
+  hasLocalMemberPresence: boolean;
+  localMemberPeerId: string | null;
+  localMemberPresenceState: string | null;
+  snapshotPresenceRevision: number | null;
+  previousRepairKey: string | null;
+  socketConnected: boolean;
+}) {
+  const idleAction = {
+    nextRepairKey: null,
+    shouldEmitPresence: false,
+    shouldRequestResync: false,
+    shouldStartHeartbeat: false
+  };
+
+  if (
+    !input.snapshotRoomId ||
+    !input.activeSessionId ||
+    !input.peerId ||
+    !input.hasLocalMemberPresence
+  ) {
+    return idleAction;
+  }
+  if (input.localMemberPresenceState === "online" && input.localMemberPeerId === input.peerId) {
+    return idleAction;
+  }
+
+  const nextRepairKey = [
+    input.snapshotRoomId,
+    input.snapshotPresenceRevision,
+    input.localMemberPeerId ?? "none",
+    input.localMemberPresenceState,
+    input.peerId
+  ].join("|");
+  if (input.previousRepairKey === nextRepairKey || !input.socketConnected) {
+    return {
+      ...idleAction,
+      nextRepairKey
+    };
+  }
+
+  return {
+    nextRepairKey,
+    shouldEmitPresence: true,
+    shouldRequestResync: true,
+    shouldStartHeartbeat: true
+  };
+}
+
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -566,31 +618,30 @@ export function useRoomRealtimeConnection(input: {
   ]);
 
   useEffect(() => {
-    if (!snapshotRoomId || !activeSession?.userId || !peerId || !hasLocalMemberPresence) {
-      presenceRepairKeyRef.current = null;
-      return;
-    }
-    if (localMemberPresenceState === "online" && localMemberPeerId === peerId) {
-      presenceRepairKeyRef.current = null;
-      return;
-    }
-    const repairKey = [
+    const presenceRepairAction = resolvePresenceRepairAction({
       snapshotRoomId,
-      snapshotPresenceRevision,
-      localMemberPeerId ?? "none",
+      activeSessionId: activeSession?.userId,
+      peerId,
+      hasLocalMemberPresence,
+      localMemberPeerId,
       localMemberPresenceState,
-      peerId
-    ].join("|");
-    if (presenceRepairKeyRef.current === repairKey) {
+      snapshotPresenceRevision,
+      previousRepairKey: presenceRepairKeyRef.current,
+      socketConnected: !!socketRef.current?.connected
+    });
+    presenceRepairKeyRef.current = presenceRepairAction.nextRepairKey;
+    if (!presenceRepairAction.shouldStartHeartbeat) {
       return;
     }
-    presenceRepairKeyRef.current = repairKey;
-    if (!socketRef.current?.connected) {
-      return;
+    if (presenceRepairAction.shouldStartHeartbeat) {
+      startPresenceHeartbeat();
     }
-    startPresenceHeartbeat();
-    emitPresence();
-    void requestRoomSnapshotResync("subscribe-ack", snapshotRoomId);
+    if (presenceRepairAction.shouldEmitPresence) {
+      emitPresence();
+    }
+    if (presenceRepairAction.shouldRequestResync && snapshotRoomId) {
+      void requestRoomSnapshotResync("subscribe-ack", snapshotRoomId);
+    }
   }, [
     emitPresence,
     activeSession?.userId,

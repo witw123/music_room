@@ -9,6 +9,7 @@ import {
   isSocketDisconnectGraceActive,
   shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
+  resolvePresenceRepairAction,
   resolveRoomRealtimeSnapshotInputs,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
@@ -334,5 +335,68 @@ describe("resolveRoomRealtimeSnapshotInputs", () => {
         fallbackUploadedTrackIds: []
       })
     );
+  });
+});
+
+describe("resolvePresenceRepairAction", () => {
+  it("requests a repair once for a stale local presence record", () => {
+    expect(
+      resolvePresenceRepairAction({
+        snapshotRoomId: "room_1",
+        activeSessionId: "user_1",
+        peerId: "peer_1",
+        hasLocalMemberPresence: true,
+        localMemberPeerId: "old_peer",
+        localMemberPresenceState: "offline",
+        snapshotPresenceRevision: 7,
+        previousRepairKey: null,
+        socketConnected: true
+      })
+    ).toEqual({
+      nextRepairKey: "room_1|7|old_peer|offline|peer_1",
+      shouldEmitPresence: true,
+      shouldRequestResync: true,
+      shouldStartHeartbeat: true
+    });
+  });
+
+  it("does not repeat the same repair key or repair an already healthy local presence", () => {
+    expect(
+      resolvePresenceRepairAction({
+        snapshotRoomId: "room_1",
+        activeSessionId: "user_1",
+        peerId: "peer_1",
+        hasLocalMemberPresence: true,
+        localMemberPeerId: "old_peer",
+        localMemberPresenceState: "offline",
+        snapshotPresenceRevision: 7,
+        previousRepairKey: "room_1|7|old_peer|offline|peer_1",
+        socketConnected: true
+      })
+    ).toEqual({
+      nextRepairKey: "room_1|7|old_peer|offline|peer_1",
+      shouldEmitPresence: false,
+      shouldRequestResync: false,
+      shouldStartHeartbeat: false
+    });
+
+    expect(
+      resolvePresenceRepairAction({
+        snapshotRoomId: "room_1",
+        activeSessionId: "user_1",
+        peerId: "peer_1",
+        hasLocalMemberPresence: true,
+        localMemberPeerId: "peer_1",
+        localMemberPresenceState: "online",
+        snapshotPresenceRevision: 8,
+        previousRepairKey: "room_1|7|old_peer|offline|peer_1",
+        socketConnected: true
+      })
+    ).toEqual({
+      nextRepairKey: null,
+      shouldEmitPresence: false,
+      shouldRequestResync: false,
+      shouldStartHeartbeat: false
+    });
   });
 });
