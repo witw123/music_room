@@ -352,6 +352,13 @@ describe("playback runtime pipeline keys", () => {
       ),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const tickEffectsControllerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/runtime-tick-effects-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
     const orchestratorNeedle = "const runtimeTickOrchestrator = new PlaybackOrchestrator";
     expect(runtimeSource.indexOf(orchestratorNeedle)).toBe(-1);
     expect(runtimeTickHookSource.indexOf(orchestratorNeedle)).toBeGreaterThan(-1);
@@ -379,12 +386,12 @@ describe("playback runtime pipeline keys", () => {
 
     const callbackRefreshNeedle =
       "recoverPausedFullLocalPlaybackRef.current = recoverPausedFullLocalPlayback;";
-    const callbackRefreshIndex = runtimeSource.indexOf(callbackRefreshNeedle);
+    const callbackRefreshIndex = tickEffectsControllerSource.indexOf(callbackRefreshNeedle);
     expect(callbackRefreshIndex).toBeGreaterThan(-1);
 
-    const dependencyStart = runtimeSource.indexOf("  }, [", callbackRefreshIndex);
-    const dependencyEnd = runtimeSource.indexOf("]);", dependencyStart);
-    const dependencies = runtimeSource.slice(dependencyStart, dependencyEnd);
+    const dependencyStart = tickEffectsControllerSource.indexOf("  }, [", callbackRefreshIndex);
+    const dependencyEnd = tickEffectsControllerSource.indexOf("]);", dependencyStart);
+    const dependencies = tickEffectsControllerSource.slice(dependencyStart, dependencyEnd);
 
     expect(dependencies).toContain("playbackCurrentTrackId");
     expect(dependencies).toContain("playbackMediaEpoch");
@@ -398,8 +405,23 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const warmupControllerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-warmup-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const tickEffectsControllerSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/runtime-tick-effects-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
 
-    const dependencySource = [...runtimeSource.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)]
+    const dependencySource = [runtimeSource, warmupControllerSource, tickEffectsControllerSource]
+      .flatMap((source) => [...source.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)])
       .map((match) => match.groups?.deps ?? "")
       .join("\n");
 
@@ -423,7 +445,7 @@ describe("playback runtime pipeline keys", () => {
     ).replace(/\r\n/g, "\n");
 
     expect(runtimeSource).toContain("usePlaybackRuntimeTickOrchestrator");
-    expect(runtimeSource).toContain("noopPlaybackRuntimeTick");
+    expect(runtimeTickHookSource).toContain("noopPlaybackRuntimeTick");
     expect(runtimeSource).not.toContain("useSyncExternalStore");
     expect(runtimeSource).not.toContain("new PlaybackOrchestrator");
     expect(runtimeSource).not.toContain("type RuntimeTickState");
@@ -743,6 +765,31 @@ describe("playback runtime pipeline keys", () => {
     expect(warmupController).toContain("resolveWarmupPreflight");
     expect(warmupController).toContain("resolveProgressiveWarmupDecision");
     expect(warmupController).toContain("resolveWarmupInactivePlaybackAction");
+  });
+
+  it("hosts runtime tick effects outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const tickEffectsController = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/runtime-tick-effects-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("useRuntimeTickEffectsController");
+    expect(runtimeSource).not.toContain("const recoverPausedFullLocalPlayback = () =>");
+    expect(runtimeSource).not.toContain("const sampleDrift = () =>");
+    expect(runtimeSource).not.toContain("const syncFullLocalBufferedWarmup = () =>");
+    expect(runtimeSource).not.toContain("const syncUpgrade = () =>");
+    expect(tickEffectsController).toContain("export function useRuntimeTickEffectsController");
+    expect(tickEffectsController).toContain("resolveFullLocalPausedRecoveryPreflight");
+    expect(tickEffectsController).toContain("resolveDriftSampleAction");
+    expect(tickEffectsController).toContain("resolveFullLocalUpgradeAction");
+    expect(tickEffectsController).toContain("resolveFullLocalWarmupTransitionAction");
   });
 
   it("memoizes diagnostic bucket objects before using them in effect dependencies", () => {
