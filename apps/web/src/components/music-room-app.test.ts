@@ -134,6 +134,23 @@ describe("playback snapshot dependency boundaries", () => {
   });
 });
 
+describe("room page cached full-local playback boundary", () => {
+  it("hosts cached full-local playback orchestration outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const cachedPlaybackSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-cached-full-local-playback.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("cachedFullLocalPlaybackLoadTargetRef");
+    expect(appSource).not.toContain("replaceCachedFullLocalPlaybackTrack");
+    expect(cachedPlaybackSource).toContain("export function useRoomCachedFullLocalPlayback");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({
