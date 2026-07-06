@@ -38,6 +38,22 @@ export type ManualCacheTaskPatch =
   | Partial<ManualCacheTask>
   | ((current: ManualCacheTask | null) => Partial<ManualCacheTask> | null);
 
+export type ManualCacheTaskUpsertRecord = Omit<
+  ManualCacheTaskRecord,
+  "taskKey" | "updatedAt"
+> & {
+  taskKey?: string;
+  updatedAt?: string;
+};
+
+type ManualCacheTaskStateSetter = (
+  updater: (current: Record<string, ManualCacheTask>) => Record<string, ManualCacheTask>
+) => void;
+
+type TrackIdRuntimeStore = {
+  delete: (trackId: string) => boolean;
+};
+
 export function buildNextManualCacheTask(input: {
   trackId: string;
   existing: ManualCacheTask | null;
@@ -105,6 +121,63 @@ export function resolveManualCacheTaskStateUpdate(input: {
     },
     nextTask
   };
+}
+
+export function applyManualCacheTaskUpdate(input: {
+  trackId: string;
+  patch: ManualCacheTaskPatch;
+  roomId: string | null | undefined;
+  roomTracks: Array<{ id: string; fileHash: string; mimeType?: string | null }> | null | undefined;
+  updatedAt: string;
+  setManualCacheTasks: ManualCacheTaskStateSetter;
+  upsertManualCacheTask: (record: ManualCacheTaskUpsertRecord) => void | Promise<void>;
+}) {
+  input.setManualCacheTasks((current) => {
+    const result = resolveManualCacheTaskStateUpdate({
+      currentTasks: current,
+      trackId: input.trackId,
+      roomTracks: input.roomTracks,
+      patch: input.patch,
+      updatedAt: input.updatedAt
+    });
+    if (!result.nextTask) {
+      return current;
+    }
+    if (input.roomId && result.nextTask.fileHash) {
+      void input.upsertManualCacheTask(
+        buildManualCacheTaskRecord({
+          roomId: input.roomId,
+          task: result.nextTask
+        })
+      );
+    }
+
+    return result.nextTasks;
+  });
+}
+
+export function applyManualCacheTaskDrop(input: {
+  trackId: string;
+  roomId: string | null | undefined;
+  chunkIndexesByTrack: TrackIdRuntimeStore;
+  assemblingTrackIdsByTrack: TrackIdRuntimeStore;
+  setManualCacheTasks: ManualCacheTaskStateSetter;
+  deleteManualCacheTask: (roomId: string, trackId: string) => void | Promise<void>;
+}) {
+  input.chunkIndexesByTrack.delete(input.trackId);
+  input.assemblingTrackIdsByTrack.delete(input.trackId);
+  if (input.roomId) {
+    void input.deleteManualCacheTask(input.roomId, input.trackId);
+  }
+  input.setManualCacheTasks((current) => {
+    if (!(input.trackId in current)) {
+      return current;
+    }
+
+    const next = { ...current };
+    delete next[input.trackId];
+    return next;
+  });
 }
 
 export function buildManualCacheTaskRecord(input: {

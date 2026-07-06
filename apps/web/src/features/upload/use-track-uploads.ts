@@ -67,9 +67,9 @@ import {
   type ManualCacheTask
 } from "./upload-ui-state";
 import {
-  buildManualCacheTaskRecord,
-  hydrateManualCacheTasksForRoom,
-  resolveManualCacheTaskStateUpdate
+  applyManualCacheTaskDrop,
+  applyManualCacheTaskUpdate,
+  hydrateManualCacheTasksForRoom
 } from "./manual-cache-task-store";
 import {
   buildCachedLibraryTrackRegisterPayload,
@@ -351,46 +351,27 @@ export function useTrackUploads(options: {
         | Partial<ManualCacheTask>
         | ((current: ManualCacheTask | null) => Partial<ManualCacheTask> | null)
     ) => {
-      setManualCacheTasks((current) => {
-        const result = resolveManualCacheTaskStateUpdate({
-          currentTasks: current,
-          trackId,
-          roomTracks: roomSnapshot?.tracks,
-          patch,
-          updatedAt: new Date().toISOString()
-        });
-        if (!result.nextTask) {
-          return current;
-        }
-        if (roomSnapshot?.room.id && result.nextTask.fileHash) {
-          void upsertManualCacheTask(
-            buildManualCacheTaskRecord({
-              roomId: roomSnapshot.room.id,
-              task: result.nextTask
-            })
-          );
-        }
-
-        return result.nextTasks;
+      applyManualCacheTaskUpdate({
+        trackId,
+        patch,
+        roomId: roomSnapshot?.room.id,
+        roomTracks: roomSnapshot?.tracks,
+        updatedAt: new Date().toISOString(),
+        setManualCacheTasks,
+        upsertManualCacheTask
       });
     },
     [roomSnapshot]
   );
 
   const dropManualCacheTask = useCallback((trackId: string) => {
-    manualCacheChunkIndexesRef.current.delete(trackId);
-    manualCacheAssemblingTrackIdsRef.current.delete(trackId);
-    if (roomSnapshot?.room.id) {
-      void deleteManualCacheTask(roomSnapshot.room.id, trackId);
-    }
-    setManualCacheTasks((current) => {
-      if (!(trackId in current)) {
-        return current;
-      }
-
-      const next = { ...current };
-      delete next[trackId];
-      return next;
+    applyManualCacheTaskDrop({
+      trackId,
+      roomId: roomSnapshot?.room.id,
+      chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+      assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current,
+      setManualCacheTasks,
+      deleteManualCacheTask
     });
   }, [roomSnapshot?.room.id]);
 

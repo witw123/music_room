@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyManualCacheTaskDrop,
+  applyManualCacheTaskUpdate,
   buildManualCacheTaskRecord,
   buildNextManualCacheTask,
   hydrateManualCacheTasksForRoom,
@@ -7,6 +9,7 @@ import {
   resolveStalePlaybackDemandTaskIds,
   shouldHydrateCacheTaskPieceIndexes
 } from "./manual-cache-task-store";
+import type { ManualCacheTask, ManualCacheTaskUpsertRecord } from "./manual-cache-task-store";
 
 describe("manual cache task store helpers", () => {
   it("builds task state from defaults and patches", () => {
@@ -137,6 +140,88 @@ describe("manual cache task store helpers", () => {
       totalChunks: 4,
       updatedAt: "2026-07-06T00:00:00.000Z"
     });
+  });
+
+  it("applies task updates through state and persistence boundaries", () => {
+    let currentTasks: Record<string, ManualCacheTask> = {};
+    const persistedRecords: ManualCacheTaskUpsertRecord[] = [];
+
+    applyManualCacheTaskUpdate({
+      trackId: "track_1",
+      patch: {
+        status: "downloading",
+        completedChunks: 1,
+        totalChunks: 4
+      },
+      roomId: "room_1",
+      roomTracks: [
+        {
+          id: "track_1",
+          fileHash: "hash_1",
+          mimeType: "audio/flac"
+        }
+      ],
+      updatedAt: "2026-07-06T00:00:00.000Z",
+      setManualCacheTasks: (updater) => {
+        currentTasks = updater(currentTasks);
+      },
+      upsertManualCacheTask: (record) => {
+        persistedRecords.push(record);
+      }
+    });
+
+    expect(currentTasks.track_1).toMatchObject({
+      trackId: "track_1",
+      status: "downloading",
+      fileHash: "hash_1",
+      completedChunks: 1,
+      totalChunks: 4
+    });
+    expect(persistedRecords).toHaveLength(1);
+    expect(persistedRecords[0]).toMatchObject({
+      roomId: "room_1",
+      trackId: "track_1",
+      fileHash: "hash_1",
+      status: "downloading"
+    });
+  });
+
+  it("drops task state and runtime indexes for a track", () => {
+    let currentTasks: Record<string, ManualCacheTask> = {
+      track_1: buildNextManualCacheTask({
+        trackId: "track_1",
+        existing: null,
+        track: {
+          fileHash: "hash_1",
+          mimeType: "audio/flac"
+        },
+        patch: {
+          status: "queued"
+        },
+        updatedAt: "2026-07-06T00:00:00.000Z"
+      })!
+    };
+    const deletedTasks: Array<{ roomId: string; trackId: string }> = [];
+    const chunkIndexesByTrack = new Map([["track_1", new Set([0])]]);
+    const assemblingTrackIdsByTrack = new Set(["track_1"]);
+
+    applyManualCacheTaskDrop({
+      trackId: "track_1",
+      roomId: "room_1",
+      chunkIndexesByTrack,
+      assemblingTrackIdsByTrack,
+      setManualCacheTasks: (updater) => {
+        currentTasks = updater(currentTasks);
+      },
+      deleteManualCacheTask: (roomId, trackId) => {
+        deletedTasks.push({ roomId, trackId });
+      }
+    });
+
+    expect(currentTasks).toEqual({});
+    expect([...chunkIndexesByTrack.keys()]).toEqual([]);
+    expect([...assemblingTrackIdsByTrack.keys()]).toEqual([]);
+    expect(deletedTasks).toEqual([{ roomId: "room_1", trackId: "track_1" }]);
   });
 
   it("loads room manual cache tasks with stale task cleanup and cached piece indexes", async () => {
