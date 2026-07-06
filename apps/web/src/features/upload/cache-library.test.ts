@@ -8,12 +8,36 @@ import {
   exportCachedLibraryTrackFile,
   importCachedLibraryTrackToRoom,
   loadCacheLibrarySnapshot,
+  startCacheDownload,
   toCachedLibraryFile,
   toCachedLibraryTrack,
   toCachedLibraryTrackFile
 } from "./cache-library";
 
 describe("cache-library adapters", () => {
+  const roomTrack = {
+    id: "track_1",
+    title: "Cached",
+    artist: "Artist",
+    album: null,
+    durationMs: 120_000,
+    bitrate: null,
+    sizeBytes: 4096,
+    codec: "flac",
+    mimeType: "audio/flac",
+    fileHash: "hash_1",
+    artworkUrl: null,
+    ownerSessionId: "user_1",
+    ownerNickname: "Host",
+    sourceType: "local_upload" as const,
+    pieceManifest: {
+      totalChunks: 2,
+      chunkSize: 1024,
+      pieceMimeType: "audio/flac"
+    },
+    relayManifest: null
+  };
+
   it("builds stable file names from cached track metadata", () => {
     expect(
       buildCachedLibraryFileName({
@@ -314,5 +338,112 @@ describe("cache-library adapters", () => {
     expect(registeredPayloads).toEqual(["room_1:Cached"]);
     expect(syncedRooms).toEqual(["room_1"]);
     expect(publishedAvailability).toEqual(["room_1:track_registered"]);
+  });
+
+  it("starts cache downloads as ready when a usable full cached file exists", async () => {
+    const file = new File(["cached"], "cached.flac", { type: "audio/flac" });
+
+    const result = await startCacheDownload({
+      manualTrackCachingEnabled: true,
+      trackId: "track_1",
+      mode: "manual",
+      roomTracks: [roomTrack],
+      peerId: "peer_1",
+      cachedLibraryTracksByHash: new Map([
+        [
+          "hash_1",
+          {
+            fileHash: "hash_1",
+            title: "Cached",
+            artist: "Artist",
+            mimeType: "audio/flac",
+            durationMs: 120_000,
+            sizeBytes: 4096,
+            cachedAt: "2026-07-04T00:00:00.000Z",
+            sourceTrackIds: ["track_1"],
+            sourceRoomIds: ["room_1"],
+            lastSourceTrackId: "track_1",
+            lastSourceRoomId: "room_1",
+            lastOwnerNickname: "Host"
+          }
+        ]
+      ]),
+      getCachedLibraryTrackSummary: async () => null,
+      getCachedLibraryTrack: async () => ({
+        fileHash: "hash_1",
+        title: "Cached",
+        artist: "Artist",
+        mimeType: "audio/flac",
+        durationMs: 120_000,
+        sizeBytes: 4096,
+        cachedAt: "2026-07-04T00:00:00.000Z",
+        sourceTrackIds: ["track_1"],
+        sourceRoomIds: ["room_1"],
+        lastSourceTrackId: "track_1",
+        lastSourceRoomId: "room_1",
+        lastOwnerNickname: "Host",
+        file
+      }),
+      getTrackPieceManifestByFileHash: async () => null,
+      getTrackPieceManifest: async () => null,
+      deleteCachedPiecesForTrack: async () => undefined,
+      getCachedPiecesForTrack: async () => []
+    });
+
+    expect(result.taskPatch).toMatchObject({
+      status: "ready",
+      mode: "manual",
+      fileHash: "hash_1",
+      completedChunks: 2,
+      totalChunks: 2,
+      mimeType: "audio/flac"
+    });
+    expect(result.chunkIndexes).toBeNull();
+    expect(result.assembleRequest).toBeNull();
+  });
+
+  it("clears incompatible cached pieces before starting a new cache task", async () => {
+    const deletedTracks: string[] = [];
+
+    const result = await startCacheDownload({
+      manualTrackCachingEnabled: true,
+      trackId: "track_1",
+      mode: "manual",
+      roomTracks: [roomTrack],
+      peerId: "peer_1",
+      cachedLibraryTracksByHash: new Map(),
+      getCachedLibraryTrackSummary: async () => null,
+      getCachedLibraryTrack: async () => null,
+      getTrackPieceManifestByFileHash: async () => ({
+        trackId: "track_1",
+        fileHash: "hash_1",
+        mimeType: "audio/flac",
+        codec: "flac",
+        sizeBytes: 4096,
+        durationMs: 120_000,
+        totalChunks: 3,
+        chunkSize: 2048,
+        updatedAt: "2026-07-04T00:00:00.000Z"
+      }),
+      getTrackPieceManifest: async () => null,
+      deleteCachedPiecesForTrack: async (trackId) => {
+        deletedTracks.push(trackId);
+      },
+      getCachedPiecesForTrack: async () => []
+    });
+
+    expect(deletedTracks).toEqual(["track_1"]);
+    expect(result.shouldClearChunkIndexes).toBe(true);
+    expect(result.chunkIndexes).toEqual(new Set());
+    expect(result.taskPatch).toMatchObject({
+      status: "queued",
+      mode: "manual",
+      fileHash: "hash_1",
+      completedChunks: 0,
+      totalChunks: 2,
+      manifestSource: "snapshot",
+      integrityMode: "weak"
+    });
+    expect(result.statusMessage).toBe("已开始缓存《Cached》。");
   });
 });

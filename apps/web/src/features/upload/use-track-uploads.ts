@@ -48,9 +48,9 @@ import {
   deleteCachedLibraryTrackEntry as deleteCachedLibraryTrackEntryFromLibrary,
   deleteUploadedTrackArtifacts as deleteUploadedTrackArtifactsFromLibrary,
   exportCachedLibraryTrackFile,
-  hasUsableCachedLibraryFileForRoomTrack,
   importCachedLibraryTrackToRoom as importCachedLibraryTrackToRoomFromLibrary,
   loadCacheLibrarySnapshot,
+  startCacheDownload as startCacheDownloadFromLibrary,
   toCachedLibraryFile,
   toCachedLibraryTrackFile
 } from "./cache-library";
@@ -59,7 +59,6 @@ import {
   buildManualCachePieceAvailabilityAnnouncement,
   isManualCachePieceCompatible,
   resolveMissingOwnedUploadedTracks,
-  resolveReusableCachedPieceManifest,
   shouldAnnounceTrackAvailability
 } from "./track-availability";
 import {
@@ -74,8 +73,7 @@ import {
   shouldEnsurePlaybackDemandCacheTask,
   shouldHydrateCacheTaskPieceIndexes,
   shouldIgnoreManualCachePieceTaskUpdate,
-  type ManualCacheTask,
-  type ManualCacheTaskStatus
+  type ManualCacheTask
 } from "./upload-ui-state";
 import {
   buildCachedLibraryTrackRegisterPayload,
@@ -687,95 +685,39 @@ export function useTrackUploads(options: {
         return;
       }
 
-      const cachedLibraryTrack =
-        cacheLibraryTracksRef.current.get(track.fileHash) ??
-        (await getCachedLibraryTrackSummary(track.fileHash));
-      if (
-        isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: cachedLibraryTrack,
-          roomTrack: track
-        })
-      ) {
-        const cachedLibraryRecord = await getCachedLibraryTrack(track.fileHash);
-        if (
-          hasUsableCachedLibraryFileForRoomTrack({
-            cachedTrack: cachedLibraryRecord,
-            roomTrack: track
-          })
-        ) {
-          updateManualCacheTask(trackId, {
-            status: "ready",
-            mode,
-            fileHash: track.fileHash,
-            errorMessage: null,
-            completedChunks: resolveTrackTotalChunks(track),
-            totalChunks: resolveTrackTotalChunks(track),
-            mimeType: track.mimeType ?? null,
-            blockedReason: null,
-            lastError: null
-          });
-          return;
-        }
-      }
-
-      const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-      const rawCachedManifest =
-        (await getTrackPieceManifestByFileHash(track.fileHash)) ??
-        (await getTrackPieceManifest(trackId));
-      const cachedManifest = resolveReusableCachedPieceManifest({
-        cachedManifest: rawCachedManifest,
-        expectedManifest
+      const result = await startCacheDownloadFromLibrary({
+        manualTrackCachingEnabled: enableManualTrackCaching,
+        trackId,
+        mode,
+        roomTracks: roomSnapshot.tracks,
+        peerId,
+        cachedLibraryTracksByHash: cacheLibraryTracksRef.current,
+        getCachedLibraryTrackSummary,
+        getCachedLibraryTrack,
+        getTrackPieceManifestByFileHash,
+        getTrackPieceManifest,
+        deleteCachedPiecesForTrack,
+        getCachedPiecesForTrack,
+        localCacheOwnerKey
       });
-      if (
-        rawCachedManifest &&
-        !cachedManifest &&
-        expectedManifest &&
-        (rawCachedManifest.totalChunks !== expectedManifest.totalChunks ||
-          rawCachedManifest.chunkSize !== expectedManifest.chunkSize)
-      ) {
-        await deleteCachedPiecesForTrack(trackId, undefined, {
-          fileHash: track.fileHash,
-          ownerKey: localCacheOwnerKey
-        });
+      if (result.shouldClearChunkIndexes) {
         manualCacheChunkIndexesRef.current.delete(trackId);
       }
-
-      const pieces = await getCachedPiecesForTrack(trackId, peerId, {
-        fileHash: track.fileHash,
-        ownerKey: localCacheOwnerKey,
-        chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize
-      });
-      const chunkIndexes = new Set(pieces.map((piece) => piece.chunkIndex));
-      manualCacheChunkIndexesRef.current.set(trackId, chunkIndexes);
-
-      const totalChunks =
-        cachedManifest?.totalChunks ??
-        expectedManifest?.totalChunks ??
-        Math.max(chunkIndexes.size, 0);
-      const mimeType = cachedManifest?.mimeType ?? track.mimeType ?? null;
-      const completedChunks = chunkIndexes.size;
-      const status: ManualCacheTaskStatus =
-        completedChunks > 0 ? "downloading" : "queued";
-
-      updateManualCacheTask(trackId, {
-        status,
-        mode,
-        fileHash: track.fileHash,
-        errorMessage: null,
-        completedChunks,
-        totalChunks,
-        mimeType,
-        manifestSource: cachedManifest ? "cache" : expectedManifest ? "snapshot" : null,
-        blockedReason: null,
-        integrityMode: cachedManifest?.pieceHashes?.length === totalChunks ? "strong" : "weak",
-        lastError: null
-      });
-      if (mode === "manual") {
-        setStatusMessage(`已开始缓存《${track.title}》。`);
+      if (result.chunkIndexes) {
+        manualCacheChunkIndexesRef.current.set(trackId, result.chunkIndexes);
       }
-
-      if (totalChunks > 0 && completedChunks >= totalChunks) {
-        void assembleManualCacheTrack(trackId, mimeType, totalChunks);
+      if (result.taskPatch) {
+        updateManualCacheTask(trackId, result.taskPatch);
+      }
+      if (result.statusMessage) {
+        setStatusMessage(result.statusMessage);
+      }
+      if (result.assembleRequest) {
+        void assembleManualCacheTrack(
+          result.assembleRequest.trackId,
+          result.assembleRequest.mimeType,
+          result.assembleRequest.totalChunks
+        );
       }
     },
     [assembleManualCacheTrack, peerId, roomSnapshot, setStatusMessage, updateManualCacheTask]
@@ -1233,8 +1175,4 @@ export function useTrackUploads(options: {
     exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom
   };
-}
-
-function resolveTrackTotalChunks(track: Pick<TrackMeta, "relayManifest" | "pieceManifest">) {
-  return track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0;
 }

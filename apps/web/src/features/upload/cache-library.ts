@@ -9,6 +9,8 @@ import type {
   UploadedTrack
 } from "@/features/upload/audio-utils";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
+import { resolveReusableCachedPieceManifest } from "./track-availability";
+import type { ManualCacheTask } from "./upload-ui-state";
 
 type CacheLibraryTrackUpsertInput = {
   track: Pick<
@@ -42,6 +44,18 @@ type CacheLibraryTrackUpsertRecord = {
 };
 
 type TrackRegistrationDraft = Omit<TrackMeta, "id"> & { id?: string };
+
+type CachedPieceIndex = {
+  chunkIndex: number;
+};
+
+type StartCacheDownloadResult = {
+  taskPatch: Partial<ManualCacheTask> | null;
+  chunkIndexes: Set<number> | null;
+  shouldClearChunkIndexes: boolean;
+  assembleRequest: { trackId: string; mimeType: string | null; totalChunks: number } | null;
+  statusMessage: string | null;
+};
 
 export function createInFlightCachedLibraryTrackFileLoader(
   loadCachedTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>
@@ -339,6 +353,153 @@ export async function importCachedLibraryTrackToRoom(input: {
   };
 }
 
+export async function startCacheDownload(input: {
+  manualTrackCachingEnabled: boolean;
+  trackId: string;
+  mode: ManualCacheTask["mode"];
+  roomTracks: TrackMeta[];
+  peerId: string;
+  cachedLibraryTracksByHash: Map<string, CachedLibraryTrack>;
+  getCachedLibraryTrackSummary: (
+    fileHash: string
+  ) => Promise<CachedLibraryTrackSummaryRecord | null | undefined>;
+  getCachedLibraryTrack: (
+    fileHash: string
+  ) => Promise<CachedLibraryTrackRecord | null | undefined>;
+  getTrackPieceManifestByFileHash: (
+    fileHash: string
+  ) => Promise<{
+    totalChunks: number;
+    chunkSize: number;
+    mimeType?: string | null;
+    pieceHashes?: string[] | null;
+  } | null | undefined>;
+  getTrackPieceManifest: (
+    trackId: string
+  ) => Promise<{
+    totalChunks: number;
+    chunkSize: number;
+    mimeType?: string | null;
+    pieceHashes?: string[] | null;
+  } | null | undefined>;
+  deleteCachedPiecesForTrack: (
+    trackId: string,
+    peerId?: string,
+    options?: { fileHash?: string; ownerKey?: string }
+  ) => Promise<unknown>;
+  getCachedPiecesForTrack: (
+    trackId: string,
+    peerId: string,
+    options?: { fileHash?: string; ownerKey?: string; chunkSize?: number }
+  ) => Promise<CachedPieceIndex[]>;
+  localCacheOwnerKey?: string;
+}): Promise<StartCacheDownloadResult> {
+  const emptyResult: StartCacheDownloadResult = {
+    taskPatch: null,
+    chunkIndexes: null,
+    shouldClearChunkIndexes: false,
+    assembleRequest: null,
+    statusMessage: null
+  };
+  if (!input.manualTrackCachingEnabled) {
+    return emptyResult;
+  }
+
+  const track = input.roomTracks.find((entry) => entry.id === input.trackId);
+  if (!track) {
+    return emptyResult;
+  }
+
+  const cachedLibraryTrack =
+    input.cachedLibraryTracksByHash.get(track.fileHash) ??
+    (await input.getCachedLibraryTrackSummary(track.fileHash));
+  if (
+    isCachedLibraryTrackUsableForRoomTrack({
+      cachedTrack: cachedLibraryTrack,
+      roomTrack: track
+    })
+  ) {
+    const cachedLibraryRecord = await input.getCachedLibraryTrack(track.fileHash);
+    if (
+      hasUsableCachedLibraryFileForRoomTrack({
+        cachedTrack: cachedLibraryRecord,
+        roomTrack: track
+      })
+    ) {
+      return {
+        ...emptyResult,
+        taskPatch: {
+          status: "ready",
+          mode: input.mode,
+          fileHash: track.fileHash,
+          errorMessage: null,
+          completedChunks: resolveTrackTotalChunks(track),
+          totalChunks: resolveTrackTotalChunks(track),
+          mimeType: track.mimeType ?? null,
+          blockedReason: null,
+          lastError: null
+        }
+      };
+    }
+  }
+
+  const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
+  const rawCachedManifest =
+    (await input.getTrackPieceManifestByFileHash(track.fileHash)) ??
+    (await input.getTrackPieceManifest(input.trackId));
+  const cachedManifest = resolveReusableCachedPieceManifest({
+    cachedManifest: rawCachedManifest,
+    expectedManifest
+  });
+  const manifestMismatch =
+    !!rawCachedManifest &&
+    !cachedManifest &&
+    !!expectedManifest &&
+    (rawCachedManifest.totalChunks !== expectedManifest.totalChunks ||
+      rawCachedManifest.chunkSize !== expectedManifest.chunkSize);
+  if (manifestMismatch) {
+    await input.deleteCachedPiecesForTrack(input.trackId, undefined, {
+      fileHash: track.fileHash,
+      ownerKey: input.localCacheOwnerKey
+    });
+  }
+
+  const pieces = await input.getCachedPiecesForTrack(input.trackId, input.peerId, {
+    fileHash: track.fileHash,
+    ownerKey: input.localCacheOwnerKey,
+    chunkSize: cachedManifest?.chunkSize ?? expectedManifest?.chunkSize
+  });
+  const chunkIndexes = new Set(pieces.map((piece) => piece.chunkIndex));
+  const totalChunks =
+    cachedManifest?.totalChunks ?? expectedManifest?.totalChunks ?? Math.max(chunkIndexes.size, 0);
+  const mimeType = cachedManifest?.mimeType ?? track.mimeType ?? null;
+  const completedChunks = chunkIndexes.size;
+  const taskPatch: Partial<ManualCacheTask> = {
+    status: completedChunks > 0 ? "downloading" : "queued",
+    mode: input.mode,
+    fileHash: track.fileHash,
+    errorMessage: null,
+    completedChunks,
+    totalChunks,
+    mimeType,
+    manifestSource: cachedManifest ? "cache" : expectedManifest ? "snapshot" : null,
+    blockedReason: null,
+    integrityMode: cachedManifest?.pieceHashes?.length === totalChunks ? "strong" : "weak",
+    lastError: null
+  };
+
+  return {
+    taskPatch,
+    chunkIndexes,
+    shouldClearChunkIndexes: manifestMismatch,
+    assembleRequest:
+      totalChunks > 0 && completedChunks >= totalChunks
+        ? { trackId: input.trackId, mimeType, totalChunks }
+        : null,
+    statusMessage: input.mode === "manual" ? `已开始缓存《${track.title}》。` : null
+  };
+}
+
 export function buildCachedLibraryFileName(input: {
   title: string;
   mimeType: string;
@@ -347,6 +508,10 @@ export function buildCachedLibraryFileName(input: {
   const baseName = sanitizeFileName(input.title) || input.fileHash;
   const extension = inferFileExtension(input.mimeType);
   return extension ? `${baseName}.${extension}` : baseName;
+}
+
+function resolveTrackTotalChunks(track: Pick<TrackMeta, "relayManifest" | "pieceManifest">) {
+  return track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0;
 }
 
 function inferFileExtension(mimeType: string | null | undefined) {
