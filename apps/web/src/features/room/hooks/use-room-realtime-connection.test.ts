@@ -9,6 +9,7 @@ import {
   isSocketDisconnectGraceActive,
   shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
+  resolveRoomRealtimeSnapshotInputs,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
 } from "./use-room-realtime-connection";
@@ -276,5 +277,62 @@ describe("room realtime timer dependencies", () => {
       .join("\n");
 
     expect(dependencySource).not.toMatch(/^\s+roomSnapshot,\s*$/m);
+  });
+});
+
+describe("resolveRoomRealtimeSnapshotInputs", () => {
+  it("keeps cloned room snapshots on the same scalar timer identity", () => {
+    const snapshot = createSnapshot({
+      tracks: [
+        {
+          id: "track_1",
+          ownerSessionId: "host",
+          title: "Track 1",
+          artist: "Artist",
+          album: null,
+          durationMs: 120_000,
+          bitrate: 320_000,
+          fileHash: "hash_1",
+          mimeType: "audio/flac",
+          codec: "flac",
+          sizeBytes: 1024,
+          artworkUrl: null,
+          ownerNickname: "Host",
+          sourceType: "local_upload"
+        }
+      ]
+    });
+    snapshot.room.members = [
+      {
+        id: "user_1",
+        nickname: "Listener",
+        role: "member",
+        joinedAt: "2026-01-01T00:00:00.000Z",
+        peerId: "peer_1",
+        presenceState: "online"
+      }
+    ];
+    const clonedSnapshot = {
+      ...snapshot,
+      room: {
+        ...snapshot.room,
+        members: [...snapshot.room.members]
+      },
+      tracks: [...snapshot.tracks]
+    };
+
+    expect(
+      resolveRoomRealtimeSnapshotInputs({
+        roomSnapshot: clonedSnapshot,
+        activeSessionId: "user_1",
+        fallbackUploadedTrackIds: []
+      })
+    ).toEqual(
+      resolveRoomRealtimeSnapshotInputs({
+        roomSnapshot: snapshot,
+        activeSessionId: "user_1",
+        fallbackUploadedTrackIds: []
+      })
+    );
   });
 });

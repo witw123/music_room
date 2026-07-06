@@ -131,6 +131,29 @@ export function shouldExitRoomOnSnapshotMissing(input: {
   return !input.missingRoomId || input.missingRoomId === input.currentRoomId;
 }
 
+export function resolveRoomRealtimeSnapshotInputs(input: {
+  roomSnapshot: RoomSnapshot | null;
+  activeSessionId: string | null | undefined;
+  fallbackUploadedTrackIds: string[];
+}) {
+  const localMemberPresence =
+    input.roomSnapshot?.room.members.find((member) => member.id === input.activeSessionId) ??
+    null;
+  const snapshotTrackIds =
+    input.roomSnapshot?.tracks.map((track) => track.id) ?? input.fallbackUploadedTrackIds;
+
+  return {
+    snapshotRoomId: input.roomSnapshot?.room.id ?? null,
+    snapshotMembersCount: input.roomSnapshot?.room.members.length ?? 0,
+    snapshotPresenceRevision: input.roomSnapshot?.room.presenceRevision ?? null,
+    hasLocalMemberPresence: !!localMemberPresence,
+    localMemberPeerId: localMemberPresence?.peerId ?? null,
+    localMemberPresenceState: localMemberPresence?.presenceState ?? null,
+    snapshotTrackIds,
+    snapshotTrackIdsKey: snapshotTrackIds.join("|")
+  };
+}
+
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -431,16 +454,20 @@ export function useRoomRealtimeConnection(input: {
     socketRef,
     uploadedTrackIds
   } = input;
-  const snapshotRoomId = roomSnapshot?.room.id ?? null;
-  const snapshotMembersCount = roomSnapshot?.room.members.length ?? 0;
-  const snapshotPresenceRevision = roomSnapshot?.room.presenceRevision ?? null;
-  const localMemberPresence =
-    roomSnapshot?.room.members.find((member) => member.id === activeSession?.userId) ?? null;
-  const hasLocalMemberPresence = !!localMemberPresence;
-  const localMemberPeerId = localMemberPresence?.peerId ?? null;
-  const localMemberPresenceState = localMemberPresence?.presenceState ?? null;
-  const snapshotTrackIds = roomSnapshot?.tracks.map((track) => track.id) ?? uploadedTrackIds;
-  const snapshotTrackIdsKey = snapshotTrackIds.join("|");
+  const {
+    hasLocalMemberPresence,
+    localMemberPeerId,
+    localMemberPresenceState,
+    snapshotMembersCount,
+    snapshotPresenceRevision,
+    snapshotRoomId,
+    snapshotTrackIds,
+    snapshotTrackIdsKey
+  } = resolveRoomRealtimeSnapshotInputs({
+    roomSnapshot,
+    activeSessionId: activeSession?.userId,
+    fallbackUploadedTrackIds: uploadedTrackIds
+  });
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
   const recoveryWatchdogIntervalRef = useRef<number | null>(null);
