@@ -25,6 +25,15 @@ export type SourceResetReason =
   | "none";
 
 type PlaybackLike = PlaybackSnapshot | null | undefined;
+type PlaybackTopologyLike =
+  | {
+      currentTrackId: string | null | undefined;
+      mediaEpoch?: number | null;
+      sourcePeerId?: string | null;
+      sourceSessionId?: string | null;
+    }
+  | null
+  | undefined;
 
 export function resolvePlaybackSurfaceKey(playback: PlaybackLike) {
   if (!playback?.currentTrackId) {
@@ -50,8 +59,8 @@ export function resolvePlaybackTimelineKey(playback: PlaybackLike) {
 }
 
 export function resolvePlaybackSourceResetReason(input: {
-  previousPlayback: PlaybackLike;
-  nextPlayback: PlaybackLike;
+  previousPlayback: PlaybackTopologyLike;
+  nextPlayback: PlaybackTopologyLike;
 }): SourceResetReason {
   const { previousPlayback, nextPlayback } = input;
 

@@ -48,9 +48,7 @@ import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
 import {
-  resolvePlaybackSourceResetReason,
-  resolvePlaybackSurfaceKey,
-  resolvePlaybackTimelineKey
+  resolvePlaybackSourceResetReason
 } from "@/features/room/hooks/room-playback-topology";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
@@ -475,25 +473,50 @@ export function MusicRoomApp({
   const playbackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
   const playbackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
   const playbackStatus = roomPlayback?.status ?? null;
+  const roomPlaybackRef = useRef(roomPlayback);
+  roomPlaybackRef.current = roomPlayback;
   const isCurrentSourceOwner = isCurrentPlaybackSourceDevice({
     playback: roomPlayback,
     peerId,
     activeSessionId: activeSession?.userId
   });
   const playbackSurfaceKey = useMemo(
-    () => resolvePlaybackSurfaceKey(roomPlayback),
+    () => {
+      if (!currentPlaybackTrackId) {
+        return null;
+      }
+
+      const sourceIdentity = playbackSourceSessionId ?? playbackSourcePeerId ?? "none";
+      const mediaEpoch = typeof playbackMediaEpoch === "number" ? playbackMediaEpoch : "none";
+      return [currentPlaybackTrackId, sourceIdentity, mediaEpoch].join("|");
+    },
     [currentPlaybackTrackId, playbackMediaEpoch, playbackSourcePeerId, playbackSourceSessionId]
   );
   const playbackTimelineKey = useMemo(
-    () => resolvePlaybackTimelineKey(roomPlayback),
+    () => {
+      if (!currentPlaybackTrackId) {
+        return null;
+      }
+
+      const playbackTimelineRevision =
+        typeof playbackRevision === "number" ? playbackRevision : playbackQueueVersion;
+      const mediaEpoch = typeof playbackMediaEpoch === "number" ? playbackMediaEpoch : "none";
+      return [currentPlaybackTrackId, playbackTimelineRevision, mediaEpoch].join("|");
+    },
     [currentPlaybackTrackId, playbackMediaEpoch, playbackQueueVersion, playbackRevision]
   );
   const playbackTopologySnapshot = useMemo(
-    () => roomPlayback,
+    () =>
+      currentPlaybackTrackId
+        ? {
+            currentTrackId: currentPlaybackTrackId,
+            mediaEpoch: playbackMediaEpoch,
+            sourcePeerId: playbackSourcePeerId,
+            sourceSessionId: playbackSourceSessionId
+          }
+        : null,
     [currentPlaybackTrackId, playbackMediaEpoch, playbackSourcePeerId, playbackSourceSessionId]
   );
-  const roomPlaybackRef = useRef(roomPlayback);
-  roomPlaybackRef.current = roomPlayback;
   const currentTrackRef = useRef<RoomSnapshot["tracks"][number] | null>(null);
   const currentTrack = useMemo(
     () => resolveStableCurrentTrack(currentTrackRef.current, currentPlaybackTrackId, roomSnapshot?.tracks),
@@ -979,20 +1002,20 @@ export function MusicRoomApp({
   });
 
   useEffect(() => {
-    const playback = roomSnapshot?.room.playback;
     if (
       isCurrentSourceOwner &&
-      playback?.status === "playing" &&
-      playback.currentTrackId &&
-      cachedFullLocalPlaybackTrack?.trackId === playback.currentTrackId
+      playbackStatus === "playing" &&
+      currentPlaybackTrackId &&
+      cachedFullLocalPlaybackTrack?.trackId === currentPlaybackTrackId
     ) {
       void ensureSourcePlaybackStarted();
     }
   }, [
-    cachedFullLocalPlaybackTrack,
+    cachedFullLocalPlaybackTrack?.trackId,
+    currentPlaybackTrackId,
     ensureSourcePlaybackStarted,
     isCurrentSourceOwner,
-    roomSnapshot?.room.playback
+    playbackStatus
   ]);
 
   useEffect(() => {

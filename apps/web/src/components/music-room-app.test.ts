@@ -121,6 +121,11 @@ describe("playback snapshot dependency boundaries", () => {
     ).replace(/\r\n/g, "\n");
 
     expect(source).not.toContain("[roomSnapshot?.room.playback]");
+    expect(
+      source
+        .split("\n")
+        .map((line) => line.trim().replace(/,$/, ""))
+    ).not.toContain("roomSnapshot?.room.playback");
     expect(source).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
     expect(source).not.toMatch(/^\s+roomPlayback,\s*$/m);
   });
