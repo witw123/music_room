@@ -206,6 +206,66 @@ export function resolvePresenceRepairAction(input: {
   };
 }
 
+export function resolveRoomSnapshotWatchdogAction(input: {
+  activeRouteRoomId: string | null;
+  socketConnected: boolean;
+  snapshotRoomId: string | null;
+  lastRealtimeRoomEventAtMs: number;
+  nowMs: number;
+  staleAfterMs: number;
+}) {
+  const idleAction = {
+    nextLastRealtimeRoomEventAtMs: input.lastRealtimeRoomEventAtMs,
+    resyncRoomId: null,
+    shouldRequestResync: false
+  };
+
+  if (
+    !input.activeRouteRoomId ||
+    input.activeRouteRoomId !== input.snapshotRoomId ||
+    !input.socketConnected
+  ) {
+    return idleAction;
+  }
+  if (input.nowMs - input.lastRealtimeRoomEventAtMs < input.staleAfterMs) {
+    return idleAction;
+  }
+
+  return {
+    nextLastRealtimeRoomEventAtMs: input.nowMs,
+    resyncRoomId: input.snapshotRoomId,
+    shouldRequestResync: true
+  };
+}
+
+export function resolveRecoveryWatchdogAction(input: {
+  snapshotRoomId: string | null;
+  enableTrackCaching: boolean;
+  connectedPeersCount: number;
+  snapshotMembersCount: number;
+  playbackConnectionKey: string | null;
+}) {
+  if (
+    !input.snapshotRoomId ||
+    !input.enableTrackCaching ||
+    input.connectedPeersCount > 0 ||
+    input.snapshotMembersCount <= 1
+  ) {
+    return { recommendation: null };
+  }
+
+  return {
+    recommendation: {
+      playbackConnectionKey: input.playbackConnectionKey,
+      peerId: null,
+      scope: "data" as const,
+      level: "soft" as const,
+      reason: "watchdog-data-stalled" as const,
+      observedNoProgressMs: null
+    }
+  };
+}
+
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -593,14 +653,18 @@ export function useRoomRealtimeConnection(input: {
     roomSnapshotWatchdogIntervalRef.current = window.setInterval(() => {
       const activeRoomId = activeRouteRoomIdRef.current;
       const socket = socketRef.current;
-      if (!activeRoomId || activeRoomId !== snapshotRoomId || !socket?.connected) {
-        return;
+      const watchdogAction = resolveRoomSnapshotWatchdogAction({
+        activeRouteRoomId: activeRoomId,
+        socketConnected: !!socket?.connected,
+        snapshotRoomId,
+        lastRealtimeRoomEventAtMs: lastRealtimeRoomEventAtRef.current,
+        nowMs: Date.now(),
+        staleAfterMs: 8_000
+      });
+      lastRealtimeRoomEventAtRef.current = watchdogAction.nextLastRealtimeRoomEventAtMs;
+      if (watchdogAction.shouldRequestResync) {
+        void requestRoomSnapshotResync("stale-watchdog", watchdogAction.resyncRoomId);
       }
-      if (Date.now() - lastRealtimeRoomEventAtRef.current < 8_000) {
-        return;
-      }
-      lastRealtimeRoomEventAtRef.current = Date.now();
-      void requestRoomSnapshotResync("stale-watchdog", snapshotRoomId);
     }, 4_000);
 
     return () => stopRoomSnapshotWatchdog();
@@ -722,18 +786,15 @@ export function useRoomRealtimeConnection(input: {
     }
     stopRecoveryWatchdog();
     recoveryWatchdogIntervalRef.current = window.setInterval(() => {
-      if (!snapshotRoomId || !enableTrackCaching) {
-        return;
-      }
-      if (connectedPeers.length === 0 && snapshotMembersCount > 1) {
-        queuePlaybackRecoveryRecommendation?.({
-          playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null,
-          peerId: null,
-          scope: "data",
-          level: "soft",
-          reason: "watchdog-data-stalled",
-          observedNoProgressMs: null
-        });
+      const recoveryAction = resolveRecoveryWatchdogAction({
+        snapshotRoomId,
+        enableTrackCaching,
+        connectedPeersCount: connectedPeers.length,
+        snapshotMembersCount,
+        playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null
+      });
+      if (recoveryAction.recommendation) {
+        queuePlaybackRecoveryRecommendation?.(recoveryAction.recommendation);
       }
     }, 5_000);
     return () => stopRecoveryWatchdog();
