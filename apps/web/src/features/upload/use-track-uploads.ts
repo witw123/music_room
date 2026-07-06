@@ -31,7 +31,6 @@ import {
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import {
   buildTrackMeta,
   type CachedLibraryTrack,
@@ -60,7 +59,6 @@ import {
 } from "./track-availability";
 import {
   mergeHydratedManualCacheTasks,
-  pruneManualCacheChunkIndexesByActiveTracks,
   resolveAutomaticPlaybackCacheTaskMode,
   resolveManualCachePieceReceivedAction,
   resolveManualCachePlanReceivedAction,
@@ -80,6 +78,10 @@ import {
 } from "./upload-pipeline";
 import { assembleManualCacheTrackFromPieces } from "./manual-cache-assembly";
 import { rehydrateOwnedUploadedTracksFromCache } from "./upload-rehydration";
+import {
+  applyUploadRuntimePruneForActiveTracks,
+  applyUploadRuntimeTrackRemoval
+} from "./upload-runtime-cleanup";
 
 export {
   buildCachedLibraryTrackRegisterPayload,
@@ -252,23 +254,11 @@ export function useTrackUploads(options: {
       return;
     }
     const activeTrackIds = new Set(roomTrackIdsKey ? roomTrackIdsKey.split("|") : []);
-    pruneManualCacheChunkIndexesByActiveTracks(
-      manualCacheChunkIndexesRef.current,
-      activeTrackIds
-    );
-    for (const trackId of manualCacheAssemblingTrackIdsRef.current.keys()) {
-      if (!activeTrackIds.has(trackId)) {
-        manualCacheAssemblingTrackIdsRef.current.delete(trackId);
-      }
-    }
-    setUploadedTracks((current) => {
-      const next = { ...current };
-      for (const trackId of Object.keys(current)) {
-        if (!activeTrackIds.has(trackId)) {
-          delete next[trackId];
-        }
-      }
-      return next;
+    applyUploadRuntimePruneForActiveTracks({
+      activeTrackIds,
+      setUploadedTracks,
+      chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+      assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current
     });
   }, [roomSnapshot?.room.id, roomTrackIdsKey]);
 
@@ -816,11 +806,12 @@ export function useTrackUploads(options: {
         deleteCachedPiecesForTrack,
         deleteManualCacheTask
       });
-      for (const removedTrackId of result.removedTrackIds) {
-        manualCacheChunkIndexesRef.current.delete(removedTrackId);
-        manualCacheAssemblingTrackIdsRef.current.delete(removedTrackId);
-      }
-      setUploadedTracks((current) => removeTracksFromUploads(current, result.removedTrackIds));
+      applyUploadRuntimeTrackRemoval({
+        trackIds: result.removedTrackIds,
+        setUploadedTracks,
+        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+        assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current
+      });
     },
     [roomSnapshot?.room.id]
   );
@@ -833,17 +824,12 @@ export function useTrackUploads(options: {
         deleteCachedPiecesForTracks,
         deleteManualCacheTasksForTracks
       });
-      for (const trackId of result.removedTrackIds) {
-        manualCacheChunkIndexesRef.current.delete(trackId);
-        manualCacheAssemblingTrackIdsRef.current.delete(trackId);
-      }
-      setUploadedTracks((current) => removeTracksFromUploads(current, result.removedTrackIds));
-      setManualCacheTasks((current) => {
-        const next = { ...current };
-        for (const trackId of result.removedTrackIds) {
-          delete next[trackId];
-        }
-        return next;
+      applyUploadRuntimeTrackRemoval({
+        trackIds: result.removedTrackIds,
+        setUploadedTracks,
+        setManualCacheTasks,
+        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+        assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current
       });
     },
     [roomSnapshot?.room.id]
