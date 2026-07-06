@@ -44,7 +44,7 @@ async function registerAndJoin(context: BrowserContext, joinCode: string, nickna
 
 function wavFile(name: string, frequencyHz: number) {
   const sampleRate = 44_100;
-  const durationSeconds = 0.5;
+  const durationSeconds = 4;
   const sampleCount = Math.floor(sampleRate * durationSeconds);
   const dataSize = sampleCount * 2;
   const buffer = Buffer.alloc(44 + dataSize);
