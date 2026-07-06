@@ -5,7 +5,8 @@ import {
   buildPeerConnectionConfig,
   releasePeerConnectionEntry,
   resolveExistingPeerConnectionAction,
-  shouldInitiatePeerConnection
+  shouldInitiatePeerConnection,
+  toIceCandidatePayload
 } from "./peer-connection-lifecycle";
 
 class FakeDataChannel {
@@ -44,6 +45,22 @@ function buildEntry(input: {
 }
 
 describe("peer connection lifecycle helpers", () => {
+  it("serializes ICE candidate init fields for data peer signals", () => {
+    expect(
+      toIceCandidatePayload({
+        candidate: "candidate-1",
+        sdpMid: "0",
+        sdpMLineIndex: 0,
+        usernameFragment: "ufrag"
+      })
+    ).toEqual({
+      candidate: "candidate-1",
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+      usernameFragment: "ufrag"
+    });
+  });
+
   it("derives stable initiator and connection config decisions", () => {
     expect(shouldInitiatePeerConnection("peer_a", "peer_b")).toBe(true);
     expect(shouldInitiatePeerConnection("peer_b", "peer_a")).toBe(false);

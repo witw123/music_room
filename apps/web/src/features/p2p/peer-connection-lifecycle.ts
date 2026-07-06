@@ -95,7 +95,7 @@ export function bindPeerConnectionEvents(input: {
     input.entry.lastSignalProgressAtMs = Date.now();
     input.sendCandidate(
       input.peerId,
-      event.candidate.toJSON() as unknown as Record<string, unknown>
+      toIceCandidatePayload(event.candidate.toJSON())
     );
   };
 
@@ -150,5 +150,18 @@ export function bindPeerConnectionEvents(input: {
   input.connection.ondatachannel = (event) => {
     input.entry.channel = event.channel;
     input.bindChannel(input.peerId, input.entry, input.entry.channel);
+  };
+}
+
+export function toIceCandidatePayload(candidate: RTCIceCandidateInit): Record<string, unknown> {
+  return {
+    candidate: candidate.candidate,
+    ...(typeof candidate.sdpMid === "string" ? { sdpMid: candidate.sdpMid } : {}),
+    ...(typeof candidate.sdpMLineIndex === "number"
+      ? { sdpMLineIndex: candidate.sdpMLineIndex }
+      : {}),
+    ...(typeof candidate.usernameFragment === "string"
+      ? { usernameFragment: candidate.usernameFragment }
+      : {})
   };
 }

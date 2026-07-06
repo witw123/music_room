@@ -103,7 +103,7 @@ export class SignalingTransport {
   ) {
     const offer = options ? await connection.createOffer(options) : await connection.createOffer();
     await connection.setLocalDescription(offer);
-    this.send(peerId, "offer", offer as unknown as Record<string, unknown>);
+    this.send(peerId, "offer", toSessionDescriptionPayload(offer));
     return offer;
   }
 
@@ -138,7 +138,7 @@ export class SignalingTransport {
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
-        this.send(payload.fromPeerId, "answer", answer as unknown as Record<string, unknown>);
+        this.send(payload.fromPeerId, "answer", toSessionDescriptionPayload(answer));
       });
       return;
     }
@@ -186,6 +186,15 @@ export class SignalingTransport {
       });
     }
   }
+}
+
+export function toSessionDescriptionPayload(
+  description: RTCLocalSessionDescriptionInit
+): Record<string, unknown> {
+  return {
+    type: description.type,
+    ...(typeof description.sdp === "string" ? { sdp: description.sdp } : {})
+  };
 }
 
 export function toSessionDescriptionInit(

@@ -4,6 +4,7 @@ import {
   buildDataPeerSignal,
   shouldIgnoreStaleAnswerError,
   toIceCandidateInit,
+  toSessionDescriptionPayload,
   toSessionDescriptionInit
 } from "./signaling-transport";
 
@@ -136,6 +137,14 @@ describe("SignalingTransport", () => {
   });
 
   it("parses SDP descriptions and ICE candidates from peer signal payload records", () => {
+    expect(toSessionDescriptionPayload({ type: "offer", sdp: "fake-offer" })).toEqual({
+      type: "offer",
+      sdp: "fake-offer"
+    });
+    expect(toSessionDescriptionPayload({ type: "answer" })).toEqual({
+      type: "answer"
+    });
+
     expect(toSessionDescriptionInit({ type: "answer", sdp: "fake-answer" })).toEqual({
       type: "answer",
       sdp: "fake-answer"
