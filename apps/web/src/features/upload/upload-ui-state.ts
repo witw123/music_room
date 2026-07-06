@@ -37,6 +37,47 @@ export type ManualCacheTask = {
   lastError: string | null;
 };
 
+type ManualCacheTaskPatch =
+  | Partial<ManualCacheTask>
+  | ((current: ManualCacheTask | null) => Partial<ManualCacheTask> | null);
+
+export function buildNextManualCacheTask(input: {
+  trackId: string;
+  existing: ManualCacheTask | null;
+  track: { fileHash: string; mimeType?: string | null } | null;
+  patch: ManualCacheTaskPatch;
+  updatedAt: string;
+}) {
+  const nextPatch = typeof input.patch === "function" ? input.patch(input.existing) : input.patch;
+  if (!nextPatch) {
+    return null;
+  }
+
+  return {
+    trackId: input.trackId,
+    status: input.existing?.status ?? "idle",
+    mode: input.existing?.mode ?? "manual",
+    fileHash: input.existing?.fileHash ?? input.track?.fileHash ?? "",
+    errorMessage: input.existing?.errorMessage ?? null,
+    completedChunks: input.existing?.completedChunks ?? 0,
+    totalChunks: input.existing?.totalChunks ?? 0,
+    mimeType: input.existing?.mimeType ?? input.track?.mimeType ?? null,
+    manifestSource: input.existing?.manifestSource ?? null,
+    blockedReason: input.existing?.blockedReason ?? null,
+    integrityMode: input.existing?.integrityMode ?? null,
+    providerPeerIds: input.existing?.providerPeerIds ?? [],
+    connectedProviderPeerIds: input.existing?.connectedProviderPeerIds ?? [],
+    selectedProviderPeerId: input.existing?.selectedProviderPeerId ?? null,
+    requestableChunkCount: input.existing?.requestableChunkCount ?? 0,
+    pendingChunkCount: input.existing?.pendingChunkCount ?? 0,
+    lastRequestedChunks: input.existing?.lastRequestedChunks ?? [],
+    lastPieceReceivedAt: input.existing?.lastPieceReceivedAt ?? null,
+    lastError: input.existing?.lastError ?? null,
+    ...nextPatch,
+    updatedAt: input.updatedAt
+  } satisfies ManualCacheTask;
+}
+
 export function mergeHydratedManualCacheTasks(input: {
   currentTasks: Record<string, ManualCacheTask>;
   hydratedTasks: ManualCacheTaskRecord[];

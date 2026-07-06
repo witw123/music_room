@@ -58,6 +58,7 @@ import {
   shouldAnnounceTrackAvailability
 } from "./track-availability";
 import {
+  buildNextManualCacheTask,
   mergeHydratedManualCacheTasks,
   mergeManualCachePieceTaskProgress,
   mergeManualCachePlanTaskProgress,
@@ -398,34 +399,17 @@ export function useTrackUploads(options: {
     ) => {
       setManualCacheTasks((current) => {
         const existing = current[trackId] ?? null;
-        const nextPatch = typeof patch === "function" ? patch(existing) : patch;
-        if (!nextPatch) {
+        const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
+        const nextTask = buildNextManualCacheTask({
+          trackId,
+          existing,
+          track,
+          patch,
+          updatedAt: new Date().toISOString()
+        });
+        if (!nextTask) {
           return current;
         }
-        const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
-        const nextTask: ManualCacheTask = {
-          trackId,
-          status: existing?.status ?? "idle",
-          mode: existing?.mode ?? "manual",
-          fileHash: existing?.fileHash ?? track?.fileHash ?? "",
-          errorMessage: existing?.errorMessage ?? null,
-          completedChunks: existing?.completedChunks ?? 0,
-          totalChunks: existing?.totalChunks ?? 0,
-          mimeType: existing?.mimeType ?? null,
-          manifestSource: existing?.manifestSource ?? null,
-          blockedReason: existing?.blockedReason ?? null,
-          integrityMode: existing?.integrityMode ?? null,
-          providerPeerIds: existing?.providerPeerIds ?? [],
-          connectedProviderPeerIds: existing?.connectedProviderPeerIds ?? [],
-          selectedProviderPeerId: existing?.selectedProviderPeerId ?? null,
-          requestableChunkCount: existing?.requestableChunkCount ?? 0,
-          pendingChunkCount: existing?.pendingChunkCount ?? 0,
-          lastRequestedChunks: existing?.lastRequestedChunks ?? [],
-          lastPieceReceivedAt: existing?.lastPieceReceivedAt ?? null,
-          lastError: existing?.lastError ?? null,
-          ...nextPatch,
-          updatedAt: new Date().toISOString()
-        };
         if (roomSnapshot?.room.id && nextTask.fileHash) {
           void upsertManualCacheTask({
             roomId: roomSnapshot.room.id,
