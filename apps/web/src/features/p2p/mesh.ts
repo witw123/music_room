@@ -24,8 +24,6 @@ import {
   enqueuePeerOperation,
   flushPendingCandidates,
   shouldRestartPeer,
-  startPeerStatsSampling,
-  stopPeerStatsSampling,
   type PeerEntry
 } from "./peer-connection-registry";
 import {
@@ -36,6 +34,7 @@ import {
   shouldInitiatePeerConnection
 } from "./peer-connection-lifecycle";
 import { MeshHealthMonitor } from "./mesh-health-monitor";
+import { PeerStatsSampler } from "./peer-stats-sampler";
 
 type MeshCallbacks = {
   onPieceReceived: (payload: {
@@ -167,7 +166,6 @@ export class P2PMesh {
   private readonly pieceServeBatchConcurrency = 3;
   private readonly maxDataChannelPayloadBytes = 48 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;
-  private statsSamplingMode: "off" | "steady" | "active" = "active";
   private readonly autoReconnect: boolean;
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
@@ -178,6 +176,7 @@ export class P2PMesh {
   private readonly pieceServe: PieceServeProcessor<PeerEntry>;
   private readonly pieceRequestClient: PieceRequestClient<PeerEntry>;
   private readonly pieceMessages: PieceMessageRouter<PeerEntry>;
+  private readonly statsSampler: PeerStatsSampler;
 
   constructor(
     private readonly roomId: string,
@@ -196,6 +195,12 @@ export class P2PMesh {
       localPeerId: this.localPeerId,
       sendSignal: this.sendSignal,
       onSignal: this.callbacks.onSignal
+    });
+    this.statsSampler = new PeerStatsSampler({
+      activeStatsSamplingIntervalMs: this.activeStatsSamplingIntervalMs,
+      steadyStatsSamplingIntervalMs: this.steadyStatsSamplingIntervalMs,
+      onStatsSample: this.callbacks.onStatsSample,
+      samplePeerConnectionStats
     });
     this.dataChannels = new DataChannelManager({
       autoReconnect: this.autoReconnect,
@@ -300,15 +305,7 @@ export class P2PMesh {
   }
 
   setStatsSamplingMode(mode: "off" | "steady" | "active") {
-    if (this.statsSamplingMode === mode) {
-      return;
-    }
-
-    this.statsSamplingMode = mode;
-    for (const [peerId, entry] of this.peerConnections.entries()) {
-      this.stopStatsSampling(entry);
-      this.startStatsSampling(peerId, entry);
-    }
+    this.statsSampler.setMode(mode, this.peerConnections.entries());
   }
 
   requestPiece(
@@ -421,7 +418,7 @@ export class P2PMesh {
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
       nowMs: Date.now()
     });
-    this.startStatsSampling(peerId, entry);
+    this.statsSampler.start(peerId, entry);
 
     bindPeerConnectionEvents({
       peerId,
@@ -517,7 +514,7 @@ export class P2PMesh {
         this.peerConnections.deleteIfCurrent(currentPeerId, currentEntry),
       clearPendingRequestsForPeer: (currentPeerId) =>
         this.clearPendingRequestsForPeer(currentPeerId),
-      stopStatsSampling: (currentEntry) => this.stopStatsSampling(currentEntry),
+      stopStatsSampling: (currentEntry) => this.statsSampler.stop(currentEntry),
       onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange
     });
   }
@@ -546,22 +543,6 @@ export class P2PMesh {
     const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
     nextEntry.reconnectAttempts = reconnectAttempts;
     return nextEntry;
-  }
-
-  private startStatsSampling(peerId: string, entry: PeerEntry) {
-    startPeerStatsSampling({
-      peerId,
-      entry,
-      mode: this.statsSamplingMode,
-      activeStatsSamplingIntervalMs: this.activeStatsSamplingIntervalMs,
-      steadyStatsSamplingIntervalMs: this.steadyStatsSamplingIntervalMs,
-      onStatsSample: this.callbacks.onStatsSample,
-      samplePeerConnectionStats
-    });
-  }
-
-  private stopStatsSampling(entry: PeerEntry) {
-    stopPeerStatsSampling(entry);
   }
 
   private async applyRemoteDescription(
