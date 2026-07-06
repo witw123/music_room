@@ -10,7 +10,6 @@ import { usePlaybackRuntimeControllerStack } from "./playback-orchestrator/playb
 import { usePlaybackRuntimeInputState } from "./playback-orchestrator/playback-runtime-input-state";
 import { usePlaybackRuntimeRefs } from "./playback-orchestrator/playback-runtime-refs";
 import type {
-  FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
   UseProgressiveRuntimeResult
 } from "./playback-orchestrator/runtime-types";
