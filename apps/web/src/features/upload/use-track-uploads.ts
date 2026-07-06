@@ -51,7 +51,6 @@ import {
   importCachedLibraryTrackToRoom as importCachedLibraryTrackToRoomFromLibrary,
   loadCacheLibrarySnapshot,
   startCacheDownload as startCacheDownloadFromLibrary,
-  toCachedLibraryFile,
   toCachedLibraryTrackFile
 } from "./cache-library";
 import {
@@ -80,6 +79,7 @@ import {
   processSelectedTrackFiles
 } from "./upload-pipeline";
 import { assembleManualCacheTrackFromPieces } from "./manual-cache-assembly";
+import { rehydrateOwnedUploadedTracksFromCache } from "./upload-rehydration";
 
 export {
   buildCachedLibraryTrackRegisterPayload,
@@ -299,48 +299,17 @@ export function useTrackUploads(options: {
 
     let cancelled = false;
     void (async () => {
-      const rehydratedUploads: Record<string, UploadedTrack> = {};
+      const result = await rehydrateOwnedUploadedTracksFromCache({
+        missingOwnedTracks,
+        cachedLibraryTracksByHash: cacheLibraryTracksRef.current,
+        getCachedLibraryTrackSummary,
+        getCachedLibraryTrack,
+        createObjectUrl: (file) => URL.createObjectURL(file)
+      });
 
-      for (const track of missingOwnedTracks) {
-        const cachedSummary =
-          cacheLibraryTracksRef.current.get(track.fileHash) ??
-          (await getCachedLibraryTrackSummary(track.fileHash));
-        if (
-          !isCachedLibraryTrackUsableForRoomTrack({
-            cachedTrack: cachedSummary,
-            roomTrack: track
-          })
-        ) {
-          continue;
-        }
-
-        const cachedRecord = await getCachedLibraryTrack(track.fileHash);
-        const usableCachedRecord = isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: cachedRecord,
-          roomTrack: track
-        })
-          ? cachedRecord
-          : null;
-        if (!usableCachedRecord) {
-          continue;
-        }
-        const cachedFile = toCachedLibraryFile({
-          file: usableCachedRecord.file,
-          title: usableCachedRecord.title,
-          mimeType: usableCachedRecord.mimeType,
-          fileHash: usableCachedRecord.fileHash
-        });
-
-        rehydratedUploads[track.id] = {
-          file: cachedFile,
-          objectUrl: URL.createObjectURL(cachedFile),
-          origin: "live-upload"
-        };
-      }
-
-      if (cancelled || Object.keys(rehydratedUploads).length === 0) {
-        for (const upload of Object.values(rehydratedUploads)) {
-          URL.revokeObjectURL(upload.objectUrl);
+      if (cancelled || Object.keys(result.uploads).length === 0) {
+        for (const objectUrl of result.createdObjectUrls) {
+          URL.revokeObjectURL(objectUrl);
         }
         return;
       }
@@ -348,7 +317,7 @@ export function useTrackUploads(options: {
       setUploadedTracks((current) => {
         let changed = false;
         const next = { ...current };
-        for (const [trackId, upload] of Object.entries(rehydratedUploads)) {
+        for (const [trackId, upload] of Object.entries(result.uploads)) {
           if (next[trackId]) {
             URL.revokeObjectURL(upload.objectUrl);
             continue;
