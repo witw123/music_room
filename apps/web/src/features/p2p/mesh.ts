@@ -37,13 +37,12 @@ import {
 import {
   PeerConnectionRegistry,
   clearPeerTimers,
-  clearPeerWatchdog,
   createPeerEntry,
-  isPeerStalled,
   shouldRestartPeer,
   type PeerEntry,
   type QueuedSendItem
 } from "./peer-connection-registry";
+import { MeshHealthMonitor } from "./mesh-health-monitor";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -230,6 +229,7 @@ export class P2PMesh {
   private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
   private readonly signaling: SignalingTransport;
   private readonly dataChannels: DataChannelManager;
+  private readonly healthMonitor: MeshHealthMonitor;
 
   constructor(
     private readonly roomId: string,
@@ -257,6 +257,18 @@ export class P2PMesh {
       onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
       onPeerConnectionChange: this.callbacks.onPeerConnectionChange,
       onPeerStalled: this.callbacks.onPeerStalled
+    });
+    this.healthMonitor = new MeshHealthMonitor({
+      autoReconnect: this.autoReconnect,
+      reconnectBackoffMs: this.reconnectBackoffMs,
+      dataOpenTimeoutMs: this.dataOpenTimeoutMs,
+      dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
+      connectionProgressTimeoutMs: this.connectionProgressTimeoutMs,
+      isExpectedPeer: (peerId) => this.peerConnections.expects(peerId),
+      getPeerEntry: (peerId) => this.peerConnections.get(peerId),
+      onPeerStalled: this.callbacks.onPeerStalled,
+      releasePeer: (peerId, entry) => this.releasePeer(peerId, entry),
+      recreatePeer: (peerId, entry) => this.recreatePeer(peerId, entry)
     });
   }
 
@@ -945,75 +957,12 @@ export class P2PMesh {
     });
   }
 
-  private isPeerEntryStalled(entry: PeerEntry, nowMs: number) {
-    return isPeerStalled({
-      entry,
-      nowMs,
-      dataOpenTimeoutMs: this.dataOpenTimeoutMs,
-      dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
-      connectionProgressTimeoutMs: this.connectionProgressTimeoutMs
-    });
-  }
-
   private schedulePeerWatchdog(peerId: string, entry: PeerEntry) {
-    if (entry.releasing || !this.peerConnections.expects(peerId)) {
-      clearPeerWatchdog(entry);
-      return;
-    }
-
-    clearPeerWatchdog(entry);
-    entry.watchdogTimerId = setTimeout(() => {
-      if (
-        this.peerConnections.get(peerId) !== entry ||
-        entry.releasing ||
-        !this.peerConnections.expects(peerId)
-      ) {
-        return;
-      }
-
-      if (this.isPeerEntryStalled(entry, Date.now())) {
-        this.callbacks.onPeerStalled?.({
-          peerId,
-          reason: "watchdog-timeout"
-        });
-        if (this.autoReconnect) {
-          this.schedulePeerReconnect(peerId, entry);
-        }
-        return;
-      }
-
-      this.schedulePeerWatchdog(peerId, entry);
-    }, 1_000);
+    this.healthMonitor.schedulePeerWatchdog(peerId, entry);
   }
 
   private schedulePeerReconnect(peerId: string, entry: PeerEntry) {
-    if (entry.releasing || !this.peerConnections.expects(peerId)) {
-      this.releasePeer(peerId, entry);
-      return;
-    }
-
-    clearPeerWatchdog(entry);
-    if (entry.reconnectTimerId) {
-      return;
-    }
-
-    const delay =
-      this.reconnectBackoffMs[
-        Math.min(entry.reconnectAttempts, this.reconnectBackoffMs.length - 1)
-      ];
-    entry.reconnectAttempts += 1;
-    entry.reconnectTimerId = setTimeout(() => {
-      entry.reconnectTimerId = null;
-      if (
-        this.peerConnections.get(peerId) !== entry ||
-        entry.releasing ||
-        !this.peerConnections.expects(peerId)
-      ) {
-        return;
-      }
-
-      void this.recreatePeer(peerId, entry);
-    }, delay);
+    this.healthMonitor.schedulePeerReconnect(peerId, entry);
   }
 
   private async recreatePeer(peerId: string, entry: PeerEntry) {
