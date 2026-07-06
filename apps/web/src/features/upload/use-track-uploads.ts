@@ -42,12 +42,12 @@ import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
+  buildCachedLibraryTrackUpsertRecord,
   buildCachedLibraryFileName,
   createInFlightCachedLibraryTrackFileLoader,
   hasUsableCachedLibraryFileForRoomTrack,
+  loadCacheLibrarySnapshot,
   toCachedLibraryFile,
-  toCachedLibraryFileFromBlob,
-  toCachedLibraryTrack,
   toCachedLibraryTrackFile
 } from "./cache-library";
 import {
@@ -161,14 +161,14 @@ export function useTrackUploads(options: {
   );
 
   const refreshCacheLibrary = useCallback(async () => {
-    const records = await listCachedLibraryTrackSummaries();
-    const nextTracks: CachedLibraryTrack[] = records.map(toCachedLibraryTrack);
+    const snapshot = await loadCacheLibrarySnapshot({
+      listCachedLibraryTrackSummaries,
+      getCachedLibraryTrackCount
+    });
 
-    cacheLibraryTracksRef.current = new Map(
-      nextTracks.map((track) => [track.fileHash, track] as const)
-    );
-    setCacheLibraryTracks(nextTracks);
-    setCachedTrackCount(await getCachedLibraryTrackCount());
+    cacheLibraryTracksRef.current = snapshot.tracksByHash;
+    setCacheLibraryTracks(snapshot.tracks);
+    setCachedTrackCount(snapshot.count);
   }, []);
 
   useEffect(() => {
@@ -508,22 +508,7 @@ export function useTrackUploads(options: {
       roomId: string;
       file: File | Blob;
     }) => {
-      const file =
-        input.file instanceof File ? input.file : toCachedLibraryFileFromBlob(input.file, input.track);
-      await upsertCachedLibraryTrack({
-        fileHash: input.track.fileHash,
-        title: input.track.title,
-        artist: input.track.artist ?? "未知艺术家",
-        mimeType: input.track.mimeType || file.type || "audio/mpeg",
-        durationMs: input.track.durationMs,
-        sizeBytes: input.track.sizeBytes ?? file.size,
-        file,
-        sourceTrackIds: [input.track.id],
-        sourceRoomIds: [input.roomId],
-        lastSourceTrackId: input.track.id,
-        lastSourceRoomId: input.roomId,
-        lastOwnerNickname: input.track.ownerNickname ?? null
-      });
+      await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord(input));
       await refreshCacheLibrary();
     },
     [refreshCacheLibrary]

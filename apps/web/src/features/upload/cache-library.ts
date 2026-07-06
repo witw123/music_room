@@ -9,6 +9,37 @@ import type {
 } from "@/features/upload/audio-utils";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 
+type CacheLibraryTrackUpsertInput = {
+  track: Pick<
+    TrackMeta,
+    | "id"
+    | "title"
+    | "artist"
+    | "mimeType"
+    | "durationMs"
+    | "sizeBytes"
+    | "fileHash"
+    | "ownerNickname"
+  >;
+  roomId: string;
+  file: File | Blob;
+};
+
+type CacheLibraryTrackUpsertRecord = {
+  fileHash: string;
+  title: string;
+  artist: string;
+  mimeType: string;
+  durationMs: number;
+  sizeBytes: number;
+  file: File;
+  sourceTrackIds: string[];
+  sourceRoomIds: string[];
+  lastSourceTrackId: string;
+  lastSourceRoomId: string;
+  lastOwnerNickname: string | null;
+};
+
 export function createInFlightCachedLibraryTrackFileLoader(
   loadCachedTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>
 ) {
@@ -52,6 +83,42 @@ export function hasUsableCachedLibraryFileForRoomTrack(input: {
       roomTrack: input.roomTrack
     })
   );
+}
+
+export async function loadCacheLibrarySnapshot(input: {
+  listCachedLibraryTrackSummaries: () => Promise<CachedLibraryTrackSummaryRecord[]>;
+  getCachedLibraryTrackCount: () => Promise<number>;
+}) {
+  const records = await input.listCachedLibraryTrackSummaries();
+  const tracks = records.map(toCachedLibraryTrack);
+
+  return {
+    tracks,
+    tracksByHash: new Map(tracks.map((track) => [track.fileHash, track] as const)),
+    count: await input.getCachedLibraryTrackCount()
+  };
+}
+
+export function buildCachedLibraryTrackUpsertRecord(
+  input: CacheLibraryTrackUpsertInput
+): CacheLibraryTrackUpsertRecord {
+  const file =
+    input.file instanceof File ? input.file : toCachedLibraryFileFromBlob(input.file, input.track);
+
+  return {
+    fileHash: input.track.fileHash,
+    title: input.track.title,
+    artist: input.track.artist ?? "未知艺术家",
+    mimeType: input.track.mimeType || file.type || "audio/mpeg",
+    durationMs: input.track.durationMs,
+    sizeBytes: input.track.sizeBytes ?? file.size,
+    file,
+    sourceTrackIds: [input.track.id],
+    sourceRoomIds: [input.roomId],
+    lastSourceTrackId: input.track.id,
+    lastSourceRoomId: input.roomId,
+    lastOwnerNickname: input.track.ownerNickname ?? null
+  };
 }
 
 export function toCachedLibraryFile(input: {
