@@ -79,12 +79,14 @@ import {
 } from "./upload-ui-state";
 import {
   buildCachedLibraryTrackRegisterPayload,
-  buildRegisterTrackPayload
+  buildRegisterTrackPayload,
+  processSelectedTrackFiles
 } from "./upload-pipeline";
 
 export {
   buildCachedLibraryTrackRegisterPayload,
-  buildRegisterTrackPayload
+  buildRegisterTrackPayload,
+  processSelectedTrackFiles
 } from "./upload-pipeline";
 export {
   createInFlightCachedLibraryTrackFileLoader,
@@ -631,80 +633,36 @@ export function useTrackUploads(options: {
       }
 
       const roomId = roomSnapshot.room.id;
-      const nextUploads: Record<string, UploadedTrack> = {};
-      const nextTracks: TrackMeta[] = [];
-      const currentTracksByHash = new Map(
-        roomSnapshot.tracks
-          .filter((track) => track.ownerSessionId === activeSession.userId)
-          .map((track) => [track.fileHash, track] as const)
-      );
-
-      for (const file of Array.from(files)) {
-        const objectUrl = URL.createObjectURL(file);
-        const track = await buildTrackMeta(file, objectUrl, activeSession);
-        const uploadHashKey = `${activeSession.userId}:${track.fileHash}`;
-
-        if (inFlightUploadHashesRef.current.has(uploadHashKey)) {
-          URL.revokeObjectURL(objectUrl);
-          continue;
-        }
-
-        const existingTrack = currentTracksByHash.get(track.fileHash);
-        if (existingTrack) {
-          URL.revokeObjectURL(objectUrl);
-          continue;
-        }
-
-        inFlightUploadHashesRef.current.add(uploadHashKey);
-        let registered: TrackMeta;
-        try {
-          registered = await musicRoomApi.registerTrack(roomId, buildRegisterTrackPayload(track));
-        } finally {
-          inFlightUploadHashesRef.current.delete(uploadHashKey);
-        }
-
-        nextUploads[registered.id] = {
-          file,
-          objectUrl,
-          origin: "live-upload"
-        };
-        nextTracks.push(registered);
-        currentTracksByHash.set(registered.fileHash, registered);
-
-        if (enableManualTrackCaching) {
-          await persistTrackIntoLibrary({
-            track: registered,
-            roomId,
-            file
-          });
-        }
-
-        if (peerId && shouldAnnounceTrackAvailability({ peerId })) {
-          const availability = await buildTrackAvailabilityFromFile({
-            roomId,
-            trackId: registered.id,
-            fileHash: registered.fileHash,
-            file,
-            peerId,
-            nickname: activeSession.nickname,
-            source: "live_upload",
-            mimeType: registered.mimeType,
-            codec: registered.codec ?? null,
-            sizeBytes: registered.sizeBytes ?? file.size,
-            durationMs: registered.durationMs,
-            totalChunks: registered.pieceManifest?.totalChunks,
-            chunkSize: registered.pieceManifest?.chunkSize
-          });
+      const result = await processSelectedTrackFiles({
+        files: Array.from(files),
+        activeSession,
+        roomId,
+        roomTracks: roomSnapshot.tracks,
+        peerId,
+        manualTrackCachingEnabled: enableManualTrackCaching,
+        inFlightUploadHashes: inFlightUploadHashesRef.current,
+        createObjectUrl: (file) => URL.createObjectURL(file),
+        revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
+        buildTrackMeta: (file, objectUrl) => buildTrackMeta(file, objectUrl, activeSession),
+        buildRegisterTrackPayload,
+        registerTrack: (registerRoomId, payload) =>
+          musicRoomApi.registerTrack(
+            registerRoomId,
+            payload as Parameters<typeof musicRoomApi.registerTrack>[1]
+          ),
+        persistTrackIntoLibrary,
+        buildTrackAvailabilityFromFile,
+        publishAvailability: (availability) => {
           onAvailability(availability);
           emitAvailability(availability);
         }
-      }
+      });
 
-      setUploadedTracks((current) => ({ ...current, ...nextUploads }));
-      if (nextTracks.length > 0) {
+      setUploadedTracks((current) => ({ ...current, ...result.uploads }));
+      if (result.registeredTracks.length > 0) {
         await syncRoomSnapshot(roomId);
       }
-      setStatusMessage(`${Object.keys(nextUploads).length} 首本地歌曲已导入房间曲库。`);
+      setStatusMessage(`${result.importedCount} 首本地歌曲已导入房间曲库。`);
     },
     [
       activeSession,
