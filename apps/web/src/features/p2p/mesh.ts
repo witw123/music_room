@@ -5,17 +5,10 @@ import {
   type PeerSignalMessage
 } from "@music-room/shared";
 import {
-  getCachedPiece,
-  getCachedPieceIndexes,
-  getTrackPieceManifest,
-  localCacheOwnerKey
-} from "@/lib/indexeddb";
-import {
   samplePeerConnectionStats,
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
-  buildPieceFrames,
   decodePieceFrame,
   type BinaryPieceFragmentMessage,
   type BinaryPieceMessage
@@ -34,10 +27,8 @@ import {
   PieceRequestTracker
 } from "./piece-request-tracker";
 import { PieceFragmentTracker } from "./piece-fragment-tracker";
-import {
-  PieceInboundProcessor,
-  type CachedPieceManifestHeader
-} from "./piece-inbound-processor";
+import { PieceInboundProcessor } from "./piece-inbound-processor";
+import { PieceServeProcessor } from "./piece-serve-processor";
 import {
   PeerConnectionRegistry,
   clearPeerTimers,
@@ -170,7 +161,6 @@ type MeshOptions = {
 export class P2PMesh {
   private readonly peerConnections: PeerConnectionRegistry;
   private readonly pieceRequests = new PieceRequestTracker();
-  private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
   private readonly reconnectBackoffMs = [1_000, 2_000, 4_000, 8_000] as const;
   private readonly dataOpenTimeoutMs = 8_000;
   private readonly dataConnectingTimeoutMs = 12_000;
@@ -186,7 +176,6 @@ export class P2PMesh {
   private statsSamplingMode: "off" | "steady" | "active" = "active";
   private readonly autoReconnect: boolean;
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
-  private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
   private readonly pieceFragments = new PieceFragmentTracker({
     ttlMs: this.incomingPieceFragmentTtlMs
@@ -195,6 +184,7 @@ export class P2PMesh {
   private readonly dataChannels: DataChannelManager;
   private readonly healthMonitor: MeshHealthMonitor;
   private readonly inboundPieces: PieceInboundProcessor;
+  private readonly pieceServe: PieceServeProcessor<PeerEntry>;
 
   constructor(
     private readonly roomId: string,
@@ -207,7 +197,6 @@ export class P2PMesh {
     this.peerConnections = new PeerConnectionRegistry(this.localPeerId);
     this.autoReconnect = options.autoReconnect ?? true;
     this.resolveConnectionConfig = options.resolveConnectionConfig;
-    this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
     this.resolveTrackCacheIdentity = options.resolveTrackCacheIdentity;
     this.signaling = new SignalingTransport({
       roomId: this.roomId,
@@ -237,14 +226,22 @@ export class P2PMesh {
       releasePeer: (peerId, entry) => this.releasePeer(peerId, entry),
       recreatePeer: (peerId, entry) => this.recreatePeer(peerId, entry)
     });
+    this.pieceServe = new PieceServeProcessor<PeerEntry>({
+      localPeerId: this.localPeerId,
+      maxDataChannelPayloadBytes: this.maxDataChannelPayloadBytes,
+      resolvePieceRequestFallback: options.resolvePieceRequestFallback,
+      resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
+      enqueueSendItem: (peerId, entry, item) => this.enqueueSendItem(peerId, entry, item),
+      onPieceServed: this.callbacks.onPieceServed,
+      onPieceServeMiss: this.callbacks.onPieceServeMiss
+    });
     this.inboundPieces = new PieceInboundProcessor({
       batchSize: this.incomingPieceBatchSize,
       localPeerId: this.localPeerId,
       resolveManifestHeader: (trackId, fallbackChunkSize) =>
-        this.resolveManifestHeader(trackId, fallbackChunkSize),
-      rememberManifestHeader: (trackId, header) => {
-        this.pieceManifestHeaders.set(trackId, header);
-      },
+        this.pieceServe.resolveManifestHeader(trackId, fallbackChunkSize),
+      rememberManifestHeader: (trackId, header) =>
+        this.pieceServe.rememberManifestHeader(trackId, header),
       resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
       onPieceReceived: this.callbacks.onPieceReceived,
       onPiecePersisted: this.callbacks.onPiecePersisted,
@@ -685,136 +682,11 @@ export class P2PMesh {
       requestId?: string;
     }
   ) {
-    if (entry.channel?.readyState !== "open") {
-      this.callbacks.onPieceServeMiss?.({
-        peerId,
-        trackId: request.trackId,
-        chunkIndex: request.chunkIndex,
-        reason: "channel-not-open"
-      });
-      return;
-    }
-
-    const cacheIdentity = this.resolveTrackCacheIdentity?.(request.trackId) ?? null;
-    const expectedChunkSize = cacheIdentity?.chunkSize ?? null;
-    let piece: {
-      chunkIndex: number;
-      chunkSize: number;
-      hash: string;
-      payload: ArrayBuffer;
-    } | null = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex, {
-      fileHash: cacheIdentity?.fileHash,
-      ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey,
-      chunkSize: expectedChunkSize
-    });
-    let manifestHeader = piece
-      ? await this.resolveManifestHeader(request.trackId, expectedChunkSize ?? piece.chunkSize)
-      : null;
-
-    if (!piece || !manifestHeader) {
-      const fallbackPiece = await this.resolvePieceRequestFallback?.({
-        trackId: request.trackId,
-        chunkIndex: request.chunkIndex
-      });
-      if (fallbackPiece) {
-        piece = {
-          chunkIndex: request.chunkIndex,
-          chunkSize: fallbackPiece.payload.byteLength,
-          hash: fallbackPiece.hash,
-          payload: fallbackPiece.payload
-        };
-        manifestHeader = {
-          totalChunks: fallbackPiece.totalChunks,
-          chunkSize: fallbackPiece.chunkSize,
-          mimeType: fallbackPiece.mimeType
-        };
-        this.pieceManifestHeaders.set(request.trackId, manifestHeader);
-      }
-    }
-
-    if (!piece) {
-      this.callbacks.onPieceServeMiss?.({
-        peerId,
-        trackId: request.trackId,
-        chunkIndex: request.chunkIndex,
-        reason: "piece-missing"
-      });
-      return;
-    }
-
-    if (!manifestHeader || entry.channel?.readyState !== "open") {
-      this.callbacks.onPieceServeMiss?.({
-        peerId,
-        trackId: request.trackId,
-        chunkIndex: request.chunkIndex,
-        reason: "manifest-missing"
-      });
-      return;
-    }
-
-    const pieceFrames = buildPieceFrames(
-      {
-        requestId: request.requestId,
-        trackId: request.trackId,
-        chunkIndex: piece.chunkIndex,
-        totalChunks: manifestHeader.totalChunks,
-        chunkSize: manifestHeader.chunkSize,
-        mimeType: manifestHeader.mimeType,
-        pieceHash: piece.hash
-      },
-      piece.payload,
-      this.maxDataChannelPayloadBytes
-    );
-    for (const frame of pieceFrames) {
-      this.enqueueSendItem(peerId, entry, {
-        data: frame.data,
-        trackId: request.trackId,
-        chunkIndex: piece.chunkIndex,
-        payloadBytes: frame.payloadBytes
-      });
-    }
-    this.callbacks.onPieceServed?.({
+    await this.pieceServe.servePieceRequest({
       peerId,
-      trackId: request.trackId,
-      chunkIndex: piece.chunkIndex,
-      payloadBytes: piece.payload.byteLength,
-      requestId: request.requestId
+      entry,
+      request
     });
-  }
-
-  private async resolveManifestHeader(trackId: string, fallbackChunkSize: number) {
-    let manifestHeader = this.pieceManifestHeaders.get(trackId) ?? null;
-    if (!manifestHeader) {
-      const manifest = await getTrackPieceManifest(trackId);
-      if (manifest) {
-        manifestHeader = {
-          totalChunks: manifest.totalChunks,
-          chunkSize: manifest.chunkSize,
-          mimeType: manifest.mimeType || "audio/mpeg",
-          pieceHashes: manifest.pieceHashes
-        };
-        this.pieceManifestHeaders.set(trackId, manifestHeader);
-      }
-    }
-
-    let totalChunks = manifestHeader?.totalChunks ?? 0;
-    if (totalChunks <= 0) {
-      const cacheIdentity = this.resolveTrackCacheIdentity?.(trackId) ?? null;
-      const chunkIndexes = await getCachedPieceIndexes(trackId, this.localPeerId, {
-        fileHash: cacheIdentity?.fileHash,
-        ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey,
-        chunkSize: cacheIdentity?.chunkSize
-      });
-      totalChunks = chunkIndexes.length;
-      manifestHeader = {
-        totalChunks,
-        chunkSize: manifestHeader?.chunkSize ?? fallbackChunkSize,
-        mimeType: manifestHeader?.mimeType || "audio/mpeg"
-      };
-      this.pieceManifestHeaders.set(trackId, manifestHeader);
-    }
-
-    return manifestHeader;
   }
 
   private enqueueSendItem(peerId: string, entry: PeerEntry, item: DataChannelQueuedSendItem) {

@@ -4,14 +4,8 @@ import {
 } from "@/lib/indexeddb";
 import { validateTrackPiecePayloadBatch } from "./index";
 import type { BinaryPieceMessage } from "./piece-frame-codec";
+import type { CachedPieceManifestHeader } from "./piece-manifest-header";
 import type { PendingPieceRequest } from "./piece-request-tracker";
-
-export type CachedPieceManifestHeader = {
-  totalChunks: number;
-  chunkSize: number;
-  mimeType: string;
-  pieceHashes?: string[];
-};
 
 export type IncomingPieceBatchItem = {
   peerId: string;
