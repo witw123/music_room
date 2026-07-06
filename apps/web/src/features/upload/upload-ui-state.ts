@@ -354,3 +354,79 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
     input.existingTask.status === "failed-integrity"
   );
 }
+
+export function resolveManualCachePlanTaskUpdate(input: {
+  current: ManualCacheTask | null;
+  plan: {
+    localPieceIndexes: readonly number[];
+    manifest: { totalChunks: number; pieceMimeType?: string | null } | null;
+    manifestSource: string;
+    blockedReason: string | null;
+    integrityMode: ManualCacheTask["integrityMode"];
+    providerPeerIds: readonly string[];
+    connectedProviderPeerIds: readonly string[];
+    selectedProviderPeerId: string | null;
+    requestableChunks: readonly number[];
+    pendingChunkCount: number;
+  };
+  track: { fileHash: string; mimeType?: string | null };
+  knownChunkIndexes: Set<number>;
+  isCurrentPlaybackDemand: boolean;
+}) {
+  if (!input.current && !input.isCurrentPlaybackDemand) {
+    return {
+      patch: null,
+      shouldAssemble: false,
+      assembleMimeType: null,
+      assembleTotalChunks: 0
+    };
+  }
+  if (input.current?.status === "paused" || input.current?.status === "ready") {
+    return {
+      patch: null,
+      shouldAssemble: false,
+      assembleMimeType: null,
+      assembleTotalChunks: 0
+    };
+  }
+
+  const progress = mergeManualCachePlanTaskProgress({
+    current: input.current,
+    planLocalPieceIndexes: [...input.plan.localPieceIndexes],
+    inMemoryPieceIndexes: input.knownChunkIndexes,
+    planTotalChunks: input.plan.manifest?.totalChunks ?? input.current?.totalChunks ?? 0,
+    planBlockedReason: input.plan.blockedReason
+  });
+  const mimeType =
+    input.plan.manifest?.pieceMimeType ?? input.current?.mimeType ?? input.track.mimeType ?? null;
+  const shouldAssemble = shouldAssembleManualCachePlanProgress({
+    status: progress.status,
+    completedChunks: progress.completedChunks,
+    totalChunks: progress.totalChunks
+  });
+
+  return {
+    patch: {
+      status: shouldAssemble ? "assembling" as const : progress.status,
+      mode: input.current?.mode ?? resolveAutomaticPlaybackCacheTaskMode(),
+      fileHash: input.track.fileHash,
+      completedChunks: progress.completedChunks,
+      totalChunks: progress.totalChunks,
+      mimeType,
+      manifestSource: input.plan.manifestSource === "none" ? null : input.plan.manifestSource,
+      blockedReason: progress.blockedReason,
+      integrityMode: input.plan.integrityMode,
+      providerPeerIds: [...input.plan.providerPeerIds],
+      connectedProviderPeerIds: [...input.plan.connectedProviderPeerIds],
+      selectedProviderPeerId: input.plan.selectedProviderPeerId,
+      requestableChunkCount: input.plan.requestableChunks.length,
+      pendingChunkCount: input.plan.pendingChunkCount,
+      lastRequestedChunks: [...input.plan.requestableChunks],
+      lastPieceReceivedAt: progress.lastPieceReceivedAt,
+      lastError: progress.lastError
+    },
+    shouldAssemble,
+    assembleMimeType: mimeType,
+    assembleTotalChunks: progress.totalChunks
+  };
+}

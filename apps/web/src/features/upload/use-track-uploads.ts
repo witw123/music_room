@@ -61,11 +61,10 @@ import {
   buildNextManualCacheTask,
   mergeHydratedManualCacheTasks,
   mergeManualCachePieceTaskProgress,
-  mergeManualCachePlanTaskProgress,
   pruneManualCacheChunkIndexesByActiveTracks,
   resolveAutomaticPlaybackCacheTaskMode,
+  resolveManualCachePlanTaskUpdate,
   resolveStalePlaybackDemandTaskIds,
-  shouldAssembleManualCachePlanProgress,
   shouldCreatePlaybackDemandTaskFromCachePiece,
   shouldEnsurePlaybackDemandCacheTask,
   shouldHydrateCacheTaskPieceIndexes,
@@ -1156,45 +1155,17 @@ export function useTrackUploads(options: {
         if (!current && !isCurrentPlaybackDemand) {
           return null;
         }
-        if (current?.status === "paused" || current?.status === "ready") {
-          return null;
-        }
-
-        const progress = mergeManualCachePlanTaskProgress({
+        const update = resolveManualCachePlanTaskUpdate({
           current,
-          planLocalPieceIndexes: plan.localPieceIndexes,
-          inMemoryPieceIndexes: knownChunkIndexes,
-          planTotalChunks: plan.manifest?.totalChunks ?? current?.totalChunks ?? 0,
-          planBlockedReason: plan.blockedReason
+          plan,
+          track,
+          knownChunkIndexes,
+          isCurrentPlaybackDemand
         });
-        const mimeType = plan.manifest?.pieceMimeType ?? current?.mimeType ?? track.mimeType ?? null;
-        shouldAssembleFromPlan = shouldAssembleManualCachePlanProgress({
-          status: progress.status,
-          completedChunks: progress.completedChunks,
-          totalChunks: progress.totalChunks
-        });
-        assembleMimeType = mimeType;
-        assembleTotalChunks = progress.totalChunks;
-
-        return {
-          status: shouldAssembleFromPlan ? "assembling" : progress.status,
-          mode: current?.mode ?? resolveAutomaticPlaybackCacheTaskMode(),
-          fileHash: track.fileHash,
-          completedChunks: progress.completedChunks,
-          totalChunks: progress.totalChunks,
-          mimeType,
-          manifestSource: plan.manifestSource === "none" ? null : plan.manifestSource,
-          blockedReason: progress.blockedReason,
-          integrityMode: plan.integrityMode,
-          providerPeerIds: plan.providerPeerIds,
-          connectedProviderPeerIds: plan.connectedProviderPeerIds,
-          selectedProviderPeerId: plan.selectedProviderPeerId,
-          requestableChunkCount: plan.requestableChunks.length,
-          pendingChunkCount: plan.pendingChunkCount,
-          lastRequestedChunks: plan.requestableChunks,
-          lastPieceReceivedAt: progress.lastPieceReceivedAt,
-          lastError: progress.lastError
-        };
+        shouldAssembleFromPlan = update.shouldAssemble;
+        assembleMimeType = update.assembleMimeType;
+        assembleTotalChunks = update.assembleTotalChunks;
+        return update.patch;
       });
 
       if (shouldAssembleFromPlan) {
