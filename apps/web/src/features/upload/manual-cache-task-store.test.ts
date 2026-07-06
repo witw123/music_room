@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildManualCacheTaskRecord,
   buildNextManualCacheTask,
+  hydrateManualCacheTasksForRoom,
   resolveManualCacheTaskStateUpdate,
   resolveStalePlaybackDemandTaskIds,
   shouldHydrateCacheTaskPieceIndexes
@@ -136,5 +137,110 @@ describe("manual cache task store helpers", () => {
       totalChunks: 4,
       updatedAt: "2026-07-06T00:00:00.000Z"
     });
+  });
+
+  it("loads room manual cache tasks with stale task cleanup and cached piece indexes", async () => {
+    const pieceIndexQueries: Array<{
+      trackId: string;
+      peerId: string;
+      fileHash?: string | null;
+      chunkSize?: number | null;
+    }> = [];
+
+    const result = await hydrateManualCacheTasksForRoom({
+      roomId: "room_1",
+      peerId: "peer_1",
+      currentPlaybackTrackId: "track_current",
+      roomTracks: [
+        {
+          id: "track_manual",
+          relayManifest: null,
+          pieceManifest: {
+            totalChunks: 2,
+            chunkSize: 1024,
+            pieceMimeType: "audio/flac"
+          }
+        }
+      ],
+      listManualCacheTasksForRoom: async () => [
+        {
+          taskKey: "room_1:track_manual",
+          roomId: "room_1",
+          trackId: "track_manual",
+          fileHash: "hash_manual",
+          status: "queued",
+          mode: "manual",
+          errorMessage: null,
+          completedChunks: 0,
+          totalChunks: 2,
+          mimeType: "audio/flac",
+          manifestSource: "snapshot",
+          blockedReason: null,
+          integrityMode: "weak",
+          providerPeerIds: [],
+          connectedProviderPeerIds: [],
+          selectedProviderPeerId: null,
+          requestableChunkCount: 0,
+          pendingChunkCount: 0,
+          lastRequestedChunks: [],
+          lastPieceReceivedAt: null,
+          lastError: null,
+          updatedAt: "2026-07-06T00:00:00.000Z"
+        },
+        {
+          taskKey: "room_1:track_old",
+          roomId: "room_1",
+          trackId: "track_old",
+          fileHash: "hash_old",
+          status: "downloading",
+          mode: "playback-demand",
+          errorMessage: null,
+          completedChunks: 0,
+          totalChunks: 2,
+          mimeType: "audio/flac",
+          manifestSource: "snapshot",
+          blockedReason: null,
+          integrityMode: "weak",
+          providerPeerIds: [],
+          connectedProviderPeerIds: [],
+          selectedProviderPeerId: null,
+          requestableChunkCount: 0,
+          pendingChunkCount: 0,
+          lastRequestedChunks: [],
+          lastPieceReceivedAt: null,
+          lastError: null,
+          updatedAt: "2026-07-06T00:00:00.000Z"
+        }
+      ],
+      getCachedPieceIndexes: async (trackId, peerId, options) => {
+        pieceIndexQueries.push({
+          trackId,
+          peerId,
+          fileHash: options?.fileHash,
+          chunkSize: options?.chunkSize
+        });
+        return [0, 1];
+      },
+      localCacheOwnerKey: "local"
+    });
+
+    expect(result.tasks).toHaveLength(2);
+    expect(result.staleTasks).toEqual([{ roomId: "room_1", trackId: "track_old" }]);
+    expect(result.chunkIndexesByTrack.get("track_manual")).toEqual(new Set([0, 1]));
+    expect(result.chunkIndexesByTrack.get("track_old")).toEqual(new Set([0, 1]));
+    expect(pieceIndexQueries).toEqual([
+      {
+        trackId: "track_manual",
+        peerId: "peer_1",
+        fileHash: "hash_manual",
+        chunkSize: 1024
+      },
+      {
+        trackId: "track_old",
+        peerId: "peer_1",
+        fileHash: "hash_old",
+        chunkSize: undefined
+      }
+    ]);
   });
 });

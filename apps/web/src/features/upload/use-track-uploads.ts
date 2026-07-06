@@ -66,11 +66,11 @@ import {
   resolveManualCachePlanReceivedAction,
   resolveStalePlaybackDemandTaskIds,
   shouldEnsurePlaybackDemandCacheTask,
-  shouldHydrateCacheTaskPieceIndexes,
   type ManualCacheTask
 } from "./upload-ui-state";
 import {
   buildManualCacheTaskRecord,
+  hydrateManualCacheTasksForRoom,
   resolveManualCacheTaskStateUpdate
 } from "./manual-cache-task-store";
 import {
@@ -201,41 +201,30 @@ export function useTrackUploads(options: {
       return;
     }
     let cancelled = false;
-    void listManualCacheTasksForRoom(roomSnapshot.room.id).then((tasks) => {
+    void hydrateManualCacheTasksForRoom({
+      roomId: roomSnapshot.room.id,
+      peerId,
+      currentPlaybackTrackId: roomSnapshot.room.playback.currentTrackId ?? null,
+      roomTracks: roomSnapshot.tracks,
+      listManualCacheTasksForRoom,
+      getCachedPieceIndexes,
+      localCacheOwnerKey
+    }).then((result) => {
       if (cancelled) {
         return;
       }
-      const currentPlaybackTrackId = roomSnapshot.room.playback.currentTrackId ?? null;
-      for (const task of tasks) {
-        if (
-          (task.mode !== "manual" && task.mode !== "playback-demand") ||
-          (task.mode === "playback-demand" && task.trackId !== currentPlaybackTrackId)
-        ) {
-          void deleteManualCacheTask(task.roomId, task.trackId);
-        }
+      for (const task of result.staleTasks) {
+        void deleteManualCacheTask(task.roomId, task.trackId);
       }
       setManualCacheTasks((current) =>
         mergeHydratedManualCacheTasks({
           currentTasks: current,
-          hydratedTasks: tasks,
-          currentPlaybackTrackId
+          hydratedTasks: result.tasks,
+          currentPlaybackTrackId: roomSnapshot.room.playback.currentTrackId ?? null
         })
       );
-      for (const task of tasks) {
-        if (shouldHydrateCacheTaskPieceIndexes(task)) {
-          const track = roomSnapshot.tracks.find((entry) => entry.id === task.trackId) ?? null;
-          const expectedManifest = track?.relayManifest ?? track?.pieceManifest ?? null;
-          void getCachedPieceIndexes(task.trackId, peerId, {
-            fileHash: task.fileHash,
-            ownerKey: localCacheOwnerKey,
-            chunkSize: expectedManifest?.chunkSize
-          }).then((indexes) => {
-            if (cancelled) {
-              return;
-            }
-            manualCacheChunkIndexesRef.current.set(task.trackId, new Set(indexes));
-          });
-        }
+      for (const [trackId, indexes] of result.chunkIndexesByTrack) {
+        manualCacheChunkIndexesRef.current.set(trackId, indexes);
       }
     });
     return () => {

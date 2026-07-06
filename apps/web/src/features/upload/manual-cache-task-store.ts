@@ -217,6 +217,58 @@ export function shouldHydrateCacheTaskPieceIndexes(input: {
   );
 }
 
+export async function hydrateManualCacheTasksForRoom(input: {
+  roomId: string;
+  peerId: string;
+  currentPlaybackTrackId: string | null;
+  roomTracks: Array<{
+    id: string;
+    relayManifest?: { chunkSize: number; totalChunks?: number; pieceMimeType?: string | null } | null;
+    pieceManifest?: { chunkSize: number; totalChunks?: number; pieceMimeType?: string | null } | null;
+  }>;
+  listManualCacheTasksForRoom: (roomId: string) => Promise<ManualCacheTaskRecord[]>;
+  getCachedPieceIndexes: (
+    trackId: string,
+    peerId: string,
+    options?: { fileHash?: string; ownerKey?: string; chunkSize?: number }
+  ) => Promise<number[]>;
+  localCacheOwnerKey: string;
+}) {
+  const tasks = await input.listManualCacheTasksForRoom(input.roomId);
+  const staleTasks = tasks
+    .filter(
+      (task) =>
+        (task.mode !== "manual" && task.mode !== "playback-demand") ||
+        (task.mode === "playback-demand" && task.trackId !== input.currentPlaybackTrackId)
+    )
+    .map((task) => ({
+      roomId: task.roomId,
+      trackId: task.trackId
+    }));
+  const chunkIndexesByTrack = new Map<string, Set<number>>();
+
+  for (const task of tasks) {
+    if (!shouldHydrateCacheTaskPieceIndexes(task)) {
+      continue;
+    }
+
+    const track = input.roomTracks.find((entry) => entry.id === task.trackId) ?? null;
+    const expectedManifest = track?.relayManifest ?? track?.pieceManifest ?? null;
+    const indexes = await input.getCachedPieceIndexes(task.trackId, input.peerId, {
+      fileHash: task.fileHash,
+      ownerKey: input.localCacheOwnerKey,
+      chunkSize: expectedManifest?.chunkSize
+    });
+    chunkIndexesByTrack.set(task.trackId, new Set(indexes));
+  }
+
+  return {
+    tasks,
+    staleTasks,
+    chunkIndexesByTrack
+  };
+}
+
 export function resolveAutomaticPlaybackCacheTaskMode(): ManualCacheTask["mode"] {
   return "playback-demand";
 }
