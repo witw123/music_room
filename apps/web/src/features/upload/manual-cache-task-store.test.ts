@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyManualCacheTaskDrop,
   applyManualCacheDownloadStartResult,
+  applyManualCacheProgressResult,
   applyManualCacheTaskUpdate,
   buildManualCacheTaskRecord,
   buildNextManualCacheTask,
@@ -278,6 +279,94 @@ describe("manual cache task store helpers", () => {
         totalChunks: 3
       }
     ]);
+  });
+
+  it("applies manual cache progress results to runtime state and callbacks", () => {
+    const chunkIndexesByTrack = new Map<string, Set<number>>();
+    const availabilityEvents: string[] = [];
+    const taskPatches: Array<Partial<ManualCacheTask>> = [];
+    const assembleRequests: Array<{ trackId: string; mimeType: string | null; totalChunks: number }> = [];
+
+    const applied = applyManualCacheProgressResult({
+      trackId: "track_1",
+      result: {
+        accepted: true,
+        nextChunkIndexes: new Set([0, 1]),
+        availability: "available",
+        taskPatch: {
+          status: "downloading",
+          completedChunks: 2,
+          totalChunks: 3
+        },
+        assembleRequest: {
+          trackId: "track_1",
+          mimeType: "audio/flac",
+          totalChunks: 3
+        }
+      },
+      chunkIndexesByTrack,
+      publishAvailability: (availability) => {
+        availabilityEvents.push(availability);
+      },
+      updateManualCacheTask: (_trackId, patch) => {
+        taskPatches.push(patch);
+      },
+      assembleManualCacheTrack: (trackId, mimeType, totalChunks) => {
+        assembleRequests.push({ trackId, mimeType, totalChunks });
+      }
+    });
+
+    expect(applied).toBe(true);
+    expect(chunkIndexesByTrack.get("track_1")).toEqual(new Set([0, 1]));
+    expect(availabilityEvents).toEqual(["available"]);
+    expect(taskPatches).toEqual([
+      {
+        status: "downloading",
+        completedChunks: 2,
+        totalChunks: 3
+      }
+    ]);
+    expect(assembleRequests).toEqual([
+      {
+        trackId: "track_1",
+        mimeType: "audio/flac",
+        totalChunks: 3
+      }
+    ]);
+  });
+
+  it("skips rejected manual cache progress results", () => {
+    const chunkIndexesByTrack = new Map<string, Set<number>>();
+
+    const applied = applyManualCacheProgressResult({
+      trackId: "track_1",
+      result: {
+        accepted: false,
+        nextChunkIndexes: new Set([0]),
+        availability: "available",
+        taskPatch: {
+          status: "downloading"
+        },
+        assembleRequest: {
+          trackId: "track_1",
+          mimeType: "audio/flac",
+          totalChunks: 1
+        }
+      },
+      chunkIndexesByTrack,
+      publishAvailability: () => {
+        throw new Error("availability should not publish");
+      },
+      updateManualCacheTask: () => {
+        throw new Error("task should not update");
+      },
+      assembleManualCacheTrack: () => {
+        throw new Error("assembly should not start");
+      }
+    });
+
+    expect(applied).toBe(false);
+    expect(chunkIndexesByTrack.has("track_1")).toBe(false);
   });
 
   it("loads room manual cache tasks with stale task cleanup and cached piece indexes", async () => {

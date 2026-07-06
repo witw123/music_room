@@ -68,6 +68,7 @@ import {
 } from "./upload-ui-state";
 import {
   applyManualCacheDownloadStartResult,
+  applyManualCacheProgressResult,
   applyManualCacheTaskDrop,
   applyManualCacheTaskUpdate,
   hydrateManualCacheTasksForRoom
@@ -677,28 +678,19 @@ export function useTrackUploads(options: {
         nowIso: new Date().toISOString()
       });
 
-      if (!result.accepted) {
-        return;
-      }
-
-      manualCacheChunkIndexesRef.current.set(input.trackId, result.nextChunkIndexes);
-
-      if (result.availability) {
-        onAvailability(result.availability);
-        emitAvailability(result.availability);
-      }
-
-      if (result.taskPatch) {
-        updateManualCacheTask(input.trackId, result.taskPatch);
-      }
-
-      if (result.assembleRequest) {
-        void assembleManualCacheTrack(
-          result.assembleRequest.trackId,
-          result.assembleRequest.mimeType,
-          result.assembleRequest.totalChunks
-        );
-      }
+      applyManualCacheProgressResult({
+        trackId: input.trackId,
+        result,
+        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+        publishAvailability: (availability) => {
+          onAvailability(availability);
+          emitAvailability(availability);
+        },
+        updateManualCacheTask,
+        assembleManualCacheTrack: (assembleTrackId, mimeType, totalChunks) => {
+          void assembleManualCacheTrack(assembleTrackId, mimeType, totalChunks);
+        }
+      });
     },
     [
       activeSession,
@@ -746,19 +738,16 @@ export function useTrackUploads(options: {
         track,
         isCurrentPlaybackDemand
       });
-      manualCacheChunkIndexesRef.current.set(plan.trackId, result.nextChunkIndexes);
-
-      if (result.taskPatch) {
-        updateManualCacheTask(plan.trackId, result.taskPatch);
-      }
-
-      if (result.assembleRequest) {
-        void assembleManualCacheTrack(
-          result.assembleRequest.trackId,
-          result.assembleRequest.mimeType,
-          result.assembleRequest.totalChunks
-        );
-      }
+      applyManualCacheProgressResult({
+        trackId: plan.trackId,
+        result,
+        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
+        publishAvailability: () => undefined,
+        updateManualCacheTask,
+        assembleManualCacheTrack: (assembleTrackId, mimeType, totalChunks) => {
+          void assembleManualCacheTrack(assembleTrackId, mimeType, totalChunks);
+        }
+      });
     },
     [
       activeSession?.userId,

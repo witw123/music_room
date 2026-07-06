@@ -219,6 +219,49 @@ export function applyManualCacheDownloadStartResult(input: {
   }
 }
 
+export function applyManualCacheProgressResult<TAvailability>(input: {
+  trackId: string;
+  result: {
+    accepted?: boolean;
+    nextChunkIndexes: Set<number>;
+    availability?: TAvailability | null;
+    taskPatch: Partial<ManualCacheTask> | null;
+    assembleRequest: { trackId: string; mimeType: string | null; totalChunks: number } | null;
+  };
+  chunkIndexesByTrack: Map<string, Set<number>>;
+  publishAvailability: (availability: TAvailability) => void;
+  updateManualCacheTask: (trackId: string, patch: Partial<ManualCacheTask>) => void;
+  assembleManualCacheTrack: (
+    trackId: string,
+    mimeType: string | null,
+    totalChunks: number
+  ) => void;
+}) {
+  if (input.result.accepted === false) {
+    return false;
+  }
+
+  input.chunkIndexesByTrack.set(input.trackId, input.result.nextChunkIndexes);
+
+  if (input.result.availability) {
+    input.publishAvailability(input.result.availability);
+  }
+
+  if (input.result.taskPatch) {
+    input.updateManualCacheTask(input.trackId, input.result.taskPatch);
+  }
+
+  if (input.result.assembleRequest) {
+    input.assembleManualCacheTrack(
+      input.result.assembleRequest.trackId,
+      input.result.assembleRequest.mimeType,
+      input.result.assembleRequest.totalChunks
+    );
+  }
+
+  return true;
+}
+
 export function buildManualCacheTaskRecord(input: {
   roomId: string;
   task: ManualCacheTask;
