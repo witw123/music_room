@@ -31,8 +31,7 @@ import {
 } from "./signaling-transport";
 import {
   DataChannelManager,
-  shouldFlushDataChannelQueue,
-  shouldSendQueuedDataChannelItem
+  type DataChannelQueuedSendItem
 } from "./data-channel-manager";
 import {
   PeerConnectionRegistry,
@@ -41,8 +40,7 @@ import {
   enqueuePeerOperation,
   flushPendingCandidates,
   shouldRestartPeer,
-  type PeerEntry,
-  type QueuedSendItem
+  type PeerEntry
 } from "./peer-connection-registry";
 import { MeshHealthMonitor } from "./mesh-health-monitor";
 import { validateTrackPiecePayloadBatch } from "./index";
@@ -255,6 +253,8 @@ export class P2PMesh {
     this.dataChannels = new DataChannelManager({
       autoReconnect: this.autoReconnect,
       sendQueueLowWatermarkBytes: this.sendQueueLowWatermarkBytes,
+      sendQueueHighWatermarkBytes: this.sendQueueHighWatermarkBytes,
+      onPieceSent: this.callbacks.onPieceSent,
       onDataChannelStateChange: this.callbacks.onDataChannelStateChange,
       onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
       onPeerConnectionChange: this.callbacks.onPeerConnectionChange,
@@ -870,67 +870,20 @@ export class P2PMesh {
     return manifestHeader;
   }
 
-  private enqueueSendItem(peerId: string, entry: PeerEntry, item: QueuedSendItem) {
-    if (entry.releasing) {
-      return;
-    }
-
-    entry.sendQueue.push(item);
-    this.flushSendQueue(peerId, entry);
+  private enqueueSendItem(peerId: string, entry: PeerEntry, item: DataChannelQueuedSendItem) {
+    this.dataChannels.enqueueSendItem({
+      peerId,
+      entry,
+      item,
+      schedulePeerReconnect: () => this.schedulePeerReconnect(peerId, entry)
+    });
   }
 
   private flushSendQueue(peerId: string, entry: PeerEntry) {
-    const channel = entry.channel;
-    if (!channel || !shouldFlushDataChannelQueue({
-      hasChannel: true,
-      readyState: channel.readyState,
-      releasing: entry.releasing
-    })) {
-      return;
-    }
-
-    while (
-      shouldSendQueuedDataChannelItem({
-        queueLength: entry.sendQueue.length,
-        bufferedAmountBytes: channel.bufferedAmount,
-        highWatermarkBytes: this.sendQueueHighWatermarkBytes
-      })
-    ) {
-      const nextItem = entry.sendQueue.shift()!;
-      try {
-        if (typeof nextItem.data === "string") {
-          channel.send(nextItem.data);
-        } else {
-          channel.send(nextItem.data);
-        }
-      } catch {
-        entry.sendQueue.unshift(nextItem);
-        this.callbacks.onPeerStalled?.({
-          peerId,
-          reason: "data-channel-closed"
-        });
-        if (this.autoReconnect) {
-          this.schedulePeerReconnect(peerId, entry);
-        }
-        break;
-      }
-      if (
-        typeof nextItem.trackId === "string" &&
-        typeof nextItem.chunkIndex === "number" &&
-        typeof nextItem.payloadBytes === "number"
-      ) {
-        this.callbacks.onPieceSent?.({
-          peerId,
-          trackId: nextItem.trackId,
-          chunkIndex: nextItem.chunkIndex,
-          payloadBytes: nextItem.payloadBytes
-        });
-      }
-    }
-
-    this.callbacks.onDataBufferedAmountChange?.({
+    this.dataChannels.flushSendQueue({
       peerId,
-      bufferedAmountBytes: channel.bufferedAmount
+      entry,
+      schedulePeerReconnect: () => this.schedulePeerReconnect(peerId, entry)
     });
   }
 

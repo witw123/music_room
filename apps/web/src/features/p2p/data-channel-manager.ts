@@ -1,8 +1,16 @@
+export type DataChannelQueuedSendItem = {
+  data: string | ArrayBuffer;
+  trackId?: string;
+  chunkIndex?: number;
+  payloadBytes?: number;
+};
+
 type DataChannelLifecycleEntry = {
+  channel?: RTCDataChannel | null;
   dataChannelState: RTCDataChannelState | null;
   lastSignalProgressAtMs: number;
   reconnectAttempts: number;
-  sendQueue: unknown[];
+  sendQueue: DataChannelQueuedSendItem[];
   releasing: boolean;
 };
 
@@ -23,19 +31,28 @@ type DataChannelManagerCallbacks = {
     peerId: string;
     reason: "watchdog-timeout" | "connection-failed" | "data-channel-closed";
   }) => void;
+  onPieceSent?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    payloadBytes: number;
+  }) => void;
 };
 
 export class DataChannelManager {
   private readonly autoReconnect: boolean;
   private readonly sendQueueLowWatermarkBytes: number;
+  private readonly sendQueueHighWatermarkBytes: number;
   private readonly callbacks: DataChannelManagerCallbacks;
 
   constructor(input: {
     autoReconnect: boolean;
     sendQueueLowWatermarkBytes: number;
+    sendQueueHighWatermarkBytes?: number;
   } & DataChannelManagerCallbacks) {
     this.autoReconnect = input.autoReconnect;
     this.sendQueueLowWatermarkBytes = input.sendQueueLowWatermarkBytes;
+    this.sendQueueHighWatermarkBytes = input.sendQueueHighWatermarkBytes ?? 1024 * 1024;
     this.callbacks = input;
   }
 
@@ -123,6 +140,79 @@ export class DataChannelManager {
         input.schedulePeerReconnect();
       }
     };
+  }
+
+  enqueueSendItem(input: {
+    peerId: string;
+    entry: DataChannelLifecycleEntry;
+    item: DataChannelQueuedSendItem;
+    schedulePeerReconnect: () => void;
+  }) {
+    if (input.entry.releasing) {
+      return;
+    }
+
+    input.entry.sendQueue.push(input.item);
+    this.flushSendQueue(input);
+  }
+
+  flushSendQueue(input: {
+    peerId: string;
+    entry: DataChannelLifecycleEntry;
+    schedulePeerReconnect: () => void;
+  }) {
+    const channel = input.entry.channel;
+    if (!channel || !shouldFlushDataChannelQueue({
+      hasChannel: true,
+      readyState: channel.readyState,
+      releasing: input.entry.releasing
+    })) {
+      return;
+    }
+
+    while (
+      shouldSendQueuedDataChannelItem({
+        queueLength: input.entry.sendQueue.length,
+        bufferedAmountBytes: channel.bufferedAmount,
+        highWatermarkBytes: this.sendQueueHighWatermarkBytes
+      })
+    ) {
+      const nextItem = input.entry.sendQueue.shift()!;
+      try {
+        if (typeof nextItem.data === "string") {
+          channel.send(nextItem.data);
+        } else {
+          channel.send(nextItem.data);
+        }
+      } catch {
+        input.entry.sendQueue.unshift(nextItem);
+        this.callbacks.onPeerStalled?.({
+          peerId: input.peerId,
+          reason: "data-channel-closed"
+        });
+        if (this.autoReconnect) {
+          input.schedulePeerReconnect();
+        }
+        break;
+      }
+      if (
+        typeof nextItem.trackId === "string" &&
+        typeof nextItem.chunkIndex === "number" &&
+        typeof nextItem.payloadBytes === "number"
+      ) {
+        this.callbacks.onPieceSent?.({
+          peerId: input.peerId,
+          trackId: nextItem.trackId,
+          chunkIndex: nextItem.chunkIndex,
+          payloadBytes: nextItem.payloadBytes
+        });
+      }
+    }
+
+    this.callbacks.onDataBufferedAmountChange?.({
+      peerId: input.peerId,
+      bufferedAmountBytes: channel.bufferedAmount
+    });
   }
 }
 

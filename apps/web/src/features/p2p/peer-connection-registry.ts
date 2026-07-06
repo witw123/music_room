@@ -1,11 +1,5 @@
 import type { PeerConnectionStatsSnapshot } from "./connection-stats";
-
-export type QueuedSendItem = {
-  data: string | ArrayBuffer;
-  trackId?: string;
-  chunkIndex?: number;
-  payloadBytes?: number;
-};
+import type { DataChannelQueuedSendItem } from "./data-channel-manager";
 
 export type PeerEntry = {
   connection: RTCPeerConnection;
@@ -21,7 +15,7 @@ export type PeerEntry = {
   reconnectAttempts: number;
   reconnectTimerId: ReturnType<typeof setTimeout> | null;
   watchdogTimerId: ReturnType<typeof setTimeout> | null;
-  sendQueue: QueuedSendItem[];
+  sendQueue: DataChannelQueuedSendItem[];
   releasing: boolean;
   operationChain: Promise<void>;
 };
