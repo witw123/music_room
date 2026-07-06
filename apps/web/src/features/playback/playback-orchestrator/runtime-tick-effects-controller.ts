@@ -91,7 +91,6 @@ type RuntimeTickEffectsControllerInput = {
   currentBufferedFullLocalTrackObjectUrl: string | null;
   currentBufferedFullLocalTrackRef: MutableRefObject<FullLocalPlaybackTrack | null | undefined>;
   currentProgressiveEngineType: ProgressiveEngineType;
-  currentTrackFormatKey: string;
   currentTrackRef: MutableRefObject<TrackMeta | null>;
   fullLocalBlockedReason: string | null;
   fullLocalMaxDriftMs: number;
@@ -102,8 +101,6 @@ type RuntimeTickEffectsControllerInput = {
   localTakeoverCooldownUntilRef: MutableRefObject<number>;
   playbackCurrentTrackId: string | null;
   playbackMediaEpoch: number | null;
-  playbackQualityStalledEventsLast30s: number;
-  playbackQualityWaitingEventsLast30s: number;
   playbackRecoveryStage: PlaybackRecoveryStage;
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
   playbackStatus: PlaybackSnapshot["status"] | null | undefined;
@@ -130,7 +127,6 @@ export function useRuntimeTickEffectsController({
   currentBufferedFullLocalTrackObjectUrl,
   currentBufferedFullLocalTrackRef,
   currentProgressiveEngineType,
-  currentTrackFormatKey,
   currentTrackRef,
   fullLocalBlockedReason,
   fullLocalMaxDriftMs,
@@ -141,8 +137,6 @@ export function useRuntimeTickEffectsController({
   localTakeoverCooldownUntilRef,
   playbackCurrentTrackId,
   playbackMediaEpoch,
-  playbackQualityStalledEventsLast30s,
-  playbackQualityWaitingEventsLast30s,
   playbackRecoveryStage,
   playbackRef,
   playbackStatus,

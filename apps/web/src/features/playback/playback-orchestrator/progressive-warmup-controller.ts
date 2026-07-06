@@ -367,6 +367,7 @@ export function useProgressiveWarmupController({
       }
     };
   }, [
+    attemptPlaybackStartRef,
     audioRef,
     currentProgressiveManifestRef,
     directProgressiveTakeoverEnabled,
