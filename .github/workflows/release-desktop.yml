@@ -192,3 +192,8 @@ jobs:
           find release-assets -type f \
             \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.tar.gz' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.apk' -o -name '*.json' -o -name '*.sig' \) \
             -print0 | xargs -0 gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Update release asset labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/update-release-asset-labels.mjs
