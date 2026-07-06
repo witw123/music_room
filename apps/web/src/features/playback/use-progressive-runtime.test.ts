@@ -650,6 +650,54 @@ describe("playback runtime pipeline keys", () => {
     expect(lifecycleSource).toContain("resolvePcmRuntimeFailureResetAction");
   });
 
+  it("hosts playback runtime input derivation outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const inputStateSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-runtime-input-state.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackRuntimeInputState");
+    expect(runtimeSource).not.toContain("const currentBufferedFullLocalTrack = useMemo(");
+    expect(runtimeSource).not.toContain("const currentProgressiveManifestKey =");
+    expect(runtimeSource).not.toContain("const nextCurrentProgressiveManifest =");
+    expect(runtimeSource).not.toContain("const progressiveHealthSnapshot = useMemo(");
+    expect(inputStateSource).toContain("export function usePlaybackRuntimeInputState");
+    expect(inputStateSource).toContain("buildProgressiveTrackManifest");
+    expect(inputStateSource).toContain("buildProgressiveHealthSnapshot");
+    expect(inputStateSource).toContain("resolveTrackAvailabilityManifestHint");
+    expect(inputStateSource).toContain("resolveFullLocalPlaybackSessionState");
+  });
+
+  it("hosts playback runtime refs outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const refsSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-runtime-refs.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackRuntimeRefs");
+    expect(runtimeSource).not.toContain("const progressiveEngineRef = useRef<ProgressiveMseEngine | null>");
+    expect(runtimeSource).not.toContain("const progressivePcmEngineRef = useRef<ProgressivePcmEngine | null>");
+    expect(runtimeSource).not.toContain("const pcmRuntimeFailureRef = useRef<{ trackId: string; reason: string } | null>");
+    expect(refsSource).toContain("export function usePlaybackRuntimeRefs");
+    expect(refsSource).toContain("progressiveEngineRef");
+    expect(refsSource).toContain("localTakeoverCooldownUntilRef");
+    expect(refsSource).toContain("lastStablePlaybackAtRef");
+  });
+
   it("hosts local playback readiness handling outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
