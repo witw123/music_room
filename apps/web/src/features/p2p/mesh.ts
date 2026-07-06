@@ -13,16 +13,13 @@ import {
 } from "@/lib/indexeddb";
 import {
   samplePeerConnectionStats,
-  type PeerConnectionStatsSample,
-  type PeerConnectionStatsSnapshot
+  type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
-  assembleIncomingPieceFragments,
   buildPieceFrames,
   decodePieceFrame,
   type BinaryPieceFragmentMessage,
-  type BinaryPieceMessage,
-  type PendingIncomingPieceFragments
+  type BinaryPieceMessage
 } from "./piece-frame-codec";
 import {
   SignalingTransport,
@@ -32,9 +29,25 @@ import {
 } from "./signaling-transport";
 import {
   DataChannelManager,
-  shouldFlushDataChannelQueue,
-  shouldSendQueuedDataChannelItem
+  type DataChannelQueuedSendItem
 } from "./data-channel-manager";
+import {
+  PieceRequestTracker,
+  type PendingPieceRequest
+} from "./piece-request-tracker";
+import { PieceFragmentTracker } from "./piece-fragment-tracker";
+import {
+  PeerConnectionRegistry,
+  clearPeerTimers,
+  createPeerEntry,
+  enqueuePeerOperation,
+  flushPendingCandidates,
+  shouldRestartPeer,
+  startPeerStatsSampling,
+  stopPeerStatsSampling,
+  type PeerEntry
+} from "./peer-connection-registry";
+import { MeshHealthMonitor } from "./mesh-health-monitor";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -153,34 +166,6 @@ type MeshOptions = {
     | undefined;
 };
 
-type PeerEntry = {
-  connection: RTCPeerConnection;
-  channel: RTCDataChannel | null;
-  /** The peerId that initiated this connection (so we don't initiate twice) */
-  initiatorPeerId: string | null;
-  pendingCandidates: RTCIceCandidateInit[];
-  statsIntervalId: ReturnType<typeof setInterval> | null;
-  statsSnapshot: PeerConnectionStatsSnapshot | null;
-  dataChannelState: RTCDataChannelState | null;
-  createdAtMs: number;
-  lastSignalProgressAtMs: number;
-  reconnectAttempts: number;
-  reconnectTimerId: ReturnType<typeof setTimeout> | null;
-  watchdogTimerId: ReturnType<typeof setTimeout> | null;
-  sendQueue: QueuedSendItem[];
-  releasing: boolean;
-  operationChain: Promise<void>;
-};
-
-type PendingPieceRequest = {
-  peerId: string;
-  requestId?: string;
-  expectedTotalChunks?: number;
-  requestedAtMs: number;
-  timeoutMs: number;
-  timeoutId: ReturnType<typeof setTimeout>;
-};
-
 type IncomingPieceBatchItem = {
   peerId: string;
   message: BinaryPieceMessage;
@@ -212,17 +197,9 @@ type CachedPieceManifestHeader = {
   pieceHashes?: string[];
 };
 
-type QueuedSendItem = {
-  data: string | ArrayBuffer;
-  trackId?: string;
-  chunkIndex?: number;
-  payloadBytes?: number;
-};
-
 export class P2PMesh {
-  private readonly peers = new Map<string, PeerEntry>();
-  private readonly expectedPeerIds = new Set<string>();
-  private readonly pendingPieceRequests = new Map<string, PendingPieceRequest>();
+  private readonly peerConnections: PeerConnectionRegistry;
+  private readonly pieceRequests = new PieceRequestTracker();
   private readonly pendingIncomingPieces: IncomingPieceBatchItem[] = [];
   private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
   private pieceFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -245,9 +222,12 @@ export class P2PMesh {
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
   private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
-  private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
+  private readonly pieceFragments = new PieceFragmentTracker({
+    ttlMs: this.incomingPieceFragmentTtlMs
+  });
   private readonly signaling: SignalingTransport;
   private readonly dataChannels: DataChannelManager;
+  private readonly healthMonitor: MeshHealthMonitor;
 
   constructor(
     private readonly roomId: string,
@@ -257,6 +237,7 @@ export class P2PMesh {
     private readonly iceServers: IceServerConfig[] = [],
     options: MeshOptions = {}
     ) {
+    this.peerConnections = new PeerConnectionRegistry(this.localPeerId);
     this.autoReconnect = options.autoReconnect ?? true;
     this.resolveConnectionConfig = options.resolveConnectionConfig;
     this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
@@ -270,10 +251,24 @@ export class P2PMesh {
     this.dataChannels = new DataChannelManager({
       autoReconnect: this.autoReconnect,
       sendQueueLowWatermarkBytes: this.sendQueueLowWatermarkBytes,
+      sendQueueHighWatermarkBytes: this.sendQueueHighWatermarkBytes,
+      onPieceSent: this.callbacks.onPieceSent,
       onDataChannelStateChange: this.callbacks.onDataChannelStateChange,
       onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
       onPeerConnectionChange: this.callbacks.onPeerConnectionChange,
       onPeerStalled: this.callbacks.onPeerStalled
+    });
+    this.healthMonitor = new MeshHealthMonitor({
+      autoReconnect: this.autoReconnect,
+      reconnectBackoffMs: this.reconnectBackoffMs,
+      dataOpenTimeoutMs: this.dataOpenTimeoutMs,
+      dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
+      connectionProgressTimeoutMs: this.connectionProgressTimeoutMs,
+      isExpectedPeer: (peerId) => this.peerConnections.expects(peerId),
+      getPeerEntry: (peerId) => this.peerConnections.get(peerId),
+      onPeerStalled: this.callbacks.onPeerStalled,
+      releasePeer: (peerId, entry) => this.releasePeer(peerId, entry),
+      recreatePeer: (peerId, entry) => this.recreatePeer(peerId, entry)
     });
   }
 
@@ -281,17 +276,13 @@ export class P2PMesh {
     remotePeerIds: string[],
     options?: { forceReconnectDegraded?: boolean }
   ) {
-    const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
-    this.expectedPeerIds.clear();
-    for (const peerId of nextPeers) {
-      this.expectedPeerIds.add(peerId);
-    }
+    const nextPeers = this.peerConnections.setExpectedRemotePeerIds(remotePeerIds);
 
     for (const peerId of nextPeers) {
-      const existing = this.peers.get(peerId);
+      const existing = this.peerConnections.get(peerId);
       if (
         existing &&
-        (options?.forceReconnectDegraded || this.shouldRestartPeer(existing))
+        (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing))
       ) {
         await this.recreatePeer(peerId, existing);
         continue;
@@ -305,7 +296,7 @@ export class P2PMesh {
       this.schedulePeerWatchdog(peerId, existing);
     }
 
-    for (const [peerId, entry] of this.peers.entries()) {
+    for (const [peerId, entry] of this.peerConnections.entries()) {
       if (!nextPeers.has(peerId)) {
         this.releasePeer(peerId, entry);
       }
@@ -319,11 +310,13 @@ export class P2PMesh {
 
     // handleSignal is for processing incoming signals — always get/create the peer
     // entry and process the signal regardless of who initiated.
-    const entry = this.peers.get(payload.fromPeerId) ?? (await this.ensurePeer(payload.fromPeerId, false));
+    const entry =
+      this.peerConnections.get(payload.fromPeerId) ??
+      (await this.ensurePeer(payload.fromPeerId, false));
     entry.lastSignalProgressAtMs = Date.now();
 
     if (payload.type === "offer") {
-      await this.enqueuePeerOperation(entry, async () => {
+      await enqueuePeerOperation(entry, async () => {
         this.signaling.markReceived(payload.fromPeerId, "offer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
@@ -338,7 +331,7 @@ export class P2PMesh {
         }
 
         await this.applyRemoteDescription(entry, remoteDescription);
-        await this.flushPendingCandidates(entry);
+        await flushPendingCandidates(entry);
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = Date.now();
@@ -348,7 +341,7 @@ export class P2PMesh {
     }
 
     if (payload.type === "answer") {
-      await this.enqueuePeerOperation(entry, async () => {
+      await enqueuePeerOperation(entry, async () => {
         this.signaling.markReceived(payload.fromPeerId, "answer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
@@ -360,14 +353,14 @@ export class P2PMesh {
         }
 
         await this.applyRemoteDescription(entry, remoteDescription);
-        await this.flushPendingCandidates(entry);
+        await flushPendingCandidates(entry);
         entry.lastSignalProgressAtMs = Date.now();
       });
       return;
     }
 
     if (payload.type === "candidate") {
-      await this.enqueuePeerOperation(entry, async () => {
+      await enqueuePeerOperation(entry, async () => {
         this.signaling.markReceived(payload.fromPeerId, "candidate");
         const candidate = toIceCandidateInit(payload.payload);
         if (!candidate) {
@@ -397,7 +390,7 @@ export class P2PMesh {
     }
 
     this.statsSamplingMode = mode;
-    for (const [peerId, entry] of this.peers.entries()) {
+    for (const [peerId, entry] of this.peerConnections.entries()) {
       this.stopStatsSampling(entry);
       this.startStatsSampling(peerId, entry);
     }
@@ -426,45 +419,27 @@ export class P2PMesh {
     expectedTotalChunks?: number,
     timeoutMs = 10000
   ) {
-    const entry = this.peers.get(peerId);
+    const entry = this.peerConnections.get(peerId);
     if (!entry?.channel || entry.channel.readyState !== "open") {
       return false;
     }
 
-    const normalizedChunkIndexes = [...new Set(chunkIndexes)]
-      .filter((chunkIndex) => !this.pendingPieceRequests.has(this.buildRequestKey(trackId, chunkIndex)))
-      .sort((left, right) => left - right);
+    const normalizedChunkIndexes = this.pieceRequests.getAvailableChunkIndexes(trackId, chunkIndexes);
     if (normalizedChunkIndexes.length === 0) {
       return false;
     }
 
     const requestId =
       normalizedChunkIndexes.length > 1 ? this.createRequestId(trackId, normalizedChunkIndexes) : undefined;
-    const pendingRequests: Array<{ requestKey: string; chunkIndex: number; timeoutId: ReturnType<typeof setTimeout> }> = [];
-    const requestedAtMs = Date.now();
-
-    for (const chunkIndex of normalizedChunkIndexes) {
-      const requestKey = this.buildRequestKey(trackId, chunkIndex);
-      const timeoutId = setTimeout(() => {
-        this.pendingPieceRequests.delete(requestKey);
-        this.callbacks.onPieceRequestTimeout?.({
-          trackId,
-          chunkIndex,
-          peerId,
-          requestId,
-          requestDurationMs: Date.now() - requestedAtMs
-        });
-      }, timeoutMs);
-      this.pendingPieceRequests.set(requestKey, {
-        peerId,
-        requestId,
-        expectedTotalChunks,
-        requestedAtMs,
-        timeoutMs,
-        timeoutId
-      });
-      pendingRequests.push({ requestKey, chunkIndex, timeoutId });
-    }
+    this.pieceRequests.registerRequests({
+      peerId,
+      trackId,
+      chunkIndexes: normalizedChunkIndexes,
+      expectedTotalChunks,
+      requestId,
+      timeoutMs,
+      onTimeout: this.callbacks.onPieceRequestTimeout
+    });
 
     const payload: P2PDataMessage =
       normalizedChunkIndexes.length === 1
@@ -492,15 +467,13 @@ export class P2PMesh {
   }
 
   getConnectedPeerIds() {
-    return [...this.peers.entries()]
-      .filter(([, entry]) => entry.channel?.readyState === "open")
-      .map(([peerId]) => peerId);
+    return this.peerConnections.getConnectedPeerIds();
   }
 
   async restartPeer(peerId: string) {
-    const entry = this.peers.get(peerId);
+    const entry = this.peerConnections.get(peerId);
     if (!entry) {
-      if (!this.expectedPeerIds.has(peerId)) {
+      if (!this.peerConnections.expects(peerId)) {
         return null;
       }
       return this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
@@ -510,12 +483,12 @@ export class P2PMesh {
   }
 
   async restartIce(peerId: string) {
-    const entry = this.peers.get(peerId);
+    const entry = this.peerConnections.get(peerId);
     if (!entry || entry.releasing) {
       return null;
     }
 
-    return this.enqueuePeerOperation(entry, async () => {
+    return enqueuePeerOperation(entry, async () => {
       if (entry.releasing || entry.connection.signalingState !== "stable") {
         return null;
       }
@@ -529,26 +502,23 @@ export class P2PMesh {
   }
 
   destroy() {
-    this.expectedPeerIds.clear();
-    for (const pendingRequest of this.pendingPieceRequests.values()) {
-      clearTimeout(pendingRequest.timeoutId);
-    }
-    this.pendingPieceRequests.clear();
+    this.peerConnections.clearExpected();
+    this.pieceRequests.clearAll();
     if (this.pieceFlushTimer) {
       clearTimeout(this.pieceFlushTimer);
       this.pieceFlushTimer = null;
     }
     this.pendingIncomingPieces.length = 0;
-    this.pendingIncomingPieceFragments.clear();
+    this.pieceFragments.clearAll();
 
-    for (const [peerId, entry] of this.peers.entries()) {
+    for (const [peerId, entry] of this.peerConnections.entries()) {
       this.releasePeer(peerId, entry);
     }
-    this.peers.clear();
+    this.peerConnections.clearPeers();
   }
 
   private async ensurePeer(peerId: string, shouldInitiate: boolean) {
-    const existing = this.peers.get(peerId);
+    const existing = this.peerConnections.get(peerId);
 
     if (existing) {
       if (
@@ -569,23 +539,11 @@ export class P2PMesh {
     }
 
     const connection = new RTCPeerConnection(this.buildConnectionConfig(peerId));
-    const entry: PeerEntry = {
+    const entry = createPeerEntry({
       connection,
-      channel: null,
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
-      pendingCandidates: [],
-      statsIntervalId: null,
-      statsSnapshot: null,
-      dataChannelState: null,
-      createdAtMs: Date.now(),
-      lastSignalProgressAtMs: Date.now(),
-      reconnectAttempts: 0,
-      reconnectTimerId: null,
-      watchdogTimerId: null,
-      sendQueue: [],
-      releasing: false,
-      operationChain: Promise.resolve()
-    };
+      nowMs: Date.now()
+    });
     this.startStatsSampling(peerId, entry);
 
     connection.onicecandidate = (event) => {
@@ -612,9 +570,9 @@ export class P2PMesh {
         entry.reconnectAttempts = 0;
       }
 
-      if (this.peers.get(peerId) === entry) {
+      if (this.peerConnections.get(peerId) === entry) {
         if (connection.connectionState === "failed" || connection.connectionState === "closed") {
-          if (this.expectedPeerIds.has(peerId)) {
+          if (this.peerConnections.expects(peerId)) {
             this.callbacks.onPeerStalled?.({
               peerId,
               reason: "connection-failed"
@@ -639,7 +597,7 @@ export class P2PMesh {
         peerId,
         state: connection.iceConnectionState
       });
-      if (this.peers.get(peerId) === entry) {
+      if (this.peerConnections.get(peerId) === entry) {
         this.schedulePeerWatchdog(peerId, entry);
       }
     };
@@ -649,7 +607,7 @@ export class P2PMesh {
       this.bindChannel(peerId, entry, entry.channel);
     };
 
-    this.peers.set(peerId, entry);
+    this.peerConnections.set(peerId, entry);
     this.schedulePeerWatchdog(peerId, entry);
     try {
       if (shouldInitiate) {
@@ -666,7 +624,7 @@ export class P2PMesh {
 
       return entry;
     } catch (error) {
-      if (this.peers.get(peerId) === entry) {
+      if (this.peerConnections.get(peerId) === entry) {
         this.releasePeer(peerId, entry);
       }
       throw error;
@@ -725,17 +683,12 @@ export class P2PMesh {
         }
 
         if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
-          const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
-          const pendingRequest = this.pendingPieceRequests.get(requestKey);
-          if (pendingRequest) {
-            clearTimeout(pendingRequest.timeoutId);
-            this.pendingPieceRequests.delete(requestKey);
-          }
+          const pendingRequest = this.pieceRequests.take(message.trackId, message.chunkIndex);
 
           this.pendingIncomingPieces.push({
             peerId,
             message,
-            pendingRequest
+            pendingRequest: pendingRequest ?? undefined
           });
           this.scheduleIncomingPieceFlush();
           return;
@@ -889,77 +842,28 @@ export class P2PMesh {
     return manifestHeader;
   }
 
-  private enqueueSendItem(peerId: string, entry: PeerEntry, item: QueuedSendItem) {
-    if (entry.releasing) {
-      return;
-    }
-
-    entry.sendQueue.push(item);
-    this.flushSendQueue(peerId, entry);
+  private enqueueSendItem(peerId: string, entry: PeerEntry, item: DataChannelQueuedSendItem) {
+    this.dataChannels.enqueueSendItem({
+      peerId,
+      entry,
+      item,
+      schedulePeerReconnect: () => this.schedulePeerReconnect(peerId, entry)
+    });
   }
 
   private flushSendQueue(peerId: string, entry: PeerEntry) {
-    const channel = entry.channel;
-    if (!channel || !shouldFlushDataChannelQueue({
-      hasChannel: true,
-      readyState: channel.readyState,
-      releasing: entry.releasing
-    })) {
-      return;
-    }
-
-    while (
-      shouldSendQueuedDataChannelItem({
-        queueLength: entry.sendQueue.length,
-        bufferedAmountBytes: channel.bufferedAmount,
-        highWatermarkBytes: this.sendQueueHighWatermarkBytes
-      })
-    ) {
-      const nextItem = entry.sendQueue.shift()!;
-      try {
-        if (typeof nextItem.data === "string") {
-          channel.send(nextItem.data);
-        } else {
-          channel.send(nextItem.data);
-        }
-      } catch {
-        entry.sendQueue.unshift(nextItem);
-        this.callbacks.onPeerStalled?.({
-          peerId,
-          reason: "data-channel-closed"
-        });
-        if (this.autoReconnect) {
-          this.schedulePeerReconnect(peerId, entry);
-        }
-        break;
-      }
-      if (
-        typeof nextItem.trackId === "string" &&
-        typeof nextItem.chunkIndex === "number" &&
-        typeof nextItem.payloadBytes === "number"
-      ) {
-        this.callbacks.onPieceSent?.({
-          peerId,
-          trackId: nextItem.trackId,
-          chunkIndex: nextItem.chunkIndex,
-          payloadBytes: nextItem.payloadBytes
-        });
-      }
-    }
-
-    this.callbacks.onDataBufferedAmountChange?.({
+    this.dataChannels.flushSendQueue({
       peerId,
-      bufferedAmountBytes: channel.bufferedAmount
+      entry,
+      schedulePeerReconnect: () => this.schedulePeerReconnect(peerId, entry)
     });
   }
 
   private releasePeer(peerId: string, entry: PeerEntry) {
     entry.releasing = true;
     entry.sendQueue = [];
-    if (this.peers.get(peerId) === entry) {
-      this.peers.delete(peerId);
-    }
-    this.clearPeerTimers(entry);
+    this.peerConnections.deleteIfCurrent(peerId, entry);
+    clearPeerTimers(entry);
     this.clearPendingRequestsForPeer(peerId);
     this.stopStatsSampling(entry);
     entry.channel?.close();
@@ -970,104 +874,22 @@ export class P2PMesh {
     });
   }
 
-  private shouldRestartPeer(entry: PeerEntry) {
-    if (entry.releasing) {
-      return false;
-    }
-
-    if (
-      entry.connection.connectionState === "failed" ||
-      entry.connection.connectionState === "closed" ||
-      entry.dataChannelState === "closed"
-    ) {
-      return true;
-    }
-
-    return this.isPeerStalled(entry, Date.now());
-  }
-
-  private isPeerStalled(entry: PeerEntry, now: number) {
-    const channelState = entry.channel?.readyState ?? null;
-    const connectionState = entry.connection.connectionState;
-
-    if (channelState === "open") {
-      return false;
-    }
-
-    if (now - entry.createdAtMs >= this.dataOpenTimeoutMs) {
-      return true;
-    }
-
-    if (
-      channelState === "connecting" &&
-      now - entry.lastSignalProgressAtMs >= this.dataConnectingTimeoutMs
-    ) {
-      return true;
-    }
-
-    if (
-      (connectionState === "new" ||
-        connectionState === "connecting" ||
-        connectionState === "disconnected") &&
-      now - entry.lastSignalProgressAtMs >= this.connectionProgressTimeoutMs
-    ) {
-      return true;
-    }
-
-    return false;
+  private shouldRestartPeerEntry(entry: PeerEntry) {
+    return shouldRestartPeer({
+      entry,
+      nowMs: Date.now(),
+      dataOpenTimeoutMs: this.dataOpenTimeoutMs,
+      dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
+      connectionProgressTimeoutMs: this.connectionProgressTimeoutMs
+    });
   }
 
   private schedulePeerWatchdog(peerId: string, entry: PeerEntry) {
-    if (entry.releasing || !this.expectedPeerIds.has(peerId)) {
-      this.clearPeerWatchdog(entry);
-      return;
-    }
-
-    this.clearPeerWatchdog(entry);
-    entry.watchdogTimerId = setTimeout(() => {
-      if (this.peers.get(peerId) !== entry || entry.releasing || !this.expectedPeerIds.has(peerId)) {
-        return;
-      }
-
-      if (this.isPeerStalled(entry, Date.now())) {
-        this.callbacks.onPeerStalled?.({
-          peerId,
-          reason: "watchdog-timeout"
-        });
-        if (this.autoReconnect) {
-          this.schedulePeerReconnect(peerId, entry);
-        }
-        return;
-      }
-
-      this.schedulePeerWatchdog(peerId, entry);
-    }, 1_000);
+    this.healthMonitor.schedulePeerWatchdog(peerId, entry);
   }
 
   private schedulePeerReconnect(peerId: string, entry: PeerEntry) {
-    if (entry.releasing || !this.expectedPeerIds.has(peerId)) {
-      this.releasePeer(peerId, entry);
-      return;
-    }
-
-    this.clearPeerWatchdog(entry);
-    if (entry.reconnectTimerId) {
-      return;
-    }
-
-    const delay =
-      this.reconnectBackoffMs[
-        Math.min(entry.reconnectAttempts, this.reconnectBackoffMs.length - 1)
-      ];
-    entry.reconnectAttempts += 1;
-    entry.reconnectTimerId = setTimeout(() => {
-      entry.reconnectTimerId = null;
-      if (this.peers.get(peerId) !== entry || entry.releasing || !this.expectedPeerIds.has(peerId)) {
-        return;
-      }
-
-      void this.recreatePeer(peerId, entry);
-    }, delay);
+    this.healthMonitor.schedulePeerReconnect(peerId, entry);
   }
 
   private async recreatePeer(peerId: string, entry: PeerEntry) {
@@ -1086,102 +908,20 @@ export class P2PMesh {
     };
   }
 
-  private clearPeerWatchdog(entry: PeerEntry) {
-    if (!entry.watchdogTimerId) {
-      return;
-    }
-
-    clearTimeout(entry.watchdogTimerId);
-    entry.watchdogTimerId = null;
-  }
-
-  private clearPeerReconnectTimer(entry: PeerEntry) {
-    if (!entry.reconnectTimerId) {
-      return;
-    }
-
-    clearTimeout(entry.reconnectTimerId);
-    entry.reconnectTimerId = null;
-  }
-
-  private clearPeerTimers(entry: PeerEntry) {
-    this.clearPeerWatchdog(entry);
-    this.clearPeerReconnectTimer(entry);
-  }
-
   private startStatsSampling(peerId: string, entry: PeerEntry) {
-    if (
-      !this.callbacks.onStatsSample ||
-      entry.statsIntervalId ||
-      this.statsSamplingMode === "off"
-    ) {
-      return;
-    }
-
-    const emitStatsSample = async () => {
-      const nextStats = await samplePeerConnectionStats(entry.connection, entry.statsSnapshot);
-      if (!nextStats) {
-        return;
-      }
-
-      entry.statsSnapshot = nextStats.snapshot;
-      this.callbacks.onStatsSample?.({
-        peerId,
-        sample: nextStats.sample
-      });
-    };
-
-    void emitStatsSample();
-    const samplingIntervalMs =
-      this.statsSamplingMode === "steady"
-        ? this.steadyStatsSamplingIntervalMs
-        : this.activeStatsSamplingIntervalMs;
-    entry.statsIntervalId = setInterval(() => {
-      void emitStatsSample();
-    }, samplingIntervalMs);
+    startPeerStatsSampling({
+      peerId,
+      entry,
+      mode: this.statsSamplingMode,
+      activeStatsSamplingIntervalMs: this.activeStatsSamplingIntervalMs,
+      steadyStatsSamplingIntervalMs: this.steadyStatsSamplingIntervalMs,
+      onStatsSample: this.callbacks.onStatsSample,
+      samplePeerConnectionStats
+    });
   }
 
   private stopStatsSampling(entry: PeerEntry) {
-    if (!entry.statsIntervalId) {
-      return;
-    }
-
-    clearInterval(entry.statsIntervalId);
-    entry.statsIntervalId = null;
-  }
-
-  private async flushPendingCandidates(entry: PeerEntry) {
-    if (entry.pendingCandidates.length === 0) {
-      return;
-    }
-
-    const nextCandidates = [...entry.pendingCandidates];
-    entry.pendingCandidates = [];
-    for (const candidate of nextCandidates) {
-      try {
-        await entry.connection.addIceCandidate(candidate);
-      } catch {
-        if (!entry.connection.remoteDescription) {
-          entry.pendingCandidates.push(candidate);
-        }
-      }
-    }
-  }
-
-  private enqueuePeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {
-    const run = entry.operationChain
-      .catch(() => undefined)
-      .then(async () => {
-        if (entry.releasing) {
-          return undefined as T;
-        }
-        return task();
-      });
-    entry.operationChain = run.then(
-      () => undefined,
-      () => undefined
-    );
-    return run;
+    stopPeerStatsSampling(entry);
   }
 
   private async applyRemoteDescription(
@@ -1202,18 +942,7 @@ export class P2PMesh {
   }
 
   private clearPendingRequestsForPeer(peerId: string) {
-    for (const [requestKey, pendingRequest] of this.pendingPieceRequests.entries()) {
-      if (pendingRequest.peerId !== peerId) {
-        continue;
-      }
-
-      clearTimeout(pendingRequest.timeoutId);
-      this.pendingPieceRequests.delete(requestKey);
-    }
-  }
-
-  private buildRequestKey(trackId: string, chunkIndex: number) {
-    return `${trackId}:${chunkIndex}`;
+    this.pieceRequests.clearPeer(peerId);
   }
 
   private createRequestId(trackId: string, chunkIndexes: number[]) {
@@ -1344,97 +1073,19 @@ export class P2PMesh {
   }
 
   private handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage) {
-    this.purgeStaleIncomingPieceFragments();
-    const fragmentKey = this.buildIncomingPieceFragmentKey(
-      peerId,
-      message.trackId,
-      message.chunkIndex,
-      message.requestId
-    );
-    const existing = this.pendingIncomingPieceFragments.get(fragmentKey);
-    const fragmentState: PendingIncomingPieceFragments =
-      existing &&
-      existing.fragmentCount === message.fragmentCount &&
-      existing.pieceHash === message.pieceHash
-        ? existing
-        : {
-            peerId,
-            requestId: message.requestId,
-            trackId: message.trackId,
-            chunkIndex: message.chunkIndex,
-            totalChunks: message.totalChunks,
-            chunkSize: message.chunkSize,
-            mimeType: message.mimeType,
-            pieceHash: message.pieceHash,
-            fragmentCount: message.fragmentCount,
-            receivedAtMs: Date.now(),
-            fragments: new Map<number, ArrayBuffer>()
-          };
-
-    fragmentState.receivedAtMs = Date.now();
-    fragmentState.fragments.set(message.fragmentIndex, message.payload);
-    this.pendingIncomingPieceFragments.set(fragmentKey, fragmentState);
-
-    if (fragmentState.fragments.size < fragmentState.fragmentCount) {
+    const assembledMessage = this.pieceFragments.addFragment(peerId, message);
+    if (!assembledMessage) {
       return;
     }
 
-    const assembledPayload = assembleIncomingPieceFragments(fragmentState);
-    this.pendingIncomingPieceFragments.delete(fragmentKey);
-    if (!assembledPayload) {
-      return;
-    }
-
-    const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
-    const pendingRequest = this.pendingPieceRequests.get(requestKey);
-    if (pendingRequest) {
-      clearTimeout(pendingRequest.timeoutId);
-      this.pendingPieceRequests.delete(requestKey);
-    }
+    const pendingRequest = this.pieceRequests.take(message.trackId, message.chunkIndex);
 
     this.pendingIncomingPieces.push({
       peerId,
-      message: {
-        kind: "send-piece",
-        requestId: message.requestId,
-        trackId: message.trackId,
-        chunkIndex: message.chunkIndex,
-        totalChunks: message.totalChunks,
-        chunkSize: message.chunkSize,
-        mimeType: message.mimeType,
-        pieceHash: message.pieceHash,
-        header: {
-          kind: "send-piece",
-          requestId: message.requestId,
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex,
-          totalChunks: message.totalChunks,
-          chunkSize: message.chunkSize,
-          mimeType: message.mimeType,
-          pieceHash: message.pieceHash
-        },
-        payload: assembledPayload
-      },
-      pendingRequest
+      message: assembledMessage,
+      pendingRequest: pendingRequest ?? undefined
     });
     this.scheduleIncomingPieceFlush();
-  }
-
-  private buildIncomingPieceFragmentKey(
-    peerId: string,
-    trackId: string,
-    chunkIndex: number,
-    requestId?: string
-  ) {
-    return `${peerId}:${trackId}:${chunkIndex}:${requestId ?? "none"}`;
-  }
-
-  private purgeStaleIncomingPieceFragments(now = Date.now()) {
-    for (const [fragmentKey, fragmentState] of this.pendingIncomingPieceFragments.entries()) {
-      if (now - fragmentState.receivedAtMs >= this.incomingPieceFragmentTtlMs) {
-        this.pendingIncomingPieceFragments.delete(fragmentKey);
-      }
-    }
   }
 }
 

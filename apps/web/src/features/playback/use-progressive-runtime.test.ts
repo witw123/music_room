@@ -38,7 +38,6 @@ import {
   resolveForceSourceOwnerLocalPlaybackAction as pipelineResolveForceSourceOwnerLocalPlaybackAction,
   resolveIdleFullLocalUpgradeArmState as pipelineResolveIdleFullLocalUpgradeArmState,
   resolveImmediateFullLocalRecoveryAction as pipelineResolveImmediateFullLocalRecoveryAction,
-  resolveLocalTakeoverCooldownArmAction as pipelineResolveLocalTakeoverCooldownArmAction,
   resolveLocalTakeoverCooldownResetAction as pipelineResolveLocalTakeoverCooldownResetAction,
   shouldAllowLocalTakeover as pipelineShouldAllowLocalTakeover,
   resolveFullLocalPlaybackSessionState as pipelineResolveFullLocalPlaybackSessionState,
@@ -55,7 +54,6 @@ import {
   resolveDriftSamplingPreflight as pipelineResolveDriftSamplingPreflight,
   resolvePausedPlaybackRecoveryState as pipelineResolvePausedPlaybackRecoveryState,
   resolvePlaybackSourceTransitionAction as pipelineResolvePlaybackSourceTransitionAction,
-  resolvePlaybackTimelineResetAction as pipelineResolvePlaybackTimelineResetAction,
   resolvePlaybackSurfaceResetAction as pipelineResolvePlaybackSurfaceResetAction,
   resolvePlaybackSurfaceResetMediaConnectionState as pipelineResolvePlaybackSurfaceResetMediaConnectionState,
   resolvePlaybackStartMediaConnectionState as pipelineResolvePlaybackStartMediaConnectionState,
@@ -261,7 +259,6 @@ import {
   resolveIdleFullLocalUpgradeArmState,
   resolveImmediateFullLocalRecoveryAction,
   resolveLocalTakeoverCooldownArmAction,
-  resolveLocalTakeoverCooldownResetAction,
   shouldPreferImmediateFullLocalRecovery,
   shouldPreferLocalTakeover,
   resolvePlaybackSourceAfterProgressiveRuntimeFailure,
@@ -2054,16 +2051,8 @@ describe("playback runtime pipeline keys", () => {
         currentTrackFormatKey: firstTrackKey,
         progressiveManifestKey: "manifest:track-1:hash-1",
         activePlaybackSource: "progressive-local",
-        canUseFullLocalForPlaybackSession: false,
         progressiveEngineType: "pcm",
-        progressiveStartupReady: true,
-        startupBufferMs: 60,
-        progressiveLocalBlockedReason: null,
-        isCurrentSourceOwner: false,
-        playbackRecoveryStage: "steady",
-        progressiveFallbackReason: null,
-        stalledEventsLast30s: 0,
-        waitingEventsLast30s: 0
+        startupBufferMs: 60
       })
     ).toBe(
       buildProgressiveWarmupTimerKey({
@@ -2073,17 +2062,48 @@ describe("playback runtime pipeline keys", () => {
         currentTrackFormatKey: nextTrackKey,
         progressiveManifestKey: "manifest:track-1:hash-1",
         activePlaybackSource: "progressive-local",
-        canUseFullLocalForPlaybackSession: false,
         progressiveEngineType: "pcm",
-        progressiveStartupReady: true,
-        startupBufferMs: 60,
-        progressiveLocalBlockedReason: null,
-        isCurrentSourceOwner: false,
-        playbackRecoveryStage: "steady",
-        progressiveFallbackReason: null,
-        stalledEventsLast30s: 0,
-        waitingEventsLast30s: 0
+        startupBufferMs: 60
       })
+    );
+  });
+
+  it("keeps warmup timer keys stable when only live policy state changes", () => {
+    const stableWarmupIdentity = {
+      playbackCurrentTrackId: "track-1",
+      playbackStatus: "playing" as const,
+      playbackMediaEpoch: 7,
+      currentTrackFormatKey: "track-1|hash-1|180000|audio/flac|flac",
+      progressiveManifestKey: "manifest:track-1:hash-1",
+      activePlaybackSource: "progressive-local" as const,
+      progressiveEngineType: "pcm" as const,
+      startupBufferMs: 60
+    };
+    const blockedPolicyRefresh = {
+      ...stableWarmupIdentity,
+      canUseFullLocalForPlaybackSession: false,
+      progressiveStartupReady: false,
+      progressiveLocalBlockedReason: "not-enough-connected-peers",
+      isCurrentSourceOwner: false,
+      playbackRecoveryStage: "startup-buffering",
+      progressiveFallbackReason: "buffer-underrun",
+      stalledEventsLast30s: 0,
+      waitingEventsLast30s: 0
+    };
+    const readyPolicyRefresh = {
+      ...stableWarmupIdentity,
+      canUseFullLocalForPlaybackSession: true,
+      progressiveStartupReady: true,
+      progressiveLocalBlockedReason: null,
+      isCurrentSourceOwner: true,
+      playbackRecoveryStage: "steady",
+      progressiveFallbackReason: null,
+      stalledEventsLast30s: 2,
+      waitingEventsLast30s: 3
+    };
+
+    expect(buildProgressiveWarmupTimerKey(blockedPolicyRefresh)).toBe(
+      buildProgressiveWarmupTimerKey(readyPolicyRefresh)
     );
   });
 });

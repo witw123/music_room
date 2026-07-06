@@ -15,6 +15,16 @@ class FakeDataChannel {
   onbufferedamountlow: (() => void) | null = null;
   bufferedAmount = 0;
   bufferedAmountLowThreshold = 0;
+  sentMessages: unknown[] = [];
+  failNextSend = false;
+
+  send(payload: unknown) {
+    if (this.failNextSend) {
+      this.failNextSend = false;
+      throw new Error("channel-closed");
+    }
+    this.sentMessages.push(payload);
+  }
 }
 
 describe("data channel manager policy", () => {
@@ -200,5 +210,120 @@ describe("data channel manager policy", () => {
       reason: "data-channel-closed"
     });
     expect(schedulePeerReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("flushes queued data while the channel is below the high watermark", () => {
+    const onPieceSent = vi.fn();
+    const onDataBufferedAmountChange = vi.fn();
+    const manager = new DataChannelManager({
+      autoReconnect: true,
+      sendQueueLowWatermarkBytes: 384 * 1024,
+      sendQueueHighWatermarkBytes: 1024 * 1024,
+      onPieceSent,
+      onDataBufferedAmountChange
+    });
+    const channel = new FakeDataChannel();
+    channel.readyState = "open";
+    channel.bufferedAmount = 128 * 1024;
+    const piecePayload = new Uint8Array([1, 2]).buffer;
+    const entry = {
+      channel: channel as unknown as RTCDataChannel,
+      dataChannelState: "open" as RTCDataChannelState,
+      lastSignalProgressAtMs: 0,
+      reconnectAttempts: 0,
+      sendQueue: [
+        { data: "request" },
+        {
+          data: piecePayload,
+          trackId: "track_1",
+          chunkIndex: 3,
+          payloadBytes: 2
+        }
+      ],
+      releasing: false
+    };
+
+    manager.flushSendQueue({
+      peerId: "peer_b",
+      entry,
+      schedulePeerReconnect: vi.fn()
+    });
+
+    expect(channel.sentMessages).toEqual(["request", piecePayload]);
+    expect(entry.sendQueue).toEqual([]);
+    expect(onPieceSent).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      trackId: "track_1",
+      chunkIndex: 3,
+      payloadBytes: 2
+    });
+    expect(onDataBufferedAmountChange).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      bufferedAmountBytes: 128 * 1024
+    });
+  });
+
+  it("keeps failed sends queued and schedules reconnect", () => {
+    const onPeerStalled = vi.fn();
+    const schedulePeerReconnect = vi.fn();
+    const manager = new DataChannelManager({
+      autoReconnect: true,
+      sendQueueLowWatermarkBytes: 384 * 1024,
+      sendQueueHighWatermarkBytes: 1024 * 1024,
+      onPeerStalled
+    });
+    const channel = new FakeDataChannel();
+    channel.readyState = "open";
+    channel.failNextSend = true;
+    const queuedItem = { data: "request" };
+    const entry = {
+      channel: channel as unknown as RTCDataChannel,
+      dataChannelState: "open" as RTCDataChannelState,
+      lastSignalProgressAtMs: 0,
+      reconnectAttempts: 0,
+      sendQueue: [queuedItem],
+      releasing: false
+    };
+
+    manager.flushSendQueue({
+      peerId: "peer_b",
+      entry,
+      schedulePeerReconnect
+    });
+
+    expect(entry.sendQueue).toEqual([queuedItem]);
+    expect(onPeerStalled).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      reason: "data-channel-closed"
+    });
+    expect(schedulePeerReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("enqueues data and immediately flushes open channels", () => {
+    const manager = new DataChannelManager({
+      autoReconnect: true,
+      sendQueueLowWatermarkBytes: 384 * 1024,
+      sendQueueHighWatermarkBytes: 1024 * 1024
+    });
+    const channel = new FakeDataChannel();
+    channel.readyState = "open";
+    const entry = {
+      channel: channel as unknown as RTCDataChannel,
+      dataChannelState: "open" as RTCDataChannelState,
+      lastSignalProgressAtMs: 0,
+      reconnectAttempts: 0,
+      sendQueue: [],
+      releasing: false
+    };
+
+    manager.enqueueSendItem({
+      peerId: "peer_b",
+      entry,
+      item: { data: "request" },
+      schedulePeerReconnect: vi.fn()
+    });
+
+    expect(channel.sentMessages).toEqual(["request"]);
+    expect(entry.sendQueue).toEqual([]);
   });
 });

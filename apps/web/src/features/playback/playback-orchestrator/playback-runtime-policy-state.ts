@@ -293,16 +293,8 @@ export function usePlaybackRuntimePolicyState({
     currentTrackFormatKey,
     progressiveManifestKey: currentProgressiveManifestKey,
     activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
     progressiveEngineType: currentProgressiveEngineType,
-    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
-    progressiveLocalBlockedReason,
-    isCurrentSourceOwner,
-    playbackRecoveryStage,
-    progressiveFallbackReason,
-    stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-    waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s
+    startupBufferMs
   });
   const progressiveWarmupRuntimeRef = useRef({
     activePlaybackSource,
