@@ -574,3 +574,51 @@ export function resolveManualCachePlanTaskUpdate(input: {
     assembleTotalChunks: progress.totalChunks
   };
 }
+
+export function resolveManualCachePlanReceivedAction(input: {
+  plan: {
+    trackId: string;
+    localPieceIndexes: readonly number[];
+    manifest: { totalChunks: number; pieceMimeType?: string | null } | null;
+    manifestSource: string;
+    blockedReason: string | null;
+    integrityMode: ManualCacheTask["integrityMode"];
+    providerPeerIds: readonly string[];
+    connectedProviderPeerIds: readonly string[];
+    selectedProviderPeerId: string | null;
+    requestableChunks: readonly number[];
+    pendingChunkCount: number;
+  };
+  currentTask: ManualCacheTask | null;
+  knownChunkIndexes: Set<number>;
+  track: { fileHash: string; mimeType?: string | null };
+  isCurrentPlaybackDemand: boolean;
+}) {
+  const nextChunkIndexes = new Set(input.knownChunkIndexes);
+  const planTotalChunks = input.plan.manifest?.totalChunks ?? 0;
+  for (const chunkIndex of input.plan.localPieceIndexes) {
+    if (chunkIndex >= 0 && (planTotalChunks <= 0 || chunkIndex < planTotalChunks)) {
+      nextChunkIndexes.add(chunkIndex);
+    }
+  }
+
+  const update = resolveManualCachePlanTaskUpdate({
+    current: input.currentTask,
+    plan: input.plan,
+    track: input.track,
+    knownChunkIndexes: nextChunkIndexes,
+    isCurrentPlaybackDemand: input.isCurrentPlaybackDemand
+  });
+
+  return {
+    nextChunkIndexes,
+    taskPatch: update.patch,
+    assembleRequest: update.shouldAssemble
+      ? {
+          trackId: input.plan.trackId,
+          mimeType: update.assembleMimeType,
+          totalChunks: update.assembleTotalChunks
+        }
+      : null
+  };
+}

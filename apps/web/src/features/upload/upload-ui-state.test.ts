@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildNextManualCacheTask,
   resolveManualCachePieceReceivedAction,
+  resolveManualCachePlanReceivedAction,
   resolveManualCachePlanTaskUpdate
 } from "./upload-ui-state";
 
@@ -105,6 +106,68 @@ describe("resolveManualCachePlanTaskUpdate", () => {
     expect(update.shouldAssemble).toBe(true);
     expect(update.assembleMimeType).toBe("audio/flac");
     expect(update.assembleTotalChunks).toBe(2);
+  });
+});
+
+describe("resolveManualCachePlanReceivedAction", () => {
+  const plan = {
+    trackId: "track_1",
+    localPieceIndexes: [0, 1],
+    manifest: {
+      totalChunks: 2,
+      pieceMimeType: "audio/flac"
+    },
+    manifestSource: "snapshot",
+    blockedReason: "complete",
+    integrityMode: "strong" as const,
+    providerPeerIds: ["peer_a"],
+    connectedProviderPeerIds: ["peer_a"],
+    selectedProviderPeerId: "peer_a",
+    requestableChunks: [1],
+    pendingChunkCount: 0
+  };
+
+  it("merges plan indexes and returns playback-demand assembly actions", () => {
+    const result = resolveManualCachePlanReceivedAction({
+      plan,
+      currentTask: null,
+      knownChunkIndexes: new Set([0]),
+      track: {
+        fileHash: "hash_1",
+        mimeType: "audio/flac"
+      },
+      isCurrentPlaybackDemand: true
+    });
+
+    expect(result.nextChunkIndexes).toEqual(new Set([0, 1]));
+    expect(result.taskPatch).toMatchObject({
+      status: "assembling",
+      mode: "playback-demand",
+      completedChunks: 2,
+      totalChunks: 2
+    });
+    expect(result.assembleRequest).toEqual({
+      trackId: "track_1",
+      mimeType: "audio/flac",
+      totalChunks: 2
+    });
+  });
+
+  it("ignores plans without current tasks when playback does not demand caching", () => {
+    const result = resolveManualCachePlanReceivedAction({
+      plan,
+      currentTask: null,
+      knownChunkIndexes: new Set(),
+      track: {
+        fileHash: "hash_1",
+        mimeType: "audio/flac"
+      },
+      isCurrentPlaybackDemand: false
+    });
+
+    expect(result.taskPatch).toBeNull();
+    expect(result.assembleRequest).toBeNull();
+    expect(result.nextChunkIndexes).toEqual(new Set([0, 1]));
   });
 });
 

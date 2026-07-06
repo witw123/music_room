@@ -65,7 +65,7 @@ import {
   pruneManualCacheChunkIndexesByActiveTracks,
   resolveAutomaticPlaybackCacheTaskMode,
   resolveManualCachePieceReceivedAction,
-  resolveManualCachePlanTaskUpdate,
+  resolveManualCachePlanReceivedAction,
   resolveStalePlaybackDemandTaskIds,
   shouldEnsurePlaybackDemandCacheTask,
   shouldHydrateCacheTaskPieceIndexes,
@@ -76,6 +76,7 @@ import {
   buildRegisterTrackPayload,
   processSelectedTrackFiles
 } from "./upload-pipeline";
+import { assembleManualCacheTrackFromPieces } from "./manual-cache-assembly";
 
 export {
   buildCachedLibraryTrackRegisterPayload,
@@ -100,6 +101,7 @@ export {
   mergeManualCachePlanTaskProgress,
   pruneManualCacheChunkIndexesByActiveTracks,
   resolveAutomaticPlaybackCacheTaskMode,
+  resolveManualCachePlanReceivedAction,
   resolveStalePlaybackDemandTaskIds,
   shouldAssembleManualCachePlanProgress,
   shouldCreatePlaybackDemandTaskFromCachePiece,
@@ -527,88 +529,29 @@ export function useTrackUploads(options: {
 
   const assembleManualCacheTrack = useCallback(
     async (trackId: string, mimeType: string | null, totalChunks: number) => {
-      if (!enableManualTrackCaching || !roomSnapshot || manualCacheAssemblingTrackIdsRef.current.has(trackId)) {
-        return;
-      }
-
-      manualCacheAssemblingTrackIdsRef.current.add(trackId);
-      try {
-        const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
-        if (!track) {
-          return;
-        }
-
-        updateManualCacheTask(trackId, {
-          status: "assembling",
-          errorMessage: null,
-          blockedReason: null,
-          totalChunks,
-          completedChunks: totalChunks,
-          mimeType
-        });
-
-        const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-        const pieces = await getCachedPiecesForTrack(trackId, peerId, {
-          fileHash: track.fileHash,
-          ownerKey: localCacheOwnerKey,
-          chunkSize: expectedManifest?.chunkSize
-        });
-        if (pieces.length < totalChunks) {
-          updateManualCacheTask(trackId, (current) =>
-            current && current.status !== "paused"
-              ? {
-                  status: "downloading",
-                  completedChunks: pieces.length,
-                  totalChunks,
-                  mimeType
-                }
-              : null
-          );
-          return;
-        }
-
-        const assembled = await assembleTrackFileFromPieces({
-          pieces,
-          totalChunks,
-          mimeType: mimeType || track.mimeType || "audio/mpeg",
-          title: track.title,
-          expectedFileHash: track.fileHash
-        });
-
-        if (!assembled) {
-          updateManualCacheTask(trackId, {
-            status: "failed-integrity",
-            errorMessage: "文件组装或完整性校验失败",
-            completedChunks: pieces.length,
-            totalChunks,
-            mimeType,
-            lastError: "integrity-mismatch"
-          });
-          setStatusMessage(`曲目 ${track.title} 的缓存完整性校验失败，等待新的可用来源后重试。`);
-          return;
-        }
-
-        await persistTrackIntoLibrary({
-          track,
-          roomId: roomSnapshot.room.id,
-          file: assembled.file
-        });
-        await deleteCachedPiecesForTrack(trackId);
-        manualCacheChunkIndexesRef.current.delete(trackId);
-        updateManualCacheTask(trackId, {
-          status: "ready",
-          errorMessage: null,
-          blockedReason: null,
-          completedChunks: totalChunks,
-          totalChunks,
-          mimeType: mimeType || assembled.file.type || track.mimeType || null,
-          lastError: null
-        });
-        void announceRoomTrackAvailability(trackId);
-        setStatusMessage(`已缓存《${track.title}》。`);
-      } finally {
-        manualCacheAssemblingTrackIdsRef.current.delete(trackId);
-      }
+      await assembleManualCacheTrackFromPieces({
+        manualTrackCachingEnabled: enableManualTrackCaching,
+        assemblingTrackIds: manualCacheAssemblingTrackIdsRef.current,
+        trackId,
+        mimeType,
+        totalChunks,
+        roomId: roomSnapshot?.room.id,
+        roomTracks: roomSnapshot?.tracks ?? [],
+        peerId,
+        localCacheOwnerKey,
+        updateManualCacheTask,
+        getCachedPiecesForTrack,
+        assembleTrackFileFromPieces,
+        persistTrackIntoLibrary,
+        deleteCachedPiecesForTrack,
+        onCachedPiecesConsumed: (assembledTrackId) => {
+          manualCacheChunkIndexesRef.current.delete(assembledTrackId);
+        },
+        announceRoomTrackAvailability: (assembledTrackId) => {
+          void announceRoomTrackAvailability(assembledTrackId);
+        },
+        setStatusMessage
+      });
     },
     [
       announceRoomTrackAvailability,
@@ -879,58 +822,46 @@ export function useTrackUploads(options: {
       }
       const knownChunkIndexes =
         manualCacheChunkIndexesRef.current.get(plan.trackId) ?? new Set<number>();
-      const planTotalChunks = plan.manifest?.totalChunks ?? 0;
-      for (const chunkIndex of plan.localPieceIndexes) {
-        if (
-          chunkIndex >= 0 &&
-          (planTotalChunks <= 0 || chunkIndex < planTotalChunks)
-        ) {
-          knownChunkIndexes.add(chunkIndex);
-        }
-      }
-      manualCacheChunkIndexesRef.current.set(plan.trackId, knownChunkIndexes);
-      let shouldAssembleFromPlan = false;
-      let assembleMimeType: string | null = null;
-      let assembleTotalChunks = 0;
-      updateManualCacheTask(plan.trackId, (current) => {
-        const hasLocalFullTrack =
-          !!uploadedTracks[plan.trackId] ||
-          isCachedLibraryTrackUsableForRoomTrack({
-            cachedTrack: cacheLibraryTracksRef.current.get(track.fileHash),
-            roomTrack: track
-          });
-        const isCurrentPlaybackDemand =
-          plan.trackId === roomSnapshot.room.playback.currentTrackId &&
-          hasActivePlaybackIntent(roomSnapshot.room.playback) &&
-          (!isCurrentPlaybackSourceDevice({
-            playback: roomSnapshot.room.playback,
-            peerId,
-            activeSessionId: activeSession?.userId
-          }) ||
-            !hasLocalFullTrack);
-        if (!current && !isCurrentPlaybackDemand) {
-          return null;
-        }
-        const update = resolveManualCachePlanTaskUpdate({
-          current,
-          plan,
-          track,
-          knownChunkIndexes,
-          isCurrentPlaybackDemand
+      const hasLocalFullTrack =
+        !!uploadedTracks[plan.trackId] ||
+        isCachedLibraryTrackUsableForRoomTrack({
+          cachedTrack: cacheLibraryTracksRef.current.get(track.fileHash),
+          roomTrack: track
         });
-        shouldAssembleFromPlan = update.shouldAssemble;
-        assembleMimeType = update.assembleMimeType;
-        assembleTotalChunks = update.assembleTotalChunks;
-        return update.patch;
+      const isCurrentPlaybackDemand =
+        plan.trackId === roomSnapshot.room.playback.currentTrackId &&
+        hasActivePlaybackIntent(roomSnapshot.room.playback) &&
+        (!isCurrentPlaybackSourceDevice({
+          playback: roomSnapshot.room.playback,
+          peerId,
+          activeSessionId: activeSession?.userId
+        }) ||
+          !hasLocalFullTrack);
+      const result = resolveManualCachePlanReceivedAction({
+        plan,
+        currentTask: manualCacheTasks[plan.trackId] ?? null,
+        knownChunkIndexes,
+        track,
+        isCurrentPlaybackDemand
       });
+      manualCacheChunkIndexesRef.current.set(plan.trackId, result.nextChunkIndexes);
 
-      if (shouldAssembleFromPlan) {
-        void assembleManualCacheTrack(plan.trackId, assembleMimeType, assembleTotalChunks);
+      if (result.taskPatch) {
+        updateManualCacheTask(plan.trackId, result.taskPatch);
+      }
+
+      if (result.assembleRequest) {
+        void assembleManualCacheTrack(
+          result.assembleRequest.trackId,
+          result.assembleRequest.mimeType,
+          result.assembleRequest.totalChunks
+        );
       }
     },
     [
       activeSession?.userId,
       assembleManualCacheTrack,
+      manualCacheTasks,
       peerId,
       roomSnapshot,
       updateManualCacheTask,
