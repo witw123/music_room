@@ -2,6 +2,10 @@ import type { RoomSnapshot } from "@music-room/shared";
 import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
+import {
+  buildManualCachePieceAvailabilityAnnouncement,
+  isManualCachePieceCompatible
+} from "./track-availability";
 
 export type ManualCacheTaskStatus =
   | "idle"
@@ -271,6 +275,146 @@ export function mergeManualCachePieceTaskProgress(input: {
 
 export function shouldIgnoreManualCachePieceTaskUpdate(status: ManualCacheTaskStatus) {
   return status === "ready" || status === "assembling";
+}
+
+export function resolveManualCachePieceReceivedAction(input: {
+  piece: {
+    trackId: string;
+    chunkIndex: number;
+    totalChunks: number;
+    chunkSize: number;
+    mimeType: string;
+  };
+  currentTask: ManualCacheTask | null;
+  knownChunkIndexes: Set<number>;
+  track: {
+    id: string;
+    fileHash: string;
+    mimeType?: string | null;
+    relayManifest?: { totalChunks: number; chunkSize: number } | null;
+    pieceManifest?: { totalChunks: number; chunkSize: number; pieceMimeType?: string | null } | null;
+  } | null;
+  roomId: string | null | undefined;
+  activeSession: { userId: string; nickname: string } | null;
+  peerId: string | null | undefined;
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  hasLocalFullTrack: boolean;
+  nowIso: string;
+}) {
+  const expectedManifest = input.track?.relayManifest ?? input.track?.pieceManifest ?? null;
+  if (
+    !isManualCachePieceCompatible({
+      piece: input.piece,
+      expectedManifest
+    })
+  ) {
+    return {
+      accepted: false,
+      nextChunkIndexes: new Set(input.knownChunkIndexes),
+      availability: null,
+      taskPatch: null,
+      assembleRequest: null
+    };
+  }
+
+  const nextChunkIndexes = new Set(input.knownChunkIndexes);
+  nextChunkIndexes.add(input.piece.chunkIndex);
+
+  const availability =
+    input.roomId && input.activeSession && input.peerId && input.track
+      ? buildManualCachePieceAvailabilityAnnouncement({
+          existing: undefined,
+          roomId: input.roomId,
+          trackId: input.piece.trackId,
+          fileHash: input.track.fileHash,
+          peerId: input.peerId,
+          nickname: input.activeSession.nickname,
+          chunkIndex: input.piece.chunkIndex,
+          totalChunks: input.piece.totalChunks,
+          chunkSize: input.piece.chunkSize,
+          availableChunks: [...nextChunkIndexes]
+        })
+      : null;
+
+  let current = input.currentTask;
+  if (
+    !current &&
+    shouldCreatePlaybackDemandTaskFromCachePiece({
+      playback: input.playback,
+      trackId: input.piece.trackId,
+      peerId: input.peerId,
+      activeSessionId: input.activeSession?.userId,
+      hasLocalFullTrack: input.hasLocalFullTrack,
+      hasCurrentTask: false
+    })
+  ) {
+    current = {
+      trackId: input.piece.trackId,
+      status: "downloading",
+      mode: resolveAutomaticPlaybackCacheTaskMode(),
+      fileHash: input.track?.fileHash ?? "",
+      updatedAt: input.nowIso,
+      errorMessage: null,
+      completedChunks: 0,
+      totalChunks: input.piece.totalChunks,
+      mimeType: input.piece.mimeType || input.track?.mimeType || null,
+      manifestSource: expectedManifest ? "snapshot" : null,
+      blockedReason: null,
+      integrityMode: "weak",
+      providerPeerIds: [],
+      connectedProviderPeerIds: [],
+      selectedProviderPeerId: null,
+      requestableChunkCount: 0,
+      pendingChunkCount: 0,
+      lastRequestedChunks: [],
+      lastPieceReceivedAt: null,
+      lastError: null
+    };
+  }
+
+  if (!current || shouldIgnoreManualCachePieceTaskUpdate(current.status)) {
+    return {
+      accepted: true,
+      nextChunkIndexes,
+      availability,
+      taskPatch: null,
+      assembleRequest: null
+    };
+  }
+
+  const progress = mergeManualCachePieceTaskProgress({
+    current,
+    knownChunkIndexes: nextChunkIndexes,
+    receivedTotalChunks: input.piece.totalChunks
+  });
+  const shouldAssemble =
+    current.status !== "paused" &&
+    progress.totalChunks > 0 &&
+    progress.completedChunks >= progress.totalChunks;
+  const taskPatch = {
+    status: current.status === "paused" || shouldAssemble ? current.status : progress.status,
+    errorMessage: null,
+    blockedReason: null,
+    completedChunks: progress.completedChunks,
+    totalChunks: progress.totalChunks,
+    mimeType: input.piece.mimeType || current.mimeType,
+    lastPieceReceivedAt: input.nowIso,
+    lastError: null
+  } satisfies Partial<ManualCacheTask>;
+
+  return {
+    accepted: true,
+    nextChunkIndexes,
+    availability,
+    taskPatch,
+    assembleRequest: shouldAssemble
+      ? {
+          trackId: input.piece.trackId,
+          mimeType: input.piece.mimeType,
+          totalChunks: Math.max(input.piece.totalChunks, nextChunkIndexes.size)
+        }
+      : null
+  };
 }
 
 export function pruneManualCacheChunkIndexesByActiveTracks(
