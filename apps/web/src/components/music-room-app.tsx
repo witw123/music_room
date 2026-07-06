@@ -68,6 +68,7 @@ import {
   type CachedFullLocalPlaybackLoadTarget,
   type CachedFullLocalPlaybackTrack
 } from "@/components/room/hooks/use-room-page-derived";
+import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 
 export {
   getCachedFullLocalPlaybackLoadKey,
@@ -166,16 +167,9 @@ export function MusicRoomApp({
   const [activeDashboardTab, setActiveDashboardTab] = useState<"queue" | "library" | "cache" | "members">(
     "queue"
   );
-  const [isDiagnosticsPanelOpen, setIsDiagnosticsPanelOpen] = useState(false);
-  const [isPageVisible, setIsPageVisible] = useState(
-    typeof document === "undefined" ? true : !document.hidden
-  );
-  const [volume, setVolume] = useState(0.72);
   const [schedulerMode, setSchedulerMode] = useState<"normal" | "conservative" | "idle">(
     "normal"
   );
-  const [schedulerPlaybackBucketMs, setSchedulerPlaybackBucketMs] = useState(0);
-  const [playerResetEpoch, setPlayerResetEpoch] = useState(0);
   const [bufferHealth, setBufferHealth] = useState<"healthy" | "low" | "critical">("healthy");
   const [activePlaybackSource, setActivePlaybackSource] =
     useState<ProgressivePlaybackSource>("progressive-local");
@@ -187,7 +181,20 @@ export function MusicRoomApp({
     "idle" | "awaiting-unlock" | "starting" | "live" | "failed"
   >("idle");
   const [lastSourceStartError, setLastSourceStartError] = useState<string | null>(null);
-  const [audioBlockedOverlay, setAudioBlockedOverlay] = useState(false);
+  const {
+    isDiagnosticsPanelOpen,
+    setIsDiagnosticsPanelOpen,
+    isPageVisible,
+    setIsPageVisible,
+    volume,
+    setVolume,
+    schedulerPlaybackBucketMs,
+    setSchedulerPlaybackBucketMs,
+    playerResetEpoch,
+    setPlayerResetEpoch,
+    audioBlockedOverlay,
+    setAudioBlockedOverlay
+  } = useRoomPageState();
   const [roomRecoveryState, setRoomRecoveryState] = useState<RoomRecoveryState>({
     phase: "joining",
     mode: "steady",
@@ -599,7 +606,9 @@ export function MusicRoomApp({
   }, [
     destroyProgressiveRuntime,
     resetAvailabilityState,
-    resetPeerDiagnostics
+    resetPeerDiagnostics,
+    setPlayerResetEpoch,
+    setSchedulerPlaybackBucketMs
   ]);
 
   const getCurrentPlaybackPositionMs = useCallback(() => currentPlaybackPositionRef.current, []);
@@ -1011,7 +1020,7 @@ export function MusicRoomApp({
 
   const handlePlaybackBucketChange = useCallback((bucketMs: number) => {
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
-  }, []);
+  }, [setSchedulerPlaybackBucketMs]);
 
   const primeFullLocalTrackPlayback = useCallback(
     async (trackId: string | null | undefined) => {
@@ -1327,7 +1336,8 @@ export function MusicRoomApp({
     audioUnlocked,
     currentPlaybackTrackId,
     isCurrentSourceOwner,
-    playbackStatus
+    playbackStatus,
+    setAudioBlockedOverlay
   ]);
 
   const handleAudioUnlock = useCallback(async () => {
@@ -1342,7 +1352,7 @@ export function MusicRoomApp({
     }
     setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
     setAudioBlockedOverlay(true);
-  }, [audioRef, setAudioUnlocked, setStatusMessage]);
+  }, [audioRef, setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
 
   return (
     <>
