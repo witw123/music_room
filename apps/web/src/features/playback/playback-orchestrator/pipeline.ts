@@ -2563,16 +2563,8 @@ export function buildProgressiveWarmupTimerKey(input: {
   currentTrackFormatKey: string;
   progressiveManifestKey: string;
   activePlaybackSource: ProgressivePlaybackSource;
-  canUseFullLocalForPlaybackSession: boolean;
   progressiveEngineType: ProgressiveEngineType;
-  progressiveStartupReady: boolean;
   startupBufferMs: number;
-  progressiveLocalBlockedReason: string | null;
-  isCurrentSourceOwner: boolean;
-  playbackRecoveryStage: PlaybackRecoveryStage;
-  progressiveFallbackReason: string | null;
-  stalledEventsLast30s: number;
-  waitingEventsLast30s: number;
 }) {
   return [
     input.playbackCurrentTrackId ?? "none",
@@ -2581,15 +2573,7 @@ export function buildProgressiveWarmupTimerKey(input: {
     input.currentTrackFormatKey,
     input.progressiveManifestKey,
     input.activePlaybackSource,
-    input.canUseFullLocalForPlaybackSession ? "full-local-ready" : "full-local-missing",
     input.progressiveEngineType,
-    input.progressiveStartupReady ? "startup-ready" : "startup-pending",
-    input.startupBufferMs,
-    input.progressiveLocalBlockedReason ?? "unblocked",
-    input.isCurrentSourceOwner ? "source-owner" : "listener",
-    input.playbackRecoveryStage,
-    input.progressiveFallbackReason ?? "no-fallback",
-    input.stalledEventsLast30s,
-    input.waitingEventsLast30s
+    input.startupBufferMs
   ].join("|");
 }
