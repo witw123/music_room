@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  useCallback,
-  useMemo,
-  useRef
+  useCallback
 } from "react";
 import {
   getFullLocalStableWindowMs
@@ -25,6 +23,7 @@ import { useLocalPlaybackReadinessController } from "./playback-orchestrator/loc
 import { usePlaybackSourceController } from "./playback-orchestrator/playback-source-controller";
 import { usePlaybackRuntimeLifecycleController } from "./playback-orchestrator/playback-runtime-lifecycle-controller";
 import { usePlaybackRuntimeInputState } from "./playback-orchestrator/playback-runtime-input-state";
+import { usePlaybackRuntimePolicyState } from "./playback-orchestrator/playback-runtime-policy-state";
 import { usePlaybackRuntimeRefs } from "./playback-orchestrator/playback-runtime-refs";
 import { useProgressiveEngineController } from "./playback-orchestrator/progressive-engine-controller";
 import { useMainPlaybackController } from "./playback-orchestrator/main-playback-controller";
@@ -434,106 +433,6 @@ export function useProgressiveRuntime({
     recordPeerDiagnostic
   });
   const startupBufferMs = adaptiveStartupBufferMs;
-  const localTakeoverCooldownMs = useMemo(
-    () => Math.max(0, localTakeoverCooldownUntilRef.current - Date.now()),
-    []
-  );
-  const bufferSafetyMarginMs = useMemo(
-    () =>
-      resolveBufferSafetyMarginMs({
-        aheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-        estimatedFillTimeMs: progressiveHealthSnapshot.estimatedFillTimeMs
-      }),
-    [
-      progressiveHealthSnapshot.aheadBufferedMs,
-      progressiveHealthSnapshot.estimatedFillTimeMs
-    ]
-  );
-  const progressiveLocalReadinessPreflight = resolveProgressiveLocalReadinessPreflight({
-    hasManifest: !!currentProgressiveManifest,
-    isCurrentSourceOwner,
-    activePlaybackSource,
-    playbackStatus,
-    engineType: currentProgressiveEngineType,
-    startupReady: progressiveHealthSnapshot.startupReady,
-    hasFullLocalTrack: canUseFullLocalForPlaybackSession,
-    progressiveFallbackReason,
-    localTakeoverCooldownMs,
-    connectedPeersCount,
-    aggregatePieceDownloadRateKbps
-  });
-  const progressiveLocalBlockedReason =
-    progressiveLocalReadinessPreflight.blockedReason ??
-    (progressiveLocalReadinessPreflight.shouldProbeTakeoverReady
-      ? resolveProgressiveLocalBlockedReason({
-          hasManifest: true,
-          isCurrentSourceOwner,
-          activePlaybackSource,
-          playbackStatus,
-          engineType: currentProgressiveEngineType,
-          startupReady: progressiveHealthSnapshot.startupReady,
-          hasFullLocalTrack: canUseFullLocalForPlaybackSession,
-          progressiveFallbackReason,
-          localTakeoverCooldownMs,
-          connectedPeersCount,
-          aggregatePieceDownloadRateKbps,
-          progressiveTakeoverReady: isProgressiveTakeoverReady()
-        })
-      : null);
-  const progressiveLocalEligible = progressiveLocalBlockedReason === null;
-  const transportGovernorMode = useMemo(
-    () =>
-      resolveTransportGovernorMode({
-        activePlaybackSource,
-        mediaConnectedPeersCount,
-        connectedPeersCount,
-        pendingPlaybackIntent,
-        progressiveFallbackReason,
-        progressiveLocalEligible
-      }),
-    [
-      activePlaybackSource,
-      connectedPeersCount,
-      mediaConnectedPeersCount,
-      pendingPlaybackIntent,
-      progressiveFallbackReason,
-      progressiveLocalEligible
-    ]
-  );
-  const nextQueueTrackPrefetch = useMemo(() => {
-    return resolveNextQueueTrackPrefetch({
-      queue: roomSnapshot?.queue,
-      currentQueueItemId: roomSnapshot?.room.playback.currentQueueItemId,
-      currentTrackId: currentTrack?.id,
-      tracks: roomSnapshot?.tracks,
-      availabilityByTrack,
-      peerId
-    });
-  }, [
-    roomSnapshot?.queue,
-    roomSnapshot?.room.playback.currentQueueItemId,
-    roomSnapshot?.tracks,
-    currentTrack?.id,
-    availabilityByTrack,
-    peerId
-  ]);
-  const sourceOwnerIdentity = useMemo(
-    () =>
-      resolveSourceOwnerIdentity({
-        members: roomSnapshot?.room.members,
-        peerId,
-        playbackSourceSessionId: roomSnapshot?.room.playback.sourceSessionId,
-        playbackSourcePeerId: roomSnapshot?.room.playback.sourcePeerId,
-        isSourceOwner: isCurrentSourceOwner
-      }),
-    [
-      isCurrentSourceOwner,
-      peerId,
-      roomSnapshot?.room.members,
-      roomSnapshot?.room.playback.sourcePeerId,
-      roomSnapshot?.room.playback.sourceSessionId
-    ]
-  );
   const {
     localAudioDiagnostics,
     markContinuousPlaybackInterrupted,
@@ -546,20 +445,59 @@ export function useProgressiveRuntime({
   } = usePlaybackQualityState({ audioRef });
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
-  const shadowWarmupActive = false;
-  const effectiveStartupBufferMs = useMemo(
-    () =>
-      resolveEffectiveStartupBufferMs({
-        baseStartupBufferMs: startupBufferMs,
-        waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
-        stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s
-      }),
-    [
-      playbackQualityMetrics.stalledEventsLast30s,
-      playbackQualityMetrics.waitingEventsLast30s,
-      startupBufferMs
-    ]
-  );
+  const {
+    audibleLocalFallbackActive,
+    bufferSafetyMarginMs,
+    effectiveStartupBufferMs,
+    fullLocalBlockedReason,
+    fullLocalEligible,
+    immediateFullLocalRecoveryEligible,
+    isLocalTakeoverAllowed,
+    isLocalTakeoverAllowedRef,
+    localTakeoverCooldownMs,
+    nextQueueTrackPrefetch,
+    playbackRecoveryStage,
+    progressiveLocalBlockedReason,
+    progressiveLocalEligible,
+    progressiveWarmupRuntimeRef,
+    progressiveWarmupTimerKey,
+    schedulerBudgetTier,
+    shadowWarmupActive,
+    sourceOwnerIdentity,
+    startupGatePending,
+    transportGovernorMode
+  } = usePlaybackRuntimePolicyState({
+    activePlaybackSource,
+    aggregatePieceDownloadRateKbps,
+    availabilityByTrack,
+    canUseFullLocalForPlaybackSession,
+    connectedPeersCount,
+    currentBufferedFullLocalTrackObjectUrl,
+    currentProgressiveEngineType,
+    currentProgressiveManifestKey,
+    currentTrack,
+    currentTrackFormatKey,
+    fullLocalReady,
+    hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
+    hasProgressiveManifest: !!currentProgressiveManifest,
+    isCurrentSourceOwner,
+    isProgressiveTakeoverReady,
+    listenerLocalTakeoverEnabled: enableListenerLocalTakeover,
+    localTakeoverCooldownUntilRef,
+    mediaConnectedPeersCount,
+    peerId,
+    pendingPlaybackIntent,
+    playbackCurrentTrackId,
+    playbackMediaEpoch,
+    playbackQualityMetrics,
+    playbackStatus,
+    progressiveFallbackReason,
+    progressiveHealthSnapshot,
+    recoveryAudioUnlocked: audioUnlocked,
+    roomRecoveryState,
+    roomSnapshot,
+    startupBufferMs
+  });
 
   const {
     armLocalTakeoverCooldown,
@@ -592,140 +530,6 @@ export function useProgressiveRuntime({
     setActivePlaybackSource,
     setMediaConnectionState,
     setProgressiveFallbackReason
-  });
-
-  const immediateFullLocalRecoveryEligible =
-    shouldPreferImmediateFullLocalRecovery({
-      isCurrentSourceOwner,
-      audioUnlocked,
-      hasBufferedFullLocalTrack: canUseFullLocalForPlaybackSession,
-      fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive,
-      recoveryPhase: roomRecoveryState.phase,
-      recoveryMode: roomRecoveryState.mode,
-      playbackStatus
-    });
-
-  const isLocalTakeoverAllowed = useCallback(
-    (now = Date.now()) =>
-      shouldAllowLocalTakeover({
-        listenerLocalTakeoverEnabled: enableListenerLocalTakeover,
-        nowMs: now,
-        cooldownUntilMs: localTakeoverCooldownUntilRef.current,
-        immediateFullLocalRecoveryEligible,
-        canUseFullLocalForPlaybackSession,
-        connectedPeersCount
-      }),
-    [canUseFullLocalForPlaybackSession, connectedPeersCount, immediateFullLocalRecoveryEligible]
-  );
-  const isLocalTakeoverAllowedRef = useRef(isLocalTakeoverAllowed);
-  isLocalTakeoverAllowedRef.current = isLocalTakeoverAllowed;
-  const audibleLocalFallbackActive = resolveAudibleLocalFallbackActive({
-    isCurrentSourceOwner,
-    activePlaybackSource,
-    progressiveFallbackReason
-  });
-  const startupGatePending = false;
-  const playbackRecoveryStage = useMemo(
-    () =>
-      resolvePlaybackRecoveryStage({
-        activePlaybackSource,
-        playbackStatus,
-        startupGatePending,
-        waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
-        stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-        shadowWarmupActive,
-        audibleLocalFallbackActive
-      }),
-    [
-      activePlaybackSource,
-      audibleLocalFallbackActive,
-      playbackStatus,
-      playbackQualityMetrics.stalledEventsLast30s,
-      playbackQualityMetrics.waitingEventsLast30s,
-      shadowWarmupActive,
-      startupGatePending
-    ]
-  );
-  const progressiveWarmupTimerKey = buildProgressiveWarmupTimerKey({
-    playbackCurrentTrackId,
-    playbackStatus,
-    playbackMediaEpoch,
-    currentTrackFormatKey,
-    progressiveManifestKey: currentProgressiveManifestKey,
-    activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
-    progressiveEngineType: currentProgressiveEngineType,
-    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
-    progressiveLocalBlockedReason,
-    isCurrentSourceOwner,
-    playbackRecoveryStage,
-    progressiveFallbackReason,
-    stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-    waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s
-  });
-  const progressiveWarmupRuntimeRef = useRef({
-    activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
-    currentProgressiveEngineType,
-    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
-    progressiveLocalBlockedReason,
-    isCurrentSourceOwner,
-    playbackRecoveryStage,
-    progressiveFallbackReason
-  });
-  progressiveWarmupRuntimeRef.current = {
-    activePlaybackSource,
-    canUseFullLocalForPlaybackSession,
-    currentProgressiveEngineType,
-    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
-    progressiveLocalBlockedReason,
-    isCurrentSourceOwner,
-    playbackRecoveryStage,
-    progressiveFallbackReason
-  };
-  const schedulerBudgetTier = useMemo(
-    () =>
-      resolveSchedulerBudgetTier({
-        bufferHealth: resolveSchedulerBufferHealth({
-          stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-          waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s
-        }),
-        activePlaybackSource,
-        playbackRecoveryStage
-      }),
-    [
-      activePlaybackSource,
-      playbackQualityMetrics.stalledEventsLast30s,
-      playbackQualityMetrics.waitingEventsLast30s,
-      playbackRecoveryStage
-    ]
-  );
-  const fullLocalBlockedReason = useMemo(
-    () =>
-      resolveFullLocalBlockedReason({
-        hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
-        canUseFullLocalForPlaybackSession,
-        isCurrentSourceOwner,
-        listenerLocalTakeoverEnabled: enableListenerLocalTakeover,
-        activePlaybackSource,
-        startupGatePending,
-        fullLocalRecoveryActive: roomRecoveryState.fullLocalRecoveryActive
-      }),
-    [
-      activePlaybackSource,
-      canUseFullLocalForPlaybackSession,
-      currentBufferedFullLocalTrackObjectUrl,
-      isCurrentSourceOwner,
-      roomRecoveryState.fullLocalRecoveryActive,
-      startupGatePending
-    ]
-  );
-  const fullLocalEligible = resolveFullLocalEligibility({
-    fullLocalReady,
-    fullLocalBlockedReason
   });
 
   const { transitionPlaybackSource } = usePlaybackSourceController({

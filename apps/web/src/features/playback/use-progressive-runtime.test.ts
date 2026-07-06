@@ -698,6 +698,31 @@ describe("playback runtime pipeline keys", () => {
     expect(refsSource).toContain("lastStablePlaybackAtRef");
   });
 
+  it("hosts playback runtime policy state outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const policyStateSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-runtime-policy-state.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackRuntimePolicyState");
+    expect(runtimeSource).not.toContain("const progressiveLocalReadinessPreflight =");
+    expect(runtimeSource).not.toContain("const transportGovernorMode = useMemo(");
+    expect(runtimeSource).not.toContain("const progressiveWarmupTimerKey = buildProgressiveWarmupTimerKey");
+    expect(runtimeSource).not.toContain("const fullLocalBlockedReason = useMemo(");
+    expect(policyStateSource).toContain("export function usePlaybackRuntimePolicyState");
+    expect(policyStateSource).toContain("resolveProgressiveLocalBlockedReason");
+    expect(policyStateSource).toContain("resolveTransportGovernorMode");
+    expect(policyStateSource).toContain("buildProgressiveWarmupTimerKey");
+    expect(policyStateSource).toContain("resolveFullLocalBlockedReason");
+  });
+
   it("hosts local playback readiness handling outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
