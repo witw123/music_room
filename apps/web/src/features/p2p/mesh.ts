@@ -31,7 +31,7 @@ import {
   toSessionDescriptionInit
 } from "./signaling-transport";
 import {
-  resolveDataChannelClosedAction,
+  DataChannelManager,
   shouldFlushDataChannelQueue,
   shouldSendQueuedDataChannelItem
 } from "./data-channel-manager";
@@ -247,6 +247,7 @@ export class P2PMesh {
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
   private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
   private readonly signaling: SignalingTransport;
+  private readonly dataChannels: DataChannelManager;
 
   constructor(
     private readonly roomId: string,
@@ -265,6 +266,14 @@ export class P2PMesh {
       localPeerId: this.localPeerId,
       sendSignal: this.sendSignal,
       onSignal: this.callbacks.onSignal
+    });
+    this.dataChannels = new DataChannelManager({
+      autoReconnect: this.autoReconnect,
+      sendQueueLowWatermarkBytes: this.sendQueueLowWatermarkBytes,
+      onDataChannelStateChange: this.callbacks.onDataChannelStateChange,
+      onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
+      onPeerConnectionChange: this.callbacks.onPeerConnectionChange,
+      onPeerStalled: this.callbacks.onPeerStalled
     });
   }
 
@@ -665,139 +674,78 @@ export class P2PMesh {
   }
 
   private bindChannel(peerId: string, entry: PeerEntry, channel: RTCDataChannel) {
-    channel.binaryType = "arraybuffer";
-    channel.bufferedAmountLowThreshold = this.sendQueueLowWatermarkBytes;
-    entry.dataChannelState = channel.readyState;
-    entry.lastSignalProgressAtMs = Date.now();
-    this.callbacks.onDataChannelStateChange?.({
+    this.dataChannels.bind({
       peerId,
-      state: channel.readyState
-    });
-    this.callbacks.onDataBufferedAmountChange?.({
-      peerId,
-      bufferedAmountBytes: channel.bufferedAmount
-    });
-    this.schedulePeerWatchdog(peerId, entry);
-
-    channel.onopen = () => {
-      entry.dataChannelState = channel.readyState;
-      entry.lastSignalProgressAtMs = Date.now();
-      entry.reconnectAttempts = 0;
-      this.callbacks.onDataChannelStateChange?.({
-        peerId,
-        state: channel.readyState
-      });
-      this.callbacks.onDataBufferedAmountChange?.({
-        peerId,
-        bufferedAmountBytes: channel.bufferedAmount
-      });
-      this.flushSendQueue(peerId, entry);
-      this.schedulePeerWatchdog(peerId, entry);
-    };
-
-    channel.onbufferedamountlow = () => {
-      this.callbacks.onDataBufferedAmountChange?.({
-        peerId,
-        bufferedAmountBytes: channel.bufferedAmount
-      });
-      this.flushSendQueue(peerId, entry);
-    };
-
-    channel.onmessage = async (event) => {
-      entry.lastSignalProgressAtMs = Date.now();
-      const message = await parseIncomingMessage(event.data);
-      if (!message) {
-        return;
-      }
-
-      if (message.kind === "request-piece") {
-        this.callbacks.onPieceRequestReceived?.({
-          peerId,
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex
-        });
-        await this.handlePieceRequest(peerId, entry, {
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex
-        });
-        return;
-      }
-
-      if (message.kind === "request-pieces") {
-        const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
-        for (let offset = 0; offset < chunkIndexes.length; offset += this.pieceServeBatchConcurrency) {
-          const batch = chunkIndexes.slice(offset, offset + this.pieceServeBatchConcurrency);
-          await Promise.all(
-            batch.map(async (chunkIndex) => {
-              this.callbacks.onPieceRequestReceived?.({
-                peerId,
-                trackId: message.trackId,
-                chunkIndex,
-                requestId: message.requestId
-              });
-              await this.handlePieceRequest(peerId, entry, {
-                trackId: message.trackId,
-                chunkIndex,
-                requestId: message.requestId
-              });
-            })
-          );
-        }
-        return;
-      }
-
-      if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
-        const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
-        const pendingRequest = this.pendingPieceRequests.get(requestKey);
-        if (pendingRequest) {
-          clearTimeout(pendingRequest.timeoutId);
-          this.pendingPieceRequests.delete(requestKey);
+      entry,
+      channel,
+      flushSendQueue: () => this.flushSendQueue(peerId, entry),
+      schedulePeerWatchdog: () => this.schedulePeerWatchdog(peerId, entry),
+      clearPendingRequestsForPeer: (closedPeerId) => this.clearPendingRequestsForPeer(closedPeerId),
+      schedulePeerReconnect: () => this.schedulePeerReconnect(peerId, entry),
+      onMessage: async (event) => {
+        const message = await parseIncomingMessage(event.data);
+        if (!message) {
+          return;
         }
 
-        this.pendingIncomingPieces.push({
-          peerId,
-          message,
-          pendingRequest
-        });
-        this.scheduleIncomingPieceFlush();
-        return;
-      }
+        if (message.kind === "request-piece") {
+          this.callbacks.onPieceRequestReceived?.({
+            peerId,
+            trackId: message.trackId,
+            chunkIndex: message.chunkIndex
+          });
+          await this.handlePieceRequest(peerId, entry, {
+            trackId: message.trackId,
+            chunkIndex: message.chunkIndex
+          });
+          return;
+        }
 
-      if (message.kind === "send-piece-fragment" && isBinaryPieceFragmentMessage(message)) {
-        this.handleIncomingPieceFragment(peerId, message);
-      }
-    };
+        if (message.kind === "request-pieces") {
+          const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
+          for (let offset = 0; offset < chunkIndexes.length; offset += this.pieceServeBatchConcurrency) {
+            const batch = chunkIndexes.slice(offset, offset + this.pieceServeBatchConcurrency);
+            await Promise.all(
+              batch.map(async (chunkIndex) => {
+                this.callbacks.onPieceRequestReceived?.({
+                  peerId,
+                  trackId: message.trackId,
+                  chunkIndex,
+                  requestId: message.requestId
+                });
+                await this.handlePieceRequest(peerId, entry, {
+                  trackId: message.trackId,
+                  chunkIndex,
+                  requestId: message.requestId
+                });
+              })
+            );
+          }
+          return;
+        }
 
-    channel.onclose = () => {
-      entry.dataChannelState = "closed";
-      entry.sendQueue = [];
-      this.callbacks.onDataChannelStateChange?.({
-        peerId,
-        state: "closed"
-      });
-      this.callbacks.onDataBufferedAmountChange?.({
-        peerId,
-        bufferedAmountBytes: 0
-      });
-      this.clearPendingRequestsForPeer(peerId);
-      this.callbacks.onPeerConnectionChange?.({
-        peerId,
-        state: "closed"
-      });
-      const closedAction = resolveDataChannelClosedAction({
-        releasing: entry.releasing,
-        autoReconnect: this.autoReconnect
-      });
-      if (closedAction.shouldReportStalled) {
-        this.callbacks.onPeerStalled?.({
-          peerId,
-          reason: "data-channel-closed"
-        });
+        if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
+          const requestKey = this.buildRequestKey(message.trackId, message.chunkIndex);
+          const pendingRequest = this.pendingPieceRequests.get(requestKey);
+          if (pendingRequest) {
+            clearTimeout(pendingRequest.timeoutId);
+            this.pendingPieceRequests.delete(requestKey);
+          }
+
+          this.pendingIncomingPieces.push({
+            peerId,
+            message,
+            pendingRequest
+          });
+          this.scheduleIncomingPieceFlush();
+          return;
+        }
+
+        if (message.kind === "send-piece-fragment" && isBinaryPieceFragmentMessage(message)) {
+          this.handleIncomingPieceFragment(peerId, message);
+        }
       }
-      if (closedAction.shouldScheduleReconnect) {
-        this.schedulePeerReconnect(peerId, entry);
-      }
-    };
+    });
   }
 
   private async handlePieceRequest(
