@@ -134,6 +134,40 @@ export function clearPeerTimers(entry: PeerEntry) {
   clearPeerReconnectTimer(entry);
 }
 
+export async function flushPendingCandidates(entry: PeerEntry) {
+  if (entry.pendingCandidates.length === 0) {
+    return;
+  }
+
+  const nextCandidates = [...entry.pendingCandidates];
+  entry.pendingCandidates = [];
+  for (const candidate of nextCandidates) {
+    try {
+      await entry.connection.addIceCandidate(candidate);
+    } catch {
+      if (!entry.connection.remoteDescription) {
+        entry.pendingCandidates.push(candidate);
+      }
+    }
+  }
+}
+
+export function enqueuePeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {
+  const run = entry.operationChain
+    .catch(() => undefined)
+    .then(async () => {
+      if (entry.releasing) {
+        return undefined as T;
+      }
+      return task();
+    });
+  entry.operationChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 export class PeerConnectionRegistry {
   private readonly peers = new Map<string, PeerEntry>();
   private readonly expectedPeerIds = new Set<string>();

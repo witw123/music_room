@@ -1,17 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   PeerConnectionRegistry,
   clearPeerTimers,
   createPeerEntry,
+  enqueuePeerOperation,
+  flushPendingCandidates,
   isPeerStalled,
   shouldRestartPeer
 } from "./peer-connection-registry";
 
 function buildConnection(
-  input: Partial<Pick<RTCPeerConnection, "connectionState">> = {}
+  input: Partial<
+    Pick<RTCPeerConnection, "connectionState" | "remoteDescription" | "addIceCandidate">
+  > = {}
 ) {
   return {
-    connectionState: input.connectionState ?? "new"
+    connectionState: input.connectionState ?? "new",
+    remoteDescription: input.remoteDescription ?? null,
+    addIceCandidate: input.addIceCandidate ?? (async () => undefined)
   } as RTCPeerConnection;
 }
 
@@ -93,6 +99,69 @@ describe("PeerConnectionRegistry", () => {
 
     expect(entry.watchdogTimerId).toBeNull();
     expect(entry.reconnectTimerId).toBeNull();
+  });
+
+  it("flushes queued ICE candidates and keeps failed candidates until remote description exists", async () => {
+    let shouldRejectCandidate = true;
+    const addIceCandidate = vi.fn(async () => {
+      if (shouldRejectCandidate) {
+        throw new Error("candidate-race");
+      }
+    });
+    const entry = createPeerEntry({
+      connection: buildConnection({ addIceCandidate }),
+      initiatorPeerId: "peer_a",
+      nowMs: 100
+    });
+    entry.pendingCandidates.push({ candidate: "candidate-1" });
+
+    await flushPendingCandidates(entry);
+
+    expect(addIceCandidate).toHaveBeenCalledWith({ candidate: "candidate-1" });
+    expect(entry.pendingCandidates).toEqual([{ candidate: "candidate-1" }]);
+
+    shouldRejectCandidate = false;
+    Object.defineProperty(entry.connection, "remoteDescription", {
+      value: { type: "offer", sdp: "remote-offer" },
+      configurable: true
+    });
+
+    await flushPendingCandidates(entry);
+
+    expect(entry.pendingCandidates).toEqual([]);
+  });
+
+  it("serializes peer operations and skips tasks once releasing", async () => {
+    const entry = createPeerEntry({
+      connection: buildConnection(),
+      initiatorPeerId: "peer_a",
+      nowMs: 100
+    });
+    const events: string[] = [];
+
+    const first = enqueuePeerOperation(entry, async () => {
+      events.push("first:start");
+      await Promise.resolve();
+      events.push("first:end");
+      return "first";
+    });
+    const second = enqueuePeerOperation(entry, async () => {
+      events.push("second");
+      return "second";
+    });
+
+    await expect(first).resolves.toBe("first");
+    await expect(second).resolves.toBe("second");
+    expect(events).toEqual(["first:start", "first:end", "second"]);
+
+    entry.releasing = true;
+    const skipped = await enqueuePeerOperation(entry, async () => {
+      events.push("skipped");
+      return "skipped";
+    });
+
+    expect(skipped).toBeUndefined();
+    expect(events).toEqual(["first:start", "first:end", "second"]);
   });
 
   it("classifies stalled and restartable peer entries", () => {

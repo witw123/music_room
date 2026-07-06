@@ -38,6 +38,8 @@ import {
   PeerConnectionRegistry,
   clearPeerTimers,
   createPeerEntry,
+  enqueuePeerOperation,
+  flushPendingCandidates,
   shouldRestartPeer,
   type PeerEntry,
   type QueuedSendItem
@@ -316,7 +318,7 @@ export class P2PMesh {
     entry.lastSignalProgressAtMs = Date.now();
 
     if (payload.type === "offer") {
-      await this.enqueuePeerOperation(entry, async () => {
+      await enqueuePeerOperation(entry, async () => {
         this.signaling.markReceived(payload.fromPeerId, "offer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
@@ -331,7 +333,7 @@ export class P2PMesh {
         }
 
         await this.applyRemoteDescription(entry, remoteDescription);
-        await this.flushPendingCandidates(entry);
+        await flushPendingCandidates(entry);
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = Date.now();
@@ -341,7 +343,7 @@ export class P2PMesh {
     }
 
     if (payload.type === "answer") {
-      await this.enqueuePeerOperation(entry, async () => {
+      await enqueuePeerOperation(entry, async () => {
         this.signaling.markReceived(payload.fromPeerId, "answer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
@@ -353,14 +355,14 @@ export class P2PMesh {
         }
 
         await this.applyRemoteDescription(entry, remoteDescription);
-        await this.flushPendingCandidates(entry);
+        await flushPendingCandidates(entry);
         entry.lastSignalProgressAtMs = Date.now();
       });
       return;
     }
 
     if (payload.type === "candidate") {
-      await this.enqueuePeerOperation(entry, async () => {
+      await enqueuePeerOperation(entry, async () => {
         this.signaling.markReceived(payload.fromPeerId, "candidate");
         const candidate = toIceCandidateInit(payload.payload);
         if (!candidate) {
@@ -506,7 +508,7 @@ export class P2PMesh {
       return null;
     }
 
-    return this.enqueuePeerOperation(entry, async () => {
+    return enqueuePeerOperation(entry, async () => {
       if (entry.releasing || entry.connection.signalingState !== "stable") {
         return null;
       }
@@ -1020,40 +1022,6 @@ export class P2PMesh {
 
     clearInterval(entry.statsIntervalId);
     entry.statsIntervalId = null;
-  }
-
-  private async flushPendingCandidates(entry: PeerEntry) {
-    if (entry.pendingCandidates.length === 0) {
-      return;
-    }
-
-    const nextCandidates = [...entry.pendingCandidates];
-    entry.pendingCandidates = [];
-    for (const candidate of nextCandidates) {
-      try {
-        await entry.connection.addIceCandidate(candidate);
-      } catch {
-        if (!entry.connection.remoteDescription) {
-          entry.pendingCandidates.push(candidate);
-        }
-      }
-    }
-  }
-
-  private enqueuePeerOperation<T>(entry: PeerEntry, task: () => Promise<T>) {
-    const run = entry.operationChain
-      .catch(() => undefined)
-      .then(async () => {
-        if (entry.releasing) {
-          return undefined as T;
-        }
-        return task();
-      });
-    entry.operationChain = run.then(
-      () => undefined,
-      () => undefined
-    );
-    return run;
   }
 
   private async applyRemoteDescription(
