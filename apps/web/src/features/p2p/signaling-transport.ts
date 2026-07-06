@@ -8,6 +8,34 @@ type SignalDiagnosticRecorder = (payload: {
   type: SignalType;
 }) => void;
 
+type SignalPeerEntry = {
+  connection: {
+    addIceCandidate: (candidate: RTCIceCandidateInit) => Promise<void>;
+    createAnswer: () => Promise<RTCLocalSessionDescriptionInit>;
+    remoteDescription: RTCSessionDescription | RTCSessionDescriptionInit | null;
+    setLocalDescription: (description?: RTCLocalSessionDescriptionInit) => Promise<void>;
+    signalingState: RTCSignalingState;
+  };
+  pendingCandidates: RTCIceCandidateInit[];
+  lastSignalProgressAtMs: number;
+};
+
+type LocalOfferConnection = {
+  createOffer: (options?: RTCOfferOptions) => Promise<RTCLocalSessionDescriptionInit>;
+  setLocalDescription: (description?: RTCLocalSessionDescriptionInit) => Promise<void>;
+};
+
+type IncomingSignalHandlers<TEntry extends SignalPeerEntry> = {
+  getOrCreatePeerEntry: (peerId: string) => Promise<TEntry>;
+  runPeerOperation: <T>(entry: TEntry, task: () => Promise<T>) => Promise<T | undefined>;
+  applyRemoteDescription: (
+    entry: TEntry,
+    remoteDescription: RTCSessionDescriptionInit
+  ) => Promise<void>;
+  flushPendingCandidates: (entry: TEntry) => Promise<void>;
+  nowMs?: () => number;
+};
+
 export function buildDataPeerSignal(input: {
   roomId: string;
   localPeerId: string;
@@ -66,6 +94,97 @@ export class SignalingTransport {
         payload
       })
     );
+  }
+
+  async createAndSendOffer(
+    peerId: string,
+    connection: LocalOfferConnection,
+    options?: RTCOfferOptions
+  ) {
+    const offer = options ? await connection.createOffer(options) : await connection.createOffer();
+    await connection.setLocalDescription(offer);
+    this.send(peerId, "offer", offer as unknown as Record<string, unknown>);
+    return offer;
+  }
+
+  async handleIncomingSignal<TEntry extends SignalPeerEntry>(
+    payload: PeerSignalMessage,
+    handlers: IncomingSignalHandlers<TEntry>
+  ) {
+    if (payload.channelKind !== "data" || payload.toPeerId !== this.localPeerId) {
+      return;
+    }
+
+    const entry = await handlers.getOrCreatePeerEntry(payload.fromPeerId);
+    entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
+
+    if (payload.type === "offer") {
+      await handlers.runPeerOperation(entry, async () => {
+        this.markReceived(payload.fromPeerId, "offer");
+        const remoteDescription = toSessionDescriptionInit(payload.payload);
+        if (!remoteDescription) {
+          return;
+        }
+
+        if (
+          entry.connection.signalingState !== "stable" &&
+          entry.connection.signalingState !== "have-local-offer"
+        ) {
+          return;
+        }
+
+        await handlers.applyRemoteDescription(entry, remoteDescription);
+        await handlers.flushPendingCandidates(entry);
+        const answer = await entry.connection.createAnswer();
+        await entry.connection.setLocalDescription(answer);
+        entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
+        this.send(payload.fromPeerId, "answer", answer as unknown as Record<string, unknown>);
+      });
+      return;
+    }
+
+    if (payload.type === "answer") {
+      await handlers.runPeerOperation(entry, async () => {
+        this.markReceived(payload.fromPeerId, "answer");
+        const remoteDescription = toSessionDescriptionInit(payload.payload);
+        if (!remoteDescription) {
+          return;
+        }
+
+        if (entry.connection.signalingState !== "have-local-offer") {
+          return;
+        }
+
+        await handlers.applyRemoteDescription(entry, remoteDescription);
+        await handlers.flushPendingCandidates(entry);
+        entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
+      });
+      return;
+    }
+
+    if (payload.type === "candidate") {
+      await handlers.runPeerOperation(entry, async () => {
+        this.markReceived(payload.fromPeerId, "candidate");
+        const candidate = toIceCandidateInit(payload.payload);
+        if (!candidate) {
+          return;
+        }
+
+        if (!entry.connection.remoteDescription) {
+          entry.pendingCandidates.push(candidate);
+          return;
+        }
+
+        try {
+          await entry.connection.addIceCandidate(candidate);
+          entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
+        } catch {
+          if (!entry.connection.remoteDescription) {
+            entry.pendingCandidates.push(candidate);
+          }
+        }
+      });
+    }
   }
 }
 

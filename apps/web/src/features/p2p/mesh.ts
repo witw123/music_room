@@ -8,9 +8,7 @@ import {
 } from "./connection-stats";
 import {
   SignalingTransport,
-  shouldIgnoreStaleAnswerError,
-  toIceCandidateInit,
-  toSessionDescriptionInit
+  shouldIgnoreStaleAnswerError
 } from "./signaling-transport";
 import {
   DataChannelManager,
@@ -285,84 +283,14 @@ export class P2PMesh {
   }
 
   async handleSignal(payload: PeerSignalMessage) {
-    if (payload.channelKind !== "data" || payload.toPeerId !== this.localPeerId) {
-      return;
-    }
-
-    // handleSignal is for processing incoming signals — always get/create the peer
-    // entry and process the signal regardless of who initiated.
-    const entry =
-      this.peerConnections.get(payload.fromPeerId) ??
-      (await this.ensurePeer(payload.fromPeerId, false));
-    entry.lastSignalProgressAtMs = Date.now();
-
-    if (payload.type === "offer") {
-      await enqueuePeerOperation(entry, async () => {
-        this.signaling.markReceived(payload.fromPeerId, "offer");
-        const remoteDescription = toSessionDescriptionInit(payload.payload);
-        if (!remoteDescription) {
-          return;
-        }
-
-        if (
-          entry.connection.signalingState !== "stable" &&
-          entry.connection.signalingState !== "have-local-offer"
-        ) {
-          return;
-        }
-
-        await this.applyRemoteDescription(entry, remoteDescription);
-        await flushPendingCandidates(entry);
-        const answer = await entry.connection.createAnswer();
-        await entry.connection.setLocalDescription(answer);
-        entry.lastSignalProgressAtMs = Date.now();
-        this.signaling.send(payload.fromPeerId, "answer", answer as unknown as Record<string, unknown>);
-      });
-      return;
-    }
-
-    if (payload.type === "answer") {
-      await enqueuePeerOperation(entry, async () => {
-        this.signaling.markReceived(payload.fromPeerId, "answer");
-        const remoteDescription = toSessionDescriptionInit(payload.payload);
-        if (!remoteDescription) {
-          return;
-        }
-
-        if (entry.connection.signalingState !== "have-local-offer") {
-          return;
-        }
-
-        await this.applyRemoteDescription(entry, remoteDescription);
-        await flushPendingCandidates(entry);
-        entry.lastSignalProgressAtMs = Date.now();
-      });
-      return;
-    }
-
-    if (payload.type === "candidate") {
-      await enqueuePeerOperation(entry, async () => {
-        this.signaling.markReceived(payload.fromPeerId, "candidate");
-        const candidate = toIceCandidateInit(payload.payload);
-        if (!candidate) {
-          return;
-        }
-
-        if (!entry.connection.remoteDescription) {
-          entry.pendingCandidates.push(candidate);
-          return;
-        }
-
-        try {
-          await entry.connection.addIceCandidate(candidate);
-          entry.lastSignalProgressAtMs = Date.now();
-        } catch {
-          if (!entry.connection.remoteDescription) {
-            entry.pendingCandidates.push(candidate);
-          }
-        }
-      });
-    }
+    await this.signaling.handleIncomingSignal(payload, {
+      getOrCreatePeerEntry: async (peerId) =>
+        this.peerConnections.get(peerId) ?? (await this.ensurePeer(peerId, false)),
+      runPeerOperation: (entry, task) => enqueuePeerOperation(entry, task),
+      applyRemoteDescription: (entry, remoteDescription) =>
+        this.applyRemoteDescription(entry, remoteDescription),
+      flushPendingCandidates
+    });
   }
 
   setStatsSamplingMode(mode: "off" | "steady" | "active") {
@@ -436,10 +364,8 @@ export class P2PMesh {
         return null;
       }
 
-      const offer = await entry.connection.createOffer({ iceRestart: true });
-      await entry.connection.setLocalDescription(offer);
+      await this.signaling.createAndSendOffer(peerId, entry.connection, { iceRestart: true });
       entry.lastSignalProgressAtMs = Date.now();
-      this.signaling.send(peerId, "offer", offer as unknown as Record<string, unknown>);
       return entry;
     });
   }
@@ -555,10 +481,8 @@ export class P2PMesh {
         });
         entry.channel = channel;
         this.bindChannel(peerId, entry, channel);
-        const offer = await connection.createOffer();
-        await connection.setLocalDescription(offer);
+        await this.signaling.createAndSendOffer(peerId, connection);
         entry.lastSignalProgressAtMs = Date.now();
-        this.signaling.send(peerId, "offer", offer as unknown as Record<string, unknown>);
       }
 
       return entry;
@@ -586,22 +510,6 @@ export class P2PMesh {
           data: event.data
         });
       }
-    });
-  }
-
-  private async handlePieceRequest(
-    peerId: string,
-    entry: PeerEntry,
-    request: {
-      trackId: string;
-      chunkIndex: number;
-      requestId?: string;
-    }
-  ) {
-    await this.pieceServe.servePieceRequest({
-      peerId,
-      entry,
-      request
     });
   }
 
