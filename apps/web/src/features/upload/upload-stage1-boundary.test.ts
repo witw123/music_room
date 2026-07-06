@@ -12,6 +12,7 @@ import {
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useManualCacheActions } from "./use-manual-cache-actions";
 import { useCacheLibraryActions } from "./use-cache-library-actions";
+import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
 
 describe("upload stage 1 module boundaries", () => {
   it("hosts registration payload helpers in upload-pipeline", () => {
@@ -82,5 +83,9 @@ describe("upload stage 1 module boundaries", () => {
 
   it("hosts cache library action orchestration outside the main hook", () => {
     expect(typeof useCacheLibraryActions).toBe("function");
+  });
+
+  it("hosts upload pipeline action orchestration outside the main hook", () => {
+    expect(typeof useUploadPipelineActions).toBe("function");
   });
 });
