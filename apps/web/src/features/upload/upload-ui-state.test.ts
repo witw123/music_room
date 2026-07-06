@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildNextManualCacheTask,
+  buildRoomTrackIdsKey,
   resolveManualCachePieceReceivedAction,
   resolveManualCachePlanReceivedAction,
-  resolveManualCachePlanTaskUpdate
+  resolveManualCachePlanTaskUpdate,
+  selectActiveManualCacheTrackIds,
+  type ManualCacheTask
 } from "./upload-ui-state";
 
 describe("buildNextManualCacheTask", () => {
@@ -46,6 +49,72 @@ describe("buildNextManualCacheTask", () => {
         updatedAt: "2026-07-06T00:00:00.000Z"
       })
     ).toBeNull();
+  });
+});
+
+describe("upload page derived UI state", () => {
+  it("builds a stable room track ids key from refreshed snapshot track arrays", () => {
+    expect(
+      buildRoomTrackIdsKey([
+        { id: "track_b" },
+        { id: "track_a" },
+        { id: "track_b" }
+      ])
+    ).toBe("track_a|track_b");
+  });
+
+  it("selects active manual and current playback-demand cache task ids", () => {
+    const baseTask = {
+      fileHash: "hash",
+      updatedAt: "2026-07-06T00:00:00.000Z",
+      errorMessage: null,
+      completedChunks: 0,
+      totalChunks: 4,
+      mimeType: "audio/flac",
+      manifestSource: "snapshot",
+      blockedReason: null,
+      integrityMode: "strong",
+      providerPeerIds: [],
+      connectedProviderPeerIds: [],
+      selectedProviderPeerId: null,
+      requestableChunkCount: 0,
+      pendingChunkCount: 0,
+      lastRequestedChunks: [],
+      lastPieceReceivedAt: null,
+      lastError: null
+    } satisfies Omit<ManualCacheTask, "trackId" | "status" | "mode">;
+
+    expect(
+      selectActiveManualCacheTrackIds({
+        tasks: {
+          manual_ready: {
+            ...baseTask,
+            trackId: "manual_ready",
+            status: "ready",
+            mode: "manual"
+          },
+          manual_active: {
+            ...baseTask,
+            trackId: "manual_active",
+            status: "downloading",
+            mode: "manual"
+          },
+          playback_current: {
+            ...baseTask,
+            trackId: "playback_current",
+            status: "blocked",
+            mode: "playback-demand"
+          },
+          playback_other: {
+            ...baseTask,
+            trackId: "playback_other",
+            status: "downloading",
+            mode: "playback-demand"
+          }
+        },
+        currentPlaybackTrackId: "playback_current"
+      }).sort()
+    ).toEqual(["manual_active", "playback_current"]);
   });
 });
 

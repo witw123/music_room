@@ -17,7 +17,9 @@ import {
   loadCacheLibrarySnapshot
 } from "./cache-library";
 import {
+  buildRoomTrackIdsKey,
   resolveStalePlaybackDemandTaskIds,
+  selectActiveManualCacheTrackIds,
   type ManualCacheTask
 } from "./upload-ui-state";
 import {
@@ -47,6 +49,7 @@ export {
   shouldAnnounceTrackAvailability
 } from "./track-availability";
 export {
+  buildRoomTrackIdsKey,
   mergeHydratedManualCacheTasks,
   mergeManualCachePieceTaskProgress,
   mergeManualCachePlanTaskProgress,
@@ -58,7 +61,8 @@ export {
   shouldCreatePlaybackDemandTaskFromCachePiece,
   shouldEnsurePlaybackDemandCacheTask,
   shouldHydrateCacheTaskPieceIndexes,
-  shouldIgnoreManualCachePieceTaskUpdate
+  shouldIgnoreManualCachePieceTaskUpdate,
+  selectActiveManualCacheTrackIds
 } from "./upload-ui-state";
 export type {
   ManualCacheTask,
@@ -95,23 +99,16 @@ export function useTrackUploads(options: {
   const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
   const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
   const roomTrackIdsKey = useMemo(
-    () => [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])].sort().join("|"),
+    () => buildRoomTrackIdsKey(roomSnapshot?.tracks),
     [roomSnapshot?.tracks]
   );
 
   const manualCacheTrackIds = useMemo(
     () =>
-      Object.values(manualCacheTasks)
-        .filter(
-          (task) =>
-            (task.mode === "manual" ||
-              task.trackId === roomSnapshot?.room.playback.currentTrackId) &&
-            (task.status === "queued" ||
-              task.status === "downloading" ||
-              task.status === "blocked" ||
-              task.status === "assembling")
-        )
-        .map((task) => task.trackId),
+      selectActiveManualCacheTrackIds({
+        tasks: manualCacheTasks,
+        currentPlaybackTrackId: roomSnapshot?.room.playback.currentTrackId
+      }),
     [manualCacheTasks, roomSnapshot?.room.playback.currentTrackId]
   );
 

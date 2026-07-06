@@ -24,6 +24,28 @@ export type {
   ManualCacheTaskPatch
 } from "./manual-cache-task-store";
 
+export function buildRoomTrackIdsKey(
+  tracks: Array<{ id: string }> | null | undefined
+) {
+  return [...new Set(tracks?.map((track) => track.id) ?? [])].sort().join("|");
+}
+
+export function selectActiveManualCacheTrackIds(input: {
+  tasks: Record<string, Pick<ManualCacheTask, "trackId" | "mode" | "status">>;
+  currentPlaybackTrackId: string | null | undefined;
+}) {
+  return Object.values(input.tasks)
+    .filter(
+      (task) =>
+        (task.mode === "manual" || task.trackId === input.currentPlaybackTrackId) &&
+        (task.status === "queued" ||
+          task.status === "downloading" ||
+          task.status === "blocked" ||
+          task.status === "assembling")
+    )
+    .map((task) => task.trackId);
+}
+
 export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
   playback: RoomSnapshot["room"]["playback"] | null | undefined;
   trackId: string;
