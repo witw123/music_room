@@ -1,4 +1,7 @@
-import type { PeerConnectionStatsSnapshot } from "./connection-stats";
+import type {
+  PeerConnectionStatsSample,
+  PeerConnectionStatsSnapshot
+} from "./connection-stats";
 import type { DataChannelQueuedSendItem } from "./data-channel-manager";
 
 export type PeerEntry = {
@@ -160,6 +163,63 @@ export function enqueuePeerOperation<T>(entry: PeerEntry, task: () => Promise<T>
     () => undefined
   );
   return run;
+}
+
+export function startPeerStatsSampling(input: {
+  peerId: string;
+  entry: PeerEntry;
+  mode: "off" | "steady" | "active";
+  activeStatsSamplingIntervalMs: number;
+  steadyStatsSamplingIntervalMs: number;
+  onStatsSample?: (payload: {
+    peerId: string;
+    sample: PeerConnectionStatsSample;
+  }) => void;
+  samplePeerConnectionStats: (
+    connection: RTCPeerConnection,
+    previousSnapshot: PeerConnectionStatsSnapshot | null
+  ) => Promise<{
+    sample: PeerConnectionStatsSample;
+    snapshot: PeerConnectionStatsSnapshot;
+  } | null>;
+}) {
+  if (!input.onStatsSample || input.entry.statsIntervalId || input.mode === "off") {
+    return;
+  }
+
+  const emitStatsSample = async () => {
+    const nextStats = await input.samplePeerConnectionStats(
+      input.entry.connection,
+      input.entry.statsSnapshot
+    );
+    if (!nextStats) {
+      return;
+    }
+
+    input.entry.statsSnapshot = nextStats.snapshot;
+    input.onStatsSample?.({
+      peerId: input.peerId,
+      sample: nextStats.sample
+    });
+  };
+
+  void emitStatsSample();
+  const samplingIntervalMs =
+    input.mode === "steady"
+      ? input.steadyStatsSamplingIntervalMs
+      : input.activeStatsSamplingIntervalMs;
+  input.entry.statsIntervalId = setInterval(() => {
+    void emitStatsSample();
+  }, samplingIntervalMs);
+}
+
+export function stopPeerStatsSampling(entry: PeerEntry) {
+  if (!entry.statsIntervalId) {
+    return;
+  }
+
+  clearInterval(entry.statsIntervalId);
+  entry.statsIntervalId = null;
 }
 
 export class PeerConnectionRegistry {

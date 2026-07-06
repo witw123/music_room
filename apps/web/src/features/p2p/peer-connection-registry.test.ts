@@ -6,7 +6,9 @@ import {
   enqueuePeerOperation,
   flushPendingCandidates,
   isPeerStalled,
-  shouldRestartPeer
+  shouldRestartPeer,
+  startPeerStatsSampling,
+  stopPeerStatsSampling
 } from "./peer-connection-registry";
 
 function buildConnection(
@@ -162,6 +164,65 @@ describe("PeerConnectionRegistry", () => {
 
     expect(skipped).toBeUndefined();
     expect(events).toEqual(["first:start", "first:end", "second"]);
+  });
+
+  it("starts and stops peer stats sampling", async () => {
+    vi.useFakeTimers();
+    try {
+      const entry = createPeerEntry({
+        connection: buildConnection(),
+        initiatorPeerId: "peer_a",
+        nowMs: 100
+      });
+      const onStatsSample = vi.fn();
+      const sample = {
+        candidateType: null,
+        protocol: null,
+        currentRoundTripTimeMs: null,
+        availableOutgoingBitrateKbps: null,
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: null,
+        packetsLost: null,
+        jitterMs: null
+      };
+      const snapshot = {
+        inboundAudioBytes: 12,
+        inboundAudioTimestampMs: null,
+        outboundAudioBytes: null,
+        outboundAudioTimestampMs: null,
+        packetsLost: null,
+        packetsTotal: null
+      };
+      const samplePeerConnectionStats = vi.fn(async () => ({
+        snapshot,
+        sample
+      }));
+
+      startPeerStatsSampling({
+        peerId: "peer_b",
+        entry,
+        mode: "active",
+        activeStatsSamplingIntervalMs: 1_000,
+        steadyStatsSamplingIntervalMs: 5_000,
+        onStatsSample,
+        samplePeerConnectionStats
+      });
+
+      await Promise.resolve();
+
+      expect(samplePeerConnectionStats).toHaveBeenCalledWith(entry.connection, null);
+      expect(onStatsSample).toHaveBeenCalledWith({
+        peerId: "peer_b",
+        sample
+      });
+      expect(entry.statsSnapshot).toEqual(snapshot);
+      expect(entry.statsIntervalId).not.toBeNull();
+
+      stopPeerStatsSampling(entry);
+      expect(entry.statsIntervalId).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("classifies stalled and restartable peer entries", () => {

@@ -40,6 +40,8 @@ import {
   enqueuePeerOperation,
   flushPendingCandidates,
   shouldRestartPeer,
+  startPeerStatsSampling,
+  stopPeerStatsSampling,
   type PeerEntry
 } from "./peer-connection-registry";
 import { MeshHealthMonitor } from "./mesh-health-monitor";
@@ -937,44 +939,19 @@ export class P2PMesh {
   }
 
   private startStatsSampling(peerId: string, entry: PeerEntry) {
-    if (
-      !this.callbacks.onStatsSample ||
-      entry.statsIntervalId ||
-      this.statsSamplingMode === "off"
-    ) {
-      return;
-    }
-
-    const emitStatsSample = async () => {
-      const nextStats = await samplePeerConnectionStats(entry.connection, entry.statsSnapshot);
-      if (!nextStats) {
-        return;
-      }
-
-      entry.statsSnapshot = nextStats.snapshot;
-      this.callbacks.onStatsSample?.({
-        peerId,
-        sample: nextStats.sample
-      });
-    };
-
-    void emitStatsSample();
-    const samplingIntervalMs =
-      this.statsSamplingMode === "steady"
-        ? this.steadyStatsSamplingIntervalMs
-        : this.activeStatsSamplingIntervalMs;
-    entry.statsIntervalId = setInterval(() => {
-      void emitStatsSample();
-    }, samplingIntervalMs);
+    startPeerStatsSampling({
+      peerId,
+      entry,
+      mode: this.statsSamplingMode,
+      activeStatsSamplingIntervalMs: this.activeStatsSamplingIntervalMs,
+      steadyStatsSamplingIntervalMs: this.steadyStatsSamplingIntervalMs,
+      onStatsSample: this.callbacks.onStatsSample,
+      samplePeerConnectionStats
+    });
   }
 
   private stopStatsSampling(entry: PeerEntry) {
-    if (!entry.statsIntervalId) {
-      return;
-    }
-
-    clearInterval(entry.statsIntervalId);
-    entry.statsIntervalId = null;
+    stopPeerStatsSampling(entry);
   }
 
   private async applyRemoteDescription(
