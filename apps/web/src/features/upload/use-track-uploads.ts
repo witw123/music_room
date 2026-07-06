@@ -33,10 +33,6 @@ import {
   type CachedLibraryTrack,
   type UploadedTrack
 } from "@/features/upload/audio-utils";
-import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
-import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
-import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
-import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
   buildCachedLibraryTrackUpsertRecord,
   applyCachedLibraryRoomImportResult,
@@ -47,7 +43,6 @@ import {
   exportCachedLibraryTrackFile,
   importCachedLibraryTrackToRoom as importCachedLibraryTrackToRoomFromLibrary,
   loadCacheLibrarySnapshot,
-  startCacheDownload as startCacheDownloadFromLibrary,
   toCachedLibraryTrackFile
 } from "./cache-library";
 import {
@@ -55,19 +50,12 @@ import {
   shouldAnnounceTrackAvailability
 } from "./track-availability";
 import {
-  resolveAutomaticPlaybackCacheTaskMode,
-  resolveManualCachePieceReceivedAction,
-  resolveManualCachePlanReceivedAction,
   resolveStalePlaybackDemandTaskIds,
-  shouldEnsurePlaybackDemandCacheTask,
   type ManualCacheTask
 } from "./upload-ui-state";
 import {
-  applyManualCacheDownloadStartResult,
-  applyManualCacheProgressResult,
   applyManualCacheTaskDrop,
-  applyManualCacheTaskUpdate,
-  resolveManualCachePausePatch
+  applyManualCacheTaskUpdate
 } from "./manual-cache-task-store";
 import {
   applySelectedTrackFilesResult,
@@ -80,6 +68,7 @@ import {
   applyUploadRuntimeTrackRemoval
 } from "./upload-runtime-cleanup";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
+import { useManualCacheActions } from "./use-manual-cache-actions";
 
 export {
   buildCachedLibraryTrackRegisterPayload,
@@ -384,221 +373,26 @@ export function useTrackUploads(options: {
     ]
   );
 
-  const startCacheDownload = useCallback(
-    async (trackId: string, mode: ManualCacheTask["mode"]) => {
-      if (!enableManualTrackCaching || !roomSnapshot) {
-        return;
-      }
-
-      const track = roomSnapshot.tracks.find((entry) => entry.id === trackId);
-      if (!track) {
-        return;
-      }
-
-      const result = await startCacheDownloadFromLibrary({
-        manualTrackCachingEnabled: enableManualTrackCaching,
-        trackId,
-        mode,
-        roomTracks: roomSnapshot.tracks,
-        peerId,
-        cachedLibraryTracksByHash: cacheLibraryTracksRef.current,
-        getCachedLibraryTrackSummary,
-        getCachedLibraryTrack,
-        getTrackPieceManifestByFileHash,
-        getTrackPieceManifest,
-        deleteCachedPiecesForTrack,
-        getCachedPiecesForTrack,
-        localCacheOwnerKey
-      });
-      applyManualCacheDownloadStartResult({
-        trackId,
-        result,
-        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-        updateManualCacheTask,
-        setStatusMessage,
-        assembleManualCacheTrack: (assembleTrackId, mimeType, totalChunks) => {
-          void assembleManualCacheTrack(assembleTrackId, mimeType, totalChunks);
-        }
-      });
-    },
-    [assembleManualCacheTrack, peerId, roomSnapshot, setStatusMessage, updateManualCacheTask]
-  );
-
-  const startManualCacheDownload = useCallback(
-    async (trackId: string) => {
-      await startCacheDownload(trackId, "manual");
-    },
-    [startCacheDownload]
-  );
-
-  const startPlaybackDemandCacheDownload = useCallback(
-    async (trackId: string) => {
-      await startCacheDownload(trackId, resolveAutomaticPlaybackCacheTaskMode());
-    },
-    [startCacheDownload]
-  );
-
-  useEffect(() => {
-    const playback = roomSnapshot?.room.playback ?? null;
-    const trackId = playback?.currentTrackId ?? null;
-    if (!trackId) {
-      return;
-    }
-
-    const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
-    const trackExists = !!track;
-    const cachedLibraryTrack = track
-      ? cacheLibraryTracksRef.current.get(track.fileHash)
-      : null;
-    const hasLocalFullTrack =
-      !!uploadedTracks[trackId] ||
-      isCachedLibraryTrackUsableForRoomTrack({
-        cachedTrack: cachedLibraryTrack,
-        roomTrack: track
-      });
-    if (
-      !shouldEnsurePlaybackDemandCacheTask({
-        enableManualTrackCaching,
-        playback,
-        trackExists,
-        peerId,
-        activeSessionId: activeSession?.userId,
-        hasLocalFullTrack,
-        existingTask: manualCacheTasks[trackId] ?? null
-      })
-    ) {
-      return;
-    }
-
-    void startPlaybackDemandCacheDownload(trackId);
-  }, [
-    activeSession?.userId,
-    manualCacheTasks,
-    peerId,
-    roomSnapshot?.room.playback,
-    roomSnapshot?.tracks,
+  const {
+    startManualCacheDownload,
     startPlaybackDemandCacheDownload,
+    pauseManualCacheDownload,
+    handleManualCachePieceReceived,
+    handleManualCachePlan
+  } = useManualCacheActions({
+    activeSession,
+    assembleManualCacheTrack,
+    cacheLibraryTracksRef,
+    emitAvailability,
+    manualCacheChunkIndexesRef,
+    manualCacheTasks,
+    onAvailability,
+    peerId,
+    roomSnapshot,
+    setStatusMessage,
+    updateManualCacheTask,
     uploadedTracks
-  ]);
-
-  const pauseManualCacheDownload = useCallback(
-    (trackId: string) => {
-      updateManualCacheTask(trackId, resolveManualCachePausePatch);
-    },
-    [updateManualCacheTask]
-  );
-
-  const handleManualCachePieceReceived = useCallback(
-    (input: {
-      trackId: string;
-      chunkIndex: number;
-      totalChunks: number;
-      chunkSize: number;
-      mimeType: string;
-    }) => {
-      const track = roomSnapshot?.tracks.find((entry) => entry.id === input.trackId) ?? null;
-      const knownChunkIndexes =
-        manualCacheChunkIndexesRef.current.get(input.trackId) ?? new Set<number>();
-      const hasLocalFullTrack =
-        !!uploadedTracks[input.trackId] ||
-        isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: track ? cacheLibraryTracksRef.current.get(track.fileHash) : null,
-          roomTrack: track
-        });
-      const result = resolveManualCachePieceReceivedAction({
-        piece: input,
-        currentTask: manualCacheTasks[input.trackId] ?? null,
-        knownChunkIndexes,
-        track,
-        roomId: roomSnapshot?.room.id,
-        activeSession,
-        peerId,
-        playback: roomSnapshot?.room.playback,
-        hasLocalFullTrack,
-        nowIso: new Date().toISOString()
-      });
-
-      applyManualCacheProgressResult({
-        trackId: input.trackId,
-        result,
-        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-        publishAvailability: (availability) => {
-          onAvailability(availability);
-          emitAvailability(availability);
-        },
-        updateManualCacheTask,
-        assembleManualCacheTrack: (assembleTrackId, mimeType, totalChunks) => {
-          void assembleManualCacheTrack(assembleTrackId, mimeType, totalChunks);
-        }
-      });
-    },
-    [
-      activeSession,
-      assembleManualCacheTrack,
-      emitAvailability,
-      manualCacheTasks,
-      onAvailability,
-      peerId,
-      roomSnapshot,
-      updateManualCacheTask,
-      uploadedTracks
-    ]
-  );
-
-  const handleManualCachePlan = useCallback(
-    (plan: ManualCacheTrackPlan) => {
-      if (!plan.trackId || !roomSnapshot) {
-        return;
-      }
-      const track = roomSnapshot.tracks.find((entry) => entry.id === plan.trackId) ?? null;
-      if (!track) {
-        return;
-      }
-      const knownChunkIndexes =
-        manualCacheChunkIndexesRef.current.get(plan.trackId) ?? new Set<number>();
-      const hasLocalFullTrack =
-        !!uploadedTracks[plan.trackId] ||
-        isCachedLibraryTrackUsableForRoomTrack({
-          cachedTrack: cacheLibraryTracksRef.current.get(track.fileHash),
-          roomTrack: track
-        });
-      const isCurrentPlaybackDemand =
-        plan.trackId === roomSnapshot.room.playback.currentTrackId &&
-        hasActivePlaybackIntent(roomSnapshot.room.playback) &&
-        (!isCurrentPlaybackSourceDevice({
-          playback: roomSnapshot.room.playback,
-          peerId,
-          activeSessionId: activeSession?.userId
-        }) ||
-          !hasLocalFullTrack);
-      const result = resolveManualCachePlanReceivedAction({
-        plan,
-        currentTask: manualCacheTasks[plan.trackId] ?? null,
-        knownChunkIndexes,
-        track,
-        isCurrentPlaybackDemand
-      });
-      applyManualCacheProgressResult({
-        trackId: plan.trackId,
-        result,
-        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-        publishAvailability: () => undefined,
-        updateManualCacheTask,
-        assembleManualCacheTrack: (assembleTrackId, mimeType, totalChunks) => {
-          void assembleManualCacheTrack(assembleTrackId, mimeType, totalChunks);
-        }
-      });
-    },
-    [
-      activeSession?.userId,
-      assembleManualCacheTrack,
-      manualCacheTasks,
-      peerId,
-      roomSnapshot,
-      updateManualCacheTask,
-      uploadedTracks
-    ]
-  );
+  });
 
   const deleteUploadedTrackArtifacts = useCallback(
     async (trackId: string) => {
