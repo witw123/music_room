@@ -1,0 +1,315 @@
+import type { RoomSnapshot } from "@music-room/shared";
+import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
+import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
+import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
+
+export type ManualCacheTaskStatus =
+  | "idle"
+  | "queued"
+  | "downloading"
+  | "paused"
+  | "blocked"
+  | "assembling"
+  | "ready"
+  | "failed"
+  | "failed-integrity";
+
+export type ManualCacheTask = {
+  trackId: string;
+  status: ManualCacheTaskStatus;
+  mode: "manual" | "playback-demand";
+  fileHash: string;
+  updatedAt: string;
+  errorMessage: string | null;
+  completedChunks: number;
+  totalChunks: number;
+  mimeType: string | null;
+  manifestSource: string | null;
+  blockedReason: string | null;
+  integrityMode: "strong" | "weak" | null;
+  providerPeerIds: string[];
+  connectedProviderPeerIds: string[];
+  selectedProviderPeerId: string | null;
+  requestableChunkCount: number;
+  pendingChunkCount: number;
+  lastRequestedChunks: number[];
+  lastPieceReceivedAt: string | null;
+  lastError: string | null;
+};
+
+export function mergeHydratedManualCacheTasks(input: {
+  currentTasks: Record<string, ManualCacheTask>;
+  hydratedTasks: ManualCacheTaskRecord[];
+  currentPlaybackTrackId: string | null;
+}) {
+  const hydrated = Object.fromEntries(
+    input.hydratedTasks
+      .filter(isManualCacheTaskRecord)
+      .filter((task) => task.mode === "manual" || task.trackId === input.currentPlaybackTrackId)
+      .map((task) => {
+        const status = task.status;
+        return [
+          task.trackId,
+          {
+            trackId: task.trackId,
+            status,
+            mode: task.mode,
+            fileHash: task.fileHash,
+            updatedAt: task.updatedAt,
+            errorMessage: task.errorMessage,
+            completedChunks: task.completedChunks,
+            totalChunks: task.totalChunks,
+            mimeType: task.mimeType,
+            manifestSource: task.manifestSource,
+            blockedReason: task.blockedReason,
+            integrityMode: task.integrityMode,
+            providerPeerIds: task.providerPeerIds,
+            connectedProviderPeerIds: task.connectedProviderPeerIds,
+            selectedProviderPeerId: task.selectedProviderPeerId,
+            requestableChunkCount: task.requestableChunkCount,
+            pendingChunkCount: task.pendingChunkCount,
+            lastRequestedChunks: task.lastRequestedChunks,
+            lastPieceReceivedAt: task.lastPieceReceivedAt,
+            lastError: task.lastError
+          } satisfies ManualCacheTask
+        ];
+      })
+  );
+
+  const preservedCurrent = Object.fromEntries(
+    Object.entries(input.currentTasks).filter(([, task]) => {
+      if (task.mode === "manual") {
+        return true;
+      }
+
+      return task.mode === "playback-demand" && task.trackId === input.currentPlaybackTrackId;
+    })
+  );
+
+  return {
+    ...hydrated,
+    ...preservedCurrent
+  };
+}
+
+export function resolveStalePlaybackDemandTaskIds(input: {
+  currentTasks: Record<string, ManualCacheTask>;
+  currentPlaybackTrackId: string | null;
+}) {
+  return Object.values(input.currentTasks)
+    .filter(
+      (task) =>
+        task.mode === "playback-demand" &&
+        task.trackId !== input.currentPlaybackTrackId
+    )
+    .map((task) => task.trackId)
+    .sort();
+}
+
+export function shouldHydrateCacheTaskPieceIndexes(input: {
+  mode: ManualCacheTaskRecord["mode"];
+  status: ManualCacheTaskRecord["status"];
+}) {
+  return (
+    (input.mode === "manual" || input.mode === "playback-demand") &&
+    (input.status === "queued" ||
+      input.status === "downloading" ||
+      input.status === "blocked")
+  );
+}
+
+export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  trackId: string;
+  peerId: string | null | undefined;
+  activeSessionId: string | null | undefined;
+  hasLocalFullTrack?: boolean;
+  hasCurrentTask: boolean;
+}) {
+  const playback = input.playback;
+  if (
+    input.hasCurrentTask ||
+    !playback?.currentTrackId ||
+    playback.currentTrackId !== input.trackId ||
+    !hasActivePlaybackIntent(playback)
+  ) {
+    return false;
+  }
+
+  return !isCurrentPlaybackSourceDevice({
+    playback,
+    peerId: input.peerId,
+    activeSessionId: input.activeSessionId
+  }) || input.hasLocalFullTrack === false;
+}
+
+function isManualCacheTaskRecord(
+  task: ManualCacheTaskRecord
+): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
+  return task.mode === "manual" || task.mode === "playback-demand";
+}
+
+export function resolveAutomaticPlaybackCacheTaskMode(): ManualCacheTask["mode"] {
+  return "playback-demand";
+}
+
+export function mergeManualCachePlanTaskProgress(input: {
+  current:
+    | Pick<
+        ManualCacheTask,
+        | "completedChunks"
+        | "totalChunks"
+        | "status"
+        | "blockedReason"
+        | "lastPieceReceivedAt"
+        | "lastError"
+      >
+    | null
+    | undefined;
+  planLocalPieceIndexes: number[];
+  inMemoryPieceIndexes: Set<number> | null | undefined;
+  planTotalChunks: number | null | undefined;
+  planBlockedReason: string | null | undefined;
+}) {
+  const currentCompletedChunks = input.current?.completedChunks ?? 0;
+  const indexedPieceCount = input.planLocalPieceIndexes.length;
+  const inMemoryPieceCount = input.inMemoryPieceIndexes?.size ?? 0;
+  const completedChunks = Math.max(
+    currentCompletedChunks,
+    indexedPieceCount,
+    inMemoryPieceCount
+  );
+  const totalChunks = Math.max(input.current?.totalChunks ?? 0, input.planTotalChunks ?? 0);
+  const isComplete = totalChunks > 0 && completedChunks >= totalChunks;
+  const pendingWindowFull = input.planBlockedReason === "pending-window-full";
+  const actuallyBlocked =
+    !!input.planBlockedReason && input.planBlockedReason !== "complete" && !pendingWindowFull;
+
+  return {
+    completedChunks,
+    totalChunks,
+    status:
+      actuallyBlocked && !isComplete
+        ? ("blocked" as const)
+        : !input.current ||
+            input.current.status === "queued" ||
+            input.current.status === "blocked"
+          ? ("downloading" as const)
+          : input.current.status,
+    blockedReason: input.planBlockedReason === "complete" || isComplete ? null : input.planBlockedReason,
+    lastPieceReceivedAt: input.current?.lastPieceReceivedAt ?? null,
+    lastError: actuallyBlocked && !isComplete ? input.planBlockedReason : (input.current?.lastError ?? null)
+  };
+}
+
+export function mergeManualCachePieceTaskProgress(input: {
+  current:
+    | Pick<ManualCacheTask, "completedChunks" | "totalChunks" | "status">
+    | null
+    | undefined;
+  knownChunkIndexes: Set<number> | null | undefined;
+  receivedTotalChunks: number | null | undefined;
+}) {
+  const completedChunks = Math.max(
+    input.current?.completedChunks ?? 0,
+    input.knownChunkIndexes?.size ?? 0
+  );
+  const totalChunks = Math.max(input.current?.totalChunks ?? 0, input.receivedTotalChunks ?? 0);
+
+  return {
+    completedChunks,
+    totalChunks,
+    status:
+      input.current?.status === "paused" ||
+      input.current?.status === "ready" ||
+      input.current?.status === "assembling"
+        ? input.current.status
+        : ("downloading" as const)
+  };
+}
+
+export function shouldIgnoreManualCachePieceTaskUpdate(status: ManualCacheTaskStatus) {
+  return status === "ready" || status === "assembling";
+}
+
+export function pruneManualCacheChunkIndexesByActiveTracks(
+  chunkIndexesByTrack: Map<string, Set<number>>,
+  activeTrackIds: Set<string>
+) {
+  for (const trackId of chunkIndexesByTrack.keys()) {
+    if (!activeTrackIds.has(trackId)) {
+      chunkIndexesByTrack.delete(trackId);
+    }
+  }
+}
+
+export function shouldAssembleManualCachePlanProgress(input: {
+  status: ManualCacheTaskStatus | null | undefined;
+  completedChunks: number;
+  totalChunks: number;
+}) {
+  return (
+    input.status !== "paused" &&
+    input.status !== "ready" &&
+    input.status !== "assembling" &&
+    input.totalChunks > 0 &&
+    input.completedChunks >= input.totalChunks
+  );
+}
+
+export function shouldEnsurePlaybackDemandCacheTask(input: {
+  enableManualTrackCaching: boolean;
+  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  trackExists: boolean;
+  peerId: string | null | undefined;
+  activeSessionId: string | null | undefined;
+  hasLocalFullTrack?: boolean;
+  existingTask: Pick<ManualCacheTask, "mode" | "status"> | null | undefined;
+}) {
+  const playback = input.playback;
+  if (
+    !input.enableManualTrackCaching ||
+    !playback?.currentTrackId ||
+    !hasActivePlaybackIntent(playback) ||
+    !input.trackExists
+  ) {
+    return false;
+  }
+
+  if (
+    isCurrentPlaybackSourceDevice({
+      playback,
+      peerId: input.peerId,
+      activeSessionId: input.activeSessionId
+    }) &&
+    input.hasLocalFullTrack !== false
+  ) {
+    return false;
+  }
+
+  if (!input.existingTask) {
+    return true;
+  }
+
+  if (input.existingTask.mode === "manual") {
+    if (input.existingTask.status === "ready") {
+      return input.hasLocalFullTrack === false;
+    }
+
+    return (
+      input.existingTask.status === "idle" ||
+      input.existingTask.status === "failed" ||
+      input.existingTask.status === "failed-integrity"
+    );
+  }
+
+  if (input.existingTask.status === "ready") {
+    return input.hasLocalFullTrack === false;
+  }
+
+  return (
+    input.existingTask.status === "idle" ||
+    input.existingTask.status === "failed" ||
+    input.existingTask.status === "failed-integrity"
+  );
+}

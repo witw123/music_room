@@ -41,490 +41,74 @@ import {
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
 import type {
   CachedLibraryTrackRecord,
-  CachedLibraryTrackSummaryRecord,
-  ManualCacheTaskRecord
+  CachedLibraryTrackSummaryRecord
 } from "@/lib/indexeddb";
+import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
-import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
+import {
+  createInFlightCachedLibraryTrackFileLoader,
+  hasUsableCachedLibraryFileForRoomTrack
+} from "./cache-library";
+import {
+  buildManualCachePieceAvailabilityAnnouncement,
+  isManualCachePieceCompatible,
+  resolveMissingOwnedUploadedTracks,
+  resolveReusableCachedPieceManifest,
+  shouldAnnounceTrackAvailability
+} from "./track-availability";
+import {
+  mergeHydratedManualCacheTasks,
+  mergeManualCachePieceTaskProgress,
+  mergeManualCachePlanTaskProgress,
+  pruneManualCacheChunkIndexesByActiveTracks,
+  resolveAutomaticPlaybackCacheTaskMode,
+  resolveStalePlaybackDemandTaskIds,
+  shouldAssembleManualCachePlanProgress,
+  shouldCreatePlaybackDemandTaskFromCachePiece,
+  shouldEnsurePlaybackDemandCacheTask,
+  shouldHydrateCacheTaskPieceIndexes,
+  shouldIgnoreManualCachePieceTaskUpdate,
+  type ManualCacheTask,
+  type ManualCacheTaskStatus
+} from "./upload-ui-state";
+import {
+  buildCachedLibraryTrackRegisterPayload,
+  buildRegisterTrackPayload
+} from "./upload-pipeline";
 
-export type ManualCacheTaskStatus =
-  | "idle"
-  | "queued"
-  | "downloading"
-  | "paused"
-  | "blocked"
-  | "assembling"
-  | "ready"
-  | "failed"
-  | "failed-integrity";
-
-export type ManualCacheTask = {
-  trackId: string;
-  status: ManualCacheTaskStatus;
-  mode: "manual" | "playback-demand";
-  fileHash: string;
-  updatedAt: string;
-  errorMessage: string | null;
-  completedChunks: number;
-  totalChunks: number;
-  mimeType: string | null;
-  manifestSource: string | null;
-  blockedReason: string | null;
-  integrityMode: "strong" | "weak" | null;
-  providerPeerIds: string[];
-  connectedProviderPeerIds: string[];
-  selectedProviderPeerId: string | null;
-  requestableChunkCount: number;
-  pendingChunkCount: number;
-  lastRequestedChunks: number[];
-  lastPieceReceivedAt: string | null;
-  lastError: string | null;
-};
-
-type RehydratableRoomTrack = Pick<TrackMeta, "id" | "fileHash" | "ownerSessionId">;
-type TrackPieceManifestGeometry = {
-  totalChunks: number;
-  chunkSize: number;
-};
-
-export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
-  return {
-    ...(track.id ? { id: track.id } : {}),
-    title: track.title,
-    artist: track.artist,
-    album: track.album,
-    durationMs: track.durationMs,
-    bitrate: track.bitrate,
-    sizeBytes: track.sizeBytes,
-    codec: track.codec,
-    mimeType: track.mimeType,
-    fileHash: track.fileHash,
-    artworkUrl: track.artworkUrl,
-    ownerSessionId: track.ownerSessionId,
-    ownerNickname: track.ownerNickname,
-    sourceType: track.sourceType,
-    pieceManifest: track.pieceManifest,
-    relayManifest: track.relayManifest
-  };
-}
-
-export function buildCachedLibraryTrackRegisterPayload(track: Omit<TrackMeta, "id"> & { id?: string }) {
-  return buildRegisterTrackPayload(track);
-}
-
-export function shouldAnnounceTrackAvailability(input: {
-  peerId: string | null | undefined;
-}) {
-  return Boolean(input.peerId);
-}
-
-export function createInFlightCachedLibraryTrackFileLoader(
-  loadCachedTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>
-) {
-  const inFlightLoads = new Map<string, Promise<CachedLibraryTrackFile | null>>();
-
-  return (fileHash: string) => {
-    const existingLoad = inFlightLoads.get(fileHash);
-    if (existingLoad) {
-      return existingLoad;
-    }
-
-    const nextLoad = loadCachedTrackFile(fileHash).finally(() => {
-      if (inFlightLoads.get(fileHash) === nextLoad) {
-        inFlightLoads.delete(fileHash);
-      }
-    });
-    inFlightLoads.set(fileHash, nextLoad);
-    return nextLoad;
-  };
-}
-
-export function resolveReusableCachedPieceManifest<T extends TrackPieceManifestGeometry>(input: {
-  cachedManifest: T | null | undefined;
-  expectedManifest: TrackPieceManifestGeometry | null | undefined;
-}) {
-  if (!input.cachedManifest) {
-    return null;
-  }
-
-  if (
-    input.expectedManifest &&
-    (input.cachedManifest.totalChunks !== input.expectedManifest.totalChunks ||
-      input.cachedManifest.chunkSize !== input.expectedManifest.chunkSize)
-  ) {
-    return null;
-  }
-
-  return input.cachedManifest;
-}
-
-export function isManualCachePieceCompatible(input: {
-  piece: TrackPieceManifestGeometry;
-  expectedManifest: TrackPieceManifestGeometry | null | undefined;
-}) {
-  if (!input.expectedManifest) {
-    return true;
-  }
-
-  return (
-    input.piece.totalChunks === input.expectedManifest.totalChunks &&
-    input.piece.chunkSize === input.expectedManifest.chunkSize
-  );
-}
-
-export function buildManualCachePieceAvailabilityAnnouncement(input: {
-  existing?: TrackAvailabilityAnnouncement | null;
-  roomId: string;
-  trackId: string;
-  fileHash: string;
-  peerId: string;
-  nickname: string;
-  chunkIndex: number;
-  totalChunks: number;
-  chunkSize: number;
-  availableChunks?: number[];
-}) {
-  const existing = input.existing ?? null;
-  const availableChunks = new Set(
-    [...(existing?.availableChunks ?? []), ...(input.availableChunks ?? [])].filter(
-      (chunkIndex) => chunkIndex >= 0 && chunkIndex < input.totalChunks
-    )
-  );
-  availableChunks.add(input.chunkIndex);
-
-  return {
-    roomId: input.roomId,
-    trackId: input.trackId,
-    ownerPeerId: input.peerId,
-    nickname: input.nickname,
-    assetKind: "relay",
-    assetHash: input.fileHash,
-    totalChunks: input.totalChunks,
-    chunkSize: input.chunkSize,
-    availableChunks: [...availableChunks].sort((left, right) => left - right),
-    source: "local_cache",
-    announcedAt: new Date().toISOString()
-  } satisfies TrackAvailabilityAnnouncement;
-}
-
-export function mergeHydratedManualCacheTasks(input: {
-  currentTasks: Record<string, ManualCacheTask>;
-  hydratedTasks: ManualCacheTaskRecord[];
-  currentPlaybackTrackId: string | null;
-}) {
-  const hydrated = Object.fromEntries(
-    input.hydratedTasks
-      .filter(isManualCacheTaskRecord)
-      .filter((task) => task.mode === "manual" || task.trackId === input.currentPlaybackTrackId)
-      .map((task) => {
-        const status = task.status;
-        return [
-          task.trackId,
-          {
-            trackId: task.trackId,
-            status,
-            mode: task.mode,
-            fileHash: task.fileHash,
-            updatedAt: task.updatedAt,
-            errorMessage: task.errorMessage,
-            completedChunks: task.completedChunks,
-            totalChunks: task.totalChunks,
-            mimeType: task.mimeType,
-            manifestSource: task.manifestSource,
-            blockedReason: task.blockedReason,
-            integrityMode: task.integrityMode,
-            providerPeerIds: task.providerPeerIds,
-            connectedProviderPeerIds: task.connectedProviderPeerIds,
-            selectedProviderPeerId: task.selectedProviderPeerId,
-            requestableChunkCount: task.requestableChunkCount,
-            pendingChunkCount: task.pendingChunkCount,
-            lastRequestedChunks: task.lastRequestedChunks,
-            lastPieceReceivedAt: task.lastPieceReceivedAt,
-            lastError: task.lastError
-          } satisfies ManualCacheTask
-        ];
-      })
-  );
-
-  const preservedCurrent = Object.fromEntries(
-    Object.entries(input.currentTasks).filter(([, task]) => {
-      if (task.mode === "manual") {
-        return true;
-      }
-
-      return task.mode === "playback-demand" && task.trackId === input.currentPlaybackTrackId;
-    })
-  );
-
-  return {
-    ...hydrated,
-    ...preservedCurrent
-  };
-}
-
-export function resolveStalePlaybackDemandTaskIds(input: {
-  currentTasks: Record<string, ManualCacheTask>;
-  currentPlaybackTrackId: string | null;
-}) {
-  return Object.values(input.currentTasks)
-    .filter(
-      (task) =>
-        task.mode === "playback-demand" &&
-        task.trackId !== input.currentPlaybackTrackId
-    )
-    .map((task) => task.trackId)
-    .sort();
-}
-
-export function shouldHydrateCacheTaskPieceIndexes(input: {
-  mode: ManualCacheTaskRecord["mode"];
-  status: ManualCacheTaskRecord["status"];
-}) {
-  return (
-    (input.mode === "manual" || input.mode === "playback-demand") &&
-    (input.status === "queued" ||
-      input.status === "downloading" ||
-      input.status === "blocked")
-  );
-}
-
-export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
-  playback: RoomSnapshot["room"]["playback"] | null | undefined;
-  trackId: string;
-  peerId: string | null | undefined;
-  activeSessionId: string | null | undefined;
-  hasLocalFullTrack?: boolean;
-  hasCurrentTask: boolean;
-}) {
-  const playback = input.playback;
-  if (
-    input.hasCurrentTask ||
-    !playback?.currentTrackId ||
-    playback.currentTrackId !== input.trackId ||
-    !hasActivePlaybackIntent(playback)
-  ) {
-    return false;
-  }
-
-  return !isCurrentPlaybackSourceDevice({
-    playback,
-    peerId: input.peerId,
-    activeSessionId: input.activeSessionId
-  }) || input.hasLocalFullTrack === false;
-}
-
-function isManualCacheTaskRecord(
-  task: ManualCacheTaskRecord
-): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
-  return task.mode === "manual" || task.mode === "playback-demand";
-}
-
-export function resolveAutomaticPlaybackCacheTaskMode(): ManualCacheTask["mode"] {
-  return "playback-demand";
-}
-
-export function resolveMissingOwnedUploadedTracks(input: {
-  roomTracks: RehydratableRoomTrack[];
-  activeSessionId: string | null | undefined;
-  uploadedTracks: Record<string, UploadedTrack>;
-}) {
-  if (!input.activeSessionId) {
-    return [];
-  }
-
-  return input.roomTracks.filter(
-    (track) =>
-      track.ownerSessionId === input.activeSessionId &&
-      !input.uploadedTracks[track.id] &&
-      !!track.fileHash
-  );
-}
-
-export function mergeManualCachePlanTaskProgress(input: {
-  current:
-    | Pick<
-        ManualCacheTask,
-        | "completedChunks"
-        | "totalChunks"
-        | "status"
-        | "blockedReason"
-        | "lastPieceReceivedAt"
-        | "lastError"
-      >
-    | null
-    | undefined;
-  planLocalPieceIndexes: number[];
-  inMemoryPieceIndexes: Set<number> | null | undefined;
-  planTotalChunks: number | null | undefined;
-  planBlockedReason: string | null | undefined;
-}) {
-  const currentCompletedChunks = input.current?.completedChunks ?? 0;
-  const indexedPieceCount = input.planLocalPieceIndexes.length;
-  const inMemoryPieceCount = input.inMemoryPieceIndexes?.size ?? 0;
-  const completedChunks = Math.max(
-    currentCompletedChunks,
-    indexedPieceCount,
-    inMemoryPieceCount
-  );
-  const totalChunks = Math.max(input.current?.totalChunks ?? 0, input.planTotalChunks ?? 0);
-  const isComplete = totalChunks > 0 && completedChunks >= totalChunks;
-  const pendingWindowFull = input.planBlockedReason === "pending-window-full";
-  const actuallyBlocked =
-    !!input.planBlockedReason && input.planBlockedReason !== "complete" && !pendingWindowFull;
-
-  return {
-    completedChunks,
-    totalChunks,
-    status:
-      actuallyBlocked && !isComplete
-        ? ("blocked" as const)
-        : !input.current ||
-            input.current.status === "queued" ||
-            input.current.status === "blocked"
-          ? ("downloading" as const)
-          : input.current.status,
-    blockedReason: input.planBlockedReason === "complete" || isComplete ? null : input.planBlockedReason,
-    lastPieceReceivedAt: input.current?.lastPieceReceivedAt ?? null,
-    lastError: actuallyBlocked && !isComplete ? input.planBlockedReason : (input.current?.lastError ?? null)
-  };
-}
-
-export function mergeManualCachePieceTaskProgress(input: {
-  current:
-    | Pick<ManualCacheTask, "completedChunks" | "totalChunks" | "status">
-    | null
-    | undefined;
-  knownChunkIndexes: Set<number> | null | undefined;
-  receivedTotalChunks: number | null | undefined;
-}) {
-  const completedChunks = Math.max(
-    input.current?.completedChunks ?? 0,
-    input.knownChunkIndexes?.size ?? 0
-  );
-  const totalChunks = Math.max(input.current?.totalChunks ?? 0, input.receivedTotalChunks ?? 0);
-
-  return {
-    completedChunks,
-    totalChunks,
-    status:
-      input.current?.status === "paused" ||
-      input.current?.status === "ready" ||
-      input.current?.status === "assembling"
-        ? input.current.status
-        : ("downloading" as const)
-  };
-}
-
-export function shouldIgnoreManualCachePieceTaskUpdate(status: ManualCacheTaskStatus) {
-  return status === "ready" || status === "assembling";
-}
-
-export function pruneManualCacheChunkIndexesByActiveTracks(
-  chunkIndexesByTrack: Map<string, Set<number>>,
-  activeTrackIds: Set<string>
-) {
-  for (const trackId of chunkIndexesByTrack.keys()) {
-    if (!activeTrackIds.has(trackId)) {
-      chunkIndexesByTrack.delete(trackId);
-    }
-  }
-}
-
-export function shouldAssembleManualCachePlanProgress(input: {
-  status: ManualCacheTaskStatus | null | undefined;
-  completedChunks: number;
-  totalChunks: number;
-}) {
-  return (
-    input.status !== "paused" &&
-    input.status !== "ready" &&
-    input.status !== "assembling" &&
-    input.totalChunks > 0 &&
-    input.completedChunks >= input.totalChunks
-  );
-}
-
-export function shouldEnsurePlaybackDemandCacheTask(input: {
-  enableManualTrackCaching: boolean;
-  playback: RoomSnapshot["room"]["playback"] | null | undefined;
-  trackExists: boolean;
-  peerId: string | null | undefined;
-  activeSessionId: string | null | undefined;
-  hasLocalFullTrack?: boolean;
-  existingTask: Pick<ManualCacheTask, "mode" | "status"> | null | undefined;
-}) {
-  const playback = input.playback;
-  if (
-    !input.enableManualTrackCaching ||
-    !playback?.currentTrackId ||
-    !hasActivePlaybackIntent(playback) ||
-    !input.trackExists
-  ) {
-    return false;
-  }
-
-  if (
-    isCurrentPlaybackSourceDevice({
-      playback,
-      peerId: input.peerId,
-      activeSessionId: input.activeSessionId
-    }) &&
-    input.hasLocalFullTrack !== false
-  ) {
-    return false;
-  }
-
-  if (!input.existingTask) {
-    return true;
-  }
-
-  if (input.existingTask.mode === "manual") {
-    if (input.existingTask.status === "ready") {
-      return input.hasLocalFullTrack === false;
-    }
-
-    return (
-      input.existingTask.status === "idle" ||
-      input.existingTask.status === "failed" ||
-      input.existingTask.status === "failed-integrity"
-    );
-  }
-
-  if (input.existingTask.status === "ready") {
-    return input.hasLocalFullTrack === false;
-  }
-
-  return (
-    input.existingTask.status === "idle" ||
-    input.existingTask.status === "failed" ||
-    input.existingTask.status === "failed-integrity"
-  );
-}
-
-export function hasUsableCachedLibraryFileForRoomTrack(input: {
-  cachedTrack:
-    | (CachedLibraryTrackRecord & { file?: Blob | null })
-    | (CachedLibraryTrackSummaryRecord & { file?: Blob | null })
-    | CachedLibraryTrack
-    | CachedLibraryTrackFile
-    | null
-    | undefined;
-  roomTrack:
-    | Pick<TrackMeta, "id" | "fileHash" | "durationMs" | "sizeBytes">
-    | null
-    | undefined;
-}) {
-  return !!(
-    input.cachedTrack &&
-    "file" in input.cachedTrack &&
-    input.cachedTrack.file &&
-    isCachedLibraryTrackUsableForRoomTrack({
-      cachedTrack: input.cachedTrack,
-      roomTrack: input.roomTrack
-    })
-  );
-}
+export {
+  buildCachedLibraryTrackRegisterPayload,
+  buildRegisterTrackPayload
+} from "./upload-pipeline";
+export {
+  createInFlightCachedLibraryTrackFileLoader,
+  hasUsableCachedLibraryFileForRoomTrack
+} from "./cache-library";
+export {
+  buildManualCachePieceAvailabilityAnnouncement,
+  isManualCachePieceCompatible,
+  resolveMissingOwnedUploadedTracks,
+  resolveReusableCachedPieceManifest,
+  shouldAnnounceTrackAvailability
+} from "./track-availability";
+export {
+  mergeHydratedManualCacheTasks,
+  mergeManualCachePieceTaskProgress,
+  mergeManualCachePlanTaskProgress,
+  pruneManualCacheChunkIndexesByActiveTracks,
+  resolveAutomaticPlaybackCacheTaskMode,
+  resolveStalePlaybackDemandTaskIds,
+  shouldAssembleManualCachePlanProgress,
+  shouldCreatePlaybackDemandTaskFromCachePiece,
+  shouldEnsurePlaybackDemandCacheTask,
+  shouldHydrateCacheTaskPieceIndexes,
+  shouldIgnoreManualCachePieceTaskUpdate
+} from "./upload-ui-state";
+export type {
+  ManualCacheTask,
+  ManualCacheTaskStatus
+} from "./upload-ui-state";
 
 export function useTrackUploads(options: {
   peerId: string;
