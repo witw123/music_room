@@ -277,6 +277,21 @@ describe("room page clipboard actions boundary", () => {
   });
 });
 
+describe("room page feature assembly shape", () => {
+  it("keeps feature hook results bundled in the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toMatch(/const\s+\{[\s\S]*?\}\s*=\s*useRoomPageState\(/);
+    expect(appSource).not.toMatch(/const\s+\{[\s\S]*?\}\s*=\s*useTrackUploads\(/);
+    expect(appSource).not.toMatch(/const\s+\{[\s\S]*?\}\s*=\s*useRoomPageRoomActions\(/);
+    expect(appSource).not.toMatch(/const\s+\{[\s\S]*?\}\s*=\s*useRoomPlaybackActions\(/);
+    expect(appSource.split("\n").length).toBeLessThanOrEqual(520);
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({

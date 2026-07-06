@@ -85,58 +85,7 @@ export function MusicRoomApp({
   const roomSnapshot = roomState.snapshot;
   const [peerId, setPeerId] = useState("");
   const playbackSourceInitializationKeyRef = useRef<string | null>(null);
-  const {
-    setAvailableRooms,
-    setPlaylists,
-    connectedPeers,
-    setConnectedPeers,
-    mediaConnectedPeers,
-    setMediaConnectedPeers,
-    suppressRoomRecovery,
-    setSuppressRoomRecovery,
-    isRecoveringRoom,
-    setIsRecoveringRoom,
-    isNavigatingRoomExit,
-    setIsNavigatingRoomExit,
-    mediaConnectionState,
-    setMediaConnectionState,
-    iceConfig,
-    setIceConfig,
-    iceConfigResolved,
-    setIceConfigResolved,
-    activeDashboardTab,
-    setActiveDashboardTab,
-    activePlaybackSource,
-    setActivePlaybackSource,
-    progressiveFallbackReason,
-    setProgressiveFallbackReason,
-    playbackStartIntent,
-    setPlaybackStartIntent,
-    roomRecoveryState,
-    setRoomRecoveryState,
-    isDiagnosticsPanelOpen,
-    setIsDiagnosticsPanelOpen,
-    isPageVisible,
-    setIsPageVisible,
-    schedulerMode,
-    setSchedulerMode,
-    volume,
-    setVolume,
-    schedulerPlaybackBucketMs,
-    setSchedulerPlaybackBucketMs,
-    playerResetEpoch,
-    setPlayerResetEpoch,
-    bufferHealth,
-    setBufferHealth,
-    audioUnlocked,
-    setAudioUnlocked,
-    sourceStartState,
-    setSourceStartState,
-    lastSourceStartError,
-    setLastSourceStartError,
-    audioBlockedOverlay,
-    setAudioBlockedOverlay
-  } = useRoomPageState({
+  const pageState = useRoomPageState({
     audioUnlocked: roomAudioOutput.isActivated()
   });
 
@@ -166,7 +115,8 @@ export function MusicRoomApp({
   });
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
     usePeerDiagnostics({
-      highFrequencyEnabled: activeDashboardTab === "members" && isDiagnosticsPanelOpen
+      highFrequencyEnabled:
+        pageState.activeDashboardTab === "members" && pageState.isDiagnosticsPanelOpen
     });
 
   const canControlPlayback = !!activeSession && !!roomSnapshot;
@@ -191,26 +141,7 @@ export function MusicRoomApp({
   });
   const roomPlaybackRef = useRef(roomPlayback);
   roomPlaybackRef.current = roomPlayback;
-  const {
-    uploadedTracks,
-    cachedTrackCount,
-    cacheLibraryTracks,
-    manualCacheTasks,
-    manualCacheTrackIds,
-    handleFilesSelected: handleTrackFilesSelected,
-    announceRoomTrackAvailability,
-    startManualCacheDownload,
-    startPlaybackDemandCacheDownload,
-    pauseManualCacheDownload,
-    handleManualCachePieceReceived,
-    handleManualCachePlan,
-    deleteUploadedTrackArtifacts,
-    deleteRoomTrackArtifacts,
-    deleteCachedLibraryTrackEntry,
-    loadCachedLibraryTrackFile,
-    exportCachedLibraryTrack,
-    importCachedLibraryTrackToRoom
-  } = useTrackUploads({
+  const uploads = useTrackUploads({
     peerId,
     activeSession,
     roomSnapshot,
@@ -220,15 +151,10 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability
   });
 
-  const {
-    cachedFullLocalPlaybackTrack,
-    fullLocalPlaybackTracks,
-    hasPlayableFullLocalTrack,
-    loadCachedFullLocalPlaybackTrack
-  } = useRoomCachedFullLocalPlayback({
-    uploadedTracks,
-    cacheLibraryTracks,
-    loadCachedLibraryTrackFile,
+  const cachedPlayback = useRoomCachedFullLocalPlayback({
+    uploadedTracks: uploads.uploadedTracks,
+    cacheLibraryTracks: uploads.cacheLibraryTracks,
+    loadCachedLibraryTrackFile: uploads.loadCachedLibraryTrackFile,
     roomSnapshot,
     currentTrack,
     currentPlaybackTrackId
@@ -240,60 +166,36 @@ export function MusicRoomApp({
     peerId
   });
 
-  const {
-    progressiveSchedulerPolicy,
-    transportGovernorMode,
-    getLocalPlaybackPositionMs,
-    destroyProgressiveRuntime
-  } =
-    useProgressiveRuntime({
+  const progressiveRuntime = useProgressiveRuntime({
       audioRef,
       roomSnapshot,
       currentTrack,
       peerId,
       availabilityByTrack,
-      uploadedTracks,
-      fullLocalPlaybackTracks,
+      uploadedTracks: uploads.uploadedTracks,
+      fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
       isCurrentSourceOwner,
-      activePlaybackSource,
-      setActivePlaybackSource,
-      progressiveFallbackReason,
-      setProgressiveFallbackReason,
-      playbackStartIntent,
-      setPlaybackStartIntent,
-      audioUnlocked,
-      roomRecoveryState,
-      isPageVisible,
-      volume,
-      connectedPeersCount: connectedPeers.length,
-      mediaConnectedPeersCount: mediaConnectedPeers.length,
+      activePlaybackSource: pageState.activePlaybackSource,
+      setActivePlaybackSource: pageState.setActivePlaybackSource,
+      progressiveFallbackReason: pageState.progressiveFallbackReason,
+      setProgressiveFallbackReason: pageState.setProgressiveFallbackReason,
+      playbackStartIntent: pageState.playbackStartIntent,
+      setPlaybackStartIntent: pageState.setPlaybackStartIntent,
+      audioUnlocked: pageState.audioUnlocked,
+      roomRecoveryState: pageState.roomRecoveryState,
+      isPageVisible: pageState.isPageVisible,
+      volume: pageState.volume,
+      connectedPeersCount: pageState.connectedPeers.length,
+      mediaConnectedPeersCount: pageState.mediaConnectedPeers.length,
       peerDiagnostics,
       recordPeerDiagnostic,
       setStatusMessage,
-      setSchedulerMode,
-      setBufferHealth,
-      setMediaConnectionState
-    });
+      setSchedulerMode: pageState.setSchedulerMode,
+      setBufferHealth: pageState.setBufferHealth,
+      setMediaConnectionState: pageState.setMediaConnectionState
+  });
 
-  const {
-    deleteTrack,
-    addToQueue,
-    playTrack,
-    playQueueItem,
-    pauseTrack,
-    prevTrack,
-    nextTrack,
-    removeQueueItem,
-    reorderQueue,
-    seekTrack,
-    handleClearIdentity,
-    handleLeaveRoomAction,
-    handleDeleteRoomAction,
-    handleLogout,
-    refreshAvailableRooms,
-    refreshPlaylists,
-    resetPlayerSurface
-  } = useRoomPageRoomActions({
+  const roomActions = useRoomPageRoomActions({
     workspaceOnly,
     workspaceEntryHref,
     authEntryHref,
@@ -302,9 +204,9 @@ export function MusicRoomApp({
     audioRef,
     clearIdentity,
     currentPlaybackPositionRef,
-    deleteRoomTrackArtifacts,
-    deleteUploadedTrackArtifacts,
-    destroyProgressiveRuntime,
+    deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
+    deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
+    destroyProgressiveRuntime: progressiveRuntime.destroyProgressiveRuntime,
     dispatchRoomStateEvent,
     peerId,
     peerStorageKey,
@@ -312,24 +214,24 @@ export function MusicRoomApp({
     resetAvailabilityState,
     resetPeerDiagnostics,
     roomSnapshot,
-    setActivePlaybackSource,
-    setAvailableRooms,
-    setBufferHealth,
-    setIsNavigatingRoomExit,
-    setMediaConnectedPeers,
-    setMediaConnectionState,
+    setActivePlaybackSource: pageState.setActivePlaybackSource,
+    setAvailableRooms: pageState.setAvailableRooms,
+    setBufferHealth: pageState.setBufferHealth,
+    setIsNavigatingRoomExit: pageState.setIsNavigatingRoomExit,
+    setMediaConnectedPeers: pageState.setMediaConnectedPeers,
+    setMediaConnectionState: pageState.setMediaConnectionState,
     setPeerId,
-    setPlaybackStartIntent,
-    setPlayerResetEpoch,
-    setPlaylists,
-    setProgressiveFallbackReason,
-    setRoomRecoveryState,
-    setSchedulerPlaybackBucketMs,
+    setPlaybackStartIntent: pageState.setPlaybackStartIntent,
+    setPlayerResetEpoch: pageState.setPlayerResetEpoch,
+    setPlaylists: pageState.setPlaylists,
+    setProgressiveFallbackReason: pageState.setProgressiveFallbackReason,
+    setRoomRecoveryState: pageState.setRoomRecoveryState,
+    setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
     setStatusMessage,
-    setSuppressRoomRecovery,
+    setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
   });
 
-  const { ensureSourcePlaybackStarted } = useRoomRuntime({
+  const roomRuntime = useRoomRuntime({
     workspaceOnly,
     initialRoomId,
     hydrated,
@@ -347,79 +249,68 @@ export function MusicRoomApp({
     currentRoomRef,
     peerId,
     setPeerId,
-    connectedPeers,
-    setConnectedPeers,
-    mediaConnectedPeers,
-    setMediaConnectedPeers,
-    suppressRoomRecovery,
-    setSuppressRoomRecovery,
-    setIsRecoveringRoom,
-    isNavigatingRoomExit,
-    setIsNavigatingRoomExit,
-    iceConfig,
-    setIceConfig,
-    iceConfigResolved,
-    setIceConfigResolved,
-    mediaConnectionState,
-    setMediaConnectionState,
-    isPageVisible,
-    setIsPageVisible,
-    schedulerMode,
-    setSchedulerMode,
-    schedulerPlaybackBucketMs,
-    bufferHealth,
-    transportGovernorMode,
-    activePlaybackSource,
-    progressiveSchedulerPolicy,
+    connectedPeers: pageState.connectedPeers,
+    setConnectedPeers: pageState.setConnectedPeers,
+    mediaConnectedPeers: pageState.mediaConnectedPeers,
+    setMediaConnectedPeers: pageState.setMediaConnectedPeers,
+    suppressRoomRecovery: pageState.suppressRoomRecovery,
+    setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
+    setIsRecoveringRoom: pageState.setIsRecoveringRoom,
+    isNavigatingRoomExit: pageState.isNavigatingRoomExit,
+    setIsNavigatingRoomExit: pageState.setIsNavigatingRoomExit,
+    iceConfig: pageState.iceConfig,
+    setIceConfig: pageState.setIceConfig,
+    iceConfigResolved: pageState.iceConfigResolved,
+    setIceConfigResolved: pageState.setIceConfigResolved,
+    mediaConnectionState: pageState.mediaConnectionState,
+    setMediaConnectionState: pageState.setMediaConnectionState,
+    isPageVisible: pageState.isPageVisible,
+    setIsPageVisible: pageState.setIsPageVisible,
+    schedulerMode: pageState.schedulerMode,
+    setSchedulerMode: pageState.setSchedulerMode,
+    schedulerPlaybackBucketMs: pageState.schedulerPlaybackBucketMs,
+    bufferHealth: pageState.bufferHealth,
+    transportGovernorMode: progressiveRuntime.transportGovernorMode,
+    activePlaybackSource: pageState.activePlaybackSource,
+    progressiveSchedulerPolicy: progressiveRuntime.progressiveSchedulerPolicy,
     isCurrentSourceOwner,
-    hasFullLocalTrack: hasPlayableFullLocalTrack,
-    audioUnlocked,
-    getLocalPlaybackPositionMs,
-    setAudioUnlocked,
-    roomRecoveryState,
-    setRoomRecoveryState,
-    sourceStartState,
-    setSourceStartState,
-    lastSourceStartError,
-    setLastSourceStartError,
+    hasFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,
+    audioUnlocked: pageState.audioUnlocked,
+    getLocalPlaybackPositionMs: progressiveRuntime.getLocalPlaybackPositionMs,
+    setAudioUnlocked: pageState.setAudioUnlocked,
+    roomRecoveryState: pageState.roomRecoveryState,
+    setRoomRecoveryState: pageState.setRoomRecoveryState,
+    sourceStartState: pageState.sourceStartState,
+    setSourceStartState: pageState.setSourceStartState,
+    lastSourceStartError: pageState.lastSourceStartError,
+    setLastSourceStartError: pageState.setLastSourceStartError,
     availabilityByTrack,
     queueAvailability,
     clearAvailabilityForPeer,
     flushPendingAvailability,
     recordPeerDiagnostic,
-    uploadedTracks,
-    fullLocalPlaybackTracks,
-    uploadedTrackIds: Object.keys(uploadedTracks),
+    uploadedTracks: uploads.uploadedTracks,
+    fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
+    uploadedTrackIds: Object.keys(uploads.uploadedTracks),
     uploadedTrackIdsRef,
-    manualCacheTrackIds,
-    startPlaybackDemandCacheDownload,
-    announceRoomTrackAvailability,
-    handleManualCachePieceReceived,
-    handleManualCachePlan,
-    deleteUploadedTrackArtifacts,
-    deleteRoomTrackArtifacts,
+    manualCacheTrackIds: uploads.manualCacheTrackIds,
+    startPlaybackDemandCacheDownload: uploads.startPlaybackDemandCacheDownload,
+    announceRoomTrackAvailability: uploads.announceRoomTrackAvailability,
+    handleManualCachePieceReceived: uploads.handleManualCachePieceReceived,
+    handleManualCachePlan: uploads.handleManualCachePlan,
+    deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
+    deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
     audioRef,
     socketRef,
     chunkSchedulerRef,
-    resetPlayerSurface,
+    resetPlayerSurface: roomActions.resetPlayerSurface,
     setStatusMessage,
     statusMessage,
-    refreshAvailableRooms,
-    refreshPlaylists
+    refreshAvailableRooms: roomActions.refreshAvailableRooms,
+    refreshPlaylists: roomActions.refreshPlaylists
   });
 
-  const {
-    handleAudioUnlock,
-    handleFilesSelected,
-    handleLocalPlaybackReady,
-    handleNextTrack,
-    handlePlayQueueItem,
-    handlePlaybackBucketChange,
-    handlePlaybackEnded,
-    handlePlaybackPositionChange,
-    handlePlayTrack,
-    handlePrevTrack
-  } = useRoomPlaybackActions({
+  const playbackActions = useRoomPlaybackActions({
     audioRef,
     currentPlaybackPositionRef,
     roomPlaybackRef,
@@ -431,52 +322,46 @@ export function MusicRoomApp({
     playbackRevision,
     playbackStatus,
     isCurrentSourceOwner,
-    audioUnlocked,
-    volume,
-    fullLocalPlaybackTracks,
-    loadCachedFullLocalPlaybackTrack,
-    ensureSourcePlaybackStarted,
-    handleTrackFilesSelected,
-    playTrack,
-    playQueueItem,
-    prevTrack,
-    nextTrack,
+    audioUnlocked: pageState.audioUnlocked,
+    volume: pageState.volume,
+    fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
+    loadCachedFullLocalPlaybackTrack: cachedPlayback.loadCachedFullLocalPlaybackTrack,
+    ensureSourcePlaybackStarted: roomRuntime.ensureSourcePlaybackStarted,
+    handleTrackFilesSelected: uploads.handleFilesSelected,
+    playTrack: roomActions.playTrack,
+    playQueueItem: roomActions.playQueueItem,
+    prevTrack: roomActions.prevTrack,
+    nextTrack: roomActions.nextTrack,
     recordPeerDiagnostic,
-    setActivePlaybackSource,
-    setAudioBlockedOverlay,
-    setAudioUnlocked,
-    setLastSourceStartError,
-    setMediaConnectionState,
-    setPlaybackStartIntent,
-    setProgressiveFallbackReason,
-    setSchedulerPlaybackBucketMs,
+    setActivePlaybackSource: pageState.setActivePlaybackSource,
+    setAudioBlockedOverlay: pageState.setAudioBlockedOverlay,
+    setAudioUnlocked: pageState.setAudioUnlocked,
+    setLastSourceStartError: pageState.setLastSourceStartError,
+    setMediaConnectionState: pageState.setMediaConnectionState,
+    setPlaybackStartIntent: pageState.setPlaybackStartIntent,
+    setProgressiveFallbackReason: pageState.setProgressiveFallbackReason,
+    setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
     setStatusMessage
   });
 
-  const {
-    handleAddCachedLibraryTrackToLibrary,
-    handleDeleteCachedLibraryTrack,
-    handleExportCachedLibraryTrack,
-    handlePauseManualCacheDownload,
-    handleStartManualCacheDownload
-  } = useRoomCacheLibraryActions({
+  const cacheActions = useRoomCacheLibraryActions({
     roomSnapshot,
-    startManualCacheDownload,
-    pauseManualCacheDownload,
-    deleteCachedLibraryTrackEntry,
-    exportCachedLibraryTrack,
-    importCachedLibraryTrackToRoom,
+    startManualCacheDownload: uploads.startManualCacheDownload,
+    pauseManualCacheDownload: uploads.pauseManualCacheDownload,
+    deleteCachedLibraryTrackEntry: uploads.deleteCachedLibraryTrackEntry,
+    exportCachedLibraryTrack: uploads.exportCachedLibraryTrack,
+    importCachedLibraryTrackToRoom: uploads.importCachedLibraryTrackToRoom,
     setStatusMessage
   });
 
   useRoomPlaybackEffects({
-    cachedFullLocalPlaybackTrack,
+    cachedFullLocalPlaybackTrack: cachedPlayback.cachedFullLocalPlaybackTrack,
     currentPlaybackTrackId,
     currentProgressiveEngineTypeForSource,
     currentTrack,
     dispatchRoomStateEvent,
-    ensureSourcePlaybackStarted,
-    hasPlayableFullLocalTrack,
+    ensureSourcePlaybackStarted: roomRuntime.ensureSourcePlaybackStarted,
+    hasPlayableFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,
     initialRoomId,
     isCurrentSourceOwner,
     playbackSourceInitializationKeyRef,
@@ -485,109 +370,96 @@ export function MusicRoomApp({
     playbackTimelineKey,
     playbackTopologySnapshot,
     recordPeerDiagnostic,
-    setActivePlaybackSource,
-    setProgressiveFallbackReason
+    setActivePlaybackSource: pageState.setActivePlaybackSource,
+    setProgressiveFallbackReason: pageState.setProgressiveFallbackReason
   });
 
-  const { handleCopyJoinCode } = useRoomClipboardActions({
+  const clipboardActions = useRoomClipboardActions({
     roomSnapshot,
     setStatusMessage
   });
 
-  const {
-    canDisbandRoom,
-    connectedPeersCount,
-    mediaConnectedPeersCount,
-    availabilitySummary,
-    memberTransferSummaries,
-    localMemberState,
-    statusTone,
-    iceConfigStatus,
-    iceConfigSource,
-    isRoomTransitionPending,
-    showRoomTransitionState,
-    workspacePeerDiagnostics
-  } = useRoomWorkspaceViewModel({
+  const workspaceViewModel = useRoomWorkspaceViewModel({
     roomSnapshot,
     peerId,
-    connectedPeers,
-    mediaConnectedPeers,
-    activeDashboardTab,
+    connectedPeers: pageState.connectedPeers,
+    mediaConnectedPeers: pageState.mediaConnectedPeers,
+    activeDashboardTab: pageState.activeDashboardTab,
     currentTrack,
     availabilityByTrack,
     peerDiagnostics,
     peerRecentEvents,
     canDeleteRoom,
     statusMessage,
-    iceConfig,
-    iceConfigResolved,
+    iceConfig: pageState.iceConfig,
+    iceConfigResolved: pageState.iceConfigResolved,
     workspaceOnly,
     initialRoomId,
     activeSessionUserId: activeSession?.userId,
-    mediaConnectionState,
-    audioUnlocked,
-    sourceStartState,
-    lastSourceStartError,
-    suppressRoomRecovery,
-    isNavigatingRoomExit,
-    isRecoveringRoom
+    mediaConnectionState: pageState.mediaConnectionState,
+    audioUnlocked: pageState.audioUnlocked,
+    sourceStartState: pageState.sourceStartState,
+    lastSourceStartError: pageState.lastSourceStartError,
+    suppressRoomRecovery: pageState.suppressRoomRecovery,
+    isNavigatingRoomExit: pageState.isNavigatingRoomExit,
+    isRecoveringRoom: pageState.isRecoveringRoom
   });
 
   return (
     <>
       <AudioUnlockOverlay
-        visible={audioBlockedOverlay}
-        onUnlock={handleAudioUnlock}
+        visible={pageState.audioBlockedOverlay}
+        onUnlock={playbackActions.handleAudioUnlock}
       />
       <RoomWorkspace
         activeSession={activeSession}
         statusMessage={statusMessage}
-        statusTone={statusTone}
+        statusTone={workspaceViewModel.statusTone}
         roomSnapshot={roomSnapshot}
         currentTrack={currentTrack}
         canControlPlayback={canControlPlayback}
         canDeleteRoom={canDeleteRoom}
-        canDisbandRoom={canDisbandRoom}
+        canDisbandRoom={workspaceViewModel.canDisbandRoom}
         canReorderQueue={canReorderQueue}
-        uploadedTracks={uploadedTracks}
-        connectedPeersCount={connectedPeersCount}
-        mediaConnectionState={mediaConnectionState}
-        mediaConnectedPeersCount={mediaConnectedPeersCount}
-        cachedTrackCount={cachedTrackCount}
-        cacheLibraryTracks={cacheLibraryTracks}
-        manualCacheTasks={manualCacheTasks}
-        availabilitySummary={availabilitySummary}
-        memberTransferSummaries={memberTransferSummaries}
-        localMemberState={localMemberState}
-        peerDiagnostics={workspacePeerDiagnostics.peerDiagnostics}
-        peerRecentEvents={workspacePeerDiagnostics.peerRecentEvents}
-        iceConfigSource={iceConfigSource}
-        iceConfigStatus={iceConfigStatus}
+        uploadedTracks={uploads.uploadedTracks}
+        connectedPeersCount={workspaceViewModel.connectedPeersCount}
+        mediaConnectionState={pageState.mediaConnectionState}
+        mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
+        cachedTrackCount={uploads.cachedTrackCount}
+        cacheLibraryTracks={uploads.cacheLibraryTracks}
+        manualCacheTasks={uploads.manualCacheTasks}
+        availabilitySummary={workspaceViewModel.availabilitySummary}
+        memberTransferSummaries={workspaceViewModel.memberTransferSummaries}
+        localMemberState={workspaceViewModel.localMemberState}
+        peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
+        peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}
+        iceConfigSource={workspaceViewModel.iceConfigSource}
+        iceConfigStatus={workspaceViewModel.iceConfigStatus}
         workspaceEntryHref={workspaceEntryHref}
         authEntryHref={authEntryHref}
-        showRoomTransitionState={showRoomTransitionState}
-        isNavigatingRoomExit={isNavigatingRoomExit}
-        isRecoveringRoom={isRecoveringRoom}
-        isRoomTransitionPending={isRoomTransitionPending}
-        onLogout={handleLogout}
-        onClearIdentity={handleClearIdentity}
-        onCopyJoinCode={handleCopyJoinCode}
-        onLeaveRoom={handleLeaveRoomAction}
-        onDeleteRoom={handleDeleteRoomAction}
-        onFilesSelected={handleFilesSelected}
-        onAddToQueue={addToQueue}
-        onDeleteTrack={deleteTrack}
-        onPlayTrack={handlePlayTrack}
-        onStartManualCacheDownload={handleStartManualCacheDownload}
-        onPauseManualCacheDownload={handlePauseManualCacheDownload}
-        onAddCachedLibraryTrackToLibrary={handleAddCachedLibraryTrackToLibrary}
-        onExportCachedLibraryTrack={handleExportCachedLibraryTrack}
-        onDeleteCachedLibraryTrack={handleDeleteCachedLibraryTrack}
-        onPlayQueueItem={handlePlayQueueItem}
-        onRemoveQueueItem={removeQueueItem}
-        onReorderQueue={reorderQueue}
-        onTabChange={setActiveDashboardTab}
-        onDiagnosticsVisibilityChange={setIsDiagnosticsPanelOpen}
+        showRoomTransitionState={workspaceViewModel.showRoomTransitionState}
+        isNavigatingRoomExit={pageState.isNavigatingRoomExit}
+        isRecoveringRoom={pageState.isRecoveringRoom}
+        isRoomTransitionPending={workspaceViewModel.isRoomTransitionPending}
+        onLogout={roomActions.handleLogout}
+        onClearIdentity={roomActions.handleClearIdentity}
+        onCopyJoinCode={clipboardActions.handleCopyJoinCode}
+        onLeaveRoom={roomActions.handleLeaveRoomAction}
+        onDeleteRoom={roomActions.handleDeleteRoomAction}
+        onFilesSelected={playbackActions.handleFilesSelected}
+        onAddToQueue={roomActions.addToQueue}
+        onDeleteTrack={roomActions.deleteTrack}
+        onPlayTrack={playbackActions.handlePlayTrack}
+        onStartManualCacheDownload={cacheActions.handleStartManualCacheDownload}
+        onPauseManualCacheDownload={cacheActions.handlePauseManualCacheDownload}
+        onAddCachedLibraryTrackToLibrary={cacheActions.handleAddCachedLibraryTrackToLibrary}
+        onExportCachedLibraryTrack={cacheActions.handleExportCachedLibraryTrack}
+        onDeleteCachedLibraryTrack={cacheActions.handleDeleteCachedLibraryTrack}
+        onPlayQueueItem={playbackActions.handlePlayQueueItem}
+        onRemoveQueueItem={roomActions.removeQueueItem}
+        onReorderQueue={roomActions.reorderQueue}
+        onTabChange={pageState.setActiveDashboardTab}
+        onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
         socket={socketRef.current}
         isSyncPending={false}
         playerSlot={
@@ -596,18 +468,18 @@ export function MusicRoomApp({
             roomSnapshot={roomSnapshot}
             activeSession={activeSession}
             currentTrack={currentTrack}
-            resetEpoch={playerResetEpoch}
-            onPlaybackPositionChange={handlePlaybackPositionChange}
-            onPlaybackBucketChange={handlePlaybackBucketChange}
-            onVolumeChange={setVolume}
-            getLocalPlaybackPositionMs={getLocalPlaybackPositionMs}
-            onPlay={handlePlayTrack}
-            onPause={pauseTrack}
-            onSeek={seekTrack}
-            onPrev={handlePrevTrack}
-            onNext={handleNextTrack}
-            onEnded={handlePlaybackEnded}
-            onLocalPlaybackReady={handleLocalPlaybackReady}
+            resetEpoch={pageState.playerResetEpoch}
+            onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
+            onPlaybackBucketChange={playbackActions.handlePlaybackBucketChange}
+            onVolumeChange={pageState.setVolume}
+            getLocalPlaybackPositionMs={progressiveRuntime.getLocalPlaybackPositionMs}
+            onPlay={playbackActions.handlePlayTrack}
+            onPause={roomActions.pauseTrack}
+            onSeek={roomActions.seekTrack}
+            onPrev={playbackActions.handlePrevTrack}
+            onNext={playbackActions.handleNextTrack}
+            onEnded={playbackActions.handlePlaybackEnded}
+            onLocalPlaybackReady={playbackActions.handleLocalPlaybackReady}
           />
         }
       />
