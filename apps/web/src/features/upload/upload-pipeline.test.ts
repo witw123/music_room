@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
-import { processSelectedTrackFiles } from "./upload-pipeline";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
+import { applySelectedTrackFilesResult, processSelectedTrackFiles } from "./upload-pipeline";
 
 const buildTrack = (id: string, fileHash: string): TrackMeta => ({
   id,
@@ -98,5 +99,53 @@ describe("processSelectedTrackFiles", () => {
     expect(publishedAvailability).toEqual(["room_1:track_new"]);
     expect(revokedUrls).toEqual(["blob:existing.flac", "blob:busy.flac"]);
     expect([...inFlightUploadHashes]).toEqual(["user_1:hash_busy"]);
+  });
+});
+
+describe("applySelectedTrackFilesResult", () => {
+  it("merges uploads, syncs rooms with registrations, and reports imported count", async () => {
+    const file = new File(["new"], "new.flac", { type: "audio/flac" });
+    let uploadedTracks: Record<string, UploadedTrack> = {
+      track_existing: {
+        file: new File(["existing"], "existing.flac", { type: "audio/flac" }),
+        objectUrl: "blob:existing",
+        origin: "live-upload" as const
+      }
+    };
+    const syncedRooms: string[] = [];
+    const statusMessages: string[] = [];
+
+    await applySelectedTrackFilesResult({
+      roomId: "room_1",
+      result: {
+        uploads: {
+          track_new: {
+            file,
+            objectUrl: "blob:new",
+            origin: "live-upload"
+          }
+        },
+        registeredTracks: [buildTrack("track_new", "hash_new")],
+        importedCount: 1
+      },
+      setUploadedTracks: (updater) => {
+        uploadedTracks = updater(uploadedTracks);
+      },
+      syncRoomSnapshot: async (roomId) => {
+        syncedRooms.push(roomId);
+      },
+      setStatusMessage: (message) => {
+        statusMessages.push(message);
+      }
+    });
+
+    expect(Object.keys(uploadedTracks).sort()).toEqual(["track_existing", "track_new"]);
+    expect(uploadedTracks.track_new).toMatchObject({
+      file,
+      objectUrl: "blob:new",
+      origin: "live-upload"
+    });
+    expect(syncedRooms).toEqual(["room_1"]);
+    expect(statusMessages).toEqual(["1 首本地歌曲已导入房间曲库。"]);
   });
 });

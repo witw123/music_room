@@ -151,3 +151,26 @@ export async function processSelectedTrackFiles(input: {
     importedCount: Object.keys(uploads).length
   };
 }
+
+export async function applySelectedTrackFilesResult(input: {
+  roomId: string;
+  result: {
+    uploads: Record<string, UploadedTrack>;
+    registeredTracks: TrackMeta[];
+    importedCount: number;
+  };
+  setUploadedTracks: (
+    updater: (current: Record<string, UploadedTrack>) => Record<string, UploadedTrack>
+  ) => void;
+  syncRoomSnapshot: (roomId: string) => Promise<void>;
+  setStatusMessage: (message: string) => void;
+}) {
+  input.setUploadedTracks((current) => ({
+    ...current,
+    ...input.result.uploads
+  }));
+  if (input.result.registeredTracks.length > 0) {
+    await input.syncRoomSnapshot(input.roomId);
+  }
+  input.setStatusMessage(`${input.result.importedCount} 首本地歌曲已导入房间曲库。`);
+}

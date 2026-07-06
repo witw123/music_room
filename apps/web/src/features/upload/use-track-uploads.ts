@@ -74,6 +74,7 @@ import {
   hydrateManualCacheTasksForRoom
 } from "./manual-cache-task-store";
 import {
+  applySelectedTrackFilesResult,
   buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
   processSelectedTrackFiles
@@ -507,11 +508,7 @@ export function useTrackUploads(options: {
         }
       });
 
-      setUploadedTracks((current) => ({ ...current, ...result.uploads }));
-      if (result.registeredTracks.length > 0) {
-        await syncRoomSnapshot(roomId);
-      }
-      setStatusMessage(`${result.importedCount} 首本地歌曲已导入房间曲库。`);
+      await applySelectedTrackFilesResult({ roomId, result, setUploadedTracks, syncRoomSnapshot, setStatusMessage });
     },
     [
       activeSession,
