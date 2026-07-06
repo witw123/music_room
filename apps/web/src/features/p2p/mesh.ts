@@ -24,6 +24,12 @@ import {
   type BinaryPieceMessage,
   type PendingIncomingPieceFragments
 } from "./piece-frame-codec";
+import {
+  SignalingTransport,
+  shouldIgnoreStaleAnswerError,
+  toIceCandidateInit,
+  toSessionDescriptionInit
+} from "./signaling-transport";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -235,6 +241,7 @@ export class P2PMesh {
   private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
   private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
+  private readonly signaling: SignalingTransport;
 
   constructor(
     private readonly roomId: string,
@@ -248,6 +255,12 @@ export class P2PMesh {
     this.resolveConnectionConfig = options.resolveConnectionConfig;
     this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
     this.resolveTrackCacheIdentity = options.resolveTrackCacheIdentity;
+    this.signaling = new SignalingTransport({
+      roomId: this.roomId,
+      localPeerId: this.localPeerId,
+      sendSignal: this.sendSignal,
+      onSignal: this.callbacks.onSignal
+    });
   }
 
   async syncPeers(
@@ -297,11 +310,7 @@ export class P2PMesh {
 
     if (payload.type === "offer") {
       await this.enqueuePeerOperation(entry, async () => {
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "received",
-          type: "offer"
-        });
+        this.signaling.markReceived(payload.fromPeerId, "offer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
           return;
@@ -319,30 +328,14 @@ export class P2PMesh {
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = Date.now();
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "sent",
-          type: "answer"
-        });
-        this.sendSignal({
-          roomId: this.roomId,
-          fromPeerId: this.localPeerId,
-          toPeerId: payload.fromPeerId,
-          channelKind: "data",
-          type: "answer",
-          payload: answer as unknown as Record<string, unknown>
-        });
+        this.signaling.send(payload.fromPeerId, "answer", answer as unknown as Record<string, unknown>);
       });
       return;
     }
 
     if (payload.type === "answer") {
       await this.enqueuePeerOperation(entry, async () => {
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "received",
-          type: "answer"
-        });
+        this.signaling.markReceived(payload.fromPeerId, "answer");
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
           return;
@@ -361,11 +354,7 @@ export class P2PMesh {
 
     if (payload.type === "candidate") {
       await this.enqueuePeerOperation(entry, async () => {
-        this.callbacks.onSignal?.({
-          peerId: payload.fromPeerId,
-          direction: "received",
-          type: "candidate"
-        });
+        this.signaling.markReceived(payload.fromPeerId, "candidate");
         const candidate = toIceCandidateInit(payload.payload);
         if (!candidate) {
           return;
@@ -520,19 +509,7 @@ export class P2PMesh {
       const offer = await entry.connection.createOffer({ iceRestart: true });
       await entry.connection.setLocalDescription(offer);
       entry.lastSignalProgressAtMs = Date.now();
-      this.callbacks.onSignal?.({
-        peerId,
-        direction: "sent",
-        type: "offer"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "data",
-        type: "offer",
-        payload: offer as unknown as Record<string, unknown>
-      });
+      this.signaling.send(peerId, "offer", offer as unknown as Record<string, unknown>);
       return entry;
     });
   }
@@ -603,19 +580,11 @@ export class P2PMesh {
       }
       entry.lastSignalProgressAtMs = Date.now();
 
-      this.callbacks.onSignal?.({
+      this.signaling.send(
         peerId,
-        direction: "sent",
-        type: "candidate"
-      });
-      this.sendSignal({
-        roomId: this.roomId,
-        fromPeerId: this.localPeerId,
-        toPeerId: peerId,
-        channelKind: "data",
-        type: "candidate",
-        payload: event.candidate.toJSON() as unknown as Record<string, unknown>
-      });
+        "candidate",
+        event.candidate.toJSON() as unknown as Record<string, unknown>
+      );
     };
 
     connection.onconnectionstatechange = () => {
@@ -678,19 +647,7 @@ export class P2PMesh {
         const offer = await connection.createOffer();
         await connection.setLocalDescription(offer);
         entry.lastSignalProgressAtMs = Date.now();
-        this.callbacks.onSignal?.({
-          peerId,
-          direction: "sent",
-          type: "offer"
-        });
-        this.sendSignal({
-          roomId: this.roomId,
-          fromPeerId: this.localPeerId,
-          toPeerId: peerId,
-          channelKind: "data",
-          type: "offer",
-          payload: offer as unknown as Record<string, unknown>
-        });
+        this.signaling.send(peerId, "offer", offer as unknown as Record<string, unknown>);
       }
 
       return entry;
@@ -1270,22 +1227,12 @@ export class P2PMesh {
     } catch (error) {
       if (
         remoteDescription.type === "answer" &&
-        this.shouldIgnoreStaleAnswerError(entry, error)
+        shouldIgnoreStaleAnswerError(entry.connection.signalingState, error)
       ) {
         return;
       }
       throw error;
     }
-  }
-
-  private shouldIgnoreStaleAnswerError(entry: PeerEntry, error: unknown) {
-    if (entry.connection.signalingState === "have-local-offer") {
-      return false;
-    }
-
-    const message =
-      error instanceof Error ? error.message : typeof error === "string" ? error : "";
-    return /wrong state:\s*stable/i.test(message) || /Called in wrong state:\s*stable/i.test(message);
   }
 
   private clearPendingRequestsForPeer(peerId: string) {
@@ -1626,30 +1573,4 @@ function isBinaryPieceFragmentMessage(
     "payload" in value &&
     value.header.kind === "send-piece-fragment"
   );
-}
-
-function toSessionDescriptionInit(payload: Record<string, unknown>): RTCSessionDescriptionInit | null {
-  if (typeof payload.type !== "string") {
-    return null;
-  }
-
-  return {
-    type: payload.type as RTCSdpType,
-    sdp: typeof payload.sdp === "string" ? payload.sdp : undefined
-  };
-}
-
-function toIceCandidateInit(payload: Record<string, unknown>): RTCIceCandidateInit | null {
-  if (typeof payload.candidate !== "string") {
-    return null;
-  }
-
-  return {
-    candidate: payload.candidate,
-    sdpMid: typeof payload.sdpMid === "string" ? payload.sdpMid : undefined,
-    sdpMLineIndex:
-      typeof payload.sdpMLineIndex === "number" ? payload.sdpMLineIndex : undefined,
-    usernameFragment:
-      typeof payload.usernameFragment === "string" ? payload.usernameFragment : undefined
-  };
 }
