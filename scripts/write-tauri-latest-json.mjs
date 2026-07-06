@@ -19,22 +19,6 @@ function walkFiles(currentDir) {
   });
 }
 
-function normalizeReleaseAssetFileNames(currentDir) {
-  for (const filePath of walkFiles(currentDir)) {
-    const fileName = path.basename(filePath);
-    if (!fileName.includes(" ")) {
-      continue;
-    }
-
-    const normalizedPath = path.join(path.dirname(filePath), fileName.replaceAll(" ", "."));
-    if (fs.existsSync(normalizedPath)) {
-      throw new Error(`Cannot normalize duplicate release asset name: ${normalizedPath}`);
-    }
-
-    fs.renameSync(filePath, normalizedPath);
-  }
-}
-
 function toDownloadUrl(fileName) {
   return `https://github.com/${repository}/releases/download/${tagName}/${encodeURIComponent(fileName)}`;
 }
@@ -56,7 +40,6 @@ function findUpdaterArtifact(files, predicate) {
   };
 }
 
-normalizeReleaseAssetFileNames(absoluteReleaseAssetsDir);
 const files = walkFiles(absoluteReleaseAssetsDir);
 const platforms = {};
 

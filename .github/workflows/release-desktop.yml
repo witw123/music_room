@@ -162,10 +162,21 @@ jobs:
       - name: Generate Tauri updater manifest
         run: node scripts/write-tauri-latest-json.mjs release-assets
 
+      - name: Write release notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## 修复内容
+          - 修复缓存播放与成员进出时可能出现的播放抖动、静音和重连抖动问题。
+          - 新增软件内检查更新：桌面端可提示下载并安装更新，Android 端提示前往下载 APK。
+          - 优化 P2P 分发、上传缓存、手动缓存下载与房间实时连接链路稳定性。
+          - 精简播放运行时和房间页面编排，降低后续播放回归风险。
+          EOF
+
       - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          name: Music Room ${{ github.ref_name }}
+          body_path: release-notes.md
           files: |
             release-assets/**/*.exe
             release-assets/**/*.msi
