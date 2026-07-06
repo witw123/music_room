@@ -1,13 +1,7 @@
 "use client";
 
-import { useReducer, useRef, useState } from "react";
-import type { RoomSnapshot } from "@music-room/shared";
-import {
-  ChunkScheduler,
-  useAvailabilityAnnouncements,
-  usePeerDiagnostics
-} from "@/features/p2p";
-import type { RoomSocket } from "@/lib/ws-client";
+import { useReducer, useState } from "react";
+import { useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p";
 import { RoomAppShell } from "@/components/room/RoomAppShell";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
@@ -15,16 +9,8 @@ import { useProgressiveRuntime } from "@/features/playback/use-progressive-runti
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
-import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
-import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
-import {
-  initialRoomStateStore,
-  roomStateReducer
-} from "@/features/room/room-state-reducer";
-import {
-  useCurrentProgressiveEngineTypeForSource,
-  useRoomPageDerived
-} from "@/components/room/hooks/use-room-page-derived";
+import { initialRoomStateStore, roomStateReducer } from "@/features/room/room-state-reducer";
+import { useCurrentProgressiveEngineTypeForSource, useRoomPageDerived } from "@/components/room/hooks/use-room-page-derived";
 import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
 import { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
 import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playback-effects";
@@ -33,6 +19,8 @@ import { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-ro
 import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 import { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-workspace-view-model";
 import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
+import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
+import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 
 export {
   getCachedFullLocalPlaybackLoadKey,
@@ -62,19 +50,9 @@ export function MusicRoomApp({
   initialRoomId = null
 }: MusicRoomAppProps) {
   const router = useRouter();
-  const clientPlatform = getClientPlatformFromBrowser();
-  const workspaceEntryHref = buildAppEntryHref(clientPlatform);
-  const authEntryHref = buildWorkspaceAuthHref({
-    clientPlatform,
-    redirectTo: initialRoomId ? `/room/${initialRoomId}` : workspaceEntryHref
+  const appEntries = useRoomAppEntries({
+    initialRoomId
   });
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const socketRef = useRef<RoomSocket | null>(null);
-  const chunkSchedulerRef = useRef<ChunkScheduler | null>(null);
-  const currentPlaybackPositionRef = useRef(0);
-  const activeSessionRef = useRef<ReturnType<typeof useSessionIdentity>["activeSession"]>(null);
-  const currentRoomRef = useRef<RoomSnapshot | null>(null);
-  const uploadedTrackIdsRef = useRef<string[]>([]);
 
   const [roomState, dispatchRoomStateEvent] = useReducer(
     roomStateReducer,
@@ -82,7 +60,6 @@ export function MusicRoomApp({
   );
   const roomSnapshot = roomState.snapshot;
   const [peerId, setPeerId] = useState("");
-  const playbackSourceInitializationKeyRef = useRef<string | null>(null);
   const pageState = useRoomPageState({
     audioUnlocked: roomAudioOutput.isActivated()
   });
@@ -100,6 +77,18 @@ export function MusicRoomApp({
     sessionStorageKey: "music-room-session"
   });
 
+  const canControlPlayback = !!activeSession && !!roomSnapshot;
+  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
+  const canReorderQueue = canDeleteRoom;
+  const pageDerived = useRoomPageDerived({
+    activeSessionId: activeSession?.userId,
+    peerId,
+    roomSnapshot
+  });
+  const appRefs = useRoomAppRefs({
+    roomPlayback: pageDerived.roomPlayback
+  });
+
   const {
     availabilityByTrack,
     queueAvailability,
@@ -109,36 +98,13 @@ export function MusicRoomApp({
     clearAvailabilityForPeer,
     resetAvailabilityState
   } = useAvailabilityAnnouncements({
-    socketRef
+    socketRef: appRefs.socketRef
   });
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
     usePeerDiagnostics({
       highFrequencyEnabled:
         pageState.activeDashboardTab === "members" && pageState.isDiagnosticsPanelOpen
     });
-
-  const canControlPlayback = !!activeSession && !!roomSnapshot;
-  const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
-  const canReorderQueue = canDeleteRoom;
-  const {
-    roomPlayback,
-    currentPlaybackTrackId,
-    playbackMediaEpoch,
-    playbackQueueVersion,
-    playbackRevision,
-    playbackStatus,
-    isCurrentSourceOwner,
-    playbackSurfaceKey,
-    playbackTimelineKey,
-    playbackTopologySnapshot,
-    currentTrack
-  } = useRoomPageDerived({
-    activeSessionId: activeSession?.userId,
-    peerId,
-    roomSnapshot
-  });
-  const roomPlaybackRef = useRef(roomPlayback);
-  roomPlaybackRef.current = roomPlayback;
   const uploads = useTrackUploads({
     peerId,
     activeSession,
@@ -154,25 +120,25 @@ export function MusicRoomApp({
     cacheLibraryTracks: uploads.cacheLibraryTracks,
     loadCachedLibraryTrackFile: uploads.loadCachedLibraryTrackFile,
     roomSnapshot,
-    currentTrack,
-    currentPlaybackTrackId
+    currentTrack: pageDerived.currentTrack,
+    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId
   });
 
   const currentProgressiveEngineTypeForSource = useCurrentProgressiveEngineTypeForSource({
-    currentTrack,
+    currentTrack: pageDerived.currentTrack,
     availabilityByTrack,
     peerId
   });
 
   const progressiveRuntime = useProgressiveRuntime({
-      audioRef,
+      audioRef: appRefs.audioRef,
       roomSnapshot,
-      currentTrack,
+      currentTrack: pageDerived.currentTrack,
       peerId,
       availabilityByTrack,
       uploadedTracks: uploads.uploadedTracks,
       fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
-      isCurrentSourceOwner,
+      isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
       activePlaybackSource: pageState.activePlaybackSource,
       setActivePlaybackSource: pageState.setActivePlaybackSource,
       progressiveFallbackReason: pageState.progressiveFallbackReason,
@@ -195,20 +161,20 @@ export function MusicRoomApp({
 
   const roomActions = useRoomPageRoomActions({
     workspaceOnly,
-    workspaceEntryHref,
-    authEntryHref,
+    workspaceEntryHref: appEntries.workspaceEntryHref,
+    authEntryHref: appEntries.authEntryHref,
     router,
     activeSession,
-    audioRef,
+    audioRef: appRefs.audioRef,
     clearIdentity,
-    currentPlaybackPositionRef,
+    currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
     deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
     destroyProgressiveRuntime: progressiveRuntime.destroyProgressiveRuntime,
     dispatchRoomStateEvent,
     peerId,
     peerStorageKey,
-    playbackSourceInitializationKeyRef,
+    playbackSourceInitializationKeyRef: appRefs.playbackSourceInitializationKeyRef,
     resetAvailabilityState,
     resetPeerDiagnostics,
     roomSnapshot,
@@ -233,18 +199,18 @@ export function MusicRoomApp({
     workspaceOnly,
     initialRoomId,
     hydrated,
-    authEntryHref,
-    workspaceEntryHref,
+    authEntryHref: appEntries.authEntryHref,
+    workspaceEntryHref: appEntries.workspaceEntryHref,
     router,
     lastRoomStorageKey,
     peerStorageKey,
     activeSession,
     hasStoredSession,
-    activeSessionRef,
+    activeSessionRef: appRefs.activeSessionRef,
     refreshSession,
     roomSnapshot,
     dispatchRoomStateEvent,
-    currentRoomRef,
+    currentRoomRef: appRefs.currentRoomRef,
     peerId,
     setPeerId,
     connectedPeers: pageState.connectedPeers,
@@ -271,7 +237,7 @@ export function MusicRoomApp({
     transportGovernorMode: progressiveRuntime.transportGovernorMode,
     activePlaybackSource: pageState.activePlaybackSource,
     progressiveSchedulerPolicy: progressiveRuntime.progressiveSchedulerPolicy,
-    isCurrentSourceOwner,
+    isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
     hasFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,
     audioUnlocked: pageState.audioUnlocked,
     getLocalPlaybackPositionMs: progressiveRuntime.getLocalPlaybackPositionMs,
@@ -290,7 +256,7 @@ export function MusicRoomApp({
     uploadedTracks: uploads.uploadedTracks,
     fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
     uploadedTrackIds: Object.keys(uploads.uploadedTracks),
-    uploadedTrackIdsRef,
+    uploadedTrackIdsRef: appRefs.uploadedTrackIdsRef,
     manualCacheTrackIds: uploads.manualCacheTrackIds,
     startPlaybackDemandCacheDownload: uploads.startPlaybackDemandCacheDownload,
     announceRoomTrackAvailability: uploads.announceRoomTrackAvailability,
@@ -298,9 +264,9 @@ export function MusicRoomApp({
     handleManualCachePlan: uploads.handleManualCachePlan,
     deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
-    audioRef,
-    socketRef,
-    chunkSchedulerRef,
+    audioRef: appRefs.audioRef,
+    socketRef: appRefs.socketRef,
+    chunkSchedulerRef: appRefs.chunkSchedulerRef,
     resetPlayerSurface: roomActions.resetPlayerSurface,
     setStatusMessage,
     statusMessage,
@@ -309,17 +275,17 @@ export function MusicRoomApp({
   });
 
   const playbackActions = useRoomPlaybackActions({
-    audioRef,
-    currentPlaybackPositionRef,
-    roomPlaybackRef,
+    audioRef: appRefs.audioRef,
+    currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
+    roomPlaybackRef: appRefs.roomPlaybackRef,
     roomSnapshot,
-    currentTrack,
-    currentPlaybackTrackId,
-    playbackMediaEpoch,
-    playbackQueueVersion,
-    playbackRevision,
-    playbackStatus,
-    isCurrentSourceOwner,
+    currentTrack: pageDerived.currentTrack,
+    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
+    playbackMediaEpoch: pageDerived.playbackMediaEpoch,
+    playbackQueueVersion: pageDerived.playbackQueueVersion,
+    playbackRevision: pageDerived.playbackRevision,
+    playbackStatus: pageDerived.playbackStatus,
+    isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
     audioUnlocked: pageState.audioUnlocked,
     volume: pageState.volume,
     fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
@@ -354,19 +320,19 @@ export function MusicRoomApp({
 
   useRoomPlaybackEffects({
     cachedFullLocalPlaybackTrack: cachedPlayback.cachedFullLocalPlaybackTrack,
-    currentPlaybackTrackId,
+    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
     currentProgressiveEngineTypeForSource,
-    currentTrack,
+    currentTrack: pageDerived.currentTrack,
     dispatchRoomStateEvent,
     ensureSourcePlaybackStarted: roomRuntime.ensureSourcePlaybackStarted,
     hasPlayableFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,
     initialRoomId,
-    isCurrentSourceOwner,
-    playbackSourceInitializationKeyRef,
-    playbackStatus,
-    playbackSurfaceKey,
-    playbackTimelineKey,
-    playbackTopologySnapshot,
+    isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
+    playbackSourceInitializationKeyRef: appRefs.playbackSourceInitializationKeyRef,
+    playbackStatus: pageDerived.playbackStatus,
+    playbackSurfaceKey: pageDerived.playbackSurfaceKey,
+    playbackTimelineKey: pageDerived.playbackTimelineKey,
+    playbackTopologySnapshot: pageDerived.playbackTopologySnapshot,
     recordPeerDiagnostic,
     setActivePlaybackSource: pageState.setActivePlaybackSource,
     setProgressiveFallbackReason: pageState.setProgressiveFallbackReason
@@ -383,7 +349,7 @@ export function MusicRoomApp({
     connectedPeers: pageState.connectedPeers,
     mediaConnectedPeers: pageState.mediaConnectedPeers,
     activeDashboardTab: pageState.activeDashboardTab,
-    currentTrack,
+    currentTrack: pageDerived.currentTrack,
     availabilityByTrack,
     peerDiagnostics,
     peerRecentEvents,
@@ -406,23 +372,23 @@ export function MusicRoomApp({
   return (
     <RoomAppShell
       activeSession={activeSession}
-      audioRef={audioRef}
-      authEntryHref={authEntryHref}
+      audioRef={appRefs.audioRef}
+      authEntryHref={appEntries.authEntryHref}
       cacheActions={cacheActions}
       canControlPlayback={canControlPlayback}
       canDeleteRoom={canDeleteRoom}
       canReorderQueue={canReorderQueue}
       clipboardActions={clipboardActions}
-      currentTrack={currentTrack}
+      currentTrack={pageDerived.currentTrack}
       pageState={pageState}
       playbackActions={playbackActions}
       progressiveRuntime={progressiveRuntime}
       roomActions={roomActions}
       roomSnapshot={roomSnapshot}
-      socket={socketRef.current}
+      socket={appRefs.socketRef.current}
       statusMessage={statusMessage}
       uploads={uploads}
-      workspaceEntryHref={workspaceEntryHref}
+      workspaceEntryHref={appEntries.workspaceEntryHref}
       workspaceViewModel={workspaceViewModel}
     />
   );

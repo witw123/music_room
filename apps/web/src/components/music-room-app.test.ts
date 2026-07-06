@@ -311,6 +311,31 @@ describe("room page render shell boundary", () => {
   });
 });
 
+describe("room page app infrastructure boundary", () => {
+  it("hosts app entry links and shared refs outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const entriesSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-app-entries.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const refsSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-app-refs.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("getClientPlatformFromBrowser()");
+    expect(appSource).not.toContain("useRef<HTMLAudioElement>");
+    expect(appSource).toContain("useRoomAppEntries({");
+    expect(appSource).toContain("useRoomAppRefs({");
+    expect(appSource.split("\n").length).toBeLessThanOrEqual(400);
+    expect(entriesSource).toContain("export function useRoomAppEntries");
+    expect(refsSource).toContain("export function useRoomAppRefs");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({
