@@ -1,167 +1,28 @@
 import type { RoomSnapshot } from "@music-room/shared";
-import type { ManualCacheTaskRecord } from "@/lib/indexeddb";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
   buildManualCachePieceAvailabilityAnnouncement,
   isManualCachePieceCompatible
 } from "./track-availability";
+import {
+  resolveAutomaticPlaybackCacheTaskMode,
+  type ManualCacheTask,
+  type ManualCacheTaskStatus
+} from "./manual-cache-task-store";
 
-export type ManualCacheTaskStatus =
-  | "idle"
-  | "queued"
-  | "downloading"
-  | "paused"
-  | "blocked"
-  | "assembling"
-  | "ready"
-  | "failed"
-  | "failed-integrity";
-
-export type ManualCacheTask = {
-  trackId: string;
-  status: ManualCacheTaskStatus;
-  mode: "manual" | "playback-demand";
-  fileHash: string;
-  updatedAt: string;
-  errorMessage: string | null;
-  completedChunks: number;
-  totalChunks: number;
-  mimeType: string | null;
-  manifestSource: string | null;
-  blockedReason: string | null;
-  integrityMode: "strong" | "weak" | null;
-  providerPeerIds: string[];
-  connectedProviderPeerIds: string[];
-  selectedProviderPeerId: string | null;
-  requestableChunkCount: number;
-  pendingChunkCount: number;
-  lastRequestedChunks: number[];
-  lastPieceReceivedAt: string | null;
-  lastError: string | null;
-};
-
-type ManualCacheTaskPatch =
-  | Partial<ManualCacheTask>
-  | ((current: ManualCacheTask | null) => Partial<ManualCacheTask> | null);
-
-export function buildNextManualCacheTask(input: {
-  trackId: string;
-  existing: ManualCacheTask | null;
-  track: { fileHash: string; mimeType?: string | null } | null;
-  patch: ManualCacheTaskPatch;
-  updatedAt: string;
-}) {
-  const nextPatch = typeof input.patch === "function" ? input.patch(input.existing) : input.patch;
-  if (!nextPatch) {
-    return null;
-  }
-
-  return {
-    trackId: input.trackId,
-    status: input.existing?.status ?? "idle",
-    mode: input.existing?.mode ?? "manual",
-    fileHash: input.existing?.fileHash ?? input.track?.fileHash ?? "",
-    errorMessage: input.existing?.errorMessage ?? null,
-    completedChunks: input.existing?.completedChunks ?? 0,
-    totalChunks: input.existing?.totalChunks ?? 0,
-    mimeType: input.existing?.mimeType ?? input.track?.mimeType ?? null,
-    manifestSource: input.existing?.manifestSource ?? null,
-    blockedReason: input.existing?.blockedReason ?? null,
-    integrityMode: input.existing?.integrityMode ?? null,
-    providerPeerIds: input.existing?.providerPeerIds ?? [],
-    connectedProviderPeerIds: input.existing?.connectedProviderPeerIds ?? [],
-    selectedProviderPeerId: input.existing?.selectedProviderPeerId ?? null,
-    requestableChunkCount: input.existing?.requestableChunkCount ?? 0,
-    pendingChunkCount: input.existing?.pendingChunkCount ?? 0,
-    lastRequestedChunks: input.existing?.lastRequestedChunks ?? [],
-    lastPieceReceivedAt: input.existing?.lastPieceReceivedAt ?? null,
-    lastError: input.existing?.lastError ?? null,
-    ...nextPatch,
-    updatedAt: input.updatedAt
-  } satisfies ManualCacheTask;
-}
-
-export function mergeHydratedManualCacheTasks(input: {
-  currentTasks: Record<string, ManualCacheTask>;
-  hydratedTasks: ManualCacheTaskRecord[];
-  currentPlaybackTrackId: string | null;
-}) {
-  const hydrated = Object.fromEntries(
-    input.hydratedTasks
-      .filter(isManualCacheTaskRecord)
-      .filter((task) => task.mode === "manual" || task.trackId === input.currentPlaybackTrackId)
-      .map((task) => {
-        const status = task.status;
-        return [
-          task.trackId,
-          {
-            trackId: task.trackId,
-            status,
-            mode: task.mode,
-            fileHash: task.fileHash,
-            updatedAt: task.updatedAt,
-            errorMessage: task.errorMessage,
-            completedChunks: task.completedChunks,
-            totalChunks: task.totalChunks,
-            mimeType: task.mimeType,
-            manifestSource: task.manifestSource,
-            blockedReason: task.blockedReason,
-            integrityMode: task.integrityMode,
-            providerPeerIds: task.providerPeerIds,
-            connectedProviderPeerIds: task.connectedProviderPeerIds,
-            selectedProviderPeerId: task.selectedProviderPeerId,
-            requestableChunkCount: task.requestableChunkCount,
-            pendingChunkCount: task.pendingChunkCount,
-            lastRequestedChunks: task.lastRequestedChunks,
-            lastPieceReceivedAt: task.lastPieceReceivedAt,
-            lastError: task.lastError
-          } satisfies ManualCacheTask
-        ];
-      })
-  );
-
-  const preservedCurrent = Object.fromEntries(
-    Object.entries(input.currentTasks).filter(([, task]) => {
-      if (task.mode === "manual") {
-        return true;
-      }
-
-      return task.mode === "playback-demand" && task.trackId === input.currentPlaybackTrackId;
-    })
-  );
-
-  return {
-    ...hydrated,
-    ...preservedCurrent
-  };
-}
-
-export function resolveStalePlaybackDemandTaskIds(input: {
-  currentTasks: Record<string, ManualCacheTask>;
-  currentPlaybackTrackId: string | null;
-}) {
-  return Object.values(input.currentTasks)
-    .filter(
-      (task) =>
-        task.mode === "playback-demand" &&
-        task.trackId !== input.currentPlaybackTrackId
-    )
-    .map((task) => task.trackId)
-    .sort();
-}
-
-export function shouldHydrateCacheTaskPieceIndexes(input: {
-  mode: ManualCacheTaskRecord["mode"];
-  status: ManualCacheTaskRecord["status"];
-}) {
-  return (
-    (input.mode === "manual" || input.mode === "playback-demand") &&
-    (input.status === "queued" ||
-      input.status === "downloading" ||
-      input.status === "blocked")
-  );
-}
+export {
+  buildNextManualCacheTask,
+  mergeHydratedManualCacheTasks,
+  resolveAutomaticPlaybackCacheTaskMode,
+  resolveStalePlaybackDemandTaskIds,
+  shouldHydrateCacheTaskPieceIndexes
+} from "./manual-cache-task-store";
+export type {
+  ManualCacheTask,
+  ManualCacheTaskStatus,
+  ManualCacheTaskPatch
+} from "./manual-cache-task-store";
 
 export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
   playback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -186,16 +47,6 @@ export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
     peerId: input.peerId,
     activeSessionId: input.activeSessionId
   }) || input.hasLocalFullTrack === false;
-}
-
-function isManualCacheTaskRecord(
-  task: ManualCacheTaskRecord
-): task is ManualCacheTaskRecord & { mode: "manual" | "playback-demand" } {
-  return task.mode === "manual" || task.mode === "playback-demand";
-}
-
-export function resolveAutomaticPlaybackCacheTaskMode(): ManualCacheTask["mode"] {
-  return "playback-demand";
 }
 
 export function mergeManualCachePlanTaskProgress(input: {

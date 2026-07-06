@@ -60,7 +60,6 @@ import {
   shouldAnnounceTrackAvailability
 } from "./track-availability";
 import {
-  buildNextManualCacheTask,
   mergeHydratedManualCacheTasks,
   pruneManualCacheChunkIndexesByActiveTracks,
   resolveAutomaticPlaybackCacheTaskMode,
@@ -71,6 +70,10 @@ import {
   shouldHydrateCacheTaskPieceIndexes,
   type ManualCacheTask
 } from "./upload-ui-state";
+import {
+  buildManualCacheTaskRecord,
+  resolveManualCacheTaskStateUpdate
+} from "./manual-cache-task-store";
 import {
   buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
@@ -401,48 +404,26 @@ export function useTrackUploads(options: {
         | ((current: ManualCacheTask | null) => Partial<ManualCacheTask> | null)
     ) => {
       setManualCacheTasks((current) => {
-        const existing = current[trackId] ?? null;
-        const track = roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
-        const nextTask = buildNextManualCacheTask({
+        const result = resolveManualCacheTaskStateUpdate({
+          currentTasks: current,
           trackId,
-          existing,
-          track,
+          roomTracks: roomSnapshot?.tracks,
           patch,
           updatedAt: new Date().toISOString()
         });
-        if (!nextTask) {
+        if (!result.nextTask) {
           return current;
         }
-        if (roomSnapshot?.room.id && nextTask.fileHash) {
-          void upsertManualCacheTask({
-            roomId: roomSnapshot.room.id,
-            trackId,
-            fileHash: nextTask.fileHash,
-            status: nextTask.status,
-            mode: nextTask.mode,
-            errorMessage: nextTask.errorMessage,
-            completedChunks: nextTask.completedChunks,
-            totalChunks: nextTask.totalChunks,
-            mimeType: nextTask.mimeType,
-            manifestSource: nextTask.manifestSource,
-            blockedReason: nextTask.blockedReason,
-            integrityMode: nextTask.integrityMode,
-            providerPeerIds: nextTask.providerPeerIds,
-            connectedProviderPeerIds: nextTask.connectedProviderPeerIds,
-            selectedProviderPeerId: nextTask.selectedProviderPeerId,
-            requestableChunkCount: nextTask.requestableChunkCount,
-            pendingChunkCount: nextTask.pendingChunkCount,
-            lastRequestedChunks: nextTask.lastRequestedChunks,
-            lastPieceReceivedAt: nextTask.lastPieceReceivedAt,
-            lastError: nextTask.lastError,
-            updatedAt: nextTask.updatedAt
-          });
+        if (roomSnapshot?.room.id && result.nextTask.fileHash) {
+          void upsertManualCacheTask(
+            buildManualCacheTaskRecord({
+              roomId: roomSnapshot.room.id,
+              task: result.nextTask
+            })
+          );
         }
 
-        return {
-          ...current,
-          [trackId]: nextTask
-        };
+        return result.nextTasks;
       });
     },
     [roomSnapshot]
