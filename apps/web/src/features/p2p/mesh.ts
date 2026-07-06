@@ -5,7 +5,6 @@ import {
   type PeerSignalMessage
 } from "@music-room/shared";
 import {
-  cacheTrackPieces,
   getCachedPiece,
   getCachedPieceIndexes,
   getTrackPieceManifest,
@@ -32,10 +31,13 @@ import {
   type DataChannelQueuedSendItem
 } from "./data-channel-manager";
 import {
-  PieceRequestTracker,
-  type PendingPieceRequest
+  PieceRequestTracker
 } from "./piece-request-tracker";
 import { PieceFragmentTracker } from "./piece-fragment-tracker";
+import {
+  PieceInboundProcessor,
+  type CachedPieceManifestHeader
+} from "./piece-inbound-processor";
 import {
   PeerConnectionRegistry,
   clearPeerTimers,
@@ -48,7 +50,6 @@ import {
   type PeerEntry
 } from "./peer-connection-registry";
 import { MeshHealthMonitor } from "./mesh-health-monitor";
-import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
   onPieceReceived: (payload: {
@@ -166,45 +167,10 @@ type MeshOptions = {
     | undefined;
 };
 
-type IncomingPieceBatchItem = {
-  peerId: string;
-  message: BinaryPieceMessage;
-  pendingRequest?: PendingPieceRequest;
-};
-
-type ReceivedPieceCallbackPayload = {
-  peerId: string;
-  trackId: string;
-  chunkIndex: number;
-  totalChunks: number;
-  chunkSize: number;
-  mimeType: string;
-  payloadBytes: number;
-  requestId?: string;
-  requestRttMs?: number | null;
-};
-
-type PersistableIncomingPiece = {
-  item: IncomingPieceBatchItem;
-  expectedHash: string;
-  callbackPayload: ReceivedPieceCallbackPayload;
-};
-
-type CachedPieceManifestHeader = {
-  totalChunks: number;
-  chunkSize: number;
-  mimeType: string;
-  pieceHashes?: string[];
-};
-
 export class P2PMesh {
   private readonly peerConnections: PeerConnectionRegistry;
   private readonly pieceRequests = new PieceRequestTracker();
-  private readonly pendingIncomingPieces: IncomingPieceBatchItem[] = [];
   private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
-  private pieceFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  private pieceFlushInFlight = false;
-  private piecePersistChain: Promise<void> = Promise.resolve();
   private readonly reconnectBackoffMs = [1_000, 2_000, 4_000, 8_000] as const;
   private readonly dataOpenTimeoutMs = 8_000;
   private readonly dataConnectingTimeoutMs = 12_000;
@@ -228,6 +194,7 @@ export class P2PMesh {
   private readonly signaling: SignalingTransport;
   private readonly dataChannels: DataChannelManager;
   private readonly healthMonitor: MeshHealthMonitor;
+  private readonly inboundPieces: PieceInboundProcessor;
 
   constructor(
     private readonly roomId: string,
@@ -269,6 +236,19 @@ export class P2PMesh {
       onPeerStalled: this.callbacks.onPeerStalled,
       releasePeer: (peerId, entry) => this.releasePeer(peerId, entry),
       recreatePeer: (peerId, entry) => this.recreatePeer(peerId, entry)
+    });
+    this.inboundPieces = new PieceInboundProcessor({
+      batchSize: this.incomingPieceBatchSize,
+      localPeerId: this.localPeerId,
+      resolveManifestHeader: (trackId, fallbackChunkSize) =>
+        this.resolveManifestHeader(trackId, fallbackChunkSize),
+      rememberManifestHeader: (trackId, header) => {
+        this.pieceManifestHeaders.set(trackId, header);
+      },
+      resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
+      onPieceReceived: this.callbacks.onPieceReceived,
+      onPiecePersisted: this.callbacks.onPiecePersisted,
+      onPieceRequestTimeout: this.callbacks.onPieceRequestTimeout
     });
   }
 
@@ -504,11 +484,7 @@ export class P2PMesh {
   destroy() {
     this.peerConnections.clearExpected();
     this.pieceRequests.clearAll();
-    if (this.pieceFlushTimer) {
-      clearTimeout(this.pieceFlushTimer);
-      this.pieceFlushTimer = null;
-    }
-    this.pendingIncomingPieces.length = 0;
+    this.inboundPieces.clear();
     this.pieceFragments.clearAll();
 
     for (const [peerId, entry] of this.peerConnections.entries()) {
@@ -685,12 +661,11 @@ export class P2PMesh {
         if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
           const pendingRequest = this.pieceRequests.take(message.trackId, message.chunkIndex);
 
-          this.pendingIncomingPieces.push({
+          this.inboundPieces.enqueue({
             peerId,
             message,
             pendingRequest: pendingRequest ?? undefined
           });
-          this.scheduleIncomingPieceFlush();
           return;
         }
 
@@ -959,119 +934,6 @@ export class P2PMesh {
     return this.localPeerId.localeCompare(peerId) < 0;
   }
 
-  private scheduleIncomingPieceFlush() {
-    if (this.pieceFlushTimer || this.pieceFlushInFlight) {
-      return;
-    }
-
-    this.pieceFlushTimer = setTimeout(() => {
-      this.pieceFlushTimer = null;
-      void this.flushIncomingPieces();
-    }, 18);
-  }
-
-  private async flushIncomingPieces() {
-    if (this.pieceFlushInFlight || this.pendingIncomingPieces.length === 0) {
-      return;
-    }
-
-    this.pieceFlushInFlight = true;
-    const batch = this.pendingIncomingPieces.splice(0, this.incomingPieceBatchSize);
-
-    try {
-      const expectedHashes = await Promise.all(
-        batch.map(async (item) => {
-          const manifestHeader = await this.resolveManifestHeader(
-            item.message.trackId,
-            item.message.header.chunkSize
-          );
-          return manifestHeader?.pieceHashes?.[item.message.chunkIndex] ?? item.message.pieceHash;
-        })
-      );
-      const validationResults = await validateTrackPiecePayloadBatch(
-        batch.map((item, index) => ({
-          payload: item.message.payload,
-          expectedHash: expectedHashes[index] ?? item.message.pieceHash
-        }))
-      );
-
-      const persistablePieces: PersistableIncomingPiece[] = [];
-      for (const [index, item] of batch.entries()) {
-        if (!(validationResults[index] ?? false)) {
-          this.callbacks.onPieceRequestTimeout?.({
-            trackId: item.message.trackId,
-            chunkIndex: item.message.chunkIndex,
-            peerId: item.peerId,
-            requestId: item.pendingRequest?.requestId,
-            requestDurationMs:
-              item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : 0
-          });
-          continue;
-        }
-
-        this.pieceManifestHeaders.set(item.message.trackId, {
-          totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
-          chunkSize: item.message.header.chunkSize,
-          mimeType: item.message.header.mimeType,
-          pieceHashes:
-            this.pieceManifestHeaders.get(item.message.trackId)?.pieceHashes ??
-            (item.message.pieceHash ? undefined : undefined)
-        });
-
-        const callbackPayload = {
-          peerId: item.peerId,
-          trackId: item.message.header.trackId,
-          chunkIndex: item.message.header.chunkIndex,
-          totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
-          chunkSize: item.message.header.chunkSize,
-          mimeType: item.message.header.mimeType,
-          payloadBytes: item.message.payload.byteLength,
-          requestId: item.message.header.requestId ?? item.pendingRequest?.requestId,
-          requestRttMs:
-            item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null
-        };
-        const shouldPersistPiece = this.callbacks.onPieceReceived(callbackPayload);
-        if (shouldPersistPiece === true) {
-          persistablePieces.push({
-            item,
-            expectedHash: expectedHashes[index] ?? item.message.pieceHash,
-            callbackPayload
-          });
-        }
-      }
-
-      if (persistablePieces.length > 0) {
-        const piecesToPersist = persistablePieces.map(({ item, expectedHash }) => ({
-          pieceId: `${
-            this.resolveTrackCacheIdentity?.(item.message.trackId)?.fileHash ?? item.message.trackId
-          }:${item.message.header.chunkSize}:${localCacheOwnerKey}:${item.message.chunkIndex}`,
-          trackId: item.message.trackId,
-          fileHash: this.resolveTrackCacheIdentity?.(item.message.trackId)?.fileHash ?? undefined,
-          peerId: this.localPeerId,
-          ownerKey: localCacheOwnerKey,
-          chunkIndex: item.message.chunkIndex,
-          chunkSize: item.message.payload.byteLength,
-          hash: expectedHash,
-          payload: item.message.payload
-        }));
-        const persistedPayloads = persistablePieces.map((piece) => piece.callbackPayload);
-        this.piecePersistChain = this.piecePersistChain
-          .catch(() => undefined)
-          .then(async () => {
-            await cacheTrackPieces(piecesToPersist);
-            for (const payload of persistedPayloads) {
-              this.callbacks.onPiecePersisted?.(payload);
-            }
-          });
-      }
-    } finally {
-      this.pieceFlushInFlight = false;
-      if (this.pendingIncomingPieces.length > 0) {
-        this.scheduleIncomingPieceFlush();
-      }
-    }
-  }
-
   private handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage) {
     const assembledMessage = this.pieceFragments.addFragment(peerId, message);
     if (!assembledMessage) {
@@ -1080,12 +942,11 @@ export class P2PMesh {
 
     const pendingRequest = this.pieceRequests.take(message.trackId, message.chunkIndex);
 
-    this.pendingIncomingPieces.push({
+    this.inboundPieces.enqueue({
       peerId,
       message: assembledMessage,
       pendingRequest: pendingRequest ?? undefined
     });
-    this.scheduleIncomingPieceFlush();
   }
 }
 

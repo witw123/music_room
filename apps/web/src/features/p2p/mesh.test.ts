@@ -141,9 +141,12 @@ class FakeRTCPeerConnection {
 }
 
 type MeshTestAccess = {
-  pendingIncomingPieces: Array<{ peerId: string; message: BinaryPieceMessage }>;
-  flushIncomingPieces(): Promise<void>;
-  piecePersistChain: Promise<void>;
+  inboundPieces: {
+    enqueue(item: { peerId: string; message: BinaryPieceMessage }): void;
+    flush(): Promise<void>;
+    awaitPersistence(): Promise<void>;
+    pendingCount(): number;
+  };
   handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage): void;
 };
 
@@ -483,7 +486,7 @@ describe("P2PMesh", () => {
     const secondHash = await sha256Hex(secondPayload);
     const meshAccess = getMeshTestAccess(mesh);
 
-    meshAccess.pendingIncomingPieces.push(
+    meshAccess.inboundPieces.enqueue(
       {
         peerId: "peer_b",
         message: buildIncomingPieceMessage({
@@ -494,7 +497,9 @@ describe("P2PMesh", () => {
           pieceHash: firstHash,
           payload: firstPayload
         })
-      },
+      }
+    );
+    meshAccess.inboundPieces.enqueue(
       {
         peerId: "peer_b",
         message: buildIncomingPieceMessage({
@@ -508,8 +513,8 @@ describe("P2PMesh", () => {
       }
     );
 
-    await meshAccess.flushIncomingPieces();
-    await meshAccess.piecePersistChain;
+    await meshAccess.inboundPieces.flush();
+    await meshAccess.inboundPieces.awaitPersistence();
 
     expect(cacheTrackPieces).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -544,7 +549,7 @@ describe("P2PMesh", () => {
     const hash = await sha256Hex(payload);
     const meshAccess = getMeshTestAccess(mesh);
 
-    meshAccess.pendingIncomingPieces.push({
+    meshAccess.inboundPieces.enqueue({
       peerId: "peer_b",
       message: buildIncomingPieceMessage({
         trackId: "track_1",
@@ -556,7 +561,7 @@ describe("P2PMesh", () => {
       })
     });
 
-    await meshAccess.flushIncomingPieces();
+    await meshAccess.inboundPieces.flush();
     await Promise.resolve();
 
     expect(onPieceReceived).toHaveBeenCalledTimes(1);
@@ -564,7 +569,7 @@ describe("P2PMesh", () => {
     expect(onPiecePersisted).not.toHaveBeenCalled();
 
     resolvePersist();
-    await meshAccess.piecePersistChain;
+    await meshAccess.inboundPieces.awaitPersistence();
 
     expect(onPiecePersisted).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -588,7 +593,7 @@ describe("P2PMesh", () => {
     const hash = await sha256Hex(payload);
     const meshAccess = getMeshTestAccess(mesh);
 
-    meshAccess.pendingIncomingPieces.push({
+    meshAccess.inboundPieces.enqueue({
       peerId: "peer_b",
       message: buildIncomingPieceMessage({
         trackId: "track_1",
@@ -600,8 +605,8 @@ describe("P2PMesh", () => {
       })
     });
 
-    await meshAccess.flushIncomingPieces();
-    await meshAccess.piecePersistChain;
+    await meshAccess.inboundPieces.flush();
+    await meshAccess.inboundPieces.awaitPersistence();
 
     expect(onPieceReceived).toHaveBeenCalledTimes(1);
     expect(cacheTrackPieces).not.toHaveBeenCalled();
@@ -791,9 +796,9 @@ describe("P2PMesh", () => {
       meshAccess.handleIncomingPieceFragment("peer_b", fragmentMessage);
     }
 
-    expect(meshAccess.pendingIncomingPieces).toHaveLength(1);
-    await meshAccess.flushIncomingPieces();
-    await meshAccess.piecePersistChain;
+    expect(meshAccess.inboundPieces.pendingCount()).toBe(1);
+    await meshAccess.inboundPieces.flush();
+    await meshAccess.inboundPieces.awaitPersistence();
 
     expect(onPieceReceived).toHaveBeenCalledWith(
       expect.objectContaining({
