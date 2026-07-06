@@ -1,6 +1,5 @@
 import {
   type IceServerConfig,
-  type P2PDataMessage,
   type PeerSignalMessage
 } from "@music-room/shared";
 import {
@@ -25,9 +24,7 @@ import {
   DataChannelManager,
   type DataChannelQueuedSendItem
 } from "./data-channel-manager";
-import {
-  PieceRequestTracker
-} from "./piece-request-tracker";
+import { PieceRequestClient } from "./piece-request-client";
 import { PieceFragmentTracker } from "./piece-fragment-tracker";
 import { PieceInboundProcessor } from "./piece-inbound-processor";
 import { PieceServeProcessor } from "./piece-serve-processor";
@@ -162,7 +159,6 @@ type MeshOptions = {
 
 export class P2PMesh {
   private readonly peerConnections: PeerConnectionRegistry;
-  private readonly pieceRequests = new PieceRequestTracker();
   private readonly reconnectBackoffMs = [1_000, 2_000, 4_000, 8_000] as const;
   private readonly dataOpenTimeoutMs = 8_000;
   private readonly dataConnectingTimeoutMs = 12_000;
@@ -187,6 +183,7 @@ export class P2PMesh {
   private readonly healthMonitor: MeshHealthMonitor;
   private readonly inboundPieces: PieceInboundProcessor;
   private readonly pieceServe: PieceServeProcessor<PeerEntry>;
+  private readonly pieceRequestClient: PieceRequestClient<PeerEntry>;
 
   constructor(
     private readonly roomId: string,
@@ -236,6 +233,12 @@ export class P2PMesh {
       enqueueSendItem: (peerId, entry, item) => this.enqueueSendItem(peerId, entry, item),
       onPieceServed: this.callbacks.onPieceServed,
       onPieceServeMiss: this.callbacks.onPieceServeMiss
+    });
+    this.pieceRequestClient = new PieceRequestClient<PeerEntry>({
+      getPeerEntry: (peerId) => this.peerConnections.get(peerId),
+      enqueueSendItem: (peerId, entry, item) => this.enqueueSendItem(peerId, entry, item),
+      onPieceRequestSent: this.callbacks.onPieceRequestSent,
+      onPieceRequestTimeout: this.callbacks.onPieceRequestTimeout
     });
     this.inboundPieces = new PieceInboundProcessor({
       batchSize: this.incomingPieceBatchSize,
@@ -382,10 +385,10 @@ export class P2PMesh {
     expectedTotalChunks?: number,
     timeoutMs = 10000
   ) {
-    return this.requestPieces(
+    return this.pieceRequestClient.requestPiece(
       peerId,
       trackId,
-      [chunkIndex],
+      chunkIndex,
       expectedTotalChunks,
       timeoutMs
     );
@@ -398,51 +401,13 @@ export class P2PMesh {
     expectedTotalChunks?: number,
     timeoutMs = 10000
   ) {
-    const entry = this.peerConnections.get(peerId);
-    if (!entry?.channel || entry.channel.readyState !== "open") {
-      return false;
-    }
-
-    const normalizedChunkIndexes = this.pieceRequests.getAvailableChunkIndexes(trackId, chunkIndexes);
-    if (normalizedChunkIndexes.length === 0) {
-      return false;
-    }
-
-    const requestId =
-      normalizedChunkIndexes.length > 1 ? this.createRequestId(trackId, normalizedChunkIndexes) : undefined;
-    this.pieceRequests.registerRequests({
+    return this.pieceRequestClient.requestPieces(
       peerId,
       trackId,
-      chunkIndexes: normalizedChunkIndexes,
+      chunkIndexes,
       expectedTotalChunks,
-      requestId,
-      timeoutMs,
-      onTimeout: this.callbacks.onPieceRequestTimeout
-    });
-
-    const payload: P2PDataMessage =
-      normalizedChunkIndexes.length === 1
-        ? {
-            kind: "request-piece",
-            trackId,
-            chunkIndex: normalizedChunkIndexes[0]!
-          }
-        : {
-            kind: "request-pieces",
-            requestId: requestId!,
-            trackId,
-            chunkIndexes: normalizedChunkIndexes
-          };
-    this.enqueueSendItem(peerId, entry, {
-      data: JSON.stringify(payload)
-    });
-    this.callbacks.onPieceRequestSent?.({
-      peerId,
-      trackId,
-      chunkIndexes: normalizedChunkIndexes,
-      requestId
-    });
-    return true;
+      timeoutMs
+    );
   }
 
   getConnectedPeerIds() {
@@ -482,7 +447,7 @@ export class P2PMesh {
 
   destroy() {
     this.peerConnections.clearExpected();
-    this.pieceRequests.clearAll();
+    this.pieceRequestClient.clearAll();
     this.inboundPieces.clear();
     this.pieceFragments.clearAll();
 
@@ -658,7 +623,10 @@ export class P2PMesh {
         }
 
         if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
-          const pendingRequest = this.pieceRequests.take(message.trackId, message.chunkIndex);
+          const pendingRequest = this.pieceRequestClient.takePendingRequest(
+            message.trackId,
+            message.chunkIndex
+          );
 
           this.inboundPieces.enqueue({
             peerId,
@@ -791,17 +759,7 @@ export class P2PMesh {
   }
 
   private clearPendingRequestsForPeer(peerId: string) {
-    this.pieceRequests.clearPeer(peerId);
-  }
-
-  private createRequestId(trackId: string, chunkIndexes: number[]) {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return `${trackId}:${crypto.randomUUID()}`;
-    }
-
-    return `${trackId}:${chunkIndexes[0] ?? 0}:${Date.now().toString(36)}:${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    this.pieceRequestClient.clearPeer(peerId);
   }
 
   private shouldInitiatePeer(peerId: string) {
@@ -814,7 +772,10 @@ export class P2PMesh {
       return;
     }
 
-    const pendingRequest = this.pieceRequests.take(message.trackId, message.chunkIndex);
+    const pendingRequest = this.pieceRequestClient.takePendingRequest(
+      message.trackId,
+      message.chunkIndex
+    );
 
     this.inboundPieces.enqueue({
       peerId,
