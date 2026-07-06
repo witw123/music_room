@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildCachedLibraryTrackUpsertRecord,
   buildCachedLibraryFileName,
+  deleteCachedLibraryTrackEntry,
+  exportCachedLibraryTrackFile,
   loadCacheLibrarySnapshot,
   toCachedLibraryFile,
   toCachedLibraryTrack,
@@ -106,5 +108,65 @@ describe("cache-library adapters", () => {
       sourceTrackIds: ["track_1"],
       sourceRoomIds: ["room_1"]
     });
+  });
+
+  it("deletes cache library entries and their source pieces", async () => {
+    const deletedPiecesForTracks: string[][] = [];
+    const result = await deleteCachedLibraryTrackEntry({
+      fileHash: "hash_1",
+      deleteCachedLibraryTrackRecord: async () => ({
+        fileHash: "hash_1",
+        title: "Cached",
+        artist: "Artist",
+        mimeType: "audio/flac",
+        durationMs: 120_000,
+        sizeBytes: 4096,
+        cachedAt: "2026-07-04T00:00:00.000Z",
+        sourceTrackIds: ["track_1", "track_2"],
+        sourceRoomIds: ["room_1"],
+        lastSourceTrackId: "track_1",
+        lastSourceRoomId: "room_1",
+        lastOwnerNickname: "Host",
+        file: new File(["cached"], "cached.flac", { type: "audio/flac" })
+      }),
+      deleteCachedPiecesForTracks: async (trackIds) => {
+        deletedPiecesForTracks.push([...trackIds]);
+      }
+    });
+
+    expect(result.affectedTrackIds).toEqual(["track_1", "track_2"]);
+    expect(deletedPiecesForTracks).toEqual([["track_1", "track_2"]]);
+  });
+
+  it("exports cached files through injected browser download effects", async () => {
+    const clicked: string[] = [];
+    const revoked: string[] = [];
+    const file = new File(["cached"], "cached.flac", { type: "audio/flac" });
+
+    await exportCachedLibraryTrackFile({
+      fileHash: "hash_1",
+      loadCachedLibraryTrackFile: async () => ({
+        fileHash: "hash_1",
+        title: "Cached",
+        artist: "Artist",
+        mimeType: "audio/flac",
+        durationMs: 120_000,
+        sizeBytes: 4096,
+        cachedAt: "2026-07-04T00:00:00.000Z",
+        sourceTrackIds: ["track_1"],
+        sourceRoomIds: ["room_1"],
+        lastSourceTrackId: "track_1",
+        lastSourceRoomId: "room_1",
+        lastOwnerNickname: "Host",
+        file
+      }),
+      createObjectUrl: () => "blob:cached",
+      clickDownload: (href, filename) => clicked.push(`${href}|${filename}`),
+      revokeObjectUrl: (href) => revoked.push(href),
+      defer: (callback) => callback()
+    });
+
+    expect(clicked).toEqual(["blob:cached|Cached.flac"]);
+    expect(revoked).toEqual(["blob:cached"]);
   });
 });

@@ -176,6 +176,41 @@ export function toCachedLibraryTrackFile(
   };
 }
 
+export async function deleteCachedLibraryTrackEntry(input: {
+  fileHash: string;
+  deleteCachedLibraryTrackRecord: (
+    fileHash: string
+  ) => Promise<(CachedLibraryTrackRecord & { sourceTrackIds: string[] }) | null | undefined>;
+  deleteCachedPiecesForTracks: (trackIds: string[]) => Promise<unknown>;
+}) {
+  const record = await input.deleteCachedLibraryTrackRecord(input.fileHash);
+  const affectedTrackIds = record?.sourceTrackIds ?? [];
+  if (affectedTrackIds.length > 0) {
+    await input.deleteCachedPiecesForTracks(affectedTrackIds);
+  }
+
+  return { affectedTrackIds };
+}
+
+export async function exportCachedLibraryTrackFile(input: {
+  fileHash: string;
+  loadCachedLibraryTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>;
+  createObjectUrl: (file: Blob) => string;
+  clickDownload: (href: string, filename: string) => void;
+  revokeObjectUrl: (href: string) => void;
+  defer: (callback: () => void) => void;
+}) {
+  const cachedTrack = await input.loadCachedLibraryTrackFile(input.fileHash);
+  if (!cachedTrack) {
+    return false;
+  }
+
+  const downloadUrl = input.createObjectUrl(cachedTrack.file);
+  input.clickDownload(downloadUrl, buildCachedLibraryFileName(cachedTrack));
+  input.defer(() => input.revokeObjectUrl(downloadUrl));
+  return true;
+}
+
 export function buildCachedLibraryFileName(input: {
   title: string;
   mimeType: string;

@@ -43,8 +43,9 @@ import { hasActivePlaybackIntent } from "@/features/playback/progressive-playbac
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
   buildCachedLibraryTrackUpsertRecord,
-  buildCachedLibraryFileName,
   createInFlightCachedLibraryTrackFileLoader,
+  deleteCachedLibraryTrackEntry as deleteCachedLibraryTrackEntryFromLibrary,
+  exportCachedLibraryTrackFile,
   hasUsableCachedLibraryFileForRoomTrack,
   loadCacheLibrarySnapshot,
   toCachedLibraryFile,
@@ -1230,12 +1231,13 @@ export function useTrackUploads(options: {
 
   const deleteCachedLibraryTrackEntry = useCallback(
     async (fileHash: string) => {
-      const record = await deleteCachedLibraryTrackRecord(fileHash);
-      if (record?.sourceTrackIds.length) {
-        await deleteCachedPiecesForTracks(record.sourceTrackIds);
-        for (const trackId of record.sourceTrackIds) {
-          dropManualCacheTask(trackId);
-        }
+      const result = await deleteCachedLibraryTrackEntryFromLibrary({
+        fileHash,
+        deleteCachedLibraryTrackRecord,
+        deleteCachedPiecesForTracks
+      });
+      for (const trackId of result.affectedTrackIds) {
+        dropManualCacheTask(trackId);
       }
       await refreshCacheLibrary();
     },
@@ -1244,19 +1246,23 @@ export function useTrackUploads(options: {
 
   const exportCachedLibraryTrack = useCallback(
     async (fileHash: string) => {
-      const cachedTrack = await loadCachedLibraryTrackFile(fileHash);
-      if (!cachedTrack) {
-        return;
-      }
-
-      const downloadUrl = URL.createObjectURL(cachedTrack.file);
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = buildCachedLibraryFileName(cachedTrack);
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+      await exportCachedLibraryTrackFile({
+        fileHash,
+        loadCachedLibraryTrackFile,
+        createObjectUrl: (file) => URL.createObjectURL(file),
+        clickDownload: (href, filename) => {
+          const anchor = document.createElement("a");
+          anchor.href = href;
+          anchor.download = filename;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        },
+        revokeObjectUrl: (href) => URL.revokeObjectURL(href),
+        defer: (callback) => {
+          window.setTimeout(callback, 0);
+        }
+      });
     },
     [loadCachedLibraryTrackFile]
   );
