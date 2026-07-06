@@ -11,11 +11,8 @@ import {
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
-  deleteCachedLibraryTrack as deleteCachedLibraryTrackRecord,
   deleteManualCacheTask,
-  deleteManualCacheTasksForTracks,
   deleteCachedPiecesForTrack,
-  deleteCachedPiecesForTracks,
   getCachedLibraryTrack,
   getCachedLibraryTrackCount,
   getCachedLibraryTrackSummary,
@@ -35,19 +32,10 @@ import {
 } from "@/features/upload/audio-utils";
 import {
   buildCachedLibraryTrackUpsertRecord,
-  applyCachedLibraryRoomImportResult,
-  createInFlightCachedLibraryTrackFileLoader,
-  deleteRoomTrackArtifacts as deleteRoomTrackArtifactsFromLibrary,
-  deleteCachedLibraryTrackEntry as deleteCachedLibraryTrackEntryFromLibrary,
-  deleteUploadedTrackArtifacts as deleteUploadedTrackArtifactsFromLibrary,
-  exportCachedLibraryTrackFile,
-  importCachedLibraryTrackToRoom as importCachedLibraryTrackToRoomFromLibrary,
-  loadCacheLibrarySnapshot,
-  toCachedLibraryTrackFile
+  loadCacheLibrarySnapshot
 } from "./cache-library";
 import {
-  announceRoomTrackAvailability as announceRoomTrackAvailabilityFromSources,
-  shouldAnnounceTrackAvailability
+  announceRoomTrackAvailability as announceRoomTrackAvailabilityFromSources
 } from "./track-availability";
 import {
   resolveStalePlaybackDemandTaskIds,
@@ -59,16 +47,13 @@ import {
 } from "./manual-cache-task-store";
 import {
   applySelectedTrackFilesResult,
-  buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
   processSelectedTrackFiles
 } from "./upload-pipeline";
 import { assembleManualCacheTrackFromPieces } from "./manual-cache-assembly";
-import {
-  applyUploadRuntimeTrackRemoval
-} from "./upload-runtime-cleanup";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useManualCacheActions } from "./use-manual-cache-actions";
+import { useCacheLibraryActions } from "./use-cache-library-actions";
 
 export {
   buildCachedLibraryTrackRegisterPayload,
@@ -394,135 +379,27 @@ export function useTrackUploads(options: {
     uploadedTracks
   });
 
-  const deleteUploadedTrackArtifacts = useCallback(
-    async (trackId: string) => {
-      const result = await deleteUploadedTrackArtifactsFromLibrary({
-        trackId,
-        roomId: roomSnapshot?.room.id,
-        deleteCachedPiecesForTrack,
-        deleteManualCacheTask
-      });
-      applyUploadRuntimeTrackRemoval({
-        trackIds: result.removedTrackIds,
-        setUploadedTracks,
-        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-        assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current
-      });
-    },
-    [roomSnapshot?.room.id]
-  );
-
-  const deleteRoomTrackArtifacts = useCallback(
-    async (trackIds: string[]) => {
-      const result = await deleteRoomTrackArtifactsFromLibrary({
-        trackIds,
-        roomId: roomSnapshot?.room.id,
-        deleteCachedPiecesForTracks,
-        deleteManualCacheTasksForTracks
-      });
-      applyUploadRuntimeTrackRemoval({
-        trackIds: result.removedTrackIds,
-        setUploadedTracks,
-        setManualCacheTasks,
-        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-        assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current
-      });
-    },
-    [roomSnapshot?.room.id]
-  );
-
-  const loadCachedLibraryTrackFile = useMemo(
-    () =>
-      createInFlightCachedLibraryTrackFileLoader(async (fileHash) => {
-        const cachedTrack = await getCachedLibraryTrack(fileHash);
-        return cachedTrack ? toCachedLibraryTrackFile(cachedTrack) : null;
-      }),
-    []
-  );
-
-  const deleteCachedLibraryTrackEntry = useCallback(
-    async (fileHash: string) => {
-      const result = await deleteCachedLibraryTrackEntryFromLibrary({
-        fileHash,
-        deleteCachedLibraryTrackRecord,
-        deleteCachedPiecesForTracks
-      });
-      for (const trackId of result.affectedTrackIds) {
-        dropManualCacheTask(trackId);
-      }
-      await refreshCacheLibrary();
-    },
-    [dropManualCacheTask, refreshCacheLibrary]
-  );
-
-  const exportCachedLibraryTrack = useCallback(
-    async (fileHash: string) => {
-      await exportCachedLibraryTrackFile({
-        fileHash,
-        loadCachedLibraryTrackFile,
-        createObjectUrl: (file) => URL.createObjectURL(file),
-        clickDownload: (href, filename) => {
-          const anchor = document.createElement("a");
-          anchor.href = href;
-          anchor.download = filename;
-          document.body.appendChild(anchor);
-          anchor.click();
-          anchor.remove();
-        },
-        revokeObjectUrl: (href) => URL.revokeObjectURL(href),
-        defer: (callback) => {
-          window.setTimeout(callback, 0);
-        }
-      });
-    },
-    [loadCachedLibraryTrackFile]
-  );
-
-  const importCachedLibraryTrackToRoom = useCallback(
-    async (fileHash: string) => {
-      if (!activeSession || !roomSnapshot) {
-        return null;
-      }
-
-      const result = await importCachedLibraryTrackToRoomFromLibrary({
-        fileHash,
-        activeSession,
-        roomId: roomSnapshot.room.id,
-        roomTracks: roomSnapshot.tracks,
-        peerId,
-        shouldAnnounceAvailability: shouldAnnounceTrackAvailability({ peerId }),
-        loadCachedLibraryTrackFile,
-        createObjectUrl: (file) => URL.createObjectURL(file),
-        revokeObjectUrl: (href) => URL.revokeObjectURL(href),
-        buildTrackMeta: (file, objectUrl) => buildTrackMeta(file, objectUrl, activeSession),
-        buildRegisterTrackPayload: buildCachedLibraryTrackRegisterPayload,
-        registerTrack: (roomId, payload) =>
-          musicRoomApi.registerTrack(
-            roomId,
-            payload as Parameters<typeof musicRoomApi.registerTrack>[1]
-          ),
-        syncRoomSnapshot,
-        buildTrackAvailabilityFromFile,
-        publishAvailability: (availability) => {
-          onAvailability(availability);
-          emitAvailability(availability);
-        }
-      });
-      return applyCachedLibraryRoomImportResult({
-        result,
-        setUploadedTracks
-      });
-    },
-    [
-      activeSession,
-      emitAvailability,
-      onAvailability,
-      peerId,
-      roomSnapshot,
-      syncRoomSnapshot,
-      loadCachedLibraryTrackFile
-    ]
-  );
+  const {
+    deleteUploadedTrackArtifacts,
+    deleteRoomTrackArtifacts,
+    deleteCachedLibraryTrackEntry,
+    loadCachedLibraryTrackFile,
+    exportCachedLibraryTrack,
+    importCachedLibraryTrackToRoom
+  } = useCacheLibraryActions({
+    activeSession,
+    dropManualCacheTask,
+    emitAvailability,
+    manualCacheAssemblingTrackIdsRef,
+    manualCacheChunkIndexesRef,
+    onAvailability,
+    peerId,
+    refreshCacheLibrary,
+    roomSnapshot,
+    setManualCacheTasks,
+    setUploadedTracks,
+    syncRoomSnapshot
+  });
 
   return {
     uploadedTracks,
