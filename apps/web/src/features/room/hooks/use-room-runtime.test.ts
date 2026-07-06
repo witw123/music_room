@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   buildActivePlaybackCacheWindow,
@@ -749,5 +752,20 @@ describe("pure cache room runtime helpers", () => {
         currentRecoveryGeneration: 3
       })
     ).toBe(false);
+  });
+});
+
+describe("room runtime snapshot dependency boundaries", () => {
+  it("keeps snapshot playback and track array object refreshes out of dependency arrays", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-room-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const dependencySource = [...source.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)]
+      .map((match) => match.groups?.deps ?? "")
+      .join("\n");
+
+    expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
+    expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.tracks,\s*$/m);
   });
 });

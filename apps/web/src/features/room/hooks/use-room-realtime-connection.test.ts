@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
@@ -6,9 +9,19 @@ import {
   isSocketDisconnectGraceActive,
   shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
+  resolvePresenceRepairAction,
+  resolveRecoveryWatchdogAction,
+  resolveRoomRealtimeSnapshotInputs,
+  resolveRoomSnapshotWatchdogAction,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
 } from "./use-room-realtime-connection";
+
+const readRoomRealtimeConnectionSource = () =>
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "use-room-realtime-connection.ts"),
+    "utf8"
+  ).replace(/\r\n/g, "\n");
 
 function createPlayback(overrides: Partial<PlaybackSnapshot> = {}): PlaybackSnapshot {
   return {
@@ -256,5 +269,255 @@ describe("shouldQueueIncomingAvailability", () => {
         activeRouteRoomId: "room_1"
       })
     ).toBe(false);
+  });
+});
+
+describe("room realtime timer dependencies", () => {
+  it("keeps watchdog and presence timers free of room snapshot object identity", () => {
+    const source = readRoomRealtimeConnectionSource();
+    const dependencySource = [...source.matchAll(/\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)]
+      .map((match) => match.groups?.deps ?? "")
+      .join("\n");
+
+    expect(dependencySource).not.toMatch(/^\s+roomSnapshot,\s*$/m);
+  });
+});
+
+describe("resolveRoomRealtimeSnapshotInputs", () => {
+  it("keeps cloned room snapshots on the same scalar timer identity", () => {
+    const snapshot = createSnapshot({
+      tracks: [
+        {
+          id: "track_1",
+          ownerSessionId: "host",
+          title: "Track 1",
+          artist: "Artist",
+          album: null,
+          durationMs: 120_000,
+          bitrate: 320_000,
+          fileHash: "hash_1",
+          mimeType: "audio/flac",
+          codec: "flac",
+          sizeBytes: 1024,
+          artworkUrl: null,
+          ownerNickname: "Host",
+          sourceType: "local_upload"
+        }
+      ]
+    });
+    snapshot.room.members = [
+      {
+        id: "user_1",
+        nickname: "Listener",
+        role: "member",
+        joinedAt: "2026-01-01T00:00:00.000Z",
+        peerId: "peer_1",
+        presenceState: "online"
+      }
+    ];
+    const clonedSnapshot = {
+      ...snapshot,
+      room: {
+        ...snapshot.room,
+        members: [...snapshot.room.members]
+      },
+      tracks: [...snapshot.tracks]
+    };
+
+    expect(
+      resolveRoomRealtimeSnapshotInputs({
+        roomSnapshot: clonedSnapshot,
+        activeSessionId: "user_1",
+        fallbackUploadedTrackIds: []
+      })
+    ).toEqual(
+      resolveRoomRealtimeSnapshotInputs({
+        roomSnapshot: snapshot,
+        activeSessionId: "user_1",
+        fallbackUploadedTrackIds: []
+      })
+    );
+  });
+});
+
+describe("resolvePresenceRepairAction", () => {
+  it("requests a repair once for a stale local presence record", () => {
+    expect(
+      resolvePresenceRepairAction({
+        snapshotRoomId: "room_1",
+        activeSessionId: "user_1",
+        peerId: "peer_1",
+        hasLocalMemberPresence: true,
+        localMemberPeerId: "old_peer",
+        localMemberPresenceState: "offline",
+        snapshotPresenceRevision: 7,
+        previousRepairKey: null,
+        socketConnected: true
+      })
+    ).toEqual({
+      nextRepairKey: "room_1|7|old_peer|offline|peer_1",
+      shouldEmitPresence: true,
+      shouldRequestResync: true,
+      shouldStartHeartbeat: true
+    });
+  });
+
+  it("does not repeat the same repair key or repair an already healthy local presence", () => {
+    expect(
+      resolvePresenceRepairAction({
+        snapshotRoomId: "room_1",
+        activeSessionId: "user_1",
+        peerId: "peer_1",
+        hasLocalMemberPresence: true,
+        localMemberPeerId: "old_peer",
+        localMemberPresenceState: "offline",
+        snapshotPresenceRevision: 7,
+        previousRepairKey: "room_1|7|old_peer|offline|peer_1",
+        socketConnected: true
+      })
+    ).toEqual({
+      nextRepairKey: "room_1|7|old_peer|offline|peer_1",
+      shouldEmitPresence: false,
+      shouldRequestResync: false,
+      shouldStartHeartbeat: false
+    });
+
+    expect(
+      resolvePresenceRepairAction({
+        snapshotRoomId: "room_1",
+        activeSessionId: "user_1",
+        peerId: "peer_1",
+        hasLocalMemberPresence: true,
+        localMemberPeerId: "peer_1",
+        localMemberPresenceState: "online",
+        snapshotPresenceRevision: 8,
+        previousRepairKey: "room_1|7|old_peer|offline|peer_1",
+        socketConnected: true
+      })
+    ).toEqual({
+      nextRepairKey: null,
+      shouldEmitPresence: false,
+      shouldRequestResync: false,
+      shouldStartHeartbeat: false
+    });
+  });
+});
+
+describe("resolveRoomSnapshotWatchdogAction", () => {
+  it("requests a stale-watchdog resync once realtime room events go stale", () => {
+    expect(
+      resolveRoomSnapshotWatchdogAction({
+        activeRouteRoomId: "room_1",
+        socketConnected: true,
+        snapshotRoomId: "room_1",
+        lastRealtimeRoomEventAtMs: 1_000,
+        nowMs: 9_500,
+        staleAfterMs: 8_000
+      })
+    ).toEqual({
+      nextLastRealtimeRoomEventAtMs: 9_500,
+      resyncRoomId: "room_1",
+      shouldRequestResync: true
+    });
+  });
+
+  it("holds the stale watchdog while the route, socket, or freshness gate is not ready", () => {
+    expect(
+      resolveRoomSnapshotWatchdogAction({
+        activeRouteRoomId: "room_2",
+        socketConnected: true,
+        snapshotRoomId: "room_1",
+        lastRealtimeRoomEventAtMs: 1_000,
+        nowMs: 9_500,
+        staleAfterMs: 8_000
+      }).shouldRequestResync
+    ).toBe(false);
+
+    expect(
+      resolveRoomSnapshotWatchdogAction({
+        activeRouteRoomId: "room_1",
+        socketConnected: false,
+        snapshotRoomId: "room_1",
+        lastRealtimeRoomEventAtMs: 1_000,
+        nowMs: 9_500,
+        staleAfterMs: 8_000
+      }).shouldRequestResync
+    ).toBe(false);
+
+    expect(
+      resolveRoomSnapshotWatchdogAction({
+        activeRouteRoomId: "room_1",
+        socketConnected: true,
+        snapshotRoomId: "room_1",
+        lastRealtimeRoomEventAtMs: 8_000,
+        nowMs: 9_500,
+        staleAfterMs: 8_000
+      }).shouldRequestResync
+    ).toBe(false);
+  });
+});
+
+describe("resolveRecoveryWatchdogAction", () => {
+  it("recommends data recovery when a multi-member cached room has no connected peers", () => {
+    expect(
+      resolveRecoveryWatchdogAction({
+        snapshotRoomId: "room_1",
+        enableTrackCaching: true,
+        connectedPeersCount: 0,
+        snapshotMembersCount: 2,
+        playbackConnectionKey: "track_1|1"
+      })
+    ).toEqual({
+      recommendation: {
+        playbackConnectionKey: "track_1|1",
+        peerId: null,
+        scope: "data",
+        level: "soft",
+        reason: "watchdog-data-stalled",
+        observedNoProgressMs: null
+      }
+    });
+  });
+
+  it("skips data recovery when room, caching, peer, or member gates are not ready", () => {
+    expect(
+      resolveRecoveryWatchdogAction({
+        snapshotRoomId: null,
+        enableTrackCaching: true,
+        connectedPeersCount: 0,
+        snapshotMembersCount: 2,
+        playbackConnectionKey: null
+      }).recommendation
+    ).toBeNull();
+
+    expect(
+      resolveRecoveryWatchdogAction({
+        snapshotRoomId: "room_1",
+        enableTrackCaching: false,
+        connectedPeersCount: 0,
+        snapshotMembersCount: 2,
+        playbackConnectionKey: null
+      }).recommendation
+    ).toBeNull();
+
+    expect(
+      resolveRecoveryWatchdogAction({
+        snapshotRoomId: "room_1",
+        enableTrackCaching: true,
+        connectedPeersCount: 1,
+        snapshotMembersCount: 2,
+        playbackConnectionKey: null
+      }).recommendation
+    ).toBeNull();
+
+    expect(
+      resolveRecoveryWatchdogAction({
+        snapshotRoomId: "room_1",
+        enableTrackCaching: true,
+        connectedPeersCount: 0,
+        snapshotMembersCount: 1,
+        playbackConnectionKey: null
+      }).recommendation
+    ).toBeNull();
   });
 });

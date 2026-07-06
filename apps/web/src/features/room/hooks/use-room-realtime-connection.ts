@@ -131,6 +131,141 @@ export function shouldExitRoomOnSnapshotMissing(input: {
   return !input.missingRoomId || input.missingRoomId === input.currentRoomId;
 }
 
+export function resolveRoomRealtimeSnapshotInputs(input: {
+  roomSnapshot: RoomSnapshot | null;
+  activeSessionId: string | null | undefined;
+  fallbackUploadedTrackIds: string[];
+}) {
+  const localMemberPresence =
+    input.roomSnapshot?.room.members.find((member) => member.id === input.activeSessionId) ??
+    null;
+  const snapshotTrackIds =
+    input.roomSnapshot?.tracks.map((track) => track.id) ?? input.fallbackUploadedTrackIds;
+
+  return {
+    snapshotRoomId: input.roomSnapshot?.room.id ?? null,
+    snapshotMembersCount: input.roomSnapshot?.room.members.length ?? 0,
+    snapshotPresenceRevision: input.roomSnapshot?.room.presenceRevision ?? null,
+    hasLocalMemberPresence: !!localMemberPresence,
+    localMemberPeerId: localMemberPresence?.peerId ?? null,
+    localMemberPresenceState: localMemberPresence?.presenceState ?? null,
+    snapshotTrackIds,
+    snapshotTrackIdsKey: snapshotTrackIds.join("|")
+  };
+}
+
+export function resolvePresenceRepairAction(input: {
+  snapshotRoomId: string | null;
+  activeSessionId: string | null | undefined;
+  peerId: string;
+  hasLocalMemberPresence: boolean;
+  localMemberPeerId: string | null;
+  localMemberPresenceState: string | null;
+  snapshotPresenceRevision: number | null;
+  previousRepairKey: string | null;
+  socketConnected: boolean;
+}) {
+  const idleAction = {
+    nextRepairKey: null,
+    shouldEmitPresence: false,
+    shouldRequestResync: false,
+    shouldStartHeartbeat: false
+  };
+
+  if (
+    !input.snapshotRoomId ||
+    !input.activeSessionId ||
+    !input.peerId ||
+    !input.hasLocalMemberPresence
+  ) {
+    return idleAction;
+  }
+  if (input.localMemberPresenceState === "online" && input.localMemberPeerId === input.peerId) {
+    return idleAction;
+  }
+
+  const nextRepairKey = [
+    input.snapshotRoomId,
+    input.snapshotPresenceRevision,
+    input.localMemberPeerId ?? "none",
+    input.localMemberPresenceState,
+    input.peerId
+  ].join("|");
+  if (input.previousRepairKey === nextRepairKey || !input.socketConnected) {
+    return {
+      ...idleAction,
+      nextRepairKey
+    };
+  }
+
+  return {
+    nextRepairKey,
+    shouldEmitPresence: true,
+    shouldRequestResync: true,
+    shouldStartHeartbeat: true
+  };
+}
+
+export function resolveRoomSnapshotWatchdogAction(input: {
+  activeRouteRoomId: string | null;
+  socketConnected: boolean;
+  snapshotRoomId: string | null;
+  lastRealtimeRoomEventAtMs: number;
+  nowMs: number;
+  staleAfterMs: number;
+}) {
+  const idleAction = {
+    nextLastRealtimeRoomEventAtMs: input.lastRealtimeRoomEventAtMs,
+    resyncRoomId: null,
+    shouldRequestResync: false
+  };
+
+  if (
+    !input.activeRouteRoomId ||
+    input.activeRouteRoomId !== input.snapshotRoomId ||
+    !input.socketConnected
+  ) {
+    return idleAction;
+  }
+  if (input.nowMs - input.lastRealtimeRoomEventAtMs < input.staleAfterMs) {
+    return idleAction;
+  }
+
+  return {
+    nextLastRealtimeRoomEventAtMs: input.nowMs,
+    resyncRoomId: input.snapshotRoomId,
+    shouldRequestResync: true
+  };
+}
+
+export function resolveRecoveryWatchdogAction(input: {
+  snapshotRoomId: string | null;
+  enableTrackCaching: boolean;
+  connectedPeersCount: number;
+  snapshotMembersCount: number;
+  playbackConnectionKey: string | null;
+}) {
+  if (
+    !input.snapshotRoomId ||
+    !input.enableTrackCaching ||
+    input.connectedPeersCount > 0 ||
+    input.snapshotMembersCount <= 1
+  ) {
+    return { recommendation: null };
+  }
+
+  return {
+    recommendation: {
+      playbackConnectionKey: input.playbackConnectionKey,
+      peerId: null,
+      scope: "data" as const,
+      level: "soft" as const,
+      reason: "watchdog-data-stalled" as const,
+      observedNoProgressMs: null
+    }
+  };
+}
+
 function applyRoomSubscribeBootstrap(input: {
   ack: RoomSubscribeAckPayload;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -431,6 +566,20 @@ export function useRoomRealtimeConnection(input: {
     socketRef,
     uploadedTrackIds
   } = input;
+  const {
+    hasLocalMemberPresence,
+    localMemberPeerId,
+    localMemberPresenceState,
+    snapshotMembersCount,
+    snapshotPresenceRevision,
+    snapshotRoomId,
+    snapshotTrackIds,
+    snapshotTrackIdsKey
+  } = resolveRoomRealtimeSnapshotInputs({
+    roomSnapshot,
+    activeSessionId: activeSession?.userId,
+    fallbackUploadedTrackIds: uploadedTrackIds
+  });
   const presenceIntervalRef = useRef<number | null>(null);
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
   const recoveryWatchdogIntervalRef = useRef<number | null>(null);
@@ -489,11 +638,11 @@ export function useRoomRealtimeConnection(input: {
 
   useEffect(() => {
     if (
-      !roomSnapshot?.room.id ||
+      !snapshotRoomId ||
       !hydrated ||
       !activeSession?.userId ||
       isNavigatingRoomExit ||
-      roomSnapshot.room.members.length <= 1
+      snapshotMembersCount <= 1
     ) {
       stopRoomSnapshotWatchdog();
       return;
@@ -504,14 +653,18 @@ export function useRoomRealtimeConnection(input: {
     roomSnapshotWatchdogIntervalRef.current = window.setInterval(() => {
       const activeRoomId = activeRouteRoomIdRef.current;
       const socket = socketRef.current;
-      if (!activeRoomId || activeRoomId !== roomSnapshot?.room.id || !socket?.connected) {
-        return;
+      const watchdogAction = resolveRoomSnapshotWatchdogAction({
+        activeRouteRoomId: activeRoomId,
+        socketConnected: !!socket?.connected,
+        snapshotRoomId,
+        lastRealtimeRoomEventAtMs: lastRealtimeRoomEventAtRef.current,
+        nowMs: Date.now(),
+        staleAfterMs: 8_000
+      });
+      lastRealtimeRoomEventAtRef.current = watchdogAction.nextLastRealtimeRoomEventAtMs;
+      if (watchdogAction.shouldRequestResync) {
+        void requestRoomSnapshotResync("stale-watchdog", watchdogAction.resyncRoomId);
       }
-      if (Date.now() - lastRealtimeRoomEventAtRef.current < 8_000) {
-        return;
-      }
-      lastRealtimeRoomEventAtRef.current = Date.now();
-      void requestRoomSnapshotResync("stale-watchdog", roomSnapshot.room.id);
     }, 4_000);
 
     return () => stopRoomSnapshotWatchdog();
@@ -522,50 +675,47 @@ export function useRoomRealtimeConnection(input: {
     isNavigatingRoomExit,
     lastRealtimeRoomEventAtRef,
     requestRoomSnapshotResync,
-    roomSnapshot,
+    snapshotMembersCount,
+    snapshotRoomId,
     socketRef,
     stopRoomSnapshotWatchdog
   ]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id || !activeSession?.userId || !peerId) {
-      presenceRepairKeyRef.current = null;
+    const presenceRepairAction = resolvePresenceRepairAction({
+      snapshotRoomId,
+      activeSessionId: activeSession?.userId,
+      peerId,
+      hasLocalMemberPresence,
+      localMemberPeerId,
+      localMemberPresenceState,
+      snapshotPresenceRevision,
+      previousRepairKey: presenceRepairKeyRef.current,
+      socketConnected: !!socketRef.current?.connected
+    });
+    presenceRepairKeyRef.current = presenceRepairAction.nextRepairKey;
+    if (!presenceRepairAction.shouldStartHeartbeat) {
       return;
     }
-    const localMember =
-      roomSnapshot.room.members.find((member) => member.id === activeSession?.userId) ??
-      null;
-    if (!localMember) {
-      presenceRepairKeyRef.current = null;
-      return;
+    if (presenceRepairAction.shouldStartHeartbeat) {
+      startPresenceHeartbeat();
     }
-    if (localMember.presenceState === "online" && localMember.peerId === peerId) {
-      presenceRepairKeyRef.current = null;
-      return;
+    if (presenceRepairAction.shouldEmitPresence) {
+      emitPresence();
     }
-    const repairKey = [
-      roomSnapshot.room.id,
-      roomSnapshot.room.presenceRevision,
-      localMember.peerId ?? "none",
-      localMember.presenceState,
-      peerId
-    ].join("|");
-    if (presenceRepairKeyRef.current === repairKey) {
-      return;
+    if (presenceRepairAction.shouldRequestResync && snapshotRoomId) {
+      void requestRoomSnapshotResync("subscribe-ack", snapshotRoomId);
     }
-    presenceRepairKeyRef.current = repairKey;
-    if (!socketRef.current?.connected) {
-      return;
-    }
-    startPresenceHeartbeat();
-    emitPresence();
-    void requestRoomSnapshotResync("subscribe-ack", roomSnapshot.room.id);
   }, [
     emitPresence,
     activeSession?.userId,
+    hasLocalMemberPresence,
+    localMemberPeerId,
+    localMemberPresenceState,
     peerId,
     requestRoomSnapshotResync,
-    roomSnapshot,
+    snapshotPresenceRevision,
+    snapshotRoomId,
     socketRef,
     startPresenceHeartbeat
   ]);
@@ -576,9 +726,9 @@ export function useRoomRealtimeConnection(input: {
       !hydrated ||
       !activeSession?.userId ||
       isNavigatingRoomExit ||
-      roomSnapshot?.room.id !== initialRoomId
+      snapshotRoomId !== initialRoomId
     ) {
-      if (!initialRoomId || roomSnapshot?.room.id !== initialRoomId) {
+      if (!initialRoomId || snapshotRoomId !== initialRoomId) {
         initialRoomSnapshotResyncKeyRef.current = null;
       }
       return;
@@ -595,59 +745,56 @@ export function useRoomRealtimeConnection(input: {
     initialRoomId,
     isNavigatingRoomExit,
     requestRoomSnapshotResync,
-    roomSnapshot?.room.id
+    snapshotRoomId
   ]);
 
   useEffect(() => {
     const nextBroadcastKey = shouldReannounceManualCacheAvailability({
       enableManualTrackCaching,
-      roomId: roomSnapshot?.room.id,
+      roomId: snapshotRoomId,
       roomListenerSetHash,
-      uploadedTrackIds: roomSnapshot?.tracks.map((track) => track.id) ?? uploadedTrackIds,
+      uploadedTrackIds: snapshotTrackIds,
       lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
     });
     if (!nextBroadcastKey) {
       if (
-        !roomSnapshot?.room.id ||
+        !snapshotRoomId ||
         !roomListenerSetHash ||
-        (roomSnapshot?.tracks.length ?? uploadedTrackIds.length) === 0
+        snapshotTrackIds.length === 0
       ) {
         lastManualCacheAvailabilityBroadcastKeyRef.current = null;
       }
       return;
     }
     lastManualCacheAvailabilityBroadcastKeyRef.current = nextBroadcastKey;
-    for (const trackId of roomSnapshot?.tracks.map((track) => track.id) ?? uploadedTrackIds) {
+    for (const trackId of snapshotTrackIds) {
       void announceRoomTrackAvailabilityRef.current(trackId);
     }
   }, [
     announceRoomTrackAvailabilityRef,
     enableManualTrackCaching,
     roomListenerSetHash,
-    roomSnapshot?.room.id,
-    roomSnapshot?.tracks,
-    uploadedTrackIds
+    snapshotRoomId,
+    snapshotTrackIds,
+    snapshotTrackIdsKey
   ]);
 
   useEffect(() => {
-    if (!roomSnapshot?.room.id) {
+    if (!snapshotRoomId) {
       stopRecoveryWatchdog();
       return;
     }
     stopRecoveryWatchdog();
     recoveryWatchdogIntervalRef.current = window.setInterval(() => {
-      if (!roomSnapshot?.room.id || !enableTrackCaching) {
-        return;
-      }
-      if (connectedPeers.length === 0 && roomSnapshot.room.members.length > 1) {
-        queuePlaybackRecoveryRecommendation?.({
-          playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null,
-          peerId: null,
-          scope: "data",
-          level: "soft",
-          reason: "watchdog-data-stalled",
-          observedNoProgressMs: null
-        });
+      const recoveryAction = resolveRecoveryWatchdogAction({
+        snapshotRoomId,
+        enableTrackCaching,
+        connectedPeersCount: connectedPeers.length,
+        snapshotMembersCount,
+        playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null
+      });
+      if (recoveryAction.recommendation) {
+        queuePlaybackRecoveryRecommendation?.(recoveryAction.recommendation);
       }
     }, 5_000);
     return () => stopRecoveryWatchdog();
@@ -656,7 +803,8 @@ export function useRoomRealtimeConnection(input: {
     enableTrackCaching,
     getCurrentPlaybackConnectionKey,
     queuePlaybackRecoveryRecommendation,
-    roomSnapshot,
+    snapshotMembersCount,
+    snapshotRoomId,
     stopRecoveryWatchdog
   ]);
 

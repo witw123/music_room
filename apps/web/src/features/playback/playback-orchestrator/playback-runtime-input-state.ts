@@ -102,22 +102,9 @@ export function usePlaybackRuntimeInputState({
   const playbackCurrentTrackId = playback?.currentTrackId ?? null;
   const playbackStatus = playback?.status ?? null;
   const playbackMediaEpoch = playback?.mediaEpoch ?? null;
-  const playbackSourceSessionId = playback?.sourceSessionId ?? null;
-  const playbackSourcePeerId = playback?.sourcePeerId ?? null;
   const playbackPositionKey = buildPlaybackPositionKey(playback);
-  const playbackSurfaceKey = useMemo(
-    () => resolvePlaybackSurfaceKey(playback),
-    [
-      playbackCurrentTrackId,
-      playbackMediaEpoch,
-      playbackSourcePeerId,
-      playbackSourceSessionId
-    ]
-  );
-  const playbackTimelineKey = useMemo(
-    () => resolvePlaybackTimelineKey(playback),
-    [playbackCurrentTrackId, playbackMediaEpoch, playbackRevision]
-  );
+  const playbackSurfaceKey = resolvePlaybackSurfaceKey(playback);
+  const playbackTimelineKey = resolvePlaybackTimelineKey(playback);
 
   const currentBufferedFullLocalTrack = useMemo(
     () =>
@@ -147,15 +134,11 @@ export function usePlaybackRuntimeInputState({
   });
   const canUseFullLocalForPlaybackSession =
     fullLocalPlaybackSessionRef.current.availableInSession && !!currentBufferedFullLocalTrack;
-  const forceSourceOwnerLocalPlayback = useMemo(
-    () =>
-      shouldForceSourceOwnerLocalPlayback({
-        isCurrentSourceOwner,
-        activePlaybackSource,
-        hasFullLocalTrack: !!currentBufferedFullLocalTrack
-      }),
-    [activePlaybackSource, currentBufferedFullLocalTrackObjectUrl, isCurrentSourceOwner]
-  );
+  const forceSourceOwnerLocalPlayback = shouldForceSourceOwnerLocalPlayback({
+    isCurrentSourceOwner,
+    activePlaybackSource,
+    hasFullLocalTrack: !!currentBufferedFullLocalTrack
+  });
   const activeMemberPeerIds = useMemo(
     () => resolveActiveMemberPeerIds(roomSnapshot?.room.members),
     [roomSnapshot?.room.members]
@@ -220,25 +203,14 @@ export function usePlaybackRuntimeInputState({
       }),
     [activeMemberPeerIds, peerDiagnostics]
   );
-  const progressiveHealthSnapshot = useMemo(
-    () =>
-      buildProgressiveHealthSnapshot({
-        playback,
-        activeSource: activePlaybackSource,
-        manifest: currentProgressiveManifest,
-        localAvailability: currentTrackAvailabilityAnnouncement,
-        fallbackReason: progressiveFallbackReason,
-        currentPieceDownloadRateKbps: aggregatePieceDownloadRateKbps
-      }),
-    [
-      playbackPositionKey,
-      activePlaybackSource,
-      currentProgressiveManifest,
-      currentTrackAvailabilityAnnouncement,
-      progressiveFallbackReason,
-      aggregatePieceDownloadRateKbps
-    ]
-  );
+  const progressiveHealthSnapshot = buildProgressiveHealthSnapshot({
+    playback,
+    activeSource: activePlaybackSource,
+    manifest: currentProgressiveManifest,
+    localAvailability: currentTrackAvailabilityAnnouncement,
+    fallbackReason: progressiveFallbackReason,
+    currentPieceDownloadRateKbps: aggregatePieceDownloadRateKbps
+  });
   const progressiveSchedulerPolicy = progressiveHealthSnapshot.schedulerPolicy;
   const isProgressiveTakeoverReady = useCallback(
     (now = Date.now()) => {

@@ -16,7 +16,6 @@ import {
   type ProgressiveHealthSnapshot,
   type ProgressivePlaybackSource
 } from "../progressive-playback";
-import type { PlaybackStartIntent } from "../playback-start-intent";
 import {
   buildProgressiveWarmupTimerKey,
   resolveAudibleLocalFallbackActive,
@@ -59,7 +58,6 @@ type PlaybackRuntimePolicyStateInput = {
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   canUseFullLocalForPlaybackSession: boolean;
   connectedPeersCount: number;
-  currentBufferedFullLocalTrackObjectUrl: string | null;
   currentProgressiveEngineType: ProgressiveEngineType;
   currentProgressiveManifestKey: string;
   currentTrack: TrackMeta | null;
@@ -92,7 +90,6 @@ export function usePlaybackRuntimePolicyState({
   availabilityByTrack,
   canUseFullLocalForPlaybackSession,
   connectedPeersCount,
-  currentBufferedFullLocalTrackObjectUrl,
   currentProgressiveEngineType,
   currentProgressiveManifestKey,
   currentTrack,
@@ -360,7 +357,6 @@ export function usePlaybackRuntimePolicyState({
     [
       activePlaybackSource,
       canUseFullLocalForPlaybackSession,
-      currentBufferedFullLocalTrackObjectUrl,
       hasBufferedFullLocalTrack,
       isCurrentSourceOwner,
       listenerLocalTakeoverEnabled,

@@ -501,6 +501,30 @@ describe("playback runtime pipeline keys", () => {
     expect(runtimeTypesSource).toContain("export type UseProgressiveRuntimeResult =");
   });
 
+  it("hosts compatibility helper exports outside the main runtime hook", () => {
+    const runtimeSource = readPlaybackRuntimeSource("use-progressive-runtime.ts");
+    const compatibilityExportsSource = readPlaybackRuntimeSource(
+      "playback-orchestrator/playback-runtime-compat-exports.ts"
+    );
+
+    expect(runtimeSource).not.toMatch(
+      /^import\s+\{[^;]*\}\s+from "\.\/playback-orchestrator\/pipeline";/m
+    );
+    expect(runtimeSource).not.toMatch(
+      /^import\s+\{[^;]*\}\s+from "\.\/pcm-runtime-failure";/m
+    );
+    expect(runtimeSource).not.toMatch(
+      /^import\s+\{[^;]*\}\s+from "\.\/progressive-source-controller";/m
+    );
+    expect(runtimeSource).not.toContain("appendPlaybackQualityTimestamp,");
+    expect(runtimeSource).not.toContain("shouldRetryPcmRuntimeAfterFailure");
+    expect(runtimeSource).toContain(
+      'export * from "./playback-orchestrator/playback-runtime-compat-exports";'
+    );
+    expect(compatibilityExportsSource).toContain('} from "../pcm-runtime-failure";');
+    expect(compatibilityExportsSource).toContain('} from "./pipeline";');
+  });
+
   it("hosts playback start intent orchestration outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),

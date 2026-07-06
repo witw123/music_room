@@ -28,7 +28,6 @@ import {
   type ProgressivePlaybackSource,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
-import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
@@ -189,6 +188,34 @@ type UseRoomRuntimeResult = {
 };
 
 type SourceLocalPlaybackTrack = Pick<UploadedTrack, "objectUrl">;
+type PlaybackCacheIdentity = {
+  currentTrackId: string | null | undefined;
+  status: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
+  sourcePeerId: string | null | undefined;
+  sourceSessionId: string | null | undefined;
+} & Partial<
+    Omit<
+      RoomSnapshot["room"]["playback"],
+      "currentTrackId" | "status" | "sourcePeerId" | "sourceSessionId"
+    >
+  >;
+
+function isPlaybackCacheSourceDevice(input: {
+  playback: PlaybackCacheIdentity | null | undefined;
+  peerId: string | null | undefined;
+  activeSessionId: string | null | undefined;
+}) {
+  const playback = input.playback;
+  if (!playback?.currentTrackId) {
+    return false;
+  }
+
+  if (input.peerId && playback.sourcePeerId) {
+    return playback.sourcePeerId === input.peerId;
+  }
+
+  return Boolean(input.activeSessionId && playback.sourceSessionId === input.activeSessionId);
+}
 
 export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
   previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
@@ -213,7 +240,7 @@ export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
 }
 
 export function shouldStartPlaybackDemandCacheForPlayback(input: {
-  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  playback: PlaybackCacheIdentity | null | undefined;
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
   manualCacheTrackIds: string[];
@@ -224,12 +251,12 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
   if (
     !input.enableManualTrackCaching ||
     !playback?.currentTrackId ||
-    !hasActivePlaybackIntent(playback)
+    (playback.status !== "playing" && playback.status !== "buffering")
   ) {
     return false;
   }
 
-  if (isCurrentPlaybackSourceDevice({
+  if (isPlaybackCacheSourceDevice({
     playback,
     peerId: input.peerId,
     activeSessionId: input.activeSessionId
@@ -274,7 +301,7 @@ export function resolveSourceLocalPlaybackTrack(input: {
 }
 
 export function resolveRuntimeManualCacheTrackIds(input: {
-  playback: RoomSnapshot["room"]["playback"] | null | undefined;
+  playback: PlaybackCacheIdentity | null | undefined;
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
   manualCacheTrackIds: string[];
@@ -283,7 +310,7 @@ export function resolveRuntimeManualCacheTrackIds(input: {
 }) {
   const trackIds = new Set(input.manualCacheTrackIds.filter(Boolean));
   const playback = input.playback;
-  const isSourceDevice = isCurrentPlaybackSourceDevice({
+  const isSourceDevice = isPlaybackCacheSourceDevice({
     playback,
     peerId: input.peerId,
     activeSessionId: input.activeSessionId
@@ -291,7 +318,7 @@ export function resolveRuntimeManualCacheTrackIds(input: {
   if (
     input.enableManualTrackCaching &&
     playback?.currentTrackId &&
-    hasActivePlaybackIntent(playback) &&
+    (playback.status === "playing" || playback.status === "buffering") &&
     (!isSourceDevice || !input.hasLocalFullTrack)
   ) {
     trackIds.add(playback.currentTrackId);
@@ -471,10 +498,37 @@ export function useRoomRuntime({
   void setMediaConnectedPeers;
   void mediaConnectionState;
 
+  const roomPlayback = roomSnapshot?.room.playback ?? null;
+  const roomPlaybackCurrentTrackId = roomPlayback?.currentTrackId ?? null;
+  const roomPlaybackStatus = roomPlayback?.status ?? null;
+  const roomPlaybackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
+  const roomPlaybackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
+  const roomPlaybackRef = useRef(roomPlayback);
+  roomPlaybackRef.current = roomPlayback;
+  const roomTracksRef = useRef(roomSnapshot?.tracks ?? null);
+  roomTracksRef.current = roomSnapshot?.tracks ?? null;
+  const roomPlaybackCacheIdentity = useMemo<PlaybackCacheIdentity | null>(
+    () =>
+      roomPlaybackCurrentTrackId
+        ? {
+            currentTrackId: roomPlaybackCurrentTrackId,
+            status: roomPlaybackStatus,
+            sourcePeerId: roomPlaybackSourcePeerId,
+            sourceSessionId: roomPlaybackSourceSessionId
+          }
+        : null,
+    [
+      roomPlaybackCurrentTrackId,
+      roomPlaybackSourcePeerId,
+      roomPlaybackSourceSessionId,
+      roomPlaybackStatus
+    ]
+  );
+
   const runtimeManualCacheTrackIds = useMemo(
     () =>
       resolveRuntimeManualCacheTrackIds({
-        playback: roomSnapshot?.room.playback,
+        playback: roomPlaybackCacheIdentity,
         peerId,
         activeSessionId: activeSession?.userId,
         manualCacheTrackIds,
@@ -486,7 +540,7 @@ export function useRoomRuntime({
       hasFullLocalTrack,
       manualCacheTrackIds,
       peerId,
-      roomSnapshot?.room.playback
+      roomPlaybackCacheIdentity
     ]
   );
 
@@ -555,18 +609,17 @@ export function useRoomRuntime({
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
   const activePlaybackTrackDurationMs =
-    roomSnapshot?.tracks.find(
-      (track) => track.id === roomSnapshot.room.playback.currentTrackId
-    )?.durationMs ?? 0;
+    roomTracksRef.current?.find((track) => track.id === roomPlaybackCurrentTrackId)?.durationMs ??
+    0;
   const activePlaybackCacheWindow = buildActivePlaybackCacheWindow({
-    playback: roomSnapshot?.room.playback,
+    playback: roomPlayback,
     positionMs: resolveActivePlaybackCacheWindowPosition({
       localPlaybackPositionMs:
         typeof getLocalPlaybackPositionMs === "function"
           ? getLocalPlaybackPositionMs()
           : null,
       mediaConnectionState,
-      playback: roomSnapshot?.room.playback,
+      playback: roomPlayback,
       durationMs: activePlaybackTrackDurationMs,
       schedulerPlaybackBucketMs
     }),
@@ -676,7 +729,7 @@ export function useRoomRuntime({
   );
 
   const ensureSourcePlaybackStarted = useCallback(async () => {
-    const playback = currentRoomRef.current?.room.playback ?? roomSnapshot?.room.playback ?? null;
+    const playback = currentRoomRef.current?.room.playback ?? roomPlaybackRef.current;
     if (!playback?.currentTrackId || playback.status !== "playing") {
       updateSourceStartState("idle", { recordEvent: false });
       return;
@@ -718,7 +771,7 @@ export function useRoomRuntime({
         }
         const track =
           currentRoomRef.current?.tracks.find((entry) => entry.id === playback.currentTrackId) ??
-          roomSnapshot?.tracks.find((entry) => entry.id === playback.currentTrackId) ??
+          roomTracksRef.current?.find((entry) => entry.id === playback.currentTrackId) ??
           null;
         const expectedSeconds =
           getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now()) / 1000;
@@ -745,8 +798,8 @@ export function useRoomRuntime({
     activePlaybackSourceRef,
     audioRef,
     currentRoomRef,
-    roomSnapshot?.room.playback,
-    roomSnapshot?.tracks,
+    roomPlaybackRef,
+    roomTracksRef,
     updateSourceStartState,
     uploadedTracksRef,
     fullLocalPlaybackTracks,
@@ -891,7 +944,7 @@ export function useRoomRuntime({
   );
 
   useEffect(() => {
-    const playback = roomSnapshot?.room.playback ?? null;
+    const playback = roomPlaybackCacheIdentity;
     if (
       !shouldStartPlaybackDemandCacheForPlayback({
         playback,
@@ -911,7 +964,7 @@ export function useRoomRuntime({
     hasFullLocalTrack,
     manualCacheTrackIds,
     peerId,
-    roomSnapshot?.room.playback,
+    roomPlaybackCacheIdentity,
     startPlaybackDemandCacheDownload
   ]);
 
@@ -972,8 +1025,8 @@ export function useRoomRuntime({
       getPeerMedianRttMs,
       setConnectedPeers,
       isPageVisible,
-      playbackStatus: roomSnapshot?.room.playback.status ?? "paused",
-      currentTrackId: roomSnapshot?.room.playback.currentTrackId ?? null,
+      playbackStatus: roomPlaybackStatus ?? "paused",
+      currentTrackId: roomPlaybackCurrentTrackId,
       bufferHealth,
       enableManualTrackCaching,
       enableTrackCaching,
@@ -1007,8 +1060,8 @@ export function useRoomRuntime({
     });
   }, [
     roomSnapshot?.room.id,
-    roomSnapshot?.room.playback.currentTrackId,
-    roomSnapshot?.room.playback.status,
+    roomPlaybackCurrentTrackId,
+    roomPlaybackStatus,
     hydrated,
     iceConfig,
     iceConfigResolved,
@@ -1063,13 +1116,13 @@ export function useRoomRuntime({
 
   useEffect(() => {
     setMediaConnectionState(
-      roomSnapshot?.room.playback.currentTrackId
+      roomPlaybackCurrentTrackId
         ? bufferHealth === "critical"
           ? "buffering"
           : "live"
         : "idle"
     );
-  }, [bufferHealth, roomSnapshot?.room.playback.currentTrackId, setMediaConnectionState]);
+  }, [bufferHealth, roomPlaybackCurrentTrackId, setMediaConnectionState]);
 
   useEffect(() => {
     updateConnectionSupervisorPlayout();
