@@ -16,12 +16,10 @@ import {
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
-  assembleIncomingPieceFragments,
   buildPieceFrames,
   decodePieceFrame,
   type BinaryPieceFragmentMessage,
-  type BinaryPieceMessage,
-  type PendingIncomingPieceFragments
+  type BinaryPieceMessage
 } from "./piece-frame-codec";
 import {
   SignalingTransport,
@@ -37,6 +35,7 @@ import {
   PieceRequestTracker,
   type PendingPieceRequest
 } from "./piece-request-tracker";
+import { PieceFragmentTracker } from "./piece-fragment-tracker";
 import {
   PeerConnectionRegistry,
   clearPeerTimers,
@@ -223,7 +222,9 @@ export class P2PMesh {
   private readonly resolveConnectionConfig?: MeshOptions["resolveConnectionConfig"];
   private readonly resolvePieceRequestFallback?: MeshOptions["resolvePieceRequestFallback"];
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
-  private readonly pendingIncomingPieceFragments = new Map<string, PendingIncomingPieceFragments>();
+  private readonly pieceFragments = new PieceFragmentTracker({
+    ttlMs: this.incomingPieceFragmentTtlMs
+  });
   private readonly signaling: SignalingTransport;
   private readonly dataChannels: DataChannelManager;
   private readonly healthMonitor: MeshHealthMonitor;
@@ -508,7 +509,7 @@ export class P2PMesh {
       this.pieceFlushTimer = null;
     }
     this.pendingIncomingPieces.length = 0;
-    this.pendingIncomingPieceFragments.clear();
+    this.pieceFragments.clearAll();
 
     for (const [peerId, entry] of this.peerConnections.entries()) {
       this.releasePeer(peerId, entry);
@@ -1072,44 +1073,8 @@ export class P2PMesh {
   }
 
   private handleIncomingPieceFragment(peerId: string, message: BinaryPieceFragmentMessage) {
-    this.purgeStaleIncomingPieceFragments();
-    const fragmentKey = this.buildIncomingPieceFragmentKey(
-      peerId,
-      message.trackId,
-      message.chunkIndex,
-      message.requestId
-    );
-    const existing = this.pendingIncomingPieceFragments.get(fragmentKey);
-    const fragmentState: PendingIncomingPieceFragments =
-      existing &&
-      existing.fragmentCount === message.fragmentCount &&
-      existing.pieceHash === message.pieceHash
-        ? existing
-        : {
-            peerId,
-            requestId: message.requestId,
-            trackId: message.trackId,
-            chunkIndex: message.chunkIndex,
-            totalChunks: message.totalChunks,
-            chunkSize: message.chunkSize,
-            mimeType: message.mimeType,
-            pieceHash: message.pieceHash,
-            fragmentCount: message.fragmentCount,
-            receivedAtMs: Date.now(),
-            fragments: new Map<number, ArrayBuffer>()
-          };
-
-    fragmentState.receivedAtMs = Date.now();
-    fragmentState.fragments.set(message.fragmentIndex, message.payload);
-    this.pendingIncomingPieceFragments.set(fragmentKey, fragmentState);
-
-    if (fragmentState.fragments.size < fragmentState.fragmentCount) {
-      return;
-    }
-
-    const assembledPayload = assembleIncomingPieceFragments(fragmentState);
-    this.pendingIncomingPieceFragments.delete(fragmentKey);
-    if (!assembledPayload) {
+    const assembledMessage = this.pieceFragments.addFragment(peerId, message);
+    if (!assembledMessage) {
       return;
     }
 
@@ -1117,47 +1082,10 @@ export class P2PMesh {
 
     this.pendingIncomingPieces.push({
       peerId,
-      message: {
-        kind: "send-piece",
-        requestId: message.requestId,
-        trackId: message.trackId,
-        chunkIndex: message.chunkIndex,
-        totalChunks: message.totalChunks,
-        chunkSize: message.chunkSize,
-        mimeType: message.mimeType,
-        pieceHash: message.pieceHash,
-        header: {
-          kind: "send-piece",
-          requestId: message.requestId,
-          trackId: message.trackId,
-          chunkIndex: message.chunkIndex,
-          totalChunks: message.totalChunks,
-          chunkSize: message.chunkSize,
-          mimeType: message.mimeType,
-          pieceHash: message.pieceHash
-        },
-        payload: assembledPayload
-      },
+      message: assembledMessage,
       pendingRequest: pendingRequest ?? undefined
     });
     this.scheduleIncomingPieceFlush();
-  }
-
-  private buildIncomingPieceFragmentKey(
-    peerId: string,
-    trackId: string,
-    chunkIndex: number,
-    requestId?: string
-  ) {
-    return `${peerId}:${trackId}:${chunkIndex}:${requestId ?? "none"}`;
-  }
-
-  private purgeStaleIncomingPieceFragments(now = Date.now()) {
-    for (const [fragmentKey, fragmentState] of this.pendingIncomingPieceFragments.entries()) {
-      if (now - fragmentState.receivedAtMs >= this.incomingPieceFragmentTtlMs) {
-        this.pendingIncomingPieceFragments.delete(fragmentKey);
-      }
-    }
   }
 }
 
