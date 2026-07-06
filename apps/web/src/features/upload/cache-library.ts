@@ -53,3 +53,92 @@ export function hasUsableCachedLibraryFileForRoomTrack(input: {
     })
   );
 }
+
+export function toCachedLibraryFile(input: {
+  file: Blob;
+  title: string;
+  mimeType: string;
+  fileHash: string;
+}) {
+  if (input.file instanceof File) {
+    return input.file;
+  }
+
+  return new File([input.file], buildCachedLibraryFileName(input), {
+    type: input.mimeType || "audio/mpeg"
+  });
+}
+
+export function toCachedLibraryFileFromBlob(
+  file: Blob,
+  track: Pick<TrackMeta, "title" | "mimeType" | "fileHash">
+) {
+  return toCachedLibraryFile({
+    file,
+    title: track.title,
+    mimeType: track.mimeType || file.type || "audio/mpeg",
+    fileHash: track.fileHash
+  });
+}
+
+export function toCachedLibraryTrack(
+  record: CachedLibraryTrackSummaryRecord
+): CachedLibraryTrack {
+  return {
+    fileHash: record.fileHash,
+    title: record.title,
+    artist: record.artist,
+    mimeType: record.mimeType,
+    durationMs: record.durationMs,
+    sizeBytes: record.sizeBytes,
+    cachedAt: record.cachedAt,
+    sourceTrackIds: record.sourceTrackIds,
+    sourceRoomIds: record.sourceRoomIds,
+    lastSourceTrackId: record.lastSourceTrackId,
+    lastSourceRoomId: record.lastSourceRoomId,
+    lastOwnerNickname: record.lastOwnerNickname
+  };
+}
+
+export function toCachedLibraryTrackFile(
+  record: CachedLibraryTrackRecord
+): CachedLibraryTrackFile {
+  return {
+    ...toCachedLibraryTrack(record),
+    file: toCachedLibraryFile(record)
+  };
+}
+
+export function buildCachedLibraryFileName(input: {
+  title: string;
+  mimeType: string;
+  fileHash: string;
+}) {
+  const baseName = sanitizeFileName(input.title) || input.fileHash;
+  const extension = inferFileExtension(input.mimeType);
+  return extension ? `${baseName}.${extension}` : baseName;
+}
+
+function inferFileExtension(mimeType: string | null | undefined) {
+  switch ((mimeType ?? "").toLowerCase()) {
+    case "audio/mpeg":
+    case "audio/mp3":
+      return "mp3";
+    case "audio/flac":
+      return "flac";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav";
+    case "audio/mp4":
+    case "audio/aac":
+      return "m4a";
+    case "audio/ogg":
+      return "ogg";
+    default:
+      return "";
+  }
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[\\/:*?"<>|]+/g, " ").trim();
+}

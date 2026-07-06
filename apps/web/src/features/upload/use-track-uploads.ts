@@ -35,20 +35,20 @@ import { removeTracksFromUploads } from "@/lib/music-room-ui";
 import {
   buildTrackMeta,
   type CachedLibraryTrack,
-  type CachedLibraryTrackFile,
   type UploadedTrack
 } from "@/features/upload/audio-utils";
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
-import type {
-  CachedLibraryTrackRecord,
-  CachedLibraryTrackSummaryRecord
-} from "@/lib/indexeddb";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
+  buildCachedLibraryFileName,
   createInFlightCachedLibraryTrackFileLoader,
-  hasUsableCachedLibraryFileForRoomTrack
+  hasUsableCachedLibraryFileForRoomTrack,
+  toCachedLibraryFile,
+  toCachedLibraryFileFromBlob,
+  toCachedLibraryTrack,
+  toCachedLibraryTrackFile
 } from "./cache-library";
 import {
   buildManualCachePieceAvailabilityAnnouncement,
@@ -1423,93 +1423,4 @@ export function useTrackUploads(options: {
 
 function resolveTrackTotalChunks(track: Pick<TrackMeta, "relayManifest" | "pieceManifest">) {
   return track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0;
-}
-
-function toCachedLibraryFile(input: {
-  file: Blob;
-  title: string;
-  mimeType: string;
-  fileHash: string;
-}) {
-  if (input.file instanceof File) {
-    return input.file;
-  }
-
-  return new File([input.file], buildCachedLibraryFileName(input), {
-    type: input.mimeType || "audio/mpeg"
-  });
-}
-
-function toCachedLibraryFileFromBlob(
-  file: Blob,
-  track: Pick<TrackMeta, "title" | "mimeType" | "fileHash">
-) {
-  return toCachedLibraryFile({
-    file,
-    title: track.title,
-    mimeType: track.mimeType || file.type || "audio/mpeg",
-    fileHash: track.fileHash
-  });
-}
-
-function toCachedLibraryTrack(
-  record: CachedLibraryTrackSummaryRecord
-): CachedLibraryTrack {
-  return {
-    fileHash: record.fileHash,
-    title: record.title,
-    artist: record.artist,
-    mimeType: record.mimeType,
-    durationMs: record.durationMs,
-    sizeBytes: record.sizeBytes,
-    cachedAt: record.cachedAt,
-    sourceTrackIds: record.sourceTrackIds,
-    sourceRoomIds: record.sourceRoomIds,
-    lastSourceTrackId: record.lastSourceTrackId,
-    lastSourceRoomId: record.lastSourceRoomId,
-    lastOwnerNickname: record.lastOwnerNickname
-  };
-}
-
-function toCachedLibraryTrackFile(
-  record: CachedLibraryTrackRecord
-): CachedLibraryTrackFile {
-  return {
-    ...toCachedLibraryTrack(record),
-    file: toCachedLibraryFile(record)
-  };
-}
-
-function buildCachedLibraryFileName(input: {
-  title: string;
-  mimeType: string;
-  fileHash: string;
-}) {
-  const baseName = sanitizeFileName(input.title) || input.fileHash;
-  const extension = inferFileExtension(input.mimeType);
-  return extension ? `${baseName}.${extension}` : baseName;
-}
-
-function inferFileExtension(mimeType: string | null | undefined) {
-  switch ((mimeType ?? "").toLowerCase()) {
-    case "audio/mpeg":
-    case "audio/mp3":
-      return "mp3";
-    case "audio/flac":
-      return "flac";
-    case "audio/wav":
-    case "audio/x-wav":
-      return "wav";
-    case "audio/mp4":
-    case "audio/aac":
-      return "m4a";
-    case "audio/ogg":
-      return "ogg";
-    default:
-      return "";
-  }
-}
-
-function sanitizeFileName(value: string) {
-  return value.replace(/[\\/:*?"<>|]+/g, " ").trim();
 }
