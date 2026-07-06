@@ -205,6 +205,24 @@ describe("room page playback effects boundary", () => {
   });
 });
 
+describe("room page room actions boundary", () => {
+  it("hosts room action assembly outside the app component", () => {
+    const appSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "music-room-app.tsx"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const roomActionsSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-page-room-actions.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(appSource).not.toContain("const resetPlayerSurface = useCallback");
+    expect(appSource).not.toContain("useRoomActions({");
+    expect(appSource).not.toContain("useRoomLifecycleActions({");
+    expect(roomActionsSource).toContain("export function useRoomPageRoomActions");
+  });
+});
+
 describe("getPlaybackSourceInitializationKey", () => {
   it("keeps runtime fallback state when equivalent room track metadata is refreshed", () => {
     const firstKey = getPlaybackSourceInitializationKey({

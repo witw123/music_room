@@ -8,7 +8,6 @@ import {
   useAvailabilityAnnouncements,
   usePeerDiagnostics
 } from "@/features/p2p";
-import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomSocket } from "@/lib/ws-client";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
@@ -22,7 +21,6 @@ import {
   getProgressiveEngineType
 } from "@/features/playback/progressive-playback";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
-import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
@@ -30,8 +28,6 @@ import {
   selectWorkspacePeerDiagnostics,
   useRoomDerivedState
 } from "@/components/room/hooks/use-room-derived-state";
-import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
-import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import {
   initialRoomStateStore,
   roomStateReducer
@@ -43,6 +39,7 @@ import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room
 import { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
 import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playback-effects";
 import { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
+import { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
 import { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
 
 export {
@@ -148,11 +145,6 @@ export function MusicRoomApp({
   } = useRoomPageState({
     audioUnlocked: roomAudioOutput.isActivated()
   });
-  const resetRealtimePeer = useCallback(() => {
-    const nextPeerId = `peer_${crypto.randomUUID()}`;
-    window.sessionStorage.setItem(peerStorageKey, nextPeerId);
-    setPeerId(nextPeerId);
-  }, []);
 
   const {
     activeSession,
@@ -302,91 +294,7 @@ export function MusicRoomApp({
       setMediaConnectionState
     });
 
-  const refreshAvailableRooms = useCallback(async () => {
-    try {
-      const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
-    } catch {
-      setAvailableRooms([]);
-    }
-  }, [setAvailableRooms]);
-
-  const refreshPlaylists = useCallback(async () => {
-    try {
-      const nextPlaylists = await musicRoomApi.listMyPlaylists();
-      setPlaylists(nextPlaylists);
-    } catch {
-      setPlaylists([]);
-    }
-  }, [setPlaylists]);
-
-  const handleTrackDeleted = useCallback(
-    (trackId: string) => deleteUploadedTrackArtifacts(trackId),
-    [deleteUploadedTrackArtifacts]
-  );
-  const handleRoomDeleted = useCallback(
-    async (trackIds: string[]) => {
-      await deleteRoomTrackArtifacts(trackIds);
-    },
-    [deleteRoomTrackArtifacts]
-  );
-
-  const resetPlayerSurface = useCallback(() => {
-    const localAudio = audioRef.current;
-
-    if (localAudio) {
-      localAudio.pause();
-      localAudio.srcObject = null;
-      localAudio.removeAttribute("src");
-      localAudio.load();
-    }
-
-    destroyProgressiveRuntime();
-    resetAvailabilityState();
-    resetPeerDiagnostics();
-    currentPlaybackPositionRef.current = 0;
-    setPlayerResetEpoch((current) => current + 1);
-    setSchedulerPlaybackBucketMs(0);
-    setBufferHealth("healthy");
-    setMediaConnectionState("idle");
-    setMediaConnectedPeers([]);
-    playbackSourceInitializationKeyRef.current = null;
-    setActivePlaybackSource("progressive-local");
-    setProgressiveFallbackReason(null);
-    setPlaybackStartIntent(null);
-    setRoomRecoveryState({
-      phase: "joining",
-      mode: "steady",
-      generation: null,
-      bootstrapStartedAt: null,
-      bootstrapSourcePeerId: null,
-      pendingSnapshot: false,
-      pendingData: false,
-      pendingMedia: false,
-      listenerBootstrapAttempts: null,
-      fullLocalRecoveryActive: false
-    });
-  }, [
-    destroyProgressiveRuntime,
-    resetAvailabilityState,
-    resetPeerDiagnostics,
-    setActivePlaybackSource,
-    setBufferHealth,
-    setMediaConnectedPeers,
-    setMediaConnectionState,
-    setPlaybackStartIntent,
-    setPlayerResetEpoch,
-    setProgressiveFallbackReason,
-    setRoomRecoveryState,
-    setSchedulerPlaybackBucketMs
-  ]);
-
-  const getCurrentPlaybackPositionMs = useCallback(() => currentPlaybackPositionRef.current, []);
-  const getCurrentPeerId = useCallback(() => peerId || null, [peerId]);
-
   const {
-    leaveRoom,
-    deleteRoom,
     deleteTrack,
     addToQueue,
     playTrack,
@@ -396,43 +304,48 @@ export function MusicRoomApp({
     nextTrack,
     removeQueueItem,
     reorderQueue,
-    seekTrack
-  } = useRoomActions({
-    activeSession,
-    roomSnapshot,
-    dispatchRoomStateEvent,
-    setSuppressRoomRecovery,
-    setStatusMessage,
-    refreshAvailableRooms,
-    refreshPlaylists,
-    resetPlayerSurface,
-    resetRealtimePeer,
-    lastRoomStorageKey,
-    getCurrentPlaybackPositionMs,
-    getCurrentPeerId,
-    onTrackDeleted: handleTrackDeleted,
-    onRoomDeleted: handleRoomDeleted
-  });
-
-  const {
+    seekTrack,
     handleClearIdentity,
     handleLeaveRoomAction,
     handleDeleteRoomAction,
-    handleLogout
-  } = useRoomLifecycleActions({
+    handleLogout,
+    refreshAvailableRooms,
+    refreshPlaylists,
+    resetPlayerSurface
+  } = useRoomPageRoomActions({
     workspaceOnly,
     workspaceEntryHref,
     authEntryHref,
     router,
+    activeSession,
+    audioRef,
     clearIdentity,
-    resetPlayerSurface,
-    resetRealtimePeer,
-    setSuppressRoomRecovery,
+    currentPlaybackPositionRef,
+    deleteRoomTrackArtifacts,
+    deleteUploadedTrackArtifacts,
+    destroyProgressiveRuntime,
     dispatchRoomStateEvent,
+    peerId,
+    peerStorageKey,
+    playbackSourceInitializationKeyRef,
+    resetAvailabilityState,
+    resetPeerDiagnostics,
+    roomSnapshot,
+    setActivePlaybackSource,
+    setAvailableRooms,
+    setBufferHealth,
+    setIsNavigatingRoomExit,
+    setMediaConnectedPeers,
+    setMediaConnectionState,
+    setPeerId,
+    setPlaybackStartIntent,
+    setPlayerResetEpoch,
     setPlaylists,
-    leaveRoom,
-    deleteRoom,
-    setIsNavigatingRoomExit
+    setProgressiveFallbackReason,
+    setRoomRecoveryState,
+    setSchedulerPlaybackBucketMs,
+    setStatusMessage,
+    setSuppressRoomRecovery,
   });
 
   const { ensureSourcePlaybackStarted } = useRoomRuntime({
