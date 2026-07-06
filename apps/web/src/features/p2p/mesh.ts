@@ -13,8 +13,7 @@ import {
 } from "@/lib/indexeddb";
 import {
   samplePeerConnectionStats,
-  type PeerConnectionStatsSample,
-  type PeerConnectionStatsSnapshot
+  type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
   assembleIncomingPieceFragments,
@@ -35,6 +34,16 @@ import {
   shouldFlushDataChannelQueue,
   shouldSendQueuedDataChannelItem
 } from "./data-channel-manager";
+import {
+  PeerConnectionRegistry,
+  clearPeerTimers,
+  clearPeerWatchdog,
+  createPeerEntry,
+  isPeerStalled,
+  shouldRestartPeer,
+  type PeerEntry,
+  type QueuedSendItem
+} from "./peer-connection-registry";
 import { validateTrackPiecePayloadBatch } from "./index";
 
 type MeshCallbacks = {
@@ -153,25 +162,6 @@ type MeshOptions = {
     | undefined;
 };
 
-type PeerEntry = {
-  connection: RTCPeerConnection;
-  channel: RTCDataChannel | null;
-  /** The peerId that initiated this connection (so we don't initiate twice) */
-  initiatorPeerId: string | null;
-  pendingCandidates: RTCIceCandidateInit[];
-  statsIntervalId: ReturnType<typeof setInterval> | null;
-  statsSnapshot: PeerConnectionStatsSnapshot | null;
-  dataChannelState: RTCDataChannelState | null;
-  createdAtMs: number;
-  lastSignalProgressAtMs: number;
-  reconnectAttempts: number;
-  reconnectTimerId: ReturnType<typeof setTimeout> | null;
-  watchdogTimerId: ReturnType<typeof setTimeout> | null;
-  sendQueue: QueuedSendItem[];
-  releasing: boolean;
-  operationChain: Promise<void>;
-};
-
 type PendingPieceRequest = {
   peerId: string;
   requestId?: string;
@@ -212,16 +202,8 @@ type CachedPieceManifestHeader = {
   pieceHashes?: string[];
 };
 
-type QueuedSendItem = {
-  data: string | ArrayBuffer;
-  trackId?: string;
-  chunkIndex?: number;
-  payloadBytes?: number;
-};
-
 export class P2PMesh {
-  private readonly peers = new Map<string, PeerEntry>();
-  private readonly expectedPeerIds = new Set<string>();
+  private readonly peerConnections: PeerConnectionRegistry;
   private readonly pendingPieceRequests = new Map<string, PendingPieceRequest>();
   private readonly pendingIncomingPieces: IncomingPieceBatchItem[] = [];
   private readonly pieceManifestHeaders = new Map<string, CachedPieceManifestHeader>();
@@ -257,6 +239,7 @@ export class P2PMesh {
     private readonly iceServers: IceServerConfig[] = [],
     options: MeshOptions = {}
     ) {
+    this.peerConnections = new PeerConnectionRegistry(this.localPeerId);
     this.autoReconnect = options.autoReconnect ?? true;
     this.resolveConnectionConfig = options.resolveConnectionConfig;
     this.resolvePieceRequestFallback = options.resolvePieceRequestFallback;
@@ -281,17 +264,13 @@ export class P2PMesh {
     remotePeerIds: string[],
     options?: { forceReconnectDegraded?: boolean }
   ) {
-    const nextPeers = new Set(remotePeerIds.filter((peerId) => peerId && peerId !== this.localPeerId));
-    this.expectedPeerIds.clear();
-    for (const peerId of nextPeers) {
-      this.expectedPeerIds.add(peerId);
-    }
+    const nextPeers = this.peerConnections.setExpectedRemotePeerIds(remotePeerIds);
 
     for (const peerId of nextPeers) {
-      const existing = this.peers.get(peerId);
+      const existing = this.peerConnections.get(peerId);
       if (
         existing &&
-        (options?.forceReconnectDegraded || this.shouldRestartPeer(existing))
+        (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing))
       ) {
         await this.recreatePeer(peerId, existing);
         continue;
@@ -305,7 +284,7 @@ export class P2PMesh {
       this.schedulePeerWatchdog(peerId, existing);
     }
 
-    for (const [peerId, entry] of this.peers.entries()) {
+    for (const [peerId, entry] of this.peerConnections.entries()) {
       if (!nextPeers.has(peerId)) {
         this.releasePeer(peerId, entry);
       }
@@ -319,7 +298,9 @@ export class P2PMesh {
 
     // handleSignal is for processing incoming signals — always get/create the peer
     // entry and process the signal regardless of who initiated.
-    const entry = this.peers.get(payload.fromPeerId) ?? (await this.ensurePeer(payload.fromPeerId, false));
+    const entry =
+      this.peerConnections.get(payload.fromPeerId) ??
+      (await this.ensurePeer(payload.fromPeerId, false));
     entry.lastSignalProgressAtMs = Date.now();
 
     if (payload.type === "offer") {
@@ -397,7 +378,7 @@ export class P2PMesh {
     }
 
     this.statsSamplingMode = mode;
-    for (const [peerId, entry] of this.peers.entries()) {
+    for (const [peerId, entry] of this.peerConnections.entries()) {
       this.stopStatsSampling(entry);
       this.startStatsSampling(peerId, entry);
     }
@@ -426,7 +407,7 @@ export class P2PMesh {
     expectedTotalChunks?: number,
     timeoutMs = 10000
   ) {
-    const entry = this.peers.get(peerId);
+    const entry = this.peerConnections.get(peerId);
     if (!entry?.channel || entry.channel.readyState !== "open") {
       return false;
     }
@@ -492,15 +473,13 @@ export class P2PMesh {
   }
 
   getConnectedPeerIds() {
-    return [...this.peers.entries()]
-      .filter(([, entry]) => entry.channel?.readyState === "open")
-      .map(([peerId]) => peerId);
+    return this.peerConnections.getConnectedPeerIds();
   }
 
   async restartPeer(peerId: string) {
-    const entry = this.peers.get(peerId);
+    const entry = this.peerConnections.get(peerId);
     if (!entry) {
-      if (!this.expectedPeerIds.has(peerId)) {
+      if (!this.peerConnections.expects(peerId)) {
         return null;
       }
       return this.ensurePeer(peerId, this.shouldInitiatePeer(peerId));
@@ -510,7 +489,7 @@ export class P2PMesh {
   }
 
   async restartIce(peerId: string) {
-    const entry = this.peers.get(peerId);
+    const entry = this.peerConnections.get(peerId);
     if (!entry || entry.releasing) {
       return null;
     }
@@ -529,7 +508,7 @@ export class P2PMesh {
   }
 
   destroy() {
-    this.expectedPeerIds.clear();
+    this.peerConnections.clearExpected();
     for (const pendingRequest of this.pendingPieceRequests.values()) {
       clearTimeout(pendingRequest.timeoutId);
     }
@@ -541,14 +520,14 @@ export class P2PMesh {
     this.pendingIncomingPieces.length = 0;
     this.pendingIncomingPieceFragments.clear();
 
-    for (const [peerId, entry] of this.peers.entries()) {
+    for (const [peerId, entry] of this.peerConnections.entries()) {
       this.releasePeer(peerId, entry);
     }
-    this.peers.clear();
+    this.peerConnections.clearPeers();
   }
 
   private async ensurePeer(peerId: string, shouldInitiate: boolean) {
-    const existing = this.peers.get(peerId);
+    const existing = this.peerConnections.get(peerId);
 
     if (existing) {
       if (
@@ -569,23 +548,11 @@ export class P2PMesh {
     }
 
     const connection = new RTCPeerConnection(this.buildConnectionConfig(peerId));
-    const entry: PeerEntry = {
+    const entry = createPeerEntry({
       connection,
-      channel: null,
       initiatorPeerId: shouldInitiate ? this.localPeerId : null,
-      pendingCandidates: [],
-      statsIntervalId: null,
-      statsSnapshot: null,
-      dataChannelState: null,
-      createdAtMs: Date.now(),
-      lastSignalProgressAtMs: Date.now(),
-      reconnectAttempts: 0,
-      reconnectTimerId: null,
-      watchdogTimerId: null,
-      sendQueue: [],
-      releasing: false,
-      operationChain: Promise.resolve()
-    };
+      nowMs: Date.now()
+    });
     this.startStatsSampling(peerId, entry);
 
     connection.onicecandidate = (event) => {
@@ -612,9 +579,9 @@ export class P2PMesh {
         entry.reconnectAttempts = 0;
       }
 
-      if (this.peers.get(peerId) === entry) {
+      if (this.peerConnections.get(peerId) === entry) {
         if (connection.connectionState === "failed" || connection.connectionState === "closed") {
-          if (this.expectedPeerIds.has(peerId)) {
+          if (this.peerConnections.expects(peerId)) {
             this.callbacks.onPeerStalled?.({
               peerId,
               reason: "connection-failed"
@@ -639,7 +606,7 @@ export class P2PMesh {
         peerId,
         state: connection.iceConnectionState
       });
-      if (this.peers.get(peerId) === entry) {
+      if (this.peerConnections.get(peerId) === entry) {
         this.schedulePeerWatchdog(peerId, entry);
       }
     };
@@ -649,7 +616,7 @@ export class P2PMesh {
       this.bindChannel(peerId, entry, entry.channel);
     };
 
-    this.peers.set(peerId, entry);
+    this.peerConnections.set(peerId, entry);
     this.schedulePeerWatchdog(peerId, entry);
     try {
       if (shouldInitiate) {
@@ -666,7 +633,7 @@ export class P2PMesh {
 
       return entry;
     } catch (error) {
-      if (this.peers.get(peerId) === entry) {
+      if (this.peerConnections.get(peerId) === entry) {
         this.releasePeer(peerId, entry);
       }
       throw error;
@@ -956,10 +923,8 @@ export class P2PMesh {
   private releasePeer(peerId: string, entry: PeerEntry) {
     entry.releasing = true;
     entry.sendQueue = [];
-    if (this.peers.get(peerId) === entry) {
-      this.peers.delete(peerId);
-    }
-    this.clearPeerTimers(entry);
+    this.peerConnections.deleteIfCurrent(peerId, entry);
+    clearPeerTimers(entry);
     this.clearPendingRequestsForPeer(peerId);
     this.stopStatsSampling(entry);
     entry.channel?.close();
@@ -970,66 +935,43 @@ export class P2PMesh {
     });
   }
 
-  private shouldRestartPeer(entry: PeerEntry) {
-    if (entry.releasing) {
-      return false;
-    }
-
-    if (
-      entry.connection.connectionState === "failed" ||
-      entry.connection.connectionState === "closed" ||
-      entry.dataChannelState === "closed"
-    ) {
-      return true;
-    }
-
-    return this.isPeerStalled(entry, Date.now());
+  private shouldRestartPeerEntry(entry: PeerEntry) {
+    return shouldRestartPeer({
+      entry,
+      nowMs: Date.now(),
+      dataOpenTimeoutMs: this.dataOpenTimeoutMs,
+      dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
+      connectionProgressTimeoutMs: this.connectionProgressTimeoutMs
+    });
   }
 
-  private isPeerStalled(entry: PeerEntry, now: number) {
-    const channelState = entry.channel?.readyState ?? null;
-    const connectionState = entry.connection.connectionState;
-
-    if (channelState === "open") {
-      return false;
-    }
-
-    if (now - entry.createdAtMs >= this.dataOpenTimeoutMs) {
-      return true;
-    }
-
-    if (
-      channelState === "connecting" &&
-      now - entry.lastSignalProgressAtMs >= this.dataConnectingTimeoutMs
-    ) {
-      return true;
-    }
-
-    if (
-      (connectionState === "new" ||
-        connectionState === "connecting" ||
-        connectionState === "disconnected") &&
-      now - entry.lastSignalProgressAtMs >= this.connectionProgressTimeoutMs
-    ) {
-      return true;
-    }
-
-    return false;
+  private isPeerEntryStalled(entry: PeerEntry, nowMs: number) {
+    return isPeerStalled({
+      entry,
+      nowMs,
+      dataOpenTimeoutMs: this.dataOpenTimeoutMs,
+      dataConnectingTimeoutMs: this.dataConnectingTimeoutMs,
+      connectionProgressTimeoutMs: this.connectionProgressTimeoutMs
+    });
   }
 
   private schedulePeerWatchdog(peerId: string, entry: PeerEntry) {
-    if (entry.releasing || !this.expectedPeerIds.has(peerId)) {
-      this.clearPeerWatchdog(entry);
+    if (entry.releasing || !this.peerConnections.expects(peerId)) {
+      clearPeerWatchdog(entry);
       return;
     }
 
-    this.clearPeerWatchdog(entry);
+    clearPeerWatchdog(entry);
     entry.watchdogTimerId = setTimeout(() => {
-      if (this.peers.get(peerId) !== entry || entry.releasing || !this.expectedPeerIds.has(peerId)) {
+      if (
+        this.peerConnections.get(peerId) !== entry ||
+        entry.releasing ||
+        !this.peerConnections.expects(peerId)
+      ) {
         return;
       }
 
-      if (this.isPeerStalled(entry, Date.now())) {
+      if (this.isPeerEntryStalled(entry, Date.now())) {
         this.callbacks.onPeerStalled?.({
           peerId,
           reason: "watchdog-timeout"
@@ -1045,12 +987,12 @@ export class P2PMesh {
   }
 
   private schedulePeerReconnect(peerId: string, entry: PeerEntry) {
-    if (entry.releasing || !this.expectedPeerIds.has(peerId)) {
+    if (entry.releasing || !this.peerConnections.expects(peerId)) {
       this.releasePeer(peerId, entry);
       return;
     }
 
-    this.clearPeerWatchdog(entry);
+    clearPeerWatchdog(entry);
     if (entry.reconnectTimerId) {
       return;
     }
@@ -1062,7 +1004,11 @@ export class P2PMesh {
     entry.reconnectAttempts += 1;
     entry.reconnectTimerId = setTimeout(() => {
       entry.reconnectTimerId = null;
-      if (this.peers.get(peerId) !== entry || entry.releasing || !this.expectedPeerIds.has(peerId)) {
+      if (
+        this.peerConnections.get(peerId) !== entry ||
+        entry.releasing ||
+        !this.peerConnections.expects(peerId)
+      ) {
         return;
       }
 
@@ -1084,29 +1030,6 @@ export class P2PMesh {
         this.iceServers.length > 0 ? this.iceServers : [{ urls: "stun:stun.l.google.com:19302" }],
       ...(this.resolveConnectionConfig?.(peerId) ?? {})
     };
-  }
-
-  private clearPeerWatchdog(entry: PeerEntry) {
-    if (!entry.watchdogTimerId) {
-      return;
-    }
-
-    clearTimeout(entry.watchdogTimerId);
-    entry.watchdogTimerId = null;
-  }
-
-  private clearPeerReconnectTimer(entry: PeerEntry) {
-    if (!entry.reconnectTimerId) {
-      return;
-    }
-
-    clearTimeout(entry.reconnectTimerId);
-    entry.reconnectTimerId = null;
-  }
-
-  private clearPeerTimers(entry: PeerEntry) {
-    this.clearPeerWatchdog(entry);
-    this.clearPeerReconnectTimer(entry);
   }
 
   private startStatsSampling(peerId: string, entry: PeerEntry) {
