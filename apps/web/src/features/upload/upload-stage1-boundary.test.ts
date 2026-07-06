@@ -9,6 +9,7 @@ import {
   resolveAutomaticPlaybackCacheTaskMode,
   shouldIgnoreManualCachePieceTaskUpdate
 } from "./upload-ui-state";
+import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 
 describe("upload stage 1 module boundaries", () => {
   it("hosts registration payload helpers in upload-pipeline", () => {
@@ -67,5 +68,9 @@ describe("upload stage 1 module boundaries", () => {
   it("hosts manual cache UI-state helpers outside the hook", () => {
     expect(resolveAutomaticPlaybackCacheTaskMode()).toBe("playback-demand");
     expect(shouldIgnoreManualCachePieceTaskUpdate("ready")).toBe(true);
+  });
+
+  it("hosts upload runtime lifecycle effects outside the main hook", () => {
+    expect(typeof useUploadRuntimeEffects).toBe("function");
   });
 });

@@ -4,6 +4,9 @@ type TrackIdRuntimeStore = {
 };
 
 type StateSetter<TState> = (updater: (current: TState) => TState) => void;
+type RuntimeRef<TValue> = {
+  current: TValue;
+};
 
 export function syncUploadedTrackObjectUrls(input: {
   currentUrls: Map<string, string>;
@@ -21,6 +24,18 @@ export function syncUploadedTrackObjectUrls(input: {
   }
 
   return nextUrls;
+}
+
+export function cleanupUploadRuntimeRefs(input: {
+  uploadedTrackUrlsRef: RuntimeRef<Map<string, string>>;
+  cacheLibraryTracksRef: RuntimeRef<{ clear: () => void }>;
+  revokeObjectUrl: (objectUrl: string) => void;
+}) {
+  for (const objectUrl of input.uploadedTrackUrlsRef.current.values()) {
+    input.revokeObjectUrl(objectUrl);
+  }
+  input.uploadedTrackUrlsRef.current.clear();
+  input.cacheLibraryTracksRef.current.clear();
 }
 
 export function pruneUploadRuntimeStateForActiveTracks<TUpload>(input: {

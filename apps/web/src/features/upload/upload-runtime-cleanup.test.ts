@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyUploadRuntimePruneForActiveTracks,
   applyUploadRuntimeTrackRemoval,
+  cleanupUploadRuntimeRefs,
   pruneUploadRuntimeStateForActiveTracks,
   removeUploadRuntimeTrackIds,
   syncUploadedTrackObjectUrls
@@ -168,5 +169,30 @@ describe("upload runtime cleanup helpers", () => {
       ["track_changed", "blob:new"]
     ]);
     expect(revokedUrls).toEqual(["blob:old", "blob:removed"]);
+  });
+
+  it("cleans uploaded urls and cache library refs on unmount", () => {
+    const revokedUrls: string[] = [];
+    const uploadedTrackUrlsRef = {
+      current: new Map([
+        ["track_1", "blob:one"],
+        ["track_2", "blob:two"]
+      ])
+    };
+    const cacheLibraryTracksRef = {
+      current: new Map([["hash_1", "cached"]])
+    };
+
+    cleanupUploadRuntimeRefs({
+      uploadedTrackUrlsRef,
+      cacheLibraryTracksRef,
+      revokeObjectUrl: (objectUrl) => {
+        revokedUrls.push(objectUrl);
+      }
+    });
+
+    expect(revokedUrls).toEqual(["blob:one", "blob:two"]);
+    expect(uploadedTrackUrlsRef.current.size).toBe(0);
+    expect(cacheLibraryTracksRef.current.size).toBe(0);
   });
 });
