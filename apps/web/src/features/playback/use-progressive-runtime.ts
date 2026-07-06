@@ -1,9 +1,6 @@
 "use client";
 
 import {
-  useCallback
-} from "react";
-import {
   getFullLocalStableWindowMs
 } from "./progressive-playback";
 import {
@@ -13,22 +10,9 @@ import {
 import {
   usePlaybackRuntimeTickOrchestrator
 } from "./playback-orchestrator/use-runtime-tick-orchestrator";
-import { usePlaybackStartIntentController } from "./playback-orchestrator/playback-start-intent-controller";
-import { useProgressiveDiagnosticsPublisher } from "./playback-orchestrator/progressive-diagnostics-publisher";
-import { usePlaybackSchedulerState } from "./playback-orchestrator/playback-scheduler-state";
-import { usePlaybackQualityState } from "./playback-orchestrator/playback-quality-state";
-import { useLocalAudioPlaybackState } from "./playback-orchestrator/local-audio-playback-state";
-import { useLocalAudioEventController } from "./playback-orchestrator/local-audio-event-controller";
-import { useLocalPlaybackReadinessController } from "./playback-orchestrator/local-playback-readiness-controller";
-import { usePlaybackSourceController } from "./playback-orchestrator/playback-source-controller";
-import { usePlaybackRuntimeLifecycleController } from "./playback-orchestrator/playback-runtime-lifecycle-controller";
+import { usePlaybackRuntimeControllerStack } from "./playback-orchestrator/playback-runtime-controller-stack";
 import { usePlaybackRuntimeInputState } from "./playback-orchestrator/playback-runtime-input-state";
-import { usePlaybackRuntimePolicyState } from "./playback-orchestrator/playback-runtime-policy-state";
 import { usePlaybackRuntimeRefs } from "./playback-orchestrator/playback-runtime-refs";
-import { useProgressiveEngineController } from "./playback-orchestrator/progressive-engine-controller";
-import { useMainPlaybackController } from "./playback-orchestrator/main-playback-controller";
-import { useProgressiveWarmupController } from "./playback-orchestrator/progressive-warmup-controller";
-import { useRuntimeTickEffectsController } from "./playback-orchestrator/runtime-tick-effects-controller";
 import type {
   FullLocalPlaybackTrack,
   UseProgressiveRuntimeInput,
@@ -345,63 +329,15 @@ export function useProgressiveRuntime({
   setBufferHealth,
   setMediaConnectionState
 }: UseProgressiveRuntimeInput): UseProgressiveRuntimeResult {
-  const {
-    activeSourceActivatedAtRef,
-    fullLocalWarmupReadyAtRef,
-    lastPcmSlidingWindowPlayAttemptAtRef,
-    lastStablePlaybackAtRef,
-    localTakeoverCooldownUntilRef,
-    pcmLastBlockedReasonRef,
-    pcmRuntimeFailureRef,
-    previousPlaybackSurfaceKeyRef,
-    progressiveEngineRef,
-    progressivePcmEngineRef,
-    progressiveWarmupReadyAtRef
-  } = usePlaybackRuntimeRefs();
-  const {
-    syncProgressiveWarmupRef,
-    recoverPausedFullLocalPlaybackRef,
-    sampleDriftRef,
-    syncFullLocalBufferedWarmupRef,
-    syncUpgradeRef
-  } = usePlaybackRuntimeTickOrchestrator();
-  const {
-    aggregatePieceDownloadRateKbps,
-    canPrepareProgressiveLocal,
-    canUseFullLocalForPlaybackSession,
-    canWarmBufferedFullLocal,
-    currentBufferedFullLocalTrack,
-    currentBufferedFullLocalTrackObjectUrl,
-    currentBufferedFullLocalTrackRef,
-    currentProgressiveEngineType,
-    currentProgressiveManifest,
-    currentProgressiveManifestKey,
-    currentProgressiveManifestRef,
-    currentTrackAvailableChunksKey,
-    currentTrackDurationMs,
-    currentTrackFormatKey,
-    currentTrackRef,
-    forceSourceOwnerLocalPlayback,
-    fullLocalReady,
-    isProgressiveTakeoverReady,
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackPositionKey,
-    playbackRef,
-    playbackRevision,
-    playbackStatus,
-    playbackSurfaceKey,
-    playbackTimelineKey,
-    pendingPlaybackIntent,
-    progressiveHealthSnapshot,
-    progressiveSchedulerPolicy
-  } = usePlaybackRuntimeInputState({
+  const refs = usePlaybackRuntimeRefs();
+  const tickRefs = usePlaybackRuntimeTickOrchestrator();
+  const inputState = usePlaybackRuntimeInputState({
     activePlaybackSource,
     availabilityByTrack,
     currentTrack,
     fullLocalPlaybackTracks,
     isCurrentSourceOwner,
-    pcmRuntimeFailureRef,
+    pcmRuntimeFailureRef: refs.pcmRuntimeFailureRef,
     peerDiagnostics,
     peerId,
     playbackStartIntent,
@@ -410,352 +346,41 @@ export function useProgressiveRuntime({
     trackCachingEnabled: enableTrackCaching,
     uploadedTracks
   });
-  const { setAudioPaused } = useLocalAudioPlaybackState({
-    audioRef,
-    playbackCurrentTrackId
-  });
-  const {
-    attemptPlaybackStart,
-    attemptPlaybackStartRef,
-    clearPlaybackStartRetry,
-    ensurePlaybackStart,
-    markPlaybackStartFailure
-  } = usePlaybackStartIntentController({
+  return usePlaybackRuntimeControllerStack({
     activePlaybackSource,
     audioRef,
-    playbackCurrentTrackId,
-    playbackStatus,
-    playbackRef,
-    playbackStartIntent,
-    setAudioPaused,
-    setPlaybackStartIntent,
-    setStatusMessage,
-    recordPeerDiagnostic
-  });
-  const startupBufferMs = adaptiveStartupBufferMs;
-  const {
-    localAudioDiagnostics,
-    markContinuousPlaybackInterrupted,
-    markContinuousPlaybackStarted,
-    playbackQualityMetrics,
-    recordDriftSample,
-    recordStalledEvent,
-    recordWaitingEvent,
-    resetPlaybackQualityState
-  } = usePlaybackQualityState({ audioRef });
-  const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
-  const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
-  const {
-    audibleLocalFallbackActive,
-    bufferSafetyMarginMs,
-    effectiveStartupBufferMs,
-    fullLocalBlockedReason,
-    fullLocalEligible,
-    immediateFullLocalRecoveryEligible,
-    isLocalTakeoverAllowed,
-    isLocalTakeoverAllowedRef,
-    localTakeoverCooldownMs,
-    nextQueueTrackPrefetch,
-    playbackRecoveryStage,
-    progressiveLocalBlockedReason,
-    progressiveLocalEligible,
-    progressiveWarmupRuntimeRef,
-    progressiveWarmupTimerKey,
-    schedulerBudgetTier,
-    shadowWarmupActive,
-    sourceOwnerIdentity,
-    startupGatePending,
-    transportGovernorMode
-  } = usePlaybackRuntimePolicyState({
-    activePlaybackSource,
-    aggregatePieceDownloadRateKbps,
+    audioUnlocked,
     availabilityByTrack,
-    canUseFullLocalForPlaybackSession,
     connectedPeersCount,
-    currentBufferedFullLocalTrackObjectUrl,
-    currentProgressiveEngineType,
-    currentProgressiveManifestKey,
     currentTrack,
-    currentTrackFormatKey,
-    fullLocalReady,
-    hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
-    hasProgressiveManifest: !!currentProgressiveManifest,
+    directProgressiveTakeoverEnabled: enableDirectProgressiveTakeover,
+    fullLocalMaxDriftMs,
+    fullLocalPlaybackTracks,
+    fullLocalSwitchDelayMs,
+    inputState,
     isCurrentSourceOwner,
-    isProgressiveTakeoverReady,
+    isPageVisible,
     listenerLocalTakeoverEnabled: enableListenerLocalTakeover,
-    localTakeoverCooldownUntilRef,
     mediaConnectedPeersCount,
+    pcmSlidingWindowPlayRetryIntervalMs,
     peerId,
-    pendingPlaybackIntent,
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackQualityMetrics,
-    playbackStatus,
+    playbackStartIntent,
     progressiveFallbackReason,
-    progressiveHealthSnapshot,
-    recoveryAudioUnlocked: audioUnlocked,
+    progressiveSwitchDelayMs,
+    recordPeerDiagnostic,
+    refs,
     roomRecoveryState,
     roomSnapshot,
-    startupBufferMs
-  });
-
-  const {
-    armLocalTakeoverCooldown,
-    destroyProgressiveRuntime,
-    markPcmRuntimeFailure,
-    markPcmRuntimeFailureRef
-  } = usePlaybackRuntimeLifecycleController({
-    activePlaybackSource,
-    activeSourceActivatedAtRef,
-    audioRef,
-    canUseFullLocalForPlaybackSession,
-    clearPlaybackStartRetry,
-    currentProgressiveManifest,
-    fullLocalWarmupReadyAtRef,
-    lastPcmSlidingWindowPlayAttemptAtRef,
-    localTakeoverCooldownUntilRef,
-    pcmLastBlockedReasonRef,
-    pcmRuntimeFailureRef,
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackRef,
-    playbackRevision,
-    playbackStatus,
-    playbackSurfaceKey,
-    previousPlaybackSurfaceKeyRef,
-    progressiveEngineRef,
-    progressivePcmEngineRef,
-    progressiveWarmupReadyAtRef,
-    resetPlaybackQualityState,
     setActivePlaybackSource,
-    setMediaConnectionState,
-    setProgressiveFallbackReason
-  });
-
-  const { transitionPlaybackSource } = usePlaybackSourceController({
-    activePlaybackSource,
-    armLocalTakeoverCooldown,
-    audioRef,
-    canUseFullLocalForPlaybackSession,
-    forceSourceOwnerLocalPlayback,
-    fullLocalBlockedReason,
-    hasBufferedFullLocalTrack: !!currentBufferedFullLocalTrack,
-    immediateFullLocalRecoveryEligible,
-    localAudioDiagnostics,
-    pcmEngineDiagnosticsKey,
-    playbackStatus,
-    progressivePcmEngineRef,
-    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    setActivePlaybackSource,
-    setMediaConnectionState,
-    setProgressiveFallbackReason
-  });
-
-  const getLocalPlaybackPositionMs = useCallback(() => {
-    if (!isSlidingWindowPlaybackSource(activePlaybackSource) && activePlaybackSource !== "full-local") {
-      return null;
-    }
-
-    const pcmEngine = progressivePcmEngineRef.current;
-    if (!pcmEngine) {
-      return null;
-    }
-
-    return resolveLocalPlaybackPositionMs({
-      activePlaybackSource,
-      currentTimeSeconds: pcmEngine.getCurrentTimeSeconds()
-    });
-  }, [activePlaybackSource]);
-
-  useMainPlaybackController({
-    activePlaybackSource,
-    attemptPlaybackStart,
-    audioRef,
-    currentProgressiveEngineType,
-    currentTrackDurationMs,
-    destroyProgressiveRuntime,
-    ensurePlaybackStart,
-    forceSourceOwnerLocalPlayback,
-    fullLocalPlaybackTracks,
-    isCurrentSourceOwner,
-    markPlaybackStartFailure,
-    markPcmRuntimeFailure,
-    pcmLastBlockedReasonRef,
-    playbackPositionKey,
-    playbackRef,
-    progressiveEngineRef,
-    progressivePcmEngineRef,
-    progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    setActivePlaybackSource,
+    setBufferHealth,
     setMediaConnectionState,
     setPlaybackStartIntent,
     setProgressiveFallbackReason,
+    setSchedulerMode,
     setStatusMessage,
-    startupBufferMs,
+    startupBufferMs: adaptiveStartupBufferMs,
+    tickRefs,
     uploadedTracks,
     volume
   });
-
-  useLocalAudioEventController({
-    activePlaybackSource,
-    audioRef,
-    currentProgressiveManifest,
-    isPageVisible,
-    lastStablePlaybackAtRef,
-    markContinuousPlaybackInterrupted,
-    markContinuousPlaybackStarted,
-    playbackRef,
-    progressiveHealthSnapshot,
-    recordPeerDiagnostic,
-    recordStalledEvent,
-    recordWaitingEvent,
-    setBufferHealth,
-    setMediaConnectionState,
-    setProgressiveFallbackReason,
-    setSchedulerMode,
-    shadowWarmupActive
-  });
-
-  useLocalPlaybackReadinessController({
-    activePlaybackSource,
-    attemptPlaybackStart,
-    audioRef,
-    ensurePlaybackStart,
-    isCurrentSourceOwner,
-    mediaConnectedPeersCount,
-    playbackCurrentTrackId,
-    playbackRef,
-    playbackStatus,
-    recordPeerDiagnostic,
-    setMediaConnectionState,
-    volume
-  });
-
-  useRuntimeTickEffectsController({
-    activePlaybackSource,
-    attemptPlaybackStart,
-    audioRef,
-    audioUnlocked,
-    canUseFullLocalForPlaybackSession,
-    canWarmBufferedFullLocal,
-    currentBufferedFullLocalTrackObjectUrl,
-    currentBufferedFullLocalTrackRef,
-    currentProgressiveEngineType,
-    currentTrackFormatKey,
-    currentTrackRef,
-    fullLocalBlockedReason,
-    fullLocalMaxDriftMs,
-    fullLocalSwitchDelayMs,
-    fullLocalWarmupReadyAtRef,
-    getLocalPlaybackPositionMs,
-    isLocalTakeoverAllowed,
-    localTakeoverCooldownUntilRef,
-    playbackCurrentTrackId,
-    playbackMediaEpoch,
-    playbackQualityStalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
-    playbackQualityWaitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
-    playbackRecoveryStage,
-    playbackRef,
-    playbackStatus,
-    progressiveAheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
-    recoverPausedFullLocalPlaybackRef,
-    recordDriftSample,
-    recordPeerDiagnostic,
-    sampleDriftRef,
-    setMediaConnectionState,
-    startupGatePending,
-    syncFullLocalBufferedWarmupRef,
-    syncUpgradeRef,
-    transitionPlaybackSource,
-    volume
-  });
-
-  useProgressiveEngineController({
-    audioRef,
-    canPrepareProgressiveLocal,
-    currentProgressiveEngineType,
-    currentProgressiveManifest,
-    currentTrackAvailableChunksKey,
-    markPcmRuntimeFailure,
-    peerId,
-    progressiveEngineRef,
-    progressivePcmEngineRef,
-    setProgressiveFallbackReason,
-    volume
-  });
-
-  useProgressiveWarmupController({
-    attemptPlaybackStartRef,
-    progressiveWarmupTimerKey,
-    audioRef,
-    currentProgressiveManifestRef,
-    directProgressiveTakeoverEnabled: enableDirectProgressiveTakeover,
-    isLocalTakeoverAllowedRef,
-    lastPcmSlidingWindowPlayAttemptAtRef,
-    markPcmRuntimeFailureRef,
-    pcmLastBlockedReasonRef,
-    pcmSlidingWindowPlayRetryIntervalMs,
-    playbackRef,
-    progressiveEngineRef,
-    progressivePcmEngineRef,
-    progressiveSwitchDelayMs,
-    progressiveWarmupReadyAtRef,
-    progressiveWarmupRuntimeRef,
-    setMediaConnectionState,
-    setProgressiveFallbackReason,
-    syncProgressiveWarmupRef
-  });
-
-  usePlaybackSchedulerState({
-    activePlaybackSource,
-    isPageVisible,
-    playbackCurrentTrackId,
-    playbackRef,
-    playbackStatus,
-    progressiveHealthSnapshot,
-    setProgressiveFallbackReason,
-    setSchedulerMode
-  });
-
-  useProgressiveDiagnosticsPublisher({
-    audibleLocalFallbackActive,
-    bufferSafetyMarginMs,
-    currentTrackFormatKey,
-    currentTrackRef,
-    effectiveStartupBufferMs,
-    fullLocalBlockedReason,
-    fullLocalEligible,
-    fullLocalReady,
-    immediateFullLocalRecoveryEligible,
-    lastStablePlaybackAtRef,
-    localAudioDiagnostics,
-    localTakeoverCooldownMs,
-    localTakeoverCooldownUntilRef,
-    nextQueueTrackPrefetch,
-    pcmEngineDiagnosticsKey,
-    pcmLastBlockedReasonRef,
-    playbackQualityMetrics,
-    playbackRecoveryStage,
-    playbackStartIntent,
-    playbackSurfaceKey,
-    playbackTimelineKey,
-    pendingPlaybackIntent,
-    progressiveHealthSnapshot,
-    progressiveLocalBlockedReason,
-    progressiveLocalEligible,
-    progressivePcmEngineRef,
-    recordPeerDiagnostic,
-    roomRecoveryState,
-    schedulerBudgetTier,
-    shadowWarmupActive,
-    sourceOwnerIdentity,
-    transportGovernorMode
-  });
-
-  return {
-    progressiveSchedulerPolicy,
-    transportGovernorMode,
-    getLocalPlaybackPositionMs,
-    destroyProgressiveRuntime
-  };
 }

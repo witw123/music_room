@@ -288,6 +288,15 @@ import {
   shouldUsePcmEngineForFullLocal
 } from "./use-progressive-runtime";
 
+const readPlaybackRuntimeSource = (relativePath: string) =>
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), relativePath), "utf8").replace(
+    /\r\n/g,
+    "\n"
+  );
+
+const readControllerStackSource = () =>
+  readPlaybackRuntimeSource("playback-orchestrator/playback-runtime-controller-stack.ts");
+
 describe("playback runtime pipeline keys", () => {
   it("drives the progressive warmup loop through the playback orchestrator", () => {
     const runtimeSource = readFileSync(
@@ -397,6 +406,12 @@ describe("playback runtime pipeline keys", () => {
     expect(dependencies).toContain("playbackMediaEpoch");
     expect(dependencies).toContain("playbackStatus");
     expect(dependencies).not.toContain("playback,");
+    expect(dependencies).not.toMatch(/^\s+canUseFullLocalForPlaybackSession,\s*$/m);
+    expect(dependencies).not.toMatch(/^\s+currentBufferedFullLocalTrackObjectUrl,\s*$/m);
+    expect(dependencies).not.toMatch(/^\s+currentProgressiveEngineType,\s*$/m);
+    expect(dependencies).not.toMatch(/^\s+currentTrackFormatKey,\s*$/m);
+    expect(dependencies).not.toMatch(/^\s+fullLocalBlockedReason,\s*$/m);
+    expect(dependencies).not.toMatch(/^\s+progressiveAheadBufferedMs,\s*$/m);
     expect(dependencies).not.toMatch(/^\s+currentTrack,\s*$/m);
   });
 
@@ -491,6 +506,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const controllerSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -499,7 +515,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("usePlaybackStartIntentController");
+    expect(controllerStackSource).toContain("usePlaybackStartIntentController");
     expect(runtimeSource).not.toContain("const updatePlaybackStartIntent = useCallback");
     expect(runtimeSource).not.toContain("const markPlaybackStartFailure = useCallback");
     expect(runtimeSource).not.toContain("const attemptPlaybackStart = useCallback");
@@ -515,6 +531,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const publisherSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -523,7 +540,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useProgressiveDiagnosticsPublisher");
+    expect(controllerStackSource).toContain("useProgressiveDiagnosticsPublisher");
     expect(runtimeSource).not.toContain('event: "progressive-status"');
     expect(runtimeSource).not.toContain("const diagnosticBuckets = useMemo");
     expect(runtimeSource).not.toContain("lastProgressiveDiagnosticSignatureRef");
@@ -538,6 +555,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const schedulerSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -546,7 +564,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("usePlaybackSchedulerState");
+    expect(controllerStackSource).toContain("usePlaybackSchedulerState");
     expect(runtimeSource).not.toContain("const schedulerAction = resolveInactivePlaybackSchedulerAction");
     expect(runtimeSource).not.toContain("const fallbackReason = resolveSlidingWindowLowBufferFallbackReason");
     expect(schedulerSource).toContain("export function usePlaybackSchedulerState");
@@ -559,6 +577,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const qualityStateSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -567,7 +586,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("usePlaybackQualityState");
+    expect(controllerStackSource).toContain("usePlaybackQualityState");
     expect(runtimeSource).not.toContain("waitingEventTimestampsRef");
     expect(runtimeSource).not.toContain("stalledEventTimestampsRef");
     expect(runtimeSource).not.toContain("driftSamplesRef");
@@ -585,6 +604,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const audioStateSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -593,7 +613,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useLocalAudioPlaybackState");
+    expect(controllerStackSource).toContain("useLocalAudioPlaybackState");
     expect(runtimeSource).not.toContain("useState<boolean | null>");
     expect(runtimeSource).not.toContain("const handlePlay = () => setAudioPaused(false)");
     expect(runtimeSource).not.toContain("const handlePause = () => setAudioPaused(true)");
@@ -607,6 +627,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const eventControllerSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -615,7 +636,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useLocalAudioEventController");
+    expect(controllerStackSource).toContain("useLocalAudioEventController");
     expect(runtimeSource).not.toContain("const handlePlaying = (event: Event)");
     expect(runtimeSource).not.toContain("const handleWaiting = (event: Event)");
     expect(runtimeSource).not.toContain("const handleStalled = (event: Event)");
@@ -631,6 +652,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const lifecycleSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -639,7 +661,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("usePlaybackRuntimeLifecycleController");
+    expect(controllerStackSource).toContain("usePlaybackRuntimeLifecycleController");
     expect(runtimeSource).not.toContain("const destroyProgressiveRuntime = useCallback");
     expect(runtimeSource).not.toContain("const resetAction = resolvePlaybackSurfaceResetAction");
     expect(runtimeSource).not.toContain("const resetAction = resolvePlaybackTimelineResetAction");
@@ -703,6 +725,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const policyStateSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -711,7 +734,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("usePlaybackRuntimePolicyState");
+    expect(controllerStackSource).toContain("usePlaybackRuntimePolicyState");
     expect(runtimeSource).not.toContain("const progressiveLocalReadinessPreflight =");
     expect(runtimeSource).not.toContain("const transportGovernorMode = useMemo(");
     expect(runtimeSource).not.toContain("const progressiveWarmupTimerKey = buildProgressiveWarmupTimerKey");
@@ -723,11 +746,36 @@ describe("playback runtime pipeline keys", () => {
     expect(policyStateSource).toContain("resolveFullLocalBlockedReason");
   });
 
+  it("hosts playback runtime controller wiring outside the main runtime hook", () => {
+    const runtimeSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/playback-runtime-controller-stack.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(runtimeSource).toContain("usePlaybackRuntimeControllerStack");
+    expect(runtimeSource).not.toContain("useMainPlaybackController({");
+    expect(runtimeSource).not.toContain("useRuntimeTickEffectsController({");
+    expect(runtimeSource).not.toContain("useProgressiveDiagnosticsPublisher({");
+    expect(runtimeSource).not.toContain("const getLocalPlaybackPositionMs = useCallback");
+    expect(controllerStackSource).toContain("export function usePlaybackRuntimeControllerStack");
+    expect(controllerStackSource).toContain("useMainPlaybackController");
+    expect(controllerStackSource).toContain("useRuntimeTickEffectsController");
+    expect(controllerStackSource).toContain("useProgressiveDiagnosticsPublisher");
+  });
+
   it("hosts local playback readiness handling outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const readinessSource = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -736,7 +784,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useLocalPlaybackReadinessController");
+    expect(controllerStackSource).toContain("useLocalPlaybackReadinessController");
     expect(runtimeSource).not.toContain("const localReadyEvents: Array<keyof HTMLMediaElementEventMap>");
     expect(runtimeSource).not.toContain("const localPlaybackReady = resolveLocalPlaybackReady");
     expect(runtimeSource).not.toContain("const nextMediaConnectionState = resolveListenerMediaConnectionState");
@@ -750,6 +798,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const sourceController = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -758,7 +807,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("usePlaybackSourceController");
+    expect(controllerStackSource).toContain("usePlaybackSourceController");
     expect(runtimeSource).not.toContain("const transitionPlaybackSource = useCallback");
     expect(runtimeSource).not.toContain("const forceLocalAction =\n      resolveForceSourceOwnerLocalPlaybackAction");
     expect(runtimeSource).not.toContain("const recoveryAction = resolveImmediateFullLocalRecoveryAction");
@@ -774,6 +823,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const engineController = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -782,7 +832,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useProgressiveEngineController");
+    expect(controllerStackSource).toContain("useProgressiveEngineController");
     expect(runtimeSource).not.toContain("const setupPreflight = resolveProgressiveEngineSetupPreflight");
     expect(runtimeSource).not.toContain("new ProgressivePcmEngine(");
     expect(runtimeSource).not.toContain("new ProgressiveMseEngine(");
@@ -798,6 +848,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const mainPlaybackController = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -806,7 +857,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useMainPlaybackController");
+    expect(controllerStackSource).toContain("useMainPlaybackController");
     expect(runtimeSource).not.toContain("const mainPlaybackPreflight = resolveMainPlaybackPreflight");
     expect(runtimeSource).not.toContain("const resetIdleAction = resolveMainPlaybackResetIdleAction");
     expect(runtimeSource).not.toContain("const wantsFullLocalPlayback = resolveFullLocalPlaybackSelection");
@@ -822,6 +873,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const warmupController = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -830,7 +882,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useProgressiveWarmupController");
+    expect(controllerStackSource).toContain("useProgressiveWarmupController");
     expect(runtimeSource).not.toContain("const warmupPreflight = resolveWarmupPreflight");
     expect(runtimeSource).not.toContain("const syncWarmup = async () =>");
     expect(runtimeSource).not.toContain("syncProgressiveWarmupRef.current = () =>");
@@ -845,6 +897,7 @@ describe("playback runtime pipeline keys", () => {
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),
       "utf8"
     ).replace(/\r\n/g, "\n");
+    const controllerStackSource = readControllerStackSource();
     const tickEffectsController = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -853,7 +906,7 @@ describe("playback runtime pipeline keys", () => {
       "utf8"
     ).replace(/\r\n/g, "\n");
 
-    expect(runtimeSource).toContain("useRuntimeTickEffectsController");
+    expect(controllerStackSource).toContain("useRuntimeTickEffectsController");
     expect(runtimeSource).not.toContain("const recoverPausedFullLocalPlayback = () =>");
     expect(runtimeSource).not.toContain("const sampleDrift = () =>");
     expect(runtimeSource).not.toContain("const syncFullLocalBufferedWarmup = () =>");

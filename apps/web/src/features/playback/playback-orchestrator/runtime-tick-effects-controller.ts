@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useRef,
   type MutableRefObject,
   type RefObject
 } from "react";
@@ -59,6 +60,26 @@ type TransitionPlaybackSource = (
   nextSource: ProgressivePlaybackSource,
   options?: { clearFallbackReason?: boolean }
 ) => boolean;
+
+type RuntimeTickEffectsRuntimeState = {
+  activePlaybackSource: ProgressivePlaybackSource;
+  attemptPlaybackStart: AttemptPlaybackStart;
+  audioUnlocked: boolean;
+  canUseFullLocalForPlaybackSession: boolean;
+  canWarmBufferedFullLocal: boolean;
+  currentBufferedFullLocalTrackObjectUrl: string | null;
+  currentProgressiveEngineType: ProgressiveEngineType;
+  fullLocalBlockedReason: string | null;
+  fullLocalMaxDriftMs: number;
+  fullLocalSwitchDelayMs: number;
+  getLocalPlaybackPositionMs: () => number | null;
+  isLocalTakeoverAllowed: (nowMs?: number) => boolean;
+  playbackRecoveryStage: PlaybackRecoveryStage;
+  progressiveAheadBufferedMs: number;
+  startupGatePending: boolean;
+  transitionPlaybackSource: TransitionPlaybackSource;
+  volume: number;
+};
 
 type RuntimeTickEffectsControllerInput = {
   activePlaybackSource: ProgressivePlaybackSource;
@@ -137,6 +158,45 @@ export function useRuntimeTickEffectsController({
   transitionPlaybackSource,
   volume
 }: RuntimeTickEffectsControllerInput) {
+  const runtimeStateRef = useRef<RuntimeTickEffectsRuntimeState>({
+    activePlaybackSource,
+    attemptPlaybackStart,
+    audioUnlocked,
+    canUseFullLocalForPlaybackSession,
+    canWarmBufferedFullLocal,
+    currentBufferedFullLocalTrackObjectUrl,
+    currentProgressiveEngineType,
+    fullLocalBlockedReason,
+    fullLocalMaxDriftMs,
+    fullLocalSwitchDelayMs,
+    getLocalPlaybackPositionMs,
+    isLocalTakeoverAllowed,
+    playbackRecoveryStage,
+    progressiveAheadBufferedMs,
+    startupGatePending,
+    transitionPlaybackSource,
+    volume
+  });
+  runtimeStateRef.current = {
+    activePlaybackSource,
+    attemptPlaybackStart,
+    audioUnlocked,
+    canUseFullLocalForPlaybackSession,
+    canWarmBufferedFullLocal,
+    currentBufferedFullLocalTrackObjectUrl,
+    currentProgressiveEngineType,
+    fullLocalBlockedReason,
+    fullLocalMaxDriftMs,
+    fullLocalSwitchDelayMs,
+    getLocalPlaybackPositionMs,
+    isLocalTakeoverAllowed,
+    playbackRecoveryStage,
+    progressiveAheadBufferedMs,
+    startupGatePending,
+    transitionPlaybackSource,
+    volume
+  };
+
   useEffect(() => {
     const playbackState = playbackRef.current;
     const samplingPreflight = resolveDriftSamplingPreflight({
@@ -156,6 +216,7 @@ export function useRuntimeTickEffectsController({
     let fullLocalPausedRecoveryInFlight = false;
 
     const recoverPausedFullLocalPlayback = () => {
+      const runtimeState = runtimeStateRef.current;
       const latestPlayback = playbackRef.current;
       const latestTrack = currentTrackRef.current;
       const audio = audioRef.current;
@@ -163,17 +224,17 @@ export function useRuntimeTickEffectsController({
         currentTrackId: latestPlayback?.currentTrackId ?? null,
         hasPlaybackState: !!latestPlayback,
         hasAudio: !!audio,
-        activePlaybackSource
+        activePlaybackSource: runtimeState.activePlaybackSource
       });
       if (!recoveryPreflight || !audio) {
         return;
       }
 
       const shouldRecover = shouldRecoverPausedFullLocalPlayback({
-        activePlaybackSource,
+        activePlaybackSource: runtimeState.activePlaybackSource,
         playbackStatus: latestPlayback?.status ?? "paused",
         currentTrackId: latestPlayback?.currentTrackId ?? null,
-        audioUnlocked,
+        audioUnlocked: runtimeState.audioUnlocked,
         localAudioPaused: audio.paused,
         localAudioReadyState: audio.readyState,
         localAudioHasSrc: !!audio.currentSrc || !!audio.getAttribute("src"),
@@ -197,9 +258,9 @@ export function useRuntimeTickEffectsController({
         correctionMode: "audible-local-follow"
       });
       audio.muted = false;
-      audio.volume = getAudibleElementVolume(volume);
+      audio.volume = getAudibleElementVolume(runtimeState.volume);
       fullLocalPausedRecoveryInFlight = true;
-      void attemptPlaybackStart(
+      void runtimeState.attemptPlaybackStart(
         audio,
         "full-local",
         "浏览器阻止了本地音频自动播放，请手动点击播放恢复。",
@@ -228,6 +289,7 @@ export function useRuntimeTickEffectsController({
     };
 
     const sampleDrift = () => {
+      const runtimeState = runtimeStateRef.current;
       const latestPlayback = playbackRef.current;
       const latestTrack = currentTrackRef.current;
       const latestSamplingPreflight = resolveDriftSamplingPreflight({
@@ -247,8 +309,8 @@ export function useRuntimeTickEffectsController({
         ) / 1000;
       const audio = audioRef.current;
       const observedSeconds = resolveObservedPlaybackSeconds({
-        activePlaybackSource,
-        localPlaybackPositionMs: getLocalPlaybackPositionMs(),
+        activePlaybackSource: runtimeState.activePlaybackSource,
+        localPlaybackPositionMs: runtimeState.getLocalPlaybackPositionMs(),
         audioCurrentTimeSeconds: audio?.currentTime ?? null,
         audioPaused: audio?.paused ?? true
       });
@@ -265,13 +327,14 @@ export function useRuntimeTickEffectsController({
     };
 
     const syncUpgrade = () => {
+      const runtimeState = runtimeStateRef.current;
       const playbackState = playbackRef.current;
       const upgradePreflight = resolveFullLocalUpgradePreflight({
         currentTrackId: playbackState?.currentTrackId ?? null,
         hasPlaybackState: !!playbackState,
-        hasBufferedFullLocalObjectUrl: !!currentBufferedFullLocalTrackObjectUrl,
-        canWarmBufferedFullLocal,
-        activePlaybackSource,
+        hasBufferedFullLocalObjectUrl: !!runtimeState.currentBufferedFullLocalTrackObjectUrl,
+        canWarmBufferedFullLocal: runtimeState.canWarmBufferedFullLocal,
+        activePlaybackSource: runtimeState.activePlaybackSource,
         playbackHasActiveIntent: hasActivePlaybackIntent(playbackState)
       });
       if (!upgradePreflight.shouldRun) {
@@ -286,31 +349,31 @@ export function useRuntimeTickEffectsController({
         }
       );
       const now = Date.now();
-      const localTakeoverAllowed = isLocalTakeoverAllowed(now);
+      const localTakeoverAllowed = runtimeState.isLocalTakeoverAllowed(now);
       const shouldUpgrade = shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
-        activePlaybackSource,
-        progressiveEngineType: currentProgressiveEngineType,
-        canUseFullLocalForPlaybackSession,
-        fullLocalBlockedReason,
+        activePlaybackSource: runtimeState.activePlaybackSource,
+        progressiveEngineType: runtimeState.currentProgressiveEngineType,
+        canUseFullLocalForPlaybackSession: runtimeState.canUseFullLocalForPlaybackSession,
+        fullLocalBlockedReason: runtimeState.fullLocalBlockedReason,
         localTakeoverAllowed,
-        aheadBufferedMs: progressiveAheadBufferedMs,
+        aheadBufferedMs: runtimeState.progressiveAheadBufferedMs,
         comfortBufferMs,
         warmupReadyAt: fullLocalWarmupReadyAtRef.current,
         now,
-        switchDelayMs: fullLocalSwitchDelayMs
+        switchDelayMs: runtimeState.fullLocalSwitchDelayMs
       });
 
       if (shouldUpgrade) {
-        transitionPlaybackSource("full-local");
+        runtimeState.transitionPlaybackSource("full-local");
         return;
       }
 
       const canArmIdleFullLocalUpgrade = resolveIdleFullLocalUpgradeArmState({
-        progressiveEngineType: currentProgressiveEngineType,
-        canUseFullLocalForPlaybackSession,
-        fullLocalBlockedReason,
+        progressiveEngineType: runtimeState.currentProgressiveEngineType,
+        canUseFullLocalForPlaybackSession: runtimeState.canUseFullLocalForPlaybackSession,
+        fullLocalBlockedReason: runtimeState.fullLocalBlockedReason,
         localTakeoverAllowed,
-        aheadBufferedMs: progressiveAheadBufferedMs,
+        aheadBufferedMs: runtimeState.progressiveAheadBufferedMs,
         comfortBufferMs
       });
       const upgradeAction = resolveFullLocalUpgradeAction({
@@ -320,7 +383,7 @@ export function useRuntimeTickEffectsController({
         now
       });
       if (upgradeAction.kind === "transition") {
-        transitionPlaybackSource(upgradeAction.nextSource);
+        runtimeState.transitionPlaybackSource(upgradeAction.nextSource);
         return;
       }
       if (upgradeAction.kind === "set-warmup-ready-at") {
@@ -329,14 +392,15 @@ export function useRuntimeTickEffectsController({
     };
 
     const syncFullLocalBufferedWarmup = () => {
+      const runtimeState = runtimeStateRef.current;
       const playbackState = playbackRef.current;
       const audio = audioRef.current;
       const warmupPreflight = resolveFullLocalBufferedWarmupPreflight({
         currentTrackId: playbackState?.currentTrackId ?? null,
         hasPlaybackState: !!playbackState,
         hasAudio: !!audio,
-        hasBufferedFullLocalObjectUrl: !!currentBufferedFullLocalTrackObjectUrl,
-        canWarmBufferedFullLocal
+        hasBufferedFullLocalObjectUrl: !!runtimeState.currentBufferedFullLocalTrackObjectUrl,
+        canWarmBufferedFullLocal: runtimeState.canWarmBufferedFullLocal
       });
       if (!warmupPreflight.shouldRun) {
         fullLocalWarmupReadyAtRef.current = null;
@@ -399,10 +463,10 @@ export function useRuntimeTickEffectsController({
       const readyForFullLocal = resolveFullLocalWarmupReadiness({
         localReady,
         driftMs,
-        maxDriftMs: fullLocalMaxDriftMs,
-        fullLocalBlockedReason,
-        progressiveEngineType: currentProgressiveEngineType,
-        aheadBufferedMs: progressiveAheadBufferedMs,
+        maxDriftMs: runtimeState.fullLocalMaxDriftMs,
+        fullLocalBlockedReason: runtimeState.fullLocalBlockedReason,
+        progressiveEngineType: runtimeState.currentProgressiveEngineType,
+        aheadBufferedMs: runtimeState.progressiveAheadBufferedMs,
         requiredAheadMs: getStartupWindowMs(
           latestTrack ?? {
             mimeType: null,
@@ -412,16 +476,16 @@ export function useRuntimeTickEffectsController({
       });
 
       const shouldAttemptFullLocalHandoff = shouldEnableFullLocalHandoff({
-        activePlaybackSource,
-        playbackRecoveryStage,
-        startupGatePending,
+        activePlaybackSource: runtimeState.activePlaybackSource,
+        playbackRecoveryStage: runtimeState.playbackRecoveryStage,
+        startupGatePending: runtimeState.startupGatePending,
         localReady: readyForFullLocal,
         driftMs,
         cooldownMs: Math.max(0, localTakeoverCooldownUntilRef.current - now)
       });
 
       const holdState = resolveFullLocalWarmupHoldState({
-        localTakeoverAllowed: isLocalTakeoverAllowed(now),
+        localTakeoverAllowed: runtimeState.isLocalTakeoverAllowed(now),
         shouldAttemptFullLocalHandoff,
         readyForFullLocal,
         nowMs: now
@@ -432,23 +496,23 @@ export function useRuntimeTickEffectsController({
       }
 
       const warmupDecision = resolveFullLocalWarmupDecision({
-        currentSource: activePlaybackSource,
+        currentSource: runtimeState.activePlaybackSource,
         localReady: readyForFullLocal,
         driftMs,
         warmupReadyAt: fullLocalWarmupReadyAtRef.current,
         now,
-        switchDelayMs: fullLocalSwitchDelayMs,
-        maxDriftMs: fullLocalMaxDriftMs
+        switchDelayMs: runtimeState.fullLocalSwitchDelayMs,
+        maxDriftMs: runtimeState.fullLocalMaxDriftMs
       });
       const transitionAction = resolveFullLocalWarmupTransitionAction({
-        currentSource: activePlaybackSource,
+        currentSource: runtimeState.activePlaybackSource,
         nextSource: warmupDecision.nextSource,
         nextWarmupReadyAt: warmupDecision.nextWarmupReadyAt,
         clearFallbackReason: warmupDecision.clearFallbackReason
       });
       fullLocalWarmupReadyAtRef.current = transitionAction.nextWarmupReadyAt;
       if (transitionAction.transition) {
-        transitionPlaybackSource(transitionAction.transition.nextSource, {
+        runtimeState.transitionPlaybackSource(transitionAction.transition.nextSource, {
           clearFallbackReason: transitionAction.transition.clearFallbackReason
         });
       }
@@ -478,41 +542,22 @@ export function useRuntimeTickEffectsController({
       }
     };
   }, [
-    activePlaybackSource,
-    attemptPlaybackStart,
     audioRef,
-    audioUnlocked,
-    canUseFullLocalForPlaybackSession,
-    canWarmBufferedFullLocal,
-    currentBufferedFullLocalTrackObjectUrl,
     currentBufferedFullLocalTrackRef,
-    currentProgressiveEngineType,
-    currentTrackFormatKey,
     currentTrackRef,
-    fullLocalBlockedReason,
-    fullLocalMaxDriftMs,
-    fullLocalSwitchDelayMs,
     fullLocalWarmupReadyAtRef,
-    getLocalPlaybackPositionMs,
-    isLocalTakeoverAllowed,
     localTakeoverCooldownUntilRef,
     playbackCurrentTrackId,
     playbackMediaEpoch,
-    playbackQualityStalledEventsLast30s,
-    playbackQualityWaitingEventsLast30s,
-    playbackRecoveryStage,
     playbackRef,
     playbackStatus,
-    progressiveAheadBufferedMs,
     recoverPausedFullLocalPlaybackRef,
     recordDriftSample,
     recordPeerDiagnostic,
+    runtimeStateRef,
     sampleDriftRef,
     setMediaConnectionState,
-    startupGatePending,
     syncFullLocalBufferedWarmupRef,
-    syncUpgradeRef,
-    transitionPlaybackSource,
-    volume
+    syncUpgradeRef
   ]);
 }
