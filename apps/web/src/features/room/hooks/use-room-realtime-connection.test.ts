@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
   buildRoomSubscribePayload,
+  createRoomRealtimeRuntime,
   hasSubscribeBootstrapFullLocalTrack,
   isSocketDisconnectGraceActive,
   shouldQueueIncomingAvailability,
@@ -16,6 +17,9 @@ import {
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
 } from "./use-room-realtime-connection";
+import { resolveRoomSnapshotWatchdogAction as resolveRoomSnapshotWatchdogActionFromPolicy } from "./room-realtime-policy";
+import { createRoomRealtimeRuntime as createRoomRealtimeRuntimeFromRuntime } from "./room-realtime-runtime";
+import { useRoomRealtimeConnectionEffects } from "./room-realtime-effects";
 
 const readRoomRealtimeConnectionSource = () =>
   readFileSync(
@@ -60,6 +64,14 @@ function createSnapshot(overrides: {
     playlists: []
   };
 }
+
+describe("room realtime module boundaries", () => {
+  it("hosts policy, runtime and effect orchestration outside the main hook module", () => {
+    expect(resolveRoomSnapshotWatchdogActionFromPolicy).toBe(resolveRoomSnapshotWatchdogAction);
+    expect(createRoomRealtimeRuntimeFromRuntime).toBe(createRoomRealtimeRuntime);
+    expect(typeof useRoomRealtimeConnectionEffects).toBe("function");
+  });
+});
 
 describe("isSocketDisconnectGraceActive", () => {
   it("stays active before the grace window expires", () => {
