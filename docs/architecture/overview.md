@@ -1,6 +1,6 @@
 # 整体架构
 
-最后更新：`2026-04-17`
+最后更新：`2026-07-07`
 
 ## 组件划分
 
@@ -41,12 +41,14 @@
 
 - Tauri 2 桌面壳
 - 打包时通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 指向生产 Web 入口
+- 通过 Tauri updater 支持软件内检查、下载和安装更新
 - 不内嵌本地 Node 服务
 
 ### `apps/mobile`
 
 - Capacitor Android 壳
 - 同样通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 指向生产 Web 入口
+- 检查 GitHub 最新 Release，并提示用户下载新版 APK
 
 ## 服务依赖
 

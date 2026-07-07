@@ -1,6 +1,6 @@
 # Redis Sentinel / HA
 
-最后更新：`2026-04-01`
+最后更新：`2026-07-07`
 
 ## 当前范围
 
@@ -9,7 +9,7 @@
 - 服务端支持通过 Sentinel 发现 Redis master
 - 提供了一份本地/样例用的 Sentinel compose：`deploy/linux/docker-compose.redis-sentinel.yml`
 
-这不是完整的 Redis 平台化方案，但足够把当前单点 Redis 提升到基础 HA 形态。
+这是一套基础 HA 样例，用于把当前单点 Redis 提升到 Sentinel 发现 master 的部署形态。
 
 ## 服务端环境变量
 
@@ -58,7 +58,7 @@ REDIS_PASSWORD=replace-with-a-real-redis-password
 3. `web` 不直接连接 Redis
 4. `server` readiness 中检查 Redis 连接模式和可用性
 
-当前服务端 readiness 响应会带上 `redisMode`，便于确认当前是不是走的 Sentinel。
+当前服务端 readiness 响应会带上 `redisMode`，便于确认当前 Redis 连接模式。
 
 ## 建议
 

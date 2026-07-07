@@ -1,7 +1,10 @@
 import process from "node:process";
+import fs from "node:fs";
 
 const rawOrigin = process.env.MUSIC_ROOM_PUBLIC_ORIGIN?.trim() ?? "";
 const lifecycle = process.env.npm_lifecycle_event ?? "package";
+const packageJson = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const packageVersion = packageJson.version;
 
 if (!rawOrigin) {
   console.error(
@@ -32,7 +35,7 @@ if (parsedOrigin.hostname === "example.com") {
 
 if (parsedOrigin.origin !== "https://musicroom.witw.top") {
   console.error(
-    `[release] MUSIC_ROOM_PUBLIC_ORIGIN must point to https://musicroom.witw.top for 0.2.7 official packages. Current: ${parsedOrigin.origin}`
+    `[release] MUSIC_ROOM_PUBLIC_ORIGIN must point to https://musicroom.witw.top for ${packageVersion} official packages. Current: ${parsedOrigin.origin}`
   );
   process.exit(1);
 }
