@@ -11,10 +11,6 @@ Music Room is a collaborative music-room project for listening to local music to
 
 ## Product Scope
 
-Music Room is not a public licensed music catalog, and it is not a server-hosted audio platform.
-
-The current goals are:
-
 - Let users listen together using their own local audio files
 - Build a complete room experience with a shared queue, P2P chunks, and local cache playback
 - Keep audio files off the server while still providing stable collaborative playback
