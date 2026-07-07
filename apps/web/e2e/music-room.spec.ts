@@ -123,7 +123,9 @@ test("upload-queue-playback", async ({ browser, page }) => {
 
   await page.getByTestId("queue-item-play-button").first().click();
   await expect(page.getByText("正在播放").first()).toBeVisible({ timeout: 10_000 });
-  await expect(listenerPage.getByText("正在播放").first()).toBeVisible({ timeout: 15_000 });
+  await expect(listenerPage.getByTestId("queue-item-play-button").first()).toHaveText("播放中", {
+    timeout: 15_000
+  });
 
   await page.getByTestId("player-toggle-button").last().click();
   await expect(page.getByTestId("player-toggle-button").last()).toHaveAttribute("title", "播放", {
