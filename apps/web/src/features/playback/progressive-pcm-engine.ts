@@ -259,6 +259,12 @@ export class ProgressivePcmEngine {
 
       this.audio.srcObject = this.destinationNode.stream;
       this.audio.volume = 1;
+      // Setting srcObject pauses the element per the HTML spec. The element
+      // was primed during a user gesture, which grants sticky autoplay
+      // activation — play() should succeed here. If it doesn't (e.g. the
+      // gesture token was somehow invalidated), the direct gain→destination
+      // path still produces audio, so we silently ignore the failure.
+      this.audio.play().catch(() => undefined);
       return true;
     } catch {
       this.status = "failed";
@@ -372,11 +378,19 @@ export class ProgressivePcmEngine {
 
     const driftMs = Math.abs(this.getCurrentTimeSeconds() - positionSeconds) * 1000;
     if (!this.playing || driftMs > 220) {
+      const wasPlaying = this.playing;
       this.playing = true;
       this.pausedTrackTimeSec = positionSeconds;
       this.anchorTrackTimeSec = positionSeconds;
       this.anchorContextTimeSec = this.audioContext.currentTime + 0.05;
-      this.stopScheduledSegments();
+      // Only stop segments when we're already playing and need to
+      // re-anchor after a drift correction. On the initial transition
+      // from not-playing, the segment list is empty and stopping is
+      // a no-op — but calling it here would unnecessarily reset
+      // source nodes that scheduleAhead is about to create.
+      if (wasPlaying) {
+        this.stopScheduledSegments();
+      }
     }
 
     this.scheduleAhead(positionSeconds);
@@ -419,9 +433,13 @@ export class ProgressivePcmEngine {
       // WebCodecs may have already closed the decoder after a fatal decode error.
     }
     if (this.audio.srcObject === this.destinationNode?.stream) {
-      this.audio.pause();
+      // Don't pause() or load() — both reset the element's sticky
+      // autoplay activation granted during the user-gesture priming.
+      // Setting srcObject to null alone triggers the media element load
+      // algorithm per the HTML spec, which pauses the element. The
+      // next engine's attach() will set a new stream and attempt to
+      // resume playback via the still-valid gesture activation.
       this.audio.srcObject = null;
-      this.audio.load();
     }
     if (this.keepAliveOscillator) {
       try { this.keepAliveOscillator.stop(); } catch { /* already stopped */ }

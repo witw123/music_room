@@ -628,6 +628,11 @@ describe("ProgressivePcmEngine", () => {
 
     try {
       await engine.attach();
+      // attach() calls audio.play() after setting srcObject to recover
+      // the playing state lost during the HTML-spec-mandated pause on
+      // srcObject assignment. Reset the spy so the assertion below only
+      // covers syncPlayback.
+      (audio.play as ReturnType<typeof vi.fn>).mockClear();
       Reflect.set(engine as object, "status", "ready");
       Reflect.set(engine as object, "decodedSegments", [
         {
