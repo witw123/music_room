@@ -118,6 +118,8 @@ test("upload-queue-playback", async ({ browser, page }) => {
   await addButtons.nth(1).click();
   await page.getByTestId("room-tab-queue").click();
   await expect(page.getByTestId("queue-item")).toHaveCount(2);
+  await listenerPage.getByTestId("room-tab-queue").click();
+  await expect(listenerPage.getByTestId("queue-item")).toHaveCount(2, { timeout: 15_000 });
 
   await page.getByTestId("queue-item-play-button").first().click();
   await expect(page.getByText("正在播放").first()).toBeVisible({ timeout: 10_000 });
