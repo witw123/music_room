@@ -161,6 +161,7 @@ export function usePlaybackRuntimeLifecycleController({
       setMediaConnectionState(resetAction.mediaConnectionState);
     }
   }, [
+    activePlaybackSource,
     audioRef,
     destroyProgressiveRuntime,
     pcmLastBlockedReasonRef,

@@ -501,6 +501,20 @@ export function useRoomRuntime({
   const roomPlaybackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
   const roomPlaybackRef = useRef(roomPlayback);
   roomPlaybackRef.current = roomPlayback;
+  const realtimeRuntimeStateRef = useRef({
+    playbackStatus: roomPlaybackStatus,
+    currentTrackId: roomPlaybackCurrentTrackId,
+    bufferHealth,
+    isPageVisible,
+    audioUnlocked
+  });
+  realtimeRuntimeStateRef.current = {
+    playbackStatus: roomPlaybackStatus,
+    currentTrackId: roomPlaybackCurrentTrackId,
+    bufferHealth,
+    isPageVisible,
+    audioUnlocked
+  };
   const roomTracksRef = useRef(roomSnapshot?.tracks ?? null);
   roomTracksRef.current = roomSnapshot?.tracks ?? null;
   const roomPlaybackCacheIdentity = useMemo<PlaybackCacheIdentity | null>(
@@ -990,6 +1004,7 @@ export function useRoomRuntime({
     if (!activeRoomId) {
       return;
     }
+    const realtimeRuntimeState = realtimeRuntimeStateRef.current;
 
     return createRoomRealtimeRuntime({
       roomId: activeRoomId,
@@ -1020,10 +1035,10 @@ export function useRoomRuntime({
       pieceTransferRatesRef,
       getPeerMedianRttMs,
       setConnectedPeers,
-      isPageVisible,
-      playbackStatus: roomPlaybackStatus ?? "paused",
-      currentTrackId: roomPlaybackCurrentTrackId,
-      bufferHealth,
+      isPageVisible: realtimeRuntimeState.isPageVisible,
+      playbackStatus: realtimeRuntimeState.playbackStatus ?? "paused",
+      currentTrackId: realtimeRuntimeState.currentTrackId,
+      bufferHealth: realtimeRuntimeState.bufferHealth,
       enableManualTrackCaching,
       enableTrackCaching,
       resubscribeRoomRef,
@@ -1047,7 +1062,7 @@ export function useRoomRuntime({
       setRoomRecoveryState,
       setStatusMessage,
       isNavigatingRoomExit,
-      audioUnlocked,
+      audioUnlocked: realtimeRuntimeState.audioUnlocked,
       emitPresence,
       startPresenceHeartbeat,
       exitCurrentRoom,
@@ -1056,8 +1071,6 @@ export function useRoomRuntime({
     });
   }, [
     roomSnapshot?.room.id,
-    roomPlaybackCurrentTrackId,
-    roomPlaybackStatus,
     hydrated,
     iceConfig,
     iceConfigResolved,
@@ -1065,7 +1078,6 @@ export function useRoomRuntime({
     activeSessionRef,
     activeRouteRoomIdRef,
     announceRoomTrackAvailabilityRef,
-    bufferHealth,
     clearAvailabilityForPeerRef,
     clearManualCachePendingPiece,
     currentRoomRef,
@@ -1076,7 +1088,6 @@ export function useRoomRuntime({
     flushPendingAvailabilityRef,
     fullLocalPlaybackTracksRef,
     handleManualCachePieceReceivedRef,
-    isPageVisible,
     lastRealtimeRoomEventAtRef,
     lastSubscribeAckAtRef,
     manualCacheTrackIdsRef,
@@ -1106,8 +1117,23 @@ export function useRoomRuntime({
     exitCurrentRoom,
     emitPresence,
     startPresenceHeartbeat,
-    isNavigatingRoomExit,
-    audioUnlocked
+    isNavigatingRoomExit
+  ]);
+
+  useEffect(() => {
+    meshRef.current?.setStatsSamplingMode(
+      !roomPlaybackCurrentTrackId || (!isPageVisible && roomPlaybackStatus !== "playing")
+        ? "off"
+        : bufferHealth !== "healthy"
+          ? "active"
+          : "steady"
+    );
+  }, [
+    bufferHealth,
+    isPageVisible,
+    meshRef,
+    roomPlaybackCurrentTrackId,
+    roomPlaybackStatus
   ]);
 
   useEffect(() => {

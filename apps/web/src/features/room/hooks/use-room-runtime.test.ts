@@ -804,4 +804,18 @@ describe("room runtime snapshot dependency boundaries", () => {
     expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.room\.playback,\s*$/m);
     expect(dependencySource).not.toMatch(/^\s+roomSnapshot\?\.tracks,\s*$/m);
   });
+
+  it("keeps playback runtime state out of the realtime socket runtime dependencies", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "use-room-runtime.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const runtimeEffect = source.match(
+      /return createRoomRealtimeRuntime\([\s\S]*?\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/
+    );
+
+    expect(runtimeEffect?.groups?.deps ?? "").not.toMatch(
+      /\b(roomPlaybackCurrentTrackId|roomPlaybackStatus|bufferHealth|isPageVisible|audioUnlocked)\b/
+    );
+  });
 });
