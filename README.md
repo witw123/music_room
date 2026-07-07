@@ -28,6 +28,7 @@ The core loop is already runnable. The project is in a "usable product, ongoing 
 - The room workspace currently focuses on `Queue`, `Library`, `Cache`, and `Members`
 - P2P chunk cache and progressive local playback for MP3/FLAC are integrated
 - The desktop app has moved to Tauri 2, and the mobile app currently provides a Capacitor Android shell
+- Desktop and Android clients can check for updates from inside the app
 
 More details:
 
@@ -66,6 +67,7 @@ Recommended reading order:
 - Manual cache, cache restore to library, and cache export
 - Member-level connection and cache diagnostics
 - Server-issued short-lived TURN credentials with frontend fallback to static ICE config
+- Client update checks for desktop and Android shells
 
 ## Quick Start
 
@@ -118,7 +120,7 @@ pnpm pack:mobile
 - The web client falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
 - Desktop and mobile shells use `MUSIC_ROOM_PUBLIC_ORIGIN` at build/package time.
 - If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, desktop and mobile packaging fails fast instead of producing a client pointed at `https://example.com`.
-- Official `0.2.7` client packages are expected to target `https://musicroom.witw.top`.
+- Official `0.2.8` client packages are expected to target `https://musicroom.witw.top`.
 
 Examples:
 
@@ -218,16 +220,22 @@ More deployment details:
 
 ## Releases
 
-Desktop and mobile installers are published through:
+Desktop and Android installers are published through:
 
 - [GitHub Releases](https://github.com/witw123/music_room/releases)
 
-Release artifacts usually include:
+Current release titles use `Music Room vX.Y.Z`. Release assets include:
 
 - Windows `.exe` / `.msi`
 - macOS `.dmg`
 - Linux `.AppImage` / `.deb` / `.rpm`
 - Android `.apk`
+- Tauri desktop updater manifest `latest.json`
+
+Update behavior:
+
+- Desktop shells use the Tauri updater manifest to prompt the user to download and install signed updates.
+- Android shells check the latest GitHub Release and prompt the user to download the newest APK.
 
 ## Known Boundaries
 

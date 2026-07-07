@@ -1,7 +1,7 @@
 # 项目状态
 
-最后更新：`2026-04-17`
-当前版本：`0.2.7`
+最后更新：`2026-07-07`
+当前版本：`0.2.8`
 
 ## 总览
 
@@ -16,6 +16,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 - 客户端会根据缓存情况在 `progressive-local`、`full-local` 之间切换
 - 房间默认工作区现在包含 `共享队列`、`曲库`、`缓存`、`成员`
 - 成员页已提供连接、缓存、ICE、播放源和最近事件诊断
+- 桌面端和 Android 端已支持在软件内检查更新
 
 ## 已完成
 
@@ -34,8 +35,10 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
   - FLAC 在 Chromium 浏览器中走 PCM / WebCodecs + AudioContext
   - 完整缓存后可切换到 `full-local`
 - 桌面端已迁移到 Tauri 2，移动端使用 Capacitor Android 壳
+- 桌面端通过 Tauri updater 检查签名安装包更新，Android 端检查 GitHub Release 并提示下载 APK
 - 客户端打包已改为通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 注入公网入口，不再默认暴露真实域名
-- 自动化测试已形成基础盘：当前仓库共有 `52` 个 `*.test.ts` / `*.spec.ts` 文件，覆盖 shared 协议、服务端核心模块、前端房间/P2P/播放纯逻辑与部分组件/Hook
+- 自动化测试已形成基础盘：当前仓库共有 `112` 个 `*.test.ts` / `*.spec.ts` 文件，覆盖 shared 协议、服务端核心模块、前端房间/P2P/播放纯逻辑、部分组件/Hook 和 Playwright E2E
+- 播放运行时、房间实时连接、P2P Mesh、上传、手动缓存下载器和顶层房间组件已拆分为更小的模块；重构记录见 [../refactor/README.md](../refactor/README.md)
 
 ## 部分完成
 
@@ -49,7 +52,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
   - `缓存`
   - `成员与诊断`
 - 观测能力仍偏基础，主要依赖日志和前端诊断面板，缺少统一 metrics / tracing / error reporting
-- 自动化测试已覆盖大量纯逻辑、状态机和部分组件 / Hook，但浏览器级交互回归、真实 WebRTC 联调和 E2E 仍然不足
+- 自动化测试已覆盖大量纯逻辑、状态机、部分组件 / Hook 和核心 E2E 主流程，但真实 WebRTC 联调、Media 集成和打包后客户端 smoke test 仍然不足
 - 移动端目前只看到 Android 壳与 APK 打包链路，iOS 仍未进入当前仓库交付面
 
 ## 当前已知风险
@@ -57,8 +60,8 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 - 直接在宿主机部署时，如果错误复用 Docker 版 Nginx upstream（`web:3000` / `server:3001`），会直接出现 `502 Bad Gateway`
 - 如果没有 `systemd`、`pm2` 或 Docker restart policy 守护 `web` / `server` 进程，服务掉线后用户侧会表现成“站点总是崩”
 - TURN 配置不完整时，复杂网络下分片同步会退化，诊断面板通常会看到 `ICE: stun-only` 或 `disconnected / failed`
-- 房间退出、重连恢复和队列播放仍有偶发竞态反馈，属于当前持续观察项
 - FLAC 的首次起播依赖本地连续缓冲，缓存追不上时会进入恢复和保守调度
+- 真实 WebRTC、MediaSource、AudioContext 与客户端壳的打包后 smoke test 仍需要继续补强
 - 当前正式版按“单 server 实例 + Redis 广播增强”交付，不支持 server 水平扩容；多实例一致性需要后续 Redis CAS 或数据库事务化方案单独落地
 
 ## 当前建议的部署方式
@@ -72,9 +75,9 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 
 ## 近期优先级
 
-1. 继续消除房间退出、重连恢复和队列播放的偶发竞态
-2. 补强多实例 / 服务重启后的状态恢复与补偿
-3. 完善播放链路和房间工作流的交互级测试，覆盖进房、重连、切歌、暂停和 seek
+1. 补强多实例 / 服务重启后的状态恢复与补偿
+2. 增加真实 WebRTC / MediaSource / AudioContext 集成测试和打包后客户端 smoke test
+3. 继续完善播放链路和房间工作流的交互级测试，覆盖弱网、重连、切歌、暂停和 seek
 4. 补齐统一观测能力，包括服务端错误收集、资源监控和告警
 5. 视产品取舍决定是否恢复歌单前端主入口或继续维持“后端保留、主 UI 收起”的策略
 

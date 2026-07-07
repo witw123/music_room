@@ -28,6 +28,7 @@ Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
 - 房间主界面当前收敛为 `共享队列`、`曲库`、`缓存`、`成员`
 - P2P 分片缓存、MP3/FLAC 渐进式本地播放均已接入
 - 桌面端已迁移到 Tauri 2，移动端当前提供 Capacitor Android 壳
+- 桌面端与 Android 端已支持在软件内检查更新
 
 进度细节见：
 
@@ -66,6 +67,7 @@ Music Room 不是公共版权曲库，也不是服务端托管音频的平台。
 - 手动缓存、缓存回库与缓存导出
 - 成员级“连接与缓存诊断”面板
 - 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
+- 桌面端与 Android 壳的软件内检查更新
 
 ## 快速开始
 
@@ -118,7 +120,7 @@ pnpm pack:mobile
 - Web 会在运行时回退到当前页面 origin，因此开源仓库不需要把生产域名写死进前端 bundle。
 - 桌面端和移动端壳在构建 / 打包时使用 `MUSIC_ROOM_PUBLIC_ORIGIN`。
 - 如果没有设置 `MUSIC_ROOM_PUBLIC_ORIGIN`，桌面端和移动端打包会快速失败，避免产出指向 `https://example.com` 的客户端。
-- 官方 `0.2.7` 客户端包预期指向 `https://musicroom.witw.top`。
+- 官方 `0.2.8` 客户端包预期指向 `https://musicroom.witw.top`。
 
 示例：
 
@@ -218,16 +220,22 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 
 ## 发布
 
-桌面端和移动端安装包发布在：
+桌面端和 Android 安装包发布在：
 
 - [GitHub Releases](https://github.com/witw123/music_room/releases)
 
-当前发布物通常包含：
+当前 Release 标题统一使用 `Music Room vX.Y.Z`。发布物包含：
 
 - Windows `.exe` / `.msi`
 - macOS `.dmg`
 - Linux `.AppImage` / `.deb` / `.rpm`
 - Android `.apk`
+- Tauri 桌面端更新清单 `latest.json`
+
+更新行为：
+
+- 桌面端通过 Tauri updater 清单检查更新，发现新的签名桌面包后提示用户下载并安装。
+- Android 端检查 GitHub 最新 Release，发现新版 APK 后提示用户前往下载。
 
 ## 当前已知边界
 
