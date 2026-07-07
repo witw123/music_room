@@ -743,12 +743,13 @@ export class ProgressivePcmEngine {
         maxPcmPlaybackWindowPiecesToDecode
       );
       if (!cachedWindow || cachedWindow.bytes.byteLength === 0) {
+        console.debug(
+          `[pcm] flac window start=${startChunkIndex} ` +
+          `no cached chunks at this offset`
+        );
         continue;
       }
 
-      // The engine may have been torn down while awaiting the cache read, which
-      // nulls streamInfo/decoder. Re-check before using them so we never crash
-      // reading properties off a null streamInfo.
       const streamInfo = this.streamInfo;
       if (!streamInfo || !this.decoder || isTerminalEngineStatus(this.status)) {
         break;
@@ -761,6 +762,10 @@ export class ProgressivePcmEngine {
         finalChunk: cachedWindow.endChunkIndex >= this.manifest.totalChunks - 1
       });
       if (extraction.packets.length === 0) {
+        console.debug(
+          `[pcm] flac window start=${startChunkIndex} ` +
+          `bytes=${cachedWindow.bytes.byteLength} packets=0`
+        );
         continue;
       }
 
@@ -1030,13 +1035,11 @@ export class ProgressivePcmEngine {
   }
 
   private async syncUntilBufferedPosition(positionSeconds: number) {
-    // Let contiguous append run at full catch-up speed until the decoder covers
-    // the requested position, instead of crawling two chunks per sync (which
-    // kept nothing audible until the whole track finished caching).
     this.catchupTargetChunkIndex = getChunkIndexForPositionMs(
       this.manifest,
       positionSeconds * 1000
     );
+    const trackLabel = `${this.manifest.trackId.slice(0, 8)}`;
     try {
       for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
         if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
@@ -1045,12 +1048,6 @@ export class ProgressivePcmEngine {
 
         const appended = await this.sync();
 
-        // Only fall back to window decoding when the linear (from-chunk-0)
-        // decode can no longer make progress — i.e. the contiguous prefix is
-        // genuinely missing. Running both paths concurrently makes them decode
-        // overlapping time ranges into the same decoder + dedup set, which
-        // produced doubled/overlapping audio and left gaps that stalled
-        // playback until it went silent.
         let decodedWindow = false;
         if (!appended && !this.hasBufferedPosition(positionSeconds)) {
           decodedWindow = isWavTrack(this.manifest)
@@ -1058,6 +1055,16 @@ export class ProgressivePcmEngine {
             : await this.decodeCachedFlacWindowAt(positionSeconds);
         }
         if (!appended && !decodedWindow) {
+          if (attempt === 0) {
+            console.debug(
+              `[pcm] ${trackLabel} catchup stalled at iteration 0: ` +
+              `contiguousChunks=${this.contiguousChunkCount} ` +
+              `targetChunk=${this.catchupTargetChunkIndex} ` +
+              `decodedSegments=${this.decodedSegments.length} ` +
+              `hasStreamInfo=${!!this.streamInfo} ` +
+              `hasDecoder=${!!this.decoder}`
+            );
+          }
           break;
         }
 
