@@ -67,6 +67,11 @@ class FakeDataChannel {
 
   send(payload: unknown) {
     this.sentMessages.push(payload);
+    if (payload instanceof ArrayBuffer) {
+      this.bufferedAmount += payload.byteLength;
+    } else if (typeof payload === "string") {
+      this.bufferedAmount += new TextEncoder().encode(payload).byteLength;
+    }
   }
 
   close() {
@@ -723,6 +728,110 @@ describe("P2PMesh", () => {
       channel?.sentMessages.filter((message): message is ArrayBuffer => message instanceof ArrayBuffer) ??
       [];
     expect(binaryFrames).toHaveLength(3);
+  });
+
+  it("starts enough piece reads from a batched playback request to keep cache warmup saturated", async () => {
+    const pendingReads: Array<{
+      chunkIndex: number;
+      resolve: (piece: Awaited<ReturnType<typeof getCachedPiece>>) => void;
+    }> = [];
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      return new Promise((resolve) => {
+        pendingReads.push({ chunkIndex, resolve });
+      });
+    });
+    vi.mocked(getTrackPieceManifest).mockResolvedValue({
+      trackId: "track_1",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: 16 * 128 * 1024,
+      durationMs: 30_000,
+      totalChunks: 16,
+      chunkSize: 128 * 1024,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
+    const handleMessage = channel?.onmessage?.({
+      data: JSON.stringify({
+        kind: "request-pieces",
+        requestId: "request-1",
+        trackId: "track_1",
+        chunkIndexes: Array.from({ length: 16 }, (_value, index) => index)
+      })
+    } as MessageEvent<string>);
+    await Promise.resolve();
+
+    expect(pendingReads.map((entry) => entry.chunkIndex)).toEqual(
+      Array.from({ length: 16 }, (_value, index) => index)
+    );
+
+    for (const pendingRead of pendingReads) {
+      const payload = new TextEncoder().encode(`piece-${pendingRead.chunkIndex}`).buffer;
+      pendingRead.resolve({
+        pieceId: `track_1:peer_a:${pendingRead.chunkIndex}`,
+        trackId: "track_1",
+        peerId: "peer_a",
+        chunkIndex: pendingRead.chunkIndex,
+        chunkSize: payload.byteLength,
+        hash: await sha256Hex(payload),
+        createdAt: "2026-04-03T16:30:00.000Z",
+        payload
+      });
+    }
+    await handleMessage;
+  });
+
+  it("pre-fills enough data channel bytes for an active playback cache burst", async () => {
+    const piecePayload = new Uint8Array(128 * 1024).fill(7).buffer;
+    const pieceHash = await sha256Hex(piecePayload);
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => ({
+      pieceId: `track_1:peer_a:${chunkIndex}`,
+      trackId: "track_1",
+      peerId: "peer_a",
+      chunkIndex,
+      chunkSize: piecePayload.byteLength,
+      hash: pieceHash,
+      createdAt: "2026-04-03T16:30:00.000Z",
+      payload: piecePayload.slice(0)
+    }));
+    vi.mocked(getTrackPieceManifest).mockResolvedValue({
+      trackId: "track_1",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: 16 * piecePayload.byteLength,
+      durationMs: 30_000,
+      totalChunks: 16,
+      chunkSize: piecePayload.byteLength,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
+    expect(channel?.bufferedAmountLowThreshold).toBe(1024 * 1024);
+
+    await channel?.onmessage?.({
+      data: JSON.stringify({
+        kind: "request-pieces",
+        requestId: "request-1",
+        trackId: "track_1",
+        chunkIndexes: Array.from({ length: 16 }, (_value, index) => index)
+      })
+    } as MessageEvent<string>);
+
+    const binaryFrames =
+      channel?.sentMessages.filter((message): message is ArrayBuffer => message instanceof ArrayBuffer) ??
+      [];
+    expect(binaryFrames.length).toBe(16 * 3);
   });
 
   it("fragments oversized piece frames before sending over the data channel", async () => {

@@ -139,10 +139,10 @@ type MeshOptions = {
 };
 
 export class P2PMesh {
-  private readonly sendQueueLowWatermarkBytes = 384 * 1024;
-  private readonly sendQueueHighWatermarkBytes = 1024 * 1024;
+  private readonly sendQueueLowWatermarkBytes = 1024 * 1024;
+  private readonly sendQueueHighWatermarkBytes = 4 * 1024 * 1024;
   private readonly incomingPieceBatchSize = 8;
-  private readonly pieceServeBatchConcurrency = 3;
+  private readonly pieceServeBatchConcurrency = 16;
   private readonly maxDataChannelPayloadBytes = 48 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;
   private readonly autoReconnect: boolean;
