@@ -1465,8 +1465,10 @@ export function shouldSkipSecondaryPcmWarmupSync(input: {
   return input.engineType === "pcm" && (!input.engineReady || !input.localReady);
 }
 
-export function resolveWarmupPcmSyncMode(source: ProgressivePlaybackSource) {
-  return isSlidingWindowPlaybackSource(source) ? "snapshot-only" as const : "sync-playback" as const;
+export function resolveWarmupPcmSyncMode(
+  _source: ProgressivePlaybackSource
+): "snapshot-only" | "sync-playback" {
+  return "sync-playback" as const;
 }
 
 export function resolveWarmupPcmAudioStartAction(input: {

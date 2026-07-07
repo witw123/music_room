@@ -34,9 +34,7 @@ export function usePlaybackQualityState({ audioRef }: PlaybackQualityStateInput)
   const continuousPlaybackStartedAtRef = useRef<number | null>(null);
   const continuousPlaybackSegmentsRef = useRef<ContinuousPlaybackSegment[]>([]);
 
-  const localAudioDiagnostics = useMemo(() => {
-    return resolveLocalAudioDiagnostics(audioRef.current);
-  }, [audioRef]);
+  const localAudioDiagnostics = resolveLocalAudioDiagnostics(audioRef.current);
 
   const recordQualityEvent = useCallback(
     (targetRef: typeof waitingEventTimestampsRef, timestampMs = Date.now()) => {

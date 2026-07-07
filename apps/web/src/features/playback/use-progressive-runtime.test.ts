@@ -625,6 +625,7 @@ describe("playback runtime pipeline keys", () => {
     expect(qualityStateSource).toContain("recordWaitingEvent");
     expect(qualityStateSource).toContain("recordStalledEvent");
     expect(qualityStateSource).toContain("resetPlaybackQualityState");
+    expect(qualityStateSource).not.toContain("const localAudioDiagnostics = useMemo");
   });
 
   it("hosts local audio play-pause state outside the main runtime hook", () => {
@@ -3359,8 +3360,8 @@ describe("use-progressive-runtime policy helpers", () => {
   });
 
   it("keeps progressive warmup PCM sync mode in the pure pipeline module", () => {
-    expect(pipelineResolveWarmupPcmSyncMode("progressive-local")).toBe("snapshot-only");
-    expect(resolveWarmupPcmSyncMode("lossless-local")).toBe("snapshot-only");
+    expect(pipelineResolveWarmupPcmSyncMode("progressive-local")).toBe("sync-playback");
+    expect(resolveWarmupPcmSyncMode("lossless-local")).toBe("sync-playback");
     expect(resolveWarmupPcmSyncMode("full-local")).toBe("sync-playback");
     expect(
       pipelineResolveWarmupPcmAudioStartAction({

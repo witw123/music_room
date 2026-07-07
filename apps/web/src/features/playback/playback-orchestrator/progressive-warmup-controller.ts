@@ -156,9 +156,8 @@ export function useProgressiveWarmupController({
       let driftMs = Number.POSITIVE_INFINITY;
 
       if (pcmEngine) {
-        // The main playback controller already drives pcmEngine.syncPlayback
-        // for sliding-window sources. A second sync loop competes with that
-        // anchor, so warmup only reads snapshots in that mode.
+        // Sliding-window playback needs the warmup tick to keep PCM decode and
+        // catch-up moving until the local audio element is audibly running.
         const pcmSyncMode = resolveWarmupPcmSyncMode(latestWarmupState.activePlaybackSource);
         const syncResult =
           pcmSyncMode === "snapshot-only"
