@@ -928,15 +928,6 @@ export function getLocalPlaybackStatus(input: {
     };
   }
 
-  if (input.mediaConnectionState === "failed") {
-      return {
-      label: "数据链路不可用",
-      detail: "当前缓存播放所需的数据链路尚未恢复。",
-      tone: "warning",
-      badgeText: "failed"
-      };
-  }
-
   return {
     label: "等待缓存链路",
     detail: "正在等待当前播放曲目的分片来源和数据通道。",

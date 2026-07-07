@@ -17,6 +17,20 @@ describe("transport-health", () => {
     });
   });
 
+  it("treats an open data channel as ready even when a stale connection failure remains", () => {
+    expect(
+      resolveTransportHealth({
+        dataConnectionState: "closed",
+        dataChannelState: "open",
+        recoveryActionLevel: "observe",
+        audibleSource: "progressive-local"
+      })
+    ).toMatchObject({
+      transportHealth: "healthy",
+      degradedReason: null
+    });
+  });
+
   it("treats background peer recovery as recovering before escalating to reconnecting", () => {
     expect(
       resolveTransportHealth({

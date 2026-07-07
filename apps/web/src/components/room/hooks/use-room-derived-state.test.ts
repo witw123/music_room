@@ -535,6 +535,29 @@ describe("use-room-derived-state helpers", () => {
     ).toEqual([diagnostics[0], diagnostics[2]]);
   });
 
+  it("does not report a data-link failure from media state alone", () => {
+    expect(
+      getLocalPlaybackStatus({
+        presenceState: "online",
+        mediaConnectionState: "failed",
+        isSourceOwner: false,
+        audioUnlocked: true,
+        sourceStartState: "live",
+        lastSourceStartError: null,
+        mediaConnectedPeersCount: 0,
+        playbackStatus: "playing",
+        cachePlayback: null,
+        dataReadyCount: 0,
+        pieceDownloadRateKbps: null,
+        pieceUploadRateKbps: null
+      })
+    ).toMatchObject({
+      label: "等待缓存链路",
+      tone: "neutral",
+      badgeText: "idle"
+    });
+  });
+
   it("treats ready native blob full-local playback as audible without PCM frames", () => {
     const cachePlayback = {
       ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,

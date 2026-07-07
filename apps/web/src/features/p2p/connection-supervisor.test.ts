@@ -203,6 +203,40 @@ describe("connection-supervisor", () => {
     expect(state.lastPlayoutProgressAtMs).toBe(Date.now());
   });
 
+  it("clears stale data failures when the data channel opens again", () => {
+    let state = createPeerConnectionSupervisorState({
+      roomId: "room_1",
+      peerId: "peer_b",
+      now: Date.now()
+    });
+
+    state = notePeerSignalState({
+      state,
+      dataConnectionState: "closed",
+      dataChannelState: "closed",
+      lastFailureReason: "data-failed",
+      now: Date.now()
+    });
+    expect(state.lastFailureReason).toBe("data-failed");
+    state = {
+      ...state,
+      transportScore: "failed"
+    };
+
+    vi.advanceTimersByTime(500);
+    state = notePeerSignalState({
+      state,
+      dataChannelState: "open",
+      now: Date.now()
+    });
+
+    expect(state.dataChannelState).toBe("open");
+    expect(state.dataConnectionState).toBe("connected");
+    expect(state.lastFailureReason).toBeNull();
+    expect(state.unhealthySignalStateStartedAtMs).toBeNull();
+    expect(state.transportScore).toBe("degraded");
+  });
+
   it("keeps the first unhealthy signal timestamp while checking continues", () => {
     let state = createPeerConnectionSupervisorState({
       roomId: "room_1",

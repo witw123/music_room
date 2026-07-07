@@ -20,7 +20,6 @@ import {
 import type { RoomRuntimeEvent } from "./room-runtime-types";
 import { isStableFullChunkIndexList } from "./manual-cache-download-progress";
 
-const activePlaybackPendingRefreshBucketMs = 20_000;
 const directRequestBatchSize = 32;
 const maxPendingPerTrack = 128;
 const providerBootstrapRetryCooldownMs = 1_500;
@@ -71,10 +70,7 @@ export function getActivePlaybackPendingKey(
   return [
     activePlaybackWindow.trackId,
     activePlaybackWindow.revision,
-    activePlaybackWindow.mediaEpoch,
-    activePlaybackWindow.status,
-    activePlaybackWindow.policy,
-    Math.floor(activePlaybackWindow.positionMs / activePlaybackPendingRefreshBucketMs)
+    activePlaybackWindow.mediaEpoch
   ].join("|");
 }
 

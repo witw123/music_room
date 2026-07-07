@@ -4,19 +4,26 @@ import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@mu
 import type { TrackPieceManifestRecord } from "@/lib/indexeddb";
 import { resolveTrackPieceManifest, type ResolvedTrackPieceManifest } from "@/features/p2p";
 import {
+  getStartupWindowMs,
+  isFlacTrack
+} from "@/features/playback/progressive-playback";
+import { getRequiredDecodablePrefixChunkCount } from "@/features/playback/sliding-window/playback-window-scheduler";
+import {
   resolveManualCacheTrackPlan,
   type ActivePlaybackCacheWindow,
   type ManualCacheTrackPlan
 } from "./manual-cache-download-queue";
 
 const directRequestBatchSize = 32;
-const activePlaybackDirectRequestBatchSize = 12;
 const directRequestTimeoutMs = 15_000;
+const activePlaybackDirectRequestBatchSize = 48;
+const activePlaybackDirectRequestTimeoutMs = 45_000;
 const directPendingTtlMs = 20_000;
+const activePlaybackDirectPendingTtlMs = activePlaybackDirectRequestTimeoutMs + 5_000;
 const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
-const activePlaybackMaxPendingPerTrack = 48;
-const activePlaybackMaxPendingPerPeer = 12;
+const activePlaybackMaxPendingPerTrack = 192;
+const activePlaybackMaxPendingPerPeer = 96;
 
 export type ManualCacheDirectRequestResult = {
   plan: ManualCacheTrackPlan;
@@ -27,25 +34,72 @@ type ManualCacheDirectRequestBudget = {
   batchSize: number;
   maxPendingPerTrack: number;
   maxPendingPerPeer: number;
+  pendingTtlMs: number;
+  timeoutMs: number;
 };
 
 function resolveManualCacheDirectRequestBudget(input: {
   trackId: string;
+  track?: TrackMeta | null;
+  manifest?: ResolvedTrackPieceManifest | null;
   activePlaybackWindow?: ActivePlaybackCacheWindow | null;
 }): ManualCacheDirectRequestBudget {
   if (input.activePlaybackWindow?.trackId === input.trackId) {
+    const activePrefixChunkCount = resolveActivePlaybackDecodablePrefixChunkCount({
+      track: input.track ?? null,
+      manifest: input.manifest ?? null,
+      activePlaybackWindow: input.activePlaybackWindow
+    });
+    const activePendingWindow = Math.max(
+      activePlaybackMaxPendingPerTrack,
+      activePrefixChunkCount + activePlaybackMaxPendingPerPeer
+    );
+
     return {
       batchSize: activePlaybackDirectRequestBatchSize,
-      maxPendingPerTrack: activePlaybackMaxPendingPerTrack,
-      maxPendingPerPeer: activePlaybackMaxPendingPerPeer
+      maxPendingPerTrack: activePendingWindow,
+      maxPendingPerPeer: activePlaybackMaxPendingPerPeer,
+      pendingTtlMs: activePlaybackDirectPendingTtlMs,
+      timeoutMs: activePlaybackDirectRequestTimeoutMs
     };
   }
 
   return {
     batchSize: directRequestBatchSize,
     maxPendingPerTrack,
-    maxPendingPerPeer
+    maxPendingPerPeer,
+    pendingTtlMs: directPendingTtlMs,
+    timeoutMs: directRequestTimeoutMs
   };
+}
+
+function resolveActivePlaybackDecodablePrefixChunkCount(input: {
+  track: TrackMeta | null;
+  manifest: ResolvedTrackPieceManifest | null;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+}) {
+  if (!input.track || !input.manifest || !input.activePlaybackWindow) {
+    return 0;
+  }
+
+  if (isFlacTrack({
+    mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? null,
+    codec: input.track.codec ?? null
+  })) {
+    return 0;
+  }
+
+  return getRequiredDecodablePrefixChunkCount({
+    manifest: {
+      durationMs: input.track.durationMs,
+      totalChunks: input.manifest.totalChunks
+    },
+    playbackPositionMs: input.activePlaybackWindow.positionMs,
+    lookAheadMs: getStartupWindowMs({
+      mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? null,
+      codec: input.track.codec ?? null
+    })
+  });
 }
 
 export async function planManualCacheDirectRequests(input: {
@@ -122,6 +176,8 @@ export async function planManualCacheDirectRequests(input: {
 
     const requestBudget = resolveManualCacheDirectRequestBudget({
       trackId,
+      track,
+      manifest: manifestHint,
       activePlaybackWindow: input.activePlaybackWindow ?? null
     });
     const pendingRefillLowWatermark =
@@ -159,10 +215,10 @@ export async function planManualCacheDirectRequests(input: {
       trackId,
       plan.requestableChunks,
       plan.manifest.totalChunks,
-      directRequestTimeoutMs
+      requestBudget.timeoutMs
     );
     if (didRequest) {
-      const expiresAt = now + directPendingTtlMs;
+      const expiresAt = now + requestBudget.pendingTtlMs;
       for (const chunkIndex of plan.requestableChunks) {
         pendingForTrack.set(chunkIndex, expiresAt);
       }

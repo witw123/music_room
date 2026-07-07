@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type MutableRefObject } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import type { RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
 import {
   getCachedPieceIndexes,
@@ -50,6 +50,35 @@ type ManualCacheDownloadEffectsInput = {
   schedulerAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
 };
 
+export function reconcileManualCacheDirectPendingTracks(input: {
+  pendingByTrack: Map<string, Map<number, number>>;
+  manualCacheTrackIds: string[];
+  previousActivePlaybackPendingKey: string | null;
+  nextActivePlaybackPendingKey: string | null;
+  previousActivePlaybackTrackId: string | null;
+  nextActivePlaybackTrackId: string | null;
+}) {
+  const activeTrackIds = new Set(input.manualCacheTrackIds);
+  for (const trackId of input.pendingByTrack.keys()) {
+    if (!activeTrackIds.has(trackId)) {
+      input.pendingByTrack.delete(trackId);
+    }
+  }
+
+  if (input.previousActivePlaybackPendingKey !== input.nextActivePlaybackPendingKey) {
+    const trackIdToClear =
+      input.previousActivePlaybackTrackId ?? input.nextActivePlaybackTrackId;
+    if (trackIdToClear) {
+      input.pendingByTrack.delete(trackIdToClear);
+    }
+  }
+
+  return {
+    nextActivePlaybackPendingKey: input.nextActivePlaybackPendingKey,
+    nextActivePlaybackTrackId: input.nextActivePlaybackTrackId
+  };
+}
+
 export function useManualCacheDownloadEffects({
   activePlaybackPendingKey,
   activePlaybackPendingKeyRef,
@@ -74,6 +103,38 @@ export function useManualCacheDownloadEffects({
   roomSnapshot,
   schedulerAvailabilityByTrack
 }: ManualCacheDownloadEffectsInput) {
+  const directRequestLoopInputRef = useRef({
+    activePlaybackPendingKey,
+    connectedPeers,
+    dataMesh,
+    enableManualTrackCaching,
+    manualCacheTrackIds,
+    onManualCachePlan,
+    onRuntimeEvent,
+    pauseDirectRequests,
+    peerId,
+    providerPeerIds,
+    roomSnapshot,
+    schedulerAvailabilityByTrack
+  });
+  const activePlaybackTrackIdRef = useRef<string | null>(
+    activePlaybackWindowRef.current?.trackId ?? null
+  );
+  directRequestLoopInputRef.current = {
+    activePlaybackPendingKey,
+    connectedPeers,
+    dataMesh,
+    enableManualTrackCaching,
+    manualCacheTrackIds,
+    onManualCachePlan,
+    onRuntimeEvent,
+    pauseDirectRequests,
+    peerId,
+    providerPeerIds,
+    roomSnapshot,
+    schedulerAvailabilityByTrack
+  };
+
   useEffect(() => {
     if (
       pauseDirectRequests ||
@@ -234,43 +295,51 @@ export function useManualCacheDownloadEffects({
   ]);
 
   useEffect(() => {
-    const activeTrackIds = new Set(manualCacheTrackIds);
-    for (const trackId of directPendingRef.current.keys()) {
-      if (!activeTrackIds.has(trackId)) {
-        directPendingRef.current.delete(trackId);
-      }
-    }
-
-    if (activePlaybackPendingKeyRef.current !== activePlaybackPendingKey) {
-      const activeTrackId = activePlaybackWindowRef.current?.trackId;
-      if (activeTrackId) {
-        directPendingRef.current.delete(activeTrackId);
-      }
-      activePlaybackPendingKeyRef.current = activePlaybackPendingKey;
-    }
-
-    if (pauseDirectRequests) {
-      directPendingRef.current.clear();
-      return;
-    }
-
-    if (manualCacheTrackIds.length === 0) {
-      return;
-    }
-
     let stopped = false;
     let inFlight = false;
 
     const requestMissingPieces = async () => {
-      if (stopped || inFlight || !roomSnapshot?.room.id || !peerId || !dataMesh) {
+      if (stopped || inFlight) {
         return;
       }
 
+      const latest = directRequestLoopInputRef.current;
+      const pendingReconcileResult = reconcileManualCacheDirectPendingTracks({
+        pendingByTrack: directPendingRef.current,
+        manualCacheTrackIds: latest.manualCacheTrackIds,
+        previousActivePlaybackPendingKey: activePlaybackPendingKeyRef.current,
+        nextActivePlaybackPendingKey: latest.activePlaybackPendingKey,
+        previousActivePlaybackTrackId: activePlaybackTrackIdRef.current,
+        nextActivePlaybackTrackId: activePlaybackWindowRef.current?.trackId ?? null
+      });
+      activePlaybackPendingKeyRef.current =
+        pendingReconcileResult.nextActivePlaybackPendingKey;
+      activePlaybackTrackIdRef.current = pendingReconcileResult.nextActivePlaybackTrackId;
+
+      if (latest.pauseDirectRequests) {
+        directPendingRef.current.clear();
+        return;
+      }
+
+      if (
+        latest.manualCacheTrackIds.length === 0 ||
+        !latest.enableManualTrackCaching ||
+        !latest.roomSnapshot?.room.id ||
+        !latest.peerId ||
+        !latest.dataMesh
+      ) {
+        return;
+      }
+
+      const dataMesh = latest.dataMesh;
       inFlight = true;
       try {
-        let connectedPeerIds = mergePeerIds(connectedPeers, dataMesh.getConnectedPeerIds());
+        let connectedPeerIds = mergePeerIds(
+          latest.connectedPeers,
+          dataMesh.getConnectedPeerIds()
+        );
         const now = Date.now();
-        for (const providerPeerId of providerPeerIds) {
+        for (const providerPeerId of latest.providerPeerIds) {
           if (connectedPeerIds.includes(providerPeerId)) {
             providerUnavailableSinceRef.current.delete(providerPeerId);
             continue;
@@ -282,17 +351,17 @@ export function useManualCacheDownloadEffects({
         }
         if (
           shouldRetryManualCacheProviderBootstrap({
-            manualCacheTrackIds,
-            providerPeerIds,
+            manualCacheTrackIds: latest.manualCacheTrackIds,
+            providerPeerIds: latest.providerPeerIds,
             connectedPeerIds,
             lastBootstrapAttemptAt: lastBootstrapAttemptAtRef.current,
             now
           })
         ) {
           lastBootstrapAttemptAtRef.current = now;
-          const syncStarted = await dataMesh.syncPeers(providerPeerIds);
+          const syncStarted = await dataMesh.syncPeers(latest.providerPeerIds);
           if (!syncStarted) {
-            onRuntimeEvent?.({
+            latest.onRuntimeEvent?.({
               type: "diagnostic",
               peerId: "system",
               channelKind: "system",
@@ -303,9 +372,12 @@ export function useManualCacheDownloadEffects({
               recordEvent: false
             });
           }
-          connectedPeerIds = mergePeerIds(connectedPeers, dataMesh.getConnectedPeerIds());
+          connectedPeerIds = mergePeerIds(
+            latest.connectedPeers,
+            dataMesh.getConnectedPeerIds()
+          );
         }
-        for (const providerPeerId of providerPeerIds) {
+        for (const providerPeerId of latest.providerPeerIds) {
           if (
             shouldRestartManualCacheProviderPeer({
               providerPeerId,
@@ -318,7 +390,7 @@ export function useManualCacheDownloadEffects({
           ) {
             lastProviderRestartAtRef.current.set(providerPeerId, now);
             await dataMesh.restartPeer(providerPeerId).catch((error) => {
-              onRuntimeEvent?.({
+              latest.onRuntimeEvent?.({
                 type: "diagnostic",
                 peerId: providerPeerId,
                 channelKind: "data",
@@ -332,12 +404,12 @@ export function useManualCacheDownloadEffects({
         }
 
         const requestResults = await planManualCacheDirectRequests({
-          roomSnapshot,
-          manualCacheTrackIds,
-          peerId,
-          providerPeerIds,
+          roomSnapshot: latest.roomSnapshot,
+          manualCacheTrackIds: latest.manualCacheTrackIds,
+          peerId: latest.peerId,
+          providerPeerIds: latest.providerPeerIds,
           connectedPeerIds,
-          availabilityByTrack: schedulerAvailabilityByTrack,
+          availabilityByTrack: latest.schedulerAvailabilityByTrack,
           pendingByTrack: directPendingRef.current,
           activePlaybackWindow: activePlaybackWindowRef.current,
           now,
@@ -346,20 +418,26 @@ export function useManualCacheDownloadEffects({
             (await getTrackPieceManifest(track.id)) ??
             null,
           getLocalPieceIndexes: (track, _cachedManifest, manifestHint) =>
-            getCachedPieceIndexes(track.id, peerId, {
+            getCachedPieceIndexes(track.id, latest.peerId, {
               fileHash: track.fileHash,
               ownerKey: localCacheOwnerKey,
               chunkSize: manifestHint?.chunkSize
             }),
           requestPieces: (providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs) =>
-            dataMesh.requestPieces(providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs)
+            dataMesh.requestPieces(
+              providerPeerId,
+              trackId,
+              chunkIndexes,
+              totalChunks,
+              timeoutMs
+            )
         });
 
         for (const { plan, didRequest } of requestResults) {
-          onManualCachePlan?.(plan);
+          latest.onManualCachePlan?.(plan);
 
           if (didRequest === false && plan.selectedProviderPeerId) {
-            onRuntimeEvent?.(
+            latest.onRuntimeEvent?.(
               buildManualCacheRequestFailureEvent({
                 providerPeerId: plan.selectedProviderPeerId,
                 trackId: plan.trackId,
@@ -370,7 +448,7 @@ export function useManualCacheDownloadEffects({
           }
 
           if (didRequest === true && plan.selectedProviderPeerId) {
-            onRuntimeEvent?.({
+            latest.onRuntimeEvent?.({
               type: "diagnostic",
               peerId: plan.selectedProviderPeerId,
               channelKind: "data",
@@ -382,7 +460,7 @@ export function useManualCacheDownloadEffects({
           }
 
           if (plan.blockedReason && plan.blockedReason !== "complete") {
-            onRuntimeEvent?.({
+            latest.onRuntimeEvent?.({
               type: "diagnostic",
               peerId: "system",
               channelKind: "data",
@@ -408,23 +486,13 @@ export function useManualCacheDownloadEffects({
       window.clearInterval(timerId);
     };
   }, [
-    activePlaybackPendingKey,
     activePlaybackPendingKeyRef,
     activePlaybackWindowRef,
-    connectedPeers,
-    dataMesh,
+    directRequestLoopInputRef,
     directPendingRef,
     lastBootstrapAttemptAtRef,
     lastProviderRestartAtRef,
-    manualCacheTrackIds,
-    onManualCachePlan,
-    onRuntimeEvent,
-    pauseDirectRequests,
-    peerId,
-    providerPeerIds,
-    providerUnavailableSinceRef,
-    roomSnapshot,
-    schedulerAvailabilityByTrack
+    providerUnavailableSinceRef
   ]);
 
   useEffect(() => {

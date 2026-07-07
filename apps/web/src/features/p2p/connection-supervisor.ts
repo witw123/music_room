@@ -143,10 +143,17 @@ export function createPeerConnectionSupervisorState(input: {
 
 export function notePeerSignalState(input: NoteSignalStateInput) {
   const now = input.now ?? Date.now();
-  const lastFailureReason = resolveLastFailureReason(input);
+  const dataChannelState = input.dataChannelState ?? input.state.dataChannelState;
+  const previousDataConnectionState = input.dataConnectionState ?? input.state.dataConnectionState;
+  const dataConnectionState =
+    dataChannelState === "open" &&
+    input.dataConnectionState === undefined &&
+    isHardDataConnectionState(previousDataConnectionState)
+      ? "connected"
+      : previousDataConnectionState;
   const nextSignalState = {
-    dataChannelState: input.dataChannelState ?? input.state.dataChannelState,
-    dataConnectionState: input.dataConnectionState ?? input.state.dataConnectionState,
+    dataChannelState,
+    dataConnectionState,
     mediaConnectionState: input.mediaConnectionState ?? input.state.mediaConnectionState,
     dataIceState: input.dataIceState ?? input.state.dataIceState,
     mediaIceState: input.mediaIceState ?? input.state.mediaIceState
@@ -154,14 +161,31 @@ export function notePeerSignalState(input: NoteSignalStateInput) {
   const unhealthySignalStateStartedAtMs = isUnhealthySignalState(nextSignalState)
     ? input.state.unhealthySignalStateStartedAtMs ?? now
     : null;
+  const lastFailureReason = isUnhealthySignalState(nextSignalState)
+    ? resolveLastFailureReason({
+        ...input,
+        ...nextSignalState
+      })
+    : input.lastFailureReason ?? null;
+  const transportScore =
+    !isUnhealthySignalState(nextSignalState) &&
+    dataChannelState === "open" &&
+    (input.state.transportScore === "failed" || input.state.transportScore === "unstable")
+      ? "degraded"
+      : input.state.transportScore;
 
   return {
     ...input.state,
     ...nextSignalState,
+    transportScore,
     lastSignalStateAtMs: now,
     unhealthySignalStateStartedAtMs,
     lastFailureReason
   };
+}
+
+function isHardDataConnectionState(state: string | null | undefined) {
+  return state === "closed" || state === "failed" || state === "disconnected";
 }
 
 export function observePeerTransport(input: ObserveTransportInput) {

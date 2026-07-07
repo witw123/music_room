@@ -18,9 +18,10 @@ export function resolveTransportHealth(
   const dataReady = isDataChannelReady(snapshot);
   const audible = snapshot.audibleSource !== null;
   const failed =
-    snapshot.dataConnectionState === "failed" ||
-    snapshot.dataConnectionState === "closed" ||
-    snapshot.dataChannelState === "closed";
+    !dataReady &&
+    (snapshot.dataConnectionState === "failed" ||
+      snapshot.dataConnectionState === "closed" ||
+      snapshot.dataChannelState === "closed");
   const degraded = (snapshot.dataConnectionState === "connecting" && audible) || false;
   const reconnecting =
     snapshot.dataConnectionState === "connecting" ||

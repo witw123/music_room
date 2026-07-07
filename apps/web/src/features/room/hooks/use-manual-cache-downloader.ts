@@ -36,6 +36,7 @@ export type {
 } from "./manual-cache-download-queue";
 export { planManualCacheDirectRequests } from "./manual-cache-piece-fetch";
 export type { ManualCacheDirectRequestResult } from "./manual-cache-piece-fetch";
+export { reconcileManualCacheDirectPendingTracks } from "./manual-cache-download-effects";
 export {
   buildManualCacheSchedulerAvailability,
   buildManualCacheSchedulerAvailabilityFromParts,
