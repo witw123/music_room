@@ -127,13 +127,27 @@ export function useMainPlaybackController({
       if (resetIdleAction.shouldDestroyRuntime) {
         destroyProgressiveRuntime();
       }
+      // During track-switch transitions the element was primed during a
+      // user gesture and the upcoming engine will set a new srcObject.
+      // Pausing here would require a fresh user gesture for the next
+      // play(), which we won't have. Mute instead so the element stays
+      // "playing" and the sticky activation survives the transition.
       if (resetIdleAction.shouldPauseAudio) {
-        audio.pause();
+        if (isSlidingWindowPlaybackSource(activePlaybackSource)) {
+          audio.muted = true;
+        } else {
+          audio.pause();
+        }
       }
+      // Don't clear the audio source for sliding-window playback — the
+      // upcoming PCM/MSE engine replaces the srcObject atomically and
+      // removing it now would reset the element's load state.
       if (resetIdleAction.shouldClearAudioSource) {
-        audio.srcObject = null;
-        audio.removeAttribute("src");
-        audio.load();
+        if (!isSlidingWindowPlaybackSource(activePlaybackSource)) {
+          audio.srcObject = null;
+          audio.removeAttribute("src");
+          audio.load();
+        }
       }
       if (resetIdleAction.shouldClearPlaybackStartIntent) {
         setPlaybackStartIntent(null);

@@ -83,7 +83,11 @@ const maxPcmCachedPiecesToAppendPerSync = 2;
 // 64 per sync × maxPcmPlaybackCatchupSyncBatches still covers large seeks.
 const maxPcmCatchupPiecesToAppendPerSync = 64;
 const maxPcmPlaybackCatchupSyncBatches = 8;
-const maxPcmPlaybackWindowPiecesToDecode = 4;
+// Window decode reads up to this many chunks around the playback position.
+// P2P delivery is unordered so a small window (4) frequently fails when the
+// first gap is hit. 16 chunks (~2 MB) gives the FLAC frame extractor enough
+// material to find complete frames across gaps.
+const maxPcmPlaybackWindowPiecesToDecode = 16;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
@@ -773,6 +777,8 @@ export class ProgressivePcmEngine {
     const chunks: Uint8Array[] = [];
     let totalBytes = 0;
     let endChunkIndex = startChunkIndex - 1;
+    let consecutiveSkips = 0;
+    const maxConsecutiveSkips = 12;
 
     for (
       let chunkIndex = Math.max(0, startChunkIndex);
@@ -790,8 +796,17 @@ export class ProgressivePcmEngine {
         }
       );
       if (!piece) {
-        break;
+        // P2P delivery is unordered — skip missing chunks instead of
+        // breaking so later chunks that DID arrive can still be used.
+        // The FLAC frame extractor finds sync codes and discards
+        // partial frames at gap boundaries.
+        consecutiveSkips += 1;
+        if (consecutiveSkips > maxConsecutiveSkips) {
+          break;
+        }
+        continue;
       }
+      consecutiveSkips = 0;
 
       const bytes = new Uint8Array(piece.payload);
       chunks.push(bytes);
