@@ -112,6 +112,8 @@ export function useManualCacheDownloadEffects({
   roomSnapshot,
   schedulerAvailabilityByTrack
 }: ManualCacheDownloadEffectsInput) {
+  const triggerDirectRequestRef = useRef<() => void>(() => {});
+
   const directRequestLoopInputRef = useRef({
     activePlaybackPendingKey,
     connectedPeers,
@@ -178,6 +180,9 @@ export function useManualCacheDownloadEffects({
         ) {
           lastBootstrapKeyRef.current = bootstrapKey;
           lastBootstrapAttemptAtRef.current = Date.now();
+          // Data channel established — fire an immediate download
+          // request instead of waiting for the next interval tick.
+          triggerDirectRequestRef.current();
           return;
         }
 
@@ -264,6 +269,11 @@ export function useManualCacheDownloadEffects({
     void dataMesh
       .syncPeers(providerPeerIds, recoveryMode === "force-reconnect" ? { forceReconnectDegraded: true } : undefined)
       .then((syncStarted) => {
+        if (syncStarted) {
+          // Connection recovered — fire an immediate download request.
+          triggerDirectRequestRef.current();
+          return;
+        }
         if (!syncStarted) {
           onRuntimeEvent?.({
             type: "diagnostic",
@@ -483,6 +493,10 @@ export function useManualCacheDownloadEffects({
       } finally {
         inFlight = false;
       }
+    };
+
+    triggerDirectRequestRef.current = () => {
+      void requestMissingPieces();
     };
 
     void requestMissingPieces();
