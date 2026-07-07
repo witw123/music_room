@@ -18,6 +18,7 @@ import {
   type ProgressivePlaybackSource,
   type ProgressiveTrackManifest
 } from "../progressive-playback";
+import { isSlidingWindowPlaybackSource } from "./pipeline";
 import {
   resolveLocalTakeoverCooldownArmAction,
   resolveLocalTakeoverCooldownResetAction,
@@ -143,10 +144,19 @@ export function usePlaybackRuntimeLifecycleController({
       return;
     }
 
-    audio.pause();
-    audio.srcObject = null;
-    audio.removeAttribute("src");
-    audio.load();
+    // For sliding-window playback (PCM/MSE) the element was primed during
+    // a user gesture and must stay playing across surface changes (track
+    // switch, format change).  Pausing here would require a fresh user
+    // gesture for the next play(), which we won't have.  Clear the stale
+    // srcObject without pausing so the upcoming engine can attach cleanly.
+    if (isSlidingWindowPlaybackSource(activePlaybackSource)) {
+      audio.srcObject = null;
+    } else {
+      audio.pause();
+      audio.srcObject = null;
+      audio.removeAttribute("src");
+      audio.load();
+    }
     if (resetAction.mediaConnectionState !== null) {
       setMediaConnectionState(resetAction.mediaConnectionState);
     }
