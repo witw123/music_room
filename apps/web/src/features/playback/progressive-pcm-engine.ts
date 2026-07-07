@@ -325,19 +325,47 @@ export class ProgressivePcmEngine {
 
     if (!this.canUseDecodedPlaybackAt(positionSeconds) && this.status !== "ready") {
       await this.sync();
+
+      // If the initial sync found no data (chunk 0 not cached yet for
+      // FLAC/WAV header), yield to microtasks once — the downloader may
+      // write chunk 0 to IndexedDB concurrently, and yielding lets the
+      // write transaction commit before we check again.
+      if (this.status === "opening" || this.status === "idle") {
+        await yieldToMicrotasks();
+        if (!isTerminalEngineStatus(this.status)) {
+          await this.sync();
+        }
+      }
     }
 
-    if (!this.audioContext || (!this.canUseDecodedPlaybackAt(positionSeconds) && this.status !== "ready")) {
+    if (!this.audioContext) {
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
         playbackPositionSeconds: this.getCurrentTimeSeconds(),
-        blockedReason:
-          this.status === "failed" && this.lastDecodeError
-            ? this.lastDecodeError
-            : this.status !== "ready"
-              ? `engine-${this.status}`
-              : "missing-audio-context"
+        blockedReason: "missing-audio-context"
+      };
+    }
+
+    // Terminal / non-recoverable statuses can't be helped by retrying.
+    if (this.status === "idle") {
+      return {
+        localReady: false,
+        driftMs: Number.POSITIVE_INFINITY,
+        playbackPositionSeconds: this.getCurrentTimeSeconds(),
+        blockedReason: "engine-not-attached"
+      };
+    }
+
+    if (
+      (this.status === "failed" || this.status === "degraded") &&
+      !this.canUseDecodedPlaybackAt(positionSeconds)
+    ) {
+      return {
+        localReady: false,
+        driftMs: Number.POSITIVE_INFINITY,
+        playbackPositionSeconds: this.getCurrentTimeSeconds(),
+        blockedReason: this.lastDecodeError ? this.lastDecodeError : `engine-${this.status}`
       };
     }
 
