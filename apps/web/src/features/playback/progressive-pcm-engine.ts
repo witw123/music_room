@@ -362,10 +362,7 @@ export class ProgressivePcmEngine {
       };
     }
 
-    if (
-      (this.status === "failed" || this.status === "degraded") &&
-      !this.canUseDecodedPlaybackAt(positionSeconds)
-    ) {
+    if (this.status === "failed" && !this.canUseDecodedPlaybackAt(positionSeconds)) {
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -726,8 +723,15 @@ export class ProgressivePcmEngine {
   }
 
   private async decodeCachedFlacWindowAt(positionSeconds: number) {
-    if (!this.streamInfo || !this.decoder || isWavTrack(this.manifest)) {
+    if (!this.streamInfo || isWavTrack(this.manifest)) {
       return false;
+    }
+
+    if (!this.decoder) {
+      const decoderReady = await this.ensureDecoder(this.streamInfo);
+      if (!decoderReady || !this.decoder) {
+        return false;
+      }
     }
 
     const currentChunkIndex = getChunkIndexForPositionMs(this.manifest, positionSeconds * 1000);
