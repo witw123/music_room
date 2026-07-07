@@ -45,6 +45,17 @@ export class RoomAudioActivationManager {
 
     try {
       await this.resumeSharedContext();
+      // If the element is already playing, skip play() to avoid a
+      // potential NotAllowedError when the user gesture that started
+      // playback has expired. The element's "playing" state was
+      // established during priming and preserved by the engine.
+      if (!element.paused) {
+        this.activated = true;
+        return {
+          ok: true,
+          error: null
+        };
+      }
       await element.play();
       this.activated = true;
       return {

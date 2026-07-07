@@ -53,24 +53,27 @@ function installFakeAudioContext(
   const originalEncodedAudioChunk = (
     globalThis as typeof globalThis & { EncodedAudioChunk?: unknown }
   ).EncodedAudioChunk;
-  const gainNode = {
-    connectCalls: [] as unknown[],
-    disconnectCalls: 0,
-    gain: {
-      value: 1,
-      setValueAtTime(value: number) {
-        this.value = value;
+  function makeGainNode() {
+    return {
+      connectCalls: [] as unknown[],
+      disconnectCalls: 0,
+      gain: {
+        value: 1,
+        setValueAtTime(value: number) {
+          this.value = value;
+        }
+      },
+      connect(target: unknown) {
+        this.connectCalls.push(target);
+        return undefined;
+      },
+      disconnect() {
+        this.disconnectCalls += 1;
+        return undefined;
       }
-    },
-    connect(target: unknown) {
-      this.connectCalls.push(target);
-      return undefined;
-    },
-    disconnect() {
-      this.disconnectCalls += 1;
-      return undefined;
-    }
-  };
+    };
+  }
+  const gainNode = makeGainNode();
   const mediaStreamDestination = {
     stream: {},
     disconnectCalls: 0,
@@ -88,9 +91,17 @@ function installFakeAudioContext(
     currentTime = 0;
     state = "running" as AudioContextState;
     destination = audioDestination;
+    gainNode = gainNode;
+    private _gainCallCount = 0;
 
     createGain() {
-      return gainNode;
+      // First call returns the tracked gainNode used in test assertions;
+      // subsequent calls (keep-alive) return fresh lightweight mocks.
+      if (this._gainCallCount === 0) {
+        this._gainCallCount += 1;
+        return gainNode;
+      }
+      return makeGainNode();
     }
 
     createMediaStreamDestination() {
@@ -108,6 +119,26 @@ function installFakeAudioContext(
           return undefined;
         },
         stop() {
+          return undefined;
+        },
+        disconnect() {
+          return undefined;
+        }
+      };
+    }
+
+    createOscillator() {
+      return {
+        frequency: {
+          setValueAtTime(_value: number, _time: number) {}
+        },
+        connect(_target: unknown) {
+          return undefined;
+        },
+        start(_when?: number) {
+          return undefined;
+        },
+        stop(_when?: number) {
           return undefined;
         },
         disconnect() {
@@ -1390,6 +1421,9 @@ describe("ProgressivePcmEngine", () => {
       createMediaStreamDestination() { return { stream: {}, connect() {}, disconnect() {} }; }
       createBufferSource() {
         return { buffer: null as unknown, onended: null as (() => void) | null, connect() {}, start() {}, stop() {}, disconnect() {} };
+      }
+      createOscillator() {
+        return { frequency: { setValueAtTime() {} }, connect() {}, start() {}, stop() {}, disconnect() {} };
       }
       close() { return Promise.resolve(); }
       createBuffer(numberOfChannels: number, numberOfFrames: number, sampleRate: number) {

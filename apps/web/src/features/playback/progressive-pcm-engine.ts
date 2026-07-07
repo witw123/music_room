@@ -89,6 +89,8 @@ export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
   private gainNode: GainNode | null = null;
+  private keepAliveOscillator: OscillatorNode | null = null;
+  private keepAliveGain: GainNode | null = null;
   private directOutputConnected = false;
   private decoder: AudioDecoderLike | null = null;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
@@ -240,6 +242,21 @@ export class ProgressivePcmEngine {
       // listeners. The direct connection is the only reliable output route.
       this.gainNode.connect(this.audioContext.destination);
       this.directOutputConnected = true;
+
+      // Chrome auto-suspends idle AudioContexts after ~30 s. During initial
+      // caching there may be no decoded segments to schedule yet, so the
+      // context would go idle and stay suspended — resuming it requires a
+      // user gesture that we won't have. A silent inaudible oscillator
+      // keeps the context "running" so scheduled audio flows immediately
+      // once data becomes available.
+      this.keepAliveGain = this.audioContext.createGain();
+      this.keepAliveGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      this.keepAliveGain.connect(this.audioContext.destination);
+      this.keepAliveOscillator = this.audioContext.createOscillator();
+      this.keepAliveOscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
+      this.keepAliveOscillator.connect(this.keepAliveGain);
+      this.keepAliveOscillator.start();
+
       this.audio.srcObject = this.destinationNode.stream;
       this.audio.volume = 1;
       return true;
@@ -405,6 +422,15 @@ export class ProgressivePcmEngine {
       this.audio.pause();
       this.audio.srcObject = null;
       this.audio.load();
+    }
+    if (this.keepAliveOscillator) {
+      try { this.keepAliveOscillator.stop(); } catch { /* already stopped */ }
+      this.keepAliveOscillator.disconnect();
+      this.keepAliveOscillator = null;
+    }
+    if (this.keepAliveGain) {
+      this.keepAliveGain.disconnect();
+      this.keepAliveGain = null;
     }
     if (!this.audioContextProvider) {
       void this.audioContext?.close().catch(() => undefined);

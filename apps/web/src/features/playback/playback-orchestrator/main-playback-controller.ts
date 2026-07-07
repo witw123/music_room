@@ -325,16 +325,16 @@ export function useMainPlaybackController({
         localAudioHasSource: !!(audio.srcObject || audio.src || audio.getAttribute("src"))
       });
       if (noEngineHoldAction.shouldHold) {
+        // The audio element was primed during a user gesture and should
+        // stay playing so the engine can take over without requiring
+        // another play() call. Mute instead of pause to silence output
+        // while keeping the "playing" state intact.
         if (noEngineHoldAction.shouldPauseAudio) {
-          audio.pause();
-          audio.muted = false;
-          audio.playbackRate = 1;
+          audio.muted = true;
         }
-        if (noEngineHoldAction.shouldClearAudioSource) {
-          audio.srcObject = null;
-          audio.removeAttribute("src");
-          audio.load();
-        }
+        // Don't clear the audio source — the upcoming PCM engine will
+        // set its own MediaStream via srcObject, replacing any stale
+        // source without interrupting the element's playing state.
         if (noEngineHoldAction.mediaConnectionState) {
           setMediaConnectionState(noEngineHoldAction.mediaConnectionState);
         }
