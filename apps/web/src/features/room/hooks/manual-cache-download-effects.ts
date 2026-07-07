@@ -23,7 +23,11 @@ import {
 import { mergePeerIds } from "./manual-cache-download-progress";
 import { planManualCacheDirectRequests } from "./manual-cache-piece-fetch";
 
-const directRequestIntervalMs = 750;
+// Balanced interval: fast enough that newly cached chunks are requested
+// within a reasonable window (the engine syncs at 150 ms), slow enough
+// that background IndexedDB reads don't contend with the downloader's
+// write transactions.
+const directRequestIntervalMs = 400;
 
 type ManualCacheDownloadEffectsInput = {
   activePlaybackPendingKey: string | null;

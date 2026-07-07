@@ -331,11 +331,11 @@ export class ProgressivePcmEngine {
       await this.sync();
 
       // If the initial sync found no data (chunk 0 not cached yet for
-      // FLAC/WAV header), yield to microtasks once — the downloader may
-      // write chunk 0 to IndexedDB concurrently, and yielding lets the
-      // write transaction commit before we check again.
+      // FLAC/WAV header), yield to the macrotask queue.  IndexedDB
+      // write transactions commit on macrotasks — microtask yields
+      // (queueMicrotask) don't flush them.
       if (this.status === "opening" || this.status === "idle") {
-        await yieldToMicrotasks();
+        await yieldToMacrotask();
         if (!isTerminalEngineStatus(this.status)) {
           await this.sync();
         }
@@ -940,6 +940,13 @@ export class ProgressivePcmEngine {
         return;
       }
     }
+    // IndexedDB write transactions from the downloader commit on the
+    // macrotask queue, not the microtask queue.  Yield once so newly
+    // cached chunks become visible before the catchup loop gives up.
+    await yieldToMacrotask();
+    if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+      return;
+    }
   }
 
   private async syncUntilBufferedPosition(positionSeconds: number) {
@@ -1385,6 +1392,16 @@ function getEncodedAudioChunkCtor() {
 function yieldToMicrotasks() {
   return new Promise<void>((resolve) => {
     queueMicrotask(resolve);
+  });
+}
+
+/** Yield to the macrotask queue so pending IndexedDB write transactions
+ *  (from the downloader) commit before the engine reads again.  Without
+ *  this the engine's catchup loop retries reads against stale storage
+ *  and breaks early, reporting buffer-missing. */
+function yieldToMacrotask() {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
   });
 }
 
