@@ -52,6 +52,14 @@ export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInf
     const blockEnd = blockStart + blockLength;
 
     if (blockEnd > bytes.byteLength) {
+      // The last metadata block crosses the end of the available payload
+      // (common when chunk 0 is too small to hold a large embedded cover
+      // art PICTURE block).  If we've already found the STREAMINFO block
+      // (always the first metadata block), return it — partial trailing
+      // blocks don't affect the stream info we need for decoding.
+      if (streamInfoBlock) {
+        break;
+      }
       return null;
     }
 
