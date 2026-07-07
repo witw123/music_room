@@ -22,8 +22,12 @@ const directPendingTtlMs = 20_000;
 const activePlaybackDirectPendingTtlMs = activePlaybackDirectRequestTimeoutMs + 5_000;
 const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
-const activePlaybackMaxPendingPerTrack = 640;
-const activePlaybackMaxPendingPerPeer = 256;
+// Large in-flight windows to saturate the P2P data channel bandwidth.
+// 512 chunks @ 128 KB = 64 MB in-flight per peer is enough for even
+// lossless FLAC streams (1-3 Mbps) to stream while downloading at
+// multi-megabyte-per-second rates.
+const activePlaybackMaxPendingPerTrack = 1024;
+const activePlaybackMaxPendingPerPeer = 512;
 
 export type ManualCacheDirectRequestResult = {
   plan: ManualCacheTrackPlan;
