@@ -113,7 +113,13 @@ export class RoomAudioActivationManager {
         error: error instanceof Error ? error.message : "play-rejected"
       };
     } finally {
-      if (wasPaused) {
+      // Keep the element playing when it already had a media source attached
+      // (e.g. MediaStream from PCM engine or a blob URL for full-local).
+      // Pausing here would require a new user gesture for the next play(),
+      // which browsers block once the gesture token expires. The element
+      // should remain in "playing" state so scheduled audio flows naturally
+      // through the Web Audio graph without requiring another play() call.
+      if (wasPaused && !hadSrcObject && !hadSrc) {
         this.safeCall(() => element.pause());
       }
 

@@ -249,12 +249,18 @@ export function useMainPlaybackController({
               setProgressiveFallbackReason(fallbackReason);
             }
             if (playbackOutcome.playbackStartFailureKind) {
-              markPlaybackStartFailure(
-                `${activePlaybackSource}-${playbackOutcome.playbackStartFailureKind}`,
-                playbackOutcome.playbackStartFailureKind === "init-failed"
-                  ? "本地解码初始化失败，请等待完整缓存后播放。"
-                  : "本地缓冲不足，正在缓存播放所需片段。"
-              );
+              // Permanent failures (init-failed) should mark the intent as
+              // failed. Transient buffer-underrun should publish a status
+              // message but keep the intent pending — data may arrive in a
+              // subsequent tick and the retry loop will pick it up.
+              if (playbackOutcome.playbackStartFailureKind === "init-failed") {
+                markPlaybackStartFailure(
+                  `${activePlaybackSource}-init-failed`,
+                  "本地解码初始化失败，请等待完整缓存后播放。"
+                );
+              } else {
+                setStatusMessage("本地缓冲不足，正在缓存播放所需片段。");
+              }
               return;
             }
             if (playbackOutcome.shouldEnsurePlaybackStart) {
@@ -289,10 +295,9 @@ export function useMainPlaybackController({
             setProgressiveFallbackReason(fallbackReason);
           }
           if (playbackOutcome.playbackStartFailureKind) {
-            markPlaybackStartFailure(
-              `${activePlaybackSource}-${playbackOutcome.playbackStartFailureKind}`,
-              "本地缓冲不足，正在缓存播放所需片段。"
-            );
+            // Same reasoning as PCM path: transient buffer-underrun should
+            // keep the intent pending, not permanently fail it.
+            setStatusMessage("本地缓冲不足，正在缓存播放所需片段。");
             return;
           }
 

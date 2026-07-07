@@ -66,10 +66,19 @@ export function reconcileManualCacheDirectPendingTracks(input: {
   }
 
   if (input.previousActivePlaybackPendingKey !== input.nextActivePlaybackPendingKey) {
-    const trackIdToClear =
-      input.previousActivePlaybackTrackId ?? input.nextActivePlaybackTrackId;
-    if (trackIdToClear) {
-      input.pendingByTrack.delete(trackIdToClear);
+    // Only clear pending when the active playback TRACK changes, not when
+    // just the revision or epoch changes on the same track. Pending entries
+    // for the current track are still valid — the request ordering already
+    // prioritises chunks near the current playback position, and stale
+    // entries naturally expire via their TTL.
+    if (
+      input.previousActivePlaybackTrackId !== input.nextActivePlaybackTrackId
+    ) {
+      const trackIdToClear =
+        input.previousActivePlaybackTrackId ?? input.nextActivePlaybackTrackId;
+      if (trackIdToClear) {
+        input.pendingByTrack.delete(trackIdToClear);
+      }
     }
   }
 

@@ -324,7 +324,10 @@ export class ProgressivePcmEngine {
       this.playing = false;
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
-      this.audio.pause();
+      // Keep the audio element playing — when no segments are scheduled
+      // the gain → MediaStreamDestination pipeline outputs silence naturally.
+      // Pausing here would force a new element.play() later, which browsers
+      // block outside of a user gesture.
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -340,7 +343,8 @@ export class ProgressivePcmEngine {
       this.playing = false;
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
-      this.audio.pause();
+      // Same reasoning as above — keep the element playing so audio can
+      // flow as soon as the context resumes.
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
