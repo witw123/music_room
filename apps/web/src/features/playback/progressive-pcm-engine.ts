@@ -382,12 +382,14 @@ export class ProgressivePcmEngine {
       this.playing = true;
       this.pausedTrackTimeSec = positionSeconds;
       this.anchorTrackTimeSec = positionSeconds;
-      this.anchorContextTimeSec = this.audioContext.currentTime + 0.05;
-      // Only stop segments when we're already playing and need to
-      // re-anchor after a drift correction. On the initial transition
-      // from not-playing, the segment list is empty and stopping is
-      // a no-op — but calling it here would unnecessarily reset
-      // source nodes that scheduleAhead is about to create.
+      // On the initial transition from not-playing, use a minimal anchor
+      // offset: scheduleAhead already adds +0.02 s via Math.max, so 5 ms
+      // here keeps the total under one render quantum (~25 ms).
+      // When re-anchoring mid-playback (drift correction) keep the
+      // original 50 ms margin to absorb clock skew between the system
+      // timer and the AudioContext clock.
+      this.anchorContextTimeSec =
+        this.audioContext.currentTime + (wasPlaying ? 0.05 : 0.005);
       if (wasPlaying) {
         this.stopScheduledSegments();
       }
