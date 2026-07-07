@@ -9,7 +9,10 @@ import {
   useSyncExternalStore
 } from "react";
 import type { MutableRefObject } from "react";
-import { PlaybackOrchestrator } from "./orchestrator";
+import {
+  PlaybackOrchestrator,
+  type PlaybackOrchestratorScheduler
+} from "./orchestrator";
 
 type RuntimeTickState = {
   lastDriftSampleAtMs: number;
@@ -46,6 +49,73 @@ const fullLocalPausedRecoveryIntervalMs = 500;
 
 export const noopPlaybackRuntimeTick = () => undefined;
 
+type PlaybackRuntimeTickOrchestratorOptions = {
+  refs: PlaybackRuntimeTickRefs;
+  nowMs?: () => number;
+  scheduler: PlaybackOrchestratorScheduler<number>;
+};
+
+export function createPlaybackRuntimeTickOrchestrator({
+  refs,
+  nowMs = Date.now,
+  scheduler
+}: PlaybackRuntimeTickOrchestratorOptions): RuntimeTickOrchestrator {
+  const initialRuntimeTickAtMs = nowMs();
+  return new PlaybackOrchestrator({
+    initialState: {
+      lastDriftSampleAtMs: initialRuntimeTickAtMs,
+      lastPausedRecoveryAtMs: initialRuntimeTickAtMs
+    },
+    initialInput: null,
+    initialSnapshot: null,
+    tickMs: progressiveRuntimeTickIntervalMs,
+    getEngineSnapshot: () => null,
+    reduceTick: ({ state, nowMs: tickNowMs }) => {
+      const shouldSampleDrift =
+        tickNowMs - state.lastDriftSampleAtMs >= playbackDriftSampleIntervalMs;
+      const shouldRecoverPausedFullLocal =
+        tickNowMs - state.lastPausedRecoveryAtMs >= fullLocalPausedRecoveryIntervalMs;
+      return {
+        nextState: {
+          lastDriftSampleAtMs: shouldSampleDrift ? tickNowMs : state.lastDriftSampleAtMs,
+          lastPausedRecoveryAtMs: shouldRecoverPausedFullLocal
+            ? tickNowMs
+            : state.lastPausedRecoveryAtMs
+        },
+        effects: [
+          ...(shouldRecoverPausedFullLocal ? (["recover-paused-full-local"] as const) : []),
+          "sync-progressive-warmup",
+          "sync-full-local-warmup",
+          "sync-upgrade",
+          ...(shouldSampleDrift ? (["sample-drift"] as const) : [])
+        ] as const
+      };
+    },
+    runEffect: (effect) => {
+      if (effect === "sync-progressive-warmup") {
+        refs.syncProgressiveWarmupRef.current();
+        return;
+      }
+      if (effect === "recover-paused-full-local") {
+        refs.recoverPausedFullLocalPlaybackRef.current();
+        return;
+      }
+      if (effect === "sample-drift") {
+        refs.sampleDriftRef.current();
+        return;
+      }
+      if (effect === "sync-full-local-warmup") {
+        refs.syncFullLocalBufferedWarmupRef.current();
+        return;
+      }
+      refs.syncUpgradeRef.current();
+    },
+    buildSnapshot: () => null,
+    nowMs,
+    scheduler
+  });
+}
+
 export function usePlaybackRuntimeTickOrchestrator(): PlaybackRuntimeTickRefs {
   const syncProgressiveWarmupRef = useRef<() => void>(noopPlaybackRuntimeTick);
   const recoverPausedFullLocalPlaybackRef = useRef<() => void>(noopPlaybackRuntimeTick);
@@ -53,57 +123,14 @@ export function usePlaybackRuntimeTickOrchestrator(): PlaybackRuntimeTickRefs {
   const syncFullLocalBufferedWarmupRef = useRef<() => void>(noopPlaybackRuntimeTick);
   const syncUpgradeRef = useRef<() => void>(noopPlaybackRuntimeTick);
   const [runtimeTickOrchestratorRef] = useState<{ current: RuntimeTickOrchestrator }>(() => {
-    const initialRuntimeTickAtMs = Date.now();
-    const runtimeTickOrchestrator = new PlaybackOrchestrator({
-      initialState: {
-        lastDriftSampleAtMs: initialRuntimeTickAtMs,
-        lastPausedRecoveryAtMs: initialRuntimeTickAtMs
+    const runtimeTickOrchestrator = createPlaybackRuntimeTickOrchestrator({
+      refs: {
+        syncProgressiveWarmupRef,
+        recoverPausedFullLocalPlaybackRef,
+        sampleDriftRef,
+        syncFullLocalBufferedWarmupRef,
+        syncUpgradeRef
       },
-      initialInput: null,
-      initialSnapshot: null,
-      tickMs: progressiveRuntimeTickIntervalMs,
-      getEngineSnapshot: () => null,
-      reduceTick: ({ state, nowMs }) => {
-        const shouldSampleDrift =
-          nowMs - state.lastDriftSampleAtMs >= playbackDriftSampleIntervalMs;
-        const shouldRecoverPausedFullLocal =
-          nowMs - state.lastPausedRecoveryAtMs >= fullLocalPausedRecoveryIntervalMs;
-        return {
-          nextState: {
-            lastDriftSampleAtMs: shouldSampleDrift ? nowMs : state.lastDriftSampleAtMs,
-            lastPausedRecoveryAtMs: shouldRecoverPausedFullLocal
-              ? nowMs
-              : state.lastPausedRecoveryAtMs
-          },
-          effects: [
-            ...(shouldRecoverPausedFullLocal ? (["recover-paused-full-local"] as const) : []),
-            "sync-progressive-warmup",
-            "sync-full-local-warmup",
-            "sync-upgrade",
-            ...(shouldSampleDrift ? (["sample-drift"] as const) : [])
-          ] as const
-        };
-      },
-      runEffect: (effect) => {
-        if (effect === "sync-progressive-warmup") {
-          syncProgressiveWarmupRef.current();
-          return;
-        }
-        if (effect === "recover-paused-full-local") {
-          recoverPausedFullLocalPlaybackRef.current();
-          return;
-        }
-        if (effect === "sample-drift") {
-          sampleDriftRef.current();
-          return;
-        }
-        if (effect === "sync-full-local-warmup") {
-          syncFullLocalBufferedWarmupRef.current();
-          return;
-        }
-        syncUpgradeRef.current();
-      },
-      buildSnapshot: () => null,
       scheduler: {
         setInterval: (callback, delayMs) => window.setInterval(callback, delayMs),
         clearInterval: (timerId) => window.clearInterval(timerId)

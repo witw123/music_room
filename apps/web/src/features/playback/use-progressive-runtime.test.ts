@@ -324,9 +324,8 @@ describe("playback runtime pipeline keys", () => {
       "const runtimeTickOrchestrator = new PlaybackOrchestrator"
     );
     expect(orchestratorIndex).toBe(-1);
-    expect(runtimeTickHookSource).toContain(
-      "const runtimeTickOrchestrator = new PlaybackOrchestrator"
-    );
+    expect(runtimeTickHookSource).toContain("createPlaybackRuntimeTickOrchestrator");
+    expect(runtimeTickHookSource).toContain("return new PlaybackOrchestrator");
     expect(runtimeTickHookSource).toContain("\"sync-progressive-warmup\"");
 
     const warmupRefIndex = warmupControllerSource.indexOf("syncProgressiveWarmupRef.current = () => {");
@@ -367,7 +366,7 @@ describe("playback runtime pipeline keys", () => {
     ).replace(/\r\n/g, "\n");
     const orchestratorNeedle = "const runtimeTickOrchestrator = new PlaybackOrchestrator";
     expect(runtimeSource.indexOf(orchestratorNeedle)).toBe(-1);
-    expect(runtimeTickHookSource.indexOf(orchestratorNeedle)).toBeGreaterThan(-1);
+    expect(runtimeTickHookSource.indexOf("return new PlaybackOrchestrator")).toBeGreaterThan(-1);
     expect(runtimeSource).not.toContain("const driftSamplingOrchestrator = new PlaybackOrchestrator");
     expect(runtimeSource).not.toContain(
       "const fullLocalUpgradeOrchestrator = new PlaybackOrchestrator"
