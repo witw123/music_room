@@ -33,6 +33,7 @@ export {
   resolveFullLocalPlaybackSessionState,
   resolveFullLocalBlockedReason,
   resolveFullLocalBufferedWarmupPreflight,
+  resolveFullLocalBufferedWarmupMuted,
   resolveFullLocalPausedPlaybackAction,
   resolveFullLocalPausedRecoveryAttemptAction,
   resolveFullLocalPausedRecoveryPreflight,

@@ -1940,6 +1940,10 @@ export function resolveFullLocalBufferedWarmupPreflight(input: {
   };
 }
 
+export function resolveFullLocalBufferedWarmupMuted(engineType: ProgressiveEngineType) {
+  return engineType !== "none";
+}
+
 export function resolveFullLocalWarmupMissingTrackAction(input: {
   hasBufferedFullLocalTrack: boolean;
   playbackHasActiveIntent: boolean;
@@ -2033,9 +2037,16 @@ export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: 
       progressiveEngineType: input.progressiveEngineType,
       aheadBufferedMs: input.aheadBufferedMs,
       requiredAheadMs: input.comfortBufferMs
-    }) ||
-    input.warmupReadyAt === null
+    })
   ) {
+    return false;
+  }
+
+  if (input.progressiveEngineType === "none") {
+    return true;
+  }
+
+  if (input.warmupReadyAt === null) {
     return false;
   }
 

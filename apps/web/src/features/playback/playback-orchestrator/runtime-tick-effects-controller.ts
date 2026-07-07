@@ -30,6 +30,7 @@ import {
   resolveDriftSamplingPreflight,
   resolveFullLocalAudioSourceAction,
   resolveFullLocalBufferedWarmupPreflight,
+  resolveFullLocalBufferedWarmupMuted,
   resolveFullLocalPausedRecoveryAttemptAction,
   resolveFullLocalPausedRecoveryPreflight,
   resolveFullLocalPausedRecoveryResult,
@@ -448,7 +449,10 @@ export function useRuntimeTickEffectsController({
         hardDriftMs: 900,
         correctionMode: "shadow-local-catchup"
       });
-      audio.muted = true;
+      audio.muted = resolveFullLocalBufferedWarmupMuted(runtimeState.currentProgressiveEngineType);
+      if (!audio.muted) {
+        audio.volume = getAudibleElementVolume(runtimeState.volume);
+      }
       void roomAudioOutput.playElement(audio);
 
       const localReady = audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;

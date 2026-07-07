@@ -116,6 +116,7 @@ import {
   resolveFullLocalReadyPlaybackResult as pipelineResolveFullLocalReadyPlaybackResult,
   resolveFullLocalPausedRecoveryResult as pipelineResolveFullLocalPausedRecoveryResult,
   resolveFullLocalBufferedWarmupPreflight as pipelineResolveFullLocalBufferedWarmupPreflight,
+  resolveFullLocalBufferedWarmupMuted as pipelineResolveFullLocalBufferedWarmupMuted,
   resolveFullLocalWarmupMissingTrackAction as pipelineResolveFullLocalWarmupMissingTrackAction,
   resolveProgressiveLocalBlockedReason as pipelineResolveProgressiveLocalBlockedReason,
   resolveProgressiveLocalReadinessPreflight as pipelineResolveProgressiveLocalReadinessPreflight,
@@ -240,6 +241,7 @@ import {
   resolveFullLocalReadyPlaybackResult,
   resolveFullLocalPausedRecoveryResult,
   resolveFullLocalBufferedWarmupPreflight,
+  resolveFullLocalBufferedWarmupMuted,
   resolveFullLocalWarmupMissingTrackAction,
   resolveProgressiveLocalBlockedReason,
   resolveProgressiveLocalReadinessPreflight,
@@ -4041,6 +4043,8 @@ describe("use-progressive-runtime policy helpers", () => {
         requiredAheadMs: 1_000
       })
     ).toBe(false);
+    expect(pipelineResolveFullLocalBufferedWarmupMuted("none")).toBe(false);
+    expect(resolveFullLocalBufferedWarmupMuted("pcm")).toBe(true);
   });
 
   it("keeps full-local warmup hold policy in the pure pipeline module", () => {
@@ -4230,6 +4234,23 @@ describe("use-progressive-runtime policy helpers", () => {
         localTakeoverAllowed: true,
         aheadBufferedMs: 500,
         comfortBufferMs: 1_000
+      })
+    ).toBe(true);
+  });
+
+  it("immediately enters full-local when no progressive engine can play the ready cache", () => {
+    expect(
+      shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        activePlaybackSource: "lossless-local",
+        progressiveEngineType: "none",
+        canUseFullLocalForPlaybackSession: true,
+        fullLocalBlockedReason: null,
+        localTakeoverAllowed: true,
+        aheadBufferedMs: 0,
+        comfortBufferMs: 10_000,
+        warmupReadyAt: null,
+        now: 2_000,
+        switchDelayMs: 500
       })
     ).toBe(true);
   });
