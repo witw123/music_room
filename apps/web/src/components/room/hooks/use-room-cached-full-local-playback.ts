@@ -11,9 +11,11 @@ import type {
 import type { FullLocalPlaybackTrack } from "@/features/playback/use-progressive-runtime";
 import {
   getCachedFullLocalPlaybackLoadKey,
+  getCachedFullLocalPlaybackLoadMissKey,
   hasPlayableFullLocalPlaybackTrack,
   resolveCachedFullLocalPlaybackLoadTarget,
   selectFullLocalPlaybackTracks,
+  shouldNotifyCachedFullLocalPlaybackLoadMiss,
   shouldClearCachedFullLocalPlaybackTrack,
   type CachedFullLocalPlaybackLoadTarget,
   type CachedFullLocalPlaybackTrack
@@ -26,6 +28,7 @@ type UseRoomCachedFullLocalPlaybackInput = {
   roomSnapshot: RoomSnapshot | null;
   currentTrack: RoomSnapshot["tracks"][number] | null;
   currentPlaybackTrackId: string | null;
+  onCachedFullLocalPlaybackLoadMiss?: (trackId: string) => void;
 };
 
 export function useRoomCachedFullLocalPlayback({
@@ -34,11 +37,13 @@ export function useRoomCachedFullLocalPlayback({
   loadCachedLibraryTrackFile,
   roomSnapshot,
   currentTrack,
-  currentPlaybackTrackId
+  currentPlaybackTrackId,
+  onCachedFullLocalPlaybackLoadMiss
 }: UseRoomCachedFullLocalPlaybackInput) {
   const [cachedFullLocalPlaybackTrack, setCachedFullLocalPlaybackTrack] =
     useState<CachedFullLocalPlaybackTrack | null>(null);
   const cachedFullLocalPlaybackTrackRef = useRef<CachedFullLocalPlaybackTrack | null>(null);
+  const notifiedCachedFullLocalPlaybackLoadMissKeysRef = useRef<Set<string>>(new Set());
   const replaceLoadedTrack = useCallback((next: CachedFullLocalPlaybackTrack | null) => {
     const previous = cachedFullLocalPlaybackTrackRef.current;
     if (previous && previous.objectUrl !== next?.objectUrl) {
@@ -47,6 +52,26 @@ export function useRoomCachedFullLocalPlayback({
     cachedFullLocalPlaybackTrackRef.current = next;
     setCachedFullLocalPlaybackTrack(next);
   }, []);
+  const notifyCachedFullLocalPlaybackLoadMiss = useCallback(
+    (target: CachedFullLocalPlaybackLoadTarget, cachedTrackFileLoaded: boolean) => {
+      if (
+        !shouldNotifyCachedFullLocalPlaybackLoadMiss({
+          target,
+          cachedTrackFileLoaded,
+          notifiedMissKeys: notifiedCachedFullLocalPlaybackLoadMissKeysRef.current
+        })
+      ) {
+        return;
+      }
+
+      const missKey = getCachedFullLocalPlaybackLoadMissKey(target);
+      if (missKey) {
+        notifiedCachedFullLocalPlaybackLoadMissKeysRef.current.add(missKey);
+      }
+      onCachedFullLocalPlaybackLoadMiss?.(target.trackId);
+    },
+    [onCachedFullLocalPlaybackLoadMiss]
+  );
 
   const fullLocalPlaybackTracks = useMemo(
     () =>
@@ -106,6 +131,20 @@ export function useRoomCachedFullLocalPlayback({
           roomTrack
         })
       ) {
+        notifyCachedFullLocalPlaybackLoadMiss(
+          {
+            trackId,
+            fileHash: roomTrack.fileHash,
+            cachedFileHash: cachedTrack.fileHash,
+            roomTrack: {
+              id: roomTrack.id,
+              fileHash: roomTrack.fileHash,
+              durationMs: roomTrack.durationMs ?? undefined,
+              sizeBytes: roomTrack.sizeBytes ?? undefined
+            }
+          },
+          false
+        );
         return null;
       }
 
@@ -122,6 +161,7 @@ export function useRoomCachedFullLocalPlayback({
       cacheLibraryTracks,
       currentTrack,
       loadCachedLibraryTrackFile,
+      notifyCachedFullLocalPlaybackLoadMiss,
       replaceLoadedTrack,
       roomSnapshot?.tracks,
       uploadedTracks
@@ -177,15 +217,23 @@ export function useRoomCachedFullLocalPlayback({
     void (async () => {
       const cachedTrackFile = await loadCachedLibraryTrackFile(target.cachedFileHash);
       const latestTarget = cachedFullLocalPlaybackLoadTargetRef.current;
-      if (
-        cancelled ||
-        getCachedFullLocalPlaybackLoadKey(latestTarget) !== cachedFullLocalPlaybackLoadKey ||
-        !cachedTrackFile ||
-        !isCachedLibraryTrackUsableForRoomTrack({
+      const latestTargetMatches =
+        getCachedFullLocalPlaybackLoadKey(latestTarget) === cachedFullLocalPlaybackLoadKey;
+      const cachedTrackFileUsable = !!(
+        cachedTrackFile &&
+        isCachedLibraryTrackUsableForRoomTrack({
           cachedTrack: cachedTrackFile,
           roomTrack: target.roomTrack
         })
+      );
+      if (
+        cancelled ||
+        !latestTargetMatches
       ) {
+        return;
+      }
+      if (!cachedTrackFileUsable) {
+        notifyCachedFullLocalPlaybackLoadMiss(target, false);
         return;
       }
 
@@ -207,11 +255,13 @@ export function useRoomCachedFullLocalPlayback({
       cancelled = true;
     };
   }, [
+    cacheLibraryTracks,
     cachedFullLocalPlaybackLoadKey,
     currentPlaybackTrackId,
     currentTrack?.fileHash,
     currentUploadedPlaybackTrack,
     loadCachedLibraryTrackFile,
+    notifyCachedFullLocalPlaybackLoadMiss,
     replaceLoadedTrack
   ]);
 

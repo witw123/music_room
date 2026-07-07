@@ -158,6 +158,7 @@ vi.mock("@/lib/indexeddb", () => ({
   getCachedPiece: vi.fn(),
   getCachedPieceIndexes: vi.fn(async () => []),
   getTrackPieceManifest: vi.fn(async () => null),
+  getTrackPieceManifestByFileHash: vi.fn(async () => null),
   localCacheOwnerKey: "__local__"
 }));
 

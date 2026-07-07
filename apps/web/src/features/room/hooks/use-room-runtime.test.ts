@@ -418,6 +418,17 @@ describe("pure cache room runtime helpers", () => {
         playback,
         peerId: "peer_listener",
         activeSessionId: "listener",
+        manualCacheTrackIds: [],
+        hasLocalFullTrack: true,
+        enableManualTrackCaching: true
+      })
+    ).toBe(false);
+
+    expect(
+      shouldStartPlaybackDemandCacheForPlayback({
+        playback,
+        peerId: "peer_listener",
+        activeSessionId: "listener",
         manualCacheTrackIds: ["track_1"],
         enableManualTrackCaching: true
       })
@@ -494,7 +505,7 @@ describe("pure cache room runtime helpers", () => {
     ).toEqual(["track_1"]);
   });
 
-  it("keeps listener playback cache active even when a stale full-local flag is present", () => {
+  it("stops playback-demand runtime caching for a listener once a full local file is playable", () => {
     expect(
       resolveRuntimeManualCacheTrackIds({
         playback: {
@@ -513,6 +524,31 @@ describe("pure cache room runtime helpers", () => {
         peerId: "peer_listener",
         activeSessionId: "listener",
         manualCacheTrackIds: [],
+        hasLocalFullTrack: true,
+        enableManualTrackCaching: true
+      })
+    ).toEqual([]);
+  });
+
+  it("keeps an explicit manual cache task after the same listener has full local playback", () => {
+    expect(
+      resolveRuntimeManualCacheTrackIds({
+        playback: {
+          status: "playing",
+          currentTrackId: "track_1",
+          currentQueueItemId: "queue_1",
+          sourceSessionId: "host",
+          sourcePeerId: "peer_source",
+          sourceTrackId: "track_1",
+          positionMs: 0,
+          startedAt: "2026-04-14T00:00:00.000Z",
+          queueVersion: 1,
+          playbackRevision: 2,
+          mediaEpoch: 3
+        },
+        peerId: "peer_listener",
+        activeSessionId: "listener",
+        manualCacheTrackIds: ["track_1"],
         hasLocalFullTrack: true,
         enableManualTrackCaching: true
       })

@@ -17,6 +17,7 @@ import {
   appendPlaybackQualityTimestamp as pipelineAppendPlaybackQualityTimestamp,
   resolveTrackAvailabilityAnnouncement as pipelineResolveTrackAvailabilityAnnouncement,
   resolveNextQueueTrackPrefetch as pipelineResolveNextQueueTrackPrefetch,
+  resolveLocalPlaybackClockSeconds as pipelineResolveLocalPlaybackClockSeconds,
   resolveLocalPlaybackPositionMs as pipelineResolveLocalPlaybackPositionMs,
   bucketDiagnosticDurationMs as pipelineBucketDiagnosticDurationMs,
   getAudibleElementVolume as pipelineGetAudibleElementVolume,
@@ -160,6 +161,7 @@ import {
   appendPlaybackQualityTimestamp,
   resolveTrackAvailabilityAnnouncement,
   resolveNextQueueTrackPrefetch,
+  resolveLocalPlaybackClockSeconds,
   resolveLocalPlaybackPositionMs,
   resolveLocalAudioDiagnostics,
   resolveMediaElementPlaybackRole,
@@ -1224,6 +1226,20 @@ describe("playback runtime pipeline keys", () => {
         currentTimeSeconds: 1.2345
       })
     ).toBe(1235);
+    expect(
+      pipelineResolveLocalPlaybackClockSeconds({
+        activePlaybackSource: "full-local",
+        pcmCurrentTimeSeconds: null,
+        audioCurrentTimeSeconds: 21.75
+      })
+    ).toBe(21.75);
+    expect(
+      resolveLocalPlaybackClockSeconds({
+        activePlaybackSource: "lossless-local",
+        pcmCurrentTimeSeconds: 18.25,
+        audioCurrentTimeSeconds: 17.5
+      })
+    ).toBe(18.25);
     expect(
       pipelineResolveLocalPlaybackPositionMs({
         activePlaybackSource: "remote",
@@ -4157,7 +4173,7 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
-  it("does not directly upgrade sliding-window playback to full-local while an engine owns the shared audio element", () => {
+  it("allows full-local takeover from PCM playback once the complete cache is ready", () => {
     const readyInput = {
       activePlaybackSource: "lossless-local" as const,
       canUseFullLocalForPlaybackSession: true,
@@ -4175,7 +4191,7 @@ describe("use-progressive-runtime policy helpers", () => {
         ...readyInput,
         progressiveEngineType: "pcm"
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
         ...readyInput,
@@ -4204,7 +4220,7 @@ describe("use-progressive-runtime policy helpers", () => {
         aheadBufferedMs: 2_000,
         comfortBufferMs: 1_000
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       resolveIdleFullLocalUpgradeArmState({
         progressiveEngineType: "none",
@@ -4213,6 +4229,34 @@ describe("use-progressive-runtime policy helpers", () => {
         localTakeoverAllowed: true,
         aheadBufferedMs: 500,
         comfortBufferMs: 1_000
+      })
+    ).toBe(true);
+  });
+
+  it("does not require PCM ahead buffer before recovering to a complete full-local cache", () => {
+    expect(
+      resolveIdleFullLocalUpgradeArmState({
+        progressiveEngineType: "pcm",
+        canUseFullLocalForPlaybackSession: true,
+        fullLocalBlockedReason: null,
+        localTakeoverAllowed: true,
+        aheadBufferedMs: 0,
+        comfortBufferMs: 1_000
+      })
+    ).toBe(true);
+
+    expect(
+      shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
+        activePlaybackSource: "lossless-local",
+        progressiveEngineType: "pcm",
+        canUseFullLocalForPlaybackSession: true,
+        fullLocalBlockedReason: null,
+        localTakeoverAllowed: true,
+        aheadBufferedMs: 0,
+        comfortBufferMs: 1_000,
+        warmupReadyAt: 1_000,
+        now: 1_500,
+        switchDelayMs: 400
       })
     ).toBe(true);
   });

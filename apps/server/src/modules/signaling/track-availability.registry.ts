@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   mergeTrackAvailabilityAnnouncement,
+  trackAvailabilityAnnouncementSchema,
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -111,11 +112,12 @@ export class TrackAvailabilityRegistry {
 
   private async loadSnapshot(roomId: string) {
     try {
-      return (
-        (await this.redisService.getJson<TrackAvailabilityAnnouncement[]>(
-          this.availabilitySnapshotKey(roomId)
-        )) ?? []
-      );
+      const snapshot =
+        (await this.redisService.getJson<unknown[]>(this.availabilitySnapshotKey(roomId))) ?? [];
+      return snapshot.flatMap((entry) => {
+        const parsed = trackAvailabilityAnnouncementSchema.safeParse(entry);
+        return parsed.success && parsed.data.roomId === roomId ? [parsed.data] : [];
+      });
     } catch {
       return [];
     }

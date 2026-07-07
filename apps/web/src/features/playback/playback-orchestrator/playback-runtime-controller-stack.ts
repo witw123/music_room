@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import {
   getPcmEngineDiagnosticsKey,
   isSlidingWindowPlaybackSource,
+  resolveLocalPlaybackClockSeconds,
   resolveLocalPlaybackPositionMs
 } from "./pipeline";
 import type {
@@ -304,16 +305,16 @@ export function usePlaybackRuntimeControllerStack({
       return null;
     }
 
-    const pcmEngine = progressivePcmEngineRef.current;
-    if (!pcmEngine) {
-      return null;
-    }
-
     return resolveLocalPlaybackPositionMs({
       activePlaybackSource,
-      currentTimeSeconds: pcmEngine.getCurrentTimeSeconds()
+      currentTimeSeconds: resolveLocalPlaybackClockSeconds({
+        activePlaybackSource,
+        pcmCurrentTimeSeconds:
+          progressivePcmEngineRef.current?.getCurrentTimeSeconds() ?? null,
+        audioCurrentTimeSeconds: audioRef.current?.currentTime ?? null
+      })
     });
-  }, [activePlaybackSource, progressivePcmEngineRef]);
+  }, [activePlaybackSource, audioRef, progressivePcmEngineRef]);
 
   useMainPlaybackController({
     activePlaybackSource,

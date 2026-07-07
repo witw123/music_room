@@ -140,6 +140,52 @@ describe("buildManualCacheSchedulerAvailability", () => {
     });
   });
 
+  it("prefers the current playback source before the track owner for implicit cache providers", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing"
+    });
+    const sourceMember = {
+      id: "listener_2",
+      nickname: "cached source",
+      role: "member" as const,
+      joinedAt: new Date(0).toISOString(),
+      peerId: "peer_cached_source",
+      presenceState: "online" as const
+    };
+    const snapshotWithCachedSource = {
+      ...roomSnapshot,
+      room: {
+        ...roomSnapshot.room,
+        members: [...roomSnapshot.room.members, sourceMember],
+        playback: {
+          ...roomSnapshot.room.playback,
+          sourceSessionId: sourceMember.id,
+          sourcePeerId: sourceMember.peerId
+        }
+      }
+    };
+    const availability = buildManualCacheSchedulerAvailability({
+      availabilityByTrack: {},
+      manualCacheTrackIds: ["track_a"],
+      roomSnapshot: snapshotWithCachedSource,
+      localPeerId: "peer_local"
+    });
+    const plan = resolveManualCacheTrackPlan({
+      track: snapshotWithCachedSource.tracks[0],
+      roomId: snapshotWithCachedSource.room.id,
+      localPeerId: "peer_local",
+      availabilityByTrack: availability,
+      connectedPeerIds: ["peer_owner", "peer_cached_source"],
+      cachedManifest: null,
+      localPieceIndexes: [],
+      pendingChunkIndexes: []
+    });
+
+    expect(plan.selectedProviderPeerId).toBe("peer_cached_source");
+    expect(plan.requestableChunks).toEqual([0, 1, 2, 3]);
+  });
+
   it("drops stale availability from peers that are no longer active room members", () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner"

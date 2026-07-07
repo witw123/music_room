@@ -697,6 +697,256 @@ describe("RoomService", () => {
     });
   });
 
+  it("rejects playback from a partial local-cache peer when the uploader is offline", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const signalingGateway = createSignalingGatewayMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(
+      authService,
+      prisma as never,
+      redis as never,
+      signalingGateway as never
+    );
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Partial Cache Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "member-track-partial-cache",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    signalingGateway.setTrackAvailability(snapshot.room.id, memberTrack.id, [
+      {
+        roomId: snapshot.room.id,
+        trackId: memberTrack.id,
+        ownerPeerId: "peer-host",
+        nickname: host.nickname,
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1],
+        source: "local_cache",
+        announcedAt: new Date().toISOString()
+      }
+    ]);
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: memberTrack.id,
+        actorSessionId: host.id
+      })
+    ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
+  });
+
+  it("rejects playback from a cached peer whose full-looking chunks are duplicated or out of range", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const signalingGateway = createSignalingGatewayMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(
+      authService,
+      prisma as never,
+      redis as never,
+      signalingGateway as never
+    );
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Invalid Chunk Cache Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "member-track-invalid-chunks",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    signalingGateway.setTrackAvailability(snapshot.room.id, memberTrack.id, [
+      {
+        roomId: snapshot.room.id,
+        trackId: memberTrack.id,
+        ownerPeerId: "peer-host",
+        nickname: host.nickname,
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 0, 0, 99],
+        source: "local_cache",
+        announcedAt: new Date().toISOString()
+      }
+    ]);
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: memberTrack.id,
+        actorSessionId: host.id
+      })
+    ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
+  });
+
+  it("rejects playback from a partial live-upload announcement when the uploader is offline", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const signalingGateway = createSignalingGatewayMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(
+      authService,
+      prisma as never,
+      redis as never,
+      signalingGateway as never
+    );
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Partial Live Upload Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "member-track-partial-live-upload",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    signalingGateway.setTrackAvailability(snapshot.room.id, memberTrack.id, [
+      {
+        roomId: snapshot.room.id,
+        trackId: memberTrack.id,
+        ownerPeerId: "peer-host",
+        nickname: host.nickname,
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1],
+        source: "live_upload",
+        announcedAt: new Date().toISOString()
+      }
+    ]);
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: memberTrack.id,
+        actorSessionId: host.id
+      })
+    ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
+  });
+
+  it("rejects playback from a full cached peer when the announced asset hash does not match the track", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const signalingGateway = createSignalingGatewayMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(
+      authService,
+      prisma as never,
+      redis as never,
+      signalingGateway as never
+    );
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Mismatched Cache Track",
+      artist: "Local Upload",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "member-track-good-hash",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload",
+      pieceManifest: {
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+
+    signalingGateway.setTrackAvailability(snapshot.room.id, memberTrack.id, [
+      {
+        roomId: snapshot.room.id,
+        trackId: memberTrack.id,
+        ownerPeerId: "peer-host",
+        nickname: host.nickname,
+        assetKind: "relay",
+        assetHash: "different-track-hash",
+        totalChunks: 4,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1, 2, 3],
+        source: "local_cache",
+        announcedAt: new Date().toISOString()
+      }
+    ]);
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        trackId: memberTrack.id,
+        actorSessionId: host.id
+      })
+    ).rejects.toThrow("Track owner is not online, so this song cannot be played right now.");
+  });
+
   it("keeps playback snapshot consistent when a member pauses and seeks", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

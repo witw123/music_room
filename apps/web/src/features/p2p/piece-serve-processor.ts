@@ -2,6 +2,7 @@ import {
   getCachedPiece,
   getCachedPieceIndexes,
   getTrackPieceManifest,
+  getTrackPieceManifestByFileHash,
   localCacheOwnerKey
 } from "@/lib/indexeddb";
 import { buildPieceFrames } from "./piece-frame-codec";
@@ -93,7 +94,11 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
   async resolveManifestHeader(trackId: string, fallbackChunkSize: number) {
     let manifestHeader = this.pieceManifestHeaders.get(trackId) ?? null;
     if (!manifestHeader) {
-      const manifest = await getTrackPieceManifest(trackId);
+      const cacheIdentity = this.resolveTrackCacheIdentity?.(trackId) ?? null;
+      const manifest =
+        (cacheIdentity?.fileHash
+          ? await getTrackPieceManifestByFileHash(cacheIdentity.fileHash)
+          : null) ?? (await getTrackPieceManifest(trackId));
       if (manifest) {
         manifestHeader = {
           totalChunks: manifest.totalChunks,

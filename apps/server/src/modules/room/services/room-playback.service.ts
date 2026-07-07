@@ -385,6 +385,10 @@ export class RoomPlaybackService {
       roomId,
       track.id
     ) ?? []) {
+      if (!this.isUsableFullTrackAvailability(roomId, track, announcement)) {
+        continue;
+      }
+
       const sessionId = sessionByPeerId.get(announcement.ownerPeerId);
       if (!sessionId || !isSessionAvailable(sessionId)) {
         continue;
@@ -392,8 +396,8 @@ export class RoomPlaybackService {
 
       const candidate = {
         ...announcement,
-        availableChunkCount: announcement.availableChunks.length,
-        fullyCached: announcement.availableChunks.length >= announcement.totalChunks
+        availableChunkCount: this.countValidAvailableChunks(announcement),
+        fullyCached: true
       };
       const existing = bestAnnouncementsBySessionId.get(sessionId);
       if (
@@ -430,6 +434,41 @@ export class RoomPlaybackService {
       sessionId: fallbackCandidate[0],
       peerId: fallbackCandidate[1].ownerPeerId
     };
+  }
+
+  private isUsableFullTrackAvailability(
+    roomId: string,
+    track: TrackMeta,
+    announcement: TrackAvailabilityAnnouncement
+  ) {
+    if (
+      announcement.roomId !== roomId ||
+      announcement.trackId !== track.id ||
+      announcement.totalChunks <= 0 ||
+      announcement.chunkSize <= 0 ||
+      (announcement.assetHash && announcement.assetHash !== track.fileHash)
+    ) {
+      return false;
+    }
+
+    const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
+    if (
+      expectedManifest &&
+      (announcement.totalChunks !== expectedManifest.totalChunks ||
+        announcement.chunkSize !== expectedManifest.chunkSize)
+    ) {
+      return false;
+    }
+
+    return this.countValidAvailableChunks(announcement) >= announcement.totalChunks;
+  }
+
+  private countValidAvailableChunks(announcement: TrackAvailabilityAnnouncement) {
+    return new Set(
+      announcement.availableChunks.filter(
+        (chunkIndex) => chunkIndex >= 0 && chunkIndex < announcement.totalChunks
+      )
+    ).size;
   }
 
   private clampPositionMs(record: RoomRecord, trackId: string | null, positionMs: number) {

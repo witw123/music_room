@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCachedPiece,
   getCachedPieceIndexes,
-  getTrackPieceManifest
+  getTrackPieceManifest,
+  getTrackPieceManifestByFileHash
 } from "@/lib/indexeddb";
 import { decodePieceFrame } from "./piece-frame-codec";
 import { PieceServeProcessor } from "./piece-serve-processor";
@@ -11,6 +12,7 @@ vi.mock("@/lib/indexeddb", () => ({
   getCachedPiece: vi.fn(),
   getCachedPieceIndexes: vi.fn(async () => []),
   getTrackPieceManifest: vi.fn(async () => null),
+  getTrackPieceManifestByFileHash: vi.fn(async () => null),
   localCacheOwnerKey: "__local__"
 }));
 
@@ -132,6 +134,70 @@ describe("PieceServeProcessor", () => {
         totalChunks: 2,
         chunkSize: payload.byteLength,
         mimeType: "audio/mpeg",
+        pieceHash: hash
+      },
+      payload
+    });
+  });
+
+  it("serves cached pieces with file-hash manifest metadata when the room track id changed", async () => {
+    const payload = new TextEncoder().encode("piece-1").buffer;
+    const hash = await sha256Hex(payload);
+    vi.mocked(getCachedPiece).mockResolvedValueOnce({
+      pieceId: "hash-track-1:7:__local__:0",
+      trackId: "track_old",
+      fileHash: "hash-track-1",
+      peerId: "peer_a",
+      ownerKey: "__local__",
+      chunkIndex: 0,
+      chunkSize: payload.byteLength,
+      hash,
+      createdAt: "2026-04-03T16:30:00.000Z",
+      payload
+    });
+    vi.mocked(getTrackPieceManifest).mockResolvedValueOnce(undefined);
+    vi.mocked(getTrackPieceManifestByFileHash).mockResolvedValueOnce({
+      trackId: "track_old",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: payload.byteLength * 5,
+      durationMs: 5000,
+      totalChunks: 5,
+      chunkSize: payload.byteLength,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+    const enqueueSendItem = vi.fn();
+    const processor = new PieceServeProcessor({
+      localPeerId: "peer_a",
+      maxDataChannelPayloadBytes: 48 * 1024,
+      resolveTrackCacheIdentity: () => ({
+        fileHash: "hash-track-1",
+        ownerKey: "__local__",
+        chunkSize: payload.byteLength
+      }),
+      enqueueSendItem
+    });
+
+    await processor.servePieceRequest({
+      peerId: "peer_b",
+      entry: openEntry(),
+      request: {
+        trackId: "track_new",
+        chunkIndex: 0
+      }
+    });
+
+    expect(getTrackPieceManifestByFileHash).toHaveBeenCalledWith("hash-track-1");
+    expect(enqueueSendItem).toHaveBeenCalledTimes(1);
+    expect(decodePieceFrame(enqueueSendItem.mock.calls[0]?.[2]?.data)).toMatchObject({
+      header: {
+        kind: "send-piece",
+        trackId: "track_new",
+        chunkIndex: 0,
+        totalChunks: 5,
+        chunkSize: payload.byteLength,
+        mimeType: "audio/flac",
         pieceHash: hash
       },
       payload

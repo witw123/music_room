@@ -251,7 +251,8 @@ export function shouldStartPlaybackDemandCacheForPlayback(input: {
   if (
     !input.enableManualTrackCaching ||
     !playback?.currentTrackId ||
-    (playback.status !== "playing" && playback.status !== "buffering")
+    (playback.status !== "playing" && playback.status !== "buffering") ||
+    input.hasLocalFullTrack === true
   ) {
     return false;
   }
@@ -310,16 +311,11 @@ export function resolveRuntimeManualCacheTrackIds(input: {
 }) {
   const trackIds = new Set(input.manualCacheTrackIds.filter(Boolean));
   const playback = input.playback;
-  const isSourceDevice = isPlaybackCacheSourceDevice({
-    playback,
-    peerId: input.peerId,
-    activeSessionId: input.activeSessionId
-  });
   if (
     input.enableManualTrackCaching &&
     playback?.currentTrackId &&
     (playback.status === "playing" || playback.status === "buffering") &&
-    (!isSourceDevice || !input.hasLocalFullTrack)
+    !input.hasLocalFullTrack
   ) {
     trackIds.add(playback.currentTrackId);
   }

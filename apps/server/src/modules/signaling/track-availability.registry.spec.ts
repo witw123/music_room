@@ -124,4 +124,45 @@ describe("TrackAvailabilityRegistry", () => {
       })
     );
   });
+
+  it("skips invalid persisted availability snapshots when replaying to subscribers", async () => {
+    const redis = createRedisServiceMock();
+    redis.getJson.mockResolvedValue([
+      {
+        roomId: "room_1",
+        trackId: "track_bad",
+        ownerPeerId: "peer_bad",
+        nickname: "Bad",
+        totalChunks: 8,
+        chunkSize: 0,
+        availableChunks: [0],
+        source: "local_cache",
+        announcedAt: "2026-06-29T10:00:00.000Z"
+      },
+      {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_listener",
+        nickname: "Listener",
+        totalChunks: 8,
+        chunkSize: 128 * 1024,
+        availableChunks: [0, 1],
+        source: "local_cache",
+        announcedAt: "2026-06-29T10:00:01.000Z"
+      }
+    ]);
+    const registry = new TrackAvailabilityRegistry(redis as never);
+    const emit = jest.fn();
+
+    await registry.emitSnapshot("room_1", emit);
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trackId: "track_1",
+        chunkSize: 128 * 1024
+      })
+    );
+    expect(registry.getTrackAnnouncements("room_1", "track_bad")).toEqual([]);
+  });
 });

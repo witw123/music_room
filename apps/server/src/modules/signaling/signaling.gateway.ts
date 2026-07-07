@@ -18,11 +18,30 @@ import type {
   RoomLibraryPatchPayload,
   RoomPlaybackPatchPayload,
   RoomPresencePatchPayload,
+  RoomPresencePayload,
   RoomQueuePatchPayload,
+  RoomSubscribePayload,
   RoomSnapshot,
+  RoomUnsubscribePayload,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
-import { errorCodes, roomChatInputPayloadSchema } from "@music-room/shared";
+import {
+  errorCodes,
+  peerSignalMessageSchema,
+  pieceAvailabilityClearPayloadSchema,
+  roomChatInputPayloadSchema,
+  roomDeletedPayloadSchema,
+  roomLibraryPatchPayloadSchema,
+  roomPlaybackPatchPayloadSchema,
+  roomPresencePayloadSchema,
+  roomPresencePatchPayloadSchema,
+  roomQueuePatchPayloadSchema,
+  roomSubscribePayloadSchema,
+  roomSnapshotMissingPayloadSchema,
+  roomSnapshotSchema,
+  roomUnsubscribePayloadSchema,
+  trackAvailabilityAnnouncementSchema
+} from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RedisService } from "../../infra/redis/redis.service";
@@ -50,6 +69,18 @@ type PendingPeerSignal = {
   expiresAtMs: number;
 };
 
+function hasForeignRedisEnvelope(
+  message: { sourceId?: unknown; roomId?: unknown },
+  localInstanceId: string
+) {
+  return (
+    typeof message.sourceId === "string" &&
+    message.sourceId !== localInstanceId &&
+    typeof message.roomId === "string" &&
+    message.roomId.length > 0
+  );
+}
+
 @WebSocketGateway({
   path: "/ws/socket.io",
   cors: { origin: getCorsOrigins(), credentials: true }
@@ -58,7 +89,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private readonly disconnectGracePeriodMs = 25_000;
   private readonly pendingPeerSignalTtlMs = 10_000;
   private readonly pendingPeerSignalLimit = 64;
-  private unsubscribeRoomSnapshots: (() => Promise<void> | void) | null = null;
+  private readonly redisUnsubscribers: Array<() => Promise<void> | void> = [];
   private sequence = 0;
   private recoveryGenerationSequence = 0;
   private readonly pendingDisconnectCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -172,19 +203,19 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           snapshot?: RoomSnapshot;
         };
 
-        if (
-          !message.roomId ||
-          !message.snapshot ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
+        if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
           return;
         }
 
-        this.server.to(message.roomId).emit("room.snapshot", message.snapshot);
+        const parsed = roomSnapshotSchema.safeParse(message.snapshot);
+        if (!parsed.success || parsed.data.room.id !== message.roomId) {
+          return;
+        }
+
+        this.server.to(message.roomId).emit("room.snapshot", parsed.data);
       })
       .then((unsubscribe) => {
-        this.unsubscribeRoomSnapshots = unsubscribe;
+        this.redisUnsubscribers.push(unsubscribe);
       });
 
     void this.redisService.subscribe(roomSnapshotMissingChannel, (payload) => {
@@ -193,20 +224,23 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         roomId?: string;
       };
 
-      if (
-        !message.roomId ||
-        !message.sourceId ||
-        message.sourceId === this.roomRealtimeBroadcaster.instanceId
-      ) {
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
         return;
       }
 
-      this.trackAvailabilityRegistry.clearRoom(message.roomId);
-      this.peerSocketsByRoom.delete(message.roomId);
-      this.activeSessionsByRoom.delete(message.roomId);
-      this.metrics.clearRoom(message.roomId);
-      this.clearRoomRecoveryState(message.roomId);
-      this.server.to(message.roomId).emit("room.snapshot.missing", { roomId: message.roomId });
+      const parsed = roomSnapshotMissingPayloadSchema.safeParse({ roomId: message.roomId });
+      if (!parsed.success) {
+        return;
+      }
+
+      this.trackAvailabilityRegistry.clearRoom(parsed.data.roomId);
+      this.peerSocketsByRoom.delete(parsed.data.roomId);
+      this.activeSessionsByRoom.delete(parsed.data.roomId);
+      this.metrics.clearRoom(parsed.data.roomId);
+      this.clearRoomRecoveryState(parsed.data.roomId);
+      this.server.to(parsed.data.roomId).emit("room.snapshot.missing", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(roomDeletedChannel, (payload) => {
@@ -216,22 +250,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         trackIds?: string[];
       };
 
-      if (
-        !message.roomId ||
-        !message.sourceId ||
-        message.sourceId === this.roomRealtimeBroadcaster.instanceId
-      ) {
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
         return;
       }
 
-      this.trackAvailabilityRegistry.clearRoom(message.roomId);
-      this.peerSocketsByRoom.delete(message.roomId);
-      this.activeSessionsByRoom.delete(message.roomId);
-      this.metrics.clearRoom(message.roomId);
-      this.clearRoomRecoveryState(message.roomId);
-      this.server
-        .to(message.roomId)
-        .emit("room.deleted", { roomId: message.roomId, trackIds: message.trackIds ?? [] });
+      const parsed = roomDeletedPayloadSchema.safeParse({
+        roomId: message.roomId,
+        trackIds: message.trackIds ?? []
+      });
+      if (!parsed.success) {
+        return;
+      }
+
+      this.trackAvailabilityRegistry.clearRoom(parsed.data.roomId);
+      this.peerSocketsByRoom.delete(parsed.data.roomId);
+      this.activeSessionsByRoom.delete(parsed.data.roomId);
+      this.metrics.clearRoom(parsed.data.roomId);
+      this.clearRoomRecoveryState(parsed.data.roomId);
+      this.server.to(parsed.data.roomId).emit("room.deleted", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(roomPlaybackPatchChannel, (payload) => {
@@ -241,16 +279,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: RoomPlaybackPatchPayload;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
 
-      this.server.to(message.roomId).emit("room.playback.patch", message.payload);
+      const parsed = roomPlaybackPatchPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.playback.patch", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(roomQueuePatchChannel, (payload) => {
@@ -260,16 +300,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: RoomQueuePatchPayload;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
 
-      this.server.to(message.roomId).emit("room.queue.patch", message.payload);
+      const parsed = roomQueuePatchPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.queue.patch", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(roomPresencePatchChannel, (payload) => {
@@ -279,16 +321,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: RoomPresencePatchPayload;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
 
-      this.server.to(message.roomId).emit("room.presence.patch", message.payload);
+      const parsed = roomPresencePatchPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.presence.patch", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(roomLibraryPatchChannel, (payload) => {
@@ -298,16 +342,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: RoomLibraryPatchPayload;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
 
-      this.server.to(message.roomId).emit("room.library.patch", message.payload);
+      const parsed = roomLibraryPatchPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.server.to(message.roomId).emit("room.library.patch", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(peerSignalChannel, (payload) => {
@@ -317,16 +363,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: PeerSignalMessage;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
 
-      this.emitPeerSignalToPeer(message.roomId, message.payload.toPeerId, message.payload);
+      const parsed = peerSignalMessageSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.emitPeerSignalToPeer(message.roomId, parsed.data.toPeerId, parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(pieceAvailabilityChannel, (payload) => {
@@ -336,20 +384,22 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: TrackAvailabilityAnnouncement;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+
+      const parsed = trackAvailabilityAnnouncementSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
 
       const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(
         message.roomId,
-        message.payload
+        parsed.data
       );
       this.server.to(message.roomId).emit("piece.availability", mergedAnnouncement);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
 
     void this.redisService.subscribe(pieceAvailabilityClearChannel, (payload) => {
@@ -359,22 +409,26 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         payload?: PieceAvailabilityClearPayload;
       };
 
-      if (
-          !message.roomId ||
-          !message.payload ||
-          !message.sourceId ||
-          message.sourceId === this.roomRealtimeBroadcaster.instanceId
-        ) {
-          return;
-        }
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
 
-      this.trackAvailabilityRegistry.removePeer(message.roomId, message.payload.ownerPeerId);
-      this.server.to(message.roomId).emit("piece.availability.clear", message.payload);
+      const parsed = pieceAvailabilityClearPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+
+      this.trackAvailabilityRegistry.removePeer(message.roomId, parsed.data.ownerPeerId);
+      this.server.to(message.roomId).emit("piece.availability.clear", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
     });
   }
 
   onModuleDestroy() {
-    void this.unsubscribeRoomSnapshots?.();
+    for (const unsubscribe of this.redisUnsubscribers.splice(0)) {
+      void unsubscribe();
+    }
     for (const timer of this.pendingDisconnectCleanupTimers.values()) {
       clearTimeout(timer);
     }
@@ -388,24 +442,34 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   @SubscribeMessage("peer.signal")
   async handleSignal(@ConnectedSocket() client: Socket, @MessageBody() payload: PeerSignalMessage) {
-    this.assertRealtimeClient(client, payload.roomId);
+    const parsed = peerSignalMessageSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid peer signal payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const message = parsed.data;
+
+    this.assertRealtimeClient(client, message.roomId);
     this.assertRealtimeAvailable();
 
-    if (client.data.peerId !== payload.fromPeerId) {
+    if (client.data.peerId !== message.fromPeerId) {
       throw new WsException("Peer mismatch.");
     }
 
     const nextPayload = {
-      ...payload,
-      sequence: (payload as PeerSignalMessage & { sequence?: number }).sequence ?? this.nextSequence(),
+      ...message,
+      sequence: (message as PeerSignalMessage & { sequence?: number }).sequence ?? this.nextSequence(),
       recoveryGeneration:
-        payload.recoveryGeneration ?? this.resolvePeerRecoveryGeneration(payload.roomId, payload.toPeerId)
+        message.recoveryGeneration ?? this.resolvePeerRecoveryGeneration(message.roomId, message.toPeerId)
     } as PeerSignalMessage;
 
-    this.emitPeerSignalToPeer(payload.roomId, nextPayload.toPeerId, nextPayload);
+    this.emitPeerSignalToPeer(message.roomId, nextPayload.toPeerId, nextPayload);
     await this.redisService.publish(peerSignalChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: payload.roomId,
+      roomId: message.roomId,
       payload: nextPayload
     });
     return nextPayload;
@@ -416,18 +480,31 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: TrackAvailabilityAnnouncement
   ) {
-    this.assertRealtimeClient(client, payload.roomId);
+    const parsed = trackAvailabilityAnnouncementSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid piece availability payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const announcement = parsed.data;
+
+    this.assertRealtimeClient(client, announcement.roomId);
     this.assertRealtimeAvailable();
 
-    if (client.data.peerId !== payload.ownerPeerId) {
+    if (client.data.peerId !== announcement.ownerPeerId) {
       throw new WsException("Peer mismatch.");
     }
 
-    const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(payload.roomId, payload);
-    client.to(payload.roomId).emit("piece.availability", mergedAnnouncement);
+    const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(
+      announcement.roomId,
+      announcement
+    );
+    client.to(announcement.roomId).emit("piece.availability", mergedAnnouncement);
     await this.redisService.publish(pieceAvailabilityChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: payload.roomId,
+      roomId: announcement.roomId,
       payload: mergedAnnouncement
     });
     return mergedAnnouncement;
@@ -469,18 +546,28 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   @SubscribeMessage("room.subscribe")
   async handleRoomSubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { roomId: string; sessionId?: string; peerId?: string }
+    @MessageBody() payload: RoomSubscribePayload
   ) {
+    const parsed = roomSubscribePayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid room subscribe payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const message = parsed.data;
+
     this.ensureBroadcasterServer();
     this.assertRealtimeAvailable();
 
-    if (!payload.sessionId || !payload.peerId) {
+    if (!message.sessionId || !message.peerId) {
       throw new WsException("Missing session identity.");
     }
 
     const sessionToken = this.getSocketSessionToken(client);
     try {
-      await this.authService.assertSessionToken(payload.sessionId, sessionToken);
+      await this.authService.assertSessionToken(message.sessionId, sessionToken);
     } catch (error) {
       throw createWsApiException(
         error instanceof Error ? error.message : "Unauthorized.",
@@ -503,7 +590,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       client.id
     );
     this.metrics.unbindRealtimeSocket(client.id);
-    if (previousRoomId && previousRoomId !== payload.roomId) {
+    if (previousRoomId && previousRoomId !== message.roomId) {
       client.leave(previousRoomId);
       if (previousSessionId) {
         void this.updatePeerPresence(previousRoomId, previousSessionId, null, "offline");
@@ -515,51 +602,51 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     client.data ??= {};
 
     await this.replaceExistingRoomSession(
-      payload.roomId,
-      payload.sessionId,
-      payload.peerId,
+      message.roomId,
+      message.sessionId,
+      message.peerId,
       client.id
     );
 
-    client.data.roomId = payload.roomId;
-    client.data.sessionId = payload.sessionId;
-    client.data.peerId = payload.peerId;
+    client.data.roomId = message.roomId;
+    client.data.sessionId = message.sessionId;
+    client.data.peerId = message.peerId;
     client.data.isRealtimeAuthenticated = true;
-    client.join(payload.roomId);
+    client.join(message.roomId);
     const recoveryGeneration = this.registerRecoveryGeneration(
-      payload.roomId,
-      payload.sessionId,
-      payload.peerId
+      message.roomId,
+      message.sessionId,
+      message.peerId
     );
-    this.registerPeerSocket(payload.roomId, payload.peerId, client.id);
-    this.registerSessionSocket(payload.roomId, payload.sessionId, payload.peerId, client.id);
+    this.registerPeerSocket(message.roomId, message.peerId, client.id);
+    this.registerSessionSocket(message.roomId, message.sessionId, message.peerId, client.id);
 
     try {
-      this.cancelPendingDisconnectCleanup(payload.roomId, payload.sessionId);
-      await this.updatePeerPresence(payload.roomId, payload.sessionId, payload.peerId, "online");
-      await this.rememberRecentRoom(payload.roomId, payload.sessionId);
+      this.cancelPendingDisconnectCleanup(message.roomId, message.sessionId);
+      await this.updatePeerPresence(message.roomId, message.sessionId, message.peerId, "online");
+      await this.rememberRecentRoom(message.roomId, message.sessionId);
       let snapshot: RoomSnapshot;
       try {
-        snapshot = await this.roomService.getAccessibleRoomSnapshot(payload.roomId, [], payload.sessionId);
+        snapshot = await this.roomService.getAccessibleRoomSnapshot(message.roomId, [], message.sessionId);
       } catch {
-        client.emit("room.snapshot.missing", { roomId: payload.roomId });
+        client.emit("room.snapshot.missing", { roomId: message.roomId });
         return { ok: false };
       }
-      this.metrics.bindRealtimeSocket(client.id, payload.roomId);
+      this.metrics.bindRealtimeSocket(client.id, message.roomId);
       // Defer the snapshot emit to the next macrotask so the subscribe ack
       // response is flushed before the (potentially large) snapshot payload.
       setImmediate(() => {
         client.emit("room.snapshot", snapshot);
       });
-      await this.emitAvailabilitySnapshot(payload.roomId, client);
-      this.flushPendingPeerSignals(payload.roomId, payload.peerId);
+      await this.emitAvailabilitySnapshot(message.roomId, client);
+      this.flushPendingPeerSignals(message.roomId, message.peerId);
       return this.buildSubscribeAck(snapshot, recoveryGeneration);
     } catch (error) {
-      this.unregisterPeerSocket(payload.roomId, payload.peerId, client.id);
-      this.unregisterSessionSocket(payload.roomId, payload.sessionId, client.id);
-      this.clearPendingPeerSignals(payload.roomId, payload.peerId);
-      this.clearRecoveryGeneration(payload.roomId, payload.sessionId, payload.peerId);
-      client.leave(payload.roomId);
+      this.unregisterPeerSocket(message.roomId, message.peerId, client.id);
+      this.unregisterSessionSocket(message.roomId, message.sessionId, client.id);
+      this.clearPendingPeerSignals(message.roomId, message.peerId);
+      this.clearRecoveryGeneration(message.roomId, message.sessionId, message.peerId);
+      client.leave(message.roomId);
       client.data.roomId = undefined;
       client.data.sessionId = undefined;
       client.data.peerId = undefined;
@@ -572,23 +659,33 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   @SubscribeMessage("room.presence")
   async handleRoomPresence(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { roomId: string; sessionId: string; peerId: string }
+    @MessageBody() payload: RoomPresencePayload
   ) {
+    const parsed = roomPresencePayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid room presence payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const message = parsed.data;
+
     this.ensureBroadcasterServer();
-    this.assertRealtimeClient(client, payload.roomId);
+    this.assertRealtimeClient(client, message.roomId);
     this.assertRealtimeAvailable();
 
-    if (client.data.sessionId !== payload.sessionId || client.data.peerId !== payload.peerId) {
+    if (client.data.sessionId !== message.sessionId || client.data.peerId !== message.peerId) {
       throw new WsException("Presence mismatch.");
     }
 
     const refreshResult = await this.roomService.refreshRealtimePresence(
-      payload.roomId,
-      payload.sessionId,
-      payload.peerId
+      message.roomId,
+      message.sessionId,
+      message.peerId
     );
     if (refreshResult.changed) {
-      await this.roomRealtimePublisher.emitTopologySnapshot(payload.roomId);
+      await this.roomRealtimePublisher.emitTopologySnapshot(message.roomId);
     }
     return { ok: true };
   }
@@ -596,32 +693,43 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   @SubscribeMessage("room.unsubscribe")
   handleRoomUnsubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { roomId: string }
+    @MessageBody() payload: RoomUnsubscribePayload
   ) {
+    const parsed = roomUnsubscribePayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid room unsubscribe payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const message = parsed.data;
+
+    this.assertRealtimeClient(client, message.roomId);
     const sessionId = client.data.sessionId as string | undefined;
     const peerId = client.data.peerId as string | undefined;
-    const isActiveSessionSocket = this.isActiveSessionSocket(payload.roomId, sessionId, client.id);
+    const isActiveSessionSocket = this.isActiveSessionSocket(message.roomId, sessionId, client.id);
 
-    this.unregisterPeerSocket(payload.roomId, peerId, client.id);
-    this.unregisterSessionSocket(payload.roomId, sessionId, client.id);
+    this.unregisterPeerSocket(message.roomId, peerId, client.id);
+    this.unregisterSessionSocket(message.roomId, sessionId, client.id);
     this.metrics.unbindRealtimeSocket(client.id);
     if (sessionId && isActiveSessionSocket) {
-      this.cancelPendingDisconnectCleanup(payload.roomId, sessionId);
+      this.cancelPendingDisconnectCleanup(message.roomId, sessionId);
     }
-    client.leave(payload.roomId);
+    client.leave(message.roomId);
     if (sessionId && isActiveSessionSocket) {
       void this.updatePeerPresence(
-        payload.roomId,
+        message.roomId,
         sessionId,
         null,
         "offline"
       );
     }
     if (peerId) {
-      this.clearPeerAvailability(payload.roomId, peerId);
-      this.clearPendingPeerSignals(payload.roomId, peerId);
+      this.clearPeerAvailability(message.roomId, peerId);
+      this.clearPendingPeerSignals(message.roomId, peerId);
     }
-    this.clearRecoveryGeneration(payload.roomId, sessionId, peerId);
+    this.clearRecoveryGeneration(message.roomId, sessionId, peerId);
     client.data.roomId = undefined;
     client.data.sessionId = undefined;
     client.data.peerId = undefined;

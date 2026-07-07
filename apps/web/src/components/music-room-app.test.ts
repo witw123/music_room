@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import {
   getCachedFullLocalPlaybackLoadKey,
+  getCachedFullLocalPlaybackLoadMissKey,
   getPlaybackSourceInitializationKey,
   hasPlayableFullLocalPlaybackTrack,
   resolveCachedFullLocalPlaybackLoadTarget,
+  shouldNotifyCachedFullLocalPlaybackLoadMiss,
   runPlaybackMutationAfterLocalPrime,
   selectFullLocalPlaybackTracks,
   shouldClearCachedFullLocalPlaybackTrack,
@@ -148,6 +150,19 @@ describe("room page cached full-local playback boundary", () => {
     expect(appSource).not.toContain("cachedFullLocalPlaybackLoadTargetRef");
     expect(appSource).not.toContain("replaceCachedFullLocalPlaybackTrack");
     expect(cachedPlaybackSource).toContain("export function useRoomCachedFullLocalPlayback");
+  });
+
+  it("retries cached full-local file loading when the cache library refreshes for the same playback track", () => {
+    const cachedPlaybackSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "room/hooks/use-room-cached-full-local-playback.ts"),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const effectBlocks = [...cachedPlaybackSource.matchAll(/useEffect\(\(\) => \{[\s\S]*?cachedTrackFile[\s\S]*?\n\s*\}, \[\n(?<deps>[\s\S]*?)\n\s*\]\);/g)];
+    const loadEffectDeps = effectBlocks
+      .map((match) => match.groups?.deps ?? "")
+      .find((deps) => deps.includes("cachedFullLocalPlaybackLoadKey"));
+
+    expect(loadEffectDeps).toContain("cacheLibraryTracks");
   });
 });
 
@@ -374,7 +389,7 @@ describe("getPlaybackSourceInitializationKey", () => {
     ).toBe(false);
   });
 
-  it("keeps the current source when full cache becomes playable during the same surface", () => {
+  it("reinitializes the playback source when full cache becomes playable during the same surface", () => {
     const pendingCacheKey = getPlaybackSourceInitializationKey({
       playbackSurfaceKey: "track_cached|host|1",
       currentPlaybackTrackId: "track_cached",
@@ -407,7 +422,7 @@ describe("getPlaybackSourceInitializationKey", () => {
         previousInitializationKey: pendingCacheKey,
         nextInitializationKey: readyCacheKey
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
@@ -454,6 +469,55 @@ describe("resolveCachedFullLocalPlaybackLoadTarget", () => {
 
     expect(getCachedFullLocalPlaybackLoadKey(firstTarget)).toBe("track_cached:hash_cached");
     expect(getCachedFullLocalPlaybackLoadKey(refreshedTarget)).toBe("track_cached:hash_cached");
+  });
+});
+
+describe("cached full-local playback load miss recovery", () => {
+  it("notifies playback-demand caching once when cache metadata exists but the file cannot be loaded", () => {
+    const target = {
+      trackId: "track_cached",
+      fileHash: "hash_cached",
+      cachedFileHash: "hash_cached",
+      roomTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        durationMs: 120_000,
+        sizeBytes: 48_000_000
+      }
+    };
+    const notifiedMissKeys = new Set<string>();
+    const missKey = getCachedFullLocalPlaybackLoadMissKey(target);
+
+    expect(missKey).toBe("track_cached:hash_cached:hash_cached");
+    expect(
+      shouldNotifyCachedFullLocalPlaybackLoadMiss({
+        target,
+        cachedTrackFileLoaded: false,
+        notifiedMissKeys
+      })
+    ).toBe(true);
+    notifiedMissKeys.add(missKey!);
+    expect(
+      shouldNotifyCachedFullLocalPlaybackLoadMiss({
+        target,
+        cachedTrackFileLoaded: false,
+        notifiedMissKeys
+      })
+    ).toBe(false);
+    expect(
+      shouldNotifyCachedFullLocalPlaybackLoadMiss({
+        target: null,
+        cachedTrackFileLoaded: false,
+        notifiedMissKeys
+      })
+    ).toBe(false);
+    expect(
+      shouldNotifyCachedFullLocalPlaybackLoadMiss({
+        target,
+        cachedTrackFileLoaded: true,
+        notifiedMissKeys
+      })
+    ).toBe(false);
   });
 });
 

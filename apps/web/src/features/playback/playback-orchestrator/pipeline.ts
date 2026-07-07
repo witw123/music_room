@@ -201,6 +201,39 @@ export function resolveLocalPlaybackPositionMs(input: {
     : null;
 }
 
+export function resolveLocalPlaybackClockSeconds(input: {
+  activePlaybackSource: ProgressivePlaybackSource | "remote";
+  pcmCurrentTimeSeconds: number | null | undefined;
+  audioCurrentTimeSeconds: number | null | undefined;
+}) {
+  if (
+    !isSlidingWindowPlaybackSource(input.activePlaybackSource) &&
+    input.activePlaybackSource !== "full-local"
+  ) {
+    return null;
+  }
+
+  if (
+    input.activePlaybackSource === "full-local" &&
+    typeof input.audioCurrentTimeSeconds === "number" &&
+    Number.isFinite(input.audioCurrentTimeSeconds)
+  ) {
+    return input.audioCurrentTimeSeconds;
+  }
+
+  if (
+    typeof input.pcmCurrentTimeSeconds === "number" &&
+    Number.isFinite(input.pcmCurrentTimeSeconds)
+  ) {
+    return input.pcmCurrentTimeSeconds;
+  }
+
+  return typeof input.audioCurrentTimeSeconds === "number" &&
+    Number.isFinite(input.audioCurrentTimeSeconds)
+    ? input.audioCurrentTimeSeconds
+    : null;
+}
+
 export function resolveTransportGovernorMode(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
@@ -1857,7 +1890,7 @@ export function hasSufficientBackingForFullLocalWarmup(input: {
   aheadBufferedMs: number;
   requiredAheadMs: number;
 }) {
-  if (input.progressiveEngineType === "none") {
+  if (input.progressiveEngineType === "none" || input.progressiveEngineType === "pcm") {
     return true;
   }
 
@@ -1959,7 +1992,7 @@ export function resolveIdleFullLocalUpgradeArmState(input: {
   comfortBufferMs: number;
 }) {
   return (
-    input.progressiveEngineType === "none" &&
+    (input.progressiveEngineType === "none" || input.progressiveEngineType === "pcm") &&
     input.canUseFullLocalForPlaybackSession &&
     input.fullLocalBlockedReason === null &&
     input.localTakeoverAllowed &&
@@ -1985,7 +2018,7 @@ export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: 
 }) {
   if (
     !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    input.progressiveEngineType !== "none"
+    (input.progressiveEngineType !== "none" && input.progressiveEngineType !== "pcm")
   ) {
     return false;
   }

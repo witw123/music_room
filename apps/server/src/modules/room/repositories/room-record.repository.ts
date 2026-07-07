@@ -2,6 +2,7 @@ import { RedisService } from "../../../infra/redis/redis.service";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
 import {
   deserializeRoomRecord,
+  roomRecordSchema,
   serializePlaybackForPersistence,
   type RoomRecord
 } from "../room.types";
@@ -30,16 +31,19 @@ export class RoomRecordRepository {
       });
 
       if (persisted) {
-        const record = deserializeRoomRecord(persisted);
-        this.rooms.set(record.room.id, cloneRoomRecord(record));
-        return cloneRoomRecord(record).room;
+        const record = parseRoomRecord(deserializeRoomRecord(persisted));
+        if (record) {
+          this.rooms.set(record.room.id, cloneRoomRecord(record));
+          return cloneRoomRecord(record).room;
+        }
       }
     }
 
-    const redisRecord = await this.redis.getJson<RoomRecord>(this.joinCodeCacheKey(code));
-    if (redisRecord) {
-      this.rooms.set(redisRecord.room.id, cloneRoomRecord(redisRecord));
-      return cloneRoomRecord(redisRecord).room;
+    const redisRecord = await this.redis.getJson<unknown>(this.joinCodeCacheKey(code));
+    const parsedRedisRecord = parseRoomRecord(redisRecord);
+    if (parsedRedisRecord && parsedRedisRecord.room.joinCode === code) {
+      this.rooms.set(parsedRedisRecord.room.id, cloneRoomRecord(parsedRedisRecord));
+      return cloneRoomRecord(parsedRedisRecord).room;
     }
 
     throw new Error(`Room not found for join code: ${joinCode}`);
@@ -58,16 +62,19 @@ export class RoomRecordRepository {
       });
 
       if (persisted) {
-        const record = deserializeRoomRecord(persisted);
-        this.rooms.set(roomId, cloneRoomRecord(record));
-        return cloneRoomRecord(record);
+        const record = parseRoomRecord(deserializeRoomRecord(persisted));
+        if (record) {
+          this.rooms.set(roomId, cloneRoomRecord(record));
+          return cloneRoomRecord(record);
+        }
       }
     }
 
-    const redisRecord = await this.redis.getJson<RoomRecord>(this.roomCacheKey(roomId));
-    if (redisRecord) {
-      this.rooms.set(roomId, cloneRoomRecord(redisRecord));
-      return cloneRoomRecord(redisRecord);
+    const redisRecord = await this.redis.getJson<unknown>(this.roomCacheKey(roomId));
+    const parsedRedisRecord = parseRoomRecord(redisRecord);
+    if (parsedRedisRecord && parsedRedisRecord.room.id === roomId) {
+      this.rooms.set(roomId, cloneRoomRecord(parsedRedisRecord));
+      return cloneRoomRecord(parsedRedisRecord);
     }
 
     throw new Error(`Room not found: ${roomId}`);
@@ -126,7 +133,10 @@ export class RoomRecordRepository {
       });
 
       for (const item of persisted) {
-        const record = deserializeRoomRecord(item);
+        const record = parseRoomRecord(deserializeRoomRecord(item));
+        if (!record) {
+          continue;
+        }
         this.rooms.set(record.room.id, cloneRoomRecord(record));
         records.set(record.room.id, cloneRoomRecord(record));
       }
@@ -138,8 +148,9 @@ export class RoomRecordRepository {
         continue;
       }
 
-      const record = await this.redis.getJson<RoomRecord>(this.roomCacheKey(roomId));
-      if (!record) {
+      const rawRecord = await this.redis.getJson<unknown>(this.roomCacheKey(roomId));
+      const record = parseRoomRecord(rawRecord);
+      if (!record || record.room.id !== roomId) {
         await this.redis.removeFromSet(this.roomRegistryKey, roomId);
         continue;
       }
@@ -250,6 +261,11 @@ export class RoomRecordRepository {
 
 function cloneRoomRecord(record: RoomRecord): RoomRecord {
   return structuredClone(record);
+}
+
+function parseRoomRecord(value: unknown): RoomRecord | null {
+  const parsed = roomRecordSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

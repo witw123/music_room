@@ -4,6 +4,20 @@ import type { Playlist } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RoomService } from "../room/room.service";
 
+type PersistedPlaylistRecord = {
+  id: string;
+  ownerId: string;
+  roomId?: string | null;
+  title: string;
+  description: string | null;
+  coverUrl: string | null;
+  tags: unknown;
+  isCollaborative: boolean;
+  trackIds: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 @Injectable()
 export class PlaylistService {
   private readonly playlists = new Map<string, Playlist>();
@@ -21,8 +35,10 @@ export class PlaylistService {
         orderBy: { updatedAt: "desc" }
       });
 
-      const playlists = persisted.map((item: any) => this.deserializePlaylist(item));
-      persisted.forEach((item: any) => {
+      const playlists = (persisted as PersistedPlaylistRecord[]).map((item) =>
+        this.deserializePlaylist(item)
+      );
+      (persisted as PersistedPlaylistRecord[]).forEach((item) => {
         this.playlistRoomIds.set(item.id, item.roomId ?? null);
       });
       playlists.forEach((playlist: Playlist) => this.playlists.set(playlist.id, playlist));
@@ -258,9 +274,9 @@ export class PlaylistService {
       title: item.title,
       description: item.description,
       coverUrl: item.coverUrl,
-      tags: item.tags as string[],
+      tags: toStringList(item.tags),
       isCollaborative: item.isCollaborative,
-      trackIds: item.trackIds as string[],
+      trackIds: toStringList(item.trackIds),
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString()
     };
@@ -286,4 +302,10 @@ export class PlaylistService {
 
     throw new Error(`Playlist not found: ${playlistId}`);
   }
+}
+
+function toStringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+    : [];
 }

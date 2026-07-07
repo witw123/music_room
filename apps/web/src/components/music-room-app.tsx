@@ -24,11 +24,13 @@ import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
 
 export {
   getCachedFullLocalPlaybackLoadKey,
+  getCachedFullLocalPlaybackLoadMissKey,
   getPlaybackSourceInitializationKey,
   hasPlayableFullLocalPlaybackTrack,
   resolveCachedFullLocalPlaybackLoadTarget,
   resolveStableCurrentTrack,
   selectFullLocalPlaybackTracks,
+  shouldNotifyCachedFullLocalPlaybackLoadMiss,
   shouldClearCachedFullLocalPlaybackTrack,
   shouldInitializePlaybackSource
 } from "@/components/room/hooks/use-room-page-derived";
@@ -121,7 +123,8 @@ export function MusicRoomApp({
     loadCachedLibraryTrackFile: uploads.loadCachedLibraryTrackFile,
     roomSnapshot,
     currentTrack: pageDerived.currentTrack,
-    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId
+    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
+    onCachedFullLocalPlaybackLoadMiss: uploads.startPlaybackDemandCacheDownload
   });
 
   const currentProgressiveEngineTypeForSource = useCurrentProgressiveEngineTypeForSource({

@@ -331,7 +331,8 @@ export function getPlaybackSourceInitializationKey(input: {
     input.currentTrack?.id ?? "missing-track",
     input.currentTrack?.fileHash ?? "missing-hash",
     format,
-    input.currentProgressiveEngineTypeForSource ?? "none"
+    input.currentProgressiveEngineTypeForSource ?? "none",
+    input.hasPlayableFullLocalTrack ? "full-local-ready" : "full-local-pending"
   ].join("|");
 }
 
@@ -346,6 +347,21 @@ export function getCachedFullLocalPlaybackLoadKey(
   target: CachedFullLocalPlaybackLoadTarget | null | undefined
 ) {
   return target ? `${target.trackId}:${target.fileHash}` : null;
+}
+
+export function getCachedFullLocalPlaybackLoadMissKey(
+  target: CachedFullLocalPlaybackLoadTarget | null | undefined
+) {
+  return target ? `${target.trackId}:${target.fileHash}:${target.cachedFileHash}` : null;
+}
+
+export function shouldNotifyCachedFullLocalPlaybackLoadMiss(input: {
+  target: CachedFullLocalPlaybackLoadTarget | null | undefined;
+  cachedTrackFileLoaded: boolean;
+  notifiedMissKeys: ReadonlySet<string>;
+}) {
+  const missKey = getCachedFullLocalPlaybackLoadMissKey(input.target);
+  return !!missKey && !input.cachedTrackFileLoaded && !input.notifiedMissKeys.has(missKey);
 }
 
 export function resolveCachedFullLocalPlaybackLoadTarget(input: {

@@ -1,10 +1,18 @@
+import { queueItemSchema, roomSchema, trackMetaSchema } from "@music-room/shared";
 import type { PlaybackSnapshot, QueueItem, Room, RoomMember, TrackMeta } from "@music-room/shared";
+import { z } from "zod";
 
 export type RoomRecord = {
   room: Room;
   tracks: TrackMeta[];
   queue: QueueItem[];
 };
+
+export const roomRecordSchema = z.object({
+  room: roomSchema,
+  tracks: z.array(trackMetaSchema),
+  queue: z.array(queueItemSchema)
+});
 
 export type PersistedRoomRecord = {
   id: string;

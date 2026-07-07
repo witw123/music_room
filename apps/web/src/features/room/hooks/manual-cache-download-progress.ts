@@ -186,7 +186,7 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
         : null;
     const playbackSourceMember =
       playbackSourcePeerId ? membersByPeerId.get(playbackSourcePeerId) ?? null : null;
-    const implicitProviders = [owner, playbackSourceMember].filter(
+    const implicitProviders = [playbackSourceMember, owner].filter(
       (member, index, members): member is NonNullable<typeof member> =>
         !!member &&
         members.findIndex((candidate) => candidate?.peerId === member.peerId) === index

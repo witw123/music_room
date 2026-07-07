@@ -55,6 +55,7 @@ export {
   resolveMainPlaybackPreflight,
   resolveLocalAudioDiagnostics,
   resolveLocalPlaybackReady,
+  resolveLocalPlaybackClockSeconds,
   resolveLocalPlaybackPositionMs,
   resolveListenerMediaConnectionState,
   resolveMainPausedPlaybackAction,

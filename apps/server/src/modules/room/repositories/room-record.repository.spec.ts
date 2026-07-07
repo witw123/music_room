@@ -46,7 +46,9 @@ function createRedisMock() {
   return {
     addToSet: jest.fn(),
     delete: jest.fn(),
+    getSetMembers: jest.fn(async (): Promise<string[]> => []),
     getJson: jest.fn(),
+    getString: jest.fn(),
     removeFromSet: jest.fn(),
     setJson: jest.fn(),
     setString: jest.fn()
@@ -186,5 +188,119 @@ describe("RoomRecordRepository", () => {
     await expect(repository.deleteRecord(existingRecord)).rejects.toThrow("Redis unavailable");
 
     expect(rooms.has("room_1")).toBe(true);
+  });
+
+  it("rejects invalid redis room cache records before hydrating memory", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => false)
+    };
+    const redis = createRedisMock();
+    redis.getJson.mockResolvedValueOnce({
+      room: {
+        id: "room_1"
+      },
+      tracks: [],
+      queue: []
+    });
+    const rooms = new Map<string, RoomRecord>();
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.getRoomRecord("room_1")).rejects.toThrow("Room not found: room_1");
+
+    expect(rooms.has("room_1")).toBe(false);
+  });
+
+  it("rejects invalid database room records before hydrating memory", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        findUnique: jest.fn(async () => ({
+          id: "room_1",
+          hostId: "host_1",
+          joinCode: "ABC123",
+          visibility: "public",
+          presenceRevision: 0,
+          roomRevision: 1,
+          playback: {
+            status: "paused",
+            currentTrackId: null,
+            currentQueueItemId: null,
+            sourceSessionId: "host_1",
+            sourcePeerId: null,
+            sourceTrackId: null,
+            positionMs: 0,
+            startedAt: null,
+            queueVersion: 1,
+            playbackRevision: 1,
+            mediaEpoch: 0
+          },
+          members: [
+            {
+              id: "host_1",
+              nickname: "Host",
+              role: "host",
+              joinedAt: "2026-01-01T00:00:00.000Z",
+              peerId: null,
+              presenceState: "offline"
+            }
+          ],
+          tracks: [{ id: "track_bad" }],
+          queue: []
+        }))
+      }
+    };
+    const redis = createRedisMock();
+    const rooms = new Map<string, RoomRecord>();
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.getRoomRecord("room_1")).rejects.toThrow("Room not found: room_1");
+
+    expect(rooms.has("room_1")).toBe(false);
+  });
+
+  it("removes invalid redis room ids from the recoverable registry", async () => {
+    const validRecord = createRoomRecord(2);
+    validRecord.room.id = "room_valid";
+    const prisma = {
+      isAvailable: jest.fn(() => false)
+    };
+    const redis = createRedisMock();
+    redis.getSetMembers.mockResolvedValueOnce(["room_bad", "room_valid"]);
+    redis.getJson
+      .mockResolvedValueOnce({
+        room: { id: "room_bad" },
+        tracks: [],
+        queue: []
+      })
+      .mockResolvedValueOnce(validRecord);
+    const rooms = new Map<string, RoomRecord>();
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.listRecoverableRecords()).resolves.toEqual([validRecord]);
+
+    expect(redis.removeFromSet).toHaveBeenCalledWith("music-room:rooms", "room_bad");
+    expect(rooms.has("room_bad")).toBe(false);
+    expect(rooms.has("room_valid")).toBe(true);
   });
 });

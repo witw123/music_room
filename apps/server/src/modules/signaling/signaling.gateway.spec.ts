@@ -55,6 +55,7 @@ function createSnapshot(input?: {
         positionMs: 0,
         startedAt: null,
         queueVersion: 1,
+        playbackRevision: 1,
         mediaEpoch: 0
       }
     },
@@ -359,18 +360,265 @@ describe("SignalingGateway", () => {
     expect(redisService.subscribe).toHaveBeenCalled();
 
     const roomEmit = (gateway.server.to("room_1").emit as jest.Mock);
+    const snapshot = createSnapshot();
+    handlers.get("music-room:room-snapshot")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      snapshot
+    });
+
+    expect(roomEmit).toHaveBeenCalledWith("room.snapshot", snapshot);
+  });
+
+  it("unsubscribes every redis realtime channel when the module is destroyed", async () => {
+    const unsubscribeFns: jest.Mock[] = [];
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async () => {
+          const unsubscribe = jest.fn();
+          unsubscribeFns.push(unsubscribe);
+          return unsubscribe;
+        })
+      })
+    });
+    attachServerMock(gateway);
+
+    gateway.afterInit();
+    await Promise.resolve();
+    await Promise.resolve();
+    gateway.onModuleDestroy();
+
+    expect(unsubscribeFns).toHaveLength(10);
+    for (const unsubscribe of unsubscribeFns) {
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("ignores invalid redis room snapshots before forwarding them", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+
+    gateway.afterInit();
     handlers.get("music-room:room-snapshot")?.({
       sourceId: "other-instance",
       roomId: "room_1",
       snapshot: { room: { id: "room_1" }, tracks: [], queue: [], playlists: [] }
     });
-
-    expect(roomEmit).toHaveBeenCalledWith("room.snapshot", {
-      room: { id: "room_1" },
-      tracks: [],
-      queue: [],
-      playlists: []
+    handlers.get("music-room:room-snapshot")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      snapshot: createSnapshot({ roomId: "room_2" })
     });
+
+    expect(emit).not.toHaveBeenCalledWith("room.snapshot", expect.anything());
+  });
+
+  it("ignores invalid or mismatched redis playback patches before forwarding them", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+    const snapshot = createSnapshot();
+
+    gateway.afterInit();
+    handlers.get("music-room:room-playback-patch")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: {
+        roomId: "room_1",
+        playback: { ...snapshot.room.playback, positionMs: -1 },
+        updatedAt: new Date().toISOString()
+      }
+    });
+    handlers.get("music-room:room-playback-patch")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: {
+        roomId: "room_2",
+        playback: snapshot.room.playback,
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+    expect(emit).not.toHaveBeenCalledWith("room.playback.patch", expect.anything());
+  });
+
+  it.each([
+    {
+      channel: "music-room:room-queue-patch",
+      event: "room.queue.patch",
+      invalidPayload: (snapshot: ReturnType<typeof createSnapshot>) => ({
+        roomId: "room_1",
+        queue: [],
+        playback: { ...snapshot.room.playback, positionMs: -1 },
+        updatedAt: new Date().toISOString()
+      }),
+      mismatchedPayload: (snapshot: ReturnType<typeof createSnapshot>) => ({
+        roomId: "room_2",
+        queue: [],
+        playback: snapshot.room.playback,
+        updatedAt: new Date().toISOString()
+      })
+    },
+    {
+      channel: "music-room:room-presence-patch",
+      event: "room.presence.patch",
+      invalidPayload: (snapshot: ReturnType<typeof createSnapshot>) => ({
+        roomId: "room_1",
+        members: [{ id: "guest_host" }],
+        playback: snapshot.room.playback,
+        presenceRevision: 1,
+        updatedAt: new Date().toISOString()
+      }),
+      mismatchedPayload: (snapshot: ReturnType<typeof createSnapshot>) => ({
+        roomId: "room_2",
+        members: snapshot.room.members,
+        playback: snapshot.room.playback,
+        presenceRevision: 1,
+        updatedAt: new Date().toISOString()
+      })
+    },
+    {
+      channel: "music-room:room-library-patch",
+      event: "room.library.patch",
+      invalidPayload: (snapshot: ReturnType<typeof createSnapshot>) => ({
+        roomId: "room_1",
+        tracks: [{ id: "track_1" }],
+        queue: [],
+        playback: snapshot.room.playback,
+        updatedAt: new Date().toISOString()
+      }),
+      mismatchedPayload: (snapshot: ReturnType<typeof createSnapshot>) => ({
+        roomId: "room_2",
+        tracks: [],
+        queue: [],
+        playback: snapshot.room.playback,
+        updatedAt: new Date().toISOString()
+      })
+    }
+  ])(
+    "ignores invalid or mismatched redis $event payloads before forwarding them",
+    ({ channel, event, invalidPayload, mismatchedPayload }) => {
+      const handlers = new Map<string, (payload: unknown) => void>();
+      const { gateway } = createGateway({
+        redisService: createRedisServiceMock({
+          subscribe: jest.fn(async (channelName: string, next: (payload: unknown) => void) => {
+            handlers.set(channelName, next);
+          })
+        })
+      });
+      const { emit } = attachServerMock(gateway);
+      const snapshot = createSnapshot();
+
+      gateway.afterInit();
+      handlers.get(channel)?.({
+        sourceId: "other-instance",
+        roomId: "room_1",
+        payload: invalidPayload(snapshot)
+      });
+      handlers.get(channel)?.({
+        sourceId: "other-instance",
+        roomId: "room_1",
+        payload: mismatchedPayload(snapshot)
+      });
+
+      expect(emit).not.toHaveBeenCalledWith(event, expect.anything());
+    }
+  );
+
+  it("ignores invalid redis room deletion and snapshot-missing envelopes before cleanup", () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway, trackAvailabilityRegistry, metrics } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+    const availability = {
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_cached",
+      nickname: "Cached",
+      totalChunks: 4,
+      chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3],
+      source: "local_cache" as const,
+      announcedAt: new Date().toISOString()
+    };
+    trackAvailabilityRegistry.setAnnouncement("room_1", availability);
+    metrics.bindRealtimeSocket("socket_cached", "room_1");
+
+    gateway.afterInit();
+    handlers.get("music-room:room-deleted")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      trackIds: "track_1"
+    });
+    handlers.get("music-room:room-snapshot-missing")?.({
+      sourceId: "other-instance",
+      roomId: ""
+    });
+
+    expect(emit).not.toHaveBeenCalledWith("room.deleted", expect.anything());
+    expect(emit).not.toHaveBeenCalledWith("room.snapshot.missing", expect.anything());
+    expect(trackAvailabilityRegistry.getTrackAnnouncements("room_1", "track_1")).toEqual([
+      availability
+    ]);
+    expect(metrics.snapshot()).toEqual(expect.objectContaining({ activeRooms: 1 }));
+  });
+
+  it("ignores invalid redis peer signals before routing or queueing them", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+
+    gateway.afterInit();
+    await gateway.handleRoomSubscribe(
+      createClient({ id: "socket_peer_b" }) as never,
+      {
+        roomId: "room_1",
+        sessionId: "guest_b",
+        peerId: "peer_b"
+      }
+    );
+    (gateway.server.to as jest.Mock).mockClear();
+    emit.mockClear();
+
+    handlers.get("music-room:peer-signal")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: {
+        roomId: "room_1",
+        fromPeerId: "peer_a",
+        toPeerId: "peer_b",
+        channelKind: "media",
+        type: "offer",
+        payload: {}
+      }
+    });
+
+    expect(gateway.server.to).not.toHaveBeenCalledWith("socket_peer_b");
+    expect(emit).not.toHaveBeenCalledWith("peer.signal", expect.anything());
   });
 
   it("forwards peer signals received from redis only to the subscribed target peer", async () => {
@@ -458,6 +706,43 @@ describe("SignalingGateway", () => {
     );
   });
 
+  it("rejects invalid piece availability before broadcasting or persisting it", async () => {
+    const { gateway, redisService } = createGateway();
+    const emit = jest.fn();
+    const client = {
+      ...createClient({
+        roomId: "room_1",
+        peerId: "peer_1",
+        isRealtimeAuthenticated: true
+      }),
+      to: jest.fn().mockReturnValue({ emit })
+    };
+
+    await expect(
+      gateway.handlePieceAvailability(client as never, {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_1",
+        nickname: "Host",
+        totalChunks: 4,
+        chunkSize: 0,
+        availableChunks: [0],
+        source: "live_upload",
+        announcedAt: new Date().toISOString()
+      } as never)
+    ).rejects.toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED"
+      }
+    });
+
+    expect(emit).not.toHaveBeenCalled();
+    expect(redisService.publish).not.toHaveBeenCalledWith(
+      "music-room:piece-availability",
+      expect.anything()
+    );
+  });
+
   it("publishes peer signals so they can cross server instances", async () => {
     const { gateway, redisService } = createGateway();
     attachServerMock(gateway);
@@ -489,6 +774,39 @@ describe("SignalingGateway", () => {
           sequence: expect.any(Number)
         })
       })
+    );
+  });
+
+  it("rejects invalid peer signals before routing or publishing them", async () => {
+    const { gateway, redisService } = createGateway();
+    const { emit } = attachServerMock(gateway);
+
+    await expect(
+      gateway.handleSignal(
+        createClient({
+          roomId: "room_1",
+          peerId: "peer_a",
+          isRealtimeAuthenticated: true
+        }) as never,
+        {
+          roomId: "room_1",
+          fromPeerId: "peer_a",
+          toPeerId: "peer_b",
+          channelKind: "media",
+          type: "offer",
+          payload: {}
+        } as never
+      )
+    ).rejects.toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED"
+      }
+    });
+
+    expect(emit).not.toHaveBeenCalledWith("peer.signal", expect.anything());
+    expect(redisService.publish).not.toHaveBeenCalledWith(
+      "music-room:peer-signal",
+      expect.anything()
     );
   });
 
@@ -661,6 +979,87 @@ describe("SignalingGateway", () => {
       }
     });
     expect(emit).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid room subscribe payloads before mutating realtime presence", async () => {
+    const { gateway, roomService } = createGateway();
+    const client = createClient();
+
+    await expect(
+      gateway.handleRoomSubscribe(client as never, {
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: 123
+      } as never)
+    ).rejects.toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED"
+      }
+    });
+
+    expect(roomService.updatePeerPresence).not.toHaveBeenCalled();
+    expect(client.join).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid room presence payloads before refreshing presence", async () => {
+    const { gateway, roomService } = createGateway();
+    const client = createClient({
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      isRealtimeAuthenticated: true
+    });
+
+    await expect(
+      gateway.handleRoomPresence(client as never, {
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: 123
+      } as never)
+    ).rejects.toMatchObject({
+      error: {
+        code: "VALIDATION_FAILED"
+      }
+    });
+
+    expect(roomService.refreshRealtimePresence).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid room unsubscribe payloads before clearing local peer state", () => {
+    const { gateway, trackAvailabilityRegistry } = createGateway();
+    const { emit } = attachServerMock(gateway);
+    const availability = {
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_host",
+      nickname: "Host",
+      totalChunks: 4,
+      chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3],
+      source: "local_cache" as const,
+      announcedAt: new Date().toISOString()
+    };
+    trackAvailabilityRegistry.setAnnouncement("room_1", availability);
+    const client = createClient({
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      isRealtimeAuthenticated: true
+    });
+
+    expect(() =>
+      gateway.handleRoomUnsubscribe(client as never, { roomId: 123 } as never)
+    ).toThrow(expect.objectContaining({
+      error: expect.objectContaining({
+        code: "VALIDATION_FAILED"
+      })
+    }));
+
+    expect(client.leave).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalledWith("piece.availability.clear", expect.anything());
+    expect(trackAvailabilityRegistry.getTrackAnnouncements("room_1", "track_1")).toEqual([
+      availability
+    ]);
   });
 
   it("rejects room subscriptions when redis realtime is unavailable", async () => {
@@ -878,6 +1277,79 @@ describe("SignalingGateway", () => {
     expect(client.emit).toHaveBeenCalledWith("piece.availability", redisAvailability);
   });
 
+  it("ignores invalid piece availability received from redis before broadcasting or caching it", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway, redisService, trackAvailabilityRegistry } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+
+    gateway.afterInit();
+    handlers.get("music-room:piece-availability")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: {
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_bad",
+        nickname: "Bad",
+        totalChunks: 4,
+        chunkSize: 0,
+        availableChunks: [0],
+        source: "local_cache",
+        announcedAt: new Date().toISOString()
+      }
+    });
+
+    expect(emit).not.toHaveBeenCalledWith("piece.availability", expect.anything());
+    expect(trackAvailabilityRegistry.getTrackAnnouncements("room_1", "track_1")).toEqual([]);
+    expect(redisService.setJson).not.toHaveBeenCalled();
+  });
+
+  it("ignores mismatched redis availability clear events before removing cached providers", async () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway, trackAvailabilityRegistry } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+    const availability = {
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_cached",
+      nickname: "Cached",
+      totalChunks: 4,
+      chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3],
+      source: "local_cache" as const,
+      announcedAt: new Date().toISOString()
+    };
+    trackAvailabilityRegistry.setAnnouncement("room_1", availability);
+
+    gateway.afterInit();
+    handlers.get("music-room:piece-availability-clear")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: {
+        roomId: "room_2",
+        ownerPeerId: "peer_cached",
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+    expect(emit).not.toHaveBeenCalledWith("piece.availability.clear", expect.anything());
+    expect(trackAvailabilityRegistry.getTrackAnnouncements("room_1", "track_1")).toEqual([
+      availability
+    ]);
+  });
+
   it("queues peer signals until the target peer subscribes, then flushes them with the active recovery generation", async () => {
     jest.useFakeTimers();
     const { gateway } = createGateway();
@@ -1060,6 +1532,39 @@ describe("SignalingGateway", () => {
     );
 
     expect(roomService.updatePeerPresence).not.toHaveBeenCalled();
+  });
+
+  it("rejects room unsubscribe payloads for a different room before clearing peer availability", async () => {
+    const { gateway, trackAvailabilityRegistry } = createGateway();
+    const { emit } = attachServerMock(gateway);
+    const otherRoomAvailability = {
+      roomId: "room_2",
+      trackId: "track_2",
+      ownerPeerId: "peer_host",
+      nickname: "Host",
+      totalChunks: 4,
+      chunkSize: 128 * 1024,
+      availableChunks: [0, 1, 2, 3],
+      source: "local_cache" as const,
+      announcedAt: new Date().toISOString()
+    };
+    trackAvailabilityRegistry.setAnnouncement("room_2", otherRoomAvailability);
+    const client = createClient({
+      id: "socket_host",
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      isRealtimeAuthenticated: true
+    });
+
+    expect(() =>
+      gateway.handleRoomUnsubscribe(client as never, { roomId: "room_2" })
+    ).toThrow("Unauthorized realtime request.");
+
+    expect(emit).not.toHaveBeenCalledWith("piece.availability.clear", expect.anything());
+    expect(trackAvailabilityRegistry.getTrackAnnouncements("room_2", "track_2")).toEqual([
+      otherRoomAvailability
+    ]);
   });
 
   it("ignores stale disconnect events from an older socket after the session has moved", async () => {
