@@ -262,6 +262,7 @@ export class ProgressivePcmEngine {
       this.keepAliveOscillator.start();
 
       this.audio.srcObject = this.destinationNode.stream;
+      this.audio.muted = false;
       this.audio.volume = 1;
       // Setting srcObject pauses the element per the HTML spec. The element
       // was primed during a user gesture, which grants sticky autoplay
@@ -831,6 +832,85 @@ export class ProgressivePcmEngine {
     };
   }
 
+  private async decodeCachedWavWindowAt(positionSeconds: number) {
+    if (!this.audioContext) {
+      return false;
+    }
+
+    // Parse the WAV header from chunk 0 if the linear path hasn't
+    // processed it yet (chunk 0 may just now have become available).
+    if (!this.wavHeader) {
+      const headerPiece = await getCachedPiece(
+        this.manifest.trackId,
+        this.peerId,
+        0,
+        {
+          fileHash: this.manifest.fileHash,
+          ownerKey: localCacheOwnerKey,
+          chunkSize: this.manifest.chunkSize
+        }
+      );
+      if (headerPiece) {
+        const headerBytes = new Uint8Array(headerPiece.payload);
+        const parsed = parseWavHeader(headerBytes);
+        if (parsed) {
+          this.wavHeader = parsed;
+          this.status = "ready";
+        }
+      }
+      if (!this.wavHeader) {
+        return false;
+      }
+    }
+
+    const header = this.wavHeader;
+    const currentChunkIndex = getChunkIndexForPositionMs(this.manifest, positionSeconds * 1000);
+    const startChunkIndex = Math.max(0, currentChunkIndex - 1);
+
+    const cachedWindow = await this.readCachedPieceWindow(
+      startChunkIndex,
+      maxPcmPlaybackWindowPiecesToDecode
+    );
+    if (!cachedWindow || cachedWindow.bytes.byteLength === 0) {
+      return false;
+    }
+
+    // Each chunk holds exactly chunkSize bytes of PCM data.  Process
+    // the cached bytes in chunk-sized slices to honour the original
+    // chunk boundaries for absolute-byte-offset calculations.
+    const chunkSize = this.manifest.chunkSize;
+    let decodedAny = false;
+    let byteOffset = 0;
+
+    for (
+      let chunkIndex = startChunkIndex;
+      chunkIndex < this.manifest.totalChunks &&
+      byteOffset < cachedWindow.bytes.byteLength;
+      chunkIndex += 1
+    ) {
+      const sliceEnd = Math.min(byteOffset + chunkSize, cachedWindow.bytes.byteLength);
+      const sliceBytes = sliceEnd - byteOffset;
+      if (sliceBytes < header.blockAlign) {
+        byteOffset = sliceEnd;
+        continue;
+      }
+
+      const payload = cachedWindow.bytes.subarray(byteOffset, sliceEnd);
+      const absoluteStartByte = header.dataOffset + chunkIndex * chunkSize;
+      const segment = this.createDecodedWavSegment(header, payload, absoluteStartByte);
+      if (segment) {
+        this.decodedSegments.push(segment);
+        decodedAny = true;
+      }
+      byteOffset = sliceEnd;
+    }
+
+    if (decodedAny) {
+      this.decodedSegments.sort((left, right) => left.startTimeSec - right.startTimeSec);
+    }
+    return decodedAny;
+  }
+
   private async decodeFlacPackets(packets: ProgressiveFlacFramePacket[]) {
     if (packets.length === 0 || !this.decoder) {
       return false;
@@ -973,7 +1053,9 @@ export class ProgressivePcmEngine {
         // playback until it went silent.
         let decodedWindow = false;
         if (!appended && !this.hasBufferedPosition(positionSeconds)) {
-          decodedWindow = await this.decodeCachedFlacWindowAt(positionSeconds);
+          decodedWindow = isWavTrack(this.manifest)
+            ? await this.decodeCachedWavWindowAt(positionSeconds)
+            : await this.decodeCachedFlacWindowAt(positionSeconds);
         }
         if (!appended && !decodedWindow) {
           break;

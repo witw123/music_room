@@ -731,28 +731,8 @@ function getLocalAudioPlaybackIssue(
     return `等待浏览器允许音频输出: ${cachePlayback.pendingPlaybackIntent}。`;
   }
 
-  if (cachePlayback.localAudioMuted) {
-    return "本地音频元素处于静音状态。";
-  }
-
-  if (cachePlayback.localAudioVolume === 0) {
-    return "本地音频音量为 0。";
-  }
-
   if (nativeBlobFullLocalReady || playingFullLocalReady) {
     return null;
-  }
-
-  if (cachePlayback.localAudioPaused === true) {
-    return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
-  }
-
-  if (cachePlayback.localAudioPaused === false && !hasPlayableOutput) {
-    return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
-  }
-
-  if (cachePlayback.localAudioPaused !== false) {
-    return "尚未确认本地音频元素已经开始播放。";
   }
 
   const shouldInspectPcmOutput =
@@ -786,6 +766,26 @@ function getLocalAudioPlaybackIssue(
     if ((cachePlayback.pcmScheduledSegmentCount ?? 0) <= 0) {
       return "PCM 引擎尚未调度音频帧到输出。";
     }
+  }
+
+  if (cachePlayback.localAudioMuted) {
+    return "本地音频元素处于静音状态。";
+  }
+
+  if (cachePlayback.localAudioVolume === 0) {
+    return "本地音频音量为 0。";
+  }
+
+  if (cachePlayback.localAudioPaused === true) {
+    return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
+  }
+
+  if (cachePlayback.localAudioPaused === false && !hasPlayableOutput) {
+    return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
+  }
+
+  if (cachePlayback.localAudioPaused !== false) {
+    return "尚未确认本地音频元素已经开始播放。";
   }
 
   return null;
@@ -886,7 +886,7 @@ export function getLocalPlaybackStatus(input: {
         return {
           label: "缓存已就绪但未发声",
           detail: localAudioIssue,
-          tone: "accent",
+          tone: "warning",
           badgeText: "audio-wait"
         };
       }

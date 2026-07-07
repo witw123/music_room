@@ -840,7 +840,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
-      Array.from({ length: 96 }, (_, index) => index),
+      Array.from({ length: 128 }, (_, index) => index),
       240,
       expect.any(Number)
     );
@@ -894,7 +894,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 96 }, (_, index) => index));
+    expect(requestedChunks).toEqual(Array.from({ length: 128 }, (_, index) => index));
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
@@ -924,7 +924,7 @@ describe("planManualCacheDirectRequests", () => {
     const pendingByTrack = new Map([
       [
         "track_a",
-        new Map(Array.from({ length: 96 }, (_, chunkIndex) => [chunkIndex, 30_000]))
+        new Map(Array.from({ length: 128 }, (_, chunkIndex) => [chunkIndex, 30_000]))
       ]
     ]);
 
@@ -956,7 +956,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 96 }, (_, index) => index + 96));
+    expect(requestedChunks).toEqual(Array.from({ length: 112 }, (_, index) => index + 128));
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
@@ -964,6 +964,61 @@ describe("planManualCacheDirectRequests", () => {
       240,
       expect.any(Number)
     );
+  });
+
+  it("continues refilling active playback when several slow batches are still pending", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 720,
+      durationMs: 720_000,
+      sizeBytes: 720 * 128 * 1024
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+    const pendingByTrack = new Map([
+      [
+        "track_a",
+        new Map(Array.from({ length: 384 }, (_, chunkIndex) => [chunkIndex, 60_000]))
+      ]
+    ]);
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack,
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 180_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "catchup"
+      },
+      now: 10_000
+    });
+
+    const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
+    expect(requestedChunks).toEqual(Array.from({ length: 128 }, (_, index) => index + 384));
   });
 
   it("uses a longer timeout for active playback cache requests", async () => {

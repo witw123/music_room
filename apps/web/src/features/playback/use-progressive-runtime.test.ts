@@ -578,6 +578,7 @@ describe("playback runtime pipeline keys", () => {
     expect(publisherSource).toContain("const diagnosticBuckets = useMemo");
     expect(publisherSource).toContain('event: "progressive-status"');
     expect(publisherSource).toContain("resolveProgressiveDiagnosticSignature");
+    expect(controllerStackSource).toContain("pcmDiagnosticsPulse");
   });
 
   it("hosts playback scheduler and low-buffer fallback state outside the main runtime hook", () => {

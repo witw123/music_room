@@ -16,14 +16,14 @@ import {
 
 const directRequestBatchSize = 32;
 const directRequestTimeoutMs = 15_000;
-const activePlaybackDirectRequestBatchSize = 96;
+const activePlaybackDirectRequestBatchSize = 128;
 const activePlaybackDirectRequestTimeoutMs = 45_000;
 const directPendingTtlMs = 20_000;
 const activePlaybackDirectPendingTtlMs = activePlaybackDirectRequestTimeoutMs + 5_000;
 const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
-const activePlaybackMaxPendingPerTrack = 384;
-const activePlaybackMaxPendingPerPeer = 192;
+const activePlaybackMaxPendingPerTrack = 640;
+const activePlaybackMaxPendingPerPeer = 256;
 
 export type ManualCacheDirectRequestResult = {
   plan: ManualCacheTrackPlan;

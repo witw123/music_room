@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getPcmEngineDiagnosticsKey,
   isSlidingWindowPlaybackSource,
@@ -193,6 +193,24 @@ export function usePlaybackRuntimeControllerStack({
     recordWaitingEvent,
     resetPlaybackQualityState
   } = usePlaybackQualityState({ audioRef });
+  const [pcmDiagnosticsPulse, setPcmDiagnosticsPulse] = useState(0);
+  useEffect(() => {
+    if (
+      currentProgressiveEngineType !== "pcm" ||
+      !isSlidingWindowPlaybackSource(activePlaybackSource) ||
+      (playbackStatus !== "playing" && playbackStatus !== "buffering")
+    ) {
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      setPcmDiagnosticsPulse((current) => current + 1);
+    }, 500);
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [activePlaybackSource, currentProgressiveEngineType, playbackStatus]);
+  void pcmDiagnosticsPulse;
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
   const {

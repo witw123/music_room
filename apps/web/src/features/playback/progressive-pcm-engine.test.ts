@@ -329,6 +329,7 @@ function mockSingleDecodedPacket() {
 
 function createAudioElement() {
   return {
+    muted: false,
     volume: 0,
     srcObject: null as MediaStream | null,
     play: vi.fn(async () => undefined),
@@ -440,6 +441,23 @@ describe("ProgressivePcmEngine", () => {
         hasOutputStream: true,
         directOutputConnected: true
       });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("clears a stale muted flag when attaching PCM output", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    audio.muted = true;
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    try {
+      await engine.attach();
+
+      expect(audio.muted).toBe(false);
+      expect(audio.volume).toBe(1);
     } finally {
       engine.destroy();
       audioContext.restore();

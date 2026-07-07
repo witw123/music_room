@@ -732,6 +732,51 @@ describe("use-room-derived-state helpers", () => {
     });
   });
 
+  it("reports missing PCM output before the shadow audio element mute state", () => {
+    const cachePlayback = {
+      ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,
+      activeSource: "progressive-local",
+      engineType: "pcm",
+      contiguousBufferedMs: 48_800,
+      aheadBufferedMs: 28_500,
+      schedulerPolicy: "catchup",
+      startupReady: true,
+      localAudioPaused: false,
+      localAudioMuted: true,
+      localAudioVolume: 1,
+      localAudioReadyState: 0,
+      localAudioCurrentSrc: null,
+      localAudioHasSrcObject: false,
+      pcmAudioContextState: null,
+      pcmDirectOutputConnected: null,
+      pcmDecodedSegmentCount: null,
+      pcmScheduledSegmentCount: null,
+      pcmLastBlockedReason: null
+    } satisfies NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
+
+    expect(
+      getLocalPlaybackStatus({
+        presenceState: "online",
+        mediaConnectionState: "live",
+        isSourceOwner: false,
+        audioUnlocked: true,
+        sourceStartState: "live",
+        lastSourceStartError: null,
+        mediaConnectedPeersCount: 0,
+        playbackStatus: "playing",
+        cachePlayback,
+        dataReadyCount: 1,
+        pieceDownloadRateKbps: 2618,
+        pieceUploadRateKbps: null
+      })
+    ).toMatchObject({
+      label: "缓存已就绪但未发声",
+      tone: "warning",
+      badgeText: "audio-wait",
+      detail: "PCM 引擎尚未解码出可播放音频帧。"
+    });
+  });
+
   it("treats PCM media-stream output as audible without direct output", () => {
     const cachePlayback = {
       ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,
