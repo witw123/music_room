@@ -100,8 +100,13 @@ const pcmScheduleAheadSeconds = 12;
 const pcmSoftResyncDriftMs = 220;
 const pcmHardResyncDriftMs = 720;
 const pcmMaxSoftCorrectionSeconds = 0.05;
-const pcmNativeHandoffFadeMs = 45;
+const pcmNativeHandoffFadeMs = 140;
+const pcmNativeHandoffTailHoldMs = 120;
+const pcmNativeHandoffReleasePaddingMs = 20;
 const pcmDecodedSegmentRetentionSeconds = 24;
+const pcmPlaybackRefillIntervalMs = 80;
+const pcmPlaybackRefillTargetAheadMs = 18_000;
+const pcmPlaybackRefillMinScheduledAheadMs = 7_000;
 // Maximum gap between decoded segments that the coverage checker tolerates
 // before declaring the buffer missing.  P2P delivery is unordered and FLAC
 // frame extraction across chunk boundaries can produce small timing gaps;
@@ -164,6 +169,9 @@ export class ProgressivePcmEngine {
   private volume = 1;
   private syncInFlight = false;
   private syncQueued = false;
+  private refillTimerId: ReturnType<typeof setInterval> | null = null;
+  private refillInFlight = false;
+  private nativeHandoffTailReleaseAtMs: number | null = null;
   // Chunk index the decoder still needs to reach to cover the requested
   // playback position. While set, contiguous append runs in catch-up mode and
   // is not throttled by the small steady-state per-sync cap.
@@ -358,6 +366,7 @@ export class ProgressivePcmEngine {
     if (!input.isPlaying) {
       this.pausedTrackTimeSec = positionSeconds;
       this.playing = false;
+      this.stopPlaybackRefillLoop();
       this.stopScheduledSegments();
       this.audio.pause();
       return {
@@ -415,6 +424,7 @@ export class ProgressivePcmEngine {
 
     if (!this.hasBufferedPosition(positionSeconds)) {
       this.playing = false;
+      this.stopPlaybackRefillLoop();
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
       // The direct AudioContext path outputs silence naturally when no
@@ -433,6 +443,7 @@ export class ProgressivePcmEngine {
     }
     if (this.audioContext.state !== "running") {
       this.playing = false;
+      this.stopPlaybackRefillLoop();
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
       // Same reasoning as above: keep the shared element state intact while
@@ -471,6 +482,7 @@ export class ProgressivePcmEngine {
       this.applySoftDriftCorrection(positionSeconds);
     }
 
+    this.startPlaybackRefillLoop();
     this.scheduleAhead(positionSeconds);
 
     return {
@@ -489,14 +501,18 @@ export class ProgressivePcmEngine {
     const currentPlaybackSeconds = this.getCurrentTimeSeconds();
     const now = this.audioContext.currentTime;
     const fadeSeconds = Math.max(0, fadeMs) / 1000;
+    const holdSeconds = pcmNativeHandoffTailHoldMs / 1000;
     const gain = this.gainNode.gain;
     try {
       gain.cancelScheduledValues(now);
       gain.setValueAtTime(gain.value, now);
+      if (holdSeconds > 0) {
+        gain.setValueAtTime(gain.value, now + holdSeconds);
+      }
       if (fadeSeconds > 0 && typeof gain.linearRampToValueAtTime === "function") {
-        gain.linearRampToValueAtTime(0, now + fadeSeconds);
+        gain.linearRampToValueAtTime(0, now + holdSeconds + fadeSeconds);
       } else {
-        gain.setValueAtTime(0, now);
+        gain.setValueAtTime(0, now + holdSeconds);
       }
     } catch {
       try {
@@ -506,7 +522,13 @@ export class ProgressivePcmEngine {
       }
     }
     this.playing = false;
+    this.stopPlaybackRefillLoop();
     this.pausedTrackTimeSec = currentPlaybackSeconds;
+    this.nativeHandoffTailReleaseAtMs =
+      Date.now() +
+      pcmNativeHandoffTailHoldMs +
+      Math.max(0, fadeMs) +
+      pcmNativeHandoffReleasePaddingMs;
     return true;
   }
 
@@ -516,22 +538,40 @@ export class ProgressivePcmEngine {
     }
 
     this.status = "destroyed";
-    this.stopScheduledSegments();
+    this.stopPlaybackRefillLoop();
+    const preserveNativeHandoffTail =
+      this.nativeHandoffTailReleaseAtMs !== null && this.scheduledSegments.length > 0;
+    const preservedScheduledSegments = preserveNativeHandoffTail
+      ? [...this.scheduledSegments]
+      : [];
+    const preservedGainNode = preserveNativeHandoffTail ? this.gainNode : null;
+    const preservedDestinationNode = preserveNativeHandoffTail ? this.destinationNode : null;
+    const preservedAudioContext = preserveNativeHandoffTail ? this.audioContext : null;
+    const nativeHandoffReleaseDelayMs = preserveNativeHandoffTail
+      ? Math.max(0, (this.nativeHandoffTailReleaseAtMs ?? Date.now()) - Date.now())
+      : 0;
+    if (preserveNativeHandoffTail) {
+      this.scheduledSegments = [];
+    } else {
+      this.stopScheduledSegments();
+    }
     // Release in-memory buffered pieces for this track so they don't leak.
     pieceMemoryBuffer.clearTrack(this.manifest.trackId);
     // The engine runs on a shared AudioContext, so destroying it never closes
     // the context. Explicitly disconnect the graph, otherwise stale gain nodes
     // from previous engine instances stay wired to the destination and overlap
     // their output with the new engine, which is heard as popping/clipping.
-    try {
-      this.gainNode?.disconnect();
-    } catch {
-      // The node may already be disconnected after a fatal graph teardown.
-    }
-    try {
-      this.destinationNode?.disconnect();
-    } catch {
-      // Ignore double-disconnect races during teardown.
+    if (!preserveNativeHandoffTail) {
+      try {
+        this.gainNode?.disconnect();
+      } catch {
+        // The node may already be disconnected after a fatal graph teardown.
+      }
+      try {
+        this.destinationNode?.disconnect();
+      } catch {
+        // Ignore double-disconnect races during teardown.
+      }
     }
     this.directOutputConnected = false;
     const decoder = this.decoder;
@@ -559,8 +599,26 @@ export class ProgressivePcmEngine {
       this.keepAliveGain.disconnect();
       this.keepAliveGain = null;
     }
-    if (!this.audioContextProvider) {
+    if (!this.audioContextProvider && !preserveNativeHandoffTail) {
       void this.audioContext?.close().catch(() => undefined);
+    }
+    if (preserveNativeHandoffTail) {
+      setTimeout(() => {
+        this.stopScheduledSegmentList(preservedScheduledSegments);
+        try {
+          preservedGainNode?.disconnect();
+        } catch {
+          // The node may already be disconnected after a fatal graph teardown.
+        }
+        try {
+          preservedDestinationNode?.disconnect();
+        } catch {
+          // Ignore double-disconnect races during teardown.
+        }
+        if (!this.audioContextProvider) {
+          void preservedAudioContext?.close().catch(() => undefined);
+        }
+      }, nativeHandoffReleaseDelayMs);
     }
     this.audioContext = null;
     this.destinationNode = null;
@@ -589,9 +647,68 @@ export class ProgressivePcmEngine {
     this.contiguousBytes = new Uint8Array(0);
     this.syncInFlight = false;
     this.syncQueued = false;
+    this.refillInFlight = false;
+    this.nativeHandoffTailReleaseAtMs = null;
     this.catchupTargetChunkIndex = null;
     this.playbackTimelineKey = null;
     this.playbackTimelineRevision = null;
+  }
+
+  private startPlaybackRefillLoop() {
+    if (this.refillTimerId !== null || this.status === "destroyed") {
+      return;
+    }
+
+    this.refillTimerId = setInterval(() => {
+      void this.refillPlaybackBuffer();
+    }, pcmPlaybackRefillIntervalMs);
+  }
+
+  private stopPlaybackRefillLoop() {
+    if (this.refillTimerId === null) {
+      return;
+    }
+
+    clearInterval(this.refillTimerId);
+    this.refillTimerId = null;
+  }
+
+  private async refillPlaybackBuffer() {
+    if (
+      this.refillInFlight ||
+      !this.playing ||
+      !this.audioContext ||
+      isTerminalEngineStatus(this.status)
+    ) {
+      return;
+    }
+
+    this.refillInFlight = true;
+    try {
+      const currentPlaybackSeconds = this.getCurrentTimeSeconds();
+      this.scheduleAhead(currentPlaybackSeconds);
+      if (
+        this.getScheduledAheadMs(currentPlaybackSeconds) >=
+        pcmPlaybackRefillMinScheduledAheadMs
+      ) {
+        return;
+      }
+      if (
+        this.getBufferedAheadMs(currentPlaybackSeconds) >= pcmPlaybackRefillTargetAheadMs ||
+        isTerminalEngineStatus(this.status)
+      ) {
+        return;
+      }
+
+      await this.sync();
+      if (!this.playing || !this.audioContext || isTerminalEngineStatus(this.status)) {
+        return;
+      }
+
+      this.scheduleAhead(this.getCurrentTimeSeconds());
+    } finally {
+      this.refillInFlight = false;
+    }
   }
 
   private resolvePlaybackTimelineDecision(playbackTimeline: PcmPlaybackTimeline | null | undefined) {
@@ -1618,6 +1735,31 @@ export class ProgressivePcmEngine {
     return this.findBufferedCoverageEnd(positionSeconds) > positionSeconds + 0.02;
   }
 
+  private getScheduledAheadMs(positionSeconds = this.getCurrentTimeSeconds()) {
+    if (!Number.isFinite(positionSeconds) || this.scheduledSegments.length === 0) {
+      return 0;
+    }
+
+    const sortedSegments = [...this.scheduledSegments].sort(
+      (left, right) => left.startTimeSec - right.startTimeSec
+    );
+    let coverageEnd = positionSeconds;
+    for (const segment of sortedSegments) {
+      if (!Number.isFinite(segment.startTimeSec) || !Number.isFinite(segment.endTimeSec)) {
+        continue;
+      }
+      if (segment.endTimeSec <= coverageEnd + 0.001) {
+        continue;
+      }
+      if (segment.startTimeSec > coverageEnd + pcmCoverageGapToleranceSec) {
+        break;
+      }
+      coverageEnd = Math.max(coverageEnd, segment.endTimeSec);
+    }
+
+    return normalizeDurationMs(Math.round(Math.max(0, coverageEnd - positionSeconds) * 1000));
+  }
+
   private hasPlaybackCoverageForFlacPacket(packet: ProgressiveFlacFramePacket) {
     const packetStartSec = packet.timestampUs / 1_000_000;
     const packetEndSec = packetStartSec + packet.durationUs / 1_000_000;
@@ -1665,7 +1807,12 @@ export class ProgressivePcmEngine {
   }
 
   private stopScheduledSegments() {
-    for (const segment of this.scheduledSegments) {
+    this.stopScheduledSegmentList(this.scheduledSegments);
+    this.scheduledSegments = [];
+  }
+
+  private stopScheduledSegmentList(segments: ScheduledSegment[]) {
+    for (const segment of segments) {
       segment.source.onended = null;
       try {
         segment.source.stop();
@@ -1674,7 +1821,6 @@ export class ProgressivePcmEngine {
       }
       segment.source.disconnect();
     }
-    this.scheduledSegments = [];
   }
 
   private pruneScheduledSegments() {

@@ -941,6 +941,91 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("self-refills decoded PCM while playing and stops the refill loop when paused", async () => {
+    vi.useFakeTimers();
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0,
+          endTimeSec: 1,
+          buffer: {}
+        }
+      ]);
+
+      const result = await syncPlayback(engine, 0.2, true);
+      const syncSpy = vi
+        .spyOn(engine as unknown as { sync: () => Promise<boolean> }, "sync")
+        .mockResolvedValue(false);
+
+      expect(result.localReady).toBe(true);
+      expect(Reflect.get(engine as object, "refillTimerId")).toBeDefined();
+      expect(Reflect.get(engine as object, "refillTimerId")).not.toBeNull();
+
+      await vi.advanceTimersByTimeAsync(160);
+
+      expect(syncSpy).toHaveBeenCalled();
+
+      syncSpy.mockClear();
+      await syncPlayback(engine, 0.4, false);
+      expect(Reflect.get(engine as object, "refillTimerId")).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(240);
+
+      expect(syncSpy).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not keep decoding from cache while already scheduled far enough ahead", async () => {
+    vi.useFakeTimers();
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const longManifest = {
+      ...manifest,
+      durationMs: 60_000
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", longManifest);
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0,
+          endTimeSec: 13,
+          buffer: {}
+        }
+      ]);
+
+      const result = await syncPlayback(engine, 1, true);
+      const syncSpy = vi
+        .spyOn(engine as unknown as { sync: () => Promise<boolean> }, "sync")
+        .mockResolvedValue(false);
+
+      expect(result.localReady).toBe(true);
+      expect(engine.getSnapshot()).toMatchObject({
+        scheduledSegmentCount: 1
+      });
+
+      await vi.advanceTimersByTimeAsync(160);
+
+      expect(syncSpy).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+      vi.useRealTimers();
+    }
+  });
+
   it("fades PCM output down when native full-local playback is ready to take over", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
@@ -964,6 +1049,38 @@ describe("ProgressivePcmEngine", () => {
     } finally {
       engine.destroy();
       audioContext.restore();
+    }
+  });
+
+  it("preserves the scheduled PCM tail while a native full-local handoff fades in", async () => {
+    vi.useFakeTimers();
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    mockSingleDecodedPacket();
+
+    try {
+      await engine.attach();
+      await syncPlayback(engine, 0.2, true);
+      expect(audioContext.bufferSources).toHaveLength(1);
+
+      expect(engine.prepareForNativeHandoff(120)).toBe(true);
+      engine.destroy();
+
+      expect(audioContext.bufferSources[0]?.stopCalls).toBe(0);
+      expect(audioContext.bufferSources[0]?.disconnectCalls).toBe(0);
+      expect(audioContext.gainNode.disconnectCalls).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(260);
+
+      expect(audioContext.bufferSources[0]?.stopCalls).toBe(1);
+      expect(audioContext.bufferSources[0]?.disconnectCalls).toBe(1);
+      expect(audioContext.gainNode.disconnectCalls).toBe(1);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+      vi.useRealTimers();
     }
   });
 

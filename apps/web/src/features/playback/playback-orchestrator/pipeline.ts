@@ -1988,6 +1988,7 @@ export function hasSufficientBackingForFullLocalWarmup(input: {
 
 export function resolveFullLocalWarmupReadiness(input: {
   localReady: boolean;
+  localAudioPaused?: boolean | null;
   driftMs: number;
   maxDriftMs: number;
   fullLocalBlockedReason: string | null | undefined;
@@ -1997,6 +1998,7 @@ export function resolveFullLocalWarmupReadiness(input: {
 }) {
   return (
     input.localReady &&
+    (input.progressiveEngineType !== "pcm" || input.localAudioPaused !== true) &&
     input.driftMs <= input.maxDriftMs &&
     input.fullLocalBlockedReason === null &&
     hasSufficientBackingForFullLocalWarmup({

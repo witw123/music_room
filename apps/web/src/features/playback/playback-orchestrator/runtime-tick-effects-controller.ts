@@ -475,6 +475,7 @@ export function useRuntimeTickEffectsController({
       const now = Date.now();
       const readyForFullLocal = resolveFullLocalWarmupReadiness({
         localReady,
+        localAudioPaused: audio.paused,
         driftMs,
         maxDriftMs: runtimeState.fullLocalMaxDriftMs,
         fullLocalBlockedReason: runtimeState.fullLocalBlockedReason,

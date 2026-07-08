@@ -4132,6 +4132,23 @@ describe("use-progressive-runtime policy helpers", () => {
         requiredAheadMs: 1_000
       })
     ).toBe(true);
+    const pcmReadyButNativeElementPaused = {
+      localReady: true,
+      localAudioPaused: true,
+      driftMs: 100,
+      maxDriftMs: 180,
+      fullLocalBlockedReason: null,
+      progressiveEngineType: "pcm" as const,
+      aheadBufferedMs: 2_000,
+      requiredAheadMs: 1_000
+    };
+    expect(resolveFullLocalWarmupReadiness(pcmReadyButNativeElementPaused)).toBe(false);
+    expect(
+      resolveFullLocalWarmupReadiness({
+        ...pcmReadyButNativeElementPaused,
+        localAudioPaused: false
+      })
+    ).toBe(true);
     expect(
       resolveFullLocalWarmupReadiness({
         localReady: true,
