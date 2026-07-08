@@ -419,7 +419,7 @@ describe("ProgressivePcmEngine", () => {
     });
   });
 
-  it("routes decoded PCM directly to the audio destination for audible playback", async () => {
+  it("routes decoded PCM through one audible direct output path", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
@@ -431,14 +431,13 @@ describe("ProgressivePcmEngine", () => {
 
       expect(attached).toBe(true);
       expect(audio.volume).toBe(1);
+      expect(audio.srcObject).toBeNull();
+      expect(audio.play).not.toHaveBeenCalled();
       expect(audioContext.gainNode.gain.value).toBe(0.6);
-      expect(audioContext.gainNode.connectCalls).toHaveLength(2);
-      expect(audioContext.gainNode.connectCalls).toContain(
-        audioContext.mediaStreamDestination
-      );
+      expect(audioContext.gainNode.connectCalls).toHaveLength(1);
       expect(audioContext.gainNode.connectCalls).toContain(audioContext.destination);
       expect(engine.getSnapshot()).toMatchObject({
-        hasOutputStream: true,
+        hasOutputStream: false,
         directOutputConnected: true
       });
     } finally {
@@ -483,7 +482,7 @@ describe("ProgressivePcmEngine", () => {
       expect(() => engine.destroy()).not.toThrow();
       expect(closeCalls).toBe(1);
       expect(audioContext.gainNode.disconnectCalls).toBe(1);
-      expect(audioContext.mediaStreamDestination.disconnectCalls).toBe(1);
+      expect(audioContext.mediaStreamDestination.disconnectCalls).toBe(0);
       expect(engine.engineStatus).toBe("destroyed");
     } finally {
       audioContext.restore();

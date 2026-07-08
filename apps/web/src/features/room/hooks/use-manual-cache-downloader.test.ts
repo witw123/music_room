@@ -840,7 +840,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
-      Array.from({ length: 192 }, (_, index) => index),
+      Array.from({ length: 128 }, (_, index) => index),
       240,
       expect.any(Number)
     );
@@ -894,7 +894,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 192 }, (_, index) => index));
+    expect(requestedChunks).toEqual(Array.from({ length: 128 }, (_, index) => index));
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
@@ -1018,7 +1018,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 192 }, (_, index) => index + 384));
+    expect(requestedChunks).toEqual(Array.from({ length: 128 }, (_, index) => index + 384));
   });
 
   it("uses a longer timeout for active playback cache requests", async () => {

@@ -16,7 +16,7 @@ import {
 
 const directRequestBatchSize = 32;
 const directRequestTimeoutMs = 15_000;
-const activePlaybackDirectRequestBatchSize = 192;
+const activePlaybackDirectRequestBatchSize = 128;
 const activePlaybackDirectRequestTimeoutMs = 45_000;
 const directPendingTtlMs = 20_000;
 const activePlaybackDirectPendingTtlMs = activePlaybackDirectRequestTimeoutMs + 5_000;

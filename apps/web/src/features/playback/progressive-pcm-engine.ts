@@ -249,13 +249,11 @@ export class ProgressivePcmEngine {
       this.audioContext = this.audioContextProvider?.() ?? new AudioContextCtor();
       this.gainNode = this.audioContext.createGain();
       this.gainNode.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
-      this.destinationNode = this.audioContext.createMediaStreamDestination();
-      this.gainNode.connect(this.destinationNode);
       // Route decoded PCM straight to the AudioContext destination. On
       // Chrome/Edge a MediaStreamAudioDestinationNode stream attached to
       // <audio srcObject> stays silent (it is only wired for WebRTC), so the
-      // element path alone produces "progress moves but no sound" for
-      // listeners. The direct connection is the only reliable output route.
+      // element path is unreliable. Keeping both routes connected can also
+      // play the same PCM twice in browsers that do render srcObject audio.
       this.gainNode.connect(this.audioContext.destination);
       this.directOutputConnected = true;
 
@@ -273,15 +271,9 @@ export class ProgressivePcmEngine {
       this.keepAliveOscillator.connect(this.keepAliveGain);
       this.keepAliveOscillator.start();
 
-      this.audio.srcObject = this.destinationNode.stream;
+      this.audio.srcObject = null;
       this.audio.muted = false;
       this.audio.volume = 1;
-      // Setting srcObject pauses the element per the HTML spec. The element
-      // was primed during a user gesture, which grants sticky autoplay
-      // activation — play() should succeed here. If it doesn't (e.g. the
-      // gesture token was somehow invalidated), the direct gain→destination
-      // path still produces audio, so we silently ignore the failure.
-      this.audio.play().catch(() => undefined);
       return true;
     } catch {
       this.status = "failed";
@@ -389,10 +381,9 @@ export class ProgressivePcmEngine {
       this.playing = false;
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
-      // Keep the audio element playing — when no segments are scheduled
-      // the gain → MediaStreamDestination pipeline outputs silence naturally.
-      // Pausing here would force a new element.play() later, which browsers
-      // block outside of a user gesture.
+      // The direct AudioContext path outputs silence naturally when no
+      // segments are scheduled. Avoid pausing the shared element here; it may
+      // still be used by native full-local handoff in the same playback flow.
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -408,8 +399,8 @@ export class ProgressivePcmEngine {
       this.playing = false;
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
-      // Same reasoning as above — keep the element playing so audio can
-      // flow as soon as the context resumes.
+      // Same reasoning as above: keep the shared element state intact while
+      // the direct AudioContext path waits for resume.
       return {
         localReady: false,
         driftMs: Number.POSITIVE_INFINITY,
@@ -1324,7 +1315,7 @@ export class ProgressivePcmEngine {
   }
 
   private scheduleAhead(fromPositionSeconds: number) {
-    if (!this.audioContext || !this.destinationNode || !this.gainNode || !this.playing) {
+    if (!this.audioContext || !this.gainNode || !this.playing) {
       return;
     }
 
