@@ -30,6 +30,7 @@ import { noopPlaybackRuntimeTick } from "./use-runtime-tick-orchestrator";
 import {
   getSlidingWindowPlayBlockedReason,
   isSlidingWindowPlaybackSource,
+  resolvePlaybackTimelineIdentity,
   resolveWarmupHoldState,
   resolveWarmupInactivePlaybackAction,
   resolveWarmupMseCatchupAction,
@@ -158,6 +159,7 @@ export function useProgressiveWarmupController({
           latestManifest.durationMs,
           Date.now()
         ) / 1000;
+      const playbackTimeline = resolvePlaybackTimelineIdentity(latestPlayback);
       const now = Date.now();
       const shadowWarmupReady = true;
       let engineReady = false;
@@ -171,7 +173,11 @@ export function useProgressiveWarmupController({
         const syncResult =
           pcmSyncMode === "snapshot-only"
             ? null
-            : await pcmEngine.syncPlayback(expectedSeconds, true);
+            : await pcmEngine.syncPlayback({
+                expectedSeconds,
+                isPlaying: true,
+                playbackTimeline
+              });
         if (syncResult) {
           pcmLastBlockedReasonRef.current = syncResult.blockedReason;
           markPcmRuntimeFailureRef.current(
@@ -288,7 +294,13 @@ export function useProgressiveWarmupController({
       });
       if (unavailableAction) {
         if (pcmEngine && unavailableAction.shouldRunSecondaryPcmSync) {
-          const syncResult = await pcmEngine.syncPlayback(expectedSeconds, false).catch(() => null);
+          const syncResult = await pcmEngine
+            .syncPlayback({
+              expectedSeconds,
+              isPlaying: false,
+              playbackTimeline
+            })
+            .catch(() => null);
           pcmLastBlockedReasonRef.current = syncResult?.blockedReason ?? null;
           markPcmRuntimeFailureRef.current(
             resolvePcmRuntimeFailureReason({
@@ -348,15 +360,19 @@ export function useProgressiveWarmupController({
     });
     if (inactiveAction) {
       if (inactiveAction.shouldSyncPcmPlayback && progressivePcmEngineRef.current) {
+        const expectedSeconds =
+          getEffectivePlaybackPositionMs(
+            playbackState,
+            manifestState.durationMs,
+            Date.now()
+          ) / 1000;
+        const playbackTimeline = resolvePlaybackTimelineIdentity(playbackState);
         void progressivePcmEngineRef.current
-          .syncPlayback(
-            getEffectivePlaybackPositionMs(
-              playbackState,
-              manifestState.durationMs,
-              Date.now()
-            ) / 1000,
-            false
-          )
+          .syncPlayback({
+            expectedSeconds,
+            isPlaying: false,
+            playbackTimeline
+          })
           .then((result) => {
             pcmLastBlockedReasonRef.current = result.blockedReason;
             markPcmRuntimeFailureRef.current(

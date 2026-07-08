@@ -57,6 +57,22 @@ type PcmEngineSyncResult = {
   blockedReason: string | null;
 };
 
+export type PcmPlaybackTimeline = {
+  key: string | null;
+  revision: number | null;
+};
+
+type NormalizedPcmPlaybackTimeline = {
+  key: string;
+  revision: number;
+};
+
+export type PcmEngineSyncPlaybackInput = {
+  expectedSeconds: number;
+  isPlaying: boolean;
+  playbackTimeline?: PcmPlaybackTimeline | null;
+};
+
 export type PcmEnginePlayoutState = "playing" | "buffering" | "paused";
 export type ProgressivePcmEngineSnapshot = {
   status: EngineStatus;
@@ -143,6 +159,8 @@ export class ProgressivePcmEngine {
   // playback position. While set, contiguous append runs in catch-up mode and
   // is not throttled by the small steady-state per-sync cap.
   private catchupTargetChunkIndex: number | null = null;
+  private playbackTimelineKey: string | null = null;
+  private playbackTimelineRevision: number | null = null;
 
   constructor(
     private readonly audio: HTMLAudioElement,
@@ -315,11 +333,20 @@ export class ProgressivePcmEngine {
     return appendedAny;
   }
 
-  async syncPlayback(expectedSeconds: number, isPlaying: boolean): Promise<PcmEngineSyncResult> {
-    const positionSeconds = normalizeTrackTimeSeconds(expectedSeconds);
+  async syncPlayback(input: PcmEngineSyncPlaybackInput): Promise<PcmEngineSyncResult> {
+    const positionSeconds = normalizeTrackTimeSeconds(input.expectedSeconds);
+    const timelineDecision = this.resolvePlaybackTimelineDecision(input.playbackTimeline);
+    if (timelineDecision.stale) {
+      return this.createStalePlaybackTimelineSyncResult(positionSeconds);
+    }
+    if (timelineDecision.timeline) {
+      this.playbackTimelineKey = timelineDecision.timeline.key;
+      this.playbackTimelineRevision = timelineDecision.timeline.revision;
+    }
+
     this.pruneDecodedSegments(positionSeconds);
 
-    if (!isPlaying) {
+    if (!input.isPlaying) {
       this.pausedTrackTimeSec = positionSeconds;
       this.playing = false;
       this.stopScheduledSegments();
@@ -410,7 +437,7 @@ export class ProgressivePcmEngine {
     }
 
     const driftMs = Math.abs(this.getCurrentTimeSeconds() - positionSeconds) * 1000;
-    if (!this.playing || driftMs > 220) {
+    if (!this.playing || timelineDecision.hardSync || driftMs > 220) {
       const wasPlaying = this.playing;
       this.playing = true;
       this.pausedTrackTimeSec = positionSeconds;
@@ -516,6 +543,62 @@ export class ProgressivePcmEngine {
     this.syncInFlight = false;
     this.syncQueued = false;
     this.catchupTargetChunkIndex = null;
+    this.playbackTimelineKey = null;
+    this.playbackTimelineRevision = null;
+  }
+
+  private resolvePlaybackTimelineDecision(playbackTimeline: PcmPlaybackTimeline | null | undefined) {
+    const timeline = normalizePcmPlaybackTimeline(playbackTimeline);
+    if (!timeline) {
+      return {
+        stale: false,
+        hardSync: false,
+        timeline: null
+      };
+    }
+
+    if (this.playbackTimelineKey === null || this.playbackTimelineRevision === null) {
+      return {
+        stale: false,
+        hardSync: true,
+        timeline
+      };
+    }
+
+    if (timeline.key !== this.playbackTimelineKey) {
+      return {
+        stale: false,
+        hardSync: true,
+        timeline
+      };
+    }
+
+    if (timeline.revision < this.playbackTimelineRevision) {
+      return {
+        stale: true,
+        hardSync: false,
+        timeline: null
+      };
+    }
+
+    return {
+      stale: false,
+      hardSync: timeline.revision > this.playbackTimelineRevision,
+      timeline
+    };
+  }
+
+  private createStalePlaybackTimelineSyncResult(positionSeconds: number): PcmEngineSyncResult {
+    const currentPlaybackSeconds = this.getCurrentTimeSeconds();
+    if (this.playing) {
+      this.scheduleAhead(currentPlaybackSeconds);
+    }
+    return {
+      localReady: this.hasBufferedPosition(currentPlaybackSeconds),
+      driftMs: Math.abs(currentPlaybackSeconds - positionSeconds) * 1000,
+      playbackPositionSeconds: this.getCurrentTimeSeconds(),
+      blockedReason: null
+    };
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
@@ -1634,6 +1717,27 @@ function decodeWavSample(view: DataView, offset: number, header: WavHeader) {
 
 function normalizeTrackTimeSeconds(value: number) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function normalizePcmPlaybackTimeline(
+  playbackTimeline: PcmPlaybackTimeline | null | undefined
+): NormalizedPcmPlaybackTimeline | null {
+  const key =
+    typeof playbackTimeline?.key === "string" && playbackTimeline.key.length > 0
+      ? playbackTimeline.key
+      : null;
+  const revision =
+    typeof playbackTimeline?.revision === "number" &&
+    Number.isFinite(playbackTimeline.revision)
+      ? Math.max(0, Math.floor(playbackTimeline.revision))
+      : null;
+
+  return key && revision !== null
+    ? {
+        key,
+        revision
+      }
+    : null;
 }
 
 function normalizeDurationMs(value: number) {

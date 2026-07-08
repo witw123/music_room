@@ -56,6 +56,16 @@ type PlaybackPositionInput = Pick<
   "status" | "currentTrackId" | "positionMs" | "startedAt" | "mediaEpoch"
 > | null | undefined;
 
+type PlaybackTimelineInput =
+  | {
+      currentTrackId?: string | null;
+      mediaEpoch?: number | null;
+      playbackRevision?: number | null;
+      queueVersion?: number | null;
+    }
+  | null
+  | undefined;
+
 export function buildPlaybackPositionKey(playback: PlaybackPositionInput) {
   return [
     playback?.currentTrackId ?? "none",
@@ -64,6 +74,23 @@ export function buildPlaybackPositionKey(playback: PlaybackPositionInput) {
     playback?.startedAt ?? "not-started",
     playback?.mediaEpoch ?? "unknown-epoch"
   ].join("|");
+}
+
+export function resolvePlaybackTimelineIdentity(playback: PlaybackTimelineInput) {
+  if (!playback?.currentTrackId) {
+    return null;
+  }
+
+  const rawRevision = playback.playbackRevision ?? playback.queueVersion;
+  if (typeof rawRevision !== "number" || !Number.isFinite(rawRevision)) {
+    return null;
+  }
+
+  const mediaEpoch = typeof playback.mediaEpoch === "number" ? playback.mediaEpoch : "none";
+  return {
+    key: [playback.currentTrackId, mediaEpoch].join("|"),
+    revision: rawRevision
+  };
 }
 
 export function buildAvailableChunksKey(chunks: readonly number[] | null | undefined) {

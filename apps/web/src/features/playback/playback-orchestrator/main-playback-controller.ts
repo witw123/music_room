@@ -39,6 +39,7 @@ import {
   resolveMainPlaybackPreflight,
   resolveMainPlaybackResetIdleAction,
   resolvePlaybackStartMediaConnectionState,
+  resolvePlaybackTimelineIdentity,
   resolvePcmOutputAudible,
   resolvePcmSyncPlaybackOutcome,
   resolveSlidingWindowFallbackPlaybackAction,
@@ -173,6 +174,7 @@ export function useMainPlaybackController({
     const expectedSeconds =
       getEffectivePlaybackPositionMs(playbackState, currentTrackDurationMs ?? 0, Date.now()) /
       1000;
+    const playbackTimeline = resolvePlaybackTimelineIdentity(playbackState);
     const shouldPlayPlayback = hasActivePlaybackIntent(playbackState);
     const wantsFullLocalPlayback = resolveFullLocalPlaybackSelection({
       activePlaybackSource,
@@ -248,7 +250,11 @@ export function useMainPlaybackController({
       if (pcmEngine) {
         audio.muted = false;
         void pcmEngine
-          .syncPlayback(expectedSeconds, shouldPlayPlayback)
+          .syncPlayback({
+            expectedSeconds,
+            isPlaying: shouldPlayPlayback,
+            playbackTimeline
+          })
           .then((result) => {
             pcmLastBlockedReasonRef.current = result.blockedReason;
             const pcmSnapshot = pcmEngine.getSnapshot();

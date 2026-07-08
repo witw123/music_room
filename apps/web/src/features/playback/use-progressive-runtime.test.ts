@@ -65,6 +65,7 @@ import {
   resolvePlaybackStartRetryClearAction as pipelineResolvePlaybackStartRetryClearAction,
   resolvePlaybackStartRetryPreflight as pipelineResolvePlaybackStartRetryPreflight,
   resolvePlaybackStartRetryResult as pipelineResolvePlaybackStartRetryResult,
+  resolvePlaybackTimelineIdentity as pipelineResolvePlaybackTimelineIdentity,
   resolvePcmRuntimeFailureAction as pipelineResolvePcmRuntimeFailureAction,
   resolvePcmRuntimeFailureResetAction as pipelineResolvePcmRuntimeFailureResetAction,
   resolvePcmSyncPlaybackOutcome as pipelineResolvePcmSyncPlaybackOutcome,
@@ -186,6 +187,7 @@ import {
   resolvePlaybackStartRetryClearAction,
   resolvePlaybackStartRetryPreflight,
   resolvePlaybackStartRetryResult,
+  resolvePlaybackTimelineIdentity,
   resolvePcmRuntimeFailureAction,
   resolvePcmRuntimeFailureResetAction,
   resolvePcmSyncPlaybackOutcome,
@@ -2047,6 +2049,32 @@ describe("playback runtime pipeline keys", () => {
 
     expect(buildPlaybackPositionKey({ ...playback })).toBe(buildPlaybackPositionKey(playback));
     expect(buildAvailableChunksKey([0, 1, 2, 3])).toBe(buildAvailableChunksKey([0, 1, 2, 3]));
+  });
+
+  it("derives PCM playback timelines from track epoch and playback revision", () => {
+    const playback = {
+      status: "playing" as const,
+      currentTrackId: "track-1",
+      currentQueueItemId: "queue-1",
+      sourceSessionId: "session-1",
+      sourcePeerId: "peer-1",
+      sourceTrackId: "track-1",
+      positionMs: 12_000,
+      startedAt: "2026-07-05T09:00:00.000Z",
+      queueVersion: 3,
+      playbackRevision: 5,
+      mediaEpoch: 7
+    };
+
+    expect(pipelineResolvePlaybackTimelineIdentity(playback)).toEqual({
+      key: "track-1|7",
+      revision: 5
+    });
+    expect(resolvePlaybackTimelineIdentity({ ...playback, playbackRevision: undefined })).toEqual({
+      key: "track-1|7",
+      revision: 3
+    });
+    expect(resolvePlaybackTimelineIdentity({ ...playback, currentTrackId: null })).toBeNull();
   });
 
   it("keeps warmup timer keys stable when only snapshot object references change", () => {

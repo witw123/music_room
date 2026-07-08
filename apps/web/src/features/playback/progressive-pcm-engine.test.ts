@@ -342,6 +342,19 @@ function createAudioElement() {
   } as unknown as HTMLAudioElement;
 }
 
+function syncPlayback(
+  engine: ProgressivePcmEngine,
+  expectedSeconds: number,
+  isPlaying: boolean,
+  playbackTimeline = { key: "track_1|1", revision: 1 }
+) {
+  return engine.syncPlayback({
+    expectedSeconds,
+    isPlaying,
+    playbackTimeline
+  });
+}
+
 function buildPcmWavBytes(input: {
   sampleRate: number;
   channels: number;
@@ -659,10 +672,134 @@ describe("ProgressivePcmEngine", () => {
         }
       ]);
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(true);
       expect(audio.play).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("ignores stale playback timeline updates without stopping active PCM output", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const longManifest = {
+      ...manifest,
+      durationMs: 120_000
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", longManifest);
+
+    try {
+      await engine.attach();
+      const context = Reflect.get(engine as object, "audioContext") as AudioContext;
+      Reflect.set(context as object, "currentTime", 62);
+      const stop = vi.fn();
+      const disconnect = vi.fn();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "playing", true);
+      Reflect.set(engine as object, "anchorTrackTimeSec", 60);
+      Reflect.set(engine as object, "anchorContextTimeSec", 60);
+      Reflect.set(engine as object, "pausedTrackTimeSec", 60);
+      Reflect.set(engine as object, "playbackTimelineKey", "track_1|1");
+      Reflect.set(engine as object, "playbackTimelineRevision", 7);
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 60,
+          endTimeSec: 72,
+          buffer: {}
+        }
+      ]);
+      Reflect.set(engine as object, "scheduledSegments", [
+        {
+          source: {
+            onended: null,
+            stop,
+            disconnect
+          },
+          startTimeSec: 60,
+          endTimeSec: 72,
+          contextStartSec: 60,
+          durationSec: 12
+        }
+      ]);
+
+      const result = await syncPlayback(engine, 5, true, {
+        key: "track_1|1",
+        revision: 6
+      });
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(result.playbackPositionSeconds).toBeGreaterThan(61);
+      expect(engine.getSnapshot()).toMatchObject({
+        playoutState: "playing"
+      });
+      expect(stop).not.toHaveBeenCalled();
+      expect(disconnect).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("hard syncs a newer playback timeline instead of preserving stale PCM output", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const longManifest = {
+      ...manifest,
+      durationMs: 120_000
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", longManifest);
+
+    try {
+      await engine.attach();
+      const context = Reflect.get(engine as object, "audioContext") as AudioContext;
+      Reflect.set(context as object, "currentTime", 62);
+      const stop = vi.fn();
+      const disconnect = vi.fn();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "playing", true);
+      Reflect.set(engine as object, "anchorTrackTimeSec", 60);
+      Reflect.set(engine as object, "anchorContextTimeSec", 60);
+      Reflect.set(engine as object, "pausedTrackTimeSec", 60);
+      Reflect.set(engine as object, "playbackTimelineKey", "track_1|1");
+      Reflect.set(engine as object, "playbackTimelineRevision", 6);
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 60,
+          endTimeSec: 72,
+          buffer: {}
+        }
+      ]);
+      Reflect.set(engine as object, "scheduledSegments", [
+        {
+          source: {
+            onended: null,
+            stop,
+            disconnect
+          },
+          startTimeSec: 60,
+          endTimeSec: 72,
+          contextStartSec: 60,
+          durationSec: 12
+        }
+      ]);
+
+      const result = await syncPlayback(engine, 5, true, {
+        key: "track_1|1",
+        revision: 7
+      });
+
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
+      expect(result.playbackPositionSeconds).toBe(5);
+      expect(engine.getSnapshot()).toMatchObject({
+        playoutState: "paused"
+      });
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(disconnect).toHaveBeenCalledTimes(1);
     } finally {
       engine.destroy();
       audioContext.restore();
@@ -679,7 +816,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -758,7 +895,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(4.1, true);
+      const result = await syncPlayback(engine, 4.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -833,7 +970,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(4.1, true);
+      const result = await syncPlayback(engine, 4.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -912,7 +1049,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(4.1, true);
+      const result = await syncPlayback(engine, 4.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -990,7 +1127,7 @@ describe("ProgressivePcmEngine", () => {
       Reflect.set(engine as object, "decoder", null);
       Reflect.set(engine as object, "contiguousChunkCount", 1);
 
-      const result = await engine.syncPlayback(4.1, true);
+      const result = await syncPlayback(engine, 4.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1066,7 +1203,7 @@ describe("ProgressivePcmEngine", () => {
         new Set([4_000_000, 5_000_000])
       );
 
-      const result = await engine.syncPlayback(7.1, true);
+      const result = await syncPlayback(engine, 7.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1137,7 +1274,7 @@ describe("ProgressivePcmEngine", () => {
         new Set([7_000_000, 8_000_000])
       );
 
-      const result = await engine.syncPlayback(7.1, true);
+      const result = await syncPlayback(engine, 7.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1181,7 +1318,7 @@ describe("ProgressivePcmEngine", () => {
         }
       ]);
 
-      const result = await engine.syncPlayback(40.2, true);
+      const result = await syncPlayback(engine, 40.2, true);
 
       expect(result.localReady).toBe(true);
       expect(Reflect.get(engine as object, "decodedSegments")).toHaveLength(1);
@@ -1229,7 +1366,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(0.1, true);
+      const result = await syncPlayback(engine, 0.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1286,7 +1423,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(0.9, true);
+      const result = await syncPlayback(engine, 0.9, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1348,7 +1485,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(600.1, true);
+      const result = await syncPlayback(engine, 600.1, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1521,7 +1658,7 @@ describe("ProgressivePcmEngine", () => {
 
       // Once the abort clears, the next sync catches up and produces audio.
       shouldAbort = false;
-      const result = await engine.syncPlayback(0.9, true);
+      const result = await syncPlayback(engine, 0.9, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1546,7 +1683,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(false);
       expect(result.blockedReason).toBe("decoder-flush-failed");
@@ -1574,7 +1711,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(true);
       expect(engine.getSnapshot()).toMatchObject({
@@ -1599,7 +1736,7 @@ describe("ProgressivePcmEngine", () => {
 
     try {
       await engine.attach();
-      const result = await engine.syncPlayback(Number.NaN, true);
+      const result = await syncPlayback(engine, Number.NaN, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1639,7 +1776,7 @@ describe("ProgressivePcmEngine", () => {
         }
       ]);
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(false);
       expect(result.blockedReason).toBe("audio-context-suspended");
@@ -1669,7 +1806,7 @@ describe("ProgressivePcmEngine", () => {
         }
       ]);
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1760,7 +1897,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(30, true);
+      const result = await syncPlayback(engine, 30, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
@@ -1860,7 +1997,7 @@ describe("ProgressivePcmEngine", () => {
     try {
       await engine.attach();
 
-      const result = await engine.syncPlayback(0.2, true);
+      const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();

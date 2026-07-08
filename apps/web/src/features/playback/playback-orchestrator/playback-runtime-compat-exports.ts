@@ -77,6 +77,7 @@ export {
   resolvePlaybackStartRetryClearAction,
   resolvePlaybackStartRetryPreflight,
   resolvePlaybackStartRetryResult,
+  resolvePlaybackTimelineIdentity,
   resolvePlaybackTimelineResetAction,
   resolvePcmRuntimeFailureAction,
   resolvePcmRuntimeFailureResetAction,
