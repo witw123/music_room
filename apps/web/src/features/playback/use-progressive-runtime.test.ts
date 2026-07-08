@@ -3393,23 +3393,38 @@ describe("use-progressive-runtime policy helpers", () => {
     expect(
       pipelineResolveWarmupPcmAudioStartResultAction({
         cancelled: true,
-        playbackStarted: true
+        playbackStarted: true,
+        pcmOutputAudible: false
       })
     ).toBe(null);
     expect(
       resolveWarmupPcmAudioStartResultAction({
         cancelled: false,
-        playbackStarted: false
+        playbackStarted: false,
+        pcmOutputAudible: false
       })
     ).toBe(null);
     expect(
       resolveWarmupPcmAudioStartResultAction({
         cancelled: false,
-        playbackStarted: true
+        playbackStarted: true,
+        pcmOutputAudible: false
       })
     ).toEqual({
       shouldClearFallbackReason: true,
-      mediaConnectionState: "live"
+      mediaConnectionState: "live",
+      shouldConsumePlaybackStartIntent: true
+    });
+    expect(
+      resolveWarmupPcmAudioStartResultAction({
+        cancelled: false,
+        playbackStarted: false,
+        pcmOutputAudible: true
+      })
+    ).toEqual({
+      shouldClearFallbackReason: true,
+      mediaConnectionState: "live",
+      shouldConsumePlaybackStartIntent: true
     });
     expect(
       pipelineResolveWarmupMseCatchupAction({

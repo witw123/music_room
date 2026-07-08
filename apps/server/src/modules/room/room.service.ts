@@ -359,6 +359,9 @@ export class RoomService {
     }
 
     await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
+    if (!leavingHost) {
+      this.removeTracksOwnedBySession(record, sessionId);
+    }
     this.incrementPresenceRevision(record.room);
     this.incrementRoomRevision(record.room);
 
@@ -428,23 +431,11 @@ export class RoomService {
       throw new Error(`Track not found in room: ${trackId}`);
     }
 
-    if (track.ownerSessionId !== sessionId) {
-      throw new Error("Only the original uploader can delete this track.");
+    if (record.room.hostId !== sessionId && track.ownerSessionId !== sessionId) {
+      throw new Error("Only the host or original uploader can delete this track.");
     }
 
-    const previousQueueLength = record.queue.length;
-    record.tracks = record.tracks.filter((item) => item.id !== trackId);
-    record.queue = record.queue
-      .filter((item) => item.trackId !== trackId)
-      .map((item, index) => ({ ...item, position: index }));
-
-    if (record.room.playback.currentTrackId === trackId) {
-      this.roomPlaybackService.clearPlayback(record.room.playback);
-    }
-
-    if (record.queue.length !== previousQueueLength) {
-      this.incrementQueueVersion(record.room.playback);
-    }
+    this.removeTracksById(record, new Set([trackId]));
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return { ok: true };
@@ -710,6 +701,38 @@ export class RoomService {
 
   private incrementPlaybackRevision(playback: PlaybackSnapshot) {
     playback.playbackRevision += 1;
+  }
+
+  private removeTracksOwnedBySession(record: RoomRecord, sessionId: string) {
+    const removedTrackIds = new Set(
+      record.tracks
+        .filter((track) => track.ownerSessionId === sessionId)
+        .map((track) => track.id)
+    );
+    this.removeTracksById(record, removedTrackIds);
+  }
+
+  private removeTracksById(record: RoomRecord, trackIds: Set<string>) {
+    if (trackIds.size === 0) {
+      return;
+    }
+
+    const previousQueueLength = record.queue.length;
+    record.tracks = record.tracks.filter((item) => !trackIds.has(item.id));
+    record.queue = record.queue
+      .filter((item) => !trackIds.has(item.trackId))
+      .map((item, index) => ({ ...item, position: index }));
+
+    if (
+      record.room.playback.currentTrackId &&
+      trackIds.has(record.room.playback.currentTrackId)
+    ) {
+      this.roomPlaybackService.clearPlayback(record.room.playback);
+    }
+
+    if (record.queue.length !== previousQueueLength) {
+      this.incrementQueueVersion(record.room.playback);
+    }
   }
 
   private incrementPresenceRevision(room: Room) {

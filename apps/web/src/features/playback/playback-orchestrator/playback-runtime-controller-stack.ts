@@ -460,12 +460,14 @@ export function usePlaybackRuntimeControllerStack({
     pcmLastBlockedReasonRef,
     pcmSlidingWindowPlayRetryIntervalMs,
     playbackRef,
+    playbackStartIntent,
     progressiveEngineRef,
     progressivePcmEngineRef,
     progressiveSwitchDelayMs,
     progressiveWarmupReadyAtRef,
     progressiveWarmupRuntimeRef,
     setMediaConnectionState,
+    setPlaybackStartIntent,
     setProgressiveFallbackReason,
     syncProgressiveWarmupRef
   });

@@ -20,6 +20,11 @@ import type { ProgressiveMseEngine } from "../progressive-mse-engine";
 import type { ProgressivePcmEngine } from "../progressive-pcm-engine";
 import { roomAudioOutput } from "../room-audio-output";
 import { resolvePcmRuntimeFailureReason } from "../pcm-runtime-failure";
+import {
+  consumePlaybackStartIntent,
+  doesPlaybackMatchStartIntent,
+  type PlaybackStartIntent
+} from "../playback-start-intent";
 import { resolveProgressiveWarmupDecision } from "../progressive-source-controller";
 import { noopPlaybackRuntimeTick } from "./use-runtime-tick-orchestrator";
 import {
@@ -69,6 +74,7 @@ type ProgressiveWarmupControllerInput = {
   pcmLastBlockedReasonRef: MutableRefObject<string | null>;
   pcmSlidingWindowPlayRetryIntervalMs: number;
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
+  playbackStartIntent: PlaybackStartIntent | null;
   progressiveEngineRef: MutableRefObject<ProgressiveMseEngine | null>;
   progressivePcmEngineRef: MutableRefObject<ProgressivePcmEngine | null>;
   progressiveSwitchDelayMs: number;
@@ -80,6 +86,7 @@ type ProgressiveWarmupControllerInput = {
     manifest: ProgressiveTrackManifest | null;
   }>;
   setMediaConnectionState: Dispatch<SetStateAction<RoomMediaConnectionState>>;
+  setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
   setProgressiveFallbackReason: Dispatch<SetStateAction<string | null>>;
   syncProgressiveWarmupRef: MutableRefObject<() => void>;
 };
@@ -94,6 +101,7 @@ export function useProgressiveWarmupController({
   pcmLastBlockedReasonRef,
   pcmSlidingWindowPlayRetryIntervalMs,
   playbackRef,
+  playbackStartIntent,
   progressiveEngineRef,
   progressivePcmEngineRef,
   progressiveSwitchDelayMs,
@@ -102,6 +110,7 @@ export function useProgressiveWarmupController({
   progressiveWarmupTimerKey,
   currentProgressiveManifestRef,
   setMediaConnectionState,
+  setPlaybackStartIntent,
   setProgressiveFallbackReason,
   syncProgressiveWarmupRef
 }: ProgressiveWarmupControllerInput) {
@@ -204,15 +213,29 @@ export function useProgressiveWarmupController({
             getSlidingWindowPlayBlockedReason(latestWarmupState.activePlaybackSource),
             { reportFailure: false }
           ).then((ok) => {
+            const pcmSnapshot = pcmEngine.getSnapshot();
+            const pcmOutputAudible =
+              pcmSnapshot.audioContextState === "running" &&
+              pcmSnapshot.directOutputConnected !== false &&
+              pcmSnapshot.decodedSegmentCount > 0 &&
+              pcmSnapshot.scheduledSegmentCount > 0;
             const startResultAction = resolveWarmupPcmAudioStartResultAction({
               cancelled,
-              playbackStarted: ok
+              playbackStarted: ok,
+              pcmOutputAudible
             });
             if (!startResultAction) {
               return;
             }
             if (startResultAction.shouldClearFallbackReason) {
               setProgressiveFallbackReason(null);
+            }
+            if (startResultAction.shouldConsumePlaybackStartIntent) {
+              setPlaybackStartIntent((current) =>
+                current && doesPlaybackMatchStartIntent(current, playbackRef.current)
+                  ? consumePlaybackStartIntent(current, latestWarmupState.activePlaybackSource)
+                  : current
+              );
             }
             setMediaConnectionState(startResultAction.mediaConnectionState);
           });
@@ -376,6 +399,7 @@ export function useProgressiveWarmupController({
     pcmLastBlockedReasonRef,
     pcmSlidingWindowPlayRetryIntervalMs,
     playbackRef,
+    playbackStartIntent,
     progressiveEngineRef,
     progressivePcmEngineRef,
     progressiveSwitchDelayMs,
@@ -383,6 +407,7 @@ export function useProgressiveWarmupController({
     progressiveWarmupRuntimeRef,
     progressiveWarmupTimerKey,
     setMediaConnectionState,
+    setPlaybackStartIntent,
     setProgressiveFallbackReason,
     syncProgressiveWarmupRef
   ]);

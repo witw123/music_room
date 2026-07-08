@@ -14,7 +14,8 @@ import {
   type UploadedTrack
 } from "@/features/upload/audio-utils";
 import {
-  loadCacheLibrarySnapshot
+  loadCacheLibrarySnapshot,
+  selectCachedLibraryTracksForRoomAutoImport
 } from "./cache-library";
 import {
   buildRoomTrackIdsKey,
@@ -98,6 +99,8 @@ export function useTrackUploads(options: {
   const availabilityAnnouncementTtlRef = useRef<Map<string, number>>(new Map());
   const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
   const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
+  const autoImportInFlightCacheKeysRef = useRef<Set<string>>(new Set());
+  const autoImportAttemptedCacheKeysRef = useRef<Set<string>>(new Set());
   const roomTrackIdsKey = useMemo(
     () => buildRoomTrackIdsKey(roomSnapshot?.tracks),
     [roomSnapshot?.tracks]
@@ -250,6 +253,60 @@ export function useTrackUploads(options: {
     setUploadedTracks,
     syncRoomSnapshot
   });
+
+  useEffect(() => {
+    if (!activeSession || !roomSnapshot?.room.id) {
+      return;
+    }
+
+    const fileHashes = selectCachedLibraryTracksForRoomAutoImport({
+      activeSessionNickname: activeSession.nickname,
+      activeSessionUserId: activeSession.userId,
+      roomId: roomSnapshot.room.id,
+      roomTracks: roomSnapshot.tracks,
+      cachedLibraryTracks: cacheLibraryTracks
+    });
+    if (fileHashes.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      for (const fileHash of fileHashes) {
+        if (cancelled) {
+          return;
+        }
+
+        const cacheKey = `${roomSnapshot.room.id}:${activeSession.userId}:${fileHash}`;
+        if (
+          autoImportInFlightCacheKeysRef.current.has(cacheKey) ||
+          autoImportAttemptedCacheKeysRef.current.has(cacheKey)
+        ) {
+          continue;
+        }
+
+        autoImportInFlightCacheKeysRef.current.add(cacheKey);
+        autoImportAttemptedCacheKeysRef.current.add(cacheKey);
+        try {
+          await importCachedLibraryTrackToRoom(fileHash);
+        } catch {
+          autoImportAttemptedCacheKeysRef.current.delete(cacheKey);
+        } finally {
+          autoImportInFlightCacheKeysRef.current.delete(cacheKey);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSession,
+    cacheLibraryTracks,
+    importCachedLibraryTrackToRoom,
+    roomSnapshot?.room.id,
+    roomSnapshot?.tracks
+  ]);
 
   return {
     uploadedTracks,

@@ -307,6 +307,61 @@ describe("RoomService", () => {
     expect(recentRoom).toBeNull();
   });
 
+  it("removes a leaving member's library tracks from the room queue and playback", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+    const hostTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Host Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "host-track-stays-after-member-leave",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "member-track-removed-on-leave",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+
+    await roomService.addQueueItem(snapshot.room.id, host.id, hostTrack.id);
+    await roomService.addQueueItem(snapshot.room.id, member.id, memberTrack.id);
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: memberTrack.id,
+      actorSessionId: member.id
+    });
+
+    const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, member.id);
+
+    expect(roomAfterLeave.members.some((roomMember) => roomMember.id === member.id)).toBe(false);
+    const snapshotAfterLeave = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(snapshotAfterLeave.tracks.map((track) => track.id)).toEqual([hostTrack.id]);
+    expect(snapshotAfterLeave.queue.map((queueItem) => queueItem.trackId)).toEqual([hostTrack.id]);
+    expect(snapshotAfterLeave.queue[0]?.position).toBe(0);
+    expect(snapshotAfterLeave.room.playback.currentTrackId).toBeNull();
+  });
+
   it("keeps the room recoverable when the last active member leaves and only the offline host remains", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
@@ -565,6 +620,40 @@ describe("RoomService", () => {
     expect(roomAfterDelete.room.playback.currentTrackId).toBeNull();
   });
 
+  it("allows the host to delete another member's uploaded track", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    const track = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "member-track-host-delete",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+    await roomService.addQueueItem(snapshot.room.id, host.id, track.id);
+
+    await expect(
+      roomService.removeTrack(snapshot.room.id, host.id, track.id)
+    ).resolves.toEqual({ ok: true });
+
+    const roomAfterDelete = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(roomAfterDelete.tracks).toHaveLength(0);
+    expect(roomAfterDelete.queue).toHaveLength(0);
+  });
+
   it("blocks other members from deleting someone else's uploaded track", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
@@ -591,7 +680,7 @@ describe("RoomService", () => {
 
     await expect(
       roomService.removeTrack(snapshot.room.id, member.id, track.id)
-    ).rejects.toThrow("Only the original uploader can delete this track.");
+    ).rejects.toThrow("Only the host or original uploader can delete this track.");
   });
 
   it("rejects playback when the track owner is offline", async () => {

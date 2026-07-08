@@ -111,6 +111,41 @@ export async function loadCacheLibrarySnapshot(input: {
   };
 }
 
+export function selectCachedLibraryTracksForRoomAutoImport(input: {
+  activeSessionNickname: string | null | undefined;
+  activeSessionUserId: string | null | undefined;
+  roomId: string | null | undefined;
+  roomTracks: Array<Pick<TrackMeta, "fileHash" | "ownerSessionId">>;
+  cachedLibraryTracks: CachedLibraryTrack[];
+}) {
+  if (!input.activeSessionUserId || !input.activeSessionNickname || !input.roomId) {
+    return [];
+  }
+
+  const existingOwnedFileHashes = new Set(
+    input.roomTracks
+      .filter((track) => track.ownerSessionId === input.activeSessionUserId)
+      .map((track) => track.fileHash)
+  );
+  const selected = new Set<string>();
+
+  for (const cachedTrack of input.cachedLibraryTracks) {
+    const belongsToCurrentRoom =
+      cachedTrack.sourceRoomIds.includes(input.roomId) ||
+      cachedTrack.lastSourceRoomId === input.roomId;
+    const belongsToActiveMember = cachedTrack.lastOwnerNickname === input.activeSessionNickname;
+    if (
+      belongsToCurrentRoom &&
+      belongsToActiveMember &&
+      !existingOwnedFileHashes.has(cachedTrack.fileHash)
+    ) {
+      selected.add(cachedTrack.fileHash);
+    }
+  }
+
+  return [...selected];
+}
+
 export function buildCachedLibraryTrackUpsertRecord(
   input: CacheLibraryTrackUpsertInput
 ): CacheLibraryTrackUpsertRecord {

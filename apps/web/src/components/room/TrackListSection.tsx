@@ -11,6 +11,7 @@ type TrackListSectionProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   cachedLibraryFileHashes: string[];
   canControlPlayback: boolean;
+  canManageLibraryTracks: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
@@ -23,6 +24,7 @@ function TrackListSectionBase({
   uploadedTracks,
   cachedLibraryFileHashes,
   canControlPlayback,
+  canManageLibraryTracks,
   activeSession,
   onFilesSelected,
   onAddToQueue,
@@ -70,7 +72,11 @@ function TrackListSectionBase({
         {tracks.length > 0 ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {tracks.map((track) => {
-              const isMine = track.ownerSessionId === activeSession?.userId;
+              const canDeleteTrack = canDeleteLibraryTrack({
+                track,
+                activeSessionUserId: activeSession?.userId,
+                canManageLibraryTracks
+              });
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
               const isInCacheLibrary = cachedLibraryFileHashSet.has(track.fileHash);
@@ -116,12 +122,12 @@ function TrackListSectionBase({
 
                   <div
                     className={`mt-auto grid items-center gap-2 ${
-                      isMine
+                      canDeleteTrack
                         ? "grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
                         : "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto]"
                     }`}
                   >
-                    {isMine ? (
+                    {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
                         data-track-id={track.id}
@@ -196,4 +202,16 @@ export const TrackListSection = memo(TrackListSectionBase);
 
 export function buildCachedLibraryFileHashSet(cachedLibraryFileHashes: string[]) {
   return new Set(cachedLibraryFileHashes);
+}
+
+export function canDeleteLibraryTrack(input: {
+  track: Pick<TrackMeta, "ownerSessionId">;
+  activeSessionUserId: string | null | undefined;
+  canManageLibraryTracks: boolean;
+}) {
+  return !!(
+    input.activeSessionUserId &&
+    (input.canManageLibraryTracks ||
+      input.track.ownerSessionId === input.activeSessionUserId)
+  );
 }

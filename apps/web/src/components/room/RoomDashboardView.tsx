@@ -292,6 +292,7 @@ function RoomDashboardViewBase({
               uploadedTracks={uploadedTracks}
               cacheLibraryTracks={cacheLibraryTracks}
               canControlPlayback={canControlPlayback}
+              canManageLibraryTracks={canDeleteRoom}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}
               onAddToQueue={onAddToQueue}

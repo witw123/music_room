@@ -9,6 +9,7 @@ import {
   exportCachedLibraryTrackFile,
   importCachedLibraryTrackToRoom,
   loadCacheLibrarySnapshot,
+  selectCachedLibraryTracksForRoomAutoImport,
   startCacheDownload,
   toCachedLibraryFile,
   toCachedLibraryTrack,
@@ -137,6 +138,84 @@ describe("cache-library adapters", () => {
       sourceTrackIds: ["track_1"],
       sourceRoomIds: ["room_1"]
     });
+  });
+
+  it("selects only the active member's cached room-history tracks for automatic room import", () => {
+    const selected = selectCachedLibraryTracksForRoomAutoImport({
+      activeSessionNickname: "Member",
+      activeSessionUserId: "user_1",
+      roomId: "room_1",
+      roomTracks: [
+        {
+          fileHash: "hash_existing",
+          ownerSessionId: "user_1"
+        },
+        {
+          fileHash: "hash_other_member",
+          ownerSessionId: "user_2"
+        }
+      ],
+      cachedLibraryTracks: [
+        {
+          fileHash: "hash_restore",
+          title: "Restore",
+          artist: "Artist",
+          mimeType: "audio/flac",
+          durationMs: 120_000,
+          sizeBytes: 4096,
+          cachedAt: "2026-07-04T00:00:00.000Z",
+          sourceTrackIds: ["track_restore"],
+          sourceRoomIds: ["room_1"],
+          lastSourceTrackId: "track_restore",
+          lastSourceRoomId: "room_1",
+          lastOwnerNickname: "Member"
+        },
+        {
+          fileHash: "hash_existing",
+          title: "Already Registered",
+          artist: "Artist",
+          mimeType: "audio/flac",
+          durationMs: 120_000,
+          sizeBytes: 4096,
+          cachedAt: "2026-07-04T00:00:00.000Z",
+          sourceTrackIds: ["track_existing"],
+          sourceRoomIds: ["room_1"],
+          lastSourceTrackId: "track_existing",
+          lastSourceRoomId: "room_1",
+          lastOwnerNickname: "Member"
+        },
+        {
+          fileHash: "hash_other_member",
+          title: "Other Member Cached",
+          artist: "Artist",
+          mimeType: "audio/flac",
+          durationMs: 120_000,
+          sizeBytes: 4096,
+          cachedAt: "2026-07-04T00:00:00.000Z",
+          sourceTrackIds: ["track_other_member"],
+          sourceRoomIds: ["room_1"],
+          lastSourceTrackId: "track_other_member",
+          lastSourceRoomId: "room_1",
+          lastOwnerNickname: "Other"
+        },
+        {
+          fileHash: "hash_other_room",
+          title: "Other Room",
+          artist: "Artist",
+          mimeType: "audio/flac",
+          durationMs: 120_000,
+          sizeBytes: 4096,
+          cachedAt: "2026-07-04T00:00:00.000Z",
+          sourceTrackIds: ["track_other_room"],
+          sourceRoomIds: ["room_2"],
+          lastSourceTrackId: "track_other_room",
+          lastSourceRoomId: "room_2",
+          lastOwnerNickname: "Member"
+        }
+      ]
+    });
+
+    expect(selected).toEqual(["hash_restore"]);
   });
 
   it("deletes cache library entries and their source pieces", async () => {

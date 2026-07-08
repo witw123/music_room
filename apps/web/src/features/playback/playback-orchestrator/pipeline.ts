@@ -1489,14 +1489,16 @@ export function resolveWarmupPcmAudioStartAction(input: {
 export function resolveWarmupPcmAudioStartResultAction(input: {
   cancelled: boolean;
   playbackStarted: boolean;
+  pcmOutputAudible: boolean;
 }) {
-  if (input.cancelled || !input.playbackStarted) {
+  if (input.cancelled || (!input.playbackStarted && !input.pcmOutputAudible)) {
     return null;
   }
 
   return {
     shouldClearFallbackReason: true,
-    mediaConnectionState: "live" as const
+    mediaConnectionState: "live" as const,
+    shouldConsumePlaybackStartIntent: true
   };
 }
 
