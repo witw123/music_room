@@ -980,7 +980,10 @@ export class ProgressivePcmEngine {
     let decodedAny = false;
     for (const packet of packets) {
       if (this.decodedFlacPacketTimestampUs.has(packet.timestampUs)) {
-        continue;
+        if (this.hasPlaybackCoverageForFlacPacket(packet)) {
+          continue;
+        }
+        this.decodedFlacPacketTimestampUs.delete(packet.timestampUs);
       }
 
       try {
@@ -1401,6 +1404,25 @@ export class ProgressivePcmEngine {
     }
 
     return this.findBufferedCoverageEnd(positionSeconds) > positionSeconds + 0.02;
+  }
+
+  private hasPlaybackCoverageForFlacPacket(packet: ProgressiveFlacFramePacket) {
+    const packetStartSec = packet.timestampUs / 1_000_000;
+    const packetEndSec = packetStartSec + packet.durationUs / 1_000_000;
+    if (!Number.isFinite(packetStartSec) || !Number.isFinite(packetEndSec)) {
+      return false;
+    }
+
+    const coversPacket = (segment: { startTimeSec: number; endTimeSec: number }) =>
+      Number.isFinite(segment.startTimeSec) &&
+      Number.isFinite(segment.endTimeSec) &&
+      segment.startTimeSec <= packetStartSec + 0.001 &&
+      segment.endTimeSec >= Math.min(packetEndSec, packetStartSec + 0.02);
+
+    return (
+      this.decodedSegments.some(coversPacket) ||
+      this.scheduledSegments.some(coversPacket)
+    );
   }
 
   private findBufferedCoverageEnd(positionSeconds: number) {

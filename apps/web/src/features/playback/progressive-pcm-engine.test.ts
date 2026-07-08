@@ -1081,6 +1081,77 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("re-decodes a FLAC window packet when a prior duplicate marker has no PCM segment", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const windowManifest = {
+      ...manifest,
+      durationMs: 9_000,
+      totalChunks: 9,
+      chunkSize: 64
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", windowManifest);
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]);
+    const streamInfo = {
+      description,
+      audioOffset: description.byteLength,
+      sampleRate: 256,
+      numberOfChannels: 2,
+      bitsPerSample: 16,
+      minBlockSize: 256,
+      maxBlockSize: 256,
+      totalSamples: null
+    };
+
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      const payload =
+        chunkIndex === 7
+          ? buildFlacFrame(7, [0x70, 0x71])
+          : chunkIndex === 8
+            ? buildFlacFrame(8, [0x80, 0x81])
+            : null;
+      if (!payload) {
+        return null;
+      }
+
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: windowManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: windowManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: payload.buffer
+      };
+    });
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "streamInfo", streamInfo);
+      Reflect.set(engine as object, "contiguousChunkCount", 1);
+      Reflect.set(
+        engine as object,
+        "decodedFlacPacketTimestampUs",
+        new Set([7_000_000, 8_000_000])
+      );
+
+      const result = await engine.syncPlayback(7.1, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 2,
+        decodedSegmentCount: 2,
+        scheduledSegmentCount: 2
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("drops decoded PCM segments far behind the current playout position", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
