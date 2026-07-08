@@ -96,6 +96,10 @@ export type ProgressivePcmEngineSnapshot = {
 };
 
 const pcmScheduleAheadSeconds = 8;
+const pcmSoftResyncDriftMs = 220;
+const pcmHardResyncDriftMs = 720;
+const pcmMaxSoftCorrectionSeconds = 0.05;
+const pcmNativeHandoffFadeMs = 45;
 const pcmDecodedSegmentRetentionSeconds = 16;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
 // Steady-state prefetch stays small so switching tracks never blocks the main
@@ -437,7 +441,12 @@ export class ProgressivePcmEngine {
     }
 
     const driftMs = Math.abs(this.getCurrentTimeSeconds() - positionSeconds) * 1000;
-    if (!this.playing || timelineDecision.hardSync || driftMs > 220) {
+    const shouldHardSync =
+      !this.playing ||
+      timelineDecision.hardSync ||
+      driftMs > pcmHardResyncDriftMs ||
+      (this.scheduledSegments.length === 0 && driftMs > pcmSoftResyncDriftMs);
+    if (shouldHardSync) {
       const wasPlaying = this.playing;
       this.playing = true;
       this.pausedTrackTimeSec = positionSeconds;
@@ -453,6 +462,8 @@ export class ProgressivePcmEngine {
       if (wasPlaying) {
         this.stopScheduledSegments();
       }
+    } else if (driftMs > pcmSoftResyncDriftMs) {
+      this.applySoftDriftCorrection(positionSeconds);
     }
 
     this.scheduleAhead(positionSeconds);
@@ -463,6 +474,35 @@ export class ProgressivePcmEngine {
       playbackPositionSeconds: this.getCurrentTimeSeconds(),
       blockedReason: null
     };
+  }
+
+  prepareForNativeHandoff(fadeMs = pcmNativeHandoffFadeMs) {
+    if (!this.audioContext || !this.gainNode || this.status === "destroyed") {
+      return false;
+    }
+
+    const currentPlaybackSeconds = this.getCurrentTimeSeconds();
+    const now = this.audioContext.currentTime;
+    const fadeSeconds = Math.max(0, fadeMs) / 1000;
+    const gain = this.gainNode.gain;
+    try {
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(gain.value, now);
+      if (fadeSeconds > 0 && typeof gain.linearRampToValueAtTime === "function") {
+        gain.linearRampToValueAtTime(0, now + fadeSeconds);
+      } else {
+        gain.setValueAtTime(0, now);
+      }
+    } catch {
+      try {
+        gain.setValueAtTime(0, now);
+      } catch {
+        // If the AudioParam is already detached, the engine is on its way out.
+      }
+    }
+    this.playing = false;
+    this.pausedTrackTimeSec = currentPlaybackSeconds;
+    return true;
   }
 
   destroy() {
@@ -599,6 +639,25 @@ export class ProgressivePcmEngine {
       playbackPositionSeconds: this.getCurrentTimeSeconds(),
       blockedReason: null
     };
+  }
+
+  private applySoftDriftCorrection(positionSeconds: number) {
+    const currentSeconds = this.getCurrentTimeSeconds();
+    if (!Number.isFinite(currentSeconds) || !Number.isFinite(positionSeconds)) {
+      return;
+    }
+
+    const correctionSeconds = clamp(
+      positionSeconds - currentSeconds,
+      -pcmMaxSoftCorrectionSeconds,
+      pcmMaxSoftCorrectionSeconds
+    );
+    this.anchorTrackTimeSec = normalizeTrackTimeSeconds(
+      this.anchorTrackTimeSec + correctionSeconds
+    );
+    this.pausedTrackTimeSec = normalizeTrackTimeSeconds(
+      this.pausedTrackTimeSec + correctionSeconds
+    );
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
@@ -1717,6 +1776,14 @@ function decodeWavSample(view: DataView, offset: number, header: WavHeader) {
 
 function normalizeTrackTimeSeconds(value: number) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function clamp(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(max, Math.max(min, value));
 }
 
 function normalizePcmPlaybackTimeline(

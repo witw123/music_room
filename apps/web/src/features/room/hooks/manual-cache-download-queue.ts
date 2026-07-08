@@ -241,21 +241,14 @@ export function buildManualCacheRequestFailureEvent(input: {
   };
 }
 
-function resolveManualCacheRequestOrder(input: {
+export function resolveManualCacheActivePriorityChunks(input: {
   manifest: ResolvedTrackPieceManifest;
   track: TrackMeta;
   localPieceIndexes: number[];
   activePlaybackWindow: ActivePlaybackCacheWindow | null;
 }) {
-  const localPieceSet = new Set(input.localPieceIndexes);
   if (input.activePlaybackWindow?.trackId !== input.track.id) {
-    const missingChunks: number[] = [];
-    for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
-      if (!localPieceSet.has(chunkIndex)) {
-        missingChunks.push(chunkIndex);
-      }
-    }
-    return missingChunks;
+    return [];
   }
 
   const startupLookAheadMs = getStartupWindowMs({
@@ -268,7 +261,7 @@ function resolveManualCacheRequestOrder(input: {
       codec: input.track.codec ?? null
     })
   ) {
-    const orderedChunks = getPriorityChunkIndexes({
+    return getPriorityChunkIndexes({
       manifest: {
         trackId: input.track.id,
         fileHash: input.track.fileHash,
@@ -285,17 +278,9 @@ function resolveManualCacheRequestOrder(input: {
       lookBehindMs: 4_000,
       lookAheadMs: input.activePlaybackWindow.policy === "catchup" ? 60_000 : startupLookAheadMs
     });
-    const seen = new Set(orderedChunks);
-    for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
-      if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {
-        orderedChunks.push(chunkIndex);
-        seen.add(chunkIndex);
-      }
-    }
-    return orderedChunks;
   }
 
-  const orderedChunks = resolveSlidingWindowChunkOrder({
+  return resolveSlidingWindowChunkOrder({
     manifest: {
       durationMs: input.track.durationMs,
       totalChunks: input.manifest.totalChunks,
@@ -315,6 +300,26 @@ function resolveManualCacheRequestOrder(input: {
     startupLookAheadMs,
     steadyLookAheadMs: input.activePlaybackWindow.policy === "catchup" ? 60_000 : 30_000
   });
+}
+
+function resolveManualCacheRequestOrder(input: {
+  manifest: ResolvedTrackPieceManifest;
+  track: TrackMeta;
+  localPieceIndexes: number[];
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+}) {
+  const localPieceSet = new Set(input.localPieceIndexes);
+  if (input.activePlaybackWindow?.trackId !== input.track.id) {
+    const missingChunks: number[] = [];
+    for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
+      if (!localPieceSet.has(chunkIndex)) {
+        missingChunks.push(chunkIndex);
+      }
+    }
+    return missingChunks;
+  }
+
+  const orderedChunks = resolveManualCacheActivePriorityChunks(input);
   const seen = new Set(orderedChunks);
   for (let chunkIndex = 0; chunkIndex < input.manifest.totalChunks; chunkIndex += 1) {
     if (!localPieceSet.has(chunkIndex) && !seen.has(chunkIndex)) {

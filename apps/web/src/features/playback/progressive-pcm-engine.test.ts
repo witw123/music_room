@@ -59,8 +59,16 @@ function installFakeAudioContext(
       disconnectCalls: 0,
       gain: {
         value: 1,
+        cancelScheduledValues(_time: number) {
+          return undefined;
+        },
         setValueAtTime(value: number) {
           this.value = value;
+          return this;
+        },
+        linearRampToValueAtTime(value: number) {
+          this.value = value;
+          return this;
         }
       },
       connect(target: unknown) {
@@ -74,6 +82,11 @@ function installFakeAudioContext(
     };
   }
   const gainNode = makeGainNode();
+  const bufferSources: Array<{
+    stopCalls: number;
+    disconnectCalls: number;
+    startCalls: Array<{ when?: number; offset?: number; duration?: number }>;
+  }> = [];
   const mediaStreamDestination = {
     stream: {},
     disconnectCalls: 0,
@@ -109,22 +122,30 @@ function installFakeAudioContext(
     }
 
     createBufferSource() {
-      return {
+      const source = {
         buffer: null as unknown,
         onended: null as (() => void) | null,
         connect() {
           return undefined;
         },
-        start() {
+        start(when?: number, offset?: number, duration?: number) {
+          this.startCalls.push({ when, offset, duration });
           return undefined;
         },
+        startCalls: [] as Array<{ when?: number; offset?: number; duration?: number }>,
+        stopCalls: 0,
         stop() {
+          this.stopCalls += 1;
           return undefined;
         },
+        disconnectCalls: 0,
         disconnect() {
+          this.disconnectCalls += 1;
           return undefined;
         }
       };
+      bufferSources.push(source);
+      return source;
     }
 
     createOscillator() {
@@ -259,6 +280,7 @@ function installFakeAudioContext(
 
   return {
     gainNode,
+    bufferSources,
     mediaStreamDestination,
     destination: audioDestination,
     restore() {
@@ -806,6 +828,68 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("keeps scheduled PCM audio through soft drift instead of hard cutting output", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const longManifest = {
+      ...manifest,
+      durationMs: 120_000
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", longManifest);
+
+    try {
+      await engine.attach();
+      const context = Reflect.get(engine as object, "audioContext") as AudioContext;
+      Reflect.set(context as object, "currentTime", 60.3);
+      const stop = vi.fn();
+      const disconnect = vi.fn();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "playing", true);
+      Reflect.set(engine as object, "anchorTrackTimeSec", 60);
+      Reflect.set(engine as object, "anchorContextTimeSec", 60);
+      Reflect.set(engine as object, "pausedTrackTimeSec", 60);
+      Reflect.set(engine as object, "playbackTimelineKey", "track_1|1");
+      Reflect.set(engine as object, "playbackTimelineRevision", 7);
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 60,
+          endTimeSec: 72,
+          buffer: {}
+        }
+      ]);
+      Reflect.set(engine as object, "scheduledSegments", [
+        {
+          source: {
+            onended: null,
+            stop,
+            disconnect
+          },
+          startTimeSec: 60,
+          endTimeSec: 72,
+          contextStartSec: 60,
+          durationSec: 12
+        }
+      ]);
+
+      const result = await syncPlayback(engine, 60.56, true, {
+        key: "track_1|1",
+        revision: 7
+      });
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(stop).not.toHaveBeenCalled();
+      expect(disconnect).not.toHaveBeenCalled();
+      expect(engine.getSnapshot()).toMatchObject({
+        scheduledSegmentCount: 1,
+        playoutState: "playing"
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("flushes decoded packets before reporting PCM playback ready", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
@@ -830,6 +914,32 @@ describe("ProgressivePcmEngine", () => {
         decodedRms: 0.25,
         decodedNonZeroSampleCount: 88_200
       });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("fades PCM output down when native full-local playback is ready to take over", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    mockSingleDecodedPacket();
+
+    try {
+      await engine.attach();
+      await syncPlayback(engine, 0.2, true);
+
+      const prepared = engine.prepareForNativeHandoff(45);
+
+      expect(prepared).toBe(true);
+      expect(audioContext.gainNode.gain.value).toBe(0);
+      expect(engine.getSnapshot()).toMatchObject({
+        scheduledSegmentCount: 1,
+        playoutState: "paused"
+      });
+      expect(audio.srcObject).toBeNull();
     } finally {
       engine.destroy();
       audioContext.restore();

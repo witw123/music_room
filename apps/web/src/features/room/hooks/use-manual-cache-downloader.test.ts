@@ -1172,6 +1172,64 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 59, 60, 61]);
   });
 
+  it("lets the active FLAC decode window preempt stale pending cache requests", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 3_000,
+      durationMs: 3_000_000,
+      sizeBytes: 3_000 * 128 * 1024,
+      mimeType: "audio/flac",
+      codec: "flac"
+    });
+    const pendingForTrack = new Map<number, number>();
+    for (let chunkIndex = 1_000; chunkIndex < 2_024; chunkIndex += 1) {
+      pendingForTrack.set(chunkIndex, 70_000);
+    }
+    const pendingByTrack = new Map([["track_a", pendingForTrack]]);
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack,
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 600_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalled();
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 599, 600, 601]);
+    expect(pendingByTrack.get("track_a")?.has(1_000)).toBe(false);
+    expect(pendingByTrack.get("track_a")?.has(600)).toBe(true);
+  });
+
   it("continues filling the full FLAC cache after the active decode window is cached", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",

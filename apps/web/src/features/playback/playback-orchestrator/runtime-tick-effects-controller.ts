@@ -21,6 +21,7 @@ import {
   type ProgressiveEngineType,
   type ProgressivePlaybackSource
 } from "../progressive-playback";
+import type { ProgressivePcmEngine } from "../progressive-pcm-engine";
 import type { FullLocalPlaybackTrack } from "./runtime-types";
 import { roomAudioOutput } from "../room-audio-output";
 import { noopPlaybackRuntimeTick } from "./use-runtime-tick-orchestrator";
@@ -106,6 +107,7 @@ type RuntimeTickEffectsControllerInput = {
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
   playbackStatus: PlaybackSnapshot["status"] | null | undefined;
   progressiveAheadBufferedMs: number;
+  progressivePcmEngineRef: MutableRefObject<ProgressivePcmEngine | null>;
   recoverPausedFullLocalPlaybackRef: MutableRefObject<() => void>;
   recordDriftSample: (driftMs: number, timestampMs?: number) => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -142,6 +144,7 @@ export function useRuntimeTickEffectsController({
   playbackRef,
   playbackStatus,
   progressiveAheadBufferedMs,
+  progressivePcmEngineRef,
   recoverPausedFullLocalPlaybackRef,
   recordDriftSample,
   recordPeerDiagnostic,
@@ -359,6 +362,12 @@ export function useRuntimeTickEffectsController({
       });
 
       if (shouldUpgrade) {
+        const audio = audioRef.current;
+        if (audio) {
+          audio.muted = false;
+          audio.volume = getAudibleElementVolume(runtimeState.volume);
+        }
+        progressivePcmEngineRef.current?.prepareForNativeHandoff();
         runtimeState.transitionPlaybackSource("full-local");
         return;
       }
@@ -378,6 +387,12 @@ export function useRuntimeTickEffectsController({
         now
       });
       if (upgradeAction.kind === "transition") {
+        const audio = audioRef.current;
+        if (audio) {
+          audio.muted = false;
+          audio.volume = getAudibleElementVolume(runtimeState.volume);
+        }
+        progressivePcmEngineRef.current?.prepareForNativeHandoff();
         runtimeState.transitionPlaybackSource(upgradeAction.nextSource);
         return;
       }
@@ -510,6 +525,9 @@ export function useRuntimeTickEffectsController({
       });
       fullLocalWarmupReadyAtRef.current = transitionAction.nextWarmupReadyAt;
       if (transitionAction.transition) {
+        audio.muted = false;
+        audio.volume = getAudibleElementVolume(runtimeState.volume);
+        progressivePcmEngineRef.current?.prepareForNativeHandoff();
         runtimeState.transitionPlaybackSource(transitionAction.transition.nextSource, {
           clearFallbackReason: transitionAction.transition.clearFallbackReason
         });
@@ -549,6 +567,7 @@ export function useRuntimeTickEffectsController({
     playbackMediaEpoch,
     playbackRef,
     playbackStatus,
+    progressivePcmEngineRef,
     recoverPausedFullLocalPlaybackRef,
     recordDriftSample,
     recordPeerDiagnostic,

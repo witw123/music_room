@@ -434,6 +434,7 @@ export function usePlaybackRuntimeControllerStack({
     playbackRef,
     playbackStatus,
     progressiveAheadBufferedMs: progressiveHealthSnapshot.aheadBufferedMs,
+    progressivePcmEngineRef,
     recoverPausedFullLocalPlaybackRef,
     recordDriftSample,
     recordPeerDiagnostic,

@@ -9,6 +9,7 @@ import {
 } from "@/features/playback/progressive-playback";
 import { getRequiredDecodablePrefixChunkCount } from "@/features/playback/sliding-window/playback-window-scheduler";
 import {
+  resolveManualCacheActivePriorityChunks,
   resolveManualCacheTrackPlan,
   type ActivePlaybackCacheWindow,
   type ManualCacheTrackPlan
@@ -106,6 +107,53 @@ function resolveActivePlaybackDecodablePrefixChunkCount(input: {
   });
 }
 
+function releaseStaleActivePlaybackPendingChunks(input: {
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  localPieceIndexes: number[];
+  pendingForTrack: Map<number, number>;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined;
+  maxPendingChunks: number;
+  targetFreeSlots: number;
+}) {
+  if (
+    input.activePlaybackWindow?.trackId !== input.track.id ||
+    input.pendingForTrack.size < input.maxPendingChunks ||
+    input.targetFreeSlots <= 0
+  ) {
+    return false;
+  }
+
+  const localPieceSet = new Set(input.localPieceIndexes);
+  const activePriorityChunks = resolveManualCacheActivePriorityChunks({
+    manifest: input.manifest,
+    track: input.track,
+    localPieceIndexes: input.localPieceIndexes,
+    activePlaybackWindow: input.activePlaybackWindow
+  });
+  const missingPriorityChunks = activePriorityChunks.filter(
+    (chunkIndex) => !localPieceSet.has(chunkIndex) && !input.pendingForTrack.has(chunkIndex)
+  );
+  if (missingPriorityChunks.length === 0) {
+    return false;
+  }
+
+  const priorityChunkSet = new Set(activePriorityChunks);
+  const requiredFreeSlots = Math.min(input.targetFreeSlots, missingPriorityChunks.length);
+  const targetPendingSize = Math.max(0, input.maxPendingChunks - requiredFreeSlots);
+  for (const chunkIndex of [...input.pendingForTrack.keys()]) {
+    if (priorityChunkSet.has(chunkIndex)) {
+      continue;
+    }
+
+    input.pendingForTrack.delete(chunkIndex);
+    if (input.pendingForTrack.size <= targetPendingSize) {
+      break;
+    }
+  }
+  return input.pendingForTrack.size <= targetPendingSize;
+}
+
 export async function planManualCacheDirectRequests(input: {
   roomSnapshot: RoomSnapshot | null;
   manualCacheTrackIds: string[];
@@ -184,11 +232,24 @@ export async function planManualCacheDirectRequests(input: {
       manifest: manifestHint,
       activePlaybackWindow: input.activePlaybackWindow ?? null
     });
+    const releasedActivePrioritySlots = manifestHint
+      ? releaseStaleActivePlaybackPendingChunks({
+        track,
+        manifest: manifestHint,
+        localPieceIndexes,
+        pendingForTrack,
+        activePlaybackWindow: input.activePlaybackWindow ?? null,
+        maxPendingChunks: requestBudget.maxPendingPerTrack,
+        targetFreeSlots: requestBudget.batchSize
+      })
+      : false;
     const pendingRefillLowWatermark =
       requestBudget.maxPendingPerTrack - requestBudget.maxPendingPerPeer;
     const remainingTrackSlots = Math.max(0, requestBudget.maxPendingPerTrack - pendingForTrack.size);
     const shouldRefillPendingWindow =
-      pendingForTrack.size === 0 || pendingForTrack.size <= pendingRefillLowWatermark;
+      releasedActivePrioritySlots ||
+      pendingForTrack.size === 0 ||
+      pendingForTrack.size <= pendingRefillLowWatermark;
     const plan = resolveManualCacheTrackPlan({
       track,
       roomId,
