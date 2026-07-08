@@ -5,8 +5,8 @@
 
 /**
  * Failures that should latch: the same track will not be retried with the PCM
- * engine until it changes, because the failure is not transient (decoder or
- * cache problems that will recur on the same input).
+ * engine until it changes, because the failure is not transient (decoder
+ * problems that will recur on the same input).
  */
 export function shouldLatchPcmRuntimeFailure(reason: string | null | undefined) {
   return (
@@ -15,7 +15,6 @@ export function shouldLatchPcmRuntimeFailure(reason: string | null | undefined) 
     reason === "decoder-config-failed" ||
     reason === "encoded-audio-chunk-unavailable" ||
     reason === "decoder-flush-failed" ||
-    reason === "cache-read-failed" ||
     reason === "wav-decode-failed"
   );
 }

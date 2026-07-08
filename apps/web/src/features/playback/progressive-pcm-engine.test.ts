@@ -932,8 +932,8 @@ describe("ProgressivePcmEngine", () => {
     const audio = createAudioElement();
     const windowManifest = {
       ...manifest,
-      durationMs: 8_000,
-      totalChunks: 8,
+      durationMs: 10_000,
+      totalChunks: 10,
       chunkSize: 64
     };
     const engine = new ProgressivePcmEngine(audio, "peer_local", windowManifest);
@@ -999,6 +999,81 @@ describe("ProgressivePcmEngine", () => {
         decodedPacketCount: 1,
         decodedSegmentCount: 1,
         scheduledSegmentCount: 1
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("continues FLAC window decoding past duplicate packets in an earlier sparse run", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const windowManifest = {
+      ...manifest,
+      durationMs: 9_000,
+      totalChunks: 9,
+      chunkSize: 64
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", windowManifest);
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]);
+    const streamInfo = {
+      description,
+      audioOffset: description.byteLength,
+      sampleRate: 256,
+      numberOfChannels: 2,
+      bitsPerSample: 16,
+      minBlockSize: 256,
+      maxBlockSize: 256,
+      totalSamples: null
+    };
+
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      const payload =
+        chunkIndex === 4
+          ? buildFlacFrame(4, [0x40, 0x41])
+          : chunkIndex === 5
+            ? buildFlacFrame(5, [0x50, 0x51])
+            : chunkIndex === 7
+              ? buildFlacFrame(7, [0x70, 0x71])
+              : chunkIndex === 8
+                ? buildFlacFrame(8, [0x80, 0x81])
+                : null;
+      if (!payload) {
+        return null;
+      }
+
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: windowManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: windowManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: payload.buffer
+      };
+    });
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "streamInfo", streamInfo);
+      Reflect.set(engine as object, "contiguousChunkCount", 1);
+      Reflect.set(
+        engine as object,
+        "decodedFlacPacketTimestampUs",
+        new Set([4_000_000, 5_000_000])
+      );
+
+      const result = await engine.syncPlayback(7.1, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 2,
+        decodedSegmentCount: 2,
+        scheduledSegmentCount: 2
       });
     } finally {
       engine.destroy();

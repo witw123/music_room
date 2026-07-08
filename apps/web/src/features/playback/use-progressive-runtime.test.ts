@@ -4854,12 +4854,12 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
-  it("latches fatal PCM runtime failures while keeping cache misses recoverable", () => {
+  it("latches fatal PCM runtime failures while keeping cache read failures recoverable", () => {
     expect(shouldLatchPcmRuntimeFailure("engine-failed")).toBe(true);
     expect(shouldLatchPcmRuntimeFailure("decoder-unavailable")).toBe(true);
     expect(shouldLatchPcmRuntimeFailure("decoder-config-failed")).toBe(true);
     expect(shouldLatchPcmRuntimeFailure("encoded-audio-chunk-unavailable")).toBe(true);
-    expect(shouldLatchPcmRuntimeFailure("cache-read-failed")).toBe(true);
+    expect(shouldLatchPcmRuntimeFailure("cache-read-failed")).toBe(false);
     expect(shouldLatchPcmRuntimeFailure("engine-opening")).toBe(false);
     expect(shouldLatchPcmRuntimeFailure("pcm-buffer-missing")).toBe(false);
     expect(shouldLatchPcmRuntimeFailure("audio-context-suspended")).toBe(false);
@@ -4898,6 +4898,13 @@ describe("use-progressive-runtime policy helpers", () => {
         currentTrackId: "track_1",
         failureTrackId: "track_1",
         failureReason: "pcm-buffer-missing"
+      })
+    ).toBe(true);
+    expect(
+      shouldRetryPcmRuntimeAfterFailure({
+        currentTrackId: "track_1",
+        failureTrackId: "track_1",
+        failureReason: "cache-read-failed"
       })
     ).toBe(true);
   });
