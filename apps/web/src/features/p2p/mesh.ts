@@ -143,7 +143,7 @@ export class P2PMesh {
   private readonly sendQueueHighWatermarkBytes = 16 * 1024 * 1024;
   private readonly incomingPieceBatchSize = 32;
   private readonly pieceServeBatchConcurrency = 128;
-  private readonly maxDataChannelPayloadBytes = 320 * 1024;
+  private readonly maxDataChannelPayloadBytes = 240 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;
   private readonly autoReconnect: boolean;
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];

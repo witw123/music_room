@@ -879,7 +879,52 @@ describe("P2PMesh", () => {
       (message): message is ArrayBuffer => message instanceof ArrayBuffer
     ) ?? [];
     expect(binaryFrames.length).toBeGreaterThan(1);
-    expect(binaryFrames.every((frame) => frame.byteLength <= 320 * 1024)).toBe(true);
+    expect(binaryFrames.every((frame) => frame.byteLength <= 240 * 1024)).toBe(true);
+  });
+
+  it("keeps 256KB audio chunks below conservative data channel frame limits", async () => {
+    const piecePayload = new Uint8Array(256 * 1024).fill(7).buffer;
+    vi.mocked(getCachedPiece).mockResolvedValueOnce({
+      pieceId: "track_1:peer_a:0",
+      trackId: "track_1",
+      peerId: "peer_a",
+      chunkIndex: 0,
+      chunkSize: piecePayload.byteLength,
+      hash: await sha256Hex(piecePayload),
+      createdAt: "2026-04-03T16:30:00.000Z",
+      payload: piecePayload
+    });
+    vi.mocked(getTrackPieceManifest).mockResolvedValueOnce({
+      trackId: "track_1",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: piecePayload.byteLength,
+      durationMs: 1000,
+      totalChunks: 1,
+      chunkSize: piecePayload.byteLength,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+
+    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
+      onPieceReceived: vi.fn()
+    });
+
+    await mesh.syncPeers(["peer_b"]);
+    const channel = FakeRTCPeerConnection.instances[0]?.channel;
+    await channel?.onmessage?.({
+      data: JSON.stringify({
+        kind: "request-piece",
+        trackId: "track_1",
+        chunkIndex: 0
+      })
+    } as MessageEvent<string>);
+
+    const binaryFrames = channel?.sentMessages.filter(
+      (message): message is ArrayBuffer => message instanceof ArrayBuffer
+    ) ?? [];
+    expect(binaryFrames.length).toBeGreaterThan(1);
+    expect(binaryFrames.every((frame) => frame.byteLength <= 256 * 1024)).toBe(true);
   });
 
   it("reassembles fragmented piece frames before persisting the received piece", async () => {
