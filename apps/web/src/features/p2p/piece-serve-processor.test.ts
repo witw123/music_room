@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getCachedPiece,
+  getCachedPiecesByIndexes,
   getCachedPieceIndexes,
   getTrackPieceManifest,
   getTrackPieceManifestByFileHash
@@ -10,6 +11,7 @@ import { PieceServeProcessor } from "./piece-serve-processor";
 
 vi.mock("@/lib/indexeddb", () => ({
   getCachedPiece: vi.fn(),
+  getCachedPiecesByIndexes: vi.fn(async () => []),
   getCachedPieceIndexes: vi.fn(async () => []),
   getTrackPieceManifest: vi.fn(async () => null),
   getTrackPieceManifestByFileHash: vi.fn(async () => null),
@@ -88,6 +90,86 @@ describe("PieceServeProcessor", () => {
       payloadBytes: payload.byteLength,
       requestId: "request-1"
     });
+  });
+
+  it("serves batched cached piece requests with one IndexedDB read", async () => {
+    const firstPayload = new TextEncoder().encode("piece-0").buffer;
+    const secondPayload = new TextEncoder().encode("piece-1").buffer;
+    const firstHash = await sha256Hex(firstPayload);
+    const secondHash = await sha256Hex(secondPayload);
+    vi.mocked(getCachedPiecesByIndexes).mockResolvedValueOnce([
+      {
+        pieceId: "hash-track-1:7:__local__:0",
+        trackId: "track_1",
+        fileHash: "hash-track-1",
+        peerId: "peer_a",
+        ownerKey: "__local__",
+        chunkIndex: 0,
+        chunkSize: 7,
+        hash: firstHash,
+        createdAt: "2026-04-03T16:30:00.000Z",
+        payload: firstPayload
+      },
+      {
+        pieceId: "hash-track-1:7:__local__:1",
+        trackId: "track_1",
+        fileHash: "hash-track-1",
+        peerId: "peer_a",
+        ownerKey: "__local__",
+        chunkIndex: 1,
+        chunkSize: 7,
+        hash: secondHash,
+        createdAt: "2026-04-03T16:30:00.000Z",
+        payload: secondPayload
+      }
+    ]);
+    vi.mocked(getTrackPieceManifest).mockResolvedValueOnce({
+      trackId: "track_1",
+      fileHash: "hash-track-1",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: firstPayload.byteLength + secondPayload.byteLength,
+      durationMs: 1000,
+      totalChunks: 2,
+      chunkSize: 7,
+      updatedAt: "2026-04-03T16:30:00.000Z"
+    });
+    const enqueueSendItem = vi.fn();
+    const onPieceServed = vi.fn();
+    const processor = new PieceServeProcessor({
+      localPeerId: "peer_a",
+      maxDataChannelPayloadBytes: 48 * 1024,
+      resolveTrackCacheIdentity: () => ({
+        fileHash: "hash-track-1",
+        ownerKey: "__local__",
+        chunkSize: 7
+      }),
+      enqueueSendItem,
+      onPieceServed
+    });
+
+    await processor.servePieceRequests({
+      peerId: "peer_b",
+      entry: openEntry(),
+      requests: [
+        { trackId: "track_1", chunkIndex: 0, requestId: "request-1" },
+        { trackId: "track_1", chunkIndex: 1, requestId: "request-1" }
+      ]
+    });
+
+    expect(getCachedPiece).not.toHaveBeenCalled();
+    expect(getCachedPiecesByIndexes).toHaveBeenCalledWith(
+      "track_1",
+      "peer_a",
+      [0, 1],
+      {
+        fileHash: "hash-track-1",
+        ownerKey: "__local__",
+        chunkSize: 7
+      }
+    );
+    expect(enqueueSendItem).toHaveBeenCalledTimes(2);
+    expect(onPieceServed.mock.calls.map(([payload]) => payload.chunkIndex)).toEqual([0, 1]);
   });
 
   it("uses fallback payloads when the local cached piece is missing", async () => {

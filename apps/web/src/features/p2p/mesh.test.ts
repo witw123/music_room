@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cacheTrackPieces,
   getCachedPiece,
+  getCachedPiecesByIndexes,
   getCachedPieceIndexes,
   getTrackPieceManifest
 } from "@/lib/indexeddb";
@@ -161,6 +162,7 @@ function getMeshTestAccess(mesh: P2PMesh): MeshTestAccess {
 vi.mock("@/lib/indexeddb", () => ({
   cacheTrackPieces: vi.fn(),
   getCachedPiece: vi.fn(),
+  getCachedPiecesByIndexes: vi.fn(async () => []),
   getCachedPieceIndexes: vi.fn(async () => []),
   getTrackPieceManifest: vi.fn(async () => null),
   getTrackPieceManifestByFileHash: vi.fn(async () => null),
@@ -670,22 +672,26 @@ describe("P2PMesh", () => {
         };
       })
     );
-    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
-      const piece = payloads.find((entry) => entry.chunkIndex === chunkIndex);
-      if (!piece) {
-        return null;
-      }
-      return {
-        pieceId: `track_1:peer_a:${chunkIndex}`,
-        trackId: "track_1",
-        peerId: "peer_a",
-        chunkIndex,
-        chunkSize: piece.payload.byteLength,
-        hash: piece.hash,
-        createdAt: "2026-04-03T16:30:00.000Z",
-        payload: piece.payload
-      };
-    });
+    vi.mocked(getCachedPiecesByIndexes).mockImplementation(async (_trackId, _peerId, chunkIndexes) =>
+      chunkIndexes
+        .map((chunkIndex) => {
+          const piece = payloads.find((entry) => entry.chunkIndex === chunkIndex);
+          if (!piece) {
+            return null;
+          }
+          return {
+            pieceId: `track_1:peer_a:${chunkIndex}`,
+            trackId: "track_1",
+            peerId: "peer_a",
+            chunkIndex,
+            chunkSize: piece.payload.byteLength,
+            hash: piece.hash,
+            createdAt: "2026-04-03T16:30:00.000Z",
+            payload: piece.payload
+          };
+        })
+        .filter((piece): piece is NonNullable<typeof piece> => !!piece)
+    );
     vi.mocked(getTrackPieceManifest).mockResolvedValue({
       trackId: "track_1",
       fileHash: "hash-track-1",
@@ -730,14 +736,13 @@ describe("P2PMesh", () => {
     expect(binaryFrames).toHaveLength(3);
   });
 
-  it("starts enough piece reads from a batched playback request to keep cache warmup saturated", async () => {
-    const pendingReads: Array<{
-      chunkIndex: number;
-      resolve: (piece: Awaited<ReturnType<typeof getCachedPiece>>) => void;
-    }> = [];
-    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+  it("starts one batch piece read from a batched playback request", async () => {
+    let resolveBatchRead: (
+      pieces: Awaited<ReturnType<typeof getCachedPiecesByIndexes>>
+    ) => void = () => undefined;
+    vi.mocked(getCachedPiecesByIndexes).mockImplementation(async () => {
       return new Promise((resolve) => {
-        pendingReads.push({ chunkIndex, resolve });
+        resolveBatchRead = resolve;
       });
     });
     vi.mocked(getTrackPieceManifest).mockResolvedValue({
@@ -767,39 +772,36 @@ describe("P2PMesh", () => {
     } as MessageEvent<string>);
     await Promise.resolve();
 
-    expect(pendingReads.map((entry) => entry.chunkIndex)).toEqual(
-      Array.from({ length: 16 }, (_value, index) => index)
+    expect(getCachedPiece).not.toHaveBeenCalled();
+    expect(getCachedPiecesByIndexes).toHaveBeenCalledWith(
+      "track_1",
+      "peer_a",
+      Array.from({ length: 16 }, (_value, index) => index),
+      {
+        fileHash: undefined,
+        ownerKey: "__local__",
+        chunkSize: null
+      }
     );
-
-    for (const pendingRead of pendingReads) {
-      const payload = new TextEncoder().encode(`piece-${pendingRead.chunkIndex}`).buffer;
-      pendingRead.resolve({
-        pieceId: `track_1:peer_a:${pendingRead.chunkIndex}`,
-        trackId: "track_1",
-        peerId: "peer_a",
-        chunkIndex: pendingRead.chunkIndex,
-        chunkSize: payload.byteLength,
-        hash: await sha256Hex(payload),
-        createdAt: "2026-04-03T16:30:00.000Z",
-        payload
-      });
-    }
+    resolveBatchRead([]);
     await handleMessage;
   });
 
   it("pre-fills enough data channel bytes for an active playback cache burst", async () => {
     const piecePayload = new Uint8Array(128 * 1024).fill(7).buffer;
     const pieceHash = await sha256Hex(piecePayload);
-    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => ({
-      pieceId: `track_1:peer_a:${chunkIndex}`,
-      trackId: "track_1",
-      peerId: "peer_a",
-      chunkIndex,
-      chunkSize: piecePayload.byteLength,
-      hash: pieceHash,
-      createdAt: "2026-04-03T16:30:00.000Z",
-      payload: piecePayload.slice(0)
-    }));
+    vi.mocked(getCachedPiecesByIndexes).mockImplementation(async (_trackId, _peerId, chunkIndexes) =>
+      chunkIndexes.map((chunkIndex) => ({
+        pieceId: `track_1:peer_a:${chunkIndex}`,
+        trackId: "track_1",
+        peerId: "peer_a",
+        chunkIndex,
+        chunkSize: piecePayload.byteLength,
+        hash: pieceHash,
+        createdAt: "2026-04-03T16:30:00.000Z",
+        payload: piecePayload.slice(0)
+      }))
+    );
     vi.mocked(getTrackPieceManifest).mockResolvedValue({
       trackId: "track_1",
       fileHash: "hash-track-1",
@@ -817,7 +819,7 @@ describe("P2PMesh", () => {
 
     await mesh.syncPeers(["peer_b"]);
     const channel = FakeRTCPeerConnection.instances[0]?.channel;
-    expect(channel?.bufferedAmountLowThreshold).toBe(1024 * 1024);
+    expect(channel?.bufferedAmountLowThreshold).toBe(4 * 1024 * 1024);
 
     await channel?.onmessage?.({
       data: JSON.stringify({
@@ -831,11 +833,12 @@ describe("P2PMesh", () => {
     const binaryFrames =
       channel?.sentMessages.filter((message): message is ArrayBuffer => message instanceof ArrayBuffer) ??
       [];
-    expect(binaryFrames.length).toBe(16 * 3);
+    expect(binaryFrames.length).toBe(16);
+    expect(binaryFrames.every((frame) => frame.byteLength > 128 * 1024)).toBe(true);
   });
 
   it("fragments oversized piece frames before sending over the data channel", async () => {
-    const piecePayload = new Uint8Array(128 * 1024).fill(7).buffer;
+    const piecePayload = new Uint8Array(512 * 1024).fill(7).buffer;
     vi.mocked(getCachedPiece).mockResolvedValueOnce({
       pieceId: "track_1:peer_a:0",
       trackId: "track_1",
@@ -876,7 +879,7 @@ describe("P2PMesh", () => {
       (message): message is ArrayBuffer => message instanceof ArrayBuffer
     ) ?? [];
     expect(binaryFrames.length).toBeGreaterThan(1);
-    expect(binaryFrames.every((frame) => frame.byteLength <= 48 * 1024)).toBe(true);
+    expect(binaryFrames.every((frame) => frame.byteLength <= 320 * 1024)).toBe(true);
   });
 
   it("reassembles fragmented piece frames before persisting the received piece", async () => {

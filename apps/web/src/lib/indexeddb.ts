@@ -1,4 +1,4 @@
-import Dexie, { type Table } from "dexie";
+import Dexie, { type IndexableType, type Table } from "dexie";
 
 type TrackAssetRecord = {
   trackId: string;
@@ -9,7 +9,7 @@ type TrackAssetRecord = {
   cachedAt: string;
 };
 
-type TrackPieceRecord = {
+export type TrackPieceRecord = {
   pieceId: string;
   trackId: string;
   fileHash?: string;
@@ -535,6 +535,48 @@ export async function getCachedPiece(
     .toArray();
 
   return filterCachedPiecesByGeometry(pieces, options)[0] ?? null;
+}
+
+export async function getCachedPiecesByIndexes(
+  trackId: string,
+  peerId: string,
+  chunkIndexes: number[],
+  options?: { fileHash?: string | null; ownerKey?: string | null; chunkSize?: number | null }
+) {
+  const wantedChunkIndexes = new Set(
+    chunkIndexes
+      .filter((chunkIndex) => Number.isInteger(chunkIndex) && chunkIndex >= 0)
+  );
+  if (wantedChunkIndexes.size === 0) {
+    return [];
+  }
+
+  const ownerKey = options?.ownerKey ?? peerId;
+  const fileHash = options?.fileHash ?? null;
+  const pieces = fileHash
+    ? await musicRoomDatabase.trackPieces
+        .where("[fileHash+ownerKey+chunkIndex]")
+        .anyOf(
+          [...wantedChunkIndexes].map((chunkIndex) => [
+            fileHash,
+            ownerKey,
+            chunkIndex
+          ]) as unknown as IndexableType[]
+        )
+        .toArray()
+    : await musicRoomDatabase.trackPieces
+        .where("[trackId+ownerKey+chunkIndex]")
+        .anyOf(
+          [...wantedChunkIndexes].map((chunkIndex) => [
+            trackId,
+            ownerKey,
+            chunkIndex
+          ]) as unknown as IndexableType[]
+        )
+        .toArray();
+
+  return filterCachedPiecesByGeometry(pieces, options)
+    .sort((left, right) => left.chunkIndex - right.chunkIndex);
 }
 
 export async function getCachedPiecesForTrack(

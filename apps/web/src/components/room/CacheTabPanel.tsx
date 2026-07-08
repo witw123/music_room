@@ -69,7 +69,9 @@ function CacheTabPanelBase({
               const cachedLibraryTrack = cacheLibraryByHash.get(track.fileHash) ?? null;
               const task = manualCacheTasks[track.id] ?? null;
               const availability = availabilityByTrackId.get(track.id) ?? null;
-              const hasOnlineProvider = (availability?.peerCount ?? 0) > 0 && (availability?.totalChunks ?? 0) > 0;
+              const hasOnlineProvider =
+                (availability?.remotePeerCount ?? availability?.peerCount ?? 0) > 0 &&
+                (availability?.totalChunks ?? 0) > 0;
               const progressTotalChunks = Math.max(
                 task?.totalChunks ?? 0,
                 track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0

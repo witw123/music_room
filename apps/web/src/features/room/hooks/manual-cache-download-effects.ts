@@ -78,10 +78,12 @@ export function reconcileManualCacheDirectPendingTracks(input: {
     if (
       input.previousActivePlaybackTrackId !== input.nextActivePlaybackTrackId
     ) {
-      const trackIdToClear =
-        input.previousActivePlaybackTrackId ?? input.nextActivePlaybackTrackId;
-      if (trackIdToClear) {
-        input.pendingByTrack.delete(trackIdToClear);
+      const trackIdsToClear = [
+        input.previousActivePlaybackTrackId,
+        input.nextActivePlaybackTrackId
+      ].filter((trackId): trackId is string => !!trackId);
+      for (const trackId of trackIdsToClear) {
+        input.pendingByTrack.delete(trackId);
       }
     }
   }

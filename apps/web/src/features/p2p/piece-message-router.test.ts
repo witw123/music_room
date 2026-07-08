@@ -5,11 +5,13 @@ import { PieceMessageRouter } from "./piece-message-router";
 describe("PieceMessageRouter", () => {
   it("serves single and batched piece requests", async () => {
     const servePieceRequest = vi.fn();
+    const servePieceRequests = vi.fn();
     const onPieceRequestReceived = vi.fn();
     const router = new PieceMessageRouter({
       pieceServeBatchConcurrency: 2,
       incomingPieceFragmentTtlMs: 15_000,
       servePieceRequest,
+      servePieceRequests,
       takePendingRequest: vi.fn(),
       enqueueInboundPiece: vi.fn(),
       onPieceRequestReceived
@@ -46,23 +48,29 @@ describe("PieceMessageRouter", () => {
       {
         trackId: "track_1",
         chunkIndex: 0
-      },
-      {
-        trackId: "track_1",
-        chunkIndex: 0,
-        requestId: "request-1"
-      },
-      {
-        trackId: "track_1",
-        chunkIndex: 1,
-        requestId: "request-1"
-      },
-      {
-        trackId: "track_1",
-        chunkIndex: 2,
-        requestId: "request-1"
       }
     ]);
+    expect(servePieceRequests).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      entry,
+      requests: [
+        {
+          trackId: "track_1",
+          chunkIndex: 0,
+          requestId: "request-1"
+        },
+        {
+          trackId: "track_1",
+          chunkIndex: 1,
+          requestId: "request-1"
+        },
+        {
+          trackId: "track_1",
+          chunkIndex: 2,
+          requestId: "request-1"
+        }
+      ]
+    });
   });
 
   it("enqueues received pieces with their pending request metadata", async () => {

@@ -81,6 +81,7 @@ describe("use-room-derived-state helpers", () => {
       {
         track,
         peerCount: 1,
+        remotePeerCount: 0,
         localChunkCount: 4,
         totalChunks: 10,
         sources: ["Host (live_upload)"]

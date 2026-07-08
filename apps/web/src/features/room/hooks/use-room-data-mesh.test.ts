@@ -3,6 +3,7 @@ import {
   createBoundedCachedLibraryTrackCache,
   createInFlightCachedLibraryTrackRecordLoader,
   createDataMeshBridge,
+  resolvePieceRequestFallbackPayload,
   resolveDataPeerRecoveryRecommendation
 } from "./use-room-data-mesh";
 
@@ -81,6 +82,58 @@ describe("createDataMeshBridge", () => {
     await expect(bridge.syncPeers(["peer_source"])).resolves.toBe(true);
     expect(syncPeers).toHaveBeenCalledWith(["peer_source"], undefined);
     expect(bridge.isReady()).toBe(true);
+  });
+});
+
+describe("resolvePieceRequestFallbackPayload", () => {
+  it("reuses manifest piece hashes without hashing the fallback file chunk again", async () => {
+    const hashArrayBuffer = vi.fn(async () => "computed-hash");
+    const fallbackFile = new File(["abcdefgh"], "track.flac", { type: "audio/flac" });
+
+    const result = await resolvePieceRequestFallbackPayload({
+      track: {
+        id: "track_1",
+        title: "Track",
+        artist: "Artist",
+        album: null,
+        durationMs: 1000,
+        bitrate: null,
+        sizeBytes: fallbackFile.size,
+        codec: "flac",
+        mimeType: "audio/flac",
+        fileHash: "file-hash",
+        artworkUrl: null,
+        ownerSessionId: "owner_1",
+        ownerNickname: "owner",
+        sourceType: "local_upload",
+        pieceManifest: null,
+        relayManifest: null
+      },
+      fallbackFile,
+      cachedManifest: {
+        trackId: "track_1",
+        fileHash: "file-hash",
+        mimeType: "audio/flac",
+        codec: "flac",
+        sizeBytes: fallbackFile.size,
+        durationMs: 1000,
+        totalChunks: 2,
+        chunkSize: 4,
+        pieceHashes: ["manifest-hash-0", "manifest-hash-1"],
+        updatedAt: "2026-07-08T00:00:00.000Z"
+      },
+      chunkIndex: 1,
+      hashArrayBuffer
+    });
+
+    expect(hashArrayBuffer).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      hash: "manifest-hash-1",
+      totalChunks: 2,
+      chunkSize: 4,
+      mimeType: "audio/flac"
+    });
+    expect(new TextDecoder().decode(result?.payload)).toBe("efgh");
   });
 });
 

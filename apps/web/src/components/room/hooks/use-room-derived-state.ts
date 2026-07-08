@@ -480,6 +480,7 @@ export function buildAvailabilitySummary(input: {
       input.activeMemberPeerIds
     );
     const local = peers.find((entry) => entry.ownerPeerId === input.localPeerId);
+    const remotePeerCount = peers.filter((entry) => entry.ownerPeerId !== input.localPeerId).length;
     const manifest = resolveCurrentRoomTrackManifest(
       track,
       trackAvailability,
@@ -490,6 +491,7 @@ export function buildAvailabilitySummary(input: {
     return {
       track,
       peerCount: peers.length,
+      remotePeerCount,
       localChunkCount: local?.availableChunks.length ?? 0,
       totalChunks: manifest?.totalChunks ?? 0,
       sources: peers.map((entry) => `${entry.nickname} (${entry.source})`)

@@ -51,8 +51,8 @@ export function flushAvailabilityEmitQueue(input: {
 
 export function useAvailabilityAnnouncements({
   socketRef,
-  flushDelayMs = 90,
-  emitDelayMs = 140
+  flushDelayMs = 30,
+  emitDelayMs = 60
 }: UseAvailabilityAnnouncementsOptions) {
   const pendingAvailabilityRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());
   const pendingAvailabilityEmitRef = useRef(new Map<string, TrackAvailabilityAnnouncement>());

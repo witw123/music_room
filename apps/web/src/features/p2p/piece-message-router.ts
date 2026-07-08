@@ -38,6 +38,11 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     entry: TEntry;
     request: PieceServeRequest;
   }) => Promise<void>;
+  private readonly servePieceRequests?: (input: {
+    peerId: string;
+    entry: TEntry;
+    requests: PieceServeRequest[];
+  }) => Promise<void>;
   private readonly takePendingRequest: (
     trackId: string,
     chunkIndex: number
@@ -53,6 +58,11 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       entry: TEntry;
       request: PieceServeRequest;
     }) => Promise<void>;
+    servePieceRequests?: (input: {
+      peerId: string;
+      entry: TEntry;
+      requests: PieceServeRequest[];
+    }) => Promise<void>;
     takePendingRequest: (trackId: string, chunkIndex: number) => PendingPieceRequest | null;
     enqueueInboundPiece: (item: IncomingPieceBatchItem) => void;
   } & PieceMessageRouterCallbacks) {
@@ -61,6 +71,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       ttlMs: input.incomingPieceFragmentTtlMs
     });
     this.servePieceRequest = input.servePieceRequest;
+    this.servePieceRequests = input.servePieceRequests;
     this.takePendingRequest = input.takePendingRequest;
     this.enqueueInboundPiece = input.enqueueInboundPiece;
     this.callbacks = input;
@@ -86,14 +97,31 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
 
     if (message.kind === "request-pieces") {
       const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
-      for (let offset = 0; offset < chunkIndexes.length; offset += this.pieceServeBatchConcurrency) {
-        const batch = chunkIndexes.slice(offset, offset + this.pieceServeBatchConcurrency);
+      const requests = chunkIndexes.map((chunkIndex) => ({
+        trackId: message.trackId,
+        chunkIndex,
+        requestId: message.requestId
+      }));
+      for (const request of requests) {
+        this.reportPieceRequest(input.peerId, request);
+      }
+      if (this.servePieceRequests) {
+        await this.servePieceRequests({
+          peerId: input.peerId,
+          entry: input.entry,
+          requests
+        });
+        return;
+      }
+
+      for (let offset = 0; offset < requests.length; offset += this.pieceServeBatchConcurrency) {
+        const batch = requests.slice(offset, offset + this.pieceServeBatchConcurrency);
         await Promise.all(
-          batch.map((chunkIndex) =>
-            this.serveSinglePieceRequest(input.peerId, input.entry, {
-              trackId: message.trackId,
-              chunkIndex,
-              requestId: message.requestId
+          batch.map((request) =>
+            this.servePieceRequest({
+              peerId: input.peerId,
+              entry: input.entry,
+              request
             })
           )
         );
@@ -120,16 +148,20 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     entry: TEntry,
     request: PieceServeRequest
   ) {
+    this.reportPieceRequest(peerId, request);
+    await this.servePieceRequest({
+      peerId,
+      entry,
+      request
+    });
+  }
+
+  private reportPieceRequest(peerId: string, request: PieceServeRequest) {
     this.callbacks.onPieceRequestReceived?.({
       peerId,
       trackId: request.trackId,
       chunkIndex: request.chunkIndex,
       requestId: request.requestId
-    });
-    await this.servePieceRequest({
-      peerId,
-      entry,
-      request
     });
   }
 

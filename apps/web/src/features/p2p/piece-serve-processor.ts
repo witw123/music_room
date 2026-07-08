@@ -1,9 +1,11 @@
 import {
   getCachedPiece,
+  getCachedPiecesByIndexes,
   getCachedPieceIndexes,
   getTrackPieceManifest,
   getTrackPieceManifestByFileHash,
-  localCacheOwnerKey
+  localCacheOwnerKey,
+  type TrackPieceRecord
 } from "@/lib/indexeddb";
 import { buildPieceFrames } from "./piece-frame-codec";
 import type { DataChannelQueuedSendItem } from "./data-channel-manager";
@@ -36,6 +38,11 @@ type PieceServeRequest = {
   chunkIndex: number;
   requestId?: string;
 };
+
+type CachedServedPiece = Pick<
+  TrackPieceRecord,
+  "chunkIndex" | "chunkSize" | "hash" | "payload"
+>;
 
 type PieceServeProcessorCallbacks = {
   onPieceServed?: (payload: {
@@ -135,59 +142,159 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
     entry: TEntry;
     request: PieceServeRequest;
   }) {
-    const { peerId, entry, request } = input;
-    if (entry.channel?.readyState !== "open") {
-      this.reportMiss(peerId, request, "channel-not-open");
+    await this.servePieceRequests({
+      peerId: input.peerId,
+      entry: input.entry,
+      requests: [input.request]
+    });
+  }
+
+  async servePieceRequests(input: {
+    peerId: string;
+    entry: TEntry;
+    requests: PieceServeRequest[];
+  }) {
+    const { peerId, entry } = input;
+    const requests = input.requests.filter(
+      (request) => request.trackId && Number.isInteger(request.chunkIndex) && request.chunkIndex >= 0
+    );
+    if (requests.length === 0) {
       return;
     }
 
-    const cacheIdentity = this.resolveTrackCacheIdentity?.(request.trackId) ?? null;
+    if (entry.channel?.readyState !== "open") {
+      for (const request of requests) {
+        this.reportMiss(peerId, request, "channel-not-open");
+      }
+      return;
+    }
+
+    const requestsByTrackId = new Map<string, PieceServeRequest[]>();
+    for (const request of requests) {
+      const trackRequests = requestsByTrackId.get(request.trackId) ?? [];
+      trackRequests.push(request);
+      requestsByTrackId.set(request.trackId, trackRequests);
+    }
+
+    for (const trackRequests of requestsByTrackId.values()) {
+      await this.serveTrackPieceRequests({
+        peerId,
+        entry,
+        requests: trackRequests
+      });
+    }
+  }
+
+  private async serveTrackPieceRequests(input: {
+    peerId: string;
+    entry: TEntry;
+    requests: PieceServeRequest[];
+  }) {
+    const { peerId, entry, requests } = input;
+    const trackId = requests[0]?.trackId;
+    if (!trackId) {
+      return;
+    }
+
+    const cacheIdentity = this.resolveTrackCacheIdentity?.(trackId) ?? null;
     const expectedChunkSize = cacheIdentity?.chunkSize ?? null;
-    let piece: {
-      chunkIndex: number;
-      chunkSize: number;
-      hash: string;
-      payload: ArrayBuffer;
-    } | null = await getCachedPiece(request.trackId, this.localPeerId, request.chunkIndex, {
+    const chunkIndexes = [...new Set(requests.map((request) => request.chunkIndex))];
+    const cachedPieces = requests.length === 1
+      ? await this.getSingleCachedPiece(trackId, requests[0]!, cacheIdentity, expectedChunkSize)
+      : await getCachedPiecesByIndexes(trackId, this.localPeerId, chunkIndexes, {
+          fileHash: cacheIdentity?.fileHash,
+          ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey,
+          chunkSize: expectedChunkSize
+        });
+    const piecesByChunkIndex = new Map(
+      cachedPieces.map((piece) => [piece.chunkIndex, piece])
+    );
+    let manifestHeader = cachedPieces.length > 0
+      ? await this.resolveManifestHeader(trackId, expectedChunkSize ?? cachedPieces[0]!.chunkSize)
+      : null;
+
+    for (const request of requests) {
+      if (entry.channel?.readyState !== "open") {
+        this.reportMiss(peerId, request, "channel-not-open");
+        continue;
+      }
+
+      let piece: CachedServedPiece | null = piecesByChunkIndex.get(request.chunkIndex) ?? null;
+      if (piece && !manifestHeader) {
+        manifestHeader = await this.resolveManifestHeader(
+          trackId,
+          expectedChunkSize ?? piece.chunkSize
+        );
+      }
+
+      if (!piece || !manifestHeader) {
+        const fallbackPiece = await this.resolvePieceRequestFallback?.({
+          trackId: request.trackId,
+          chunkIndex: request.chunkIndex
+        });
+        if (fallbackPiece) {
+          piece = {
+            chunkIndex: request.chunkIndex,
+            chunkSize: fallbackPiece.payload.byteLength,
+            hash: fallbackPiece.hash,
+            payload: fallbackPiece.payload
+          };
+          manifestHeader = {
+            totalChunks: fallbackPiece.totalChunks,
+            chunkSize: fallbackPiece.chunkSize,
+            mimeType: fallbackPiece.mimeType
+          };
+          this.rememberManifestHeader(request.trackId, manifestHeader);
+        }
+      }
+
+      if (!piece) {
+        this.reportMiss(peerId, request, "piece-missing");
+        continue;
+      }
+
+      if (!manifestHeader || entry.channel?.readyState !== "open") {
+        this.reportMiss(
+          peerId,
+          request,
+          entry.channel?.readyState === "open" ? "manifest-missing" : "channel-not-open"
+        );
+        continue;
+      }
+
+      this.enqueuePieceFrames({
+        peerId,
+        entry,
+        request,
+        piece,
+        manifestHeader
+      });
+    }
+  }
+
+  private async getSingleCachedPiece(
+    trackId: string,
+    request: PieceServeRequest,
+    cacheIdentity: TrackCacheIdentity | null,
+    expectedChunkSize: number | null
+  ): Promise<CachedServedPiece[]> {
+    const piece = await getCachedPiece(trackId, this.localPeerId, request.chunkIndex, {
       fileHash: cacheIdentity?.fileHash,
       ownerKey: cacheIdentity?.ownerKey ?? localCacheOwnerKey,
       chunkSize: expectedChunkSize
     });
-    let manifestHeader = piece
-      ? await this.resolveManifestHeader(request.trackId, expectedChunkSize ?? piece.chunkSize)
-      : null;
 
-    if (!piece || !manifestHeader) {
-      const fallbackPiece = await this.resolvePieceRequestFallback?.({
-        trackId: request.trackId,
-        chunkIndex: request.chunkIndex
-      });
-      if (fallbackPiece) {
-        piece = {
-          chunkIndex: request.chunkIndex,
-          chunkSize: fallbackPiece.payload.byteLength,
-          hash: fallbackPiece.hash,
-          payload: fallbackPiece.payload
-        };
-        manifestHeader = {
-          totalChunks: fallbackPiece.totalChunks,
-          chunkSize: fallbackPiece.chunkSize,
-          mimeType: fallbackPiece.mimeType
-        };
-        this.rememberManifestHeader(request.trackId, manifestHeader);
-      }
-    }
+    return piece ? [piece] : [];
+  }
 
-    if (!piece) {
-      this.reportMiss(peerId, request, "piece-missing");
-      return;
-    }
-
-    if (!manifestHeader || entry.channel?.readyState !== "open") {
-      this.reportMiss(peerId, request, "manifest-missing");
-      return;
-    }
-
+  private enqueuePieceFrames(input: {
+    peerId: string;
+    entry: TEntry;
+    request: PieceServeRequest;
+    piece: CachedServedPiece;
+    manifestHeader: CachedPieceManifestHeader;
+  }) {
+    const { entry, manifestHeader, peerId, piece, request } = input;
     const pieceFrames = buildPieceFrames(
       {
         requestId: request.requestId,

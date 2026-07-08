@@ -97,4 +97,59 @@ describe("announceRoomTrackAvailability", () => {
 
     expect(published).toEqual([]);
   });
+
+  it("publishes partial cached-piece availability so room peers can relay cached chunks", async () => {
+    const published: Array<{ chunks: number[]; totalChunks: number }> = [];
+    const ttl = new Map<string, number>();
+
+    const didPublish = await announceRoomTrackAvailability({
+      roomId: "room_1",
+      roomTracks: [track],
+      activeSession: { nickname: "Listener" },
+      peerId: "peer_listener",
+      trackId: "track_1",
+      uploadedTrack: null,
+      inFlightAnnouncements: new Set(),
+      announcementTtl: ttl,
+      nowMs: 10_000,
+      getCachedLibraryTrackSummary: async () => null,
+      getCachedLibraryTrack: async () => null,
+      getTrackPieceManifestByFileHash: async () => ({
+        trackId: "track_1",
+        fileHash: "hash_1",
+        mimeType: "audio/flac",
+        codec: "flac",
+        sizeBytes: 4096,
+        durationMs: 120_000,
+        totalChunks: 2,
+        chunkSize: 1024,
+        updatedAt: "2026-07-08T00:00:00.000Z"
+      }),
+      getTrackPieceManifest: async () => null,
+      buildTrackAvailabilityFromCache: async () => ({
+        roomId: "room_1",
+        trackId: "track_1",
+        ownerPeerId: "peer_listener",
+        nickname: "Listener",
+        totalChunks: 2,
+        chunkSize: 1024,
+        availableChunks: [0],
+        source: "local_cache",
+        announcedAt: "2026-07-08T00:00:00.000Z"
+      }),
+      buildTrackAvailabilityFromManifest: () => {
+        throw new Error("partial cache should not require full-file fallback");
+      },
+      publishAvailability: (availability) => {
+        published.push({
+          chunks: availability.availableChunks,
+          totalChunks: availability.totalChunks
+        });
+      }
+    });
+
+    expect(didPublish).toBe(true);
+    expect(published).toEqual([{ chunks: [0], totalChunks: 2 }]);
+    expect(ttl.get("room_1|track_1|hash_1|peer_listener")).toBe(10_000);
+  });
 });

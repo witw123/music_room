@@ -342,6 +342,29 @@ describe("getActivePlaybackPendingKey", () => {
 });
 
 describe("reconcileManualCacheDirectPendingTracks", () => {
+  it("clears both previous and next active tracks when switching tracks", () => {
+    const pendingByTrack = new Map<string, Map<number, number>>([
+      ["track_a", new Map([[0, 50_000]])],
+      ["track_b", new Map([[10, 50_000]])],
+      ["track_c", new Map([[20, 50_000]])]
+    ]);
+
+    const result = reconcileManualCacheDirectPendingTracks({
+      pendingByTrack,
+      manualCacheTrackIds: ["track_a", "track_b", "track_c"],
+      previousActivePlaybackPendingKey: "track_a|1|1",
+      nextActivePlaybackPendingKey: "track_b|2|1",
+      previousActivePlaybackTrackId: "track_a",
+      nextActivePlaybackTrackId: "track_b"
+    });
+
+    expect(result.nextActivePlaybackPendingKey).toBe("track_b|2|1");
+    expect(result.nextActivePlaybackTrackId).toBe("track_b");
+    expect(pendingByTrack.has("track_a")).toBe(false);
+    expect(pendingByTrack.has("track_b")).toBe(false);
+    expect(pendingByTrack.has("track_c")).toBe(true);
+  });
+
   it("clears the previous active playback track when the active window disappears", () => {
     const pendingByTrack = new Map<string, Map<number, number>>([
       ["track_a", new Map([[0, 50_000]])]

@@ -199,7 +199,7 @@ export async function announceRoomTrackAvailability(input: {
       });
       if (
         availabilityFromPieces &&
-        availabilityFromPieces.availableChunks.length >= availabilityFromPieces.totalChunks
+        availabilityFromPieces.availableChunks.length > 0
       ) {
         input.announcementTtl.set(announcementKey, now);
         input.publishAvailability(availabilityFromPieces);

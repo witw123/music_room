@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import {
   ChunkScheduler,
   P2PMesh,
@@ -14,7 +14,8 @@ import {
   getTrackPieceManifest,
   getTrackPieceManifestByFileHash,
   localCacheOwnerKey,
-  queueTrackPieceManifestUpsert
+  queueTrackPieceManifestUpsert,
+  type TrackPieceManifestRecord
 } from "@/lib/indexeddb";
 import type { CachedLibraryTrackRecord } from "@/lib/indexeddb";
 import { hashArrayBuffer } from "@/features/p2p";
@@ -165,6 +166,44 @@ export function createInFlightCachedLibraryTrackRecordLoader<T>(
     });
     inFlightLoads.set(fileHash, nextLoad);
     return nextLoad;
+  };
+}
+
+export async function resolvePieceRequestFallbackPayload(input: {
+  track: TrackMeta;
+  fallbackFile: Blob;
+  cachedManifest: TrackPieceManifestRecord | null;
+  chunkIndex: number;
+  hashArrayBuffer: (payload: ArrayBuffer) => Promise<string>;
+}) {
+  const manifest = resolveTrackPieceManifest({
+    track: input.track,
+    cacheManifest: input.cachedManifest,
+    file: input.fallbackFile,
+    mimeType: input.track.mimeType ?? input.fallbackFile.type ?? null,
+    codec: input.track.codec ?? null,
+    sizeBytes: input.track.sizeBytes ?? input.fallbackFile.size
+  });
+  if (!manifest || input.chunkIndex < 0 || input.chunkIndex >= manifest.totalChunks) {
+    return null;
+  }
+
+  const chunkStart = input.chunkIndex * manifest.chunkSize;
+  if (chunkStart >= input.fallbackFile.size) {
+    return null;
+  }
+
+  const payload = await input.fallbackFile
+    .slice(chunkStart, Math.min(input.fallbackFile.size, chunkStart + manifest.chunkSize))
+    .arrayBuffer();
+  const hash = manifest.pieceHashes?.[input.chunkIndex] ?? await input.hashArrayBuffer(payload);
+
+  return {
+    payload,
+    hash,
+    totalChunks: manifest.totalChunks,
+    chunkSize: manifest.chunkSize,
+    mimeType: manifest.pieceMimeType
   };
 }
 
@@ -510,36 +549,15 @@ export function createRoomDataMeshRuntime(input: {
 
         const cachedManifest =
           (await getTrackPieceManifestByFileHash(track.fileHash)) ??
-          (await getTrackPieceManifest(trackId));
-        const manifest = resolveTrackPieceManifest({
+          (await getTrackPieceManifest(trackId)) ??
+          null;
+        return resolvePieceRequestFallbackPayload({
           track,
-          cacheManifest: cachedManifest,
-          file: fallbackFile,
-          mimeType: track.mimeType ?? fallbackFile.type ?? null,
-          codec: track.codec ?? null,
-          sizeBytes: track.sizeBytes ?? fallbackFile.size
+          cachedManifest,
+          fallbackFile,
+          chunkIndex,
+          hashArrayBuffer
         });
-        if (!manifest || chunkIndex < 0 || chunkIndex >= manifest.totalChunks) {
-          return null;
-        }
-
-        const chunkStart = chunkIndex * manifest.chunkSize;
-        if (chunkStart >= fallbackFile.size) {
-          return null;
-        }
-
-        const payload = await fallbackFile
-          .slice(chunkStart, Math.min(fallbackFile.size, chunkStart + manifest.chunkSize))
-          .arrayBuffer();
-        const hash = await hashArrayBuffer(payload);
-
-        return {
-          payload,
-          hash: manifest.pieceHashes?.[chunkIndex] ?? hash,
-          totalChunks: manifest.totalChunks,
-          chunkSize: manifest.chunkSize,
-          mimeType: manifest.pieceMimeType
-        };
       },
       resolveTrackCacheIdentity: (trackId) => {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;

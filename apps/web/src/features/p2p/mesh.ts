@@ -139,11 +139,11 @@ type MeshOptions = {
 };
 
 export class P2PMesh {
-  private readonly sendQueueLowWatermarkBytes = 1024 * 1024;
-  private readonly sendQueueHighWatermarkBytes = 4 * 1024 * 1024;
-  private readonly incomingPieceBatchSize = 8;
-  private readonly pieceServeBatchConcurrency = 16;
-  private readonly maxDataChannelPayloadBytes = 48 * 1024;
+  private readonly sendQueueLowWatermarkBytes = 4 * 1024 * 1024;
+  private readonly sendQueueHighWatermarkBytes = 16 * 1024 * 1024;
+  private readonly incomingPieceBatchSize = 32;
+  private readonly pieceServeBatchConcurrency = 128;
+  private readonly maxDataChannelPayloadBytes = 320 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;
   private readonly autoReconnect: boolean;
   private readonly resolveTrackCacheIdentity?: MeshOptions["resolveTrackCacheIdentity"];
@@ -226,6 +226,7 @@ export class P2PMesh {
       pieceServeBatchConcurrency: this.pieceServeBatchConcurrency,
       incomingPieceFragmentTtlMs: this.incomingPieceFragmentTtlMs,
       servePieceRequest: (input) => this.pieceServe.servePieceRequest(input),
+      servePieceRequests: (input) => this.pieceServe.servePieceRequests(input),
       takePendingRequest: (trackId, chunkIndex) =>
         this.pieceRequestClient.takePendingRequest(trackId, chunkIndex),
       enqueueInboundPiece: (item) => this.inboundPieces.enqueue(item),

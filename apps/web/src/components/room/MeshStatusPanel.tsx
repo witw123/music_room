@@ -13,6 +13,7 @@ import type { LocalMemberPanelState } from "./MembersPanel";
 export type AvailabilityEntry = {
   track: TrackMeta;
   peerCount: number;
+  remotePeerCount: number;
   localChunkCount: number;
   totalChunks: number;
   sources: string[];
@@ -446,7 +447,7 @@ function MeshStatusPanelBase({
             </summary>
             <div className="mt-3 flex flex-col gap-2">
               {visibleAvailability.length ? (
-                visibleAvailability.map(({ track, peerCount, localChunkCount, totalChunks, sources }) => (
+                visibleAvailability.map(({ track, peerCount, remotePeerCount, localChunkCount, totalChunks, sources }) => (
                   <div
                     key={track.id}
                     className="rounded-lg border border-surface-border bg-black/20 p-3 text-[10px]"
@@ -454,7 +455,7 @@ function MeshStatusPanelBase({
                     <strong className="block truncate text-xs text-foreground">{track.title}</strong>
                     <div className="mt-1 flex items-center justify-between text-foreground-muted">
                       <span>本地分片 {localChunkCount}/{totalChunks || 0}</span>
-                      <span>可见节点 {peerCount}</span>
+                      <span>可见/远端 {peerCount}/{remotePeerCount}</span>
                     </div>
                     {sources.length ? (
                       <p className="mt-1 truncate text-foreground-muted/80">
