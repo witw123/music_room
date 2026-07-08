@@ -43,7 +43,7 @@ export type PlaybackRuntimeTickRefs = {
   syncUpgradeRef: MutableRefObject<() => void>;
 };
 
-const progressiveRuntimeTickIntervalMs = 150;
+const progressiveRuntimeTickIntervalMs = 80;
 const playbackDriftSampleIntervalMs = 1_000;
 const fullLocalPausedRecoveryIntervalMs = 500;
 

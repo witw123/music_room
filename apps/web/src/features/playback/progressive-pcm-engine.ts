@@ -96,12 +96,18 @@ export type ProgressivePcmEngineSnapshot = {
   playoutState: PcmEnginePlayoutState;
 };
 
-const pcmScheduleAheadSeconds = 8;
+const pcmScheduleAheadSeconds = 12;
 const pcmSoftResyncDriftMs = 220;
 const pcmHardResyncDriftMs = 720;
 const pcmMaxSoftCorrectionSeconds = 0.05;
 const pcmNativeHandoffFadeMs = 45;
-const pcmDecodedSegmentRetentionSeconds = 16;
+const pcmDecodedSegmentRetentionSeconds = 24;
+// Maximum gap between decoded segments that the coverage checker tolerates
+// before declaring the buffer missing.  P2P delivery is unordered and FLAC
+// frame extraction across chunk boundaries can produce small timing gaps;
+// a slightly relaxed tolerance avoids false "buffer-missing" signals that
+// would cause audible stutter.
+const pcmCoverageGapToleranceSec = 0.25;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
 // Steady-state: batch-read up to this many contiguous chunks per sync.
 // With the in-memory buffer + batch IndexedDB reads, reading 16 chunks is
@@ -115,10 +121,10 @@ const maxPcmCachedPiecesToAppendPerSync = 16;
 const maxPcmCatchupPiecesToAppendPerSync = 128;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 // Window decode reads up to this many chunks around the playback position.
-// P2P delivery is unordered so a small window (4) frequently fails when the
-// first gap is hit. 16 chunks (~2 MB) gives the FLAC frame extractor enough
-// material to find complete frames across gaps.
-const maxPcmPlaybackWindowPiecesToDecode = 16;
+// P2P delivery is unordered so a larger window is needed to skip gaps and
+// find enough material for the FLAC frame extractor. 32 chunks (~4 MB at
+// 128 kB/chunk) gives generous room for frame stitching across gaps.
+const maxPcmPlaybackWindowPiecesToDecode = 32;
 
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
@@ -1554,7 +1560,7 @@ export class ProgressivePcmEngine {
         continue;
       }
 
-      if (segment.startTimeSec > scheduledUntilSec + 0.12) {
+      if (segment.startTimeSec > scheduledUntilSec + pcmCoverageGapToleranceSec) {
         break;
       }
 
@@ -1644,7 +1650,7 @@ export class ProgressivePcmEngine {
         continue;
       }
 
-      if (segment.startTimeSec > coverageEnd + 0.12) {
+      if (segment.startTimeSec > coverageEnd + pcmCoverageGapToleranceSec) {
         break;
       }
 

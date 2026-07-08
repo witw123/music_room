@@ -452,7 +452,6 @@ export function usePlaybackRuntimeControllerStack({
     canPrepareProgressiveLocal,
     currentProgressiveEngineType,
     currentProgressiveManifest,
-    currentTrackAvailableChunksKey,
     markPcmRuntimeFailure,
     peerId,
     progressiveEngineRef,

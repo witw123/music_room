@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCachedPiece, getCachedPiecesByIndexes } from "@/lib/indexeddb";
 import { ProgressivePcmEngine } from "./progressive-pcm-engine";
 import { extractFlacPacketsFromBitstream } from "./progressive-flac";
-import { pieceMemoryBuffer } from "@/features/p2p/piece-memory-buffer";
 
 vi.mock("@/lib/indexeddb", () => ({
   getCachedPiece: vi.fn(),

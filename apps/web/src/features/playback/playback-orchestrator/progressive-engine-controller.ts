@@ -27,7 +27,6 @@ type ProgressiveEngineControllerInput = {
   canPrepareProgressiveLocal: boolean;
   currentProgressiveEngineType: ProgressiveEngineType;
   currentProgressiveManifest: ProgressiveTrackManifest | null;
-  currentTrackAvailableChunksKey: string;
   markPcmRuntimeFailure: (reason: string | null | undefined) => void;
   peerId: string;
   progressiveEngineRef: MutableRefObject<ProgressiveMseEngine | null>;
@@ -41,7 +40,6 @@ export function useProgressiveEngineController({
   canPrepareProgressiveLocal,
   currentProgressiveEngineType,
   currentProgressiveManifest,
-  currentTrackAvailableChunksKey,
   markPcmRuntimeFailure,
   peerId,
   progressiveEngineRef,
@@ -152,21 +150,6 @@ export function useProgressiveEngineController({
     progressiveEngineRef,
     progressivePcmEngineRef,
     setProgressiveFallbackReason
-  ]);
-
-  useEffect(() => {
-    if (!currentProgressiveManifest) {
-      return;
-    }
-
-    void progressiveEngineRef.current?.sync();
-    void progressivePcmEngineRef.current?.sync();
-    void currentTrackAvailableChunksKey;
-  }, [
-    currentProgressiveManifest,
-    currentTrackAvailableChunksKey,
-    progressiveEngineRef,
-    progressivePcmEngineRef
   ]);
 
   useEffect(() => {

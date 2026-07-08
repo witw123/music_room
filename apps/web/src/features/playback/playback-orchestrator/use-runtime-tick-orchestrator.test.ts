@@ -18,7 +18,7 @@ describe("createPlaybackRuntimeTickOrchestrator", () => {
     const refs = createTickRefs();
     const intervalCallbacks: Array<() => void> = [];
     const setInterval = vi.fn((callback: () => void, delayMs: number) => {
-      expect(delayMs).toBe(150);
+      expect(delayMs).toBe(80);
       intervalCallbacks.push(callback);
       return intervalCallbacks.length;
     });
@@ -41,7 +41,7 @@ describe("createPlaybackRuntimeTickOrchestrator", () => {
 
     refs.syncProgressiveWarmupRef.current = vi.fn();
     const refreshedWarmup = refs.syncProgressiveWarmupRef.current;
-    nowMs += 150;
+    nowMs += 80;
     intervalCallbacks[0]?.();
 
     expect(setInterval).toHaveBeenCalledOnce();
