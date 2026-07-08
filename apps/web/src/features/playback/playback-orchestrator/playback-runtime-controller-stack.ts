@@ -142,7 +142,6 @@ export function usePlaybackRuntimeControllerStack({
     currentProgressiveManifest,
     currentProgressiveManifestKey,
     currentProgressiveManifestRef,
-    currentTrackAvailableChunksKey,
     currentTrackDurationMs,
     currentTrackFormatKey,
     currentTrackRef,
