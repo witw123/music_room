@@ -31,6 +31,18 @@ type ScheduledSegment = {
   durationSec: number;
 };
 
+type CachedPieceWindowPiece = {
+  chunkIndex: number;
+  bytes: Uint8Array;
+};
+
+type CachedPieceWindowRun = {
+  startChunkIndex: number;
+  endChunkIndex: number;
+  bytes: Uint8Array;
+  pieces: CachedPieceWindowPiece[];
+};
+
 type EncodedAudioChunkCtor = typeof EncodedAudioChunk;
 
 type AudioDecoderCtor = typeof AudioDecoder;
@@ -746,7 +758,7 @@ export class ProgressivePcmEngine {
         startChunkIndex,
         maxPcmPlaybackWindowPiecesToDecode
       );
-      if (!cachedWindow || cachedWindow.bytes.byteLength === 0) {
+      if (!cachedWindow || cachedWindow.runs.length === 0) {
         console.debug(
           `[pcm] flac window start=${startChunkIndex} ` +
           `no cached chunks at this offset`
@@ -759,23 +771,30 @@ export class ProgressivePcmEngine {
         break;
       }
 
-      const extraction = extractFlacPacketsFromWindow({
-        bytes: cachedWindow.bytes,
-        streamInfo,
-        absoluteStartOffset: startChunkIndex * this.manifest.chunkSize,
-        finalChunk: cachedWindow.endChunkIndex >= this.manifest.totalChunks - 1
-      });
-      if (extraction.packets.length === 0) {
-        console.debug(
-          `[pcm] flac window start=${startChunkIndex} ` +
-          `bytes=${cachedWindow.bytes.byteLength} packets=0`
-        );
-        continue;
-      }
+      let decodedRun = false;
+      for (const run of cachedWindow.runs) {
+        const extraction = extractFlacPacketsFromWindow({
+          bytes: run.bytes,
+          streamInfo,
+          absoluteStartOffset: run.startChunkIndex * this.manifest.chunkSize,
+          finalChunk: run.endChunkIndex >= this.manifest.totalChunks - 1
+        });
+        if (extraction.packets.length === 0) {
+          console.debug(
+            `[pcm] flac window start=${run.startChunkIndex} ` +
+            `bytes=${run.bytes.byteLength} packets=0`
+          );
+          continue;
+        }
 
-      await this.decodeFlacPackets(extraction.packets);
-      decodedAny = true;
-      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+        await this.decodeFlacPackets(extraction.packets);
+        decodedAny = true;
+        decodedRun = true;
+        if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+          break;
+        }
+      }
+      if (decodedRun || this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
         break;
       }
     }
@@ -784,15 +803,39 @@ export class ProgressivePcmEngine {
   }
 
   private async readCachedPieceWindow(startChunkIndex: number, maxPieceCount: number) {
-    const chunks: Uint8Array[] = [];
-    let totalBytes = 0;
+    const runs: CachedPieceWindowRun[] = [];
+    let currentRunPieces: CachedPieceWindowPiece[] = [];
     let endChunkIndex = startChunkIndex - 1;
     let consecutiveSkips = 0;
+    let foundPieceCount = 0;
     const maxConsecutiveSkips = 12;
+    const flushCurrentRun = () => {
+      if (currentRunPieces.length === 0) {
+        return;
+      }
+
+      let totalBytes = 0;
+      for (const piece of currentRunPieces) {
+        totalBytes += piece.bytes.byteLength;
+      }
+      const bytes = new Uint8Array(totalBytes);
+      let offset = 0;
+      for (const piece of currentRunPieces) {
+        bytes.set(piece.bytes, offset);
+        offset += piece.bytes.byteLength;
+      }
+      runs.push({
+        startChunkIndex: currentRunPieces[0]!.chunkIndex,
+        endChunkIndex: currentRunPieces[currentRunPieces.length - 1]!.chunkIndex,
+        bytes,
+        pieces: currentRunPieces
+      });
+      currentRunPieces = [];
+    };
 
     for (
       let chunkIndex = Math.max(0, startChunkIndex);
-      chunkIndex < this.manifest.totalChunks && chunks.length < maxPieceCount;
+      chunkIndex < this.manifest.totalChunks && foundPieceCount < maxPieceCount;
       chunkIndex += 1
     ) {
       const piece = await getCachedPiece(
@@ -807,9 +850,10 @@ export class ProgressivePcmEngine {
       );
       if (!piece) {
         // P2P delivery is unordered — skip missing chunks instead of
-        // breaking so later chunks that DID arrive can still be used.
-        // The FLAC frame extractor finds sync codes and discards
-        // partial frames at gap boundaries.
+        // breaking so later chunks that DID arrive can still be used. Keep
+        // each contiguous run separate so decoders never treat a gap as real
+        // audio bytes.
+        flushCurrentRun();
         consecutiveSkips += 1;
         if (consecutiveSkips > maxConsecutiveSkips) {
           break;
@@ -819,24 +863,18 @@ export class ProgressivePcmEngine {
       consecutiveSkips = 0;
 
       const bytes = new Uint8Array(piece.payload);
-      chunks.push(bytes);
-      totalBytes += bytes.byteLength;
+      currentRunPieces.push({ chunkIndex, bytes });
       endChunkIndex = chunkIndex;
+      foundPieceCount += 1;
     }
+    flushCurrentRun();
 
-    if (chunks.length === 0) {
+    if (runs.length === 0) {
       return null;
     }
 
-    const bytes = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-
     return {
-      bytes,
+      runs,
       endChunkIndex
     };
   }
@@ -880,38 +918,40 @@ export class ProgressivePcmEngine {
       startChunkIndex,
       maxPcmPlaybackWindowPiecesToDecode
     );
-    if (!cachedWindow || cachedWindow.bytes.byteLength === 0) {
+    if (!cachedWindow || cachedWindow.runs.length === 0) {
       return false;
     }
 
-    // Each chunk holds exactly chunkSize bytes of PCM data.  Process
-    // the cached bytes in chunk-sized slices to honour the original
-    // chunk boundaries for absolute-byte-offset calculations.
-    const chunkSize = this.manifest.chunkSize;
     let decodedAny = false;
-    let byteOffset = 0;
 
-    for (
-      let chunkIndex = startChunkIndex;
-      chunkIndex < this.manifest.totalChunks &&
-      byteOffset < cachedWindow.bytes.byteLength;
-      chunkIndex += 1
-    ) {
-      const sliceEnd = Math.min(byteOffset + chunkSize, cachedWindow.bytes.byteLength);
-      const sliceBytes = sliceEnd - byteOffset;
-      if (sliceBytes < header.blockAlign) {
-        byteOffset = sliceEnd;
-        continue;
-      }
+    for (const run of cachedWindow.runs) {
+      for (const piece of run.pieces) {
+        const pieceStartByte = piece.chunkIndex * this.manifest.chunkSize;
+        const pieceEndByte = pieceStartByte + piece.bytes.byteLength;
+        const dataStartByte = Math.max(pieceStartByte, header.dataOffset);
+        const dataEndByte = Math.min(pieceEndByte, header.dataOffset + header.dataBytes);
+        const alignedStartByte =
+          header.dataOffset +
+          Math.max(0, Math.ceil((dataStartByte - header.dataOffset) / header.blockAlign)) *
+            header.blockAlign;
+        const alignedEndByte =
+          header.dataOffset +
+          Math.max(0, Math.floor((dataEndByte - header.dataOffset) / header.blockAlign)) *
+            header.blockAlign;
+        if (alignedEndByte <= alignedStartByte) {
+          continue;
+        }
 
-      const payload = cachedWindow.bytes.subarray(byteOffset, sliceEnd);
-      const absoluteStartByte = header.dataOffset + chunkIndex * chunkSize;
-      const segment = this.createDecodedWavSegment(header, payload, absoluteStartByte);
-      if (segment) {
-        this.decodedSegments.push(segment);
-        decodedAny = true;
+        const payload = piece.bytes.subarray(
+          alignedStartByte - pieceStartByte,
+          alignedEndByte - pieceStartByte
+        );
+        const segment = this.createDecodedWavSegment(header, payload, alignedStartByte);
+        if (segment) {
+          this.decodedSegments.push(segment);
+          decodedAny = true;
+        }
       }
-      byteOffset = sliceEnd;
     }
 
     if (decodedAny) {

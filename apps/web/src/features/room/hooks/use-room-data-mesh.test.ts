@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createBoundedCachedLibraryTrackCache,
   createInFlightCachedLibraryTrackRecordLoader,
-  createDataMeshBridge
+  createDataMeshBridge,
+  resolveDataPeerRecoveryRecommendation
 } from "./use-room-data-mesh";
 
 describe("createBoundedCachedLibraryTrackCache", () => {
@@ -80,5 +81,32 @@ describe("createDataMeshBridge", () => {
     await expect(bridge.syncPeers(["peer_source"])).resolves.toBe(true);
     expect(syncPeers).toHaveBeenCalledWith(["peer_source"], undefined);
     expect(bridge.isReady()).toBe(true);
+  });
+});
+
+describe("resolveDataPeerRecoveryRecommendation", () => {
+  it("requests a targeted data peer restart for closed or failed transport states", () => {
+    expect(
+      resolveDataPeerRecoveryRecommendation({
+        peerId: "peer_2",
+        dataChannelState: "closed",
+        dataConnectionState: "connected",
+        reason: "data-channel-closed"
+      })
+    ).toMatchObject({
+      peerId: "peer_2",
+      scope: "data",
+      level: "hard-recreate",
+      reason: "data-channel-closed"
+    });
+
+    expect(
+      resolveDataPeerRecoveryRecommendation({
+        peerId: "peer_2",
+        dataChannelState: "open",
+        dataConnectionState: "connected",
+        reason: "data-channel-open"
+      })
+    ).toBeNull();
   });
 });

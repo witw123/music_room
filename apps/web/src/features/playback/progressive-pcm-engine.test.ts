@@ -1159,6 +1159,77 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("keeps sparse WAV window chunks on their real timeline", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const wavManifest = {
+      ...manifest,
+      mimeType: "audio/wav",
+      codec: "wav",
+      durationMs: 1_000,
+      totalChunks: 6,
+      chunkSize: 444
+    };
+    const fullWav = buildPcmWavBytes({
+      sampleRate: 1_000,
+      channels: 1,
+      bitsPerSample: 16,
+      dataBytes: 2_000,
+      availableDataBytes: 2_000
+    });
+    const engine = new ProgressivePcmEngine(audio, "peer_local", wavManifest);
+
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      if (chunkIndex === 0) {
+        return {
+          pieceId: "piece_0",
+          trackId: wavManifest.trackId,
+          peerId: "peer_local",
+          chunkIndex,
+          chunkSize: wavManifest.chunkSize,
+          hash: "hash_0",
+          createdAt: new Date().toISOString(),
+          payload: fullWav.slice(0, 44).buffer
+        };
+      }
+      if (chunkIndex !== 2 && chunkIndex !== 4) {
+        return null;
+      }
+
+      const start = chunkIndex * wavManifest.chunkSize;
+      const end = Math.min(fullWav.byteLength, start + wavManifest.chunkSize);
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: wavManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: wavManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: fullWav.slice(start, end).buffer
+      };
+    });
+
+    try {
+      await engine.attach();
+      const decodeWindow = Reflect.get(engine as object, "decodeCachedWavWindowAt") as (
+        positionSeconds: number
+      ) => Promise<boolean>;
+
+      await expect(decodeWindow.call(engine, 0.6)).resolves.toBe(true);
+
+      const decodedSegments = Reflect.get(engine as object, "decodedSegments") as Array<{
+        startTimeSec: number;
+        endTimeSec: number;
+      }>;
+      expect(decodedSegments.map((segment) => segment.startTimeSec)).toEqual([0.422, 0.866]);
+      expect(decodedSegments.map((segment) => segment.endTimeSec)).toEqual([0.644, 1]);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("marks PCM playback failed when cached pieces cannot be read", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();

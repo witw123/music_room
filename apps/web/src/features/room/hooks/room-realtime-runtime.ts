@@ -21,6 +21,7 @@ import type {
   ManualCachePieceReceivedInput,
   PieceRequestSampleInput,
   PieceTransferInput,
+  PlaybackRecoveryRecommendation,
   RoomDataMeshDiagnosticsRefs,
   RoomRecoveryMode,
   RoomRecoveryState
@@ -179,6 +180,7 @@ type RoomRealtimeRuntimeInput = {
   bufferHealth: "healthy" | "low" | "critical";
   enableManualTrackCaching: boolean;
   enableTrackCaching: boolean;
+  queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
   resubscribeRoomRef: MutableRefObject<(() => void) | null>;
   activeSessionRef: MutableRefObject<AuthSession | null>;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
@@ -263,6 +265,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     currentTrackId: input.currentTrackId,
     bufferHealth: input.bufferHealth,
     enableManualTrackCaching: input.enableManualTrackCaching,
+    queuePlaybackRecoveryRecommendation: input.queuePlaybackRecoveryRecommendation,
     reportMeshResyncFailure: (error) => {
       input.recordPeerDiagnosticRef.current({
         peerId: "system",

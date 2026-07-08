@@ -23,6 +23,7 @@ import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached
 import type {
   DataMeshBridge,
   ManualCachePieceReceivedInput,
+  PlaybackRecoveryRecommendation,
   RoomDataMeshDiagnosticsRefs
 } from "./room-runtime-types";
 
@@ -70,6 +71,36 @@ export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime |
     isReady() {
       return !!meshRef.current;
     }
+  };
+}
+
+export function resolveDataPeerRecoveryRecommendation(input: {
+  peerId: string;
+  dataChannelState?: string | null;
+  dataConnectionState?: string | null;
+  reason: string;
+}): PlaybackRecoveryRecommendation | null {
+  const failedDataChannel = input.dataChannelState === "closed";
+  const failedDataConnection =
+    input.dataConnectionState === "closed" ||
+    input.dataConnectionState === "failed" ||
+    input.dataConnectionState === "disconnected";
+  const stalledReason =
+    input.reason === "watchdog-timeout" ||
+    input.reason === "connection-failed" ||
+    input.reason === "data-channel-closed";
+
+  if (!failedDataChannel && !failedDataConnection && !stalledReason) {
+    return null;
+  }
+
+  return {
+    playbackConnectionKey: null,
+    peerId: input.peerId,
+    scope: "data",
+    level: "hard-recreate",
+    reason: input.reason,
+    observedNoProgressMs: null
   };
 }
 
@@ -158,6 +189,7 @@ export function createRoomDataMeshRuntime(input: {
   currentTrackId: string | null | undefined;
   bufferHealth: "healthy" | "low" | "critical";
   enableManualTrackCaching: boolean;
+  queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
   reportMeshResyncFailure: (error: unknown) => void;
 } & RoomDataMeshDiagnosticsRefs) {
   const peerBufferedAmountBytes = new Map<string, number>();
@@ -166,6 +198,17 @@ export function createRoomDataMeshRuntime(input: {
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
     getCachedLibraryTrack
   );
+  const queueDataPeerRecovery = (inputValue: {
+    peerId: string;
+    dataChannelState?: string | null;
+    dataConnectionState?: string | null;
+    reason: string;
+  }) => {
+    const recommendation = resolveDataPeerRecoveryRecommendation(inputValue);
+    if (recommendation) {
+      input.queuePlaybackRecoveryRecommendation?.(recommendation);
+    }
+  };
   const mesh = new P2PMesh(
     input.roomId,
     input.peerId,
@@ -333,6 +376,11 @@ export function createRoomDataMeshRuntime(input: {
           peerBufferedAmountBytes.delete(remotePeerId);
           input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
           input.setConnectedPeers((current) => current.filter((peer) => peer !== remotePeerId));
+          queueDataPeerRecovery({
+            peerId: remotePeerId,
+            dataConnectionState: state,
+            reason: state === "disconnected" ? "data-disconnected" : "data-failed"
+          });
         }
       },
       onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
@@ -397,6 +445,13 @@ export function createRoomDataMeshRuntime(input: {
           peerBufferedAmountBytes.delete(remotePeerId);
           input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
         }
+        if (state === "closed") {
+          queueDataPeerRecovery({
+            peerId: remotePeerId,
+            dataChannelState: state,
+            reason: "data-channel-closed"
+          });
+        }
       },
       onDataBufferedAmountChange: ({ peerId: remotePeerId, bufferedAmountBytes }) => {
         peerBufferedAmountBytes.set(remotePeerId, bufferedAmountBytes);
@@ -415,6 +470,10 @@ export function createRoomDataMeshRuntime(input: {
           lastFailureReason: reason
         });
         input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
+        queueDataPeerRecovery({
+          peerId: remotePeerId,
+          reason
+        });
       }
     },
     input.iceServers,
