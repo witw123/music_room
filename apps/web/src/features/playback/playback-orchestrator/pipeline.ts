@@ -564,11 +564,13 @@ export function resolveFullLocalPlaybackSelection(input: {
 
 export function resolveFullLocalAudioSourceAction(input: {
   hasSrcObject: boolean;
+  hasProgressiveRuntime?: boolean;
   currentSrc: string;
   nextSrc: string;
 }) {
   const shouldAssignSource = input.currentSrc !== input.nextSrc || input.hasSrcObject;
   return {
+    shouldDestroyRuntime: input.hasSrcObject || input.hasProgressiveRuntime === true,
     shouldClearSrcObject: input.hasSrcObject,
     shouldAssignSource,
     shouldLoadSource: shouldAssignSource

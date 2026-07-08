@@ -3177,9 +3177,23 @@ describe("use-progressive-runtime policy helpers", () => {
         nextSrc: "blob:track"
       })
     ).toEqual({
+      shouldDestroyRuntime: true,
       shouldClearSrcObject: true,
       shouldAssignSource: true,
       shouldLoadSource: true
+    });
+    expect(
+      resolveFullLocalAudioSourceAction({
+        hasSrcObject: false,
+        hasProgressiveRuntime: true,
+        currentSrc: "blob:track",
+        nextSrc: "blob:track"
+      })
+    ).toEqual({
+      shouldDestroyRuntime: true,
+      shouldClearSrcObject: false,
+      shouldAssignSource: false,
+      shouldLoadSource: false
     });
     expect(
       resolveFullLocalAudioSourceAction({
@@ -3188,6 +3202,7 @@ describe("use-progressive-runtime policy helpers", () => {
         nextSrc: "blob:track"
       })
     ).toEqual({
+      shouldDestroyRuntime: false,
       shouldClearSrcObject: false,
       shouldAssignSource: false,
       shouldLoadSource: false

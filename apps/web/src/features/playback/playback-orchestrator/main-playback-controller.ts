@@ -178,9 +178,13 @@ export function useMainPlaybackController({
     if (wantsFullLocalPlayback && uploaded) {
       const audioSourceAction = resolveFullLocalAudioSourceAction({
         hasSrcObject: !!audio.srcObject,
+        hasProgressiveRuntime: !!(progressivePcmEngineRef.current || progressiveEngineRef.current),
         currentSrc: audio.src,
         nextSrc: uploaded.objectUrl
       });
+      if (audioSourceAction.shouldDestroyRuntime) {
+        destroyProgressiveRuntime();
+      }
       if (audioSourceAction.shouldClearSrcObject) {
         audio.srcObject = null;
       }

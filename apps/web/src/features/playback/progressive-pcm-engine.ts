@@ -960,6 +960,20 @@ export class ProgressivePcmEngine {
     return decodedAny;
   }
 
+  private canAttemptCachedWindowDecode() {
+    if (isWavTrack(this.manifest)) {
+      return !!this.audioContext;
+    }
+
+    return !!this.streamInfo;
+  }
+
+  private async decodeCachedWindowAt(positionSeconds: number) {
+    return isWavTrack(this.manifest)
+      ? await this.decodeCachedWavWindowAt(positionSeconds)
+      : await this.decodeCachedFlacWindowAt(positionSeconds);
+  }
+
   private async decodeFlacPackets(packets: ProgressiveFlacFramePacket[]) {
     if (packets.length === 0 || !this.decoder) {
       return false;
@@ -1084,19 +1098,34 @@ export class ProgressivePcmEngine {
       positionSeconds * 1000
     );
     const trackLabel = `${this.manifest.trackId.slice(0, 8)}`;
+    let attemptedCurrentWindowDecode = false;
     try {
       for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
         if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
           return;
         }
 
+        let decodedWindow = false;
+        if (!attemptedCurrentWindowDecode && this.canAttemptCachedWindowDecode()) {
+          attemptedCurrentWindowDecode = true;
+          decodedWindow = await this.decodeCachedWindowAt(positionSeconds);
+          if (decodedWindow) {
+            await this.waitForDecodedPosition(positionSeconds);
+            if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+              return;
+            }
+          }
+        }
+
         const appended = await this.sync();
 
-        let decodedWindow = false;
-        if (!appended && !this.hasBufferedPosition(positionSeconds)) {
-          decodedWindow = isWavTrack(this.manifest)
-            ? await this.decodeCachedWavWindowAt(positionSeconds)
-            : await this.decodeCachedFlacWindowAt(positionSeconds);
+        if (
+          !attemptedCurrentWindowDecode &&
+          !this.hasBufferedPosition(positionSeconds) &&
+          this.canAttemptCachedWindowDecode()
+        ) {
+          attemptedCurrentWindowDecode = true;
+          decodedWindow = await this.decodeCachedWindowAt(positionSeconds);
         }
         if (!appended && !decodedWindow) {
           if (attempt === 0) {

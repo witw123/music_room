@@ -1099,7 +1099,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("continues reading cached prefix chunks until the requested WAV position can play", async () => {
+  it("plays the requested WAV position without waiting for every prefix chunk", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const wavManifest = {
@@ -1145,14 +1145,72 @@ describe("ProgressivePcmEngine", () => {
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
-      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(6);
-      // Catch-up append pulls all cached prefix chunks in one pass to reach the
-      // requested position, so the WAV data decodes into fewer, larger segments
-      // than the old two-chunk-per-sync throttle produced.
-      expect(engine.getSnapshot()).toMatchObject({
-        decodedSegmentCount: 2,
-        scheduledSegmentCount: 1
-      });
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeLessThan(6);
+      const snapshot = engine.getSnapshot();
+      expect(snapshot.decodedSegmentCount).toBe(2);
+      expect(snapshot.scheduledSegmentCount).toBeGreaterThanOrEqual(1);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("decodes the current WAV cache window even while older prefix chunks are still appending", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const wavManifest = {
+      ...manifest,
+      mimeType: "audio/wav",
+      codec: "wav",
+      durationMs: 700_000,
+      totalChunks: 700,
+      chunkSize: 444
+    };
+    const fullWav = buildPcmWavBytes({
+      sampleRate: 222,
+      channels: 1,
+      bitsPerSample: 16,
+      dataBytes: 444 * 700,
+      availableDataBytes: 444 * 700
+    });
+    const engine = new ProgressivePcmEngine(audio, "peer_local", wavManifest);
+
+    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
+      if (chunkIndex < 0 || chunkIndex >= wavManifest.totalChunks) {
+        return null;
+      }
+
+      const hasPrefixPiece = chunkIndex <= 514;
+      const hasCurrentWindowPiece = chunkIndex === 600 || chunkIndex === 601;
+      if (!hasPrefixPiece && !hasCurrentWindowPiece) {
+        return null;
+      }
+
+      const start = chunkIndex * wavManifest.chunkSize;
+      const end = Math.min(fullWav.byteLength, start + wavManifest.chunkSize);
+      return {
+        pieceId: `piece_${chunkIndex}`,
+        trackId: wavManifest.trackId,
+        peerId: "peer_local",
+        chunkIndex,
+        chunkSize: wavManifest.chunkSize,
+        hash: `hash_${chunkIndex}`,
+        createdAt: new Date().toISOString(),
+        payload: fullWav.slice(start, end).buffer
+      };
+    });
+
+    try {
+      await engine.attach();
+
+      const result = await engine.syncPlayback(600.1, true);
+
+      expect(result.localReady).toBe(true);
+      expect(result.blockedReason).toBeNull();
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeLessThan(600);
+      const snapshot = engine.getSnapshot();
+      expect(snapshot.decodedSegmentCount).toBeGreaterThanOrEqual(1);
+      expect(snapshot.scheduledSegmentCount).toBeGreaterThanOrEqual(1);
     } finally {
       engine.destroy();
       audioContext.restore();
