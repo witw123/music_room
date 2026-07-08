@@ -151,3 +151,14 @@ export function applyUploadRuntimeTrackRemoval<TUpload, TTask>(input: {
       }).manualCacheTasks ?? current
   );
 }
+
+export function resolveRetainedCachePieceTrackIdsToConsume(input: {
+  retainedTrackIds: Iterable<string>;
+  currentPlaybackTrackId: string | null | undefined;
+  playbackHasActiveIntent: boolean;
+}) {
+  const retainedTrackIds = [...new Set([...input.retainedTrackIds].filter(Boolean))];
+  return retainedTrackIds.filter(
+    (trackId) => trackId !== input.currentPlaybackTrackId
+  );
+}

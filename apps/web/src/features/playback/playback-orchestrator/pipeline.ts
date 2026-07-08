@@ -589,6 +589,20 @@ export function resolveFullLocalPlaybackSelection(input: {
   );
 }
 
+export function resolveSourceOwnerHasLocalTrackForPlayback(input: {
+  isCurrentSourceOwner: boolean;
+  hasUploadedTrack: boolean;
+  activePlaybackSource: ProgressivePlaybackSource;
+  forceSourceOwnerLocalPlayback: boolean;
+}) {
+  return (
+    input.isCurrentSourceOwner &&
+    input.hasUploadedTrack &&
+    (input.activePlaybackSource === "full-local" ||
+      input.forceSourceOwnerLocalPlayback)
+  );
+}
+
 export function resolveFullLocalAudioSourceAction(input: {
   hasSrcObject: boolean;
   hasProgressiveRuntime?: boolean;
@@ -1154,8 +1168,7 @@ export function resolveFullLocalPlaybackSessionState(input: {
 
   return {
     key: input.playbackSurfaceKey,
-    availableInSession:
-      input.currentSession.availableInSession || input.hasBufferedFullLocalTrack
+    availableInSession: input.currentSession.availableInSession
   };
 }
 

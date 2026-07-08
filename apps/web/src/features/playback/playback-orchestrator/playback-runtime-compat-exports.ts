@@ -95,6 +95,7 @@ export {
   resolveSeekedPlaybackPolicy,
   resolveSourceOwnerIdentity,
   resolvePlaybackStartFailureReason,
+  resolveSourceOwnerHasLocalTrackForPlayback,
   resolveSlidingWindowFallbackPlaybackAction,
   resolveSlidingWindowLowBufferFallbackReason,
   resolveSlidingWindowNativeSyncOutcome,

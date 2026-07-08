@@ -99,6 +99,7 @@ export function useTrackUploads(options: {
   const availabilityAnnouncementTtlRef = useRef<Map<string, number>>(new Map());
   const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
   const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
+  const manualCacheRetainedPieceTrackIdsRef = useRef<Set<string>>(new Set());
   const autoImportInFlightCacheKeysRef = useRef<Set<string>>(new Set());
   const autoImportAttemptedCacheKeysRef = useRef<Set<string>>(new Set());
   const roomTrackIdsKey = useMemo(
@@ -132,6 +133,7 @@ export function useTrackUploads(options: {
     cacheLibraryTracksRef,
     manualCacheAssemblingTrackIdsRef,
     manualCacheChunkIndexesRef,
+    manualCacheRetainedPieceTrackIdsRef,
     peerId,
     refreshCacheLibrary,
     roomSnapshot,
@@ -201,6 +203,7 @@ export function useTrackUploads(options: {
     inFlightUploadHashesRef,
     manualCacheAssemblingTrackIdsRef,
     manualCacheChunkIndexesRef,
+    manualCacheRetainedPieceTrackIdsRef,
     onAvailability,
     peerId,
     refreshCacheLibrary,

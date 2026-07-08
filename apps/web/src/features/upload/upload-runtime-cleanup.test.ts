@@ -4,6 +4,7 @@ import {
   applyUploadRuntimeTrackRemoval,
   cleanupUploadRuntimeRefs,
   pruneUploadRuntimeStateForActiveTracks,
+  resolveRetainedCachePieceTrackIdsToConsume,
   removeUploadRuntimeTrackIds,
   syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
@@ -141,6 +142,32 @@ describe("upload runtime cleanup helpers", () => {
     expect(manualCacheTasks).toEqual({
       track_keep: "task"
     });
+  });
+
+  it("keeps retained cache pieces while the same track remains current", () => {
+    expect(
+      resolveRetainedCachePieceTrackIdsToConsume({
+        retainedTrackIds: ["track_active", "track_old"],
+        currentPlaybackTrackId: "track_active",
+        playbackHasActiveIntent: true
+      })
+    ).toEqual(["track_old"]);
+
+    expect(
+      resolveRetainedCachePieceTrackIdsToConsume({
+        retainedTrackIds: ["track_active"],
+        currentPlaybackTrackId: "track_active",
+        playbackHasActiveIntent: false
+      })
+    ).toEqual([]);
+
+    expect(
+      resolveRetainedCachePieceTrackIdsToConsume({
+        retainedTrackIds: ["track_active"],
+        currentPlaybackTrackId: null,
+        playbackHasActiveIntent: false
+      })
+    ).toEqual(["track_active"]);
   });
 
   it("syncs uploaded track object urls and revokes stale urls", () => {

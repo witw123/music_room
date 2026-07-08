@@ -12,6 +12,7 @@ import {
   resolveAggregatePieceDownloadRateKbps as pipelineResolveAggregatePieceDownloadRateKbps,
   resolveCurrentBufferedFullLocalTrack as pipelineResolveCurrentBufferedFullLocalTrack,
   resolveFullLocalPlaybackSelection as pipelineResolveFullLocalPlaybackSelection,
+  resolveSourceOwnerHasLocalTrackForPlayback as pipelineResolveSourceOwnerHasLocalTrackForPlayback,
   pruneContinuousPlaybackSegments as pipelinePruneContinuousPlaybackSegments,
   prunePlaybackQualityTimestamps as pipelinePrunePlaybackQualityTimestamps,
   appendPlaybackQualityTimestamp as pipelineAppendPlaybackQualityTimestamp,
@@ -158,6 +159,7 @@ import {
   resolveAggregatePieceDownloadRateKbps,
   resolveCurrentBufferedFullLocalTrack,
   resolveFullLocalPlaybackSelection,
+  resolveSourceOwnerHasLocalTrackForPlayback,
   pruneContinuousPlaybackSegments,
   prunePlaybackQualityTimestamps,
   appendPlaybackQualityTimestamp,
@@ -1769,7 +1771,7 @@ describe("playback runtime pipeline keys", () => {
       })
     ).toEqual({
       key: "surface-a",
-      availableInSession: true
+      availableInSession: false
     });
   });
 
@@ -3200,6 +3202,22 @@ describe("use-progressive-runtime policy helpers", () => {
 
   it("keeps main playback source selection policy in the pure pipeline module", () => {
     expect(
+      pipelineResolveSourceOwnerHasLocalTrackForPlayback({
+        isCurrentSourceOwner: true,
+        hasUploadedTrack: true,
+        activePlaybackSource: "lossless-local",
+        forceSourceOwnerLocalPlayback: false
+      })
+    ).toBe(false);
+    expect(
+      resolveSourceOwnerHasLocalTrackForPlayback({
+        isCurrentSourceOwner: true,
+        hasUploadedTrack: true,
+        activePlaybackSource: "lossless-local",
+        forceSourceOwnerLocalPlayback: true
+      })
+    ).toBe(true);
+    expect(
       pipelineResolveFullLocalPlaybackSelection({
         activePlaybackSource: "full-local",
         forceSourceOwnerLocalPlayback: false,
@@ -4594,7 +4612,7 @@ describe("use-progressive-runtime policy helpers", () => {
     );
   });
 
-  it("allows full-local playback once the complete cache appears during the same playback session", () => {
+  it("keeps the active sliding-window session when complete cache appears mid-playback", () => {
     const initialSession = resolveFullLocalPlaybackSessionState({
       currentSession: {
         key: null,
@@ -4617,6 +4635,17 @@ describe("use-progressive-runtime policy helpers", () => {
       })
     ).toEqual({
       key: "track_1:epoch_1",
+      availableInSession: false
+    });
+
+    expect(
+      resolveFullLocalPlaybackSessionState({
+        currentSession: initialSession,
+        playbackSurfaceKey: "track_1:epoch_2",
+        hasBufferedFullLocalTrack: true
+      })
+    ).toEqual({
+      key: "track_1:epoch_2",
       availableInSession: true
     });
   });

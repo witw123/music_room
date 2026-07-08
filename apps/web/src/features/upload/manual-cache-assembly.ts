@@ -54,6 +54,8 @@ type AssembleManualCacheTrackInput = {
   }) => Promise<void>;
   deleteCachedPiecesForTrack: (trackId: string) => Promise<unknown>;
   onCachedPiecesConsumed: (trackId: string) => void;
+  onCachedPiecesRetained?: (trackId: string) => void;
+  retainCachedPiecesAfterAssembly?: boolean;
   announceRoomTrackAvailability: (trackId: string) => void;
   setStatusMessage: (message: string) => void;
 };
@@ -133,8 +135,12 @@ export async function assembleManualCacheTrackFromPieces(
       roomId: input.roomId,
       file: assembled.file
     });
-    await input.deleteCachedPiecesForTrack(input.trackId);
-    input.onCachedPiecesConsumed(input.trackId);
+    if (input.retainCachedPiecesAfterAssembly) {
+      input.onCachedPiecesRetained?.(input.trackId);
+    } else {
+      await input.deleteCachedPiecesForTrack(input.trackId);
+      input.onCachedPiecesConsumed(input.trackId);
+    }
     input.updateManualCacheTask(input.trackId, {
       status: "ready",
       errorMessage: null,

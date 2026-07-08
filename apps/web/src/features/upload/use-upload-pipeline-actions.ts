@@ -12,6 +12,7 @@ import {
   buildTrackAvailabilityFromManifest
 } from "@/features/p2p";
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
+import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteCachedPiecesForTrack,
@@ -55,6 +56,7 @@ type UploadPipelineActionsInput = {
   inFlightUploadHashesRef: MutableRefObject<Set<string>>;
   manualCacheAssemblingTrackIdsRef: MutableRefObject<Set<string>>;
   manualCacheChunkIndexesRef: MutableRefObject<Map<string, Set<number>>>;
+  manualCacheRetainedPieceTrackIdsRef: MutableRefObject<Set<string>>;
   onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   peerId: string;
   refreshCacheLibrary: () => Promise<void>;
@@ -74,6 +76,7 @@ export function useUploadPipelineActions({
   inFlightUploadHashesRef,
   manualCacheAssemblingTrackIdsRef,
   manualCacheChunkIndexesRef,
+  manualCacheRetainedPieceTrackIdsRef,
   onAvailability,
   peerId,
   refreshCacheLibrary,
@@ -157,6 +160,9 @@ export function useUploadPipelineActions({
 
   const assembleManualCacheTrack = useCallback(
     async (trackId: string, mimeType: string | null, totalChunks: number) => {
+      const playback = roomSnapshot?.room.playback ?? null;
+      const retainCachedPiecesAfterAssembly =
+        playback?.currentTrackId === trackId && hasActivePlaybackIntent(playback);
       await assembleManualCacheTrackFromPieces({
         manualTrackCachingEnabled: enableManualTrackCaching,
         assemblingTrackIds: manualCacheAssemblingTrackIdsRef.current,
@@ -172,8 +178,12 @@ export function useUploadPipelineActions({
         assembleTrackFileFromPieces,
         persistTrackIntoLibrary,
         deleteCachedPiecesForTrack,
+        retainCachedPiecesAfterAssembly,
         onCachedPiecesConsumed: (assembledTrackId) => {
           manualCacheChunkIndexesRef.current.delete(assembledTrackId);
+        },
+        onCachedPiecesRetained: (assembledTrackId) => {
+          manualCacheRetainedPieceTrackIdsRef.current.add(assembledTrackId);
         },
         announceRoomTrackAvailability: (assembledTrackId) => {
           void announceRoomTrackAvailability(assembledTrackId);
@@ -185,6 +195,7 @@ export function useUploadPipelineActions({
       announceRoomTrackAvailability,
       manualCacheAssemblingTrackIdsRef,
       manualCacheChunkIndexesRef,
+      manualCacheRetainedPieceTrackIdsRef,
       peerId,
       persistTrackIntoLibrary,
       roomSnapshot,

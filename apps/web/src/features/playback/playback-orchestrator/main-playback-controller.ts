@@ -42,6 +42,7 @@ import {
   resolvePlaybackTimelineIdentity,
   resolvePcmOutputAudible,
   resolvePcmSyncPlaybackOutcome,
+  resolveSourceOwnerHasLocalTrackForPlayback,
   resolveSlidingWindowFallbackPlaybackAction,
   resolveSlidingWindowNativeSyncOutcome,
   resolveSlidingWindowNoEngineHoldAction
@@ -170,7 +171,12 @@ export function useMainPlaybackController({
       fullLocalPlaybackTracks[currentTrackId] ??
       uploadedTracks[currentTrackId] ??
       null;
-    const sourceOwnerHasLocalTrack = isCurrentSourceOwner && !!uploaded;
+    const sourceOwnerHasLocalTrack = resolveSourceOwnerHasLocalTrackForPlayback({
+      isCurrentSourceOwner,
+      hasUploadedTrack: !!uploaded,
+      activePlaybackSource,
+      forceSourceOwnerLocalPlayback
+    });
     const expectedSeconds =
       getEffectivePlaybackPositionMs(playbackState, currentTrackDurationMs ?? 0, Date.now()) /
       1000;

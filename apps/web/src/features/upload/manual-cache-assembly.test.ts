@@ -80,6 +80,50 @@ describe("assembleManualCacheTrackFromPieces", () => {
     expect(statusMessages).toEqual(["已缓存《Cached》。"]);
   });
 
+  it("retains cached pieces after assembly when the active playback window may still read them", async () => {
+    const taskUpdates: Array<{ trackId: string; patch: unknown }> = [];
+    const deletedPieces: string[] = [];
+    const consumedPieces: string[] = [];
+    const assembledFile = new File(["assembled"], "assembled.flac", { type: "audio/flac" });
+
+    await assembleManualCacheTrackFromPieces({
+      manualTrackCachingEnabled: true,
+      assemblingTrackIds: new Set(),
+      trackId: "track_1",
+      mimeType: "audio/flac",
+      totalChunks: 2,
+      roomId: "room_1",
+      roomTracks: [roomTrack],
+      peerId: "peer_1",
+      localCacheOwnerKey: "local",
+      retainCachedPiecesAfterAssembly: true,
+      updateManualCacheTask: (trackId, patch) => {
+        taskUpdates.push({ trackId, patch });
+      },
+      getCachedPiecesForTrack: async () => [
+        { chunkIndex: 0, payload: new ArrayBuffer(1) },
+        { chunkIndex: 1, payload: new ArrayBuffer(1) }
+      ],
+      assembleTrackFileFromPieces: async () => ({ file: assembledFile }),
+      persistTrackIntoLibrary: async () => undefined,
+      deleteCachedPiecesForTrack: async (trackId) => {
+        deletedPieces.push(trackId);
+      },
+      onCachedPiecesConsumed: (trackId) => {
+        consumedPieces.push(trackId);
+      },
+      announceRoomTrackAvailability: () => undefined,
+      setStatusMessage: () => undefined
+    });
+
+    expect(taskUpdates.map(({ patch }) => patch)).toEqual([
+      expect.objectContaining({ status: "assembling", completedChunks: 2 }),
+      expect.objectContaining({ status: "ready", completedChunks: 2 })
+    ]);
+    expect(deletedPieces).toEqual([]);
+    expect(consumedPieces).toEqual([]);
+  });
+
   it("returns incomplete assemblies to downloading progress", async () => {
     const updateManualCacheTask = vi.fn();
 

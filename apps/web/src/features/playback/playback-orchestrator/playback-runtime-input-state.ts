@@ -137,7 +137,7 @@ export function usePlaybackRuntimeInputState({
   const forceSourceOwnerLocalPlayback = shouldForceSourceOwnerLocalPlayback({
     isCurrentSourceOwner,
     activePlaybackSource,
-    hasFullLocalTrack: !!currentBufferedFullLocalTrack
+    hasFullLocalTrack: canUseFullLocalForPlaybackSession
   });
   const activeMemberPeerIds = useMemo(
     () => resolveActiveMemberPeerIds(roomSnapshot?.room.members),

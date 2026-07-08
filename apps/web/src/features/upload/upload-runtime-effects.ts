@@ -2,6 +2,7 @@ import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } 
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import {
   clearTransientTrackCacheData,
+  deleteCachedPiecesForTrack,
   deleteManualCacheTask,
   getCachedLibraryTrack,
   getCachedLibraryTrackSummary,
@@ -13,6 +14,7 @@ import type {
   CachedLibraryTrack,
   UploadedTrack
 } from "@/features/upload/audio-utils";
+import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import {
   applyHydratedManualCacheTasksResult,
   hydrateManualCacheTasksForRoom,
@@ -28,6 +30,7 @@ import {
 import {
   applyUploadRuntimePruneForActiveTracks,
   cleanupUploadRuntimeRefs,
+  resolveRetainedCachePieceTrackIdsToConsume,
   syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
 
@@ -37,6 +40,7 @@ type UploadRuntimeEffectsInput = {
   cacheLibraryTracksRef: MutableRefObject<Map<string, CachedLibraryTrack>>;
   manualCacheAssemblingTrackIdsRef: MutableRefObject<Set<string>>;
   manualCacheChunkIndexesRef: MutableRefObject<Map<string, Set<number>>>;
+  manualCacheRetainedPieceTrackIdsRef: MutableRefObject<Set<string>>;
   peerId: string;
   refreshCacheLibrary: () => Promise<void>;
   roomSnapshot: RoomSnapshot | null;
@@ -53,6 +57,7 @@ export function useUploadRuntimeEffects({
   cacheLibraryTracksRef,
   manualCacheAssemblingTrackIdsRef,
   manualCacheChunkIndexesRef,
+  manualCacheRetainedPieceTrackIdsRef,
   peerId,
   refreshCacheLibrary,
   roomSnapshot,
@@ -110,10 +115,49 @@ export function useUploadRuntimeEffects({
   ]);
 
   useEffect(() => {
+    const trackIdsToConsume = resolveRetainedCachePieceTrackIdsToConsume({
+      retainedTrackIds: manualCacheRetainedPieceTrackIdsRef.current,
+      currentPlaybackTrackId: null,
+      playbackHasActiveIntent: false
+    });
+    for (const trackId of trackIdsToConsume) {
+      void deleteCachedPiecesForTrack(trackId, undefined, {
+        ownerKey: localCacheOwnerKey
+      });
+    }
     manualCacheChunkIndexesRef.current.clear();
     manualCacheAssemblingTrackIdsRef.current.clear();
+    manualCacheRetainedPieceTrackIdsRef.current.clear();
     void clearTransientTrackCacheData();
-  }, [manualCacheAssemblingTrackIdsRef, manualCacheChunkIndexesRef, roomSnapshot?.room.id]);
+  }, [
+    manualCacheAssemblingTrackIdsRef,
+    manualCacheChunkIndexesRef,
+    manualCacheRetainedPieceTrackIdsRef,
+    roomSnapshot?.room.id
+  ]);
+
+  useEffect(() => {
+    const trackIdsToConsume = resolveRetainedCachePieceTrackIdsToConsume({
+      retainedTrackIds: manualCacheRetainedPieceTrackIdsRef.current,
+      currentPlaybackTrackId: roomSnapshot?.room.playback.currentTrackId ?? null,
+      playbackHasActiveIntent: hasActivePlaybackIntent(roomSnapshot?.room.playback)
+    });
+    if (trackIdsToConsume.length === 0) {
+      return;
+    }
+
+    for (const trackId of trackIdsToConsume) {
+      manualCacheRetainedPieceTrackIdsRef.current.delete(trackId);
+      manualCacheChunkIndexesRef.current.delete(trackId);
+      void deleteCachedPiecesForTrack(trackId, undefined, {
+        ownerKey: localCacheOwnerKey
+      });
+    }
+  }, [
+    manualCacheChunkIndexesRef,
+    manualCacheRetainedPieceTrackIdsRef,
+    roomSnapshot?.room.playback
+  ]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id) {
