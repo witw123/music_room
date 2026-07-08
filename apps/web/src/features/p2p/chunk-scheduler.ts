@@ -106,7 +106,10 @@ const DEFAULTS = {
   upcomingPrefetchMs: 12_000,
   backgroundChunkBatchSize: 2
   ,
-  minScheduleIntervalMs: 35
+  // Reduced from 35 ms to 16 ms (~one frame at 60 fps) so new chunk
+  // requests are dispatched sooner after a piece arrives, which is
+  // especially important during first-time playback startup.
+  minScheduleIntervalMs: 16
 } as const;
 
 export class ChunkScheduler {
@@ -927,11 +930,11 @@ function getTrackStreamingProfile(
 
   if (policy === "outrun-recovery") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 28 : 22,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 9 : 7,
+      maxConcurrent: streamProfile === "large-lossless" ? 36 : 30,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 13 : 10,
       lookBehindMs: 0,
       lookAheadMs: streamProfile === "large-lossless" ? 300_000 : 170_000,
-      timeoutMs: streamProfile === "large-lossless" ? 750 : 850
+      timeoutMs: streamProfile === "large-lossless" ? 600 : 700
     };
   }
 
@@ -947,11 +950,13 @@ function getTrackStreamingProfile(
 
   if (policy === "startup") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 22 : 18,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 7 : 6,
+      // Higher concurrency during startup saturates the P2P pipe faster,
+      // which is critical for first-time playback where no chunks are cached.
+      maxConcurrent: streamProfile === "large-lossless" ? 32 : 28,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 12 : 10,
       lookBehindMs: 0,
       lookAheadMs: streamProfile === "large-lossless" ? 128_000 : 72_000,
-      timeoutMs: streamProfile === "large-lossless" ? 850 : 1_000
+      timeoutMs: streamProfile === "large-lossless" ? 600 : 700
     };
   }
 

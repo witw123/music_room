@@ -1,4 +1,5 @@
-import { getCachedPiece, localCacheOwnerKey } from "@/lib/indexeddb";
+import { getCachedPiece, getCachedPiecesByIndexes, localCacheOwnerKey } from "@/lib/indexeddb";
+import { pieceMemoryBuffer } from "@/features/p2p/piece-memory-buffer";
 import {
   getChunkIndexForPositionMs,
   isWavTrack,
@@ -102,18 +103,16 @@ const pcmMaxSoftCorrectionSeconds = 0.05;
 const pcmNativeHandoffFadeMs = 45;
 const pcmDecodedSegmentRetentionSeconds = 16;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
-// Steady-state prefetch stays small so switching tracks never blocks the main
-// thread decoding hundreds of chunks at once.
-const maxPcmCachedPiecesToAppendPerSync = 2;
-// When we still need to reach the live playback position (listener catching up
-// to the host, or a seek), the small per-sync cap would make decoding lag far
-// behind download and playback, so nothing becomes audible until the whole
-// track finishes caching. In that catch-up case we allow appending more
-// contiguous chunks per pass. Kept moderate (not hundreds) because every chunk
-// is a separate IndexedDB read transaction; issuing hundreds in one burst
-// contends with the downloader's write transactions and triggers AbortError.
-// 64 per sync × maxPcmPlaybackCatchupSyncBatches still covers large seeks.
-const maxPcmCatchupPiecesToAppendPerSync = 64;
+// Steady-state: batch-read up to this many contiguous chunks per sync.
+// With the in-memory buffer + batch IndexedDB reads, reading 16 chunks is
+// nearly as cheap as reading 1, so a moderate value here keeps the decoder
+// fed without blocking the main thread on large track switches.
+const maxPcmCachedPiecesToAppendPerSync = 16;
+// Catch-up mode: when the decoder is behind the playback position (listener
+// catching up to the host, or a seek). Batch reads make this efficient —
+// a single IndexedDB query fetches all needed chunks. 128 per sync × 8
+// batches covers the full range of realistic seeks.
+const maxPcmCatchupPiecesToAppendPerSync = 128;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 // Window decode reads up to this many chunks around the playback position.
 // P2P delivery is unordered so a small window (4) frequently fails when the
@@ -512,6 +511,8 @@ export class ProgressivePcmEngine {
 
     this.status = "destroyed";
     this.stopScheduledSegments();
+    // Release in-memory buffered pieces for this track so they don't leak.
+    pieceMemoryBuffer.clearTrack(this.manifest.trackId);
     // The engine runs on a shared AudioContext, so destroying it never closes
     // the context. Explicitly disconnect the graph, otherwise stale gain nodes
     // from previous engine instances stay wired to the destination and overlap
@@ -833,35 +834,70 @@ export class ProgressivePcmEngine {
   }
 
   private async appendAvailableContiguousPieces() {
-    let appended = false;
-    let appendedPieceCount = 0;
+    if (isTerminalEngineStatus(this.status)) {
+      return false;
+    }
 
-    while (
-      this.contiguousChunkCount < this.manifest.totalChunks &&
-      appendedPieceCount < this.getAppendBudgetForCurrentSync()
-    ) {
-      const piece = await getCachedPiece(
+    const budget = this.getAppendBudgetForCurrentSync();
+    if (budget <= 0) {
+      return false;
+    }
+
+    // Build the list of chunk indexes we need (contiguous from current position).
+    const maxChunkIndex = Math.min(
+      this.manifest.totalChunks - 1,
+      this.contiguousChunkCount + budget - 1
+    );
+    const neededChunks: number[] = [];
+    for (let i = this.contiguousChunkCount; i <= maxChunkIndex; i++) {
+      neededChunks.push(i);
+    }
+    if (neededChunks.length === 0) {
+      return false;
+    }
+
+    // 1. Check the in-memory piece buffer first (instant, no I/O).
+    const memoryPieces = pieceMemoryBuffer.getBatch(this.manifest.trackId, neededChunks);
+
+    // 2. For chunks not in memory, batch-read from IndexedDB in a single query.
+    const idbNeededChunks = neededChunks.filter((c) => !memoryPieces.has(c));
+    const idbPieces = new Map<number, ArrayBuffer>();
+    if (idbNeededChunks.length > 0) {
+      const records = await getCachedPiecesByIndexes(
         this.manifest.trackId,
         this.peerId,
-        this.contiguousChunkCount,
+        idbNeededChunks,
         {
-          fileHash: this.manifest.fileHash,
+          fileHash: this.manifest.fileHash || null,
           ownerKey: localCacheOwnerKey,
           chunkSize: this.manifest.chunkSize
         }
       );
-      if (isTerminalEngineStatus(this.status)) {
-        break;
+      for (const record of records) {
+        idbPieces.set(record.chunkIndex, record.payload);
+      }
+    }
+
+    if (isTerminalEngineStatus(this.status)) {
+      return false;
+    }
+
+    // 3. Append chunks in contiguous order. Stop at the first gap.
+    let appended = false;
+    for (const chunkIndex of neededChunks) {
+      const payload = memoryPieces.get(chunkIndex) ?? idbPieces.get(chunkIndex);
+      if (!payload) {
+        break; // Gap — stop, can't append non-contiguous chunks
       }
 
-      if (!piece) {
-        break;
-      }
-
-      this.appendContiguousBytes(piece.payload);
+      this.appendContiguousBytes(payload);
       this.contiguousChunkCount += 1;
-      appendedPieceCount += 1;
       appended = true;
+
+      // Evict from memory buffer now that the decoder owns the bytes.
+      if (memoryPieces.has(chunkIndex)) {
+        pieceMemoryBuffer.evict(this.manifest.trackId, chunkIndex);
+      }
     }
 
     return appended;
@@ -966,26 +1002,47 @@ export class ProgressivePcmEngine {
       currentRunPieces = [];
     };
 
+    // Build probe list: up to maxPieceCount + maxConsecutiveSkips chunks
+    // (worst case: all skips before any hits).
+    const probeEnd = Math.min(
+      this.manifest.totalChunks,
+      Math.max(0, startChunkIndex) + maxPieceCount + maxConsecutiveSkips + 1
+    );
+    const probeChunks: number[] = [];
+    for (let i = Math.max(0, startChunkIndex); i < probeEnd; i++) {
+      probeChunks.push(i);
+    }
+    if (probeChunks.length === 0) {
+      return null;
+    }
+
+    // Batch-read from memory buffer + IndexedDB.
+    const memoryPieces = pieceMemoryBuffer.getBatch(this.manifest.trackId, probeChunks);
+    const idbNeeded = probeChunks.filter((c) => !memoryPieces.has(c));
+    const idbRecords = idbNeeded.length > 0
+      ? await getCachedPiecesByIndexes(
+          this.manifest.trackId,
+          this.peerId,
+          idbNeeded,
+          {
+            fileHash: this.manifest.fileHash || null,
+            ownerKey: localCacheOwnerKey,
+            chunkSize: this.manifest.chunkSize
+          }
+        )
+      : [];
+    const idbMap = new Map<number, ArrayBuffer>();
+    for (const record of idbRecords) {
+      idbMap.set(record.chunkIndex, record.payload);
+    }
+
     for (
       let chunkIndex = Math.max(0, startChunkIndex);
       chunkIndex < this.manifest.totalChunks && foundPieceCount < maxPieceCount;
       chunkIndex += 1
     ) {
-      const piece = await getCachedPiece(
-        this.manifest.trackId,
-        this.peerId,
-        chunkIndex,
-        {
-          fileHash: this.manifest.fileHash,
-          ownerKey: localCacheOwnerKey,
-          chunkSize: this.manifest.chunkSize
-        }
-      );
-      if (!piece) {
-        // P2P delivery is unordered — skip missing chunks instead of
-        // breaking so later chunks that DID arrive can still be used. Keep
-        // each contiguous run separate so decoders never treat a gap as real
-        // audio bytes.
+      const rawPayload = memoryPieces.get(chunkIndex) ?? idbMap.get(chunkIndex);
+      if (!rawPayload) {
         flushCurrentRun();
         consecutiveSkips += 1;
         if (consecutiveSkips > maxConsecutiveSkips) {
@@ -995,10 +1052,15 @@ export class ProgressivePcmEngine {
       }
       consecutiveSkips = 0;
 
-      const bytes = new Uint8Array(piece.payload);
+      // CachedPieceWindowPiece uses Uint8Array for byte concatenation.
+      const bytes = new Uint8Array(rawPayload);
       currentRunPieces.push({ chunkIndex, bytes });
       endChunkIndex = chunkIndex;
       foundPieceCount += 1;
+
+      if (memoryPieces.has(chunkIndex)) {
+        pieceMemoryBuffer.evict(this.manifest.trackId, chunkIndex);
+      }
     }
     flushCurrentRun();
 

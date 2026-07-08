@@ -21,6 +21,9 @@ export type ReceivedPieceCallbackPayload = {
   chunkSize: number;
   mimeType: string;
   payloadBytes: number;
+  /** Raw piece payload bytes — available for in-memory buffering.
+   *  This is the validated chunk data before IndexedDB persistence. */
+  payload: ArrayBuffer;
   requestId?: string;
   requestRttMs?: number | null;
 };
@@ -231,6 +234,7 @@ export class PieceInboundProcessor {
       chunkSize: item.message.header.chunkSize,
       mimeType: item.message.header.mimeType,
       payloadBytes: item.message.payload.byteLength,
+      payload: item.message.payload,
       requestId: item.message.header.requestId ?? item.pendingRequest?.requestId,
       requestRttMs:
         item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null

@@ -131,6 +131,7 @@ export * from "./connection-supervisor";
 export * from "./availability-state";
 export * from "./use-peer-diagnostics";
 export * from "./use-availability-announcements";
+export * from "./piece-memory-buffer";
 
 export const defaultChunkSize = 128 * 1024;
 export const currentTrackChunkRequestLimit = 24;

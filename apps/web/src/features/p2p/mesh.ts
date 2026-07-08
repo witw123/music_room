@@ -31,6 +31,8 @@ type MeshCallbacks = {
     chunkSize: number;
     mimeType: string;
     payloadBytes: number;
+    /** Raw piece payload — available for in-memory buffering before persistence. */
+    payload: ArrayBuffer;
     requestId?: string;
     requestRttMs?: number | null;
   }) => boolean | void;

@@ -7,7 +7,8 @@ import {
   ChunkScheduler,
   P2PMesh,
   resolvePreferredIceTransportPolicy,
-  resolveTrackPieceManifest
+  resolveTrackPieceManifest,
+  pieceMemoryBuffer
 } from "@/features/p2p";
 import {
   getCachedLibraryTrack,
@@ -261,8 +262,14 @@ export function createRoomDataMeshRuntime(input: {
         chunkSize,
         mimeType,
         payloadBytes,
+        payload,
         requestRttMs
       }) => {
+        // Store validated piece in the in-memory buffer so the PCM engine can
+        // read it instantly without an IndexedDB round-trip. This eliminates
+        // the primary latency bottleneck for first-time playback.
+        pieceMemoryBuffer.put(trackId, chunkIndex, payload);
+
         input.recordPieceTransferRef.current({
           peerId: sourcePeerId,
           direction: "download",
