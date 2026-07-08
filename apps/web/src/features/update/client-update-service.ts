@@ -44,8 +44,23 @@ export type ClientUpdateCheckResult =
 
 const latestReleaseApiUrl = "https://api.github.com/repos/witw123/music_room/releases/latest";
 
-function toFailureMessage(error: unknown) {
-  return error instanceof Error && error.message ? error.message : "检查更新失败。";
+export function toClientUpdateFailureMessage(error: unknown, fallback = "检查更新失败。") {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message.trim();
+    }
+  }
+
+  return fallback;
 }
 
 async function checkDesktopUpdate(): Promise<ClientUpdateCheckResult> {
@@ -135,7 +150,7 @@ export async function checkClientUpdate(
 
     return {
       status: "failed",
-      message: toFailureMessage(error)
+      message: toClientUpdateFailureMessage(error)
     };
   }
 }

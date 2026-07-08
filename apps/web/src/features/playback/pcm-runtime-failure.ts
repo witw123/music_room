@@ -40,17 +40,21 @@ export function shouldRetryPcmRuntimeAfterFailure(input: {
 }
 
 /**
- * Collapse a sync blocked reason and the decoder's last error into a single
- * failure reason. A generic "engine-failed" is replaced with the more specific
- * decoder error when available.
+ * Collapse the current sync blocked reason into a failure reason. The decoder's
+ * last error is diagnostic history, so it only refines a current generic engine
+ * failure; a recovered sync must not relatch an old decode error.
  */
 export function resolvePcmRuntimeFailureReason(input: {
   blockedReason: string | null | undefined;
   lastDecodeError: string | null | undefined;
 }) {
+  if (!input.blockedReason) {
+    return null;
+  }
+
   if (input.blockedReason === "engine-failed" && input.lastDecodeError) {
     return input.lastDecodeError;
   }
 
-  return input.blockedReason ?? input.lastDecodeError ?? null;
+  return input.blockedReason;
 }

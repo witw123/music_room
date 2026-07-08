@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   checkClientUpdate,
+  toClientUpdateFailureMessage,
   type ClientUpdate,
   type ClientUpdateCheckMode
 } from "@/features/update/client-update-service";
@@ -89,7 +90,7 @@ export function ClientUpdateManager({ children }: { children: React.ReactNode })
     try {
       await update.install();
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "安装更新失败。");
+      setStatusMessage(toClientUpdateFailureMessage(error, "安装更新失败。"));
       setInstalling(false);
     }
   }

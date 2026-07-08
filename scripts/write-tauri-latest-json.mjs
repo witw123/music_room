@@ -40,11 +40,28 @@ function toDownloadUrl(fileName) {
 }
 
 function findUpdaterArtifact(files, predicate) {
-  const artifactPath = files.find((filePath) => predicate(path.basename(filePath)));
+  const artifactPath = findUpdaterArtifactPath(files, predicate);
   if (!artifactPath) {
     return null;
   }
 
+  return toUpdaterArtifact(artifactPath);
+}
+
+function findUpdaterArtifactPath(files, predicate) {
+  return files.find((filePath) => predicate(path.basename(filePath))) ?? null;
+}
+
+function findUpdaterArtifacts(files, predicate) {
+  return files
+    .filter((filePath) => predicate(path.basename(filePath)))
+    .map((artifactPath) => ({
+      artifactPath,
+      artifact: toUpdaterArtifact(artifactPath)
+    }));
+}
+
+function toUpdaterArtifact(artifactPath) {
   const signaturePath = `${artifactPath}.sig`;
   if (!fs.existsSync(signaturePath)) {
     throw new Error(`Missing updater signature for ${artifactPath}`);
@@ -54,6 +71,56 @@ function findUpdaterArtifact(files, predicate) {
     signature: fs.readFileSync(signaturePath, "utf8").trim(),
     url: toDownloadUrl(path.basename(artifactPath))
   };
+}
+
+function getMacosPlatformKeyFromName(fileName) {
+  const lowerFileName = fileName.toLowerCase();
+  if (lowerFileName.includes("aarch64") || lowerFileName.includes("arm64")) {
+    return "darwin-aarch64";
+  }
+
+  if (
+    lowerFileName.includes("x86_64") ||
+    lowerFileName.includes("x64") ||
+    lowerFileName.includes("amd64")
+  ) {
+    return "darwin-x86_64";
+  }
+
+  return null;
+}
+
+function getMacosInstallerPlatformKeys(files) {
+  return new Set(
+    files
+      .filter((filePath) => path.basename(filePath).endsWith(".dmg"))
+      .map((filePath) => getMacosPlatformKeyFromName(path.basename(filePath)))
+      .filter(Boolean)
+  );
+}
+
+function resolveMacosUpdaterPlatformKeys(artifactPath, files) {
+  const artifactFileName = path.basename(artifactPath);
+  const artifactPlatformKey = getMacosPlatformKeyFromName(artifactFileName);
+  if (artifactPlatformKey) {
+    return [artifactPlatformKey];
+  }
+
+  const siblingInstallerKeys = getMacosInstallerPlatformKeys(
+    files.filter((filePath) => path.dirname(filePath) === path.dirname(artifactPath))
+  );
+  if (siblingInstallerKeys.size === 1) {
+    return [...siblingInstallerKeys];
+  }
+
+  const allInstallerKeys = getMacosInstallerPlatformKeys(files);
+  if (allInstallerKeys.size === 1) {
+    return [...allInstallerKeys];
+  }
+
+  throw new Error(
+    `Cannot infer macOS updater target for ${artifactFileName}. Include aarch64, arm64, x86_64, x64, or amd64 in the updater artifact name, or publish it beside one arch-specific .dmg.`
+  );
 }
 
 normalizeReleaseAssetFileNames(absoluteReleaseAssetsDir);
@@ -73,10 +140,11 @@ if (linux) {
   platforms["linux-x86_64"] = linux;
 }
 
-const macos = findUpdaterArtifact(files, (fileName) => fileName.endsWith(".app.tar.gz"));
-if (macos) {
-  const isAppleSilicon = macos.url.includes("_aarch64") || macos.url.includes("aarch64");
-  platforms[isAppleSilicon ? "darwin-aarch64" : "darwin-x86_64"] = macos;
+const macosArtifacts = findUpdaterArtifacts(files, (fileName) => fileName.endsWith(".app.tar.gz"));
+for (const { artifactPath, artifact } of macosArtifacts) {
+  for (const platformKey of resolveMacosUpdaterPlatformKeys(artifactPath, files)) {
+    platforms[platformKey] = artifact;
+  }
 }
 
 const version = tagName.replace(/^v/i, "");

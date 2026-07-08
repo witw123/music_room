@@ -877,6 +877,28 @@ describe("playback runtime pipeline keys", () => {
     expect(engineController).toContain("resolveProgressiveEngineAttachErrorAction");
   });
 
+  it("does not rebuild the progressive engine when only the volume changes", () => {
+    const engineController = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-engine-controller.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+    const setupEffectIndex = engineController.indexOf(
+      "const setupPreflight = resolveProgressiveEngineSetupPreflight"
+    );
+    const dependencyStart = engineController.indexOf("  }, [", setupEffectIndex);
+    const dependencyEnd = engineController.indexOf("  ]);", dependencyStart);
+    const setupEffectDependencies = engineController.slice(dependencyStart, dependencyEnd);
+
+    expect(setupEffectIndex).toBeGreaterThan(-1);
+    expect(dependencyStart).toBeGreaterThan(setupEffectIndex);
+    expect(dependencyEnd).toBeGreaterThan(dependencyStart);
+    expect(setupEffectDependencies).not.toMatch(/^\s+volume,?\s*$/m);
+    expect(engineController).toContain("progressivePcmEngineRef.current?.setVolume(volume);");
+  });
+
   it("hosts main playback driving outside the main runtime hook", () => {
     const runtimeSource = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "use-progressive-runtime.ts"),

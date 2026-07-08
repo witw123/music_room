@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -48,6 +49,9 @@ export function useProgressiveEngineController({
   setProgressiveFallbackReason,
   volume
 }: ProgressiveEngineControllerInput) {
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+
   useEffect(() => {
     const audio = audioRef.current;
     const setupPreflight = resolveProgressiveEngineSetupPreflight({
@@ -79,7 +83,7 @@ export function useProgressiveEngineController({
 
     if (engine instanceof ProgressivePcmEngine) {
       progressivePcmEngineRef.current = engine;
-      engine.setVolume(volume);
+      engine.setVolume(volumeRef.current);
     } else {
       progressiveEngineRef.current = engine;
     }
@@ -147,8 +151,7 @@ export function useProgressiveEngineController({
     peerId,
     progressiveEngineRef,
     progressivePcmEngineRef,
-    setProgressiveFallbackReason,
-    volume
+    setProgressiveFallbackReason
   ]);
 
   useEffect(() => {
