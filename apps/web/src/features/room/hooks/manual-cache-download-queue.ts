@@ -36,6 +36,28 @@ export type ManualCacheBlockedReason =
   | "provider-has-no-requestable-chunks"
   | "pending-window-full";
 
+export type ManualCacheRequestGroupPriority =
+  | "active-critical"
+  | "active-fill"
+  | "background";
+
+export type ManualCacheRequestGroup = {
+  providerPeerId: string;
+  chunkIndexes: number[];
+  timeoutMs: number;
+  priority: ManualCacheRequestGroupPriority;
+};
+
+export type ManualCachePeerSummary = {
+  peerId: string;
+  requestedChunkCount: number;
+  priority: ManualCacheRequestGroupPriority;
+  downloadRateKbps?: number | null;
+  roundTripTimeMs?: number | null;
+  bufferedAmountBytes?: number | null;
+  transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
+};
+
 export type ManualCacheTrackPlan = {
   trackId: string;
   manifest: ResolvedTrackPieceManifest | null;
@@ -47,8 +69,13 @@ export type ManualCacheTrackPlan = {
   connectedProviderPeerIds: string[];
   selectedProviderPeerId: string | null;
   requestableChunks: number[];
+  requestGroups: ManualCacheRequestGroup[];
   pendingChunkCount: number;
   blockedReason: ManualCacheBlockedReason | null;
+  downloadRateKbps?: number | null;
+  activeAheadMs?: number | null;
+  activePeerCount?: number;
+  peerSummaries?: ManualCachePeerSummary[];
 };
 
 export type ActivePlaybackCacheWindow = {
@@ -345,6 +372,7 @@ function emptyManualCacheTrackPlan(
     connectedProviderPeerIds: [],
     selectedProviderPeerId: null,
     requestableChunks: [],
+    requestGroups: [],
     pendingChunkCount: 0,
     blockedReason
   };
@@ -495,6 +523,7 @@ export function resolveManualCacheTrackPlan(input: {
       connectedProviderPeerIds,
       selectedProviderPeerId: null,
       requestableChunks: [],
+      requestGroups: [],
       pendingChunkCount: pendingChunkSet.size,
       blockedReason: "no-provider"
     };
@@ -512,6 +541,7 @@ export function resolveManualCacheTrackPlan(input: {
       connectedProviderPeerIds,
       selectedProviderPeerId: null,
       requestableChunks: [],
+      requestGroups: [],
       pendingChunkCount: pendingChunkSet.size,
       blockedReason: "provider-not-connected"
     };
@@ -542,6 +572,7 @@ export function resolveManualCacheTrackPlan(input: {
         connectedProviderPeerIds,
         selectedProviderPeerId: provider.ownerPeerId,
         requestableChunks,
+        requestGroups: [],
         pendingChunkCount: pendingChunkSet.size,
         blockedReason: null
       };
@@ -559,6 +590,7 @@ export function resolveManualCacheTrackPlan(input: {
     connectedProviderPeerIds,
     selectedProviderPeerId: null,
     requestableChunks: [],
+    requestGroups: [],
     pendingChunkCount: pendingChunkSet.size,
     blockedReason:
       pendingChunkSet.size > 0 &&

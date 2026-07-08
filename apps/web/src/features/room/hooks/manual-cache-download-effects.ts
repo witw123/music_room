@@ -460,13 +460,14 @@ export function useManualCacheDownloadEffects({
               ownerKey: localCacheOwnerKey,
               chunkSize: manifestHint?.chunkSize
             }),
-          requestPieces: (providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs) =>
+          requestPieces: (providerPeerId, trackId, chunkIndexes, totalChunks, timeoutMs, options) =>
             dataMesh.requestPieces(
               providerPeerId,
               trackId,
               chunkIndexes,
               totalChunks,
-              timeoutMs
+              timeoutMs,
+              options
             ),
           resolvePeerRequestWindow: latest.resolvePeerRequestWindow
         });

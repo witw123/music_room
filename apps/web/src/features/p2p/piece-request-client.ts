@@ -27,6 +27,11 @@ type PieceRequestClientCallbacks = {
   onPieceRequestTimeout?: (payload: PieceRequestTimeoutPayload) => void;
 };
 
+export type PieceRequestOptions = {
+  allowRedundant?: boolean;
+  maxReplicas?: number;
+};
+
 export class PieceRequestClient<TEntry extends PieceRequestPeerEntry = PieceRequestPeerEntry> {
   private readonly pieceRequests = new PieceRequestTracker();
   private readonly getPeerEntry: (peerId: string) => TEntry | null | undefined;
@@ -74,14 +79,19 @@ export class PieceRequestClient<TEntry extends PieceRequestPeerEntry = PieceRequ
     trackId: string,
     chunkIndexes: number[],
     expectedTotalChunks?: number,
-    timeoutMs = 10000
+    timeoutMs = 10000,
+    options: PieceRequestOptions = {}
   ) {
     const entry = this.getPeerEntry(peerId);
     if (!entry?.channel || entry.channel.readyState !== "open") {
       return false;
     }
 
-    const normalizedChunkIndexes = this.pieceRequests.getAvailableChunkIndexes(trackId, chunkIndexes);
+    const normalizedChunkIndexes = this.pieceRequests.getAvailableChunkIndexes(trackId, chunkIndexes, {
+      allowRedundant: options.allowRedundant,
+      maxReplicas: options.maxReplicas,
+      peerId
+    });
     if (normalizedChunkIndexes.length === 0) {
       return false;
     }
@@ -97,7 +107,9 @@ export class PieceRequestClient<TEntry extends PieceRequestPeerEntry = PieceRequ
       expectedTotalChunks,
       requestId,
       timeoutMs,
-      onTimeout: this.callbacks.onPieceRequestTimeout
+      onTimeout: this.callbacks.onPieceRequestTimeout,
+      allowRedundant: options.allowRedundant,
+      maxReplicas: options.maxReplicas
     });
 
     const payload: P2PDataMessage =

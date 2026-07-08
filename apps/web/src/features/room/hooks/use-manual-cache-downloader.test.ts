@@ -983,6 +983,168 @@ describe("planManualCacheDirectRequests", () => {
     );
   });
 
+  it("splits active playback cache requests across healthy providers by link quality", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: null,
+      playbackStatus: "playing",
+      totalChunks: 160,
+      durationMs: 160_000,
+      sizeBytes: 160 * 128 * 1024
+    });
+    const availabilityByTrack = {
+      track_a: {
+        peer_fast: buildAvailability("peer_fast", 160),
+        peer_standard: buildAvailability("peer_standard", 160),
+        peer_unstable: buildAvailability("peer_unstable", 160)
+      }
+    };
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number,
+        _options?: { allowRedundant?: boolean; maxReplicas?: number }
+      ) => true
+    );
+
+    const plans = await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_fast", "peer_standard", "peer_unstable"],
+      connectedPeerIds: ["peer_fast", "peer_standard", "peer_unstable"],
+      availabilityByTrack,
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      resolvePeerRequestWindow: (providerPeerId) =>
+        providerPeerId === "peer_fast"
+          ? {
+              bufferedAmountBytes: 0,
+              currentRoundTripTimeMs: 35,
+              downloadRateKbps: 6_400,
+              transportScore: "healthy"
+            }
+          : providerPeerId === "peer_standard"
+            ? {
+                bufferedAmountBytes: 64 * 1024,
+                currentRoundTripTimeMs: 95,
+                downloadRateKbps: 2_200,
+                transportScore: "healthy"
+              }
+            : {
+                bufferedAmountBytes: 900 * 1024,
+                currentRoundTripTimeMs: 420,
+                downloadRateKbps: 600,
+                transportScore: "unstable"
+              },
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 40_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    const requestsByPeer = new Map(
+      requestPieces.mock.calls.map((call) => [call[0], call[2]] as const)
+    );
+
+    expect(requestsByPeer.get("peer_fast")?.length ?? 0).toBeGreaterThan(
+      requestsByPeer.get("peer_standard")?.length ?? 0
+    );
+    expect(requestsByPeer.get("peer_standard")?.length ?? 0).toBeGreaterThan(0);
+    expect(requestsByPeer.has("peer_unstable")).toBe(false);
+    expect(plans[0]?.plan.requestGroups.map((group) => group.providerPeerId)).toEqual([
+      "peer_fast",
+      "peer_standard"
+    ]);
+  });
+
+  it("duplicates the nearest active playback chunks through a second healthy provider", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: null,
+      playbackStatus: "playing",
+      totalChunks: 8,
+      durationMs: 80_000,
+      sizeBytes: 8 * 128 * 1024
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number,
+        _options?: { allowRedundant?: boolean; maxReplicas?: number }
+      ) => true
+    );
+
+    const plans = await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_fast", "peer_backup"],
+      connectedPeerIds: ["peer_fast", "peer_backup"],
+      availabilityByTrack: {
+        track_a: {
+          peer_fast: buildAvailability("peer_fast", 8),
+          peer_backup: buildAvailability("peer_backup", 8)
+        }
+      },
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      resolvePeerRequestWindow: (providerPeerId) =>
+        providerPeerId === "peer_fast"
+          ? {
+              bufferedAmountBytes: 0,
+              currentRoundTripTimeMs: 30,
+              downloadRateKbps: 6_000,
+              transportScore: "healthy"
+            }
+          : {
+              bufferedAmountBytes: 0,
+              currentRoundTripTimeMs: 50,
+              downloadRateKbps: 3_200,
+              transportScore: "healthy"
+            },
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 0,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledTimes(2);
+    expect(requestPieces.mock.calls[0]?.[0]).toBe("peer_fast");
+    expect(requestPieces.mock.calls[0]?.[2]).toEqual(Array.from({ length: 8 }, (_, index) => index));
+    expect(requestPieces.mock.calls[1]).toEqual([
+      "peer_backup",
+      "track_a",
+      [0, 1],
+      8,
+      expect.any(Number),
+      { allowRedundant: true, maxReplicas: 2 }
+    ]);
+    expect(plans[0]?.plan.requestGroups.at(-1)).toMatchObject({
+      providerPeerId: "peer_backup",
+      chunkIndexes: [0, 1],
+      priority: "active-critical"
+    });
+  });
+
   it("prioritizes the active playback track before background cache work on the same provider", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
@@ -1625,5 +1787,21 @@ function buildManualCacheRoomSnapshot(input: {
     ],
     queue: [],
     playlists: []
+  };
+}
+
+function buildAvailability(ownerPeerId: string, totalChunks: number) {
+  return {
+    roomId: "room_1",
+    trackId: "track_a",
+    ownerPeerId,
+    nickname: ownerPeerId,
+    assetKind: "relay" as const,
+    assetHash: "hash_a",
+    totalChunks,
+    chunkSize: 128 * 1024,
+    availableChunks: Array.from({ length: totalChunks }, (_, chunkIndex) => chunkIndex),
+    source: "live_upload" as const,
+    announcedAt: "2026-07-08T00:00:00.000Z"
   };
 }

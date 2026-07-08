@@ -56,14 +56,15 @@ export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime |
     restartPeer(peerId) {
       return meshRef.current?.restartPeer(peerId) ?? Promise.resolve(null);
     },
-    requestPieces(peerId, trackId, chunkIndexes, totalChunks, timeoutMs) {
+    requestPieces(peerId, trackId, chunkIndexes, totalChunks, timeoutMs, options) {
       return (
         meshRef.current?.requestPieces(
           peerId,
           trackId,
           chunkIndexes,
           totalChunks,
-          timeoutMs
+          timeoutMs,
+          options
         ) ?? false
       );
     },

@@ -11,6 +11,16 @@ export type ManualCacheTaskStatus =
   | "failed"
   | "failed-integrity";
 
+export type ManualCacheTaskPeerSummary = {
+  peerId: string;
+  requestedChunkCount: number;
+  priority: "active-critical" | "active-fill" | "background";
+  downloadRateKbps?: number | null;
+  roundTripTimeMs?: number | null;
+  bufferedAmountBytes?: number | null;
+  transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
+};
+
 export type ManualCacheTask = {
   trackId: string;
   status: ManualCacheTaskStatus;
@@ -32,6 +42,10 @@ export type ManualCacheTask = {
   lastRequestedChunks: number[];
   lastPieceReceivedAt: string | null;
   lastError: string | null;
+  downloadRateKbps?: number | null;
+  activeAheadMs?: number | null;
+  activePeerCount?: number;
+  peerSummaries?: ManualCacheTaskPeerSummary[];
 };
 
 export type ManualCacheTaskPatch =
@@ -86,6 +100,18 @@ export function buildNextManualCacheTask(input: {
     lastRequestedChunks: input.existing?.lastRequestedChunks ?? [],
     lastPieceReceivedAt: input.existing?.lastPieceReceivedAt ?? null,
     lastError: input.existing?.lastError ?? null,
+    ...(input.existing?.downloadRateKbps !== undefined
+      ? { downloadRateKbps: input.existing.downloadRateKbps }
+      : {}),
+    ...(input.existing?.activeAheadMs !== undefined
+      ? { activeAheadMs: input.existing.activeAheadMs }
+      : {}),
+    ...(input.existing?.activePeerCount !== undefined
+      ? { activePeerCount: input.existing.activePeerCount }
+      : {}),
+    ...(input.existing?.peerSummaries !== undefined
+      ? { peerSummaries: input.existing.peerSummaries }
+      : {}),
     ...nextPatch,
     updatedAt: input.updatedAt
   } satisfies ManualCacheTask;

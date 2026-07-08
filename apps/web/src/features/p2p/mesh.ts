@@ -13,7 +13,7 @@ import {
   DataChannelManager,
   type DataChannelQueuedSendItem
 } from "./data-channel-manager";
-import { PieceRequestClient } from "./piece-request-client";
+import { PieceRequestClient, type PieceRequestOptions } from "./piece-request-client";
 import { PieceMessageRouter } from "./piece-message-router";
 import { PieceInboundProcessor } from "./piece-inbound-processor";
 import { PieceServeProcessor } from "./piece-serve-processor";
@@ -278,14 +278,16 @@ export class P2PMesh {
     trackId: string,
     chunkIndexes: number[],
     expectedTotalChunks?: number,
-    timeoutMs = 10000
+    timeoutMs = 10000,
+    options?: PieceRequestOptions
   ) {
     return this.pieceRequestClient.requestPieces(
       peerId,
       trackId,
       chunkIndexes,
       expectedTotalChunks,
-      timeoutMs
+      timeoutMs,
+      options
     );
   }
 

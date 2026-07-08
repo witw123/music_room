@@ -146,6 +146,44 @@ describe("manual cache task store helpers", () => {
     });
   });
 
+  it("keeps runtime cache metrics out of persisted manual cache records", () => {
+    const task = buildNextManualCacheTask({
+      trackId: "track_1",
+      existing: null,
+      track: {
+        fileHash: "hash_1",
+        mimeType: "audio/flac"
+      },
+      patch: {
+        status: "downloading",
+        completedChunks: 2,
+        totalChunks: 4,
+        downloadRateKbps: 6_200,
+        activeAheadMs: 12_000,
+        activePeerCount: 2,
+        peerSummaries: [
+          {
+            peerId: "peer_fast",
+            requestedChunkCount: 2,
+            downloadRateKbps: 4_000,
+            priority: "active-critical"
+          }
+        ]
+      },
+      updatedAt: "2026-07-06T00:00:00.000Z"
+    });
+
+    const record = buildManualCacheTaskRecord({
+      roomId: "room_1",
+      task: task!
+    });
+
+    expect(record).not.toHaveProperty("downloadRateKbps");
+    expect(record).not.toHaveProperty("activeAheadMs");
+    expect(record).not.toHaveProperty("activePeerCount");
+    expect(record).not.toHaveProperty("peerSummaries");
+  });
+
   it("applies task updates through state and persistence boundaries", () => {
     let currentTasks: Record<string, ManualCacheTask> = {};
     const persistedRecords: ManualCacheTaskUpsertRecord[] = [];

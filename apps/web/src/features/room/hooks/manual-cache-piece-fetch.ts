@@ -3,6 +3,7 @@
 import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import type { TrackPieceManifestRecord } from "@/lib/indexeddb";
 import { resolveTrackPieceManifest, type ResolvedTrackPieceManifest } from "@/features/p2p";
+import type { PieceRequestOptions } from "@/features/p2p/piece-request-client";
 import {
   getStartupWindowMs,
   isFlacTrack
@@ -13,6 +14,9 @@ import {
   resolveManualCacheTrackPlan,
   resolveManualCacheTrackProviderPeerId,
   type ActivePlaybackCacheWindow,
+  type ManualCachePeerSummary,
+  type ManualCacheRequestGroup,
+  type ManualCacheRequestGroupPriority,
   type ManualCacheTrackPlan
 } from "./manual-cache-download-queue";
 
@@ -24,6 +28,7 @@ const directPendingTtlMs = 20_000;
 const activePlaybackDirectPendingTtlMs = activePlaybackDirectRequestTimeoutMs + 5_000;
 const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
+const maxRedundantActivePlaybackChunks = 2;
 // Keep enough active in-flight work to reach multi-MB/s links without letting
 // cache writes starve the PCM reader/decoder during cache completion.
 const activePlaybackMaxPendingPerTrack = 256;
@@ -233,6 +238,379 @@ function resolveManualCacheDirectRequestBudget(input: {
   };
 }
 
+function resolveRequestGroupPriority(
+  requestPriority: ManualCacheRequestPriority
+): ManualCacheRequestGroupPriority {
+  return requestPriority === "active" ? "active-critical" : "background";
+}
+
+function scoreManualCacheProvider(input: {
+  providerPeerId: string;
+  window: ManualCachePeerRequestWindow | null;
+  availableChunkCount: number;
+}) {
+  const window = input.window;
+  const profile = window ? resolveManualCacheLinkProfile(window) : "standard";
+  const profileBonus =
+    profile === "fast" ? 4_000 : profile === "standard" ? 2_000 : profile === "constrained" ? 500 : 0;
+  const downloadBonus = Math.min(2_000, finitePositiveNumber(window?.downloadRateKbps) ?? 0);
+  const rttPenalty = Math.min(1_000, finitePositiveNumber(window?.currentRoundTripTimeMs) ?? 150);
+  const bufferedPenalty = Math.round((finitePositiveNumber(window?.bufferedAmountBytes) ?? 0) / 1024);
+  return profileBonus + downloadBonus + input.availableChunkCount / 10 - rttPenalty - bufferedPenalty;
+}
+
+function isProviderEligibleForRequest(input: {
+  requestPriority: ManualCacheRequestPriority;
+  window: ManualCachePeerRequestWindow | null;
+}) {
+  if (input.requestPriority !== "active") {
+    return true;
+  }
+
+  if (!input.window) {
+    return true;
+  }
+
+  return resolveManualCacheLinkProfile(input.window) !== "severe";
+}
+
+function resolveCurrentPlaybackChunkIndex(input: {
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  activePlaybackWindow: ActivePlaybackCacheWindow;
+}) {
+  if (
+    !Number.isFinite(input.track.durationMs) ||
+    input.track.durationMs <= 0 ||
+    input.manifest.totalChunks <= 0
+  ) {
+    return 0;
+  }
+
+  const progressRatio = Math.max(
+    0,
+    Math.min(1, input.activePlaybackWindow.positionMs / input.track.durationMs)
+  );
+  return Math.max(
+    0,
+    Math.min(input.manifest.totalChunks - 1, Math.floor(progressRatio * input.manifest.totalChunks))
+  );
+}
+
+function resolveRedundantActivePlaybackChunks(input: {
+  plan: ManualCacheTrackPlan;
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+}) {
+  if (
+    input.activePlaybackWindow?.trackId !== input.track.id ||
+    input.activePlaybackWindow.status !== "playing"
+  ) {
+    return [];
+  }
+
+  const currentChunkIndex = resolveCurrentPlaybackChunkIndex({
+    track: input.track,
+    manifest: input.manifest,
+    activePlaybackWindow: input.activePlaybackWindow
+  });
+  const nearDeadlineChunks = new Set([
+    currentChunkIndex,
+    currentChunkIndex + 1,
+    currentChunkIndex + 2
+  ]);
+  const currentWindowChunks = input.plan.requestableChunks
+    .filter((chunkIndex) => nearDeadlineChunks.has(chunkIndex))
+    .slice(0, maxRedundantActivePlaybackChunks);
+
+  return (
+    currentWindowChunks.length > 0
+      ? currentWindowChunks
+      : input.plan.requestableChunks.slice(0, maxRedundantActivePlaybackChunks)
+  );
+}
+
+function resolveActiveCacheAheadMs(input: {
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  localPieceIndexes: readonly number[];
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+}) {
+  if (
+    input.activePlaybackWindow?.trackId !== input.track.id ||
+    !Number.isFinite(input.track.durationMs) ||
+    input.track.durationMs <= 0 ||
+    input.manifest.totalChunks <= 0
+  ) {
+    return null;
+  }
+
+  const chunkDurationMs = input.track.durationMs / input.manifest.totalChunks;
+  const localPieceSet = new Set(input.localPieceIndexes);
+  let chunkIndex = resolveCurrentPlaybackChunkIndex({
+    track: input.track,
+    manifest: input.manifest,
+    activePlaybackWindow: input.activePlaybackWindow
+  });
+  const startChunkIndex = chunkIndex;
+  while (chunkIndex < input.manifest.totalChunks && localPieceSet.has(chunkIndex)) {
+    chunkIndex += 1;
+  }
+  return Math.max(0, Math.round((chunkIndex - startChunkIndex) * chunkDurationMs));
+}
+
+function mergeManualCacheRequestPriority(
+  current: ManualCacheRequestGroupPriority,
+  next: ManualCacheRequestGroupPriority
+): ManualCacheRequestGroupPriority {
+  if (current === "active-critical" || next === "active-critical") {
+    return "active-critical";
+  }
+  if (current === "active-fill" || next === "active-fill") {
+    return "active-fill";
+  }
+  return "background";
+}
+
+function buildManualCachePlanRuntimeMetrics(input: {
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  localPieceIndexes: readonly number[];
+  requestGroups: readonly ManualCacheRequestGroup[];
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  resolvePeerRequestWindow?: (
+    providerPeerId: string,
+    trackId: string,
+    priority: ManualCacheRequestPriority
+  ) => ManualCachePeerRequestWindow | null | undefined;
+}) {
+  const peerSummaryById = new Map<string, ManualCachePeerSummary>();
+  for (const group of input.requestGroups) {
+    const requestPriority: ManualCacheRequestPriority =
+      group.priority === "background" ? "background" : "active";
+    const window =
+      input.resolvePeerRequestWindow?.(group.providerPeerId, input.track.id, requestPriority) ??
+      null;
+    const existing = peerSummaryById.get(group.providerPeerId);
+    peerSummaryById.set(group.providerPeerId, {
+      peerId: group.providerPeerId,
+      requestedChunkCount:
+        (existing?.requestedChunkCount ?? 0) + group.chunkIndexes.length,
+      priority: existing
+        ? mergeManualCacheRequestPriority(existing.priority, group.priority)
+        : group.priority,
+      downloadRateKbps:
+        finitePositiveNumber(window?.downloadRateKbps) ?? existing?.downloadRateKbps ?? null,
+      roundTripTimeMs:
+        finitePositiveNumber(window?.currentRoundTripTimeMs) ?? existing?.roundTripTimeMs ?? null,
+      bufferedAmountBytes:
+        finitePositiveNumber(window?.bufferedAmountBytes) ?? existing?.bufferedAmountBytes ?? null,
+      transportScore: window?.transportScore ?? existing?.transportScore ?? null
+    });
+  }
+
+  const peerSummaries = [...peerSummaryById.values()];
+  const downloadRates = peerSummaries
+    .map((summary) => finitePositiveNumber(summary.downloadRateKbps))
+    .filter((rate): rate is number => rate !== null);
+  return {
+    downloadRateKbps:
+      downloadRates.length > 0
+        ? Math.round(downloadRates.reduce((total, rate) => total + rate, 0))
+        : null,
+    activeAheadMs: resolveActiveCacheAheadMs({
+      track: input.track,
+      manifest: input.manifest,
+      localPieceIndexes: input.localPieceIndexes,
+      activePlaybackWindow: input.activePlaybackWindow
+    }),
+    activePeerCount: peerSummaries.filter((summary) => summary.priority !== "background").length,
+    peerSummaries
+  };
+}
+
+function buildManualCacheRequestGroups(input: {
+  plan: ManualCacheTrackPlan;
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  requestPriority: ManualCacheRequestPriority;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  requestedChunkCountByPeer: Map<string, number>;
+  resolvePeerRequestWindow?: (
+    providerPeerId: string,
+    trackId: string,
+    priority: ManualCacheRequestPriority
+  ) => ManualCachePeerRequestWindow | null | undefined;
+}) {
+  if (input.plan.requestableChunks.length === 0) {
+    return [] as ManualCacheRequestGroup[];
+  }
+
+  const connectedProviderSet = new Set(input.plan.connectedProviderPeerIds);
+  const allProviderEntries = input.plan.providerCandidates
+    .filter((provider) => connectedProviderSet.has(provider.ownerPeerId))
+    .map((provider) => {
+      const window =
+        input.resolvePeerRequestWindow?.(
+          provider.ownerPeerId,
+          input.track.id,
+          input.requestPriority
+        ) ?? null;
+      const budget = resolveManualCacheDirectRequestBudget({
+        trackId: input.track.id,
+        track: input.track,
+        manifest: input.manifest,
+        activePlaybackWindow: input.activePlaybackWindow,
+        peerWindow: window
+      });
+      const remainingPeerSlots = Math.max(
+        0,
+        budget.maxPendingPerPeer -
+          (input.requestedChunkCountByPeer.get(provider.ownerPeerId) ?? 0)
+      );
+      return {
+        provider,
+        availableChunkSet: new Set(provider.availableChunks),
+        window,
+        budget,
+        capacity: Math.min(budget.batchSize, remainingPeerSlots),
+        score: scoreManualCacheProvider({
+          providerPeerId: provider.ownerPeerId,
+          window,
+          availableChunkCount: provider.availableChunks.length
+        })
+      };
+    })
+    .filter((entry) => entry.capacity > 0)
+    .sort((left, right) => {
+      const scoreDifference = right.score - left.score;
+      if (scoreDifference !== 0) {
+        return scoreDifference;
+      }
+      return right.provider.availableChunks.length - left.provider.availableChunks.length;
+    });
+  const healthyProviderEntries = allProviderEntries.filter((entry) =>
+    isProviderEligibleForRequest({
+      requestPriority: input.requestPriority,
+      window: entry.window
+    })
+  );
+  const providerEntries =
+    input.requestPriority === "active" && healthyProviderEntries.length === 0
+      ? allProviderEntries
+      : healthyProviderEntries;
+
+  const assignedChunks = new Set<number>();
+  const primaryProviderByChunk = new Map<number, string>();
+  const requestGroups: ManualCacheRequestGroup[] = [];
+  for (const entry of providerEntries) {
+    const chunkIndexes = input.plan.requestableChunks
+      .filter(
+        (chunkIndex) =>
+          !assignedChunks.has(chunkIndex) && entry.availableChunkSet.has(chunkIndex)
+      )
+      .slice(0, entry.capacity);
+    if (chunkIndexes.length === 0) {
+      continue;
+    }
+    for (const chunkIndex of chunkIndexes) {
+      assignedChunks.add(chunkIndex);
+      primaryProviderByChunk.set(chunkIndex, entry.provider.ownerPeerId);
+    }
+    requestGroups.push({
+      providerPeerId: entry.provider.ownerPeerId,
+      chunkIndexes,
+      timeoutMs: entry.budget.timeoutMs,
+      priority: resolveRequestGroupPriority(input.requestPriority)
+    });
+  }
+
+  if (input.requestPriority === "active" && providerEntries.length > 1) {
+    for (const chunkIndex of resolveRedundantActivePlaybackChunks({
+      plan: input.plan,
+      track: input.track,
+      manifest: input.manifest,
+      activePlaybackWindow: input.activePlaybackWindow
+    })) {
+      const primaryProviderPeerId = primaryProviderByChunk.get(chunkIndex);
+      if (!primaryProviderPeerId) {
+        continue;
+      }
+      const backupEntry = providerEntries.find(
+        (entry) =>
+          entry.provider.ownerPeerId !== primaryProviderPeerId &&
+          entry.availableChunkSet.has(chunkIndex)
+      );
+      if (!backupEntry) {
+        continue;
+      }
+
+      const existingGroup = requestGroups.find(
+        (group) => group.providerPeerId === backupEntry.provider.ownerPeerId
+      );
+      if (existingGroup) {
+        existingGroup.chunkIndexes = [...new Set([...existingGroup.chunkIndexes, chunkIndex])].sort(
+          (left, right) => left - right
+        );
+      } else {
+        requestGroups.push({
+          providerPeerId: backupEntry.provider.ownerPeerId,
+          chunkIndexes: [chunkIndex],
+          timeoutMs: backupEntry.budget.timeoutMs,
+          priority: "active-critical"
+        });
+      }
+    }
+  }
+
+  return requestGroups;
+}
+
+function resolveAggregateRequestBatchSize(input: {
+  trackId: string;
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest | null;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  connectedPeerIds: string[];
+  requestPriority: ManualCacheRequestPriority;
+  resolvePeerRequestWindow?: (
+    providerPeerId: string,
+    trackId: string,
+    priority: ManualCacheRequestPriority
+  ) => ManualCachePeerRequestWindow | null | undefined;
+}) {
+  const connectedPeerSet = new Set(input.connectedPeerIds);
+  let aggregateBatchSize = 0;
+  for (const provider of Object.values(input.availabilityByTrack[input.trackId] ?? {})) {
+    if (!connectedPeerSet.has(provider.ownerPeerId)) {
+      continue;
+    }
+    const window =
+      input.resolvePeerRequestWindow?.(provider.ownerPeerId, input.trackId, input.requestPriority) ??
+      null;
+    if (
+      !isProviderEligibleForRequest({
+        requestPriority: input.requestPriority,
+        window
+      })
+    ) {
+      continue;
+    }
+    const budget = resolveManualCacheDirectRequestBudget({
+      trackId: input.trackId,
+      track: input.track,
+      manifest: input.manifest,
+      activePlaybackWindow: input.activePlaybackWindow,
+      peerWindow: window
+    });
+    aggregateBatchSize += Math.min(budget.batchSize, budget.maxPendingPerPeer);
+  }
+
+  return Math.max(1, aggregateBatchSize || directRequestBatchSize);
+}
+
 function resolveManualCacheTrackRequestOrder(input: {
   trackIds: string[];
   activeTrackId: string | null;
@@ -352,7 +730,8 @@ export async function planManualCacheDirectRequests(input: {
     trackId: string,
     chunkIndexes: number[],
     totalChunks: number,
-    timeoutMs: number
+    timeoutMs: number,
+    options?: PieceRequestOptions
   ) => boolean;
   resolvePeerRequestWindow?: (
     providerPeerId: string,
@@ -387,6 +766,7 @@ export async function planManualCacheDirectRequests(input: {
           connectedProviderPeerIds: [],
           selectedProviderPeerId: null,
           requestableChunks: [],
+          requestGroups: [],
           pendingChunkCount: 0,
           blockedReason: "missing-track"
         },
@@ -446,6 +826,16 @@ export async function planManualCacheDirectRequests(input: {
     const pendingRefillLowWatermark =
       requestBudget.maxPendingPerTrack - requestBudget.maxPendingPerPeer;
     const remainingTrackSlots = Math.max(0, requestBudget.maxPendingPerTrack - pendingForTrack.size);
+    const aggregateRequestBatchSize = resolveAggregateRequestBatchSize({
+      trackId,
+      track,
+      manifest: manifestHint,
+      activePlaybackWindow: input.activePlaybackWindow ?? null,
+      availabilityByTrack: input.availabilityByTrack,
+      connectedPeerIds: input.connectedPeerIds,
+      requestPriority,
+      resolvePeerRequestWindow: input.resolvePeerRequestWindow
+    });
     const shouldRefillPendingWindow =
       releasedActivePrioritySlots ||
       pendingForTrack.size === 0 ||
@@ -463,9 +853,9 @@ export async function planManualCacheDirectRequests(input: {
       maxPendingChunks: requestBudget.maxPendingPerTrack,
       maxRequestChunks: shouldRefillPendingWindow
         ? Math.min(
-            requestBudget.batchSize,
+            aggregateRequestBatchSize,
             remainingTrackSlots,
-            requestBudget.maxPendingPerPeer
+            requestBudget.maxPendingPerTrack
           )
         : 0
     });
@@ -475,74 +865,93 @@ export async function planManualCacheDirectRequests(input: {
       continue;
     }
 
-    const selectedProviderPeerId = plan.selectedProviderPeerId;
     const selectedManifest = plan.manifest;
-    const selectedPeerWindow =
-      selectedProviderPeerId === expectedProviderPeerId
-        ? expectedPeerWindow
-        : input.resolvePeerRequestWindow?.(
-            selectedProviderPeerId,
-            trackId,
-            requestPriority
-          ) ?? null;
-    const selectedRequestBudget =
-      selectedProviderPeerId === expectedProviderPeerId
-        ? requestBudget
-        : resolveManualCacheDirectRequestBudget({
-            trackId,
-            track,
-            manifest: manifestHint,
-            activePlaybackWindow: input.activePlaybackWindow ?? null,
-            peerWindow: selectedPeerWindow
-          });
-    const remainingPeerSlots = Math.max(
-      0,
-      selectedRequestBudget.maxPendingPerPeer -
-        (requestedChunkCountByPeer.get(selectedProviderPeerId) ?? 0)
-    );
-    const requestableChunks = plan.requestableChunks.slice(
-      0,
-      Math.min(plan.requestableChunks.length, selectedRequestBudget.batchSize, remainingPeerSlots)
-    );
+    const requestGroups = buildManualCacheRequestGroups({
+      plan,
+      track,
+      manifest: selectedManifest,
+      requestPriority,
+      activePlaybackWindow: input.activePlaybackWindow ?? null,
+      requestedChunkCountByPeer,
+      resolvePeerRequestWindow: input.resolvePeerRequestWindow
+    });
+    const requestableChunks = [
+      ...new Set(requestGroups.flatMap((group) => group.chunkIndexes))
+    ].sort((left, right) => left - right);
+    const runtimeMetrics = buildManualCachePlanRuntimeMetrics({
+      track,
+      manifest: selectedManifest,
+      localPieceIndexes,
+      requestGroups,
+      activePlaybackWindow: input.activePlaybackWindow ?? null,
+      resolvePeerRequestWindow: input.resolvePeerRequestWindow
+    });
     if (requestableChunks.length === 0) {
       results.push({
         plan: {
           ...plan,
           requestableChunks,
-          blockedReason: null
+          requestGroups,
+          blockedReason: null,
+          ...runtimeMetrics
         },
         didRequest: null
       });
       continue;
     }
 
-    const requestPlan =
-      requestableChunks.length === plan.requestableChunks.length
-        ? plan
-        : {
-            ...plan,
-            requestableChunks
-          };
-    const didRequest = input.requestPieces(
-      selectedProviderPeerId,
-      trackId,
-      requestPlan.requestableChunks,
-      selectedManifest.totalChunks,
-      selectedRequestBudget.timeoutMs
-    );
-    if (didRequest) {
-      requestedChunkCountByPeer.set(
-        selectedProviderPeerId,
-        (requestedChunkCountByPeer.get(selectedProviderPeerId) ?? 0) +
-          requestPlan.requestableChunks.length
+    const requestPlan = {
+      ...plan,
+      selectedProviderPeerId: requestGroups[0]?.providerPeerId ?? plan.selectedProviderPeerId,
+      requestableChunks,
+      requestGroups,
+      ...runtimeMetrics
+    };
+    let didRequestAny = false;
+    let didRequestFailed = false;
+    const expiresAt = now + requestBudget.pendingTtlMs;
+    const requestedChunkIndexes = new Set<number>();
+    for (const group of requestGroups) {
+      const hasRedundantChunks = group.chunkIndexes.some((chunkIndex) =>
+        requestedChunkIndexes.has(chunkIndex)
       );
-      const expiresAt = now + selectedRequestBudget.pendingTtlMs;
-      for (const chunkIndex of requestPlan.requestableChunks) {
-        pendingForTrack.set(chunkIndex, expiresAt);
+      const didRequestGroup = hasRedundantChunks
+        ? input.requestPieces(
+            group.providerPeerId,
+            trackId,
+            group.chunkIndexes,
+            selectedManifest.totalChunks,
+            group.timeoutMs,
+            { allowRedundant: true, maxReplicas: 2 }
+          )
+        : input.requestPieces(
+            group.providerPeerId,
+            trackId,
+            group.chunkIndexes,
+            selectedManifest.totalChunks,
+            group.timeoutMs
+          );
+      if (didRequestGroup) {
+        didRequestAny = true;
+        for (const chunkIndex of group.chunkIndexes) {
+          requestedChunkIndexes.add(chunkIndex);
+        }
+        requestedChunkCountByPeer.set(
+          group.providerPeerId,
+          (requestedChunkCountByPeer.get(group.providerPeerId) ?? 0) + group.chunkIndexes.length
+        );
+        for (const chunkIndex of group.chunkIndexes) {
+          pendingForTrack.set(chunkIndex, expiresAt);
+        }
+      } else {
+        didRequestFailed = true;
       }
     }
 
-    results.push({ plan: requestPlan, didRequest });
+    results.push({
+      plan: requestPlan,
+      didRequest: didRequestAny ? true : didRequestFailed ? false : null
+    });
   }
 
   return results;

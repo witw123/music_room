@@ -12,6 +12,22 @@
 export class PieceMemoryBuffer {
   /** trackKey → chunkIndex → payload bytes (owned copy) */
   private readonly store = new Map<string, Map<number, ArrayBuffer>>();
+  private readonly maxChunks: number;
+  private activeTrackKey: string | null = null;
+  private activeChunkIndexes = new Set<number>();
+
+  constructor(options: { maxChunks?: number } = {}) {
+    this.maxChunks =
+      typeof options.maxChunks === "number" && Number.isFinite(options.maxChunks)
+        ? Math.max(0, Math.floor(options.maxChunks))
+        : Number.POSITIVE_INFINITY;
+  }
+
+  setActiveWindow(trackKey: string | null, chunkIndexes: number[]): void {
+    this.activeTrackKey = trackKey;
+    this.activeChunkIndexes = new Set(chunkIndexes);
+    this.evictToCapacity();
+  }
 
   /**
    * Store a piece payload in the memory buffer.
@@ -27,6 +43,7 @@ export class PieceMemoryBuffer {
     // reused by the piece frame decoder on the next message.
     if (!trackStore.has(chunkIndex)) {
       trackStore.set(chunkIndex, payload.slice(0));
+      this.evictToCapacity();
     }
   }
 
@@ -76,6 +93,10 @@ export class PieceMemoryBuffer {
    */
   clearTrack(trackKey: string): void {
     this.store.delete(trackKey);
+    if (this.activeTrackKey === trackKey) {
+      this.activeTrackKey = null;
+      this.activeChunkIndexes.clear();
+    }
   }
 
   /**
@@ -95,7 +116,33 @@ export class PieceMemoryBuffer {
     }
     return count;
   }
+
+  private evictToCapacity(): void {
+    while (this.totalChunkCount > this.maxChunks) {
+      const evicted = this.evictOne(false) || this.evictOne(true);
+      if (!evicted) {
+        break;
+      }
+    }
+  }
+
+  private evictOne(includeActiveWindow: boolean): boolean {
+    for (const [trackKey, trackStore] of this.store.entries()) {
+      for (const chunkIndex of trackStore.keys()) {
+        if (!includeActiveWindow && this.isActiveChunk(trackKey, chunkIndex)) {
+          continue;
+        }
+        this.evict(trackKey, chunkIndex);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isActiveChunk(trackKey: string, chunkIndex: number) {
+    return this.activeTrackKey === trackKey && this.activeChunkIndexes.has(chunkIndex);
+  }
 }
 
 /** Singleton instance shared across the P2P receive path and PCM decode path. */
-export const pieceMemoryBuffer = new PieceMemoryBuffer();
+export const pieceMemoryBuffer = new PieceMemoryBuffer({ maxChunks: 512 });

@@ -92,6 +92,32 @@ describe("PieceRequestClient", () => {
     expect(client.requestPiece("peer_b", "track_1", 0, undefined, 1_000)).toBe(false);
   });
 
+  it("allows bounded redundant requests for urgent chunks", () => {
+    const enqueueSendItem = vi.fn();
+    const client = new PieceRequestClient<TestPeerEntry>({
+      getPeerEntry: () => openEntry(),
+      enqueueSendItem
+    });
+
+    expect(client.requestPiece("peer_b", "track_1", 0, 2, 1_000)).toBe(true);
+    expect(
+      client.requestPieces("peer_c", "track_1", [0], 2, 1_000, {
+        allowRedundant: true,
+        maxReplicas: 2
+      })
+    ).toBe(true);
+    expect(
+      client.requestPieces("peer_d", "track_1", [0], 2, 1_000, {
+        allowRedundant: true,
+        maxReplicas: 2
+      })
+    ).toBe(false);
+
+    expect(enqueueSendItem).toHaveBeenCalledTimes(2);
+    expect(client.takePendingRequest("track_1", 0)?.peerId).toBe("peer_b");
+    expect(client.takePendingRequest("track_1", 0)).toBeNull();
+  });
+
   it("clears pending requests when a peer is removed", async () => {
     const onPieceRequestTimeout = vi.fn();
     const client = new PieceRequestClient<TestPeerEntry>({

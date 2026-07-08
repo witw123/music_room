@@ -372,6 +372,28 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
   );
 }
 
+function buildManualCachePlanRuntimeTaskPatch(input: {
+  downloadRateKbps?: number | null;
+  activeAheadMs?: number | null;
+  activePeerCount?: number;
+  peerSummaries?: ManualCacheTask["peerSummaries"];
+}) {
+  const patch: Partial<ManualCacheTask> = {};
+  if ("downloadRateKbps" in input) {
+    patch.downloadRateKbps = input.downloadRateKbps ?? null;
+  }
+  if ("activeAheadMs" in input) {
+    patch.activeAheadMs = input.activeAheadMs ?? null;
+  }
+  if ("activePeerCount" in input) {
+    patch.activePeerCount = input.activePeerCount ?? 0;
+  }
+  if ("peerSummaries" in input) {
+    patch.peerSummaries = input.peerSummaries ? [...input.peerSummaries] : [];
+  }
+  return patch;
+}
+
 export function resolveManualCachePlanTaskUpdate(input: {
   current: ManualCacheTask | null;
   plan: {
@@ -385,6 +407,16 @@ export function resolveManualCachePlanTaskUpdate(input: {
     selectedProviderPeerId: string | null;
     requestableChunks: readonly number[];
     pendingChunkCount: number;
+    requestGroups?: readonly {
+      providerPeerId: string;
+      chunkIndexes: readonly number[];
+      timeoutMs: number;
+      priority: "active-critical" | "active-fill" | "background";
+    }[];
+    downloadRateKbps?: number | null;
+    activeAheadMs?: number | null;
+    activePeerCount?: number;
+    peerSummaries?: ManualCacheTask["peerSummaries"];
   };
   track: { fileHash: string; mimeType?: string | null };
   knownChunkIndexes: Set<number>;
@@ -440,7 +472,8 @@ export function resolveManualCachePlanTaskUpdate(input: {
       pendingChunkCount: input.plan.pendingChunkCount,
       lastRequestedChunks: [...input.plan.requestableChunks],
       lastPieceReceivedAt: progress.lastPieceReceivedAt,
-      lastError: progress.lastError
+      lastError: progress.lastError,
+      ...buildManualCachePlanRuntimeTaskPatch(input.plan)
     },
     shouldAssemble,
     assembleMimeType: mimeType,
@@ -461,6 +494,16 @@ export function resolveManualCachePlanReceivedAction(input: {
     selectedProviderPeerId: string | null;
     requestableChunks: readonly number[];
     pendingChunkCount: number;
+    requestGroups?: readonly {
+      providerPeerId: string;
+      chunkIndexes: readonly number[];
+      timeoutMs: number;
+      priority: "active-critical" | "active-fill" | "background";
+    }[];
+    downloadRateKbps?: number | null;
+    activeAheadMs?: number | null;
+    activePeerCount?: number;
+    peerSummaries?: ManualCacheTask["peerSummaries"];
   };
   currentTask: ManualCacheTask | null;
   knownChunkIndexes: Set<number>;

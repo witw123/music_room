@@ -84,6 +84,54 @@ describe("PieceRequestTracker", () => {
     expect(onTimeout).not.toHaveBeenCalled();
   });
 
+  it("allows bounded redundant requests and clears sibling replicas when one arrives", async () => {
+    const onTimeout = vi.fn();
+    const tracker = new PieceRequestTracker();
+
+    tracker.registerRequests({
+      peerId: "peer_b",
+      trackId: "track_1",
+      chunkIndexes: [0],
+      expectedTotalChunks: 4,
+      requestId: undefined,
+      timeoutMs: 500,
+      onTimeout
+    });
+
+    expect(
+      tracker.getAvailableChunkIndexes("track_1", [0], {
+        allowRedundant: true,
+        maxReplicas: 2
+      })
+    ).toEqual([0]);
+
+    tracker.registerRequests({
+      peerId: "peer_c",
+      trackId: "track_1",
+      chunkIndexes: [0],
+      expectedTotalChunks: 4,
+      requestId: undefined,
+      timeoutMs: 700,
+      onTimeout,
+      allowRedundant: true
+    });
+
+    expect(
+      tracker.getAvailableChunkIndexes("track_1", [0], {
+        allowRedundant: true,
+        maxReplicas: 2
+      })
+    ).toEqual([]);
+
+    const pendingRequest = tracker.take("track_1", 0);
+    expect(pendingRequest?.peerId).toBe("peer_b");
+    expect(tracker.get("track_1", 0)).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+
   it("clears requests for one peer without touching other peers", async () => {
     const onTimeout = vi.fn();
     const tracker = new PieceRequestTracker();

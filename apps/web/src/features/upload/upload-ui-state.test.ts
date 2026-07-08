@@ -176,6 +176,96 @@ describe("resolveManualCachePlanTaskUpdate", () => {
     expect(update.assembleMimeType).toBe("audio/flac");
     expect(update.assembleTotalChunks).toBe(2);
   });
+
+  it("carries runtime cache speed and peer metrics from request plans", () => {
+    const update = resolveManualCachePlanTaskUpdate({
+      current: {
+        trackId: "track_1",
+        status: "downloading",
+        mode: "manual",
+        fileHash: "hash_1",
+        updatedAt: "2026-07-06T00:00:00.000Z",
+        errorMessage: null,
+        completedChunks: 1,
+        totalChunks: 8,
+        mimeType: "audio/flac",
+        manifestSource: "snapshot",
+        blockedReason: null,
+        integrityMode: "weak",
+        providerPeerIds: [],
+        connectedProviderPeerIds: [],
+        selectedProviderPeerId: null,
+        requestableChunkCount: 0,
+        pendingChunkCount: 0,
+        lastRequestedChunks: [],
+        lastPieceReceivedAt: null,
+        lastError: null
+      },
+      plan: {
+        ...plan,
+        manifest: {
+          totalChunks: 8,
+          pieceMimeType: "audio/flac"
+        },
+        requestableChunks: [2, 3, 4],
+        requestGroups: [
+          {
+            providerPeerId: "peer_fast",
+            chunkIndexes: [2, 3],
+            timeoutMs: 35_000,
+            priority: "active-critical" as const
+          },
+          {
+            providerPeerId: "peer_backup",
+            chunkIndexes: [2],
+            timeoutMs: 35_000,
+            priority: "active-critical" as const
+          }
+        ],
+        downloadRateKbps: 6_200,
+        activeAheadMs: 12_000,
+        activePeerCount: 2,
+        peerSummaries: [
+          {
+            peerId: "peer_fast",
+            requestedChunkCount: 2,
+            downloadRateKbps: 4_000,
+            priority: "active-critical" as const
+          },
+          {
+            peerId: "peer_backup",
+            requestedChunkCount: 1,
+            downloadRateKbps: 2_200,
+            priority: "active-critical" as const
+          }
+        ]
+      },
+      track: {
+        fileHash: "hash_1",
+        mimeType: "audio/flac"
+      },
+      knownChunkIndexes: new Set([0, 1]),
+      isCurrentPlaybackDemand: false
+    });
+
+    expect(update.patch).toMatchObject({
+      downloadRateKbps: 6_200,
+      activeAheadMs: 12_000,
+      activePeerCount: 2,
+      peerSummaries: [
+        {
+          peerId: "peer_fast",
+          requestedChunkCount: 2,
+          downloadRateKbps: 4_000
+        },
+        {
+          peerId: "peer_backup",
+          requestedChunkCount: 1,
+          downloadRateKbps: 2_200
+        }
+      ]
+    });
+  });
 });
 
 describe("resolveManualCachePlanReceivedAction", () => {

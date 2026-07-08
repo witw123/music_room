@@ -90,6 +90,22 @@ describe("PieceMemoryBuffer", () => {
     expect(buffer.totalChunkCount).toBe(3);
   });
 
+  it("evicts non-active chunks first when the capacity is exceeded", () => {
+    buffer = new PieceMemoryBuffer({ maxChunks: 3 });
+    buffer.setActiveWindow("track_active", [5, 6]);
+
+    buffer.put("track_other", 0, new Uint8Array([10]).buffer);
+    buffer.put("track_active", 5, new Uint8Array([5]).buffer);
+    buffer.put("track_active", 6, new Uint8Array([6]).buffer);
+    buffer.put("track_other", 1, new Uint8Array([11]).buffer);
+
+    expect(buffer.get("track_active", 5)).toBeInstanceOf(ArrayBuffer);
+    expect(buffer.get("track_active", 6)).toBeInstanceOf(ArrayBuffer);
+    expect(buffer.get("track_other", 0)).toBeUndefined();
+    expect(buffer.get("track_other", 1)).toBeInstanceOf(ArrayBuffer);
+    expect(buffer.totalChunkCount).toBe(3);
+  });
+
   it("clearTrack on unknown track is a no-op", () => {
     expect(() => buffer.clearTrack("nonexistent")).not.toThrow();
     expect(buffer.totalChunkCount).toBe(0);
@@ -103,5 +119,15 @@ describe("PieceMemoryBuffer", () => {
 describe("pieceMemoryBuffer singleton", () => {
   it("is a PieceMemoryBuffer instance", () => {
     expect(pieceMemoryBuffer).toBeInstanceOf(PieceMemoryBuffer);
+  });
+
+  it("keeps the shared buffer bounded", () => {
+    pieceMemoryBuffer.clearTrack("singleton_track");
+    for (let chunkIndex = 0; chunkIndex < 513; chunkIndex += 1) {
+      pieceMemoryBuffer.put("singleton_track", chunkIndex, new Uint8Array([chunkIndex]).buffer);
+    }
+
+    expect(pieceMemoryBuffer.totalChunkCount).toBeLessThanOrEqual(512);
+    pieceMemoryBuffer.clearTrack("singleton_track");
   });
 });

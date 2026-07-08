@@ -867,6 +867,7 @@ export class ProgressivePcmEngine {
     }
 
     // 1. Check the in-memory piece buffer first (instant, no I/O).
+    pieceMemoryBuffer.setActiveWindow(this.manifest.trackId, neededChunks);
     const memoryPieces = pieceMemoryBuffer.getBatch(this.manifest.trackId, neededChunks);
 
     // 2. For chunks not in memory, batch-read from IndexedDB in a single query.
@@ -1027,6 +1028,7 @@ export class ProgressivePcmEngine {
     }
 
     // Batch-read from memory buffer + IndexedDB.
+    pieceMemoryBuffer.setActiveWindow(this.manifest.trackId, probeChunks);
     const memoryPieces = pieceMemoryBuffer.getBatch(this.manifest.trackId, probeChunks);
     const idbNeeded = probeChunks.filter((c) => !memoryPieces.has(c));
     const idbRecords = idbNeeded.length > 0

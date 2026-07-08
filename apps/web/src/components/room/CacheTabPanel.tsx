@@ -21,6 +21,49 @@ type CacheTabPanelProps = {
   onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
 };
 
+function formatCacheDownloadRate(downloadRateKbps: number | null | undefined) {
+  if (
+    typeof downloadRateKbps !== "number" ||
+    !Number.isFinite(downloadRateKbps) ||
+    downloadRateKbps <= 0
+  ) {
+    return "测速中";
+  }
+
+  const bytesPerSecond = downloadRateKbps * 1000 / 8;
+  if (bytesPerSecond >= 1024 * 1024) {
+    return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
+  }
+  return `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
+}
+
+function formatCacheAhead(activeAheadMs: number | null | undefined) {
+  if (
+    typeof activeAheadMs !== "number" ||
+    !Number.isFinite(activeAheadMs) ||
+    activeAheadMs < 0
+  ) {
+    return "等待计算";
+  }
+
+  return `${Math.round(activeAheadMs / 1000)} 秒`;
+}
+
+function formatPeerSummary(task: ManualCacheTask) {
+  const summaries = task.peerSummaries ?? [];
+  if (summaries.length === 0) {
+    return "暂无活跃来源";
+  }
+
+  return summaries
+    .slice(0, 3)
+    .map((summary) => {
+      const rate = formatCacheDownloadRate(summary.downloadRateKbps);
+      return `${summary.peerId} ${rate} ${summary.requestedChunkCount}片`;
+    })
+    .join(" / ");
+}
+
 function CacheTabPanelBase({
   tracks,
   availabilitySummary,
@@ -155,6 +198,14 @@ function CacheTabPanelBase({
                         manifest：{task.manifestSource ?? "未知"}  校验：{task.integrityMode ?? "未知"}  provider：
                         {task.connectedProviderPeerIds.length}/{task.providerPeerIds.length}  pending：
                         {task.pendingChunkCount}  可请求：{task.requestableChunkCount}
+                      </p>
+                    ) : null}
+                    {task ? (
+                      <p className="truncate text-[10px] text-foreground-muted">
+                        速度：{formatCacheDownloadRate(task.downloadRateKbps)}  可播放缓存：
+                        {formatCacheAhead(task.activeAheadMs)}  活跃来源：
+                        {task.activePeerCount ?? task.connectedProviderPeerIds.length}  来源：
+                        {formatPeerSummary(task)}
                       </p>
                     ) : null}
                     <div className="h-1 overflow-hidden rounded-full bg-white/6">
