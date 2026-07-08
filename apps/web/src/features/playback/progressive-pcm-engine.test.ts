@@ -1955,14 +1955,13 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("catches up to a far playback position in a single sync instead of only after full cache", async () => {
+  it("catches up to a far playback position without draining the full cache", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     // 41 chunks: chunk 0 is the FLAC header, chunks 1..40 each carry one frame.
     // The requested position (chunk 30) sits far beyond the small steady-state
-    // append cap, so catch-up append must pull enough chunks in a single
-    // syncPlayback pass. With batch reads the engine efficiently reads all
-    // available contiguous chunks.
+    // append cap, so catch-up append must pull enough chunks for the current
+    // playback position without decoding the full remaining track in one turn.
     const catchupManifest = {
       ...manifest,
       durationMs: 40_000,
@@ -2035,8 +2034,10 @@ describe("ProgressivePcmEngine", () => {
 
       expect(result.localReady).toBe(true);
       expect(result.blockedReason).toBeNull();
-      // All contiguous chunks are read efficiently in one batch-read pass.
-      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(catchupManifest.totalChunks);
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeGreaterThanOrEqual(31);
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeLessThan(
+        catchupManifest.totalChunks
+      );
     } finally {
       engine.destroy();
       audioContext.restore();

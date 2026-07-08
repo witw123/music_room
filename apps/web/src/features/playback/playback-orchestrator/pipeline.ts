@@ -1957,7 +1957,7 @@ export function shouldWarmFullLocalWithSharedAudioElement(input: {
     input.canUseFullLocalForPlaybackSession &&
     !input.isCurrentSourceOwner &&
     input.activePlaybackSource !== "full-local" &&
-    input.progressiveEngineType === "none"
+    (input.progressiveEngineType === "none" || input.progressiveEngineType === "pcm")
   );
 }
 
@@ -1966,7 +1966,7 @@ export function hasSufficientBackingForFullLocalWarmup(input: {
   aheadBufferedMs: number;
   requiredAheadMs: number;
 }) {
-  if (input.progressiveEngineType === "none" || input.progressiveEngineType === "pcm") {
+  if (input.progressiveEngineType === "none") {
     return true;
   }
 
@@ -2072,7 +2072,7 @@ export function resolveIdleFullLocalUpgradeArmState(input: {
   comfortBufferMs: number;
 }) {
   return (
-    (input.progressiveEngineType === "none" || input.progressiveEngineType === "pcm") &&
+    input.progressiveEngineType === "none" &&
     input.canUseFullLocalForPlaybackSession &&
     input.fullLocalBlockedReason === null &&
     input.localTakeoverAllowed &&
@@ -2098,7 +2098,7 @@ export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: 
 }) {
   if (
     !isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
-    (input.progressiveEngineType !== "none" && input.progressiveEngineType !== "pcm")
+    input.progressiveEngineType !== "none"
   ) {
     return false;
   }
@@ -2116,15 +2116,7 @@ export function shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup(input: 
     return false;
   }
 
-  if (input.progressiveEngineType === "none") {
-    return true;
-  }
-
-  if (input.warmupReadyAt === null) {
-    return false;
-  }
-
-  return input.now - input.warmupReadyAt >= input.switchDelayMs;
+  return true;
 }
 
 export function resolveFullLocalUpgradeAction(input: {

@@ -815,7 +815,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces.mock.calls[0]?.[2].slice(0, 9)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
-  it("requests a bounded active playback cache batch from the decodable prefix", async () => {
+  it("requests a PCM-safe active playback cache batch from the decodable prefix", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -863,7 +863,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
-      Array.from({ length: 128 }, (_, index) => index),
+      Array.from({ length: 32 }, (_, index) => index),
       240,
       expect.any(Number)
     );
@@ -871,7 +871,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(plans[0]?.didRequest).toBe(true);
   });
 
-  it("keeps fast active playback providers on the large startup batch", async () => {
+  it("keeps fast active playback providers bounded below cache-completion bursts", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -923,7 +923,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     expect(requestPieces.mock.calls[0]?.[2]).toEqual(
-      Array.from({ length: 128 }, (_, index) => index)
+      Array.from({ length: 48 }, (_, index) => index)
     );
   });
 
@@ -1098,7 +1098,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 128 }, (_, index) => index));
+    expect(requestedChunks).toEqual(Array.from({ length: 32 }, (_, index) => index));
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
@@ -1160,7 +1160,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 112 }, (_, index) => index + 128));
+    expect(requestedChunks).toEqual(Array.from({ length: 32 }, (_, index) => index + 128));
     expect(requestPieces).toHaveBeenCalledWith(
       "peer_owner",
       "track_a",
@@ -1170,7 +1170,7 @@ describe("planManualCacheDirectRequests", () => {
     );
   });
 
-  it("continues refilling active playback when several slow batches are still pending", async () => {
+  it("stops refilling active playback when slow cache batches saturate the pending window", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -1221,8 +1221,7 @@ describe("planManualCacheDirectRequests", () => {
       now: 10_000
     });
 
-    const requestedChunks = requestPieces.mock.calls[0]?.[2] ?? [];
-    expect(requestedChunks).toEqual(Array.from({ length: 128 }, (_, index) => index + 384));
+    expect(requestPieces).not.toHaveBeenCalled();
   });
 
   it("uses a longer timeout for active playback cache requests", async () => {

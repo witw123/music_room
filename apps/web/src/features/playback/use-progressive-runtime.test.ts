@@ -4244,7 +4244,7 @@ describe("use-progressive-runtime policy helpers", () => {
     });
   });
 
-  it("does not warm full-local on the shared audio element while sliding-window playback owns it", () => {
+  it("warms full-local on the shared audio element while PCM owns direct output", () => {
     expect(
       shouldWarmFullLocalWithSharedAudioElement({
         activePlaybackSource: "lossless-local",
@@ -4252,7 +4252,7 @@ describe("use-progressive-runtime policy helpers", () => {
         canUseFullLocalForPlaybackSession: true,
         isCurrentSourceOwner: false
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldWarmFullLocalWithSharedAudioElement({
         activePlaybackSource: "progressive-local",
@@ -4271,7 +4271,7 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
-  it("allows full-local takeover from PCM playback once the complete cache is ready", () => {
+  it("blocks un-warmed full-local takeover while PCM playback is healthy", () => {
     const readyInput = {
       activePlaybackSource: "lossless-local" as const,
       canUseFullLocalForPlaybackSession: true,
@@ -4289,7 +4289,7 @@ describe("use-progressive-runtime policy helpers", () => {
         ...readyInput,
         progressiveEngineType: "pcm"
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
         ...readyInput,
@@ -4318,7 +4318,7 @@ describe("use-progressive-runtime policy helpers", () => {
         aheadBufferedMs: 2_000,
         comfortBufferMs: 1_000
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       resolveIdleFullLocalUpgradeArmState({
         progressiveEngineType: "none",
@@ -4348,7 +4348,7 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
-  it("does not require PCM ahead buffer before recovering to a complete full-local cache", () => {
+  it("keeps PCM on the warmed full-local path instead of the direct upgrade path", () => {
     expect(
       resolveIdleFullLocalUpgradeArmState({
         progressiveEngineType: "pcm",
@@ -4358,7 +4358,7 @@ describe("use-progressive-runtime policy helpers", () => {
         aheadBufferedMs: 0,
         comfortBufferMs: 1_000
       })
-    ).toBe(true);
+    ).toBe(false);
 
     expect(
       shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup({
@@ -4373,7 +4373,7 @@ describe("use-progressive-runtime policy helpers", () => {
         now: 1_500,
         switchDelayMs: 400
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("keeps full-local upgrade loop action policy in the pure pipeline module", () => {

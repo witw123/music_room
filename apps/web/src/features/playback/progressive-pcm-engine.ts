@@ -114,11 +114,11 @@ const pcmParsedByteCompactionThreshold = 512 * 1024;
 // nearly as cheap as reading 1, so a moderate value here keeps the decoder
 // fed without blocking the main thread on large track switches.
 const maxPcmCachedPiecesToAppendPerSync = 16;
-// Catch-up mode: when the decoder is behind the playback position (listener
-// catching up to the host, or a seek). Batch reads make this efficient —
-// a single IndexedDB query fetches all needed chunks. 128 per sync × 8
-// batches covers the full range of realistic seeks.
-const maxPcmCatchupPiecesToAppendPerSync = 128;
+// Catch-up mode: pull enough contiguous prefix for the requested playback
+// point, but do not drain the full cache in one turn while the downloader is
+// also writing. Current-window decoding handles far seeks through sparse reads.
+const maxPcmCatchupPiecesToAppendPerSync = 32;
+const pcmCatchupLookAheadChunks = 2;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 // Window decode reads up to this many chunks around the playback position.
 // P2P delivery is unordered so a larger window is needed to skip gaps and
@@ -701,9 +701,8 @@ export class ProgressivePcmEngine {
             return;
           }
 
-          this.decodedSegments.push(segment);
+          this.insertDecodedSegment(segment);
           this.lastDecodedAtMs = Date.now();
-          this.decodedSegments.sort((left, right) => left.startTimeSec - right.startTimeSec);
           if (this.playing) {
             this.scheduleAhead(this.getCurrentTimeSeconds());
           }
@@ -820,8 +819,7 @@ export class ProgressivePcmEngine {
     }
 
     this.wavDecodedByteOffset = alignedEndByte;
-    this.decodedSegments.push(segment);
-    this.decodedSegments.sort((left, right) => left.startTimeSec - right.startTimeSec);
+    this.insertDecodedSegment(segment);
     this.lastDecodedAtMs = Date.now();
     if (this.playing) {
       this.scheduleAhead(this.getCurrentTimeSeconds());
@@ -833,7 +831,13 @@ export class ProgressivePcmEngine {
       this.catchupTargetChunkIndex !== null &&
       this.contiguousChunkCount <= this.catchupTargetChunkIndex
     ) {
-      return maxPcmCatchupPiecesToAppendPerSync;
+      return Math.min(
+        maxPcmCatchupPiecesToAppendPerSync,
+        Math.max(
+          1,
+          this.catchupTargetChunkIndex - this.contiguousChunkCount + 1 + pcmCatchupLookAheadChunks
+        )
+      );
     }
 
     return maxPcmCachedPiecesToAppendPerSync;
@@ -1149,14 +1153,10 @@ export class ProgressivePcmEngine {
         );
         const segment = this.createDecodedWavSegment(header, payload, alignedStartByte);
         if (segment) {
-          this.decodedSegments.push(segment);
+          this.insertDecodedSegment(segment);
           decodedAny = true;
         }
       }
-    }
-
-    if (decodedAny) {
-      this.decodedSegments.sort((left, right) => left.startTimeSec - right.startTimeSec);
     }
     return decodedAny;
   }
@@ -1721,6 +1721,31 @@ export class ProgressivePcmEngine {
     this.contiguousBytes = compactedBytes;
     this.contiguousByteLength = compactedBytes.byteLength;
     this.parsedOffset = description.byteLength;
+  }
+
+  private insertDecodedSegment(segment: DecodedSegment) {
+    const segments = this.decodedSegments;
+    if (segments.length === 0 || segment.startTimeSec >= segments[segments.length - 1]!.startTimeSec) {
+      segments.push(segment);
+      return;
+    }
+
+    if (segment.startTimeSec <= segments[0]!.startTimeSec) {
+      segments.unshift(segment);
+      return;
+    }
+
+    let low = 0;
+    let high = segments.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (segments[mid]!.startTimeSec < segment.startTimeSec) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    segments.splice(low, 0, segment);
   }
 
   private pruneDecodedSegments(positionSeconds: number) {

@@ -18,18 +18,16 @@ import {
 
 const directRequestBatchSize = 32;
 const directRequestTimeoutMs = 15_000;
-const activePlaybackDirectRequestBatchSize = 128;
+const activePlaybackDirectRequestBatchSize = 32;
 const activePlaybackDirectRequestTimeoutMs = 45_000;
 const directPendingTtlMs = 20_000;
 const activePlaybackDirectPendingTtlMs = activePlaybackDirectRequestTimeoutMs + 5_000;
 const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
-// Large in-flight windows to saturate the P2P data channel bandwidth.
-// 512 chunks @ 128 KB = 64 MB in-flight per peer is enough for even
-// lossless FLAC streams (1-3 Mbps) to stream while downloading at
-// multi-megabyte-per-second rates.
-const activePlaybackMaxPendingPerTrack = 1024;
-const activePlaybackMaxPendingPerPeer = 512;
+// Keep enough active in-flight work to reach multi-MB/s links without letting
+// cache writes starve the PCM reader/decoder during cache completion.
+const activePlaybackMaxPendingPerTrack = 256;
+const activePlaybackMaxPendingPerPeer = 96;
 
 export type ManualCacheRequestPriority = "active" | "background";
 
@@ -62,15 +60,15 @@ type ManualCacheAdaptiveBudgetShape = Omit<ManualCacheDirectRequestBudget, "pend
 
 const adaptiveActivePlaybackBudgets: Record<ManualCacheLinkProfile, ManualCacheAdaptiveBudgetShape> = {
   fast: {
-    batchSize: activePlaybackDirectRequestBatchSize,
+    batchSize: 48,
     maxPendingPerTrack: activePlaybackMaxPendingPerTrack,
     maxPendingPerPeer: activePlaybackMaxPendingPerPeer,
     timeoutMs: activePlaybackDirectRequestTimeoutMs
   },
   standard: {
-    batchSize: 48,
-    maxPendingPerTrack: 384,
-    maxPendingPerPeer: 96,
+    batchSize: activePlaybackDirectRequestBatchSize,
+    maxPendingPerTrack: 192,
+    maxPendingPerPeer: 64,
     timeoutMs: 35_000
   },
   constrained: {
