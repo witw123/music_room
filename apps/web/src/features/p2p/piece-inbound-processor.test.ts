@@ -153,6 +153,50 @@ describe("PieceInboundProcessor", () => {
     );
   });
 
+  it("persists the canonical chunk size from the piece header", async () => {
+    const payload = new TextEncoder().encode("final").buffer;
+    const hash = await sha256Hex(payload);
+    const processor = new PieceInboundProcessor({
+      batchSize: 8,
+      localPeerId: "peer_a",
+      resolveManifestHeader: vi.fn(async () => ({
+        totalChunks: 1,
+        chunkSize: 1024,
+        mimeType: "audio/flac",
+        pieceHashes: [hash]
+      })),
+      rememberManifestHeader: vi.fn(),
+      resolveTrackCacheIdentity: () => ({
+        fileHash: "hash-track-1"
+      }),
+      onPieceReceived: vi.fn(() => true)
+    });
+
+    processor.enqueue({
+      peerId: "peer_b",
+      message: buildIncomingPieceMessage({
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        chunkSize: 1024,
+        mimeType: "audio/flac",
+        pieceHash: hash,
+        payload
+      })
+    });
+
+    await processor.flush();
+    await processor.awaitPersistence();
+
+    expect(cacheTrackPieces).toHaveBeenCalledWith([
+      expect.objectContaining({
+        pieceId: "hash-track-1:1024:__local__:0",
+        chunkSize: 1024,
+        payload
+      })
+    ]);
+  });
+
   it("reports validation failures through the request-timeout callback", async () => {
     const payload = new TextEncoder().encode("piece-1").buffer;
     const onPieceRequestTimeout = vi.fn();

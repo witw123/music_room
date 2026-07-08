@@ -252,7 +252,7 @@ export class PieceInboundProcessor {
         peerId: this.localPeerId,
         ownerKey: localCacheOwnerKey,
         chunkIndex: item.message.chunkIndex,
-        chunkSize: item.message.payload.byteLength,
+        chunkSize: item.message.header.chunkSize,
         hash: expectedHash,
         payload: item.message.payload
       };

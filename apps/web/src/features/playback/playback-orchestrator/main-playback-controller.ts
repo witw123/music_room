@@ -11,6 +11,10 @@ import type { PlaybackSnapshot, RoomMediaConnectionState } from "@music-room/sha
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { syncLocalPlaybackWindow } from "../playback-sync";
 import {
+  consumePlaybackStartIntent,
+  doesPlaybackMatchStartIntent
+} from "../playback-start-intent";
+import {
   getEffectivePlaybackPositionMs,
   hasActivePlaybackIntent,
   type ProgressiveEngineType,
@@ -35,6 +39,7 @@ import {
   resolveMainPlaybackPreflight,
   resolveMainPlaybackResetIdleAction,
   resolvePlaybackStartMediaConnectionState,
+  resolvePcmOutputAudible,
   resolvePcmSyncPlaybackOutcome,
   resolveSlidingWindowFallbackPlaybackAction,
   resolveSlidingWindowNativeSyncOutcome,
@@ -246,15 +251,27 @@ export function useMainPlaybackController({
           .syncPlayback(expectedSeconds, shouldPlayPlayback)
           .then((result) => {
             pcmLastBlockedReasonRef.current = result.blockedReason;
+            const pcmSnapshot = pcmEngine.getSnapshot();
             const pcmFailureReason = resolvePcmRuntimeFailureReason({
               blockedReason: result.blockedReason,
-              lastDecodeError: pcmEngine.getSnapshot().lastDecodeError
+              lastDecodeError: pcmSnapshot.lastDecodeError
             });
             markPcmRuntimeFailure(pcmFailureReason);
+            const pcmOutputAudible = resolvePcmOutputAudible({
+              pcmAudioContextState: pcmSnapshot.audioContextState,
+              pcmDirectOutputConnected: pcmSnapshot.directOutputConnected,
+              pcmDecodedSegmentCount: pcmSnapshot.decodedSegmentCount,
+              pcmScheduledSegmentCount: pcmSnapshot.scheduledSegmentCount,
+              localAudioHasSrcObject: !!audio.srcObject,
+              localAudioPaused: audio.paused,
+              localAudioMuted: audio.muted,
+              localAudioVolume: audio.volume
+            });
             const playbackOutcome = resolvePcmSyncPlaybackOutcome({
               shouldPlayPlayback,
               localReady: result.localReady,
-              shouldLatchFailure: shouldLatchPcmRuntimeFailure(pcmFailureReason)
+              shouldLatchFailure: shouldLatchPcmRuntimeFailure(pcmFailureReason),
+              pcmOutputAudible
             });
             if (!playbackOutcome) {
               return;
@@ -283,6 +300,13 @@ export function useMainPlaybackController({
             }
             if (playbackOutcome.shouldEnsurePlaybackStart) {
               ensurePlaybackStart(activePlaybackSource);
+            }
+            if (playbackOutcome.shouldConsumePlaybackStartIntent) {
+              setPlaybackStartIntent((current) =>
+                current && doesPlaybackMatchStartIntent(current, playbackRef.current)
+                  ? consumePlaybackStartIntent(current, activePlaybackSource)
+                  : current
+              );
             }
           })
           .catch(() => {

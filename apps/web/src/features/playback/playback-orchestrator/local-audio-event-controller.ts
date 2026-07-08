@@ -27,6 +27,7 @@ type LocalAudioEventControllerInput = {
   lastStablePlaybackAtRef: MutableRefObject<string | null>;
   markContinuousPlaybackInterrupted: (timestampMs?: number) => void;
   markContinuousPlaybackStarted: (timestampMs?: number) => void;
+  pcmOutputAudible: boolean;
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
   progressiveHealthSnapshot: ProgressiveHealthSnapshot;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -47,6 +48,7 @@ export function useLocalAudioEventController({
   lastStablePlaybackAtRef,
   markContinuousPlaybackInterrupted,
   markContinuousPlaybackStarted,
+  pcmOutputAudible,
   playbackRef,
   progressiveHealthSnapshot,
   recordPeerDiagnostic,
@@ -65,7 +67,8 @@ export function useLocalAudioEventController({
         return resolveMediaElementPlaybackRole({
           target: "local",
           activePlaybackSource,
-          shadowWarmupActive
+          shadowWarmupActive,
+          pcmOutputAudible
         });
       }
 
@@ -226,6 +229,7 @@ export function useLocalAudioEventController({
     lastStablePlaybackAtRef,
     markContinuousPlaybackInterrupted,
     markContinuousPlaybackStarted,
+    pcmOutputAudible,
     playbackRef,
     progressiveHealthSnapshot.aheadBufferedMs,
     progressiveHealthSnapshot.contiguousBufferedMs,

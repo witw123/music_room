@@ -651,6 +651,7 @@ export function resolvePcmSyncPlaybackOutcome(input: {
   shouldPlayPlayback: boolean;
   localReady: boolean;
   shouldLatchFailure: boolean;
+  pcmOutputAudible?: boolean;
 }) {
   if (input.shouldLatchFailure) {
     return {
@@ -668,6 +669,14 @@ export function resolvePcmSyncPlaybackOutcome(input: {
   }
 
   if (input.shouldPlayPlayback && input.localReady) {
+    if (input.pcmOutputAudible) {
+      return {
+        progressiveFallbackReason: null,
+        mediaConnectionState: "live" as const,
+        shouldConsumePlaybackStartIntent: true
+      };
+    }
+
     return {
       progressiveFallbackReason: null,
       mediaConnectionState: "live" as const,
@@ -1388,17 +1397,18 @@ export function shouldRecoverSilentSlidingWindowWithFullLocal(input: {
     return false;
   }
 
-  const pcmElementOutputAudible =
-    input.localAudioHasSrcObject &&
-    input.localAudioPaused === false &&
-    input.localAudioMuted !== true &&
-    input.localAudioVolume !== 0;
-  const pcmOutputAudible =
-    input.pcmAudioContextState === "running" &&
-    (input.pcmDecodedSegmentCount ?? 0) > 0 &&
-    (input.pcmScheduledSegmentCount ?? 0) > 0 &&
-    (input.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
-  if (pcmOutputAudible) {
+  if (
+    resolvePcmOutputAudible({
+      pcmAudioContextState: input.pcmAudioContextState,
+      pcmDirectOutputConnected: input.pcmDirectOutputConnected,
+      pcmDecodedSegmentCount: input.pcmDecodedSegmentCount,
+      pcmScheduledSegmentCount: input.pcmScheduledSegmentCount,
+      localAudioHasSrcObject: input.localAudioHasSrcObject,
+      localAudioPaused: input.localAudioPaused,
+      localAudioMuted: input.localAudioMuted,
+      localAudioVolume: input.localAudioVolume
+    })
+  ) {
     return false;
   }
 
@@ -1865,12 +1875,45 @@ export function getPcmEngineDiagnosticsKey(
   ].join("|");
 }
 
+export function resolvePcmOutputAudible(input: {
+  pcmAudioContextState: string | null | undefined;
+  pcmDirectOutputConnected: boolean | null | undefined;
+  pcmDecodedSegmentCount: number | null | undefined;
+  pcmScheduledSegmentCount: number | null | undefined;
+  localAudioHasSrcObject?: boolean | null | undefined;
+  localAudioPaused?: boolean | null | undefined;
+  localAudioMuted?: boolean | null | undefined;
+  localAudioVolume?: number | null | undefined;
+}) {
+  const pcmElementOutputAudible =
+    input.localAudioHasSrcObject === true &&
+    input.localAudioPaused === false &&
+    input.localAudioMuted !== true &&
+    input.localAudioVolume !== 0;
+
+  return (
+    input.pcmAudioContextState === "running" &&
+    (input.pcmDecodedSegmentCount ?? 0) > 0 &&
+    (input.pcmScheduledSegmentCount ?? 0) > 0 &&
+    (input.pcmDirectOutputConnected !== false || pcmElementOutputAudible)
+  );
+}
+
 export function resolveMediaElementPlaybackRole(input: {
   target: "local" | "remote";
   activePlaybackSource: ProgressivePlaybackSource;
   shadowWarmupActive: boolean;
+  pcmOutputAudible?: boolean;
 }) {
   if (input.target === "local") {
+    if (
+      input.pcmOutputAudible &&
+      (isSlidingWindowPlaybackSource(input.activePlaybackSource) ||
+        input.activePlaybackSource === "full-local")
+    ) {
+      return "inactive" as const;
+    }
+
     return "audible-local" as const;
   }
 

@@ -80,6 +80,7 @@ export {
   resolvePlaybackTimelineResetAction,
   resolvePcmRuntimeFailureAction,
   resolvePcmRuntimeFailureResetAction,
+  resolvePcmOutputAudible,
   resolvePcmSyncPlaybackOutcome,
   resolveProgressiveEngineSetupPreflight,
   resolveProgressiveEngineAttachErrorAction,

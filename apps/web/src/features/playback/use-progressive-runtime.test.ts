@@ -2213,6 +2213,17 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe("inactive");
   });
 
+  it("ignores local media element events while PCM direct output is already audible", () => {
+    expect(
+      resolveMediaElementPlaybackRole({
+        target: "local",
+        activePlaybackSource: "progressive-local",
+        shadowWarmupActive: false,
+        pcmOutputAudible: true
+      })
+    ).toBe("inactive");
+  });
+
   it("prefers immediate full-local recovery for late-join or rejoin when the full cache is already ready", () => {
     expect(
       shouldPreferImmediateFullLocalRecovery({
@@ -3301,12 +3312,13 @@ describe("use-progressive-runtime policy helpers", () => {
       resolvePcmSyncPlaybackOutcome({
         shouldPlayPlayback: true,
         localReady: true,
-        shouldLatchFailure: false
+        shouldLatchFailure: false,
+        pcmOutputAudible: true
       })
     ).toEqual({
       progressiveFallbackReason: null,
       mediaConnectionState: "live",
-      shouldEnsurePlaybackStart: true
+      shouldConsumePlaybackStartIntent: true
     });
     expect(
       resolvePcmSyncPlaybackOutcome({

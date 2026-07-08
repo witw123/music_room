@@ -5,7 +5,8 @@ import {
   getPcmEngineDiagnosticsKey,
   isSlidingWindowPlaybackSource,
   resolveLocalPlaybackClockSeconds,
-  resolveLocalPlaybackPositionMs
+  resolveLocalPlaybackPositionMs,
+  resolvePcmOutputAudible
 } from "./pipeline";
 import type {
   FullLocalPlaybackTrack,
@@ -213,6 +214,16 @@ export function usePlaybackRuntimeControllerStack({
   void pcmDiagnosticsPulse;
   const pcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
   const pcmEngineDiagnosticsKey = getPcmEngineDiagnosticsKey(pcmEngineDiagnostics);
+  const pcmOutputAudible = resolvePcmOutputAudible({
+    pcmAudioContextState: pcmEngineDiagnostics?.audioContextState ?? null,
+    pcmDirectOutputConnected: pcmEngineDiagnostics?.directOutputConnected ?? null,
+    pcmDecodedSegmentCount: pcmEngineDiagnostics?.decodedSegmentCount ?? null,
+    pcmScheduledSegmentCount: pcmEngineDiagnostics?.scheduledSegmentCount ?? null,
+    localAudioHasSrcObject: !!audioRef.current?.srcObject,
+    localAudioPaused: audioRef.current?.paused ?? null,
+    localAudioMuted: audioRef.current?.muted ?? null,
+    localAudioVolume: audioRef.current?.volume ?? null
+  });
   const {
     audibleLocalFallbackActive,
     bufferSafetyMarginMs,
@@ -371,6 +382,7 @@ export function usePlaybackRuntimeControllerStack({
     lastStablePlaybackAtRef,
     markContinuousPlaybackInterrupted,
     markContinuousPlaybackStarted,
+    pcmOutputAudible,
     playbackRef,
     progressiveHealthSnapshot,
     recordPeerDiagnostic,
