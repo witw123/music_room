@@ -871,6 +871,187 @@ describe("planManualCacheDirectRequests", () => {
     expect(plans[0]?.didRequest).toBe(true);
   });
 
+  it("keeps fast active playback providers on the large startup batch", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 240,
+      durationMs: 240_000,
+      sizeBytes: 240 * 128 * 1024
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      resolvePeerRequestWindow: () => ({
+        bufferedAmountBytes: 0,
+        currentRoundTripTimeMs: 35,
+        downloadRateKbps: 5_200,
+        transportScore: "healthy"
+      }),
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 60_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces.mock.calls[0]?.[2]).toEqual(
+      Array.from({ length: 128 }, (_, index) => index)
+    );
+  });
+
+  it("shrinks active playback batches for a congested provider while preserving decode order", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 240,
+      durationMs: 240_000,
+      sizeBytes: 240 * 128 * 1024
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      resolvePeerRequestWindow: () => ({
+        bufferedAmountBytes: 1_100 * 1024,
+        currentRoundTripTimeMs: 420,
+        downloadRateKbps: 620,
+        transportScore: "degraded"
+      }),
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 60_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces.mock.calls[0]?.[2]).toEqual(
+      Array.from({ length: 8 }, (_, index) => index)
+    );
+  });
+
+  it("prioritizes the active playback track before background cache work on the same provider", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 240,
+      durationMs: 240_000,
+      sizeBytes: 240 * 128 * 1024
+    });
+    roomSnapshot.tracks.push({
+      ...roomSnapshot.tracks[0]!,
+      id: "track_b",
+      title: "Track B",
+      fileHash: "hash_b",
+      pieceManifest: {
+        totalChunks: 96,
+        chunkSize: 128 * 1024,
+        pieceMimeType: "audio/mpeg"
+      }
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_b", "track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_b", "track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      resolvePeerRequestWindow: () => ({
+        bufferedAmountBytes: 0,
+        currentRoundTripTimeMs: 40,
+        downloadRateKbps: 5_000,
+        transportScore: "healthy"
+      }),
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 60_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledTimes(1);
+    expect(requestPieces.mock.calls[0]?.[1]).toBe("track_a");
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 8)).toEqual(
+      Array.from({ length: 8 }, (_, index) => index)
+    );
+  });
+
   it("keeps late MP3 listener requests bounded while targeting the decodable prefix", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",

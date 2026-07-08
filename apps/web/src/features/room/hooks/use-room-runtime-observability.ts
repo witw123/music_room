@@ -62,6 +62,7 @@ export function useRoomRuntimeObservability(input: {
   const { recordPeerDiagnostic } = input;
   const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
   const pieceRequestSamplesRef = useRef<Map<string, unknown>>(new Map());
+  const peerBufferedAmountBytesRef = useRef<Map<string, number>>(new Map());
 
   const recordPieceTransferRef = useRef(
     (value: { peerId: string; direction: "download" | "upload"; bytes: number }) => {
@@ -100,6 +101,7 @@ export function useRoomRuntimeObservability(input: {
   );
 
   const updatePeerBufferedAmountRef = useRef((peerId: string, bufferedAmountBytes: number) => {
+    peerBufferedAmountBytesRef.current.set(peerId, bufferedAmountBytes);
     recordPeerDiagnostic({
       peerId,
       channelKind: "data",
@@ -183,6 +185,7 @@ export function useRoomRuntimeObservability(input: {
   return {
     pieceTransferRatesRef,
     pieceRequestSamplesRef,
+    peerBufferedAmountBytesRef,
     updateDataTransportStatsRef,
     updateMediaTransportStatsRef,
     reportRealtimeFailureRef,

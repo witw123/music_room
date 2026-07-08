@@ -36,7 +36,12 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { getPlaybackConsistencyVersion, toUserFacingError } from "@/lib/music-room-ui";
 import { enableManualTrackCaching, enableTrackCaching } from "@/features/cache/cache-policy";
 import { useRoomDiagnosticsBridge } from "./use-room-diagnostics-bridge";
-import { useManualCacheDownloader, type ManualCacheTrackPlan } from "./use-manual-cache-downloader";
+import {
+  useManualCacheDownloader,
+  type ManualCachePeerRequestWindow,
+  type ManualCacheRequestPriority,
+  type ManualCacheTrackPlan
+} from "./use-manual-cache-downloader";
 import { useRoomDataMesh } from "./use-room-data-mesh";
 import {
   getPieceTransferRates,
@@ -642,6 +647,7 @@ export function useRoomRuntime({
   } = useRoomConnectionSupervisor({ lastSubscribeAckAtRef });
   const {
     pieceTransferRatesRef,
+    peerBufferedAmountBytesRef,
     updateDataTransportStatsRef,
     recordPieceTransferRef,
     recordPieceRequestSampleRef,
@@ -659,6 +665,34 @@ export function useRoomRuntime({
   } = useRoomPlaybackConnectionCoordinator({
     currentRoomRef
   });
+  const resolveManualCachePeerRequestWindow = useCallback(
+    (
+      remotePeerId: string,
+      _trackId: string,
+      _priority: ManualCacheRequestPriority
+    ): ManualCachePeerRequestWindow => {
+      const supervisorState =
+        connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
+      const pieceTransferRates = getPieceTransferRates(
+        pieceTransferRatesRef.current,
+        remotePeerId
+      );
+      return {
+        currentRoundTripTimeMs: getPeerMedianRttMs(supervisorState),
+        downloadRateKbps: pieceTransferRates.downloadRateKbps,
+        uploadRateKbps: pieceTransferRates.uploadRateKbps,
+        candidateType: supervisorState?.lastObservedTransportKind ?? null,
+        protocol: supervisorState?.samples[supervisorState.samples.length - 1]?.protocol ?? null,
+        transportScore: supervisorState?.transportScore ?? null,
+        bufferedAmountBytes: peerBufferedAmountBytesRef.current.get(remotePeerId) ?? null
+      };
+    },
+    [
+      connectionSupervisorStatesRef,
+      peerBufferedAmountBytesRef,
+      pieceTransferRatesRef
+    ]
+  );
 
   const roomSnapshotResyncController = useRef(
     createRoomSnapshotResyncController({
@@ -942,7 +976,8 @@ export function useRoomRuntime({
     dataMesh: dataMeshBridge,
     activePlaybackWindow: activePlaybackCacheWindow,
     onRuntimeEvent: emitRuntimeEvent,
-    onManualCachePlan: handleManualCachePlan
+    onManualCachePlan: handleManualCachePlan,
+    resolvePeerRequestWindow: resolveManualCachePeerRequestWindow
   });
   const clearManualCachePendingPieceRef = useRef(manualCacheDownloader.clearPendingPiece);
   useEffect(() => {

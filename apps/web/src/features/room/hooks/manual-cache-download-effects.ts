@@ -21,7 +21,11 @@ import {
   type ManualCacheTrackPlan
 } from "./manual-cache-download-queue";
 import { mergePeerIds } from "./manual-cache-download-progress";
-import { planManualCacheDirectRequests } from "./manual-cache-piece-fetch";
+import {
+  planManualCacheDirectRequests,
+  type ManualCachePeerRequestWindow,
+  type ManualCacheRequestPriority
+} from "./manual-cache-piece-fetch";
 
 // Aggressive interval to saturate the P2P data channel during active
 // playback.  The engine syncs every 150 ms; keeping the download tick
@@ -48,6 +52,11 @@ type ManualCacheDownloadEffectsInput = {
   peerId: string;
   providerPeerIds: string[];
   providerUnavailableSinceRef: MutableRefObject<Map<string, number>>;
+  resolvePeerRequestWindow?: (
+    providerPeerId: string,
+    trackId: string,
+    priority: ManualCacheRequestPriority
+  ) => ManualCachePeerRequestWindow | null | undefined;
   recoverySinceAtRef: MutableRefObject<number | null>;
   remotePeerIds: string[];
   roomSnapshot: RoomSnapshot | null;
@@ -113,6 +122,7 @@ export function useManualCacheDownloadEffects({
   peerId,
   providerPeerIds,
   providerUnavailableSinceRef,
+  resolvePeerRequestWindow,
   recoverySinceAtRef,
   remotePeerIds,
   roomSnapshot,
@@ -131,6 +141,7 @@ export function useManualCacheDownloadEffects({
     pauseDirectRequests,
     peerId,
     providerPeerIds,
+    resolvePeerRequestWindow,
     roomSnapshot,
     schedulerAvailabilityByTrack
   });
@@ -148,6 +159,7 @@ export function useManualCacheDownloadEffects({
     pauseDirectRequests,
     peerId,
     providerPeerIds,
+    resolvePeerRequestWindow,
     roomSnapshot,
     schedulerAvailabilityByTrack
   };
@@ -455,7 +467,8 @@ export function useManualCacheDownloadEffects({
               chunkIndexes,
               totalChunks,
               timeoutMs
-            )
+            ),
+          resolvePeerRequestWindow: latest.resolvePeerRequestWindow
         });
 
         for (const { plan, didRequest } of requestResults) {

@@ -15,6 +15,10 @@ import {
   resolveManualCacheUploaderPeerIds
 } from "./manual-cache-download-progress";
 import { useManualCacheDownloadEffects } from "./manual-cache-download-effects";
+import type {
+  ManualCachePeerRequestWindow,
+  ManualCacheRequestPriority
+} from "./manual-cache-piece-fetch";
 
 export {
   buildManualCacheRequestFailureEvent,
@@ -35,7 +39,11 @@ export type {
   ManualCacheTrackPlan
 } from "./manual-cache-download-queue";
 export { planManualCacheDirectRequests } from "./manual-cache-piece-fetch";
-export type { ManualCacheDirectRequestResult } from "./manual-cache-piece-fetch";
+export type {
+  ManualCacheDirectRequestResult,
+  ManualCachePeerRequestWindow,
+  ManualCacheRequestPriority
+} from "./manual-cache-piece-fetch";
 export { reconcileManualCacheDirectPendingTracks } from "./manual-cache-download-effects";
 export {
   buildManualCacheSchedulerAvailability,
@@ -57,6 +65,11 @@ export function useManualCacheDownloader(input: {
   activePlaybackWindow?: ActivePlaybackCacheWindow | null;
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
   onManualCachePlan?: (plan: ManualCacheTrackPlan) => void;
+  resolvePeerRequestWindow?: (
+    providerPeerId: string,
+    trackId: string,
+    priority: ManualCacheRequestPriority
+  ) => ManualCachePeerRequestWindow | null | undefined;
 }) {
   const {
     activePlaybackWindow,
@@ -69,6 +82,7 @@ export function useManualCacheDownloader(input: {
     onRuntimeEvent,
     pauseDirectRequests,
     peerId,
+    resolvePeerRequestWindow,
     roomSnapshot
   } = input;
   const lastBootstrapKeyRef = useRef<string | null>(null);
@@ -141,6 +155,7 @@ export function useManualCacheDownloader(input: {
     peerId,
     providerPeerIds,
     providerUnavailableSinceRef,
+    resolvePeerRequestWindow,
     recoverySinceAtRef,
     remotePeerIds,
     roomSnapshot,
