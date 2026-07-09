@@ -285,7 +285,7 @@ export function shouldWaitForSourceAudioElementTrack(input: {
   if (
     !input.playbackTrackId ||
     input.playbackStatus !== "playing" ||
-    (!input.isCurrentSourceOwner && input.activePlaybackSource !== "full-local") ||
+    input.activePlaybackSource !== "full-local" ||
     !input.uploadedTrackObjectUrl
   ) {
     return false;

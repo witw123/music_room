@@ -389,7 +389,7 @@ describe("getPlaybackSourceInitializationKey", () => {
     ).toBe(false);
   });
 
-  it("reinitializes the playback source when full cache becomes playable during the same surface", () => {
+  it("keeps the current playback source when full cache becomes playable during the same surface", () => {
     const pendingCacheKey = getPlaybackSourceInitializationKey({
       playbackSurfaceKey: "track_cached|host|1",
       currentPlaybackTrackId: "track_cached",
@@ -417,10 +417,48 @@ describe("getPlaybackSourceInitializationKey", () => {
       hasPlayableFullLocalTrack: true
     });
 
+    expect(readyCacheKey).toBe(pendingCacheKey);
     expect(
       shouldInitializePlaybackSource({
         previousInitializationKey: pendingCacheKey,
         nextInitializationKey: readyCacheKey
+      })
+    ).toBe(false);
+  });
+
+  it("reinitializes the playback source on the next surface so completed cache can be used then", () => {
+    const currentSurfaceKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey: "track_cached|host|1",
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        mimeType: "audio/flac",
+        codec: "flac",
+        title: "Cached"
+      },
+      currentProgressiveEngineTypeForSource: "pcm",
+      hasPlayableFullLocalTrack: false
+    });
+    const nextSurfaceKey = getPlaybackSourceInitializationKey({
+      playbackSurfaceKey: "track_cached|host|2",
+      currentPlaybackTrackId: "track_cached",
+      currentTrack: {
+        id: "track_cached",
+        fileHash: "hash_cached",
+        mimeType: "audio/flac",
+        codec: "flac",
+        title: "Cached"
+      },
+      currentProgressiveEngineTypeForSource: "pcm",
+      hasPlayableFullLocalTrack: true
+    });
+
+    expect(nextSurfaceKey).not.toBe(currentSurfaceKey);
+    expect(
+      shouldInitializePlaybackSource({
+        previousInitializationKey: currentSurfaceKey,
+        nextInitializationKey: nextSurfaceKey
       })
     ).toBe(true);
   });

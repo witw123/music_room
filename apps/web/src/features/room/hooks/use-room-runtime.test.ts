@@ -103,7 +103,7 @@ describe("pure cache room runtime helpers", () => {
     expect(recoveryRef.current).toBe("user_1:room_1");
   });
 
-  it("waits for the source owner's audio element to switch away from the previous track", () => {
+  it("waits for the source owner's audio element only when full-local playback is active", () => {
     expect(
       shouldWaitForSourceAudioElementTrack({
         playbackTrackId: "track_2",
@@ -136,7 +136,7 @@ describe("pure cache room runtime helpers", () => {
         audioCurrentSrc: "",
         audioSrcObjectPresent: true
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldWaitForSourceAudioElementTrack({
         playbackTrackId: "track_2",
