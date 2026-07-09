@@ -1495,9 +1495,7 @@ export class ProgressivePcmEngine {
         break;
       }
 
-      if (segment.startTimeSec <= coverageEnd + 0.001) {
-        coverageEnd = Math.max(coverageEnd, segment.endTimeSec);
-      }
+      coverageEnd = Math.max(coverageEnd, segment.endTimeSec);
     }
 
     return coverageEnd;

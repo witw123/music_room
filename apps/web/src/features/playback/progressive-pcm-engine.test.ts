@@ -911,6 +911,52 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("treats tiny decoder timestamp gaps as buffered instead of cutting PCM output", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const longManifest = {
+      ...manifest,
+      durationMs: 120_000
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", longManifest);
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "status", "ready");
+      Reflect.set(engine as object, "decodedSegments", [
+        {
+          startTimeSec: 0.03,
+          endTimeSec: 1,
+          buffer: {}
+        },
+        {
+          startTimeSec: 1.08,
+          endTimeSec: 2,
+          buffer: {}
+        }
+      ]);
+
+      const initialResult = await syncPlayback(engine, 0, true);
+      expect(initialResult.localReady).toBe(true);
+      expect(initialResult.blockedReason).toBeNull();
+      expect(engine.getSnapshot().bufferedAheadMs).toBeGreaterThanOrEqual(1_900);
+
+      const gapResult = await syncPlayback(engine, 1.02, true, {
+        key: "track_1|1",
+        revision: 2
+      });
+
+      expect(gapResult.localReady).toBe(true);
+      expect(gapResult.blockedReason).toBeNull();
+      expect(engine.getSnapshot()).toMatchObject({
+        playoutState: "playing"
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("flushes decoded packets before reporting PCM playback ready", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
