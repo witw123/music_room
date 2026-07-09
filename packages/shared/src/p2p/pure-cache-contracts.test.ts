@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { peerSignalMessageSchema } from "./models";
+import { p2pDataMessageSchema, peerSignalMessageSchema } from "./models";
 
 describe("p2p signaling contracts", () => {
   it("accepts data peer signals", () => {
@@ -26,5 +26,17 @@ describe("p2p signaling contracts", () => {
         payload: {}
       }).success
     ).toBe(false);
+  });
+
+  it("accepts piece unavailable notifications for immediate cache retry", () => {
+    expect(
+      p2pDataMessageSchema.safeParse({
+        kind: "piece-unavailable",
+        requestId: "request-1",
+        trackId: "track_1",
+        chunkIndex: 0,
+        reason: "piece-missing"
+      }).success
+    ).toBe(true);
   });
 });

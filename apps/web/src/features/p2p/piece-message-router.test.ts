@@ -170,6 +170,58 @@ describe("PieceMessageRouter", () => {
       pendingRequest: undefined
     });
   });
+
+  it("clears a pending request immediately when the provider reports the piece unavailable", async () => {
+    const pendingRequest = {
+      peerId: "peer_b",
+      requestId: "request-1",
+      expectedTotalChunks: 4,
+      requestedAtMs: Date.now() - 250,
+      timeoutMs: 45_000,
+      timeoutId: setTimeout(() => undefined, 45_000)
+    };
+    const failPendingRequest = vi.fn(() => pendingRequest);
+    const onPieceUnavailable = vi.fn();
+    const router = new PieceMessageRouter({
+      pieceServeBatchConcurrency: 2,
+      incomingPieceFragmentTtlMs: 15_000,
+      servePieceRequest: vi.fn(),
+      takePendingRequest: vi.fn(),
+      failPendingRequest,
+      enqueueInboundPiece: vi.fn(),
+      onPieceUnavailable
+    });
+
+    await router.handleChannelMessage({
+      peerId: "peer_b",
+      entry: openEntry(),
+      data: JSON.stringify({
+        kind: "piece-unavailable",
+        requestId: "request-1",
+        trackId: "track_1",
+        chunkIndex: 0,
+        reason: "piece-missing"
+      })
+    });
+
+    expect(failPendingRequest).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      trackId: "track_1",
+      chunkIndex: 0,
+      requestId: "request-1"
+    });
+    expect(onPieceUnavailable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        peerId: "peer_b",
+        trackId: "track_1",
+        chunkIndex: 0,
+        requestId: "request-1",
+        reason: "piece-missing",
+        pendingRequest
+      })
+    );
+    clearTimeout(pendingRequest.timeoutId);
+  });
 });
 
 function openEntry() {

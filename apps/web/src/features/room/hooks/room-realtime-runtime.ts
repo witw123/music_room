@@ -169,6 +169,11 @@ type RoomRealtimeRuntimeInput = {
   announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
+  deferManualCachePendingPiece: (
+    trackId: string,
+    chunkIndex: number,
+    retryAfterMs: number
+  ) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   recordPieceTransferRef: MutableRefObject<(input: PieceTransferInput) => void>;
   recordPieceRequestSampleRef: MutableRefObject<(input: PieceRequestSampleInput) => void>;
@@ -246,6 +251,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     announceRoomTrackAvailabilityRef: input.announceRoomTrackAvailabilityRef,
     handleManualCachePieceReceivedRef: input.handleManualCachePieceReceivedRef,
     clearManualCachePendingPiece: input.clearManualCachePendingPiece,
+    deferManualCachePendingPiece: input.deferManualCachePendingPiece,
     flushPendingAvailabilityRef: input.flushPendingAvailabilityRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
     recordPieceTransferRef: input.recordPieceTransferRef,

@@ -37,6 +37,24 @@ describe("mesh message codec", () => {
       trackId: "track_1",
       chunkIndexes: [0, 2, 1]
     });
+
+    await expect(
+      parseIncomingMeshMessage(
+        JSON.stringify({
+          kind: "piece-unavailable",
+          requestId: "request-1",
+          trackId: "track_1",
+          chunkIndex: 0,
+          reason: "piece-missing"
+        })
+      )
+    ).resolves.toEqual({
+      kind: "piece-unavailable",
+      requestId: "request-1",
+      trackId: "track_1",
+      chunkIndex: 0,
+      reason: "piece-missing"
+    });
   });
 
   it("parses binary piece frames and narrows them with guards", async () => {

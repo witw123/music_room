@@ -164,6 +164,11 @@ export function useManualCacheDownloader(input: {
   const clearPendingPiece = (trackId: string, chunkIndex: number) => {
     directPendingRef.current.get(trackId)?.delete(chunkIndex);
   };
+  const deferPendingPiece = (trackId: string, chunkIndex: number, retryAfterMs: number) => {
+    const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
+    pendingForTrack.set(chunkIndex, retryAfterMs);
+    directPendingRef.current.set(trackId, pendingForTrack);
+  };
 
   return {
     availabilityProviderPeerIds,
@@ -171,6 +176,7 @@ export function useManualCacheDownloader(input: {
     providerPeerIds,
     remotePeerIds,
     schedulerAvailabilityByTrack,
-    clearPendingPiece
+    clearPendingPiece,
+    deferPendingPiece
   };
 }

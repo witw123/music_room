@@ -167,4 +167,51 @@ describe("PieceRequestTracker", () => {
     );
     expect(tracker.get("track_1", 0)).toBeNull();
   });
+
+  it("fails one unavailable replica without waiting for the request timeout", async () => {
+    const onTimeout = vi.fn();
+    const tracker = new PieceRequestTracker();
+
+    tracker.registerRequests({
+      peerId: "peer_b",
+      trackId: "track_1",
+      chunkIndexes: [0],
+      expectedTotalChunks: 4,
+      requestId: "request_b",
+      timeoutMs: 500,
+      onTimeout,
+      allowRedundant: true
+    });
+    tracker.registerRequests({
+      peerId: "peer_c",
+      trackId: "track_1",
+      chunkIndexes: [0],
+      expectedTotalChunks: 4,
+      requestId: "request_c",
+      timeoutMs: 500,
+      onTimeout,
+      allowRedundant: true
+    });
+
+    const failed = tracker.fail({
+      peerId: "peer_b",
+      trackId: "track_1",
+      chunkIndex: 0,
+      requestId: "request_b"
+    });
+
+    expect(failed?.peerId).toBe("peer_b");
+    expect(tracker.get("track_1", 0)?.peerId).toBe("peer_c");
+
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+    expect(onTimeout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        peerId: "peer_c",
+        requestId: "request_c",
+        chunkIndex: 0
+      })
+    );
+  });
 });

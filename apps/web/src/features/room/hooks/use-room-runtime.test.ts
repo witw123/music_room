@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildActivePlaybackCacheWindow,
   buildManualCachePendingPieceClearer,
+  buildManualCachePendingPieceDeferrer,
   resolveSourceLocalPlaybackTrack,
   resolveActivePlaybackCacheWindowPosition,
   buildRoomExitHref,
@@ -725,6 +726,20 @@ describe("pure cache room runtime helpers", () => {
     clearPendingPiece("track_1", 7);
 
     expect(calls).toEqual([["track_1", 7]]);
+  });
+
+  it("routes realtime piece unavailable notifications to a short manual cache pending deferral", () => {
+    const calls: Array<[string, number, number]> = [];
+    const deferPendingPieceRef = {
+      current: (trackId: string, chunkIndex: number, retryAfterMs: number) => {
+        calls.push([trackId, chunkIndex, retryAfterMs]);
+      }
+    };
+
+    const deferPendingPiece = buildManualCachePendingPieceDeferrer(deferPendingPieceRef);
+    deferPendingPiece("track_1", 7, 12_345);
+
+    expect(calls).toEqual([["track_1", 7, 12_345]]);
   });
 
   it("does not kick local source playback from a stale realtime playback event", () => {

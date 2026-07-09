@@ -86,6 +86,14 @@ type MeshCallbacks = {
     requestId?: string;
     requestDurationMs: number;
   }) => void;
+  onPieceUnavailable?: (payload: {
+    trackId: string;
+    chunkIndex: number;
+    peerId: string;
+    requestId?: string;
+    reason: "piece-missing" | "manifest-missing" | "channel-not-open";
+    requestDurationMs: number;
+  }) => void;
   onPeerConnectionChange?: (payload: {
     peerId: string;
     state: RTCPeerConnectionState;
@@ -237,8 +245,19 @@ export class P2PMesh {
       servePieceRequests: (input) => this.pieceServe.servePieceRequests(input),
       takePendingRequest: (trackId, chunkIndex) =>
         this.pieceRequestClient.takePendingRequest(trackId, chunkIndex),
+      failPendingRequest: (request) =>
+        this.pieceRequestClient.failPendingRequest(request),
       enqueueInboundPiece: (item) => this.inboundPieces.enqueue(item),
-      onPieceRequestReceived: this.callbacks.onPieceRequestReceived
+      onPieceRequestReceived: this.callbacks.onPieceRequestReceived,
+      onPieceUnavailable: ({ peerId, trackId, chunkIndex, requestId, reason, requestDurationMs }) =>
+        this.callbacks.onPieceUnavailable?.({
+          peerId,
+          trackId,
+          chunkIndex,
+          requestId,
+          reason,
+          requestDurationMs
+        })
     });
   }
 

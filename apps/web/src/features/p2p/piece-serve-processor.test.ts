@@ -332,6 +332,44 @@ describe("PieceServeProcessor", () => {
     ).toBe(true);
   });
 
+  it("notifies the requester immediately when a requested piece is not available yet", async () => {
+    vi.mocked(getCachedPiece).mockResolvedValueOnce(null);
+    const enqueueSendItem = vi.fn();
+    const onPieceServeMiss = vi.fn();
+    const processor = new PieceServeProcessor({
+      localPeerId: "peer_a",
+      maxDataChannelPayloadBytes: 48 * 1024,
+      enqueueSendItem,
+      onPieceServeMiss
+    });
+
+    await processor.servePieceRequest({
+      peerId: "peer_b",
+      entry: openEntry(),
+      request: {
+        trackId: "track_1",
+        chunkIndex: 0,
+        requestId: "request-1"
+      }
+    });
+
+    expect(enqueueSendItem).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(enqueueSendItem.mock.calls[0]?.[2]?.data)).toEqual({
+      kind: "piece-unavailable",
+      requestId: "request-1",
+      trackId: "track_1",
+      chunkIndex: 0,
+      reason: "piece-missing"
+    });
+    expect(enqueueSendItem.mock.calls[0]?.[2]?.priority).toBe("control");
+    expect(onPieceServeMiss).toHaveBeenCalledWith({
+      peerId: "peer_b",
+      trackId: "track_1",
+      chunkIndex: 0,
+      reason: "piece-missing"
+    });
+  });
+
   it("reports a serve miss when the data channel is not open", async () => {
     const onPieceServeMiss = vi.fn();
     const enqueueSendItem = vi.fn();

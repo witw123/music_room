@@ -115,6 +115,40 @@ export class PieceRequestTracker {
     return pendingRequests[0] ?? null;
   }
 
+  fail(input: {
+    trackId: string;
+    chunkIndex: number;
+    peerId: string;
+    requestId?: string;
+  }) {
+    const requestKey = buildPieceRequestKey(input.trackId, input.chunkIndex);
+    const pendingRequests = this.pendingPieceRequests.get(requestKey) ?? [];
+    if (pendingRequests.length === 0) {
+      return null;
+    }
+
+    const failedRequests: PendingPieceRequest[] = [];
+    const remainingRequests: PendingPieceRequest[] = [];
+    for (const pendingRequest of pendingRequests) {
+      const samePeer = pendingRequest.peerId === input.peerId;
+      const sameRequest = pendingRequest.requestId === input.requestId;
+      if (samePeer && sameRequest) {
+        clearTimeout(pendingRequest.timeoutId);
+        failedRequests.push(pendingRequest);
+      } else {
+        remainingRequests.push(pendingRequest);
+      }
+    }
+
+    if (remainingRequests.length === 0) {
+      this.pendingPieceRequests.delete(requestKey);
+    } else {
+      this.pendingPieceRequests.set(requestKey, remainingRequests);
+    }
+
+    return failedRequests[0] ?? null;
+  }
+
   clearPeer(peerId: string) {
     for (const [requestKey, pendingRequests] of this.pendingPieceRequests.entries()) {
       const nextRequests: PendingPieceRequest[] = [];

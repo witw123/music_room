@@ -35,6 +35,8 @@ type DataMeshRuntime = Pick<
   "syncPeers" | "restartPeer" | "requestPieces" | "getConnectedPeerIds"
 >;
 
+const pieceUnavailableRetryDelayMs = 1_500;
+
 export function useRoomDataMesh(input: {
   meshRef: MutableRefObject<P2PMesh | null>;
 }): DataMeshBridge | null {
@@ -224,6 +226,11 @@ export function createRoomDataMeshRuntime(input: {
   announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
+  deferManualCachePendingPiece: (
+    trackId: string,
+    chunkIndex: number,
+    retryAfterMs: number
+  ) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   isPageVisible: boolean;
@@ -240,7 +247,7 @@ export function createRoomDataMeshRuntime(input: {
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
     getCachedLibraryTrack
   );
-  const resolvePeerLinkWindow = (remotePeerId: string) => {
+const resolvePeerLinkWindow = (remotePeerId: string) => {
     const supervisorState =
       input.connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
     const latestTransportSample =
@@ -422,6 +429,33 @@ export function createRoomDataMeshRuntime(input: {
         });
         input.clearManualCachePendingPiece(trackId, chunkIndex);
         input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
+      },
+      onPieceUnavailable: ({
+        trackId,
+        chunkIndex,
+        peerId: unavailablePeerId,
+        reason,
+        requestDurationMs
+      }) => {
+        input.recordPieceRequestSampleRef.current({
+          peerId: unavailablePeerId,
+          outcome: "timeout",
+          durationMs: requestDurationMs
+        });
+        input.deferManualCachePendingPiece(
+          trackId,
+          chunkIndex,
+          Date.now() + pieceUnavailableRetryDelayMs
+        );
+        input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, unavailablePeerId);
+        input.recordPeerDiagnosticRef.current({
+          peerId: unavailablePeerId,
+          channelKind: "data",
+          direction: "received",
+          event: "piece-unavailable",
+          level: "warning",
+          summary: `${trackId}#${chunkIndex} 暂不可用：${reason}`
+        });
       },
       onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
         const supervisorState = input.updateConnectionSupervisorSignalState({

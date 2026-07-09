@@ -389,6 +389,18 @@ export function buildManualCachePendingPieceClearer(
   };
 }
 
+export function buildManualCachePendingPieceDeferrer(
+  deferPendingPieceRef: MutableRefObject<(
+    trackId: string,
+    chunkIndex: number,
+    retryAfterMs: number
+  ) => void>
+) {
+  return (trackId: string, chunkIndex: number, retryAfterMs: number) => {
+    deferPendingPieceRef.current(trackId, chunkIndex, retryAfterMs);
+  };
+}
+
 export function shouldStartRoomRealtimeRuntime(input: {
   roomId: string | null | undefined;
   hydrated: boolean;
@@ -991,6 +1003,14 @@ export function useRoomRuntime({
     () => buildManualCachePendingPieceClearer(clearManualCachePendingPieceRef),
     []
   );
+  const deferManualCachePendingPieceRef = useRef(manualCacheDownloader.deferPendingPiece);
+  useEffect(() => {
+    deferManualCachePendingPieceRef.current = manualCacheDownloader.deferPendingPiece;
+  }, [manualCacheDownloader.deferPendingPiece]);
+  const deferManualCachePendingPiece = useMemo(
+    () => buildManualCachePendingPieceDeferrer(deferManualCachePendingPieceRef),
+    []
+  );
 
   useEffect(() => {
     const playback = roomPlaybackCacheIdentity;
@@ -1061,6 +1081,7 @@ export function useRoomRuntime({
       announceRoomTrackAvailabilityRef,
       handleManualCachePieceReceivedRef,
       clearManualCachePendingPiece,
+      deferManualCachePendingPiece,
       flushPendingAvailabilityRef,
       recordPieceTransferRef,
       recordPieceRequestSampleRef,
@@ -1121,6 +1142,7 @@ export function useRoomRuntime({
     announceRoomTrackAvailabilityRef,
     clearAvailabilityForPeerRef,
     clearManualCachePendingPiece,
+    deferManualCachePendingPiece,
     currentRoomRef,
     chunkSchedulerRef,
     connectionSupervisorStatesRef,

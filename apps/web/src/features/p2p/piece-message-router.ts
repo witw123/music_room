@@ -29,6 +29,15 @@ type PieceMessageRouterCallbacks = {
     chunkIndex: number;
     requestId?: string;
   }) => void;
+  onPieceUnavailable?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    requestId?: string;
+    reason: "piece-missing" | "manifest-missing" | "channel-not-open";
+    requestDurationMs: number;
+    pendingRequest?: PendingPieceRequest;
+  }) => void;
 };
 
 export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = PieceMessageRouterPeerEntry> {
@@ -48,6 +57,12 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     trackId: string,
     chunkIndex: number
   ) => PendingPieceRequest | null;
+  private readonly failPendingRequest: (input: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    requestId?: string;
+  }) => PendingPieceRequest | null;
   private readonly enqueueInboundPiece: (item: IncomingPieceBatchItem) => void;
   private readonly callbacks: PieceMessageRouterCallbacks;
 
@@ -65,6 +80,12 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       requests: PieceServeRequest[];
     }) => Promise<void>;
     takePendingRequest: (trackId: string, chunkIndex: number) => PendingPieceRequest | null;
+    failPendingRequest?: (input: {
+      peerId: string;
+      trackId: string;
+      chunkIndex: number;
+      requestId?: string;
+    }) => PendingPieceRequest | null;
     enqueueInboundPiece: (item: IncomingPieceBatchItem) => void;
   } & PieceMessageRouterCallbacks) {
     this.pieceServeBatchConcurrency = input.pieceServeBatchConcurrency;
@@ -74,6 +95,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     this.servePieceRequest = input.servePieceRequest;
     this.servePieceRequests = input.servePieceRequests;
     this.takePendingRequest = input.takePendingRequest;
+    this.failPendingRequest = input.failPendingRequest ?? (() => null);
     this.enqueueInboundPiece = input.enqueueInboundPiece;
     this.callbacks = input;
   }
@@ -129,6 +151,26 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
           )
         );
       }
+      return;
+    }
+
+    if (message.kind === "piece-unavailable") {
+      const pendingRequest = this.failPendingRequest({
+        peerId: input.peerId,
+        trackId: message.trackId,
+        chunkIndex: message.chunkIndex,
+        requestId: message.requestId
+      });
+      this.callbacks.onPieceUnavailable?.({
+        peerId: input.peerId,
+        trackId: message.trackId,
+        chunkIndex: message.chunkIndex,
+        requestId: message.requestId,
+        reason: message.reason ?? "piece-missing",
+        requestDurationMs:
+          pendingRequest ? Date.now() - pendingRequest.requestedAtMs : 0,
+        pendingRequest: pendingRequest ?? undefined
+      });
       return;
     }
 

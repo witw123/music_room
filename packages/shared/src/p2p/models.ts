@@ -73,6 +73,13 @@ export const p2pDataMessageSchema = z.union([
     priority: z.enum(["critical", "bulk"]).optional()
   }),
   z.object({
+    kind: z.literal("piece-unavailable"),
+    requestId: z.string().optional(),
+    trackId: z.string(),
+    chunkIndex: z.number().int().nonnegative(),
+    reason: z.enum(["piece-missing", "manifest-missing", "channel-not-open"]).optional()
+  }),
+  z.object({
     kind: z.literal("send-piece"),
     requestId: z.string().optional(),
     trackId: z.string(),

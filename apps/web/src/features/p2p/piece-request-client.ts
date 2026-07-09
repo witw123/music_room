@@ -145,6 +145,15 @@ export class PieceRequestClient<TEntry extends PieceRequestPeerEntry = PieceRequ
     return this.pieceRequests.take(trackId, chunkIndex);
   }
 
+  failPendingRequest(input: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    requestId?: string;
+  }): PendingPieceRequest | null {
+    return this.pieceRequests.fail(input);
+  }
+
   clearPeer(peerId: string) {
     this.pieceRequests.clearPeer(peerId);
   }

@@ -7,6 +7,7 @@ import {
   localCacheOwnerKey,
   type TrackPieceRecord
 } from "@/lib/indexeddb";
+import type { P2PDataMessage } from "@music-room/shared";
 import { buildPieceFrames } from "./piece-frame-codec";
 import type { DataChannelQueuedSendItem } from "./data-channel-manager";
 import type { CachedPieceManifestHeader } from "./piece-manifest-header";
@@ -168,7 +169,7 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
 
     if (entry.channel?.readyState !== "open") {
       for (const request of requests) {
-        this.reportMiss(peerId, request, "channel-not-open");
+        this.reportMiss(peerId, entry, request, "channel-not-open");
       }
       return;
     }
@@ -219,7 +220,7 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
 
     for (const request of requests) {
       if (entry.channel?.readyState !== "open") {
-        this.reportMiss(peerId, request, "channel-not-open");
+        this.reportMiss(peerId, entry, request, "channel-not-open");
         continue;
       }
 
@@ -253,13 +254,14 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
       }
 
       if (!piece) {
-        this.reportMiss(peerId, request, "piece-missing");
+        this.reportMiss(peerId, entry, request, "piece-missing");
         continue;
       }
 
       if (!manifestHeader || entry.channel?.readyState !== "open") {
         this.reportMiss(
           peerId,
+          entry,
           request,
           entry.channel?.readyState === "open" ? "manifest-missing" : "channel-not-open"
         );
@@ -333,9 +335,23 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
 
   private reportMiss(
     peerId: string,
+    entry: TEntry,
     request: PieceServeRequest,
     reason: "channel-not-open" | "piece-missing" | "manifest-missing"
   ) {
+    if (reason !== "channel-not-open" && entry.channel?.readyState === "open") {
+      const payload: P2PDataMessage = {
+        kind: "piece-unavailable",
+        ...(request.requestId ? { requestId: request.requestId } : {}),
+        trackId: request.trackId,
+        chunkIndex: request.chunkIndex,
+        reason
+      };
+      this.enqueueSendItem(peerId, entry, {
+        data: JSON.stringify(payload),
+        priority: "control"
+      });
+    }
     this.callbacks.onPieceServeMiss?.({
       peerId,
       trackId: request.trackId,
