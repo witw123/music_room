@@ -319,8 +319,7 @@ export function resolveRuntimeManualCacheTrackIds(input: {
   if (
     input.enableManualTrackCaching &&
     playback?.currentTrackId &&
-    (playback.status === "playing" || playback.status === "buffering") &&
-    !input.hasLocalFullTrack
+    (playback.status === "playing" || playback.status === "buffering")
   ) {
     trackIds.add(playback.currentTrackId);
   }

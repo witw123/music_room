@@ -480,7 +480,7 @@ describe("pure cache room runtime helpers", () => {
     ).toEqual(["track_1"]);
   });
 
-  it("keeps the current remote playback track active for downloader refs until a full local file exists", () => {
+  it("keeps the current remote playback track active for downloader refs", () => {
     expect(
       resolveRuntimeManualCacheTrackIds({
         playback: {
@@ -505,7 +505,7 @@ describe("pure cache room runtime helpers", () => {
     ).toEqual(["track_1"]);
   });
 
-  it("stops playback-demand runtime caching for a listener once a full local file is playable", () => {
+  it("keeps playback-demand runtime caching active while the listener is still playing after a full local file is playable", () => {
     expect(
       resolveRuntimeManualCacheTrackIds({
         playback: {
@@ -527,7 +527,7 @@ describe("pure cache room runtime helpers", () => {
         hasLocalFullTrack: true,
         enableManualTrackCaching: true
       })
-    ).toEqual([]);
+    ).toEqual(["track_1"]);
   });
 
   it("keeps an explicit manual cache task after the same listener has full local playback", () => {
