@@ -72,11 +72,13 @@ export async function assembleManualCacheTrackFromPieces(
   }
 
   input.assemblingTrackIds.add(input.trackId);
+  let trackTitle = input.trackId;
   try {
     const track = input.roomTracks.find((entry) => entry.id === input.trackId);
     if (!track) {
       return;
     }
+    trackTitle = track.title;
 
     input.updateManualCacheTask(input.trackId, {
       status: "assembling",
@@ -152,7 +154,33 @@ export async function assembleManualCacheTrackFromPieces(
     });
     input.announceRoomTrackAvailability(input.trackId);
     input.setStatusMessage(`已缓存《${track.title}》。`);
+  } catch (error) {
+    const errorMessage = `缓存组装失败：${formatAssemblyError(error)}`;
+    input.updateManualCacheTask(input.trackId, (current) => {
+      if (current?.status === "paused" || current?.status === "ready") {
+        return null;
+      }
+
+      return {
+        status: "failed",
+        errorMessage,
+        blockedReason: null,
+        completedChunks: current?.completedChunks ?? 0,
+        totalChunks: Math.max(current?.totalChunks ?? 0, input.totalChunks),
+        mimeType: input.mimeType ?? current?.mimeType ?? null,
+        lastError: "assembly-failed"
+      };
+    });
+    input.setStatusMessage(`曲目 ${trackTitle} 的缓存组装失败，可稍后重试。`);
   } finally {
     input.assemblingTrackIds.delete(input.trackId);
   }
+}
+
+function formatAssemblyError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return String(error || "unknown-error");
 }

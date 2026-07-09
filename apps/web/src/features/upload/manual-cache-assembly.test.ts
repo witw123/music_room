@@ -165,4 +165,59 @@ describe("assembleManualCacheTrackFromPieces", () => {
       mimeType: "audio/flac"
     });
   });
+
+  it("marks assembly failures as retryable instead of leaving tasks stuck assembling", async () => {
+    const updateManualCacheTask = vi.fn();
+    const statusMessages: string[] = [];
+    const assemblingTrackIds = new Set<string>();
+
+    await assembleManualCacheTrackFromPieces({
+      manualTrackCachingEnabled: true,
+      assemblingTrackIds,
+      trackId: "track_1",
+      mimeType: "audio/flac",
+      totalChunks: 2,
+      roomId: "room_1",
+      roomTracks: [roomTrack],
+      peerId: "peer_1",
+      localCacheOwnerKey: "local",
+      updateManualCacheTask,
+      getCachedPiecesForTrack: async () => [
+        { chunkIndex: 0, payload: new ArrayBuffer(1) },
+        { chunkIndex: 1, payload: new ArrayBuffer(1) }
+      ],
+      assembleTrackFileFromPieces: async () => {
+        throw new Error("worker timed out");
+      },
+      persistTrackIntoLibrary: async () => undefined,
+      deleteCachedPiecesForTrack: async () => undefined,
+      onCachedPiecesConsumed: () => undefined,
+      announceRoomTrackAvailability: () => undefined,
+      setStatusMessage: (message) => {
+        statusMessages.push(message);
+      }
+    });
+
+    expect(assemblingTrackIds.has("track_1")).toBe(false);
+    expect(updateManualCacheTask).toHaveBeenLastCalledWith(
+      "track_1",
+      expect.any(Function)
+    );
+    const patch = updateManualCacheTask.mock.calls.at(-1)?.[1]({
+      status: "assembling",
+      completedChunks: 2,
+      totalChunks: 2,
+      mimeType: "audio/flac"
+    });
+    expect(patch).toMatchObject({
+      status: "failed",
+      errorMessage: "缓存组装失败：worker timed out",
+      blockedReason: null,
+      completedChunks: 2,
+      totalChunks: 2,
+      mimeType: "audio/flac",
+      lastError: "assembly-failed"
+    });
+    expect(statusMessages).toEqual(["曲目 Cached 的缓存组装失败，可稍后重试。"]);
+  });
 });

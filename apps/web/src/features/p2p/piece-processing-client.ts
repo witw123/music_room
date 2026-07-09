@@ -46,13 +46,14 @@ type WorkerResponse =
   | { id: number; ok: false; error: string };
 
 type PendingRequest = {
-  resolve: (value: unknown) => void;
-  reject: (reason?: unknown) => void;
+  resolve: (value: unknown | null) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
 };
 
 let workerInstance: Worker | null = null;
 let requestCounter = 0;
 const pendingRequests = new Map<number, PendingRequest>();
+const workerTaskTimeoutMs = 45_000;
 
 function canUseWorker() {
   return typeof window !== "undefined" && typeof Worker !== "undefined";
@@ -70,48 +71,70 @@ function getWorker() {
     );
     workerInstance.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const message = event.data;
-      const pending = pendingRequests.get(message.id);
-      if (!pending) {
+      if (!pendingRequests.has(message.id)) {
         return;
       }
 
-      pendingRequests.delete(message.id);
       if (!message.ok) {
-        pending.reject(new Error(message.error));
+        settleWorkerRequest(message.id, null);
         return;
       }
 
-      pending.resolve(message.result);
+      settleWorkerRequest(message.id, message.result);
     };
-    workerInstance.onerror = (error) => {
-      for (const pending of pendingRequests.values()) {
-        pending.reject(error);
-      }
-      pendingRequests.clear();
-      workerInstance?.terminate();
-      workerInstance = null;
+    workerInstance.onerror = () => {
+      resetWorkerWithFallback();
+    };
+    workerInstance.onmessageerror = () => {
+      resetWorkerWithFallback();
     };
   }
 
   return workerInstance;
 }
 
-async function runWorkerTask<T>(request: Omit<WorkerRequest, "id">) {
+function settleWorkerRequest(id: number, value: unknown | null) {
+  const pending = pendingRequests.get(id);
+  if (!pending) {
+    return;
+  }
+
+  clearTimeout(pending.timeoutId);
+  pendingRequests.delete(id);
+  pending.resolve(value);
+}
+
+function resetWorkerWithFallback() {
+  for (const [id] of pendingRequests.entries()) {
+    settleWorkerRequest(id, null);
+  }
+  workerInstance?.terminate();
+  workerInstance = null;
+}
+
+async function runWorkerTask<T>(request: Omit<WorkerRequest, "id">): Promise<T | null> {
   const worker = getWorker();
   if (!worker) {
     return null;
   }
 
   const id = ++requestCounter;
-  return new Promise<T>((resolve, reject) => {
+  return new Promise<T | null>((resolve) => {
+    const timeoutId = setTimeout(() => {
+      resetWorkerWithFallback();
+    }, workerTaskTimeoutMs);
     pendingRequests.set(id, {
       resolve: (value: unknown) => resolve(value as T),
-      reject
+      timeoutId
     });
-    worker.postMessage({
-      id,
-      ...request
-    } as WorkerRequest);
+    try {
+      worker.postMessage({
+        id,
+        ...request
+      } as WorkerRequest);
+    } catch {
+      resetWorkerWithFallback();
+    }
   });
 }
 

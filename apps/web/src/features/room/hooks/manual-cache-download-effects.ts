@@ -81,9 +81,9 @@ export function reconcileManualCacheDirectPendingTracks(input: {
   if (input.previousActivePlaybackPendingKey !== input.nextActivePlaybackPendingKey) {
     // Only clear pending when the active playback TRACK changes, not when
     // just the revision or epoch changes on the same track. Pending entries
-    // for the current track are still valid — the request ordering already
-    // prioritises chunks near the current playback position, and stale
-    // entries naturally expire via their TTL.
+    // for the current track may still be valid; the request planner can
+    // preempt stale non-priority entries when the active playback window moves,
+    // and any remaining stale entries naturally expire via their TTL.
     if (
       input.previousActivePlaybackTrackId !== input.nextActivePlaybackTrackId
     ) {

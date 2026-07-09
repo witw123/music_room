@@ -10,7 +10,6 @@ import {
 import type { PieceRequestOptions } from "@/features/p2p/piece-request-client";
 import {
   getStartupWindowMs,
-  isFlacTrack
 } from "@/features/playback/progressive-playback";
 import { getRequiredDecodablePrefixChunkCount } from "@/features/playback/sliding-window/playback-window-scheduler";
 import {
@@ -646,13 +645,6 @@ function resolveActivePlaybackDecodablePrefixChunkCount(input: {
     return 0;
   }
 
-  if (isFlacTrack({
-    mimeType: input.manifest.pieceMimeType ?? input.track.mimeType ?? null,
-    codec: input.track.codec ?? null
-  })) {
-    return 0;
-  }
-
   return getRequiredDecodablePrefixChunkCount({
     manifest: {
       durationMs: input.track.durationMs,
@@ -666,21 +658,18 @@ function resolveActivePlaybackDecodablePrefixChunkCount(input: {
   });
 }
 
-function releaseStaleActivePlaybackPendingChunks(input: {
+function resolveActivePlaybackPendingPriorityState(input: {
   track: TrackMeta;
   manifest: ResolvedTrackPieceManifest;
   localPieceIndexes: number[];
   pendingForTrack: Map<number, number>;
   activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined;
-  maxPendingChunks: number;
-  targetFreeSlots: number;
 }) {
-  if (
-    input.activePlaybackWindow?.trackId !== input.track.id ||
-    input.pendingForTrack.size < input.maxPendingChunks ||
-    input.targetFreeSlots <= 0
-  ) {
-    return false;
+  if (input.activePlaybackWindow?.trackId !== input.track.id) {
+    return {
+      activePriorityChunks: [] as number[],
+      missingPriorityChunks: [] as number[]
+    };
   }
 
   const localPieceSet = new Set(input.localPieceIndexes);
@@ -693,6 +682,31 @@ function releaseStaleActivePlaybackPendingChunks(input: {
   const missingPriorityChunks = activePriorityChunks.filter(
     (chunkIndex) => !localPieceSet.has(chunkIndex) && !input.pendingForTrack.has(chunkIndex)
   );
+
+  return {
+    activePriorityChunks,
+    missingPriorityChunks
+  };
+}
+
+function releaseStaleActivePlaybackPendingChunks(input: {
+  track: TrackMeta;
+  manifest: ResolvedTrackPieceManifest;
+  localPieceIndexes: number[];
+  pendingForTrack: Map<number, number>;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined;
+  maxPendingChunks: number;
+  targetFreeSlots: number;
+}) {
+  if (
+    input.activePlaybackWindow?.trackId !== input.track.id ||
+    input.targetFreeSlots <= 0
+  ) {
+    return false;
+  }
+
+  const { activePriorityChunks, missingPriorityChunks } =
+    resolveActivePlaybackPendingPriorityState(input);
   if (missingPriorityChunks.length === 0) {
     return false;
   }
@@ -700,6 +714,10 @@ function releaseStaleActivePlaybackPendingChunks(input: {
   const priorityChunkSet = new Set(activePriorityChunks);
   const requiredFreeSlots = Math.min(input.targetFreeSlots, missingPriorityChunks.length);
   const targetPendingSize = Math.max(0, input.maxPendingChunks - requiredFreeSlots);
+  if (input.pendingForTrack.size <= targetPendingSize) {
+    return false;
+  }
+
   for (const chunkIndex of [...input.pendingForTrack.keys()]) {
     if (priorityChunkSet.has(chunkIndex)) {
       continue;
@@ -817,6 +835,15 @@ export async function planManualCacheDirectRequests(input: {
       activePlaybackWindow: input.activePlaybackWindow ?? null,
       peerWindow: expectedPeerWindow
     });
+    const activePlaybackPriorityState = manifestHint
+      ? resolveActivePlaybackPendingPriorityState({
+          track,
+          manifest: manifestHint,
+          localPieceIndexes,
+          pendingForTrack,
+          activePlaybackWindow: input.activePlaybackWindow ?? null
+        })
+      : null;
     const releasedActivePrioritySlots = manifestHint
       ? releaseStaleActivePlaybackPendingChunks({
         track,
@@ -844,7 +871,12 @@ export async function planManualCacheDirectRequests(input: {
     const shouldRefillPendingWindow =
       releasedActivePrioritySlots ||
       pendingForTrack.size === 0 ||
-      pendingForTrack.size <= pendingRefillLowWatermark;
+      pendingForTrack.size <= pendingRefillLowWatermark ||
+      (
+        requestPriority === "active" &&
+        (activePlaybackPriorityState?.missingPriorityChunks.length ?? 0) > 0 &&
+        remainingTrackSlots > 0
+      );
     const backgroundRequestChunkLimit = resolveBackgroundRequestChunkLimit({
       requestPriority,
       activePlaybackWindow: input.activePlaybackWindow ?? null,

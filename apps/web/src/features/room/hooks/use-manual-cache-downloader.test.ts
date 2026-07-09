@@ -1337,6 +1337,67 @@ describe("planManualCacheDirectRequests", () => {
     );
   });
 
+  it("keeps refilling active playback when stale same-track pending is above the low watermark", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 720,
+      durationMs: 720_000,
+      sizeBytes: 720 * 128 * 1024
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+    const pendingByTrack = new Map([
+      [
+        "track_a",
+        new Map(Array.from({ length: 220 }, (_, index) => [index + 400, 60_000]))
+      ]
+    ]);
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack,
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 180_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledWith(
+      "peer_owner",
+      "track_a",
+      Array.from({ length: 32 }, (_, index) => index),
+      720,
+      expect.any(Number),
+      { priority: "critical" }
+    );
+  });
+
   it("stops refilling active playback when slow cache batches saturate the pending window", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
@@ -1540,6 +1601,69 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("continues the late FLAC decodable prefix while earlier prefix chunks are still pending", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner",
+      playbackStatus: "playing",
+      totalChunks: 1_000,
+      durationMs: 1_000_000,
+      sizeBytes: 1_000 * 128 * 1024,
+      mimeType: "audio/flac",
+      codec: "flac"
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+    const pendingByTrack = new Map([
+      [
+        "track_a",
+        new Map(Array.from({ length: 256 }, (_, chunkIndex) => [chunkIndex, 60_000]))
+      ]
+    ]);
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_owner"],
+      connectedPeerIds: ["peer_owner"],
+      availabilityByTrack: buildManualCacheSchedulerAvailability({
+        availabilityByTrack: {},
+        manualCacheTrackIds: ["track_a"],
+        roomSnapshot,
+        localPeerId: "peer_local"
+      }),
+      pendingByTrack,
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      activePlaybackWindow: {
+        trackId: "track_a",
+        positionMs: 600_000,
+        revision: 1,
+        mediaEpoch: 1,
+        status: "playing",
+        policy: "startup"
+      },
+      now: 10_000
+    });
+
+    expect(requestPieces).toHaveBeenCalledWith(
+      "peer_owner",
+      "track_a",
+      Array.from({ length: 32 }, (_, index) => index + 256),
+      1_000,
+      expect.any(Number),
+      { priority: "critical" }
+    );
   });
 
   it("lets the active FLAC prefix preempt stale pending cache requests", async () => {
