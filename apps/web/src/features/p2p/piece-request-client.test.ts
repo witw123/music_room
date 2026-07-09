@@ -36,7 +36,8 @@ describe("PieceRequestClient", () => {
           kind: "request-piece",
           trackId: "track_1",
           chunkIndex: 2
-        })
+        }),
+        priority: "control"
       }
     );
     expect(onPieceRequestSent).toHaveBeenCalledWith({
@@ -69,7 +70,8 @@ describe("PieceRequestClient", () => {
           requestId: "request-1",
           trackId: "track_1",
           chunkIndexes: [2, 3]
-        })
+        }),
+        priority: "control"
       }
     );
     expect(onPieceRequestSent).toHaveBeenLastCalledWith({

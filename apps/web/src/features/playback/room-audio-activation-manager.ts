@@ -20,6 +20,9 @@ export type PrimeRoomAudioOutputsResult = {
 export class RoomAudioActivationManager {
   private sharedContext: AudioContext | null = null;
   private activated = false;
+  private readonly playedElementSourceKeys = new WeakMap<HTMLAudioElement, string>();
+  private readonly sourceObjectIds = new WeakMap<object, number>();
+  private nextSourceObjectId = 1;
 
   async activateOutputs(input: {
     localAudio?: HTMLAudioElement | null;
@@ -29,6 +32,9 @@ export class RoomAudioActivationManager {
       this.primeAudioElement({ element: input.localAudio })
     ]);
     this.activated = contextReady || local.ok;
+    if (local.ok && input.localAudio) {
+      this.rememberElementSource(input.localAudio);
+    }
     return {
       ok: this.activated,
       local
@@ -45,11 +51,14 @@ export class RoomAudioActivationManager {
 
     try {
       await this.resumeSharedContext();
-      // If the element is already playing, skip play() to avoid a
-      // potential NotAllowedError when the user gesture that started
-      // playback has expired. The element's "playing" state was
-      // established during priming and preserved by the engine.
-      if (!element.paused) {
+      const sourceKey = this.getElementSourceKey(element);
+      // If the same concrete media source is already playing, skip play() to
+      // avoid a potential NotAllowedError when the user gesture that started
+      // playback has expired.  When track switching replaces src/srcObject,
+      // the element may still report paused=false from the previous source;
+      // in that case we must call play() for the new source or the UI can
+      // advance while the new song stays silent.
+      if (!element.paused && this.playedElementSourceKeys.get(element) === sourceKey) {
         this.activated = true;
         return {
           ok: true,
@@ -58,6 +67,7 @@ export class RoomAudioActivationManager {
       }
       await element.play();
       this.activated = true;
+      this.playedElementSourceKeys.set(element, sourceKey);
       return {
         ok: true,
         error: null
@@ -189,6 +199,40 @@ export class RoomAudioActivationManager {
       action();
     } catch {
       // Ignore one-off media element failures during priming cleanup.
+    }
+  }
+
+  private rememberElementSource(element: HTMLAudioElement) {
+    this.playedElementSourceKeys.set(element, this.getElementSourceKey(element));
+  }
+
+  private getElementSourceKey(element: HTMLAudioElement) {
+    const srcObject = element.srcObject;
+    if (srcObject) {
+      return `srcObject:${this.getSourceObjectId(srcObject)}`;
+    }
+
+    const currentSrc = element.src || this.safeGetAttribute(element, "src") || element.currentSrc;
+    return currentSrc ? `src:${currentSrc}` : "src:none";
+  }
+
+  private getSourceObjectId(sourceObject: object) {
+    const existingId = this.sourceObjectIds.get(sourceObject);
+    if (existingId) {
+      return existingId;
+    }
+
+    const nextId = this.nextSourceObjectId;
+    this.nextSourceObjectId += 1;
+    this.sourceObjectIds.set(sourceObject, nextId);
+    return nextId;
+  }
+
+  private safeGetAttribute(element: HTMLAudioElement, name: string) {
+    try {
+      return element.getAttribute(name);
+    } catch {
+      return null;
     }
   }
 }

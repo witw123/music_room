@@ -16,7 +16,10 @@ export type StableTransportKind = "direct" | "relay";
 type SupervisorSample = {
   timestampMs: number;
   candidateType: string | null;
+  localCandidateType: string | null;
+  remoteCandidateType: string | null;
   protocol: string | null;
+  relayProtocol: string | null;
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
   packetLossRate: number | null;
@@ -193,7 +196,10 @@ export function observePeerTransport(input: ObserveTransportInput) {
   const nextSample: SupervisorSample = {
     timestampMs: now,
     candidateType: input.sample.candidateType,
+    localCandidateType: input.sample.localCandidateType ?? null,
+    remoteCandidateType: input.sample.remoteCandidateType ?? null,
     protocol: input.sample.protocol,
+    relayProtocol: input.sample.relayProtocol ?? null,
     currentRoundTripTimeMs: input.sample.currentRoundTripTimeMs,
     availableOutgoingBitrateKbps: input.sample.availableOutgoingBitrateKbps,
     packetLossRate: input.sample.packetLossRate ?? null,

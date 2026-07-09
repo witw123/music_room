@@ -3,6 +3,7 @@
 import { useCallback, useRef, type MutableRefObject } from "react";
 import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
+import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats";
 import {
   createPeerConnectionSupervisorState,
   notePeerSignalState,
@@ -138,6 +139,38 @@ export function useRoomConnectionSupervisor(input: {
     [commitConnectionSupervisorState, ensureConnectionSupervisorState]
   );
 
+  const updateConnectionSupervisorTransportStats = useCallback(
+    (value: {
+      peerId: string;
+      sample: PeerConnectionStatsSample;
+      diagnostics?: Pick<
+        PeerDiagnosticsSnapshot,
+        | "dataChannelState"
+        | "dataConnectionState"
+        | "mediaConnectionState"
+        | "dataIceState"
+        | "mediaIceState"
+      > | null;
+      now?: number;
+    }) => {
+      const state = ensureConnectionSupervisorState(value.peerId);
+      const next = observePeerTransport({
+        state,
+        sample: value.sample,
+        diagnostics: value.diagnostics ?? {
+          dataChannelState: value.sample.dataChannelState ?? state.dataChannelState,
+          dataConnectionState: value.sample.connectionState ?? state.dataConnectionState,
+          dataIceState: value.sample.iceConnectionState ?? state.dataIceState,
+          mediaConnectionState: state.mediaConnectionState,
+          mediaIceState: state.mediaIceState
+        },
+        now: value.now
+      });
+      return commitConnectionSupervisorState(next);
+    },
+    [commitConnectionSupervisorState, ensureConnectionSupervisorState]
+  );
+
   const updateConnectionSupervisorPlayout = useCallback(() => null, []);
 
   const resolveCurrentAudibleSource = useCallback(
@@ -177,6 +210,7 @@ export function useRoomConnectionSupervisor(input: {
     commitConnectionSupervisorState,
     updateConnectionSupervisorSignalState,
     updateConnectionSupervisorTransport,
+    updateConnectionSupervisorTransportStats,
     updateConnectionSupervisorPlayout
   };
 }

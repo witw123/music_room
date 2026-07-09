@@ -37,6 +37,7 @@ type PieceServeRequest = {
   trackId: string;
   chunkIndex: number;
   requestId?: string;
+  priority?: "critical" | "bulk";
 };
 
 type CachedServedPiece = Pick<
@@ -63,6 +64,7 @@ type PieceServeProcessorCallbacks = {
 export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServePeerEntry> {
   private readonly localPeerId: string;
   private readonly maxDataChannelPayloadBytes: number;
+  private readonly resolveMaxDataChannelPayloadBytes?: (peerId: string) => number | null | undefined;
   private readonly resolvePieceRequestFallback?: PieceRequestFallback;
   private readonly resolveTrackCacheIdentity?: (
     trackId: string
@@ -78,6 +80,7 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
   constructor(input: {
     localPeerId: string;
     maxDataChannelPayloadBytes: number;
+    resolveMaxDataChannelPayloadBytes?: (peerId: string) => number | null | undefined;
     resolvePieceRequestFallback?: PieceRequestFallback;
     resolveTrackCacheIdentity?: (trackId: string) => TrackCacheIdentity | null | undefined;
     enqueueSendItem: (
@@ -88,6 +91,7 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
   } & PieceServeProcessorCallbacks) {
     this.localPeerId = input.localPeerId;
     this.maxDataChannelPayloadBytes = input.maxDataChannelPayloadBytes;
+    this.resolveMaxDataChannelPayloadBytes = input.resolveMaxDataChannelPayloadBytes;
     this.resolvePieceRequestFallback = input.resolvePieceRequestFallback;
     this.resolveTrackCacheIdentity = input.resolveTrackCacheIdentity;
     this.enqueueSendItem = input.enqueueSendItem;
@@ -306,11 +310,13 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
         pieceHash: piece.hash
       },
       piece.payload,
-      this.maxDataChannelPayloadBytes
+      this.resolveMaxDataChannelPayloadBytes?.(peerId) ??
+        this.maxDataChannelPayloadBytes
     );
     for (const frame of pieceFrames) {
       this.enqueueSendItem(peerId, entry, {
         data: frame.data,
+        priority: request.priority === "critical" ? "critical" : "bulk",
         trackId: request.trackId,
         chunkIndex: piece.chunkIndex,
         payloadBytes: frame.payloadBytes

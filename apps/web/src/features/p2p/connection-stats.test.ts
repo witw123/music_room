@@ -14,6 +14,127 @@ function buildStatsReport(stats: Array<Record<string, unknown>>) {
 }
 
 describe("samplePeerConnectionStats", () => {
+  it("reports the selected relay udp candidate path explicitly", async () => {
+    const connection = {
+      connectionState: "connected",
+      iceConnectionState: "connected",
+      getStats: async () =>
+        buildStatsReport([
+          {
+            id: "transport_1",
+            type: "transport",
+            timestamp: 1_000,
+            selectedCandidatePairId: "pair_1"
+          },
+          {
+            id: "pair_1",
+            type: "candidate-pair",
+            timestamp: 1_000,
+            state: "succeeded",
+            currentRoundTripTime: 0.048,
+            availableOutgoingBitrate: 5_200_000,
+            localCandidateId: "local_1",
+            remoteCandidateId: "remote_1"
+          },
+          {
+            id: "local_1",
+            type: "local-candidate",
+            timestamp: 1_000,
+            candidateType: "relay",
+            protocol: "udp",
+            relayProtocol: "udp"
+          },
+          {
+            id: "remote_1",
+            type: "remote-candidate",
+            timestamp: 1_000,
+            candidateType: "srflx",
+            protocol: "udp"
+          }
+        ])
+    } as unknown as RTCPeerConnection;
+
+    const result = await samplePeerConnectionStats(connection, null);
+
+    expect(result?.sample).toMatchObject({
+      candidateType: "relay",
+      localCandidateType: "relay",
+      remoteCandidateType: "srflx",
+      protocol: "udp",
+      relayProtocol: "udp",
+      currentRoundTripTimeMs: 48,
+      availableOutgoingBitrateKbps: 5200,
+      connectionState: "connected",
+      iceConnectionState: "connected"
+    });
+  });
+
+  it("reports relay tcp as tcp even when the remote candidate omits protocol", async () => {
+    const connection = {
+      getStats: async () =>
+        buildStatsReport([
+          {
+            id: "pair_1",
+            type: "candidate-pair",
+            timestamp: 1_000,
+            selected: true,
+            currentRoundTripTime: 0.31,
+            localCandidateId: "local_1",
+            remoteCandidateId: "remote_1"
+          },
+          {
+            id: "local_1",
+            type: "local-candidate",
+            timestamp: 1_000,
+            candidateType: "host",
+            protocol: "udp"
+          },
+          {
+            id: "remote_1",
+            type: "remote-candidate",
+            timestamp: 1_000,
+            candidateType: "relay",
+            relayProtocol: "tcp"
+          }
+        ])
+    } as unknown as RTCPeerConnection;
+
+    const result = await samplePeerConnectionStats(connection, null);
+
+    expect(result?.sample).toMatchObject({
+      candidateType: "relay",
+      localCandidateType: "host",
+      remoteCandidateType: "relay",
+      protocol: "tcp",
+      relayProtocol: "tcp",
+      currentRoundTripTimeMs: 310
+    });
+  });
+
+  it("returns null path fields when no selected candidate pair exists", async () => {
+    const connection = {
+      getStats: async () =>
+        buildStatsReport([
+          {
+            id: "transport_1",
+            type: "transport",
+            timestamp: 1_000
+          }
+        ])
+    } as unknown as RTCPeerConnection;
+
+    const result = await samplePeerConnectionStats(connection, null);
+
+    expect(result?.sample).toMatchObject({
+      candidateType: null,
+      localCandidateType: null,
+      remoteCandidateType: null,
+      protocol: null,
+      relayProtocol: null,
+      currentRoundTripTimeMs: null
+    });
+  });
+
   it("derives short-window packet loss rate from cumulative WebRTC counters", async () => {
     const connection = {
       getStats: async () =>

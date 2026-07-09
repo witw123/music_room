@@ -7,6 +7,7 @@ import {
   ChunkScheduler,
   P2PMesh,
   resolvePreferredIceTransportPolicy,
+  resolvePeerSendBudget,
   resolveTrackPieceManifest,
   pieceMemoryBuffer
 } from "@/features/p2p";
@@ -239,6 +240,29 @@ export function createRoomDataMeshRuntime(input: {
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
     getCachedLibraryTrack
   );
+  const resolvePeerLinkWindow = (remotePeerId: string) => {
+    const supervisorState =
+      input.connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
+    const latestTransportSample =
+      supervisorState?.samples[supervisorState.samples.length - 1] ?? null;
+    const pieceTransferRates = input.getPieceTransferRates(
+      input.pieceTransferRatesRef.current,
+      remotePeerId
+    );
+
+    return {
+      currentRoundTripTimeMs: input.getPeerMedianRttMs(supervisorState),
+      downloadRateKbps: pieceTransferRates.downloadRateKbps,
+      uploadRateKbps: pieceTransferRates.uploadRateKbps,
+      candidateType:
+        latestTransportSample?.candidateType ?? supervisorState?.lastObservedTransportKind ?? null,
+      protocol:
+        latestTransportSample?.relayProtocol ?? latestTransportSample?.protocol ?? null,
+      relayProtocol: latestTransportSample?.relayProtocol ?? null,
+      transportScore: supervisorState?.transportScore ?? null,
+      bufferedAmountBytes: peerBufferedAmountBytes.get(remotePeerId) ?? null
+    };
+  };
   const queueDataPeerRecovery = (inputValue: {
     peerId: string;
     dataChannelState?: string | null;
@@ -505,6 +529,10 @@ export function createRoomDataMeshRuntime(input: {
         input.updatePeerBufferedAmountRef.current(remotePeerId, bufferedAmountBytes);
       },
       onStatsSample: ({ peerId: remotePeerId, sample }) => {
+        input.updateConnectionSupervisorTransportStats({
+          peerId: remotePeerId,
+          sample
+        });
         input.updateDataTransportStatsRef.current({
           peerId: remotePeerId,
           sample
@@ -531,6 +559,8 @@ export function createRoomDataMeshRuntime(input: {
           input.connectionSupervisorStatesRef.current.get(remotePeerId)
         )
       }),
+      resolvePeerSendBudget: (remotePeerId) =>
+        resolvePeerSendBudget(resolvePeerLinkWindow(remotePeerId)),
       resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         const uploadedTrack = input.uploadedTracksRef.current[trackId] ?? null;
@@ -587,24 +617,18 @@ export function createRoomDataMeshRuntime(input: {
         : "steady"
   );
   input.chunkSchedulerRef.current = new ChunkScheduler(input.peerId, {
-    requestPieces: ({ peerId: remotePeerId, trackId, chunkIndexes, totalChunks, timeoutMs }) =>
-      mesh.requestPieces(remotePeerId, trackId, chunkIndexes, totalChunks, timeoutMs),
-    resolvePeerRequestWindow: (remotePeerId) => {
-      const supervisorState =
-        input.connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
-      const pieceTransferRates = input.getPieceTransferRates(
-        input.pieceTransferRatesRef.current,
-        remotePeerId
-      );
-      return {
-        currentRoundTripTimeMs: input.getPeerMedianRttMs(supervisorState),
-        downloadRateKbps: pieceTransferRates.downloadRateKbps,
-        candidateType: supervisorState?.lastObservedTransportKind ?? null,
-        protocol: supervisorState?.samples[supervisorState.samples.length - 1]?.protocol ?? null,
-        transportScore: supervisorState?.transportScore ?? null,
-        bufferedAmountBytes: peerBufferedAmountBytes.get(remotePeerId) ?? null
-      };
-    }
+    requestPieces: ({
+      peerId: remotePeerId,
+      trackId,
+      chunkIndexes,
+      totalChunks,
+      timeoutMs,
+      priority
+    }) =>
+      mesh.requestPieces(remotePeerId, trackId, chunkIndexes, totalChunks, timeoutMs, {
+        priority: priority === "background" ? "bulk" : "critical"
+      }),
+    resolvePeerRequestWindow: (remotePeerId) => resolvePeerLinkWindow(remotePeerId)
   });
 
   const resyncRealtimePeers = (

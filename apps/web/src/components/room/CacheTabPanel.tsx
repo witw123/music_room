@@ -64,6 +64,19 @@ function formatPeerSummary(task: ManualCacheTask) {
     .join(" / ");
 }
 
+function formatCacheLinkWarning(task: ManualCacheTask) {
+  const constrainedPeer = (task.peerSummaries ?? []).find(
+    (summary) => summary.candidateType === "relay" || summary.protocol === "tcp"
+  );
+  if (!constrainedPeer) {
+    return null;
+  }
+
+  return `当前来源 ${constrainedPeer.peerId} 使用 ${
+    constrainedPeer.candidateType === "relay" ? "TURN relay" : "直连"
+  }${constrainedPeer.protocol ? `/${constrainedPeer.protocol}` : ""}，外网缓存速度可能受限。`;
+}
+
 function CacheTabPanelBase({
   tracks,
   availabilitySummary,
@@ -206,6 +219,11 @@ function CacheTabPanelBase({
                         {formatCacheAhead(task.activeAheadMs)}  活跃来源：
                         {task.activePeerCount ?? task.connectedProviderPeerIds.length}  来源：
                         {formatPeerSummary(task)}
+                      </p>
+                    ) : null}
+                    {task && formatCacheLinkWarning(task) ? (
+                      <p className="text-[10px] text-amber-300">
+                        {formatCacheLinkWarning(task)}
                       </p>
                     ) : null}
                     <div className="h-1 overflow-hidden rounded-full bg-white/6">

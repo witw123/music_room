@@ -2,7 +2,11 @@
 
 import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import type { TrackPieceManifestRecord } from "@/lib/indexeddb";
-import { resolveTrackPieceManifest, type ResolvedTrackPieceManifest } from "@/features/p2p";
+import {
+  resolvePeerLinkProfile,
+  resolveTrackPieceManifest,
+  type ResolvedTrackPieceManifest
+} from "@/features/p2p";
 import type { PieceRequestOptions } from "@/features/p2p/piece-request-client";
 import {
   getStartupWindowMs,
@@ -126,42 +130,16 @@ function finitePositiveNumber(value: number | null | undefined) {
 function resolveManualCacheLinkProfile(
   window: ManualCachePeerRequestWindow
 ): ManualCacheLinkProfile {
-  const bufferedAmountBytes = finitePositiveNumber(window.bufferedAmountBytes) ?? 0;
-  const roundTripTimeMs = finitePositiveNumber(window.currentRoundTripTimeMs);
-  const downloadRateKbps = finitePositiveNumber(window.downloadRateKbps);
-  const constrainedTransport =
-    window.protocol === "tcp" || window.candidateType === "relay";
-
-  if (
-    window.transportScore === "failed" ||
-    window.transportScore === "unstable" ||
-    bufferedAmountBytes >= 1024 * 1024 ||
-    (roundTripTimeMs !== null && roundTripTimeMs >= 400) ||
-    (downloadRateKbps !== null && downloadRateKbps < 800)
-  ) {
-    return "severe";
-  }
-
-  if (
-    window.transportScore === "degraded" ||
-    constrainedTransport ||
-    bufferedAmountBytes >= 512 * 1024 ||
-    (roundTripTimeMs !== null && roundTripTimeMs >= 250) ||
-    (downloadRateKbps !== null && downloadRateKbps < 1_500)
-  ) {
-    return "constrained";
-  }
-
-  if (
-    window.transportScore === "healthy" &&
-    bufferedAmountBytes < 128 * 1024 &&
-    (roundTripTimeMs === null || roundTripTimeMs <= 120) &&
-    downloadRateKbps !== null &&
-    downloadRateKbps >= 4_000
-  ) {
+  const profile = resolvePeerLinkProfile(window);
+  if (profile === "fast-direct") {
     return "fast";
   }
-
+  if (profile === "severe") {
+    return "severe";
+  }
+  if (profile === "constrained" || profile === "relay-udp") {
+    return "constrained";
+  }
   return "standard";
 }
 
@@ -406,7 +384,9 @@ function buildManualCachePlanRuntimeMetrics(input: {
         finitePositiveNumber(window?.currentRoundTripTimeMs) ?? existing?.roundTripTimeMs ?? null,
       bufferedAmountBytes:
         finitePositiveNumber(window?.bufferedAmountBytes) ?? existing?.bufferedAmountBytes ?? null,
-      transportScore: window?.transportScore ?? existing?.transportScore ?? null
+      transportScore: window?.transportScore ?? existing?.transportScore ?? null,
+      candidateType: window?.candidateType ?? existing?.candidateType ?? null,
+      protocol: window?.protocol ?? existing?.protocol ?? null
     });
   }
 
@@ -611,6 +591,30 @@ function resolveAggregateRequestBatchSize(input: {
   return Math.max(1, aggregateBatchSize || directRequestBatchSize);
 }
 
+function resolveBackgroundRequestChunkLimit(input: {
+  requestPriority: ManualCacheRequestPriority;
+  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activeAheadMs: number | null;
+}) {
+  if (input.requestPriority !== "background" || !input.activePlaybackWindow?.trackId) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  if (input.activeAheadMs === null) {
+    return 0;
+  }
+
+  if (input.activeAheadMs < 45_000) {
+    return 0;
+  }
+
+  if (input.activeAheadMs < 90_000) {
+    return 8;
+  }
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
 function resolveManualCacheTrackRequestOrder(input: {
   trackIds: string[];
   activeTrackId: string | null;
@@ -751,6 +755,7 @@ export async function planManualCacheDirectRequests(input: {
     trackIds: input.manualCacheTrackIds,
     activeTrackId: input.activePlaybackWindow?.trackId ?? null
   });
+  let activeTrackAheadMs: number | null = null;
   for (const trackId of orderedTrackIds) {
     const track = input.roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? null;
     if (!track) {
@@ -840,6 +845,11 @@ export async function planManualCacheDirectRequests(input: {
       releasedActivePrioritySlots ||
       pendingForTrack.size === 0 ||
       pendingForTrack.size <= pendingRefillLowWatermark;
+    const backgroundRequestChunkLimit = resolveBackgroundRequestChunkLimit({
+      requestPriority,
+      activePlaybackWindow: input.activePlaybackWindow ?? null,
+      activeAheadMs: activeTrackAheadMs
+    });
     const plan = resolveManualCacheTrackPlan({
       track,
       roomId,
@@ -855,7 +865,8 @@ export async function planManualCacheDirectRequests(input: {
         ? Math.min(
             aggregateRequestBatchSize,
             remainingTrackSlots,
-            requestBudget.maxPendingPerTrack
+            requestBudget.maxPendingPerTrack,
+            backgroundRequestChunkLimit
           )
         : 0
     });
@@ -886,6 +897,9 @@ export async function planManualCacheDirectRequests(input: {
       activePlaybackWindow: input.activePlaybackWindow ?? null,
       resolvePeerRequestWindow: input.resolvePeerRequestWindow
     });
+    if (requestPriority === "active") {
+      activeTrackAheadMs = runtimeMetrics.activeAheadMs ?? null;
+    }
     if (requestableChunks.length === 0) {
       results.push({
         plan: {
@@ -921,15 +935,18 @@ export async function planManualCacheDirectRequests(input: {
             trackId,
             group.chunkIndexes,
             selectedManifest.totalChunks,
-            group.timeoutMs,
-            { allowRedundant: true, maxReplicas: 2 }
+          group.timeoutMs,
+            { allowRedundant: true, maxReplicas: 2, priority: "critical" }
           )
         : input.requestPieces(
             group.providerPeerId,
             trackId,
             group.chunkIndexes,
             selectedManifest.totalChunks,
-            group.timeoutMs
+            group.timeoutMs,
+            {
+              priority: group.priority === "background" ? "bulk" : "critical"
+            }
           );
       if (didRequestGroup) {
         didRequestAny = true;

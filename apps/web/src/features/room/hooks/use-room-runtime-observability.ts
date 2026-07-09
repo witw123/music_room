@@ -128,7 +128,24 @@ export function useRoomRuntimeObservability(input: {
         ...snapshot,
         dataConnectionState: value.sample?.connectionState ?? snapshot.dataConnectionState,
         dataIceState: value.sample?.iceConnectionState ?? snapshot.dataIceState,
-        dataChannelState: value.sample?.dataChannelState ?? snapshot.dataChannelState
+        dataChannelState: value.sample?.dataChannelState ?? snapshot.dataChannelState,
+        dataCandidateType: value.sample?.candidateType ?? snapshot.dataCandidateType,
+        dataRemoteCandidateType:
+          value.sample?.remoteCandidateType ?? snapshot.dataRemoteCandidateType ?? null,
+        dataProtocol: value.sample?.protocol ?? snapshot.dataProtocol ?? null,
+        dataRelayProtocol: value.sample?.relayProtocol ?? snapshot.dataRelayProtocol ?? null,
+        currentRoundTripTimeMs:
+          value.sample?.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
+        availableOutgoingBitrateKbps:
+          value.sample?.availableOutgoingBitrateKbps ??
+          snapshot.availableOutgoingBitrateKbps,
+        packetsLost: value.sample?.packetsLost ?? snapshot.packetsLost,
+        jitterMs: value.sample?.jitterMs ?? snapshot.jitterMs,
+        packetLossRate: value.sample?.packetLossRate ?? snapshot.packetLossRate,
+        mediaReceiveBitrateKbps:
+          value.sample?.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
+        mediaSendBitrateKbps:
+          value.sample?.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps
       })
     });
   });

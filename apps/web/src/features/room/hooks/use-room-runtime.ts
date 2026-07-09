@@ -643,6 +643,7 @@ export function useRoomRuntime({
   const {
     connectionSupervisorStatesRef,
     updateConnectionSupervisorSignalState,
+    updateConnectionSupervisorTransportStats,
     updateConnectionSupervisorPlayout
   } = useRoomConnectionSupervisor({ lastSubscribeAckAtRef });
   const {
@@ -673,6 +674,8 @@ export function useRoomRuntime({
     ): ManualCachePeerRequestWindow => {
       const supervisorState =
         connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
+      const latestTransportSample =
+        supervisorState?.samples[supervisorState.samples.length - 1] ?? null;
       const pieceTransferRates = getPieceTransferRates(
         pieceTransferRatesRef.current,
         remotePeerId
@@ -681,8 +684,10 @@ export function useRoomRuntime({
         currentRoundTripTimeMs: getPeerMedianRttMs(supervisorState),
         downloadRateKbps: pieceTransferRates.downloadRateKbps,
         uploadRateKbps: pieceTransferRates.uploadRateKbps,
-        candidateType: supervisorState?.lastObservedTransportKind ?? null,
-        protocol: supervisorState?.samples[supervisorState.samples.length - 1]?.protocol ?? null,
+        candidateType:
+          latestTransportSample?.candidateType ?? supervisorState?.lastObservedTransportKind ?? null,
+        protocol:
+          latestTransportSample?.relayProtocol ?? latestTransportSample?.protocol ?? null,
         transportScore: supervisorState?.transportScore ?? null,
         bufferedAmountBytes: peerBufferedAmountBytesRef.current.get(remotePeerId) ?? null
       };
@@ -1064,6 +1069,7 @@ export function useRoomRuntime({
       updateDataTransportStatsRef,
       connectionSupervisorStatesRef,
       updateConnectionSupervisorSignalState,
+      updateConnectionSupervisorTransportStats,
       withResolvedTransportHealth,
       withSupervisorDiagnosticPatch,
       getPieceTransferRates,
@@ -1147,6 +1153,7 @@ export function useRoomRuntime({
     setRoomRecoveryState,
     setStatusMessage,
     updateConnectionSupervisorSignalState,
+    updateConnectionSupervisorTransportStats,
     updateDataTransportStatsRef,
     updatePeerBufferedAmountRef,
     uploadedTrackIdsRef,

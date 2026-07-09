@@ -115,6 +115,10 @@ export type RoomDataMeshDiagnosticsRefs = {
   updateConnectionSupervisorSignalState: (
     input: ConnectionSupervisorSignalStateInput
   ) => PeerConnectionSupervisorState | null;
+  updateConnectionSupervisorTransportStats: (input: {
+    peerId: string;
+    sample: PeerConnectionStatsSample;
+  }) => PeerConnectionSupervisorState | null;
   withResolvedTransportHealth: (
     snapshot: PeerDiagnosticsSnapshot
   ) => PeerDiagnosticsSnapshot;

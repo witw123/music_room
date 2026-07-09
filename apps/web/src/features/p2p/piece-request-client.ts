@@ -30,6 +30,7 @@ type PieceRequestClientCallbacks = {
 export type PieceRequestOptions = {
   allowRedundant?: boolean;
   maxReplicas?: number;
+  priority?: "critical" | "bulk";
 };
 
 export class PieceRequestClient<TEntry extends PieceRequestPeerEntry = PieceRequestPeerEntry> {
@@ -117,16 +118,19 @@ export class PieceRequestClient<TEntry extends PieceRequestPeerEntry = PieceRequ
         ? {
             kind: "request-piece",
             trackId,
-            chunkIndex: normalizedChunkIndexes[0]!
+            chunkIndex: normalizedChunkIndexes[0]!,
+            ...(options.priority ? { priority: options.priority } : {})
           }
         : {
             kind: "request-pieces",
             requestId: requestId!,
             trackId,
-            chunkIndexes: normalizedChunkIndexes
+            chunkIndexes: normalizedChunkIndexes,
+            ...(options.priority ? { priority: options.priority } : {})
           };
     this.enqueueSendItem(peerId, entry, {
-      data: JSON.stringify(payload)
+      data: JSON.stringify(payload),
+      priority: "control"
     });
     this.callbacks.onPieceRequestSent?.({
       peerId,

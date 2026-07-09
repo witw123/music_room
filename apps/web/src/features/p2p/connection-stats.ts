@@ -2,9 +2,15 @@ type StatsRecord = RTCStats & Record<string, unknown>;
 
 export type PeerConnectionStatsSample = {
   candidateType: string | null;
+  localCandidateType?: string | null;
+  remoteCandidateType?: string | null;
   protocol: string | null;
+  relayProtocol?: string | null;
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
+  connectionState?: string | null;
+  iceConnectionState?: string | null;
+  dataChannelState?: string | null;
   targetAudioBitrateKbps?: number | null;
   configuredAudioMaxBitrateKbps?: number | null;
   senderAudioMaxBitrateKbps?: number | null;
@@ -45,6 +51,10 @@ export async function samplePeerConnectionStats(
     const remoteCandidate = selectedCandidatePair
       ? getLinkedStat(statsById, selectedCandidatePair, "remoteCandidateId")
       : null;
+    const selectedPath = resolveSelectedCandidatePath({
+      localCandidate,
+      remoteCandidate
+    });
     const inboundAudio = findFirstStat(
       statsById,
       (stat) => stat.type === "inbound-rtp" && getString(stat, "kind") === "audio"
@@ -72,21 +82,20 @@ export async function samplePeerConnectionStats(
 
     return {
       sample: {
-        candidateType:
-          getString(localCandidate, "candidateType") ??
-          getString(remoteCandidate, "candidateType") ??
-          null,
-        protocol:
-          getString(localCandidate, "relayProtocol") ??
-          getString(localCandidate, "protocol") ??
-          getString(remoteCandidate, "protocol") ??
-          null,
+        candidateType: selectedPath.candidateType,
+        localCandidateType: selectedPath.localCandidateType,
+        remoteCandidateType: selectedPath.remoteCandidateType,
+        protocol: selectedPath.protocol,
+        relayProtocol: selectedPath.relayProtocol,
         currentRoundTripTimeMs:
           toMilliseconds(getNumber(remoteInboundAudio, "roundTripTime")) ??
           toMilliseconds(getNumber(selectedCandidatePair, "currentRoundTripTime")),
         availableOutgoingBitrateKbps: toKbps(
           getNumber(selectedCandidatePair, "availableOutgoingBitrate")
         ),
+        connectionState: getConnectionState(connection),
+        iceConnectionState: getIceConnectionState(connection),
+        dataChannelState: null,
         mediaReceiveBitrateKbps: toBitrateKbps({
           currentBytes: inboundAudioBytes,
           currentTimestampMs: inboundAudioTimestampMs,
@@ -115,6 +124,42 @@ export async function samplePeerConnectionStats(
   } catch {
     return null;
   }
+}
+
+function resolveSelectedCandidatePath(input: {
+  localCandidate: StatsRecord | null;
+  remoteCandidate: StatsRecord | null;
+}) {
+  const localCandidateType = getString(input.localCandidate, "candidateType");
+  const remoteCandidateType = getString(input.remoteCandidate, "candidateType");
+  const localRelayProtocol = getString(input.localCandidate, "relayProtocol");
+  const remoteRelayProtocol = getString(input.remoteCandidate, "relayProtocol");
+  const relayProtocol = localRelayProtocol ?? remoteRelayProtocol ?? null;
+  const localProtocol = getString(input.localCandidate, "protocol");
+  const remoteProtocol = getString(input.remoteCandidate, "protocol");
+  const candidateType =
+    localCandidateType === "relay" || remoteCandidateType === "relay"
+      ? "relay"
+      : localCandidateType ?? remoteCandidateType ?? null;
+  const protocol = relayProtocol ?? localProtocol ?? remoteProtocol ?? null;
+
+  return {
+    candidateType,
+    localCandidateType,
+    remoteCandidateType,
+    protocol,
+    relayProtocol
+  };
+}
+
+function getConnectionState(connection: RTCPeerConnection) {
+  const state = connection.connectionState;
+  return typeof state === "string" ? state : null;
+}
+
+function getIceConnectionState(connection: RTCPeerConnection) {
+  const state = connection.iceConnectionState;
+  return typeof state === "string" ? state : null;
 }
 
 function findSelectedCandidatePair(statsById: Map<string, StatsRecord>) {

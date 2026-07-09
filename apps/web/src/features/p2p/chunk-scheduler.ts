@@ -8,6 +8,7 @@ import {
   getTargetSteadyBufferMs,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
+import { resolvePeerLinkProfile } from "./peer-link-profile";
 
 export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
 export type ChunkSchedulerMode = "normal" | "conservative" | "idle";
@@ -52,6 +53,7 @@ type PeerRequestWindow = {
   downloadRateKbps?: number | null;
   candidateType?: string | null;
   protocol?: string | null;
+  relayProtocol?: string | null;
   transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
   bufferedAmountBytes?: number | null;
 };
@@ -807,33 +809,20 @@ export class ChunkScheduler {
       return 2 * 1024 * 1024;
     }
 
-    const constrainedTransport =
-      window.protocol === "tcp" || window.candidateType === "relay";
-    if (window.transportScore === "failed" || window.transportScore === "unstable") {
+    const profile = resolvePeerLinkProfile(window);
+    if (profile === "severe") {
+      return 512 * 1024;
+    }
+    if (profile === "constrained") {
       return 1024 * 1024;
     }
-
-    if ((window.bufferedAmountBytes ?? 0) >= 768 * 1024) {
-      return 1024 * 1024;
-    }
-
-    if (constrainedTransport) {
-      return 1024 * 1024;
-    }
-
-    if (window.transportScore === "degraded") {
+    if (profile === "relay-udp") {
       return 2 * 1024 * 1024;
     }
-
-    if ((window.downloadRateKbps ?? 0) >= 4_000) {
+    if (profile === "fast-direct") {
       return 8 * 1024 * 1024;
     }
-
-    if ((window.downloadRateKbps ?? 0) >= 1_500) {
-      return 4 * 1024 * 1024;
-    }
-
-    return 2 * 1024 * 1024;
+    return 4 * 1024 * 1024;
   }
 
   private resolvePieceTimeoutMs(
@@ -860,13 +849,17 @@ export class ChunkScheduler {
     activeTrackRequests: number;
   }) {
     const window = this.resolvePeerRequestWindow(input.peerId, input.trackId, input.priority);
-    const constrainedTransport =
-      window?.protocol === "tcp" ||
-      window?.candidateType === "relay" ||
-      window?.transportScore === "degraded" ||
-      window?.transportScore === "unstable" ||
-      (window?.bufferedAmountBytes ?? 0) >= 512 * 1024;
-    const maxBatchSize = constrainedTransport ? 2 : 8;
+    const profile = window ? resolvePeerLinkProfile(window) : "standard-direct";
+    const maxBatchSize =
+      profile === "fast-direct"
+        ? 8
+        : profile === "standard-direct"
+          ? 6
+          : profile === "relay-udp"
+            ? 4
+            : profile === "constrained"
+              ? 2
+              : 1;
     const remainingSlots = Math.max(1, input.maxConcurrent - input.activeTrackRequests);
     const resolvedBatchSize = Math.max(1, Math.min(maxBatchSize, remainingSlots));
     const availability = Object.values(this.availabilityByTrack[input.trackId] ?? {}).find(
@@ -1114,16 +1107,28 @@ export function selectChunkPeer(input: {
     resolvePeerMaxInFlightBytes
   } = input;
 
-  const candidates = announcements.filter(
+  const buildCandidates = (allowSevereCurrentPeer: boolean) => announcements.filter(
     (announcement) => {
       const peerId = announcement.ownerPeerId;
       const failure = peerFailureStates?.get(peerId);
       const window = resolvePeerRequestWindow?.(peerId);
+      const profile = window ? resolvePeerLinkProfile(window) : "standard-direct";
       const maxInFlightBytes =
         resolvePeerMaxInFlightBytes?.(peerId) ?? Number.MAX_SAFE_INTEGER;
+      const profileSlotMultiplier =
+        profile === "fast-direct"
+          ? 2
+          : profile === "relay-udp"
+            ? 0.75
+            : profile === "constrained" || profile === "severe"
+              ? 0.5
+              : 1;
       const maxPeerSlots = Math.max(
         1,
-        Math.min(maxConcurrentPerPeer, Math.floor(maxInFlightBytes / Math.max(1, chunkSize)))
+        Math.min(
+          Math.max(1, Math.ceil(maxConcurrentPerPeer * profileSlotMultiplier)),
+          Math.floor(maxInFlightBytes / Math.max(1, chunkSize))
+        )
       );
 
       return (
@@ -1131,13 +1136,21 @@ export function selectChunkPeer(input: {
         connectedPeerIds.has(peerId) &&
         !excludedPeerIds.has(peerId) &&
         (failure?.cooledDownUntil ?? 0) <= now &&
-        !(priority === "current" && (window?.transportScore === "failed" || window?.transportScore === "unstable")) &&
+        !(
+          priority === "current" &&
+          !allowSevereCurrentPeer &&
+          profile === "severe"
+        ) &&
         (window?.bufferedAmountBytes ?? 0) < maxInFlightBytes &&
         (peerLoads.get(peerId) ?? 0) < maxPeerSlots &&
         (peerInFlightBytes.get(peerId) ?? 0) < maxInFlightBytes
       );
     }
   );
+  let candidates = buildCandidates(false);
+  if (candidates.length === 0 && priority === "current") {
+    candidates = buildCandidates(true);
+  }
 
   if (candidates.length === 0) {
     return null;
@@ -1214,16 +1227,16 @@ function scoreChunkPeer(input: {
   failure?: { timeoutStreak: number; lastFailedAt: number; cooledDownUntil: number };
   window?: PeerRequestWindow | null;
 }) {
+  const profile = input.window ? resolvePeerLinkProfile(input.window) : "standard-direct";
   const transportPenalty =
-    input.window?.transportScore === "failed"
+    profile === "severe"
       ? 10_000
-      : input.window?.transportScore === "unstable"
-        ? 5_000
-        : input.window?.transportScore === "degraded"
-          ? 500
+      : profile === "constrained"
+        ? 1_200
+        : profile === "relay-udp"
+          ? 350
           : 0;
-  const relayPenalty =
-    input.window?.candidateType === "relay" || input.window?.protocol === "tcp" ? 150 : 0;
+  const speedProfileBonus = profile === "fast-direct" ? 700 : 0;
   const failurePenalty = (input.failure?.timeoutStreak ?? 0) * 1_000;
   const rttPenalty = Math.min(500, Math.max(0, input.window?.currentRoundTripTimeMs ?? 0));
   const speedBonus = Math.min(300, Math.max(0, (input.window?.downloadRateKbps ?? 0) / 20));
@@ -1232,13 +1245,13 @@ function scoreChunkPeer(input: {
 
   return (
     transportPenalty +
-    relayPenalty +
     failurePenalty +
     rttPenalty +
     (input.peerLoads.get(input.peerId) ?? 0) * 100 +
     Math.round((input.peerInFlightBytes.get(input.peerId) ?? 0) / (128 * 1024)) * 10 -
     input.availableChunks -
     speedBonus -
+    speedProfileBonus -
     preferredBonus -
     freshnessBonus
   );

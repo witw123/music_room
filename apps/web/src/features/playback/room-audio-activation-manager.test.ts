@@ -105,6 +105,28 @@ describe("RoomAudioActivationManager", () => {
     expect(manager.isActivated()).toBe(true);
   });
 
+  it("plays again when a not-paused element has switched to a new media source", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      value: false
+    });
+    audio.src = "blob:next-track";
+    Object.defineProperty(audio, "currentSrc", {
+      configurable: true,
+      value: "blob:next-track"
+    });
+
+    await expect(manager.playElement(audio)).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(manager.isActivated()).toBe(true);
+  });
+
   it("returns a structured failure when playback is rejected", async () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();

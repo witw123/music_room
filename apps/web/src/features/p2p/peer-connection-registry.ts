@@ -199,7 +199,12 @@ export function startPeerStatsSampling(input: {
     input.entry.statsSnapshot = nextStats.snapshot;
     input.onStatsSample?.({
       peerId: input.peerId,
-      sample: nextStats.sample
+      sample: {
+        ...nextStats.sample,
+        connectionState: input.entry.connection.connectionState ?? nextStats.sample.connectionState ?? null,
+        iceConnectionState: input.entry.connection.iceConnectionState ?? nextStats.sample.iceConnectionState ?? null,
+        dataChannelState: input.entry.channel?.readyState ?? null
+      }
     });
   };
 

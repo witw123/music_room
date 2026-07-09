@@ -116,9 +116,11 @@ function formatEventLabel(event: PeerRecentEvent) {
 
 function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
   if (peer.dataCandidateType) {
+    const protocol = peer.dataRelayProtocol ?? peer.dataProtocol;
+    const protocolLabel = protocol ? `/${protocol}` : "";
     return peer.dataCandidateType === "relay"
-      ? "数据通道经过 relay"
-      : `数据通道 direct (${peer.dataCandidateType})`;
+      ? `数据通道经过 relay${protocolLabel}`
+      : `数据通道 direct (${peer.dataCandidateType}${protocolLabel})`;
   }
 
   if (peer.dataConnectionState || peer.dataChannelState) {
@@ -209,11 +211,18 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
             <span>DataChannel: {peer.dataChannelState ?? "未知"}</span>
             <span>恢复级别: {peer.recoveryActionLevel ?? "observe"}</span>
             <span>数据候选: {formatCandidateType(peer.dataCandidateType)}</span>
+            <span>远端候选: {formatCandidateType(peer.dataRemoteCandidateType)}</span>
+            <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "未知"}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
             <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
             <span>最近分片: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
             <span>更新: {formatTimestamp(peer.updatedAt)}</span>
           </DiagnosticGrid>
+          {peer.dataCandidateType === "relay" || peer.dataProtocol === "tcp" || peer.dataRelayProtocol === "tcp" ? (
+            <p className="mt-2 text-[10px] text-amber-300">
+              当前外网中继{peer.dataRelayProtocol === "tcp" || peer.dataProtocol === "tcp" ? "/TCP" : ""}链路，缓存速度可能受 TURN 带宽和网络延迟限制。
+            </p>
+          ) : null}
           {peer.degradedReason ? (
             <p className="mt-2 text-[10px] text-amber-300">降级原因: {peer.degradedReason}</p>
           ) : null}

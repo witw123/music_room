@@ -254,6 +254,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     updateDataTransportStatsRef: input.updateDataTransportStatsRef,
     connectionSupervisorStatesRef: input.connectionSupervisorStatesRef,
     updateConnectionSupervisorSignalState: input.updateConnectionSupervisorSignalState,
+    updateConnectionSupervisorTransportStats: input.updateConnectionSupervisorTransportStats,
     withResolvedTransportHealth: input.withResolvedTransportHealth,
     withSupervisorDiagnosticPatch: input.withSupervisorDiagnosticPatch,
     getPieceTransferRates: input.getPieceTransferRates,

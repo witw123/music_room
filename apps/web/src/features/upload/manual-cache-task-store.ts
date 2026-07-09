@@ -19,6 +19,8 @@ export type ManualCacheTaskPeerSummary = {
   roundTripTimeMs?: number | null;
   bufferedAmountBytes?: number | null;
   transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
+  candidateType?: string | null;
+  protocol?: string | null;
 };
 
 export type ManualCacheTask = {

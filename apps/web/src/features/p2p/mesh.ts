@@ -11,6 +11,7 @@ import {
 } from "./signaling-transport";
 import {
   DataChannelManager,
+  type DataChannelSendBudget,
   type DataChannelQueuedSendItem
 } from "./data-channel-manager";
 import { PieceRequestClient, type PieceRequestOptions } from "./piece-request-client";
@@ -138,6 +139,7 @@ type MeshOptions = {
       }
     | null
     | undefined;
+  resolvePeerSendBudget?: (peerId: string) => DataChannelSendBudget | null | undefined;
 };
 
 export class P2PMesh {
@@ -181,7 +183,8 @@ export class P2PMesh {
       onDataChannelStateChange: this.callbacks.onDataChannelStateChange,
       onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
       onPeerConnectionChange: this.callbacks.onPeerConnectionChange,
-      onPeerStalled: this.callbacks.onPeerStalled
+      onPeerStalled: this.callbacks.onPeerStalled,
+      resolvePeerSendBudget: options.resolvePeerSendBudget
     });
     this.peerLifecycle = new PeerConnectionLifecycleManager({
       localPeerId: this.localPeerId,
@@ -200,6 +203,9 @@ export class P2PMesh {
     this.pieceServe = new PieceServeProcessor<PeerEntry>({
       localPeerId: this.localPeerId,
       maxDataChannelPayloadBytes: this.maxDataChannelPayloadBytes,
+      resolveMaxDataChannelPayloadBytes: (peerId) =>
+        options.resolvePeerSendBudget?.(peerId)?.maxPayloadBytes ??
+        this.maxDataChannelPayloadBytes,
       resolvePieceRequestFallback: options.resolvePieceRequestFallback,
       resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
       enqueueSendItem: (peerId, entry, item) => this.enqueueSendItem(peerId, entry, item),

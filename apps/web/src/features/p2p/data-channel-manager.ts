@@ -1,8 +1,15 @@
 export type DataChannelQueuedSendItem = {
   data: string | ArrayBuffer;
+  priority?: "control" | "critical" | "bulk";
   trackId?: string;
   chunkIndex?: number;
   payloadBytes?: number;
+};
+
+export type DataChannelSendBudget = {
+  highWatermarkBytes: number;
+  bulkHighWatermarkBytes: number;
+  maxPayloadBytes: number;
 };
 
 type DataChannelLifecycleEntry = {
@@ -37,6 +44,7 @@ type DataChannelManagerCallbacks = {
     chunkIndex: number;
     payloadBytes: number;
   }) => void;
+  resolvePeerSendBudget?: (peerId: string) => DataChannelSendBudget | null | undefined;
 };
 
 export class DataChannelManager {
@@ -44,6 +52,7 @@ export class DataChannelManager {
   private readonly sendQueueLowWatermarkBytes: number;
   private readonly sendQueueHighWatermarkBytes: number;
   private readonly callbacks: DataChannelManagerCallbacks;
+  private readonly resolvePeerSendBudget?: DataChannelManagerCallbacks["resolvePeerSendBudget"];
 
   constructor(input: {
     autoReconnect: boolean;
@@ -54,6 +63,7 @@ export class DataChannelManager {
     this.sendQueueLowWatermarkBytes = input.sendQueueLowWatermarkBytes;
     this.sendQueueHighWatermarkBytes = input.sendQueueHighWatermarkBytes ?? 1024 * 1024;
     this.callbacks = input;
+    this.resolvePeerSendBudget = input.resolvePeerSendBudget;
   }
 
   bind(input: {
@@ -170,14 +180,21 @@ export class DataChannelManager {
       return;
     }
 
-    while (
-      shouldSendQueuedDataChannelItem({
-        queueLength: input.entry.sendQueue.length,
+    while (input.entry.sendQueue.length > 0) {
+      const budget = this.resolveSendBudget(input.peerId);
+      const nextItemIndex = resolveNextSendQueueItemIndex({
+        queue: input.entry.sendQueue,
         bufferedAmountBytes: channel.bufferedAmount,
-        highWatermarkBytes: this.sendQueueHighWatermarkBytes
-      })
-    ) {
-      const nextItem = input.entry.sendQueue.shift()!;
+        highWatermarkBytes: budget.highWatermarkBytes,
+        bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes
+      });
+      if (nextItemIndex < 0) {
+        break;
+      }
+      const [nextItem] = input.entry.sendQueue.splice(nextItemIndex, 1);
+      if (!nextItem) {
+        break;
+      }
       try {
         if (typeof nextItem.data === "string") {
           channel.send(nextItem.data);
@@ -185,7 +202,7 @@ export class DataChannelManager {
           channel.send(nextItem.data);
         }
       } catch {
-        input.entry.sendQueue.unshift(nextItem);
+        input.entry.sendQueue.splice(nextItemIndex, 0, nextItem);
         this.callbacks.onPeerStalled?.({
           peerId: input.peerId,
           reason: "data-channel-closed"
@@ -214,6 +231,18 @@ export class DataChannelManager {
       bufferedAmountBytes: channel.bufferedAmount
     });
   }
+
+  private resolveSendBudget(peerId: string): DataChannelSendBudget {
+    const resolved = this.resolvePeerSendBudget?.(peerId);
+    const highWatermarkBytes =
+      resolved?.highWatermarkBytes ?? this.sendQueueHighWatermarkBytes;
+    return {
+      highWatermarkBytes,
+      bulkHighWatermarkBytes:
+        resolved?.bulkHighWatermarkBytes ?? highWatermarkBytes,
+      maxPayloadBytes: resolved?.maxPayloadBytes ?? Number.MAX_SAFE_INTEGER
+    };
+  }
 }
 
 export function shouldFlushDataChannelQueue(input: {
@@ -228,8 +257,55 @@ export function shouldSendQueuedDataChannelItem(input: {
   queueLength: number;
   bufferedAmountBytes: number;
   highWatermarkBytes: number;
+  bulkHighWatermarkBytes?: number;
+  priority?: DataChannelQueuedSendItem["priority"];
 }) {
-  return input.queueLength > 0 && input.bufferedAmountBytes < input.highWatermarkBytes;
+  if (input.queueLength <= 0) {
+    return false;
+  }
+
+  const priority = input.priority ?? "control";
+  const watermark =
+    priority === "bulk"
+      ? input.bulkHighWatermarkBytes ?? input.highWatermarkBytes
+      : input.highWatermarkBytes;
+  return input.bufferedAmountBytes < watermark;
+}
+
+export function resolveNextSendQueueItemIndex(input: {
+  queue: DataChannelQueuedSendItem[];
+  bufferedAmountBytes: number;
+  highWatermarkBytes: number;
+  bulkHighWatermarkBytes: number;
+}) {
+  const priorities: Array<NonNullable<DataChannelQueuedSendItem["priority"]>> = [
+    "control",
+    "critical",
+    "bulk"
+  ];
+
+  for (const priority of priorities) {
+    if (
+      !shouldSendQueuedDataChannelItem({
+        queueLength: input.queue.length,
+        bufferedAmountBytes: input.bufferedAmountBytes,
+        highWatermarkBytes: input.highWatermarkBytes,
+        bulkHighWatermarkBytes: input.bulkHighWatermarkBytes,
+        priority
+      })
+    ) {
+      continue;
+    }
+
+    const index = input.queue.findIndex(
+      (item) => (item.priority ?? "control") === priority
+    );
+    if (index >= 0) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 export function resolveDataChannelClosedAction(input: {

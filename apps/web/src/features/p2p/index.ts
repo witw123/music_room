@@ -128,6 +128,7 @@ export * from "./chunk-scheduler";
 export * from "./diagnostics";
 export * from "./transport-health";
 export * from "./connection-supervisor";
+export * from "./peer-link-profile";
 export * from "./availability-state";
 export * from "./use-peer-diagnostics";
 export * from "./use-availability-announcements";

@@ -62,13 +62,15 @@ export const p2pDataMessageSchema = z.union([
   z.object({
     kind: z.literal("request-piece"),
     trackId: z.string(),
-    chunkIndex: z.number().int().nonnegative()
+    chunkIndex: z.number().int().nonnegative(),
+    priority: z.enum(["critical", "bulk"]).optional()
   }),
   z.object({
     kind: z.literal("request-pieces"),
     requestId: z.string(),
     trackId: z.string(),
-    chunkIndexes: z.array(z.number().int().nonnegative()).min(1)
+    chunkIndexes: z.array(z.number().int().nonnegative()).min(1),
+    priority: z.enum(["critical", "bulk"]).optional()
   }),
   z.object({
     kind: z.literal("send-piece"),
@@ -373,6 +375,9 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   lastPieceReceivedAt: z.string().datetime().nullable().optional(),
   iceConfigSource: iceConfigSourceSchema.nullable().optional(),
   dataCandidateType: z.string().nullable(),
+  dataRemoteCandidateType: z.string().nullable().optional(),
+  dataProtocol: z.string().nullable().optional(),
+  dataRelayProtocol: z.string().nullable().optional(),
   mediaCandidateType: z.string().nullable(),
   mediaProtocol: z.string().nullable(),
   currentRoundTripTimeMs: z.number().nonnegative().nullable(),

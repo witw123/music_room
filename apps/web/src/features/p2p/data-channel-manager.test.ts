@@ -326,4 +326,41 @@ describe("data channel manager policy", () => {
     expect(channel.sentMessages).toEqual(["request"]);
     expect(entry.sendQueue).toEqual([]);
   });
+
+  it("sends control and critical items before bulk and keeps bulk blocked by its own watermark", () => {
+    const manager = new DataChannelManager({
+      autoReconnect: true,
+      sendQueueLowWatermarkBytes: 128 * 1024,
+      sendQueueHighWatermarkBytes: 1024 * 1024,
+      resolvePeerSendBudget: () => ({
+        highWatermarkBytes: 1024 * 1024,
+        bulkHighWatermarkBytes: 256 * 1024,
+        maxPayloadBytes: 64 * 1024
+      })
+    });
+    const channel = new FakeDataChannel();
+    channel.readyState = "open";
+    channel.bufferedAmount = 512 * 1024;
+    const entry = {
+      channel: channel as unknown as RTCDataChannel,
+      dataChannelState: "open" as RTCDataChannelState,
+      lastSignalProgressAtMs: 0,
+      reconnectAttempts: 0,
+      sendQueue: [
+        { data: "bulk-1", priority: "bulk" as const },
+        { data: "critical-1", priority: "critical" as const },
+        { data: "control-1", priority: "control" as const }
+      ],
+      releasing: false
+    };
+
+    manager.flushSendQueue({
+      peerId: "peer_relay",
+      entry,
+      schedulePeerReconnect: vi.fn()
+    });
+
+    expect(channel.sentMessages).toEqual(["control-1", "critical-1"]);
+    expect(entry.sendQueue).toEqual([{ data: "bulk-1", priority: "bulk" }]);
+  });
 });

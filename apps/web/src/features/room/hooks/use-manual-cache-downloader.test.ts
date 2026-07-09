@@ -755,7 +755,8 @@ describe("planManualCacheDirectRequests", () => {
       "track_a",
       [0, 1, 2, 3],
       4,
-      expect.any(Number)
+      expect.any(Number),
+      { priority: "critical" }
     );
     expect(plans[0]?.plan.blockedReason).toBeNull();
     expect(plans[0]?.didRequest).toBe(true);
@@ -810,7 +811,8 @@ describe("planManualCacheDirectRequests", () => {
       "track_a",
       expect.arrayContaining([5, 6, 7, 8]),
       12,
-      expect.any(Number)
+      expect.any(Number),
+      { priority: "critical" }
     );
     expect(requestPieces.mock.calls[0]?.[2].slice(0, 9)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
@@ -865,7 +867,8 @@ describe("planManualCacheDirectRequests", () => {
       "track_a",
       Array.from({ length: 32 }, (_, index) => index),
       240,
-      expect.any(Number)
+      expect.any(Number),
+      { priority: "critical" }
     );
     expect(plans[0]?.plan.blockedReason).toBeNull();
     expect(plans[0]?.didRequest).toBe(true);
@@ -1136,7 +1139,7 @@ describe("planManualCacheDirectRequests", () => {
       [0, 1],
       8,
       expect.any(Number),
-      { allowRedundant: true, maxReplicas: 2 }
+      { allowRedundant: true, maxReplicas: 2, priority: "critical" }
     ]);
     expect(plans[0]?.plan.requestGroups.at(-1)).toMatchObject({
       providerPeerId: "peer_backup",
@@ -1266,7 +1269,8 @@ describe("planManualCacheDirectRequests", () => {
       "track_a",
       requestedChunks,
       240,
-      expect.any(Number)
+      expect.any(Number),
+      { priority: "critical" }
     );
   });
 
@@ -1328,7 +1332,8 @@ describe("planManualCacheDirectRequests", () => {
       "track_a",
       requestedChunks,
       240,
-      expect.any(Number)
+      expect.any(Number),
+      { priority: "critical" }
     );
   });
 
@@ -1647,7 +1652,8 @@ describe("planManualCacheDirectRequests", () => {
       "track_a",
       [1, 2, 3, 4, 5, 6, 7, 22, 23],
       24,
-      expect.any(Number)
+      expect.any(Number),
+      { priority: "critical" }
     );
   });
 

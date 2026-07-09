@@ -55,7 +55,12 @@ describe("PeerStatsSampler", () => {
       expect(samplePeerConnectionStats).toHaveBeenCalledWith(entry.connection, null);
       expect(onStatsSample).toHaveBeenCalledWith({
         peerId: "peer_b",
-        sample
+        sample: {
+          ...sample,
+          connectionState: null,
+          iceConnectionState: null,
+          dataChannelState: null
+        }
       });
       expect(entry.statsIntervalId).not.toBeNull();
 

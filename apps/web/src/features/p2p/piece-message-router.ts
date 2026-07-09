@@ -19,6 +19,7 @@ type PieceServeRequest = {
   trackId: string;
   chunkIndex: number;
   requestId?: string;
+  priority?: "critical" | "bulk";
 };
 
 type PieceMessageRouterCallbacks = {
@@ -90,7 +91,8 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     if (message.kind === "request-piece") {
       await this.serveSinglePieceRequest(input.peerId, input.entry, {
         trackId: message.trackId,
-        chunkIndex: message.chunkIndex
+        chunkIndex: message.chunkIndex,
+        priority: message.priority
       });
       return;
     }
@@ -100,7 +102,8 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       const requests = chunkIndexes.map((chunkIndex) => ({
         trackId: message.trackId,
         chunkIndex,
-        requestId: message.requestId
+        requestId: message.requestId,
+        priority: message.priority
       }));
       for (const request of requests) {
         this.reportPieceRequest(input.peerId, request);
