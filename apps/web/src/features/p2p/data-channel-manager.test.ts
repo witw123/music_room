@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DataChannelManager,
+  resolveDataChannelBufferedAmountLowThreshold,
   resolveDataChannelClosedAction,
   shouldFlushDataChannelQueue,
   shouldSendQueuedDataChannelItem
@@ -362,5 +363,81 @@ describe("data channel manager policy", () => {
 
     expect(channel.sentMessages).toEqual(["control-1", "critical-1"]);
     expect(entry.sendQueue).toEqual([{ data: "bulk-1", priority: "bulk" }]);
+  });
+
+  it("keeps the low-water event below adaptive watermarks so stalled queues resume", () => {
+    expect(
+      resolveDataChannelBufferedAmountLowThreshold({
+        queue: [{ data: "critical", priority: "critical" }],
+        preferredLowWatermarkBytes: 4 * 1024 * 1024,
+        highWatermarkBytes: 1024 * 1024,
+        bulkHighWatermarkBytes: 256 * 1024
+      })
+    ).toBe(512 * 1024);
+    expect(
+      resolveDataChannelBufferedAmountLowThreshold({
+        queue: [{ data: "bulk", priority: "bulk" }],
+        preferredLowWatermarkBytes: 4 * 1024 * 1024,
+        highWatermarkBytes: 1024 * 1024,
+        bulkHighWatermarkBytes: 256 * 1024
+      })
+    ).toBe(128 * 1024);
+  });
+
+  it("resumes a critical send queue after an adaptive low-water event", () => {
+    const manager = new DataChannelManager({
+      autoReconnect: true,
+      sendQueueLowWatermarkBytes: 4 * 1024 * 1024,
+      sendQueueHighWatermarkBytes: 16 * 1024 * 1024,
+      resolvePeerSendBudget: () => ({
+        highWatermarkBytes: 1024 * 1024,
+        bulkHighWatermarkBytes: 256 * 1024,
+        maxPayloadBytes: 64 * 1024
+      })
+    });
+    const channel = new FakeDataChannel();
+    const entry = {
+      channel: channel as unknown as RTCDataChannel,
+      dataChannelState: "open" as RTCDataChannelState,
+      lastSignalProgressAtMs: 0,
+      reconnectAttempts: 0,
+      sendQueue: [{ data: "critical-frame", priority: "critical" as const }],
+      releasing: false
+    };
+    const schedulePeerReconnect = vi.fn();
+
+    manager.bind({
+      peerId: "peer_relay",
+      entry,
+      channel: channel as unknown as RTCDataChannel,
+      flushSendQueue: () =>
+        manager.flushSendQueue({
+          peerId: "peer_relay",
+          entry,
+          schedulePeerReconnect
+        }),
+      schedulePeerWatchdog: vi.fn(),
+      clearPendingRequestsForPeer: vi.fn(),
+      schedulePeerReconnect,
+      onMessage: vi.fn()
+    });
+
+    channel.readyState = "open";
+    channel.bufferedAmount = 1024 * 1024;
+    manager.flushSendQueue({
+      peerId: "peer_relay",
+      entry,
+      schedulePeerReconnect
+    });
+
+    expect(channel.sentMessages).toEqual([]);
+    expect(entry.sendQueue).toHaveLength(1);
+    expect(channel.bufferedAmountLowThreshold).toBe(512 * 1024);
+
+    channel.bufferedAmount = 511 * 1024;
+    channel.onbufferedamountlow?.();
+
+    expect(channel.sentMessages).toEqual(["critical-frame"]);
+    expect(entry.sendQueue).toEqual([]);
   });
 });

@@ -78,7 +78,7 @@ export class DataChannelManager {
   }) {
     const { channel, entry, peerId } = input;
     channel.binaryType = "arraybuffer";
-    channel.bufferedAmountLowThreshold = this.sendQueueLowWatermarkBytes;
+    this.updateBufferedAmountLowThreshold(peerId, entry, channel);
     entry.dataChannelState = channel.readyState;
     entry.lastSignalProgressAtMs = Date.now();
     this.callbacks.onDataChannelStateChange?.({
@@ -180,6 +180,7 @@ export class DataChannelManager {
       return;
     }
 
+    this.updateBufferedAmountLowThreshold(input.peerId, input.entry, channel);
     while (input.entry.sendQueue.length > 0) {
       const budget = this.resolveSendBudget(input.peerId);
       const nextItemIndex = resolveNextSendQueueItemIndex({
@@ -226,6 +227,7 @@ export class DataChannelManager {
       }
     }
 
+    this.updateBufferedAmountLowThreshold(input.peerId, input.entry, channel);
     this.callbacks.onDataBufferedAmountChange?.({
       peerId: input.peerId,
       bufferedAmountBytes: channel.bufferedAmount
@@ -242,6 +244,20 @@ export class DataChannelManager {
         resolved?.bulkHighWatermarkBytes ?? highWatermarkBytes,
       maxPayloadBytes: resolved?.maxPayloadBytes ?? Number.MAX_SAFE_INTEGER
     };
+  }
+
+  private updateBufferedAmountLowThreshold(
+    peerId: string,
+    entry: DataChannelLifecycleEntry,
+    channel: RTCDataChannel
+  ) {
+    const budget = this.resolveSendBudget(peerId);
+    channel.bufferedAmountLowThreshold = resolveDataChannelBufferedAmountLowThreshold({
+      queue: entry.sendQueue,
+      preferredLowWatermarkBytes: this.sendQueueLowWatermarkBytes,
+      highWatermarkBytes: budget.highWatermarkBytes,
+      bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes
+    });
   }
 }
 
@@ -306,6 +322,33 @@ export function resolveNextSendQueueItemIndex(input: {
   }
 
   return -1;
+}
+
+export function resolveDataChannelBufferedAmountLowThreshold(input: {
+  queue: DataChannelQueuedSendItem[];
+  preferredLowWatermarkBytes: number;
+  highWatermarkBytes: number;
+  bulkHighWatermarkBytes: number;
+}) {
+  if (input.queue.length === 0) {
+    return Math.max(0, Math.floor(input.preferredLowWatermarkBytes));
+  }
+
+  const hasControlOrCritical = input.queue.some(
+    (item) => (item.priority ?? "control") !== "bulk"
+  );
+  const activeWatermark = hasControlOrCritical
+    ? input.highWatermarkBytes
+    : input.bulkHighWatermarkBytes;
+  const adaptiveLowWatermark = Math.floor(Math.max(0, activeWatermark) / 2);
+
+  return Math.max(
+    0,
+    Math.min(
+      Math.floor(input.preferredLowWatermarkBytes),
+      adaptiveLowWatermark
+    )
+  );
 }
 
 export function resolveDataChannelClosedAction(input: {
