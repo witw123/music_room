@@ -59,6 +59,33 @@ const playingPlayback = {
 };
 
 describe("progressive playback helpers", () => {
+  it("prioritizes the whole decodable prefix for FLAC instead of jumping to the sliding playback window", () => {
+    const manifest = {
+      trackId: "track_flac",
+      fileHash: "hash_flac",
+      mimeType: "audio/flac",
+      codec: "flac",
+      sizeBytes: 240 * 128 * 1024,
+      durationMs: 240_000,
+      totalChunks: 240,
+      chunkSize: 128 * 1024
+    };
+
+    const wantedChunks = getPriorityChunkIndexes({
+      manifest,
+      availableChunks: [],
+      playbackPositionMs: 60_000,
+      policy: "startup",
+      lookBehindMs: 0,
+      lookAheadMs: 72_000
+    });
+
+    expect(wantedChunks.slice(0, 40)).toEqual(
+      Array.from({ length: 40 }, (_, index) => index)
+    );
+    expect(wantedChunks.indexOf(60)).toBeGreaterThan(59);
+  });
+
   it("keeps the manifest identity stable when only local cache progress changes", () => {
     const initialKey = getProgressiveTrackManifestKey(track, availability, availability);
     const progressOnlyKey = getProgressiveTrackManifestKey(
@@ -293,7 +320,7 @@ describe("progressive playback helpers", () => {
     ).toEqual([2, 3, 4]);
   });
 
-  it("treats FLAC startup as ready from the header chunk plus the decodable playback window", () => {
+  it("treats FLAC startup as ready only from the continuous decodable prefix", () => {
     const manifest = buildProgressiveTrackManifest(
       {
         ...track,
@@ -326,6 +353,13 @@ describe("progressive playback helpers", () => {
         availableChunks: [0, 3, 4, 5],
         playbackPositionMs: 40_000
       })
+    ).toBe(false);
+    expect(
+      isStartupReady({
+        manifest,
+        availableChunks: [0, 1, 2, 3, 4, 5],
+        playbackPositionMs: 40_000
+      })
     ).toBe(true);
     expect(
       getPriorityChunkIndexes({
@@ -334,7 +368,7 @@ describe("progressive playback helpers", () => {
         playbackPositionMs: 40_000,
         policy: "startup"
       }).slice(0, 4)
-    ).toEqual([0, 3, 4, 5]);
+    ).toEqual([0, 1, 2, 3]);
   });
 
   it("moves from startup to background once the current track is complete", () => {

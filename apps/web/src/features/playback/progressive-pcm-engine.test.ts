@@ -985,7 +985,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("does not keep decoding from cache while already scheduled far enough ahead", async () => {
+  it("keeps decoding from cache while only a short PCM segment is scheduled ahead", async () => {
     vi.useFakeTimers();
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
@@ -1018,7 +1018,7 @@ describe("ProgressivePcmEngine", () => {
 
       await vi.advanceTimersByTimeAsync(160);
 
-      expect(syncSpy).not.toHaveBeenCalled();
+      expect(syncSpy).toHaveBeenCalled();
     } finally {
       engine.destroy();
       audioContext.restore();
@@ -1084,7 +1084,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("plays FLAC from the current cached window without requiring every prefix chunk", async () => {
+  it("waits for the continuous FLAC prefix instead of playing a sparse current cache window", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const windowManifest = {
@@ -1145,13 +1145,13 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 4.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(1);
       expect(engine.getSnapshot()).toMatchObject({
-        decodedPacketCount: 1,
-        decodedSegmentCount: 1,
-        scheduledSegmentCount: 1
+        decodedPacketCount: 0,
+        decodedSegmentCount: 0,
+        scheduledSegmentCount: 0
       });
     } finally {
       engine.destroy();
@@ -1159,7 +1159,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("keeps current-window FLAC playable when decoded AudioData omits timestamps", async () => {
+  it("does not use sparse current-window FLAC decode when AudioData omits timestamps", async () => {
     const audioContext = installFakeAudioContext({ decodedTimestamp: Number.NaN });
     const audio = createAudioElement();
     const windowManifest = {
@@ -1220,12 +1220,12 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 4.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(engine.getSnapshot()).toMatchObject({
-        decodedPacketCount: 1,
-        decodedSegmentCount: 1,
-        scheduledSegmentCount: 1
+        decodedPacketCount: 0,
+        decodedSegmentCount: 0,
+        scheduledSegmentCount: 0
       });
     } finally {
       engine.destroy();
@@ -1233,7 +1233,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("plays a FLAC frame that starts in the previous chunk and crosses into the current chunk", async () => {
+  it("does not play a sparse FLAC frame that crosses the current window without the prefix", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const windowManifest = {
@@ -1299,12 +1299,12 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 4.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(engine.getSnapshot()).toMatchObject({
-        decodedPacketCount: 1,
-        decodedSegmentCount: 1,
-        scheduledSegmentCount: 1
+        decodedPacketCount: 0,
+        decodedSegmentCount: 0,
+        scheduledSegmentCount: 0
       });
     } finally {
       engine.destroy();
@@ -1312,7 +1312,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("recreates the FLAC decoder to play the current cached window when a prefix gap blocks linear catch-up", async () => {
+  it("does not recreate the FLAC decoder for a sparse current window when a prefix gap blocks linear catch-up", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const windowManifest = {
@@ -1377,13 +1377,13 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 4.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(engine.getSnapshot()).toMatchObject({
-        status: "ready",
-        decodedPacketCount: 1,
-        decodedSegmentCount: 1,
-        scheduledSegmentCount: 1
+        status: "degraded",
+        decodedPacketCount: 0,
+        decodedSegmentCount: 0,
+        scheduledSegmentCount: 0
       });
     } finally {
       engine.destroy();
@@ -1391,7 +1391,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("continues FLAC window decoding past duplicate packets in an earlier sparse run", async () => {
+  it("does not continue sparse FLAC window decoding past duplicate packets", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const windowManifest = {
@@ -1453,12 +1453,12 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 7.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(engine.getSnapshot()).toMatchObject({
-        decodedPacketCount: 2,
-        decodedSegmentCount: 2,
-        scheduledSegmentCount: 2
+        decodedPacketCount: 0,
+        decodedSegmentCount: 0,
+        scheduledSegmentCount: 0
       });
     } finally {
       engine.destroy();
@@ -1466,7 +1466,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("re-decodes a FLAC window packet when a prior duplicate marker has no PCM segment", async () => {
+  it("does not re-decode a sparse FLAC window packet when a prior duplicate marker has no PCM segment", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const windowManifest = {
@@ -1524,12 +1524,12 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 7.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(engine.getSnapshot()).toMatchObject({
-        decodedPacketCount: 2,
-        decodedSegmentCount: 2,
-        scheduledSegmentCount: 2
+        decodedPacketCount: 0,
+        decodedSegmentCount: 0,
+        scheduledSegmentCount: 0
       });
     } finally {
       engine.destroy();
@@ -1542,7 +1542,7 @@ describe("ProgressivePcmEngine", () => {
     const audio = createAudioElement();
     const engine = new ProgressivePcmEngine(audio, "peer_local", {
       ...manifest,
-      durationMs: 60_000
+      durationMs: 120_000
     });
 
     try {
@@ -1560,13 +1560,13 @@ describe("ProgressivePcmEngine", () => {
           buffer: {}
         },
         {
-          startTimeSec: 40,
-          endTimeSec: 41,
+          startTimeSec: 100,
+          endTimeSec: 101,
           buffer: {}
         }
       ]);
 
-      const result = await syncPlayback(engine, 40.2, true);
+      const result = await syncPlayback(engine, 100.2, true);
 
       expect(result.localReady).toBe(true);
       expect(Reflect.get(engine as object, "decodedSegments")).toHaveLength(1);
@@ -1690,7 +1690,7 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
-  it("decodes the current WAV cache window even while older prefix chunks are still appending", async () => {
+  it("waits for the continuous WAV prefix instead of decoding the current sparse cache window", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
     const wavManifest = {
@@ -1740,83 +1740,27 @@ describe("ProgressivePcmEngine", () => {
 
       const result = await syncPlayback(engine, 600.1, true);
 
-      expect(result.localReady).toBe(true);
-      expect(result.blockedReason).toBeNull();
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeLessThan(600);
       const snapshot = engine.getSnapshot();
       expect(snapshot.decodedSegmentCount).toBeGreaterThanOrEqual(1);
-      expect(snapshot.scheduledSegmentCount).toBeGreaterThanOrEqual(1);
+      expect(snapshot.scheduledSegmentCount).toBe(0);
     } finally {
       engine.destroy();
       audioContext.restore();
     }
   });
 
-  it("keeps sparse WAV window chunks on their real timeline", async () => {
+  it("does not expose sparse cached-window decode helpers", () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();
-    const wavManifest = {
-      ...manifest,
-      mimeType: "audio/wav",
-      codec: "wav",
-      durationMs: 1_000,
-      totalChunks: 6,
-      chunkSize: 444
-    };
-    const fullWav = buildPcmWavBytes({
-      sampleRate: 1_000,
-      channels: 1,
-      bitsPerSample: 16,
-      dataBytes: 2_000,
-      availableDataBytes: 2_000
-    });
-    const engine = new ProgressivePcmEngine(audio, "peer_local", wavManifest);
-
-    vi.mocked(getCachedPiece).mockImplementation(async (_trackId, _peerId, chunkIndex) => {
-      if (chunkIndex === 0) {
-        return {
-          pieceId: "piece_0",
-          trackId: wavManifest.trackId,
-          peerId: "peer_local",
-          chunkIndex,
-          chunkSize: wavManifest.chunkSize,
-          hash: "hash_0",
-          createdAt: new Date().toISOString(),
-          payload: fullWav.slice(0, 44).buffer
-        };
-      }
-      if (chunkIndex !== 2 && chunkIndex !== 4) {
-        return null;
-      }
-
-      const start = chunkIndex * wavManifest.chunkSize;
-      const end = Math.min(fullWav.byteLength, start + wavManifest.chunkSize);
-      return {
-        pieceId: `piece_${chunkIndex}`,
-        trackId: wavManifest.trackId,
-        peerId: "peer_local",
-        chunkIndex,
-        chunkSize: wavManifest.chunkSize,
-        hash: `hash_${chunkIndex}`,
-        createdAt: new Date().toISOString(),
-        payload: fullWav.slice(start, end).buffer
-      };
-    });
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
 
     try {
-      await engine.attach();
-      const decodeWindow = Reflect.get(engine as object, "decodeCachedWavWindowAt") as (
-        positionSeconds: number
-      ) => Promise<boolean>;
-
-      await expect(decodeWindow.call(engine, 0.6)).resolves.toBe(true);
-
-      const decodedSegments = Reflect.get(engine as object, "decodedSegments") as Array<{
-        startTimeSec: number;
-        endTimeSec: number;
-      }>;
-      expect(decodedSegments.map((segment) => segment.startTimeSec)).toEqual([0.422, 0.866]);
-      expect(decodedSegments.map((segment) => segment.endTimeSec)).toEqual([0.644, 1]);
+      expect(Reflect.get(engine as object, "decodeCachedWindowAt")).toBeUndefined();
+      expect(Reflect.get(engine as object, "decodeCachedFlacWindowAt")).toBeUndefined();
+      expect(Reflect.get(engine as object, "decodeCachedWavWindowAt")).toBeUndefined();
     } finally {
       engine.destroy();
       audioContext.restore();

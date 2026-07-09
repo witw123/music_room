@@ -1,4 +1,4 @@
-import { getCachedPiece, getCachedPiecesByIndexes, localCacheOwnerKey } from "@/lib/indexeddb";
+import { getCachedPiecesByIndexes, localCacheOwnerKey } from "@/lib/indexeddb";
 import { pieceMemoryBuffer } from "@/features/p2p/piece-memory-buffer";
 import {
   getChunkIndexForPositionMs,
@@ -7,7 +7,6 @@ import {
 } from "./progressive-playback";
 import {
   extractFlacPacketsFromBitstream,
-  extractFlacPacketsFromWindow,
   type ProgressiveFlacFramePacket,
   type ProgressiveFlacStreamInfo
 } from "./progressive-flac";
@@ -30,18 +29,6 @@ type ScheduledSegment = {
   endTimeSec: number;
   contextStartSec: number;
   durationSec: number;
-};
-
-type CachedPieceWindowPiece = {
-  chunkIndex: number;
-  bytes: Uint8Array;
-};
-
-type CachedPieceWindowRun = {
-  startChunkIndex: number;
-  endChunkIndex: number;
-  bytes: Uint8Array;
-  pieces: CachedPieceWindowPiece[];
 };
 
 type EncodedAudioChunkCtor = typeof EncodedAudioChunk;
@@ -96,17 +83,17 @@ export type ProgressivePcmEngineSnapshot = {
   playoutState: PcmEnginePlayoutState;
 };
 
-const pcmScheduleAheadSeconds = 12;
+const pcmScheduleAheadSeconds = 45;
 const pcmSoftResyncDriftMs = 220;
 const pcmHardResyncDriftMs = 720;
 const pcmMaxSoftCorrectionSeconds = 0.05;
 const pcmNativeHandoffFadeMs = 140;
 const pcmNativeHandoffTailHoldMs = 120;
 const pcmNativeHandoffReleasePaddingMs = 20;
-const pcmDecodedSegmentRetentionSeconds = 24;
+const pcmDecodedSegmentRetentionSeconds = 75;
 const pcmPlaybackRefillIntervalMs = 80;
-const pcmPlaybackRefillTargetAheadMs = 18_000;
-const pcmPlaybackRefillMinScheduledAheadMs = 7_000;
+const pcmPlaybackRefillTargetAheadMs = 60_000;
+const pcmPlaybackRefillMinScheduledAheadMs = 25_000;
 // Maximum gap between decoded segments that the coverage checker tolerates
 // before declaring the buffer missing.  P2P delivery is unordered and FLAC
 // frame extraction across chunk boundaries can produce small timing gaps;
@@ -125,12 +112,6 @@ const maxPcmCachedPiecesToAppendPerSync = 16;
 const maxPcmCatchupPiecesToAppendPerSync = 32;
 const pcmCatchupLookAheadChunks = 2;
 const maxPcmPlaybackCatchupSyncBatches = 8;
-// Window decode reads up to this many chunks around the playback position.
-// P2P delivery is unordered so a larger window is needed to skip gaps and
-// find enough material for the FLAC frame extractor. 32 chunks (~4 MB at
-// 128 kB/chunk) gives generous room for frame stitching across gaps.
-const maxPcmPlaybackWindowPiecesToDecode = 32;
-
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
@@ -1031,269 +1012,6 @@ export class ProgressivePcmEngine {
     return appended;
   }
 
-  private async decodeCachedFlacWindowAt(positionSeconds: number) {
-    if (!this.streamInfo || isWavTrack(this.manifest)) {
-      return false;
-    }
-
-    if (!this.decoder) {
-      const decoderReady = await this.ensureDecoder(this.streamInfo);
-      if (!decoderReady || !this.decoder) {
-        return false;
-      }
-    }
-
-    const currentChunkIndex = getChunkIndexForPositionMs(this.manifest, positionSeconds * 1000);
-    const startCandidates = [
-      Math.max(0, currentChunkIndex - 1),
-      currentChunkIndex
-    ].filter((chunkIndex, index, chunks) => chunks.indexOf(chunkIndex) === index);
-
-    let decodedAny = false;
-    for (const startChunkIndex of startCandidates) {
-      const cachedWindow = await this.readCachedPieceWindow(
-        startChunkIndex,
-        maxPcmPlaybackWindowPiecesToDecode
-      );
-      if (!cachedWindow || cachedWindow.runs.length === 0) {
-        console.debug(
-          `[pcm] flac window start=${startChunkIndex} ` +
-          `no cached chunks at this offset`
-        );
-        continue;
-      }
-
-      const streamInfo = this.streamInfo;
-      if (!streamInfo || !this.decoder || isTerminalEngineStatus(this.status)) {
-        break;
-      }
-
-      let decodedRun = false;
-      for (const run of cachedWindow.runs) {
-        const extraction = extractFlacPacketsFromWindow({
-          bytes: run.bytes,
-          streamInfo,
-          absoluteStartOffset: run.startChunkIndex * this.manifest.chunkSize,
-          finalChunk: run.endChunkIndex >= this.manifest.totalChunks - 1
-        });
-        if (extraction.packets.length === 0) {
-          console.debug(
-            `[pcm] flac window start=${run.startChunkIndex} ` +
-            `bytes=${run.bytes.byteLength} packets=0`
-          );
-          continue;
-        }
-
-        await this.decodeFlacPackets(extraction.packets);
-        decodedAny = true;
-        decodedRun = true;
-        if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
-          break;
-        }
-      }
-      if (decodedRun || this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
-        break;
-      }
-    }
-
-    return decodedAny;
-  }
-
-  private async readCachedPieceWindow(startChunkIndex: number, maxPieceCount: number) {
-    const runs: CachedPieceWindowRun[] = [];
-    let currentRunPieces: CachedPieceWindowPiece[] = [];
-    let endChunkIndex = startChunkIndex - 1;
-    let consecutiveSkips = 0;
-    let foundPieceCount = 0;
-    const maxConsecutiveSkips = 12;
-    const flushCurrentRun = () => {
-      if (currentRunPieces.length === 0) {
-        return;
-      }
-
-      let totalBytes = 0;
-      for (const piece of currentRunPieces) {
-        totalBytes += piece.bytes.byteLength;
-      }
-      const bytes = new Uint8Array(totalBytes);
-      let offset = 0;
-      for (const piece of currentRunPieces) {
-        bytes.set(piece.bytes, offset);
-        offset += piece.bytes.byteLength;
-      }
-      runs.push({
-        startChunkIndex: currentRunPieces[0]!.chunkIndex,
-        endChunkIndex: currentRunPieces[currentRunPieces.length - 1]!.chunkIndex,
-        bytes,
-        pieces: currentRunPieces
-      });
-      currentRunPieces = [];
-    };
-
-    // Build probe list: up to maxPieceCount + maxConsecutiveSkips chunks
-    // (worst case: all skips before any hits).
-    const probeEnd = Math.min(
-      this.manifest.totalChunks,
-      Math.max(0, startChunkIndex) + maxPieceCount + maxConsecutiveSkips + 1
-    );
-    const probeChunks: number[] = [];
-    for (let i = Math.max(0, startChunkIndex); i < probeEnd; i++) {
-      probeChunks.push(i);
-    }
-    if (probeChunks.length === 0) {
-      return null;
-    }
-
-    // Batch-read from memory buffer + IndexedDB.
-    pieceMemoryBuffer.setActiveWindow(this.manifest.trackId, probeChunks);
-    const memoryPieces = pieceMemoryBuffer.getBatch(this.manifest.trackId, probeChunks);
-    const idbNeeded = probeChunks.filter((c) => !memoryPieces.has(c));
-    const idbRecords = idbNeeded.length > 0
-      ? await getCachedPiecesByIndexes(
-          this.manifest.trackId,
-          this.peerId,
-          idbNeeded,
-          {
-            fileHash: this.manifest.fileHash || null,
-            ownerKey: localCacheOwnerKey,
-            chunkSize: this.manifest.chunkSize
-          }
-        )
-      : [];
-    const idbMap = new Map<number, ArrayBuffer>();
-    for (const record of idbRecords) {
-      idbMap.set(record.chunkIndex, record.payload);
-    }
-
-    for (
-      let chunkIndex = Math.max(0, startChunkIndex);
-      chunkIndex < this.manifest.totalChunks && foundPieceCount < maxPieceCount;
-      chunkIndex += 1
-    ) {
-      const rawPayload = memoryPieces.get(chunkIndex) ?? idbMap.get(chunkIndex);
-      if (!rawPayload) {
-        flushCurrentRun();
-        consecutiveSkips += 1;
-        if (consecutiveSkips > maxConsecutiveSkips) {
-          break;
-        }
-        continue;
-      }
-      consecutiveSkips = 0;
-
-      // CachedPieceWindowPiece uses Uint8Array for byte concatenation.
-      const bytes = new Uint8Array(rawPayload);
-      currentRunPieces.push({ chunkIndex, bytes });
-      endChunkIndex = chunkIndex;
-      foundPieceCount += 1;
-
-      if (memoryPieces.has(chunkIndex)) {
-        pieceMemoryBuffer.evict(this.manifest.trackId, chunkIndex);
-      }
-    }
-    flushCurrentRun();
-
-    if (runs.length === 0) {
-      return null;
-    }
-
-    return {
-      runs,
-      endChunkIndex
-    };
-  }
-
-  private async decodeCachedWavWindowAt(positionSeconds: number) {
-    if (!this.audioContext) {
-      return false;
-    }
-
-    // Parse the WAV header from chunk 0 if the linear path hasn't
-    // processed it yet (chunk 0 may just now have become available).
-    if (!this.wavHeader) {
-      const headerPiece = await getCachedPiece(
-        this.manifest.trackId,
-        this.peerId,
-        0,
-        {
-          fileHash: this.manifest.fileHash,
-          ownerKey: localCacheOwnerKey,
-          chunkSize: this.manifest.chunkSize
-        }
-      );
-      if (headerPiece) {
-        const headerBytes = new Uint8Array(headerPiece.payload);
-        const parsed = parseWavHeader(headerBytes);
-        if (parsed) {
-          this.wavHeader = parsed;
-          this.status = "ready";
-        }
-      }
-      if (!this.wavHeader) {
-        return false;
-      }
-    }
-
-    const header = this.wavHeader;
-    const currentChunkIndex = getChunkIndexForPositionMs(this.manifest, positionSeconds * 1000);
-    const startChunkIndex = Math.max(0, currentChunkIndex - 1);
-
-    const cachedWindow = await this.readCachedPieceWindow(
-      startChunkIndex,
-      maxPcmPlaybackWindowPiecesToDecode
-    );
-    if (!cachedWindow || cachedWindow.runs.length === 0) {
-      return false;
-    }
-
-    let decodedAny = false;
-
-    for (const run of cachedWindow.runs) {
-      for (const piece of run.pieces) {
-        const pieceStartByte = piece.chunkIndex * this.manifest.chunkSize;
-        const pieceEndByte = pieceStartByte + piece.bytes.byteLength;
-        const dataStartByte = Math.max(pieceStartByte, header.dataOffset);
-        const dataEndByte = Math.min(pieceEndByte, header.dataOffset + header.dataBytes);
-        const alignedStartByte =
-          header.dataOffset +
-          Math.max(0, Math.ceil((dataStartByte - header.dataOffset) / header.blockAlign)) *
-            header.blockAlign;
-        const alignedEndByte =
-          header.dataOffset +
-          Math.max(0, Math.floor((dataEndByte - header.dataOffset) / header.blockAlign)) *
-            header.blockAlign;
-        if (alignedEndByte <= alignedStartByte) {
-          continue;
-        }
-
-        const payload = piece.bytes.subarray(
-          alignedStartByte - pieceStartByte,
-          alignedEndByte - pieceStartByte
-        );
-        const segment = this.createDecodedWavSegment(header, payload, alignedStartByte);
-        if (segment) {
-          this.insertDecodedSegment(segment);
-          decodedAny = true;
-        }
-      }
-    }
-    return decodedAny;
-  }
-
-  private canAttemptCachedWindowDecode() {
-    if (isWavTrack(this.manifest)) {
-      return !!this.audioContext;
-    }
-
-    return !!this.streamInfo;
-  }
-
-  private async decodeCachedWindowAt(positionSeconds: number) {
-    return isWavTrack(this.manifest)
-      ? await this.decodeCachedWavWindowAt(positionSeconds)
-      : await this.decodeCachedFlacWindowAt(positionSeconds);
-  }
-
   private async decodeFlacPackets(packets: ProgressiveFlacFramePacket[]) {
     if (packets.length === 0 || !this.decoder) {
       return false;
@@ -1421,36 +1139,15 @@ export class ProgressivePcmEngine {
       positionSeconds * 1000
     );
     const trackLabel = `${this.manifest.trackId.slice(0, 8)}`;
-    let attemptedCurrentWindowDecode = false;
     try {
       for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
         if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
           return;
         }
 
-        let decodedWindow = false;
-        if (!attemptedCurrentWindowDecode && this.canAttemptCachedWindowDecode()) {
-          attemptedCurrentWindowDecode = true;
-          decodedWindow = await this.decodeCachedWindowAt(positionSeconds);
-          if (decodedWindow) {
-            await this.waitForDecodedPosition(positionSeconds);
-            if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
-              return;
-            }
-          }
-        }
-
         const appended = await this.sync();
 
-        if (
-          !attemptedCurrentWindowDecode &&
-          !this.hasBufferedPosition(positionSeconds) &&
-          this.canAttemptCachedWindowDecode()
-        ) {
-          attemptedCurrentWindowDecode = true;
-          decodedWindow = await this.decodeCachedWindowAt(positionSeconds);
-        }
-        if (!appended && !decodedWindow) {
+        if (!appended) {
           if (attempt === 0) {
             console.debug(
               `[pcm] ${trackLabel} catchup stalled at iteration 0: ` +

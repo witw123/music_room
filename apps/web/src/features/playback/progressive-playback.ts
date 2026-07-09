@@ -359,35 +359,6 @@ function getContiguousChunkCountFrom(input: {
   return contiguousChunkCount;
 }
 
-function getAheadBufferedMsFromChunk(input: {
-  manifest: ProgressiveTrackManifest;
-  availableChunks: number[];
-  playbackPositionMs: number;
-  startChunkIndex: number;
-  trailingGuardChunkCount?: number;
-}) {
-  const contiguousChunkCount = getContiguousChunkCountFrom({
-    availableChunks: input.availableChunks,
-    startChunkIndex: input.startChunkIndex,
-    totalChunks: input.manifest.totalChunks
-  });
-  const reachesTrackEnd = input.startChunkIndex + contiguousChunkCount >= input.manifest.totalChunks;
-  const playableChunkCount =
-    reachesTrackEnd
-      ? contiguousChunkCount
-      : contiguousChunkCount - Math.max(0, input.trailingGuardChunkCount ?? 0);
-  if (playableChunkCount <= 0) {
-    return 0;
-  }
-
-  const chunkDurationMs = input.manifest.durationMs / input.manifest.totalChunks;
-  const bufferedEndMs = Math.min(
-    input.manifest.durationMs,
-    (input.startChunkIndex + playableChunkCount) * chunkDurationMs
-  );
-  return Math.max(0, Math.floor(bufferedEndMs - Math.max(0, input.playbackPositionMs)));
-}
-
 export function getAheadBufferedMs(input: {
   manifest: ProgressiveTrackManifest | null;
   availableChunks: number[];
@@ -429,22 +400,11 @@ export function getDecodableAheadBufferedMs(input: {
   }
 
   if (isFlacTrack(input.manifest)) {
-    const hasStreamHeader = input.availableChunks.includes(0);
-    if (!hasStreamHeader) {
-      return 0;
-    }
-
-    const currentChunkIndex = getChunkIndexForPositionMs(
+    const contiguousBufferedMs = getContiguousBufferedMs(
       input.manifest,
-      input.playbackPositionMs
+      input.availableChunks
     );
-    return getAheadBufferedMsFromChunk({
-      manifest: input.manifest,
-      availableChunks: input.availableChunks,
-      playbackPositionMs: input.playbackPositionMs,
-      startChunkIndex: Math.max(0, currentChunkIndex - 1),
-      trailingGuardChunkCount: 1
-    });
+    return Math.max(0, Math.floor(contiguousBufferedMs - Math.max(0, input.playbackPositionMs)));
   }
 
   const contiguousBufferedMs = getContiguousBufferedMs(input.manifest, input.availableChunks);
@@ -835,9 +795,7 @@ export function getPriorityChunkIndexes(input: {
     playbackPositionMs,
     lookAheadMs: derivedLookAheadMs
   });
-  const requiredLeadingChunkCount = isFlacTrack(manifest)
-    ? Math.min(manifest.totalChunks, 1)
-    : requiredPrefixChunkCount;
+  const requiredLeadingChunkCount = requiredPrefixChunkCount;
   const currentDecodeStartChunkIndex = isFlacTrack(manifest)
     ? Math.max(0, currentChunkIndex - 1)
     : currentChunkIndex;

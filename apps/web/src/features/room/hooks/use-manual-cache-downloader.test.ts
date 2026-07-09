@@ -1487,7 +1487,7 @@ describe("planManualCacheDirectRequests", () => {
     expect(firstPendingExpiry - 10_000).toBeGreaterThan(firstTimeoutMs);
   });
 
-  it("prioritizes the FLAC header and current decode window during active playback caching", async () => {
+  it("prioritizes the continuous FLAC prefix during active playback caching", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -1534,10 +1534,10 @@ describe("planManualCacheDirectRequests", () => {
       now: 10_000
     });
 
-    expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 59, 60, 61]);
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 1, 2, 3]);
   });
 
-  it("lets the active FLAC decode window preempt stale pending cache requests", async () => {
+  it("lets the active FLAC prefix preempt stale pending cache requests", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -1590,9 +1590,9 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     expect(requestPieces).toHaveBeenCalled();
-    expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 599, 600, 601]);
+    expect(requestPieces.mock.calls[0]?.[2].slice(0, 4)).toEqual([0, 1, 2, 3]);
     expect(pendingByTrack.get("track_a")?.has(1_000)).toBe(false);
-    expect(pendingByTrack.get("track_a")?.has(600)).toBe(true);
+    expect(pendingByTrack.get("track_a")?.has(1)).toBe(true);
   });
 
   it("continues filling the full FLAC cache after the active decode window is cached", async () => {
