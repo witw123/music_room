@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   filterCachedPiecesByGeometry,
+  parseCachedPiecePrimaryKey,
   selectCachedPiecesForTrackDeletion,
+  selectCachedPieceIndexesFromPrimaryKeys,
   selectTrackPieceManifestIdsForDeletion,
   toCachedLibraryTrackSummaryRecord
 } from "./indexeddb";
@@ -65,6 +67,35 @@ describe("filterCachedPiecesByGeometry", () => {
         chunkSize: 262144
       }).map((piece) => piece.pieceId)
     ).toEqual(["hash_1:262144:__local__:0", "hash_1:262144:__local__:1"]);
+  });
+});
+
+describe("selectCachedPieceIndexesFromPrimaryKeys", () => {
+  it("extracts chunk indexes from piece primary keys without reading payload records", () => {
+    expect(
+      selectCachedPieceIndexesFromPrimaryKeys(
+        [
+          "hash_1:262144:__local__:2",
+          "hash_1:262144:__local__:0",
+          "hash_1:65536:__local__:1",
+          "hash_2:262144:__local__:4",
+          "bad-piece-id"
+        ],
+        {
+          fileHash: "hash_1",
+          chunkSize: 262144
+        }
+      )
+    ).toEqual([0, 2]);
+  });
+
+  it("keeps legacy primary keys parseable for old transient piece records", () => {
+    expect(parseCachedPiecePrimaryKey("track_1:peer_a:7")).toMatchObject({
+      identity: "track_1",
+      ownerKey: "peer_a",
+      chunkSize: null,
+      chunkIndex: 7
+    });
   });
 });
 

@@ -442,6 +442,77 @@ export function filterCachedPiecesByGeometry<T extends { pieceId: string }>(
   return pieces.filter((piece) => cachedPieceMatchesGeometry(piece, options));
 }
 
+export type CachedPiecePrimaryKeyParts = {
+  identity: string;
+  chunkSize: number | null;
+  ownerKey: string | null;
+  chunkIndex: number;
+};
+
+export function parseCachedPiecePrimaryKey(
+  pieceId: IndexableType
+): CachedPiecePrimaryKeyParts | null {
+  if (typeof pieceId !== "string") {
+    return null;
+  }
+
+  const parts = pieceId.split(":");
+  if (parts.length < 3) {
+    return null;
+  }
+
+  const chunkIndex = Number(parts[parts.length - 1]);
+  if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+    return null;
+  }
+
+  if (parts.length >= 4) {
+    const chunkSize = Number(parts[parts.length - 3]);
+    return {
+      identity: parts.slice(0, -3).join(":"),
+      chunkSize: Number.isFinite(chunkSize) && chunkSize > 0 ? chunkSize : null,
+      ownerKey: parts[parts.length - 2] ?? null,
+      chunkIndex
+    };
+  }
+
+  return {
+    identity: parts.slice(0, -2).join(":"),
+    chunkSize: null,
+    ownerKey: parts[parts.length - 2] ?? null,
+    chunkIndex
+  };
+}
+
+export function selectCachedPieceIndexesFromPrimaryKeys(
+  pieceIds: IndexableType[],
+  options?: { fileHash?: string | null; chunkSize?: number | null }
+) {
+  const chunkSize = options?.chunkSize;
+  const fileHash = options?.fileHash;
+  const indexes: number[] = [];
+  for (const pieceId of pieceIds) {
+    const parsed = parseCachedPiecePrimaryKey(pieceId);
+    if (!parsed) {
+      continue;
+    }
+    if (fileHash && parsed.identity !== fileHash) {
+      continue;
+    }
+    if (
+      chunkSize &&
+      chunkSize > 0 &&
+      parsed.chunkSize !== null &&
+      parsed.chunkSize !== chunkSize
+    ) {
+      continue;
+    }
+    indexes.push(parsed.chunkIndex);
+  }
+
+  return uniqueSortedChunkIndexes(indexes.map((chunkIndex) => ({ chunkIndex })));
+}
+
 export function selectCachedPiecesForTrackDeletion<
   T extends {
     pieceId: string;
@@ -496,21 +567,28 @@ export async function getCachedPieceIndexes(
   options?: { fileHash?: string | null; ownerKey?: string | null; chunkSize?: number | null }
 ) {
   const ownerKey = options?.ownerKey ?? peerId;
+  const table = musicRoomDatabase.trackPieces;
   if (options?.fileHash) {
-    const pieces = await musicRoomDatabase.trackPieces
+    // This runs on the 200ms playback cache scheduler tick.  Never call
+    // toArray() here: TrackPieceRecord includes the full ArrayBuffer payload,
+    // so reading records instead of primary keys makes the tick slower as the
+    // song becomes more cached and eventually looks like "cache loading stuck".
+    const pieceIds = await table
       .where("[fileHash+ownerKey]")
       .equals([options.fileHash, ownerKey])
-      .toArray();
+      .primaryKeys();
 
-    return uniqueSortedChunkIndexes(filterCachedPiecesByGeometry(pieces, options));
+    return selectCachedPieceIndexesFromPrimaryKeys(pieceIds, options);
   }
 
-  const pieces = await musicRoomDatabase.trackPieces
+  // Same optimization for legacy track-id keyed queries: only primary keys are
+  // needed because pieceId encodes the manifest chunk size and chunk index.
+  const pieceIds = await table
     .where("[trackId+ownerKey]")
     .equals([trackId, ownerKey])
-    .toArray();
+    .primaryKeys();
 
-  return uniqueSortedChunkIndexes(filterCachedPiecesByGeometry(pieces, options));
+  return selectCachedPieceIndexesFromPrimaryKeys(pieceIds, options);
 }
 
 export async function getCachedPiece(
