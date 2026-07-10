@@ -38,6 +38,29 @@ type AudioDecoderLike = AudioDecoder & {
   flush?: () => Promise<void>;
 };
 
+type AudioDecoderSupportChecker = {
+  isConfigSupported?: (config: AudioDecoderConfig) => Promise<{
+    supported?: boolean;
+    config?: AudioDecoderConfig;
+  }>;
+};
+
+export async function resolveSupportedAudioDecoderConfig(
+  checker: AudioDecoderSupportChecker,
+  config: AudioDecoderConfig
+) {
+  if (typeof checker.isConfigSupported !== "function") {
+    return config;
+  }
+
+  try {
+    const support = await checker.isConfigSupported(config);
+    return support.supported === true ? support.config ?? config : null;
+  } catch {
+    return null;
+  }
+}
+
 type PcmEngineSyncResult = {
   localReady: boolean;
   driftMs: number;
@@ -798,20 +821,16 @@ export class ProgressivePcmEngine {
       return false;
     }
 
-    if (typeof AudioDecoderCtor.isConfigSupported === "function") {
-      try {
-        const support = await AudioDecoderCtor.isConfigSupported({
-          codec: "flac",
-          description: streamInfo.description,
-          sampleRate: streamInfo.sampleRate,
-          numberOfChannels: streamInfo.numberOfChannels
-        });
-        if (!support.supported) {
-          return false;
-        }
-      } catch {
-        return false;
-      }
+    const decoderConfig = await resolveSupportedAudioDecoderConfig(AudioDecoderCtor, {
+      codec: "flac",
+      description: streamInfo.description,
+      sampleRate: streamInfo.sampleRate,
+      numberOfChannels: streamInfo.numberOfChannels
+    });
+    if (!decoderConfig) {
+      this.lastDecodeError = "decoder-config-failed";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+      return false;
     }
 
     try {
@@ -835,12 +854,7 @@ export class ProgressivePcmEngine {
           this.pendingDecodedFlacPacketTimings = [];
         }
       });
-      decoder.configure({
-        codec: "flac",
-        description: streamInfo.description,
-        sampleRate: streamInfo.sampleRate,
-        numberOfChannels: streamInfo.numberOfChannels
-      });
+      decoder.configure(decoderConfig);
       this.decoder = decoder;
       this.status = "ready";
       return true;

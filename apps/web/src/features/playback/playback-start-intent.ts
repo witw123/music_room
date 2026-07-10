@@ -127,6 +127,32 @@ export function doesPlaybackMatchStartIntent(
   return true;
 }
 
+export function doesAudiblePlaybackSatisfyStartIntent(
+  intent: PlaybackStartIntent | null | undefined,
+  playback: PlaybackSnapshot | null | undefined,
+  now = Date.now()
+) {
+  if (
+    !isPlaybackStartIntentPending(intent, now) ||
+    !playback?.currentTrackId ||
+    !hasActivePlaybackIntent(playback)
+  ) {
+    return false;
+  }
+
+  const activeIntent = intent as PlaybackStartIntent;
+  if (activeIntent.queueItemId) {
+    return playback.currentQueueItemId === activeIntent.queueItemId;
+  }
+  if (activeIntent.trackId) {
+    return playback.currentTrackId === activeIntent.trackId;
+  }
+  if (activeIntent.previousTrackId) {
+    return playback.currentTrackId !== activeIntent.previousTrackId;
+  }
+  return true;
+}
+
 export function consumePlaybackStartIntent(
   intent: PlaybackStartIntent,
   matchedSource: ProgressivePlaybackSource,

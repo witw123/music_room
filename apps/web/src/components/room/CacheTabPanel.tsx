@@ -267,7 +267,7 @@ function CacheTabPanelBase({
           </div>
           <input
             aria-label="搜索本机缓存"
-            className="h-9 w-full rounded-lg border border-surface-border bg-background/50 px-3 text-xs text-foreground outline-none transition-colors placeholder:text-foreground-muted/70 focus:border-accent sm:w-64"
+            className="h-9 w-full rounded-lg border border-surface-border bg-[#0d0d10] px-3 text-xs text-foreground [color-scheme:dark] outline-none transition-colors placeholder:text-foreground-muted/70 focus:border-accent sm:w-64"
             onChange={(event) => setLibraryQuery(event.target.value)}
             placeholder="搜索歌名、艺术家或上传者"
             type="search"

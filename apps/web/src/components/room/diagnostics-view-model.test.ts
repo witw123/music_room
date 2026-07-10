@@ -60,6 +60,26 @@ describe("buildDiagnosticsViewModel", () => {
     expect(result.activeIssue).toBeNull();
   });
 
+  it("trusts an actively playing full-local blob over stale readiness and intent flags", () => {
+    const result = buildDiagnosticsViewModel({
+      playback: {
+        ...createPlayback(),
+        activeSource: "full-local",
+        fullLocalReady: false,
+        fullLocalPlaybackMode: "native-blob",
+        localAudioCurrentSrc: "blob:cached-track",
+        localAudioReadyState: 4,
+        localAudioPaused: false,
+        localAudioMuted: false,
+        localAudioVolume: 1,
+        pendingPlaybackIntent: "曲库点播 track_1"
+      }
+    });
+
+    expect(result.audibility).toMatchObject({ label: "正在发声", tone: "success" });
+    expect(result.activeIssue).toBeNull();
+  });
+
   it("separates a complete piece announcement from PCM-readable continuity", () => {
     const result = buildDiagnosticsViewModel({
       playback: {

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCachedPiece, getCachedPiecesByIndexes } from "@/lib/indexeddb";
 import { pieceMemoryBuffer } from "@/features/p2p/piece-memory-buffer";
-import { ProgressivePcmEngine } from "./progressive-pcm-engine";
+import {
+  ProgressivePcmEngine,
+  resolveSupportedAudioDecoderConfig
+} from "./progressive-pcm-engine";
 import { extractFlacPacketsFromBitstream } from "./progressive-flac";
 
 vi.mock("@/lib/indexeddb", () => ({
@@ -448,6 +451,31 @@ function computeCrc8(bytes: Uint8Array) {
 }
 
 describe("ProgressivePcmEngine", () => {
+  it("configures WebCodecs with the normalized config returned by the support check", async () => {
+    const rawConfig = {
+      codec: "flac",
+      description: new Uint8Array([1, 2, 3]),
+      sampleRate: 44_100,
+      numberOfChannels: 2
+    } satisfies AudioDecoderConfig;
+    const normalizedConfig = {
+      ...rawConfig,
+      description: new Uint8Array([4, 5, 6]).buffer
+    } satisfies AudioDecoderConfig;
+
+    await expect(
+      resolveSupportedAudioDecoderConfig(
+        {
+          isConfigSupported: async () => ({
+            supported: true,
+            config: normalizedConfig
+          })
+        },
+        rawConfig
+      )
+    ).resolves.toBe(normalizedConfig);
+  });
+
   beforeEach(() => {
     vi.mocked(getCachedPiece).mockReset();
     vi.mocked(getCachedPiecesByIndexes).mockReset();

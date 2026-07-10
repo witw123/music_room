@@ -7,6 +7,7 @@ import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import {
   consumePlaybackStartIntent,
+  doesAudiblePlaybackSatisfyStartIntent,
   doesPlaybackMatchStartIntent,
   failPlaybackStartIntent,
   isPlaybackStartIntentPending,
@@ -142,8 +143,12 @@ export function usePlaybackStartIntentController({
         return false;
       }
 
-      if (doesPlaybackMatchStartIntent(playbackStartIntent, playbackRef.current)) {
-        updatePlaybackStartIntent((current) => consumePlaybackStartIntent(current, source));
+      if (doesAudiblePlaybackSatisfyStartIntent(playbackStartIntent, playbackRef.current)) {
+        updatePlaybackStartIntent((current) =>
+          doesAudiblePlaybackSatisfyStartIntent(current, playbackRef.current)
+            ? consumePlaybackStartIntent(current, source)
+            : current
+        );
       }
       setAudioPaused(false);
 

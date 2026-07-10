@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   consumePlaybackStartIntent,
   createPlaybackStartIntent,
+  doesAudiblePlaybackSatisfyStartIntent,
   doesPlaybackMatchStartIntent,
   failPlaybackStartIntent,
   isPlaybackStartIntentPending
@@ -99,6 +100,27 @@ describe("playback start intent helpers", () => {
         1_500
       )
     ).toBe(true);
+  });
+
+  it("accepts confirmed audible playback for the intended track while revisions catch up", () => {
+    const intent = createPlaybackStartIntent({
+      reason: "track",
+      trackId: "track_2",
+      targetPlaybackRevision: 3,
+      previousQueueVersion: 2,
+      previousMediaEpoch: 2,
+      now: 1_000
+    });
+
+    expect(doesPlaybackMatchStartIntent(intent, playingPlayback, 1_500)).toBe(false);
+    expect(doesAudiblePlaybackSatisfyStartIntent(intent, playingPlayback, 1_500)).toBe(true);
+    expect(
+      doesAudiblePlaybackSatisfyStartIntent(
+        intent,
+        { ...playingPlayback, currentTrackId: "track_other" },
+        1_500
+      )
+    ).toBe(false);
   });
 
   it("records matched source and failures without clearing the intent immediately", () => {

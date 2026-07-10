@@ -127,8 +127,15 @@ function hasAudibleFullLocalOutput(playback: DiagnosticsPlaybackInput) {
     playback.fullLocalPlaybackMode === "native-blob" &&
     !!playback.localAudioCurrentSrc &&
     (playback.localAudioReadyState ?? 0) >= 2;
-  return playback.fullLocalReady === true &&
-    (nativeBlobReady || playback.localAudioPaused === false);
+  const elementAudible =
+    playback.localAudioPaused === false &&
+    playback.localAudioMuted !== true &&
+    playback.localAudioVolume !== 0;
+  return (
+    (nativeBlobReady && elementAudible) ||
+    (playback.fullLocalReady === true &&
+      (nativeBlobReady || playback.localAudioPaused === false))
+  );
 }
 
 function getPlaybackMode(playback: DiagnosticsPlaybackInput | null) {
