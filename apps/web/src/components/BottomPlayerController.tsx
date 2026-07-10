@@ -11,6 +11,7 @@ type BottomPlayerControllerProps = {
   roomSnapshot: RoomSnapshot | null;
   activeSession: AuthSession | null;
   currentTrack: TrackMeta | null;
+  canSeekPlayback: boolean;
   resetEpoch: number;
   onPlaybackPositionChange: (positionMs: number) => void;
   onPlaybackBucketChange: (bucketMs: number) => void;
@@ -30,6 +31,7 @@ function BottomPlayerControllerBase({
   roomSnapshot,
   activeSession,
   currentTrack,
+  canSeekPlayback,
   resetEpoch,
   onPlaybackPositionChange,
   onPlaybackBucketChange,
@@ -101,6 +103,7 @@ function BottomPlayerControllerBase({
       audioRef={audioRef}
       playback={playback}
       canControlPlayback={canControlPlayback}
+      canSeekPlayback={canSeekPlayback}
       progressMs={progressMs}
       seekDraft={seekDraft}
       setSeekDraft={setSeekDraft}

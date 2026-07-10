@@ -118,6 +118,7 @@ function installFakeAudioContext(
 
   class FakeAudioContext {
     currentTime = 0;
+    sampleRate = 48_000;
     state = "running" as AudioContextState;
     destination = audioDestination;
     gainNode = gainNode;
@@ -474,6 +475,80 @@ describe("ProgressivePcmEngine", () => {
         rawConfig
       )
     ).resolves.toBe(normalizedConfig);
+  });
+
+  it("decodes unsupported high-rate FLAC through the software worker path", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0x80, 0, 0, 34]);
+    const packet = {
+      data: new Uint8Array([0xff, 0xf8, 1, 2]),
+      sampleCount: 38_400,
+      timestampUs: 0,
+      durationUs: 100_000
+    };
+    vi.mocked(extractFlacPacketsFromBitstream).mockReturnValue({
+      streamInfo: {
+        description,
+        audioOffset: description.byteLength,
+        sampleRate: 384_000,
+        numberOfChannels: 2,
+        bitsPerSample: 24,
+        minBlockSize: 38_400,
+        maxBlockSize: 38_400,
+        totalSamples: null
+      },
+      packets: [packet],
+      nextOffset: description.byteLength + packet.data.byteLength,
+      nextSampleIndex: 38_400
+    });
+    vi.mocked(getCachedPiece)
+      .mockResolvedValueOnce({
+        pieceId: "piece_0",
+        trackId: manifest.trackId,
+        peerId: "peer_local",
+        chunkIndex: 0,
+        chunkSize: 4,
+        hash: "hash_0",
+        createdAt: new Date().toISOString(),
+        payload: packet.data.buffer
+      })
+      .mockResolvedValueOnce(null);
+    const decodeFrames = vi.fn(async () => ({
+      channelData: [
+        new Float32Array(38_400).fill(0.25),
+        new Float32Array(38_400).fill(0.25)
+      ],
+      samplesDecoded: 38_400,
+      sampleRate: 384_000,
+      bitDepth: 24,
+      errors: []
+    }));
+    const engine = new ProgressivePcmEngine(
+      audio,
+      "peer_local",
+      manifest,
+      undefined,
+      async () => ({ decodeFrames, free: vi.fn() })
+    );
+
+    try {
+      await engine.attach();
+      const result = await syncPlayback(engine, 0, true);
+
+      expect(engine.getSnapshot().lastDecodeError).toBeNull();
+      expect(decodeFrames).toHaveBeenCalledWith([description, packet.data]);
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "ready",
+        decodedPacketCount: 1,
+        decodedSegmentCount: 1,
+        lastDecodeError: null
+      });
+      expect(result.localReady).toBe(true);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
   });
 
   beforeEach(() => {
@@ -2055,12 +2130,13 @@ describe("ProgressivePcmEngine", () => {
       expect(result.blockedReason).toBe("decoder-flush-failed: flush failed");
       expect(engine.getSnapshot()).toMatchObject({
         status: "failed",
-        decodedPacketCount: 1,
+        decodedPacketCount: 0,
         decoderFlushAttemptCount: 1,
         decoderFlushCount: 0,
         decodedSegmentCount: 0,
         lastDecodeError: "decoder-flush-failed: flush failed"
       });
+      expect(Reflect.get(engine as object, "parsedOffset")).toBe(0);
     } finally {
       engine.destroy();
       audioContext.restore();

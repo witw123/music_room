@@ -121,6 +121,7 @@ export function RoomAppShell({
             roomSnapshot={roomSnapshot}
             activeSession={activeSession}
             currentTrack={currentTrack}
+            canSeekPlayback={pageState.activePlaybackSource === "full-local"}
             resetEpoch={pageState.playerResetEpoch}
             onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
             onPlaybackBucketChange={playbackActions.handlePlaybackBucketChange}

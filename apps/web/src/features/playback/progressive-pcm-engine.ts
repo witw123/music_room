@@ -11,6 +11,12 @@ import {
   type ProgressiveFlacStreamInfo
 } from "./progressive-flac";
 import { parseWavHeader, type WavHeader } from "./codecs/wav-parser";
+import {
+  createSoftwareFlacDecoder,
+  normalizeSoftwareFlacOutput,
+  resolveFlacDecoderStrategy,
+  type SoftwareFlacDecoder
+} from "./software-flac-decoder";
 
 type EngineStatus = "idle" | "opening" | "ready" | "failed" | "degraded" | "destroyed";
 
@@ -44,6 +50,7 @@ type AudioDecoderSupportChecker = {
     config?: AudioDecoderConfig;
   }>;
 };
+type SoftwareFlacDecoderFactory = () => Promise<SoftwareFlacDecoder>;
 
 export async function resolveSupportedAudioDecoderConfig(
   checker: AudioDecoderSupportChecker,
@@ -135,6 +142,7 @@ const maxPcmCachedPiecesToAppendPerSync = 16;
 const maxPcmCatchupPiecesToAppendPerSync = 32;
 const pcmCatchupLookAheadChunks = 2;
 const maxPcmPlaybackCatchupSyncBatches = 8;
+const maxNativeFlacSampleRate = 96_000;
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
@@ -143,6 +151,9 @@ export class ProgressivePcmEngine {
   private keepAliveGain: GainNode | null = null;
   private directOutputConnected = false;
   private decoder: AudioDecoderLike | null = null;
+  private softwareFlacDecoder: SoftwareFlacDecoder | null = null;
+  private softwareFlacDecoderPrimed = false;
+  private preferSoftwareFlacDecoder = false;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
   private wavHeader: WavHeader | null = null;
   private wavDecodedByteOffset = 0;
@@ -186,7 +197,8 @@ export class ProgressivePcmEngine {
     private readonly audio: HTMLAudioElement,
     private readonly peerId: string,
     private readonly manifest: ProgressiveTrackManifest,
-    private readonly audioContextProvider?: () => AudioContext | null
+    private readonly audioContextProvider?: () => AudioContext | null,
+    private readonly softwareFlacDecoderFactory: SoftwareFlacDecoderFactory = createSoftwareFlacDecoder
   ) {}
 
   get engineStatus() {
@@ -608,6 +620,11 @@ export class ProgressivePcmEngine {
     } catch {
       // WebCodecs may have already closed the decoder after a fatal decode error.
     }
+    const softwareFlacDecoder = this.softwareFlacDecoder;
+    this.softwareFlacDecoder = null;
+    if (softwareFlacDecoder) {
+      void Promise.resolve(softwareFlacDecoder.free()).catch(() => undefined);
+    }
     if (this.audio.srcObject === this.destinationNode?.stream) {
       // Don't pause() or load() — both reset the element's sticky
       // autoplay activation granted during the user-gesture priming.
@@ -652,6 +669,8 @@ export class ProgressivePcmEngine {
     this.gainNode = null;
     this.directOutputConnected = false;
     this.streamInfo = null;
+    this.softwareFlacDecoderPrimed = false;
+    this.preferSoftwareFlacDecoder = false;
     this.wavHeader = null;
     this.wavDecodedByteOffset = 0;
     this.decodedSegments = [];
@@ -812,13 +831,21 @@ export class ProgressivePcmEngine {
   }
 
   private async ensureDecoder(streamInfo: ProgressiveFlacStreamInfo) {
-    if (this.decoder) {
+    if (this.decoder || this.softwareFlacDecoder) {
       return true;
     }
 
+    if (this.preferSoftwareFlacDecoder) {
+      return this.ensureSoftwareFlacDecoder();
+    }
+
     const AudioDecoderCtor = getAudioDecoderCtor();
-    if (!AudioDecoderCtor || !this.audioContext) {
+    if (!this.audioContext) {
       return false;
+    }
+    if (!AudioDecoderCtor) {
+      this.preferSoftwareFlacDecoder = true;
+      return this.ensureSoftwareFlacDecoder();
     }
 
     const decoderConfig = await resolveSupportedAudioDecoderConfig(AudioDecoderCtor, {
@@ -827,10 +854,14 @@ export class ProgressivePcmEngine {
       sampleRate: streamInfo.sampleRate,
       numberOfChannels: streamInfo.numberOfChannels
     });
-    if (!decoderConfig) {
-      this.lastDecodeError = "decoder-config-failed";
-      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
-      return false;
+    const decoderStrategy = resolveFlacDecoderStrategy({
+      nativeConfigSupported: !!decoderConfig,
+      sourceSampleRate: streamInfo.sampleRate,
+      maxNativeSampleRate: maxNativeFlacSampleRate
+    });
+    if (decoderStrategy === "software") {
+      this.preferSoftwareFlacDecoder = true;
+      return this.ensureSoftwareFlacDecoder();
     }
 
     try {
@@ -849,17 +880,49 @@ export class ProgressivePcmEngine {
         },
         error: (error) => {
           this.lastDecodeError = error instanceof Error ? error.message : "decode-error";
-          this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
           this.decoder = null;
           this.pendingDecodedFlacPacketTimings = [];
+          this.preferSoftwareFlacDecoder = true;
+          this.status = "opening";
+          this.syncQueued = true;
         }
       });
-      decoder.configure(decoderConfig);
+      decoder.configure(decoderConfig!);
+      if (this.preferSoftwareFlacDecoder) {
+        try {
+          decoder.close();
+        } catch {
+          // The native decoder may already be closed after rejecting configure().
+        }
+        return this.ensureSoftwareFlacDecoder();
+      }
       this.decoder = decoder;
       this.status = "ready";
       return true;
     } catch {
-      this.lastDecodeError = "decoder-config-failed";
+      this.preferSoftwareFlacDecoder = true;
+      return this.ensureSoftwareFlacDecoder();
+    }
+  }
+
+  private async ensureSoftwareFlacDecoder() {
+    if (this.softwareFlacDecoder) {
+      return true;
+    }
+
+    try {
+      this.softwareFlacDecoder = await this.softwareFlacDecoderFactory();
+      if (isDestroyedEngineStatus(this.status)) {
+        const decoder = this.softwareFlacDecoder;
+        this.softwareFlacDecoder = null;
+        void Promise.resolve(decoder.free()).catch(() => undefined);
+        return false;
+      }
+      this.lastDecodeError = null;
+      this.status = "ready";
+      return true;
+    } catch (error) {
+      this.lastDecodeError = error instanceof Error ? error.message : "software-decoder-init-failed";
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       return false;
     }
@@ -873,7 +936,7 @@ export class ProgressivePcmEngine {
       return false;
     }
 
-    if (!appendedBytes) {
+    if (!appendedBytes && this.parsedOffset >= this.contiguousByteLength) {
       return false;
     }
 
@@ -905,13 +968,16 @@ export class ProgressivePcmEngine {
     }
 
     const decoderReady = await this.ensureDecoder(extraction.streamInfo);
-    if (!decoderReady || !this.decoder) {
+    if (!decoderReady || (!this.decoder && !this.softwareFlacDecoder)) {
       this.lastDecodeError = "decoder-unavailable";
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       return true;
     }
 
-    await this.decodeFlacPackets(extraction.packets);
+    const decoded = await this.decodeFlacPackets(extraction.packets);
+    if (!decoded) {
+      return appendedBytes;
+    }
 
     this.parsedOffset = extraction.nextOffset;
     this.nextSampleIndex = extraction.nextSampleIndex;
@@ -1061,7 +1127,29 @@ export class ProgressivePcmEngine {
   }
 
   private async decodeFlacPackets(packets: ProgressiveFlacFramePacket[]) {
-    if (packets.length === 0 || !this.decoder) {
+    if (packets.length === 0 || (!this.decoder && !this.softwareFlacDecoder)) {
+      return false;
+    }
+
+    const packetsToDecode = packets.filter((packet) => {
+      if (!this.decodedFlacPacketTimestampUs.has(packet.timestampUs)) {
+        return true;
+      }
+      if (this.hasPlaybackCoverageForFlacPacket(packet)) {
+        return false;
+      }
+      this.decodedFlacPacketTimestampUs.delete(packet.timestampUs);
+      return true;
+    });
+    if (packetsToDecode.length === 0) {
+      return true;
+    }
+
+    if (this.softwareFlacDecoder) {
+      return this.decodeSoftwareFlacPackets(packetsToDecode);
+    }
+    const decoder = this.decoder;
+    if (!decoder) {
       return false;
     }
 
@@ -1073,16 +1161,10 @@ export class ProgressivePcmEngine {
     }
 
     let decodedAny = false;
-    for (const packet of packets) {
-      if (this.decodedFlacPacketTimestampUs.has(packet.timestampUs)) {
-        if (this.hasPlaybackCoverageForFlacPacket(packet)) {
-          continue;
-        }
-        this.decodedFlacPacketTimestampUs.delete(packet.timestampUs);
-      }
-
+    const submittedTimestamps: number[] = [];
+    for (const packet of packetsToDecode) {
       try {
-        this.decoder.decode(
+        decoder.decode(
           new EncodedAudioChunkCtor({
             type: "key",
             timestamp: packet.timestampUs,
@@ -1091,6 +1173,7 @@ export class ProgressivePcmEngine {
           })
         );
         this.decodedFlacPacketTimestampUs.add(packet.timestampUs);
+        submittedTimestamps.push(packet.timestampUs);
         this.pendingDecodedFlacPacketTimings.push({
           timestampUs: packet.timestampUs,
           durationUs: packet.durationUs
@@ -1120,10 +1203,93 @@ export class ProgressivePcmEngine {
     }
 
     if (decodedAny) {
-      await this.flushDecoder();
+      const flushed = await this.flushDecoder();
+      if (!flushed) {
+        for (const timestampUs of submittedTimestamps) {
+          this.decodedFlacPacketTimestampUs.delete(timestampUs);
+        }
+        this.decodedPacketCount = Math.max(0, this.decodedPacketCount - submittedTimestamps.length);
+        if (this.preferSoftwareFlacDecoder) {
+          const softwareReady = await this.ensureSoftwareFlacDecoder();
+          return softwareReady ? this.decodeSoftwareFlacPackets(packetsToDecode) : false;
+        }
+        return false;
+      }
     }
 
     return decodedAny;
+  }
+
+  private async decodeSoftwareFlacPackets(packets: ProgressiveFlacFramePacket[]) {
+    const decoder = this.softwareFlacDecoder;
+    const streamInfo = this.streamInfo;
+    if (!decoder || !streamInfo || !this.audioContext || packets.length === 0) {
+      return false;
+    }
+
+    try {
+      const frames = this.softwareFlacDecoderPrimed
+        ? packets.map((packet) => packet.data)
+        : [streamInfo.description, ...packets.map((packet) => packet.data)];
+      const decoded = await decoder.decodeFrames(frames);
+      if (isDestroyedEngineStatus(this.status)) {
+        return false;
+      }
+      this.softwareFlacDecoderPrimed = true;
+      const normalized = await normalizeSoftwareFlacOutput({
+        channelData: decoded.channelData,
+        samplesDecoded: decoded.samplesDecoded,
+        sampleRate: decoded.sampleRate,
+        targetSampleRate:
+          decoded.sampleRate <= maxNativeFlacSampleRate
+            ? decoded.sampleRate
+            : this.audioContext.sampleRate
+      });
+      if (isDestroyedEngineStatus(this.status)) {
+        return false;
+      }
+      if (normalized.samplesDecoded <= 0 || normalized.channelData.length === 0) {
+        const detail = decoded.errors.map((error) => error.message).filter(Boolean).join("; ");
+        this.lastDecodeError = detail || "software-decoder-empty-output";
+        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        return false;
+      }
+
+      const segment = this.createDecodedSegment({
+        numberOfChannels: normalized.channelData.length,
+        numberOfFrames: normalized.samplesDecoded,
+        sampleRate: normalized.sampleRate,
+        timestamp: packets[0]!.timestampUs,
+        copyTo: (destination: Float32Array, options: { planeIndex: number }) => {
+          const channel = normalized.channelData[options.planeIndex];
+          if (channel) {
+            destination.set(channel.subarray(0, destination.length));
+          }
+        }
+      });
+      if (!segment) {
+        this.lastDecodeError = "software-decoder-invalid-output";
+        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+        return false;
+      }
+
+      this.insertDecodedSegment(segment);
+      for (const packet of packets) {
+        this.decodedFlacPacketTimestampUs.add(packet.timestampUs);
+      }
+      this.decodedPacketCount += packets.length;
+      this.lastDecodedAtMs = Date.now();
+      this.lastDecodeError = null;
+      this.status = "ready";
+      if (this.playing) {
+        this.scheduleAhead(this.getCurrentTimeSeconds());
+      }
+      return true;
+    } catch (error) {
+      this.lastDecodeError = error instanceof Error ? error.message : "software-decode-failed";
+      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+      return false;
+    }
   }
 
   private appendContiguousBytes(payload: ArrayBuffer) {
@@ -1150,7 +1316,7 @@ export class ProgressivePcmEngine {
     const decoder = this.decoder;
     if (!decoder || typeof decoder.flush !== "function") {
       await yieldToMicrotasks();
-      return;
+      return true;
     }
 
     const decodeErrorBeforeFlush = this.lastDecodeError;
@@ -1158,6 +1324,7 @@ export class ProgressivePcmEngine {
       this.decoderFlushAttemptCount += 1;
       await decoder.flush();
       this.decoderFlushCount += 1;
+      return true;
     } catch (error) {
       if (this.lastDecodeError === decodeErrorBeforeFlush) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -1168,6 +1335,7 @@ export class ProgressivePcmEngine {
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       this.decoder = null;
       this.pendingDecodedFlacPacketTimings = [];
+      return false;
     }
   }
 

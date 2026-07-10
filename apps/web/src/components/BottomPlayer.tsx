@@ -16,6 +16,7 @@ type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   playback: PlaybackSnapshot | null;
   canControlPlayback: boolean;
+  canSeekPlayback: boolean;
   progressMs: number;
   seekDraft: number | null;
   setSeekDraft: (v: number | null) => void;
@@ -47,6 +48,7 @@ function BottomPlayerBase({
   audioRef,
   playback,
   canControlPlayback,
+  canSeekPlayback,
   progressMs,
   seekDraft,
   setSeekDraft,
@@ -132,7 +134,7 @@ function BottomPlayerBase({
   }, [currentTrackDuration, isPlaying, progressRenderIntervalMs, seekDraft]);
 
   const commitSeek = useCallback(() => {
-    if (seekDraft !== null && canControlPlayback) {
+    if (seekDraft !== null && canSeekPlayback && canControlPlayback) {
       const targetPositionMs = clampProgressMs(seekDraft, currentTrackDuration);
       setRenderedProgressMs(targetPositionMs);
       progressAnchorRef.current = {
@@ -145,7 +147,7 @@ function BottomPlayerBase({
         });
       });
     }
-  }, [canControlPlayback, currentTrackDuration, onSeek, seekDraft, setSeekDraft, startTransition]);
+  }, [canControlPlayback, canSeekPlayback, currentTrackDuration, onSeek, seekDraft, setSeekDraft, startTransition]);
 
   const applyVolume = useCallback(
     (nextVolume: number) => {
@@ -194,6 +196,7 @@ function BottomPlayerBase({
       <MobileBottomPlayerLayout
         isPlaying={isPlaying}
         canControlPlayback={canControlPlayback}
+        canSeekPlayback={canSeekPlayback && canControlPlayback}
         playbackTrackId={playback?.currentTrackId}
         title={title}
         artist={artist}
@@ -210,6 +213,7 @@ function BottomPlayerBase({
       <DesktopBottomPlayerLayout
         isPlaying={isPlaying}
         canControlPlayback={canControlPlayback}
+        canSeekPlayback={canSeekPlayback && canControlPlayback}
         playbackTrackId={playback?.currentTrackId}
         title={title}
         artist={artist}

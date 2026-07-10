@@ -35,4 +35,22 @@ describe("BottomPlayer source", () => {
 
     expect(source).toContain('top-0 h-[2px]');
   });
+
+  it("prevents room seeks until complete local playback has taken over", () => {
+    const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
+    const controllerSource = readFileSync(
+      new URL("./BottomPlayerController.tsx", import.meta.url),
+      "utf8"
+    );
+    const layoutSource = readFileSync(
+      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      "utf8"
+    );
+    const shellSource = readFileSync(new URL("./room/RoomAppShell.tsx", import.meta.url), "utf8");
+
+    expect(shellSource).toContain('canSeekPlayback={pageState.activePlaybackSource === "full-local"}');
+    expect(controllerSource).toContain("canSeekPlayback={canSeekPlayback}");
+    expect(playerSource).toContain("canSeekPlayback && canControlPlayback");
+    expect(layoutSource).toContain("disabled={!currentTrackDuration || !canSeekPlayback}");
+  });
 });

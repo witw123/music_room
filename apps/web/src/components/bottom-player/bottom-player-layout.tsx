@@ -7,6 +7,7 @@ import { Slider } from "@/components/ui/slider";
 type LayoutProps = {
   isPlaying: boolean;
   canControlPlayback: boolean;
+  canSeekPlayback: boolean;
   playbackTrackId: string | null | undefined;
   title: string;
   artist: string;
@@ -60,6 +61,7 @@ export function VinylBadge({
 export function MobileBottomPlayerLayout({
   isPlaying,
   canControlPlayback,
+  canSeekPlayback,
   playbackTrackId,
   title,
   artist,
@@ -99,7 +101,7 @@ export function MobileBottomPlayerLayout({
               data-testid="player-seek-slider"
               value={boundedProgressMs}
               max={currentTrackDuration || 1}
-              disabled={!currentTrackDuration || !canControlPlayback}
+              disabled={!currentTrackDuration || !canSeekPlayback}
               onChange={(event) => setSeekDraft(Number(event.target.value))}
               onMouseUp={commitSeek}
               onTouchEnd={commitSeek}
@@ -193,6 +195,7 @@ export function MobileBottomPlayerLayout({
 export function DesktopBottomPlayerLayout({
   isPlaying,
   canControlPlayback,
+  canSeekPlayback,
   playbackTrackId,
   title,
   artist,
@@ -283,7 +286,7 @@ export function DesktopBottomPlayerLayout({
               data-testid="player-seek-slider"
               value={boundedProgressMs}
               max={currentTrackDuration || 1}
-              disabled={!currentTrackDuration || !canControlPlayback}
+              disabled={!currentTrackDuration || !canSeekPlayback}
               onChange={(event) => setSeekDraft(Number(event.target.value))}
               onMouseUp={commitSeek}
               onTouchEnd={commitSeek}
