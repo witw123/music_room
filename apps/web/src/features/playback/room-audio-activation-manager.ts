@@ -73,10 +73,36 @@ export class RoomAudioActivationManager {
         error: null
       };
     } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : "play-rejected"
-      };
+      if (!isAutoplayBlockedError(error)) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : "play-rejected"
+        };
+      }
+
+      const originalMuted = element.muted;
+      const originalVolume = element.volume;
+      try {
+        // Chromium permits muted autoplay even after the transient click token
+        // has expired. Start the concrete local-cache source muted, then restore
+        // its audible state without replacing or reloading the element again.
+        element.muted = true;
+        await element.play();
+        this.activated = true;
+        this.playedElementSourceKeys.set(element, this.getElementSourceKey(element));
+        return {
+          ok: true,
+          error: null
+        };
+      } catch (retryError) {
+        return {
+          ok: false,
+          error: retryError instanceof Error ? retryError.message : "play-rejected"
+        };
+      } finally {
+        element.muted = originalMuted;
+        element.volume = originalVolume;
+      }
     }
   }
 
@@ -238,3 +264,9 @@ export class RoomAudioActivationManager {
 }
 
 export const roomAudioActivationManager = new RoomAudioActivationManager();
+
+function isAutoplayBlockedError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "NotAllowedError"
+    : error instanceof Error && /notallowed|autoplay|user gesture|blocked/i.test(error.message);
+}

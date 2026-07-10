@@ -38,6 +38,20 @@ export function resolvePlaybackRecoveryActionType(
   return recommendation.scope === "data" ? "restart-data-peer" : null;
 }
 
+export function resolvePlaybackRecoveryConnectionContext(input: {
+  trackedPlaybackConnectionKey: PlaybackConnectionKey | null;
+  currentPlaybackConnectionKey: PlaybackConnectionKey | null;
+  recommendationPlaybackConnectionKey: PlaybackConnectionKey | null;
+}) {
+  return {
+    activePlaybackConnectionKey: input.currentPlaybackConnectionKey,
+    recoveryPlaybackConnectionKey:
+      input.recommendationPlaybackConnectionKey ?? input.currentPlaybackConnectionKey,
+    shouldResetRecoveryState:
+      input.trackedPlaybackConnectionKey !== input.currentPlaybackConnectionKey
+  };
+}
+
 export function resolvePlaybackRecoveryDropReason(input: {
   playbackConnectionKey: PlaybackConnectionKey | null;
   currentPlaybackConnectionKey: PlaybackConnectionKey | null;
@@ -117,9 +131,20 @@ export function useRoomPlaybackConnectionCoordinator(input: {
       expiresInMs?: number;
     }) => {
       const now = Date.now();
+      const connectionContext = resolvePlaybackRecoveryConnectionContext({
+        trackedPlaybackConnectionKey: playbackConnectionKeyRef.current,
+        currentPlaybackConnectionKey: getCurrentPlaybackConnectionKey(),
+        recommendationPlaybackConnectionKey: inputAction.playbackConnectionKey
+      });
+      if (connectionContext.shouldResetRecoveryState) {
+        playbackConnectionKeyRef.current = connectionContext.activePlaybackConnectionKey;
+        activeRecoveryActionRef.current = null;
+        activeRecoveryActionResultRef.current = null;
+        lastRecoveryDropReasonRef.current = null;
+      }
       const dropReason = resolvePlaybackRecoveryDropReason({
-        playbackConnectionKey: inputAction.playbackConnectionKey,
-        currentPlaybackConnectionKey: playbackConnectionKeyRef.current,
+        playbackConnectionKey: connectionContext.recoveryPlaybackConnectionKey,
+        currentPlaybackConnectionKey: connectionContext.activePlaybackConnectionKey,
         activeAction: activeRecoveryActionRef.current,
         nextActionType: inputAction.actionType,
         now
@@ -128,7 +153,8 @@ export function useRoomPlaybackConnectionCoordinator(input: {
         lastRecoveryDropReasonRef.current = dropReason;
         return null;
       }
-      const playbackConnectionKey = inputAction.playbackConnectionKey as PlaybackConnectionKey;
+      const playbackConnectionKey =
+        connectionContext.recoveryPlaybackConnectionKey as PlaybackConnectionKey;
 
       const action: PlaybackRecoveryAction = {
         actionId: `playback-recovery-${++recoveryActionSequenceRef.current}`,
@@ -147,7 +173,7 @@ export function useRoomPlaybackConnectionCoordinator(input: {
       lastRecoveryDropReasonRef.current = null;
       return action;
     },
-    []
+    [getCurrentPlaybackConnectionKey]
   );
 
   const finishRecoveryAction = useCallback(

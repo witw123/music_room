@@ -138,5 +138,28 @@ describe("RoomAudioActivationManager", () => {
       ok: false,
       error: "blocked"
     });
+    expect(audio.muted).toBe(false);
+    expect(audio.volume).toBe(0.72);
+  });
+
+  it("recovers a blocked audible source by starting muted and restoring sound", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    audio.src = "blob:cached-track";
+    audio.play = vi.fn(async () => {
+      if (!audio.muted) {
+        throw new DOMException("blocked", "NotAllowedError");
+      }
+    });
+
+    await expect(manager.playElement(audio)).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+
+    expect(audio.play).toHaveBeenCalledTimes(2);
+    expect(audio.muted).toBe(false);
+    expect(audio.volume).toBe(0.72);
+    expect(manager.isActivated()).toBe(true);
   });
 });

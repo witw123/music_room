@@ -88,6 +88,7 @@ export function useRoomRealtimeConnectionEffects(input: {
     fallbackUploadedTrackIds: uploadedTrackIds
   });
   const presenceIntervalRef = useRef<number | null>(null);
+  const snapshotSourcePeerId = roomSnapshot?.room.playback.sourcePeerId ?? null;
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
   const recoveryWatchdogIntervalRef = useRef<number | null>(null);
   const presenceRepairKeyRef = useRef<string | null>(null);
@@ -298,7 +299,8 @@ export function useRoomRealtimeConnectionEffects(input: {
         enableTrackCaching,
         connectedPeersCount: connectedPeers.length,
         snapshotMembersCount,
-        playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null
+        playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null,
+        sourcePeerId: snapshotSourcePeerId
       });
       if (recoveryAction.recommendation) {
         queuePlaybackRecoveryRecommendation?.(recoveryAction.recommendation);
@@ -312,6 +314,7 @@ export function useRoomRealtimeConnectionEffects(input: {
     queuePlaybackRecoveryRecommendation,
     snapshotMembersCount,
     snapshotRoomId,
+    snapshotSourcePeerId,
     stopRecoveryWatchdog
   ]);
 

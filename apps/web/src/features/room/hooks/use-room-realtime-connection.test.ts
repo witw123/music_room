@@ -477,14 +477,15 @@ describe("resolveRecoveryWatchdogAction", () => {
         enableTrackCaching: true,
         connectedPeersCount: 0,
         snapshotMembersCount: 2,
-        playbackConnectionKey: "track_1|1"
+        playbackConnectionKey: "room_1|peer_source|7",
+        sourcePeerId: "peer_source"
       })
     ).toEqual({
       recommendation: {
-        playbackConnectionKey: "track_1|1",
-        peerId: null,
+        playbackConnectionKey: "room_1|peer_source|7",
+        peerId: "peer_source",
         scope: "data",
-        level: "soft",
+        level: "hard-recreate",
         reason: "watchdog-data-stalled",
         observedNoProgressMs: null
       }

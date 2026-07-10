@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolvePlaybackConnectionKey,
+  resolvePlaybackRecoveryConnectionContext,
   resolvePlaybackRecoveryActionType,
   resolvePlaybackRecoveryDropReason
 } from "./use-room-playback-connection-coordinator";
@@ -43,6 +44,36 @@ describe("resolvePlaybackRecoveryActionType", () => {
         observedNoProgressMs: 45_000
       })
     ).toBe("full-resubscribe");
+  });
+});
+
+describe("resolvePlaybackRecoveryConnectionContext", () => {
+  it("adopts the current playback generation before running recovery", () => {
+    expect(
+      resolvePlaybackRecoveryConnectionContext({
+        trackedPlaybackConnectionKey: null,
+        currentPlaybackConnectionKey: "room_1|peer_source|7",
+        recommendationPlaybackConnectionKey: null
+      })
+    ).toEqual({
+      activePlaybackConnectionKey: "room_1|peer_source|7",
+      recoveryPlaybackConnectionKey: "room_1|peer_source|7",
+      shouldResetRecoveryState: true
+    });
+  });
+
+  it("keeps an explicitly stale recommendation stale after adopting the current generation", () => {
+    expect(
+      resolvePlaybackRecoveryConnectionContext({
+        trackedPlaybackConnectionKey: "room_1|peer_source|6",
+        currentPlaybackConnectionKey: "room_1|peer_source|7",
+        recommendationPlaybackConnectionKey: "room_1|peer_source|6"
+      })
+    ).toEqual({
+      activePlaybackConnectionKey: "room_1|peer_source|7",
+      recoveryPlaybackConnectionKey: "room_1|peer_source|6",
+      shouldResetRecoveryState: true
+    });
   });
 });
 

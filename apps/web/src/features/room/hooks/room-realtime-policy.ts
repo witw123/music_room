@@ -208,6 +208,7 @@ export function resolveRecoveryWatchdogAction(input: {
   connectedPeersCount: number;
   snapshotMembersCount: number;
   playbackConnectionKey: string | null;
+  sourcePeerId?: string | null;
 }) {
   if (
     !input.snapshotRoomId ||
@@ -221,9 +222,9 @@ export function resolveRecoveryWatchdogAction(input: {
   return {
     recommendation: {
       playbackConnectionKey: input.playbackConnectionKey,
-      peerId: null,
+      peerId: input.sourcePeerId ?? null,
       scope: "data" as const,
-      level: "soft" as const,
+      level: input.sourcePeerId ? ("hard-recreate" as const) : ("soft" as const),
       reason: "watchdog-data-stalled" as const,
       observedNoProgressMs: null
     }
