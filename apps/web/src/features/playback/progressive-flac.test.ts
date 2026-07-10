@@ -82,6 +82,60 @@ describe("progressive flac helpers", () => {
     expect(packetExtraction.nextSampleIndex).toBe(256);
   });
 
+  it("waits for the complete FLAC metadata chain before scanning audio frames", () => {
+    const streamInfoPayload = createStreamInfoPayload();
+    const partialPicture = new Uint8Array([
+      0x86, 0x00, 0x00, 0x10,
+      0xff, 0xf8, 0x80, 0x10
+    ]);
+    const partialMetadata = new Uint8Array([
+      0x66, 0x4c, 0x61, 0x43,
+      0x00, 0x00, 0x00, 0x22,
+      ...streamInfoPayload,
+      ...partialPicture
+    ]);
+
+    expect(parseFlacStreamInfo(partialMetadata)).toBeNull();
+    expect(
+      extractFlacPacketsFromBitstream({
+        bytes: partialMetadata,
+        startOffset: 0,
+        nextSampleIndex: 0,
+        finalChunk: false
+      })
+    ).toMatchObject({
+      streamInfo: null,
+      packets: []
+    });
+  });
+
+  it("uses a canonical STREAMINFO description when large metadata is complete", () => {
+    const streamInfoPayload = createStreamInfoPayload();
+    const picturePayload = new Uint8Array(4_096).fill(0x5a);
+    const metadata = new Uint8Array([
+      0x66, 0x4c, 0x61, 0x43,
+      0x00, 0x00, 0x00, 0x22,
+      ...streamInfoPayload,
+      0x86,
+      (picturePayload.byteLength >> 16) & 0xff,
+      (picturePayload.byteLength >> 8) & 0xff,
+      picturePayload.byteLength & 0xff,
+      ...picturePayload
+    ]);
+    const frame = buildFlacFrame(0, [0x11, 0x22, 0x33]);
+    const streamInfo = parseFlacStreamInfo(new Uint8Array([...metadata, ...frame]));
+
+    expect(streamInfo?.audioOffset).toBe(metadata.byteLength);
+    expect(streamInfo?.description).toEqual(
+      new Uint8Array([
+        0x66, 0x4c, 0x61, 0x43,
+        0x80, 0x00, 0x00, 0x22,
+        ...streamInfoPayload
+      ])
+    );
+    expect(streamInfo?.description.byteLength).toBe(42);
+  });
+
   it("extracts timestamped frames from a cached playback window without requiring the full prefix", () => {
     const streamInfoPayload = new Uint8Array(34);
     streamInfoPayload[0] = 0x01;
@@ -118,6 +172,19 @@ function buildFlacFrame(frameNumber: number, bodyBytes: number[]) {
   const headerWithoutCrc = new Uint8Array([0xff, 0xf8, 0x80, 0x10, frameNumber & 0x7f]);
   const header = new Uint8Array([...headerWithoutCrc, computeCrc8(headerWithoutCrc)]);
   return new Uint8Array([...header, ...bodyBytes]);
+}
+
+function createStreamInfoPayload() {
+  const streamInfoPayload = new Uint8Array(34);
+  streamInfoPayload[0] = 0x10;
+  streamInfoPayload[1] = 0x00;
+  streamInfoPayload[2] = 0x10;
+  streamInfoPayload[3] = 0x00;
+  streamInfoPayload[10] = 0x0a;
+  streamInfoPayload[11] = 0xc4;
+  streamInfoPayload[12] = 0x42;
+  streamInfoPayload[13] = 0xf0;
+  return streamInfoPayload;
 }
 
 function computeCrc8(bytes: Uint8Array) {

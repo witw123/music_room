@@ -69,6 +69,10 @@ export function runPlaybackMutationAfterLocalPrime(input: {
   return input.mutatePlayback();
 }
 
+export function shouldPrimeFullLocalTrackForPlayCommand(trackId: string | undefined) {
+  return Boolean(trackId);
+}
+
 export function startBestEffortPlaybackAudioUnlock(input: {
   unlockAudio: () => Promise<unknown>;
   onError?: (error: unknown) => void;
@@ -389,7 +393,10 @@ export function useRoomPlaybackActions({
         trackId: targetTrackId
       });
       await runPlaybackMutationAfterLocalPrime({
-        primeLocalPlayback: () => primeFullLocalTrackPlayback(targetTrackId),
+        primeLocalPlayback: () =>
+          shouldPrimeFullLocalTrackForPlayCommand(trackId)
+            ? primeFullLocalTrackPlayback(targetTrackId)
+            : Promise.resolve(false),
         mutatePlayback: () => playTrack(trackId)
       });
     },

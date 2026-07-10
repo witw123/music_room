@@ -36,6 +36,7 @@ export {
 } from "@/components/room/hooks/use-room-page-derived";
 export {
   runPlaybackMutationAfterLocalPrime,
+  shouldPrimeFullLocalTrackForPlayCommand,
   startBestEffortPlaybackAudioUnlock
 } from "@/components/room/hooks/use-room-playback-actions";
 

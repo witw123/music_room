@@ -13,6 +13,7 @@ import {
   selectFullLocalPlaybackTracks,
   shouldClearCachedFullLocalPlaybackTrack,
   shouldInitializePlaybackSource,
+  shouldPrimeFullLocalTrackForPlayCommand,
   startBestEffortPlaybackAudioUnlock,
   resolveStableCurrentTrack
 } from "./music-room-app";
@@ -389,7 +390,7 @@ describe("getPlaybackSourceInitializationKey", () => {
     ).toBe(false);
   });
 
-  it("reinitializes the playback source when full cache becomes playable during the same surface", () => {
+  it("keeps progressive playback when full cache becomes playable during the same surface", () => {
     const pendingCacheKey = getPlaybackSourceInitializationKey({
       playbackSurfaceKey: "track_cached|host|1",
       currentPlaybackTrackId: "track_cached",
@@ -417,13 +418,13 @@ describe("getPlaybackSourceInitializationKey", () => {
       hasPlayableFullLocalTrack: true
     });
 
-    expect(readyCacheKey).not.toBe(pendingCacheKey);
+    expect(readyCacheKey).toBe(pendingCacheKey);
     expect(
       shouldInitializePlaybackSource({
         previousInitializationKey: pendingCacheKey,
         nextInitializationKey: readyCacheKey
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("reinitializes the playback source on the next surface so completed cache can be used then", () => {
@@ -578,6 +579,11 @@ describe("shouldClearCachedFullLocalPlaybackTrack", () => {
 });
 
 describe("runPlaybackMutationAfterLocalPrime", () => {
+  it("primes full-local only for an explicit new track command", () => {
+    expect(shouldPrimeFullLocalTrackForPlayCommand("track_cached")).toBe(true);
+    expect(shouldPrimeFullLocalTrackForPlayCommand(undefined)).toBe(false);
+  });
+
   it("does not wait for local audio priming before mutating room playback", async () => {
     const primeLocalPlayback = vi.fn(() => new Promise(() => undefined));
     const mutatePlayback = vi.fn(async () => "mutated");

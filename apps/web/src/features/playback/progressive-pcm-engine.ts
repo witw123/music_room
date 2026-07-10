@@ -1141,12 +1141,18 @@ export class ProgressivePcmEngine {
       return;
     }
 
+    const decodeErrorBeforeFlush = this.lastDecodeError;
     try {
       this.decoderFlushAttemptCount += 1;
       await decoder.flush();
       this.decoderFlushCount += 1;
-    } catch {
-      this.lastDecodeError = "decoder-flush-failed";
+    } catch (error) {
+      if (this.lastDecodeError === decodeErrorBeforeFlush) {
+        const detail = error instanceof Error ? error.message : String(error);
+        this.lastDecodeError = detail
+          ? `decoder-flush-failed: ${detail}`
+          : "decoder-flush-failed";
+      }
       this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
       this.decoder = null;
       this.pendingDecodedFlacPacketTimings = [];

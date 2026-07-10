@@ -2014,14 +2014,14 @@ describe("ProgressivePcmEngine", () => {
       const result = await syncPlayback(engine, 0.2, true);
 
       expect(result.localReady).toBe(false);
-      expect(result.blockedReason).toBe("decoder-flush-failed");
+      expect(result.blockedReason).toBe("decoder-flush-failed: flush failed");
       expect(engine.getSnapshot()).toMatchObject({
         status: "failed",
         decodedPacketCount: 1,
         decoderFlushAttemptCount: 1,
         decoderFlushCount: 0,
         decodedSegmentCount: 0,
-        lastDecodeError: "decoder-flush-failed"
+        lastDecodeError: "decoder-flush-failed: flush failed"
       });
     } finally {
       engine.destroy();

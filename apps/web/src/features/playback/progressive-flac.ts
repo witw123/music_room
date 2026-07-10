@@ -23,6 +23,15 @@ export type ProgressiveFlacPacketExtraction = {
   nextSampleIndex: number;
 };
 
+const flacStreamInfoLength = 34;
+
+function createFlacDecoderDescription(streamInfoBlock: Uint8Array) {
+  const description = new Uint8Array(8 + flacStreamInfoLength);
+  description.set([0x66, 0x4c, 0x61, 0x43, 0x80, 0x00, 0x00, flacStreamInfoLength]);
+  description.set(streamInfoBlock.subarray(0, flacStreamInfoLength), 8);
+  return description;
+}
+
 export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInfo | null {
   if (bytes.byteLength < 8) {
     return null;
@@ -52,14 +61,8 @@ export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInf
     const blockEnd = blockStart + blockLength;
 
     if (blockEnd > bytes.byteLength) {
-      // The last metadata block crosses the end of the available payload
-      // (common when chunk 0 is too small to hold a large embedded cover
-      // art PICTURE block).  If we've already found the STREAMINFO block
-      // (always the first metadata block), return it — partial trailing
-      // blocks don't affect the stream info we need for decoding.
-      if (streamInfoBlock) {
-        break;
-      }
+      // Audio frames start after the complete metadata chain. Scanning from a
+      // partial PICTURE block can mistake embedded image bytes for FLAC sync.
       return null;
     }
 
@@ -73,7 +76,7 @@ export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInf
     }
   }
 
-  if (!streamInfoBlock || streamInfoBlock.byteLength < 18) {
+  if (!streamInfoBlock || streamInfoBlock.byteLength !== flacStreamInfoLength) {
     return null;
   }
 
@@ -98,7 +101,9 @@ export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInf
   }
 
   return {
-    description: bytes.slice(0, cursor),
+    // WebCodecs only needs STREAMINFO. Supplying album artwork and comments
+    // made Chromium reject otherwise valid FLAC streams during flush.
+    description: createFlacDecoderDescription(streamInfoBlock),
     audioOffset: cursor,
     minBlockSize,
     maxBlockSize,
