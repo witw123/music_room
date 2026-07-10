@@ -3,6 +3,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type Dispatch,
   type MutableRefObject,
   type RefObject,
@@ -35,6 +36,22 @@ type ProgressiveEngineControllerInput = {
   volume: number;
 };
 
+export function shouldRecoverMissingProgressiveEngine(input: {
+  canPrepareProgressiveLocal: boolean;
+  hasManifest: boolean;
+  hasAudio: boolean;
+  hasMseEngine: boolean;
+  hasPcmEngine: boolean;
+}) {
+  return (
+    input.canPrepareProgressiveLocal &&
+    input.hasManifest &&
+    input.hasAudio &&
+    !input.hasMseEngine &&
+    !input.hasPcmEngine
+  );
+}
+
 export function useProgressiveEngineController({
   audioRef,
   canPrepareProgressiveLocal,
@@ -49,6 +66,39 @@ export function useProgressiveEngineController({
 }: ProgressiveEngineControllerInput) {
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
+  const markPcmRuntimeFailureRef = useRef(markPcmRuntimeFailure);
+  markPcmRuntimeFailureRef.current = markPcmRuntimeFailure;
+  const [recoveryGeneration, setRecoveryGeneration] = useState(0);
+
+  useEffect(() => {
+    if (!canPrepareProgressiveLocal || !currentProgressiveManifest) {
+      return;
+    }
+
+    const timerId = window.setInterval(() => {
+      if (
+        shouldRecoverMissingProgressiveEngine({
+          canPrepareProgressiveLocal,
+          hasManifest: !!currentProgressiveManifest,
+          hasAudio: !!audioRef.current,
+          hasMseEngine: !!progressiveEngineRef.current,
+          hasPcmEngine: !!progressivePcmEngineRef.current
+        })
+      ) {
+        setRecoveryGeneration((current) => current + 1);
+      }
+    }, 500);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [
+    audioRef,
+    canPrepareProgressiveLocal,
+    currentProgressiveManifest,
+    progressiveEngineRef,
+    progressivePcmEngineRef
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -101,7 +151,7 @@ export function useProgressiveEngineController({
 
         if (attachAction.kind === "failure") {
           if (attachAction.failureAction === "pcm-runtime-failure") {
-            markPcmRuntimeFailure("engine-failed");
+            markPcmRuntimeFailureRef.current("engine-failed");
           } else {
             setProgressiveFallbackReason(attachAction.failureAction);
           }
@@ -125,7 +175,7 @@ export function useProgressiveEngineController({
         }
 
         if (attachAction.failureAction === "pcm-runtime-failure") {
-          markPcmRuntimeFailure("engine-failed");
+          markPcmRuntimeFailureRef.current("engine-failed");
         } else {
           setProgressiveFallbackReason(attachAction.failureAction);
         }
@@ -145,10 +195,10 @@ export function useProgressiveEngineController({
     canPrepareProgressiveLocal,
     currentProgressiveManifest,
     currentProgressiveEngineType,
-    markPcmRuntimeFailure,
     peerId,
     progressiveEngineRef,
     progressivePcmEngineRef,
+    recoveryGeneration,
     setProgressiveFallbackReason
   ]);
 

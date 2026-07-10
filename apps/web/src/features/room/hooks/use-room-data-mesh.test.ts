@@ -3,6 +3,7 @@ import {
   createBoundedCachedLibraryTrackCache,
   createInFlightCachedLibraryTrackRecordLoader,
   createDataMeshBridge,
+  createRoomDataMeshRuntime,
   resolvePieceRequestFallbackPayload,
   resolveDataPeerRecoveryRecommendation
 } from "./use-room-data-mesh";
@@ -82,6 +83,123 @@ describe("createDataMeshBridge", () => {
     await expect(bridge.syncPeers(["peer_source"])).resolves.toBe(true);
     expect(syncPeers).toHaveBeenCalledWith(["peer_source"], undefined);
     expect(bridge.isReady()).toBe(true);
+  });
+});
+
+describe("createRoomDataMeshRuntime piece persistence", () => {
+  it("persists every validated playback piece and marks it owned only after persistence", () => {
+    const markPieceReceived = vi.fn();
+    const clearManualCachePendingPiece = vi.fn();
+    const handleManualCachePieceReceived = vi.fn();
+    const meshRef = { current: null };
+    const chunkSchedulerRef = { current: null };
+    const runtime = createRoomDataMeshRuntime({
+      roomId: "room_1",
+      peerId: "peer_local",
+      emitPeerSignal: vi.fn(),
+      iceServers: [],
+      meshRef,
+      chunkSchedulerRef,
+      currentRoomRef: { current: null },
+      uploadedTracksRef: { current: {} },
+      uploadedTrackIdsRef: { current: [] },
+      manualCacheTrackIdsRef: { current: [] },
+      announceRoomTrackAvailabilityRef: { current: vi.fn() },
+      handleManualCachePieceReceivedRef: {
+        current: handleManualCachePieceReceived
+      },
+      clearManualCachePendingPiece,
+      deferManualCachePendingPiece: vi.fn(),
+      flushPendingAvailabilityRef: { current: vi.fn() },
+      setConnectedPeers: vi.fn(),
+      isPageVisible: true,
+      playbackStatus: "playing",
+      currentTrackId: "track_1",
+      bufferHealth: "healthy",
+      enableManualTrackCaching: false,
+      reportMeshResyncFailure: vi.fn(),
+      recordPeerDiagnosticRef: { current: vi.fn() },
+      recordPieceTransferRef: { current: vi.fn() },
+      recordPieceRequestSampleRef: { current: vi.fn() },
+      updatePeerBufferedAmountRef: { current: vi.fn() },
+      updateDataTransportStatsRef: { current: vi.fn() },
+      connectionSupervisorStatesRef: { current: new Map() },
+      updateConnectionSupervisorSignalState: vi.fn(() => null),
+      updateConnectionSupervisorTransportStats: vi.fn(() => null),
+      withResolvedTransportHealth: vi.fn((snapshot) => snapshot),
+      withSupervisorDiagnosticPatch: vi.fn((snapshot) => snapshot),
+      getPieceTransferRates: vi.fn(() => ({
+        downloadRateKbps: null,
+        uploadRateKbps: null
+      })),
+      pieceTransferRatesRef: { current: new Map() },
+      getPeerMedianRttMs: vi.fn(() => null)
+    });
+    chunkSchedulerRef.current = {
+      markPieceReceived
+    } as never;
+    const callbacks = (
+      runtime.mesh as unknown as {
+        callbacks: {
+          onPieceReceived: (payload: {
+            peerId: string;
+            trackId: string;
+            chunkIndex: number;
+            totalChunks: number;
+            chunkSize: number;
+            mimeType: string;
+            payloadBytes: number;
+            payload: ArrayBuffer;
+            requestRttMs: number | null;
+          }) => boolean | void;
+          onPiecePersisted: (payload: {
+            peerId: string;
+            trackId: string;
+            chunkIndex: number;
+            totalChunks: number;
+            chunkSize: number;
+            mimeType: string;
+          }) => void;
+        };
+      }
+    ).callbacks;
+    const piece = {
+      peerId: "peer_source",
+      trackId: "track_1",
+      chunkIndex: 4,
+      totalChunks: 12,
+      chunkSize: 4,
+      mimeType: "audio/flac"
+    };
+
+    expect(
+      callbacks.onPieceReceived({
+        ...piece,
+        payloadBytes: 4,
+        payload: new Uint8Array([1, 2, 3, 4]).buffer,
+        requestRttMs: null
+      })
+    ).toBe(true);
+    expect(markPieceReceived).not.toHaveBeenCalled();
+
+    callbacks.onPiecePersisted(piece);
+
+    expect(markPieceReceived).toHaveBeenCalledWith(
+      "track_1",
+      4,
+      12,
+      "peer_source"
+    );
+    expect(clearManualCachePendingPiece).toHaveBeenCalledWith("track_1", 4);
+    expect(handleManualCachePieceReceived).toHaveBeenCalledWith({
+      trackId: "track_1",
+      chunkIndex: 4,
+      totalChunks: 12,
+      chunkSize: 4,
+      mimeType: "audio/flac"
+    });
+
+    runtime.mesh.destroy();
   });
 });
 

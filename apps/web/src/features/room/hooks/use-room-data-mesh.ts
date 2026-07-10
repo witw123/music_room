@@ -314,16 +314,6 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
             durationMs: requestRttMs
           });
         }
-        const shouldProcessPieceForCache = input.manualCacheTrackIdsRef.current.includes(trackId);
-        input.chunkSchedulerRef.current?.markPieceReceived(
-          trackId,
-          chunkIndex,
-          totalChunks,
-          sourcePeerId
-        );
-        if (!shouldProcessPieceForCache) {
-          return false;
-        }
         const currentTrack =
           input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         if (currentTrack) {
@@ -344,15 +334,24 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
             });
           })();
         }
+        // PCM may evict this piece from its memory window at any time, so every
+        // validated playback piece must also survive in the durable cache.
         return true;
       },
       onPiecePersisted: ({
+        peerId: sourcePeerId,
         trackId,
         chunkIndex,
         totalChunks,
         chunkSize,
         mimeType
       }) => {
+        input.chunkSchedulerRef.current?.markPieceReceived(
+          trackId,
+          chunkIndex,
+          totalChunks,
+          sourcePeerId
+        );
         input.clearManualCachePendingPiece(trackId, chunkIndex);
         input.handleManualCachePieceReceivedRef.current({
           trackId,
