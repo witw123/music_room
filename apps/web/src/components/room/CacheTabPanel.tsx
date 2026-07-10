@@ -217,7 +217,9 @@ function CacheTabPanelBase({
                     <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-muted">
                       <span className="truncate">{row.detail}</span>
                       <span className="shrink-0">
-                        {row.status.key === "downloading" ? "缓存中" : row.progress.label}
+                        {row.status.key === "downloading"
+                          ? `${row.progress.label} · ${row.speedLabel}`
+                          : row.progress.label}
                       </span>
                     </div>
                     <div

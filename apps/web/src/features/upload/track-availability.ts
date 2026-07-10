@@ -98,6 +98,7 @@ export async function announceRoomTrackAvailability(input: {
   peerId: string | null | undefined;
   trackId: string;
   uploadedTrack: UploadedTrack | null | undefined;
+  force?: boolean;
   inFlightAnnouncements: Set<string>;
   announcementTtl: Map<string, number>;
   nowMs?: number;
@@ -171,7 +172,10 @@ export async function announceRoomTrackAvailability(input: {
   const announcementKey = [input.roomId, input.trackId, track.fileHash, input.peerId].join("|");
   const now = input.nowMs ?? Date.now();
   const lastAnnouncedAt = input.announcementTtl.get(announcementKey) ?? 0;
-  if (input.inFlightAnnouncements.has(announcementKey) || now - lastAnnouncedAt < 5_000) {
+  if (
+    input.inFlightAnnouncements.has(announcementKey) ||
+    (!input.force && now - lastAnnouncedAt < 5_000)
+  ) {
     return false;
   }
   input.inFlightAnnouncements.add(announcementKey);

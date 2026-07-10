@@ -14,6 +14,7 @@ import {
   type UploadedTrack
 } from "@/features/upload/audio-utils";
 import {
+  claimRoomEntryCacheAutoImport,
   loadCacheLibrarySnapshot,
   selectCachedLibraryTracksForRoomAutoImport
 } from "./cache-library";
@@ -91,6 +92,7 @@ export function useTrackUploads(options: {
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
   const [cacheLibraryTracks, setCacheLibraryTracks] = useState<CachedLibraryTrack[]>([]);
+  const [cacheLibraryHydrated, setCacheLibraryHydrated] = useState(false);
   const [manualCacheTasks, setManualCacheTasks] = useState<Record<string, ManualCacheTask>>({});
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
@@ -102,6 +104,8 @@ export function useTrackUploads(options: {
   const manualCacheRetainedPieceTrackIdsRef = useRef<Set<string>>(new Set());
   const autoImportInFlightCacheKeysRef = useRef<Set<string>>(new Set());
   const autoImportAttemptedCacheKeysRef = useRef<Set<string>>(new Set());
+  const autoImportClaimedEntryKeyRef = useRef<string | null>(null);
+  const autoImportActiveEntryKeyRef = useRef<string | null>(null);
   const roomTrackIdsKey = useMemo(
     () => buildRoomTrackIdsKey(roomSnapshot?.tracks),
     [roomSnapshot?.tracks]
@@ -125,6 +129,7 @@ export function useTrackUploads(options: {
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
     setCacheLibraryTracks(snapshot.tracks);
     setCachedTrackCount(snapshot.count);
+    setCacheLibraryHydrated(true);
   }, []);
 
   useUploadRuntimeEffects({
@@ -259,6 +264,21 @@ export function useTrackUploads(options: {
 
   useEffect(() => {
     if (!activeSession || !roomSnapshot?.room.id) {
+      autoImportActiveEntryKeyRef.current = null;
+      autoImportClaimedEntryKeyRef.current = null;
+      return;
+    }
+
+    const entryKey = `${roomSnapshot.room.id}:${activeSession.userId}`;
+    autoImportActiveEntryKeyRef.current = entryKey;
+
+    const claim = claimRoomEntryCacheAutoImport({
+      cacheLibraryHydrated,
+      entryKey,
+      claimedEntryKey: autoImportClaimedEntryKeyRef.current
+    });
+    autoImportClaimedEntryKeyRef.current = claim.nextClaimedEntryKey;
+    if (!claim.shouldRun) {
       return;
     }
 
@@ -273,10 +293,9 @@ export function useTrackUploads(options: {
       return;
     }
 
-    let cancelled = false;
     void (async () => {
       for (const fileHash of fileHashes) {
-        if (cancelled) {
+        if (autoImportActiveEntryKeyRef.current !== entryKey) {
           return;
         }
 
@@ -299,12 +318,9 @@ export function useTrackUploads(options: {
         }
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     activeSession,
+    cacheLibraryHydrated,
     cacheLibraryTracks,
     importCachedLibraryTrackToRoom,
     roomSnapshot?.room.id,

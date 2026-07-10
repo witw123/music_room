@@ -5,11 +5,13 @@ import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { AvailabilityEntry } from "./MeshStatusPanel";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
   cachedLibraryFileHashes: string[];
+  availabilitySummary: AvailabilityEntry[];
   canControlPlayback: boolean;
   canManageLibraryTracks: boolean;
   activeSession: AuthSession | null;
@@ -23,6 +25,7 @@ function TrackListSectionBase({
   tracks,
   uploadedTracks,
   cachedLibraryFileHashes,
+  availabilitySummary,
   canControlPlayback,
   canManageLibraryTracks,
   activeSession,
@@ -35,6 +38,10 @@ function TrackListSectionBase({
   const cachedLibraryFileHashSet = useMemo(
     () => buildCachedLibraryFileHashSet(cachedLibraryFileHashes),
     [cachedLibraryFileHashes]
+  );
+  const availabilityByTrackId = useMemo(
+    () => new Map(availabilitySummary.map((entry) => [entry.track.id, entry] as const)),
+    [availabilitySummary]
   );
 
   return (
@@ -70,7 +77,7 @@ function TrackListSectionBase({
 
       <div className="mt-4 flex flex-col gap-2">
         {tracks.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="overflow-hidden rounded-lg border border-surface-border bg-surface">
             {tracks.map((track) => {
               const canDeleteTrack = canDeleteLibraryTrack({
                 track,
@@ -80,18 +87,16 @@ function TrackListSectionBase({
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
               const isInCacheLibrary = cachedLibraryFileHashSet.has(track.fileHash);
-              const availabilityDetail = isUploadedLocally
-                ? "你是这首歌的本机音源；播放时会向在线成员提供分片缓存。"
-                : isInCacheLibrary
-                  ? "本机已有完整缓存；可作为本地播放和分片兜底，不完全依赖上传者在线。"
-                  : "需要上传者在线或其他成员已有缓存；如果播放无声，先查看成员页的缓存链路。";
+              const cachedMemberLabel = formatCachedMemberNames(
+                availabilityByTrackId.get(track.id)?.cachedMemberNicknames ?? []
+              );
 
               return (
                 <article
                   key={track.id}
                   data-testid="track-card"
                   data-track-id={track.id}
-                  className="group flex flex-col justify-between gap-4 rounded-2xl border border-surface-border bg-surface p-4 transition-all duration-300 hover:bg-surface-hover hover:shadow-md"
+                  className="group grid gap-4 border-b border-surface-border px-4 py-4 transition-colors last:border-b-0 hover:bg-surface-hover lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)_auto] lg:items-center"
                 >
                   <div className="min-w-0 space-y-1">
                     <h3 className="truncate font-semibold text-foreground">{track.title}</h3>
@@ -115,24 +120,28 @@ function TrackListSectionBase({
                         : "房间可用"}{" "}
                       {track.ownerNickname} 上传
                     </p>
-                    <p className="mt-2 text-[11px] leading-5 text-foreground-muted">
-                      {availabilityDetail}
+                  </div>
+
+                  <div className="min-w-0 text-xs text-foreground-muted">
+                    <p className="truncate">{cachedMemberLabel}</p>
+                    <p className="mt-1 truncate text-[11px] text-foreground-muted/70">
+                      {isUploadedLocally
+                        ? "本机上传源"
+                        : isInCacheLibrary
+                          ? "本机完整缓存"
+                          : "等待可用音源"}
                     </p>
                   </div>
 
                   <div
-                    className={`mt-auto grid items-center gap-2 ${
-                      canDeleteTrack
-                        ? "grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
-                        : "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto]"
-                    }`}
+                    className="flex flex-wrap items-center justify-end gap-2"
                   >
                     {canDeleteTrack ? (
                       <Button
                         data-testid="track-delete-button"
                         data-track-id={track.id}
                         variant="ghost"
-                        className="h-10 shrink-0 whitespace-nowrap px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="h-9 shrink-0 whitespace-nowrap px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => startTransition(() => void onDeleteTrack(track.id))}
                         type="button"
                       >
@@ -144,7 +153,7 @@ function TrackListSectionBase({
                       data-testid="track-add-queue-button"
                       data-track-id={track.id}
                       variant="outline"
-                      className="h-10 min-w-0 w-full justify-center whitespace-nowrap bg-background/50 px-4"
+                      className="h-9 shrink-0 justify-center whitespace-nowrap bg-background/50 px-3"
                       onClick={() => startTransition(() => void onAddToQueue(track.id))}
                       type="button"
                     >
@@ -155,7 +164,7 @@ function TrackListSectionBase({
                       data-testid="track-play-button"
                       data-track-id={track.id}
                       variant="ghost"
-                      className="h-10 w-full shrink-0 px-0 hover:bg-accent/10 hover:text-accent sm:w-12"
+                      className="h-9 w-9 shrink-0 px-0 hover:bg-accent/10 hover:text-accent"
                       disabled={!canControlPlayback}
                       onClick={() => void onPlayTrack(track.id)}
                       type="button"
@@ -202,6 +211,13 @@ export const TrackListSection = memo(TrackListSectionBase);
 
 export function buildCachedLibraryFileHashSet(cachedLibraryFileHashes: string[]) {
   return new Set(cachedLibraryFileHashes);
+}
+
+export function formatCachedMemberNames(memberNames: string[]) {
+  const uniqueNames = [...new Set(memberNames.filter(Boolean))];
+  return uniqueNames.length > 0
+    ? `完整缓存：${uniqueNames.join("、")}`
+    : "暂无成员持有完整缓存";
 }
 
 export function canDeleteLibraryTrack(input: {

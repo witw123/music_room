@@ -11,6 +11,7 @@ type UseRoomCacheLibraryActionsInput = {
   deleteCachedLibraryTrackEntry: (fileHash: string) => Promise<unknown>;
   exportCachedLibraryTrack: (fileHash: string) => Promise<unknown>;
   importCachedLibraryTrackToRoom: (fileHash: string) => Promise<string | null | undefined>;
+  resetPlayerSurface: () => void;
   setStatusMessage: (value: string) => void;
 };
 
@@ -21,6 +22,7 @@ export function useRoomCacheLibraryActions({
   deleteCachedLibraryTrackEntry,
   exportCachedLibraryTrack,
   importCachedLibraryTrackToRoom,
+  resetPlayerSurface,
   setStatusMessage
 }: UseRoomCacheLibraryActionsInput) {
   const handleStartManualCacheDownload = useCallback(
@@ -43,13 +45,21 @@ export function useRoomCacheLibraryActions({
   const handleDeleteCachedLibraryTrack = useCallback(
     async (fileHash: string) => {
       try {
+        const removesCurrentTrack = roomSnapshot?.tracks.some(
+          (track) =>
+            track.id === roomSnapshot.room.playback.currentTrackId &&
+            track.fileHash === fileHash
+        );
         await deleteCachedLibraryTrackEntry(fileHash);
+        if (removesCurrentTrack) {
+          resetPlayerSurface();
+        }
         setStatusMessage("已从我的缓存库移除歌曲。");
       } catch (error) {
         setStatusMessage(toUserFacingError(error));
       }
     },
-    [deleteCachedLibraryTrackEntry, setStatusMessage]
+    [deleteCachedLibraryTrackEntry, resetPlayerSurface, roomSnapshot, setStatusMessage]
   );
 
   const handleExportCachedLibraryTrack = useCallback(

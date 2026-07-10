@@ -111,6 +111,24 @@ export async function loadCacheLibrarySnapshot(input: {
   };
 }
 
+export function claimRoomEntryCacheAutoImport(input: {
+  cacheLibraryHydrated: boolean;
+  entryKey: string | null;
+  claimedEntryKey: string | null;
+}) {
+  if (!input.cacheLibraryHydrated || !input.entryKey) {
+    return {
+      shouldRun: false,
+      nextClaimedEntryKey: input.claimedEntryKey
+    };
+  }
+
+  return {
+    shouldRun: input.claimedEntryKey !== input.entryKey,
+    nextClaimedEntryKey: input.entryKey
+  };
+}
+
 export function selectCachedLibraryTracksForRoomAutoImport(input: {
   activeSessionNickname: string | null | undefined;
   activeSessionUserId: string | null | undefined;

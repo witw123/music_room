@@ -124,7 +124,7 @@ export function useUploadPipelineActions({
   );
 
   const announceRoomTrackAvailability = useCallback(
-    async (trackId: string) => {
+    async (trackId: string, options?: { force?: boolean }) => {
       await announceRoomTrackAvailabilityFromSources({
         roomId: roomSnapshot?.room.id,
         roomTracks: roomSnapshot?.tracks ?? [],
@@ -132,6 +132,7 @@ export function useUploadPipelineActions({
         peerId,
         trackId,
         uploadedTrack: uploadedTracks[trackId] ?? null,
+        force: options?.force,
         inFlightAnnouncements: availabilityAnnouncementInFlightRef.current,
         announcementTtl: availabilityAnnouncementTtlRef.current,
         getCachedLibraryTrackSummary,

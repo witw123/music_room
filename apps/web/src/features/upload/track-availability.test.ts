@@ -98,6 +98,48 @@ describe("announceRoomTrackAvailability", () => {
     expect(published).toEqual([]);
   });
 
+  it("force publishes the current source availability inside the ttl window", async () => {
+    const published: string[] = [];
+    const ttl = new Map([["room_1|track_1|hash_1|peer_1", 8_000]]);
+
+    const didPublish = await announceRoomTrackAvailability({
+      roomId: "room_1",
+      roomTracks: [track],
+      activeSession: { nickname: "Host" },
+      peerId: "peer_1",
+      trackId: "track_1",
+      uploadedTrack: {
+        file: new File(["cached"], "cached.flac", { type: "audio/flac" }),
+        objectUrl: "blob:uploaded",
+        origin: "live-upload"
+      },
+      force: true,
+      inFlightAnnouncements: new Set(),
+      announcementTtl: ttl,
+      nowMs: 10_000,
+      getCachedLibraryTrackSummary: async () => null,
+      getCachedLibraryTrack: async () => null,
+      getTrackPieceManifestByFileHash: async () => null,
+      getTrackPieceManifest: async () => null,
+      buildTrackAvailabilityFromCache: async () => null,
+      buildTrackAvailabilityFromManifest: (input) => ({
+        roomId: input.roomId,
+        trackId: input.trackId,
+        ownerPeerId: input.peerId,
+        nickname: input.nickname,
+        totalChunks: 2,
+        chunkSize: 1024,
+        availableChunks: [0, 1],
+        source: "live_upload",
+        announcedAt: "2026-07-10T00:00:00.000Z"
+      }),
+      publishAvailability: (availability) => published.push(availability.trackId)
+    });
+
+    expect(didPublish).toBe(true);
+    expect(published).toEqual(["track_1"]);
+  });
+
   it("publishes partial cached-piece availability so room peers can relay cached chunks", async () => {
     const published: Array<{ chunks: number[]; totalChunks: number }> = [];
     const ttl = new Map<string, number>();

@@ -10,6 +10,7 @@ import {
   importCachedLibraryTrackToRoom,
   loadCacheLibrarySnapshot,
   selectCachedLibraryTracksForRoomAutoImport,
+  claimRoomEntryCacheAutoImport,
   startCacheDownload,
   toCachedLibraryFile,
   toCachedLibraryTrack,
@@ -40,6 +41,30 @@ describe("cache-library adapters", () => {
     },
     relayManifest: null
   };
+
+  it("claims automatic cache import only once per active room entry", () => {
+    expect(
+      claimRoomEntryCacheAutoImport({
+        cacheLibraryHydrated: false,
+        entryKey: "room_1:user_1",
+        claimedEntryKey: null
+      })
+    ).toEqual({ shouldRun: false, nextClaimedEntryKey: null });
+    expect(
+      claimRoomEntryCacheAutoImport({
+        cacheLibraryHydrated: true,
+        entryKey: "room_1:user_1",
+        claimedEntryKey: null
+      })
+    ).toEqual({ shouldRun: true, nextClaimedEntryKey: "room_1:user_1" });
+    expect(
+      claimRoomEntryCacheAutoImport({
+        cacheLibraryHydrated: true,
+        entryKey: "room_1:user_1",
+        claimedEntryKey: "room_1:user_1"
+      })
+    ).toEqual({ shouldRun: false, nextClaimedEntryKey: "room_1:user_1" });
+  });
 
   it("builds stable file names from cached track metadata", () => {
     expect(

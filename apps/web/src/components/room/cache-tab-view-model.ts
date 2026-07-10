@@ -149,6 +149,20 @@ export function deriveRoomCacheRow(input: DeriveRoomCacheRowInput): RoomCacheRow
   };
 }
 
+export function formatDownloadRate(downloadRateKbps: number | null | undefined) {
+  if (
+    typeof downloadRateKbps !== "number" ||
+    !Number.isFinite(downloadRateKbps) ||
+    downloadRateKbps <= 0
+  ) {
+    return "等待数据";
+  }
+
+  return downloadRateKbps >= 1_000
+    ? `${(downloadRateKbps / 1_000).toFixed(1)} Mbps`
+    : `${Math.round(downloadRateKbps)} kbps`;
+}
+
 function buildTaskRow(
   input: DeriveRoomCacheRowInput,
   progress: RoomCacheRow["progress"],
@@ -174,7 +188,7 @@ function buildTaskRow(
     category: "active",
     detail,
     progress,
-    speedLabel: null,
+    speedLabel: key === "downloading" ? formatDownloadRate(input.task?.downloadRateKbps) : null,
     aheadLabel: null,
     action,
     actionDisabled

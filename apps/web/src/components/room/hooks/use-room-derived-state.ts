@@ -503,7 +503,18 @@ export function buildAvailabilitySummary(input: {
       remotePeerCount,
       localChunkCount: local?.availableChunks.length ?? 0,
       totalChunks: manifest?.totalChunks ?? 0,
-      sources: peers.map((entry) => `${entry.nickname} (${entry.source})`)
+      sources: peers.map((entry) => `${entry.nickname} (${entry.source})`),
+      cachedMemberNicknames: [
+        ...new Set(
+          peers
+            .filter(
+              (entry) =>
+                entry.totalChunks > 0 &&
+                entry.availableChunks.length >= entry.totalChunks
+            )
+            .map((entry) => entry.nickname)
+        )
+      ]
     };
   });
 }

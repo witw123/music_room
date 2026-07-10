@@ -33,6 +33,7 @@ import {
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
   shouldQueueIncomingAvailability,
+  resolveSourceAvailabilityReannounceTrackId,
   shouldResyncSnapshotForPlaybackPatch
 } from "./room-realtime-policy";
 
@@ -167,7 +168,10 @@ type RoomRealtimeRuntimeInput = {
   fullLocalPlaybackTracksRef: MutableRefObject<FullLocalPlaybackTrackRecord>;
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIdsRef: MutableRefObject<string[]>;
-  announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
+  announceRoomTrackAvailabilityRef: MutableRefObject<(
+    trackId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
   deferManualCachePendingPiece: (
@@ -388,17 +392,26 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   };
 
   socket.on("connect", () => {
+    const currentRoom = input.currentRoomRef.current;
     input.clearSocketDisconnectGrace();
     subscribeToRoom();
     input.flushPendingAvailabilityRef.current();
-    for (const trackId of input.currentRoomRef.current?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
+    for (const trackId of currentRoom?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
       void input.announceRoomTrackAvailabilityRef.current(trackId);
     }
     input.resyncRealtimePeers();
     if (
-      input.currentRoomRef.current?.room.playback.sourceSessionId ===
-      input.activeSessionRef.current?.userId
+      currentRoom &&
+      input.activeSessionRef.current?.userId &&
+      currentRoom.room.playback.sourceSessionId === input.activeSessionRef.current.userId
     ) {
+      const currentTrackId = resolveSourceAvailabilityReannounceTrackId({
+        activeSessionId: input.activeSessionRef.current.userId,
+        playback: currentRoom.room.playback
+      });
+      if (currentTrackId) {
+        void input.announceRoomTrackAvailabilityRef.current(currentTrackId, { force: true });
+      }
       void input.ensureSourcePlaybackStartedRef.current();
     }
     void input.requestRoomSnapshotResyncRef.current("socket-connect", input.roomId);
@@ -413,6 +426,13 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     if (shouldKick) {
       window.setTimeout(() => {
         if (input.activeRouteRoomIdRef.current === input.roomId) {
+          const sourceTrackId = resolveSourceAvailabilityReannounceTrackId({
+            activeSessionId: input.activeSessionRef.current?.userId,
+            playback: nextPlayback
+          });
+          if (sourceTrackId) {
+            void input.announceRoomTrackAvailabilityRef.current(sourceTrackId, { force: true });
+          }
           void input.ensureSourcePlaybackStartedRef.current();
         }
       }, 0);

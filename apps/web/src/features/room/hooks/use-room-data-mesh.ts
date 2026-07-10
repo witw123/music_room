@@ -223,7 +223,10 @@ export function createRoomDataMeshRuntime(input: {
   uploadedTracksRef: MutableRefObject<Record<string, UploadedTrack>>;
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIdsRef: MutableRefObject<string[]>;
-  announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
+  announceRoomTrackAvailabilityRef: MutableRefObject<(
+    trackId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
   deferManualCachePendingPiece: (

@@ -55,6 +55,7 @@ import {
 } from "./use-room-connection-supervisor";
 import {
   createRoomRealtimeRuntime,
+  resolveSourceAvailabilityReannounceTrackId,
   useRoomRealtimeConnection,
   shouldAcceptIncomingPeerSignal,
   shouldReannounceManualCacheAvailability
@@ -76,7 +77,11 @@ export {
   resolveManualCacheMeshRecoveryMode,
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
-export { shouldAcceptIncomingPeerSignal, shouldReannounceManualCacheAvailability };
+export {
+  resolveSourceAvailabilityReannounceTrackId,
+  shouldAcceptIncomingPeerSignal,
+  shouldReannounceManualCacheAvailability
+};
 export { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 export {
   resetInitialRoomRecoveryAttemptOnCancellation,
@@ -168,7 +173,10 @@ type UseRoomRuntimeInput = {
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIds: string[];
   startPlaybackDemandCacheDownload: (trackId: string) => void;
-  announceRoomTrackAvailability: (trackId: string) => Promise<void>;
+  announceRoomTrackAvailability: (
+    trackId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
     chunkIndex: number;

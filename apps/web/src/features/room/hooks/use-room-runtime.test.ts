@@ -20,6 +20,7 @@ import {
   shouldStartPlaybackDemandCacheForPlayback,
   shouldWaitForSourceAudioElementTrack,
   shouldReannounceManualCacheAvailability,
+  resolveSourceAvailabilityReannounceTrackId,
   shouldRedirectRoomRouteToAuth,
   resetInitialRoomRecoveryAttemptOnCancellation,
   shouldStartRoomRealtimeRuntime,
@@ -194,7 +195,7 @@ describe("pure cache room runtime helpers", () => {
         uploadedTrackIds: ["track_2", "track_1"],
         lastBroadcastKey: null
       })
-    ).toBe("room_1|peer_a|peer_b|track_1,track_2");
+    ).toBe("room_1|peer_a|peer_b|track_1,track_2|");
   });
 
   it("reannounces track availability when manual caching is disabled", () => {
@@ -206,7 +207,41 @@ describe("pure cache room runtime helpers", () => {
         uploadedTrackIds: ["track_1"],
         lastBroadcastKey: null
       })
-    ).toBe("room_1|peer_a|peer_b|track_1");
+    ).toBe("room_1|peer_a|peer_b|track_1|");
+  });
+
+  it("reannounces when a room track becomes backed by a local file", () => {
+    expect(
+      shouldReannounceManualCacheAvailability({
+        enableManualTrackCaching: true,
+        roomId: "room_1",
+        roomListenerSetHash: "peer_a|peer_b",
+        uploadedTrackIds: ["track_1"],
+        sourceReadyTrackIds: ["track_1"],
+        lastBroadcastKey: "room_1|peer_a|peer_b|track_1|"
+      })
+    ).toBe("room_1|peer_a|peer_b|track_1|track_1");
+  });
+
+  it("forces availability reannounce whenever this member is the selected source", () => {
+    expect(
+      resolveSourceAvailabilityReannounceTrackId({
+        activeSessionId: "user_1",
+        playback: {
+          sourceSessionId: "user_1",
+          currentTrackId: "track_1"
+        }
+      })
+    ).toBe("track_1");
+    expect(
+      resolveSourceAvailabilityReannounceTrackId({
+        activeSessionId: "user_2",
+        playback: {
+          sourceSessionId: "user_1",
+          currentTrackId: "track_1"
+        }
+      })
+    ).toBeNull();
   });
 
   it("forces manual cache bootstrap when providers are not connected", () => {

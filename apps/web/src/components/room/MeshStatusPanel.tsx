@@ -18,6 +18,7 @@ export type AvailabilityEntry = {
   localChunkCount: number;
   totalChunks: number;
   sources: string[];
+  cachedMemberNicknames: string[];
 };
 
 type MeshStatusPanelProps = {

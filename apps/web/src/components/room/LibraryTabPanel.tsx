@@ -4,11 +4,13 @@ import { memo, useMemo } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { TrackListSection } from "./TrackListSection";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
+import type { AvailabilityEntry } from "./MeshStatusPanel";
 
 type LibraryTabPanelProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
   cacheLibraryTracks: CachedLibraryTrack[];
+  availabilitySummary: AvailabilityEntry[];
   canControlPlayback: boolean;
   canManageLibraryTracks: boolean;
   activeSession: AuthSession | null;

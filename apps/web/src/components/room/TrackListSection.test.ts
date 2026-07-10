@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCachedLibraryFileHashSet,
-  canDeleteLibraryTrack
+  canDeleteLibraryTrack,
+  formatCachedMemberNames
 } from "./TrackListSection";
 
 describe("TrackListSection helpers", () => {
+  it("formats complete-cache members as human-readable text", () => {
+    expect(formatCachedMemberNames(["张三", "李四", "张三"])).toBe("完整缓存：张三、李四");
+    expect(formatCachedMemberNames([])).toBe("暂无成员持有完整缓存");
+  });
+
   it("builds a deduplicated cached file hash lookup for large track lists", () => {
     const cachedHashes = buildCachedLibraryFileHashSet(["hash_a", "hash_b", "hash_a"]);
 

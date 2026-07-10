@@ -41,6 +41,7 @@ export function shouldReannounceManualCacheAvailability(input: {
   roomId: string | null | undefined;
   roomListenerSetHash: string;
   uploadedTrackIds: string[];
+  sourceReadyTrackIds?: string[];
   lastBroadcastKey: string | null;
 }) {
   if (!input.roomId || !input.roomListenerSetHash) {
@@ -52,8 +53,27 @@ export function shouldReannounceManualCacheAvailability(input: {
     return null;
   }
 
-  const nextKey = [input.roomId, input.roomListenerSetHash, sortedTrackIds.join(",")].join("|");
+  const sortedSourceReadyTrackIds = [...(input.sourceReadyTrackIds ?? [])]
+    .filter(Boolean)
+    .sort();
+  const nextKey = [
+    input.roomId,
+    input.roomListenerSetHash,
+    sortedTrackIds.join(","),
+    sortedSourceReadyTrackIds.join(",")
+  ].join("|");
   return nextKey === input.lastBroadcastKey ? null : nextKey;
+}
+
+export function resolveSourceAvailabilityReannounceTrackId(input: {
+  activeSessionId: string | null | undefined;
+  playback: Pick<RoomSnapshot["room"]["playback"], "currentTrackId" | "sourceSessionId">;
+}) {
+  return input.activeSessionId &&
+    input.playback.sourceSessionId === input.activeSessionId &&
+    input.playback.currentTrackId
+    ? input.playback.currentTrackId
+    : null;
 }
 
 export function shouldAcceptIncomingPeerSignal(input: {

@@ -291,6 +291,7 @@ function RoomDashboardViewBase({
               tracks={roomSnapshot.tracks}
               uploadedTracks={uploadedTracks}
               cacheLibraryTracks={cacheLibraryTracks}
+              availabilitySummary={availabilitySummary}
               canControlPlayback={canControlPlayback}
               canManageLibraryTracks={canDeleteRoom}
               activeSession={activeSession}

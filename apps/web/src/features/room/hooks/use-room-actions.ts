@@ -56,6 +56,20 @@ export async function runBestEffortRoomLeave(input: {
   ]);
 }
 
+export function shouldResetPlayerAfterQueueRemoval(
+  removedQueueItemId: string,
+  currentQueueItemId: string | null | undefined
+) {
+  return removedQueueItemId === currentQueueItemId;
+}
+
+export function shouldResetPlayerAfterTrackRemoval(
+  removedTrackId: string,
+  currentTrackId: string | null | undefined
+) {
+  return removedTrackId === currentTrackId;
+}
+
 export function useRoomActions({
   activeSession,
   roomSnapshot,
@@ -231,7 +245,14 @@ export function useRoomActions({
       }
 
       try {
+        const shouldResetPlayer = shouldResetPlayerAfterTrackRemoval(
+          trackId,
+          roomSnapshot.room.playback.currentTrackId
+        );
         await musicRoomApi.deleteTrack(roomSnapshot.room.id, trackId);
+        if (shouldResetPlayer) {
+          resetPlayerSurface();
+        }
         await onTrackDeleted?.(trackId);
         await syncRoomSnapshot(roomSnapshot.room.id);
         await refreshPlaylists();
@@ -246,6 +267,7 @@ export function useRoomActions({
       onTrackDeleted,
       syncRoomSnapshot,
       refreshPlaylists,
+      resetPlayerSurface,
       setStatusMessage
     ]
   );
@@ -451,7 +473,14 @@ export function useRoomActions({
       }
 
       try {
+        const shouldResetPlayer = shouldResetPlayerAfterQueueRemoval(
+          queueItemId,
+          roomSnapshot.room.playback.currentQueueItemId
+        );
         const result = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
+        if (shouldResetPlayer) {
+          resetPlayerSurface();
+        }
         dispatchRoomStateEvent({
           type: "server-queue-patch",
           roomId: roomSnapshot.room.id,
@@ -464,7 +493,14 @@ export function useRoomActions({
         setStatusMessage(toUserFacingError(error));
       }
     },
-    [roomSnapshot, activeSession, dispatchRoomStateEvent, setStatusMessage, syncRoomSnapshot]
+    [
+      roomSnapshot,
+      activeSession,
+      dispatchRoomStateEvent,
+      resetPlayerSurface,
+      setStatusMessage,
+      syncRoomSnapshot
+    ]
   );
 
   const reorderQueue = useCallback(

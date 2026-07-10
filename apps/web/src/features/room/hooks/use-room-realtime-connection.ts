@@ -10,6 +10,7 @@ export {
   resolveRecoveryWatchdogAction,
   resolveRoomRealtimeSnapshotInputs,
   resolveRoomSnapshotWatchdogAction,
+  resolveSourceAvailabilityReannounceTrackId,
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
   shouldQueueIncomingAvailability,

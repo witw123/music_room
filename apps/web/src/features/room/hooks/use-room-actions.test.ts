@@ -1,5 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { runBestEffortRoomLeave } from "./use-room-actions";
+import {
+  runBestEffortRoomLeave,
+  shouldResetPlayerAfterQueueRemoval,
+  shouldResetPlayerAfterTrackRemoval
+} from "./use-room-actions";
+
+describe("player cleanup after removal", () => {
+  it("resets only when the removed queue item is currently playing", () => {
+    expect(shouldResetPlayerAfterQueueRemoval("queue_1", "queue_1")).toBe(true);
+    expect(shouldResetPlayerAfterQueueRemoval("queue_2", "queue_1")).toBe(false);
+  });
+
+  it("resets only when the removed library track is currently playing", () => {
+    expect(shouldResetPlayerAfterTrackRemoval("track_1", "track_1")).toBe(true);
+    expect(shouldResetPlayerAfterTrackRemoval("track_2", "track_1")).toBe(false);
+  });
+});
 
 describe("runBestEffortRoomLeave", () => {
   it("completes the local room exit even when the remote leave request fails", async () => {

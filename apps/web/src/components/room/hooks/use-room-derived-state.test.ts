@@ -56,7 +56,7 @@ describe("use-room-derived-state helpers", () => {
               nickname: "Host",
               totalChunks: 10,
               chunkSize: 256 * 1024,
-              availableChunks: [0, 1, 2, 3],
+              availableChunks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
               source: "live_upload",
               announcedAt: "2026-04-04T00:00:00.000Z"
             },
@@ -82,9 +82,10 @@ describe("use-room-derived-state helpers", () => {
         track,
         peerCount: 1,
         remotePeerCount: 0,
-        localChunkCount: 4,
+        localChunkCount: 10,
         totalChunks: 10,
-        sources: ["Host (live_upload)"]
+        sources: ["Host (live_upload)"],
+        cachedMemberNicknames: ["Host"]
       }
     ]);
   });

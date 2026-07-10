@@ -319,6 +319,7 @@ export function MusicRoomApp({
     deleteCachedLibraryTrackEntry: uploads.deleteCachedLibraryTrackEntry,
     exportCachedLibraryTrack: uploads.exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom: uploads.importCachedLibraryTrackToRoom,
+    resetPlayerSurface: roomActions.resetPlayerSurface,
     setStatusMessage
   });
 

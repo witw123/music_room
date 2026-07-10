@@ -117,12 +117,12 @@ describe("cache tab view model", () => {
     expect(blocked.status).toEqual(downloading.status);
     expect(blocked.detail).toBe(downloading.detail);
     expect(blocked.action).toBe(downloading.action);
-    expect(blocked.speedLabel).toBe(downloading.speedLabel);
     expect(blocked.aheadLabel).toBe(downloading.aheadLabel);
     expect(blocked.status).toMatchObject({ key: "downloading", label: "下载中" });
     expect(blocked.detail).toBe("正在缓存完整无损文件。");
     expect(blocked.action).toBe("pause");
-    expect(blocked.speedLabel).toBeNull();
+    expect(downloading.speedLabel).toBe("1.0 Mbps");
+    expect(blocked.speedLabel).toBe("等待数据");
     expect(blocked.aheadLabel).toBeNull();
   });
 

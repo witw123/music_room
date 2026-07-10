@@ -36,7 +36,10 @@ export function useRoomRealtimeConnectionEffects(input: {
   roomListenerSetHash: string;
   uploadedTrackIds: string[];
   connectedPeers: string[];
-  announceRoomTrackAvailabilityRef: MutableRefObject<(trackId: string) => Promise<void>>;
+  announceRoomTrackAvailabilityRef: MutableRefObject<(
+    trackId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
@@ -262,6 +265,7 @@ export function useRoomRealtimeConnectionEffects(input: {
       roomId: snapshotRoomId,
       roomListenerSetHash,
       uploadedTrackIds: snapshotTrackIds,
+      sourceReadyTrackIds: uploadedTrackIds,
       lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
     });
     if (!nextBroadcastKey) {
@@ -284,7 +288,8 @@ export function useRoomRealtimeConnectionEffects(input: {
     roomListenerSetHash,
     snapshotRoomId,
     snapshotTrackIds,
-    snapshotTrackIdsKey
+    snapshotTrackIdsKey,
+    uploadedTrackIds
   ]);
 
   useEffect(() => {

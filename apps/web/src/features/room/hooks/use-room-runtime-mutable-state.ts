@@ -30,7 +30,10 @@ export function useRoomRuntimeMutableState(input: {
   manualCacheTrackIds: string[];
   uploadedTracks: Record<string, UploadedTrack>;
   fullLocalPlaybackTracks: FullLocalPlaybackTrackRecord;
-  announceRoomTrackAvailability: (trackId: string) => Promise<void>;
+  announceRoomTrackAvailability: (
+    trackId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
     chunkIndex: number;
