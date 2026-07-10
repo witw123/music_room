@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { TrackMeta } from "@music-room/shared";
-import { announceRoomTrackAvailability } from "./track-availability";
+import {
+  announceRoomTrackAvailability,
+  announceTrackAvailabilityWithRetry
+} from "./track-availability";
 
 const track = {
   id: "track_1",
@@ -26,6 +29,31 @@ const track = {
 } satisfies TrackMeta;
 
 describe("announceRoomTrackAvailability", () => {
+  it("retries a forced source announcement until its local file binding is ready", async () => {
+    const attempts: number[] = [];
+    const waits: number[] = [];
+
+    const didPublish = await announceTrackAvailabilityWithRetry({
+      trackId: "track_1",
+      retryDelaysMs: [0, 100, 300],
+      announce: async (_trackId, options) => {
+        attempts.push(options?.force ? 1 : 0);
+        if (attempts.length === 1) {
+          throw new Error("cache binding not ready");
+        }
+        return attempts.length === 3;
+      },
+      wait: async (delayMs) => {
+        waits.push(delayMs);
+      },
+      isActive: () => true
+    });
+
+    expect(didPublish).toBe(true);
+    expect(attempts).toEqual([1, 1, 1]);
+    expect(waits).toEqual([100, 300]);
+  });
+
   it("publishes uploaded file availability and records a ttl key", async () => {
     const file = new File(["cached"], "cached.flac", { type: "audio/flac" });
     const published: string[] = [];

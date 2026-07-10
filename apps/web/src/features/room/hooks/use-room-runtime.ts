@@ -55,6 +55,7 @@ import {
 } from "./use-room-connection-supervisor";
 import {
   createRoomRealtimeRuntime,
+  resolveRemoteAvailabilityRequestTrackId,
   resolveSourceAvailabilityReannounceTrackId,
   useRoomRealtimeConnection,
   shouldAcceptIncomingPeerSignal,
@@ -78,6 +79,7 @@ export {
   shouldRecoverManualCacheDataPeers
 } from "./use-manual-cache-downloader";
 export {
+  resolveRemoteAvailabilityRequestTrackId,
   resolveSourceAvailabilityReannounceTrackId,
   shouldAcceptIncomingPeerSignal,
   shouldReannounceManualCacheAvailability
@@ -176,7 +178,7 @@ type UseRoomRuntimeInput = {
   announceRoomTrackAvailability: (
     trackId: string,
     options?: { force?: boolean }
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
     chunkIndex: number;

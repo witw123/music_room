@@ -37,6 +37,7 @@ describe("processSelectedTrackFiles", () => {
     const registeredPayloads: string[] = [];
     const persistedTracks: string[] = [];
     const publishedAvailability: string[] = [];
+    const readyTracks: string[] = [];
 
     const result = await processSelectedTrackFiles({
       files: [newFile, existingFile, busyFile],
@@ -68,7 +69,11 @@ describe("processSelectedTrackFiles", () => {
         return registeredTrack;
       },
       persistTrackIntoLibrary: async ({ track, roomId }) => {
+        expect(readyTracks).toEqual(["track_new"]);
         persistedTracks.push(`${roomId}:${track.id}`);
+      },
+      onTrackReady: (trackId) => {
+        readyTracks.push(trackId);
       },
       buildTrackAvailabilityFromFile: async (input) => ({
         roomId: input.roomId,
@@ -97,6 +102,7 @@ describe("processSelectedTrackFiles", () => {
     expect(registeredPayloads).toEqual(["room_1:hash_new"]);
     expect(persistedTracks).toEqual(["room_1:track_new"]);
     expect(publishedAvailability).toEqual(["room_1:track_new"]);
+    expect(readyTracks).toEqual(["track_new"]);
     expect(revokedUrls).toEqual(["blob:existing.flac", "blob:busy.flac"]);
     expect([...inFlightUploadHashes]).toEqual(["user_1:hash_busy"]);
   });

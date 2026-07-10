@@ -16,6 +16,7 @@ import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import { announceTrackAvailabilityWithRetry } from "@/features/upload/track-availability";
 import { calibrateRoomPlaybackClock } from "@/features/playback/room-playback-clock";
 import type {
   FullLocalPlaybackTrackRecord,
@@ -33,6 +34,7 @@ import {
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
   shouldQueueIncomingAvailability,
+  resolveRemoteAvailabilityRequestTrackId,
   resolveSourceAvailabilityReannounceTrackId,
   shouldResyncSnapshotForPlaybackPatch
 } from "./room-realtime-policy";
@@ -171,7 +173,7 @@ type RoomRealtimeRuntimeInput = {
   announceRoomTrackAvailabilityRef: MutableRefObject<(
     trackId: string,
     options?: { force?: boolean }
-  ) => Promise<void>>;
+  ) => Promise<boolean>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
   deferManualCachePendingPiece: (
@@ -303,6 +305,8 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   const socket = input.socket;
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
+  const availabilityRequestRetryIds = new Set<number>();
+  const availabilityReannounceInFlight = new Map<string, Promise<boolean>>();
 
   const clearSubscribeTimers = () => {
     if (subscribeRetryId !== null) {
@@ -313,6 +317,55 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       window.clearTimeout(subscribeAckTimeoutId);
       subscribeAckTimeoutId = null;
     }
+  };
+
+  const requestTrackAvailability = (trackId: string) => {
+    if (input.activeRouteRoomIdRef.current !== input.roomId || !socket.connected) {
+      return;
+    }
+    socket.emit("piece.availability.request", {
+      roomId: input.roomId,
+      trackId,
+      requesterPeerId: input.peerId
+    });
+  };
+
+  const requestTrackAvailabilityWithRetries = (trackId: string) => {
+    for (const retryId of availabilityRequestRetryIds) {
+      window.clearTimeout(retryId);
+    }
+    availabilityRequestRetryIds.clear();
+    requestTrackAvailability(trackId);
+    for (const delayMs of [800, 2_000, 5_000]) {
+      const retryId = window.setTimeout(() => {
+        availabilityRequestRetryIds.delete(retryId);
+        const playback = input.currentRoomRef.current?.room.playback;
+        if (
+          playback?.currentTrackId === trackId &&
+          playback.sourceSessionId !== input.activeSessionRef.current?.userId
+        ) {
+          requestTrackAvailability(trackId);
+        }
+      }, delayMs);
+      availabilityRequestRetryIds.add(retryId);
+    }
+  };
+
+  const retryTrackAvailability = (trackId: string) => {
+    const existing = availabilityReannounceInFlight.get(trackId);
+    if (existing) {
+      return existing;
+    }
+    const retry = announceTrackAvailabilityWithRetry({
+      trackId,
+      announce: (requestedTrackId, options) =>
+        input.announceRoomTrackAvailabilityRef.current(requestedTrackId, options),
+      isActive: () => input.activeRouteRoomIdRef.current === input.roomId
+    }).finally(() => {
+      availabilityReannounceInFlight.delete(trackId);
+    });
+    availabilityReannounceInFlight.set(trackId, retry);
+    return retry;
   };
 
   const scheduleSubscribeRetry = (attempt: number) => {
@@ -381,6 +434,16 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           enableTrackCaching: input.enableTrackCaching,
           audioUnlocked: input.audioUnlocked
         });
+        const remoteTrackId = ack.bootstrap
+          ? resolveRemoteAvailabilityRequestTrackId({
+              activeSessionId,
+              previousPlayback: null,
+              nextPlayback: ack.bootstrap.playback
+            })
+          : null;
+        if (remoteTrackId) {
+          requestTrackAvailabilityWithRetries(remoteTrackId);
+        }
       }
     );
   };
@@ -410,7 +473,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
         playback: currentRoom.room.playback
       });
       if (currentTrackId) {
-        void input.announceRoomTrackAvailabilityRef.current(currentTrackId, { force: true });
+        void retryTrackAvailability(currentTrackId);
       }
       void input.ensureSourcePlaybackStartedRef.current();
     }
@@ -418,6 +481,14 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   });
 
   const applyPlaybackKick = (previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined, nextPlayback: RoomSnapshot["room"]["playback"]) => {
+    const remoteTrackId = resolveRemoteAvailabilityRequestTrackId({
+      activeSessionId: input.activeSessionRef.current?.userId,
+      previousPlayback,
+      nextPlayback
+    });
+    if (remoteTrackId) {
+      requestTrackAvailabilityWithRetries(remoteTrackId);
+    }
     const shouldKick = input.shouldKickSourcePlaybackFromRealtimeEvent({
       previousPlayback,
       nextPlayback,
@@ -431,7 +502,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
             playback: nextPlayback
           });
           if (sourceTrackId) {
-            void input.announceRoomTrackAvailabilityRef.current(sourceTrackId, { force: true });
+            void retryTrackAvailability(sourceTrackId);
           }
           void input.ensureSourcePlaybackStartedRef.current();
         }
@@ -599,6 +670,13 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     input.queueAvailabilityRef.current(announcement);
   });
 
+  socket.on("piece.availability.request", ({ roomId, trackId }) => {
+    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
+      return;
+    }
+    void retryTrackAvailability(trackId);
+  });
+
   socket.on("piece.availability.clear", ({ roomId, ownerPeerId }) => {
     if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
@@ -649,6 +727,10 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
 
   return () => {
     clearSubscribeTimers();
+    for (const retryId of availabilityRequestRetryIds) {
+      window.clearTimeout(retryId);
+    }
+    availabilityRequestRetryIds.clear();
     input.stopPresenceHeartbeat();
     input.stopRecoveryWatchdog();
     input.resubscribeRoomRef.current = null;

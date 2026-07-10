@@ -7,6 +7,7 @@ export {
   hasSubscribeBootstrapFullLocalTrack,
   isSocketDisconnectGraceActive,
   resolvePresenceRepairAction,
+  resolveRemoteAvailabilityRequestTrackId,
   resolveRecoveryWatchdogAction,
   resolveRoomRealtimeSnapshotInputs,
   resolveRoomSnapshotWatchdogAction,

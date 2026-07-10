@@ -226,7 +226,7 @@ export function createRoomDataMeshRuntime(input: {
   announceRoomTrackAvailabilityRef: MutableRefObject<(
     trackId: string,
     options?: { force?: boolean }
-  ) => Promise<void>>;
+  ) => Promise<boolean>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
   deferManualCachePendingPiece: (

@@ -33,7 +33,7 @@ export function useRoomRuntimeMutableState(input: {
   announceRoomTrackAvailability: (
     trackId: string,
     options?: { force?: boolean }
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   handleManualCachePieceReceived: (input: {
     trackId: string;
     chunkIndex: number;

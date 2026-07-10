@@ -12,6 +12,7 @@ import {
 import type { Server, Socket } from "socket.io";
 import type {
   PieceAvailabilityClearPayload,
+  PieceAvailabilityRequestPayload,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
   RoomChatInputPayload,
@@ -29,6 +30,7 @@ import {
   errorCodes,
   peerSignalMessageSchema,
   pieceAvailabilityClearPayloadSchema,
+  pieceAvailabilityRequestPayloadSchema,
   roomChatInputPayloadSchema,
   roomDeletedPayloadSchema,
   roomLibraryPatchPayloadSchema,
@@ -506,6 +508,36 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       payload: mergedAnnouncement
     });
     return mergedAnnouncement;
+  }
+
+  @SubscribeMessage("piece.availability.request")
+  async handlePieceAvailabilityRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: PieceAvailabilityRequestPayload
+  ) {
+    const parsed = pieceAvailabilityRequestPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid piece availability request.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const request = parsed.data;
+    this.assertRealtimeClient(client, request.roomId);
+    this.assertRealtimeAvailable();
+    if (client.data.peerId !== request.requesterPeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+
+    for (const announcement of this.trackAvailabilityRegistry.getTrackAnnouncements(
+      request.roomId,
+      request.trackId
+    )) {
+      client.emit("piece.availability", announcement);
+    }
+    client.to(request.roomId).emit("piece.availability.request", request);
+    return { ok: true };
   }
 
   @SubscribeMessage("room.chat")

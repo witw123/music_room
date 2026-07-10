@@ -743,6 +743,45 @@ describe("SignalingGateway", () => {
     );
   });
 
+  it("replays registered availability and asks room sources to reannounce on demand", async () => {
+    const { gateway, trackAvailabilityRegistry } = createGateway();
+    const roomEmit = jest.fn();
+    const client = {
+      ...createClient({
+        roomId: "room_1",
+        peerId: "peer_listener",
+        isRealtimeAuthenticated: true
+      }),
+      emit: jest.fn(),
+      to: jest.fn().mockReturnValue({ emit: roomEmit })
+    };
+    const availability = {
+      roomId: "room_1",
+      trackId: "track_1",
+      ownerPeerId: "peer_source",
+      nickname: "Source",
+      totalChunks: 2,
+      chunkSize: 1024,
+      availableChunks: [0, 1],
+      source: "live_upload" as const,
+      announcedAt: new Date().toISOString()
+    };
+    trackAvailabilityRegistry.setAnnouncement("room_1", availability);
+
+    await gateway.handlePieceAvailabilityRequest(client as never, {
+      roomId: "room_1",
+      trackId: "track_1",
+      requesterPeerId: "peer_listener"
+    });
+
+    expect(client.emit).toHaveBeenCalledWith("piece.availability", availability);
+    expect(roomEmit).toHaveBeenCalledWith("piece.availability.request", {
+      roomId: "room_1",
+      trackId: "track_1",
+      requesterPeerId: "peer_listener"
+    });
+  });
+
   it("publishes peer signals so they can cross server instances", async () => {
     const { gateway, redisService } = createGateway();
     attachServerMock(gateway);

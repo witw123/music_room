@@ -324,6 +324,14 @@ function formatPreciseMetric(
   return `${rendered}${unit}${staleSuffix}`;
 }
 
+function formatRateM(value: number | null, sampleAgeMs: number | null = null) {
+  if (value === null) {
+    return "未知";
+  }
+  const staleSuffix = sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
+  return `${(value / 1_000).toFixed(1)} M${staleSuffix}`;
+}
+
 function formatSampleAge(sampleAgeMs: number | null) {
   if (sampleAgeMs === null) {
     return "暂无样本";
@@ -501,13 +509,12 @@ function MembersPanelBase({
                       <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
                         <span>
                           分片总速:{" "}
-                          {formatPreciseMetric(
+                          {formatRateM(
                             localMemberState.pieceSummary.downloadRateKbps === null &&
                               localMemberState.pieceSummary.uploadRateKbps === null
                               ? null
                               : (localMemberState.pieceSummary.downloadRateKbps ?? 0) +
                                 (localMemberState.pieceSummary.uploadRateKbps ?? 0),
-                            " kbps",
                             localMemberState.pieceSummary.sampleAgeMs
                           )}
                         </span>
@@ -521,17 +528,15 @@ function MembersPanelBase({
                         </span>
                         <span>
                           Data 接收:{" "}
-                          {formatPreciseMetric(
+                          {formatRateM(
                             localMemberState.transportSummary.receiveRateKbps,
-                            " kbps",
                             localMemberState.transportSummary.sampleAgeMs
                           )}
                         </span>
                         <span>
                           Data 发送:{" "}
-                          {formatPreciseMetric(
+                          {formatRateM(
                             localMemberState.transportSummary.sendRateKbps,
-                            " kbps",
                             localMemberState.transportSummary.sampleAgeMs
                           )}
                         </span>
@@ -560,22 +565,20 @@ function MembersPanelBase({
                     <span>
                       下载:{" "}
                       {isLocalMember
-                        ? formatPreciseMetric(
+                        ? formatRateM(
                             localMemberState.pieceSummary.downloadRateKbps,
-                            " kbps",
                             localMemberState.pieceSummary.sampleAgeMs
                           )
-                        : formatMetric(pieceDownloadRateKbps, " kbps")}
+                        : formatRateM(pieceDownloadRateKbps)}
                     </span>
                     <span>
                       上传:{" "}
                       {isLocalMember
-                        ? formatPreciseMetric(
+                        ? formatRateM(
                             localMemberState.pieceSummary.uploadRateKbps,
-                            " kbps",
                             localMemberState.pieceSummary.sampleAgeMs
                           )
-                        : formatMetric(pieceUploadRateKbps, " kbps")}
+                        : formatRateM(pieceUploadRateKbps)}
                     </span>
                   </div>
                   {isLocalMember ? (

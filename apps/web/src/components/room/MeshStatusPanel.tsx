@@ -56,6 +56,13 @@ function formatMetric(value: number | null | undefined, unit: string) {
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
+function formatRateM(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") {
+    return "未知";
+  }
+  return `${(value / 1_000).toFixed(1)} M`;
+}
+
 function formatBoolean(value: boolean | null | undefined) {
   if (value === null || typeof value === "undefined") {
     return "未知";
@@ -220,8 +227,8 @@ function PeerDiagnosticCard({
 
         <DiagnosticBlock title="缓存传输">
           <DiagnosticGrid>
-            <span>分片下载: {formatMetric(peer.pieceDownloadRateKbps, " kbps")}</span>
-            <span>分片上传: {formatMetric(peer.pieceUploadRateKbps, " kbps")}</span>
+            <span>分片下载: {formatRateM(peer.pieceDownloadRateKbps)}</span>
+            <span>分片上传: {formatRateM(peer.pieceUploadRateKbps)}</span>
             <span>分片 RTT p50: {formatMetric(peer.pieceRttMsP50, "ms")}</span>
             <span>分片 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
             <span>请求超时率: {formatMetric(peer.pieceTimeoutRate, "%")}</span>

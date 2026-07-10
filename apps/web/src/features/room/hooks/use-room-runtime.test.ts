@@ -21,6 +21,7 @@ import {
   shouldWaitForSourceAudioElementTrack,
   shouldReannounceManualCacheAvailability,
   resolveSourceAvailabilityReannounceTrackId,
+  resolveRemoteAvailabilityRequestTrackId,
   shouldRedirectRoomRouteToAuth,
   resetInitialRoomRecoveryAttemptOnCancellation,
   shouldStartRoomRealtimeRuntime,
@@ -240,6 +241,34 @@ describe("pure cache room runtime helpers", () => {
           sourceSessionId: "user_1",
           currentTrackId: "track_1"
         }
+      })
+    ).toBeNull();
+  });
+
+  it("requests remote availability on track and replay epoch changes", () => {
+    const previousPlayback = {
+      currentTrackId: "track_1",
+      sourceSessionId: "user_2",
+      sourcePeerId: "peer_2",
+      mediaEpoch: 4
+    };
+    expect(
+      resolveRemoteAvailabilityRequestTrackId({
+        activeSessionId: "user_1",
+        previousPlayback,
+        nextPlayback: {
+          currentTrackId: "track_2",
+          sourceSessionId: "user_2",
+          sourcePeerId: "peer_2",
+          mediaEpoch: 5
+        }
+      })
+    ).toBe("track_2");
+    expect(
+      resolveRemoteAvailabilityRequestTrackId({
+        activeSessionId: "user_1",
+        previousPlayback,
+        nextPlayback: { ...previousPlayback }
       })
     ).toBeNull();
   });

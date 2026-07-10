@@ -64,6 +64,7 @@ export async function processSelectedTrackFiles(input: {
     chunkSize?: number;
   }) => Promise<TrackAvailabilityAnnouncement>;
   publishAvailability: (availability: TrackAvailabilityAnnouncement) => void;
+  onTrackReady?: (trackId: string, upload: UploadedTrack) => void;
 }) {
   const uploads: Record<string, UploadedTrack> = {};
   const registeredTracks: TrackMeta[] = [];
@@ -108,11 +109,13 @@ export async function processSelectedTrackFiles(input: {
       input.inFlightUploadHashes.delete(uploadHashKey);
     }
 
-    uploads[registered.id] = {
+    const upload = {
       file,
       objectUrl,
       origin: "live-upload"
-    };
+    } satisfies UploadedTrack;
+    uploads[registered.id] = upload;
+    input.onTrackReady?.(registered.id, upload);
     registeredTracks.push(registered);
     currentTracksByHash.set(registered.fileHash, registered);
 

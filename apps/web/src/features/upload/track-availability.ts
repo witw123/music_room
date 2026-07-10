@@ -23,6 +23,36 @@ export function shouldAnnounceTrackAvailability(input: {
   return Boolean(input.peerId);
 }
 
+export async function announceTrackAvailabilityWithRetry(input: {
+  trackId: string;
+  retryDelaysMs?: number[];
+  announce: (trackId: string, options?: { force?: boolean }) => Promise<boolean>;
+  wait?: (delayMs: number) => Promise<void>;
+  isActive: () => boolean;
+}) {
+  const retryDelaysMs = input.retryDelaysMs ?? [0, 150, 500, 1_200, 2_500];
+  const wait = input.wait ?? ((delayMs: number) => new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, delayMs);
+  }));
+
+  for (const delayMs of retryDelaysMs) {
+    if (delayMs > 0) {
+      await wait(delayMs);
+    }
+    if (!input.isActive()) {
+      return false;
+    }
+    try {
+      if (await input.announce(input.trackId, { force: true })) {
+        return true;
+      }
+    } catch {
+      // A later attempt can succeed after room metadata or IndexedDB becomes ready.
+    }
+  }
+  return false;
+}
+
 export function resolveReusableCachedPieceManifest<T extends TrackPieceManifestGeometry>(input: {
   cachedManifest: T | null | undefined;
   expectedManifest: TrackPieceManifestGeometry | null | undefined;

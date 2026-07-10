@@ -125,7 +125,7 @@ export function useUploadPipelineActions({
 
   const announceRoomTrackAvailability = useCallback(
     async (trackId: string, options?: { force?: boolean }) => {
-      await announceRoomTrackAvailabilityFromSources({
+      return announceRoomTrackAvailabilityFromSources({
         roomId: roomSnapshot?.room.id,
         roomTracks: roomSnapshot?.tracks ?? [],
         activeSession,
@@ -230,6 +230,12 @@ export function useUploadPipelineActions({
             payload as Parameters<typeof musicRoomApi.registerTrack>[1]
           ),
         persistTrackIntoLibrary,
+        onTrackReady: (trackId, upload) => {
+          setUploadedTracks((current) => ({
+            ...current,
+            [trackId]: upload
+          }));
+        },
         buildTrackAvailabilityFromFile,
         publishAvailability: (availability) => {
           onAvailability(availability);

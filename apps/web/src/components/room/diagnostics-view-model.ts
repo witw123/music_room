@@ -105,7 +105,7 @@ function formatRate(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "暂无有效样本";
   }
-  return `${Math.round(value)} kbps`;
+  return `${(value / 1_000).toFixed(1)} M`;
 }
 
 function hasAudiblePcmOutput(playback: DiagnosticsPlaybackInput) {

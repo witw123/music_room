@@ -158,9 +158,7 @@ export function formatDownloadRate(downloadRateKbps: number | null | undefined) 
     return "等待数据";
   }
 
-  return downloadRateKbps >= 1_000
-    ? `${(downloadRateKbps / 1_000).toFixed(1)} Mbps`
-    : `${Math.round(downloadRateKbps)} kbps`;
+  return `${(downloadRateKbps / 1_000).toFixed(1)} M`;
 }
 
 function buildTaskRow(

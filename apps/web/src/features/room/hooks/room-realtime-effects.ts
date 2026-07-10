@@ -39,7 +39,7 @@ export function useRoomRealtimeConnectionEffects(input: {
   announceRoomTrackAvailabilityRef: MutableRefObject<(
     trackId: string,
     options?: { force?: boolean }
-  ) => Promise<void>>;
+  ) => Promise<boolean>>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;

@@ -76,6 +76,35 @@ export function resolveSourceAvailabilityReannounceTrackId(input: {
     : null;
 }
 
+export function resolveRemoteAvailabilityRequestTrackId(input: {
+  activeSessionId: string | null | undefined;
+  previousPlayback: Pick<
+    RoomSnapshot["room"]["playback"],
+    "currentTrackId" | "sourceSessionId" | "sourcePeerId" | "mediaEpoch"
+  > | null | undefined;
+  nextPlayback: Pick<
+    RoomSnapshot["room"]["playback"],
+    "currentTrackId" | "sourceSessionId" | "sourcePeerId" | "mediaEpoch"
+  >;
+}) {
+  const next = input.nextPlayback;
+  if (
+    !input.activeSessionId ||
+    !next.currentTrackId ||
+    !next.sourcePeerId ||
+    next.sourceSessionId === input.activeSessionId
+  ) {
+    return null;
+  }
+  const previous = input.previousPlayback;
+  return !previous ||
+    previous.currentTrackId !== next.currentTrackId ||
+    previous.sourcePeerId !== next.sourcePeerId ||
+    previous.mediaEpoch !== next.mediaEpoch
+    ? next.currentTrackId
+    : null;
+}
+
 export function shouldAcceptIncomingPeerSignal(input: {
   payload: PeerSignalMessage;
 }) {

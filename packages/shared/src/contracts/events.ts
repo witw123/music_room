@@ -21,6 +21,7 @@ export const websocketEventSchema = z.union([
   z.literal("room.library.patch"),
   z.literal("room.session.replaced"),
   z.literal("piece.availability"),
+  z.literal("piece.availability.request"),
   z.literal("piece.availability.clear"),
   z.literal("peer.signal"),
   z.literal("room.chat")
@@ -30,6 +31,12 @@ export const roomSubscribePayloadSchema = z.object({
   roomId: z.string(),
   sessionId: z.string().optional(),
   peerId: z.string().optional()
+});
+
+export const pieceAvailabilityRequestPayloadSchema = z.object({
+  roomId: z.string(),
+  trackId: z.string(),
+  requesterPeerId: z.string()
 });
 
 export const roomSubscribeBootstrapMemberSchema = z.object({
@@ -206,6 +213,7 @@ export type RoomQueuePatchPayload = z.infer<typeof roomQueuePatchPayloadSchema>;
 export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSchema>;
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
 export type PieceAvailabilityClearPayload = z.infer<typeof pieceAvailabilityClearPayloadSchema>;
+export type PieceAvailabilityRequestPayload = z.infer<typeof pieceAvailabilityRequestPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
@@ -220,6 +228,7 @@ export type ServerToClientEvents = {
   "room.presence.patch": (payload: RoomPresencePatchPayload) => void;
   "room.library.patch": (payload: RoomLibraryPatchPayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
+  "piece.availability.request": (payload: PieceAvailabilityRequestPayload) => void;
   "piece.availability.clear": (payload: PieceAvailabilityClearPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
@@ -235,6 +244,7 @@ export type ClientToServerEvents = {
   "room.presence": (payload: RoomPresencePayload) => void;
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
+  "piece.availability.request": (payload: PieceAvailabilityRequestPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatInputPayload) => void;
 };
