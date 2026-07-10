@@ -98,16 +98,32 @@ describe("cache tab view model", () => {
     expect(row.progress.percent).toBe(0);
   });
 
-  it("translates an internal blocked reason into readable copy", () => {
-    const row = deriveRoomCacheRow({
+  it("keeps the active download view stable during temporary blocking", () => {
+    const downloading = deriveRoomCacheRow({
       track,
-      task: createTask({ status: "blocked", blockedReason: "provider-not-connected" }),
+      task: createTask({ status: "downloading", downloadRateKbps: 1_024, activeAheadMs: 8_000 }),
+      cachedTrack: null,
+      remotePeerCount: 1,
+      availableTotalChunks: 10
+    });
+    const blocked = deriveRoomCacheRow({
+      track,
+      task: createTask({ status: "blocked", blockedReason: "pending-window-full" }),
       cachedTrack: null,
       remotePeerCount: 0,
       availableTotalChunks: 0
     });
 
-    expect(row.detail).toBe("缓存来源正在重新连接。");
+    expect(blocked.status).toEqual(downloading.status);
+    expect(blocked.detail).toBe(downloading.detail);
+    expect(blocked.action).toBe(downloading.action);
+    expect(blocked.speedLabel).toBe(downloading.speedLabel);
+    expect(blocked.aheadLabel).toBe(downloading.aheadLabel);
+    expect(blocked.status).toMatchObject({ key: "downloading", label: "下载中" });
+    expect(blocked.detail).toBe("正在缓存完整无损文件。");
+    expect(blocked.action).toBe("pause");
+    expect(blocked.speedLabel).toBeNull();
+    expect(blocked.aheadLabel).toBeNull();
   });
 
   it("filters room rows by active, available and completed states", () => {

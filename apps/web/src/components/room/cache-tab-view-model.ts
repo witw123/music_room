@@ -39,44 +39,6 @@ type DeriveRoomCacheRowInput = {
   availableTotalChunks: number;
 };
 
-function formatDownloadRate(downloadRateKbps: number | null | undefined) {
-  if (typeof downloadRateKbps !== "number" || !Number.isFinite(downloadRateKbps) || downloadRateKbps <= 0) {
-    return null;
-  }
-  const bytesPerSecond = downloadRateKbps * 1000 / 8;
-  return bytesPerSecond >= 1024 * 1024
-    ? `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`
-    : `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
-}
-
-function formatAhead(activeAheadMs: number | null | undefined) {
-  if (typeof activeAheadMs !== "number" || !Number.isFinite(activeAheadMs) || activeAheadMs <= 0) {
-    return null;
-  }
-  return `已缓冲 ${Math.max(1, Math.round(activeAheadMs / 1000))} 秒`;
-}
-
-function formatBlockedReason(reason: string | null | undefined) {
-  switch (reason) {
-    case "missing-track":
-      return "歌曲信息已失效。";
-    case "missing-manifest":
-      return "正在等待歌曲分片信息。";
-    case "complete":
-      return "缓存分片已完整，正在生成文件。";
-    case "no-provider":
-      return "当前没有在线成员可提供缓存。";
-    case "provider-not-connected":
-      return "缓存来源正在重新连接。";
-    case "provider-has-no-requestable-chunks":
-      return "当前来源暂时没有可下载的新分片。";
-    case "pending-window-full":
-      return "正在等待已请求的分片返回。";
-    default:
-      return "缓存暂时无法继续，正在等待恢复。";
-  }
-}
-
 function buildProgress(input: DeriveRoomCacheRowInput) {
   const total = Math.max(
     0,
@@ -150,22 +112,16 @@ export function deriveRoomCacheRow(input: DeriveRoomCacheRowInput): RoomCacheRow
   if (task?.status === "paused") {
     return buildTaskRow(input, progress, "paused", "已暂停", `已保存 ${progress.label}。`, "resume", !hasProvider);
   }
-  if (task?.status === "blocked" || ((task?.status === "queued" || task?.status === "downloading") && !hasProvider)) {
+  if (task?.status === "queued" || task?.status === "downloading" || task?.status === "blocked") {
     return buildTaskRow(
       input,
       progress,
-      "waiting",
-      "等待来源",
-      formatBlockedReason(task?.blockedReason),
-      hasProvider ? "retry" : null,
-      !hasProvider
+      "downloading",
+      "下载中",
+      "正在缓存完整无损文件。",
+      "pause",
+      false
     );
-  }
-  if (task?.status === "queued" || task?.status === "downloading") {
-    const detail = task.mode === "playback-demand"
-      ? "正在为当前播放补充无损缓存。"
-      : `正在下载，已完成 ${progress.label}。`;
-    return buildTaskRow(input, progress, "downloading", "下载中", detail, "pause", false);
   }
   if (!hasProvider) {
     return {
@@ -202,7 +158,6 @@ function buildTaskRow(
   action: RoomCacheAction | null,
   actionDisabled: boolean
 ): RoomCacheRow {
-  const isDownloading = key === "downloading";
   return {
     track: input.track,
     status: {
@@ -219,8 +174,8 @@ function buildTaskRow(
     category: "active",
     detail,
     progress,
-    speedLabel: isDownloading ? formatDownloadRate(input.task?.downloadRateKbps) : null,
-    aheadLabel: isDownloading ? formatAhead(input.task?.activeAheadMs) : null,
+    speedLabel: null,
+    aheadLabel: null,
     action,
     actionDisabled
   };

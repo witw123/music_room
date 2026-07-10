@@ -216,9 +216,18 @@ function CacheTabPanelBase({
                   <div className="min-w-0">
                     <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-muted">
                       <span className="truncate">{row.detail}</span>
-                      <span className="shrink-0">{row.progress.label}</span>
+                      <span className="shrink-0">
+                        {row.status.key === "downloading" ? "缓存中" : row.progress.label}
+                      </span>
                     </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/6">
+                    <div
+                      aria-label={`${row.track.title} 缓存进度`}
+                      aria-valuemax={100}
+                      aria-valuemin={0}
+                      aria-valuenow={row.progress.percent}
+                      className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/6"
+                      role="progressbar"
+                    >
                       <div
                         className={`h-full rounded-full transition-[width] duration-300 ${
                           row.status.key === "cached" ? "bg-emerald-400" : "bg-accent"
@@ -226,11 +235,6 @@ function CacheTabPanelBase({
                         style={{ width: `${row.progress.percent}%` }}
                       />
                     </div>
-                    {row.speedLabel || row.aheadLabel ? (
-                      <p className="mt-1.5 text-[10px] text-foreground-muted">
-                        {[row.speedLabel, row.aheadLabel].filter(Boolean).join(" · ")}
-                      </p>
-                    ) : null}
                   </div>
 
                   <div className="flex min-h-9 items-center justify-end">
