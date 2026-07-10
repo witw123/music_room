@@ -237,7 +237,7 @@ export function useRoomPlaybackActions({
       const playback = roomPlaybackRef.current;
       const positionMs =
         playback?.currentTrackId === trackId
-          ? getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now())
+          ? getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0)
           : 0;
 
       const hadSrcObject = !!audio.srcObject;

@@ -248,7 +248,7 @@ export function useRuntimeTickEffectsController({
       }
 
       const expectedSeconds =
-        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
+        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0) /
         1000;
       syncLocalPlaybackWindow(audio, expectedSeconds, true, {
         softDriftMs: 90,
@@ -302,8 +302,7 @@ export function useRuntimeTickEffectsController({
       const expectedSeconds =
         getEffectivePlaybackPositionMs(
           latestPlayback,
-          latestTrack?.durationMs ?? 0,
-          Date.now()
+          latestTrack?.durationMs ?? 0
         ) / 1000;
       const audio = audioRef.current;
       const observedSeconds = resolveObservedPlaybackSeconds({
@@ -457,7 +456,7 @@ export function useRuntimeTickEffectsController({
       }
 
       const expectedSeconds =
-        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0, Date.now()) /
+        getEffectivePlaybackPositionMs(latestPlayback, latestTrack?.durationMs ?? 0) /
         1000;
       syncLocalPlaybackWindow(audio, expectedSeconds, true, {
         softDriftMs: 120,

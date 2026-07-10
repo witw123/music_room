@@ -58,10 +58,16 @@ export type LocalMemberPanelState = {
     | "pcmEngineStatus"
     | "pcmAudioContextState"
     | "pcmDirectOutputConnected"
+    | "pcmContiguousChunkCount"
+    | "pcmBufferedAheadMs"
     | "pcmDecodedSegmentCount"
     | "pcmScheduledSegmentCount"
     | "pcmLastDecodeError"
     | "pcmLastBlockedReason"
+    | "serverClockOffsetMs"
+    | "serverClockRoundTripMs"
+    | "averageDriftMs"
+    | "maxDriftMs"
     | "lastPlayStartFailure"
     | "pendingPlaybackIntent"
   > | null;
@@ -735,8 +741,14 @@ function MembersPanelBase({
                           <span>PCM: {localMemberState.cachePlayback.pcmEngineStatus ?? "未知"}</span>
                           <span>ctx: {localMemberState.cachePlayback.pcmAudioContextState ?? "未知"}</span>
                           <span>out: {formatNullableBoolean(localMemberState.cachePlayback.pcmDirectOutputConnected)}</span>
+                          <span>连续片: {localMemberState.cachePlayback.pcmContiguousChunkCount ?? "未知"}</span>
+                          <span>PCM ahead: {formatDurationMs(localMemberState.cachePlayback.pcmBufferedAheadMs)}</span>
                           <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>
                           <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
+                          <span>时钟偏移: {formatMetric(localMemberState.cachePlayback.serverClockOffsetMs ?? null, "ms")}</span>
+                          <span>校准 RTT: {formatMetric(localMemberState.cachePlayback.serverClockRoundTripMs ?? null, "ms")}</span>
+                          <span>平均漂移: {formatMetric(localMemberState.cachePlayback.averageDriftMs ?? null, "ms")}</span>
+                          <span>最大漂移: {formatMetric(localMemberState.cachePlayback.maxDriftMs ?? null, "ms")}</span>
                           <span className="col-span-2 truncate">
                             pcm block: {localMemberState.cachePlayback.pcmLastBlockedReason ?? "无"}
                           </span>

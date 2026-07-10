@@ -178,7 +178,7 @@ export function useMainPlaybackController({
       forceSourceOwnerLocalPlayback
     });
     const expectedSeconds =
-      getEffectivePlaybackPositionMs(playbackState, currentTrackDurationMs ?? 0, Date.now()) /
+      getEffectivePlaybackPositionMs(playbackState, currentTrackDurationMs ?? 0) /
       1000;
     const playbackTimeline = resolvePlaybackTimelineIdentity(playbackState);
     const shouldPlayPlayback = hasActivePlaybackIntent(playbackState);

@@ -87,6 +87,8 @@ export type ProgressiveDiagnosticSignatureInput = {
   localAudioHasSrcObject: boolean | null;
   pcmEngineStatus: string | null | undefined;
   pcmAudioContextState: string | null | undefined;
+  serverClockOffsetMs: number | null | undefined;
+  serverClockRoundTripMs: number | null | undefined;
   pcmDirectOutputConnected: boolean | null | undefined;
   pcmLastDecodeError: string | null | undefined;
   pcmDecodedSegmentCount: number | null | undefined;
@@ -94,6 +96,8 @@ export type ProgressiveDiagnosticSignatureInput = {
   pcmLastBlockedReason: string | null | undefined;
   startupBufferMs: number;
   comfortBufferedMs: number;
+  averageDriftMs: number | null;
+  maxDriftMs: number | null;
   waitingEventsLast30s: number;
   stalledEventsLast30s: number;
   shadowWarmupActive: boolean;
@@ -147,6 +151,8 @@ export function resolveProgressiveDiagnosticSignature(
     input.localAudioHasSrcObject ?? "",
     input.pcmEngineStatus ?? "",
     input.pcmAudioContextState ?? "",
+    input.serverClockOffsetMs ?? "",
+    input.serverClockRoundTripMs ?? "",
     input.pcmDirectOutputConnected ?? "",
     input.pcmLastDecodeError ?? "",
     (input.pcmDecodedSegmentCount ?? 0) > 0 ? "decoded" : "no-decoded",
@@ -154,6 +160,8 @@ export function resolveProgressiveDiagnosticSignature(
     input.pcmLastBlockedReason ?? "",
     input.startupBufferMs,
     input.comfortBufferedMs,
+    input.averageDriftMs ?? "",
+    input.maxDriftMs ?? "",
     input.waitingEventsLast30s,
     input.stalledEventsLast30s,
     input.shadowWarmupActive,

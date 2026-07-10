@@ -270,8 +270,14 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
               <span>PCM 状态: {playback.pcmEngineStatus ?? "未知"}</span>
               <span>PCM ctx: {playback.pcmAudioContextState ?? "未知"}</span>
               <span>PCM out: {formatBoolean(playback.pcmDirectOutputConnected)}</span>
+              <span>PCM 连续片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>
+              <span>PCM ahead: {formatDurationMs(playback.pcmBufferedAheadMs)}</span>
               <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
               <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>
+              <span>时钟偏移: {formatMetric(playback.serverClockOffsetMs, "ms")}</span>
+              <span>校准 RTT: {formatMetric(playback.serverClockRoundTripMs, "ms")}</span>
+              <span>平均漂移: {formatMetric(playback.averageDriftMs, "ms")}</span>
+              <span>最大漂移: {formatMetric(playback.maxDriftMs, "ms")}</span>
               <span>PCM 阻塞: {playback.pcmLastBlockedReason ?? "无"}</span>
               <span>PCM 错误: {playback.pcmLastDecodeError ?? "无"}</span>
             </DiagnosticGrid>

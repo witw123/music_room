@@ -13,6 +13,7 @@ import {
   type ProgressiveHealthSnapshot
 } from "../progressive-playback";
 import type { ProgressivePcmEngine } from "../progressive-pcm-engine";
+import { getRoomPlaybackClockSnapshot } from "../room-playback-clock";
 import type { UseProgressiveRuntimeInput } from "./runtime-types";
 import {
   resolveFullLocalPlaybackMode,
@@ -126,6 +127,7 @@ export function useProgressiveDiagnosticsPublisher({
       }
     );
     const latestPcmEngineDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
+    const roomPlaybackClockSnapshot = getRoomPlaybackClockSnapshot();
     const progressiveDiagnosticSignature = resolveProgressiveDiagnosticSignature({
       activeSource: progressiveHealthSnapshot.activeSource,
       playbackSurfaceKey,
@@ -170,6 +172,8 @@ export function useProgressiveDiagnosticsPublisher({
       localAudioHasSrcObject: localAudioDiagnostics.localAudioHasSrcObject,
       pcmEngineStatus: latestPcmEngineDiagnostics?.status,
       pcmAudioContextState: latestPcmEngineDiagnostics?.audioContextState,
+      serverClockOffsetMs: roomPlaybackClockSnapshot.offsetMs,
+      serverClockRoundTripMs: roomPlaybackClockSnapshot.bestRoundTripMs,
       pcmDirectOutputConnected: latestPcmEngineDiagnostics?.directOutputConnected,
       pcmLastDecodeError: latestPcmEngineDiagnostics?.lastDecodeError,
       pcmDecodedSegmentCount: latestPcmEngineDiagnostics?.decodedSegmentCount,
@@ -177,6 +181,8 @@ export function useProgressiveDiagnosticsPublisher({
       pcmLastBlockedReason: pcmLastBlockedReasonRef.current,
       startupBufferMs: effectiveStartupBufferMs,
       comfortBufferedMs,
+      averageDriftMs: playbackQualityMetrics.averageDriftMs,
+      maxDriftMs: playbackQualityMetrics.maxDriftMs,
       waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
       stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
       shadowWarmupActive,
@@ -261,33 +267,38 @@ export function useProgressiveDiagnosticsPublisher({
           }),
           pcmEngineStatus: latestPcmEngineDiagnostics?.status ?? null,
           pcmAudioContextState: latestPcmEngineDiagnostics?.audioContextState ?? null,
-          pcmHasOutputStream: null,
+          pcmHasOutputStream: latestPcmEngineDiagnostics?.hasOutputStream ?? null,
           pcmDirectOutputConnected: latestPcmEngineDiagnostics?.directOutputConnected ?? null,
-          pcmContiguousChunkCount: null,
-          pcmContiguousByteLength: null,
+          pcmContiguousChunkCount: latestPcmEngineDiagnostics?.contiguousChunkCount ?? null,
+          pcmContiguousByteLength: latestPcmEngineDiagnostics?.contiguousByteLength ?? null,
           pcmDecodedSegmentCount: latestPcmEngineDiagnostics?.decodedSegmentCount ?? null,
           pcmScheduledSegmentCount: latestPcmEngineDiagnostics?.scheduledSegmentCount ?? null,
-          pcmDecodedPacketCount: null,
-          pcmDecoderFlushAttemptCount: null,
-          pcmDecoderFlushCount: null,
-          pcmLastDecodedAtMs: null,
+          pcmDecodedPacketCount: latestPcmEngineDiagnostics?.decodedPacketCount ?? null,
+          pcmDecoderFlushAttemptCount:
+            latestPcmEngineDiagnostics?.decoderFlushAttemptCount ?? null,
+          pcmDecoderFlushCount: latestPcmEngineDiagnostics?.decoderFlushCount ?? null,
+          pcmLastDecodedAtMs: latestPcmEngineDiagnostics?.lastDecodedAtMs ?? null,
           pcmLastDecodeError: latestPcmEngineDiagnostics?.lastDecodeError ?? null,
-          pcmDecodedPeak: null,
-          pcmDecodedRms: null,
-          pcmDecodedNonZeroSampleCount: null,
-          pcmBufferedAheadMs: null,
-          pcmPlayoutState: null,
+          pcmDecodedPeak: latestPcmEngineDiagnostics?.decodedPeak ?? null,
+          pcmDecodedRms: latestPcmEngineDiagnostics?.decodedRms ?? null,
+          pcmDecodedNonZeroSampleCount:
+            latestPcmEngineDiagnostics?.decodedNonZeroSampleCount ?? null,
+          pcmBufferedAheadMs: latestPcmEngineDiagnostics?.bufferedAheadMs ?? null,
+          pcmPlayoutState: latestPcmEngineDiagnostics?.playoutState ?? null,
           pcmLastBlockedReason: pcmLastBlockedReasonRef.current,
           startupBufferMs: effectiveStartupBufferMs,
           comfortBufferedMs,
-          averageDriftMs: null,
-          maxDriftMs: null,
+          serverClockOffsetMs: roomPlaybackClockSnapshot.offsetMs,
+          serverClockRoundTripMs: roomPlaybackClockSnapshot.bestRoundTripMs,
+          averageDriftMs: playbackQualityMetrics.averageDriftMs,
+          maxDriftMs: playbackQualityMetrics.maxDriftMs,
           waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
           stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s,
           shadowWarmupActive,
           playbackRecoveryStage,
           audibleLocalFallbackActive,
-          maxContinuousPlaybackMsLast30s: null,
+          maxContinuousPlaybackMsLast30s:
+            playbackQualityMetrics.maxContinuousPlaybackMsLast30s,
           schedulerBudgetTier,
           lastStablePlaybackAt: lastStablePlaybackAtRef.current
         }
@@ -297,6 +308,9 @@ export function useProgressiveDiagnosticsPublisher({
     currentTrackFormatKey,
     bufferSafetyMarginMs,
     diagnosticBuckets,
+    playbackQualityMetrics.averageDriftMs,
+    playbackQualityMetrics.maxContinuousPlaybackMsLast30s,
+    playbackQualityMetrics.maxDriftMs,
     playbackQualityMetrics.stalledEventsLast30s,
     playbackQualityMetrics.waitingEventsLast30s,
     playbackSurfaceKey,

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject, type SyntheticEvent } from "react";
 import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
+import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
 
 const playbackProgressPollIntervalMs = 150;
 const hiddenPlaybackProgressPollIntervalMs = 1_000;
@@ -330,7 +331,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
         return;
       }
 
-      const now = Date.now();
+      const now = getRoomPlaybackClockNowMs();
       const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
       const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
       const audibleClockResolution =
@@ -445,7 +446,7 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       return;
     }
 
-    const now = Date.now();
+    const now = getRoomPlaybackClockNowMs();
     const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
     const eventAudio = event?.currentTarget ?? null;
     const preferredAudio = eventAudio === localAudio ? eventAudio : localAudio;
@@ -593,7 +594,7 @@ function getPlaybackClockSessionKey(playback: PlaybackSnapshot | null | undefine
 export function getPlaybackEffectivePositionMs(
   playback: PlaybackSnapshot | null | undefined,
   durationMs: number,
-  now = Date.now()
+  now = getRoomPlaybackClockNowMs()
 ) {
   if (!playback) {
     return 0;

@@ -156,8 +156,7 @@ export function useProgressiveWarmupController({
       const expectedSeconds =
         getEffectivePlaybackPositionMs(
           latestPlayback,
-          latestManifest.durationMs,
-          Date.now()
+          latestManifest.durationMs
         ) / 1000;
       const playbackTimeline = resolvePlaybackTimelineIdentity(latestPlayback);
       const now = Date.now();
@@ -363,8 +362,7 @@ export function useProgressiveWarmupController({
         const expectedSeconds =
           getEffectivePlaybackPositionMs(
             playbackState,
-            manifestState.durationMs,
-            Date.now()
+            manifestState.durationMs
           ) / 1000;
         const playbackTimeline = resolvePlaybackTimelineIdentity(playbackState);
         void progressivePcmEngineRef.current

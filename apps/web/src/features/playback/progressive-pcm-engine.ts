@@ -148,15 +148,14 @@ export class ProgressivePcmEngine {
   private anchorTrackTimeSec = 0;
   private anchorContextTimeSec = 0;
   private volume = 1;
-  private syncInFlight = false;
+  private syncPromise: Promise<boolean> | null = null;
   private syncQueued = false;
+  private queuedCatchupTargetChunkIndex: number | null = null;
   private refillTimerId: ReturnType<typeof setInterval> | null = null;
   private refillInFlight = false;
   private nativeHandoffTailReleaseAtMs: number | null = null;
-  // Chunk index the decoder still needs to reach to cover the requested
-  // playback position. While set, contiguous append runs in catch-up mode and
-  // is not throttled by the small steady-state per-sync cap.
-  private catchupTargetChunkIndex: number | null = null;
+  // Concurrent playback/warmup requests merge their target into the active
+  // cache read so they cannot race and clear each other's catch-up window.
   private playbackTimelineKey: string | null = null;
   private playbackTimelineRevision: number | null = null;
 
@@ -297,23 +296,41 @@ export class ProgressivePcmEngine {
     }
   }
 
-  async sync() {
+  async sync(catchupTargetChunkIndex: number | null = null) {
     if (isTerminalEngineStatus(this.status)) {
       return false;
     }
 
-    if (this.syncInFlight) {
+    this.queueCatchupTarget(catchupTargetChunkIndex);
+    if (this.syncPromise) {
       this.syncQueued = true;
-      return false;
+      return this.syncPromise;
     }
 
-    this.syncInFlight = true;
+    const syncPromise = this.runSyncLoop();
+    this.syncPromise = syncPromise;
+    try {
+      return await syncPromise;
+    } finally {
+      if (this.syncPromise === syncPromise) {
+        this.syncPromise = null;
+      }
+    }
+  }
+
+  private async runSyncLoop() {
     let appendedAny = false;
     try {
       do {
         this.syncQueued = false;
-        appendedAny = (await this.performSync()) || appendedAny;
-      } while (this.syncQueued && !isTerminalEngineStatus(this.status));
+        const catchupTargetChunkIndex = this.queuedCatchupTargetChunkIndex;
+        this.queuedCatchupTargetChunkIndex = null;
+        appendedAny =
+          (await this.performSync(catchupTargetChunkIndex)) || appendedAny;
+      } while (
+        (this.syncQueued || this.queuedCatchupTargetChunkIndex !== null) &&
+        !isTerminalEngineStatus(this.status)
+      );
     } catch (error) {
       if (!isDestroyedEngineStatus(this.status)) {
         // IndexedDB AbortError is transient (write/read transaction contention
@@ -325,10 +342,18 @@ export class ProgressivePcmEngine {
           this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
         }
       }
-    } finally {
-      this.syncInFlight = false;
     }
     return appendedAny;
+  }
+
+  private queueCatchupTarget(catchupTargetChunkIndex: number | null) {
+    if (catchupTargetChunkIndex === null) {
+      return;
+    }
+    this.queuedCatchupTargetChunkIndex = Math.max(
+      this.queuedCatchupTargetChunkIndex ?? 0,
+      catchupTargetChunkIndex
+    );
   }
 
   async syncPlayback(input: PcmEngineSyncPlaybackInput): Promise<PcmEngineSyncResult> {
@@ -626,11 +651,11 @@ export class ProgressivePcmEngine {
     this.nextSampleIndex = 0;
     this.contiguousByteLength = 0;
     this.contiguousBytes = new Uint8Array(0);
-    this.syncInFlight = false;
+    this.syncPromise = null;
     this.syncQueued = false;
+    this.queuedCatchupTargetChunkIndex = null;
     this.refillInFlight = false;
     this.nativeHandoffTailReleaseAtMs = null;
-    this.catchupTargetChunkIndex = null;
     this.playbackTimelineKey = null;
     this.playbackTimelineRevision = null;
   }
@@ -828,8 +853,10 @@ export class ProgressivePcmEngine {
     }
   }
 
-  private async performSync() {
-    const appendedBytes = await this.appendAvailableContiguousPieces();
+  private async performSync(catchupTargetChunkIndex: number | null) {
+    const appendedBytes = await this.appendAvailableContiguousPieces(
+      catchupTargetChunkIndex
+    );
     if (isTerminalEngineStatus(this.status)) {
       return false;
     }
@@ -856,6 +883,13 @@ export class ProgressivePcmEngine {
 
     if (!this.streamInfo) {
       this.streamInfo = extraction.streamInfo;
+    }
+
+    // STREAMINFO can arrive before a large metadata block (for example album
+    // artwork) and before the first complete audio frame. Configuring WebCodecs
+    // with that truncated description permanently fails some real FLAC files.
+    if (extraction.packets.length === 0) {
+      return true;
     }
 
     const decoderReady = await this.ensureDecoder(extraction.streamInfo);
@@ -924,16 +958,16 @@ export class ProgressivePcmEngine {
     }
   }
 
-  private getAppendBudgetForCurrentSync() {
+  private getAppendBudgetForCurrentSync(catchupTargetChunkIndex: number | null) {
     if (
-      this.catchupTargetChunkIndex !== null &&
-      this.contiguousChunkCount <= this.catchupTargetChunkIndex
+      catchupTargetChunkIndex !== null &&
+      this.contiguousChunkCount <= catchupTargetChunkIndex
     ) {
       return Math.min(
         maxPcmCatchupPiecesToAppendPerSync,
         Math.max(
           1,
-          this.catchupTargetChunkIndex - this.contiguousChunkCount + 1 + pcmCatchupLookAheadChunks
+          catchupTargetChunkIndex - this.contiguousChunkCount + 1 + pcmCatchupLookAheadChunks
         )
       );
     }
@@ -941,12 +975,14 @@ export class ProgressivePcmEngine {
     return maxPcmCachedPiecesToAppendPerSync;
   }
 
-  private async appendAvailableContiguousPieces() {
+  private async appendAvailableContiguousPieces(
+    catchupTargetChunkIndex: number | null
+  ) {
     if (isTerminalEngineStatus(this.status)) {
       return false;
     }
 
-    const budget = this.getAppendBudgetForCurrentSync();
+    const budget = this.getAppendBudgetForCurrentSync(catchupTargetChunkIndex);
     if (budget <= 0) {
       return false;
     }
@@ -1134,42 +1170,38 @@ export class ProgressivePcmEngine {
   }
 
   private async syncUntilBufferedPosition(positionSeconds: number) {
-    this.catchupTargetChunkIndex = getChunkIndexForPositionMs(
+    const catchupTargetChunkIndex = getChunkIndexForPositionMs(
       this.manifest,
       positionSeconds * 1000
     );
     const trackLabel = `${this.manifest.trackId.slice(0, 8)}`;
-    try {
-      for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
-        if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
-          return;
-        }
-
-        const appended = await this.sync();
-
-        if (!appended) {
-          // No new contiguous bytes were cached since the last sync.  Yield
-          // once to let any in-flight decoder output callbacks materialize
-          // before we give up; the previous performSync may have submitted
-          // packets whose output hasn't reached the main thread yet.
-          await this.waitForDecodedPosition(positionSeconds);
-          if (attempt === 0) {
-            console.debug(
-              `[pcm] ${trackLabel} catchup stalled at iteration 0: ` +
-              `contiguousChunks=${this.contiguousChunkCount} ` +
-              `targetChunk=${this.catchupTargetChunkIndex} ` +
-              `decodedSegments=${this.decodedSegments.length} ` +
-              `hasStreamInfo=${!!this.streamInfo} ` +
-              `hasDecoder=${!!this.decoder}`
-            );
-          }
-          break;
-        }
-
-        await this.waitForDecodedPosition(positionSeconds);
+    for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
+      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+        return;
       }
-    } finally {
-      this.catchupTargetChunkIndex = null;
+
+      const appended = await this.sync(catchupTargetChunkIndex);
+
+      if (!appended) {
+        // No new contiguous bytes were cached since the last sync.  Yield
+        // once to let any in-flight decoder output callbacks materialize
+        // before we give up; the previous performSync may have submitted
+        // packets whose output hasn't reached the main thread yet.
+        await this.waitForDecodedPosition(positionSeconds);
+        if (attempt === 0) {
+          console.debug(
+            `[pcm] ${trackLabel} catchup stalled at iteration 0: ` +
+            `contiguousChunks=${this.contiguousChunkCount} ` +
+            `targetChunk=${catchupTargetChunkIndex} ` +
+            `decodedSegments=${this.decodedSegments.length} ` +
+            `hasStreamInfo=${!!this.streamInfo} ` +
+            `hasDecoder=${!!this.decoder}`
+          );
+        }
+        break;
+      }
+
+      await this.waitForDecodedPosition(positionSeconds);
     }
   }
 

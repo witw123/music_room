@@ -108,7 +108,9 @@ export function resolvePlaybackQualityMetrics(input: {
       : null;
   const maxDriftMs =
     driftSamples.length > 0
-      ? Math.round(driftSamples.reduce((max, sample) => Math.max(max, sample.driftMs), 0))
+      ? Math.round(
+          driftSamples.reduce((max, sample) => Math.max(max, Math.abs(sample.driftMs)), 0)
+        )
       : null;
 
   return {

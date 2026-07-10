@@ -992,6 +992,29 @@ describe("playback runtime pipeline keys", () => {
     );
   });
 
+  it("publishes the captured PCM, drift, and server clock diagnostics", () => {
+    const publisherSource = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "playback-orchestrator/progressive-diagnostics-publisher.ts"
+      ),
+      "utf8"
+    ).replace(/\r\n/g, "\n");
+
+    expect(publisherSource).toContain(
+      "pcmContiguousChunkCount: latestPcmEngineDiagnostics?.contiguousChunkCount ?? null"
+    );
+    expect(publisherSource).toContain(
+      "pcmBufferedAheadMs: latestPcmEngineDiagnostics?.bufferedAheadMs ?? null"
+    );
+    expect(publisherSource).toContain(
+      "averageDriftMs: playbackQualityMetrics.averageDriftMs"
+    );
+    expect(publisherSource).toContain(
+      "serverClockOffsetMs: roomPlaybackClockSnapshot.offsetMs"
+    );
+  });
+
   it("hosts diagnostic and media element helpers in the pure pipeline module", () => {
     expect(
       Array.from(
@@ -1376,6 +1399,8 @@ describe("playback runtime pipeline keys", () => {
       localAudioHasSrcObject: false,
       pcmEngineStatus: "ready",
       pcmAudioContextState: "running",
+      serverClockOffsetMs: -1250,
+      serverClockRoundTripMs: 38,
       pcmDirectOutputConnected: true,
       pcmLastDecodeError: null,
       pcmDecodedSegmentCount: 0,
@@ -1383,6 +1408,8 @@ describe("playback runtime pipeline keys", () => {
       pcmLastBlockedReason: null,
       startupBufferMs: 60,
       comfortBufferedMs: 5000,
+      averageDriftMs: -20,
+      maxDriftMs: 45,
       waitingEventsLast30s: 1,
       stalledEventsLast30s: 0,
       shadowWarmupActive: true,
@@ -1432,6 +1459,8 @@ describe("playback runtime pipeline keys", () => {
       false,
       "ready",
       "running",
+      -1250,
+      38,
       true,
       "",
       "no-decoded",
@@ -1439,6 +1468,8 @@ describe("playback runtime pipeline keys", () => {
       "",
       60,
       5000,
+      -20,
+      45,
       1,
       0,
       true,
@@ -3886,6 +3917,22 @@ describe("use-progressive-runtime policy helpers", () => {
       averageDriftMs: 40,
       maxDriftMs: 40,
       maxContinuousPlaybackMsLast30s: 120
+    });
+    expect(
+      resolvePlaybackQualityMetrics({
+        nowMs: 1_000,
+        windowMs: 500,
+        waitingEventTimestamps: [],
+        stalledEventTimestamps: [],
+        driftSamples: [
+          { timestampMs: 900, driftMs: -20 },
+          { timestampMs: 950, driftMs: -60 }
+        ],
+        maxContinuousPlaybackMsLast30s: 0
+      })
+    ).toMatchObject({
+      averageDriftMs: -40,
+      maxDriftMs: 60
     });
   });
 

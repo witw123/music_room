@@ -634,6 +634,92 @@ describe("ProgressivePcmEngine", () => {
     }
   });
 
+  it("merges concurrent catchup targets and shares the active cache read", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const largeManifest = {
+      ...manifest,
+      totalChunks: 64
+    };
+    const engine = new ProgressivePcmEngine(audio, "peer_local", largeManifest);
+    let releaseFirstRead: () => void = () => undefined;
+    const firstReadBlocked = new Promise<void>((resolve) => {
+      releaseFirstRead = resolve;
+    });
+    let readCount = 0;
+    vi.mocked(getCachedPiecesByIndexes).mockImplementation(
+      async (trackId, peerId, chunkIndexes) => {
+        readCount += 1;
+        if (readCount === 1) {
+          await firstReadBlocked;
+        }
+        return chunkIndexes.map((chunkIndex) => ({
+          pieceId: `piece_${chunkIndex}`,
+          trackId,
+          peerId,
+          chunkIndex,
+          chunkSize: largeManifest.chunkSize,
+          hash: `hash_${chunkIndex}`,
+          createdAt: new Date().toISOString(),
+          payload: new Uint8Array([chunkIndex]).buffer
+        }));
+      }
+    );
+
+    try {
+      await engine.attach();
+      const firstSync = engine.sync(20);
+      await Promise.resolve();
+      const secondSync = engine.sync(40);
+      releaseFirstRead();
+
+      await expect(Promise.all([firstSync, secondSync])).resolves.toEqual([true, true]);
+      expect(readCount).toBeGreaterThanOrEqual(2);
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBeGreaterThanOrEqual(41);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("waits for a complete FLAC frame before configuring WebCodecs", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+    const AudioDecoderCtor = (
+      globalThis as typeof globalThis & { AudioDecoder: typeof AudioDecoder }
+    ).AudioDecoder;
+    const supportCheck = vi.spyOn(AudioDecoderCtor, "isConfigSupported");
+    vi.mocked(getCachedPiece)
+      .mockResolvedValueOnce({
+        pieceId: "piece_0",
+        trackId: manifest.trackId,
+        peerId: "peer_local",
+        chunkIndex: 0,
+        chunkSize: manifest.chunkSize,
+        hash: "hash_0",
+        createdAt: new Date().toISOString(),
+        payload: new Uint8Array([1, 2, 3]).buffer
+      })
+      .mockResolvedValueOnce(null);
+
+    try {
+      await engine.attach();
+      await engine.sync();
+
+      expect(supportCheck).not.toHaveBeenCalled();
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "opening",
+        decodedSegmentCount: 0,
+        lastDecodeError: null
+      });
+    } finally {
+      supportCheck.mockRestore();
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
   it("compacts parsed FLAC bytes after decoding to avoid retaining consumed cache payload", async () => {
     const audioContext = installFakeAudioContext();
     const audio = createAudioElement();

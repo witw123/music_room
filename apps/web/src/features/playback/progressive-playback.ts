@@ -1,6 +1,7 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import { getRequiredDecodablePrefixChunkCount } from "./sliding-window/playback-window-scheduler";
 import { isChromeOrEdgeBrowser, isFlacTrack, isWavTrack } from "./format-detection";
+import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
 import {
   getChunkIndexForPositionMs,
   getContiguousBufferedMs,
@@ -360,7 +361,7 @@ export function canUseProgressiveMse(mimeType: string | null | undefined) {
 export function getEffectivePlaybackPositionMs(
   playback: PlaybackSnapshot | null | undefined,
   durationMs: number,
-  now = Date.now()
+  now = getRoomPlaybackClockNowMs()
 ) {
   if (!playback) {
     return 0;

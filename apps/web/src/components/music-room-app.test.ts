@@ -389,7 +389,7 @@ describe("getPlaybackSourceInitializationKey", () => {
     ).toBe(false);
   });
 
-  it("keeps the current playback source when full cache becomes playable during the same surface", () => {
+  it("reinitializes the playback source when full cache becomes playable during the same surface", () => {
     const pendingCacheKey = getPlaybackSourceInitializationKey({
       playbackSurfaceKey: "track_cached|host|1",
       currentPlaybackTrackId: "track_cached",
@@ -417,13 +417,13 @@ describe("getPlaybackSourceInitializationKey", () => {
       hasPlayableFullLocalTrack: true
     });
 
-    expect(readyCacheKey).toBe(pendingCacheKey);
+    expect(readyCacheKey).not.toBe(pendingCacheKey);
     expect(
       shouldInitializePlaybackSource({
         previousInitializationKey: pendingCacheKey,
         nextInitializationKey: readyCacheKey
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("reinitializes the playback source on the next surface so completed cache can be used then", () => {

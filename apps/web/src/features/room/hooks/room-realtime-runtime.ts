@@ -16,6 +16,7 @@ import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import { calibrateRoomPlaybackClock } from "@/features/playback/room-playback-clock";
 import type {
   FullLocalPlaybackTrackRecord,
   ManualCachePieceReceivedInput,
@@ -337,6 +338,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       scheduleSubscribeRetry(attempt + 1);
     }, subscribeAckTimeoutMs);
 
+    const subscribeStartedAtMs = Date.now();
     socket.emit(
       "room.subscribe",
       buildRoomSubscribePayload({
@@ -345,6 +347,12 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
         sessionId: activeSessionId
       }),
       (ack: RoomSubscribeAckPayload) => {
+        const subscribeCompletedAtMs = Date.now();
+        calibrateRoomPlaybackClock({
+          serverNow: ack.serverNow,
+          requestStartedAtMs: subscribeStartedAtMs,
+          responseReceivedAtMs: subscribeCompletedAtMs
+        });
         if (subscribeAckTimeoutId !== null) {
           window.clearTimeout(subscribeAckTimeoutId);
           subscribeAckTimeoutId = null;

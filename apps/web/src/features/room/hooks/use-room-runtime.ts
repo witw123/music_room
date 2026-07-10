@@ -21,6 +21,7 @@ import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
 import { ChunkScheduler } from "@/features/p2p";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
 import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
 import {
   getEffectivePlaybackPositionMs,
@@ -374,7 +375,7 @@ export function resolveActivePlaybackCacheWindowPosition(input: {
     return getEffectivePlaybackPositionMs(
       input.playback,
       input.durationMs,
-      input.now ?? Date.now()
+      input.now ?? getRoomPlaybackClockNowMs()
     );
   }
 
@@ -834,7 +835,7 @@ export function useRoomRuntime({
           roomTracksRef.current?.find((entry) => entry.id === playback.currentTrackId) ??
           null;
         const expectedSeconds =
-          getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0, Date.now()) / 1000;
+          getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0) / 1000;
         syncLocalPlaybackWindow(audio, expectedSeconds, true, {
           softDriftMs: 90,
           hardDriftMs: 720,
