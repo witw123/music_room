@@ -2,8 +2,10 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
-
-type ProgressiveStatus = NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
+import {
+  buildDiagnosticsViewModel,
+  type DiagnosticsPlaybackInput
+} from "./diagnostics-view-model";
 
 export type MemberTransferSummary = {
   memberId: string;
@@ -16,6 +18,7 @@ export type MemberTransferSummary = {
 
 export type LocalMemberPanelState = {
   memberId: string;
+  presenceState: RoomMember["presenceState"];
   audioUnlocked: boolean;
   sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
   lastSourceStartError: string | null;
@@ -32,45 +35,9 @@ export type LocalMemberPanelState = {
     uploadRateKbps: number | null;
     sampleAgeMs: number | null;
   };
-  cachePlayback: Pick<
-    ProgressiveStatus,
-    | "activeSource"
-    | "engineType"
-    | "contiguousBufferedMs"
-    | "aheadBufferedMs"
-    | "schedulerPolicy"
-    | "startupReady"
-    | "fallbackReason"
-    | "estimatedFillTimeMs"
-    | "bufferSafetyMarginMs"
-    | "fullLocalReady"
-    | "progressiveLocalEligible"
-    | "progressiveLocalBlockedReason"
-    | "waitingEventsLast30s"
-    | "stalledEventsLast30s"
-    | "localAudioPaused"
-    | "localAudioMuted"
-    | "localAudioVolume"
-    | "localAudioReadyState"
-    | "localAudioCurrentSrc"
-    | "localAudioHasSrcObject"
-    | "fullLocalPlaybackMode"
-    | "pcmEngineStatus"
-    | "pcmAudioContextState"
-    | "pcmDirectOutputConnected"
-    | "pcmContiguousChunkCount"
-    | "pcmBufferedAheadMs"
-    | "pcmDecodedSegmentCount"
-    | "pcmScheduledSegmentCount"
-    | "pcmLastDecodeError"
-    | "pcmLastBlockedReason"
-    | "serverClockOffsetMs"
-    | "serverClockRoundTripMs"
-    | "averageDriftMs"
-    | "maxDriftMs"
-    | "lastPlayStartFailure"
-    | "pendingPlaybackIntent"
-  > | null;
+  cachePlayback: DiagnosticsPlaybackInput | null;
+  playbackSampleAgeMs: number | null;
+  dataReadyCount: number;
   playbackStatus: {
     label: string;
     detail: string;
@@ -86,7 +53,7 @@ type MembersPanelProps = {
   localMemberState?: LocalMemberPanelState | null;
 };
 
-type StatusTone = "neutral" | "accent" | "success" | "warning";
+type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
 function getToneClasses(tone: StatusTone) {
   switch (tone) {
@@ -104,6 +71,11 @@ function getToneClasses(tone: StatusTone) {
       return {
         badge: "border-amber-500/30 bg-amber-500/10 text-amber-300",
         progress: "bg-amber-400"
+      };
+    case "danger":
+      return {
+        badge: "border-red-500/30 bg-red-500/10 text-red-300",
+        progress: "bg-red-400"
       };
     default:
       return {
@@ -135,7 +107,7 @@ function formatCurrentTrackSources(sources: string[]) {
   return labels.join(" / ");
 }
 
-function getCurrentTrackStatus(
+export function getCurrentTrackStatus(
   summary: MemberTransferSummary | undefined,
   presenceState: RoomMember["presenceState"]
 ) {
@@ -175,8 +147,8 @@ function getCurrentTrackStatus(
 
   if (summary.currentTrackChunkCount >= summary.currentTrackTotalChunks) {
     return {
-      label: "已提供完整分片",
-      detail: "当前曲目文件已在本地，可为房间回传完整分片。",
+      label: "已声明完整分片",
+      detail: "房间可见全部分片；是否可播放以 PCM 连续读取状态为准。",
       progressPercent: 100,
       tone: "success" as const
     };
@@ -201,7 +173,8 @@ function getCurrentTrackStatus(
 
 export function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
-  peerDiagnostics: PeerDiagnosticsSnapshot | undefined
+  peerDiagnostics: PeerDiagnosticsSnapshot | undefined,
+  now = Date.now()
 ) {
   if (presenceState === "offline") {
     return {
@@ -220,71 +193,37 @@ export function getPlaybackStatus(
   }
 
   const playback = peerDiagnostics?.progressivePlaybackStatus ?? null;
-  if (playback?.activeSource === "lossless-local") {
-    const localAudioIssue = getLocalAudioPlaybackIssue(playback);
-    if (localAudioIssue) {
-      return {
-        label: "无损缓存待发声",
-        detail: localAudioIssue,
-        tone: "accent" as const
-      };
-    }
-
-    return {
-      label: "无损滑动窗口播放",
-      detail: "本端观测到该成员正在用本地缓存分片解码发声，并持续追随房间播放时钟。",
-      tone: "success" as const
-    };
-  }
-
-  if (playback?.activeSource === "full-local") {
-    const localAudioIssue = getLocalAudioPlaybackIssue(playback);
-    if (localAudioIssue) {
-      return {
-        label: "完整缓存待发声",
-        detail: localAudioIssue,
-        tone: "accent" as const
-      };
-    }
-
-    return {
-      label: "完整缓存播放",
-      detail: "本端观测到该成员使用完整本地缓存作为可听源。",
-      tone: "success" as const
-    };
-  }
-
-  if (playback?.activeSource === "progressive-local") {
-    const ahead = formatDurationMs(playback.aheadBufferedMs);
-    const localAudioIssue = getLocalAudioPlaybackIssue(playback);
-    if (playback.startupReady && localAudioIssue) {
-      return {
-        label: "缓存已就绪但未发声",
-        detail: localAudioIssue,
-        tone: "accent" as const
-      };
-    }
-
-    return {
-      label: playback.startupReady ? "边下边播" : "缓存启动中",
-      detail: `本地渐进播放窗口 ahead ${ahead}，调度策略 ${playback.schedulerPolicy ?? "未知"}。`,
-      tone: playback.startupReady ? ("success" as const) : ("accent" as const)
-    };
-  }
-
-  if (playback?.fallbackReason || playback?.progressiveLocalBlockedReason) {
-    return {
-      label: "缓存播放受阻",
-      detail: playback.fallbackReason ?? playback.progressiveLocalBlockedReason ?? "本地缓存窗口暂不可播。",
-      tone: "warning" as const
-    };
+  if (
+    playback?.activeSource ||
+    playback?.fallbackReason ||
+    playback?.progressiveLocalBlockedReason ||
+    playback?.pendingPlaybackIntent ||
+    playback?.lastPlayStartFailure
+  ) {
+    const updatedAtMs = peerDiagnostics
+      ? new Date(peerDiagnostics.updatedAt).getTime()
+      : Number.NaN;
+    return buildDiagnosticsViewModel({
+      presenceState,
+      playback,
+      playbackSampleAgeMs: Number.isFinite(updatedAtMs)
+        ? Math.max(0, now - updatedAtMs)
+        : null
+    }).audibility;
   }
 
   if (peerDiagnostics?.dataChannelState === "open") {
-    if (
-      typeof peerDiagnostics.pieceDownloadRateKbps === "number" ||
-      typeof peerDiagnostics.pieceUploadRateKbps === "number"
-    ) {
+    const updatedAtMs = new Date(peerDiagnostics.updatedAt).getTime();
+    const transfer = buildDiagnosticsViewModel({
+      transfer: {
+        downloadRateKbps: peerDiagnostics.pieceDownloadRateKbps,
+        uploadRateKbps: peerDiagnostics.pieceUploadRateKbps,
+        sampleAgeMs: Number.isFinite(updatedAtMs)
+          ? Math.max(0, now - updatedAtMs)
+          : null
+      }
+    }).transfer;
+    if (transfer.active) {
       return {
         label: "分片传输中",
         detail: "数据通道已打开，正在为缓存播放交换音频分片。",
@@ -322,78 +261,6 @@ export function getPlaybackStatus(
     detail: "当前还没有可观测的数据通道或本地播放状态。",
     tone: "neutral" as const
   };
-}
-
-function getLocalAudioPlaybackIssue(playback: ProgressiveStatus) {
-  const readyState = playback.localAudioReadyState ?? 0;
-  const hasPlayableOutput = playback.localAudioHasSrcObject || readyState >= 2;
-  const nativeBlobFullLocalReady =
-    playback.activeSource === "full-local" &&
-    playback.fullLocalPlaybackMode === "native-blob" &&
-    !!playback.localAudioCurrentSrc &&
-    hasPlayableOutput;
-  const playingFullLocalReady =
-    playback.activeSource === "full-local" &&
-    playback.fullLocalReady === true &&
-    playback.localAudioPaused === false;
-
-  const pcmHasScheduledOutput =
-    playback.engineType === "pcm" &&
-    playback.pcmAudioContextState === "running" &&
-    (playback.pcmDecodedSegmentCount ?? 0) > 0 &&
-    (playback.pcmScheduledSegmentCount ?? 0) > 0 &&
-    !(
-      playback.pcmLastBlockedReason &&
-      !(
-        playback.pcmLastBlockedReason === "engine-failed" &&
-        (playback.pcmDecodedSegmentCount ?? 0) > 0
-      )
-    );
-  const pcmElementOutputAudible =
-    playback.localAudioHasSrcObject === true &&
-    playback.localAudioPaused === false &&
-    playback.localAudioMuted !== true &&
-    playback.localAudioVolume !== 0;
-  const pcmOutputAudible =
-    pcmHasScheduledOutput &&
-    (playback.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
-  if (pcmOutputAudible) {
-    return null;
-  }
-
-  if (playback.lastPlayStartFailure) {
-    return `本地音频启动失败: ${playback.lastPlayStartFailure}。`;
-  }
-
-  if (playback.pendingPlaybackIntent) {
-    return `等待浏览器允许音频输出: ${playback.pendingPlaybackIntent}。`;
-  }
-
-  if (playback.localAudioMuted) {
-    return "本地音频元素处于静音状态。";
-  }
-
-  if (playback.localAudioVolume === 0) {
-    return "本地音频音量为 0。";
-  }
-
-  if (nativeBlobFullLocalReady || playingFullLocalReady) {
-    return null;
-  }
-
-  if (playback.localAudioPaused === true) {
-    return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
-  }
-
-  if (playback.localAudioPaused === false && !hasPlayableOutput) {
-    return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
-  }
-
-  if (playback.localAudioPaused !== false) {
-    return "尚未确认本地音频元素已经开始播放。";
-  }
-
-  return null;
 }
 
 function getLibraryStatus(summary: MemberTransferSummary | undefined) {
@@ -442,26 +309,6 @@ function formatMetric(value: number | null, unit: string) {
   return `${value}${unit}`;
 }
 
-function formatNullableBoolean(value: boolean | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  return value ? "是" : "否";
-}
-
-function formatDurationMs(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  if (value < 1000) {
-    return `${Math.round(value)}ms`;
-  }
-
-  return `${(value / 1000).toFixed(1)}s`;
-}
-
 function formatPreciseMetric(
   value: number | null,
   unit: string,
@@ -498,8 +345,27 @@ function MembersPanelBase({
   const diagnosticsByPeerId = new Map(
     peerDiagnostics.map((snapshot) => [snapshot.peerId, snapshot])
   );
+  const localSummary = localMemberState
+    ? summaryByMemberId.get(localMemberState.memberId)
+    : undefined;
+  const localDiagnosticsView = localMemberState
+    ? buildDiagnosticsViewModel({
+        presenceState: localMemberState.presenceState,
+        playback: localMemberState.cachePlayback,
+        playbackSampleAgeMs: localMemberState.playbackSampleAgeMs,
+        currentTrack: {
+          visibleChunks: localSummary?.currentTrackChunkCount ?? 0,
+          totalChunks: localSummary?.currentTrackTotalChunks ?? 0
+        },
+        transfer: localMemberState.pieceSummary,
+        dataLink: {
+          openCount: localMemberState.dataReadyCount,
+          connectedPeerCount: localMemberState.dataReadyCount
+        }
+      })
+    : null;
   const localPlaybackToneClasses = localMemberState
-    ? getToneClasses(localMemberState.playbackStatus.tone)
+    ? getToneClasses(localDiagnosticsView?.audibility.tone ?? "neutral")
     : null;
 
   return (
@@ -519,14 +385,14 @@ function MembersPanelBase({
               <span
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${localPlaybackToneClasses.badge}`}
               >
-                {localMemberState.playbackStatus.badgeText}
+                {localDiagnosticsView?.playbackMode ?? "尚未建立"}
               </span>
             </div>
             <strong className="mt-2 block text-base font-semibold text-foreground">
-              {localMemberState.playbackStatus.label}
+              {localDiagnosticsView?.audibility.label ?? "尚未建立"}
             </strong>
             <p className="mt-1 text-xs leading-5 text-foreground-muted">
-              {localMemberState.playbackStatus.detail}
+              {localDiagnosticsView?.audibility.detail ?? "尚未建立可听播放链路。"}
             </p>
           </div>
 
@@ -557,8 +423,31 @@ function MembersPanelBase({
             ? diagnosticsByPeerId.get(member.peerId)
             : undefined;
           const playbackStatus = isLocalMember
-            ? localMemberState.playbackStatus
+            ? localDiagnosticsView?.audibility ?? localMemberState.playbackStatus
             : getPlaybackStatus(member.presenceState, peerDiagnosticsSnapshot);
+          const diagnosticsView = isLocalMember
+            ? localDiagnosticsView
+            : buildDiagnosticsViewModel({
+                presenceState: member.presenceState,
+                playback: peerDiagnosticsSnapshot?.progressivePlaybackStatus ?? null,
+                playbackSampleAgeMs: peerDiagnosticsSnapshot
+                  ? Math.max(0, Date.now() - new Date(peerDiagnosticsSnapshot.updatedAt).getTime())
+                  : null,
+                currentTrack: {
+                  visibleChunks: summary?.currentTrackChunkCount ?? 0,
+                  totalChunks: summary?.currentTrackTotalChunks ?? 0
+                },
+                transfer: peerDiagnosticsSnapshot
+                  ? {
+                      downloadRateKbps: peerDiagnosticsSnapshot.pieceDownloadRateKbps,
+                      uploadRateKbps: peerDiagnosticsSnapshot.pieceUploadRateKbps,
+                      sampleAgeMs: Math.max(
+                        0,
+                        Date.now() - new Date(peerDiagnosticsSnapshot.updatedAt).getTime()
+                      )
+                    }
+                  : null
+              });
           const currentTrackStatus = getCurrentTrackStatus(summary, member.presenceState);
           const libraryStatus = getLibraryStatus(summary);
           const sourceSummary = formatCurrentTrackSources(summary?.currentTrackSources ?? []);
@@ -708,7 +597,7 @@ function MembersPanelBase({
                       className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${playbackToneClasses.badge}`}
                     >
                       {isLocalMember
-                        ? localMemberState.playbackStatus.badgeText
+                        ? diagnosticsView?.playbackMode ?? "尚未建立"
                         : peerDiagnosticsSnapshot?.transportHealth ?? "未知"}
                     </span>
                   </div>
@@ -717,45 +606,17 @@ function MembersPanelBase({
                   </p>
                   {isLocalMember && localMemberState.cachePlayback ? (
                     <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-                      <span>播放源: {localMemberState.cachePlayback.activeSource ?? "等待缓存"}</span>
-                      <span>引擎: {localMemberState.cachePlayback.engineType ?? "none"}</span>
-                      <span>ahead: {formatDurationMs(localMemberState.cachePlayback.aheadBufferedMs)}</span>
-                      <span>连续: {formatDurationMs(localMemberState.cachePlayback.contiguousBufferedMs)}</span>
-                      <span>调度: {localMemberState.cachePlayback.schedulerPolicy ?? "idle"}</span>
-                      <span>paused: {formatNullableBoolean(localMemberState.cachePlayback.localAudioPaused)}</span>
-                      <span>muted: {formatNullableBoolean(localMemberState.cachePlayback.localAudioMuted)}</span>
-                      <span>音量: {formatMetric(localMemberState.cachePlayback.localAudioVolume ?? null, "")}</span>
-                      <span>readyState: {localMemberState.cachePlayback.localAudioReadyState ?? "未知"}</span>
-                      <span className="col-span-2 truncate">
-                        src: {localMemberState.cachePlayback.localAudioHasSrcObject
-                          ? "srcObject"
-                          : localMemberState.cachePlayback.localAudioCurrentSrc
-                            ? "media-src"
-                            : "无"}
+                      <span>模式：{diagnosticsView?.playbackMode ?? "尚未建立"}</span>
+                      <span>缓冲：{diagnosticsView?.cache.healthLabel ?? "暂无有效样本"}</span>
+                      <span>前向：{diagnosticsView?.cache.aheadLabel ?? "暂无有效样本"}</span>
+                      <span>
+                        PCM 连续片：{diagnosticsView?.cache.pcmContiguousChunks ?? "暂无有效样本"}
                       </span>
-                      <span className="col-span-2 truncate">
-                        full-local: {localMemberState.cachePlayback.fullLocalPlaybackMode ?? "无"}
-                      </span>
-                      {localMemberState.cachePlayback.engineType === "pcm" ? (
-                        <>
-                          <span>PCM: {localMemberState.cachePlayback.pcmEngineStatus ?? "未知"}</span>
-                          <span>ctx: {localMemberState.cachePlayback.pcmAudioContextState ?? "未知"}</span>
-                          <span>out: {formatNullableBoolean(localMemberState.cachePlayback.pcmDirectOutputConnected)}</span>
-                          <span>连续片: {localMemberState.cachePlayback.pcmContiguousChunkCount ?? "未知"}</span>
-                          <span>PCM ahead: {formatDurationMs(localMemberState.cachePlayback.pcmBufferedAheadMs)}</span>
-                          <span>decoded: {localMemberState.cachePlayback.pcmDecodedSegmentCount ?? "未知"}</span>
-                          <span>scheduled: {localMemberState.cachePlayback.pcmScheduledSegmentCount ?? "未知"}</span>
-                          <span>时钟偏移: {formatMetric(localMemberState.cachePlayback.serverClockOffsetMs ?? null, "ms")}</span>
-                          <span>校准 RTT: {formatMetric(localMemberState.cachePlayback.serverClockRoundTripMs ?? null, "ms")}</span>
-                          <span>平均漂移: {formatMetric(localMemberState.cachePlayback.averageDriftMs ?? null, "ms")}</span>
-                          <span>最大漂移: {formatMetric(localMemberState.cachePlayback.maxDriftMs ?? null, "ms")}</span>
-                          <span className="col-span-2 truncate">
-                            pcm block: {localMemberState.cachePlayback.pcmLastBlockedReason ?? "无"}
-                          </span>
-                          <span className="col-span-2 truncate">
-                            pcm error: {localMemberState.cachePlayback.pcmLastDecodeError ?? "无"}
-                          </span>
-                        </>
+                      <span className="col-span-2">同步：{diagnosticsView?.sync.label ?? "暂无有效样本"}</span>
+                      {diagnosticsView?.activeIssue ? (
+                        <span className="col-span-2 text-amber-300">
+                          当前问题：{diagnosticsView.activeIssue}
+                        </span>
                       ) : null}
                     </div>
                   ) : null}

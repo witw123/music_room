@@ -9,6 +9,7 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import type { LocalMemberPanelState } from "./MembersPanel";
+import { buildDiagnosticsViewModel } from "./diagnostics-view-model";
 
 export type AvailabilityEntry = {
   track: TrackMeta;
@@ -52,18 +53,6 @@ function formatMetric(value: number | null | undefined, unit: string) {
   }
 
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
-}
-
-function formatDurationMs(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  if (Math.abs(value) < 1000) {
-    return `${Math.round(value)}ms`;
-  }
-
-  return `${(value / 1000).toFixed(1)}s`;
 }
 
 function formatBoolean(value: boolean | null | undefined) {
@@ -181,15 +170,19 @@ function DiagnosticBlock({
   );
 }
 
-function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
-  const playback = peer.progressivePlaybackStatus ?? null;
-
+function PeerDiagnosticCard({
+  peer,
+  label
+}: {
+  peer: PeerDiagnosticsSnapshot;
+  label: string;
+}) {
   return (
     <details className="overflow-hidden rounded-lg border border-surface-border bg-background/30 px-3 py-2">
       <summary className="cursor-pointer list-none">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <strong className="truncate text-xs font-semibold text-foreground">{peer.peerId}</strong>
+            <strong className="truncate text-xs font-semibold text-foreground">{label}</strong>
             <p className="mt-1 text-[10px] text-foreground-muted">
               {describeCandidatePath(peer) ??
                 `数据 ${peer.dataConnectionState ?? "未知"} / channel ${peer.dataChannelState ?? "未知"}`}
@@ -209,14 +202,10 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
           <DiagnosticGrid>
             <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
             <span>DataChannel: {peer.dataChannelState ?? "未知"}</span>
-            <span>恢复级别: {peer.recoveryActionLevel ?? "observe"}</span>
-            <span>数据候选: {formatCandidateType(peer.dataCandidateType)}</span>
-            <span>远端候选: {formatCandidateType(peer.dataRemoteCandidateType)}</span>
-            <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "未知"}</span>
+            <span>链路类型: {formatCandidateType(peer.dataCandidateType)}</span>
+            <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "暂无样本"}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
             <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
-            <span>最近分片: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
-            <span>更新: {formatTimestamp(peer.updatedAt)}</span>
           </DiagnosticGrid>
           {peer.dataCandidateType === "relay" || peer.dataProtocol === "tcp" || peer.dataRelayProtocol === "tcp" ? (
             <p className="mt-2 text-[10px] text-amber-300">
@@ -228,86 +217,16 @@ function PeerDiagnosticCard({ peer }: { peer: PeerDiagnosticsSnapshot }) {
           ) : null}
         </DiagnosticBlock>
 
-        <DiagnosticBlock title="分片质量">
+        <DiagnosticBlock title="缓存传输">
           <DiagnosticGrid>
-            <span>可用上行: {formatMetric(peer.availableOutgoingBitrateKbps, " kbps")}</span>
             <span>分片下载: {formatMetric(peer.pieceDownloadRateKbps, " kbps")}</span>
             <span>分片上传: {formatMetric(peer.pieceUploadRateKbps, " kbps")}</span>
             <span>分片 RTT p50: {formatMetric(peer.pieceRttMsP50, "ms")}</span>
             <span>分片 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
             <span>请求超时率: {formatMetric(peer.pieceTimeoutRate, "%")}</span>
-            <span>最近数据活动: {formatMaybeTimestamp(peer.lastDataActivityAt)}</span>
+            <span>最近分片: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
           </DiagnosticGrid>
         </DiagnosticBlock>
-
-        {playback ? (
-          <DiagnosticBlock title="缓存播放运行时">
-            <DiagnosticGrid>
-              <span>播放源: {playback.activeSource ?? "等待缓存"}</span>
-              <span>引擎: {playback.engineType ?? "none"}</span>
-              <span>播放面: {playback.playbackSurfaceKey ?? "未知"}</span>
-              <span>时间线: {playback.playbackTimelineKey ?? "未知"}</span>
-              <span>房间变更: {playback.roomChangeKind ?? "未知"}</span>
-              <span>恢复阶段: {playback.recoveryPhase ?? "未知"}</span>
-              <span>调度: {playback.schedulerPolicy ?? "未激活"}</span>
-              <span>启动就绪: {formatBoolean(playback.startupReady)}</span>
-              <span>连续缓存: {formatDurationMs(playback.contiguousBufferedMs)}</span>
-              <span>前向缓冲: {formatDurationMs(playback.aheadBufferedMs)}</span>
-              <span>预计补齐: {formatDurationMs(playback.estimatedFillTimeMs)}</span>
-              <span>安全余量: {formatDurationMs(playback.bufferSafetyMarginMs)}</span>
-              <span>完整缓存: {formatBoolean(playback.fullLocalReady)}</span>
-              <span>渐进可播: {formatBoolean(playback.progressiveLocalEligible)}</span>
-              <span>waiting/30s: {formatMetric(playback.waitingEventsLast30s, "")}</span>
-              <span>stalled/30s: {formatMetric(playback.stalledEventsLast30s, "")}</span>
-              <span>音频解锁: {formatBoolean(playback.audioUnlocked)}</span>
-              <span>本地暂停: {formatBoolean(playback.localAudioPaused)}</span>
-              <span>本地静音: {formatBoolean(playback.localAudioMuted)}</span>
-              <span>本地音量: {formatMetric(playback.localAudioVolume, "")}</span>
-              <span>本地 readyState: {formatMetric(playback.localAudioReadyState, "")}</span>
-              <span>本地 srcObject: {formatBoolean(playback.localAudioHasSrcObject)}</span>
-              <span>本地 src: {playback.localAudioCurrentSrc ? "media-src" : "无"}</span>
-              <span>full-local: {playback.fullLocalPlaybackMode ?? "无"}</span>
-              <span>PCM 状态: {playback.pcmEngineStatus ?? "未知"}</span>
-              <span>PCM ctx: {playback.pcmAudioContextState ?? "未知"}</span>
-              <span>PCM out: {formatBoolean(playback.pcmDirectOutputConnected)}</span>
-              <span>PCM 连续片: {formatMetric(playback.pcmContiguousChunkCount, "")}</span>
-              <span>PCM ahead: {formatDurationMs(playback.pcmBufferedAheadMs)}</span>
-              <span>PCM 解码: {formatMetric(playback.pcmDecodedSegmentCount, "")}</span>
-              <span>PCM 调度: {formatMetric(playback.pcmScheduledSegmentCount, "")}</span>
-              <span>时钟偏移: {formatMetric(playback.serverClockOffsetMs, "ms")}</span>
-              <span>校准 RTT: {formatMetric(playback.serverClockRoundTripMs, "ms")}</span>
-              <span>平均漂移: {formatMetric(playback.averageDriftMs, "ms")}</span>
-              <span>最大漂移: {formatMetric(playback.maxDriftMs, "ms")}</span>
-              <span>PCM 阻塞: {playback.pcmLastBlockedReason ?? "无"}</span>
-              <span>PCM 错误: {playback.pcmLastDecodeError ?? "无"}</span>
-            </DiagnosticGrid>
-            {playback.pendingPlaybackIntent ? (
-              <p className="mt-2 text-[10px] text-amber-300">
-                等待音频启动: {playback.pendingPlaybackIntent}
-              </p>
-            ) : null}
-            {playback.lastPlayStartFailure ? (
-              <p className="mt-2 text-[10px] text-red-300">
-                本地音频启动失败: {playback.lastPlayStartFailure}
-              </p>
-            ) : null}
-            {playback.lastSourceStartError ? (
-              <p className="mt-2 text-[10px] text-red-300">
-                音源启动错误: {playback.lastSourceStartError}
-              </p>
-            ) : null}
-            {playback.fallbackReason ? (
-              <p className="mt-1 text-[10px] text-amber-300">
-                缓存播放阻塞: {playback.fallbackReason}
-              </p>
-            ) : null}
-            {playback.progressiveLocalBlockedReason ? (
-              <p className="mt-1 text-[10px] text-amber-300">
-                渐进播放未就绪: {playback.progressiveLocalBlockedReason}
-              </p>
-            ) : null}
-          </DiagnosticBlock>
-        ) : null}
       </div>
     </details>
   );
@@ -321,8 +240,6 @@ function MeshStatusPanelBase({
   localMemberState,
   peerDiagnostics,
   recentEvents,
-  iceConfigSource,
-  iceConfigStatus,
   onVisibilityChange
 }: MeshStatusPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -365,6 +282,32 @@ function MeshStatusPanelBase({
       ).length,
     [activePeerIds, peerDiagnostics]
   );
+  const memberLabelByPeerId = useMemo(
+    () =>
+      new Map(
+        members
+          .filter((member) => !!member.peerId)
+          .map((member) => [
+            member.peerId!,
+            `${member.nickname} · ${member.role === "host" ? "房主" : "成员"}`
+          ])
+      ),
+    [members]
+  );
+  const localDiagnosticsView = useMemo(
+    () =>
+      buildDiagnosticsViewModel({
+        presenceState: localMemberState?.presenceState,
+        playback: localMemberState?.cachePlayback ?? null,
+        playbackSampleAgeMs: localMemberState?.playbackSampleAgeMs ?? null,
+        transfer: localMemberState?.pieceSummary ?? null,
+        dataLink: {
+          openCount: dataReadyCount,
+          connectedPeerCount: connectedPeersCount
+        }
+      }),
+    [connectedPeersCount, dataReadyCount, localMemberState]
+  );
   const visibleAvailability = availabilitySummary.slice(0, 6);
   const visibleEvents = recentEvents.slice(0, 8);
 
@@ -372,16 +315,13 @@ function MeshStatusPanelBase({
     <section className="flex w-full flex-col gap-4 rounded-2xl border border-surface-border bg-surface/20 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-foreground-muted">
-            Advanced
-          </p>
           <h2 className="text-sm font-bold text-foreground">缓存播放诊断</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            默认只展示摘要；播放缓冲或分片下载慢时，再展开查看缓存窗口、分片吞吐和数据通道。
+            默认展示可听、缓存与同步结论；需要定位问题时展开开发详情。
           </p>
         </div>
         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsOpen((value) => !value)}>
-          {isOpen ? "收起" : "展开"}
+          {isOpen ? "收起" : "开发详情"}
         </Button>
       </div>
 
@@ -390,10 +330,10 @@ function MeshStatusPanelBase({
           在线: {onlineCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          Data: {dataReadyCount || connectedPeersCount}
+          Data: {dataReadyCount}
         </span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          缓存播放: {localMemberState?.cachePlayback?.activeSource ?? "等待缓存"}
+          播放: {localDiagnosticsView.audibility.label}
         </span>
         <span
           className={`rounded border px-2 py-1 ${
@@ -407,47 +347,99 @@ function MeshStatusPanelBase({
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           缓存库: {cachedTrackCount}
         </span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          ICE: {iceConfigSource}
-        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-surface-border pt-4 text-xs sm:grid-cols-3">
+        <div>
+          <span className="text-[10px] text-foreground-muted">实际播放</span>
+          <strong className="mt-1 block text-foreground">{localDiagnosticsView.audibility.label}</strong>
+        </div>
+        <div>
+          <span className="text-[10px] text-foreground-muted">播放模式</span>
+          <strong className="mt-1 block text-foreground">{localDiagnosticsView.playbackMode}</strong>
+        </div>
+        <div>
+          <span className="text-[10px] text-foreground-muted">缓存可读性</span>
+          <strong className="mt-1 block text-foreground">
+            PCM 连续 {localDiagnosticsView.cache.pcmContiguousChunks ?? 0} 片
+          </strong>
+        </div>
+        <div>
+          <span className="text-[10px] text-foreground-muted">缓冲健康</span>
+          <strong className="mt-1 block text-foreground">
+            {localDiagnosticsView.cache.healthLabel} · {localDiagnosticsView.cache.aheadLabel}
+          </strong>
+        </div>
+        <div>
+          <span className="text-[10px] text-foreground-muted">同步状态</span>
+          <strong className="mt-1 block text-foreground">{localDiagnosticsView.sync.label}</strong>
+        </div>
+        <div>
+          <span className="text-[10px] text-foreground-muted">当前问题</span>
+          <strong className={`mt-1 block ${localDiagnosticsView.activeIssue ? "text-amber-300" : "text-foreground"}`}>
+            {localDiagnosticsView.activeIssue ?? "无"}
+          </strong>
+        </div>
       </div>
 
       {isOpen ? (
         <div className="flex flex-col gap-3 border-t border-surface-border pt-4">
-          <div className="rounded-lg border border-surface-border bg-background/30 p-3 text-xs text-foreground-muted">
-            {iceConfigStatus}
-          </div>
-
           {localMemberState ? (
-            <DiagnosticBlock title="本机摘要">
-              <DiagnosticGrid>
-                <span>链路: {localMemberState.transportLabel}</span>
-                <span>播放: {localMemberState.playbackStatus.label}</span>
-                <span>
-                  总传输: {formatMetric(localMemberState.transportSummary.totalRateKbps, " kbps")}
-                </span>
-                <span>延迟: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>
-                <span>
-                  分片下载: {formatMetric(localMemberState.pieceSummary.downloadRateKbps, " kbps")}
-                </span>
-                <span>
-                  分片上传: {formatMetric(localMemberState.pieceSummary.uploadRateKbps, " kbps")}
-                </span>
-                <span>传输样本: {formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}</span>
-                <span>分片样本: {formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}</span>
-              </DiagnosticGrid>
-              {localMemberState.lastSourceStartError ? (
-                <p className="mt-2 text-[10px] text-red-300">
-                  本机音源错误: {localMemberState.lastSourceStartError}
-                </p>
-              ) : null}
-            </DiagnosticBlock>
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              <DiagnosticBlock title="音频与 PCM">
+                <DiagnosticGrid>
+                  <span>实际播放: {localDiagnosticsView.audibility.label}</span>
+                  <span>模式: {localDiagnosticsView.playbackMode}</span>
+                  <span>音频上下文: {localMemberState.cachePlayback?.pcmAudioContextState ?? "暂无样本"}</span>
+                  <span>输出连接: {formatBoolean(localMemberState.cachePlayback?.pcmDirectOutputConnected)}</span>
+                  <span>连续分片: {localMemberState.cachePlayback?.pcmContiguousChunkCount ?? "暂无样本"}</span>
+                  <span>已解码段: {localMemberState.cachePlayback?.pcmDecodedSegmentCount ?? "暂无样本"}</span>
+                  <span>已调度段: {localMemberState.cachePlayback?.pcmScheduledSegmentCount ?? "暂无样本"}</span>
+                  <span>前向缓冲: {localDiagnosticsView.cache.aheadLabel}</span>
+                </DiagnosticGrid>
+              </DiagnosticBlock>
+
+              <DiagnosticBlock title="缓存传输">
+                <DiagnosticGrid>
+                  <span>下载: {localDiagnosticsView.transfer.downloadLabel}</span>
+                  <span>上传: {localDiagnosticsView.transfer.uploadLabel}</span>
+                  <span>传输状态: {localDiagnosticsView.transfer.active ? "正在传输" : "当前无传输"}</span>
+                  <span>样本: {formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}</span>
+                </DiagnosticGrid>
+              </DiagnosticBlock>
+
+              <DiagnosticBlock title="同步">
+                <DiagnosticGrid>
+                  <span>状态: {localDiagnosticsView.sync.label}</span>
+                  <span>{localDiagnosticsView.sync.detail}</span>
+                  <span>时钟偏移: {formatMetric(localMemberState.cachePlayback?.serverClockOffsetMs, "ms")}</span>
+                  <span>校准 RTT: {formatMetric(localMemberState.cachePlayback?.serverClockRoundTripMs, "ms")}</span>
+                  <span>平均漂移: {formatMetric(localMemberState.cachePlayback?.averageDriftMs, "ms")}</span>
+                  <span>最大漂移: {formatMetric(localMemberState.cachePlayback?.maxDriftMs, "ms")}</span>
+                </DiagnosticGrid>
+              </DiagnosticBlock>
+
+              <DiagnosticBlock title="数据链路">
+                <DiagnosticGrid>
+                  <span>DataChannel: {dataReadyCount}</span>
+                  <span>连接成员: {connectedPeersCount}</span>
+                  <span>状态: {localDiagnosticsView.dataLink.label}</span>
+                  <span>延迟: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>
+                  <span>发送队列: 见成员链路</span>
+                  <span>样本: {formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}</span>
+                </DiagnosticGrid>
+              </DiagnosticBlock>
+            </div>
           ) : null}
 
           {peerDiagnostics.length ? (
             <div className="flex flex-col gap-2">
               {peerDiagnostics.map((peer) => (
-                <PeerDiagnosticCard key={peer.peerId} peer={peer} />
+                <PeerDiagnosticCard
+                  key={peer.peerId}
+                  peer={peer}
+                  label={peer.peerId === "system" ? "本机" : memberLabelByPeerId.get(peer.peerId) ?? "房间成员"}
+                />
               ))}
             </div>
           ) : (
@@ -503,7 +495,6 @@ function MeshStatusPanelBase({
                   >
                     <div className="flex items-center justify-between gap-2 text-foreground-muted">
                       <span>{formatTimestamp(event.timestamp)}</span>
-                      <span>{event.peerId}</span>
                     </div>
                     <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
                   </div>

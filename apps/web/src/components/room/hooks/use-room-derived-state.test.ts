@@ -597,9 +597,9 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "完整缓存播放",
+      label: "正在发声",
       tone: "success",
-      badgeText: "full-local"
+      badgeText: "完整本地缓存"
     });
   });
 
@@ -641,9 +641,9 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "完整缓存播放",
+      label: "正在发声",
       tone: "success",
-      badgeText: "full-local"
+      badgeText: "完整本地缓存"
     });
   });
 
@@ -685,13 +685,13 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "完整缓存播放",
+      label: "正在发声",
       tone: "success",
-      badgeText: "full-local"
+      badgeText: "完整本地缓存"
     });
   });
 
-  it("reports ready lossless sliding-window playback as audible", () => {
+  it("does not report lossless playback as audible without a running audio context", () => {
     const cachePlayback = {
       ...createPeerSnapshot("system", "2026-04-04T00:00:00.000Z").progressivePlaybackStatus!,
       activeSource: "lossless-local",
@@ -727,9 +727,9 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "无损滑动窗口播放",
-      tone: "success",
-      badgeText: "lossless-local"
+      label: "等待 PCM 数据",
+      tone: "warning",
+      badgeText: "边缓存无损"
     });
   });
 
@@ -771,10 +771,10 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "缓存已就绪但未发声",
+      label: "等待 PCM 数据",
       tone: "warning",
-      badgeText: "audio-wait",
-      detail: "PCM 引擎尚未解码出可播放音频帧。"
+      badgeText: "渐进缓存",
+      detail: "尚未形成可调度的连续 PCM。"
     });
   });
 
@@ -815,9 +815,9 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "无损滑动窗口播放",
+      label: "正在发声",
       tone: "success",
-      badgeText: "lossless-local"
+      badgeText: "边缓存无损"
     });
   });
 
@@ -858,9 +858,9 @@ describe("use-room-derived-state helpers", () => {
         pieceUploadRateKbps: null
       })
     ).toMatchObject({
-      label: "无损滑动窗口播放",
+      label: "正在发声",
       tone: "success",
-      badgeText: "lossless-local"
+      badgeText: "边缓存无损"
     });
   });
 });

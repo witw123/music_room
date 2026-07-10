@@ -10,6 +10,7 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
+import { buildDiagnosticsViewModel } from "@/components/room/diagnostics-view-model";
 import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement
@@ -276,6 +277,7 @@ export function useRoomDerivedState({
 
     return {
       memberId: localMember.id,
+      presenceState: localMember.presenceState,
       audioUnlocked,
       sourceStartState,
       lastSourceStartError,
@@ -299,22 +301,11 @@ export function useRoomDerivedState({
         ? {
             activeSource: systemDiagnostic.progressivePlaybackStatus.activeSource,
             engineType: systemDiagnostic.progressivePlaybackStatus.engineType,
-            contiguousBufferedMs: systemDiagnostic.progressivePlaybackStatus.contiguousBufferedMs,
             aheadBufferedMs: systemDiagnostic.progressivePlaybackStatus.aheadBufferedMs,
-            schedulerPolicy: systemDiagnostic.progressivePlaybackStatus.schedulerPolicy,
-            startupReady: systemDiagnostic.progressivePlaybackStatus.startupReady,
             fallbackReason: systemDiagnostic.progressivePlaybackStatus.fallbackReason,
-            estimatedFillTimeMs: systemDiagnostic.progressivePlaybackStatus.estimatedFillTimeMs ?? null,
-            bufferSafetyMarginMs: systemDiagnostic.progressivePlaybackStatus.bufferSafetyMarginMs ?? null,
             fullLocalReady: systemDiagnostic.progressivePlaybackStatus.fullLocalReady ?? false,
-            progressiveLocalEligible:
-              systemDiagnostic.progressivePlaybackStatus.progressiveLocalEligible ?? false,
             progressiveLocalBlockedReason:
               systemDiagnostic.progressivePlaybackStatus.progressiveLocalBlockedReason ?? null,
-            waitingEventsLast30s:
-              systemDiagnostic.progressivePlaybackStatus.waitingEventsLast30s ?? null,
-            stalledEventsLast30s:
-              systemDiagnostic.progressivePlaybackStatus.stalledEventsLast30s ?? null,
             localAudioPaused: systemDiagnostic.progressivePlaybackStatus.localAudioPaused ?? null,
             localAudioMuted: systemDiagnostic.progressivePlaybackStatus.localAudioMuted ?? null,
             localAudioVolume: systemDiagnostic.progressivePlaybackStatus.localAudioVolume ?? null,
@@ -332,6 +323,10 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmAudioContextState ?? null,
             pcmDirectOutputConnected:
               systemDiagnostic.progressivePlaybackStatus.pcmDirectOutputConnected ?? null,
+            pcmContiguousChunkCount:
+              systemDiagnostic.progressivePlaybackStatus.pcmContiguousChunkCount ?? null,
+            pcmBufferedAheadMs:
+              systemDiagnostic.progressivePlaybackStatus.pcmBufferedAheadMs ?? null,
             pcmDecodedSegmentCount:
               systemDiagnostic.progressivePlaybackStatus.pcmDecodedSegmentCount ?? null,
             pcmScheduledSegmentCount:
@@ -340,12 +335,25 @@ export function useRoomDerivedState({
               systemDiagnostic.progressivePlaybackStatus.pcmLastDecodeError ?? null,
             pcmLastBlockedReason:
               systemDiagnostic.progressivePlaybackStatus.pcmLastBlockedReason ?? null,
+            serverClockOffsetMs:
+              systemDiagnostic.progressivePlaybackStatus.serverClockOffsetMs ?? null,
+            serverClockRoundTripMs:
+              systemDiagnostic.progressivePlaybackStatus.serverClockRoundTripMs ?? null,
+            averageDriftMs:
+              systemDiagnostic.progressivePlaybackStatus.averageDriftMs ?? null,
+            maxDriftMs: systemDiagnostic.progressivePlaybackStatus.maxDriftMs ?? null,
             lastPlayStartFailure:
               systemDiagnostic.progressivePlaybackStatus.lastPlayStartFailure ?? null,
+            lastSourceStartError:
+              systemDiagnostic.progressivePlaybackStatus.lastSourceStartError ?? null,
             pendingPlaybackIntent:
               systemDiagnostic.progressivePlaybackStatus.pendingPlaybackIntent ?? null
           }
         : null,
+      playbackSampleAgeMs: systemDiagnostic
+        ? Math.max(0, Date.now() - new Date(systemDiagnostic.updatedAt).getTime())
+        : null,
+      dataReadyCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
       playbackStatus: getLocalPlaybackStatus({
         presenceState: localMember.presenceState,
         mediaConnectionState,
@@ -361,7 +369,8 @@ export function useRoomDerivedState({
         cachePlayback: systemDiagnostic?.progressivePlaybackStatus ?? null,
         dataReadyCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
         pieceDownloadRateKbps: normalizedPieceDownloadRateKbps,
-        pieceUploadRateKbps: normalizedPieceUploadRateKbps
+        pieceUploadRateKbps: normalizedPieceUploadRateKbps,
+        pieceSampleAgeMs
       })
     };
   }, [
@@ -593,18 +602,6 @@ function sumNullableNumbers(...values: Array<number | null>) {
   return Math.round(numbers.reduce((sum, value) => sum + value, 0) * 10) / 10;
 }
 
-function formatDurationMs(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  if (value < 1000) {
-    return `${Math.round(value)}ms`;
-  }
-
-  return `${(value / 1000).toFixed(1)}s`;
-}
-
 function averageDiagnosticsValue(
   diagnostics: PeerDiagnosticsSnapshot[],
   key: "currentRoundTripTimeMs"
@@ -682,117 +679,6 @@ function hasPieceTransferSample(diagnostics: PeerDiagnosticsSnapshot[]) {
   );
 }
 
-function getLocalAudioPlaybackIssue(
-  cachePlayback: PeerDiagnosticsSnapshot["progressivePlaybackStatus"]
-) {
-  if (!cachePlayback) {
-    return null;
-  }
-
-  const readyState = cachePlayback.localAudioReadyState ?? 0;
-  const hasPlayableOutput = cachePlayback.localAudioHasSrcObject || readyState >= 2;
-  const nativeBlobFullLocalReady =
-    cachePlayback.activeSource === "full-local" &&
-    cachePlayback.fullLocalPlaybackMode === "native-blob" &&
-    !!cachePlayback.localAudioCurrentSrc &&
-    hasPlayableOutput;
-  const playingFullLocalReady =
-    cachePlayback.activeSource === "full-local" &&
-    cachePlayback.fullLocalReady === true &&
-    cachePlayback.localAudioPaused === false;
-
-  const pcmHasScheduledOutput =
-    cachePlayback.engineType === "pcm" &&
-    cachePlayback.pcmAudioContextState === "running" &&
-    (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0 &&
-    (cachePlayback.pcmScheduledSegmentCount ?? 0) > 0 &&
-    !(
-      cachePlayback.pcmLastBlockedReason &&
-      !(
-        cachePlayback.pcmLastBlockedReason === "engine-failed" &&
-        (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0
-      )
-    );
-  const pcmElementOutputAudible =
-    cachePlayback.localAudioHasSrcObject === true &&
-    cachePlayback.localAudioPaused === false &&
-    cachePlayback.localAudioMuted !== true &&
-    cachePlayback.localAudioVolume !== 0;
-  const pcmOutputAudible =
-    pcmHasScheduledOutput &&
-    (cachePlayback.pcmDirectOutputConnected !== false || pcmElementOutputAudible);
-  if (pcmOutputAudible) {
-    return null;
-  }
-
-  if (cachePlayback.lastPlayStartFailure) {
-    return `本地音频启动失败: ${cachePlayback.lastPlayStartFailure}。`;
-  }
-
-  if (cachePlayback.pendingPlaybackIntent) {
-    return `等待浏览器允许音频输出: ${cachePlayback.pendingPlaybackIntent}。`;
-  }
-
-  if (nativeBlobFullLocalReady || playingFullLocalReady) {
-    return null;
-  }
-
-  const shouldInspectPcmOutput =
-    cachePlayback.engineType === "pcm" &&
-    (cachePlayback.activeSource !== "full-local" ||
-      cachePlayback.fullLocalPlaybackMode === "pcm-engine" ||
-      cachePlayback.localAudioHasSrcObject === true);
-  if (shouldInspectPcmOutput) {
-    if (cachePlayback.pcmAudioContextState && cachePlayback.pcmAudioContextState !== "running") {
-      return `PCM 音频上下文未运行: ${cachePlayback.pcmAudioContextState}。`;
-    }
-
-    if (
-      cachePlayback.pcmLastBlockedReason &&
-      !(cachePlayback.pcmLastBlockedReason === "engine-failed" && (cachePlayback.pcmDecodedSegmentCount ?? 0) > 0)
-    ) {
-      return `PCM 播放未就绪: ${cachePlayback.pcmLastBlockedReason}。`;
-    }
-
-    if (
-      cachePlayback.pcmDirectOutputConnected === false &&
-      cachePlayback.localAudioHasSrcObject !== true
-    ) {
-      return "PCM 引擎尚未连接到本机音频输出。";
-    }
-
-    if ((cachePlayback.pcmDecodedSegmentCount ?? 0) <= 0) {
-      return "PCM 引擎尚未解码出可播放音频帧。";
-    }
-
-    if ((cachePlayback.pcmScheduledSegmentCount ?? 0) <= 0) {
-      return "PCM 引擎尚未调度音频帧到输出。";
-    }
-  }
-
-  if (cachePlayback.localAudioMuted) {
-    return "本地音频元素处于静音状态。";
-  }
-
-  if (cachePlayback.localAudioVolume === 0) {
-    return "本地音频音量为 0。";
-  }
-
-  if (cachePlayback.localAudioPaused === true) {
-    return "缓存窗口已准备好，但本地音频元素仍处于暂停状态。";
-  }
-
-  if (cachePlayback.localAudioPaused === false && !hasPlayableOutput) {
-    return `本地音频元素未拿到可播放数据，readyState=${readyState}。`;
-  }
-
-  if (cachePlayback.localAudioPaused !== false) {
-    return "尚未确认本地音频元素已经开始播放。";
-  }
-
-  return null;
-}
-
 export function getLocalPlaybackStatus(input: {
   presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
   mediaConnectionState: RoomMediaConnectionState;
@@ -806,6 +692,7 @@ export function getLocalPlaybackStatus(input: {
   dataReadyCount: number;
   pieceDownloadRateKbps: number | null;
   pieceUploadRateKbps: number | null;
+  pieceSampleAgeMs?: number | null;
 }): LocalMemberPanelState["playbackStatus"] {
   if (input.presenceState === "offline") {
     return {
@@ -843,76 +730,40 @@ export function getLocalPlaybackStatus(input: {
     };
   }
 
-  if (input.cachePlayback?.activeSource === "lossless-local") {
-    const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
-    if (localAudioIssue) {
-      return {
-        label: "无损缓存待发声",
-        detail: localAudioIssue,
-        tone: "accent",
-        badgeText: "lossless-wait"
-      };
-    }
-
-    return {
-      label: "无损滑动窗口播放",
-      detail: "当前使用本地缓存分片解码发声，并持续追随房间播放时钟。",
-      tone: "success",
-      badgeText: "lossless-local"
-    };
-  }
-
-  if (input.cachePlayback?.activeSource === "full-local") {
-    const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
-    if (localAudioIssue) {
-      return {
-        label: "完整缓存待发声",
-        detail: localAudioIssue,
-        tone: "accent",
-        badgeText: "audio-wait"
-      };
-    }
-
-    return {
-      label: "完整缓存播放",
-      detail: "当前使用完整本地缓存播放，网络只负责同步控制和分片回传。",
-      tone: "success",
-      badgeText: "full-local"
-    };
-  }
-
-  if (input.cachePlayback?.activeSource === "progressive-local") {
-    if (input.cachePlayback.startupReady) {
-      const localAudioIssue = getLocalAudioPlaybackIssue(input.cachePlayback);
-      if (localAudioIssue) {
-        return {
-          label: "缓存已就绪但未发声",
-          detail: localAudioIssue,
-          tone: "warning",
-          badgeText: "audio-wait"
-        };
+  if (
+    input.cachePlayback?.activeSource ||
+    input.cachePlayback?.fallbackReason ||
+    input.cachePlayback?.progressiveLocalBlockedReason ||
+    input.cachePlayback?.pendingPlaybackIntent ||
+    input.cachePlayback?.lastPlayStartFailure
+  ) {
+    const view = buildDiagnosticsViewModel({
+      presenceState: input.presenceState,
+      playback: input.cachePlayback,
+      transfer: {
+        downloadRateKbps: input.pieceDownloadRateKbps,
+        uploadRateKbps: input.pieceUploadRateKbps,
+        sampleAgeMs: input.pieceSampleAgeMs ?? 0
+      },
+      dataLink: {
+        openCount: input.dataReadyCount,
+        connectedPeerCount: input.dataReadyCount
       }
-
-      return {
-        label: "边下边播",
-        detail: `当前本地缓存窗口已可播，ahead ${formatDurationMs(input.cachePlayback.aheadBufferedMs)}。`,
-        tone: "success",
-        badgeText: "progressive"
-      };
-    }
-
+    });
     return {
-      label: "缓存启动中",
-      detail:
-        input.cachePlayback.fallbackReason ??
-        input.cachePlayback.progressiveLocalBlockedReason ??
-        "正在缓存当前播放位置所需分片。",
-      tone: "accent",
-      badgeText: "buffering"
+      ...view.audibility,
+      badgeText: view.playbackMode
     };
   }
 
-  if ((input.pieceDownloadRateKbps ?? 0) > 0 || (input.pieceUploadRateKbps ?? 0) > 0) {
+  const transferActive = buildDiagnosticsViewModel({
+    transfer: {
+      downloadRateKbps: input.pieceDownloadRateKbps,
+      uploadRateKbps: input.pieceUploadRateKbps,
+      sampleAgeMs: input.pieceSampleAgeMs ?? 0
+    }
+  }).transfer.active;
+  if (transferActive) {
     return {
       label: "正在缓存播放片段",
       detail: "已开始按当前播放进度拉取分片，等待本地播放窗口满足启动条件。",

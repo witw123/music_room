@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-import { getPlaybackStatus } from "./MembersPanel";
+import { getCurrentTrackStatus, getPlaybackStatus } from "./MembersPanel";
 
 describe("MembersPanel playback status", () => {
   it("treats native blob full-local playback as audible without PCM output", () => {
@@ -23,7 +23,7 @@ describe("MembersPanel playback status", () => {
     };
 
     expect(getPlaybackStatus("online", diagnostics)).toMatchObject({
-      label: "完整缓存播放",
+      label: "正在发声",
       tone: "success"
     });
   });
@@ -48,7 +48,7 @@ describe("MembersPanel playback status", () => {
     };
 
     expect(getPlaybackStatus("online", diagnostics)).toMatchObject({
-      label: "完整缓存播放",
+      label: "正在发声",
       tone: "success"
     });
   });
@@ -73,7 +73,7 @@ describe("MembersPanel playback status", () => {
     };
 
     expect(getPlaybackStatus("online", diagnostics)).toMatchObject({
-      label: "完整缓存播放",
+      label: "正在发声",
       tone: "success"
     });
   });
@@ -97,8 +97,39 @@ describe("MembersPanel playback status", () => {
     };
 
     expect(getPlaybackStatus("online", diagnostics)).toMatchObject({
-      label: "无损滑动窗口播放",
+      label: "正在发声",
       tone: "success"
+    });
+  });
+
+  it("does not report a zero-rate data sample as active piece transfer", () => {
+    const now = Date.now();
+    const diagnostics = createPeerSnapshot("peer_1", new Date(now).toISOString());
+    diagnostics.dataChannelState = "open";
+    diagnostics.pieceDownloadRateKbps = 0;
+    diagnostics.pieceUploadRateKbps = 0;
+
+    expect(getPlaybackStatus("online", diagnostics, now)).toMatchObject({
+      label: "数据通道就绪"
+    });
+  });
+
+  it("describes complete announcements without claiming PCM readability", () => {
+    expect(
+      getCurrentTrackStatus(
+        {
+          memberId: "member_1",
+          announcedTrackCount: 1,
+          totalChunkCount: 262,
+          currentTrackChunkCount: 262,
+          currentTrackTotalChunks: 262,
+          currentTrackSources: ["local_cache"]
+        },
+        "online"
+      )
+    ).toMatchObject({
+      label: "已声明完整分片",
+      detail: "房间可见全部分片；是否可播放以 PCM 连续读取状态为准。"
     });
   });
 });
