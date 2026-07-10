@@ -131,6 +131,9 @@ const pcmPlaybackRefillMinScheduledAheadMs = 25_000;
 // a slightly relaxed tolerance avoids false "buffer-missing" signals that
 // would cause audible stutter.
 const pcmCoverageGapToleranceSec = 0.25;
+const pcmStartupMinimumAheadSeconds = 0.35;
+const pcmSteadyMinimumAheadSeconds = 0.02;
+const pcmStartupFadeSeconds = 0.04;
 const pcmParsedByteCompactionThreshold = 512 * 1024;
 // Steady-state: batch-read up to this many contiguous chunks per sync.
 // With the in-memory buffer + batch IndexedDB reads, reading 16 chunks is
@@ -145,6 +148,40 @@ const pcmCatchupLookAheadChunks = 2;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 const maxNativeFlacSampleRate = 96_000;
 const maxSoftwareFlacPacketsPerDecode = 256;
+
+export function resolvePcmStartupMinimumAheadSeconds(input: {
+  isAlreadyPlaying: boolean;
+  remainingSeconds: number;
+}) {
+  if (input.isAlreadyPlaying) {
+    return pcmSteadyMinimumAheadSeconds;
+  }
+  if (Number.isFinite(input.remainingSeconds) && input.remainingSeconds > 0) {
+    return Math.min(pcmStartupMinimumAheadSeconds, input.remainingSeconds);
+  }
+  return pcmSteadyMinimumAheadSeconds;
+}
+
+export function schedulePcmStartupFade(input: {
+  gain: {
+    cancelScheduledValues?: (time: number) => unknown;
+    setValueAtTime: (value: number, time: number) => unknown;
+    linearRampToValueAtTime?: (value: number, time: number) => unknown;
+  };
+  nowSeconds: number;
+  startSeconds: number;
+  volume: number;
+}) {
+  input.gain.cancelScheduledValues?.(input.nowSeconds);
+  input.gain.setValueAtTime(0, input.nowSeconds);
+  const fadeEndSeconds = Math.max(input.nowSeconds, input.startSeconds) + pcmStartupFadeSeconds;
+  if (input.gain.linearRampToValueAtTime) {
+    input.gain.linearRampToValueAtTime(input.volume, fadeEndSeconds);
+  } else {
+    input.gain.setValueAtTime(input.volume, fadeEndSeconds);
+  }
+}
+
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
@@ -463,9 +500,13 @@ export class ProgressivePcmEngine {
       };
     }
 
-    await this.syncUntilBufferedPosition(positionSeconds);
+    const minimumAheadSeconds = resolvePcmStartupMinimumAheadSeconds({
+      isAlreadyPlaying: this.playing,
+      remainingSeconds: Math.max(0, this.manifest.durationMs / 1000 - positionSeconds)
+    });
+    await this.syncUntilBufferedPosition(positionSeconds, minimumAheadSeconds);
 
-    if (!this.hasBufferedPosition(positionSeconds)) {
+    if (!this.hasBufferedPosition(positionSeconds, minimumAheadSeconds)) {
       this.playing = false;
       this.stopPlaybackRefillLoop();
       this.pausedTrackTimeSec = positionSeconds;
@@ -518,6 +559,17 @@ export class ProgressivePcmEngine {
       // timer and the AudioContext clock.
       this.anchorContextTimeSec =
         this.audioContext.currentTime + (wasPlaying ? 0.05 : 0.005);
+      if (!wasPlaying && this.gainNode) {
+        schedulePcmStartupFade({
+          gain: this.gainNode.gain,
+          nowSeconds: this.audioContext.currentTime,
+          startSeconds: Math.max(
+            this.anchorContextTimeSec,
+            this.audioContext.currentTime + 0.02
+          ),
+          volume: this.volume
+        });
+      }
       if (wasPlaying) {
         this.stopScheduledSegments();
       }
@@ -1412,10 +1464,16 @@ export class ProgressivePcmEngine {
     }
   }
 
-  private async waitForDecodedPosition(positionSeconds: number) {
+  private async waitForDecodedPosition(
+    positionSeconds: number,
+    minimumAheadSeconds = pcmSteadyMinimumAheadSeconds
+  ) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await yieldToMicrotasks();
-      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+      if (
+        this.hasBufferedPosition(positionSeconds, minimumAheadSeconds) ||
+        isTerminalEngineStatus(this.status)
+      ) {
         return;
       }
     }
@@ -1423,19 +1481,28 @@ export class ProgressivePcmEngine {
     // macrotask queue, not the microtask queue.  Yield once so newly
     // cached chunks become visible before the catchup loop gives up.
     await yieldToMacrotask();
-    if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+    if (
+      this.hasBufferedPosition(positionSeconds, minimumAheadSeconds) ||
+      isTerminalEngineStatus(this.status)
+    ) {
       return;
     }
   }
 
-  private async syncUntilBufferedPosition(positionSeconds: number) {
+  private async syncUntilBufferedPosition(
+    positionSeconds: number,
+    minimumAheadSeconds = pcmSteadyMinimumAheadSeconds
+  ) {
     const catchupTargetChunkIndex = getChunkIndexForPositionMs(
       this.manifest,
       positionSeconds * 1000
     );
     const trackLabel = `${this.manifest.trackId.slice(0, 8)}`;
     for (let attempt = 0; attempt < maxPcmPlaybackCatchupSyncBatches; attempt += 1) {
-      if (this.hasBufferedPosition(positionSeconds) || isTerminalEngineStatus(this.status)) {
+      if (
+        this.hasBufferedPosition(positionSeconds, minimumAheadSeconds) ||
+        isTerminalEngineStatus(this.status)
+      ) {
         return;
       }
 
@@ -1446,7 +1513,7 @@ export class ProgressivePcmEngine {
         // once to let any in-flight decoder output callbacks materialize
         // before we give up; the previous performSync may have submitted
         // packets whose output hasn't reached the main thread yet.
-        await this.waitForDecodedPosition(positionSeconds);
+        await this.waitForDecodedPosition(positionSeconds, minimumAheadSeconds);
         if (attempt === 0) {
           console.debug(
             `[pcm] ${trackLabel} catchup stalled at iteration 0: ` +
@@ -1460,7 +1527,7 @@ export class ProgressivePcmEngine {
         break;
       }
 
-      await this.waitForDecodedPosition(positionSeconds);
+      await this.waitForDecodedPosition(positionSeconds, minimumAheadSeconds);
     }
   }
 
@@ -1720,12 +1787,16 @@ export class ProgressivePcmEngine {
     }
   }
 
-  private hasBufferedPosition(positionSeconds: number) {
+  private hasBufferedPosition(
+    positionSeconds: number,
+    minimumAheadSeconds = pcmSteadyMinimumAheadSeconds
+  ) {
     if (!Number.isFinite(positionSeconds)) {
       return false;
     }
 
-    return this.findBufferedCoverageEnd(positionSeconds) > positionSeconds + 0.02;
+    return this.findBufferedCoverageEnd(positionSeconds) >=
+      positionSeconds + minimumAheadSeconds - 0.001;
   }
 
   private getScheduledAheadMs(positionSeconds = this.getCurrentTimeSeconds()) {

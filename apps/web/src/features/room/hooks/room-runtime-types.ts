@@ -51,6 +51,7 @@ export type PieceTransferInput = {
   peerId: string;
   direction: "download" | "upload";
   bytes: number;
+  durationMs?: number | null;
 };
 
 export type PieceRequestSampleInput = {
@@ -60,6 +61,7 @@ export type PieceRequestSampleInput = {
 };
 
 export type PieceTransferSample = {
+  startedAtMs?: number;
   timestampMs: number;
   bytes: number;
 };

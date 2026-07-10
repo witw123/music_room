@@ -33,18 +33,19 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
 
   if (
     input.transportScore === "failed" ||
-    input.transportScore === "unstable" ||
-    bufferedAmountBytes >= 1024 * 1024 ||
-    (roundTripTimeMs !== null && roundTripTimeMs >= 400) ||
-    (transferRateKbps !== null && transferRateKbps < 800)
+    input.transportScore === "unstable"
   ) {
     return "severe";
+  }
+
+  if (isRelay && !isTcp) {
+    return "relay-udp";
   }
 
   if (
     input.transportScore === "degraded" ||
     isTcp ||
-    bufferedAmountBytes >= 512 * 1024 ||
+    bufferedAmountBytes >= 8 * 1024 * 1024 ||
     (roundTripTimeMs !== null && roundTripTimeMs >= 250) ||
     (transferRateKbps !== null && transferRateKbps < 1_500)
   ) {
@@ -96,9 +97,9 @@ export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudg
   }
 
   return {
-    highWatermarkBytes: 1024 * 1024,
-    bulkHighWatermarkBytes: 256 * 1024,
-    maxPayloadBytes: 64 * 1024
+    highWatermarkBytes: 4 * 1024 * 1024,
+    bulkHighWatermarkBytes: 1024 * 1024,
+    maxPayloadBytes: 128 * 1024
   };
 }
 

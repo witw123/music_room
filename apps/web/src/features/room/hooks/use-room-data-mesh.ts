@@ -308,7 +308,8 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         input.recordPieceTransferRef.current({
           peerId: sourcePeerId,
           direction: "download",
-          bytes: payloadBytes
+          bytes: payloadBytes,
+          durationMs: requestRttMs
         });
         if (typeof requestRttMs === "number" && Number.isFinite(requestRttMs)) {
           input.recordPieceRequestSampleRef.current({

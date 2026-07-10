@@ -930,7 +930,7 @@ describe("planManualCacheDirectRequests", () => {
     );
   });
 
-  it("shrinks active playback batches for a congested provider while preserving decode order", async () => {
+  it("keeps a constrained external provider saturated while preserving decode order", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",
       playbackStatus: "playing",
@@ -982,7 +982,7 @@ describe("planManualCacheDirectRequests", () => {
     });
 
     expect(requestPieces.mock.calls[0]?.[2]).toEqual(
-      Array.from({ length: 8 }, (_, index) => index)
+      Array.from({ length: 16 }, (_, index) => index)
     );
   });
 

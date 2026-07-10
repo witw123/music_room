@@ -3,6 +3,8 @@ import { getCachedPiece, getCachedPiecesByIndexes } from "@/lib/indexeddb";
 import { pieceMemoryBuffer } from "@/features/p2p/piece-memory-buffer";
 import {
   ProgressivePcmEngine,
+  resolvePcmStartupMinimumAheadSeconds,
+  schedulePcmStartupFade,
   resolveSupportedAudioDecoderConfig
 } from "./progressive-pcm-engine";
 import { extractFlacPacketsFromBitstream } from "./progressive-flac";
@@ -23,6 +25,35 @@ vi.mock("@/features/p2p/piece-memory-buffer", () => ({
     clearTrack: vi.fn()
   }
 }));
+
+describe("PCM startup smoothing", () => {
+  it("waits for a stable initial buffer but keeps steady-state checks responsive", () => {
+    expect(resolvePcmStartupMinimumAheadSeconds({ isAlreadyPlaying: false, remainingSeconds: 120 }))
+      .toBe(0.35);
+    expect(resolvePcmStartupMinimumAheadSeconds({ isAlreadyPlaying: true, remainingSeconds: 120 }))
+      .toBe(0.02);
+    expect(resolvePcmStartupMinimumAheadSeconds({ isAlreadyPlaying: false, remainingSeconds: 0.3 }))
+      .toBe(0.3);
+  });
+
+  it("ramps the first audible PCM output from silence", () => {
+    const calls: Array<[string, number, number]> = [];
+    const gain = {
+      cancelScheduledValues: (time: number) => calls.push(["cancel", 0, time]),
+      setValueAtTime: (value: number, time: number) => calls.push(["set", value, time]),
+      linearRampToValueAtTime: (value: number, time: number) => calls.push(["ramp", value, time])
+    };
+
+    schedulePcmStartupFade({ gain, nowSeconds: 10, startSeconds: 10.02, volume: 0.8 });
+
+    expect(calls.slice(0, 2)).toEqual([
+      ["cancel", 0, 10],
+      ["set", 0, 10]
+    ]);
+    expect(calls[2]?.slice(0, 2)).toEqual(["ramp", 0.8]);
+    expect(calls[2]?.[2]).toBeCloseTo(10.06);
+  });
+});
 
 vi.mock("./progressive-flac", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./progressive-flac")>();
@@ -544,7 +575,8 @@ describe("ProgressivePcmEngine", () => {
         decodedSegmentCount: 1,
         lastDecodeError: null
       });
-      expect(result.localReady).toBe(true);
+      expect(result.localReady).toBe(false);
+      expect(result.blockedReason).toBe("pcm-buffer-missing");
     } finally {
       engine.destroy();
       audioContext.restore();

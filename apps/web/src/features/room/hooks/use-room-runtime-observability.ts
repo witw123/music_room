@@ -22,14 +22,25 @@ function prunePieceTransferSamples(samples: PieceTransferSample[], now: number) 
   return samples.filter((sample) => now - sample.timestampMs <= pieceTransferWindowMs);
 }
 
-function calculatePieceTransferRateKbps(samples: PieceTransferSample[]) {
+export function calculatePieceTransferRateKbps(samples: PieceTransferSample[]) {
   if (samples.length === 0) {
     return 0;
   }
-  const first = samples[0]!;
-  const last = samples[samples.length - 1]!;
-  const elapsedMs = Math.max(1, last.timestampMs - first.timestampMs);
-  const bytes = samples.reduce((total, sample) => total + sample.bytes, 0);
+  const endMs = Math.max(...samples.map((sample) => sample.timestampMs));
+  const explicitStarts = samples
+    .map((sample) => sample.startedAtMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const startMs = explicitStarts.length > 0
+    ? Math.min(...explicitStarts)
+    : samples.length > 1
+      ? Math.min(...samples.map((sample) => sample.timestampMs))
+      : endMs;
+  const elapsedMs = endMs - startMs;
+  if (elapsedMs <= 0) {
+    return 0;
+  }
+  const measuredSamples = explicitStarts.length > 0 ? samples : samples.slice(1);
+  const bytes = measuredSamples.reduce((total, sample) => total + sample.bytes, 0);
   return Math.round((bytes * 8) / elapsedMs);
 }
 
@@ -65,12 +76,23 @@ export function useRoomRuntimeObservability(input: {
   const peerBufferedAmountBytesRef = useRef<Map<string, number>>(new Map());
 
   const recordPieceTransferRef = useRef(
-    (value: { peerId: string; direction: "download" | "upload"; bytes: number }) => {
+    (value: {
+      peerId: string;
+      direction: "download" | "upload";
+      bytes: number;
+      durationMs?: number | null;
+    }) => {
       const now = Date.now();
       const current =
         pieceTransferRatesRef.current.get(value.peerId) ?? { downloads: [], uploads: [] };
       const samples = value.direction === "download" ? current.downloads : current.uploads;
-      samples.push({ timestampMs: now, bytes: value.bytes });
+      samples.push({
+        ...(typeof value.durationMs === "number" && Number.isFinite(value.durationMs)
+          ? { startedAtMs: now - Math.max(1, value.durationMs) }
+          : {}),
+        timestampMs: now,
+        bytes: value.bytes
+      });
       current.downloads = prunePieceTransferSamples(current.downloads, now);
       current.uploads = prunePieceTransferSamples(current.uploads, now);
       pieceTransferRatesRef.current.set(value.peerId, current);
