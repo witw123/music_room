@@ -15,6 +15,7 @@ import {
   createSoftwareFlacDecoder,
   normalizeSoftwareFlacOutput,
   resolveFlacDecoderStrategy,
+  summarizeSoftwareFlacErrors,
   type SoftwareFlacDecoder
 } from "./software-flac-decoder";
 
@@ -143,6 +144,7 @@ const maxPcmCatchupPiecesToAppendPerSync = 32;
 const pcmCatchupLookAheadChunks = 2;
 const maxPcmPlaybackCatchupSyncBatches = 8;
 const maxNativeFlacSampleRate = 96_000;
+const maxSoftwareFlacPacketsPerDecode = 256;
 export class ProgressivePcmEngine {
   private audioContext: AudioContext | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
@@ -1221,73 +1223,144 @@ export class ProgressivePcmEngine {
   }
 
   private async decodeSoftwareFlacPackets(packets: ProgressiveFlacFramePacket[]) {
+    let decodedAny = false;
+    for (let offset = 0; offset < packets.length; offset += maxSoftwareFlacPacketsPerDecode) {
+      const batch = packets.slice(offset, offset + maxSoftwareFlacPacketsPerDecode);
+      if (!(await this.decodeSoftwareFlacBatch(batch))) {
+        return false;
+      }
+      decodedAny = true;
+    }
+    return decodedAny;
+  }
+
+  private async decodeSoftwareFlacBatch(packets: ProgressiveFlacFramePacket[]) {
     const decoder = this.softwareFlacDecoder;
     const streamInfo = this.streamInfo;
     if (!decoder || !streamInfo || !this.audioContext || packets.length === 0) {
       return false;
     }
 
-    try {
-      const frames = this.softwareFlacDecoderPrimed
-        ? packets.map((packet) => packet.data)
-        : [streamInfo.description, ...packets.map((packet) => packet.data)];
-      const decoded = await decoder.decodeFrames(frames);
-      if (isDestroyedEngineStatus(this.status)) {
-        return false;
-      }
-      this.softwareFlacDecoderPrimed = true;
-      const normalized = await normalizeSoftwareFlacOutput({
-        channelData: decoded.channelData,
-        samplesDecoded: decoded.samplesDecoded,
-        sampleRate: decoded.sampleRate,
-        targetSampleRate:
-          decoded.sampleRate <= maxNativeFlacSampleRate
-            ? decoded.sampleRate
-            : this.audioContext.sampleRate
-      });
-      if (isDestroyedEngineStatus(this.status)) {
-        return false;
-      }
-      if (normalized.samplesDecoded <= 0 || normalized.channelData.length === 0) {
-        const detail = decoded.errors.map((error) => error.message).filter(Boolean).join("; ");
-        this.lastDecodeError = detail || "software-decoder-empty-output";
-        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
-        return false;
-      }
-
-      const segment = this.createDecodedSegment({
-        numberOfChannels: normalized.channelData.length,
-        numberOfFrames: normalized.samplesDecoded,
-        sampleRate: normalized.sampleRate,
-        timestamp: packets[0]!.timestampUs,
-        copyTo: (destination: Float32Array, options: { planeIndex: number }) => {
-          const channel = normalized.channelData[options.planeIndex];
-          if (channel) {
-            destination.set(channel.subarray(0, destination.length));
-          }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const frames = this.softwareFlacDecoderPrimed
+          ? packets.map((packet) => packet.data)
+          : [streamInfo.description, ...packets.map((packet) => packet.data)];
+        const decoded = await decoder.decodeFrames(frames);
+        if (
+          isDestroyedEngineStatus(this.status) ||
+          this.softwareFlacDecoder !== decoder
+        ) {
+          return false;
         }
-      });
-      if (!segment) {
-        this.lastDecodeError = "software-decoder-invalid-output";
-        this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+
+        const decodeError = summarizeSoftwareFlacErrors(decoded.errors);
+        if (
+          decodeError ||
+          decoded.samplesDecoded <= 0 ||
+          decoded.channelData.length === 0
+        ) {
+          const failure = decodeError || "software-decoder-empty-output";
+          if (attempt === 0 && (await this.resetSoftwareFlacDecoder(decoder))) {
+            continue;
+          }
+          this.lastDecodeError = failure;
+          this.status = this.decodedSegments.length > 0 ? "degraded" : "opening";
+          return false;
+        }
+
+        this.softwareFlacDecoderPrimed = true;
+        const normalized = await normalizeSoftwareFlacOutput({
+          channelData: decoded.channelData,
+          samplesDecoded: decoded.samplesDecoded,
+          sampleRate: decoded.sampleRate,
+          targetSampleRate:
+            decoded.sampleRate <= maxNativeFlacSampleRate
+              ? decoded.sampleRate
+              : this.audioContext.sampleRate
+        });
+        if (
+          isDestroyedEngineStatus(this.status) ||
+          this.softwareFlacDecoder !== decoder
+        ) {
+          return false;
+        }
+        if (normalized.samplesDecoded <= 0 || normalized.channelData.length === 0) {
+          this.lastDecodeError = "software-decoder-empty-output";
+          this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+          return false;
+        }
+
+        const segment = this.createDecodedSegment({
+          numberOfChannels: normalized.channelData.length,
+          numberOfFrames: normalized.samplesDecoded,
+          sampleRate: normalized.sampleRate,
+          timestamp: packets[0]!.timestampUs,
+          copyTo: (destination: Float32Array, options: { planeIndex: number }) => {
+            const channel = normalized.channelData[options.planeIndex];
+            if (channel) {
+              destination.set(channel.subarray(0, destination.length));
+            }
+          }
+        });
+        if (!segment) {
+          this.lastDecodeError = "software-decoder-invalid-output";
+          this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+          return false;
+        }
+
+        this.insertDecodedSegment(segment);
+        for (const packet of packets) {
+          this.decodedFlacPacketTimestampUs.add(packet.timestampUs);
+        }
+        this.decodedPacketCount += packets.length;
+        this.lastDecodedAtMs = Date.now();
+        this.lastDecodeError = null;
+        this.status = "ready";
+        if (this.playing) {
+          this.scheduleAhead(this.getCurrentTimeSeconds());
+        }
+        return true;
+      } catch (error) {
+        if (
+          isDestroyedEngineStatus(this.status) ||
+          this.softwareFlacDecoder !== decoder
+        ) {
+          return false;
+        }
+        const failure = error instanceof Error ? error.message : "software-decode-failed";
+        if (attempt === 0 && (await this.resetSoftwareFlacDecoder(decoder))) {
+          continue;
+        }
+        if (!isDestroyedEngineStatus(this.status)) {
+          this.lastDecodeError = failure;
+          this.status = this.decodedSegments.length > 0 ? "degraded" : "opening";
+        }
         return false;
       }
+    }
 
-      this.insertDecodedSegment(segment);
-      for (const packet of packets) {
-        this.decodedFlacPacketTimestampUs.add(packet.timestampUs);
+    return false;
+  }
+
+  private async resetSoftwareFlacDecoder(decoder: SoftwareFlacDecoder) {
+    if (
+      isDestroyedEngineStatus(this.status) ||
+      this.softwareFlacDecoder !== decoder
+    ) {
+      return false;
+    }
+    try {
+      await decoder.reset();
+      if (
+        isDestroyedEngineStatus(this.status) ||
+        this.softwareFlacDecoder !== decoder
+      ) {
+        return false;
       }
-      this.decodedPacketCount += packets.length;
-      this.lastDecodedAtMs = Date.now();
-      this.lastDecodeError = null;
-      this.status = "ready";
-      if (this.playing) {
-        this.scheduleAhead(this.getCurrentTimeSeconds());
-      }
+      this.softwareFlacDecoderPrimed = false;
       return true;
-    } catch (error) {
-      this.lastDecodeError = error instanceof Error ? error.message : "software-decode-failed";
-      this.status = this.decodedSegments.length > 0 ? "degraded" : "failed";
+    } catch {
       return false;
     }
   }

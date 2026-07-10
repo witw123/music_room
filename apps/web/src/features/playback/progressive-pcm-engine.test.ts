@@ -529,7 +529,7 @@ describe("ProgressivePcmEngine", () => {
       "peer_local",
       manifest,
       undefined,
-      async () => ({ decodeFrames, free: vi.fn() })
+      async () => ({ decodeFrames, reset: vi.fn(), free: vi.fn() })
     );
 
     try {
@@ -545,6 +545,179 @@ describe("ProgressivePcmEngine", () => {
         lastDecodeError: null
       });
       expect(result.localReady).toBe(true);
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("bounds software FLAC decode batches below the decoder input queue limit", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43]);
+    const packets = Array.from({ length: 600 }, (_, index) => ({
+      data: new Uint8Array([0xff, 0xf8, index & 0xff]),
+      sampleCount: 16,
+      timestampUs: index * 1_000,
+      durationUs: 1_000
+    }));
+    const decodeFrames = vi.fn(async (frames: Uint8Array[]) => {
+      const packetCount = frames[0] === description ? frames.length - 1 : frames.length;
+      return {
+        channelData: [new Float32Array(packetCount * 16).fill(0.25)],
+        samplesDecoded: packetCount * 16,
+        sampleRate: 44_100,
+        bitDepth: 16,
+        errors: []
+      };
+    });
+    const engine = new ProgressivePcmEngine(
+      audio,
+      "peer_local",
+      manifest,
+      undefined,
+      async () => ({ decodeFrames, reset: vi.fn(), free: vi.fn() })
+    );
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "streamInfo", {
+        description,
+        sampleRate: 44_100
+      });
+      Reflect.set(engine as object, "softwareFlacDecoder", {
+        decodeFrames,
+        reset: vi.fn(),
+        free: vi.fn()
+      });
+      Reflect.set(engine as object, "status", "ready");
+
+      const decode = Reflect.get(engine as object, "decodeSoftwareFlacPackets") as (
+        input: typeof packets
+      ) => Promise<boolean>;
+      await expect(decode.call(engine, packets)).resolves.toBe(true);
+
+      expect(decodeFrames.mock.calls.length).toBeGreaterThan(1);
+      expect(Math.max(...decodeFrames.mock.calls.map(([frames]) => frames.length))).toBeLessThan(1024);
+      expect(engine.getSnapshot()).toMatchObject({
+        decodedPacketCount: 600,
+        decodedSegmentCount: decodeFrames.mock.calls.length,
+        lastDecodeError: null
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("resets and re-primes software FLAC after an exhausted input queue", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    const description = new Uint8Array([0x66, 0x4c, 0x61, 0x43]);
+    const packet = {
+      data: new Uint8Array([0xff, 0xf8, 1, 2]),
+      sampleCount: 32,
+      timestampUs: 0,
+      durationUs: 1_000
+    };
+    const reset = vi.fn(async () => undefined);
+    const decodeFrames = vi
+      .fn()
+      .mockResolvedValueOnce({
+        channelData: [],
+        samplesDecoded: 0,
+        sampleRate: 0,
+        bitDepth: 0,
+        errors: Array.from({ length: 20 }, () => ({
+          message: "Error: Too many input buffers"
+        }))
+      })
+      .mockResolvedValueOnce({
+        channelData: [new Float32Array(32).fill(0.25)],
+        samplesDecoded: 32,
+        sampleRate: 44_100,
+        bitDepth: 16,
+        errors: []
+      });
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "streamInfo", {
+        description,
+        sampleRate: 44_100
+      });
+      Reflect.set(engine as object, "softwareFlacDecoder", {
+        decodeFrames,
+        reset,
+        free: vi.fn()
+      });
+      Reflect.set(engine as object, "softwareFlacDecoderPrimed", true);
+      Reflect.set(engine as object, "status", "ready");
+
+      const decode = Reflect.get(engine as object, "decodeSoftwareFlacPackets") as (
+        input: typeof packet[]
+      ) => Promise<boolean>;
+      await expect(decode.call(engine, [packet])).resolves.toBe(true);
+
+      expect(reset).toHaveBeenCalledTimes(1);
+      expect(decodeFrames).toHaveBeenNthCalledWith(1, [packet.data]);
+      expect(decodeFrames).toHaveBeenNthCalledWith(2, [description, packet.data]);
+      expect(engine.getSnapshot()).toMatchObject({
+        status: "ready",
+        decodedPacketCount: 1,
+        decodedSegmentCount: 1,
+        lastDecodeError: null
+      });
+    } finally {
+      engine.destroy();
+      audioContext.restore();
+    }
+  });
+
+  it("does not reset a released software decoder when an old track rejects during switching", async () => {
+    const audioContext = installFakeAudioContext();
+    const audio = createAudioElement();
+    let rejectDecode: (error: Error) => void = () => undefined;
+    const decodeFrames = vi.fn(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          rejectDecode = reject;
+        })
+    );
+    const reset = vi.fn(async () => undefined);
+    const free = vi.fn(async () => undefined);
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+    const packet = {
+      data: new Uint8Array([0xff, 0xf8, 1, 2]),
+      sampleCount: 32,
+      timestampUs: 0,
+      durationUs: 1_000
+    };
+
+    try {
+      await engine.attach();
+      Reflect.set(engine as object, "streamInfo", {
+        description: new Uint8Array([0x66, 0x4c, 0x61, 0x43]),
+        sampleRate: 44_100
+      });
+      Reflect.set(engine as object, "softwareFlacDecoder", {
+        decodeFrames,
+        reset,
+        free
+      });
+      Reflect.set(engine as object, "status", "ready");
+      const decode = Reflect.get(engine as object, "decodeSoftwareFlacPackets") as (
+        input: typeof packet[]
+      ) => Promise<boolean>;
+
+      const pendingDecode = decode.call(engine, [packet]);
+      engine.destroy();
+      rejectDecode(new Error("worker-terminated"));
+
+      await expect(pendingDecode).resolves.toBe(false);
+      expect(reset).not.toHaveBeenCalled();
+      expect(free).toHaveBeenCalledTimes(1);
     } finally {
       engine.destroy();
       audioContext.restore();

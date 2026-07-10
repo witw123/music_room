@@ -8,8 +8,18 @@ export type SoftwareFlacDecodedAudio = {
 
 export type SoftwareFlacDecoder = {
   decodeFrames: (frames: Uint8Array[]) => Promise<SoftwareFlacDecodedAudio>;
+  reset: () => void | Promise<void>;
   free: () => void | Promise<void>;
 };
+
+export function summarizeSoftwareFlacErrors(
+  errors: Array<{ message?: string }>,
+  maxMessages = 3
+) {
+  return [...new Set(errors.map((error) => error.message?.trim()).filter(Boolean))]
+    .slice(0, maxMessages)
+    .join("; ");
+}
 
 export function resolveFlacDecoderStrategy(input: {
   nativeConfigSupported: boolean;

@@ -137,10 +137,18 @@ export function extractFlacPackets(input: {
   }
 
   while (currentHeader) {
-    const nextHeader = findNextFrameHeader(bytes, currentHeader.offset + 2);
+    const nextHeader = findNextSequentialFrameHeader(
+      bytes,
+      currentHeader.offset + 2,
+      currentHeader
+    );
+    const hasNonSequentialCompleteHeader =
+      !nextHeader && findNextFrameHeader(bytes, currentHeader.offset + 2) !== null;
     const nextSyncOffset =
       nextHeader?.offset ??
-      (!finalChunk ? findNextFrameSyncOffset(bytes, currentHeader.offset + 2) : null);
+      (!finalChunk && !hasNonSequentialCompleteHeader
+        ? findNextFrameSyncOffset(bytes, currentHeader.offset + 2)
+        : null);
     if (!nextHeader && nextSyncOffset === null && !finalChunk) {
       break;
     }
@@ -173,6 +181,33 @@ export function extractFlacPackets(input: {
     nextOffset: cursor,
     nextSampleIndex
   };
+}
+
+function findNextSequentialFrameHeader(
+  bytes: Uint8Array,
+  startOffset: number,
+  currentHeader: ParsedFlacFrameHeader
+) {
+  let searchOffset = Math.max(0, startOffset);
+  while (searchOffset + 6 <= bytes.byteLength) {
+    const candidate = findNextFrameHeader(bytes, searchOffset);
+    if (!candidate) {
+      return null;
+    }
+
+    const expectedCodedNumber = currentHeader.variableBlockSize
+      ? currentHeader.codedNumber + currentHeader.sampleCount
+      : currentHeader.codedNumber + 1;
+    if (
+      candidate.variableBlockSize === currentHeader.variableBlockSize &&
+      candidate.codedNumber === expectedCodedNumber
+    ) {
+      return candidate;
+    }
+    searchOffset = candidate.offset + 2;
+  }
+
+  return null;
 }
 
 export function extractFlacPacketsFromBitstream(input: {

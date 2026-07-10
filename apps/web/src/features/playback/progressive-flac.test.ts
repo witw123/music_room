@@ -82,6 +82,29 @@ describe("progressive flac helpers", () => {
     expect(packetExtraction.nextSampleIndex).toBe(256);
   });
 
+  it("ignores CRC-valid sync-like bytes whose frame number is not sequential", () => {
+    const description = new Uint8Array([
+      0x66, 0x4c, 0x61, 0x43,
+      0x80, 0x00, 0x00, 0x22,
+      ...createStreamInfoPayload()
+    ]);
+    const falseHeader = buildFlacFrame(9, [0x55, 0x66]);
+    const frameA = buildFlacFrame(0, [0x11, ...falseHeader, 0x22, 0x33]);
+    const frameB = buildFlacFrame(1, [0x44, 0x55, 0x66]);
+    const bitstream = new Uint8Array([...description, ...frameA, ...frameB]);
+
+    const extraction = extractFlacPacketsFromBitstream({
+      bytes: bitstream,
+      startOffset: description.length,
+      nextSampleIndex: 0,
+      finalChunk: true
+    });
+
+    expect(extraction.packets).toHaveLength(2);
+    expect(extraction.packets[0]?.data).toEqual(frameA);
+    expect(extraction.packets[1]?.data).toEqual(frameB);
+  });
+
   it("waits for the complete FLAC metadata chain before scanning audio frames", () => {
     const streamInfoPayload = createStreamInfoPayload();
     const partialPicture = new Uint8Array([

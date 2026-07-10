@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeSoftwareFlacOutput,
-  resolveFlacDecoderStrategy
+  resolveFlacDecoderStrategy,
+  summarizeSoftwareFlacErrors
 } from "./software-flac-decoder";
 
 describe("software FLAC decoder", () => {
@@ -39,5 +40,17 @@ describe("software FLAC decoder", () => {
       source.length / 384_000,
       6
     );
+  });
+
+  it("deduplicates and bounds decoder diagnostics", () => {
+    expect(
+      summarizeSoftwareFlacErrors([
+        { message: "Error: Too many input buffers" },
+        { message: "Error: Too many input buffers" },
+        { message: "State: lost sync" },
+        { message: "third" },
+        { message: "fourth" }
+      ])
+    ).toBe("Error: Too many input buffers; State: lost sync; third");
   });
 });
