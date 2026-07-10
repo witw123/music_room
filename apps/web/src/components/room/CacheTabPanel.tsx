@@ -1,12 +1,22 @@
 "use client";
 
-import { memo, useMemo, useTransition } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatDuration } from "@/lib/music-room-ui";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
-import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
+import type { ManualCacheTask } from "@/features/upload/manual-cache-task-store";
+import {
+  deriveRoomCacheRow,
+  filterRoomCacheRows,
+  formatCachedAt,
+  formatCacheSize,
+  isCachedTrackInRoomLibrary,
+  type RoomCacheAction,
+  type RoomCacheFilter,
+  type RoomCacheRow
+} from "./cache-tab-view-model";
 
 type CacheTabPanelProps = {
   tracks: TrackMeta[];
@@ -21,61 +31,26 @@ type CacheTabPanelProps = {
   onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
 };
 
-function formatCacheDownloadRate(downloadRateKbps: number | null | undefined) {
-  if (
-    typeof downloadRateKbps !== "number" ||
-    !Number.isFinite(downloadRateKbps) ||
-    downloadRateKbps <= 0
-  ) {
-    return "测速中";
-  }
+const roomFilters: Array<{ value: RoomCacheFilter; label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "active", label: "下载中" },
+  { value: "available", label: "可缓存" },
+  { value: "completed", label: "已完成" }
+];
 
-  const bytesPerSecond = downloadRateKbps * 1000 / 8;
-  if (bytesPerSecond >= 1024 * 1024) {
-    return `${(bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s`;
-  }
-  return `${Math.max(1, Math.round(bytesPerSecond / 1024))} KB/s`;
-}
+const statusToneClass: Record<RoomCacheRow["status"]["tone"], string> = {
+  neutral: "border-surface-border bg-background/60 text-foreground-muted",
+  success: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+  warning: "border-amber-500/25 bg-amber-500/10 text-amber-300",
+  danger: "border-red-500/25 bg-red-500/10 text-red-300"
+};
 
-function formatCacheAhead(activeAheadMs: number | null | undefined) {
-  if (
-    typeof activeAheadMs !== "number" ||
-    !Number.isFinite(activeAheadMs) ||
-    activeAheadMs < 0
-  ) {
-    return "等待计算";
-  }
-
-  return `${Math.round(activeAheadMs / 1000)} 秒`;
-}
-
-function formatPeerSummary(task: ManualCacheTask) {
-  const summaries = task.peerSummaries ?? [];
-  if (summaries.length === 0) {
-    return "暂无活跃来源";
-  }
-
-  return summaries
-    .slice(0, 3)
-    .map((summary) => {
-      const rate = formatCacheDownloadRate(summary.downloadRateKbps);
-      return `${summary.peerId} ${rate} ${summary.requestedChunkCount}片`;
-    })
-    .join(" / ");
-}
-
-function formatCacheLinkWarning(task: ManualCacheTask) {
-  const constrainedPeer = (task.peerSummaries ?? []).find(
-    (summary) => summary.candidateType === "relay" || summary.protocol === "tcp"
-  );
-  if (!constrainedPeer) {
-    return null;
-  }
-
-  return `当前来源 ${constrainedPeer.peerId} 使用 ${
-    constrainedPeer.candidateType === "relay" ? "TURN relay" : "直连"
-  }${constrainedPeer.protocol ? `/${constrainedPeer.protocol}` : ""}，外网缓存速度可能受限。`;
-}
+const actionLabels: Record<RoomCacheAction, string> = {
+  download: "下载",
+  pause: "暂停",
+  resume: "继续",
+  retry: "重试"
+};
 
 function CacheTabPanelBase({
   tracks,
@@ -89,7 +64,26 @@ function CacheTabPanelBase({
   onExportCachedLibraryTrack,
   onDeleteCachedLibraryTrack
 }: CacheTabPanelProps) {
-  const [isPending, startTransition] = useTransition();
+  const [roomFilter, setRoomFilter] = useState<RoomCacheFilter>("all");
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [pendingActionKeys, setPendingActionKeys] = useState<Set<string>>(() => new Set());
+  const [deleteConfirmationHash, setDeleteConfirmationHash] = useState<string | null>(null);
+  const pendingActionKeysRef = useRef(new Set<string>());
+
+  const runAction = useCallback(async (key: string, action: () => Promise<void>) => {
+    if (pendingActionKeysRef.current.has(key)) {
+      return;
+    }
+    pendingActionKeysRef.current.add(key);
+    setPendingActionKeys(new Set(pendingActionKeysRef.current));
+    try {
+      await action();
+    } finally {
+      pendingActionKeysRef.current.delete(key);
+      setPendingActionKeys(new Set(pendingActionKeysRef.current));
+    }
+  }, []);
+
   const availabilityByTrackId = useMemo(
     () => new Map(availabilitySummary.map((entry) => [entry.track.id, entry] as const)),
     [availabilitySummary]
@@ -98,261 +92,313 @@ function CacheTabPanelBase({
     () => new Map(cacheLibraryTracks.map((track) => [track.fileHash, track] as const)),
     [cacheLibraryTracks]
   );
-  const downloadableTracks = useMemo(
-    () =>
-      tracks.filter((track) => {
-        if (track.ownerSessionId === activeSession?.userId) {
-          return false;
-        }
-        return true;
+  const roomRows = useMemo(
+    () => tracks
+      .filter((track) => track.ownerSessionId !== activeSession?.userId)
+      .map((track) => {
+        const availability = availabilityByTrackId.get(track.id);
+        return deriveRoomCacheRow({
+          track,
+          task: manualCacheTasks[track.id] ?? null,
+          cachedTrack: cacheLibraryByHash.get(track.fileHash) ?? null,
+          remotePeerCount: availability?.remotePeerCount ?? 0,
+          availableTotalChunks: availability?.totalChunks ?? 0
+        });
       }),
-    [activeSession?.userId, tracks]
+    [activeSession?.userId, availabilityByTrackId, cacheLibraryByHash, manualCacheTasks, tracks]
+  );
+  const visibleRoomRows = useMemo(
+    () => filterRoomCacheRows(roomRows, roomFilter),
+    [roomFilter, roomRows]
+  );
+  const visibleLibraryTracks = useMemo(() => {
+    const query = libraryQuery.trim().toLocaleLowerCase("zh-CN");
+    if (!query) {
+      return cacheLibraryTracks;
+    }
+    return cacheLibraryTracks.filter((track) =>
+      [track.title, track.artist, track.lastOwnerNickname]
+        .filter(Boolean)
+        .some((value) => value!.toLocaleLowerCase("zh-CN").includes(query))
+    );
+  }, [cacheLibraryTracks, libraryQuery]);
+
+  const totalCacheSize = useMemo(
+    () => cacheLibraryTracks.reduce((total, track) => total + Math.max(0, track.sizeBytes), 0),
+    [cacheLibraryTracks]
+  );
+  const activeTaskCount = roomRows.filter((row) =>
+    row.status.key === "downloading" || row.status.key === "assembling" || row.status.key === "finalizing"
+  ).length;
+  const filterCounts = useMemo(
+    () => ({
+      all: roomRows.length,
+      active: roomRows.filter((row) => row.category === "active").length,
+      available: roomRows.filter((row) => row.category === "available").length,
+      completed: roomRows.filter((row) => row.category === "completed").length
+    }),
+    [roomRows]
   );
 
+  const handleRoomAction = useCallback((row: RoomCacheRow) => {
+    if (!row.action || row.actionDisabled) {
+      return;
+    }
+    if (row.action === "pause") {
+      onPauseManualCacheDownload(row.track.id);
+      return;
+    }
+    void runAction(`room:${row.track.id}`, () => onStartManualCacheDownload(row.track.id));
+  }, [onPauseManualCacheDownload, onStartManualCacheDownload, runAction]);
+
   return (
-    <div className="animate-fade-in flex w-full flex-col gap-8">
+    <div className="animate-fade-in flex w-full flex-col gap-10">
+      <header className="border-b border-surface-border pb-5">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">本机缓存</h2>
+            <p className="mt-1 text-xs text-foreground-muted">管理房间歌曲的无损下载与本机文件。</p>
+          </div>
+          <dl className="grid grid-cols-3 gap-5 sm:gap-8">
+            <CacheMetric label="已缓存" value={`${cacheLibraryTracks.length} 首`} />
+            <CacheMetric label="占用空间" value={formatCacheSize(totalCacheSize)} />
+            <CacheMetric label="进行中" value={`${activeTaskCount} 项`} />
+          </dl>
+        </div>
+      </header>
+
       <section className="flex flex-col gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">当前房间可缓存歌曲</h3>
-          <p className="mt-1 text-xs text-foreground-muted">
-            这里只展示其他成员上传的房间歌曲。点击下载后会通过当前分片链路缓存到你的个人缓存库。
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">房间歌曲</h3>
+            <p className="mt-1 text-xs text-foreground-muted">从在线成员下载完整无损文件。</p>
+          </div>
+          <div className="inline-flex w-full overflow-x-auto rounded-lg border border-surface-border bg-background/40 p-1 sm:w-auto">
+            {roomFilters.map((filter) => (
+              <button
+                key={filter.value}
+                aria-pressed={roomFilter === filter.value}
+                className={`min-w-max flex-1 rounded-md px-3 py-1.5 text-xs transition-colors sm:flex-none ${
+                  roomFilter === filter.value
+                    ? "bg-white/10 text-foreground"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+                onClick={() => setRoomFilter(filter.value)}
+                type="button"
+              >
+                {filter.label} <span className="ml-1 text-[10px] opacity-65">{filterCounts[filter.value]}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {downloadableTracks.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {downloadableTracks.map((track) => {
-              const cachedLibraryTrack = cacheLibraryByHash.get(track.fileHash) ?? null;
-              const task = manualCacheTasks[track.id] ?? null;
-              const availability = availabilityByTrackId.get(track.id) ?? null;
-              const hasOnlineProvider =
-                (availability?.remotePeerCount ?? availability?.peerCount ?? 0) > 0 &&
-                (availability?.totalChunks ?? 0) > 0;
-              const progressTotalChunks = Math.max(
-                task?.totalChunks ?? 0,
-                track.relayManifest?.totalChunks ?? track.pieceManifest?.totalChunks ?? 0
-              );
-              const progressCompletedChunks = cachedLibraryTrack
-                ? progressTotalChunks || 1
-                : task?.completedChunks ?? 0;
-              const progressLabel =
-                progressTotalChunks > 0
-                  ? `${Math.min(progressCompletedChunks, progressTotalChunks)}/${progressTotalChunks}`
-                  : "0/0";
-              const progressPercent =
-                progressTotalChunks > 0
-                  ? Math.min(
-                      100,
-                      Math.round(
-                        (Math.min(progressCompletedChunks, progressTotalChunks) / progressTotalChunks) * 100
-                      )
-                    )
-                  : 0;
-              const statusLabel = cachedLibraryTrack
-                ? "已缓存"
-                : task?.status === "assembling"
-                  ? "组装中"
-                  : task?.status === "paused"
-                    ? "已暂停"
-                    : task?.status === "blocked"
-                      ? "等待恢复"
-                      : task?.status === "failed-integrity"
-                        ? "校验失败"
-                  : task?.status === "downloading" || task?.status === "queued"
-                    ? "下载中"
-                    : !hasOnlineProvider
-                      ? "提供者离线"
-                  : task?.status === "failed"
-                      ? "下载失败"
-                      : "可下载";
-
+        {visibleRoomRows.length > 0 ? (
+          <div className="overflow-hidden rounded-lg border border-surface-border bg-surface/40">
+            {visibleRoomRows.map((row) => {
+              const pending = pendingActionKeys.has(`room:${row.track.id}`);
               return (
-                <article
-                  key={track.id}
-                  className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:flex-row lg:items-center lg:justify-between"
+                <div
+                  key={row.track.id}
+                  className="grid gap-3 border-b border-surface-border px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(220px,1fr)_auto] lg:items-center"
                 >
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                      <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
-                      <span
-                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                          cachedLibraryTrack
-                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                            : !hasOnlineProvider
-                              ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                              : task?.status === "failed"
-                                ? "border-red-500/30 bg-red-500/10 text-red-300"
-                                : "border-surface-border bg-background/50 text-foreground-muted"
-                        }`}
-                      >
-                        {statusLabel}
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h4 className="truncate text-sm font-medium text-foreground">{row.track.title}</h4>
+                      <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] ${statusToneClass[row.status.tone]}`}>
+                        {row.status.label}
                       </span>
                     </div>
-                    <p className="truncate text-xs text-foreground-muted">
-                      {track.ownerNickname} 上传 {formatDuration(track.durationMs)}
+                    <p className="mt-1 truncate text-xs text-foreground-muted">
+                      {row.track.artist || row.track.ownerNickname} · {row.track.ownerNickname} · {formatDuration(row.track.durationMs)}
                     </p>
-                    <p className="text-[10px] text-foreground-muted">
-                      {cachedLibraryTrack
-                        ? "这首歌已经进入你的个人缓存库。"
-                        : !hasOnlineProvider
-                          ? "歌曲提供者当前不在线，暂时无法下载缓存。"
-                          : task?.status === "paused"
-                            ? `已暂停下载，当前缓存进度：${progressLabel}`
-                            : task?.status === "blocked"
-                              ? `缓存暂时阻塞：${task.blockedReason ?? "等待可用来源"}。已完成：${progressLabel}`
-                              : task?.status === "failed-integrity"
-                                ? task.errorMessage ?? "文件完整性校验失败，等待新的可用来源。"
-                            : task?.status === "failed"
-                              ? task.errorMessage ?? "分片下载失败，可重新尝试。"
-                              : `当前缓存进度：${progressLabel}`}
-                    </p>
-                    {task ? (
-                      <p className="text-[10px] text-foreground-muted">
-                        manifest：{task.manifestSource ?? "未知"}  校验：{task.integrityMode ?? "未知"}  provider：
-                        {task.connectedProviderPeerIds.length}/{task.providerPeerIds.length}  pending：
-                        {task.pendingChunkCount}  可请求：{task.requestableChunkCount}
-                      </p>
-                    ) : null}
-                    {task ? (
-                      <p className="truncate text-[10px] text-foreground-muted">
-                        速度：{formatCacheDownloadRate(task.downloadRateKbps)}  可播放缓存：
-                        {formatCacheAhead(task.activeAheadMs)}  活跃来源：
-                        {task.activePeerCount ?? task.connectedProviderPeerIds.length}  来源：
-                        {formatPeerSummary(task)}
-                      </p>
-                    ) : null}
-                    {task && formatCacheLinkWarning(task) ? (
-                      <p className="text-[10px] text-amber-300">
-                        {formatCacheLinkWarning(task)}
-                      </p>
-                    ) : null}
-                    <div className="h-1 overflow-hidden rounded-full bg-white/6">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${
-                          cachedLibraryTrack ? "bg-emerald-400" : "bg-accent"
-                        }`}
-                        style={{ width: `${cachedLibraryTrack ? 100 : progressPercent}%` }}
-                      />
-                    </div>
                   </div>
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                    {task?.status === "queued" || task?.status === "downloading" || task?.status === "blocked" ? (
+                  <div className="min-w-0">
+                    <div className="flex items-center justify-between gap-3 text-[11px] text-foreground-muted">
+                      <span className="truncate">{row.detail}</span>
+                      <span className="shrink-0">{row.progress.label}</span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/6">
+                      <div
+                        className={`h-full rounded-full transition-[width] duration-300 ${
+                          row.status.key === "cached" ? "bg-emerald-400" : "bg-accent"
+                        }`}
+                        style={{ width: `${row.progress.percent}%` }}
+                      />
+                    </div>
+                    {row.speedLabel || row.aheadLabel ? (
+                      <p className="mt-1.5 text-[10px] text-foreground-muted">
+                        {[row.speedLabel, row.aheadLabel].filter(Boolean).join(" · ")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex min-h-9 items-center justify-end">
+                    {row.action ? (
                       <Button
-                        variant="ghost"
-                        className="h-10 px-4"
-                        onClick={() => onPauseManualCacheDownload(track.id)}
+                        variant={row.action === "pause" ? "ghost" : "outline"}
+                        className="h-9 min-w-20 px-3"
+                        disabled={row.actionDisabled || pending}
+                        onClick={() => handleRoomAction(row)}
                         type="button"
                       >
-                        暂停
+                        {pending ? "处理中" : actionLabels[row.action]}
                       </Button>
+                    ) : row.status.key === "waiting" ? (
+                      <span className="text-xs text-foreground-muted">等待成员上线</span>
                     ) : null}
-                    <Button
-                      variant="outline"
-                      className="h-10 px-4"
-                      disabled={!hasOnlineProvider || !!cachedLibraryTrack || task?.status === "assembling"}
-                      onClick={() => {
-                        if (!hasOnlineProvider) {
-                          return;
-                        }
-                        startTransition(() => void onStartManualCacheDownload(track.id));
-                      }}
-                      type="button"
-                    >
-                      {cachedLibraryTrack
-                        ? "已缓存"
-                        : !hasOnlineProvider
-                          ? "等待提供者在线"
-                          : task?.status === "paused"
-                            ? "继续下载"
-                            : task?.status === "blocked"
-                              ? "重试连接"
-                            : task?.status === "downloading" || task?.status === "queued"
-                              ? "下载中"
-                              : "下载到缓存库"}
-                    </Button>
                   </div>
-                </article>
+                </div>
               );
             })}
           </div>
         ) : (
-          <div className="rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-            当前房间没有其他成员上传的歌曲，暂时没有可缓存条目。
-          </div>
+          <EmptyState>
+            {roomRows.length === 0 ? "当前没有其他成员的歌曲。" : "当前筛选条件下没有歌曲。"}
+          </EmptyState>
         )}
       </section>
 
       <section className="flex flex-col gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">我的缓存库</h3>
-          <p className="mt-1 text-xs text-foreground-muted">
-            这里是当前设备的个人缓存库。你可以把缓存歌曲显式添加到当前房间曲库、导出到本地，或删除缓存。
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">本机文件</h3>
+            <p className="mt-1 text-xs text-foreground-muted">添加到房间曲库、导出或删除完整缓存。</p>
+          </div>
+          <input
+            aria-label="搜索本机缓存"
+            className="h-9 w-full rounded-lg border border-surface-border bg-background/50 px-3 text-xs text-foreground outline-none transition-colors placeholder:text-foreground-muted/70 focus:border-accent sm:w-64"
+            onChange={(event) => setLibraryQuery(event.target.value)}
+            placeholder="搜索歌名、艺术家或上传者"
+            type="search"
+            value={libraryQuery}
+          />
         </div>
 
-        {cacheLibraryTracks.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {cacheLibraryTracks.map((track) => (
-              <article
-                key={track.fileHash}
-                className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface p-4 lg:flex-row lg:items-center lg:justify-between"
-              >
-                <div className="min-w-0 flex-1 space-y-1">
-                  <h4 className="truncate text-sm font-semibold text-foreground">{track.title}</h4>
-                  <p className="truncate text-xs text-foreground-muted">
-                    {track.lastOwnerNickname ?? "未知上传者"}  {formatDuration(track.durationMs)}
-                  </p>
-                  <p className="text-[10px] text-foreground-muted">
-                    缓存时间：{new Date(track.cachedAt).toLocaleString("zh-CN", { hour12: false })}
-                  </p>
-                  <p className="text-[10px] text-foreground-muted">
-                    来源房间数：{track.sourceRoomIds.length}  关联曲目数：{track.sourceTrackIds.length}
-                  </p>
-                </div>
+        {visibleLibraryTracks.length > 0 ? (
+          <div className="overflow-hidden rounded-lg border border-surface-border bg-surface/40">
+            {visibleLibraryTracks.map((track) => {
+              const addedToRoom = isCachedTrackInRoomLibrary({
+                fileHash: track.fileHash,
+                activeSessionUserId: activeSession?.userId,
+                tracks
+              });
+              const addKey = `add:${track.fileHash}`;
+              const exportKey = `export:${track.fileHash}`;
+              const deleteKey = `delete:${track.fileHash}`;
+              const pendingAdd = pendingActionKeys.has(addKey);
+              const pendingExport = pendingActionKeys.has(exportKey);
+              const pendingDelete = pendingActionKeys.has(deleteKey);
+              const rowPending = pendingAdd || pendingExport || pendingDelete;
+              const confirmingDelete = deleteConfirmationHash === track.fileHash;
 
-                <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                  <Button
-                    variant="outline"
-                    className="h-10 px-4"
-                    onClick={() => startTransition(() => void onAddCachedLibraryTrackToLibrary(track.fileHash))}
-                    type="button"
-                  >
-                    添加到曲库
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-10 px-4"
-                    onClick={() => startTransition(() => void onExportCachedLibraryTrack(track.fileHash))}
-                    type="button"
-                  >
-                    保存到本地
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-10 px-4 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => startTransition(() => void onDeleteCachedLibraryTrack(track.fileHash))}
-                    type="button"
-                  >
-                    删除缓存
-                  </Button>
+              return (
+                <div
+                  key={track.fileHash}
+                  className={`grid gap-3 border-b border-surface-border px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${
+                    confirmingDelete ? "bg-red-500/5" : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h4 className="truncate text-sm font-medium text-foreground">{track.title}</h4>
+                      {addedToRoom ? (
+                        <span className="shrink-0 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+                          已在曲库
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-foreground-muted">
+                      {track.artist || track.lastOwnerNickname || "未知艺术家"} · {formatDuration(track.durationMs)} · {formatCacheSize(track.sizeBytes)}
+                    </p>
+                    <p className="mt-1 text-[10px] text-foreground-muted">缓存于 {formatCachedAt(track.cachedAt)}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                    {confirmingDelete ? (
+                      <>
+                        <span className="mr-1 text-xs text-red-300">确定删除本机文件？</span>
+                        <Button
+                          variant="ghost"
+                          className="h-9 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={pendingDelete}
+                          onClick={() => void runAction(deleteKey, async () => {
+                            await onDeleteCachedLibraryTrack(track.fileHash);
+                            setDeleteConfirmationHash(null);
+                          })}
+                          type="button"
+                        >
+                          {pendingDelete ? "删除中" : "确认删除"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-9 px-3"
+                          disabled={pendingDelete}
+                          onClick={() => setDeleteConfirmationHash(null)}
+                          type="button"
+                        >
+                          取消
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          className="h-9 px-3"
+                          disabled={addedToRoom || rowPending}
+                          onClick={() => void runAction(addKey, () => onAddCachedLibraryTrackToLibrary(track.fileHash))}
+                          type="button"
+                        >
+                          {addedToRoom ? "已在曲库" : pendingAdd ? "添加中" : "添加到曲库"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-9 px-3"
+                          disabled={rowPending}
+                          onClick={() => void runAction(exportKey, () => onExportCachedLibraryTrack(track.fileHash))}
+                          type="button"
+                        >
+                          {pendingExport ? "导出中" : "导出"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="h-9 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          disabled={rowPending}
+                          onClick={() => setDeleteConfirmationHash(track.fileHash)}
+                          type="button"
+                        >
+                          删除
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </article>
-            ))}
+              );
+            })}
           </div>
         ) : (
-          <div className="rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-            你的缓存库还是空的。先在上方下载房间歌曲，完成后会出现在这里。
-          </div>
+          <EmptyState>
+            {cacheLibraryTracks.length === 0 ? "本机还没有完整缓存。" : "没有匹配的本机缓存。"}
+          </EmptyState>
         )}
       </section>
+    </div>
+  );
+}
 
-      {isPending ? (
-        <div className="animate-fade-in fixed left-1/2 top-24 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-4 py-1.5 shadow-lg backdrop-blur-md">
-          <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
-          <span className="text-xs text-foreground">处理中...</span>
-        </div>
-      ) : null}
+function CacheMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[10px] text-foreground-muted">{label}</dt>
+      <dd className="mt-0.5 text-sm font-semibold text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function EmptyState({ children }: { children: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-surface-border px-5 py-10 text-center text-sm text-foreground-muted">
+      {children}
     </div>
   );
 }
