@@ -1,4 +1,4 @@
-import { Injectable, Inject, forwardRef } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Playlist } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
@@ -24,7 +24,7 @@ export class PlaylistService {
   private readonly playlistRoomIds = new Map<string, string | null>();
 
   constructor(
-    @Inject(forwardRef(() => RoomService)) private readonly roomService: RoomService,
+    private readonly roomService: RoomService,
     private readonly prisma: PrismaService
   ) {}
 

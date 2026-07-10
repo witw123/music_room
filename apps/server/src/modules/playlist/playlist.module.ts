@@ -1,12 +1,11 @@
-import { Module, forwardRef } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
-import { RoomModule } from "../room/room.module";
-import { SignalingModule } from "../signaling/signaling.module";
+import { RoomCoreModule } from "../room/room-core.module";
 import { PlaylistController } from "./playlist.controller";
 import { PlaylistService } from "./playlist.service";
 
 @Module({
-  imports: [AuthModule, forwardRef(() => RoomModule), SignalingModule],
+  imports: [AuthModule, RoomCoreModule],
   controllers: [PlaylistController],
   providers: [PlaylistService],
   exports: [PlaylistService]

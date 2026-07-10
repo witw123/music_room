@@ -1,5 +1,29 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import { getRequiredDecodablePrefixChunkCount } from "./sliding-window/playback-window-scheduler";
+import { isChromeOrEdgeBrowser, isFlacTrack, isWavTrack } from "./format-detection";
+import {
+  getChunkIndexForPositionMs,
+  getContiguousBufferedMs,
+  getAheadBufferedMs,
+  getDecodableAheadBufferedMs
+} from "./buffer-calculus";
+
+// Re-export from sub-modules for backward compatibility.
+export {
+  isChromeOrEdgeBrowser,
+  canUseProgressivePlayback,
+  isLosslessTrack,
+  isFlacTrack,
+  isWavTrack
+} from "./format-detection";
+export {
+  getContiguousChunkCount,
+  chunkIndexToPositionMs,
+  getChunkIndexForPositionMs,
+  getContiguousBufferedMs,
+  getAheadBufferedMs,
+  getDecodableAheadBufferedMs
+} from "./buffer-calculus";
 
 export type ProgressivePlaybackSource =
   | "lossless-local"
@@ -60,55 +84,8 @@ function getPlaybackRiskWindowMs(input: { mimeType?: string | null; codec?: stri
 
 const outrunRecoverySafetyFactor = 0.8;
 
-export function isChromeOrEdgeBrowser() {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  const userAgent = navigator.userAgent;
-  const isChromium = /(Chrome|Chromium|Edg)\//.test(userAgent);
-  const isWebKitOnly = /Version\/[\d.]+ .*Safari\//.test(userAgent) && !/Chrome\//.test(userAgent);
-  const isFirefox = /Firefox\//.test(userAgent);
-
-  return isChromium && !isWebKitOnly && !isFirefox;
-}
-
-export function canUseProgressivePlayback() {
-  return typeof window !== "undefined";
-}
-
-export function isLosslessTrack(input: { mimeType?: string | null; codec?: string | null }) {
-  const mimeType = input.mimeType?.toLowerCase() ?? "";
-  const codec = input.codec?.toLowerCase() ?? "";
-  return (
-    mimeType.includes("flac") ||
-    mimeType.includes("wav") ||
-    mimeType.includes("alac") ||
-    codec.includes("flac") ||
-    codec.includes("wav") ||
-    codec.includes("alac")
-  );
-}
-
-export function isFlacTrack(input: { mimeType?: string | null; codec?: string | null }) {
-  const mimeType = input.mimeType?.toLowerCase() ?? "";
-  const codec = input.codec?.toLowerCase() ?? "";
-  return mimeType.includes("flac") || codec.includes("flac");
-}
-
-export function isWavTrack(input: { mimeType?: string | null; codec?: string | null }) {
-  const mimeType = input.mimeType?.toLowerCase() ?? "";
-  const codec = input.codec?.toLowerCase() ?? "";
-  return (
-    mimeType.includes("wav") ||
-    mimeType.includes("wave") ||
-    codec.includes("wav") ||
-    codec.includes("wave")
-  );
-}
-
-export function getStartupWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
-  return isFlacTrack(input) ? 8_000 : 8_000;
+export function getStartupWindowMs(_input: { mimeType?: string | null; codec?: string | null }) {
+  return 8_000;
 }
 
 export function getTakeoverWindowMs(input: { mimeType?: string | null; codec?: string | null }) {
@@ -218,48 +195,6 @@ export function getProgressiveTrackManifestKey(
   ].join("|");
 }
 
-export function getContiguousChunkCount(availableChunks: number[]) {
-  if (availableChunks.length === 0) {
-    return 0;
-  }
-
-  const sorted = [...availableChunks].sort((left, right) => left - right);
-  let contiguous = 0;
-  for (const chunkIndex of sorted) {
-    if (chunkIndex !== contiguous) {
-      break;
-    }
-    contiguous += 1;
-  }
-
-  return contiguous;
-}
-
-export function chunkIndexToPositionMs(
-  chunkIndex: number,
-  manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">
-) {
-  if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
-    return 0;
-  }
-
-  return Math.floor((chunkIndex / manifest.totalChunks) * manifest.durationMs);
-}
-
-export function getChunkIndexForPositionMs(
-  manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">,
-  positionMs: number
-) {
-  if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
-    return 0;
-  }
-
-  return Math.min(
-    manifest.totalChunks - 1,
-    Math.max(0, Math.floor((Math.max(0, positionMs) / manifest.durationMs) * manifest.totalChunks))
-  );
-}
-
 function getPlaybackWindowChunkIndexes(input: {
   manifest: ProgressiveTrackManifest;
   playbackPositionMs: number;
@@ -310,105 +245,6 @@ function appendMissingChunks(
       target.push(chunkIndex);
     }
   }
-}
-
-export function getContiguousBufferedMs(
-  manifest: ProgressiveTrackManifest | null,
-  availableChunks: number[]
-) {
-  if (!manifest || manifest.totalChunks <= 0 || manifest.durationMs <= 0) {
-    return 0;
-  }
-
-  const contiguousChunkCount = getContiguousChunkCount(availableChunks);
-  if (contiguousChunkCount <= 0) {
-    return 0;
-  }
-
-  return Math.min(
-    manifest.durationMs,
-    Math.floor((contiguousChunkCount / manifest.totalChunks) * manifest.durationMs)
-  );
-}
-
-function getContiguousChunkCountFrom(input: {
-  availableChunks: number[];
-  startChunkIndex: number;
-  totalChunks: number;
-}) {
-  if (input.totalChunks <= 0) {
-    return 0;
-  }
-
-  const availableChunkSet = new Set(
-    input.availableChunks.filter(
-      (chunkIndex) => chunkIndex >= 0 && chunkIndex < input.totalChunks
-    )
-  );
-  let contiguousChunkCount = 0;
-  for (
-    let chunkIndex = Math.max(0, input.startChunkIndex);
-    chunkIndex < input.totalChunks;
-    chunkIndex += 1
-  ) {
-    if (!availableChunkSet.has(chunkIndex)) {
-      break;
-    }
-    contiguousChunkCount += 1;
-  }
-  return contiguousChunkCount;
-}
-
-export function getAheadBufferedMs(input: {
-  manifest: ProgressiveTrackManifest | null;
-  availableChunks: number[];
-  playbackPositionMs: number;
-}) {
-  const { manifest } = input;
-  if (!manifest || manifest.totalChunks <= 0 || manifest.durationMs <= 0) {
-    return 0;
-  }
-
-  const currentChunkIndex = getChunkIndexForPositionMs(
-    manifest,
-    input.playbackPositionMs
-  );
-  const contiguousChunkCount = getContiguousChunkCountFrom({
-    availableChunks: input.availableChunks,
-    startChunkIndex: currentChunkIndex,
-    totalChunks: manifest.totalChunks
-  });
-  if (contiguousChunkCount <= 0) {
-    return 0;
-  }
-
-  const chunkDurationMs = manifest.durationMs / manifest.totalChunks;
-  const bufferedEndMs = Math.min(
-    manifest.durationMs,
-    (currentChunkIndex + contiguousChunkCount) * chunkDurationMs
-  );
-  return Math.max(0, Math.floor(bufferedEndMs - Math.max(0, input.playbackPositionMs)));
-}
-
-export function getDecodableAheadBufferedMs(input: {
-  manifest: ProgressiveTrackManifest | null;
-  availableChunks: number[];
-  playbackPositionMs: number;
-}) {
-  if (!input.manifest) {
-    return 0;
-  }
-
-  if (isFlacTrack(input.manifest)) {
-    const contiguousBufferedMs = getContiguousBufferedMs(
-      input.manifest,
-      input.availableChunks
-    );
-    return Math.max(0, Math.floor(contiguousBufferedMs - Math.max(0, input.playbackPositionMs)));
-  }
-
-  const contiguousBufferedMs = getContiguousBufferedMs(input.manifest, input.availableChunks);
-  return Math.max(0, Math.floor(contiguousBufferedMs - Math.max(0, input.playbackPositionMs)));
 }
 
 export function isStartupReady(input: {
@@ -596,7 +432,10 @@ export function resolveSchedulerPolicy(input: {
       return "startup" satisfies ProgressiveSchedulerPolicy;
     }
 
-    if (input.activeSource === "progressive-local" && aheadBufferedMs < getCriticalBufferThresholdMs()) {
+    if (
+      (input.activeSource === "progressive-local" || input.activeSource === "lossless-local") &&
+      aheadBufferedMs < getCriticalBufferThresholdMs()
+    ) {
       return "catchup" satisfies ProgressiveSchedulerPolicy;
     }
 

@@ -56,6 +56,38 @@ function createRedisMock() {
 }
 
 describe("RoomRecordRepository", () => {
+  it("rejects stale Redis-only writes before refreshing cache projections", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => false)
+    };
+    const redis = {
+      ...createRedisMock(),
+      setJsonIfRevisionMatches: jest.fn(async () => false)
+    };
+    const rooms = new Map<string, RoomRecord>();
+    const repository = new RoomRecordRepository(
+      rooms,
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await expect(repository.persistRecord(createRoomRecord(2))).rejects.toThrow(
+      "Room state revision conflict."
+    );
+
+    expect(redis.setJsonIfRevisionMatches).toHaveBeenCalledWith(
+      "music-room:room:room_1",
+      expect.any(Object),
+      1,
+      60
+    );
+    expect(redis.addToSet).not.toHaveBeenCalled();
+    expect(rooms.has("room_1")).toBe(false);
+  });
+
   it("rejects same-revision database writes before refreshing caches", async () => {
     const storedRoomRevision = 2;
     const prisma = {
@@ -63,14 +95,9 @@ describe("RoomRecordRepository", () => {
       roomState: {
         findUnique: jest.fn(async () => ({ id: "room_1" })),
         create: jest.fn(),
-        updateMany: jest.fn(async (input: { where: { roomRevision: { lt?: number; lte?: number } } }) => {
-          const revisionGuard = input.where.roomRevision;
-          const acceptsWrite =
-            typeof revisionGuard.lt === "number"
-              ? storedRoomRevision < revisionGuard.lt
-              : storedRoomRevision <= (revisionGuard.lte ?? Number.NEGATIVE_INFINITY);
-          return { count: acceptsWrite ? 1 : 0 };
-        })
+        updateMany: jest.fn(async (input: { where: { roomRevision: number } }) => ({
+          count: storedRoomRevision === input.where.roomRevision ? 1 : 0
+        }))
       }
     };
     const redis = createRedisMock();

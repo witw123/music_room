@@ -164,9 +164,9 @@ export function useManualCacheDownloader(input: {
   const clearPendingPiece = (trackId: string, chunkIndex: number) => {
     directPendingRef.current.get(trackId)?.delete(chunkIndex);
   };
-  const deferPendingPiece = (trackId: string, chunkIndex: number, retryAfterMs: number) => {
+  const deferPendingPiece = (trackId: string, chunkIndex: number, options: { delayMs: number }) => {
     const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
-    pendingForTrack.set(chunkIndex, retryAfterMs);
+    pendingForTrack.set(chunkIndex, Date.now() + options.delayMs);
     directPendingRef.current.set(trackId, pendingForTrack);
   };
 

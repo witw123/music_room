@@ -1,12 +1,18 @@
 import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
-import type { SignalingGateway } from "../../signaling/signaling.gateway";
+
+type TrackAvailabilityReader = {
+  getTrackAvailabilityAnnouncements: (
+    roomId: string,
+    trackId: string
+  ) => TrackAvailabilityAnnouncement[];
+};
 
 export class RoomPlaybackService {
   constructor(
     private readonly roomPresenceService: RoomPresenceService,
-    private readonly signalingGateway?: Pick<SignalingGateway, "getTrackAvailabilityAnnouncements">
+    private readonly trackAvailabilityReader?: TrackAvailabilityReader
   ) {}
 
   async updatePlayback(
@@ -381,7 +387,7 @@ export class RoomPlaybackService {
       string,
       TrackAvailabilityAnnouncement & { availableChunkCount: number; fullyCached: boolean }
     >();
-    for (const announcement of this.signalingGateway?.getTrackAvailabilityAnnouncements(
+    for (const announcement of this.trackAvailabilityReader?.getTrackAvailabilityAnnouncements(
       roomId,
       track.id
     ) ?? []) {

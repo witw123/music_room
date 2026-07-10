@@ -172,7 +172,7 @@ type RoomRealtimeRuntimeInput = {
   deferManualCachePendingPiece: (
     trackId: string,
     chunkIndex: number,
-    retryAfterMs: number
+    options: { delayMs: number }
   ) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   recordPieceTransferRef: MutableRefObject<(input: PieceTransferInput) => void>;

@@ -1,4 +1,4 @@
-import { Inject, OnModuleDestroy, forwardRef } from "@nestjs/common";
+import { OnModuleDestroy } from "@nestjs/common";
 import {
   ConnectedSocket,
   OnGatewayDisconnect,
@@ -104,9 +104,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   constructor(
     private readonly redisService: RedisService,
-    @Inject(forwardRef(() => RoomService))
     private readonly roomService: RoomService,
-    @Inject(forwardRef(() => RoomRealtimePublisher))
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
     private readonly trackAvailabilityRegistry: TrackAvailabilityRegistry,

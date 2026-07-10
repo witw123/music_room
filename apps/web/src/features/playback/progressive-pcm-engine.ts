@@ -1148,6 +1148,11 @@ export class ProgressivePcmEngine {
         const appended = await this.sync();
 
         if (!appended) {
+          // No new contiguous bytes were cached since the last sync.  Yield
+          // once to let any in-flight decoder output callbacks materialize
+          // before we give up; the previous performSync may have submitted
+          // packets whose output hasn't reached the main thread yet.
+          await this.waitForDecodedPosition(positionSeconds);
           if (attempt === 0) {
             console.debug(
               `[pcm] ${trackLabel} catchup stalled at iteration 0: ` +

@@ -38,6 +38,10 @@ export class TrackAvailabilityRegistry {
     return mergedAnnouncement;
   }
 
+  getTrackAvailabilityAnnouncements(roomId: string, trackId: string) {
+    return this.getTrackAnnouncements(roomId, trackId);
+  }
+
   removePeer(roomId: string, peerId: string) {
     const roomAvailability = this.availabilityByRoom.get(roomId);
     if (!roomAvailability) {

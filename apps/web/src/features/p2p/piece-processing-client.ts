@@ -119,7 +119,7 @@ async function runWorkerTask<T>(request: Omit<WorkerRequest, "id">): Promise<T |
   }
 
   const id = ++requestCounter;
-  return new Promise<T | null>((resolve) => {
+  const result = await new Promise<T | null>((resolve) => {
     const timeoutId = setTimeout(() => {
       resetWorkerWithFallback();
     }, workerTaskTimeoutMs);
@@ -136,6 +136,15 @@ async function runWorkerTask<T>(request: Omit<WorkerRequest, "id">): Promise<T |
       resetWorkerWithFallback();
     }
   });
+
+  // If the result is null and the worker was reset (crashed), try once more
+  // with a fresh worker. Null results from normal operation (validation failure,
+  // assembly mismatch) are not retried — only the worker crash null does.
+  if (result !== null || workerInstance !== null) {
+    return result;
+  }
+
+  return runWorkerTask<T>(request);
 }
 
 export function hashArrayBufferInWorker(buffer: ArrayBuffer) {

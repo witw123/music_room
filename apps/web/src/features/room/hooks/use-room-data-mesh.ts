@@ -229,7 +229,7 @@ export function createRoomDataMeshRuntime(input: {
   deferManualCachePendingPiece: (
     trackId: string,
     chunkIndex: number,
-    retryAfterMs: number
+    options: { delayMs: number }
   ) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -445,7 +445,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         input.deferManualCachePendingPiece(
           trackId,
           chunkIndex,
-          Date.now() + pieceUnavailableRetryDelayMs
+          { delayMs: pieceUnavailableRetryDelayMs }
         );
         input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, unavailablePeerId);
         input.recordPeerDiagnosticRef.current({

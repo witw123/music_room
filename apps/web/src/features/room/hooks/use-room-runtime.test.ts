@@ -731,13 +731,13 @@ describe("pure cache room runtime helpers", () => {
   it("routes realtime piece unavailable notifications to a short manual cache pending deferral", () => {
     const calls: Array<[string, number, number]> = [];
     const deferPendingPieceRef = {
-      current: (trackId: string, chunkIndex: number, retryAfterMs: number) => {
-        calls.push([trackId, chunkIndex, retryAfterMs]);
+      current: (trackId: string, chunkIndex: number, options: { delayMs: number }) => {
+        calls.push([trackId, chunkIndex, options.delayMs]);
       }
     };
 
     const deferPendingPiece = buildManualCachePendingPieceDeferrer(deferPendingPieceRef);
-    deferPendingPiece("track_1", 7, 12_345);
+    deferPendingPiece("track_1", 7, { delayMs: 12_345 });
 
     expect(calls).toEqual([["track_1", 7, 12_345]]);
   });

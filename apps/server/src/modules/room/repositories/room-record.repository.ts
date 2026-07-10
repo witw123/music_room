@@ -81,12 +81,29 @@ export class RoomRecordRepository {
   }
 
   async persistRecord(record: RoomRecord) {
-    if (this.prisma.isAvailable()) {
+    const databaseAvailable = this.prisma.isAvailable();
+    if (databaseAvailable) {
       await this.persistRecordToDatabase(record);
     }
 
+    const supportsRedisRevisionGuard =
+      typeof this.redis.setJsonIfRevisionMatches === "function";
+    if (!databaseAvailable && supportsRedisRevisionGuard) {
+      const didPersist = await this.redis.setJsonIfRevisionMatches(
+        this.roomCacheKey(record.room.id),
+        record,
+        (record.room.roomRevision ?? 0) - 1,
+        this.roomCacheTtlSeconds
+      );
+      if (!didPersist) {
+        throw new Error("Room state revision conflict.");
+      }
+    }
+
     await this.redis.addToSet(this.roomRegistryKey, record.room.id);
-    await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
+    if (databaseAvailable || !supportsRedisRevisionGuard) {
+      await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
+    }
     await this.redis.setJson(
       this.joinCodeCacheKey(record.room.joinCode),
       record,
@@ -211,9 +228,7 @@ export class RoomRecordRepository {
     const updateResult = await this.prisma.roomState.updateMany({
       where: {
         id: record.room.id,
-        roomRevision: {
-          lt: record.room.roomRevision ?? 0
-        }
+        roomRevision: (record.room.roomRevision ?? 0) - 1
       },
       data: payload
     });
@@ -242,7 +257,7 @@ export class RoomRecordRepository {
           const retryResult = await this.prisma.roomState.updateMany({
             where: {
               id: record.room.id,
-              roomRevision: { lt: record.room.roomRevision ?? 0 }
+              roomRevision: (record.room.roomRevision ?? 0) - 1
             },
             data: payload
           });

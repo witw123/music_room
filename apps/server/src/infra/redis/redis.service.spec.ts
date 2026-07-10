@@ -9,6 +9,7 @@ const mockRedisInstances: Array<{
   subscribe: jest.Mock;
   unsubscribe: jest.Mock;
   quit: jest.Mock;
+  eval: jest.Mock;
 }> = [];
 
 jest.mock("ioredis", () => {
@@ -23,6 +24,7 @@ jest.mock("ioredis", () => {
       subscribe = jest.fn(async () => undefined);
       unsubscribe = jest.fn(async () => undefined);
       quit = jest.fn(async () => undefined);
+      eval = jest.fn(async () => 1);
 
       constructor() {
         super();
@@ -53,5 +55,29 @@ describe("RedisService", () => {
     subscriber.emit("message", "room.patch", JSON.stringify({ roomId: "room_1" }));
 
     expect(handler).toHaveBeenCalledWith({ roomId: "room_1" });
+  });
+
+  it("writes revision-guarded JSON through one atomic Redis script", async () => {
+    const service = new RedisService();
+    const publisher = mockRedisInstances[0];
+    publisher.status = "ready";
+
+    await expect(
+      service.setJsonIfRevisionMatches(
+        "music-room:room:room_1",
+        { room: { roomRevision: 2 } },
+        1,
+        60
+      )
+    ).resolves.toBe(true);
+
+    expect(publisher.eval).toHaveBeenCalledWith(
+      expect.stringContaining("currentRevision"),
+      1,
+      "music-room:room:room_1",
+      JSON.stringify({ room: { roomRevision: 2 } }),
+      "1",
+      "60"
+    );
   });
 });

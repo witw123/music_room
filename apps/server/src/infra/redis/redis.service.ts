@@ -63,6 +63,44 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.set(key, value);
   }
 
+  async setJsonIfRevisionMatches(
+    key: string,
+    payload: unknown,
+    expectedRevision: number,
+    ttlSeconds?: number
+  ) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `local current = redis.call("GET", KEYS[1])
+       if current then
+         local ok, decoded = pcall(cjson.decode, current)
+         if not ok or type(decoded) ~= "table" or type(decoded.room) ~= "table" then
+           return -1
+         end
+         local currentRevision = tonumber(decoded.room.roomRevision)
+         if currentRevision == nil or currentRevision ~= tonumber(ARGV[2]) then
+           return 0
+         end
+       elseif tonumber(ARGV[2]) ~= -1 then
+         return 0
+       end
+       if tonumber(ARGV[3]) > 0 then
+         redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[3])
+       else
+         redis.call("SET", KEYS[1], ARGV[1])
+       end
+       return 1`,
+      1,
+      key,
+      JSON.stringify(payload),
+      String(expectedRevision),
+      String(ttlSeconds ?? 0)
+    );
+
+    return Number(result) === 1;
+  }
+
   async setString(key: string, value: string, ttlSeconds?: number) {
     this.assertReady(this.client, "publisher");
 

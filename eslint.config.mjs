@@ -71,6 +71,46 @@ export default tseslint.config(
     }
   },
   {
+    files: ["apps/web/src/features/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/components", "@/components/**", "@/context", "@/context/**", "@/stores", "@/stores/**"],
+              message: "Feature modules must not depend on UI composition or legacy global state layers."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ["apps/server/src/modules/room/**/*.ts"],
+    ignores: ["apps/server/src/modules/room/**/*.spec.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@nestjs/common",
+              importNames: ["forwardRef"],
+              message: "Keep the room domain acyclic; extract a core provider instead of using forwardRef."
+            }
+          ],
+          patterns: [
+            {
+              group: ["**/signaling.gateway"],
+              message: "Room domain services must depend on state/read ports, not the WebSocket gateway."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: [
       "apps/web/e2e/**/*.{ts,tsx}",
       "apps/web/*.config.{ts,js}",

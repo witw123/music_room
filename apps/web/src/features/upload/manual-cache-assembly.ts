@@ -76,6 +76,7 @@ export async function assembleManualCacheTrackFromPieces(
   try {
     const track = input.roomTracks.find((entry) => entry.id === input.trackId);
     if (!track) {
+      input.assemblingTrackIds.delete(input.trackId);
       return;
     }
     trackTitle = track.title;

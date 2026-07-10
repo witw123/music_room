@@ -3,12 +3,12 @@ import {
   buildProgressiveTrackManifest,
   getAheadBufferedMs,
   getLowBufferThresholdMs,
-  getProgressiveEngineType,
   getPriorityChunkIndexes,
   getTargetSteadyBufferMs,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
 import { resolvePeerLinkProfile } from "./peer-link-profile";
+import { resolveCurrentTrackWantedPolicy } from "./chunk-scheduler-policy";
 
 export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
 export type ChunkSchedulerMode = "normal" | "conservative" | "idle";
@@ -416,20 +416,15 @@ export class ChunkScheduler {
         this.bufferHealth,
         shouldEnterOutrunRecovery ? "outrun-recovery" : this.policy
       );
-      const currentTrackWantedPolicy = shouldEnterOutrunRecovery
-        ? "outrun-recovery"
-        : currentTrackManifest && getProgressiveEngineType(currentTrackManifest) === "none"
-          ? this.policy === "startup"
-            ? "startup"
-            : "pause-fill"
-          : this.playbackStatus === "playing" &&
-              !isCurrentTrackComplete &&
-              currentTrackAheadBufferedMs >= comfortableCurrentTrackBufferMs &&
-              (this.policy === "steady" || this.policy === "background")
-            ? "pause-fill"
-          : this.policy === "background"
-            ? "steady"
-            : this.policy;
+      const currentTrackWantedPolicy = resolveCurrentTrackWantedPolicy({
+        policy: this.policy,
+        shouldEnterOutrunRecovery,
+        manifest: currentTrackManifest,
+        isTrackComplete: isCurrentTrackComplete,
+        playbackStatus: this.playbackStatus,
+        aheadBufferedMs: currentTrackAheadBufferedMs,
+        comfortableBufferMs: comfortableCurrentTrackBufferMs
+      });
       plans.push({
         track: currentTrack,
         priority: "current",
