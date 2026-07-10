@@ -6,8 +6,8 @@
  * instantly without an IndexedDB round-trip. This eliminates the primary
  * latency bottleneck for first-time playback.
  *
- * Chunks are evicted after the decoder consumes them or when the track is
- * cleared (engine destroy / track change).
+ * Chunks are evicted after the decoder consumes them or when the bounded
+ * buffer needs capacity. Engine replacement must not clear receive-owned data.
  */
 export class PieceMemoryBuffer {
   /** trackKey → chunkIndex → payload bytes (owned copy) */
@@ -88,9 +88,7 @@ export class PieceMemoryBuffer {
     }
   }
 
-  /**
-   * Clear all buffered pieces for a track (called on engine destroy / track change).
-   */
+  /** Clear all buffered pieces for a track when its owning room data is discarded. */
   clearTrack(trackKey: string): void {
     this.store.delete(trackKey);
     if (this.activeTrackKey === trackKey) {

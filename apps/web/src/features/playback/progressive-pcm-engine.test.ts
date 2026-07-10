@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCachedPiece, getCachedPiecesByIndexes } from "@/lib/indexeddb";
+import { pieceMemoryBuffer } from "@/features/p2p/piece-memory-buffer";
 import { ProgressivePcmEngine } from "./progressive-pcm-engine";
 import { extractFlacPacketsFromBitstream } from "./progressive-flac";
 
@@ -549,6 +550,15 @@ describe("ProgressivePcmEngine", () => {
     } finally {
       audioContext.restore();
     }
+  });
+
+  it("preserves received memory pieces while a replacement engine is created", () => {
+    const audio = createAudioElement();
+    const engine = new ProgressivePcmEngine(audio, "peer_local", manifest);
+
+    engine.destroy();
+
+    expect(pieceMemoryBuffer.clearTrack).not.toHaveBeenCalled();
   });
 
   it("appends only newly contiguous pieces across sync calls", async () => {

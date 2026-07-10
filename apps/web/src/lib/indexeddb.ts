@@ -544,6 +544,73 @@ export function selectCachedPiecesForTrackDeletion<
   });
 }
 
+export function selectCachedPiecesForPlaybackFallback<
+  T extends {
+    pieceId: string;
+    trackId: string;
+    fileHash?: string | null;
+    peerId?: string | null;
+    ownerKey?: string | null;
+    chunkIndex: number;
+  }
+>(
+  pieces: T[],
+  input: {
+    trackId: string;
+    fileHash?: string | null;
+    ownerKey: string;
+    chunkSize?: number | null;
+    wantedChunkIndexes: ReadonlySet<number>;
+  }
+) {
+  const selectedByChunkIndex = new Map<number, T>();
+  for (const piece of pieces) {
+    if (
+      piece.trackId !== input.trackId ||
+      !input.wantedChunkIndexes.has(piece.chunkIndex) ||
+      (input.fileHash && piece.fileHash && piece.fileHash !== input.fileHash)
+    ) {
+      continue;
+    }
+
+    const parsed = parseCachedPiecePrimaryKey(piece.pieceId);
+    if (!parsed) {
+      continue;
+    }
+    const identityMatches =
+      parsed.identity === input.trackId ||
+      (!!input.fileHash && parsed.identity === input.fileHash);
+    if (!identityMatches) {
+      continue;
+    }
+    if (
+      input.chunkSize &&
+      input.chunkSize > 0 &&
+      parsed.chunkSize !== null &&
+      parsed.chunkSize !== input.chunkSize
+    ) {
+      continue;
+    }
+
+    const pieceOwnerKey = piece.ownerKey ?? piece.peerId ?? null;
+    const isLegacyPeerOwnedPiece =
+      parsed.chunkSize === null &&
+      !!piece.peerId &&
+      pieceOwnerKey === piece.peerId;
+    if (pieceOwnerKey !== input.ownerKey && !isLegacyPeerOwnedPiece) {
+      continue;
+    }
+
+    if (!selectedByChunkIndex.has(piece.chunkIndex)) {
+      selectedByChunkIndex.set(piece.chunkIndex, piece);
+    }
+  }
+
+  return [...selectedByChunkIndex.values()].sort(
+    (left, right) => left.chunkIndex - right.chunkIndex
+  );
+}
+
 function cachedPieceMatchesGeometry(
   piece: { pieceId: string },
   options?: { fileHash?: string | null; chunkSize?: number | null }
@@ -653,8 +720,50 @@ export async function getCachedPiecesByIndexes(
         )
         .toArray();
 
-  return filterCachedPiecesByGeometry(pieces, options)
-    .sort((left, right) => left.chunkIndex - right.chunkIndex);
+  const exactPieces = filterCachedPiecesByGeometry(pieces, options);
+  const exactChunkIndexes = new Set(exactPieces.map((piece) => piece.chunkIndex));
+  const missingChunkIndexes = new Set(
+    [...wantedChunkIndexes].filter((chunkIndex) => !exactChunkIndexes.has(chunkIndex))
+  );
+  if (missingChunkIndexes.size === 0) {
+    return exactPieces.sort((left, right) => left.chunkIndex - right.chunkIndex);
+  }
+
+  // Versions before the stable local-owner key stored durable pieces under a
+  // transient peer id. A manifest file hash can also arrive just after the
+  // first validated pieces. Recover only the missing indexes and validate the
+  // legacy primary-key geometry before exposing their payloads to the decoder.
+  const trackPieceIds = await musicRoomDatabase.trackPieces
+    .where("trackId")
+    .equals(trackId)
+    .primaryKeys();
+  const fallbackPieceIds = trackPieceIds.filter((pieceId) => {
+    const parsed = parseCachedPiecePrimaryKey(pieceId);
+    if (!parsed || !missingChunkIndexes.has(parsed.chunkIndex)) {
+      return false;
+    }
+    if (parsed.identity !== trackId && (!fileHash || parsed.identity !== fileHash)) {
+      return false;
+    }
+    return !options?.chunkSize ||
+      options.chunkSize <= 0 ||
+      parsed.chunkSize === null ||
+      parsed.chunkSize === options.chunkSize;
+  });
+  const fallbackRecords = (
+    await musicRoomDatabase.trackPieces.bulkGet(fallbackPieceIds)
+  ).filter((piece): piece is TrackPieceRecord => !!piece);
+  const fallbackPieces = selectCachedPiecesForPlaybackFallback(fallbackRecords, {
+    trackId,
+    fileHash,
+    ownerKey,
+    chunkSize: options?.chunkSize,
+    wantedChunkIndexes: missingChunkIndexes
+  });
+
+  return [...exactPieces, ...fallbackPieces].sort(
+    (left, right) => left.chunkIndex - right.chunkIndex
+  );
 }
 
 export async function getCachedPiecesForTrack(

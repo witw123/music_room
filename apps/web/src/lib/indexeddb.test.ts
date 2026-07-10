@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterCachedPiecesByGeometry,
   parseCachedPiecePrimaryKey,
+  selectCachedPiecesForPlaybackFallback,
   selectCachedPiecesForTrackDeletion,
   selectCachedPieceIndexesFromPrimaryKeys,
   selectTrackPieceManifestIdsForDeletion,
@@ -166,6 +167,62 @@ describe("selectCachedPiecesForTrackDeletion", () => {
       "hash_1:262144:__local__:0",
       "hash_1:262144:__local__:1",
       "track_1:262144:__local__:2"
+    ]);
+  });
+});
+
+describe("selectCachedPiecesForPlaybackFallback", () => {
+  it("recovers local pieces written with legacy peer-owned primary keys", () => {
+    const pieces = [
+      {
+        pieceId: "track_1:peer_old:0",
+        trackId: "track_1",
+        fileHash: "",
+        peerId: "peer_old",
+        ownerKey: "peer_old",
+        chunkIndex: 0,
+        chunkSize: 262144
+      },
+      {
+        pieceId: "track_1:262144:__local__:1",
+        trackId: "track_1",
+        fileHash: "",
+        peerId: "peer_local",
+        ownerKey: "__local__",
+        chunkIndex: 1,
+        chunkSize: 262144
+      },
+      {
+        pieceId: "hash_other:262144:__local__:0",
+        trackId: "track_1",
+        fileHash: "hash_other",
+        peerId: "peer_local",
+        ownerKey: "__local__",
+        chunkIndex: 0,
+        chunkSize: 262144
+      },
+      {
+        pieceId: "track_1:65536:__local__:1",
+        trackId: "track_1",
+        fileHash: "",
+        peerId: "peer_local",
+        ownerKey: "__local__",
+        chunkIndex: 1,
+        chunkSize: 65536
+      }
+    ];
+
+    expect(
+      selectCachedPiecesForPlaybackFallback(pieces, {
+        trackId: "track_1",
+        fileHash: "hash_1",
+        ownerKey: "__local__",
+        chunkSize: 262144,
+        wantedChunkIndexes: new Set([0, 1])
+      }).map((piece) => piece.pieceId)
+    ).toEqual([
+      "track_1:peer_old:0",
+      "track_1:262144:__local__:1"
     ]);
   });
 });

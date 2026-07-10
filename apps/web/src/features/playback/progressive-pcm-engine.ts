@@ -561,8 +561,6 @@ export class ProgressivePcmEngine {
     } else {
       this.stopScheduledSegments();
     }
-    // Release in-memory buffered pieces for this track so they don't leak.
-    pieceMemoryBuffer.clearTrack(this.manifest.trackId);
     // The engine runs on a shared AudioContext, so destroying it never closes
     // the context. Explicitly disconnect the graph, otherwise stale gain nodes
     // from previous engine instances stay wired to the destination and overlap
