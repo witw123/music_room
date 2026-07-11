@@ -142,18 +142,14 @@ export function extractFlacPackets(input: {
       currentHeader.offset + 2,
       currentHeader
     );
-    const hasNonSequentialCompleteHeader =
-      !nextHeader && findNextFrameHeader(bytes, currentHeader.offset + 2) !== null;
-    const nextSyncOffset =
-      nextHeader?.offset ??
-      (!finalChunk && !hasNonSequentialCompleteHeader
-        ? findNextFrameSyncOffset(bytes, currentHeader.offset + 2)
-        : null);
-    if (!nextHeader && nextSyncOffset === null && !finalChunk) {
+    // Only a CRC-valid, sequential frame header proves the current frame's
+    // boundary. Payload bytes can contain 0xFFF8 and must never be used to cut
+    // a packet; doing so feeds truncated frames to libFLAC and causes LOST_SYNC.
+    if (!nextHeader && !finalChunk) {
       break;
     }
 
-    const packetEnd = nextHeader?.offset ?? nextSyncOffset ?? bytes.byteLength;
+    const packetEnd = nextHeader?.offset ?? bytes.byteLength;
     if (packetEnd <= currentHeader.offset) {
       break;
     }
@@ -278,16 +274,6 @@ function findNextFrameHeader(bytes: Uint8Array, startOffset: number): ParsedFlac
     const header = parseFrameHeader(bytes, offset);
     if (header) {
       return header;
-    }
-  }
-
-  return null;
-}
-
-function findNextFrameSyncOffset(bytes: Uint8Array, startOffset: number) {
-  for (let offset = Math.max(0, startOffset); offset + 1 < bytes.byteLength; offset += 1) {
-    if (bytes[offset] === 0xff && (bytes[offset + 1] & 0xfe) === 0xf8) {
-      return offset;
     }
   }
 

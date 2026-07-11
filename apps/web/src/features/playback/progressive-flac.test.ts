@@ -55,7 +55,7 @@ describe("progressive flac helpers", () => {
     expect(packetExtraction.nextSampleIndex).toBe(512);
   });
 
-  it("keeps the trailing frame pending until another sync word arrives", () => {
+  it("keeps frames pending until the next complete header can be validated", () => {
     const streamInfoPayload = new Uint8Array(34);
     streamInfoPayload[10] = 0x0a;
     streamInfoPayload[11] = 0xc4;
@@ -77,9 +77,28 @@ describe("progressive flac helpers", () => {
       finalChunk: false
     });
 
-    expect(packetExtraction.packets).toHaveLength(1);
-    expect(packetExtraction.nextOffset).toBe(description.length + frameA.length);
-    expect(packetExtraction.nextSampleIndex).toBe(256);
+    expect(packetExtraction.packets).toHaveLength(0);
+    expect(packetExtraction.nextOffset).toBe(description.length);
+    expect(packetExtraction.nextSampleIndex).toBe(0);
+  });
+
+  it("does not truncate a frame at an unverified sync-like payload sequence", () => {
+    const description = new Uint8Array([
+      0x66, 0x4c, 0x61, 0x43,
+      0x80, 0x00, 0x00, 0x22,
+      ...createStreamInfoPayload()
+    ]);
+    const frame = buildFlacFrame(0, [0x11, 0xff, 0xf8, 0x22, 0x33]);
+
+    const extraction = extractFlacPacketsFromBitstream({
+      bytes: new Uint8Array([...description, ...frame]),
+      startOffset: description.length,
+      nextSampleIndex: 0,
+      finalChunk: false
+    });
+
+    expect(extraction.packets).toHaveLength(0);
+    expect(extraction.nextOffset).toBe(description.length);
   });
 
   it("ignores CRC-valid sync-like bytes whose frame number is not sequential", () => {

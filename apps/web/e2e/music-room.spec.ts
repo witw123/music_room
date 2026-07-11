@@ -44,7 +44,10 @@ async function registerAndJoin(context: BrowserContext, joinCode: string, nickna
 
 function wavFile(name: string, frequencyHz: number) {
   const sampleRate = 44_100;
-  const durationSeconds = 4;
+  // Keep the fixture playing through room synchronization on slower CI
+  // runners so the pause assertion cannot accidentally click replay after
+  // the short test tone has already ended.
+  const durationSeconds = 30;
   const sampleCount = Math.floor(sampleRate * durationSeconds);
   const dataSize = sampleCount * 2;
   const buffer = Buffer.alloc(44 + dataSize);
@@ -127,8 +130,10 @@ test("upload-queue-playback", async ({ browser, page }) => {
     timeout: 15_000
   });
 
-  await page.getByTestId("player-toggle-button").last().click();
-  await expect(page.getByTestId("player-toggle-button").last()).toHaveAttribute("title", "播放", {
+  const playerToggle = page.getByTestId("player-toggle-button").last();
+  await expect(playerToggle).toHaveAttribute("title", "暂停", { timeout: 10_000 });
+  await playerToggle.click();
+  await expect(playerToggle).toHaveAttribute("title", "播放", {
     timeout: 10_000
   });
 

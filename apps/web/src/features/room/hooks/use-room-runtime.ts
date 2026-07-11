@@ -374,7 +374,6 @@ export function resolveActivePlaybackCacheWindowPosition(input: {
   now?: number;
 }) {
   if (
-    input.mediaConnectionState === "live" &&
     typeof input.localPlaybackPositionMs === "number" &&
     Number.isFinite(input.localPlaybackPositionMs)
   ) {

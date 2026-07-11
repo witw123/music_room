@@ -728,7 +728,7 @@ describe("pure cache room runtime helpers", () => {
     ).toBe(15_000);
   });
 
-  it("uses the room playback clock while local progressive playback is still buffering", () => {
+  it("pins cache requests to the local PCM position while progressive playback is buffering", () => {
     expect(
       resolveActivePlaybackCacheWindowPosition({
         localPlaybackPositionMs: 0,
@@ -750,7 +750,7 @@ describe("pure cache room runtime helpers", () => {
         schedulerPlaybackBucketMs: 0,
         now: new Date("2026-06-28T10:00:05.000Z").getTime()
       })
-    ).toBe(15_000);
+    ).toBe(0);
   });
 
   it("uses the local playback clock once local playback is live", () => {
