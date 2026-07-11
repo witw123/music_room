@@ -15,6 +15,7 @@ import { patchNextStandaloneSymlinkFallback } from "./patch-next-standalone-syml
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const webRoot = path.join(repoRoot, "apps", "web");
+const sharedRoot = path.join(repoRoot, "packages", "shared");
 const desktopWebDist = path.join(repoRoot, "apps", "desktop", "dist", "web", "app");
 const desktopNodeDist = path.join(repoRoot, "apps", "desktop", "dist", "node");
 const nextStandaloneDir = path.join(webRoot, ".next", "standalone");
@@ -41,6 +42,14 @@ function run(command, args, options = {}) {
 
 async function main() {
   await patchNextStandaloneSymlinkFallback();
+
+  // Next resolves the workspace package through its compiled main entry. A clean release
+  // checkout has no packages/shared/dist until we build it explicitly.
+  await run(
+    process.execPath,
+    [path.join(sharedRoot, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"],
+    { cwd: sharedRoot }
+  );
 
   // Clean and create directory structure
   if (existsSync(desktopWebDist)) {
