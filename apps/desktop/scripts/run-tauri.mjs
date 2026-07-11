@@ -90,25 +90,24 @@ async function main() {
   }
 
   const restoreConfig = await prepareRemoteShellConfig(publicOrigin);
+  const childEnv = {
+    ...process.env,
+    CARGO_TARGET_DIR: targetDir,
+    ...(process.platform === "linux" ? { APPIMAGE_EXTRACT_AND_RUN: "1" } : {})
+  };
   const child =
     process.platform === "win32"
       ? spawn(`"${tauriBin}" ${args.join(" ")}`.trim(), {
           cwd: rootDir,
           stdio: "inherit",
           shell: true,
-          env: {
-            ...process.env,
-            CARGO_TARGET_DIR: targetDir
-          }
+          env: childEnv
         })
       : spawn(tauriBin, args, {
           cwd: rootDir,
           stdio: "inherit",
           shell: false,
-          env: {
-            ...process.env,
-            CARGO_TARGET_DIR: targetDir
-          }
+          env: childEnv
         });
 
   const finish = async (code, signal) => {
