@@ -34,9 +34,9 @@ export const roomSubscribePayloadSchema = z.object({
 });
 
 export const pieceAvailabilityRequestPayloadSchema = z.object({
-  roomId: z.string(),
-  trackId: z.string(),
-  requesterPeerId: z.string()
+  roomId: z.string().min(1).max(160),
+  trackId: z.string().min(1).max(160),
+  requesterPeerId: z.string().min(1).max(160)
 });
 
 export const roomSubscribeBootstrapMemberSchema = z.object({

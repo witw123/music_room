@@ -56,6 +56,61 @@ function createRedisMock() {
 }
 
 describe("RoomRecordRepository", () => {
+  it("keeps the committed revision locally when a Redis projection update fails", async () => {
+    const existing = createRoomRecord(1);
+    const rooms = new Map<string, RoomRecord>([[existing.room.id, existing]]);
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      roomState: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 })
+      }
+    };
+    const redis = {
+      ...createRedisMock(),
+      addToSet: jest.fn().mockRejectedValue(new Error("redis unavailable"))
+    };
+    const repository = new RoomRecordRepository(rooms, prisma as never, redis as never, "music-room:rooms", 0, 60);
+    const next = createRoomRecord(2);
+
+    await expect(repository.persistRecord(next)).resolves.toBeUndefined();
+    prisma.isAvailable.mockReturnValue(false);
+    await expect(repository.getRoomRecord(next.room.id)).resolves.toMatchObject({
+      room: { roomRevision: 2 }
+    });
+  });
+
+  it("persists Redis room projections without expiration when room TTL is disabled", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => false)
+    };
+    const redis = {
+      ...createRedisMock(),
+      setJsonIfRevisionMatches: jest.fn(async () => true)
+    };
+    const repository = new RoomRecordRepository(
+      new Map<string, RoomRecord>(),
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      0,
+      60
+    );
+
+    await repository.persistRecord(createRoomRecord(1));
+
+    expect(redis.setJsonIfRevisionMatches).toHaveBeenCalledWith(
+      "music-room:room:room_1",
+      expect.any(Object),
+      0,
+      0
+    );
+    expect(redis.setJson).toHaveBeenCalledWith(
+      "music-room:join-code:ABC123",
+      expect.any(Object),
+      0
+    );
+  });
+
   it("rejects stale Redis-only writes before refreshing cache projections", async () => {
     const prisma = {
       isAvailable: jest.fn(() => false)

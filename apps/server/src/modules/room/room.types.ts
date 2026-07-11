@@ -19,6 +19,8 @@ export type PersistedRoomRecord = {
   hostId: string;
   joinCode: string;
   visibility: string;
+  lastActiveAt?: Date;
+  archivedAt?: Date | null;
   presenceRevision?: number;
   roomRevision?: number;
   playback: unknown;
@@ -53,6 +55,8 @@ export function deserializeRoomRecord(persisted: PersistedRoomRecord): RoomRecor
       hostId: persisted.hostId,
       joinCode: persisted.joinCode,
       visibility: persisted.visibility as Room["visibility"],
+      lastActiveAt: (persisted.lastActiveAt ?? new Date()).toISOString(),
+      archivedAt: persisted.archivedAt?.toISOString() ?? null,
       members: persistedMembers.map((member) => ({
         id: member.id ?? "",
         nickname: member.nickname ?? "",

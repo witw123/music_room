@@ -144,10 +144,11 @@ function createClient(input: {
   return {
     id: input.id,
     handshake: {
-      auth: {
-        sessionToken: input.sessionToken
-      },
-      headers: {}
+      auth: {},
+      headers: {
+        origin: "http://localhost:3000",
+        cookie: `__Host-music-room-session=${input.sessionToken}`
+      }
     },
     data: {
       roomId: input.roomId,
@@ -245,6 +246,8 @@ function createRealtimeHarness() {
 }
 
 describe("room realtime regression", () => {
+  const asCookie = (token: string) => `__Host-music-room-session=${token}`;
+
   it("covers create, join, recover, realtime reconnect, room updates, leave, and delete", async () => {
     const {
       authService,
@@ -259,21 +262,21 @@ describe("room realtime regression", () => {
     const hostSession = await authService.createGuestSession("Host");
     const memberSession = await authService.createGuestSession("Member");
 
-    const created = await roomController.createRoom(hostSession.token, {
+    const created = await roomController.createRoom(asCookie(hostSession.token), {
       visibility: "public"
     });
     expect(created.room.hostId).toBe(hostSession.userId);
     expect(created.room.members).toHaveLength(1);
 
-    const joinedSnapshot = await roomController.joinRoomByCode(memberSession.token, {
+    const joinedSnapshot = await roomController.joinRoomByCode(asCookie(memberSession.token), {
       joinCode: created.room.joinCode
     });
     expect(joinedSnapshot.room.members.map((member) => member.id)).toContain(memberSession.userId);
 
-    const recentRoom = await roomController.getRecentRoom(memberSession.token);
+    const recentRoom = await roomController.getRecentRoom(asCookie(memberSession.token));
     expect(recentRoom?.room.id).toBe(created.room.id);
 
-    const recoveredRoom = await roomController.recoverRoom(created.room.id, memberSession.token);
+    const recoveredRoom = await roomController.recoverRoom(created.room.id, asCookie(memberSession.token));
     expect(recoveredRoom?.room.id).toBe(created.room.id);
 
     const hostClient = createClient({
@@ -298,7 +301,7 @@ describe("room realtime regression", () => {
       peerId: "peer_member"
     });
 
-    const track = await roomController.registerTrack(created.room.id, hostSession.token, {
+    const track = await roomController.registerTrack(created.room.id, asCookie(hostSession.token), {
       title: "Realtime Track",
       artist: "Artist",
       album: null,
@@ -313,14 +316,14 @@ describe("room realtime regression", () => {
     });
     expect(track.ownerSessionId).toBe(hostSession.userId);
 
-    const queueState = await queueController.addQueueItem(created.room.id, memberSession.token, {
+    const queueState = await queueController.addQueueItem(created.room.id, asCookie(memberSession.token), {
       trackId: track.id
     });
     expect(queueState.queue).toHaveLength(1);
 
     const playback = await playbackController.updatePlayback(
       created.room.id,
-      hostSession.token,
+      asCookie(hostSession.token),
       {
         action: "play",
         trackId: track.id,
@@ -370,14 +373,14 @@ describe("room realtime regression", () => {
       presenceState: "online"
     });
 
-    const leaveResult = await roomController.leaveRoom(created.room.id, memberSession.token);
+    const leaveResult = await roomController.leaveRoom(created.room.id, asCookie(memberSession.token));
     expect(leaveResult.members.some((member) => member.id === memberSession.userId)).toBe(false);
-    await expect(roomController.getRecentRoom(memberSession.token)).resolves.toBeNull();
+    await expect(roomController.getRecentRoom(asCookie(memberSession.token))).resolves.toBeNull();
 
-    await expect(roomController.deleteRoom(created.room.id, hostSession.token)).resolves.toEqual({
+    await expect(roomController.deleteRoom(created.room.id, asCookie(hostSession.token))).resolves.toEqual({
       ok: true
     });
-    await expect(roomController.getRecentRoom(hostSession.token)).resolves.toBeNull();
+    await expect(roomController.getRecentRoom(asCookie(hostSession.token))).resolves.toBeNull();
 
     expect(events).toEqual(
       expect.arrayContaining([
@@ -438,7 +441,7 @@ describe("room realtime regression", () => {
     const hostSession = await authService.createGuestSession("Host");
     const memberSession = await authService.createGuestSession("Member");
 
-    const created = await roomController.createRoom(hostSession.token, {
+    const created = await roomController.createRoom(asCookie(hostSession.token), {
       visibility: "public"
     });
     const hostClient = createClient({
@@ -458,7 +461,7 @@ describe("room realtime regression", () => {
       peerId: "peer_host"
     });
 
-    await roomController.joinRoomByCode(memberSession.token, {
+    await roomController.joinRoomByCode(asCookie(memberSession.token), {
       joinCode: created.room.joinCode
     });
 
@@ -519,7 +522,7 @@ describe("room realtime regression", () => {
       presenceState: "online"
     });
 
-    await roomController.leaveRoom(created.room.id, memberSession.token);
+    await roomController.leaveRoom(created.room.id, asCookie(memberSession.token));
 
     const leaveSnapshotEvent = [...events]
       .reverse()
@@ -555,7 +558,7 @@ describe("room realtime regression", () => {
     const hostSession = await authService.createGuestSession("Host");
     const memberSession = await authService.createGuestSession("Member");
 
-    const created = await roomController.createRoom(hostSession.token, {
+    const created = await roomController.createRoom(asCookie(hostSession.token), {
       visibility: "public"
     });
     const hostClient = createClient({
@@ -575,7 +578,7 @@ describe("room realtime regression", () => {
       peerId: "peer_host"
     });
 
-    await roomController.joinRoomByCode(memberSession.token, {
+    await roomController.joinRoomByCode(asCookie(memberSession.token), {
       joinCode: created.room.joinCode
     });
     await signalingGateway.handleRoomSubscribe(memberClient as never, {
@@ -584,9 +587,9 @@ describe("room realtime regression", () => {
       peerId: "peer_member"
     });
 
-    await roomController.leaveRoom(created.room.id, memberSession.token);
+    await roomController.leaveRoom(created.room.id, asCookie(memberSession.token));
 
-    const rejoined = await roomController.joinRoomByCode(memberSession.token, {
+    const rejoined = await roomController.joinRoomByCode(asCookie(memberSession.token), {
       joinCode: created.room.joinCode
     });
     await signalingGateway.handleRoomSubscribe(memberClient as never, {

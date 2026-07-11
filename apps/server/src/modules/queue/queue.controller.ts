@@ -14,6 +14,7 @@ import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
+import { getSessionTokenFromCookie } from "../../common/auth/session-cookie";
 
 @Controller("v1/rooms/:roomId/queue")
 export class QueueController {
@@ -23,9 +24,9 @@ export class QueueController {
     private readonly authService: AuthService
   ) {}
 
-  private async getCurrentUserId(sessionToken?: string) {
+  private async getCurrentUserId(cookieHeader?: string) {
     try {
-      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(getSessionTokenFromCookie(cookieHeader));
       return session.userId;
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
@@ -35,7 +36,7 @@ export class QueueController {
   @Get()
   async listQueue(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getAccessibleQueue(roomId, userId);
@@ -44,7 +45,7 @@ export class QueueController {
   @Post()
   async addQueueItem(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body() body: { trackId: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
@@ -61,7 +62,7 @@ export class QueueController {
   async removeQueueItem(
     @Param("roomId") roomId: string,
     @Param("queueItemId") queueItemId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.roomService.removeQueueItem(roomId, queueItemId, userId);
@@ -75,7 +76,7 @@ export class QueueController {
   @Patch("reorder")
   async reorderQueue(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body() body: { queueItemIds: string[] }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);

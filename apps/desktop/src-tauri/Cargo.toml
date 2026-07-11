@@ -1,6 +1,6 @@
 [package]
 name = "music-room-desktop"
-version = "0.2.8"
+version = "0.8.1"
 description = "Music Room desktop shell powered by Tauri"
 authors = ["witw123"]
 license = "MIT"
@@ -25,3 +25,4 @@ tauri-plugin-process = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 url = "2"
+uuid = { version = "1", features = ["v4"] }

@@ -15,7 +15,6 @@ export function isStoredAuthSession(value: unknown): value is AuthSession {
       session.userId &&
       session.username &&
       session.nickname &&
-      session.token &&
       session.createdAt
   );
 }
@@ -37,7 +36,6 @@ export function areAuthSessionsEqual(
     left.userId === right.userId &&
     left.username === right.username &&
     left.nickname === right.nickname &&
-    left.token === right.token &&
     left.createdAt === right.createdAt
   );
 }

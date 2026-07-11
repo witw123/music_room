@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   areSameRoomMembers,
   formatDuration,
+  formatTransferRateMBps,
   getOnlineMemberCount,
   getReconnectingMemberCount,
   mergeRoomSnapshot,
@@ -15,6 +16,12 @@ import {
 } from "./music-room-ui";
 
 describe("music-room-ui helpers", () => {
+  it("formats internal kilobits per second as explicit megabytes per second", () => {
+    expect(formatTransferRateMBps(15_000)).toBe("1.88 MB/s");
+    expect(formatTransferRateMBps(24_000)).toBe("3.00 MB/s");
+    expect(formatTransferRateMBps(null, "等待数据")).toBe("等待数据");
+  });
+
   it("falls back to the default playlist title when the input is blank", () => {
     expect(normalizePlaylistTitle("   ")).toBe("Tonight Selects");
     expect(normalizePlaylistTitle("夜间精选")).toBe("夜间精选");

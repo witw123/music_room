@@ -10,7 +10,6 @@
           "read_audio_file",
           "get_app_version",
           "open_external",
-          "show_item_in_folder",
           "write_desktop_log"
         ],
         "deny": []

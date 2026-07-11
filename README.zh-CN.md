@@ -120,7 +120,7 @@ pnpm pack:mobile
 - Web 会在运行时回退到当前页面 origin，因此开源仓库不需要把生产域名写死进前端 bundle。
 - 桌面端和移动端壳在构建 / 打包时使用 `MUSIC_ROOM_PUBLIC_ORIGIN`。
 - 如果没有设置 `MUSIC_ROOM_PUBLIC_ORIGIN`，桌面端和移动端打包会快速失败，避免产出指向 `https://example.com` 的客户端。
-- 官方 `0.2.8` 客户端包预期指向 `https://musicroom.witw.top`。
+- 官方 `0.8.1` 客户端包预期指向 `https://musicroom.witw.top`。
 
 示例：
 

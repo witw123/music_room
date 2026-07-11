@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSummary } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -13,7 +13,7 @@ import {
   buildWorkspaceAuthHref
 } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
-import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
+import { toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 
@@ -30,8 +30,7 @@ export function HomeRoomSection() {
   const buildRoomHref = (roomId: string) =>
     clientPlatform ? `/room/${roomId}?client=${clientPlatform}` : `/room/${roomId}`;
   const [joinCode, setJoinCode] = useState("");
-  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [recentRoom, setRecentRoom] = useState<RoomSnapshot | null>(null);
+  const [availableRooms, setAvailableRooms] = useState<RoomSummary[]>([]);
   const [isPending, startTransition] = useTransition();
   const {
     activeSession,
@@ -52,23 +51,9 @@ export function HomeRoomSection() {
 
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
+      setAvailableRooms(filterOpenPublicRooms(rooms.items));
     } catch {
       setAvailableRooms([]);
-    }
-  }, [activeSession]);
-
-  const refreshRecentRoom = useCallback(async () => {
-    if (!activeSession) {
-      setRecentRoom(null);
-      return;
-    }
-
-    try {
-      const room = await musicRoomApi.getRecentRoom();
-      setRecentRoom(room);
-    } catch {
-      setRecentRoom(null);
     }
   }, [activeSession]);
 
@@ -79,8 +64,7 @@ export function HomeRoomSection() {
 
     void refreshSession();
     void refreshAvailableRooms();
-    void refreshRecentRoom();
-  }, [hydrated, activeSession, refreshSession, refreshAvailableRooms, refreshRecentRoom]);
+  }, [hydrated, activeSession, refreshSession, refreshAvailableRooms]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -89,7 +73,6 @@ export function HomeRoomSection() {
 
     const refresh = () => {
       void refreshAvailableRooms();
-      void refreshRecentRoom();
     };
 
     const intervalId = window.setInterval(refresh, 10000);
@@ -101,7 +84,7 @@ export function HomeRoomSection() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [activeSession, refreshAvailableRooms, refreshRecentRoom]);
+  }, [activeSession, refreshAvailableRooms]);
 
   async function handleCreateRoom(visibility: "public" | "private") {
     try {
@@ -130,33 +113,7 @@ export function HomeRoomSection() {
     }
   }
 
-  async function handleReturnToRecentRoom() {
-    if (!recentRoom) {
-      return;
-    }
-
-    try {
-      const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
-      if (recovered) {
-        storeRoomSnapshotHandoff(recovered);
-        window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
-        router.push(buildRoomHref(recovered.room.id) as Route);
-        return;
-      }
-
-      const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
-      storeRoomSnapshotHandoff(joined);
-      window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-      router.push(buildRoomHref(joined.room.id) as Route);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  const visibleRooms = useMemo(
-    () => availableRooms.filter((room) => room.room.id !== recentRoom?.room.id).slice(0, 3),
-    [availableRooms, recentRoom?.room.id]
-  );
+  const visibleRooms = availableRooms.slice(0, 3);
 
   return (
     <section id="try" className="mx-auto w-full max-w-[1120px] px-5 pb-24 sm:px-6 md:pb-32">
@@ -169,10 +126,10 @@ export function HomeRoomSection() {
             不下载也能先进入网页房间
           </h2>
           <p className="mt-5 text-base leading-8 text-white/[0.56]">
-            网页端保留创建房间、房间码加入、公开房大厅和最近房间恢复能力，适合快速演示项目主流程。
+            网页端保留创建房间、房间码加入和公开房大厅，适合快速演示项目主流程。
           </p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3 md:grid-cols-1">
-            {["创建公开或私密房间", "用 6 位房间码加入", "恢复最近协作房间"].map((item) => (
+            {["创建公开或私密房间", "用 6 位房间码加入", "浏览全部公开房间"].map((item) => (
               <div key={item} className="flex items-center gap-3 text-sm text-white/70">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
                 {item}
@@ -190,7 +147,7 @@ export function HomeRoomSection() {
                     Signed in
                   </p>
                   <h3 className="mt-2 text-2xl font-bold text-white">{activeSession.nickname}</h3>
-                  <p className="mt-2 text-sm text-white/[0.45]">可以直接创建、加入或恢复房间。</p>
+                  <p className="mt-2 text-sm text-white/[0.45]">可以直接创建、加入或浏览开放房间。</p>
                 </div>
                 <Link href={workspaceEntryHref as Route}>
                   <Button
@@ -242,27 +199,6 @@ export function HomeRoomSection() {
                 </Button>
               </div>
 
-              {recentRoom ? (
-                <button
-                  className="rounded-xl border border-accent/25 bg-accent/10 p-4 text-left transition-colors hover:bg-accent/15"
-                  disabled={isPending}
-                  onClick={() => startTransition(() => void handleReturnToRecentRoom())}
-                  type="button"
-                >
-                  <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-accent">
-                    Recent room
-                  </p>
-                  <div className="mt-3 flex items-center justify-between gap-4">
-                    <span className="font-mono text-lg font-bold text-white">
-                      {recentRoom.room.joinCode}
-                    </span>
-                    <span className="text-sm text-white/[0.55]">
-                      {getOnlineMemberCount(recentRoom.room.members)} 人在线
-                    </span>
-                  </div>
-                </button>
-              ) : null}
-
               {visibleRooms.length > 0 ? (
                 <div>
                   <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.2em] text-white/[0.35]">
@@ -271,15 +207,15 @@ export function HomeRoomSection() {
                   <div className="grid gap-2">
                     {visibleRooms.map((room) => (
                       <button
-                        key={room.room.id}
+                        key={room.id}
                         className="flex items-center justify-between rounded-lg border border-transparent bg-white/[0.025] px-4 py-3 text-left transition-colors hover:border-white/[0.05] hover:bg-white/[0.06]"
                         disabled={isPending}
-                        onClick={() => startTransition(() => void handleJoinRoom(room.room.joinCode))}
+                        onClick={() => startTransition(() => void handleJoinRoom(room.joinCode))}
                         type="button"
                       >
-                        <span className="font-mono text-sm font-semibold text-white">{room.room.joinCode}</span>
+                        <span className="font-mono text-sm font-semibold text-white">{room.joinCode}</span>
                         <span className="text-xs text-white/[0.45]">
-                          {getOnlineMemberCount(room.room.members)} 人在线
+                          {room.onlineMemberCount} 人在线
                         </span>
                       </button>
                     ))}

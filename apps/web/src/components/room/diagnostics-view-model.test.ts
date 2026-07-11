@@ -112,8 +112,8 @@ describe("buildDiagnosticsViewModel", () => {
         transfer: { downloadRateKbps: 800, uploadRateKbps: 0, sampleAgeMs: 500 }
       }).transfer;
     expect(activeTransfer.active).toBe(true);
-    expect(activeTransfer.downloadLabel).toBe("0.8 M");
-    expect(activeTransfer.uploadLabel).toBe("0.0 M");
+    expect(activeTransfer.downloadLabel).toBe("0.10 MB/s");
+    expect(activeTransfer.uploadLabel).toBe("0.00 MB/s");
   });
 
   it("preserves an exact zero DataChannel count", () => {

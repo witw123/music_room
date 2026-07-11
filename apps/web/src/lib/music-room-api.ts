@@ -7,11 +7,12 @@ import {
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
+  type RoomListResponse,
   type RoomSnapshot,
   type TrackMeta
 } from "@music-room/shared";
 
-const sessionStorageKey = "music-room-session";
+let csrfToken: string | null = null;
 
 export class MusicRoomApiError extends Error {
   constructor(
@@ -28,22 +29,18 @@ export type QueueMutationResponse = {
   playback: PlaybackSnapshot;
 };
 
-function getSessionToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.localStorage.getItem(sessionStorageKey);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const session = JSON.parse(raw) as AuthSession;
-    return session.token ?? null;
-  } catch {
-    return null;
-  }
+async function ensureCsrfToken() {
+  if (csrfToken) return csrfToken;
+  const response = await fetch(`${apiBaseUrl}/v1/auth/csrf`, {
+    method: "POST",
+    credentials: "include",
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error("Failed to initialize request security.");
+  const payload = await response.json() as { csrfToken?: string };
+  if (!payload.csrfToken) throw new Error("Invalid CSRF bootstrap response.");
+  csrfToken = payload.csrfToken;
+  return csrfToken;
 }
 
 export function extractApiErrorMessage(rawBody: string) {
@@ -95,15 +92,18 @@ export function extractApiError(rawBody: string): ApiErrorResponse | null {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const sessionToken = getSessionToken();
+  const method = (init?.method ?? "GET").toUpperCase();
+  const writeRequest = !["GET", "HEAD", "OPTIONS"].includes(method);
+  const requestCsrfToken = writeRequest ? await ensureCsrfToken() : null;
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(sessionToken ? { "x-session-token": sessionToken } : {}),
+      ...(requestCsrfToken ? { "x-csrf-token": requestCsrfToken } : {}),
       ...(init?.headers ?? {})
     },
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -112,10 +112,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const message = apiError?.message ?? extractApiErrorMessage(rawErrorBody);
     const shouldExpireSession =
       response.status === 401 &&
-      apiError?.code === errorCodes.unauthorized &&
-      typeof window !== "undefined";
+      apiError?.code === errorCodes.unauthorized && typeof window !== "undefined";
     if (shouldExpireSession) {
-      window.localStorage.removeItem(sessionStorageKey);
       window.dispatchEvent(
         new CustomEvent("music-room-auth-expired", {
           detail: { message }
@@ -160,6 +158,8 @@ export const musicRoomApi = {
   logout: () =>
     request<{ ok: boolean }>("/v1/auth/logout", {
       method: "POST"
+    }).finally(() => {
+      csrfToken = null;
     }),
   me: () => request<AuthSession>("/v1/auth/me"),
   createRoom: (visibility?: "private" | "public") =>
@@ -170,7 +170,11 @@ export const musicRoomApi = {
   getRecentRoom: () => request<RoomSnapshot | null>("/v1/rooms/recent/active"),
   recoverRoom: (roomId: string) =>
     request<RoomSnapshot | null>(`/v1/rooms/${roomId}/recover`),
-  listRooms: () => request<RoomSnapshot[]>("/v1/rooms"),
+  listRooms: (cursor?: string, limit = 30) => {
+    const search = new URLSearchParams({ limit: String(limit) });
+    if (cursor) search.set("cursor", cursor);
+    return request<RoomListResponse>(`/v1/rooms?${search.toString()}`);
+  },
   joinRoomByCode: (joinCode: string) =>
     request<RoomSnapshot>("/v1/rooms/join-by-code", {
       method: "POST",

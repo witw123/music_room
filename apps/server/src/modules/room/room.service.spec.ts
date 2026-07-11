@@ -1612,7 +1612,7 @@ describe("RoomService", () => {
     });
   });
 
-  it("lists public rooms only when they still have active online members", async () => {
+  it("keeps public rooms listed when all members are offline", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -1622,7 +1622,7 @@ describe("RoomService", () => {
     const member = await authService.createGuestSession("Member");
     const snapshot = await roomService.createRoom(host.id);
 
-    await expect(roomService.listPublicRooms()).resolves.toEqual([]);
+    await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
     await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
@@ -1635,7 +1635,7 @@ describe("RoomService", () => {
     await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
 
     await roomService.clearRealtimePresence(snapshot.room.id, host.id);
-    await expect(roomService.listPublicRooms()).resolves.toEqual([]);
+    await expect(roomService.listPublicRooms()).resolves.toHaveLength(1);
   });
 
   it("rejects joining a room with a duplicate nickname", async () => {

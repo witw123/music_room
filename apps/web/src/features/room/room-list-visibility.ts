@@ -1,10 +1,9 @@
 "use client";
 
-import type { RoomSnapshot } from "@music-room/shared";
-import { getOnlineMemberCount } from "@/lib/music-room-ui";
+import type { RoomSnapshot, RoomSummary } from "@music-room/shared";
 
-export function filterOpenPublicRooms(rooms: RoomSnapshot[]) {
-  return rooms.filter(
-    (room) => room.room.visibility === "public" && getOnlineMemberCount(room.room.members) > 0
+export function filterOpenPublicRooms<T extends RoomSummary | RoomSnapshot>(rooms: T[]): T[] {
+  return rooms.filter((item) =>
+    "room" in item ? item.room.visibility === "public" : item.visibility === "public"
   );
 }

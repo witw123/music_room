@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 
@@ -18,12 +18,14 @@ export class HealthController {
   }
 
   @Get("readiness")
-  readiness() {
-    const prismaReady = this.prisma.isAvailable();
-    const redisReady = this.redis.isAvailable();
+  async readiness() {
+    const [prismaReady, redisReady] = await Promise.all([
+      this.prisma.checkHealth(),
+      this.redis.checkHealth()
+    ]);
     const isReady = prismaReady && redisReady;
 
-    return {
+    const payload = {
       status: isReady ? "ready" : "degraded",
       service: "music-room-server",
       checks: {
@@ -34,5 +36,7 @@ export class HealthController {
         redisMode: this.redis.getMode()
       }
     };
+    if (!isReady) throw new ServiceUnavailableException(payload);
+    return payload;
   }
 }

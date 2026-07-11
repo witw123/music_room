@@ -54,33 +54,12 @@ function resolveWsBaseUrl() {
 
 export const wsBaseUrl = resolveWsBaseUrl();
 export const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH ?? "/ws/socket.io";
-const sessionStorageKey = "music-room-session";
-
-function getSessionToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const raw = window.localStorage.getItem(sessionStorageKey);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const session = JSON.parse(raw) as { token?: string };
-    return session.token ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function createRoomSocket() {
-  const sessionToken = getSessionToken();
   const baseUrl = normalizeSocketBaseUrl(wsBaseUrl, socketPath);
 
   return io(baseUrl, {
     path: socketPath,
-    auth: sessionToken ? { sessionToken } : undefined,
+    withCredentials: true,
     transports: ["websocket", "polling"],
     reconnection: true,
     reconnectionAttempts: Infinity,

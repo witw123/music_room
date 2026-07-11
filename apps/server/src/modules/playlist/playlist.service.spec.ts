@@ -80,4 +80,29 @@ describe("PlaylistService", () => {
       })
     ]);
   });
+
+  it("checks room membership before copying a room queue", async () => {
+    const prisma = createPrismaMock();
+    const roomService = {
+      getAccessibleQueue: jest.fn().mockRejectedValue(new Error("Only room members can perform this action."))
+    };
+    const service = new PlaylistService(roomService as never, prisma as never);
+
+    await expect(service.createPlaylistFromRoom({
+      ownerId: "guest_outsider",
+      roomId: "room_private",
+      title: "Stolen queue"
+    })).rejects.toThrow("Only room members can perform this action.");
+  });
+
+  it("only exposes playlists explicitly associated with the room", async () => {
+    const prisma = createPrismaMock();
+    const service = new PlaylistService({} as never, prisma as never);
+    await service.createPlaylist({ ownerId: "owner_1", roomId: "room_1", title: "Shared", trackIds: ["track_1"] });
+    await service.createPlaylist({ ownerId: "owner_2", title: "Private", trackIds: ["track_1"] });
+
+    await expect(service.listPlaylistsForRoom("room_1")).resolves.toEqual([
+      expect.objectContaining({ title: "Shared" })
+    ]);
+  });
 });

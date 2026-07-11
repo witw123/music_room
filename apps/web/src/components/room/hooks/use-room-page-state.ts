@@ -4,7 +4,7 @@ import { useCallback, useReducer, type SetStateAction } from "react";
 import type {
   IceConfigResponse,
   RoomMediaConnectionState,
-  RoomSnapshot,
+  RoomSummary,
   Playlist
 } from "@music-room/shared";
 import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
@@ -40,7 +40,7 @@ export type RoomPageState = {
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;
   isPageVisible: boolean;
-  availableRooms: RoomSnapshot[];
+  availableRooms: RoomSummary[];
   playlists: Playlist[];
   connectedPeers: string[];
   mediaConnectedPeers: string[];
@@ -149,7 +149,7 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
   );
 
   const setAvailableRooms = useCallback(
-    (value: SetStateAction<RoomSnapshot[]>) =>
+    (value: SetStateAction<RoomSummary[]>) =>
       dispatch({ type: "set", key: "availableRooms", value }),
     []
   );

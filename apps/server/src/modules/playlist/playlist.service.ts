@@ -53,11 +53,8 @@ export class PlaylistService {
   }
 
   async listPlaylistsForRoom(roomId: string) {
-    const roomTrackIds = new Set((await this.roomService.getTracks(roomId)).map((track) => track.id));
     const playlists = await this.listPlaylists();
-    return playlists.filter((playlist: Playlist) =>
-      playlist.trackIds.some((trackId: string) => roomTrackIds.has(trackId))
-    );
+    return playlists.filter((playlist: Playlist) => this.playlistRoomIds.get(playlist.id) === roomId);
   }
 
   async createPlaylist(input: {
@@ -70,6 +67,7 @@ export class PlaylistService {
     coverUrl?: string | null;
     isCollaborative?: boolean;
   }) {
+    this.assertDurablePersistence();
     const playlist: Playlist = {
       id: `playlist_${randomUUID()}`,
       ownerId: input.ownerId,
@@ -124,7 +122,7 @@ export class PlaylistService {
     title: string;
     description?: string | null;
   }) {
-    const roomQueue = await this.roomService.getQueue(input.roomId);
+    const roomQueue = await this.roomService.getAccessibleQueue(input.roomId, input.ownerId);
 
     return this.createPlaylist({
       ownerId: input.ownerId,
@@ -146,6 +144,7 @@ export class PlaylistService {
       trackIds?: string[];
     }
   ) {
+    this.assertDurablePersistence();
     const current = await this.getPlaylistOrThrow(playlistId);
 
     if (current.ownerId !== input.ownerId) {
@@ -181,6 +180,7 @@ export class PlaylistService {
   }
 
   async deletePlaylist(playlistId: string, ownerId: string) {
+    this.assertDurablePersistence();
     const current = await this.getPlaylistOrThrow(playlistId);
 
     if (current.ownerId !== ownerId) {
@@ -226,12 +226,7 @@ export class PlaylistService {
 
   async deletePlaylistsForRoom(roomId: string) {
     const playlists = await this.listPlaylists();
-    const roomPlaylists = playlists.filter((playlist) => this.playlistRoomIds.get(playlist.id) === roomId);
-
-    for (const playlist of roomPlaylists) {
-      this.playlists.delete(playlist.id);
-      this.playlistRoomIds.delete(playlist.id);
-    }
+    this.clearCachedPlaylistsForRoom(roomId, playlists);
 
     if (this.prisma.isAvailable()) {
       await this.prisma.playlist.deleteMany({
@@ -240,6 +235,14 @@ export class PlaylistService {
     }
 
     return { ok: true };
+  }
+
+  clearCachedPlaylistsForRoom(roomId: string, playlists = [...this.playlists.values()]) {
+    for (const playlist of playlists) {
+      if (this.playlistRoomIds.get(playlist.id) !== roomId) continue;
+      this.playlists.delete(playlist.id);
+      this.playlistRoomIds.delete(playlist.id);
+    }
   }
 
   async getPlaylist(playlistId: string) {
@@ -301,6 +304,12 @@ export class PlaylistService {
     }
 
     throw new Error(`Playlist not found: ${playlistId}`);
+  }
+
+  private assertDurablePersistence() {
+    if (!this.prisma.isAvailable() && process.env.NODE_ENV === "production") {
+      throw new Error("Playlist storage is temporarily unavailable.");
+    }
   }
 }
 

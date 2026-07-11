@@ -5,6 +5,8 @@ import {
   HttpException,
   HttpStatus
 } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import {
   createApiErrorResponse,
   errorCodes,
@@ -14,6 +16,8 @@ import {
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ApiExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     if (host.getType() !== "http") {
       throw exception;
@@ -21,13 +25,23 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     const context = host.switchToHttp();
     const response = context.getResponse();
-    const { status, body } = toHttpApiError(exception);
+    const requestId = randomUUID();
+    const { status, body } = toHttpApiError(exception, requestId);
+    if (!(exception instanceof HttpException) || status >= 500) {
+      const request = context.getRequest<{ method?: string; originalUrl?: string }>();
+      this.logger.error(JSON.stringify({
+        requestId,
+        method: request.method,
+        path: request.originalUrl,
+        error: exception instanceof Error ? exception.stack ?? exception.message : String(exception)
+      }));
+    }
 
     response.status(status).json(body);
   }
 }
 
-export function toHttpApiError(exception: unknown): {
+export function toHttpApiError(exception: unknown, requestId = randomUUID()): {
   status: number;
   body: ApiErrorResponse;
 } {
@@ -46,11 +60,14 @@ export function toHttpApiError(exception: unknown): {
     };
   }
 
-  const message = exception instanceof Error ? exception.message : "Internal server error.";
-  const code = mapErrorCode(message, HttpStatus.INTERNAL_SERVER_ERROR);
+  const rawMessage = exception instanceof Error ? exception.message : "Internal server error.";
+  const code = mapErrorCode(rawMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+  const message = code === errorCodes.internal ? "Internal server error." : rawMessage;
   return {
     status: mapErrorStatus(code),
-    body: createApiErrorResponse(code, message)
+    body: code === errorCodes.internal
+      ? createApiErrorResponse(code, message, { requestId })
+      : createApiErrorResponse(code, message)
   };
 }
 
@@ -64,6 +81,10 @@ export function mapErrorCode(message: string, status?: number): ErrorCode {
     message.includes("Room state revision conflict")
   ) {
     return errorCodes.playbackVersionConflict;
+  }
+
+  if (message.includes("storage is temporarily unavailable")) {
+    return errorCodes.realtimeUnavailable;
   }
 
   if (
@@ -138,6 +159,10 @@ export function mapErrorStatus(code: ErrorCode): number {
       return HttpStatus.BAD_REQUEST;
     case errorCodes.unauthorized:
       return HttpStatus.UNAUTHORIZED;
+    case errorCodes.csrfInvalid:
+      return HttpStatus.FORBIDDEN;
+    case errorCodes.clientUpdateRequired:
+      return 426;
     case errorCodes.rateLimited:
       return HttpStatus.TOO_MANY_REQUESTS;
     case errorCodes.roomNotFound:

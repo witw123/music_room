@@ -11,7 +11,6 @@ export const authSessionSchema = z.object({
   userId: z.string(),
   username: z.string(),
   nickname: z.string(),
-  token: z.string(),
   createdAt: z.string().datetime()
 });
 

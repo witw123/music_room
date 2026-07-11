@@ -63,6 +63,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.set(key, value);
   }
 
+  async checkHealth() {
+    if (!this.isAvailable()) return false;
+    try {
+      return (await this.client.ping()) === "PONG";
+    } catch {
+      return false;
+    }
+  }
+
   async setJsonIfRevisionMatches(
     key: string,
     payload: unknown,

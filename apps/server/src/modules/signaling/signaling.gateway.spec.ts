@@ -144,7 +144,13 @@ function createClient(input?: Partial<{
 }>) {
   return {
     id: input?.id ?? "socket_1",
-    handshake: { auth: { sessionToken: "token" }, headers: {} },
+    handshake: {
+      auth: {},
+      headers: {
+        origin: "http://localhost:3000",
+        cookie: "__Host-music-room-session=token"
+      }
+    },
     data: {
       roomId: input?.roomId,
       sessionId: input?.sessionId,
@@ -989,7 +995,7 @@ describe("SignalingGateway", () => {
       senderId: "guest_host",
       senderName: "Host",
       content: "hello",
-      timestamp: 10
+      timestamp: expect.any(Number)
     });
     expect(emit).toHaveBeenCalledWith("room.chat", result);
   });

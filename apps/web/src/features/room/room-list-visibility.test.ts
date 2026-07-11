@@ -44,7 +44,7 @@ function createRoomSnapshot(input: {
 }
 
 describe("filterOpenPublicRooms", () => {
-  it("keeps only public rooms with at least one online member", () => {
+  it("keeps every public room even when nobody is online", () => {
     const rooms = [
       createRoomSnapshot({
         id: "room_public_online",
@@ -64,7 +64,8 @@ describe("filterOpenPublicRooms", () => {
     ];
 
     expect(filterOpenPublicRooms(rooms).map((room) => room.room.id)).toEqual([
-      "room_public_online"
+      "room_public_online",
+      "room_public_offline"
     ]);
   });
 });

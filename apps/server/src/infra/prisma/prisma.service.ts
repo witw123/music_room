@@ -53,6 +53,19 @@ export class PrismaService
     return this.connectPromise;
   }
 
+  async checkHealth() {
+    if (!(await this.ensureAvailable())) return false;
+    try {
+      await this.$queryRawUnsafe("SELECT 1");
+      return true;
+    } catch (error) {
+      this.connected = false;
+      this.startReconnectLoop();
+      this.logger.warn(`Prisma health check failed. ${String(error)}`);
+      return false;
+    }
+  }
+
   private async tryConnect() {
     try {
       await this.$connect();

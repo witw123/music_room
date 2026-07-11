@@ -1,9 +1,11 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 import type { AuthSession, UserProfile } from "@music-room/shared";
 import { PrismaService } from "../../infra/prisma/prisma.service";
+import { sessionTtlMs } from "../../common/auth/session-cookie";
 
 type PersistenceMode = "database" | "fallback";
 
@@ -17,11 +19,13 @@ type StoredUser = UserProfile & {
 type StoredUserSession = {
   id: string;
   userId: string;
-  token: string;
+  tokenHash: string;
   createdAt: string;
   expiresAt: string;
   persistence: PersistenceMode;
 };
+
+export type CreatedAuthSession = AuthSession & { token: string };
 
 type FallbackAuthStore = {
   users: Array<
@@ -32,28 +36,50 @@ type FallbackAuthStore = {
   >;
 };
 
-const sessionTtlMs = 1000 * 60 * 60 * 24 * 30;
+const scryptAsync = promisify(scrypt);
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuthService.name);
   private readonly usersById = new Map<string, StoredUser>();
   private readonly userIdByUsername = new Map<string, string>();
-  private readonly sessionsByToken = new Map<string, StoredUserSession>();
+  private readonly sessionsByTokenHash = new Map<string, StoredUserSession>();
   private readonly allowFallbackPersistence = resolveAllowFallbackPersistence();
   private readonly fallbackStorePath = resolve(
     process.cwd(),
     process.env.AUTH_FAKE_PERSIST_PATH ?? ".tmp/auth-fallback-store.json"
   );
   private fallbackLoaded = false;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit() {
+    this.cleanupTimer = setInterval(() => void this.deleteExpiredSessions(), 24 * 60 * 60 * 1000);
+    this.cleanupTimer.unref?.();
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+    this.cleanupTimer = null;
+  }
+
+  async deleteExpiredSessions(now = new Date()) {
+    for (const [tokenHash, session] of this.sessionsByTokenHash) {
+      if (new Date(session.expiresAt) <= now) this.sessionsByTokenHash.delete(tokenHash);
+    }
+    if (await this.prisma.ensureAvailable()) {
+      await this.prisma.userSession.deleteMany({ where: { expiresAt: { lte: now } } });
+    } else if (this.allowFallbackPersistence) {
+      await this.persistFallbackStore();
+    }
+  }
 
   async register(input: {
     username: string;
     password: string;
     nickname: string;
-  }): Promise<AuthSession> {
+  }): Promise<CreatedAuthSession> {
     const username = input.username.trim().toLowerCase();
     const nickname = input.nickname.trim();
     const password = input.password;
@@ -78,36 +104,51 @@ export class AuthService {
       id: `user_${randomUUID()}`,
       username,
       nickname,
-      passwordHash: hashPassword(password),
+      passwordHash: await hashPassword(password),
       createdAt: now,
       updatedAt: now,
       persistence
     };
 
-    this.cacheUser(user);
-
     if (persistence === "database") {
-      await this.prisma.user.create({
-        data: {
-          id: user.id,
-          username: user.username,
-          passwordHash: user.passwordHash,
-          nickname: user.nickname,
-          createdAt: new Date(user.createdAt),
-          updatedAt: new Date(user.updatedAt)
-        }
+      const { storedSession, token } = this.buildSession(user, persistence);
+      await this.prisma.$transaction(async (transaction) => {
+        await transaction.user.create({
+          data: {
+            id: user.id,
+            username: user.username,
+            passwordHash: user.passwordHash,
+            nickname: user.nickname,
+            createdAt: new Date(user.createdAt),
+            updatedAt: new Date(user.updatedAt)
+          }
+        });
+        await transaction.userSession.create({
+          data: {
+            id: storedSession.id,
+            userId: storedSession.userId,
+            tokenHash: storedSession.tokenHash,
+            createdAt: new Date(storedSession.createdAt),
+            expiresAt: new Date(storedSession.expiresAt)
+          }
+        });
       });
-    } else {
-      await this.persistFallbackStore();
-      this.logger.warn(
-        `Database unavailable; created fallback auth user "${user.username}" at ${this.fallbackStorePath}`
-      );
+      this.cacheUser(user);
+      this.sessionsByTokenHash.set(storedSession.tokenHash, storedSession);
+      return { ...this.toAuthSession(user, storedSession), token };
     }
 
-    return this.createSessionForUser(user);
+    const { storedSession, token } = this.buildSession(user, persistence);
+    this.cacheUser(user);
+    this.sessionsByTokenHash.set(storedSession.tokenHash, storedSession);
+    await this.persistFallbackStore();
+    this.logger.warn(
+      `Database unavailable; created fallback auth user "${user.username}" at ${this.fallbackStorePath}`
+    );
+    return { ...this.toAuthSession(user, storedSession), token };
   }
 
-  async createGuestSession(nickname: string): Promise<AuthSession> {
+  async createGuestSession(nickname: string): Promise<CreatedAuthSession> {
     const slugBase =
       nickname
         .trim()
@@ -122,7 +163,7 @@ export class AuthService {
     });
   }
 
-  async login(input: { username: string; password: string }): Promise<AuthSession> {
+  async login(input: { username: string; password: string }): Promise<CreatedAuthSession> {
     const username = input.username.trim().toLowerCase();
     const password = input.password;
 
@@ -132,7 +173,7 @@ export class AuthService {
 
     await this.ensureAuthLookupAvailableOrThrow();
     const user = await this.getUserByUsernameOrThrow(username);
-    if (!verifyPassword(password, user.passwordHash)) {
+    if (!(await verifyPassword(password, user.passwordHash))) {
       throw new Error("Invalid username or password.");
     }
 
@@ -146,17 +187,18 @@ export class AuthService {
 
     await this.ensureFallbackStoreLoaded();
 
-    const session = this.sessionsByToken.get(token) ?? (await this.getPersistedSessionByToken(token));
+    const tokenHash = hashSessionToken(token);
+    const session = this.sessionsByTokenHash.get(tokenHash) ?? (await this.getPersistedSessionByToken(token));
     if (!session) {
       return { ok: true };
     }
 
-    this.sessionsByToken.delete(token);
+    this.sessionsByTokenHash.delete(tokenHash);
 
     if (session.persistence === "database") {
       if (await this.prisma.ensureAvailable()) {
         await this.prisma.userSession.deleteMany({
-          where: { token }
+          where: { tokenHash }
         });
       }
       return { ok: true };
@@ -174,18 +216,18 @@ export class AuthService {
     await this.ensureFallbackStoreLoaded();
 
     const storedSession =
-      this.sessionsByToken.get(token) ?? (await this.getPersistedSessionByToken(token));
+      this.sessionsByTokenHash.get(hashSessionToken(token)) ?? (await this.getPersistedSessionByToken(token));
 
     if (!storedSession) {
       throw new Error("Invalid session token.");
     }
 
     if (new Date(storedSession.expiresAt).getTime() <= Date.now()) {
-      this.sessionsByToken.delete(token);
+      this.sessionsByTokenHash.delete(storedSession.tokenHash);
       if (storedSession.persistence === "database") {
         if (await this.prisma.ensureAvailable()) {
           await this.prisma.userSession.deleteMany({
-            where: { token }
+          where: { tokenHash: storedSession.tokenHash }
           });
         }
       } else {
@@ -273,7 +315,7 @@ export class AuthService {
     throw new Error("Invalid username or password.");
   }
 
-  private async createSessionForUser(user: StoredUser): Promise<AuthSession> {
+  private async createSessionForUser(user: StoredUser): Promise<CreatedAuthSession> {
     const persistence =
       user.persistence === "database" && (await this.prisma.ensureAvailable())
         ? "database"
@@ -285,32 +327,38 @@ export class AuthService {
       );
     }
 
-    const storedSession: StoredUserSession = {
-      id: `session_${randomUUID()}`,
-      userId: user.id,
-      token: randomBytes(32).toString("base64url"),
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
-      persistence
-    };
-
-    this.sessionsByToken.set(storedSession.token, storedSession);
+    const { storedSession, token } = this.buildSession(user, persistence);
 
     if (persistence === "database") {
       await this.prisma.userSession.create({
         data: {
           id: storedSession.id,
           userId: storedSession.userId,
-          token: storedSession.token,
+          tokenHash: storedSession.tokenHash,
           createdAt: new Date(storedSession.createdAt),
           expiresAt: new Date(storedSession.expiresAt)
         }
       });
     } else {
+      this.sessionsByTokenHash.set(storedSession.tokenHash, storedSession);
       await this.persistFallbackStore();
     }
 
-    return this.toAuthSession(user, storedSession);
+    this.sessionsByTokenHash.set(storedSession.tokenHash, storedSession);
+    return { ...this.toAuthSession(user, storedSession), token };
+  }
+
+  private buildSession(user: StoredUser, persistence: PersistenceMode) {
+    const token = randomBytes(32).toString("base64url");
+    const storedSession: StoredUserSession = {
+      id: `session_${randomUUID()}`,
+      userId: user.id,
+      tokenHash: hashSessionToken(token),
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
+      persistence
+    };
+    return { storedSession, token };
   }
 
   private toAuthSession(user: UserProfile, session: StoredUserSession): AuthSession {
@@ -319,7 +367,6 @@ export class AuthService {
       userId: user.id,
       username: user.username,
       nickname: user.nickname,
-      token: session.token,
       createdAt: session.createdAt
     };
   }
@@ -346,20 +393,21 @@ export class AuthService {
     await this.ensureFallbackStoreLoaded();
 
     if (await this.prisma.ensureAvailable()) {
+      const tokenHash = hashSessionToken(token);
       const persisted = await this.prisma.userSession.findUnique({
-        where: { token }
+        where: { tokenHash }
       });
 
       if (persisted) {
         const session: StoredUserSession = {
           id: persisted.id,
           userId: persisted.userId,
-          token: persisted.token,
+          tokenHash: persisted.tokenHash,
           createdAt: persisted.createdAt.toISOString(),
           expiresAt: persisted.expiresAt.toISOString(),
           persistence: "database"
         };
-        this.sessionsByToken.set(session.token, session);
+        this.sessionsByTokenHash.set(session.tokenHash, session);
         return session;
       }
     }
@@ -422,7 +470,7 @@ export class AuthService {
       }
 
       for (const session of parsed.sessions ?? []) {
-        this.sessionsByToken.set(session.token, {
+        this.sessionsByTokenHash.set(session.tokenHash, {
           ...session,
           persistence: "fallback"
         });
@@ -447,7 +495,7 @@ export class AuthService {
       users: Array.from(this.usersById.values())
         .filter((user) => user.persistence === "fallback")
         .map(({ persistence: _persistence, ...user }) => user),
-      sessions: Array.from(this.sessionsByToken.values())
+      sessions: Array.from(this.sessionsByTokenHash.values())
         .filter((session) => session.persistence === "fallback")
         .map(({ persistence: _persistence, ...session }) => session)
     };
@@ -465,19 +513,19 @@ function toUserProfile(user: StoredUser): UserProfile {
   };
 }
 
-function hashPassword(password: string) {
+async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
+  const hash = (await scryptAsync(password, salt, 64) as Buffer).toString("hex");
   return `${salt}:${hash}`;
 }
 
-function verifyPassword(password: string, storedHash: string) {
+async function verifyPassword(password: string, storedHash: string) {
   const [salt, expectedHash] = storedHash.split(":");
   if (!salt || !expectedHash) {
     return false;
   }
 
-  const actual = scryptSync(password, salt, 64);
+  const actual = await scryptAsync(password, salt, 64) as Buffer;
   const expected = Buffer.from(expectedHash, "hex");
 
   if (actual.length !== expected.length) {
@@ -485,6 +533,10 @@ function verifyPassword(password: string, storedHash: string) {
   }
 
   return timingSafeEqual(actual, expected);
+}
+
+function hashSessionToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 function resolveAllowFallbackPersistence() {

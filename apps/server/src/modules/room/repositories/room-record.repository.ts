@@ -1,5 +1,6 @@
 import { RedisService } from "../../../infra/redis/redis.service";
 import { PrismaService } from "../../../infra/prisma/prisma.service";
+import { Logger } from "@nestjs/common";
 import {
   deserializeRoomRecord,
   roomRecordSchema,
@@ -8,6 +9,8 @@ import {
 } from "../room.types";
 
 export class RoomRecordRepository {
+  private readonly logger = new Logger(RoomRecordRepository.name);
+  private readonly pendingProjectionRetries = new Map<string, number>();
   constructor(
     private readonly rooms: Map<string, RoomRecord>,
     private readonly prisma: PrismaService,
@@ -30,7 +33,7 @@ export class RoomRecordRepository {
         where: { joinCode: code }
       });
 
-      if (persisted) {
+      if (persisted && "playback" in persisted) {
         const record = parseRoomRecord(deserializeRoomRecord(persisted));
         if (record) {
           this.rooms.set(record.room.id, cloneRoomRecord(record));
@@ -50,24 +53,27 @@ export class RoomRecordRepository {
   }
 
   async getRoomRecord(roomId: string) {
-    const cached = this.rooms.get(roomId);
-
-    if (cached) {
-      return cloneRoomRecord(cached);
-    }
-
     if (this.prisma.isAvailable()) {
       const persisted = await this.prisma.roomState.findUnique({
         where: { id: roomId }
       });
 
-      if (persisted) {
+      if (persisted && "playback" in persisted) {
         const record = parseRoomRecord(deserializeRoomRecord(persisted));
         if (record) {
           this.rooms.set(roomId, cloneRoomRecord(record));
           return cloneRoomRecord(record);
         }
       }
+      if (!persisted) {
+        this.rooms.delete(roomId);
+        throw new Error(`Room not found: ${roomId}`);
+      }
+    }
+
+    const cached = this.rooms.get(roomId);
+    if (cached) {
+      return cloneRoomRecord(cached);
     }
 
     const redisRecord = await this.redis.getJson<unknown>(this.roomCacheKey(roomId));
@@ -84,6 +90,14 @@ export class RoomRecordRepository {
     const databaseAvailable = this.prisma.isAvailable();
     if (databaseAvailable) {
       await this.persistRecordToDatabase(record);
+      this.rooms.set(record.room.id, cloneRoomRecord(record));
+      try {
+        await this.persistRedisProjection(record);
+      } catch (error) {
+        this.logger.warn(`Room projection update failed for ${record.room.id}: ${String(error)}`);
+        this.scheduleProjectionRetry(record);
+      }
+      return;
     }
 
     const supportsRedisRevisionGuard =
@@ -100,41 +114,65 @@ export class RoomRecordRepository {
       }
     }
 
-    await this.redis.addToSet(this.roomRegistryKey, record.room.id);
-    if (databaseAvailable || !supportsRedisRevisionGuard) {
-      await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
-    }
-    await this.redis.setJson(
-      this.joinCodeCacheKey(record.room.joinCode),
-      record,
-      this.roomCacheTtlSeconds
-    );
-    await Promise.all(
-      record.room.members.map((member) =>
-        this.redis.setString(
-          this.sessionRecentRoomKey(member.id),
-          record.room.id,
-          this.sessionRecentRoomTtlSeconds
-        )
-      )
-    );
+    await this.persistRedisProjection(record, !supportsRedisRevisionGuard);
     this.rooms.set(record.room.id, cloneRoomRecord(record));
   }
 
   async deleteRecord(record: RoomRecord) {
+    if (this.prisma.isAvailable()) {
+      await this.prisma.roomState.deleteMany({
+        where: { id: record.room.id }
+      });
+      await this.finalizeDatabaseDelete(record);
+      return;
+    }
+
+    await this.deleteRedisProjection(record);
+    this.rooms.delete(record.room.id);
+  }
+
+  async finalizeDatabaseDelete(record: RoomRecord) {
+    this.rooms.delete(record.room.id);
+    try {
+      await this.deleteRedisProjection(record);
+    } catch (error) {
+      this.logger.warn(`Room projection delete failed for ${record.room.id}: ${String(error)}`);
+    }
+  }
+
+  private async persistRedisProjection(record: RoomRecord, writeRoom = true) {
+    await this.redis.addToSet(this.roomRegistryKey, record.room.id);
+    if (writeRoom) {
+      await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
+    }
+    await this.redis.setJson(this.joinCodeCacheKey(record.room.joinCode), record, this.roomCacheTtlSeconds);
+    await Promise.all(record.room.members.map((member) =>
+      this.redis.setString(
+        this.sessionRecentRoomKey(member.id),
+        record.room.id,
+        this.sessionRecentRoomTtlSeconds
+      )
+    ));
+  }
+
+  private async deleteRedisProjection(record: RoomRecord) {
     await Promise.all([
       this.redis.removeFromSet(this.roomRegistryKey, record.room.id),
       this.redis.delete(this.roomCacheKey(record.room.id)),
       this.redis.delete(this.joinCodeCacheKey(record.room.joinCode))
     ]);
+  }
 
-    if (this.prisma.isAvailable()) {
-      await this.prisma.roomState.deleteMany({
-        where: { id: record.room.id }
-      });
-    }
-
-    this.rooms.delete(record.room.id);
+  private scheduleProjectionRetry(record: RoomRecord) {
+    const attempts = this.pendingProjectionRetries.get(record.room.id) ?? 0;
+    if (attempts >= 3) return;
+    this.pendingProjectionRetries.set(record.room.id, attempts + 1);
+    const timer = setTimeout(() => {
+      void this.persistRedisProjection(record)
+        .then(() => this.pendingProjectionRetries.delete(record.room.id))
+        .catch(() => this.scheduleProjectionRetry(record));
+    }, 500 * 2 ** attempts);
+    timer.unref?.();
   }
 
   async listRecoverableRecords() {
@@ -217,6 +255,8 @@ export class RoomRecordRepository {
       hostId: record.room.hostId,
       joinCode: record.room.joinCode,
       visibility: record.room.visibility,
+      lastActiveAt: new Date(record.room.lastActiveAt ?? Date.now()),
+      archivedAt: record.room.archivedAt ? new Date(record.room.archivedAt) : null,
       roomRevision: record.room.roomRevision ?? 0,
       presenceRevision: record.room.presenceRevision,
       playback: serializePlaybackForPersistence(record.room),

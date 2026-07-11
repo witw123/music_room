@@ -20,6 +20,7 @@ import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
 import { PlaylistService } from "./playlist.service";
+import { getSessionTokenFromCookie } from "../../common/auth/session-cookie";
 
 @Controller("v1/playlists")
 export class PlaylistController {
@@ -30,9 +31,9 @@ export class PlaylistController {
     private readonly authService: AuthService
   ) {}
 
-  private async getCurrentUserId(sessionToken?: string) {
+  private async getCurrentUserId(cookieHeader?: string) {
     try {
-      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(getSessionTokenFromCookie(cookieHeader));
       return session.userId;
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
@@ -40,14 +41,14 @@ export class PlaylistController {
   }
 
   @Get()
-  async listPlaylists(@Headers("x-session-token") sessionToken: string | undefined) {
+  async listPlaylists(@Headers("cookie") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.playlistService.listPlaylists(userId);
   }
 
   @Post()
   async createPlaylist(
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body()
     body: {
       title: string;
@@ -69,7 +70,7 @@ export class PlaylistController {
   @Patch(":playlistId")
   async updatePlaylist(
     @Param("playlistId") playlistId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body()
     body: {
       title?: string;
@@ -90,7 +91,7 @@ export class PlaylistController {
   @Delete(":playlistId")
   async deletePlaylist(
     @Param("playlistId") playlistId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.playlistService.deletePlaylist(playlistId, userId);
@@ -99,7 +100,7 @@ export class PlaylistController {
   @Post(":playlistId/import-to-room")
   async importPlaylistToRoom(
     @Param("playlistId") playlistId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body()
     body: {
       roomId: string;
@@ -121,7 +122,7 @@ export class PlaylistController {
 
   @Post("from-room")
   async createPlaylistFromRoom(
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body()
     body: {
       roomId: string;

@@ -8,6 +8,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
+import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import { buildDiagnosticsViewModel } from "./diagnostics-view-model";
 
@@ -60,7 +61,7 @@ function formatRateM(value: number | null | undefined) {
   if (value === null || typeof value === "undefined") {
     return "未知";
   }
-  return `${(value / 1_000).toFixed(1)} M`;
+  return formatTransferRateMBps(value);
 }
 
 function formatBoolean(value: boolean | null | undefined) {

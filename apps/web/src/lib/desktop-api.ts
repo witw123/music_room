@@ -1,11 +1,10 @@
 export type DesktopPickedFile = {
   name: string;
-  path: string;
+  grantId: string;
 };
 
 export type DesktopLoadedFile = {
   name: string;
-  path: string;
   type: string;
   data: number[];
 };
@@ -43,7 +42,7 @@ export async function pickDesktopAudioFilesAsFileObjects() {
   const nextFiles = await Promise.all(
     pickedFiles.map(async (pickedFile) => {
       const loaded = await invokeDesktop<DesktopLoadedFile>("read_audio_file", {
-        filePath: pickedFile.path
+        grantId: pickedFile.grantId
       });
       if (!loaded) {
         return null;

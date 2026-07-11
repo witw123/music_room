@@ -34,7 +34,8 @@ describe("AuthService", () => {
 
     const session = await service.createGuestSession("Host");
 
-    await expect(service.assertSessionToken(session.id, session.token)).resolves.toEqual(session);
+    const { token: _token, ...publicSession } = session;
+    await expect(service.assertSessionToken(session.id, session.token)).resolves.toEqual(publicSession);
   });
 
   it("rejects a missing or invalid session token", async () => {
@@ -65,5 +66,25 @@ describe("AuthService", () => {
     await expect(service.createGuestSession("Host")).rejects.toThrow(
       "Account storage is temporarily unavailable. Please try again after the database is ready."
     );
+  });
+
+  it("does not cache a user when the registration transaction fails", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => true),
+      ensureAvailable: jest.fn(async () => true),
+      $transaction: jest.fn().mockRejectedValue(new Error("database write failed")),
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null)
+      }
+    };
+    const service = new AuthService(prisma as never);
+
+    await expect(service.register({
+      username: "tester",
+      password: "secret-pass",
+      nickname: "Tester"
+    })).rejects.toThrow("database write failed");
+    await expect(service.login({ username: "tester", password: "secret-pass" }))
+      .rejects.toThrow("Invalid username or password.");
   });
 });

@@ -45,7 +45,7 @@ type RoomPresenceStore = Map<
         rooms: Map<string, RoomRecord>,
         prisma: PrismaService,
         redis: RedisService
-      ) => new RoomRecordRepository(rooms, prisma, redis, "music-room:rooms", 43_200, 604_800)
+      ) => new RoomRecordRepository(rooms, prisma, redis, "music-room:rooms", 0, 604_800)
     },
     {
       provide: RoomPresenceService,

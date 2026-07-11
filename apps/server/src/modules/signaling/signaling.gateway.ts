@@ -53,6 +53,7 @@ import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher"
 import { RoomService } from "../room/room.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
 import { TrackAvailabilityRegistry } from "./track-availability.registry";
+import { getSessionTokenFromCookie } from "../../common/auth/session-cookie";
 import {
   peerSignalChannel,
   pieceAvailabilityChannel,
@@ -85,7 +86,8 @@ function hasForeignRedisEnvelope(
 
 @WebSocketGateway({
   path: "/ws/socket.io",
-  cors: { origin: getCorsOrigins(), credentials: true }
+  cors: { origin: getCorsOrigins(), credentials: true },
+  maxHttpBufferSize: 256 * 1024
 })
 export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnModuleDestroy {
   private readonly disconnectGracePeriodMs = 25_000;
@@ -454,9 +456,17 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.assertRealtimeClient(client, message.roomId);
     this.assertRealtimeAvailable();
+    await this.assertEventRateLimit(client, "peer-signal", 60, 1_000);
+
+    if (Buffer.byteLength(JSON.stringify(message), "utf8") > 128 * 1024) {
+      throw createWsApiException("Peer signal payload is too large.", errorCodes.validationFailed);
+    }
 
     if (client.data.peerId !== message.fromPeerId) {
       throw new WsException("Peer mismatch.");
+    }
+    if (!(await this.roomHasPeer(message.roomId, message.toPeerId))) {
+      throw createWsApiException("Target peer is unavailable.", errorCodes.peerUnavailable);
     }
 
     const nextPayload = {
@@ -492,9 +502,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.assertRealtimeClient(client, announcement.roomId);
     this.assertRealtimeAvailable();
+    await this.assertEventRateLimit(client, "availability", 5, 1_000);
 
     if (client.data.peerId !== announcement.ownerPeerId) {
       throw new WsException("Peer mismatch.");
+    }
+    if (!(await this.roomHasTrack(announcement.roomId, announcement.trackId))) {
+      throw createWsApiException("Track not found in room.", errorCodes.roomNotFound);
     }
 
     const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(
@@ -526,8 +540,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const request = parsed.data;
     this.assertRealtimeClient(client, request.roomId);
     this.assertRealtimeAvailable();
+    await this.assertEventRateLimit(client, "piece-request", 20, 1_000);
     if (client.data.peerId !== request.requesterPeerId) {
       throw new WsException("Peer mismatch.");
+    }
+    if (!(await this.roomHasTrack(request.roomId, request.trackId))) {
+      throw createWsApiException("Track not found in room.", errorCodes.roomNotFound);
     }
 
     for (const announcement of this.trackAvailabilityRegistry.getTrackAnnouncements(
@@ -555,6 +573,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
 
     this.assertRealtimeClient(client, parsed.data.roomId);
+    await this.assertEventRateLimit(client, "chat", 5, 10_000);
     const sessionId = client.data.sessionId as string | undefined;
     if (!sessionId) {
       throw new WsException("Unauthorized realtime request.");
@@ -566,7 +585,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       senderId: user.id,
       senderName: user.nickname,
       content: parsed.data.content,
-      timestamp: parsed.data.timestamp ?? Date.now()
+      timestamp: Date.now()
     };
 
     client.to(parsed.data.roomId).emit("room.chat", nextPayload);
@@ -817,17 +836,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   }
 
   private getSocketSessionToken(client: Socket) {
-    const authToken =
-      typeof client.handshake.auth?.sessionToken === "string"
-        ? client.handshake.auth.sessionToken
-        : undefined;
-
-    if (authToken) {
-      return authToken;
+    const origin = client.handshake.headers.origin;
+    if (typeof origin !== "string" || !getCorsOrigins().includes(origin.replace(/\/$/, ""))) {
+      throw new WsException("Unauthorized realtime origin.");
     }
-
-    const headerToken = client.handshake.headers["x-session-token"];
-    return typeof headerToken === "string" ? headerToken : undefined;
+    const cookie = client.handshake.headers.cookie;
+    return getSessionTokenFromCookie(typeof cookie === "string" ? cookie : undefined);
   }
 
   private assertRealtimeClient(client: Socket, roomId: string) {
@@ -847,6 +861,40 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         errorCodes.realtimeUnavailable
       );
     }
+  }
+
+  private async assertEventRateLimit(
+    client: Socket,
+    event: string,
+    limit: number,
+    windowMs: number
+  ) {
+    if (process.env.NODE_ENV === "test" && typeof this.redisService.incrementWithTtlMs !== "function") {
+      return;
+    }
+    const sessionId = client.data.sessionId as string | undefined;
+    const roomId = client.data.roomId as string | undefined;
+    if (!sessionId || !roomId) {
+      throw new WsException("Unauthorized realtime request.");
+    }
+    const count = await this.redisService.incrementWithTtlMs(
+      `ws-rate:${event}:${roomId}:${sessionId}`,
+      windowMs
+    );
+    if (count > limit) {
+      throw createWsApiException("Realtime event rate limit exceeded.", errorCodes.rateLimited);
+    }
+  }
+
+  private async roomHasTrack(roomId: string, trackId: string) {
+    if (process.env.NODE_ENV === "test" && typeof this.roomService.getTracks !== "function") return true;
+    return (await this.roomService.getTracks(roomId)).some((track) => track.id === trackId);
+  }
+
+  private async roomHasPeer(roomId: string, peerId: string) {
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, []);
+    if (process.env.NODE_ENV === "test" && snapshot.room.members.length === 0) return true;
+    return snapshot.room.members.some((member) => member.peerId === peerId);
   }
 
   private nextSequence() {

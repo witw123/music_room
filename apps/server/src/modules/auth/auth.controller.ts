@@ -4,7 +4,6 @@ import {
   ConflictException,
   Controller,
   Get,
-  Headers,
   HttpException,
   HttpStatus,
   Ip,
@@ -15,13 +14,29 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import { Logger } from "@nestjs/common";
+import { randomBytes } from "node:crypto";
 import { loginRequestSchema, registerRequestSchema } from "@music-room/shared";
 import { RedisService } from "../../infra/redis/redis.service";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "./auth.service";
+import {
+  buildCookie,
+  csrfCookieName,
+  getSessionTokenFromCookie,
+  resolveSameSite,
+  sessionCookieName,
+  sessionTtlMs
+} from "../../common/auth/session-cookie";
 
 type AuthRateLimitBucket = {
   timestamps: number[];
+};
+
+type AuthRequest = {
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
+  socket?: { remoteAddress?: string };
+  res?: { getHeader(name: string): unknown; setHeader(name: string, value: string | string[]): void };
 };
 
 @Controller("v1/auth")
@@ -40,11 +55,7 @@ export class AuthController {
   async register(
     @Body() body: { username?: string; password?: string; nickname?: string },
     @Req()
-    request: {
-      ip?: string;
-      headers?: Record<string, string | string[] | undefined>;
-      socket?: { remoteAddress?: string };
-    },
+    request: AuthRequest,
     @Ip() ipAddress?: string
   ) {
     const payload = parseRequestBody(registerRequestSchema, body);
@@ -53,7 +64,7 @@ export class AuthController {
     await this.assertAuthRateLimit("register", clientIp, username);
 
     try {
-      const session = await this.authService.register({
+      const created = await this.authService.register({
         username,
         password: payload.password,
         nickname: payload.nickname
@@ -61,6 +72,8 @@ export class AuthController {
       this.logger.log(
         this.buildAuthLog("register.accepted", clientIp, username, HttpStatus.CREATED)
       );
+      this.setSessionCookie(request, created.token);
+      const { token: _token, ...session } = created;
       return session;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid payload.";
@@ -81,11 +94,7 @@ export class AuthController {
   async login(
     @Body() body: { username?: string; password?: string },
     @Req()
-    request: {
-      ip?: string;
-      headers?: Record<string, string | string[] | undefined>;
-      socket?: { remoteAddress?: string };
-    },
+    request: AuthRequest,
     @Ip() ipAddress?: string
   ) {
     const payload = parseRequestBody(loginRequestSchema, body);
@@ -94,11 +103,13 @@ export class AuthController {
     await this.assertAuthRateLimit("login", clientIp, username);
 
     try {
-      const session = await this.authService.login({
+      const created = await this.authService.login({
         username,
         password: payload.password
       });
       this.logger.log(this.buildAuthLog("login.accepted", clientIp, username, HttpStatus.OK));
+      this.setSessionCookie(request, created.token);
+      const { token: _token, ...session } = created;
       return session;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unauthorized.";
@@ -112,18 +123,55 @@ export class AuthController {
     }
   }
 
+  @Post("csrf")
+  issueCsrf(@Req() request: AuthRequest) {
+    const token = randomBytes(32).toString("base64url");
+    this.appendCookie(
+      request,
+      buildCookie(csrfCookieName, token, {
+        maxAgeSeconds: Math.floor(sessionTtlMs / 1000),
+        sameSite: resolveSameSite(readHeader(request, "origin"))
+      })
+    );
+    return { csrfToken: token };
+  }
+
   @Post("logout")
-  async logout(@Headers("x-session-token") sessionToken: string | undefined) {
-    return this.authService.logout(sessionToken);
+  async logout(@Req() request: AuthRequest) {
+    const result = await this.authService.logout(
+      getSessionTokenFromCookie(readHeader(request, "cookie"))
+    );
+    this.appendCookie(request, buildCookie(sessionCookieName, "", { maxAgeSeconds: 0 }));
+    return result;
   }
 
   @Get("me")
-  async me(@Headers("x-session-token") sessionToken: string | undefined) {
+  async me(@Req() request: AuthRequest) {
     try {
-      return await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      return await this.authService.getAuthSessionByTokenOrThrow(
+        getSessionTokenFromCookie(readHeader(request, "cookie"))
+      );
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
     }
+  }
+
+  private setSessionCookie(request: AuthRequest, token: string) {
+    this.appendCookie(
+      request,
+      buildCookie(sessionCookieName, token, {
+        maxAgeSeconds: Math.floor(sessionTtlMs / 1000),
+        sameSite: resolveSameSite(readHeader(request, "origin"))
+      })
+    );
+  }
+
+  private appendCookie(request: AuthRequest, cookie: string) {
+    const response = request.res;
+    if (!response) return;
+    const current = response.getHeader("set-cookie");
+    const values = Array.isArray(current) ? current.map(String) : current ? [String(current)] : [];
+    response.setHeader("set-cookie", [...values, cookie]);
   }
 
   private async assertAuthRateLimit(action: "register" | "login", clientIp: string, username: string) {
@@ -241,7 +289,12 @@ export class AuthController {
   ) {
     const bucket = buckets.get(key) ?? { timestamps: [] };
     bucket.timestamps = bucket.timestamps.filter((timestamp) => now - timestamp < windowMs);
+    if (bucket.timestamps.length === 0) buckets.delete(key);
     buckets.set(key, bucket);
+    if (buckets.size > 10_000) {
+      const oldestKey = buckets.keys().next().value as string | undefined;
+      if (oldestKey) buckets.delete(oldestKey);
+    }
     return bucket;
   }
 
@@ -264,12 +317,13 @@ export class AuthController {
 }
 
 function resolveClientIp(
-  request: {
-    ip?: string;
-    headers?: Record<string, string | string[] | undefined>;
-    socket?: { remoteAddress?: string };
-  },
+  request: AuthRequest,
   ipAddress?: string
 ) {
   return ipAddress?.trim() || request.ip?.trim() || request.socket?.remoteAddress?.trim() || "unknown";
+}
+
+function readHeader(request: AuthRequest, name: string) {
+  const value = request.headers?.[name];
+  return Array.isArray(value) ? value[0] : value;
 }

@@ -183,7 +183,7 @@ curl http://127.0.0.1:3001/health
 
 - 桌面端和移动端打包时必须提供 `MUSIC_ROOM_PUBLIC_ORIGIN`
 - 现在缺失该变量会直接构建失败
-- `0.2.8` 官方发布包要求该值为 `https://musicroom.witw.top`
+- `0.8.1` 官方发布包要求该值为 `https://musicroom.witw.top`
 
 示例：
 

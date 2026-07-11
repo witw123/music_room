@@ -43,11 +43,6 @@ async function prepareRemoteShellConfig(publicOrigin) {
   const tauriConfig = JSON.parse(tauriConfigSource);
   const capabilityConfig = JSON.parse(capabilitySource);
 
-  tauriConfig.build = {
-    ...tauriConfig.build,
-    frontendDist: `${publicOrigin}/app?client=desktop`
-  };
-
   tauriConfig.plugins = {
     ...tauriConfig.plugins,
     updater: {
@@ -55,16 +50,6 @@ async function prepareRemoteShellConfig(publicOrigin) {
       endpoints: [process.env.MUSIC_ROOM_UPDATER_ENDPOINT || defaultUpdaterEndpoint],
       pubkey: process.env.TAURI_SIGNING_PUBLIC_KEY || tauriConfig.plugins?.updater?.pubkey || ""
     }
-  };
-
-  capabilityConfig.remote = {
-    ...capabilityConfig.remote,
-    urls: [
-      "http://localhost:3000",
-      "http://localhost:3000/*",
-      publicOrigin,
-      `${publicOrigin}/*`
-    ]
   };
 
   await Promise.all([

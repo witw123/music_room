@@ -34,24 +34,24 @@ export const trackAvailabilitySchema = z.object({
 });
 
 export const trackAvailabilityAnnouncementSchema = z.object({
-  roomId: z.string(),
-  trackId: z.string(),
-  ownerPeerId: z.string(),
-  nickname: z.string(),
+  roomId: z.string().min(1).max(160),
+  trackId: z.string().min(1).max(160),
+  ownerPeerId: z.string().min(1).max(160),
+  nickname: z.string().max(160),
   assetKind: z.enum(["relay", "original"]).optional(),
   assetHash: z.string().optional(),
   totalChunks: z.number().int().nonnegative(),
   chunkSize: z.number().int().positive(),
-  availableChunks: z.array(z.number().int().nonnegative()),
-  pieceHashes: z.array(z.string()).optional(),
+  availableChunks: z.array(z.number().int().nonnegative()).max(10_000),
+  pieceHashes: z.array(z.string().max(256)).max(10_000).optional(),
   source: z.enum(["live_upload", "local_cache"]),
   announcedAt: z.string().datetime()
 });
 
 export const peerSignalMessageSchema = z.object({
-  roomId: z.string(),
-  fromPeerId: z.string(),
-  toPeerId: z.string(),
+  roomId: z.string().min(1).max(160),
+  fromPeerId: z.string().min(1).max(160),
+  toPeerId: z.string().min(1).max(160),
   channelKind: z.literal("data"),
   recoveryGeneration: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),

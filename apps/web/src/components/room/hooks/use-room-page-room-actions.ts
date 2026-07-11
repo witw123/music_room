@@ -10,7 +10,8 @@ import {
 import type {
   Playlist,
   RoomMediaConnectionState,
-  RoomSnapshot
+  RoomSnapshot,
+  RoomSummary
 } from "@music-room/shared";
 import type { Route } from "next";
 import { musicRoomApi } from "@/lib/music-room-api";
@@ -47,7 +48,7 @@ type UseRoomPageRoomActionsInput = {
   roomSnapshot: RoomSnapshot | null;
   router: RoomRouter;
   setActivePlaybackSource: Dispatch<SetStateAction<ProgressivePlaybackSource>>;
-  setAvailableRooms: Dispatch<SetStateAction<RoomSnapshot[]>>;
+  setAvailableRooms: Dispatch<SetStateAction<RoomSummary[]>>;
   setBufferHealth: Dispatch<SetStateAction<"healthy" | "low" | "critical">>;
   setIsNavigatingRoomExit: Dispatch<SetStateAction<boolean>>;
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -110,7 +111,7 @@ export function useRoomPageRoomActions({
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
+      setAvailableRooms(filterOpenPublicRooms(rooms.items));
     } catch {
       setAvailableRooms([]);
     }

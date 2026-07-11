@@ -37,7 +37,7 @@ describe("createRoomSocket", () => {
       "https://music.example.com",
       expect.objectContaining({
         transports: ["websocket", "polling"],
-        auth: { sessionToken: "session-token" },
+        withCredentials: true,
         reconnection: true,
         reconnectionDelay: 800,
         reconnectionDelayMax: 8000

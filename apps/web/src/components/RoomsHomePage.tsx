@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import type { RoomSnapshot } from "@music-room/shared";
+import type { RoomSummary } from "@music-room/shared";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref, buildWorkspaceAuthHref } from "@/lib/client-shell";
 import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
+import { toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
-import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useClientUpdateControls } from "@/components/ClientUpdateManager";
 
 const lastRoomStorageKey = "music-room-last-room";
@@ -28,8 +27,7 @@ export function RoomsHomePage() {
     redirectTo: workspaceEntryHref
   });
   const [joinCode, setJoinCode] = useState("");
-  const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
-  const [recentRoom, setRecentRoom] = useState<RoomSnapshot | null>(null);
+  const [availableRooms, setAvailableRooms] = useState<RoomSummary[]>([]);
   const [isPending, startTransition] = useTransition();
   const {
     activeSession,
@@ -56,18 +54,9 @@ export function RoomsHomePage() {
   const refreshAvailableRooms = useCallback(async () => {
     try {
       const rooms = await musicRoomApi.listRooms();
-      setAvailableRooms(filterOpenPublicRooms(rooms));
+      setAvailableRooms(rooms.items);
     } catch {
       setAvailableRooms([]);
-    }
-  }, []);
-
-  const refreshRecentRoom = useCallback(async () => {
-    try {
-      const room = await musicRoomApi.getRecentRoom();
-      setRecentRoom(room);
-    } catch {
-      setRecentRoom(null);
     }
   }, []);
 
@@ -78,8 +67,7 @@ export function RoomsHomePage() {
 
     void refreshSession();
     void refreshAvailableRooms();
-    void refreshRecentRoom();
-  }, [activeSession, refreshSession, refreshAvailableRooms, refreshRecentRoom]);
+  }, [activeSession, refreshSession, refreshAvailableRooms]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -88,7 +76,6 @@ export function RoomsHomePage() {
 
     const refresh = () => {
       void refreshAvailableRooms();
-      void refreshRecentRoom();
     };
 
     const intervalId = window.setInterval(refresh, 10000);
@@ -100,7 +87,7 @@ export function RoomsHomePage() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [activeSession, refreshAvailableRooms, refreshRecentRoom]);
+  }, [activeSession, refreshAvailableRooms]);
 
   async function handleCreateRoom(visibility: "public" | "private" = "public") {
     try {
@@ -129,29 +116,6 @@ export function RoomsHomePage() {
     }
   }
 
-  async function handleReturnToRecentRoom() {
-    if (!recentRoom) {
-      return;
-    }
-
-    try {
-      const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
-      if (recovered) {
-        storeRoomSnapshotHandoff(recovered);
-        window.localStorage.setItem(lastRoomStorageKey, recovered.room.id);
-        router.push(buildRoomHref(recovered.room.id) as Route);
-        return;
-      }
-
-      const joined = await musicRoomApi.joinRoomByCode(recentRoom.room.joinCode);
-      storeRoomSnapshotHandoff(joined);
-      window.localStorage.setItem(lastRoomStorageKey, joined.room.id);
-      router.push(buildRoomHref(joined.room.id) as Route);
-    } catch (error) {
-      setStatusMessage(toUserFacingError(error));
-    }
-  }
-
   async function handleLogout() {
     try {
       await musicRoomApi.logout();
@@ -162,11 +126,6 @@ export function RoomsHomePage() {
     clearIdentity();
     router.replace(authEntryHref as Route);
   }
-
-  const visibleRooms = useMemo(
-    () => availableRooms.filter((room) => room.room.id !== recentRoom?.room.id),
-    [availableRooms, recentRoom?.room.id]
-  );
 
   if (!hydrated || !activeSession) {
     return <div className="min-h-screen bg-background" />;
@@ -221,7 +180,7 @@ export function RoomsHomePage() {
             </span>
           </h1>
           <p className="mb-8 max-w-xl text-sm leading-relaxed text-foreground-muted sm:text-base md:text-lg">
-            这里是你的房间列表。创建新房间、输入房间码快速加入，或直接回到最近的协作现场。
+            这里是你的房间列表。创建新房间、输入房间码快速加入，或从开放列表进入已有房间。
           </p>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button data-testid="create-public-room" size="lg" className="w-full sm:w-auto" onClick={() => handleCreateRoom("public")} type="button">
@@ -276,86 +235,8 @@ export function RoomsHomePage() {
         </div>
       </section>
 
-      <section className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-8 sm:px-6 lg:flex-row lg:gap-10 lg:px-8">
-        <div className="flex w-full shrink-0 flex-col gap-4 lg:w-[320px]">
-          <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
-              Recent room
-            </p>
-            <h2 className="text-xl font-bold text-foreground">最近一次协作</h2>
-          </div>
-
-          <div className="glass-panel group relative flex h-full min-h-[220px] flex-col justify-between overflow-hidden rounded-[28px] p-5 sm:p-6 transition-all hover:border-accent/30">
-            <div className="pointer-events-none absolute -left-10 -top-10 z-0 h-32 w-32 rounded-full bg-accent/10 blur-[50px] transition-all group-hover:bg-accent/20" />
-            <div className="relative z-10 flex h-full flex-col">
-            {recentRoom ? (
-              <div className="flex h-full flex-col gap-5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-surface-border bg-gradient-to-br from-surface to-surface-hover text-accent shadow-inner">
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-3">
-                    <span className="font-mono text-lg font-bold text-foreground">
-                      {recentRoom.room.joinCode}
-                    </span>
-                    <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
-                      {getOnlineMemberCount(recentRoom.room.members)} 在线
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-foreground-muted">
-                    如果你刚离开不久，可以直接返回这个房间继续听歌、改队列和协作控制。
-                  </p>
-                </div>
-                <div className="mt-auto pt-2">
-                  <Button
-                    variant="glass"
-                    className="w-full border-accent/20 hover:border-accent hover:bg-accent/10"
-                    onClick={() => startTransition(() => void handleReturnToRecentRoom())}
-                    type="button"
-                  >
-                    回到最近房间
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-surface-border bg-surface text-foreground-muted opacity-60">
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </div>
-                <p className="text-sm text-foreground-muted opacity-80">
-                  还没有历史房间记录。创建一个房间后，这里会成为你的快速返回列表。
-                </p>
-              </div>
-            )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <section className="mx-auto w-full max-w-[1200px] px-4 pb-8 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 flex-col gap-4">
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.24em] text-foreground-muted">
@@ -379,23 +260,27 @@ export function RoomsHomePage() {
           </div>
 
           <div className="glass-panel min-h-[300px] rounded-[28px] p-4 sm:p-6">
-            {visibleRooms.length ? (
+            {availableRooms.length ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {visibleRooms.map((item) => {
-                  const host =
-                    item.room.members.find((member) => member.role === "host")?.nickname ?? "未知";
+                {availableRooms.map((item) => {
+                  const host = item.hostNickname;
 
                   return (
                     <article
-                      key={item.room.id}
+                      key={item.id}
                       className="group flex flex-col gap-4 rounded-3xl border border-surface-border bg-surface/50 backdrop-blur-md p-5 shadow-md transition-all duration-300 hover:-translate-y-1 hover:bg-surface-hover hover:border-accent/30"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 font-mono font-bold text-accent">
-                          {item.room.joinCode}
-                        </span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="rounded-md border border-accent/20 bg-accent/10 px-2 py-0.5 font-mono font-bold text-accent">
+                            {item.joinCode}
+                          </span>
+                          <span className="text-xs text-foreground-muted">
+                            {item.visibility === "public" ? "公开" : "私密"}
+                          </span>
+                        </div>
                         <span className="rounded-full border border-surface-border bg-background/50 px-2 py-1 text-xs font-medium text-foreground-muted">
-                          {getOnlineMemberCount(item.room.members)} 人在线
+                          {item.onlineMemberCount} 人在线
                         </span>
                       </div>
                       <div className="mt-1">
@@ -408,7 +293,7 @@ export function RoomsHomePage() {
                         data-testid="join-public-room"
                         variant="ghost"
                         className="mt-auto w-full border border-surface-border bg-white/5 transition-all group-hover:border-accent group-hover:bg-accent group-hover:text-white"
-                        onClick={() => handleJoinRoom(item.room.joinCode)}
+                        onClick={() => handleJoinRoom(item.joinCode)}
                         type="button"
                       >
                         加入此房间
@@ -435,9 +320,9 @@ export function RoomsHomePage() {
                     <line x1="9" y1="21" x2="9" y2="9" />
                   </svg>
                 </div>
-                <h3 className="mb-2 font-semibold text-foreground">当前没有公开房间</h3>
+                <h3 className="mb-2 font-semibold text-foreground">当前没有房间</h3>
                 <p className="max-w-sm text-sm text-foreground-muted">
-                  你可以先创建一个公开房间等待其他人加入，或者稍后回来刷新列表。
+                  你可以先创建一个房间等待其他人加入，或者稍后回来刷新列表。
                 </p>
               </div>
             )}

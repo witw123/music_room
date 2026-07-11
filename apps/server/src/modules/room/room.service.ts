@@ -7,6 +7,7 @@ import type {
   Room,
   RoomMember,
   RoomSnapshot,
+  RoomListResponse,
   TrackMeta,
   UserProfile
 } from "@music-room/shared";
@@ -23,7 +24,7 @@ import { RoomSnapshotService } from "./services/room-snapshot.service";
 @Injectable()
 export class RoomService {
   private readonly rooms = new Map<string, RoomRecord>();
-  private readonly roomCacheTtlSeconds = 60 * 60 * 12;
+  private readonly roomCacheTtlSeconds = 0;
   private readonly sessionRecentRoomTtlSeconds = 60 * 60 * 24 * 7;
   private readonly presenceTtlSeconds = 60;
   private readonly roomRegistryKey = "music-room:rooms";
@@ -88,6 +89,8 @@ export class RoomService {
       hostId: hostSession.id,
       joinCode: this.buildJoinCode(),
       visibility,
+      lastActiveAt: new Date().toISOString(),
+      archivedAt: null,
       members: [this.buildMember(hostSession, "host")],
       presenceRevision: 0,
       roomRevision: 0,
@@ -166,12 +169,66 @@ export class RoomService {
   async listPublicRooms(): Promise<RoomSnapshot[]> {
     const records = await this.roomRecordRepository.listRecoverableRecords();
     const publicRecords = records.filter((record) => record.room.visibility === "public");
-    const snapshots = await Promise.all(
+    return Promise.all(
       publicRecords.map((record) => this.roomSnapshotService.buildSnapshot(record, []))
     );
-    return snapshots.filter((snapshot) =>
-      snapshot.room.members.some((member) => member.presenceState === "online")
+  }
+
+  async listRoomSummariesForSession(
+    sessionId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<RoomListResponse> {
+    const records = await this.roomRecordRepository.listRecoverableRecords();
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const accessible = records.filter((record) => {
+      const isMember =
+        record.room.hostId === sessionId ||
+        record.room.members.some((member) => member.id === sessionId);
+      if (isMember) return record.room.archivedAt === null;
+      return record.room.visibility === "public" && record.room.archivedAt === null;
+    });
+    const allSnapshots = await Promise.all(
+      accessible.map((record) => this.roomSnapshotService.buildSnapshot(record, []))
     );
+    const snapshots = allSnapshots.filter((snapshot) => {
+      const isMember =
+        snapshot.room.hostId === sessionId ||
+        snapshot.room.members.some((member) => member.id === sessionId);
+      return isMember ||
+        new Date(snapshot.room.lastActiveAt ?? 0).getTime() >= cutoff ||
+        snapshot.room.members.some((member) => member.presenceState === "online");
+    });
+    snapshots.sort((left, right) =>
+      (right.room.lastActiveAt ?? "").localeCompare(left.room.lastActiveAt ?? "") ||
+      right.room.id.localeCompare(left.room.id)
+    );
+
+    const cursor = decodeRoomCursor(options?.cursor);
+    const afterCursor = cursor
+      ? snapshots.filter((snapshot) =>
+          (snapshot.room.lastActiveAt ?? "") < cursor.lastActiveAt ||
+          ((snapshot.room.lastActiveAt ?? "") === cursor.lastActiveAt && snapshot.room.id < cursor.id)
+        )
+      : snapshots;
+    const limit = Math.min(100, Math.max(1, options?.limit ?? 30));
+    const page = afterCursor.slice(0, limit);
+    const hasMore = afterCursor.length > page.length;
+
+    return {
+      items: page.map((snapshot) => ({
+        id: snapshot.room.id,
+        joinCode: snapshot.room.joinCode,
+        visibility: snapshot.room.visibility,
+        hostNickname:
+          snapshot.room.members.find((member) => member.role === "host")?.nickname ?? "Unknown",
+        memberCount: snapshot.room.members.length,
+        onlineMemberCount: snapshot.room.members.filter((member) => member.presenceState === "online").length,
+        lastActiveAt: snapshot.room.lastActiveAt ?? new Date(0).toISOString()
+      })),
+      nextCursor: hasMore && page.length
+        ? encodeRoomCursor(page[page.length - 1].room.lastActiveAt ?? new Date(0).toISOString(), page[page.length - 1].room.id)
+        : null
+    };
   }
 
   async getRecentRoomSnapshotForSession(sessionId: string): Promise<RoomSnapshot | null> {
@@ -204,6 +261,11 @@ export class RoomService {
       return null;
     }
 
+    if (record.room.archivedAt) {
+      this.incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+    }
+
     await this.roomRecordRepository.setRecentRoomForSession(sessionId, roomId);
     return this.roomSnapshotService.buildSnapshot(record, []);
   }
@@ -216,6 +278,9 @@ export class RoomService {
     if (!record.room.members.some((member) => member.id === session.id)) {
       record.room.members.push(this.buildMember(session, "member"));
       this.incrementPresenceRevision(record.room);
+      this.incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+    } else if (record.room.archivedAt) {
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
     }
@@ -443,6 +508,23 @@ export class RoomService {
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return { ok: true };
+  }
+
+  async deleteArchivedRoom(roomId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    if (!record.room.archivedAt) {
+      throw new Error("Room is not archived.");
+    }
+    if (this.prisma.isAvailable()) {
+      await this.prisma.$transaction([
+        this.prisma.playlist.deleteMany({ where: { roomId } }),
+        this.prisma.roomState.deleteMany({ where: { id: roomId, archivedAt: { not: null } } })
+      ]);
+      await this.roomRecordRepository.finalizeDatabaseDelete(record);
+    } else {
+      await this.roomRecordRepository.deleteRecord(record);
+    }
+    return record.tracks.map((track) => track.id);
   }
 
   async addQueueItem(roomId: string, sessionId: string, trackId: string) {
@@ -745,5 +827,26 @@ export class RoomService {
 
   private incrementRoomRevision(room: Room) {
     room.roomRevision = (room.roomRevision ?? 0) + 1;
+    room.lastActiveAt = new Date().toISOString();
+    room.archivedAt = null;
+  }
+}
+
+function encodeRoomCursor(lastActiveAt: string, id: string) {
+  return Buffer.from(JSON.stringify({ lastActiveAt, id }), "utf8").toString("base64url");
+}
+
+function decodeRoomCursor(cursor?: string) {
+  if (!cursor) return null;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      lastActiveAt?: unknown;
+      id?: unknown;
+    };
+    return typeof value.lastActiveAt === "string" && typeof value.id === "string"
+      ? { lastActiveAt: value.lastActiveAt, id: value.id }
+      : null;
+  } catch {
+    return null;
   }
 }

@@ -88,7 +88,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    await expect(controller.getRecentRoom("token")).resolves.toEqual(snapshot);
+    await expect(controller.getRecentRoom("__Host-music-room-session=token")).resolves.toEqual(snapshot);
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.getRecentRoomSnapshotForSession).toHaveBeenCalledWith("guest_host");
   });
@@ -108,7 +108,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    await expect(controller.recoverRoom("room_1", "token")).resolves.toEqual(snapshot);
+    await expect(controller.recoverRoom("room_1", "__Host-music-room-session=token")).resolves.toEqual(snapshot);
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
     expect(roomService.getRecoverableRoomSnapshot).toHaveBeenCalledWith("room_1", "guest_host");
   });
@@ -128,7 +128,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    const result = await controller.leaveRoom("room_1", "token");
+    const result = await controller.leaveRoom("room_1", "__Host-music-room-session=token");
 
     expect(result).toEqual(emptyRoom);
     expect(authService.getAuthSessionByTokenOrThrow).toHaveBeenCalledWith("token");
@@ -154,7 +154,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    const result = await controller.joinRoomByCode("token", {
+    const result = await controller.joinRoomByCode("__Host-music-room-session=token", {
       joinCode: "abc123"
     });
 
@@ -177,7 +177,7 @@ describe("RoomController", () => {
     );
 
     await expect(
-      controller.createRoom("token", { visibility: "friends" as never })
+      controller.createRoom("__Host-music-room-session=token", { visibility: "friends" as never })
     ).rejects.toMatchObject({
       response: expect.objectContaining({
         code: "VALIDATION_FAILED"
@@ -217,7 +217,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    const result = await controller.leaveRoom("room_1", "token");
+    const result = await controller.leaveRoom("room_1", "__Host-music-room-session=token");
 
     expect(result).toEqual(snapshot.room);
     expect(roomRealtimePublisher.emitTopologySnapshot).toHaveBeenCalledWith("room_1");
@@ -240,7 +240,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    await expect(controller.deleteRoom("room_1", "token")).resolves.toEqual({
+    await expect(controller.deleteRoom("room_1", "__Host-music-room-session=token")).resolves.toEqual({
       ok: true
     });
 
@@ -269,7 +269,7 @@ describe("RoomController", () => {
       playlistService as never
     );
 
-    await expect(controller.deleteRoom("room_1", "token")).rejects.toThrow(
+    await expect(controller.deleteRoom("room_1", "__Host-music-room-session=token")).rejects.toThrow(
       "Only the host can delete this room."
     );
 

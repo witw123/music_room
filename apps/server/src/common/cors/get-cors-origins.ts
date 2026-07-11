@@ -1,4 +1,8 @@
-const defaultCorsOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
+const defaultCorsOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:37421"
+];
 
 function normalizeOriginVariant(origin: string) {
   try {
@@ -43,5 +47,5 @@ export function getCorsOrigins() {
     .filter(Boolean);
 
   const sourceOrigins = configuredOrigins?.length ? configuredOrigins : defaultCorsOrigins;
-  return [...new Set(sourceOrigins.flatMap(expandOriginVariants))];
+  return [...new Set([...sourceOrigins, "http://127.0.0.1:37421"].flatMap(expandOriginVariants))];
 }

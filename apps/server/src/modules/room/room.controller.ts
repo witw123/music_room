@@ -6,6 +6,7 @@ import {
   Headers,
   Param,
   Post,
+  Query,
   UnauthorizedException
 } from "@nestjs/common";
 import {
@@ -18,6 +19,7 @@ import { AuthService } from "../auth/auth.service";
 import { PlaylistService } from "../playlist/playlist.service";
 import { RoomService } from "./room.service";
 import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
+import { getSessionTokenFromCookie } from "../../common/auth/session-cookie";
 
 @Controller("v1/rooms")
 export class RoomController {
@@ -28,9 +30,11 @@ export class RoomController {
     private readonly playlistService: PlaylistService
   ) {}
 
-  private async getCurrentUserId(sessionToken?: string) {
+  private async getCurrentUserId(cookieHeader?: string) {
     try {
-      const session = await this.authService.getAuthSessionByTokenOrThrow(sessionToken);
+      const session = await this.authService.getAuthSessionByTokenOrThrow(
+        getSessionTokenFromCookie(cookieHeader)
+      );
       return session.userId;
     } catch (error) {
       throw new UnauthorizedException(error instanceof Error ? error.message : "Unauthorized.");
@@ -39,7 +43,7 @@ export class RoomController {
 
   @Post()
   async createRoom(
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body() body: { visibility?: "private" | "public" }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
@@ -50,23 +54,21 @@ export class RoomController {
   }
 
   @Get()
-  async listRooms(@Headers("x-session-token") sessionToken: string | undefined) {
+  async listRooms(
+    @Headers("cookie") sessionToken: string | undefined,
+    @Query("cursor") cursor?: string,
+    @Query("limit") rawLimit?: string
+  ) {
     const userId = await this.getCurrentUserId(sessionToken);
-    const [accessibleRooms, publicRooms] = await Promise.all([
-      this.roomService.listRoomsForSession(userId),
-      this.roomService.listPublicRooms()
-    ]);
-
-    const deduped = new Map<string, (typeof accessibleRooms)[number]>();
-    for (const room of [...accessibleRooms, ...publicRooms]) {
-      deduped.set(room.room.id, room);
-    }
-
-    return [...deduped.values()];
+    const parsedLimit = rawLimit ? Number.parseInt(rawLimit, 10) : undefined;
+    return this.roomService.listRoomSummariesForSession(userId, {
+      cursor,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined
+    });
   }
 
   @Get("recent/active")
-  async getRecentRoom(@Headers("x-session-token") sessionToken: string | undefined) {
+  async getRecentRoom(@Headers("cookie") sessionToken: string | undefined) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getRecentRoomSnapshotForSession(userId);
   }
@@ -74,7 +76,7 @@ export class RoomController {
   @Get(":roomId/recover")
   async recoverRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getRecoverableRoomSnapshot(roomId, userId);
@@ -83,7 +85,7 @@ export class RoomController {
   @Get(":roomId")
   async getRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     return this.roomService.getAccessibleRoomSnapshot(roomId, [], userId);
@@ -91,7 +93,7 @@ export class RoomController {
 
   @Post("join-by-code")
   async joinRoomByCode(
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body() body: { joinCode: string }
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
@@ -101,20 +103,10 @@ export class RoomController {
     return this.roomRealtimePublisher.emitTopologySnapshot(room.id);
   }
 
-  @Post(":roomId/join")
-  async joinRoom(
-    @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
-  ) {
-    const userId = await this.getCurrentUserId(sessionToken);
-    await this.roomService.joinRoom(roomId, userId);
-    return this.roomRealtimePublisher.emitTopologySnapshot(roomId);
-  }
-
   @Post(":roomId/leave")
   async leaveRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const room = await this.roomService.leaveRoom(roomId, userId);
@@ -125,7 +117,7 @@ export class RoomController {
   @Delete(":roomId")
   async deleteRoom(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     await this.roomService.assertCanDeleteRoom(roomId, userId);
@@ -144,7 +136,7 @@ export class RoomController {
   @Post(":roomId/tracks")
   async registerTrack(
     @Param("roomId") roomId: string,
-    @Headers("x-session-token") sessionToken: string | undefined,
+    @Headers("cookie") sessionToken: string | undefined,
     @Body()
     body: {
       id?: string;
@@ -188,7 +180,7 @@ export class RoomController {
   async deleteTrack(
     @Param("roomId") roomId: string,
     @Param("trackId") trackId: string,
-    @Headers("x-session-token") sessionToken: string | undefined
+    @Headers("cookie") sessionToken: string | undefined
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const result = await this.roomService.removeTrack(roomId, userId, trackId);

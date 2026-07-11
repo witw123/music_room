@@ -7,7 +7,6 @@ const baseSession: AuthSession = {
   userId: "user_1",
   username: "listener",
   nickname: "Listener",
-  token: "token_1",
   createdAt: "2026-05-16T00:00:00.000Z"
 };
 
@@ -20,7 +19,7 @@ describe("session identity helpers", () => {
     expect(
       isStoredAuthSession({
         ...baseSession,
-        token: ""
+        username: ""
       })
     ).toBe(false);
   });
