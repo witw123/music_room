@@ -90,20 +90,23 @@ async function main() {
   }
 
   const restoreConfig = await prepareRemoteShellConfig(publicOrigin);
+  const tauriArgs = [...args];
+  if (process.platform === "linux" && isBuildCommand && !tauriArgs.includes("--bundles")) {
+    tauriArgs.push("--bundles", "deb,rpm");
+  }
   const childEnv = {
     ...process.env,
-    CARGO_TARGET_DIR: targetDir,
-    ...(process.platform === "linux" ? { APPIMAGE_EXTRACT_AND_RUN: "1" } : {})
+    CARGO_TARGET_DIR: targetDir
   };
   const child =
     process.platform === "win32"
-      ? spawn(`"${tauriBin}" ${args.join(" ")}`.trim(), {
+      ? spawn(`"${tauriBin}" ${tauriArgs.join(" ")}`.trim(), {
           cwd: rootDir,
           stdio: "inherit",
           shell: true,
           env: childEnv
         })
-      : spawn(tauriBin, args, {
+      : spawn(tauriBin, tauriArgs, {
           cwd: rootDir,
           stdio: "inherit",
           shell: false,
