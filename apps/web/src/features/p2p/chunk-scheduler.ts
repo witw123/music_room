@@ -7,7 +7,7 @@ import {
   getTargetSteadyBufferMs,
   type ProgressiveSchedulerPolicy
 } from "@/features/playback/progressive-playback";
-import { resolvePeerLinkProfile } from "./peer-link-profile";
+import { resolvePeerLinkProfile, resolvePeerTransferWindow } from "./peer-link-profile";
 import { resolveCurrentTrackWantedPolicy } from "./chunk-scheduler-policy";
 
 export type ChunkSchedulerPriority = "current" | "upcoming" | "background";
@@ -804,20 +804,7 @@ export class ChunkScheduler {
       return 2 * 1024 * 1024;
     }
 
-    const profile = resolvePeerLinkProfile(window);
-    if (profile === "severe") {
-      return 512 * 1024;
-    }
-    if (profile === "constrained") {
-      return 1024 * 1024;
-    }
-    if (profile === "relay-udp") {
-      return 2 * 1024 * 1024;
-    }
-    if (profile === "fast-direct") {
-      return 8 * 1024 * 1024;
-    }
-    return 4 * 1024 * 1024;
+    return resolvePeerTransferWindow(window, this.getTrackChunkSize(trackId)).targetInFlightBytes;
   }
 
   private resolvePieceTimeoutMs(
@@ -827,9 +814,13 @@ export class ChunkScheduler {
     fallbackTimeoutMs?: number
   ) {
     const window = this.resolvePeerRequestWindow(peerId, trackId, priority);
-    const rttMs = Math.max(0, Math.round(window?.currentRoundTripTimeMs ?? 0));
-    const adaptiveFloor = Math.max(fallbackTimeoutMs ?? 0, 3_000, rttMs * 6);
-    return Math.min(10_000, Math.max(3_000, adaptiveFloor));
+    if (!window) {
+      return Math.max(3_000, fallbackTimeoutMs ?? 0);
+    }
+    return Math.max(
+      fallbackTimeoutMs ?? 0,
+      resolvePeerTransferWindow(window, this.getTrackChunkSize(trackId)).requestTimeoutMs
+    );
   }
 
   private buildBatchChunkIndexes(input: {

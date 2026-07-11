@@ -77,6 +77,7 @@ export function RoomAppShell({
         uploadedTracks={uploads.uploadedTracks}
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
+        activePlaybackSource={pageState.activePlaybackSource}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
         cachedTrackCount={uploads.cachedTrackCount}
         cacheLibraryTracks={uploads.cacheLibraryTracks}
@@ -114,7 +115,12 @@ export function RoomAppShell({
         onTabChange={pageState.setActiveDashboardTab}
         onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
         socket={socket}
-        isSyncPending={false}
+        isSyncPending={
+          pageState.isRecoveringRoom ||
+          pageState.roomRecoveryState.pendingSnapshot ||
+          pageState.roomRecoveryState.pendingData ||
+          pageState.roomRecoveryState.pendingMedia
+        }
         playerSlot={
           <BottomPlayerController
             audioRef={audioRef}

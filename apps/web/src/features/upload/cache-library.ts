@@ -256,7 +256,7 @@ export async function importCachedLibraryTrackToRoom(input: {
     file: File;
     peerId: string;
     nickname: string;
-    source: "live_upload";
+    source: "live_upload" | "local_cache";
     mimeType: string | null;
     codec: string | null;
     sizeBytes: number;
@@ -306,7 +306,7 @@ export async function importCachedLibraryTrackToRoom(input: {
         file: cachedTrack.file,
         peerId: input.peerId,
         nickname: input.activeSession.nickname,
-        source: "live_upload",
+        source: "local_cache",
         mimeType: registeredTrack.mimeType ?? null,
         codec: registeredTrack.codec ?? null,
         sizeBytes: registeredTrack.sizeBytes ?? cachedTrack.file.size,
@@ -322,7 +322,7 @@ export async function importCachedLibraryTrackToRoom(input: {
     upload: {
       file: cachedTrack.file,
       objectUrl: uploadObjectUrl,
-      origin: "live-upload"
+      origin: "cached-library-import"
     }
   };
 }

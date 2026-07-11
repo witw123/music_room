@@ -415,7 +415,9 @@ describe("cache-library adapters", () => {
       syncRoomSnapshot: async (roomId) => {
         syncedRooms.push(roomId);
       },
-      buildTrackAvailabilityFromFile: async (input) => ({
+      buildTrackAvailabilityFromFile: async (input) => {
+        expect(input.source).toBe("local_cache");
+        return {
         totalChunks: 2,
         chunkSize: 1024,
         roomId: input.roomId,
@@ -423,9 +425,10 @@ describe("cache-library adapters", () => {
         ownerPeerId: input.peerId,
         nickname: input.nickname,
         availableChunks: [0, 1],
-        source: "live_upload",
+        source: input.source,
         announcedAt: "2026-07-04T00:00:00.000Z"
-      }),
+        };
+      },
       publishAvailability: (availability) => {
         publishedAvailability.push(`${availability.roomId}:${availability.trackId}`);
       }
@@ -436,7 +439,7 @@ describe("cache-library adapters", () => {
       upload: {
         file,
         objectUrl: "blob:2",
-        origin: "live-upload"
+        origin: "cached-library-import"
       }
     });
     expect(objectUrls).toEqual(["cached.flac", "cached.flac"]);

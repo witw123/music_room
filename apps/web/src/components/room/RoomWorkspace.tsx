@@ -16,6 +16,7 @@ import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/
 import type { AvailabilityEntry } from "@/components/room/MeshStatusPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
+import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -30,6 +31,7 @@ type RoomWorkspaceProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
+  activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
   cacheLibraryTracks: CachedLibraryTrack[];
@@ -84,6 +86,7 @@ function RoomWorkspaceBase({
   uploadedTracks,
   connectedPeersCount,
   mediaConnectionState,
+  activePlaybackSource,
   mediaConnectedPeersCount,
   cachedTrackCount,
   cacheLibraryTracks,
@@ -128,7 +131,7 @@ function RoomWorkspaceBase({
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = currentTrack?.durationMs ?? 0;
   const currentSourceOwnerNickname =
-    roomSnapshot?.tracks.find((track) => track.id === playback?.sourceTrackId)?.ownerNickname ?? null;
+    resolveCurrentSourceNickname(roomSnapshot?.room.members ?? [], playback?.sourceSessionId ?? null);
 
   return (
     <main className="relative flex min-h-screen flex-col bg-background pb-32">
@@ -172,6 +175,7 @@ function RoomWorkspaceBase({
               uploadedTracks={uploadedTracks}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
+              activePlaybackSource={activePlaybackSource}
               mediaConnectedPeersCount={mediaConnectedPeersCount}
               cachedTrackCount={cachedTrackCount}
               cacheLibraryTracks={cacheLibraryTracks}
@@ -231,3 +235,10 @@ function RoomWorkspaceBase({
 }
 
 export const RoomWorkspace = memo(RoomWorkspaceBase);
+
+export function resolveCurrentSourceNickname(
+  members: Array<Pick<RoomSnapshot["room"]["members"][number], "id" | "nickname">>,
+  sourceSessionId: string | null
+) {
+  return members.find((member) => member.id === sourceSessionId)?.nickname ?? null;
+}

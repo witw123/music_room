@@ -307,7 +307,7 @@ describe("RoomService", () => {
     expect(recentRoom).toBeNull();
   });
 
-  it("removes a leaving member's library tracks from the room queue and playback", async () => {
+  it("keeps a leaving member's tracks so cached members can continue providing them", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -356,10 +356,13 @@ describe("RoomService", () => {
 
     expect(roomAfterLeave.members.some((roomMember) => roomMember.id === member.id)).toBe(false);
     const snapshotAfterLeave = await roomService.getRoomSnapshot(snapshot.room.id, []);
-    expect(snapshotAfterLeave.tracks.map((track) => track.id)).toEqual([hostTrack.id]);
-    expect(snapshotAfterLeave.queue.map((queueItem) => queueItem.trackId)).toEqual([hostTrack.id]);
+    expect(snapshotAfterLeave.tracks.map((track) => track.id)).toEqual([memberTrack.id, hostTrack.id]);
+    expect(snapshotAfterLeave.queue.map((queueItem) => queueItem.trackId)).toEqual([
+      hostTrack.id,
+      memberTrack.id
+    ]);
     expect(snapshotAfterLeave.queue[0]?.position).toBe(0);
-    expect(snapshotAfterLeave.room.playback.currentTrackId).toBeNull();
+    expect(snapshotAfterLeave.room.playback.currentTrackId).toBe(memberTrack.id);
   });
 
   it("keeps the room recoverable when the last active member leaves and only the offline host remains", async () => {
@@ -1809,7 +1812,7 @@ describe("RoomService", () => {
       status: "playing",
       currentTrackId: track.id,
       sourceSessionId: host.id,
-      sourcePeerId: "peer-host"
+      sourcePeerId: null
     });
   });
 

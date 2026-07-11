@@ -4,6 +4,7 @@ import type { ProgressiveTrackManifest } from "./progressive-playback";
 type EngineStatus = "idle" | "opening" | "ready" | "failed" | "destroyed";
 const maxCachedPiecesToQueuePerSync = 16;
 const maxQueuedCachedPieces = 32;
+const retainedPlaybackHistorySeconds = 30;
 
 export class ProgressiveMseEngine {
   private mediaSource: MediaSource | null = null;
@@ -13,6 +14,9 @@ export class ProgressiveMseEngine {
   private appendQueue: Array<{ chunkIndex: number; payload: ArrayBuffer }> = [];
   private queuedChunkIndexes = new Set<number>();
   private appendedChunkCount = 0;
+  private activeAppend: { chunkIndex: number; payload: ArrayBuffer } | null = null;
+  private removingOldBuffer = false;
+  private quotaRetryChunkIndex: number | null = null;
   private syncing = false;
   private syncRequested = false;
   private readonly handleSourceOpen = () => {
@@ -35,6 +39,17 @@ export class ProgressiveMseEngine {
     }
   };
   private readonly handleUpdateEnd = () => {
+    if (this.removingOldBuffer) {
+      this.removingOldBuffer = false;
+    } else if (this.activeAppend) {
+      this.appendedChunkCount = Math.max(
+        this.appendedChunkCount,
+        this.activeAppend.chunkIndex + 1
+      );
+      this.queuedChunkIndexes.delete(this.activeAppend.chunkIndex);
+      this.quotaRetryChunkIndex = null;
+      this.activeAppend = null;
+    }
     this.pumpAppendQueue();
   };
   private readonly handleSourceBufferError = () => {
@@ -63,22 +78,9 @@ export class ProgressiveMseEngine {
       this.audio.buffered,
       normalizedPositionSeconds
     );
-    const estimatedBufferedEndSeconds =
-      this.manifest.totalChunks > 0 && this.manifest.durationMs > 0
-        ? Math.min(
-            this.manifest.durationMs / 1000,
-            (this.appendedChunkCount / this.manifest.totalChunks) *
-              (this.manifest.durationMs / 1000)
-          )
-        : 0;
-    const bufferedEndSeconds = Math.max(
-      mediaBufferedEndSeconds,
-      estimatedBufferedEndSeconds
-    );
-
     return Math.max(
       0,
-      Math.floor((bufferedEndSeconds - normalizedPositionSeconds) * 1000)
+      Math.floor((mediaBufferedEndSeconds - normalizedPositionSeconds) * 1000)
     );
   }
 
@@ -193,6 +195,9 @@ export class ProgressiveMseEngine {
     this.status = "destroyed";
     this.appendQueue = [];
     this.queuedChunkIndexes.clear();
+    this.activeAppend = null;
+    this.removingOldBuffer = false;
+    this.quotaRetryChunkIndex = null;
 
     if (this.sourceBuffer) {
       this.sourceBuffer.removeEventListener("updateend", this.handleUpdateEnd);
@@ -223,6 +228,10 @@ export class ProgressiveMseEngine {
       return;
     }
 
+    if (this.removeExpiredBuffer()) {
+      return;
+    }
+
     const nextPiece = this.appendQueue.shift();
     if (!nextPiece) {
       if (
@@ -239,11 +248,57 @@ export class ProgressiveMseEngine {
     }
 
     try {
+      this.activeAppend = nextPiece;
       this.sourceBuffer.appendBuffer(nextPiece.payload.slice(0));
-      this.appendedChunkCount = Math.max(this.appendedChunkCount, nextPiece.chunkIndex + 1);
-      this.queuedChunkIndexes.delete(nextPiece.chunkIndex);
-    } catch {
+    } catch (error) {
+      this.activeAppend = null;
+      this.appendQueue.unshift(nextPiece);
+      if (
+        isQuotaExceededError(error) &&
+        this.quotaRetryChunkIndex !== nextPiece.chunkIndex
+      ) {
+        this.quotaRetryChunkIndex = nextPiece.chunkIndex;
+        if (this.removeExpiredBuffer(true)) {
+          return;
+        }
+      }
       this.status = "failed";
+    }
+  }
+
+  private removeExpiredBuffer(force = false) {
+    const sourceBuffer = this.sourceBuffer;
+    if (!sourceBuffer || sourceBuffer.updating || this.removingOldBuffer) {
+      return false;
+    }
+
+    const removeBeforeSeconds = Math.max(
+      0,
+      (Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0) -
+        retainedPlaybackHistorySeconds
+    );
+    const buffered = sourceBuffer.buffered;
+    if (removeBeforeSeconds <= 0 || !buffered || buffered.length === 0) {
+      return false;
+    }
+
+    const bufferedStart = buffered.start(0);
+    if (!force && bufferedStart >= removeBeforeSeconds - 1) {
+      return false;
+    }
+
+    const removeEnd = Math.min(removeBeforeSeconds, buffered.end(0));
+    if (!Number.isFinite(removeEnd) || removeEnd <= bufferedStart) {
+      return false;
+    }
+
+    try {
+      this.removingOldBuffer = true;
+      sourceBuffer.remove(bufferedStart, removeEnd);
+      return true;
+    } catch {
+      this.removingOldBuffer = false;
+      return false;
     }
   }
 }
@@ -276,4 +331,10 @@ function getBufferedCoverageEndSeconds(
 
 function isDestroyedEngineStatus(status: EngineStatus) {
   return status === "destroyed";
+}
+
+function isQuotaExceededError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "QuotaExceededError"
+    : error instanceof Error && error.name === "QuotaExceededError";
 }

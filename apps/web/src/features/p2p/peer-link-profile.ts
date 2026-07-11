@@ -22,6 +22,12 @@ export type PeerSendBudget = {
   maxPayloadBytes: number;
 };
 
+export type PeerTransferWindow = {
+  targetInFlightBytes: number;
+  maxPendingChunks: number;
+  requestTimeoutMs: number;
+};
+
 export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkProfile {
   const bufferedAmountBytes = finitePositive(input.bufferedAmountBytes) ?? 0;
   const roundTripTimeMs = finitePositive(input.currentRoundTripTimeMs);
@@ -72,34 +78,77 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
 
 export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudget {
   const profile = resolvePeerLinkProfile(input);
+  const adaptiveWindow = resolvePeerTransferWindow(input, 256 * 1024);
+  const adaptiveBulkWatermark = clamp(
+    adaptiveWindow.targetInFlightBytes,
+    1024 * 1024,
+    32 * 1024 * 1024
+  );
   if (profile === "fast-direct") {
     return {
-      highWatermarkBytes: 16 * 1024 * 1024,
-      bulkHighWatermarkBytes: 8 * 1024 * 1024,
+      highWatermarkBytes: Math.max(16 * 1024 * 1024, adaptiveBulkWatermark * 2),
+      bulkHighWatermarkBytes: Math.max(8 * 1024 * 1024, adaptiveBulkWatermark),
       maxPayloadBytes: 240 * 1024
     };
   }
 
   if (profile === "relay-udp") {
     return {
-      highWatermarkBytes: 4 * 1024 * 1024,
-      bulkHighWatermarkBytes: 1024 * 1024,
+      highWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark * 2),
+      bulkHighWatermarkBytes: adaptiveBulkWatermark,
       maxPayloadBytes: 128 * 1024
     };
   }
 
   if (profile === "standard-direct") {
     return {
-      highWatermarkBytes: 8 * 1024 * 1024,
-      bulkHighWatermarkBytes: 4 * 1024 * 1024,
+      highWatermarkBytes: Math.max(8 * 1024 * 1024, adaptiveBulkWatermark * 2),
+      bulkHighWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark),
       maxPayloadBytes: 192 * 1024
     };
   }
 
   return {
-    highWatermarkBytes: 4 * 1024 * 1024,
-    bulkHighWatermarkBytes: 1024 * 1024,
+    highWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark * 2),
+    bulkHighWatermarkBytes: adaptiveBulkWatermark,
     maxPayloadBytes: 128 * 1024
+  };
+}
+
+export function resolvePeerTransferWindow(
+  input: PeerLinkProfileInput,
+  chunkSize: number
+): PeerTransferWindow {
+  const normalizedChunkSize = clamp(Math.round(chunkSize || 0), 16 * 1024, 4 * 1024 * 1024);
+  const rttMs = finitePositive(input.currentRoundTripTimeMs) ?? 180;
+  const transferRateKbps =
+    finitePositive(input.downloadRateKbps) ?? finitePositive(input.uploadRateKbps);
+  const bytesPerSecond = transferRateKbps === null ? null : transferRateKbps * 1000 / 8;
+  const bandwidthDelayProduct = bytesPerSecond === null
+    ? 2 * 1024 * 1024
+    : bytesPerSecond * rttMs / 1000;
+  const targetInFlightBytes = clamp(
+    Math.ceil(Math.max(4 * normalizedChunkSize, bandwidthDelayProduct * 2.5)),
+    1024 * 1024,
+    64 * 1024 * 1024
+  );
+  const transferTimeMs = bytesPerSecond === null
+    ? rttMs * 2
+    : normalizedChunkSize / Math.max(1, bytesPerSecond) * 1000;
+  const profile = resolvePeerLinkProfile(input);
+  const minimumTimeoutMs = profile === "relay-udp" || profile === "constrained" ? 3_000 : 1_500;
+  return {
+    targetInFlightBytes,
+    maxPendingChunks: clamp(
+      Math.ceil(targetInFlightBytes / normalizedChunkSize),
+      4,
+      256
+    ),
+    requestTimeoutMs: clamp(
+      Math.ceil(rttMs * 4 + transferTimeMs * 2),
+      minimumTimeoutMs,
+      45_000
+    )
   };
 }
 
@@ -119,4 +168,8 @@ function normalizeCandidateType(value: string | null | undefined) {
 
 function normalizeProtocol(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? null;
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
 }

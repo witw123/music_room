@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import type {
   AuthSession,
@@ -18,6 +18,7 @@ import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
+import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
 type TabId = "queue" | "library" | "cache" | "members";
 
@@ -36,6 +37,7 @@ type RoomDashboardViewProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
+  activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
   cacheLibraryTracks: CachedLibraryTrack[];
@@ -122,6 +124,7 @@ function RoomDashboardViewBase({
   uploadedTracks,
   connectedPeersCount,
   mediaConnectionState,
+  activePlaybackSource,
   mediaConnectedPeersCount,
   cachedTrackCount,
   cacheLibraryTracks,
@@ -164,6 +167,15 @@ function RoomDashboardViewBase({
     },
     [onDiagnosticsVisibilityChange, onTabChange]
   );
+  const handleTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, tab: TabId) => {
+    const tabs: TabId[] = ["queue", "library", "cache", "members"];
+    const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!direction) return;
+    event.preventDefault();
+    const nextTab = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length];
+    handleTabChange(nextTab);
+    document.getElementById(`room-tab-${nextTab}`)?.focus();
+  }, [handleTabChange]);
 
   return (
     <div className="relative flex min-h-[calc(100dvh-112px)] w-full flex-col overflow-visible lg:h-[calc(100dvh-80px)] lg:min-h-0 lg:flex-row lg:gap-0 lg:overflow-hidden">
@@ -189,6 +201,7 @@ function RoomDashboardViewBase({
             canDisbandRoom={canDisbandRoom}
             currentSourceOwnerNickname={currentSourceOwnerNickname}
             mediaConnectionState={mediaConnectionState}
+            activePlaybackSource={activePlaybackSource}
             mediaConnectedPeersCount={mediaConnectedPeersCount}
             iceConfigSource={iceConfigSource}
             onCopyJoinCode={onCopyJoinCode}
@@ -248,12 +261,18 @@ function RoomDashboardViewBase({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 rounded-xl bg-white/5 p-1">
+          <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-white/5 p-1" role="tablist">
             {(["queue", "library", "cache", "members"] as TabId[]).map((tab) => (
               <button
                 key={tab}
+                id={`room-tab-${tab}`}
                 data-testid={`room-tab-${tab}`}
+                aria-controls={`room-panel-${tab}`}
+                aria-selected={activeTab === tab}
                 onClick={() => handleTabChange(tab)}
+                onKeyDown={(event) => handleTabKeyDown(event, tab)}
+                role="tab"
+                tabIndex={activeTab === tab ? 0 : -1}
                 className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${
                   activeTab === tab
                     ? "bg-white/10 text-white shadow-sm"
@@ -267,7 +286,12 @@ function RoomDashboardViewBase({
           </div>
         </div>
 
-        <div className="hide-scrollbar flex-1 overflow-y-auto px-4 pb-44 pt-5 sm:px-6 lg:pb-32">
+        <div
+          aria-labelledby={`room-tab-${activeTab}`}
+          className="hide-scrollbar flex-1 overflow-y-auto px-4 pb-44 pt-5 sm:px-6 lg:pb-32"
+          id={`room-panel-${activeTab}`}
+          role="tabpanel"
+        >
           {activeTab === "queue" ? (
             <div className="animate-fade-in flex w-full flex-col gap-8">
               <QueuePanel

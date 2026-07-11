@@ -14,6 +14,14 @@ export function formatDuration(durationMs: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+export function formatTransferRateMBps(valueKbps: number | null | undefined) {
+  if (typeof valueKbps !== "number" || !Number.isFinite(valueKbps)) {
+    return "未知";
+  }
+
+  return `${(Math.max(0, valueKbps) / 8_000).toFixed(2)} MB/s`;
+}
+
 export function normalizePlaylistTitle(input: string, fallback = "Tonight Selects") {
   const trimmed = input.trim();
   return trimmed || fallback;

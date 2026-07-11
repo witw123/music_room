@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
+import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import {
   buildDiagnosticsViewModel,
   type DiagnosticsPlaybackInput
@@ -329,7 +330,7 @@ function formatRateM(value: number | null, sampleAgeMs: number | null = null) {
     return "未知";
   }
   const staleSuffix = sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
-  return `${(value / 1_000).toFixed(1)} M${staleSuffix}`;
+  return `${formatTransferRateMBps(value)}${staleSuffix}`;
 }
 
 function formatSampleAge(sampleAgeMs: number | null) {

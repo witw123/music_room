@@ -89,6 +89,12 @@ export type ManualCacheTaskRecord = {
   updatedAt: string;
 };
 
+export type CachedLibraryDeleteLeaseRecord = {
+  fileHash: string;
+  leaseTrackId: string;
+  requestedAt: string;
+};
+
 export const localCacheOwnerKey = "__local__";
 const transientCacheRetentionMs = 30 * 24 * 60 * 60 * 1000;
 
@@ -99,6 +105,7 @@ export class MusicRoomDatabase extends Dexie {
   cachedTrackLibrary!: Table<CachedLibraryTrackRecord, string>;
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
   manualCacheTasks!: Table<ManualCacheTaskRecord, string>;
+  cachedLibraryDeleteLeases!: Table<CachedLibraryDeleteLeaseRecord, string>;
 
   constructor() {
     super("music-room");
@@ -163,6 +170,16 @@ export class MusicRoomDatabase extends Dexie {
           await metadata.bulkPut(summaries);
         }
       });
+    this.version(8).stores({
+      trackAssets: "&trackId, fileHash, cachedAt",
+      trackPieces:
+        "&pieceId, trackId, fileHash, peerId, ownerKey, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], [trackId+ownerKey], [trackId+ownerKey+chunkIndex], [fileHash+ownerKey], [fileHash+ownerKey+chunkIndex], createdAt",
+      trackPieceManifests: "&trackId, fileHash, updatedAt",
+      cachedTrackLibrary: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+      cachedTrackLibraryMetadata: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+      manualCacheTasks: "&taskKey, roomId, trackId, fileHash, status, updatedAt, [roomId+trackId]",
+      cachedLibraryDeleteLeases: "&fileHash, leaseTrackId, requestedAt"
+    });
   }
 }
 
@@ -542,6 +559,21 @@ export function selectCachedPiecesForTrackDeletion<
 
     return piece.trackId === input.trackId;
   });
+}
+
+export async function upsertCachedLibraryDeleteLease(input: Omit<CachedLibraryDeleteLeaseRecord, "requestedAt">) {
+  await musicRoomDatabase.cachedLibraryDeleteLeases.put({
+    ...input,
+    requestedAt: new Date().toISOString()
+  });
+}
+
+export async function listCachedLibraryDeleteLeases() {
+  return musicRoomDatabase.cachedLibraryDeleteLeases.toArray();
+}
+
+export async function deleteCachedLibraryDeleteLease(fileHash: string) {
+  await musicRoomDatabase.cachedLibraryDeleteLeases.delete(fileHash);
 }
 
 export function selectCachedPiecesForPlaybackFallback<

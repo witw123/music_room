@@ -1,9 +1,10 @@
 "use client";
 
-import { memo, useMemo, useTransition } from "react";
+import { memo, useMemo, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 
@@ -34,7 +35,17 @@ function TrackListSectionBase({
   onDeleteTrack,
   onPlayTrack
 }: TrackListSectionProps) {
-  const [isPending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<TrackMeta | null>(null);
+  const runAction = async (key: string, action: () => Promise<void>) => {
+    if (pendingAction) return;
+    setPendingAction(key);
+    try {
+      await action();
+    } finally {
+      setPendingAction(null);
+    }
+  };
   const cachedLibraryFileHashSet = useMemo(
     () => buildCachedLibraryFileHashSet(cachedLibraryFileHashes),
     [cachedLibraryFileHashes]
@@ -71,7 +82,8 @@ function TrackListSectionBase({
           accept="audio/*"
           multiple
           className="hidden"
-          onChange={(event) => startTransition(() => void onFilesSelected(event.target.files))}
+          disabled={pendingAction !== null}
+          onChange={(event) => void runAction("upload", () => onFilesSelected(event.target.files))}
         />
       </label>
 
@@ -142,7 +154,8 @@ function TrackListSectionBase({
                         data-track-id={track.id}
                         variant="ghost"
                         className="h-9 shrink-0 whitespace-nowrap px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => startTransition(() => void onDeleteTrack(track.id))}
+                        disabled={pendingAction !== null}
+                        onClick={() => setDeleteCandidate(track)}
                         type="button"
                       >
                         删除
@@ -154,7 +167,8 @@ function TrackListSectionBase({
                       data-track-id={track.id}
                       variant="outline"
                       className="h-9 shrink-0 justify-center whitespace-nowrap bg-background/50 px-3"
-                      onClick={() => startTransition(() => void onAddToQueue(track.id))}
+                      disabled={pendingAction !== null}
+                      onClick={() => void runAction(`queue:${track.id}`, () => onAddToQueue(track.id))}
                       type="button"
                     >
                       加入队列
@@ -165,8 +179,8 @@ function TrackListSectionBase({
                       data-track-id={track.id}
                       variant="ghost"
                       className="h-9 w-9 shrink-0 px-0 hover:bg-accent/10 hover:text-accent"
-                      disabled={!canControlPlayback}
-                      onClick={() => void onPlayTrack(track.id)}
+                      disabled={!canControlPlayback || pendingAction !== null}
+                      onClick={() => void runAction(`play:${track.id}`, () => onPlayTrack(track.id))}
                       type="button"
                       title="立即播放"
                     >
@@ -197,12 +211,26 @@ function TrackListSectionBase({
         )}
       </div>
 
-      {isPending ? (
+      {pendingAction ? (
         <div className="animate-fade-in absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-4 py-1.5 shadow-lg backdrop-blur-md">
           <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
           <span className="text-xs text-foreground">处理中...</span>
         </div>
       ) : null}
+      <ConfirmDialog
+        confirmLabel="删除曲目"
+        description={`《${deleteCandidate?.title ?? "这首歌曲"}》将从房间曲库和队列中移除；若正在播放，播放状态也会改变。此操作无法撤销。`}
+        destructive
+        onCancel={() => setDeleteCandidate(null)}
+        onConfirm={() => {
+          const trackId = deleteCandidate?.id;
+          if (!trackId) return;
+          void runAction(`delete:${trackId}`, () => onDeleteTrack(trackId)).then(() => setDeleteCandidate(null));
+        }}
+        open={deleteCandidate !== null}
+        pending={pendingAction?.startsWith("delete:") ?? false}
+        title="确认删除曲目？"
+      />
     </section>
   );
 }

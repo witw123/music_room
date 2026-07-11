@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useTransition } from "react";
+import { memo, useEffect, useState } from "react";
 import type {
   AuthSession,
   RoomMediaConnectionState,
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
@@ -22,6 +24,7 @@ type RoomStageProps = {
   canDisbandRoom: boolean;
   currentSourceOwnerNickname: string | null;
   mediaConnectionState: RoomMediaConnectionState;
+  activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
   iceConfigSource: string;
   onCopyJoinCode: () => Promise<void>;
@@ -32,8 +35,9 @@ type RoomStageProps = {
 
 
 
-function getSourceModeLabel(
+export function getSourceModeLabel(
   mediaConnectionState: RoomMediaConnectionState,
+  activePlaybackSource: ProgressivePlaybackSource,
   isSourceOwner: boolean,
   currentTrack: TrackMeta | null
 ) {
@@ -44,8 +48,18 @@ function getSourceModeLabel(
   if (isSourceOwner) {
     return "本机音源";
   }
-
-  return "本地缓存播放";
+  if (activePlaybackSource === "full-local" || activePlaybackSource === "lossless-local") {
+    return "完整缓存播放";
+  }
+  if (mediaConnectionState === "failed") {
+    return "音源暂不可用";
+  }
+  if (mediaConnectionState === "connecting" || mediaConnectionState === "reconnecting") {
+    return "正在连接音源";
+  }
+  if (mediaConnectionState === "buffering") return "正在缓冲";
+  if (activePlaybackSource === "progressive-local") return "边缓存边播放";
+  return "边缓存边播放";
 }
 
 
@@ -61,12 +75,15 @@ function RoomStageBase({
   canDisbandRoom,
   currentSourceOwnerNickname,
   mediaConnectionState,
+  activePlaybackSource,
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom
 }: RoomStageProps) {
-  const [isPending, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const isSourceOwner =
     !!activeSession && activeSession.userId === roomSnapshot.room.playback.sourceSessionId;
@@ -74,7 +91,27 @@ function RoomStageBase({
   const ultraCompactStage = viewportHeight !== null && viewportHeight < 760;
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
 
-  const sourceModeLabel = getSourceModeLabel(mediaConnectionState, isSourceOwner, currentTrack);
+  const sourceModeLabel = getSourceModeLabel(mediaConnectionState, activePlaybackSource, isSourceOwner, currentTrack);
+
+  const handleCopyJoinCode = async () => {
+    if (isCopying) return;
+    setIsCopying(true);
+    try {
+      await onCopyJoinCode();
+    } finally {
+      window.setTimeout(() => setIsCopying(false), 1200);
+    }
+  };
+
+  const handleDeleteRoom = async () => {
+    setIsDeletingRoom(true);
+    try {
+      await onDeleteRoom();
+      setShowDeleteConfirmation(false);
+    } finally {
+      setIsDeletingRoom(false);
+    }
+  };
 
   useEffect(() => {
     const updateViewportHeight = () => {
@@ -103,7 +140,8 @@ function RoomStageBase({
           <button
             data-testid="room-code-button"
             className="group flex max-w-full items-center gap-2"
-            onClick={() => startTransition(() => void onCopyJoinCode())}
+            disabled={isCopying}
+            onClick={() => void handleCopyJoinCode()}
             type="button"
           >
             <div className="flex min-w-0 items-center gap-2 rounded-full border border-white/5 bg-white/10 px-3 py-1.5 shadow-sm backdrop-blur-md transition-colors group-hover:bg-white/20">
@@ -124,7 +162,7 @@ function RoomStageBase({
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
             </div>
-            {isPending ? <span className="text-[10px] text-accent">已复制</span> : null}
+            {isCopying ? <span className="text-[10px] text-accent">已复制</span> : null}
           </button>
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] tracking-[0.18em] text-white/50">
@@ -194,7 +232,7 @@ function RoomStageBase({
                     disabled={!canDisbandRoom}
                     onClick={() => {
                       setShowSettings(false);
-                      void onDeleteRoom();
+                      setShowDeleteConfirmation(true);
                     }}
                     title={canDisbandRoom ? "解散房间" : "只有全部上传者在线时才能解散房间"}
                     type="button"
@@ -327,6 +365,16 @@ function RoomStageBase({
           </p>
         </div>
       </div>
+      <ConfirmDialog
+        confirmLabel="解散房间"
+        description="房间、队列和共享曲库状态将被删除，所有成员都会离开。此操作无法撤销。"
+        destructive
+        onCancel={() => setShowDeleteConfirmation(false)}
+        onConfirm={() => void handleDeleteRoom()}
+        open={showDeleteConfirmation}
+        pending={isDeletingRoom}
+        title="确认解散房间？"
+      />
     </section>
   );
 }

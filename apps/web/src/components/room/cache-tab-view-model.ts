@@ -1,6 +1,7 @@
 import type { TrackMeta } from "@music-room/shared";
 import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/manual-cache-task-store";
+import { formatTransferRateMBps } from "@/lib/music-room-ui";
 
 export type RoomCacheFilter = "all" | "active" | "available" | "completed";
 export type RoomCacheAction = "download" | "pause" | "resume" | "retry";
@@ -158,7 +159,7 @@ export function formatDownloadRate(downloadRateKbps: number | null | undefined) 
     return "等待数据";
   }
 
-  return `${(downloadRateKbps / 1_000).toFixed(1)} M`;
+  return formatTransferRateMBps(downloadRateKbps);
 }
 
 function buildTaskRow(

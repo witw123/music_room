@@ -4,6 +4,7 @@ import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@mu
 import type { TrackPieceManifestRecord } from "@/lib/indexeddb";
 import {
   resolvePeerLinkProfile,
+  resolvePeerTransferWindow,
   resolveTrackPieceManifest,
   type ResolvedTrackPieceManifest
 } from "@/features/p2p";
@@ -149,6 +150,27 @@ function withPendingTtl(budget: ManualCacheAdaptiveBudgetShape): ManualCacheDire
   };
 }
 
+function adaptManualCacheBudgetToLink(input: {
+  budget: ManualCacheAdaptiveBudgetShape;
+  window: ManualCachePeerRequestWindow;
+  chunkSize: number;
+}) {
+  const transferWindow = resolvePeerTransferWindow(input.window, input.chunkSize);
+  const maxPendingPerPeer = Math.max(
+    input.budget.maxPendingPerPeer,
+    transferWindow.maxPendingChunks
+  );
+  return withPendingTtl({
+    batchSize: Math.min(
+      maxPendingPerPeer,
+      Math.max(input.budget.batchSize, Math.ceil(maxPendingPerPeer / 2))
+    ),
+    maxPendingPerTrack: Math.max(input.budget.maxPendingPerTrack, maxPendingPerPeer * 2),
+    maxPendingPerPeer,
+    timeoutMs: transferWindow.requestTimeoutMs
+  });
+}
+
 function resolveManualCacheDirectRequestBudget(input: {
   trackId: string;
   track?: TrackMeta | null;
@@ -170,9 +192,13 @@ function resolveManualCacheDirectRequestBudget(input: {
         activePrefixChunkCount + profileBudget.maxPendingPerPeer
       );
 
-      return withPendingTtl({
-        ...profileBudget,
-        maxPendingPerTrack: activePendingWindow
+      return adaptManualCacheBudgetToLink({
+        window: input.peerWindow,
+        chunkSize: input.manifest?.chunkSize ?? 256 * 1024,
+        budget: {
+          ...profileBudget,
+          maxPendingPerTrack: activePendingWindow
+        }
       });
     }
 
@@ -203,7 +229,11 @@ function resolveManualCacheDirectRequestBudget(input: {
         }
       : profileBudget;
 
-    return withPendingTtl(playbackAwareBudget);
+    return adaptManualCacheBudgetToLink({
+      budget: playbackAwareBudget,
+      window: input.peerWindow,
+      chunkSize: input.manifest?.chunkSize ?? 256 * 1024
+    });
   }
 
   return {

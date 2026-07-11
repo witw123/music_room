@@ -61,6 +61,7 @@ type ManualCacheDownloadEffectsInput = {
   remotePeerIds: string[];
   roomSnapshot: RoomSnapshot | null;
   schedulerAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  triggerDirectRequestRef: MutableRefObject<() => void>;
 };
 
 export function reconcileManualCacheDirectPendingTracks(input: {
@@ -126,9 +127,9 @@ export function useManualCacheDownloadEffects({
   recoverySinceAtRef,
   remotePeerIds,
   roomSnapshot,
-  schedulerAvailabilityByTrack
+  schedulerAvailabilityByTrack,
+  triggerDirectRequestRef
 }: ManualCacheDownloadEffectsInput) {
-  const triggerDirectRequestRef = useRef<() => void>(() => {});
 
   const directRequestLoopInputRef = useRef({
     activePlaybackPendingKey,
@@ -237,7 +238,8 @@ export function useManualCacheDownloadEffects({
     manualCacheTrackIds,
     onRuntimeEvent,
     pauseDirectRequests,
-    providerPeerIds
+    providerPeerIds,
+    triggerDirectRequestRef
   ]);
 
   useEffect(() => {
@@ -328,7 +330,8 @@ export function useManualCacheDownloadEffects({
     providerPeerIds,
     recoverySinceAtRef,
     remotePeerIds,
-    schedulerAvailabilityByTrack
+    schedulerAvailabilityByTrack,
+    triggerDirectRequestRef
   ]);
 
   useEffect(() => {
@@ -535,7 +538,8 @@ export function useManualCacheDownloadEffects({
     directPendingRef,
     lastBootstrapAttemptAtRef,
     lastProviderRestartAtRef,
-    providerUnavailableSinceRef
+    providerUnavailableSinceRef,
+    triggerDirectRequestRef
   ]);
 
   useEffect(() => {

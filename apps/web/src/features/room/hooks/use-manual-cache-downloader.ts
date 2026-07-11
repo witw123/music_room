@@ -90,6 +90,7 @@ export function useManualCacheDownloader(input: {
   const recoverySinceAtRef = useRef<number | null>(null);
   const lastRecoveryAtRef = useRef<number | null>(null);
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
+  const triggerDirectRequestRef = useRef<() => void>(() => {});
   const activePlaybackPendingKeyRef = useRef<string | null>(null);
   const activePlaybackWindowRef = useRef<ActivePlaybackCacheWindow | null>(
     activePlaybackWindow ?? null
@@ -159,10 +160,12 @@ export function useManualCacheDownloader(input: {
     recoverySinceAtRef,
     remotePeerIds,
     roomSnapshot,
-    schedulerAvailabilityByTrack
+    schedulerAvailabilityByTrack,
+    triggerDirectRequestRef
   });
   const clearPendingPiece = (trackId: string, chunkIndex: number) => {
     directPendingRef.current.get(trackId)?.delete(chunkIndex);
+    queueMicrotask(() => triggerDirectRequestRef.current());
   };
   const deferPendingPiece = (trackId: string, chunkIndex: number, options: { delayMs: number }) => {
     const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();

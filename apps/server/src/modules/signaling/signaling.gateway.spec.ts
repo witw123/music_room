@@ -165,8 +165,8 @@ function attachServerMock(gateway: SignalingGateway, sockets?: Map<string, Retur
     sockets: {
       sockets: sockets ?? new Map()
     }
-  } as never;
-  gateway.server = server;
+  };
+  gateway.server = server as never;
 
   return {
     emit,
@@ -294,6 +294,7 @@ describe("SignalingGateway", () => {
 
   it("leaves the previous room and clears its presence when the same socket subscribes to another room", async () => {
     const { gateway, roomService } = createGateway();
+    const { emit, server } = attachServerMock(gateway);
     const client = createClient({
       roomId: "room_old",
       sessionId: "guest_host",
@@ -321,6 +322,11 @@ describe("SignalingGateway", () => {
       "guest_host",
       "peer_host",
       "online"
+    );
+    expect(server.to).toHaveBeenCalledWith("room_old");
+    expect(emit).toHaveBeenCalledWith(
+      "piece.availability.clear",
+      expect.objectContaining({ roomId: "room_old", ownerPeerId: "peer_old" })
     );
   });
 

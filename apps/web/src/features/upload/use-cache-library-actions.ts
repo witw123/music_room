@@ -1,6 +1,7 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction
@@ -76,6 +77,7 @@ export function useCacheLibraryActions({
   setUploadedTracks,
   syncRoomSnapshot
 }: CacheLibraryActionsInput) {
+  const roomImportInFlightRef = useRef(new Map<string, Promise<string | null>>());
   const deleteUploadedTrackArtifacts = useCallback(
     async (trackId: string) => {
       const result = await deleteUploadedTrackArtifactsFromLibrary({
@@ -177,7 +179,13 @@ export function useCacheLibraryActions({
         return null;
       }
 
-      const result = await importCachedLibraryTrackToRoomFromLibrary({
+      const existingImport = roomImportInFlightRef.current.get(fileHash);
+      if (existingImport) {
+        return existingImport;
+      }
+
+      const importPromise = (async () => {
+        const result = await importCachedLibraryTrackToRoomFromLibrary({
         fileHash,
         activeSession,
         roomId: roomSnapshot.room.id,
@@ -201,10 +209,19 @@ export function useCacheLibraryActions({
           emitAvailability(availability);
         }
       });
-      return applyCachedLibraryRoomImportResult({
-        result,
-        setUploadedTracks
-      });
+        return applyCachedLibraryRoomImportResult({
+          result,
+          setUploadedTracks
+        });
+      })();
+      roomImportInFlightRef.current.set(fileHash, importPromise);
+      try {
+        return await importPromise;
+      } finally {
+        if (roomImportInFlightRef.current.get(fileHash) === importPromise) {
+          roomImportInFlightRef.current.delete(fileHash);
+        }
+      }
     },
     [
       activeSession,

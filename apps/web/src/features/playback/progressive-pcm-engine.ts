@@ -191,7 +191,6 @@ export class ProgressivePcmEngine {
   private directOutputConnected = false;
   private decoder: AudioDecoderLike | null = null;
   private softwareFlacDecoder: SoftwareFlacDecoder | null = null;
-  private softwareFlacDecoderPrimed = false;
   private preferSoftwareFlacDecoder = false;
   private streamInfo: ProgressiveFlacStreamInfo | null = null;
   private wavHeader: WavHeader | null = null;
@@ -201,6 +200,7 @@ export class ProgressivePcmEngine {
   private nextSampleIndex = 0;
   private contiguousChunkCount = 0;
   private contiguousByteLength = 0;
+  private contiguousWindowStartByte = 0;
   private contiguousBytes = new Uint8Array(0);
   private decodedSegments: DecodedSegment[] = [];
   private scheduledSegments: ScheduledSegment[] = [];
@@ -723,7 +723,6 @@ export class ProgressivePcmEngine {
     this.gainNode = null;
     this.directOutputConnected = false;
     this.streamInfo = null;
-    this.softwareFlacDecoderPrimed = false;
     this.preferSoftwareFlacDecoder = false;
     this.wavHeader = null;
     this.wavDecodedByteOffset = 0;
@@ -744,6 +743,7 @@ export class ProgressivePcmEngine {
     this.parsedOffset = 0;
     this.nextSampleIndex = 0;
     this.contiguousByteLength = 0;
+    this.contiguousWindowStartByte = 0;
     this.contiguousBytes = new Uint8Array(0);
     this.syncPromise = null;
     this.syncQueued = false;
@@ -1055,7 +1055,7 @@ export class ProgressivePcmEngine {
 
     const dataStartByte = header.dataOffset;
     const dataEndByte = Math.min(
-      this.contiguousByteLength,
+      this.contiguousWindowStartByte + this.contiguousByteLength,
       header.dataOffset + header.dataBytes
     );
     const decodeStartByte = Math.max(dataStartByte, this.wavDecodedByteOffset || dataStartByte);
@@ -1073,7 +1073,10 @@ export class ProgressivePcmEngine {
 
     const segment = this.createDecodedWavSegment(
       header,
-      bytes.subarray(alignedStartByte, alignedEndByte),
+      bytes.subarray(
+        alignedStartByte - this.contiguousWindowStartByte,
+        alignedEndByte - this.contiguousWindowStartByte
+      ),
       alignedStartByte
     );
     if (!segment) {
@@ -1084,6 +1087,7 @@ export class ProgressivePcmEngine {
 
     this.wavDecodedByteOffset = alignedEndByte;
     this.insertDecodedSegment(segment);
+    this.compactDecodedWavBytes(alignedEndByte);
     this.lastDecodedAtMs = Date.now();
     if (this.playing) {
       this.scheduleAhead(this.getCurrentTimeSeconds());
@@ -1295,9 +1299,10 @@ export class ProgressivePcmEngine {
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const frames = this.softwareFlacDecoderPrimed
-          ? packets.map((packet) => packet.data)
-          : [streamInfo.description, ...packets.map((packet) => packet.data)];
+        // decodeFrames() accepts already parsed FLAC audio frames. Passing the
+        // fLaC/STREAMINFO decoder description as an item makes libFLAC search
+        // for a frame sync inside metadata and report LOST_SYNC.
+        const frames = packets.map((packet) => packet.data);
         const decoded = await decoder.decodeFrames(frames);
         if (
           isDestroyedEngineStatus(this.status) ||
@@ -1321,7 +1326,6 @@ export class ProgressivePcmEngine {
           return false;
         }
 
-        this.softwareFlacDecoderPrimed = true;
         const normalized = await normalizeSoftwareFlacOutput({
           channelData: decoded.channelData,
           samplesDecoded: decoded.samplesDecoded,
@@ -1410,7 +1414,6 @@ export class ProgressivePcmEngine {
       ) {
         return false;
       }
-      this.softwareFlacDecoderPrimed = false;
       return true;
     } catch {
       return false;
@@ -1931,6 +1934,26 @@ export class ProgressivePcmEngine {
     this.contiguousBytes = compactedBytes;
     this.contiguousByteLength = compactedBytes.byteLength;
     this.parsedOffset = description.byteLength;
+  }
+
+  private compactDecodedWavBytes(consumedUntilByte: number) {
+    const consumedLocalBytes = Math.min(
+      this.contiguousByteLength,
+      Math.max(0, consumedUntilByte - this.contiguousWindowStartByte)
+    );
+    if (consumedLocalBytes <= 0) {
+      return;
+    }
+
+    const remainingBytes = this.contiguousBytes.subarray(
+      consumedLocalBytes,
+      this.contiguousByteLength
+    );
+    const compactedBytes = new Uint8Array(remainingBytes.byteLength);
+    compactedBytes.set(remainingBytes);
+    this.contiguousBytes = compactedBytes;
+    this.contiguousByteLength = compactedBytes.byteLength;
+    this.contiguousWindowStartByte += consumedLocalBytes;
   }
 
   private insertDecodedSegment(segment: DecodedSegment) {

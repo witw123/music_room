@@ -44,24 +44,22 @@ export class TrackAvailabilityRegistry {
 
   removePeer(roomId: string, peerId: string) {
     const roomAvailability = this.availabilityByRoom.get(roomId);
-    if (!roomAvailability) {
-      return false;
-    }
-
     let removed = false;
-    for (const [key, announcement] of roomAvailability.entries()) {
+    for (const [key, announcement] of roomAvailability?.entries() ?? []) {
       if (announcement.ownerPeerId === peerId) {
-        roomAvailability.delete(key);
+        roomAvailability?.delete(key);
         removed = true;
       }
     }
 
-    if (roomAvailability.size === 0) {
+    if (roomAvailability?.size === 0) {
       this.availabilityByRoom.delete(roomId);
     }
-    void this.persistSnapshot(roomId);
+    void this.removePeerFromPersistedSnapshot(roomId, peerId);
 
-    return removed;
+    // A persisted snapshot may still contain this peer after a server restart,
+    // so callers must broadcast the clear even when memory had no entry.
+    return removed || !roomAvailability;
   }
 
   clearRoom(roomId: string) {
@@ -124,6 +122,25 @@ export class TrackAvailabilityRegistry {
       });
     } catch {
       return [];
+    }
+  }
+
+  private async removePeerFromPersistedSnapshot(roomId: string, peerId: string) {
+    try {
+      const announcements = (await this.loadSnapshot(roomId)).filter(
+        (announcement) => announcement.ownerPeerId !== peerId
+      );
+      if (announcements.length === 0) {
+        await this.deleteSnapshot(roomId);
+        return;
+      }
+      await this.redisService.setJson(
+        this.availabilitySnapshotKey(roomId),
+        announcements,
+        this.availabilitySnapshotTtlSeconds
+      );
+    } catch {
+      // Live clear events remain authoritative if persistence is unavailable.
     }
   }
 

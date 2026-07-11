@@ -363,9 +363,6 @@ export class RoomService {
     }
 
     await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
-    if (!leavingHost) {
-      this.removeTracksOwnedBySession(record, sessionId);
-    }
     this.incrementPresenceRevision(record.room);
     this.incrementRoomRevision(record.room);
 

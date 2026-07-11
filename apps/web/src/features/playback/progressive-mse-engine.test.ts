@@ -63,9 +63,14 @@ describe("ProgressiveMseEngine", () => {
       mode = "";
       updating = false;
       appendedBuffers: ArrayBuffer[] = [];
+      buffered = createTimeRanges([[0, 30]]);
 
       appendBuffer(payload: ArrayBuffer) {
         this.appendedBuffers.push(payload);
+      }
+
+      remove() {
+        return undefined;
       }
     }
 
@@ -101,6 +106,8 @@ describe("ProgressiveMseEngine", () => {
 
     const audio = {
       src: "",
+      currentTime: 10,
+      buffered: createTimeRanges([]),
       load: vi.fn(),
       pause: vi.fn(),
       removeAttribute: vi.fn()
@@ -121,8 +128,15 @@ describe("ProgressiveMseEngine", () => {
     FakeMediaSource.latest?.open();
     await flushMicrotasks(8);
     await engine.sync();
+    expect(engine.getBufferedAheadMs(10)).toBe(0);
+    expect(engine.isPlaybackReady(10, 1)).toBe(false);
+    expect(Reflect.get(engine as object, "appendedChunkCount")).toBe(0);
     FakeMediaSource.latest?.sourceBuffer.dispatchEvent(new Event("updateend"));
     FakeMediaSource.latest?.sourceBuffer.dispatchEvent(new Event("updateend"));
+    Object.defineProperty(audio, "buffered", {
+      configurable: true,
+      value: createTimeRanges([[0, 30]])
+    });
 
     expect(FakeMediaSource.latest?.duration).toBe(120);
     expect(engine.getBufferedAheadMs(10)).toBe(20_000);
@@ -257,6 +271,69 @@ describe("ProgressiveMseEngine", () => {
     ]);
     expect(sourceBuffer.appendedBuffers).toHaveLength(2);
   });
+
+  it("clears played media and retries the same chunk after quota exhaustion", () => {
+    class FakeSourceBuffer extends EventTarget {
+      mode = "";
+      updating = false;
+      buffered = createTimeRanges([[49, 100]]);
+      appendAttempts = 0;
+      remove = vi.fn(() => {
+        this.updating = true;
+        this.buffered = createTimeRanges([[50, 100]]);
+      });
+
+      appendBuffer() {
+        this.appendAttempts += 1;
+        if (this.appendAttempts === 1) {
+          throw new DOMException("quota", "QuotaExceededError");
+        }
+        this.updating = true;
+      }
+    }
+
+    const audio = {
+      src: "",
+      currentTime: 80,
+      buffered: createTimeRanges([[49, 100]]),
+      load: vi.fn(),
+      pause: vi.fn(),
+      removeAttribute: vi.fn()
+    } as unknown as HTMLAudioElement;
+    const engine = new ProgressiveMseEngine(audio, "peer_local", {
+      trackId: "track_1",
+      fileHash: "hash_1",
+      mimeType: "audio/mpeg",
+      codec: "mpeg",
+      sizeBytes: 1024,
+      durationMs: 10_000,
+      totalChunks: 4,
+      chunkSize: 256
+    });
+    const sourceBuffer = new FakeSourceBuffer();
+    const piece = { chunkIndex: 0, payload: new Uint8Array([1]).buffer };
+    Reflect.set(engine as object, "sourceBuffer", sourceBuffer);
+    Reflect.set(engine as object, "status", "ready");
+    Reflect.set(engine as object, "appendQueue", [piece]);
+    Reflect.set(engine as object, "queuedChunkIndexes", new Set([0]));
+
+    const pump = Reflect.get(engine as object, "pumpAppendQueue") as () => void;
+    const handleUpdateEnd = Reflect.get(engine as object, "handleUpdateEnd") as () => void;
+    pump.call(engine);
+
+    expect(sourceBuffer.remove).toHaveBeenCalledWith(49, 50);
+    expect(sourceBuffer.appendAttempts).toBe(1);
+    expect(engine.engineStatus).toBe("ready");
+
+    sourceBuffer.updating = false;
+    handleUpdateEnd.call(engine);
+    expect(sourceBuffer.appendAttempts).toBe(2);
+
+    sourceBuffer.updating = false;
+    handleUpdateEnd.call(engine);
+    expect(Reflect.get(engine as object, "appendedChunkCount")).toBe(1);
+    expect(engine.engineStatus).toBe("ready");
+  });
 });
 
 function buildCachedPiece(chunkIndex: number) {
@@ -271,6 +348,14 @@ function buildCachedPiece(chunkIndex: number) {
     hash: `hash_${chunkIndex}`,
     createdAt: new Date(0).toISOString(),
     payload: new Uint8Array([chunkIndex]).buffer
+  };
+}
+
+function createTimeRanges(ranges: Array<[number, number]>): TimeRanges {
+  return {
+    length: ranges.length,
+    start: (index: number) => ranges[index]![0],
+    end: (index: number) => ranges[index]![1]
   };
 }
 

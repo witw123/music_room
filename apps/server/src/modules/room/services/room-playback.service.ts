@@ -135,13 +135,12 @@ export class RoomPlaybackService {
       activePresence ??
       (await this.roomPresenceService.getActivePresence(record.room.id, record.room.members));
     const storedSourcePeerId = record.room.playback.sourcePeerId;
-
     return {
       ...record.room.playback,
       sourcePeerId:
         record.room.playback.sourceSessionId && storedSourcePeerId
-          ? resolvedPresence.get(record.room.playback.sourceSessionId) ?? storedSourcePeerId
-          : storedSourcePeerId
+          ? resolvedPresence.get(record.room.playback.sourceSessionId) ?? null
+          : null
     };
   }
 

@@ -316,6 +316,10 @@ export class P2PMesh {
     );
   }
 
+  getInboundTransferBacklog() {
+    return this.inboundPieces.getBacklogSnapshot();
+  }
+
   getConnectedPeerIds() {
     return this.peerLifecycle.getConnectedPeerIds();
   }

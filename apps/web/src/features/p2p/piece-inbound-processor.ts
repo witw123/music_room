@@ -72,11 +72,14 @@ export class PieceInboundProcessor {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushInFlight = false;
   private piecePersistChain: Promise<void> = Promise.resolve();
+  private persistenceBacklogBytes = 0;
+  private readonly maxPersistenceBacklogBytes: number;
 
   constructor(input: {
     batchSize: number;
     localPeerId: string;
     flushDelayMs?: number;
+    maxPersistenceBacklogBytes?: number;
     resolveManifestHeader: (
       trackId: string,
       fallbackChunkSize: number
@@ -87,6 +90,7 @@ export class PieceInboundProcessor {
     this.batchSize = input.batchSize;
     this.localPeerId = input.localPeerId;
     this.flushDelayMs = input.flushDelayMs ?? 18;
+    this.maxPersistenceBacklogBytes = input.maxPersistenceBacklogBytes ?? 32 * 1024 * 1024;
     this.resolveManifestHeader = input.resolveManifestHeader;
     this.rememberManifestHeader = input.rememberManifestHeader;
     this.resolveTrackCacheIdentity = input.resolveTrackCacheIdentity;
@@ -104,6 +108,14 @@ export class PieceInboundProcessor {
 
   awaitPersistence() {
     return this.piecePersistChain;
+  }
+
+  getBacklogSnapshot() {
+    return {
+      validationQueueItems: this.pendingIncomingPieces.length,
+      persistenceBacklogBytes: this.persistenceBacklogBytes,
+      maxPersistenceBacklogBytes: this.maxPersistenceBacklogBytes
+    };
   }
 
   clear() {
@@ -139,6 +151,9 @@ export class PieceInboundProcessor {
     const batch = this.pendingIncomingPieces.splice(0, this.batchSize);
 
     try {
+      if (this.persistenceBacklogBytes >= this.maxPersistenceBacklogBytes) {
+        await this.piecePersistChain.catch(() => undefined);
+      }
       const manifestHeaders = await this.resolveManifestHeaders(batch);
       const expectedHashes = batch.map(
         (item, index) =>
@@ -262,12 +277,24 @@ export class PieceInboundProcessor {
       };
     });
     const persistedPayloads = persistablePieces.map((piece) => piece.callbackPayload);
+    const persistedBytes = persistablePieces.reduce(
+      (total, piece) => total + piece.item.message.payload.byteLength,
+      0
+    );
+    this.persistenceBacklogBytes += persistedBytes;
     this.piecePersistChain = this.piecePersistChain
       .catch(() => undefined)
       .then(async () => {
-        await cacheTrackPieces(piecesToPersist);
-        for (const payload of persistedPayloads) {
-          this.callbacks.onPiecePersisted?.(payload);
+        try {
+          await cacheTrackPieces(piecesToPersist);
+          for (const payload of persistedPayloads) {
+            this.callbacks.onPiecePersisted?.(payload);
+          }
+        } finally {
+          this.persistenceBacklogBytes = Math.max(
+            0,
+            this.persistenceBacklogBytes - persistedBytes
+          );
         }
       });
   }

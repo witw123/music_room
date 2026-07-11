@@ -14,7 +14,7 @@ const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 export type UploadedTrack = {
   file: File;
   objectUrl: string;
-  origin: "live-upload";
+  origin: "live-upload" | "cached-library-import";
 };
 
 export type CachedLibraryTrack = {

@@ -1,4 +1,5 @@
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
+import { formatTransferRateMBps } from "@/lib/music-room-ui";
 
 type ProgressiveStatus = NonNullable<PeerDiagnosticsSnapshot["progressivePlaybackStatus"]>;
 
@@ -105,7 +106,7 @@ function formatRate(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "暂无有效样本";
   }
-  return `${(value / 1_000).toFixed(1)} M`;
+  return formatTransferRateMBps(value);
 }
 
 function hasAudiblePcmOutput(playback: DiagnosticsPlaybackInput) {

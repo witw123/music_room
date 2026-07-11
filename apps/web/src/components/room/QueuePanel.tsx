@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { AuthSession, QueueItem, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ function QueuePanelBase({
 }: QueuePanelProps) {
   const [draggingQueueItemId, setDraggingQueueItemId] = useState<string | null>(null);
   const [dropTargetQueueItemId, setDropTargetQueueItemId] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const pointerDragRef = useRef<{
     pointerId: number;
     queueItemId: string;
@@ -68,9 +68,14 @@ function QueuePanelBase({
       reorderedIds.splice(toIndex, 0, sourceQueueItemId);
       setDraggingQueueItemId(null);
       setDropTargetQueueItemId(null);
-      startTransition(() => void onReorderQueue(reorderedIds));
+      setPendingAction("reorder");
+      try {
+        await onReorderQueue(reorderedIds);
+      } finally {
+        setPendingAction(null);
+      }
     },
-    [canReorderQueue, onReorderQueue, queue, startTransition]
+    [canReorderQueue, onReorderQueue, queue]
   );
 
   const finishPointerDrag = useCallback(() => {
@@ -136,7 +141,7 @@ function QueuePanelBase({
                 } ${draggingQueueItemId === item.id ? "scale-95 opacity-40" : ""} ${
                   isDropTarget ? "border-accent/60 ring-1 ring-accent/40" : ""
                 }`}
-                draggable={canReorderQueue}
+                draggable={canReorderQueue && pendingAction === null}
                 onDragStart={() => {
                   setDraggingQueueItemId(item.id);
                   setDropTargetQueueItemId(item.id);
@@ -161,9 +166,9 @@ function QueuePanelBase({
                     type="button"
                     aria-label={`拖拽调整 ${track?.title ?? "队列歌曲"} 的顺序`}
                     className={`inline-flex h-10 w-10 shrink-0 touch-none items-center justify-center rounded-xl bg-background/40 text-foreground-muted transition hover:text-accent ${
-                      canReorderQueue ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-50"
+                      canReorderQueue && !pendingAction ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-50"
                     }`}
-                    disabled={!canReorderQueue}
+                    disabled={!canReorderQueue || pendingAction !== null}
                     onPointerDown={(event) => {
                       if (!canReorderQueue || event.button !== 0) {
                         return;
@@ -242,7 +247,7 @@ function QueuePanelBase({
                         ? "pointer-events-none border border-accent/20 bg-accent/10 text-accent"
                         : ""
                     }
-                    disabled={!canControlPlayback || isCurrent}
+                    disabled={!canControlPlayback || isCurrent || pendingAction !== null}
                     onClick={() => void onPlayQueueItem(item.id)}
                     type="button"
                   >
@@ -254,8 +259,11 @@ function QueuePanelBase({
                     variant="ghost"
                     size="sm"
                     className="text-foreground-muted hover:bg-red-500/10 hover:text-red-400"
-                    disabled={!canRemoveQueueItem}
-                    onClick={() => startTransition(() => void onRemoveQueueItem(item.id))}
+                    disabled={!canRemoveQueueItem || pendingAction !== null}
+                    onClick={() => {
+                      setPendingAction(`remove:${item.id}`);
+                      void onRemoveQueueItem(item.id).finally(() => setPendingAction(null));
+                    }}
                     type="button"
                   >
                     移出队列
@@ -295,7 +303,11 @@ function QueuePanelBase({
                   variant="outline"
                   size="sm"
                   className="h-9 shrink-0 justify-start bg-surface/50 px-3 text-xs"
-                  onClick={() => startTransition(() => void onAddToQueue(track.id))}
+                  disabled={pendingAction !== null}
+                  onClick={() => {
+                    setPendingAction(`add:${track.id}`);
+                    void onAddToQueue(track.id).finally(() => setPendingAction(null));
+                  }}
                   type="button"
                 >
                   <span className="block max-w-[11rem] truncate">加入：{track.title}</span>
@@ -306,7 +318,7 @@ function QueuePanelBase({
         </div>
       )}
 
-      {isPending ? (
+      {pendingAction ? (
         <div className="animate-fade-in absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-4 py-1.5 shadow-lg backdrop-blur-md">
           <div className="h-2 w-2 animate-ping rounded-full bg-accent" />
           <span className="text-xs text-foreground">同步队列中...</span>

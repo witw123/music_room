@@ -568,7 +568,7 @@ describe("ProgressivePcmEngine", () => {
       const result = await syncPlayback(engine, 0, true);
 
       expect(engine.getSnapshot().lastDecodeError).toBeNull();
-      expect(decodeFrames).toHaveBeenCalledWith([description, packet.data]);
+      expect(decodeFrames).toHaveBeenCalledWith([packet.data]);
       expect(engine.getSnapshot()).toMatchObject({
         status: "ready",
         decodedPacketCount: 1,
@@ -594,7 +594,7 @@ describe("ProgressivePcmEngine", () => {
       durationUs: 1_000
     }));
     const decodeFrames = vi.fn(async (frames: Uint8Array[]) => {
-      const packetCount = frames[0] === description ? frames.length - 1 : frames.length;
+      const packetCount = frames.length;
       return {
         channelData: [new Float32Array(packetCount * 16).fill(0.25)],
         samplesDecoded: packetCount * 16,
@@ -684,7 +684,6 @@ describe("ProgressivePcmEngine", () => {
         reset,
         free: vi.fn()
       });
-      Reflect.set(engine as object, "softwareFlacDecoderPrimed", true);
       Reflect.set(engine as object, "status", "ready");
 
       const decode = Reflect.get(engine as object, "decodeSoftwareFlacPackets") as (
@@ -694,7 +693,7 @@ describe("ProgressivePcmEngine", () => {
 
       expect(reset).toHaveBeenCalledTimes(1);
       expect(decodeFrames).toHaveBeenNthCalledWith(1, [packet.data]);
-      expect(decodeFrames).toHaveBeenNthCalledWith(2, [description, packet.data]);
+      expect(decodeFrames).toHaveBeenNthCalledWith(2, [packet.data]);
       expect(engine.getSnapshot()).toMatchObject({
         status: "ready",
         decodedPacketCount: 1,
@@ -2129,6 +2128,10 @@ describe("ProgressivePcmEngine", () => {
       // efficiently in a single batch. The key property is that the engine
       // reached the playback position and is ready, not how many chunks it read.
       expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(6);
+      expect(Reflect.get(engine as object, "contiguousWindowStartByte")).toBe(
+        fullWav.byteLength
+      );
+      expect(Reflect.get(engine as object, "contiguousByteLength")).toBe(0);
       const snapshot = engine.getSnapshot();
       // Batch reads may produce fewer but larger segments than the old
       // one-chunk-at-a-time path. What matters is that decoding happened.
