@@ -14,9 +14,6 @@
   "dependencies": {
     "@music-room/shared": "workspace:*",
     "@tanstack/react-query": "^5.68.0",
-    "@tauri-apps/api": "^2.8.0",
-    "@tauri-apps/plugin-process": "2.3.0",
-    "@tauri-apps/plugin-updater": "2.9.0",
     "@wasm-audio-decoders/flac": "0.2.10",
     "dexie": "^4.0.11",
     "music-metadata-browser": "^2.5.11",

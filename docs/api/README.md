@@ -10,14 +10,14 @@
 - 前后端联调
 - 功能测试
 - 回归测试
-- 桌面壳 / Android 壳接入同一套服务端时的协议核对
+- 浏览器接入服务端时的协议核对
 
 它覆盖的是“整个项目的可测试契约”：
 
 - REST API
 - Socket.IO 事件
 - 共享模型与版本字段
-- Web / 桌面壳 / Android 壳的测试入口与前置条件
+- Web 测试入口与前置条件
 
 ## 测试环境基线
 
@@ -42,15 +42,14 @@ pnpm dev
 - PostgreSQL
 - Redis
 
-## 认证与客户端形态
+## 认证与网页入口
 
 - REST 和 WebSocket 共用同一登录态
 - 登录后把 `AuthSession.token` 放到：
   - REST：`x-session-token`
   - Socket.IO：`auth.sessionToken` 或 `x-session-token` header
 - Web 前端默认走当前页面同源
-- 桌面壳和 Android 壳测试时，本质上是在访问同一套后端接口，只是入口不同
-- 桌面壳 / Android 壳的远端入口依赖 `MUSIC_ROOM_PUBLIC_ORIGIN`
+- 桌面和移动浏览器访问同一套后端接口与网页入口
 
 ## 页面与测试入口
 

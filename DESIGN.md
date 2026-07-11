@@ -4,7 +4,7 @@ Last updated: `2026-04-18`
 
 ## Purpose
 
-This document defines how Music Room should look and feel across the marketing site, the web workspace, and future desktop/mobile shells.
+This document defines how Music Room should look and feel across the marketing site and the web workspace.
 
 Music Room is not a generic streaming product. It is a real-time collaborative listening workspace for local music. The UI should feel like a hybrid of:
 

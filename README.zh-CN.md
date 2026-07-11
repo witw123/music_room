@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room 是一个面向多人同步听歌的协作式音乐房项目。仓库采用 Monorepo，包含 Web 前端、NestJS 服务端、桌面端、移动端，以及前后端共享类型。
+Music Room 是一个面向多人同步听歌的 Web 音乐房项目。仓库采用 Monorepo，包含 Next.js 网页端、NestJS 服务端以及前后端共享类型。
 
 ## 项目定位
 
@@ -23,12 +23,11 @@ Music Room 聚焦于用户本地音频的多人同步播放。服务端负责房
 
 当前代码已经具备可运行的核心闭环，项目状态处于“产品可用，工程持续加固”阶段：
 
-- 首页 `/` 为官网展示入口，`/app` 为客户端工作区入口
+- 首页 `/` 为项目入口，`/app` 为网页工作区入口
 - 账号注册 / 登录、房间创建 / 加入 / 恢复、共享队列、房主播放控制已打通
 - 房间主界面当前收敛为 `共享队列`、`曲库`、`缓存`、`成员`
 - P2P 分片缓存、MP3/FLAC 渐进式本地播放均已接入
-- 桌面端已迁移到 Tauri 2，移动端当前提供 Capacitor Android 壳
-- 桌面端与 Android 端已支持在软件内检查更新
+- 全部功能统一通过现代浏览器交付，桌面和移动设备使用同一套响应式网页
 
 进度细节见：
 
@@ -52,14 +51,12 @@ Music Room 聚焦于用户本地音频的多人同步播放。服务端负责房
 
 - `apps/web`: Next.js Web 前端
 - `apps/server`: NestJS API、房间服务、WebSocket 信令
-- `apps/desktop`: Tauri 桌面端
-- `apps/mobile`: Capacitor 移动端壳
 - `packages/shared`: 前后端共享协议、类型、校验模型
 
 ## 功能概览
 
 - 房间创建、加入、恢复与退出
-- 首页展示入口与 `/app` 客户端工作区分流
+- 首页展示入口与 `/app` 网页工作区分流
 - 多人共享播放队列、房主控制与播放同步
 - 本地音频导入、曲库管理、歌单管理
 - P2P 分片缓存同步
@@ -67,7 +64,6 @@ Music Room 聚焦于用户本地音频的多人同步播放。服务端负责房
 - 手动缓存、缓存回库与缓存导出
 - 成员级“连接与缓存诊断”面板
 - 服务端下发短期 TURN 凭证，前端自动回退静态 ICE 配置
-- 桌面端与 Android 壳的软件内检查更新
 
 ## 快速开始
 
@@ -96,7 +92,7 @@ pnpm dev
 开发期主入口：
 
 - 首页展示：`/`
-- 客户端工作区：`/app`
+- 网页工作区：`/app`
 - 登录页：`/auth`
 - 房间入口：`/rooms`
 
@@ -109,30 +105,13 @@ pnpm typecheck
 pnpm test
 pnpm e2e
 pnpm check:toolchain
-pnpm pack:desktop
-pnpm pack:mobile
 ```
 
 `pnpm e2e` 会启动真实 server + web，并要求本地 Redis 可连接到 `redis://127.0.0.1:6379/15`；`pnpm check:toolchain` 会强制校验 Node.js 22.x 与 pnpm 10.x，避免本地环境和 CI / 发布环境漂移。
 
-## Shell Origin 配置
+## Web Origin 配置
 
-- Web 会在运行时回退到当前页面 origin，因此开源仓库不需要把生产域名写死进前端 bundle。
-- 桌面端和移动端壳在构建 / 打包时使用 `MUSIC_ROOM_PUBLIC_ORIGIN`。
-- 如果没有设置 `MUSIC_ROOM_PUBLIC_ORIGIN`，桌面端和移动端打包会快速失败，避免产出指向 `https://example.com` 的客户端。
-- 官方 `0.2.8` 客户端包预期指向 `https://musicroom.witw.top`。
-
-示例：
-
-```bash
-# Desktop dev / pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop dev
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop pack
-
-# Mobile shell sync / pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile android:sync
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile pack
-```
+Web 默认使用当前页面 origin，并可通过 `NEXT_PUBLIC_API_BASE_URL` 与 `NEXT_PUBLIC_WS_URL` 指向独立部署的服务端。
 
 ## WebRTC / TURN 配置
 
@@ -220,22 +199,7 @@ MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mo
 
 ## 发布
 
-桌面端和 Android 安装包发布在：
-
-- [GitHub Releases](https://github.com/witw123/music_room/releases)
-
-当前 Release 标题统一使用 `Music Room vX.Y.Z`。发布物包含：
-
-- Windows `.exe` / `.msi`
-- macOS `.dmg`
-- Linux `.AppImage` / `.deb` / `.rpm`
-- Android `.apk`
-- Tauri 桌面端更新清单 `latest.json`
-
-更新行为：
-
-- 桌面端通过 Tauri updater 清单检查更新，发现新的签名桌面包后提示用户下载并安装。
-- Android 端检查 GitHub 最新 Release，发现新版 APK 后提示用户前往下载。
+生产环境通过 `Dockerfile.web`、`Dockerfile.server` 和 `deploy/linux` 中的 Compose 配置发布，不再生成桌面或移动安装包。
 
 ## 当前已知边界
 

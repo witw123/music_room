@@ -8,11 +8,10 @@
 - 已覆盖：
   - `packages/shared` 协议、模型与事件约束
   - `apps/server` 的认证、房间、队列、播放、实时、信令、Redis 配置等核心模块
-  - `apps/web` 的房间运行时、P2P 调度、播放引擎、上传工具、客户端更新、API/客户端桥接，以及部分组件 / Hook
+  - `apps/web` 的房间运行时、P2P 调度、播放引擎、上传工具、API 桥接，以及部分组件 / Hook
 - 仍未覆盖：
   - 真实 WebRTC 多端联调
   - IndexedDB / MediaSource / AudioContext 的集成级回归
-  - 桌面端 / Android 壳的打包后 smoke test
 
 ## 已落地测试
 
@@ -63,8 +62,7 @@
   - 房间状态归并、重同步和运行时 Hook
   - 播放同步、激活策略、MSE / PCM / FLAC 渐进式播放
   - 播放 tick 编排回归：快照刷新不重建 interval、warmup 连续 tick 不被打断
-  - 客户端更新：桌面更新服务桥接、Android Release / APK 解析、版本比较
-  - API 客户端、WebSocket 客户端、客户端入口与底部播放器局部组件
+  - API 客户端、WebSocket 客户端、网页入口与底部播放器局部组件
 - `未完成`
   - 跨浏览器交互级播放器测试
   - 更完整的弱网和多端房间工作流测试

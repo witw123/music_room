@@ -7,8 +7,8 @@
 
 Music Room 当前已经是一套可运行的多人同步听歌产品，代码状态更接近“核心闭环已完成，正在补强稳态和测试”。当前主链路是：
 
-- 首页 `/` 提供官网展示与下载入口，`/app` 承载客户端工作区
-- Web / 桌面端 / Android 壳都可进入同一套房间系统
+- 首页 `/` 提供项目入口，`/app` 承载网页工作区
+- 桌面和移动浏览器进入同一套响应式房间系统
 - 用户通过账号登录注册进入房间
 - 房主导入本地音频，服务端只保存元数据，不保存音频文件
 - 房间内通过共享队列和房主权威播放状态进行同步
@@ -16,12 +16,11 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 - 客户端会根据缓存情况在 `progressive-local`、`full-local` 之间切换
 - 房间默认工作区现在包含 `共享队列`、`曲库`、`缓存`、`成员`
 - 成员页已提供连接、缓存、ICE、播放源和最近事件诊断
-- 桌面端和 Android 端已支持在软件内检查更新
 
 ## 已完成
 
-- Monorepo 仓库结构稳定：`apps/web`、`apps/server`、`apps/desktop`、`apps/mobile`、`packages/shared`
-- 首页 / 客户端分流已落地：官网走 `/`，客户端工作区走 `/app`
+- Monorepo 仓库结构稳定：`apps/web`、`apps/server`、`packages/shared`
+- 首页 / 工作区分流已落地：首页走 `/`，网页工作区走 `/app`
 - 账号体系可用：注册、登录、登出、`/v1/auth/me`
 - 房间链路可用：创建、加入、最近房间恢复、按房间恢复、离开、删除
 - 曲库链路可用：本地音频导入、元数据解析、曲目注册、曲目删除、从曲库加入队列
@@ -34,9 +33,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
   - MP3 在 Chromium 浏览器中走 MSE
   - FLAC 在 Chromium 浏览器中走 PCM / WebCodecs + AudioContext
   - 完整缓存后可切换到 `full-local`
-- 桌面端已迁移到 Tauri 2，移动端使用 Capacitor Android 壳
-- 桌面端通过 Tauri updater 检查签名安装包更新，Android 端检查 GitHub Release 并提示下载 APK
-- 客户端打包已改为通过 `MUSIC_ROOM_PUBLIC_ORIGIN` 注入公网入口，不再默认暴露真实域名
+- 项目已收敛为纯网页交付，不再维护桌面或移动原生壳
 - 自动化测试已形成基础盘：当前仓库共有 `112` 个 `*.test.ts` / `*.spec.ts` 文件，覆盖 shared 协议、服务端核心模块、前端房间/P2P/播放纯逻辑、部分组件/Hook 和 Playwright E2E
 - 播放运行时、房间实时连接、P2P Mesh、上传、手动缓存下载器和顶层房间组件已拆分为更小的模块；重构记录见 [../refactor/README.md](../refactor/README.md)
 
@@ -52,8 +49,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
   - `缓存`
   - `成员与诊断`
 - 观测能力仍偏基础，主要依赖日志和前端诊断面板，缺少统一 metrics / tracing / error reporting
-- 自动化测试已覆盖大量纯逻辑、状态机、部分组件 / Hook 和核心 E2E 主流程，但真实 WebRTC 联调、Media 集成和打包后客户端 smoke test 仍然不足
-- 移动端目前只看到 Android 壳与 APK 打包链路，iOS 仍未进入当前仓库交付面
+- 自动化测试已覆盖大量纯逻辑、状态机、部分组件 / Hook 和核心 E2E 主流程，但真实 WebRTC 与 Media 集成测试仍然不足
 
 ## 当前已知风险
 
@@ -61,7 +57,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 - 如果没有 `systemd`、`pm2` 或 Docker restart policy 守护 `web` / `server` 进程，服务掉线后用户侧会表现成“站点总是崩”
 - TURN 配置不完整时，复杂网络下分片同步会退化，诊断面板通常会看到 `ICE: stun-only` 或 `disconnected / failed`
 - FLAC 的首次起播依赖本地连续缓冲，缓存追不上时会进入恢复和保守调度
-- 真实 WebRTC、MediaSource、AudioContext 与客户端壳的打包后 smoke test 仍需要继续补强
+- 真实 WebRTC、MediaSource 与 AudioContext 集成测试仍需要继续补强
 - 当前正式版按“单 server 实例 + Redis 广播增强”交付，不支持 server 水平扩容；多实例一致性需要后续 Redis CAS 或数据库事务化方案单独落地
 
 ## 当前建议的部署方式
@@ -76,7 +72,7 @@ Music Room 当前已经是一套可运行的多人同步听歌产品，代码状
 ## 近期优先级
 
 1. 补强多实例 / 服务重启后的状态恢复与补偿
-2. 增加真实 WebRTC / MediaSource / AudioContext 集成测试和打包后客户端 smoke test
+2. 增加真实 WebRTC / MediaSource / AudioContext 浏览器集成测试
 3. 继续完善播放链路和房间工作流的交互级测试，覆盖弱网、重连、切歌、暂停和 seek
 4. 补齐统一观测能力，包括服务端错误收集、资源监控和告警
 5. 视产品取舍决定是否恢复歌单前端主入口或继续维持“后端保留、主 UI 收起”的策略

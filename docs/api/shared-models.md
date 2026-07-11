@@ -321,5 +321,4 @@
   - `/rooms`：房间页入口
   - `/room/{roomId}`：房间内页面
 - Web 运行默认同源
-- 桌面壳和 Android 壳共享同一套 REST / Socket 协议，只是客户端形态不同
-- 客户端壳测试时需要正确设置 `MUSIC_ROOM_PUBLIC_ORIGIN`
+- 桌面和移动浏览器共享同一套 REST / Socket 协议与响应式网页

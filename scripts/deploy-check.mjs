@@ -1,5 +1,5 @@
 const webUrl = process.env.DEPLOY_CHECK_WEB_URL ?? "http://localhost:3000";
-const appUrl = process.env.DEPLOY_CHECK_APP_URL ?? `${webUrl.replace(/\/$/, "")}/app?client=desktop`;
+const appUrl = process.env.DEPLOY_CHECK_APP_URL ?? `${webUrl.replace(/\/$/, "")}/app`;
 const serverUrl = process.env.DEPLOY_CHECK_SERVER_URL ?? "http://localhost:3001";
 const socketPath = process.env.DEPLOY_CHECK_SOCKET_PATH ?? "/ws/socket.io";
 

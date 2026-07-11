@@ -70,7 +70,7 @@ npx pnpm deploy:check
 至少确认这些地址是通的：
 
 - `/`
-- `/app?client=desktop`
+- `/app`
 - `/health`
 - `/health/readiness`
 - `/v1/realtime/ice-config`
@@ -82,7 +82,7 @@ npx pnpm deploy:check
 
 认证服务在数据库不可用时有一套开发期 fallback 存储；如果生产误用了这条路径，数据会写进容器内临时文件，容器重建后自然就没了。
 
-如果首页能开但 `/app?client=desktop` 白屏，要优先检查：
+如果首页能开但 `/app` 白屏，要优先检查：
 
 - `/_next/static/*` 是否返回 `200`
 - 当前前端 bundle 是否仍然引用旧的静态资源
@@ -179,15 +179,4 @@ curl http://127.0.0.1:3001/health
 - Web 运行时默认使用当前页面同源
 - 不再需要把生产域名硬编码进仓库
 
-### Desktop / Mobile
-
-- 桌面端和移动端打包时必须提供 `MUSIC_ROOM_PUBLIC_ORIGIN`
-- 现在缺失该变量会直接构建失败
-- `0.2.8` 官方发布包要求该值为 `https://musicroom.witw.top`
-
-示例：
-
-```bash
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile pack
-```
+Web 运行时默认使用当前页面同源，不再需要把生产域名硬编码进仓库。

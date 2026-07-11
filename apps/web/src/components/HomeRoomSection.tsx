@@ -12,7 +12,6 @@ import {
   buildAppEntryHref,
   buildWorkspaceAuthHref
 } from "@/lib/client-shell";
-import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
@@ -21,14 +20,11 @@ const lastRoomStorageKey = "music-room-last-room";
 
 export function HomeRoomSection() {
   const router = useRouter();
-  const clientPlatform = getClientPlatformFromBrowser();
-  const workspaceEntryHref = buildAppEntryHref(clientPlatform);
+  const workspaceEntryHref = buildAppEntryHref();
   const authEntryHref = buildWorkspaceAuthHref({
-    clientPlatform,
     redirectTo: workspaceEntryHref
   });
-  const buildRoomHref = (roomId: string) =>
-    clientPlatform ? `/room/${roomId}?client=${clientPlatform}` : `/room/${roomId}`;
+  const buildRoomHref = (roomId: string) => `/room/${roomId}`;
   const [joinCode, setJoinCode] = useState("");
   const [availableRooms, setAvailableRooms] = useState<RoomSnapshot[]>([]);
   const [recentRoom, setRecentRoom] = useState<RoomSnapshot | null>(null);
@@ -166,10 +162,10 @@ export function HomeRoomSection() {
             Online trial
           </p>
           <h2 className="mt-4 text-3xl font-bold tracking-tight text-white md:text-5xl">
-            不下载也能先进入网页房间
+            直接进入网页房间
           </h2>
           <p className="mt-5 text-base leading-8 text-white/[0.56]">
-            网页端保留创建房间、房间码加入、公开房大厅和最近房间恢复能力，适合快速演示项目主流程。
+            浏览器中即可创建房间、通过房间码加入、浏览公开房间并恢复最近的协作房间。
           </p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3 md:grid-cols-1">
             {["创建公开或私密房间", "用 6 位房间码加入", "恢复最近协作房间"].map((item) => (

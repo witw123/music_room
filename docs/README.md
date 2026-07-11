@@ -9,12 +9,10 @@ Music Room 现在是一套围绕“本地音乐多人同步播放”构建的完
 
 - Next.js Web 前端
 - NestJS API / Socket.IO 服务端
-- Tauri 2 桌面壳
-- Capacitor Android 壳
+- 响应式 Web 前端
 - PostgreSQL、Redis、coturn 的生产依赖
 - P2P 分片同步和渐进式本地播放
 - 官网展示入口 `/` 与客户端入口 `/app`
-- 桌面端和 Android 端的软件内检查更新
 
 当前房间 UI 默认是：
 
@@ -44,24 +42,15 @@ Music Room 现在是一套围绕“本地音乐多人同步播放”构建的完
 
 ## 重要说明
 
-### 1. Web 不再需要硬编码生产域名
+### 1. Web 默认使用当前页面同源
 
-- Web 前端默认走当前页面同源
-- 桌面端和移动端打包时需要注入 `MUSIC_ROOM_PUBLIC_ORIGIN`
-- 缺失该变量时，客户端打包会直接失败，避免产出指向 `example.com` 的坏包
-- `0.2.8` 官方客户端打包口径统一为 `https://musicroom.witw.top`
+- Web 前端默认走当前页面同源，不需要把生产域名硬编码进仓库
 
-### 1.5. 当前工程阶段是“可用 + 加固”
+### 1.5. 当前工程阶段是”可用 + 加固”
 
 - 核心用户链路已经跑通，不再是 PoC
 - 当前主要工作集中在多实例稳态、真实 WebRTC / Media 集成测试和统一观测能力
 - 文档中的“未完成”项优先理解为工程加固项，不代表核心产品链路不可用
-
-### 1.6. 客户端更新策略
-
-- 桌面端使用 Tauri updater 检查 `latest.json`，发现新版后提示用户下载并安装
-- Android 端检查 GitHub 最新 Release，发现新版 APK 后提示用户前往下载
-- Web 浏览器访问 `/app` 时不走安装包更新流程，直接使用当前部署的 Web 版本
 
 ### 2. Docker 配置不能直接当宿主机 Nginx 配置用
 

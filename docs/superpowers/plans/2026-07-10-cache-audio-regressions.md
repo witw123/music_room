@@ -48,5 +48,5 @@
 ### Task 4: 验证与提交
 
 - [ ] 运行 Web 类型检查、lint、全量测试和生产构建。
-- [ ] 检查差异不包含 `apps/desktop/src-tauri/Cargo.toml`。
+- [ ] 检查差异范围正确，不包含无关文件变更。
 - [ ] 提交并推送 `main`。

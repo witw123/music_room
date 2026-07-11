@@ -10,7 +10,7 @@ const githubRepositoryUrl = "https://github.com/witw123/music_room";
 const projectStats = [
   { label: "Latency", value: "< 50ms Sync" },
   { label: "Audio Quality", value: "Lossless Ready" },
-  { label: "Platforms", value: "Web & Native" },
+  { label: "Platform", value: "Browser First" },
   { label: "Privacy", value: "Local-First" }
 ];
 
@@ -49,8 +49,8 @@ const architectureItems = [
     body: "毫秒级实时状态广播机制，结合智能的端到端分片可用性追踪。"
   },
   {
-    title: "Native Desktop & Mobile",
-    body: "跨平台的客户端支持，为您提供媲美原生应用的专属桌面与移动体验。"
+    title: "Responsive Web Platform",
+    body: "无需安装客户端，使用现代浏览器即可在桌面和移动设备进入同一套协作体验。"
   }
 ];
 
@@ -229,7 +229,7 @@ function ProductRoomPreview() {
 }
 
 export function ProductLandingPage() {
-  const appHref = buildAppEntryHref(null);
+  const appHref = buildAppEntryHref();
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black font-sans selection:bg-accent/30 selection:text-white">

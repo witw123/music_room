@@ -17,8 +17,6 @@
 
 - `apps/web`：Next.js Web 前端
 - `apps/server`：NestJS API / Socket.IO 服务端
-- `apps/desktop`：Tauri 2 桌面壳
-- `apps/mobile`：Capacitor Android 壳
 - `packages/shared`：共享协议与类型
 
 本地默认联调地址：
@@ -57,26 +55,10 @@ pnpm dev
 
 ```bash
 pnpm dev
-pnpm dev:desktop
 pnpm build
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm pack:desktop
-pnpm pack:mobile
-```
-
-## Desktop / Mobile 本地注意事项
-
-- Web 运行时默认使用当前页面同源，不需要把生产域名写死到前端 bundle
-- 桌面壳和移动壳在打包时必须提供 `MUSIC_ROOM_PUBLIC_ORIGIN`
-- 当前缺失该变量时，桌面和移动打包会直接失败，避免产出指向 `example.com` 的坏包
-
-示例：
-
-```bash
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile pack
 ```
 
 ## 当前开发期行为

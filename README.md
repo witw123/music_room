@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/Node.js-22.x-339933)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-10.x-F69220)](https://pnpm.io/)
 
-Music Room is a collaborative music-room project for listening to local music together. The repository is a monorepo that includes the web client, NestJS server, desktop shell, mobile shell, and shared frontend/server contracts.
+Music Room is a browser-first collaborative music-room project for listening to local music together. The monorepo contains the Next.js web app, NestJS server, and shared frontend/server contracts.
 
 ## Product Scope
 
@@ -27,8 +27,7 @@ The core loop is already runnable. The project is in a "usable product, ongoing 
 - Registration/login, room creation/join/recovery, shared queue, and host playback control are connected
 - The room workspace currently focuses on `Queue`, `Library`, `Cache`, and `Members`
 - P2P chunk cache and progressive local playback for MP3/FLAC are integrated
-- The desktop app has moved to Tauri 2, and the mobile app currently provides a Capacitor Android shell
-- Desktop and Android clients can check for updates from inside the app
+- All product functionality is delivered through one responsive web application on desktop and mobile browsers
 
 More details:
 
@@ -52,8 +51,6 @@ Recommended reading order:
 
 - `apps/web`: Next.js web client
 - `apps/server`: NestJS API, room service, and WebSocket signaling
-- `apps/desktop`: Tauri desktop app
-- `apps/mobile`: Capacitor mobile shell
 - `packages/shared`: Shared contracts, types, and validation models
 
 ## Feature Overview
@@ -67,7 +64,6 @@ Recommended reading order:
 - Manual cache, cache restore to library, and cache export
 - Member-level connection and cache diagnostics
 - Server-issued short-lived TURN credentials with frontend fallback to static ICE config
-- Client update checks for desktop and Android shells
 
 ## Quick Start
 
@@ -109,30 +105,14 @@ pnpm typecheck
 pnpm test
 pnpm e2e
 pnpm check:toolchain
-pnpm pack:desktop
-pnpm pack:mobile
 ```
 
 `pnpm e2e` starts the real server and web app, and requires local Redis at `redis://127.0.0.1:6379/15`. `pnpm check:toolchain` enforces Node.js 22.x and pnpm 10.x to avoid drift between local development, CI, and deployment environments.
 
-## Shell Origin Configuration
+## Web Origin Configuration
 
 - The web client falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
-- Desktop and mobile shells use `MUSIC_ROOM_PUBLIC_ORIGIN` at build/package time.
-- If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, desktop and mobile packaging fails fast instead of producing a client pointed at `https://example.com`.
-- Official `0.2.8` client packages are expected to target `https://musicroom.witw.top`.
-
-Examples:
-
-```bash
-# Desktop dev / pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop dev
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/desktop pack
-
-# Mobile shell sync / pack
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile android:sync
-MUSIC_ROOM_PUBLIC_ORIGIN=https://musicroom.witw.top pnpm --filter @music-room/mobile pack
-```
+- `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_WS_URL` can point the browser app at a separately deployed server.
 
 ## WebRTC / TURN Configuration
 
@@ -220,22 +200,8 @@ More deployment details:
 
 ## Releases
 
-Desktop and Android installers are published through:
+Production releases use `Dockerfile.web`, `Dockerfile.server`, and the Compose definitions under `deploy/linux`. The project no longer builds native desktop or mobile installers.
 
-- [GitHub Releases](https://github.com/witw123/music_room/releases)
-
-Current release titles use `Music Room vX.Y.Z`. Release assets include:
-
-- Windows `.exe` / `.msi`
-- macOS `.dmg`
-- Linux `.AppImage` / `.deb` / `.rpm`
-- Android `.apk`
-- Tauri desktop updater manifest `latest.json`
-
-Update behavior:
-
-- Desktop shells use the Tauri updater manifest to prompt the user to download and install signed updates.
-- Android shells check the latest GitHub Release and prompt the user to download the newest APK.
 
 ## Known Boundaries
 

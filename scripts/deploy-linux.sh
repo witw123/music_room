@@ -43,7 +43,7 @@ echo "Waiting for services..."
 sleep 8
 
 DEPLOY_CHECK_WEB_URL="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)" \
-DEPLOY_CHECK_APP_URL="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)/app?client=desktop" \
+DEPLOY_CHECK_APP_URL="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)/app" \
 DEPLOY_CHECK_HEALTH_URL="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)/health/" \
 DEPLOY_CHECK_READINESS_URL="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)/health/readiness" \
 node "$ROOT_DIR/scripts/deploy-check.mjs"

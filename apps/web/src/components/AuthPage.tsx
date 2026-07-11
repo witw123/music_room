@@ -6,7 +6,6 @@ import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref } from "@/lib/client-shell";
-import { getClientPlatformFromBrowser } from "@/lib/client-shell-browser";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { clearMusicRoomLocalCache } from "@/lib/local-cache";
@@ -16,8 +15,7 @@ type AuthMode = "login" | "register";
 export function AuthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clientPlatform = getClientPlatformFromBrowser();
-  const redirectTo = searchParams.get("redirectTo") ?? buildAppEntryHref(clientPlatform);
+  const redirectTo = searchParams.get("redirectTo") ?? buildAppEntryHref();
   const [mode, setMode] = useState<AuthMode>("login");
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -43,9 +41,9 @@ export function AuthPage() {
     }
 
     router.replace(
-      (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref(clientPlatform)) as Route
+      (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref()) as Route
     );
-  }, [activeSession, hydrated, redirectTo, router, clientPlatform]);
+  }, [activeSession, hydrated, redirectTo, router]);
 
   async function handleLogin() {
     if (!loginUsername.trim() || !loginPassword) {
@@ -58,7 +56,7 @@ export function AuthPage() {
       setActiveSession(session);
       setStatusMessage(`欢迎回来，${session.nickname}。`);
       router.replace(
-        (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref(clientPlatform)) as Route
+        (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref()) as Route
       );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
@@ -80,7 +78,7 @@ export function AuthPage() {
       setActiveSession(session);
       setStatusMessage(`账号已创建，欢迎你，${session.nickname}。`);
       router.replace(
-        (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref(clientPlatform)) as Route
+        (redirectTo.startsWith("/") ? redirectTo : buildAppEntryHref()) as Route
       );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
