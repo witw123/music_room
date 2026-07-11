@@ -168,7 +168,7 @@ export function usePlaybackRuntimeControllerStack({
     audioRef,
     playbackCurrentTrackId
   });
-  const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isActivated();
+  const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isAudioContextReady();
   const {
     attemptPlaybackStart,
     attemptPlaybackStartRef,

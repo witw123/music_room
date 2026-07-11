@@ -110,6 +110,10 @@ export class RoomAudioActivationManager {
     return this.activated;
   }
 
+  isAudioContextReady() {
+    return this.sharedContext?.state === "running";
+  }
+
   getSharedAudioContext() {
     return this.getOrCreateSharedContext();
   }

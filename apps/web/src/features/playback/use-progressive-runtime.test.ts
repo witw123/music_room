@@ -558,9 +558,11 @@ describe("playback runtime pipeline keys", () => {
     expect(controllerSource).toContain("const attemptPlaybackStart = useCallback");
     expect(controllerSource).toContain("const ensurePlaybackStart = useCallback");
     expect(controllerSource).toContain("resolvePlaybackStartIntentTimeoutPreflight");
-    expect(controllerSource).toContain("setAudioUnlocked(true);");
+    expect(controllerSource).toContain(
+      'setAudioUnlocked(source === "lossless-local" ? roomAudioOutput.isAudioContextReady() : true);'
+    );
     expect(controllerStackSource).toContain(
-      "const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isActivated();"
+      "const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isAudioContextReady();"
     );
     expect(controllerStackSource).toContain(
       "recoveryAudioUnlocked: effectiveAudioUnlocked"

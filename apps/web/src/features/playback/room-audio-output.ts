@@ -37,6 +37,10 @@ export class RoomAudioOutput {
     return roomAudioActivationManager.isActivated();
   }
 
+  isAudioContextReady() {
+    return roomAudioActivationManager.isAudioContextReady();
+  }
+
   getSharedAudioContext() {
     return roomAudioActivationManager.getSharedAudioContext();
   }

@@ -152,7 +152,9 @@ export function usePlaybackStartIntentController({
             : current
         );
       }
-      setAudioUnlocked(true);
+      // PCM is routed directly through the shared AudioContext. A successful
+      // media-element play does not prove that PCM output has been unlocked.
+      setAudioUnlocked(source === "lossless-local" ? roomAudioOutput.isAudioContextReady() : true);
       setAudioPaused(false);
 
       return true;
