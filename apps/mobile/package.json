@@ -1,6 +1,6 @@
 {
   "name": "@music-room/mobile",
-  "version": "0.8.1",
+  "version": "0.2.9",
   "private": true,
   "scripts": {
     "clean": "node -e \"['release'].forEach((dir)=>require('node:fs').rmSync(dir,{ recursive: true, force: true, maxRetries: 10, retryDelay: 200 }))\"",

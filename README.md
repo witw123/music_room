@@ -120,7 +120,7 @@ pnpm pack:mobile
 - The web client falls back to the current page origin at runtime, so the open-source repo does not need a production domain baked into the frontend bundle.
 - Desktop and mobile shells use `MUSIC_ROOM_PUBLIC_ORIGIN` at build/package time.
 - If `MUSIC_ROOM_PUBLIC_ORIGIN` is not set, desktop and mobile packaging fails fast instead of producing a client pointed at `https://example.com`.
-- Official `0.8.1` client packages are expected to target `https://musicroom.witw.top`.
+- Official `0.2.9` client packages are expected to target `https://musicroom.witw.top`.
 
 Examples:
 
