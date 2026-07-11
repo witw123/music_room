@@ -198,7 +198,9 @@ function buildAudibility(
   if (playback?.activeSource === "lossless-local" || playback?.engineType === "pcm") {
     return { label: "等待 PCM 数据", detail: activeIssue ?? "尚未形成可调度的连续 PCM。", tone: "warning" as const };
   }
-  if (playback?.localAudioPaused === true) {
+  // PCM direct output keeps the shared audio element paused intentionally;
+  // audio flows through the AudioContext graph, not the element.
+  if (playback?.localAudioPaused === true && !playback?.pcmDirectOutputConnected) {
     return { label: "已暂停", detail: "当前播放已暂停。", tone: "neutral" as const };
   }
   return { label: "尚未建立", detail: activeIssue ?? "尚未建立可听播放链路。", tone: "neutral" as const };

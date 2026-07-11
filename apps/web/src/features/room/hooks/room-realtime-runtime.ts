@@ -523,8 +523,9 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     });
     input.setRoomRecoveryState((current: RoomRecoveryState) => ({
       ...current,
-      phase: current.fullLocalRecoveryActive ? "playing-local-fallback" : "resyncing",
+      phase: "steady",
       pendingSnapshot: false,
+      pendingData: false,
       pendingMedia: false
     }));
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);

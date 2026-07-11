@@ -457,6 +457,18 @@ export class ProgressivePcmEngine {
       };
     }
 
+    // Ensure the shared AudioContext is running before attempting decode or
+    // schedule.  A suspended context (browser autoplay policy) will silently
+    // drop scheduled audio and its currentTime won't advance, so playback
+    // appears to progress but produces no sound.
+    if (this.audioContext?.state === "suspended") {
+      try {
+        await this.audioContext.resume();
+      } catch {
+        // Best-effort; scheduling will fail gracefully below.
+      }
+    }
+
     if (!this.canUseDecodedPlaybackAt(positionSeconds) && this.status !== "ready") {
       await this.sync();
 
