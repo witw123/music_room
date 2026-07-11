@@ -172,8 +172,16 @@ function BottomPlayerBase({
   );
 
   const togglePlayback = useCallback(() => {
-    void (isPlaying ? onPause(getLiveProgressMs()) : onPlay());
-  }, [getLiveProgressMs, isPlaying, onPause, onPlay]);
+    if (isPlaying) {
+      // Stop the local media element first so its pause event cannot race the
+      // authoritative room pause mutation and trigger an immediate recovery.
+      audioRef.current?.pause();
+      void onPause(getLiveProgressMs());
+      return;
+    }
+
+    void onPlay();
+  }, [audioRef, getLiveProgressMs, isPlaying, onPause, onPlay]);
 
   const playPrev = useCallback(() => {
     void onPrev();
