@@ -33,6 +33,7 @@ export type UseProgressiveRuntimeInput = {
   playbackStartIntent: PlaybackStartIntent | null;
   setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
   audioUnlocked: boolean;
+  setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   roomRecoveryState: {
     phase:
       | "joining"

@@ -30,6 +30,7 @@ import { useProgressiveEngineController } from "./progressive-engine-controller"
 import { useMainPlaybackController } from "./main-playback-controller";
 import { useProgressiveWarmupController } from "./progressive-warmup-controller";
 import { useRuntimeTickEffectsController } from "./runtime-tick-effects-controller";
+import { roomAudioOutput } from "../room-audio-output";
 
 type PlaybackRuntimeInputState = ReturnType<typeof usePlaybackRuntimeInputState>;
 type PlaybackRuntimeRefs = ReturnType<typeof usePlaybackRuntimeRefs>;
@@ -61,6 +62,7 @@ type PlaybackRuntimeControllerStackInput = {
   roomRecoveryState: UseProgressiveRuntimeInput["roomRecoveryState"];
   roomSnapshot: UseProgressiveRuntimeInput["roomSnapshot"];
   setActivePlaybackSource: UseProgressiveRuntimeInput["setActivePlaybackSource"];
+  setAudioUnlocked: UseProgressiveRuntimeInput["setAudioUnlocked"];
   setBufferHealth: UseProgressiveRuntimeInput["setBufferHealth"];
   setMediaConnectionState: UseProgressiveRuntimeInput["setMediaConnectionState"];
   setPlaybackStartIntent: UseProgressiveRuntimeInput["setPlaybackStartIntent"];
@@ -99,6 +101,7 @@ export function usePlaybackRuntimeControllerStack({
   roomRecoveryState,
   roomSnapshot,
   setActivePlaybackSource,
+  setAudioUnlocked,
   setBufferHealth,
   setMediaConnectionState,
   setPlaybackStartIntent,
@@ -165,6 +168,7 @@ export function usePlaybackRuntimeControllerStack({
     audioRef,
     playbackCurrentTrackId
   });
+  const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isActivated();
   const {
     attemptPlaybackStart,
     attemptPlaybackStartRef,
@@ -179,6 +183,7 @@ export function usePlaybackRuntimeControllerStack({
     playbackRef,
     playbackStartIntent,
     setAudioPaused,
+    setAudioUnlocked,
     setPlaybackStartIntent,
     setStatusMessage,
     recordPeerDiagnostic
@@ -270,7 +275,7 @@ export function usePlaybackRuntimeControllerStack({
     playbackStatus,
     progressiveFallbackReason,
     progressiveHealthSnapshot,
-    recoveryAudioUnlocked: audioUnlocked,
+    recoveryAudioUnlocked: effectiveAudioUnlocked,
     roomRecoveryState,
     roomSnapshot,
     startupBufferMs
@@ -413,7 +418,7 @@ export function usePlaybackRuntimeControllerStack({
     activePlaybackSource,
     attemptPlaybackStart,
     audioRef,
-    audioUnlocked,
+    audioUnlocked: effectiveAudioUnlocked,
     canUseFullLocalForPlaybackSession,
     canWarmBufferedFullLocal,
     currentBufferedFullLocalTrackObjectUrl,

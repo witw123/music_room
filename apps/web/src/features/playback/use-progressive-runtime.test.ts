@@ -558,6 +558,16 @@ describe("playback runtime pipeline keys", () => {
     expect(controllerSource).toContain("const attemptPlaybackStart = useCallback");
     expect(controllerSource).toContain("const ensurePlaybackStart = useCallback");
     expect(controllerSource).toContain("resolvePlaybackStartIntentTimeoutPreflight");
+    expect(controllerSource).toContain("setAudioUnlocked(true);");
+    expect(controllerStackSource).toContain(
+      "const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isActivated();"
+    );
+    expect(controllerStackSource).toContain(
+      "recoveryAudioUnlocked: effectiveAudioUnlocked"
+    );
+    expect(controllerStackSource).toContain(
+      "audioUnlocked: effectiveAudioUnlocked"
+    );
   });
 
   it("hosts progressive diagnostics publishing outside the main runtime hook", () => {

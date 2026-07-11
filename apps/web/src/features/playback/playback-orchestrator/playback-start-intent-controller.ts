@@ -48,6 +48,7 @@ type PlaybackStartIntentControllerInput = {
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
   playbackStartIntent: PlaybackStartIntent | null;
   setAudioPaused: Dispatch<SetStateAction<boolean | null>>;
+  setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
   setStatusMessage: (value: string) => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
@@ -69,6 +70,7 @@ export function usePlaybackStartIntentController({
   playbackRef,
   playbackStartIntent,
   setAudioPaused,
+  setAudioUnlocked,
   setPlaybackStartIntent,
   setStatusMessage,
   recordPeerDiagnostic
@@ -150,6 +152,7 @@ export function usePlaybackStartIntentController({
             : current
         );
       }
+      setAudioUnlocked(true);
       setAudioPaused(false);
 
       return true;
@@ -160,6 +163,7 @@ export function usePlaybackStartIntentController({
       playbackStartIntent,
       recordPeerDiagnostic,
       setAudioPaused,
+      setAudioUnlocked,
       updatePlaybackStartIntent
     ]
   );

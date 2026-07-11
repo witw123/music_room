@@ -140,6 +140,7 @@ describe("RoomAudioActivationManager", () => {
     });
     expect(audio.muted).toBe(false);
     expect(audio.volume).toBe(0.72);
+    expect(manager.isActivated()).toBe(false);
   });
 
   it("recovers a blocked audible source by starting muted and restoring sound", async () => {

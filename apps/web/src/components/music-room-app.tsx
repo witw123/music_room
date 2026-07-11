@@ -149,6 +149,7 @@ export function MusicRoomApp({
       playbackStartIntent: pageState.playbackStartIntent,
       setPlaybackStartIntent: pageState.setPlaybackStartIntent,
       audioUnlocked: pageState.audioUnlocked,
+      setAudioUnlocked: pageState.setAudioUnlocked,
       roomRecoveryState: pageState.roomRecoveryState,
       isPageVisible: pageState.isPageVisible,
       volume: pageState.volume,
