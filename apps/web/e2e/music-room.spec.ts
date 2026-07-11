@@ -153,6 +153,7 @@ test("delete-room", async ({ browser, page }) => {
 
   await page.getByTestId("room-settings-button").click();
   await page.getByTestId("delete-room-button").click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "解散房间" }).click();
 
   await expect(page).toHaveURL(/\/app/);
   await expect(listenerPage).toHaveURL(/\/app/, { timeout: 15_000 });
