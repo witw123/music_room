@@ -18,6 +18,17 @@ describe("external peer link profile", () => {
     ).toBe("relay-udp");
   });
 
+  it("does not assume an unknown relay protocol is udp", () => {
+    expect(
+      resolvePeerLinkProfile({
+        candidateType: "relay",
+        relayProtocol: null,
+        currentRoundTripTimeMs: 80,
+        downloadRateKbps: 5_000
+      })
+    ).toBe("constrained");
+  });
+
   it("keeps enough bulk queue to saturate a constrained external link", () => {
     const budget = resolvePeerSendBudget({
       currentRoundTripTimeMs: 320,

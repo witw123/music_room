@@ -35,7 +35,7 @@ type DataMeshRuntime = Pick<
   "syncPeers" | "restartPeer" | "requestPieces" | "getConnectedPeerIds"
 >;
 
-const pieceUnavailableRetryDelayMs = 1_500;
+const pieceUnavailableRetryDelayMs = 150;
 
 export function useRoomDataMesh(input: {
   meshRef: MutableRefObject<P2PMesh | null>;
@@ -232,7 +232,7 @@ export function createRoomDataMeshRuntime(input: {
   deferManualCachePendingPiece: (
     trackId: string,
     chunkIndex: number,
-    options: { delayMs: number }
+    options: { delayMs: number; providerPeerId?: string }
   ) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
@@ -448,7 +448,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         input.deferManualCachePendingPiece(
           trackId,
           chunkIndex,
-          { delayMs: pieceUnavailableRetryDelayMs }
+          { delayMs: pieceUnavailableRetryDelayMs, providerPeerId: unavailablePeerId }
         );
         input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, unavailablePeerId);
         input.recordPeerDiagnosticRef.current({
@@ -590,7 +590,11 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
     },
     input.iceServers,
     {
-      autoReconnect: false,
+      // Keep recovery at the peer lifecycle layer as well as the room-level
+      // supervisor. First-entry ICE checks can legitimately flap on public
+      // networks; without this, a closed DataChannel waits for the slower
+      // cache/recovery loop and all pending piece requests stall.
+      autoReconnect: true,
       resolveConnectionConfig: (remotePeerId) => ({
         iceTransportPolicy: resolvePreferredIceTransportPolicy(
           input.connectionSupervisorStatesRef.current.get(remotePeerId)

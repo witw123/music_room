@@ -35,7 +35,6 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
     finitePositive(input.downloadRateKbps) ?? finitePositive(input.uploadRateKbps);
   const protocol = normalizeProtocol(input.relayProtocol ?? input.protocol);
   const isRelay = normalizeCandidateType(input.candidateType) === "relay";
-  const isTcp = protocol === "tcp";
 
   if (
     input.transportScore === "failed" ||
@@ -44,13 +43,16 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
     return "severe";
   }
 
-  if (isRelay && !isTcp) {
+  // ICE can report a relay candidate before relayProtocol is available. Do
+  // not treat that transitional state as UDP and open a large send window.
+  if (isRelay && protocol === "udp") {
     return "relay-udp";
   }
 
   if (
     input.transportScore === "degraded" ||
-    isTcp ||
+    (isRelay && protocol !== "udp") ||
+    protocol === "tcp" ||
     bufferedAmountBytes >= 8 * 1024 * 1024 ||
     (roundTripTimeMs !== null && roundTripTimeMs >= 250) ||
     (transferRateKbps !== null && transferRateKbps < 1_500)
@@ -58,12 +60,12 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
     return "constrained";
   }
 
-  if (isRelay) {
+  if (isRelay && protocol === "udp") {
     return "relay-udp";
   }
 
   if (
-    !isTcp &&
+    protocol !== "tcp" &&
     bufferedAmountBytes < 128 * 1024 &&
     roundTripTimeMs !== null &&
     roundTripTimeMs <= 120 &&

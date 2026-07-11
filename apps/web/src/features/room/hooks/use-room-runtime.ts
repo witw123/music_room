@@ -403,10 +403,14 @@ export function buildManualCachePendingPieceDeferrer(
   deferPendingPieceRef: MutableRefObject<(
     trackId: string,
     chunkIndex: number,
-    options: { delayMs: number }
+    options: { delayMs: number; providerPeerId?: string }
   ) => void>
 ) {
-  return (trackId: string, chunkIndex: number, options: { delayMs: number }) => {
+  return (
+    trackId: string,
+    chunkIndex: number,
+    options: { delayMs: number; providerPeerId?: string }
+  ) => {
     deferPendingPieceRef.current(trackId, chunkIndex, options);
   };
 }

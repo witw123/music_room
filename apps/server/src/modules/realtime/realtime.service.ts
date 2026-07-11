@@ -77,7 +77,11 @@ export class RealtimeService {
     const protocols = (process.env.TURN_PROTOCOLS ?? "udp,tcp,tls")
       .split(",")
       .map((protocol) => protocol.trim().toLowerCase())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((protocol, index, values) => values.indexOf(protocol) === index)
+      // Prefer the low-overhead relay transport regardless of env ordering.
+      // TCP/TLS remain available as fallback when UDP is unreachable.
+      .sort((left, right) => turnProtocolPriority(left) - turnProtocolPriority(right));
 
     const urls: string[] = [];
     for (const protocol of protocols) {
@@ -181,6 +185,20 @@ function resolveTurnHost(requestHost?: string | null) {
   }
 
   return null;
+}
+
+function turnProtocolPriority(protocol: string) {
+  switch (protocol) {
+    case "udp":
+      return 0;
+    case "tcp":
+      return 1;
+    case "tls":
+    case "turns":
+      return 2;
+    default:
+      return 3;
+  }
 }
 
 function normalizeHostHeader(value?: string | null) {

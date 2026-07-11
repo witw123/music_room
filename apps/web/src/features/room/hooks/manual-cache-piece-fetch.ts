@@ -790,6 +790,12 @@ export async function planManualCacheDirectRequests(input: {
     trackId: string,
     priority: ManualCacheRequestPriority
   ) => ManualCachePeerRequestWindow | null | undefined;
+  isProviderChunkUnavailable?: (
+    providerPeerId: string,
+    trackId: string,
+    chunkIndex: number,
+    now: number
+  ) => boolean;
 }) {
   const results: ManualCacheDirectRequestResult[] = [];
   const roomId = input.roomSnapshot?.room.id ?? null;
@@ -912,11 +918,33 @@ export async function planManualCacheDirectRequests(input: {
       activePlaybackWindow: input.activePlaybackWindow ?? null,
       activeAheadMs: activeTrackAheadMs
     });
+    const trackAvailability = Object.fromEntries(
+      Object.entries(input.availabilityByTrack[trackId] ?? {})
+        .map(([providerPeerId, announcement]) => [
+          providerPeerId,
+          {
+            ...announcement,
+            availableChunks: announcement.availableChunks.filter(
+              (chunkIndex) =>
+                !input.isProviderChunkUnavailable?.(
+                  providerPeerId,
+                  trackId,
+                  chunkIndex,
+                  now
+                )
+            )
+          }
+        ] as const)
+        .filter(([, announcement]) => announcement.availableChunks.length > 0)
+    );
     const plan = resolveManualCacheTrackPlan({
       track,
       roomId,
       localPeerId: input.peerId,
-      availabilityByTrack: input.availabilityByTrack,
+      availabilityByTrack: {
+        ...input.availabilityByTrack,
+        [trackId]: trackAvailability
+      },
       connectedPeerIds: input.connectedPeerIds,
       cachedManifest,
       localPieceIndexes,

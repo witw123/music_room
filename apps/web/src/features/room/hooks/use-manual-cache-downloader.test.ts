@@ -1148,6 +1148,50 @@ describe("planManualCacheDirectRequests", () => {
     });
   });
 
+  it("routes a quarantined provider chunk to another connected cache peer", async () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: null,
+      playbackStatus: "playing",
+      totalChunks: 4
+    });
+    const requestPieces = vi.fn(
+      (
+        _providerPeerId: string,
+        _trackId: string,
+        _chunkIndexes: number[],
+        _totalChunks: number,
+        _timeoutMs: number
+      ) => true
+    );
+
+    await planManualCacheDirectRequests({
+      roomSnapshot,
+      manualCacheTrackIds: ["track_a"],
+      peerId: "peer_local",
+      providerPeerIds: ["peer_stale", "peer_cache"],
+      connectedPeerIds: ["peer_stale", "peer_cache"],
+      availabilityByTrack: {
+        track_a: {
+          peer_stale: buildAvailability("peer_stale", 4),
+          peer_cache: buildAvailability("peer_cache", 4)
+        }
+      },
+      pendingByTrack: new Map(),
+      requestPieces,
+      getCachedManifest: async () => null,
+      getLocalPieceIndexes: async () => [],
+      isProviderChunkUnavailable: (providerPeerId, _trackId, chunkIndex) =>
+        providerPeerId === "peer_stale" && chunkIndex === 0,
+      now: 10_000
+    });
+
+    const requestedChunkZeroFrom = requestPieces.mock.calls
+      .filter((call) => call[2].includes(0))
+      .map((call) => call[0]);
+    expect(requestedChunkZeroFrom).toContain("peer_cache");
+    expect(requestedChunkZeroFrom).not.toContain("peer_stale");
+  });
+
   it("prioritizes the active playback track before background cache work on the same provider", async () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner",

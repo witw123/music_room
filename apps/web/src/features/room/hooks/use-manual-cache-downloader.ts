@@ -97,6 +97,7 @@ export function useManualCacheDownloader(input: {
   );
   const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());
   const lastProviderRestartAtRef = useRef<Map<string, number>>(new Map());
+  const unavailableProviderChunksRef = useRef<Map<string, number>>(new Map());
   activePlaybackWindowRef.current = activePlaybackWindow ?? null;
 
   const schedulerAvailabilityByTrack = useMemo(
@@ -161,16 +162,28 @@ export function useManualCacheDownloader(input: {
     remotePeerIds,
     roomSnapshot,
     schedulerAvailabilityByTrack,
-    triggerDirectRequestRef
+    triggerDirectRequestRef,
+    unavailableProviderChunksRef
   });
   const clearPendingPiece = (trackId: string, chunkIndex: number) => {
     directPendingRef.current.get(trackId)?.delete(chunkIndex);
     queueMicrotask(() => triggerDirectRequestRef.current());
   };
-  const deferPendingPiece = (trackId: string, chunkIndex: number, options: { delayMs: number }) => {
+  const deferPendingPiece = (
+    trackId: string,
+    chunkIndex: number,
+    options: { delayMs: number; providerPeerId?: string }
+  ) => {
     const pendingForTrack = directPendingRef.current.get(trackId) ?? new Map<number, number>();
     pendingForTrack.set(chunkIndex, Date.now() + options.delayMs);
     directPendingRef.current.set(trackId, pendingForTrack);
+    if (options.providerPeerId) {
+      unavailableProviderChunksRef.current.set(
+        `${options.providerPeerId}\u0000${trackId}\u0000${chunkIndex}`,
+        Date.now() + 30_000
+      );
+    }
+    queueMicrotask(() => triggerDirectRequestRef.current());
   };
 
   return {

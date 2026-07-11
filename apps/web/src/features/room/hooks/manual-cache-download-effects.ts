@@ -62,6 +62,7 @@ type ManualCacheDownloadEffectsInput = {
   roomSnapshot: RoomSnapshot | null;
   schedulerAvailabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   triggerDirectRequestRef: MutableRefObject<() => void>;
+  unavailableProviderChunksRef: MutableRefObject<Map<string, number>>;
 };
 
 export function reconcileManualCacheDirectPendingTracks(input: {
@@ -128,7 +129,8 @@ export function useManualCacheDownloadEffects({
   remotePeerIds,
   roomSnapshot,
   schedulerAvailabilityByTrack,
-  triggerDirectRequestRef
+  triggerDirectRequestRef,
+  unavailableProviderChunksRef
 }: ManualCacheDownloadEffectsInput) {
 
   const directRequestLoopInputRef = useRef({
@@ -472,7 +474,16 @@ export function useManualCacheDownloadEffects({
               timeoutMs,
               options
             ),
-          resolvePeerRequestWindow: latest.resolvePeerRequestWindow
+          resolvePeerRequestWindow: latest.resolvePeerRequestWindow,
+          isProviderChunkUnavailable: (providerPeerId, trackId, chunkIndex, nowMs) => {
+            const key = `${providerPeerId}\u0000${trackId}\u0000${chunkIndex}`;
+            const unavailableUntil = unavailableProviderChunksRef.current.get(key) ?? 0;
+            if (unavailableUntil <= nowMs) {
+              unavailableProviderChunksRef.current.delete(key);
+              return false;
+            }
+            return true;
+          }
         });
 
         for (const { plan, didRequest } of requestResults) {
@@ -539,7 +550,8 @@ export function useManualCacheDownloadEffects({
     lastBootstrapAttemptAtRef,
     lastProviderRestartAtRef,
     providerUnavailableSinceRef,
-    triggerDirectRequestRef
+    triggerDirectRequestRef,
+    unavailableProviderChunksRef
   ]);
 
   useEffect(() => {
