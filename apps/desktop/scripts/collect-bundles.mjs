@@ -20,7 +20,6 @@ const allowedFileNames = [
   ".rpm",
   ".zip",
   ".tar.gz",
-  ".json",
   ".sig"
 ];
 
