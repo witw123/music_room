@@ -245,6 +245,7 @@ export function createRoomDataMeshRuntime(input: {
   reportMeshResyncFailure: (error: unknown) => void;
 } & RoomDataMeshDiagnosticsRefs) {
   const peerBufferedAmountBytes = new Map<string, number>();
+  const rejectedRelayPeers = new Set<string>();
   const cachedLibraryTrackCache =
     createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(1, 5_000);
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
@@ -365,7 +366,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           mimeType
         });
       },
-      onPieceSent: ({ peerId: targetPeerId, payloadBytes }) => {
+      onPieceReceivedAck: ({ peerId: targetPeerId, payloadBytes }) => {
         input.recordPieceTransferRef.current({
           peerId: targetPeerId,
           direction: "upload",
@@ -574,6 +575,25 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           peerId: remotePeerId,
           sample
         });
+        if (
+          sample.candidateType === "relay" &&
+          sample.relayProtocol &&
+          sample.relayProtocol.toLowerCase() !== "udp"
+        ) {
+          input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
+          if (!rejectedRelayPeers.has(remotePeerId)) {
+            rejectedRelayPeers.add(remotePeerId);
+            void mesh.restartPeer(remotePeerId).finally(() => {
+              rejectedRelayPeers.delete(remotePeerId);
+            });
+          }
+          queueDataPeerRecovery({
+            peerId: remotePeerId,
+            dataConnectionState: sample.connectionState,
+            dataChannelState: sample.dataChannelState,
+            reason: `unsupported-relay-protocol:${sample.relayProtocol}`
+          });
+        }
       },
       onPeerStalled: ({ peerId: remotePeerId, reason }) => {
         input.updateConnectionSupervisorSignalState({

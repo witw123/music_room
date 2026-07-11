@@ -79,10 +79,10 @@ describe("peer connection lifecycle helpers", () => {
     expect(
       buildPeerConnectionConfig({
         peerId: "peer_b",
-        iceServers: [{ urls: "turn:example.test" }]
+        iceServers: [{ urls: "turn:example.test?transport=udp" }]
       })
     ).toEqual({
-      iceServers: [{ urls: "turn:example.test" }]
+      iceServers: [{ urls: "turn:example.test?transport=udp" }]
     });
   });
 

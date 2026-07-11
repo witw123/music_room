@@ -25,6 +25,7 @@ export const p2pFeatureBoundary =
 export type TurnConnectivityResult = {
   reachable: boolean;
   relayCandidates: number;
+  udpRelayCandidates: number;
   srflxCandidates: number;
   hostCandidates: number;
   totalCandidates: number;
@@ -54,6 +55,7 @@ export async function testTurnConnectivity(
     return {
       reachable: false,
       relayCandidates: 0,
+      udpRelayCandidates: 0,
       srflxCandidates: 0,
       hostCandidates: 0,
       totalCandidates: 0,
@@ -68,6 +70,7 @@ export async function testTurnConnectivity(
   });
 
   const relayCandidates: RTCIceCandidate[] = [];
+  const udpRelayCandidates: RTCIceCandidate[] = [];
   const srflxCandidates: RTCIceCandidate[] = [];
   const hostCandidates: RTCIceCandidate[] = [];
   let gatherError: string | undefined;
@@ -86,6 +89,9 @@ export async function testTurnConnectivity(
         }
         if (event.candidate.type === "relay") {
           relayCandidates.push(event.candidate);
+          if (event.candidate.protocol?.toLowerCase() === "udp") {
+            udpRelayCandidates.push(event.candidate);
+          }
         } else if (event.candidate.type === "srflx") {
           srflxCandidates.push(event.candidate);
         } else if (event.candidate.type === "host") {
@@ -113,8 +119,9 @@ export async function testTurnConnectivity(
   pc.close();
 
   return {
-    reachable: relayCandidates.length > 0,
+    reachable: udpRelayCandidates.length > 0,
     relayCandidates: relayCandidates.length,
+    udpRelayCandidates: udpRelayCandidates.length,
     srflxCandidates: srflxCandidates.length,
     hostCandidates: hostCandidates.length,
     totalCandidates: relayCandidates.length + srflxCandidates.length + hostCandidates.length,

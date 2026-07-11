@@ -54,6 +54,12 @@ type MeshCallbacks = {
     chunkIndex: number;
     payloadBytes: number;
   }) => void;
+  onPieceReceivedAck?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    payloadBytes: number;
+  }) => void;
   onPieceRequestSent?: (payload: {
     peerId: string;
     trackId: string;
@@ -235,7 +241,22 @@ export class P2PMesh {
         this.pieceServe.rememberManifestHeader(trackId, header),
       resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
       onPieceReceived: this.callbacks.onPieceReceived,
-      onPiecePersisted: this.callbacks.onPiecePersisted,
+      onPiecePersisted: (payload) => {
+        this.callbacks.onPiecePersisted?.(payload);
+        const entry = this.peerLifecycle.getPeerEntry(payload.peerId);
+        if (entry) {
+          this.enqueueSendItem(payload.peerId, entry, {
+            data: JSON.stringify({
+              kind: "piece-received",
+              trackId: payload.trackId,
+              chunkIndex: payload.chunkIndex,
+              payloadBytes: payload.payloadBytes
+            }),
+            channel: "control",
+            priority: "control"
+          });
+        }
+      },
       onPieceRequestTimeout: this.callbacks.onPieceRequestTimeout
     });
     this.pieceMessages = new PieceMessageRouter<PeerEntry>({
@@ -248,6 +269,7 @@ export class P2PMesh {
       failPendingRequest: (request) =>
         this.pieceRequestClient.failPendingRequest(request),
       enqueueInboundPiece: (item) => this.inboundPieces.enqueue(item),
+      onPieceReceivedAck: this.callbacks.onPieceReceivedAck,
       onPieceRequestReceived: this.callbacks.onPieceRequestReceived,
       onPieceUnavailable: ({ peerId, trackId, chunkIndex, requestId, reason, requestDurationMs }) =>
         this.callbacks.onPieceUnavailable?.({

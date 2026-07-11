@@ -1,5 +1,6 @@
 export type DataChannelQueuedSendItem = {
   data: string | ArrayBuffer;
+  channel?: "control" | "data";
   priority?: "control" | "critical" | "bulk";
   trackId?: string;
   chunkIndex?: number;
@@ -14,6 +15,8 @@ export type DataChannelSendBudget = {
 
 type DataChannelLifecycleEntry = {
   channel?: RTCDataChannel | null;
+  controlChannel?: RTCDataChannel | null;
+  dataChannel?: RTCDataChannel | null;
   dataChannelState: RTCDataChannelState | null;
   lastSignalProgressAtMs: number;
   reconnectAttempts: number;
@@ -77,6 +80,12 @@ export class DataChannelManager {
     onMessage: (event: MessageEvent) => void | Promise<void>;
   }) {
     const { channel, entry, peerId } = input;
+    if (channel.label === "music-room-control") {
+      entry.controlChannel = channel;
+    } else if (channel.label === "music-room-data") {
+      entry.dataChannel = channel;
+    }
+    entry.channel = entry.controlChannel ?? entry.dataChannel ?? channel;
     channel.binaryType = "arraybuffer";
     this.updateBufferedAmountLowThreshold(peerId, entry, channel);
     entry.dataChannelState = channel.readyState;
@@ -196,11 +205,16 @@ export class DataChannelManager {
       if (!nextItem) {
         break;
       }
+      const targetChannel = resolveQueuedChannel(input.entry, nextItem) ?? channel;
+      if (targetChannel.readyState !== "open") {
+        input.entry.sendQueue.splice(nextItemIndex, 0, nextItem);
+        break;
+      }
       try {
         if (typeof nextItem.data === "string") {
-          channel.send(nextItem.data);
+          targetChannel.send(nextItem.data);
         } else {
-          channel.send(nextItem.data);
+          targetChannel.send(nextItem.data);
         }
       } catch {
         input.entry.sendQueue.splice(nextItemIndex, 0, nextItem);
@@ -259,6 +273,16 @@ export class DataChannelManager {
       bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes
     });
   }
+}
+
+function resolveQueuedChannel(
+  entry: DataChannelLifecycleEntry,
+  item: DataChannelQueuedSendItem
+) {
+  if (item.channel === "data") {
+    return entry.dataChannel ?? entry.channel ?? null;
+  }
+  return entry.controlChannel ?? entry.channel ?? null;
 }
 
 export function shouldFlushDataChannelQueue(input: {

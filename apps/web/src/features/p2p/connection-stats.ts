@@ -8,6 +8,8 @@ export type PeerConnectionStatsSample = {
   relayProtocol?: string | null;
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
+  transportReceiveBitrateKbps?: number | null;
+  transportSendBitrateKbps?: number | null;
   connectionState?: string | null;
   iceConnectionState?: string | null;
   dataChannelState?: string | null;
@@ -30,6 +32,9 @@ export type PeerConnectionStatsSnapshot = {
   outboundAudioTimestampMs: number | null;
   packetsLost: number | null;
   packetsTotal: number | null;
+  candidatePairBytesReceived?: number | null;
+  candidatePairBytesSent?: number | null;
+  candidatePairTimestampMs?: number | null;
 };
 
 export async function samplePeerConnectionStats(
@@ -55,6 +60,9 @@ export async function samplePeerConnectionStats(
       localCandidate,
       remoteCandidate
     });
+    const candidatePairBytesReceived = getNumber(selectedCandidatePair, "bytesReceived");
+    const candidatePairBytesSent = getNumber(selectedCandidatePair, "bytesSent");
+    const candidatePairTimestampMs = getTimestampMs(selectedCandidatePair);
     const inboundAudio = findFirstStat(
       statsById,
       (stat) => stat.type === "inbound-rtp" && getString(stat, "kind") === "audio"
@@ -93,6 +101,18 @@ export async function samplePeerConnectionStats(
         availableOutgoingBitrateKbps: toKbps(
           getNumber(selectedCandidatePair, "availableOutgoingBitrate")
         ),
+        transportReceiveBitrateKbps: toBitrateKbps({
+          currentBytes: candidatePairBytesReceived,
+          currentTimestampMs: candidatePairTimestampMs,
+          previousBytes: previousSnapshot?.candidatePairBytesReceived ?? null,
+          previousTimestampMs: previousSnapshot?.candidatePairTimestampMs ?? null
+        }),
+        transportSendBitrateKbps: toBitrateKbps({
+          currentBytes: candidatePairBytesSent,
+          currentTimestampMs: candidatePairTimestampMs,
+          previousBytes: previousSnapshot?.candidatePairBytesSent ?? null,
+          previousTimestampMs: previousSnapshot?.candidatePairTimestampMs ?? null
+        }),
         connectionState: getConnectionState(connection),
         iceConnectionState: getIceConnectionState(connection),
         dataChannelState: null,
@@ -118,7 +138,10 @@ export async function samplePeerConnectionStats(
         outboundAudioBytes,
         outboundAudioTimestampMs,
         packetsLost: lossCounters?.lost ?? null,
-        packetsTotal: lossCounters?.total ?? null
+        packetsTotal: lossCounters?.total ?? null,
+        candidatePairBytesReceived,
+        candidatePairBytesSent,
+        candidatePairTimestampMs
       }
     };
   } catch {

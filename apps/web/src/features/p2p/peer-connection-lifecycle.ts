@@ -16,12 +16,32 @@ export function buildPeerConnectionConfig(input: {
   resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;
 }): RTCConfiguration {
   return {
-    iceServers:
+    iceServers: restrictIceServersToUdp(
       input.iceServers.length > 0
         ? input.iceServers
-        : [{ urls: "stun:stun.l.google.com:19302" }],
+        : [{ urls: "stun:stun.l.google.com:19302" }]
+    ),
     ...(input.resolveConnectionConfig?.(input.peerId) ?? {})
   };
+}
+
+function restrictIceServersToUdp(iceServers: IceServerConfig[]): IceServerConfig[] {
+  return iceServers.flatMap((server) => {
+    const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    const filteredUrls = urls.filter((url) => {
+      const normalized = url.trim().toLowerCase();
+      return !normalized.startsWith("turn:") && !normalized.startsWith("turns:")
+        ? true
+        : normalized.includes("transport=udp");
+    });
+    if (filteredUrls.length === 0) {
+      return [];
+    }
+    return [{
+      ...server,
+      urls: Array.isArray(server.urls) ? filteredUrls : filteredUrls[0]!
+    }];
+  });
 }
 
 export function resolveExistingPeerConnectionAction(input: {
@@ -54,7 +74,11 @@ export function releasePeerConnectionEntry(input: {
   clearPeerTimers(input.entry);
   input.clearPendingRequestsForPeer(input.peerId);
   input.stopStatsSampling(input.entry);
-  input.entry.channel?.close();
+  input.entry.controlChannel?.close();
+  input.entry.dataChannel?.close();
+  if (!input.entry.controlChannel && !input.entry.dataChannel) {
+    input.entry.channel?.close();
+  }
   input.entry.connection.close();
   input.onDataBufferedAmountChange?.({
     peerId: input.peerId,
@@ -148,8 +172,14 @@ export function bindPeerConnectionEvents(input: {
   };
 
   input.connection.ondatachannel = (event) => {
-    input.entry.channel = event.channel;
-    input.bindChannel(input.peerId, input.entry, input.entry.channel);
+    const channel = event.channel;
+    if (channel.label === "music-room-control") {
+      input.entry.controlChannel = channel;
+    } else if (channel.label === "music-room-data") {
+      input.entry.dataChannel = channel;
+    }
+    input.entry.channel = input.entry.controlChannel ?? input.entry.dataChannel ?? channel;
+    input.bindChannel(input.peerId, input.entry, channel);
   };
 }
 

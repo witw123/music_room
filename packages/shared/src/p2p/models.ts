@@ -80,6 +80,12 @@ export const p2pDataMessageSchema = z.union([
     reason: z.enum(["piece-missing", "manifest-missing", "channel-not-open"]).optional()
   }),
   z.object({
+    kind: z.literal("piece-received"),
+    trackId: z.string(),
+    chunkIndex: z.number().int().nonnegative(),
+    payloadBytes: z.number().int().positive()
+  }),
+  z.object({
     kind: z.literal("send-piece"),
     requestId: z.string().optional(),
     trackId: z.string(),
@@ -391,6 +397,8 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   mediaProtocol: z.string().nullable(),
   currentRoundTripTimeMs: z.number().nonnegative().nullable(),
   availableOutgoingBitrateKbps: z.number().nonnegative().nullable(),
+  transportReceiveBitrateKbps: z.number().nonnegative().nullable().optional(),
+  transportSendBitrateKbps: z.number().nonnegative().nullable().optional(),
   targetAudioBitrateKbps: z.number().nonnegative().nullable().optional(),
   configuredAudioMaxBitrateKbps: z.number().nonnegative().nullable().optional(),
   senderAudioMaxBitrateKbps: z.number().nonnegative().nullable().optional(),

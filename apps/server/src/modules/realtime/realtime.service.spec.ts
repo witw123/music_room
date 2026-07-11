@@ -22,7 +22,7 @@ describe("RealtimeService", () => {
       ...envBackup,
       TURN_PORT: "3478",
       TURN_TLS_PORT: "5349",
-      TURN_PROTOCOLS: "udp,tcp,tls",
+      TURN_PROTOCOLS: "tcp,udp,tls",
       TURN_TTL_SECONDS: "3600",
       NEXT_PUBLIC_STUN_URL: "stun:stun.example.com:3478"
     };
@@ -51,9 +51,7 @@ describe("RealtimeService", () => {
         { urls: "stun:stun.example.com:3478" },
         {
           urls: [
-            "turn:turn.example.com:3478?transport=udp",
-            "turn:turn.example.com:3478?transport=tcp",
-            "turns:turn.example.com:5349?transport=tcp"
+            "turn:turn.example.com:3478?transport=udp"
           ],
           username,
           credential

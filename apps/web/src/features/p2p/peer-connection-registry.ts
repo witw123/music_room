@@ -7,6 +7,8 @@ import type { DataChannelQueuedSendItem } from "./data-channel-manager";
 export type PeerEntry = {
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
+  controlChannel: RTCDataChannel | null;
+  dataChannel: RTCDataChannel | null;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
   pendingCandidates: RTCIceCandidateInit[];
@@ -31,6 +33,8 @@ export function createPeerEntry(input: {
   return {
     connection: input.connection,
     channel: null,
+    controlChannel: null,
+    dataChannel: null,
     initiatorPeerId: input.initiatorPeerId,
     pendingCandidates: [],
     statsIntervalId: null,

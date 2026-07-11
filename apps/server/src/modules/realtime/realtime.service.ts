@@ -70,11 +70,10 @@ export class RealtimeService {
     ttlSeconds: number;
   }): IceServerConfig[] {
     const port = parsePositiveInt(process.env.TURN_PORT) ?? 3478;
-    const tlsPort = parsePositiveInt(process.env.TURN_TLS_PORT) ?? 5349;
     const expiry = Math.floor(Date.now() / 1000) + input.ttlSeconds;
     const username = `${expiry}:${input.userId}`;
     const credential = createHmac("sha1", input.turnSecret).update(username).digest("base64");
-    const protocols = (process.env.TURN_PROTOCOLS ?? "udp,tcp,tls")
+    const protocols = (process.env.TURN_PROTOCOLS ?? "udp")
       .split(",")
       .map((protocol) => protocol.trim().toLowerCase())
       .filter(Boolean)
@@ -85,16 +84,11 @@ export class RealtimeService {
 
     const urls: string[] = [];
     for (const protocol of protocols) {
+      if (protocol !== "udp") {
+        continue;
+      }
       if (protocol === "udp") {
         urls.push(`turn:${input.turnHost}:${port}?transport=udp`);
-      }
-
-      if (protocol === "tcp") {
-        urls.push(`turn:${input.turnHost}:${port}?transport=tcp`);
-      }
-
-      if (protocol === "tls" || protocol === "turns") {
-        urls.push(`turns:${input.turnHost}:${tlsPort}?transport=tcp`);
       }
     }
 

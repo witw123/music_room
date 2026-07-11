@@ -161,6 +161,10 @@ export function useRoomRuntimeObservability(input: {
         availableOutgoingBitrateKbps:
           value.sample?.availableOutgoingBitrateKbps ??
           snapshot.availableOutgoingBitrateKbps,
+        transportReceiveBitrateKbps:
+          value.sample?.transportReceiveBitrateKbps ?? snapshot.transportReceiveBitrateKbps ?? null,
+        transportSendBitrateKbps:
+          value.sample?.transportSendBitrateKbps ?? snapshot.transportSendBitrateKbps ?? null,
         packetsLost: value.sample?.packetsLost ?? snapshot.packetsLost,
         jitterMs: value.sample?.jitterMs ?? snapshot.jitterMs,
         packetLossRate: value.sample?.packetLossRate ?? snapshot.packetLossRate,

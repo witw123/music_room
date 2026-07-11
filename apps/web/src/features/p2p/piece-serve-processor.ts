@@ -318,6 +318,7 @@ export class PieceServeProcessor<TEntry extends PieceServePeerEntry = PieceServe
     for (const frame of pieceFrames) {
       this.enqueueSendItem(peerId, entry, {
         data: frame.data,
+        channel: "data",
         priority: request.priority === "critical" ? "critical" : "bulk",
         trackId: request.trackId,
         chunkIndex: piece.chunkIndex,

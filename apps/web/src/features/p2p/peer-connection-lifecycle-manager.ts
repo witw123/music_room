@@ -270,11 +270,17 @@ export class PeerConnectionLifecycleManager {
     this.schedulePeerWatchdog(peerId, entry);
     try {
       if (shouldInitiate) {
-        const channel = connection.createDataChannel("music-room-p2p", {
+        const controlChannel = connection.createDataChannel("music-room-control", {
+          ordered: true
+        });
+        const dataChannel = connection.createDataChannel("music-room-data", {
           ordered: false
         });
-        entry.channel = channel;
-        this.bindChannelCallback(peerId, entry, channel);
+        entry.controlChannel = controlChannel;
+        entry.dataChannel = dataChannel;
+        entry.channel = controlChannel;
+        this.bindChannelCallback(peerId, entry, controlChannel);
+        this.bindChannelCallback(peerId, entry, dataChannel);
         await this.signaling.createAndSendOffer(peerId, connection);
         entry.lastSignalProgressAtMs = Date.now();
       }

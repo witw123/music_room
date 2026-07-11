@@ -4,6 +4,7 @@ import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@mu
 import type { TrackPieceManifestRecord } from "@/lib/indexeddb";
 import {
   resolvePeerLinkProfile,
+  isPeerTransportAllowed,
   resolvePeerTransferWindow,
   resolveTrackPieceManifest,
   type ResolvedTrackPieceManifest
@@ -270,11 +271,15 @@ function isProviderEligibleForRequest(input: {
   requestPriority: ManualCacheRequestPriority;
   window: ManualCachePeerRequestWindow | null;
 }) {
-  if (input.requestPriority !== "active") {
+  if (!input.window) {
     return true;
   }
 
-  if (!input.window) {
+  if (!isPeerTransportAllowed(input.window)) {
+    return false;
+  }
+
+  if (input.requestPriority !== "active") {
     return true;
   }
 

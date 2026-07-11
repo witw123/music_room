@@ -153,6 +153,7 @@ curl http://127.0.0.1:3001/health
 - `TURN_MIN_PORT=49160`
 - `TURN_MAX_PORT=49200`
 - `TURN_TTL_SECONDS=3600`
+- `TURN_PROTOCOLS=udp`
 
 ### 必须放通的端口
 

@@ -28,6 +28,15 @@ export type PeerTransferWindow = {
   requestTimeoutMs: number;
 };
 
+export function isPeerTransportAllowed(input: PeerLinkProfileInput) {
+  const candidateType = normalizeCandidateType(input.candidateType);
+  const protocol = normalizeProtocol(input.relayProtocol ?? input.protocol);
+  if (protocol === "tcp") {
+    return false;
+  }
+  return candidateType !== "relay" || protocol === "udp";
+}
+
 export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkProfile {
   const bufferedAmountBytes = finitePositive(input.bufferedAmountBytes) ?? 0;
   const roundTripTimeMs = finitePositive(input.currentRoundTripTimeMs);

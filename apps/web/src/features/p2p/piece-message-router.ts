@@ -23,6 +23,12 @@ type PieceServeRequest = {
 };
 
 type PieceMessageRouterCallbacks = {
+  onPieceReceivedAck?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    payloadBytes: number;
+  }) => void;
   onPieceRequestReceived?: (payload: {
     peerId: string;
     trackId: string;
@@ -170,6 +176,16 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
         requestDurationMs:
           pendingRequest ? Date.now() - pendingRequest.requestedAtMs : 0,
         pendingRequest: pendingRequest ?? undefined
+      });
+      return;
+    }
+
+    if (message.kind === "piece-received") {
+      this.callbacks.onPieceReceivedAck?.({
+        peerId: input.peerId,
+        trackId: message.trackId,
+        chunkIndex: message.chunkIndex,
+        payloadBytes: message.payloadBytes
       });
       return;
     }

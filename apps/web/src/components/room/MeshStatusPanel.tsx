@@ -215,6 +215,8 @@ function PeerDiagnosticCard({
             <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "暂无样本"}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
             <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
+            <span>传输接收: {formatRateM(peer.transportReceiveBitrateKbps)}</span>
+            <span>传输发送: {formatRateM(peer.transportSendBitrateKbps)}</span>
           </DiagnosticGrid>
           {peer.dataCandidateType === "relay" || peer.dataProtocol === "tcp" || peer.dataRelayProtocol === "tcp" ? (
             <p className="mt-2 text-[10px] text-amber-300">
