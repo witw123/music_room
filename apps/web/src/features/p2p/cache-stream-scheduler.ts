@@ -46,8 +46,10 @@ type SchedulerStream = {
   received: Set<number>;
   acknowledged: Set<number>;
   unconfirmed: Set<number>;
+  totalChunks: number;
   chunkSize: number;
   openedAtMs: number;
+  lastProgressAtMs: number;
   bytesAcked: number;
   nackCount: number;
   creditBytes: number;
@@ -121,6 +123,8 @@ export class CacheStreamScheduler {
   }
 
   request(input: CacheStreamSchedulerRequest) {
+    this.reassignStalledStreams(input.trackId);
+
     const wanted = [...new Set(input.chunkIndexes)]
       .filter((chunkIndex) => chunkIndex >= 0 && chunkIndex < input.totalChunks)
       .sort((left, right) => left - right);
@@ -132,6 +136,15 @@ export class CacheStreamScheduler {
     this.generationByTrack.set(input.trackId, generation);
     const candidates = this.resolveCandidates(input);
     if (candidates.length === 0) {
+      return false;
+    }
+
+    const activeStreams = this.getTrackStreams(input.trackId);
+    const availableStreamSlots = Math.max(
+      0,
+      MAX_ACTIVE_STREAMS_PER_TRACK - activeStreams.length
+    );
+    if (availableStreamSlots === 0) {
       return false;
     }
 
@@ -172,9 +185,15 @@ export class CacheStreamScheduler {
       this.assignedByTrack.set(input.trackId, trackAssignments);
     }
 
-    const activeStreams = this.getTrackStreams(input.trackId);
     let opened = false;
-    for (const [peerId, chunkIndexes] of assignment.entries()) {
+    const assignmentEntries = [...assignment.entries()];
+    for (const [peerId, chunkIndexes] of assignmentEntries.slice(availableStreamSlots)) {
+      for (const chunkIndex of chunkIndexes) {
+        this.releaseAssignment(input.trackId, chunkIndex, peerId);
+      }
+    }
+
+    for (const [peerId, chunkIndexes] of assignmentEntries.slice(0, availableStreamSlots)) {
       if (chunkIndexes.length === 0) {
         continue;
       }
@@ -207,8 +226,10 @@ export class CacheStreamScheduler {
         received: new Set(),
         acknowledged: new Set(),
         unconfirmed: new Set(chunkIndexes),
+        totalChunks: input.totalChunks,
         chunkSize: input.chunkSize,
         openedAtMs: Date.now(),
+        lastProgressAtMs: Date.now(),
         bytesAcked: 0,
         nackCount: 0,
         creditBytes: message.initialCreditBytes
@@ -296,6 +317,7 @@ export class CacheStreamScheduler {
     stream.unconfirmed.delete(input.chunkIndex);
     stream.bytesAcked += input.storedBytes;
     stream.creditBytes += input.storedBytes;
+    stream.lastProgressAtMs = Date.now();
     this.sendControl(input.peerId, {
       kind: "cache-stream-ack",
       streamId: input.streamId,
@@ -309,6 +331,9 @@ export class CacheStreamScheduler {
       generation: input.generation,
       creditBytes: input.storedBytes
     });
+    if (stream.unconfirmed.size === 0) {
+      this.removeStream(stream);
+    }
     return true;
   }
 
@@ -344,6 +369,36 @@ export class CacheStreamScheduler {
       generation: stream.generation,
       excludedPeerIds: input.reason === "hash-mismatch" ? [input.peerId] : []
     });
+  }
+
+  handleReset(input: {
+    peerId: string;
+    streamId: string;
+    generation: number;
+  }) {
+    const stream = this.streams.get(input.streamId);
+    if (
+      !stream ||
+      stream.peerId !== input.peerId ||
+      stream.generation !== input.generation
+    ) {
+      return false;
+    }
+
+    const remaining = [...stream.unconfirmed];
+    this.removeStream(stream);
+    if (remaining.length > 0) {
+      this.request({
+        trackId: stream.trackId,
+        chunkIndexes: remaining,
+        totalChunks: stream.totalChunks,
+        chunkSize: stream.chunkSize,
+        priority: stream.priority,
+        generation: stream.generation,
+        excludedPeerIds: [input.peerId]
+      });
+    }
+    return true;
   }
 
   clearTrack(trackId: string) {
@@ -396,6 +451,12 @@ export class CacheStreamScheduler {
         connected: true
       });
     }
+    if (input.preferredPeerId && !input.allowRedundant) {
+      const preferred = providers.find((provider) => provider.peerId === input.preferredPeerId);
+      if (preferred) {
+        return [preferred];
+      }
+    }
     return providers.sort((left, right) => this.scoreProvider(left) - this.scoreProvider(right));
   }
 
@@ -443,6 +504,37 @@ export class CacheStreamScheduler {
         chunkSize: stream.chunkSize,
         priority: stream.priority,
         generation: stream.generation
+      });
+    }
+  }
+
+  private reassignStalledStreams(trackId?: string) {
+    const now = Date.now();
+    for (const stream of [...this.streams.values()]) {
+      if (
+        (trackId && stream.trackId !== trackId) ||
+        stream.unconfirmed.size === 0 ||
+        now - stream.lastProgressAtMs < 12_000
+      ) {
+        continue;
+      }
+
+      this.sendControl(stream.peerId, {
+        kind: "cache-stream-reset",
+        streamId: stream.streamId,
+        generation: stream.generation,
+        reason: "timeout"
+      });
+      const remaining = [...stream.unconfirmed];
+      this.removeStream(stream);
+      this.request({
+        trackId: stream.trackId,
+        chunkIndexes: remaining,
+        totalChunks: stream.totalChunks,
+        chunkSize: stream.chunkSize,
+        priority: stream.priority,
+        generation: stream.generation,
+        excludedPeerIds: [stream.peerId]
       });
     }
   }

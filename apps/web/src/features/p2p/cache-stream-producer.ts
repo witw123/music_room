@@ -24,6 +24,14 @@ type TrackCacheIdentity = {
   chunkSize?: number | null;
 };
 
+type ProducerFallbackPiece = {
+  payload: ArrayBuffer;
+  hash: string;
+  totalChunks: number;
+  chunkSize: number;
+  mimeType: string;
+};
+
 type ProducerInFlight = {
   bytes: number;
   sentAtMs: number;
@@ -51,6 +59,8 @@ type ProducerState<TEntry extends ProducerPeerEntry = ProducerPeerEntry> = {
   bytesSent: number;
   nackCount: number;
 };
+
+const producerReadBatchSize = 32;
 
 export type CacheStreamProducerMetrics = {
   peerId: string;
@@ -85,6 +95,9 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
   private readonly resolveMaxDataChannelPayloadBytes: (peerId: string) => number;
   private readonly resolveDataChannelBufferedAmountBytes: (peerId: string, entry: TEntry) => number;
   private readonly resolveMaxInFlightBytes: (peerId: string) => number;
+  private readonly resolvePieceFallback?: (
+    input: { trackId: string; chunkIndex: number }
+  ) => Promise<ProducerFallbackPiece | null>;
   private readonly onMetrics?: (metrics: CacheStreamProducerMetrics) => void;
   private readonly streams = new Map<string, ProducerState<TEntry>>();
   private readonly manifestHeaders = new Map<string, {
@@ -107,6 +120,9 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     resolveMaxDataChannelPayloadBytes?: (peerId: string) => number;
     resolveDataChannelBufferedAmountBytes?: (peerId: string, entry: TEntry) => number;
     resolveMaxInFlightBytes?: (peerId: string) => number;
+    resolvePieceFallback?: (
+      input: { trackId: string; chunkIndex: number }
+    ) => Promise<ProducerFallbackPiece | null>;
     onMetrics?: (metrics: CacheStreamProducerMetrics) => void;
   }) {
     this.localPeerId = input.localPeerId;
@@ -120,6 +136,7 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
       ((_, entry) => entry.dataChannel?.bufferedAmount ?? 0);
     this.resolveMaxInFlightBytes =
       input.resolveMaxInFlightBytes ?? (() => 64 * 1024 * 1024);
+    this.resolvePieceFallback = input.resolvePieceFallback;
     this.onMetrics = input.onMetrics;
   }
 
@@ -150,6 +167,14 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
         state.inFlightBytes = Math.max(0, state.inFlightBytes - inFlight.bytes);
         state.acked.add(message.chunkIndex);
         this.emitMetrics(state, Date.now() - inFlight.sentAtMs);
+      }
+      if (
+        state.cursor >= state.pendingIndexes.length &&
+        state.retryIndexes.length === 0 &&
+        state.inFlight.size === 0
+      ) {
+        this.closeStream(state.streamId);
+        return;
       }
       void this.pump(state);
       return;
@@ -273,7 +298,7 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
           break;
         }
 
-        const nextIndexes = this.takeNextIndexes(state, 16);
+        const nextIndexes = this.takeNextIndexes(state, producerReadBatchSize);
         if (nextIndexes.length === 0) {
           break;
         }
@@ -290,6 +315,39 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
           }
         );
         const piecesByIndex = new Map(pieces.map((piece) => [piece.chunkIndex, piece]));
+        const missingIndexes = nextIndexes.filter((chunkIndex) => !piecesByIndex.has(chunkIndex));
+        if (missingIndexes.length > 0 && this.resolvePieceFallback) {
+          const fallbackPieces = await Promise.all(
+            missingIndexes.map(async (chunkIndex) => ({
+              chunkIndex,
+              piece: await this.resolvePieceFallback?.({
+                trackId: state.trackId,
+                chunkIndex
+              })
+            }))
+          );
+          for (const { chunkIndex, piece } of fallbackPieces) {
+            if (!piece) {
+              continue;
+            }
+            piecesByIndex.set(chunkIndex, {
+              chunkIndex,
+              chunkSize: piece.chunkSize,
+              hash: piece.hash,
+              payload: piece.payload
+            } as TrackPieceRecord);
+          }
+        }
+        if (piecesByIndex.size !== nextIndexes.length) {
+          this.sendControl(state.peerId, state.entry, {
+            kind: "cache-stream-reset",
+            streamId: state.streamId,
+            generation: state.generation,
+            reason: "protocol-error"
+          });
+          this.closeStream(state.streamId);
+          break;
+        }
         let sentAny = false;
 
         for (const chunkIndex of nextIndexes) {
@@ -311,6 +369,16 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
         }
       }
       this.emitMetrics(state, null);
+    } catch {
+      if (!state.closed) {
+        this.sendControl(state.peerId, state.entry, {
+          kind: "cache-stream-reset",
+          streamId: state.streamId,
+          generation: state.generation,
+          reason: "protocol-error"
+        });
+        this.closeStream(state.streamId);
+      }
     } finally {
       state.pumping = false;
     }

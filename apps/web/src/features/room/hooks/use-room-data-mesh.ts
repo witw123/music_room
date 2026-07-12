@@ -608,6 +608,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         }
       },
       onCacheStreamMetrics: (metrics) => {
+        const isReceiverStream = "availabilityCoveragePercent" in metrics;
         input.recordPeerDiagnosticRef.current({
           peerId: metrics.peerId,
           channelKind: "data",
@@ -624,6 +625,10 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
             streamRetryCount: metrics.streamRetryCount,
             providerContributionBytes: metrics.providerContributionBytes,
             dataChannelBufferedAmountBytes: metrics.dataChannelBufferedAmountBytes,
+            dataBufferedAmountBytes: metrics.dataChannelBufferedAmountBytes,
+            ...(isReceiverStream
+              ? { pieceDownloadRateKbps: metrics.streamThroughputKbps }
+              : { pieceUploadRateKbps: metrics.streamThroughputKbps }),
             availabilityCoveragePercent:
               "availabilityCoveragePercent" in metrics
                 ? metrics.availabilityCoveragePercent

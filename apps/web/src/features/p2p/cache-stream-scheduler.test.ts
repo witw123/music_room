@@ -105,6 +105,87 @@ describe("CacheStreamScheduler", () => {
     expect(firstStream).toBeDefined();
     expect(replacement.length).toBeGreaterThan(0);
   });
+
+  it("does not leave chunks assigned when the six-stream limit is reached", () => {
+    const sendControl = vi.fn();
+    const scheduler = new CacheStreamScheduler({ sendControl });
+    for (let index = 0; index < 7; index += 1) {
+      scheduler.setProvider({
+        peerId: `peer-${index}`,
+        trackId: "track-1",
+        availableRanges: [{ start: 0, end: 6 }],
+        connected: true
+      });
+    }
+
+    expect(
+      scheduler.request({
+        trackId: "track-1",
+        chunkIndexes: [0, 1, 2, 3, 4, 5, 6],
+        totalChunks: 7,
+        chunkSize: 128 * 1024,
+        priority: "bulk"
+      })
+    ).toBe(true);
+    const firstOpen = sendControl.mock.calls.find(([, message]) => message.kind === "cache-stream-open");
+    if (!firstOpen) {
+      throw new Error("expected an initial stream");
+    }
+    scheduler.handlePersisted({
+      peerId: firstOpen[0],
+      streamId: firstOpen[1].streamId,
+      generation: firstOpen[1].generation,
+      trackId: "track-1",
+      chunkIndex: firstOpen[1].ranges[0].start,
+      storedBytes: 128 * 1024
+    });
+    expect(
+      scheduler.request({
+        trackId: "track-1",
+        chunkIndexes: [6],
+        totalChunks: 7,
+        chunkSize: 128 * 1024,
+        priority: "bulk"
+      })
+    ).toBe(true);
+    expect(sendControl.mock.calls.filter(([, message]) => message.kind === "cache-stream-open"))
+      .toHaveLength(7);
+  });
+
+  it("reassigns a stream when its provider explicitly resets it", () => {
+    const sendControl = vi.fn();
+    const scheduler = new CacheStreamScheduler({ sendControl });
+    for (const peerId of ["peer-a", "peer-b"]) {
+      scheduler.setProvider({
+        peerId,
+        trackId: "track-1",
+        availableRanges: [{ start: 0, end: 1 }],
+        connected: true
+      });
+    }
+
+    scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0, 1],
+      totalChunks: 2,
+      chunkSize: 128 * 1024,
+      priority: "critical",
+      preferredPeerId: "peer-a"
+    });
+    const stream = sendControl.mock.calls.find(([, message]) => message.kind === "cache-stream-open");
+    if (!stream) {
+      throw new Error("expected a stream to reset");
+    }
+    scheduler.handleReset({
+      peerId: "peer-a",
+      streamId: stream[1].streamId,
+      generation: stream[1].generation
+    });
+
+    expect(sendControl.mock.calls.some(([peerId, message]) =>
+      peerId === "peer-b" && message.kind === "cache-stream-open"
+    )).toBe(true);
+  });
 });
 
 describe("calculateInitialCreditBytes", () => {

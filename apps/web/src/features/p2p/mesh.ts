@@ -223,6 +223,7 @@ export class P2PMesh {
       enqueueSendItem: (peerId, entry, item) => this.enqueueSendItem(peerId, entry, item),
       sendControl: (peerId, entry, message) => this.enqueueCacheStreamControl(peerId, entry, message),
       resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
+      resolvePieceFallback: options.resolvePieceRequestFallback,
       resolveMaxDataChannelPayloadBytes: (peerId) =>
         options.resolvePeerSendBudget?.(peerId)?.maxPayloadBytes ?? this.maxDataChannelPayloadBytes,
       resolveDataChannelBufferedAmountBytes: (peerId, entry) =>
@@ -312,6 +313,13 @@ export class P2PMesh {
         const entry = this.peerLifecycle.getPeerEntry(peerId);
         if (!entry) {
           return;
+        }
+        if (message.kind === "cache-stream-reset") {
+          this.cacheStreamScheduler.handleReset({
+            peerId,
+            streamId: message.streamId,
+            generation: message.generation
+          });
         }
         return this.cacheStreamProducer.handleMessage(peerId, entry, message);
       },
