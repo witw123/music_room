@@ -56,6 +56,7 @@ export class RoomPlaybackService {
 
     if (input.action === "play") {
       let nextTrackId = input.trackId ?? playback.currentTrackId ?? record.queue[0]?.trackId ?? null;
+      let nextQueueItemId: string | null = input.queueItemId ?? null;
 
       if (input.queueItemId) {
         const queueItem = record.queue.find((item) => item.id === input.queueItemId);
@@ -63,19 +64,25 @@ export class RoomPlaybackService {
           throw new Error("Queue item not found in this room.");
         }
         nextTrackId = queueItem.trackId;
+        nextQueueItemId = queueItem.id;
       }
       if (!nextTrackId) {
         this.clearPlayback(playback, { bumpVersion: false });
       } else {
+        // Same track can appear multiple times in the queue. Switching queue
+        // items must restart playback even when trackId is unchanged.
+        const isQueueItemSwitch =
+          nextQueueItemId !== null && nextQueueItemId !== playback.currentQueueItemId;
         const isTrackSwitch = nextTrackId !== playback.currentTrackId;
+        const shouldRestart = isTrackSwitch || isQueueItemSwitch;
         const startPositionMs =
           input.positionMs ??
-          (isTrackSwitch ? 0 : this.getEffectivePlaybackPositionMs(record, playback));
+          (shouldRestart ? 0 : this.getEffectivePlaybackPositionMs(record, playback));
         await this.applyTrackPlayback(
           record,
           nextTrackId,
           startPositionMs,
-          input.queueItemId ?? null
+          nextQueueItemId
         );
       }
     }
@@ -162,6 +169,8 @@ export class RoomPlaybackService {
     }
 
     const isTrackSwitch = playback.currentTrackId !== trackId;
+    const isQueueItemSwitch =
+      queueItemId !== null && playback.currentQueueItemId !== queueItemId;
     const isSwitchingSource =
       playback.sourceSessionId !== sourceCandidate.sessionId ||
       playback.sourcePeerId !== sourceCandidate.peerId;
@@ -174,7 +183,9 @@ export class RoomPlaybackService {
     playback.sourceTrackId = trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
     playback.startedAt = new Date().toISOString();
-    if (isTrackSwitch || isSwitchingSource) {
+    // Queue-item switches need a media epoch bump so clients remount local
+    // playback even when the underlying track asset is unchanged.
+    if (isTrackSwitch || isQueueItemSwitch || isSwitchingSource) {
       playback.mediaEpoch += 1;
     }
   }

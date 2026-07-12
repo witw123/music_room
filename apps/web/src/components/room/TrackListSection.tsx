@@ -4,7 +4,6 @@ import { memo, useMemo, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 
@@ -36,7 +35,6 @@ function TrackListSectionBase({
   onPlayTrack
 }: TrackListSectionProps) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
-  const [deleteCandidate, setDeleteCandidate] = useState<TrackMeta | null>(null);
   const runAction = async (key: string, action: () => Promise<void>) => {
     if (pendingAction) return;
     setPendingAction(key);
@@ -155,7 +153,9 @@ function TrackListSectionBase({
                         variant="ghost"
                         className="h-9 shrink-0 whitespace-nowrap px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
                         disabled={pendingAction !== null}
-                        onClick={() => setDeleteCandidate(track)}
+                        onClick={() =>
+                          void runAction(`delete:${track.id}`, () => onDeleteTrack(track.id))
+                        }
                         type="button"
                       >
                         删除
@@ -217,20 +217,6 @@ function TrackListSectionBase({
           <span className="text-xs text-foreground">处理中...</span>
         </div>
       ) : null}
-      <ConfirmDialog
-        confirmLabel="删除曲目"
-        description={`《${deleteCandidate?.title ?? "这首歌曲"}》将从房间曲库和队列中移除；若正在播放，播放状态也会改变。此操作无法撤销。`}
-        destructive
-        onCancel={() => setDeleteCandidate(null)}
-        onConfirm={() => {
-          const trackId = deleteCandidate?.id;
-          if (!trackId) return;
-          void runAction(`delete:${trackId}`, () => onDeleteTrack(trackId)).then(() => setDeleteCandidate(null));
-        }}
-        open={deleteCandidate !== null}
-        pending={pendingAction?.startsWith("delete:") ?? false}
-        title="确认删除曲目？"
-      />
     </section>
   );
 }

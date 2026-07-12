@@ -67,7 +67,6 @@ function CacheTabPanelBase({
   const [roomFilter, setRoomFilter] = useState<RoomCacheFilter>("all");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [pendingActionKeys, setPendingActionKeys] = useState<Set<string>>(() => new Set());
-  const [deleteConfirmationHash, setDeleteConfirmationHash] = useState<string | null>(null);
   const pendingActionKeysRef = useRef(new Set<string>());
 
   const runAction = useCallback(async (key: string, action: () => Promise<void>) => {
@@ -296,14 +295,11 @@ function CacheTabPanelBase({
               const pendingExport = pendingActionKeys.has(exportKey);
               const pendingDelete = pendingActionKeys.has(deleteKey);
               const rowPending = pendingAdd || pendingExport || pendingDelete;
-              const confirmingDelete = deleteConfirmationHash === track.fileHash;
 
               return (
                 <div
                   key={track.fileHash}
-                  className={`grid gap-3 border-b border-surface-border px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${
-                    confirmingDelete ? "bg-red-500/5" : ""
-                  }`}
+                  className="grid gap-3 border-b border-surface-border px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
@@ -321,62 +317,35 @@ function CacheTabPanelBase({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                    {confirmingDelete ? (
-                      <>
-                        <span className="mr-1 text-xs text-red-300">确定删除本机文件？</span>
-                        <Button
-                          variant="ghost"
-                          className="h-9 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          disabled={pendingDelete}
-                          onClick={() => void runAction(deleteKey, async () => {
-                            await onDeleteCachedLibraryTrack(track.fileHash);
-                            setDeleteConfirmationHash(null);
-                          })}
-                          type="button"
-                        >
-                          {pendingDelete ? "删除中" : "确认删除"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-9 px-3"
-                          disabled={pendingDelete}
-                          onClick={() => setDeleteConfirmationHash(null)}
-                          type="button"
-                        >
-                          取消
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          variant="outline"
-                          className="h-9 px-3"
-                          disabled={addedToRoom || rowPending}
-                          onClick={() => void runAction(addKey, () => onAddCachedLibraryTrackToLibrary(track.fileHash))}
-                          type="button"
-                        >
-                          {addedToRoom ? "已在曲库" : pendingAdd ? "添加中" : "添加到曲库"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="h-9 px-3"
-                          disabled={rowPending}
-                          onClick={() => void runAction(exportKey, () => onExportCachedLibraryTrack(track.fileHash))}
-                          type="button"
-                        >
-                          {pendingExport ? "导出中" : "导出"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="h-9 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          disabled={rowPending}
-                          onClick={() => setDeleteConfirmationHash(track.fileHash)}
-                          type="button"
-                        >
-                          删除
-                        </Button>
-                      </>
-                    )}
+                    <Button
+                      variant="outline"
+                      className="h-9 px-3"
+                      disabled={addedToRoom || rowPending}
+                      onClick={() => void runAction(addKey, () => onAddCachedLibraryTrackToLibrary(track.fileHash))}
+                      type="button"
+                    >
+                      {addedToRoom ? "已在曲库" : pendingAdd ? "添加中" : "添加到曲库"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-9 px-3"
+                      disabled={rowPending}
+                      onClick={() => void runAction(exportKey, () => onExportCachedLibraryTrack(track.fileHash))}
+                      type="button"
+                    >
+                      {pendingExport ? "导出中" : "导出"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-9 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={rowPending}
+                      onClick={() =>
+                        void runAction(deleteKey, () => onDeleteCachedLibraryTrack(track.fileHash))
+                      }
+                      type="button"
+                    >
+                      {pendingDelete ? "删除中" : "删除"}
+                    </Button>
                   </div>
                 </div>
               );

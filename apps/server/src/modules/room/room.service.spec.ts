@@ -580,6 +580,64 @@ describe("RoomService", () => {
     expect(previousPlayback.currentQueueItemId).toBe(firstQueueItem.id);
   });
 
+  it("restarts playback when jumping between queue items that share the same track", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Repeat",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "repeat-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+    const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-12T00:00:00.000Z"));
+    try {
+      const firstPlayback = await roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        queueItemId: firstQueueItem.id,
+        actorSessionId: host.id
+      });
+
+      jest.setSystemTime(new Date("2026-07-12T00:00:08.000Z"));
+
+      const secondPlayback = await roomService.updatePlayback(snapshot.room.id, {
+        action: "play",
+        queueItemId: secondQueueItem.id,
+        actorSessionId: host.id
+      });
+
+      expect(firstPlayback.currentTrackId).toBe(track.id);
+      expect(firstPlayback.currentQueueItemId).toBe(firstQueueItem.id);
+      expect(secondPlayback.currentTrackId).toBe(track.id);
+      expect(secondPlayback.currentQueueItemId).toBe(secondQueueItem.id);
+      expect(secondPlayback.positionMs).toBe(0);
+      expect(secondPlayback.mediaEpoch).toBe(firstPlayback.mediaEpoch + 1);
+      expect(secondPlayback.playbackRevision).toBeGreaterThan(firstPlayback.playbackRevision);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("allows the original uploader to delete a track and removes it from queue and playback", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
