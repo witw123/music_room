@@ -943,8 +943,8 @@ describe("ProgressivePcmEngine", () => {
       await engine.attach();
       await engine.sync();
 
-      // Steady-state budget is now 16 (batch reads are efficient).
-      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(16);
+      // Steady-state budget is now 24 (batch reads are efficient).
+      expect(Reflect.get(engine as object, "contiguousChunkCount")).toBe(24);
     } finally {
       engine.destroy();
       audioContext.restore();

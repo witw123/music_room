@@ -440,6 +440,16 @@ export function resolveSchedulerPolicy(input: {
       return "catchup" satisfies ProgressiveSchedulerPolicy;
     }
 
+    // Contiguous prefix still lagging the live clock — keep catchup even if
+    // sparse non-prefix chunks made aheadBufferedMs look healthy.
+    const contiguousPrefixMs = getContiguousBufferedMs(input.manifest, input.availableChunks);
+    if (
+      (input.activeSource === "progressive-local" || input.activeSource === "lossless-local") &&
+      contiguousPrefixMs + 1_000 < positionMs
+    ) {
+      return "catchup" satisfies ProgressiveSchedulerPolicy;
+    }
+
     if (hasOutrunRisk) {
       return "outrun-recovery" satisfies ProgressiveSchedulerPolicy;
     }
@@ -630,10 +640,14 @@ export function getPriorityChunkIndexes(input: {
     lookBehindMs: derivedLookBehindMs,
     lookAheadMs: derivedLookAheadMs
   });
+  // Always close the contiguous [0 .. position+lookAhead] prefix first. PCM
+  // engines and FLAC frame extractors need a continuous byte stream from the
+  // file head; requesting only the mid-window while prefix holes remain is the
+  // main path into pcm-buffer-missing on late join / mid-track seek.
   const requiredPrefixChunkCount = getRequiredDecodablePrefixChunkCount({
     manifest,
     playbackPositionMs,
-    lookAheadMs: derivedLookAheadMs
+    lookAheadMs: Math.max(derivedLookAheadMs, getStartupWindowMs(manifest))
   });
   const requiredLeadingChunkCount = requiredPrefixChunkCount;
   const currentDecodeStartChunkIndex = isFlacTrack(manifest)
@@ -642,8 +656,40 @@ export function getPriorityChunkIndexes(input: {
   const playbackWindowEndChunkIndex = isFlacTrack(manifest)
     ? Math.min(manifest.totalChunks - 1, endChunkIndex + 1)
     : endChunkIndex;
+  const contiguousOwnedPrefixEnd = (() => {
+    let end = 0;
+    while (end < manifest.totalChunks && owned.has(end)) {
+      end += 1;
+    }
+    return end;
+  })();
+  const mustFillPrefix =
+    policy === "startup" ||
+    policy === "catchup" ||
+    policy === "outrun-recovery" ||
+    contiguousOwnedPrefixEnd < requiredLeadingChunkCount;
 
+  // Phase 1: hard contiguous prefix from 0. Always first.
   appendMissingChunks(wantedChunks, owned, seen, 0, requiredLeadingChunkCount - 1, 1);
+
+  // Phase 2: while prefix is incomplete, keep pulling the next contiguous
+  // bytes only — do not spray mid-window holes that cannot be decoded yet.
+  if (mustFillPrefix && contiguousOwnedPrefixEnd < requiredLeadingChunkCount) {
+    const prefixFocusEnd = Math.min(
+      manifest.totalChunks - 1,
+      Math.max(requiredLeadingChunkCount - 1, contiguousOwnedPrefixEnd + 24)
+    );
+    appendMissingChunks(
+      wantedChunks,
+      owned,
+      seen,
+      contiguousOwnedPrefixEnd,
+      prefixFocusEnd,
+      1
+    );
+    return wantedChunks;
+  }
+
   appendMissingChunks(wantedChunks, owned, seen, currentDecodeStartChunkIndex, currentChunkIndex - 1, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentChunkIndex, playbackWindowEndChunkIndex, 1);
   appendMissingChunks(wantedChunks, owned, seen, currentDecodeStartChunkIndex - 1, startChunkIndex, -1);

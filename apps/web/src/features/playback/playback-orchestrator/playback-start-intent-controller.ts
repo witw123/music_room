@@ -43,6 +43,7 @@ type AttemptPlaybackStart = (
 type PlaybackStartIntentControllerInput = {
   activePlaybackSource: ProgressivePlaybackSource;
   audioRef: RefObject<HTMLAudioElement | null>;
+  audioUnlocked: boolean;
   playbackCurrentTrackId: string | null;
   playbackStatus: PlaybackSnapshot["status"] | null;
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
@@ -65,6 +66,7 @@ type PlaybackStartIntentControllerResult = {
 export function usePlaybackStartIntentController({
   activePlaybackSource,
   audioRef,
+  audioUnlocked,
   playbackCurrentTrackId,
   playbackStatus,
   playbackRef,
@@ -184,7 +186,8 @@ export function usePlaybackStartIntentController({
         requestedSource: source,
         pendingIntent,
         attempt,
-        maxRetryAttempts: maxPlaybackStartRetryAttempts
+        maxRetryAttempts: maxPlaybackStartRetryAttempts,
+        audioUnlocked
       });
       if (!retryPreflight) {
         return;
@@ -217,6 +220,7 @@ export function usePlaybackStartIntentController({
       activePlaybackSource,
       attemptPlaybackStart,
       audioRef,
+      audioUnlocked,
       clearPlaybackStartRetry,
       playbackRef,
       playbackStartIntent

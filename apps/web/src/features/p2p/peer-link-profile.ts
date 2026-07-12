@@ -44,6 +44,8 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
     finitePositive(input.downloadRateKbps) ?? finitePositive(input.uploadRateKbps);
   const protocol = normalizeProtocol(input.relayProtocol ?? input.protocol);
   const isRelay = normalizeCandidateType(input.candidateType) === "relay";
+  const isDirectCandidate =
+    !isRelay && normalizeCandidateType(input.candidateType) !== null;
 
   if (
     input.transportScore === "failed" ||
@@ -58,13 +60,21 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
     return "relay-udp";
   }
 
+  // Direct peers with only a temporarily low measured rate should not collapse
+  // into constrained mode — that creates a self-reinforcing slow window during
+  // cold start (slow sample -> tiny in-flight -> slower sample).
+  const severelySlowMeasuredRate =
+    transferRateKbps !== null &&
+    transferRateKbps < 800 &&
+    !isDirectCandidate;
+
   if (
     input.transportScore === "degraded" ||
     (isRelay && protocol !== "udp") ||
     protocol === "tcp" ||
     bufferedAmountBytes >= 8 * 1024 * 1024 ||
-    (roundTripTimeMs !== null && roundTripTimeMs >= 250) ||
-    (transferRateKbps !== null && transferRateKbps < 1_500)
+    (roundTripTimeMs !== null && roundTripTimeMs >= 320) ||
+    severelySlowMeasuredRate
   ) {
     return "constrained";
   }
@@ -75,11 +85,11 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
 
   if (
     protocol !== "tcp" &&
-    bufferedAmountBytes < 128 * 1024 &&
+    bufferedAmountBytes < 256 * 1024 &&
     roundTripTimeMs !== null &&
-    roundTripTimeMs <= 120 &&
+    roundTripTimeMs <= 140 &&
     transferRateKbps !== null &&
-    transferRateKbps >= 4_000
+    transferRateKbps >= 3_000
   ) {
     return "fast-direct";
   }
@@ -105,9 +115,11 @@ export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudg
 
   if (profile === "relay-udp") {
     return {
-      highWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark * 2),
-      bulkHighWatermarkBytes: adaptiveBulkWatermark,
-      maxPayloadBytes: 128 * 1024
+      // Relay still needs headroom to pipeline SCTP over TURN; keep below
+      // direct but high enough to saturate modest WAN uplinks.
+      highWatermarkBytes: Math.max(8 * 1024 * 1024, adaptiveBulkWatermark * 2),
+      bulkHighWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark),
+      maxPayloadBytes: 160 * 1024
     };
   }
 
@@ -134,25 +146,43 @@ export function resolvePeerTransferWindow(
   const rttMs = finitePositive(input.currentRoundTripTimeMs) ?? 180;
   const transferRateKbps =
     finitePositive(input.downloadRateKbps) ?? finitePositive(input.uploadRateKbps);
+  const profile = resolvePeerLinkProfile(input);
   const bytesPerSecond = transferRateKbps === null ? null : transferRateKbps * 1000 / 8;
-  const bandwidthDelayProduct = bytesPerSecond === null
-    ? 2 * 1024 * 1024
-    : bytesPerSecond * rttMs / 1000;
+  // Cold-start optimistic BDP when rate is unknown/low. Using a tiny measured
+  // rate as the sole BDP input keeps only a few chunks in flight and never
+  // saturates direct LAN links during progressive startup.
+  const optimisticFloorBytes =
+    profile === "fast-direct"
+      ? 12 * 1024 * 1024
+      : profile === "standard-direct"
+        ? 8 * 1024 * 1024
+        : profile === "relay-udp"
+          ? 6 * 1024 * 1024
+          : 2 * 1024 * 1024;
+  const measuredBdpBytes =
+    bytesPerSecond === null ? null : bytesPerSecond * rttMs / 1000;
+  const bandwidthDelayProduct =
+    measuredBdpBytes === null
+      ? optimisticFloorBytes
+      : Math.max(measuredBdpBytes, optimisticFloorBytes / 2);
+  const minInFlightBytes =
+    profile === "constrained" || profile === "severe"
+      ? Math.max(2 * 1024 * 1024, 6 * normalizedChunkSize)
+      : Math.max(optimisticFloorBytes, 8 * normalizedChunkSize);
   const targetInFlightBytes = clamp(
-    Math.ceil(Math.max(4 * normalizedChunkSize, bandwidthDelayProduct * 2.5)),
-    1024 * 1024,
+    Math.ceil(Math.max(minInFlightBytes, bandwidthDelayProduct * 4)),
+    minInFlightBytes,
     64 * 1024 * 1024
   );
   const transferTimeMs = bytesPerSecond === null
     ? rttMs * 2
     : normalizedChunkSize / Math.max(1, bytesPerSecond) * 1000;
-  const profile = resolvePeerLinkProfile(input);
   const minimumTimeoutMs = profile === "relay-udp" || profile === "constrained" ? 3_000 : 1_500;
   return {
     targetInFlightBytes,
     maxPendingChunks: clamp(
       Math.ceil(targetInFlightBytes / normalizedChunkSize),
-      4,
+      profile === "constrained" ? 6 : 12,
       256
     ),
     requestTimeoutMs: clamp(

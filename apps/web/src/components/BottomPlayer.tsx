@@ -232,7 +232,6 @@ function BottomPlayerBase({
       <audio
         ref={audioRef}
         className="hidden"
-        autoPlay
         playsInline
         onEnded={() => void onEnded()}
         onLoadedMetadata={() => {

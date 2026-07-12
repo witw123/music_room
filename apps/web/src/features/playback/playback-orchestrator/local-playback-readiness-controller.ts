@@ -27,9 +27,11 @@ type LocalPlaybackReadinessControllerInput = {
   activePlaybackSource: ProgressivePlaybackSource;
   attemptPlaybackStart: AttemptPlaybackStart;
   audioRef: RefObject<HTMLAudioElement | null>;
+  audioUnlocked: boolean;
   ensurePlaybackStart: (source: ProgressivePlaybackSource) => void;
   isCurrentSourceOwner: boolean;
   mediaConnectedPeersCount: number;
+  pendingStartIntent: boolean;
   playbackCurrentTrackId: string | null;
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
   playbackStatus: PlaybackSnapshot["status"] | null;
@@ -42,9 +44,11 @@ export function useLocalPlaybackReadinessController({
   activePlaybackSource,
   attemptPlaybackStart,
   audioRef,
+  audioUnlocked,
   ensurePlaybackStart,
   isCurrentSourceOwner,
   mediaConnectedPeersCount,
+  pendingStartIntent,
   playbackCurrentTrackId,
   playbackRef,
   playbackStatus,
@@ -63,7 +67,9 @@ export function useLocalPlaybackReadinessController({
       const localReadyAction = resolveLocalReadyPlaybackAction({
         activePlaybackSource,
         playbackHasActiveIntent: hasActivePlaybackIntent(playbackRef.current),
-        localAudioPaused: !!localAudio?.paused
+        localAudioPaused: !!localAudio?.paused,
+        audioUnlocked,
+        pendingStartIntent
       });
       if (localReadyAction.shouldEnsurePlaybackStart) {
         ensurePlaybackStart(activePlaybackSource);
@@ -104,7 +110,9 @@ export function useLocalPlaybackReadinessController({
     activePlaybackSource,
     attemptPlaybackStart,
     audioRef,
+    audioUnlocked,
     ensurePlaybackStart,
+    pendingStartIntent,
     playbackRef,
     recordPeerDiagnostic,
     setMediaConnectionState,

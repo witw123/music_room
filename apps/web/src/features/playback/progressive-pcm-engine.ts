@@ -139,13 +139,13 @@ const pcmParsedByteCompactionThreshold = 512 * 1024;
 // With the in-memory buffer + batch IndexedDB reads, reading 16 chunks is
 // nearly as cheap as reading 1, so a moderate value here keeps the decoder
 // fed without blocking the main thread on large track switches.
-const maxPcmCachedPiecesToAppendPerSync = 16;
+const maxPcmCachedPiecesToAppendPerSync = 24;
 // Catch-up mode: pull enough contiguous prefix for the requested playback
 // point, but do not drain the full cache in one turn while the downloader is
 // also writing. Current-window decoding handles far seeks through sparse reads.
-const maxPcmCatchupPiecesToAppendPerSync = 32;
-const pcmCatchupLookAheadChunks = 2;
-const maxPcmPlaybackCatchupSyncBatches = 8;
+const maxPcmCatchupPiecesToAppendPerSync = 48;
+const pcmCatchupLookAheadChunks = 4;
+const maxPcmPlaybackCatchupSyncBatches = 16;
 const maxNativeFlacSampleRate = 96_000;
 const maxSoftwareFlacPacketsPerDecode = 256;
 
@@ -520,9 +520,12 @@ export class ProgressivePcmEngine {
 
     if (!this.hasBufferedPosition(positionSeconds, minimumAheadSeconds)) {
       this.playing = false;
-      this.stopPlaybackRefillLoop();
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
+      // Keep the refill loop warm while waiting for the contiguous prefix so
+      // newly arrived P2P pieces are decoded immediately instead of only on
+      // the next outer sync tick.
+      this.startPlaybackRefillLoop();
       // The direct AudioContext path outputs silence naturally when no
       // segments are scheduled. Avoid pausing the shared element here; it may
       // still be used by native full-local handoff in the same playback flow.

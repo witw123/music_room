@@ -31,6 +31,7 @@ import { useMainPlaybackController } from "./main-playback-controller";
 import { useProgressiveWarmupController } from "./progressive-warmup-controller";
 import { useRuntimeTickEffectsController } from "./runtime-tick-effects-controller";
 import { roomAudioOutput } from "../room-audio-output";
+import { isPlaybackStartIntentPending } from "../playback-start-intent";
 
 type PlaybackRuntimeInputState = ReturnType<typeof usePlaybackRuntimeInputState>;
 type PlaybackRuntimeRefs = ReturnType<typeof usePlaybackRuntimeRefs>;
@@ -169,6 +170,7 @@ export function usePlaybackRuntimeControllerStack({
     playbackCurrentTrackId
   });
   const effectiveAudioUnlocked = audioUnlocked || roomAudioOutput.isAudioContextReady();
+  const pendingStartIntent = isPlaybackStartIntentPending(playbackStartIntent);
   const {
     attemptPlaybackStart,
     attemptPlaybackStartRef,
@@ -178,6 +180,7 @@ export function usePlaybackRuntimeControllerStack({
   } = usePlaybackStartIntentController({
     activePlaybackSource,
     audioRef,
+    audioUnlocked: effectiveAudioUnlocked,
     playbackCurrentTrackId,
     playbackStatus,
     playbackRef,
@@ -353,6 +356,7 @@ export function usePlaybackRuntimeControllerStack({
     activePlaybackSource,
     attemptPlaybackStart,
     audioRef,
+    audioUnlocked: effectiveAudioUnlocked,
     currentProgressiveEngineType,
     currentTrackDurationMs,
     destroyProgressiveRuntime,
@@ -363,6 +367,7 @@ export function usePlaybackRuntimeControllerStack({
     markPlaybackStartFailure,
     markPcmRuntimeFailure,
     pcmLastBlockedReasonRef,
+    pendingStartIntent,
     playbackPositionKey,
     playbackRef,
     progressiveEngineRef,
@@ -403,9 +408,11 @@ export function usePlaybackRuntimeControllerStack({
     activePlaybackSource,
     attemptPlaybackStart,
     audioRef,
+    audioUnlocked: effectiveAudioUnlocked,
     ensurePlaybackStart,
     isCurrentSourceOwner,
     mediaConnectedPeersCount,
+    pendingStartIntent,
     playbackCurrentTrackId,
     playbackRef,
     playbackStatus,

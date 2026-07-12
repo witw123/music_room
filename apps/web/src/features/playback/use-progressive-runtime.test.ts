@@ -1735,6 +1735,18 @@ describe("playback runtime pipeline keys", () => {
         localAudioHasSrc: false,
         localAudioHasSrcObject: false
       })
+    ).toBe(false);
+    expect(
+      pipelineShouldRecoverPausedFullLocalPlayback({
+        activePlaybackSource: "full-local",
+        playbackStatus: "playing",
+        currentTrackId: "track-1",
+        audioUnlocked: true,
+        localAudioPaused: true,
+        localAudioReadyState: 2,
+        localAudioHasSrc: true,
+        localAudioHasSrcObject: false
+      })
     ).toBe(true);
     expect(
       pipelineShouldSkipSecondaryPcmWarmupSync({
@@ -2533,6 +2545,30 @@ describe("use-progressive-runtime policy helpers", () => {
         attempt: 3,
         maxRetryAttempts: 3
       })
+    ).toBe(null);
+    expect(
+      resolvePlaybackStartRetryPreflight({
+        playbackHasActiveIntent: true,
+        activePlaybackSource: "progressive-local",
+        requestedSource: "progressive-local",
+        pendingIntent: false,
+        attempt: 3,
+        maxRetryAttempts: 3,
+        audioUnlocked: true
+      })
+    ).toEqual({
+      failureReason: "progressive-local-play-blocked",
+      reportFailure: true
+    });
+    expect(
+      resolvePlaybackStartRetryPreflight({
+        playbackHasActiveIntent: true,
+        activePlaybackSource: "progressive-local",
+        requestedSource: "progressive-local",
+        pendingIntent: true,
+        attempt: 0,
+        maxRetryAttempts: 3
+      })
     ).toEqual({
       failureReason: "progressive-local-play-blocked",
       reportFailure: true
@@ -2913,6 +2949,17 @@ describe("use-progressive-runtime policy helpers", () => {
         localAudioPaused: true
       })
     ).toEqual({
+      shouldEnsurePlaybackStart: false,
+      shouldAttemptFullLocalPlayback: false
+    });
+    expect(
+      pipelineResolveLocalReadyPlaybackAction({
+        activePlaybackSource: "progressive-local",
+        playbackHasActiveIntent: true,
+        localAudioPaused: true,
+        audioUnlocked: true
+      })
+    ).toEqual({
       shouldEnsurePlaybackStart: true,
       shouldAttemptFullLocalPlayback: false
     });
@@ -2920,7 +2967,8 @@ describe("use-progressive-runtime policy helpers", () => {
       resolveLocalReadyPlaybackAction({
         activePlaybackSource: "full-local",
         playbackHasActiveIntent: true,
-        localAudioPaused: true
+        localAudioPaused: true,
+        pendingStartIntent: true
       })
     ).toEqual({
       shouldEnsurePlaybackStart: true,
@@ -2930,7 +2978,8 @@ describe("use-progressive-runtime policy helpers", () => {
       resolveLocalReadyPlaybackAction({
         activePlaybackSource: "full-local",
         playbackHasActiveIntent: true,
-        localAudioPaused: false
+        localAudioPaused: false,
+        audioUnlocked: true
       })
     ).toEqual({
       shouldEnsurePlaybackStart: true,
@@ -3343,12 +3392,24 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toEqual({
       shouldSetSourceToFullLocal: true,
       shouldClearFallbackReason: true,
+      shouldAttemptPlaybackStart: false
+    });
+    expect(
+      pipelineResolveFullLocalPlaybackActivationAction({
+        shouldPlayPlayback: true,
+        activePlaybackSource: "progressive-local",
+        pendingStartIntent: true
+      })
+    ).toEqual({
+      shouldSetSourceToFullLocal: true,
+      shouldClearFallbackReason: true,
       shouldAttemptPlaybackStart: true
     });
     expect(
       resolveFullLocalPlaybackActivationAction({
         shouldPlayPlayback: true,
-        activePlaybackSource: "full-local"
+        activePlaybackSource: "full-local",
+        audioUnlocked: true
       })
     ).toEqual({
       shouldSetSourceToFullLocal: false,
@@ -3433,6 +3494,31 @@ describe("use-progressive-runtime policy helpers", () => {
     });
     expect(
       resolvePcmSyncPlaybackOutcome({
+        shouldPlayPlayback: true,
+        localReady: true,
+        shouldLatchFailure: false,
+        pcmOutputAudible: false
+      })
+    ).toEqual({
+      progressiveFallbackReason: null,
+      mediaConnectionState: "live",
+      shouldEnsurePlaybackStart: false
+    });
+    expect(
+      resolvePcmSyncPlaybackOutcome({
+        shouldPlayPlayback: true,
+        localReady: true,
+        shouldLatchFailure: false,
+        pcmOutputAudible: false,
+        audioUnlocked: true
+      })
+    ).toEqual({
+      progressiveFallbackReason: null,
+      mediaConnectionState: "live",
+      shouldEnsurePlaybackStart: true
+    });
+    expect(
+      resolvePcmSyncPlaybackOutcome({
         shouldPlayPlayback: false,
         localReady: false,
         shouldLatchFailure: false
@@ -3458,6 +3544,17 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toEqual({
       progressiveFallbackReason: null,
       mediaConnectionState: "live",
+      shouldEnsurePlaybackStart: false
+    });
+    expect(
+      resolveSlidingWindowNativeSyncOutcome({
+        shouldPlayPlayback: true,
+        localReady: true,
+        audioUnlocked: true
+      })
+    ).toEqual({
+      progressiveFallbackReason: null,
+      mediaConnectionState: "live",
       shouldEnsurePlaybackStart: true
     });
     expect(
@@ -3475,13 +3572,25 @@ describe("use-progressive-runtime policy helpers", () => {
       })
     ).toEqual({
       shouldClearFallbackReason: true,
+      shouldEnsurePlaybackStart: false,
+      shouldPausePlayback: false
+    });
+    expect(
+      pipelineResolveSlidingWindowFallbackPlaybackAction({
+        shouldPlayPlayback: true,
+        startupReady: true,
+        pendingStartIntent: true
+      })
+    ).toEqual({
+      shouldClearFallbackReason: true,
       shouldEnsurePlaybackStart: true,
       shouldPausePlayback: false
     });
     expect(
       resolveSlidingWindowFallbackPlaybackAction({
         shouldPlayPlayback: true,
-        startupReady: false
+        startupReady: false,
+        audioUnlocked: true
       })
     ).toEqual({
       shouldClearFallbackReason: false,
@@ -4848,7 +4957,7 @@ describe("use-progressive-runtime policy helpers", () => {
     ).toBe(true);
   });
 
-  it("recovers paused full-local playback from an already ready media element even if unlock state is stale", () => {
+  it("does not recover paused full-local playback before the user unlocks audio", () => {
     expect(
       shouldRecoverPausedFullLocalPlayback({
         activePlaybackSource: "full-local",
@@ -4860,7 +4969,7 @@ describe("use-progressive-runtime policy helpers", () => {
         localAudioHasSrc: true,
         localAudioHasSrcObject: false
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not recover paused full-local playback while room playback is paused", () => {

@@ -115,12 +115,6 @@ export function RoomAppShell({
         onTabChange={pageState.setActiveDashboardTab}
         onDiagnosticsVisibilityChange={pageState.setIsDiagnosticsPanelOpen}
         socket={socket}
-        isSyncPending={
-          pageState.isRecoveringRoom ||
-          pageState.roomRecoveryState.pendingSnapshot ||
-          pageState.roomRecoveryState.pendingData ||
-          pageState.roomRecoveryState.pendingMedia
-        }
         playerSlot={
           <BottomPlayerController
             audioRef={audioRef}

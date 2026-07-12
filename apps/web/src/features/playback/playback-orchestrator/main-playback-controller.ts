@@ -60,6 +60,7 @@ type MainPlaybackControllerInput = {
   activePlaybackSource: ProgressivePlaybackSource;
   attemptPlaybackStart: AttemptPlaybackStart;
   audioRef: RefObject<HTMLAudioElement | null>;
+  audioUnlocked: boolean;
   currentProgressiveEngineType: ProgressiveEngineType;
   currentTrackDurationMs: number | null;
   destroyProgressiveRuntime: () => void;
@@ -70,6 +71,7 @@ type MainPlaybackControllerInput = {
   markPlaybackStartFailure: (kind: string, message: string) => void;
   markPcmRuntimeFailure: (reason: string | null | undefined) => void;
   pcmLastBlockedReasonRef: MutableRefObject<string | null>;
+  pendingStartIntent: boolean;
   playbackPositionKey: string;
   playbackRef: MutableRefObject<PlaybackSnapshot | null | undefined>;
   progressiveEngineRef: MutableRefObject<ProgressiveMseEngine | null>;
@@ -89,6 +91,7 @@ export function useMainPlaybackController({
   activePlaybackSource,
   attemptPlaybackStart,
   audioRef,
+  audioUnlocked,
   currentProgressiveEngineType,
   currentTrackDurationMs,
   destroyProgressiveRuntime,
@@ -99,6 +102,7 @@ export function useMainPlaybackController({
   markPlaybackStartFailure,
   markPcmRuntimeFailure,
   pcmLastBlockedReasonRef,
+  pendingStartIntent,
   playbackPositionKey,
   playbackRef,
   progressiveEngineRef,
@@ -218,7 +222,9 @@ export function useMainPlaybackController({
 
       const activationAction = resolveFullLocalPlaybackActivationAction({
         shouldPlayPlayback,
-        activePlaybackSource
+        activePlaybackSource,
+        audioUnlocked,
+        pendingStartIntent
       });
       if (activationAction) {
         if (activationAction.shouldSetSourceToFullLocal) {
@@ -283,7 +289,9 @@ export function useMainPlaybackController({
               shouldPlayPlayback,
               localReady: result.localReady,
               shouldLatchFailure: shouldLatchPcmRuntimeFailure(pcmFailureReason),
-              pcmOutputAudible
+              pcmOutputAudible,
+              audioUnlocked,
+              pendingStartIntent
             });
             if (!playbackOutcome) {
               return;
@@ -339,7 +347,9 @@ export function useMainPlaybackController({
           const localReady = mseEngine.isPlaybackReady(expectedSeconds, startupBufferMs);
           const playbackOutcome = resolveSlidingWindowNativeSyncOutcome({
             shouldPlayPlayback,
-            localReady
+            localReady,
+            audioUnlocked,
+            pendingStartIntent
           });
           if (playbackOutcome.mediaConnectionState) {
             setMediaConnectionState(playbackOutcome.mediaConnectionState);
@@ -403,7 +413,9 @@ export function useMainPlaybackController({
 
       const fallbackPlaybackAction = resolveSlidingWindowFallbackPlaybackAction({
         shouldPlayPlayback,
-        startupReady: progressiveStartupReady
+        startupReady: progressiveStartupReady,
+        audioUnlocked,
+        pendingStartIntent
       });
       if (fallbackPlaybackAction.shouldClearFallbackReason) {
         setProgressiveFallbackReason(null);
@@ -434,6 +446,7 @@ export function useMainPlaybackController({
     activePlaybackSource,
     attemptPlaybackStart,
     audioRef,
+    audioUnlocked,
     currentProgressiveEngineType,
     currentTrackDurationMs,
     destroyProgressiveRuntime,
@@ -444,6 +457,7 @@ export function useMainPlaybackController({
     markPlaybackStartFailure,
     markPcmRuntimeFailure,
     pcmLastBlockedReasonRef,
+    pendingStartIntent,
     playbackPositionKey,
     playbackRef,
     progressiveEngineRef,

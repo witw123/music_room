@@ -384,8 +384,13 @@ export function resolvePlaybackStartRetryPreflight(input: {
   pendingIntent: boolean;
   attempt: number;
   maxRetryAttempts: number;
+  audioUnlocked?: boolean;
 }) {
-  if (!input.playbackHasActiveIntent || input.activePlaybackSource !== input.requestedSource) {
+  if (
+    !input.playbackHasActiveIntent ||
+    input.activePlaybackSource !== input.requestedSource ||
+    (input.audioUnlocked !== true && !input.pendingIntent)
+  ) {
     return null;
   }
 
@@ -535,12 +540,19 @@ export function resolveLocalReadyPlaybackAction(input: {
   activePlaybackSource: ProgressivePlaybackSource;
   playbackHasActiveIntent: boolean;
   localAudioPaused: boolean;
+  audioUnlocked?: boolean;
+  pendingStartIntent?: boolean;
 }) {
+  const mayStartPlayback =
+    input.audioUnlocked === true || input.pendingStartIntent === true;
+  const hasLocalPlayableSource =
+    input.activePlaybackSource === "full-local" ||
+    isSlidingWindowPlaybackSource(input.activePlaybackSource);
+
   return {
-    shouldEnsurePlaybackStart:
-      input.activePlaybackSource === "full-local" ||
-      isSlidingWindowPlaybackSource(input.activePlaybackSource),
+    shouldEnsurePlaybackStart: mayStartPlayback && hasLocalPlayableSource,
     shouldAttemptFullLocalPlayback:
+      mayStartPlayback &&
       input.activePlaybackSource === "full-local" &&
       input.playbackHasActiveIntent &&
       input.localAudioPaused
@@ -615,16 +627,20 @@ export function resolveFullLocalAudioSourceAction(input: {
 export function resolveFullLocalPlaybackActivationAction(input: {
   shouldPlayPlayback: boolean;
   activePlaybackSource: ProgressivePlaybackSource;
+  audioUnlocked?: boolean;
+  pendingStartIntent?: boolean;
 }) {
   if (!input.shouldPlayPlayback) {
     return null;
   }
 
+  const mayStartPlayback =
+    input.audioUnlocked === true || input.pendingStartIntent === true;
   const shouldSetSourceToFullLocal = input.activePlaybackSource !== "full-local";
   return {
     shouldSetSourceToFullLocal,
     shouldClearFallbackReason: shouldSetSourceToFullLocal,
-    shouldAttemptPlaybackStart: true
+    shouldAttemptPlaybackStart: mayStartPlayback
   };
 }
 
@@ -687,6 +703,8 @@ export function resolvePcmSyncPlaybackOutcome(input: {
   localReady: boolean;
   shouldLatchFailure: boolean;
   pcmOutputAudible?: boolean;
+  audioUnlocked?: boolean;
+  pendingStartIntent?: boolean;
 }) {
   if (input.shouldLatchFailure) {
     return {
@@ -703,6 +721,9 @@ export function resolvePcmSyncPlaybackOutcome(input: {
     };
   }
 
+  const mayStartPlayback =
+    input.audioUnlocked === true || input.pendingStartIntent === true;
+
   if (input.shouldPlayPlayback && input.localReady) {
     if (input.pcmOutputAudible) {
       return {
@@ -715,7 +736,7 @@ export function resolvePcmSyncPlaybackOutcome(input: {
     return {
       progressiveFallbackReason: null,
       mediaConnectionState: "live" as const,
-      shouldEnsurePlaybackStart: true
+      shouldEnsurePlaybackStart: mayStartPlayback
     };
   }
 
@@ -725,7 +746,12 @@ export function resolvePcmSyncPlaybackOutcome(input: {
 export function resolveSlidingWindowNativeSyncOutcome(input: {
   shouldPlayPlayback: boolean;
   localReady: boolean;
+  audioUnlocked?: boolean;
+  pendingStartIntent?: boolean;
 }) {
+  const mayStartPlayback =
+    input.audioUnlocked === true || input.pendingStartIntent === true;
+
   if (input.shouldPlayPlayback && !input.localReady) {
     return {
       mediaConnectionState: "buffering" as const,
@@ -737,7 +763,7 @@ export function resolveSlidingWindowNativeSyncOutcome(input: {
     return {
       progressiveFallbackReason: null,
       mediaConnectionState: "live" as const,
-      shouldEnsurePlaybackStart: true
+      shouldEnsurePlaybackStart: mayStartPlayback
     };
   }
 
@@ -749,6 +775,8 @@ export function resolveSlidingWindowNativeSyncOutcome(input: {
 export function resolveSlidingWindowFallbackPlaybackAction(input: {
   shouldPlayPlayback: boolean;
   startupReady: boolean;
+  audioUnlocked?: boolean;
+  pendingStartIntent?: boolean;
 }) {
   if (!input.shouldPlayPlayback) {
     return {
@@ -758,9 +786,12 @@ export function resolveSlidingWindowFallbackPlaybackAction(input: {
     };
   }
 
+  const mayStartPlayback =
+    input.audioUnlocked === true || input.pendingStartIntent === true;
+
   return {
     shouldClearFallbackReason: input.startupReady,
-    shouldEnsurePlaybackStart: true,
+    shouldEnsurePlaybackStart: mayStartPlayback,
     shouldPausePlayback: false
   };
 }
@@ -1350,7 +1381,8 @@ export function shouldRecoverPausedFullLocalPlayback(input: {
     input.activePlaybackSource !== "full-local" ||
     input.playbackStatus !== "playing" ||
     !input.currentTrackId ||
-    input.localAudioPaused !== true
+    input.localAudioPaused !== true ||
+    !input.audioUnlocked
   ) {
     return false;
   }
@@ -1359,8 +1391,7 @@ export function shouldRecoverPausedFullLocalPlayback(input: {
     input.localAudioHasSrcObject ||
     input.localAudioHasSrc ||
     (typeof input.localAudioReadyState === "number" &&
-      input.localAudioReadyState >= haveCurrentDataReadyState) ||
-    input.audioUnlocked
+      input.localAudioReadyState >= haveCurrentDataReadyState)
   );
 }
 

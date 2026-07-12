@@ -590,7 +590,7 @@ describe("ChunkScheduler", () => {
     });
 
     expect(requestPiece.mock.calls.length).toBeGreaterThan(7);
-    expect(requestPiece.mock.calls.length).toBeLessThanOrEqual(18);
+    expect(requestPiece.mock.calls.length).toBeLessThanOrEqual(28);
     const requestedTrackIds = (requestPiece.mock.calls as unknown as Array<[{
       trackId: string;
       priority: string;
@@ -844,6 +844,58 @@ describe("ChunkScheduler", () => {
     expect(requestPiece).toHaveBeenCalledWith(
       expect.objectContaining({ peerId: "peer_seed", trackId: "track_1" })
     );
+  });
+
+    it("prefers a fuller/faster secondary cache over a busy preferred source owner", () => {
+    const selectedPeerId = selectChunkPeer({
+      announcements: [
+        buildAnnouncement({
+          ownerPeerId: "peer_source",
+          availableChunks: [2, 3],
+          announcedAt: "2026-03-31T10:00:01.000Z"
+        }),
+        buildAnnouncement({
+          ownerPeerId: "peer_cache",
+          availableChunks: Array.from({ length: 40 }, (_, index) => index),
+          announcedAt: "2026-03-31T10:00:02.000Z"
+        })
+      ],
+      chunkIndex: 2,
+      connectedPeerIds: new Set(["peer_source", "peer_cache"]),
+      excludedPeerIds: new Set(["peer_member"]),
+      preferredPeerId: "peer_source",
+      peerLoads: new Map([
+        ["peer_source", 2],
+        ["peer_cache", 0]
+      ]),
+      peerInFlightBytes: new Map([
+        ["peer_source", 2 * 128 * 1024],
+        ["peer_cache", 0]
+      ]),
+      chunkSize: 128 * 1024,
+      maxConcurrentPerPeer: 3,
+      priority: "current",
+      resolvePeerRequestWindow: (peerId) =>
+        peerId === "peer_source"
+          ? {
+              candidateType: "relay",
+              protocol: "udp",
+              transportScore: "healthy",
+              currentRoundTripTimeMs: 220,
+              downloadRateKbps: 1_500,
+              bufferedAmountBytes: 0
+            }
+          : {
+              candidateType: "prflx",
+              protocol: "udp",
+              transportScore: "healthy",
+              currentRoundTripTimeMs: 70,
+              downloadRateKbps: 12_000,
+              bufferedAmountBytes: 0
+            }
+    });
+
+    expect(selectedPeerId).toBe("peer_cache");
   });
 
   it("avoids unstable peers for current playback and prefers healthy low-buffer peers", () => {

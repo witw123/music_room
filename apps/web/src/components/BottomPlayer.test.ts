@@ -2,12 +2,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("BottomPlayer source", () => {
-  it("enables autoplay on the local audio element", () => {
+  it("keeps the local audio element non-autoplaying", () => {
     const source = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("ref={audioRef}");
-    expect(source).toContain("autoPlay");
     expect(source).toContain("playsInline");
+    expect(source).not.toContain("autoPlay");
   });
 
   it("keeps the mobile footer height stable", () => {

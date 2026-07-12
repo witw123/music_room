@@ -7,6 +7,12 @@ import {
   buildDiagnosticsViewModel,
   type DiagnosticsPlaybackInput
 } from "./diagnostics-view-model";
+import {
+  buildWanLinkScore,
+  buildWanLinkScoreFromPeerDiagnostic,
+  type WanLinkScore,
+  type WanProviderSummary
+} from "./wan-link-score";
 
 export type MemberTransferSummary = {
   memberId: string;
@@ -342,6 +348,84 @@ function formatSampleAge(sampleAgeMs: number | null) {
   return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
 }
 
+
+function buildRoomProviders(
+  memberTransferSummaries: MemberTransferSummary[],
+  members: RoomMember[],
+  localMemberId: string | null
+): WanProviderSummary[] {
+  const nicknameById = new Map(members.map((member) => [member.id, member.nickname]));
+  return memberTransferSummaries
+    .filter((summary) => summary.currentTrackChunkCount > 0)
+    .map((summary) => ({
+      peerId: summary.memberId,
+      nickname:
+        summary.memberId === localMemberId
+          ? nicknameById.get(summary.memberId) ?? "本机"
+          : nicknameById.get(summary.memberId) ?? null,
+      availableChunks: summary.currentTrackChunkCount,
+      totalChunks: summary.currentTrackTotalChunks,
+      isPreferredSource: false
+    }));
+}
+
+function resolveRoomWanScore(input: {
+  members: RoomMember[];
+  memberTransferSummaries: MemberTransferSummary[];
+  peerDiagnostics: PeerDiagnosticsSnapshot[];
+  localMemberState: LocalMemberPanelState | null;
+}): WanLinkScore {
+  const providers = buildRoomProviders(
+    input.memberTransferSummaries,
+    input.members,
+    input.localMemberState?.memberId ?? null
+  );
+  const localSummary = input.localMemberState
+    ? input.memberTransferSummaries.find(
+        (summary) => summary.memberId === input.localMemberState?.memberId
+      )
+    : undefined;
+  const localOwnedChunks = localSummary?.currentTrackChunkCount ?? 0;
+  const localTotalChunks = localSummary?.currentTrackTotalChunks ?? 0;
+  const localDownloadRateKbps = input.localMemberState?.pieceSummary.downloadRateKbps ?? null;
+  const localUploadRateKbps = input.localMemberState?.pieceSummary.uploadRateKbps ?? null;
+
+  // Prefer the best remote peer path for room-level WAN score. Fill ETA prefers
+  // local aggregate piece download (multi-provider total) when available.
+  const remoteScores = input.peerDiagnostics
+    .filter((snapshot) => snapshot.peerId !== "system")
+    .map((snapshot) =>
+      buildWanLinkScoreFromPeerDiagnostic({
+        diagnostic: snapshot,
+        providers,
+        ownedChunks: localOwnedChunks,
+        totalChunks: localTotalChunks,
+        downloadRateKbps: localDownloadRateKbps ?? snapshot.pieceDownloadRateKbps,
+        uploadRateKbps: localUploadRateKbps ?? snapshot.pieceUploadRateKbps,
+        rttMs: snapshot.currentRoundTripTimeMs
+      })
+    )
+    .sort((left, right) => right.score - left.score);
+
+  if (remoteScores[0]) {
+    return remoteScores[0];
+  }
+
+  return buildWanLinkScore({
+    candidateType: null,
+    protocol: "udp",
+    rttMs: input.localMemberState?.transportSummary.latencyMs ?? null,
+    downloadRateKbps: localDownloadRateKbps,
+    uploadRateKbps: localUploadRateKbps,
+    transportScore: "healthy",
+    dataChannelState:
+      (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
+    providers,
+    ownedChunks: localOwnedChunks,
+    totalChunks: localTotalChunks
+  });
+}
+
 function MembersPanelBase({
   members,
   memberTransferSummaries = [],
@@ -377,11 +461,59 @@ function MembersPanelBase({
     ? getToneClasses(localDiagnosticsView?.audibility.tone ?? "neutral")
     : null;
 
+  const roomWanScore = resolveRoomWanScore({
+    members,
+    memberTransferSummaries,
+    peerDiagnostics,
+    localMemberState
+  });
+  const wanToneClasses = getToneClasses(roomWanScore.tone);
+
   return (
     <section className="flex w-full flex-col gap-2.5">
       <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
         在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
         不同成员看到的数值不一定相同。
+      </div>
+
+      <div className="rounded-xl border border-surface-border bg-surface/30 p-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
+                外网链路评分
+              </span>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${wanToneClasses.badge}`}
+              >
+                {roomWanScore.grade} · {roomWanScore.score}
+              </span>
+            </div>
+            <strong className="mt-2 block text-sm font-semibold text-foreground">
+              {roomWanScore.pathLabel}
+            </strong>
+            <p className="mt-1 text-xs leading-5 text-foreground-muted">
+              {roomWanScore.summary}
+            </p>
+          </div>
+          <div className="grid min-w-[14rem] grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-surface-border bg-background/35 px-2.5 py-2 text-[10px] text-foreground-muted">
+            <span>RTT：{roomWanScore.metrics.rttLabel}</span>
+            <span>下载：{roomWanScore.metrics.downloadLabel}</span>
+            <span>上传：{roomWanScore.metrics.uploadLabel}</span>
+            <span>供片：{roomWanScore.metrics.providerLabel}</span>
+            <span className="col-span-2">
+              预估满曲：{roomWanScore.metrics.fillEtaLabel}
+            </span>
+          </div>
+        </div>
+        <ul className="mt-2 space-y-1 text-[10px] leading-4 text-foreground-muted">
+          {roomWanScore.tips.slice(0, 3).map((tip) => (
+            <li key={tip} className="flex gap-1.5">
+              <span className="text-foreground-muted/70">•</span>
+              <span>{tip}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {localMemberState && localPlaybackToneClasses ? (
@@ -547,14 +679,42 @@ function MembersPanelBase({
                       </p>
                     </>
                   ) : (
-                    <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-                      <span>DataChannel: {peerDiagnosticsSnapshot?.dataChannelState ?? "未知"}</span>
-                      <span>延迟: {formatMetric(latencyMs, "ms")}</span>
-                      <span>
-                        buffered:{" "}
-                        {formatMetric(peerDiagnosticsSnapshot?.dataBufferedAmountBytes ?? null, " bytes")}
-                      </span>
-                    </div>
+                    <>
+                      {(() => {
+                        const remoteWanScore = peerDiagnosticsSnapshot
+                          ? buildWanLinkScoreFromPeerDiagnostic({
+                              diagnostic: peerDiagnosticsSnapshot,
+                              providers: [
+                                {
+                                  peerId: member.id,
+                                  availableChunks: summary?.currentTrackChunkCount ?? 0,
+                                  totalChunks: summary?.currentTrackTotalChunks ?? 0
+                                }
+                              ]
+                            })
+                          : null;
+                        return (
+                          <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
+                            <span>DataChannel: {peerDiagnosticsSnapshot?.dataChannelState ?? "未知"}</span>
+                            <span>延迟: {formatMetric(latencyMs, "ms")}</span>
+                            <span>路径: {remoteWanScore?.pathLabel ?? "未知"}</span>
+                            <span>
+                              评分:{" "}
+                              {remoteWanScore
+                                ? `${remoteWanScore.grade} ${remoteWanScore.score}`
+                                : "未知"}
+                            </span>
+                            <span>
+                              buffered:{" "}
+                              {formatMetric(
+                                peerDiagnosticsSnapshot?.dataBufferedAmountBytes ?? null,
+                                " bytes"
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
                 </div>
 

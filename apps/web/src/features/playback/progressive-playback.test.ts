@@ -308,6 +308,39 @@ describe("progressive playback helpers", () => {
     ).toBe(true);
   });
 
+  it("keeps late-join requests on the contiguous prefix until PCM can reach the live clock", () => {
+    const flacTrack = {
+      ...track,
+      codec: "flac",
+      mimeType: "audio/flac",
+      durationMs: 300_000,
+      sizeBytes: 60 * 1024 * 1024
+    };
+    const manifest = buildProgressiveTrackManifest(flacTrack, {
+      ...availability,
+      totalChunks: 100,
+      chunkSize: 256 * 1024,
+      availableChunks: [0, 1, 2, 3]
+    })!;
+
+    const wanted = getPriorityChunkIndexes({
+      manifest,
+      availableChunks: [0, 1, 2, 3],
+      playbackPositionMs: 46_000,
+      policy: "startup",
+      lookAheadMs: 120_000
+    });
+
+    // Only contiguous prefix holes after owned [0..3], not mid-window scatter.
+    expect(wanted[0]).toBe(4);
+    expect(wanted.length).toBeGreaterThan(8);
+    expect(
+      wanted.every((chunkIndex, index) => index === 0 || chunkIndex === wanted[index - 1]! + 1)
+    ).toBe(true);
+    // Cap still lands at the required decodable prefix end, not sparse mid-track holes.
+    expect(wanted[wanted.length - 1]).toBeLessThan(60);
+  });
+
   it("fills the missing decode prefix before current-track startup requests", () => {
     const manifest = buildProgressiveTrackManifest(track, availability)!;
     expect(
@@ -316,7 +349,7 @@ describe("progressive playback helpers", () => {
         availableChunks: [0, 1],
         playbackPositionMs: 40_000,
         policy: "startup"
-      }).slice(0, 4)
+      }).slice(0, 3)
     ).toEqual([2, 3, 4]);
   });
 

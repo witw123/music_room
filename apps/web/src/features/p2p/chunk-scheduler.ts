@@ -800,8 +800,10 @@ export class ChunkScheduler {
     priority: ChunkSchedulerPriority
   ) {
     const window = this.resolvePeerRequestWindow(peerId, trackId, priority);
+    // Unknown peer stats should still allow enough concurrent pieces for cold
+    // progressive startup; 2 MiB only covered ~8 small chunks and starved PCM.
     if (!window) {
-      return 2 * 1024 * 1024;
+      return Math.max(8 * 1024 * 1024, 16 * this.getTrackChunkSize(trackId));
     }
 
     return resolvePeerTransferWindow(window, this.getTrackChunkSize(trackId)).targetInFlightBytes;
@@ -838,14 +840,14 @@ export class ChunkScheduler {
     const profile = window ? resolvePeerLinkProfile(window) : "standard-direct";
     const maxBatchSize =
       profile === "fast-direct"
-        ? 8
+        ? 12
         : profile === "standard-direct"
-          ? 6
+          ? 10
           : profile === "relay-udp"
-            ? 4
+            ? 8
             : profile === "constrained"
-              ? 2
-              : 1;
+              ? 4
+              : 2;
     const remainingSlots = Math.max(1, input.maxConcurrent - input.activeTrackRequests);
     const resolvedBatchSize = Math.max(1, Math.min(maxBatchSize, remainingSlots));
     const availability = Object.values(this.availabilityByTrack[input.trackId] ?? {}).find(
@@ -919,11 +921,11 @@ function getTrackStreamingProfile(
 
   if (policy === "catchup") {
     return {
-      maxConcurrent: streamProfile === "large-lossless" ? 24 : 20,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 8 : 6,
+      maxConcurrent: streamProfile === "large-lossless" ? 32 : 28,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 12 : 10,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 160_000 : 96_000,
-      timeoutMs: streamProfile === "large-lossless" ? 850 : 1_000
+      lookAheadMs: streamProfile === "large-lossless" ? 200_000 : 140_000,
+      timeoutMs: streamProfile === "large-lossless" ? 1_000 : 1_200
     };
   }
 
@@ -931,11 +933,12 @@ function getTrackStreamingProfile(
     return {
       // Higher concurrency during startup saturates the P2P pipe faster,
       // which is critical for first-time playback where no chunks are cached.
-      maxConcurrent: streamProfile === "large-lossless" ? 32 : 28,
-      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 12 : 10,
+      maxConcurrent: streamProfile === "large-lossless" ? 40 : 32,
+      maxConcurrentPerPeer: streamProfile === "large-lossless" ? 16 : 12,
       lookBehindMs: 0,
-      lookAheadMs: streamProfile === "large-lossless" ? 128_000 : 72_000,
-      timeoutMs: streamProfile === "large-lossless" ? 600 : 700
+      // Pull a longer contiguous prefix so late-join PCM can catch the live clock.
+      lookAheadMs: streamProfile === "large-lossless" ? 180_000 : 120_000,
+      timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
     };
   }
 
@@ -1105,7 +1108,7 @@ export function selectChunkPeer(input: {
         profile === "fast-direct"
           ? 2
           : profile === "relay-udp"
-            ? 0.75
+            ? 1.1
             : profile === "constrained" || profile === "severe"
               ? 0.5
               : 1;
@@ -1145,10 +1148,23 @@ export function selectChunkPeer(input: {
   if (preferredPeerId && candidates.some((announcement) => announcement.ownerPeerId === preferredPeerId)) {
     const preferredWindow = resolvePeerRequestWindow?.(preferredPeerId);
     const preferredFailure = peerFailureStates?.get(preferredPeerId);
+    const preferredProfile = preferredWindow
+      ? resolvePeerLinkProfile(preferredWindow)
+      : "standard-direct";
+    const preferredLoad = peerLoads.get(preferredPeerId) ?? 0;
+    const preferredInFlight = peerInFlightBytes.get(preferredPeerId) ?? 0;
     const preferredIsViable =
       (preferredFailure?.timeoutStreak ?? 0) === 0 &&
-      preferredWindow?.transportScore !== "degraded";
-    if (preferredIsViable) {
+      preferredWindow?.transportScore !== "degraded" &&
+      preferredWindow?.transportScore !== "unstable" &&
+      preferredWindow?.transportScore !== "failed" &&
+      preferredProfile !== "severe" &&
+      preferredProfile !== "constrained" &&
+      preferredLoad <= Math.max(1, Math.floor(maxConcurrentPerPeer * 0.6)) &&
+      preferredInFlight < (resolvePeerMaxInFlightBytes?.(preferredPeerId) ?? Number.MAX_SAFE_INTEGER) * 0.7;
+    // Keep preferred only as a soft sticky choice. Sorting still prefers free
+    // multi-providers with higher coverage/speed when the source is busy.
+    if (preferredIsViable && candidates.length === 1) {
       return preferredPeerId;
     }
   }
@@ -1220,22 +1236,34 @@ function scoreChunkPeer(input: {
       : profile === "constrained"
         ? 1_200
         : profile === "relay-udp"
-          ? 350
+          ? 180
           : 0;
-  const speedProfileBonus = profile === "fast-direct" ? 700 : 0;
-  const failurePenalty = (input.failure?.timeoutStreak ?? 0) * 1_000;
-  const rttPenalty = Math.min(500, Math.max(0, input.window?.currentRoundTripTimeMs ?? 0));
-  const speedBonus = Math.min(300, Math.max(0, (input.window?.downloadRateKbps ?? 0) / 20));
-  const preferredBonus = input.preferredPeerId === input.peerId ? 120 : 0;
-  const freshnessBonus = Math.min(60, Math.max(0, new Date(input.announcedAt).getTime() / 1_000_000_000));
+  const speedProfileBonus =
+    profile === "fast-direct" ? 900 : profile === "standard-direct" ? 420 : 0;
+  const failurePenalty = (input.failure?.timeoutStreak ?? 0) * 1_200;
+  const rttMs = Math.max(0, input.window?.currentRoundTripTimeMs ?? 180);
+  const rttPenalty = Math.min(700, rttMs);
+  const downloadRateKbps = Math.max(0, input.window?.downloadRateKbps ?? 0);
+  // Prefer peers that already demonstrate higher piece throughput; this is the
+  // main multi-provider bias away from a saturated source owner.
+  const speedBonus = Math.min(1_200, downloadRateKbps / 8);
+  const load = input.peerLoads.get(input.peerId) ?? 0;
+  const inFlightBytes = input.peerInFlightBytes.get(input.peerId) ?? 0;
+  const loadPenalty = load * 140 + Math.round(inFlightBytes / (96 * 1024)) * 12;
+  // Preferred source owner is a soft tie-break only — never dominate a free,
+  // faster, fuller secondary cache provider.
+  const preferredBonus = input.preferredPeerId === input.peerId ? 40 : 0;
+  // Coverage is the strongest multi-provider signal: peers with more announced
+  // chunks can satisfy denser contiguous prefix requests.
+  const coverageBonus = Math.min(2_500, input.availableChunks * 8);
+  const freshnessBonus = Math.min(80, Math.max(0, new Date(input.announcedAt).getTime() / 1_000_000_000));
 
   return (
     transportPenalty +
     failurePenalty +
     rttPenalty +
-    (input.peerLoads.get(input.peerId) ?? 0) * 100 +
-    Math.round((input.peerInFlightBytes.get(input.peerId) ?? 0) / (128 * 1024)) * 10 -
-    input.availableChunks -
+    loadPenalty -
+    coverageBonus -
     speedBonus -
     speedProfileBonus -
     preferredBonus -

@@ -69,7 +69,6 @@ type RoomWorkspaceProps = {
   onTabChange: (tab: "queue" | "library" | "cache" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
-  isSyncPending: boolean;
   playerSlot: ReactNode;
 };
 
@@ -123,7 +122,6 @@ function RoomWorkspaceBase({
   onTabChange,
   onDiagnosticsVisibilityChange,
   socket,
-  isSyncPending,
   playerSlot
 }: RoomWorkspaceProps) {
   const playback = roomSnapshot?.room.playback;
@@ -223,13 +221,6 @@ function RoomWorkspaceBase({
       </div>
 
       {playerSlot}
-
-      {isSyncPending ? (
-        <div className="fixed left-1/2 top-8 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-surface-border bg-surface px-4 py-1.5 shadow-lg backdrop-blur-md animate-fade-in">
-          <div className="h-2 w-2 rounded-full bg-accent animate-ping" />
-          <span className="text-xs text-foreground">正在同步房间状态…</span>
-        </div>
-      ) : null}
     </main>
   );
 }

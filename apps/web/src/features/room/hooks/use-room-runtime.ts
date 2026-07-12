@@ -809,6 +809,17 @@ export function useRoomRuntime({
       return;
     }
 
+    // Entering a room should not force local audio output until the user
+    // unlocks playback (explicit play click or previous activation).
+    if (!roomAudioOutput.isActivated()) {
+      updateSourceStartState("awaiting-unlock", {
+        summary: "等待用户解锁本地音频播放",
+        level: "warning",
+        recordEvent: false
+      });
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) {
       updateSourceStartState("failed", {
