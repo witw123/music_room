@@ -33,10 +33,17 @@ import type {
 
 type DataMeshRuntime = Pick<
   P2PMesh,
-  "syncPeers" | "restartPeer" | "requestPieces" | "getConnectedPeerIds"
-> & Partial<Pick<P2PMesh, "updateCacheStreamProvider" | "clearCacheStreamTrack">>;
-
-const pieceUnavailableRetryDelayMs = 150;
+  | "syncPeers"
+  | "restartPeer"
+  | "requestPieces"
+  | "getConnectedPeerIds"
+> &
+  Partial<
+    Pick<
+      P2PMesh,
+      "updateCacheStreamProvider" | "removeCacheStreamProvider" | "clearCacheStreamTrack"
+    >
+  >;
 
 export function useRoomDataMesh(input: {
   meshRef: MutableRefObject<P2PMesh | null>;
@@ -77,6 +84,9 @@ export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime |
     },
     updateCacheStreamProvider(provider: CacheStreamProvider) {
       meshRef.current?.updateCacheStreamProvider?.(provider);
+    },
+    removeCacheStreamProvider(trackId: string, peerId: string) {
+      meshRef.current?.removeCacheStreamProvider?.(trackId, peerId);
     },
     clearCacheStreamTrack(trackId: string) {
       meshRef.current?.clearCacheStreamTrack?.(trackId);
@@ -306,8 +316,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         chunkSize,
         mimeType,
         payloadBytes,
-        payload,
-        requestRttMs
+        payload
       }) => {
         // Store validated piece in the in-memory buffer so the PCM engine can
         // read it instantly without an IndexedDB round-trip. This eliminates
@@ -317,16 +326,8 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         input.recordPieceTransferRef.current({
           peerId: sourcePeerId,
           direction: "download",
-          bytes: payloadBytes,
-          durationMs: requestRttMs
+          bytes: payloadBytes
         });
-        if (typeof requestRttMs === "number" && Number.isFinite(requestRttMs)) {
-          input.recordPieceRequestSampleRef.current({
-            peerId: sourcePeerId,
-            outcome: "completed",
-            durationMs: requestRttMs
-          });
-        }
         const currentTrack =
           input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         if (currentTrack) {
@@ -372,101 +373,6 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           totalChunks,
           chunkSize,
           mimeType
-        });
-      },
-      onPieceReceivedAck: ({ peerId: targetPeerId, payloadBytes }) => {
-        input.recordPieceTransferRef.current({
-          peerId: targetPeerId,
-          direction: "upload",
-          bytes: payloadBytes
-        });
-      },
-      onPieceRequestSent: ({ peerId: remotePeerId, trackId, chunkIndexes }) => {
-        const chunkSummary =
-          chunkIndexes.length === 1
-            ? `${chunkIndexes[0]}`
-            : `${chunkIndexes[0]}-${chunkIndexes[chunkIndexes.length - 1]}`;
-        input.recordPeerDiagnosticRef.current({
-          peerId: remotePeerId,
-          channelKind: "data",
-          direction: "sent",
-          event: "piece-request",
-          summary: `请求 ${remotePeerId} 的分片 ${trackId}#${chunkSummary}`
-        });
-      },
-      onPieceRequestReceived: ({ peerId: remotePeerId, trackId, chunkIndex }) => {
-        input.recordPeerDiagnosticRef.current({
-          peerId: remotePeerId,
-          channelKind: "data",
-          direction: "received",
-          event: "piece-request-received",
-          summary: `收到 ${remotePeerId} 的分片请求 ${trackId}#${chunkIndex}`
-        });
-      },
-      onPieceServed: ({ peerId: remotePeerId, trackId, chunkIndex, payloadBytes }) => {
-        input.recordPeerDiagnosticRef.current({
-          peerId: remotePeerId,
-          channelKind: "data",
-          direction: "sent",
-          event: "piece-served",
-          summary: `向 ${remotePeerId} 回传分片 ${trackId}#${chunkIndex} (${payloadBytes} bytes)`
-        });
-      },
-      onPieceServeMiss: ({ peerId: remotePeerId, trackId, chunkIndex, reason }) => {
-        const reasonLabel =
-          reason === "piece-missing"
-            ? "本地缺少分片"
-            : reason === "manifest-missing"
-              ? "分片清单缺失"
-              : "DataChannel 未打开";
-        input.recordPeerDiagnosticRef.current({
-          peerId: remotePeerId,
-          channelKind: "data",
-          direction: "local",
-          event: "piece-serve-miss",
-          level: "warning",
-          summary: `${trackId}#${chunkIndex} 未回片：${reasonLabel}`
-        });
-      },
-      onPieceRequestTimeout: ({
-        trackId,
-        chunkIndex,
-        peerId: timedOutPeerId,
-        requestDurationMs
-      }) => {
-        input.recordPieceRequestSampleRef.current({
-          peerId: timedOutPeerId,
-          outcome: "timeout",
-          durationMs: requestDurationMs
-        });
-        input.clearManualCachePendingPiece(trackId, chunkIndex);
-        input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, timedOutPeerId);
-      },
-      onPieceUnavailable: ({
-        trackId,
-        chunkIndex,
-        peerId: unavailablePeerId,
-        reason,
-        requestDurationMs
-      }) => {
-        input.recordPieceRequestSampleRef.current({
-          peerId: unavailablePeerId,
-          outcome: "timeout",
-          durationMs: requestDurationMs
-        });
-        input.deferManualCachePendingPiece(
-          trackId,
-          chunkIndex,
-          { delayMs: pieceUnavailableRetryDelayMs, providerPeerId: unavailablePeerId }
-        );
-        input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, unavailablePeerId);
-        input.recordPeerDiagnosticRef.current({
-          peerId: unavailablePeerId,
-          channelKind: "data",
-          direction: "received",
-          event: "piece-unavailable",
-          level: "warning",
-          summary: `${trackId}#${chunkIndex} 暂不可用：${reason}`
         });
       },
       onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
@@ -609,6 +515,19 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
       },
       onCacheStreamMetrics: (metrics) => {
         const isReceiverStream = "availabilityCoveragePercent" in metrics;
+        input.meshRef.current?.updateCacheStreamProvider?.({
+          peerId: metrics.peerId,
+          trackId: metrics.trackId,
+          throughputKbps: metrics.streamThroughputKbps,
+          rttMs: metrics.streamAckRttMs ?? undefined,
+          p95RttMs: metrics.streamAckRttMs ?? undefined,
+          bufferedAmountBytes: metrics.dataChannelBufferedAmountBytes,
+          nackRate:
+            metrics.streamNackCount > 0
+              ? metrics.streamNackCount /
+                Math.max(1, metrics.streamNackCount + metrics.providerContributionBytes)
+              : 0
+        });
         input.recordPeerDiagnosticRef.current({
           peerId: metrics.peerId,
           channelKind: "data",
@@ -635,6 +554,16 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
                 : snapshot.availabilityCoveragePercent
           })
         });
+      },
+      onCacheStreamReset: ({ peerId, trackId, chunkIndexes, reason }) => {
+        if (reason === "superseded") {
+          input.chunkSchedulerRef.current?.clearTrack(trackId);
+          return;
+        }
+
+        for (const chunkIndex of chunkIndexes) {
+          input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, peerId);
+        }
       },
       onPeerStalled: ({ peerId: remotePeerId, reason }) => {
         input.updateConnectionSupervisorSignalState({

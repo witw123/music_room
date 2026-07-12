@@ -9,7 +9,7 @@ import {
   resolveTrackPieceManifest,
   type ResolvedTrackPieceManifest
 } from "@/features/p2p";
-import type { PieceRequestOptions } from "@/features/p2p/piece-request-client";
+import type { CacheStreamRequestOptions } from "@/features/p2p/cache-stream-scheduler";
 import {
   getStartupWindowMs,
 } from "@/features/playback/progressive-playback";
@@ -788,7 +788,7 @@ export async function planManualCacheDirectRequests(input: {
     chunkIndexes: number[],
     totalChunks: number,
     timeoutMs: number,
-    options?: PieceRequestOptions
+    options?: CacheStreamRequestOptions
   ) => boolean;
   resolvePeerRequestWindow?: (
     providerPeerId: string,

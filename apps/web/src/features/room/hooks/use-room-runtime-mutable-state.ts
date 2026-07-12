@@ -46,6 +46,7 @@ export function useRoomRuntimeMutableState(input: {
   resetPlayerSurface: () => void;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
+  clearAvailabilityForTrack: (trackId: string, ownerPeerId?: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   enableTrackCaching: boolean;
@@ -82,6 +83,7 @@ export function useRoomRuntimeMutableState(input: {
   const resetPlayerSurfaceRef = useRef(input.resetPlayerSurface);
   const queueAvailabilityRef = useRef(input.queueAvailability);
   const clearAvailabilityForPeerRef = useRef(input.clearAvailabilityForPeer);
+  const clearAvailabilityForTrackRef = useRef(input.clearAvailabilityForTrack);
   const flushPendingAvailabilityRef = useRef(input.flushPendingAvailability);
   const recordPeerDiagnosticRef = useRef(input.recordPeerDiagnostic);
 
@@ -217,6 +219,10 @@ export function useRoomRuntimeMutableState(input: {
   }, [input.clearAvailabilityForPeer]);
 
   useEffect(() => {
+    clearAvailabilityForTrackRef.current = input.clearAvailabilityForTrack;
+  }, [input.clearAvailabilityForTrack]);
+
+  useEffect(() => {
     flushPendingAvailabilityRef.current = input.flushPendingAvailability;
   }, [input.flushPendingAvailability]);
 
@@ -255,6 +261,7 @@ export function useRoomRuntimeMutableState(input: {
     resetPlayerSurfaceRef,
     queueAvailabilityRef,
     clearAvailabilityForPeerRef,
+    clearAvailabilityForTrackRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
     clearSocketDisconnectGrace,

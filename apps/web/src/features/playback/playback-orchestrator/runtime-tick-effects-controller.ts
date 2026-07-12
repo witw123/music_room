@@ -43,6 +43,7 @@ import {
   resolveFullLocalWarmupTransitionAction,
   resolveIdleFullLocalUpgradeArmState,
   resolveObservedPlaybackSeconds,
+  isSlidingWindowPlaybackSource,
   shouldEnableFullLocalHandoff,
   shouldRecoverPausedFullLocalPlayback,
   shouldUpgradeSlidingWindowToFullLocalWithoutNativeWarmup,
@@ -326,6 +327,13 @@ export function useRuntimeTickEffectsController({
     const syncUpgrade = () => {
       const runtimeState = runtimeStateRef.current;
       const playbackState = playbackRef.current;
+      if (
+        hasActivePlaybackIntent(playbackState) &&
+        isSlidingWindowPlaybackSource(runtimeState.activePlaybackSource)
+      ) {
+        fullLocalWarmupReadyAtRef.current = null;
+        return;
+      }
       const upgradePreflight = resolveFullLocalUpgradePreflight({
         currentTrackId: playbackState?.currentTrackId ?? null,
         hasPlaybackState: !!playbackState,
@@ -524,7 +532,10 @@ export function useRuntimeTickEffectsController({
         clearFallbackReason: warmupDecision.clearFallbackReason
       });
       fullLocalWarmupReadyAtRef.current = transitionAction.nextWarmupReadyAt;
-      if (transitionAction.transition) {
+      const keepContinuousSource =
+        hasActivePlaybackIntent(latestPlayback) &&
+        isSlidingWindowPlaybackSource(runtimeState.activePlaybackSource);
+      if (transitionAction.transition && !keepContinuousSource) {
         audio.muted = false;
         audio.volume = getAudibleElementVolume(runtimeState.volume);
         progressivePcmEngineRef.current?.prepareForNativeHandoff();

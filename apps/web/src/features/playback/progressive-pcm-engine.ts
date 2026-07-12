@@ -231,6 +231,8 @@ export class ProgressivePcmEngine {
   private queuedCatchupTargetChunkIndex: number | null = null;
   private refillTimerId: ReturnType<typeof setInterval> | null = null;
   private refillInFlight = false;
+  private refillQueued = false;
+  private unsubscribePieceAvailability: (() => void) | null = null;
   private nativeHandoffTailReleaseAtMs: number | null = null;
   // Concurrent playback/warmup requests merge their target into the active
   // cache read so they cannot race and clear each other's catch-up window.
@@ -367,6 +369,25 @@ export class ProgressivePcmEngine {
       this.keepAliveOscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
       this.keepAliveOscillator.connect(this.keepAliveGain);
       this.keepAliveOscillator.start();
+
+      this.unsubscribePieceAvailability = pieceMemoryBuffer.subscribeToAvailability(
+        (trackKey) => {
+          if (
+            trackKey !== this.manifest.trackId ||
+            (!this.playing && !this.waitingForBuffer) ||
+            this.status === "destroyed"
+          ) {
+            return;
+          }
+
+          this.startPlaybackRefillLoop();
+          if (this.refillInFlight) {
+            this.refillQueued = true;
+            return;
+          }
+          void this.refillPlaybackBuffer().catch(() => undefined);
+        }
+      );
 
       this.audio.srcObject = null;
       this.audio.muted = false;
@@ -661,6 +682,8 @@ export class ProgressivePcmEngine {
     }
 
     this.status = "destroyed";
+    this.unsubscribePieceAvailability?.();
+    this.unsubscribePieceAvailability = null;
     this.stopPlaybackRefillLoop();
     const preserveNativeHandoffTail =
       this.nativeHandoffTailReleaseAtMs !== null && this.scheduledSegments.length > 0;
@@ -777,6 +800,7 @@ export class ProgressivePcmEngine {
     this.syncQueued = false;
     this.queuedCatchupTargetChunkIndex = null;
     this.refillInFlight = false;
+    this.refillQueued = false;
     this.nativeHandoffTailReleaseAtMs = null;
     this.playbackTimelineKey = null;
     this.playbackTimelineRevision = null;
@@ -802,8 +826,11 @@ export class ProgressivePcmEngine {
   }
 
   private async refillPlaybackBuffer() {
+    if (this.refillInFlight) {
+      this.refillQueued = true;
+      return;
+    }
     if (
-      this.refillInFlight ||
       (!this.playing && !this.waitingForBuffer) ||
       !this.audioContext ||
       isTerminalEngineStatus(this.status)
@@ -882,6 +909,17 @@ export class ProgressivePcmEngine {
       }
     } finally {
       this.refillInFlight = false;
+      if (
+        this.refillQueued &&
+        (this.playing || this.waitingForBuffer) &&
+        this.audioContext &&
+        !isTerminalEngineStatus(this.status)
+      ) {
+        this.refillQueued = false;
+        void Promise.resolve().then(() => this.refillPlaybackBuffer()).catch(() => undefined);
+      } else {
+        this.refillQueued = false;
+      }
     }
   }
 

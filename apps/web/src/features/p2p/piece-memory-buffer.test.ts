@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PieceMemoryBuffer, pieceMemoryBuffer } from "./piece-memory-buffer";
 
 describe("PieceMemoryBuffer", () => {
@@ -88,6 +88,19 @@ describe("PieceMemoryBuffer", () => {
     expect(buffer.getTrackChunkCount("track_1")).toBe(2);
     expect(buffer.getTrackChunkCount("track_2")).toBe(1);
     expect(buffer.totalChunkCount).toBe(3);
+  });
+
+  it("notifies subscribers only when a new chunk becomes available", () => {
+    const listener = vi.fn();
+    const unsubscribe = buffer.subscribeToAvailability(listener);
+
+    buffer.put("track_1", 2, new Uint8Array([2]).buffer);
+    buffer.put("track_1", 2, new Uint8Array([2]).buffer);
+    unsubscribe();
+    buffer.put("track_1", 3, new Uint8Array([3]).buffer);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith("track_1", 2);
   });
 
   it("evicts non-active chunks first when the capacity is exceeded", () => {

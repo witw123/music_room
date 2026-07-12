@@ -12,6 +12,7 @@ import {
 } from "@/lib/indexeddb";
 import { buildPieceFrames } from "./piece-frame-codec";
 import type { DataChannelQueuedSendItem } from "./data-channel-manager";
+import type { CachedPieceManifestHeader } from "./piece-manifest-header";
 
 type ProducerPeerEntry = {
   channel?: Pick<RTCDataChannel, "readyState" | "bufferedAmount"> | null;
@@ -104,6 +105,7 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     totalChunks: number;
     chunkSize: number;
     mimeType: string;
+    pieceHashes?: string[];
   }>();
 
   constructor(input: {
@@ -435,7 +437,11 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     }
   }
 
-  private async resolveManifestHeader(trackId: string, fallbackChunkSize: number, fallbackTotalChunks: number) {
+  async resolveManifestHeader(
+    trackId: string,
+    fallbackChunkSize: number,
+    fallbackTotalChunks = 1
+  ) {
     const cached = this.manifestHeaders.get(trackId);
     if (cached) {
       return cached;
@@ -448,10 +454,20 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     const header = {
       totalChunks: resolvedManifest?.totalChunks ?? Math.max(1, fallbackTotalChunks),
       chunkSize: resolvedManifest?.chunkSize ?? fallbackChunkSize,
-      mimeType: resolvedManifest?.mimeType || "audio/mpeg"
+      mimeType: resolvedManifest?.mimeType || "audio/mpeg",
+      pieceHashes: resolvedManifest?.pieceHashes
     };
     this.manifestHeaders.set(trackId, header);
     return header;
+  }
+
+  rememberManifestHeader(trackId: string, header: CachedPieceManifestHeader) {
+    this.manifestHeaders.set(trackId, {
+      totalChunks: header.totalChunks,
+      chunkSize: header.chunkSize,
+      mimeType: header.mimeType,
+      pieceHashes: header.pieceHashes
+    });
   }
 
   private closeStream(streamId: string) {

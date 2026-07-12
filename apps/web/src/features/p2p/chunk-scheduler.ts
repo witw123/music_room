@@ -212,6 +212,20 @@ export class ChunkScheduler {
     }
   }
 
+  clearTrack(trackId: string) {
+    const state = this.trackStates.get(trackId);
+    if (!state) {
+      return;
+    }
+
+    state.pendingChunks.clear();
+    state.ownedChunks.clear();
+    state.cooledDownPeers.clear();
+    state.peerFailures.clear();
+    this.trackStates.delete(trackId);
+    this.requestSchedule("high");
+  }
+
   getBufferedChunkCount(trackId: string) {
     return this.trackStates.get(trackId)?.ownedChunks.size ?? 0;
   }

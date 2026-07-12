@@ -15,6 +15,9 @@ export class PieceMemoryBuffer {
   private readonly maxChunks: number;
   private activeTrackKey: string | null = null;
   private activeChunkIndexes = new Set<number>();
+  private readonly availabilityListeners = new Set<
+    (trackKey: string, chunkIndex: number) => void
+  >();
 
   constructor(options: { maxChunks?: number } = {}) {
     this.maxChunks =
@@ -44,7 +47,19 @@ export class PieceMemoryBuffer {
     if (!trackStore.has(chunkIndex)) {
       trackStore.set(chunkIndex, payload.slice(0));
       this.evictToCapacity();
+      for (const listener of this.availabilityListeners) {
+        listener(trackKey, chunkIndex);
+      }
     }
+  }
+
+  subscribeToAvailability(
+    listener: (trackKey: string, chunkIndex: number) => void
+  ) {
+    this.availabilityListeners.add(listener);
+    return () => {
+      this.availabilityListeners.delete(listener);
+    };
   }
 
   /**

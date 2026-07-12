@@ -199,6 +199,46 @@ export function useAvailabilityAnnouncements({
     });
   }, []);
 
+  const clearAvailabilityForTrack = useCallback((trackId: string, ownerPeerId?: string) => {
+    const matches = (announcement: TrackAvailabilityAnnouncement) =>
+      announcement.trackId === trackId &&
+      (!ownerPeerId || announcement.ownerPeerId === ownerPeerId);
+
+    for (const [key, announcement] of queuedAvailabilityRef.current.entries()) {
+      if (matches(announcement)) {
+        queuedAvailabilityRef.current.delete(key);
+      }
+    }
+    for (const [key, announcement] of pendingAvailabilityEmitRef.current.entries()) {
+      if (matches(announcement)) {
+        pendingAvailabilityEmitRef.current.delete(key);
+      }
+    }
+    for (const [key, announcement] of pendingAvailabilityRef.current.entries()) {
+      if (matches(announcement)) {
+        pendingAvailabilityRef.current.delete(key);
+      }
+    }
+
+    setAvailabilityByTrack((current) => {
+      const currentTrack = current[trackId];
+      if (!currentTrack) {
+        return current;
+      }
+      const nextTrack = Object.fromEntries(
+        Object.entries(currentTrack).filter(([, announcement]) => !matches(announcement))
+      );
+      const next = { ...current };
+      if (Object.keys(nextTrack).length === 0) {
+        delete next[trackId];
+      } else {
+        next[trackId] = nextTrack;
+      }
+      availabilityByTrackRef.current = next;
+      return next;
+    });
+  }, []);
+
   const resetAvailabilityState = useCallback(() => {
     if (availabilityFlushTimerRef.current !== null) {
       window.clearTimeout(availabilityFlushTimerRef.current);
@@ -234,6 +274,7 @@ export function useAvailabilityAnnouncements({
     emitAvailability,
     flushPendingAvailability,
     clearAvailabilityForPeer,
+    clearAvailabilityForTrack,
     resetAvailabilityState
   };
 }

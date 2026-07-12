@@ -10,17 +10,9 @@ import {
 } from "./mesh-message-codec";
 import { PieceFragmentTracker } from "./piece-fragment-tracker";
 import type { IncomingPieceBatchItem } from "./piece-inbound-processor";
-import type { PendingPieceRequest } from "./piece-request-tracker";
 
 type PieceMessageRouterPeerEntry = {
   channel?: Pick<RTCDataChannel, "readyState"> | null;
-};
-
-type PieceServeRequest = {
-  trackId: string;
-  chunkIndex: number;
-  requestId?: string;
-  priority?: "critical" | "bulk";
 };
 
 type PieceMessageRouterCallbacks = {
@@ -36,88 +28,25 @@ type PieceMessageRouterCallbacks = {
     chunkIndex: number;
     payloadBytes: number;
   }) => boolean;
-  onPieceReceivedAck?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    payloadBytes: number;
-  }) => void;
-  onPieceRequestReceived?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    requestId?: string;
-  }) => void;
-  onPieceUnavailable?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    requestId?: string;
-    reason: "piece-missing" | "manifest-missing" | "channel-not-open";
-    requestDurationMs: number;
-    pendingRequest?: PendingPieceRequest;
-  }) => void;
 };
 
-export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = PieceMessageRouterPeerEntry> {
-  private readonly pieceServeBatchConcurrency: number;
+export class PieceMessageRouter<
+  TEntry extends PieceMessageRouterPeerEntry = PieceMessageRouterPeerEntry
+> {
   private readonly acceptLegacyBinaryFrames: boolean;
   private readonly pieceFragments: PieceFragmentTracker;
-  private readonly servePieceRequest?: (input: {
-    peerId: string;
-    entry: TEntry;
-    request: PieceServeRequest;
-  }) => Promise<void>;
-  private readonly servePieceRequests?: (input: {
-    peerId: string;
-    entry: TEntry;
-    requests: PieceServeRequest[];
-  }) => Promise<void>;
-  private readonly takePendingRequest?: (
-    trackId: string,
-    chunkIndex: number
-  ) => PendingPieceRequest | null;
-  private readonly failPendingRequest: (input: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    requestId?: string;
-  }) => PendingPieceRequest | null;
   private readonly enqueueInboundPiece: (item: IncomingPieceBatchItem) => void;
   private readonly callbacks: PieceMessageRouterCallbacks;
 
   constructor(input: {
-    pieceServeBatchConcurrency: number;
     incomingPieceFragmentTtlMs: number;
-    servePieceRequest?: (input: {
-      peerId: string;
-      entry: TEntry;
-      request: PieceServeRequest;
-    }) => Promise<void>;
-    servePieceRequests?: (input: {
-      peerId: string;
-      entry: TEntry;
-      requests: PieceServeRequest[];
-    }) => Promise<void>;
-    takePendingRequest?: (trackId: string, chunkIndex: number) => PendingPieceRequest | null;
     acceptLegacyBinaryFrames?: boolean;
-    failPendingRequest?: (input: {
-      peerId: string;
-      trackId: string;
-      chunkIndex: number;
-      requestId?: string;
-    }) => PendingPieceRequest | null;
     enqueueInboundPiece: (item: IncomingPieceBatchItem) => void;
   } & PieceMessageRouterCallbacks) {
-    this.pieceServeBatchConcurrency = input.pieceServeBatchConcurrency;
-    this.acceptLegacyBinaryFrames = input.acceptLegacyBinaryFrames ?? true;
+    this.acceptLegacyBinaryFrames = input.acceptLegacyBinaryFrames ?? false;
     this.pieceFragments = new PieceFragmentTracker({
       ttlMs: input.incomingPieceFragmentTtlMs
     });
-    this.servePieceRequest = input.servePieceRequest;
-    this.servePieceRequests = input.servePieceRequests;
-    this.takePendingRequest = input.takePendingRequest;
-    this.failPendingRequest = input.failPendingRequest ?? (() => null);
     this.enqueueInboundPiece = input.enqueueInboundPiece;
     this.callbacks = input;
   }
@@ -132,13 +61,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       return;
     }
 
-    if (
-      message.kind === "cache-stream-open" ||
-      message.kind === "cache-stream-credit" ||
-      message.kind === "cache-stream-ack" ||
-      message.kind === "cache-stream-nack" ||
-      message.kind === "cache-stream-reset"
-    ) {
+    if (isCacheStreamMessage(message)) {
       await this.callbacks.onCacheStreamMessage?.({
         peerId: input.peerId,
         message
@@ -146,94 +69,10 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       return;
     }
 
-    if (message.kind === "request-piece") {
-      if (!this.servePieceRequest) {
-        return;
-      }
-      await this.serveSinglePieceRequest(input.peerId, input.entry, {
-        trackId: message.trackId,
-        chunkIndex: message.chunkIndex,
-        priority: message.priority
-      });
-      return;
-    }
-
-    if (message.kind === "request-pieces") {
-      if (!this.servePieceRequest) {
-        return;
-      }
-      const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
-      const requests = chunkIndexes.map((chunkIndex) => ({
-        trackId: message.trackId,
-        chunkIndex,
-        requestId: message.requestId,
-        priority: message.priority
-      }));
-      for (const request of requests) {
-        this.reportPieceRequest(input.peerId, request);
-      }
-      if (this.servePieceRequests) {
-        await this.servePieceRequests({
-          peerId: input.peerId,
-          entry: input.entry,
-          requests
-        });
-        return;
-      }
-
-      const servePieceRequest = this.servePieceRequest;
-      if (!servePieceRequest) {
-        return;
-      }
-      for (let offset = 0; offset < requests.length; offset += this.pieceServeBatchConcurrency) {
-        const batch = requests.slice(offset, offset + this.pieceServeBatchConcurrency);
-        await Promise.all(
-          batch.map((request) =>
-            servePieceRequest({
-              peerId: input.peerId,
-              entry: input.entry,
-              request
-            })
-          )
-        );
-      }
-      return;
-    }
-
-    if (message.kind === "piece-unavailable") {
-      const pendingRequest = this.failPendingRequest({
-        peerId: input.peerId,
-        trackId: message.trackId,
-        chunkIndex: message.chunkIndex,
-        requestId: message.requestId
-      });
-      this.callbacks.onPieceUnavailable?.({
-        peerId: input.peerId,
-        trackId: message.trackId,
-        chunkIndex: message.chunkIndex,
-        requestId: message.requestId,
-        reason: message.reason ?? "piece-missing",
-        requestDurationMs:
-          pendingRequest ? Date.now() - pendingRequest.requestedAtMs : 0,
-        pendingRequest: pendingRequest ?? undefined
-      });
-      return;
-    }
-
-    if (message.kind === "piece-received") {
-      this.callbacks.onPieceReceivedAck?.({
-        peerId: input.peerId,
-        trackId: message.trackId,
-        chunkIndex: message.chunkIndex,
-        payloadBytes: message.payloadBytes
-      });
-      return;
-    }
-
     if (
       message.kind === "send-piece" &&
       isBinaryPieceMessage(message) &&
-      (this.acceptLegacyBinaryFrames || !!message.header.streamId)
+      (this.acceptLegacyBinaryFrames || hasStreamIdentity(message))
     ) {
       this.enqueueReceivedPiece(input.peerId, message);
       return;
@@ -242,7 +81,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     if (
       message.kind === "send-piece-fragment" &&
       isBinaryPieceFragmentMessage(message) &&
-      (this.acceptLegacyBinaryFrames || !!message.header.streamId)
+      (this.acceptLegacyBinaryFrames || hasStreamIdentity(message))
     ) {
       this.handleIncomingPieceFragment(input.peerId, message);
     }
@@ -252,38 +91,14 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     this.pieceFragments.clearAll();
   }
 
-  private async serveSinglePieceRequest(
-    peerId: string,
-    entry: TEntry,
-    request: PieceServeRequest
-  ) {
-    this.reportPieceRequest(peerId, request);
-    if (!this.servePieceRequest) {
-      return;
-    }
-    await this.servePieceRequest({
-      peerId,
-      entry,
-      request
-    });
-  }
-
-  private reportPieceRequest(peerId: string, request: PieceServeRequest) {
-    this.callbacks.onPieceRequestReceived?.({
-      peerId,
-      trackId: request.trackId,
-      chunkIndex: request.chunkIndex,
-      requestId: request.requestId
-    });
-  }
-
   private enqueueReceivedPiece(peerId: string, message: BinaryPieceMessage) {
     const streamId = message.header.streamId;
     const generation = message.header.generation;
+    if (!hasStreamIdentity(message) || !this.callbacks.onCacheStreamPiece) {
+      return;
+    }
+
     if (
-      streamId &&
-      typeof generation === "number" &&
-      this.callbacks.onCacheStreamPiece &&
       !this.callbacks.onCacheStreamPiece({
         peerId,
         trackId: message.trackId,
@@ -295,12 +110,10 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     ) {
       return;
     }
-    const pendingRequest = this.takePendingRequest?.(message.trackId, message.chunkIndex);
 
     this.enqueueInboundPiece({
       peerId,
-      message,
-      pendingRequest: pendingRequest ?? undefined
+      message
     });
   }
 
@@ -312,4 +125,31 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
 
     this.enqueueReceivedPiece(peerId, assembledMessage);
   }
+}
+
+function isCacheStreamMessage(
+  message: Awaited<ReturnType<typeof parseIncomingMeshMessage>>
+): message is CacheStreamMessage {
+  return (
+    message !== null &&
+    typeof message === "object" &&
+    "kind" in message &&
+    typeof message.kind === "string" &&
+    message.kind.startsWith("cache-stream-")
+  );
+}
+
+function hasStreamIdentity(
+  message: BinaryPieceMessage | BinaryPieceFragmentMessage
+): message is (BinaryPieceMessage | BinaryPieceFragmentMessage) & {
+  streamId: string;
+  generation: number;
+} {
+  return (
+    typeof message.header.streamId === "string" &&
+    message.header.streamId.length > 0 &&
+    typeof message.header.generation === "number" &&
+    Number.isInteger(message.header.generation) &&
+    message.header.generation >= 0
+  );
 }

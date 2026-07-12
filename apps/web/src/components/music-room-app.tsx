@@ -13,6 +13,7 @@ import { initialRoomStateStore, roomStateReducer } from "@/features/room/room-st
 import { useCurrentProgressiveEngineTypeForSource, useRoomPageDerived } from "@/components/room/hooks/use-room-page-derived";
 import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
 import { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
+import { useRoomCacheTrackCleanup } from "@/components/room/hooks/use-room-cache-track-cleanup";
 import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playback-effects";
 import { useRoomPlaybackActions } from "@/components/room/hooks/use-room-playback-actions";
 import { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
@@ -98,6 +99,7 @@ export function MusicRoomApp({
     emitAvailability: stableEmitAvailability,
     flushPendingAvailability,
     clearAvailabilityForPeer,
+    clearAvailabilityForTrack,
     resetAvailabilityState
   } = useAvailabilityAnnouncements({
     socketRef: appRefs.socketRef
@@ -162,7 +164,7 @@ export function MusicRoomApp({
       setBufferHealth: pageState.setBufferHealth,
       setMediaConnectionState: pageState.setMediaConnectionState
   });
-
+  const clearLocalCacheTrackRuntime = useRoomCacheTrackCleanup({ meshRef: appRefs.meshRef, socketRef: appRefs.socketRef, roomId: roomSnapshot?.room.id, peerId, clearAvailabilityForTrack });
   const roomActions = useRoomPageRoomActions({
     workspaceOnly,
     workspaceEntryHref: appEntries.workspaceEntryHref,
@@ -174,6 +176,7 @@ export function MusicRoomApp({
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
     deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
+    clearCacheStreamTrack: clearLocalCacheTrackRuntime,
     destroyProgressiveRuntime: progressiveRuntime.destroyProgressiveRuntime,
     dispatchRoomStateEvent,
     peerId,
@@ -198,7 +201,6 @@ export function MusicRoomApp({
     setStatusMessage,
     setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
   });
-
   const roomRuntime = useRoomRuntime({
     workspaceOnly,
     initialRoomId,
@@ -255,6 +257,7 @@ export function MusicRoomApp({
     availabilityByTrack,
     queueAvailability,
     clearAvailabilityForPeer,
+    clearAvailabilityForTrack,
     flushPendingAvailability,
     recordPeerDiagnostic,
     uploadedTracks: uploads.uploadedTracks,
@@ -277,7 +280,6 @@ export function MusicRoomApp({
     refreshAvailableRooms: roomActions.refreshAvailableRooms,
     refreshPlaylists: roomActions.refreshPlaylists
   });
-
   const playbackActions = useRoomPlaybackActions({
     audioRef: appRefs.audioRef,
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
@@ -319,9 +321,8 @@ export function MusicRoomApp({
     exportCachedLibraryTrack: uploads.exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom: uploads.importCachedLibraryTrackToRoom,
     setStatusMessage,
-    clearCacheStreamTrack: (trackId) => appRefs.meshRef.current?.clearCacheStreamTrack(trackId)
+    clearCacheStreamTrack: clearLocalCacheTrackRuntime
   });
-
   useRoomPlaybackEffects({
     cachedFullLocalPlaybackTrack: cachedPlayback.cachedFullLocalPlaybackTrack,
     currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
@@ -341,7 +342,6 @@ export function MusicRoomApp({
     setActivePlaybackSource: pageState.setActivePlaybackSource,
     setProgressiveFallbackReason: pageState.setProgressiveFallbackReason
   });
-
   const clipboardActions = useRoomClipboardActions({
     roomSnapshot,
     setStatusMessage

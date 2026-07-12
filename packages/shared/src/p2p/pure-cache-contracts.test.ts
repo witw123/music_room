@@ -28,16 +28,15 @@ describe("p2p signaling contracts", () => {
     ).toBe(false);
   });
 
-  it("accepts piece unavailable notifications for immediate cache retry", () => {
+  it("rejects removed piece request notifications", () => {
     expect(
       p2pDataMessageSchema.safeParse({
         kind: "piece-unavailable",
-        requestId: "request-1",
         trackId: "track_1",
         chunkIndex: 0,
         reason: "piece-missing"
       }).success
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("accepts versioned cache stream control messages", () => {

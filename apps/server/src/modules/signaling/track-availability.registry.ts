@@ -48,10 +48,21 @@ export class TrackAvailabilityRegistry {
   }
 
   removePeer(roomId: string, peerId: string) {
+    return this.removeAvailability(roomId, peerId);
+  }
+
+  removeTrack(roomId: string, peerId: string, trackId: string) {
+    return this.removeAvailability(roomId, peerId, trackId);
+  }
+
+  private removeAvailability(roomId: string, peerId: string, trackId?: string) {
     const roomAvailability = this.availabilityByRoom.get(roomId);
     let removed = false;
     for (const [key, announcement] of roomAvailability?.entries() ?? []) {
-      if (announcement.ownerPeerId === peerId) {
+      if (
+        announcement.ownerPeerId === peerId &&
+        (!trackId || announcement.trackId === trackId)
+      ) {
         roomAvailability?.delete(key);
         removed = true;
       }
@@ -60,7 +71,7 @@ export class TrackAvailabilityRegistry {
     if (roomAvailability?.size === 0) {
       this.availabilityByRoom.delete(roomId);
     }
-    void this.removePeerFromPersistedSnapshot(roomId, peerId);
+    void this.removePeerFromPersistedSnapshot(roomId, peerId, trackId);
 
     // A persisted snapshot may still contain this peer after a server restart,
     // so callers must broadcast the clear even when memory had no entry.
@@ -162,10 +173,16 @@ export class TrackAvailabilityRegistry {
     }
   }
 
-  private async removePeerFromPersistedSnapshot(roomId: string, peerId: string) {
+  private async removePeerFromPersistedSnapshot(
+    roomId: string,
+    peerId: string,
+    trackId?: string
+  ) {
     try {
       const announcements = (await this.loadSnapshot(roomId)).filter(
-        (announcement) => announcement.ownerPeerId !== peerId
+        (announcement) =>
+          announcement.ownerPeerId !== peerId ||
+          (!!trackId && announcement.trackId !== trackId)
       );
       if (announcements.length === 0) {
         await this.deleteSnapshot(roomId);

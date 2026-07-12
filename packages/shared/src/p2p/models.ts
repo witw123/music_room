@@ -111,46 +111,7 @@ export const peerSignalMessageSchema = z.object({
   payload: z.record(z.unknown())
 });
 
-export const p2pDataMessageSchema = z.union([
-  cacheStreamMessageSchema,
-  z.object({
-    kind: z.literal("request-piece"),
-    trackId: z.string(),
-    chunkIndex: z.number().int().nonnegative(),
-    priority: z.enum(["critical", "bulk"]).optional()
-  }),
-  z.object({
-    kind: z.literal("request-pieces"),
-    requestId: z.string(),
-    trackId: z.string(),
-    chunkIndexes: z.array(z.number().int().nonnegative()).min(1),
-    priority: z.enum(["critical", "bulk"]).optional()
-  }),
-  z.object({
-    kind: z.literal("piece-unavailable"),
-    requestId: z.string().optional(),
-    trackId: z.string(),
-    chunkIndex: z.number().int().nonnegative(),
-    reason: z.enum(["piece-missing", "manifest-missing", "channel-not-open"]).optional()
-  }),
-  z.object({
-    kind: z.literal("piece-received"),
-    trackId: z.string(),
-    chunkIndex: z.number().int().nonnegative(),
-    payloadBytes: z.number().int().positive()
-  }),
-  z.object({
-    kind: z.literal("send-piece"),
-    requestId: z.string().optional(),
-    trackId: z.string(),
-    chunkIndex: z.number().int().nonnegative(),
-    totalChunks: z.number().int().positive(),
-    chunkSize: z.number().int().positive(),
-    mimeType: z.string(),
-    pieceHash: z.string(),
-    payloadBase64: z.string()
-  })
-]);
+export const p2pDataMessageSchema = cacheStreamMessageSchema;
 
 export const peerRecentEventSchema = z.object({
   id: z.string(),

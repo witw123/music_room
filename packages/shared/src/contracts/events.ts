@@ -120,6 +120,7 @@ export const roomLibraryPatchPayloadSchema = z.object({
 export const pieceAvailabilityClearPayloadSchema = z.object({
   roomId: z.string(),
   ownerPeerId: z.string(),
+  trackId: z.string().optional(),
   updatedAt: z.string().datetime()
 });
 
@@ -245,6 +246,7 @@ export type ClientToServerEvents = {
   "room.unsubscribe": (payload: RoomUnsubscribePayload) => void;
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "piece.availability.request": (payload: PieceAvailabilityRequestPayload) => void;
+  "piece.availability.clear": (payload: PieceAvailabilityClearPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatInputPayload) => void;
 };

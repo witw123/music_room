@@ -32,7 +32,7 @@ export class RoomRealtimeBroadcaster {
 
   emitRoomSnapshot(roomId: string, snapshot: RoomSnapshot) {
     this.server?.to(roomId).emit("room.snapshot", snapshot);
-    void this.redisService.publish(roomSnapshotChannel, {
+    this.publish(roomSnapshotChannel, {
       sourceId: this.instanceId,
       roomId,
       snapshot
@@ -41,7 +41,7 @@ export class RoomRealtimeBroadcaster {
 
   emitRoomMissing(roomId: string) {
     this.server?.to(roomId).emit("room.snapshot.missing", { roomId });
-    void this.redisService.publish(roomSnapshotMissingChannel, {
+    this.publish(roomSnapshotMissingChannel, {
       sourceId: this.instanceId,
       roomId
     });
@@ -49,7 +49,7 @@ export class RoomRealtimeBroadcaster {
 
   emitRoomDeleted(roomId: string, trackIds: string[]) {
     this.server?.to(roomId).emit("room.deleted", { roomId, trackIds });
-    void this.redisService.publish(roomDeletedChannel, {
+    this.publish(roomDeletedChannel, {
       sourceId: this.instanceId,
       roomId,
       trackIds
@@ -66,7 +66,7 @@ export class RoomRealtimeBroadcaster {
       updatedAt: new Date().toISOString()
     };
     this.server?.to(roomId).emit("room.playback.patch", message);
-    void this.redisService.publish(roomPlaybackPatchChannel, {
+    this.publish(roomPlaybackPatchChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message
@@ -85,7 +85,7 @@ export class RoomRealtimeBroadcaster {
       updatedAt: new Date().toISOString()
     };
     this.server?.to(roomId).emit("room.queue.patch", message);
-    void this.redisService.publish(roomQueuePatchChannel, {
+    this.publish(roomQueuePatchChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message
@@ -105,7 +105,7 @@ export class RoomRealtimeBroadcaster {
       updatedAt: new Date().toISOString()
     };
     this.server?.to(roomId).emit("room.presence.patch", message);
-    void this.redisService.publish(roomPresencePatchChannel, {
+    this.publish(roomPresencePatchChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message
@@ -125,10 +125,26 @@ export class RoomRealtimeBroadcaster {
       updatedAt: new Date().toISOString()
     };
     this.server?.to(roomId).emit("room.library.patch", message);
-    void this.redisService.publish(roomLibraryPatchChannel, {
+    this.publish(roomLibraryPatchChannel, {
       sourceId: this.instanceId,
       roomId,
       payload: message
     });
+  }
+
+  private publish(channel: string, payload: unknown) {
+    void (async () => {
+      for (const delayMs of [0, 100, 250, 500, 1_000, 2_000]) {
+        if (delayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        try {
+          await this.redisService.publish(channel, payload);
+          return;
+        } catch {
+          // Room snapshots and patches can be recovered; retry short outages first.
+        }
+      }
+    })();
   }
 }

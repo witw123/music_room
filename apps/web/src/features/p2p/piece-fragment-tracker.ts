@@ -23,7 +23,6 @@ export class PieceFragmentTracker {
       peerId,
       message.trackId,
       message.chunkIndex,
-      message.requestId,
       message.streamId,
       message.generation
     );
@@ -35,7 +34,6 @@ export class PieceFragmentTracker {
         ? existing
         : {
             peerId,
-            requestId: message.requestId,
             streamId: message.streamId,
             generation: message.generation,
             trackId: message.trackId,
@@ -65,7 +63,6 @@ export class PieceFragmentTracker {
 
     return {
       kind: "send-piece",
-      requestId: message.requestId,
       streamId: message.streamId,
       generation: message.generation,
       trackId: message.trackId,
@@ -76,7 +73,6 @@ export class PieceFragmentTracker {
       pieceHash: message.pieceHash,
       header: {
         kind: "send-piece",
-        requestId: message.requestId,
         streamId: message.streamId,
         generation: message.generation,
         trackId: message.trackId,
@@ -107,16 +103,14 @@ function buildIncomingPieceFragmentKey(
   peerId: string,
   trackId: string,
   chunkIndex: number,
-  requestId?: string,
-  streamId?: string,
-  generation?: number
+  streamId: string,
+  generation: number
 ) {
   return [
     peerId,
     trackId,
     chunkIndex,
-    requestId ?? "none",
-    streamId ?? "none",
-    generation ?? "none"
+    streamId,
+    generation
   ].join(":");
 }

@@ -203,6 +203,9 @@ type RoomRealtimeRuntimeInput = {
   ensureSourcePlaybackStartedRef: MutableRefObject<() => Promise<void>>;
   queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
+  clearAvailabilityForTrackRef: MutableRefObject<
+    (trackId: string, ownerPeerId?: string) => void
+  >;
   deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[]) => Promise<void> | void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   recoveryGenerationRef: MutableRefObject<number | null>;
@@ -307,6 +310,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   const socket = input.socket;
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
+  let subscribeRequestSequence = 0;
   const availabilityRequestRetryIds = new Set<number>();
   const availabilityReannounceInFlight = new Map<string, Promise<boolean>>();
 
@@ -398,6 +402,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }, subscribeAckTimeoutMs);
 
     const subscribeStartedAtMs = Date.now();
+    const requestSequence = ++subscribeRequestSequence;
     socket.emit(
       "room.subscribe",
       buildRoomSubscribePayload({
@@ -406,6 +411,9 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
         sessionId: activeSessionId
       }),
       (ack: RoomSubscribeAckPayload) => {
+        if (requestSequence !== subscribeRequestSequence) {
+          return;
+        }
         const subscribeCompletedAtMs = Date.now();
         calibrateRoomPlaybackClock({
           serverNow: ack.serverNow,
@@ -680,11 +688,16 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     void retryTrackAvailability(trackId);
   });
 
-  socket.on("piece.availability.clear", ({ roomId, ownerPeerId }) => {
+  socket.on("piece.availability.clear", ({ roomId, ownerPeerId, trackId }) => {
     if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-    input.clearAvailabilityForPeerRef.current(ownerPeerId);
+    if (trackId) {
+      input.mesh?.removeCacheStreamProvider(trackId, ownerPeerId);
+      input.clearAvailabilityForTrackRef.current(trackId, ownerPeerId);
+    } else {
+      input.clearAvailabilityForPeerRef.current(ownerPeerId);
+    }
   });
 
   socket.on("room.session.replaced", ({ roomId }) => {

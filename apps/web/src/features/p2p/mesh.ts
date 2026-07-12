@@ -15,16 +15,20 @@ import {
   type DataChannelSendBudget,
   type DataChannelQueuedSendItem
 } from "./data-channel-manager";
-import type { PieceRequestOptions } from "./piece-request-client";
 import { PieceMessageRouter } from "./piece-message-router";
 import { PieceInboundProcessor } from "./piece-inbound-processor";
-import { PieceServeProcessor } from "./piece-serve-processor";
 import {
   type PeerEntry
 } from "./peer-connection-registry";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import { CacheStreamProducer, type CacheStreamProducerMetrics } from "./cache-stream-producer";
-import { CacheStreamScheduler, type CacheStreamSchedulerMetrics } from "./cache-stream-scheduler";
+import {
+  CacheStreamScheduler,
+  type CacheStreamRequestOptions,
+  type CacheStreamResetReason,
+  type CacheStreamSchedulerMetrics
+} from "./cache-stream-scheduler";
+import { pieceMemoryBuffer } from "./piece-memory-buffer";
 
 type MeshCallbacks = {
   onPieceReceived: (payload: {
@@ -37,10 +41,8 @@ type MeshCallbacks = {
     payloadBytes: number;
     /** Raw piece payload — available for in-memory buffering before persistence. */
     payload: ArrayBuffer;
-    requestId?: string;
-    requestRttMs?: number | null;
-    streamId?: string;
-    generation?: number;
+    streamId: string;
+    generation: number;
   }) => boolean | void;
   onPiecePersisted?: (payload: {
     peerId: string;
@@ -50,10 +52,8 @@ type MeshCallbacks = {
     chunkSize: number;
     mimeType: string;
     payloadBytes: number;
-    requestId?: string;
-    requestRttMs?: number | null;
-    streamId?: string;
-    generation?: number;
+    streamId: string;
+    generation: number;
   }) => void;
   onPieceSent?: (payload: {
     peerId: string;
@@ -61,52 +61,14 @@ type MeshCallbacks = {
     chunkIndex: number;
     payloadBytes: number;
   }) => void;
-  onPieceReceivedAck?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    payloadBytes: number;
-  }) => void;
-  onPieceRequestSent?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndexes: number[];
-    requestId?: string;
-  }) => void;
-  onPieceRequestReceived?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    requestId?: string;
-  }) => void;
-  onPieceServed?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    payloadBytes: number;
-    requestId?: string;
-  }) => void;
-  onPieceServeMiss?: (payload: {
-    peerId: string;
-    trackId: string;
-    chunkIndex: number;
-    reason: "channel-not-open" | "piece-missing" | "manifest-missing";
-  }) => void;
-  onPieceRequestTimeout?: (payload: {
-    trackId: string;
-    chunkIndex: number;
-    peerId: string;
-    requestId?: string;
-    requestDurationMs: number;
-  }) => void;
   onCacheStreamMetrics?: (payload: CacheStreamProducerMetrics | CacheStreamSchedulerMetrics) => void;
-  onPieceUnavailable?: (payload: {
-    trackId: string;
-    chunkIndex: number;
+  onCacheStreamReset?: (payload: {
     peerId: string;
-    requestId?: string;
-    reason: "piece-missing" | "manifest-missing" | "channel-not-open";
-    requestDurationMs: number;
+    trackId: string;
+    streamId: string;
+    generation: number;
+    chunkIndexes: number[];
+    reason: CacheStreamResetReason;
   }) => void;
   onPeerConnectionChange?: (payload: {
     peerId: string;
@@ -151,7 +113,6 @@ type MeshOptions = {
     totalChunks: number;
     chunkSize: number;
     mimeType: string;
-    requestId?: string;
   } | null>;
   resolveTrackCacheIdentity?: (trackId: string) =>
     | {
@@ -168,7 +129,6 @@ export class P2PMesh {
   private readonly sendQueueLowWatermarkBytes = 4 * 1024 * 1024;
   private readonly sendQueueHighWatermarkBytes = 16 * 1024 * 1024;
   private readonly incomingPieceBatchSize = 32;
-  private readonly pieceServeBatchConcurrency = 128;
   private readonly maxDataChannelPayloadBytes = 240 * 1024;
   private readonly incomingPieceFragmentTtlMs = 15_000;
   private readonly autoReconnect: boolean;
@@ -177,7 +137,6 @@ export class P2PMesh {
   private readonly peerLifecycle: PeerConnectionLifecycleManager;
   private readonly dataChannels: DataChannelManager;
   private readonly inboundPieces: PieceInboundProcessor;
-  private readonly pieceServe: PieceServeProcessor<PeerEntry>;
   private readonly pieceMessages: PieceMessageRouter<PeerEntry>;
   private readonly cacheStreamScheduler: CacheStreamScheduler;
   private readonly cacheStreamProducer: CacheStreamProducer<PeerEntry>;
@@ -193,7 +152,8 @@ export class P2PMesh {
     this.autoReconnect = options.autoReconnect ?? true;
     this.resolveTrackCacheIdentity = options.resolveTrackCacheIdentity;
     this.cacheStreamScheduler = new CacheStreamScheduler({
-      sendControl: (peerId, message) => this.sendCacheStreamControl(peerId, message)
+      sendControl: (peerId, message) => this.sendCacheStreamControl(peerId, message),
+      onStreamReset: this.callbacks.onCacheStreamReset
     });
     this.signaling = new SignalingTransport({
       roomId: this.roomId,
@@ -246,30 +206,17 @@ export class P2PMesh {
       onStatsSample: this.callbacks.onStatsSample,
       onPeerStalled: this.callbacks.onPeerStalled
     });
-    this.pieceServe = new PieceServeProcessor<PeerEntry>({
-      localPeerId: this.localPeerId,
-      maxDataChannelPayloadBytes: this.maxDataChannelPayloadBytes,
-      resolveMaxDataChannelPayloadBytes: (peerId) =>
-        options.resolvePeerSendBudget?.(peerId)?.maxPayloadBytes ??
-        this.maxDataChannelPayloadBytes,
-      resolvePieceRequestFallback: options.resolvePieceRequestFallback,
-      resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
-      enqueueSendItem: (peerId, entry, item) => this.enqueueSendItem(peerId, entry, item),
-      onPieceServed: this.callbacks.onPieceServed,
-      onPieceServeMiss: this.callbacks.onPieceServeMiss
-    });
     this.inboundPieces = new PieceInboundProcessor({
       batchSize: this.incomingPieceBatchSize,
       localPeerId: this.localPeerId,
       resolveManifestHeader: (trackId, fallbackChunkSize) =>
-        this.pieceServe.resolveManifestHeader(trackId, fallbackChunkSize),
+        this.cacheStreamProducer.resolveManifestHeader(trackId, fallbackChunkSize),
       rememberManifestHeader: (trackId, header) =>
-        this.pieceServe.rememberManifestHeader(trackId, header),
+        this.cacheStreamProducer.rememberManifestHeader(trackId, header),
       resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
       onPieceReceived: this.callbacks.onPieceReceived,
       onPiecePersisted: (payload) => {
         this.callbacks.onPiecePersisted?.(payload);
-        const entry = this.peerLifecycle.getPeerEntry(payload.peerId);
         if (payload.streamId && typeof payload.generation === "number") {
           this.cacheStreamScheduler.handlePersisted({
             peerId: payload.peerId,
@@ -279,20 +226,8 @@ export class P2PMesh {
             chunkIndex: payload.chunkIndex,
             storedBytes: payload.payloadBytes
           });
-        } else if (entry) {
-          this.enqueueSendItem(payload.peerId, entry, {
-            data: JSON.stringify({
-              kind: "piece-received",
-              trackId: payload.trackId,
-              chunkIndex: payload.chunkIndex,
-              payloadBytes: payload.payloadBytes
-            }),
-            channel: "control",
-            priority: "control"
-          });
         }
       },
-      onPieceRequestTimeout: this.callbacks.onPieceRequestTimeout,
       onPieceNack: ({ peerId, trackId, chunkIndex, streamId, generation, reason }) => {
         this.cacheStreamScheduler.handleNack({
           peerId,
@@ -305,7 +240,6 @@ export class P2PMesh {
       }
     });
     this.pieceMessages = new PieceMessageRouter<PeerEntry>({
-      pieceServeBatchConcurrency: this.pieceServeBatchConcurrency,
       incomingPieceFragmentTtlMs: this.incomingPieceFragmentTtlMs,
       enqueueInboundPiece: (item) => this.inboundPieces.enqueue(item),
       acceptLegacyBinaryFrames: false,
@@ -341,18 +275,7 @@ export class P2PMesh {
           });
         }
         return decision === "accepted";
-      },
-      onPieceReceivedAck: this.callbacks.onPieceReceivedAck,
-      onPieceRequestReceived: this.callbacks.onPieceRequestReceived,
-      onPieceUnavailable: ({ peerId, trackId, chunkIndex, requestId, reason, requestDurationMs }) =>
-        this.callbacks.onPieceUnavailable?.({
-          peerId,
-          trackId,
-          chunkIndex,
-          requestId,
-          reason,
-          requestDurationMs
-        })
+      }
     });
   }
 
@@ -393,8 +316,9 @@ export class P2PMesh {
     chunkIndexes: number[],
     expectedTotalChunks?: number,
     _timeoutMs = 10000,
-    options?: PieceRequestOptions
+    options?: CacheStreamRequestOptions
   ) {
+    this.inboundPieces.resumeTrack(trackId);
     return this.cacheStreamScheduler.request({
       trackId,
       chunkIndexes,
@@ -411,6 +335,10 @@ export class P2PMesh {
     this.cacheStreamScheduler.setProvider(provider);
   }
 
+  removeCacheStreamProvider(trackId: string, peerId: string) {
+    this.cacheStreamScheduler.removeProvider(trackId, peerId);
+  }
+
   getCacheStreamMetrics() {
     return [
       ...this.cacheStreamScheduler.getMetrics(),
@@ -418,9 +346,11 @@ export class P2PMesh {
     ];
   }
 
-  clearCacheStreamTrack(trackId: string) {
+  async clearCacheStreamTrack(trackId: string) {
     this.cacheStreamScheduler.clearTrack(trackId);
     this.cacheStreamProducer.clearTrack(trackId);
+    pieceMemoryBuffer.clearTrack(trackId);
+    await this.inboundPieces.clearTrack(trackId);
   }
 
   getInboundTransferBacklog() {

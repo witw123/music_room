@@ -22,6 +22,7 @@ vi.mock("@/features/p2p/piece-memory-buffer", () => ({
     getBatch: vi.fn(() => new Map()),
     evict: vi.fn(),
     setActiveWindow: vi.fn(),
+    subscribeToAvailability: vi.fn(() => () => undefined),
     clearTrack: vi.fn()
   }
 }));

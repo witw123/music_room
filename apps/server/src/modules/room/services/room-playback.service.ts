@@ -1,4 +1,9 @@
-import type { PlaybackSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import {
+  resolveAnnouncementChunkIndexes,
+  type PlaybackSnapshot,
+  type TrackAvailabilityAnnouncement,
+  type TrackMeta
+} from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 
@@ -386,7 +391,19 @@ export class RoomPlaybackService {
       };
     }
 
-    if (isSessionAvailable(track.ownerSessionId)) {
+    const ownerAnnouncement = this.trackAvailabilityReader
+      ?.getTrackAvailabilityAnnouncements(roomId, track.id)
+      .find(
+        (announcement) =>
+          announcement.ownerPeerId === activePresence.get(track.ownerSessionId) &&
+          this.isUsableFullTrackAvailability(roomId, track, announcement)
+      );
+    if (
+      isSessionAvailable(track.ownerSessionId) &&
+      (track.sourceType === "local_upload" ||
+        !this.trackAvailabilityReader ||
+        ownerAnnouncement)
+    ) {
       return {
         sessionId: track.ownerSessionId,
         peerId: activePresence.get(track.ownerSessionId) as string
@@ -480,11 +497,7 @@ export class RoomPlaybackService {
   }
 
   private countValidAvailableChunks(announcement: TrackAvailabilityAnnouncement) {
-    return new Set(
-      announcement.availableChunks.filter(
-        (chunkIndex) => chunkIndex >= 0 && chunkIndex < announcement.totalChunks
-      )
-    ).size;
+    return resolveAnnouncementChunkIndexes(announcement).length;
   }
 
   private clampPositionMs(record: RoomRecord, trackId: string | null, positionMs: number) {

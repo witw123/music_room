@@ -183,39 +183,6 @@ describe("P2PMesh", () => {
     vi.unstubAllGlobals();
   });
 
-  it("clears pending piece timeouts when the mesh is destroyed", async () => {
-    const onPieceRequestTimeout = vi.fn();
-    const sendSignal = vi.fn();
-    const mesh = new P2PMesh("room_1", "peer_a", sendSignal, {
-      onPieceReceived: vi.fn(),
-      onPieceRequestTimeout
-    });
-
-    await mesh.syncPeers(["peer_b"]);
-    expect(mesh.requestPiece("peer_b", "track_1", 0, undefined, 1000)).toBe(true);
-
-    mesh.destroy();
-    await vi.advanceTimersByTimeAsync(1200);
-
-    expect(onPieceRequestTimeout).not.toHaveBeenCalled();
-  });
-
-  it("clears pending piece timeouts when a peer is removed", async () => {
-    const onPieceRequestTimeout = vi.fn();
-    const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
-      onPieceReceived: vi.fn(),
-      onPieceRequestTimeout
-    });
-
-    await mesh.syncPeers(["peer_b"]);
-    expect(mesh.requestPiece("peer_b", "track_1", 0, undefined, 1000)).toBe(true);
-
-    await mesh.syncPeers([]);
-    await vi.advanceTimersByTimeAsync(1200);
-
-    expect(onPieceRequestTimeout).not.toHaveBeenCalled();
-  });
-
   it("continues requesting new pieces when a batch overlaps an existing pending piece", async () => {
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
       onPieceReceived: vi.fn()
@@ -693,14 +660,8 @@ describe("P2PMesh", () => {
       chunkSize: payloads[0]!.payload.byteLength,
       updatedAt: "2026-04-03T16:30:00.000Z"
     });
-    const onPieceServed = vi.fn();
-    const onPieceRequestReceived = vi.fn();
-    const onPieceServeMiss = vi.fn();
     const mesh = new P2PMesh("room_1", "peer_a", vi.fn(), {
-      onPieceReceived: vi.fn(),
-      onPieceServed,
-      onPieceRequestReceived,
-      onPieceServeMiss
+      onPieceReceived: vi.fn()
     });
 
     await mesh.syncPeers(["peer_b"]);
@@ -716,10 +677,6 @@ describe("P2PMesh", () => {
       })
     } as MessageEvent<string>);
 
-    expect(onPieceRequestReceived).toHaveBeenCalledTimes(3);
-    expect(onPieceServeMiss).not.toHaveBeenCalled();
-    expect(onPieceServed).toHaveBeenCalledTimes(3);
-    expect(onPieceServed.mock.calls.map(([payload]) => payload.chunkIndex)).toEqual([0, 1, 2]);
     const binaryFrames =
       channel?.sentMessages.filter((message): message is ArrayBuffer => message instanceof ArrayBuffer) ??
       [];
@@ -755,7 +712,8 @@ describe("P2PMesh", () => {
     const handleMessage = channel?.onmessage?.({
       data: JSON.stringify({
         kind: "request-pieces",
-        requestId: "request-1",
+        streamId: "stream-1",
+        generation: 1,
         trackId: "track_1",
         chunkIndexes: Array.from({ length: 16 }, (_value, index) => index)
       })
@@ -931,7 +889,8 @@ describe("P2PMesh", () => {
 
     const fragmentFrames = buildPieceFrames(
       {
-        requestId: "request-1",
+        streamId: "stream-1",
+        generation: 1,
         trackId: "track_1",
         chunkIndex: 0,
         totalChunks: 1,
@@ -991,6 +950,8 @@ function buildIncomingPieceMessage(input: {
 }) {
   return {
     kind: "send-piece" as const,
+    streamId: "stream-1",
+    generation: 1,
     trackId: input.trackId,
     chunkIndex: input.chunkIndex,
     totalChunks: input.totalChunks,
@@ -999,6 +960,8 @@ function buildIncomingPieceMessage(input: {
     pieceHash: input.pieceHash,
     header: {
       kind: "send-piece" as const,
+      streamId: "stream-1",
+      generation: 1,
       trackId: input.trackId,
       chunkIndex: input.chunkIndex,
       totalChunks: input.totalChunks,

@@ -101,6 +101,44 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return Number(result) === 1;
   }
 
+  async claimJsonLease(key: string, payload: unknown, ttlMs: number) {
+    this.assertReady(this.client, "publisher");
+
+    const previous = await this.client.eval(
+      `local current = redis.call("GET", KEYS[1])
+       redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+       return current or ""`,
+      1,
+      key,
+      JSON.stringify(payload),
+      String(Math.max(1, Math.floor(ttlMs)))
+    );
+    if (typeof previous !== "string" || previous.length === 0) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(previous) as unknown;
+    } catch {
+      return previous;
+    }
+  }
+
+  async deleteJsonIfValue(key: string, expectedPayload: unknown) {
+    this.assertReady(this.client, "publisher");
+
+    const result = await this.client.eval(
+      `if redis.call("GET", KEYS[1]) == ARGV[1] then
+         return redis.call("DEL", KEYS[1])
+       end
+       return 0`,
+      1,
+      key,
+      JSON.stringify(expectedPayload)
+    );
+    return Number(result) === 1;
+  }
+
   async setString(key: string, value: string, ttlSeconds?: number) {
     this.assertReady(this.client, "publisher");
 

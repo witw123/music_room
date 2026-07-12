@@ -37,6 +37,7 @@ type UseRoomPageRoomActionsInput = {
   currentPlaybackPositionRef: MutableRefObject<number>;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
+  clearCacheStreamTrack: (trackId: string) => Promise<void> | void;
   destroyProgressiveRuntime: () => void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   peerId: string;
@@ -73,6 +74,7 @@ export function useRoomPageRoomActions({
   currentPlaybackPositionRef,
   deleteRoomTrackArtifacts,
   deleteUploadedTrackArtifacts,
+  clearCacheStreamTrack,
   destroyProgressiveRuntime,
   dispatchRoomStateEvent,
   peerId,
@@ -126,14 +128,20 @@ export function useRoomPageRoomActions({
   }, [setPlaylists]);
 
   const handleTrackDeleted = useCallback(
-    (trackId: string) => deleteUploadedTrackArtifacts(trackId),
-    [deleteUploadedTrackArtifacts]
+    async (trackId: string) => {
+      await clearCacheStreamTrack(trackId);
+      await deleteUploadedTrackArtifacts(trackId);
+    },
+    [clearCacheStreamTrack, deleteUploadedTrackArtifacts]
   );
   const handleRoomDeleted = useCallback(
     async (trackIds: string[]) => {
+      for (const trackId of trackIds) {
+        await clearCacheStreamTrack(trackId);
+      }
       await deleteRoomTrackArtifacts(trackIds);
     },
-    [deleteRoomTrackArtifacts]
+    [clearCacheStreamTrack, deleteRoomTrackArtifacts]
   );
 
   const resetPlayerSurface = useCallback(() => {

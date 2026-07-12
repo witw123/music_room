@@ -81,6 +81,12 @@ export function usePlaybackSourceController({
   }, [forceSourceOwnerLocalPlayback, setActivePlaybackSource]);
 
   useEffect(() => {
+    if (
+      (playbackStatus === "playing" || playbackStatus === "buffering") &&
+      activePlaybackSource !== "full-local"
+    ) {
+      return;
+    }
     const recoveryAction = resolveImmediateFullLocalRecoveryAction({
       immediateFullLocalRecoveryEligible,
       activePlaybackSource,
@@ -98,6 +104,7 @@ export function usePlaybackSourceController({
     activePlaybackSource,
     hasBufferedFullLocalTrack,
     immediateFullLocalRecoveryEligible,
+    playbackStatus,
     setActivePlaybackSource,
     setProgressiveFallbackReason
   ]);
@@ -137,6 +144,12 @@ export function usePlaybackSourceController({
   );
 
   useEffect(() => {
+    if (
+      (playbackStatus === "playing" || playbackStatus === "buffering") &&
+      activePlaybackSource !== "full-local"
+    ) {
+      return;
+    }
     const audio = audioRef.current;
     const latestPcmDiagnostics = progressivePcmEngineRef.current?.getSnapshot() ?? null;
     const recoveryAction = resolveSilentSlidingWindowFullLocalRecoveryAction(

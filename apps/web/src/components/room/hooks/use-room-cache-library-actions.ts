@@ -16,7 +16,7 @@ type UseRoomCacheLibraryActionsInput = {
   exportCachedLibraryTrack: (fileHash: string) => Promise<unknown>;
   importCachedLibraryTrackToRoom: (fileHash: string) => Promise<string | null | undefined>;
   setStatusMessage: (value: string) => void;
-  clearCacheStreamTrack?: (trackId: string) => void;
+  clearCacheStreamTrack?: (trackId: string) => Promise<void> | void;
 };
 
 export function useRoomCacheLibraryActions({
@@ -39,7 +39,7 @@ export function useRoomCacheLibraryActions({
         try {
           for (const track of roomSnapshot?.tracks ?? []) {
             if (track.fileHash === fileHash) {
-              clearCacheStreamTrack?.(track.id);
+              await clearCacheStreamTrack?.(track.id);
             }
           }
           await deleteCachedLibraryTrackEntry(fileHash);
@@ -76,7 +76,7 @@ export function useRoomCacheLibraryActions({
       try {
         for (const track of roomSnapshot?.tracks ?? []) {
           if (track.fileHash === fileHash) {
-            clearCacheStreamTrack?.(track.id);
+            await clearCacheStreamTrack?.(track.id);
           }
         }
         await deleteCachedLibraryTrackEntry(fileHash);

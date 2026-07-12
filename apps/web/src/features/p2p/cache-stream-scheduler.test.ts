@@ -73,6 +73,69 @@ describe("CacheStreamScheduler", () => {
       .toHaveLength(2);
   });
 
+  it("keeps the source owner as a soft preference while using other providers", () => {
+    const sendControl = vi.fn();
+    const scheduler = new CacheStreamScheduler({ sendControl });
+    scheduler.setProvider({
+      peerId: "peer-source",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 3 }],
+      throughputKbps: 900,
+      connected: true
+    });
+    scheduler.setProvider({
+      peerId: "peer-cache",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 3 }],
+      throughputKbps: 700,
+      connected: true
+    });
+
+    scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0, 1, 2, 3],
+      totalChunks: 4,
+      chunkSize: 128 * 1024,
+      priority: "critical",
+      preferredPeerId: "peer-source"
+    });
+
+    const openPeers = sendControl.mock.calls
+      .filter(([, message]) => message.kind === "cache-stream-open")
+      .map(([peerId]) => peerId);
+    expect(openPeers).toContain("peer-source");
+    expect(openPeers).toContain("peer-cache");
+  });
+
+  it("does not assign a chunk to an explicitly empty provider range", () => {
+    const sendControl = vi.fn();
+    const scheduler = new CacheStreamScheduler({ sendControl });
+    scheduler.setProvider({
+      peerId: "peer-empty",
+      trackId: "track-1",
+      availableRanges: [],
+      connected: true
+    });
+    scheduler.setProvider({
+      peerId: "peer-ready",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 0 }],
+      connected: true
+    });
+
+    scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0],
+      totalChunks: 1,
+      chunkSize: 128 * 1024,
+      priority: "critical",
+      preferredPeerId: "peer-empty"
+    });
+
+    const open = sendControl.mock.calls.find(([, message]) => message.kind === "cache-stream-open");
+    expect(open?.[0]).toBe("peer-ready");
+  });
+
   it("reassigns unconfirmed chunks when a provider disconnects", () => {
     const sendControl = vi.fn();
     const scheduler = new CacheStreamScheduler({ sendControl });
@@ -185,6 +248,85 @@ describe("CacheStreamScheduler", () => {
     expect(sendControl.mock.calls.some(([peerId, message]) =>
       peerId === "peer-b" && message.kind === "cache-stream-open"
     )).toBe(true);
+  });
+
+  it("reclaims a stream without waiting for a new request", () => {
+    vi.useFakeTimers();
+    const sendControl = vi.fn();
+    const onStreamReset = vi.fn();
+    const scheduler = new CacheStreamScheduler({ sendControl, onStreamReset });
+    scheduler.setProvider({
+      peerId: "peer-a",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 0 }],
+      connected: true
+    });
+    scheduler.setProvider({
+      peerId: "peer-b",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 0 }],
+      connected: true
+    });
+
+    scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0],
+      totalChunks: 1,
+      chunkSize: 128 * 1024,
+      priority: "critical",
+      preferredPeerId: "peer-a"
+    });
+
+    vi.advanceTimersByTime(12_000);
+
+    expect(onStreamReset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        peerId: "peer-a",
+        trackId: "track-1",
+        chunkIndexes: [0],
+        reason: "timeout"
+      })
+    );
+    expect(sendControl.mock.calls.some(([peerId, message]) =>
+      peerId === "peer-b" && message.kind === "cache-stream-open"
+    )).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("keeps a stream alive for storage-failure retries", () => {
+    const sendControl = vi.fn();
+    const scheduler = new CacheStreamScheduler({ sendControl });
+    scheduler.setProvider({
+      peerId: "peer-a",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 0 }],
+      connected: true
+    });
+
+    scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0],
+      totalChunks: 1,
+      chunkSize: 128 * 1024,
+      priority: "critical"
+    });
+    const open = sendControl.mock.calls.find(([, message]) => message.kind === "cache-stream-open");
+    if (!open) {
+      throw new Error("expected a stream");
+    }
+
+    scheduler.handleNack({
+      peerId: "peer-a",
+      streamId: open[1].streamId,
+      generation: open[1].generation,
+      trackId: "track-1",
+      chunkIndex: 0,
+      reason: "storage-failure"
+    });
+
+    expect(scheduler.getMetrics()).toHaveLength(1);
+    expect(sendControl.mock.calls.filter(([, message]) => message.kind === "cache-stream-open"))
+      .toHaveLength(1);
   });
 });
 

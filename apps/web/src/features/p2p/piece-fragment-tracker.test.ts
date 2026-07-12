@@ -10,12 +10,14 @@ function buildFragment(input: {
   fragmentIndex: number;
   fragmentCount: number;
   payload: ArrayBuffer;
-  requestId?: string;
+  streamId?: string;
+  generation?: number;
   pieceHash?: string;
 }): BinaryPieceFragmentMessage {
   const message = {
     kind: "send-piece-fragment" as const,
-    requestId: input.requestId,
+    streamId: input.streamId ?? "stream_1",
+    generation: input.generation ?? 1,
     trackId: "track_1",
     chunkIndex: 2,
     totalChunks: 5,

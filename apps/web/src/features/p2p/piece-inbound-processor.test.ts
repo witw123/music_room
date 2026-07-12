@@ -1,7 +1,6 @@
 import { cacheTrackPieces } from "@/lib/indexeddb";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { PieceInboundProcessor } from "./piece-inbound-processor";
-import type { PendingPieceRequest } from "./piece-request-tracker";
 import type { BinaryPieceMessage } from "./piece-frame-codec";
 
 vi.mock("@/lib/indexeddb", () => ({
@@ -153,6 +152,64 @@ describe("PieceInboundProcessor", () => {
     );
   });
 
+  it("invalidates a track before persistence callbacks can reannounce deleted data", async () => {
+    let resolvePersist: () => void = () => undefined;
+    const persistPromise = new Promise<void>((resolve) => {
+      resolvePersist = resolve;
+    });
+    vi.mocked(cacheTrackPieces).mockImplementationOnce(() => persistPromise);
+    const payload = new TextEncoder().encode("piece-1").buffer;
+    const hash = await sha256Hex(payload);
+    const onPiecePersisted = vi.fn();
+    const processor = new PieceInboundProcessor({
+      batchSize: 8,
+      localPeerId: "peer_a",
+      resolveManifestHeader: vi.fn(async () => ({
+        totalChunks: 1,
+        chunkSize: payload.byteLength,
+        mimeType: "audio/flac",
+        pieceHashes: [hash]
+      })),
+      rememberManifestHeader: vi.fn(),
+      onPieceReceived: vi.fn(() => true),
+      onPiecePersisted
+    });
+
+    processor.enqueue({
+      peerId: "peer_b",
+      message: buildIncomingPieceMessage({
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        mimeType: "audio/flac",
+        pieceHash: hash,
+        payload
+      })
+    });
+    await processor.flush();
+    await Promise.resolve();
+
+    const clearPromise = processor.clearTrack("track_1");
+    resolvePersist();
+    await clearPromise;
+    await processor.awaitPersistence();
+
+    expect(onPiecePersisted).not.toHaveBeenCalled();
+    processor.enqueue({
+      peerId: "peer_b",
+      message: buildIncomingPieceMessage({
+        trackId: "track_1",
+        chunkIndex: 0,
+        totalChunks: 1,
+        mimeType: "audio/flac",
+        pieceHash: hash,
+        payload
+      })
+    });
+    await processor.flush();
+    expect(onPiecePersisted).not.toHaveBeenCalled();
+  });
+
   it("persists the canonical chunk size from the piece header", async () => {
     const payload = new TextEncoder().encode("final").buffer;
     const hash = await sha256Hex(payload);
@@ -197,9 +254,9 @@ describe("PieceInboundProcessor", () => {
     ]);
   });
 
-  it("reports validation failures through the request-timeout callback", async () => {
+  it("reports validation failures through the stream NACK callback", async () => {
     const payload = new TextEncoder().encode("piece-1").buffer;
-    const onPieceRequestTimeout = vi.fn();
+    const onPieceNack = vi.fn();
     const onPieceReceived = vi.fn(() => true);
     const processor = new PieceInboundProcessor({
       batchSize: 8,
@@ -212,7 +269,7 @@ describe("PieceInboundProcessor", () => {
       })),
       rememberManifestHeader: vi.fn(),
       onPieceReceived,
-      onPieceRequestTimeout
+      onPieceNack
     });
 
     processor.enqueue({
@@ -224,15 +281,7 @@ describe("PieceInboundProcessor", () => {
         mimeType: "audio/flac",
         pieceHash: "not-the-payload-hash",
         payload
-      }),
-      pendingRequest: {
-        peerId: "peer_b",
-        requestId: "request-1",
-        expectedTotalChunks: 1,
-        requestedAtMs: Date.now() - 25,
-        timeoutMs: 1_000,
-        timeoutId: setTimeout(() => undefined, 1_000)
-      } satisfies PendingPieceRequest
+      })
     });
 
     await processor.flush();
@@ -240,13 +289,14 @@ describe("PieceInboundProcessor", () => {
 
     expect(onPieceReceived).not.toHaveBeenCalled();
     expect(cacheTrackPieces).not.toHaveBeenCalled();
-    expect(onPieceRequestTimeout).toHaveBeenCalledWith(
+    expect(onPieceNack).toHaveBeenCalledWith(
       expect.objectContaining({
         peerId: "peer_b",
         trackId: "track_1",
         chunkIndex: 0,
-        requestId: "request-1",
-        requestDurationMs: 25
+        streamId: "stream_1",
+        generation: 1,
+        reason: "hash-mismatch"
       })
     );
   });
@@ -263,6 +313,8 @@ function buildIncomingPieceMessage(input: {
 }): BinaryPieceMessage {
   return {
     kind: "send-piece",
+    streamId: "stream_1",
+    generation: 1,
     trackId: input.trackId,
     chunkIndex: input.chunkIndex,
     totalChunks: input.totalChunks,
@@ -271,6 +323,8 @@ function buildIncomingPieceMessage(input: {
     pieceHash: input.pieceHash,
     header: {
       kind: "send-piece",
+      streamId: "stream_1",
+      generation: 1,
       trackId: input.trackId,
       chunkIndex: input.chunkIndex,
       totalChunks: input.totalChunks,

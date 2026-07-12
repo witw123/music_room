@@ -21,17 +21,18 @@ export class RoomRecordRepository {
     const code = joinCode.trim().toUpperCase();
     const inMemoryRecord = [...this.rooms.values()].find(({ room }) => room.joinCode === code);
 
-    if (inMemoryRecord) {
-      return cloneRoomRecord(inMemoryRecord).room;
-    }
-
     if (this.prisma.isAvailable()) {
       const persisted = await this.prisma.roomState.findUnique({
         where: { joinCode: code }
       });
 
       if (persisted) {
-        const record = parseRoomRecord(deserializeRoomRecord(persisted));
+        let record: RoomRecord | null = null;
+        try {
+          record = parseRoomRecord(deserializeRoomRecord(persisted));
+        } catch {
+          record = null;
+        }
         if (record) {
           this.rooms.set(record.room.id, cloneRoomRecord(record));
           return cloneRoomRecord(record).room;
@@ -39,11 +40,15 @@ export class RoomRecordRepository {
       }
     }
 
-    const redisRecord = await this.redis.getJson<unknown>(this.joinCodeCacheKey(code));
-    const parsedRedisRecord = parseRoomRecord(redisRecord);
-    if (parsedRedisRecord && parsedRedisRecord.room.joinCode === code) {
-      this.rooms.set(parsedRedisRecord.room.id, cloneRoomRecord(parsedRedisRecord));
-      return cloneRoomRecord(parsedRedisRecord).room;
+    if (this.isRedisAvailable()) {
+      const redisRecord = await this.redis.getJson<unknown>(this.joinCodeCacheKey(code));
+      const parsedRedisRecord = parseRoomRecord(redisRecord);
+      if (parsedRedisRecord && parsedRedisRecord.room.joinCode === code) {
+        this.rooms.set(parsedRedisRecord.room.id, cloneRoomRecord(parsedRedisRecord));
+        return cloneRoomRecord(parsedRedisRecord).room;
+      }
+    } else if (inMemoryRecord) {
+      return cloneRoomRecord(inMemoryRecord).room;
     }
 
     throw new Error(`Room not found for join code: ${joinCode}`);
@@ -52,17 +57,18 @@ export class RoomRecordRepository {
   async getRoomRecord(roomId: string) {
     const cached = this.rooms.get(roomId);
 
-    if (cached) {
-      return cloneRoomRecord(cached);
-    }
-
     if (this.prisma.isAvailable()) {
       const persisted = await this.prisma.roomState.findUnique({
         where: { id: roomId }
       });
 
       if (persisted) {
-        const record = parseRoomRecord(deserializeRoomRecord(persisted));
+        let record: RoomRecord | null = null;
+        try {
+          record = parseRoomRecord(deserializeRoomRecord(persisted));
+        } catch {
+          record = null;
+        }
         if (record) {
           this.rooms.set(roomId, cloneRoomRecord(record));
           return cloneRoomRecord(record);
@@ -70,11 +76,19 @@ export class RoomRecordRepository {
       }
     }
 
-    const redisRecord = await this.redis.getJson<unknown>(this.roomCacheKey(roomId));
-    const parsedRedisRecord = parseRoomRecord(redisRecord);
-    if (parsedRedisRecord && parsedRedisRecord.room.id === roomId) {
-      this.rooms.set(roomId, cloneRoomRecord(parsedRedisRecord));
-      return cloneRoomRecord(parsedRedisRecord);
+    if (this.prisma.isAvailable() && cached) {
+      return cloneRoomRecord(cached);
+    }
+
+    if (this.isRedisAvailable()) {
+      const redisRecord = await this.redis.getJson<unknown>(this.roomCacheKey(roomId));
+      const parsedRedisRecord = parseRoomRecord(redisRecord);
+      if (parsedRedisRecord && parsedRedisRecord.room.id === roomId) {
+        this.rooms.set(roomId, cloneRoomRecord(parsedRedisRecord));
+        return cloneRoomRecord(parsedRedisRecord);
+      }
+    } else if (cached) {
+      return cloneRoomRecord(cached);
     }
 
     throw new Error(`Room not found: ${roomId}`);
@@ -210,6 +224,13 @@ export class RoomRecordRepository {
 
   private joinCodeCacheKey(joinCode: string) {
     return `music-room:join-code:${joinCode}`;
+  }
+
+  private isRedisAvailable() {
+    const redisWithAvailability = this.redis as RedisService & {
+      isAvailable?: () => boolean;
+    };
+    return redisWithAvailability.isAvailable?.() ?? false;
   }
 
   private async persistRecordToDatabase(record: RoomRecord) {

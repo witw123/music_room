@@ -7,7 +7,8 @@ import {
 } from "./piece-frame-codec";
 
 const frameHeader = {
-  requestId: "request_1",
+  streamId: "stream_1",
+  generation: 1,
   trackId: "track_1",
   chunkIndex: 2,
   totalChunks: 8,
@@ -33,7 +34,8 @@ describe("piece frame codec", () => {
   it("reassembles complete piece fragments in order", () => {
     const fragmentState: PendingIncomingPieceFragments = {
       peerId: "peer_b",
-      requestId: "request_1",
+      streamId: "stream_1",
+      generation: 1,
       trackId: "track_1",
       chunkIndex: 2,
       totalChunks: 8,

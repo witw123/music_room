@@ -5,12 +5,10 @@ import {
 import { validateTrackPiecePayloadBatch } from "./index";
 import type { BinaryPieceMessage } from "./piece-frame-codec";
 import type { CachedPieceManifestHeader } from "./piece-manifest-header";
-import type { PendingPieceRequest } from "./piece-request-tracker";
 
 export type IncomingPieceBatchItem = {
   peerId: string;
   message: BinaryPieceMessage;
-  pendingRequest?: PendingPieceRequest;
 };
 
 export type ReceivedPieceCallbackPayload = {
@@ -24,10 +22,8 @@ export type ReceivedPieceCallbackPayload = {
   /** Raw piece payload bytes — available for in-memory buffering.
    *  This is the validated chunk data before IndexedDB persistence. */
   payload: ArrayBuffer;
-  requestId?: string;
-  requestRttMs?: number | null;
-  streamId?: string;
-  generation?: number;
+  streamId: string;
+  generation: number;
 };
 
 type PersistableIncomingPiece = {
@@ -45,13 +41,6 @@ type TrackCacheIdentity = {
 type PieceInboundProcessorCallbacks = {
   onPieceReceived: (payload: ReceivedPieceCallbackPayload) => boolean | void;
   onPiecePersisted?: (payload: ReceivedPieceCallbackPayload) => void;
-  onPieceRequestTimeout?: (payload: {
-    trackId: string;
-    chunkIndex: number;
-    peerId: string;
-    requestId?: string;
-    requestDurationMs: number;
-  }) => void;
   onPieceNack?: (payload: {
     peerId: string;
     trackId: string;
@@ -79,6 +68,7 @@ export class PieceInboundProcessor {
   ) => TrackCacheIdentity | null | undefined;
   private readonly callbacks: PieceInboundProcessorCallbacks;
   private readonly pendingIncomingPieces: IncomingPieceBatchItem[] = [];
+  private readonly invalidatedTracks = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushInFlight = false;
   private piecePersistChain: Promise<void> = Promise.resolve();
@@ -108,8 +98,15 @@ export class PieceInboundProcessor {
   }
 
   enqueue(item: IncomingPieceBatchItem) {
+    if (this.invalidatedTracks.has(item.message.trackId)) {
+      return;
+    }
     this.pendingIncomingPieces.push(item);
     this.scheduleFlush();
+  }
+
+  resumeTrack(trackId: string) {
+    this.invalidatedTracks.delete(trackId);
   }
 
   pendingCount() {
@@ -134,6 +131,17 @@ export class PieceInboundProcessor {
       this.flushTimer = null;
     }
     this.pendingIncomingPieces.length = 0;
+    this.invalidatedTracks.clear();
+  }
+
+  async clearTrack(trackId: string) {
+    this.invalidatedTracks.add(trackId);
+    for (let index = this.pendingIncomingPieces.length - 1; index >= 0; index -= 1) {
+      if (this.pendingIncomingPieces[index]?.message.trackId === trackId) {
+        this.pendingIncomingPieces.splice(index, 1);
+      }
+    }
+    await this.piecePersistChain.catch(() => undefined);
   }
 
   scheduleFlush() {
@@ -212,6 +220,9 @@ export class PieceInboundProcessor {
     const { batch, expectedHashes, manifestHeaders, validationResults } = input;
 
     for (const [index, item] of batch.entries()) {
+      if (this.invalidatedTracks.has(item.message.trackId)) {
+        continue;
+      }
       if (!(validationResults[index] ?? false)) {
         this.reportValidationFailure(item);
         continue;
@@ -251,16 +262,7 @@ export class PieceInboundProcessor {
         generation,
         reason: "hash-mismatch"
       });
-      return;
     }
-    this.callbacks.onPieceRequestTimeout?.({
-      trackId: item.message.trackId,
-      chunkIndex: item.message.chunkIndex,
-      peerId: item.peerId,
-      requestId: item.pendingRequest?.requestId,
-      requestDurationMs:
-        item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : 0
-    });
   }
 
   private buildCallbackPayload(item: IncomingPieceBatchItem): ReceivedPieceCallbackPayload {
@@ -268,14 +270,11 @@ export class PieceInboundProcessor {
       peerId: item.peerId,
       trackId: item.message.header.trackId,
       chunkIndex: item.message.header.chunkIndex,
-      totalChunks: item.pendingRequest?.expectedTotalChunks ?? item.message.totalChunks,
+      totalChunks: item.message.totalChunks,
       chunkSize: item.message.header.chunkSize,
       mimeType: item.message.header.mimeType,
       payloadBytes: item.message.payload.byteLength,
       payload: item.message.payload,
-      requestId: item.message.header.requestId ?? item.pendingRequest?.requestId,
-      requestRttMs:
-        item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null,
       streamId: item.message.header.streamId,
       generation: item.message.header.generation
     };
@@ -311,9 +310,14 @@ export class PieceInboundProcessor {
       .catch(() => undefined)
       .then(async () => {
         try {
+          if (persistablePieces.some(({ item }) => this.invalidatedTracks.has(item.message.trackId))) {
+            return;
+          }
           await cacheTrackPieces(piecesToPersist);
           for (const payload of persistedPayloads) {
-            this.callbacks.onPiecePersisted?.(payload);
+            if (!this.invalidatedTracks.has(payload.trackId)) {
+              this.callbacks.onPiecePersisted?.(payload);
+            }
           }
         } catch {
           for (const payload of persistedPayloads) {

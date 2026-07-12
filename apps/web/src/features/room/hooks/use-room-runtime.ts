@@ -167,6 +167,7 @@ type UseRoomRuntimeInput = {
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
+  clearAvailabilityForTrack: (trackId: string, ownerPeerId?: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   uploadedTracks: Record<string, UploadedTrack>;
@@ -498,6 +499,7 @@ export function useRoomRuntime({
   availabilityByTrack,
   queueAvailability,
   clearAvailabilityForPeer,
+  clearAvailabilityForTrack,
   flushPendingAvailability,
   recordPeerDiagnostic,
   uploadedTracks,
@@ -607,6 +609,7 @@ export function useRoomRuntime({
     resetPlayerSurfaceRef,
     queueAvailabilityRef,
     clearAvailabilityForPeerRef,
+    clearAvailabilityForTrackRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
     clearSocketDisconnectGrace,
@@ -638,6 +641,7 @@ export function useRoomRuntime({
     resetPlayerSurface,
     queueAvailability,
     clearAvailabilityForPeer,
+    clearAvailabilityForTrack,
     flushPendingAvailability,
     recordPeerDiagnostic,
     enableTrackCaching
@@ -1161,6 +1165,7 @@ export function useRoomRuntime({
       ensureSourcePlaybackStartedRef,
       queueAvailabilityRef,
       clearAvailabilityForPeerRef,
+      clearAvailabilityForTrackRef,
       deleteRoomTrackArtifactsRef,
       lastRealtimeRoomEventAtRef,
       recoveryGenerationRef,
@@ -1192,6 +1197,7 @@ export function useRoomRuntime({
     activeRouteRoomIdRef,
     announceRoomTrackAvailabilityRef,
     clearAvailabilityForPeerRef,
+    clearAvailabilityForTrackRef,
     clearManualCachePendingPiece,
     clearManualCachePendingPieces,
     deferManualCachePendingPiece,
