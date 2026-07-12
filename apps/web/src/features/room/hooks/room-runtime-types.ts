@@ -11,6 +11,7 @@ import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats"
 import type { PeerConnectionSupervisorState } from "@/features/p2p/connection-supervisor";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { PieceRequestOptions } from "@/features/p2p/piece-request-client";
+import type { CacheStreamProvider } from "@/features/p2p/cache-stream-scheduler";
 import type { RoomSocket } from "@/lib/ws-client";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
@@ -29,6 +30,8 @@ export type DataMeshBridge = {
     options?: PieceRequestOptions
   ): boolean;
   getConnectedPeerIds(): string[];
+  updateCacheStreamProvider?(provider: CacheStreamProvider): void;
+  clearCacheStreamTrack?(trackId: string): void;
   isReady(): boolean;
 };
 

@@ -1,3 +1,4 @@
+import { compactTrackAvailabilityAnnouncement } from "@music-room/shared";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
@@ -699,15 +700,16 @@ describe("SignalingGateway", () => {
     };
 
     const result = await gateway.handlePieceAvailability(client as never, payload);
+    const compactPayload = compactTrackAvailabilityAnnouncement(payload);
 
-    expect(result).toEqual(payload);
+    expect(result).toEqual(compactPayload);
     expect(client.to).toHaveBeenCalledWith("room_1");
-    expect(emit).toHaveBeenCalledWith("piece.availability", payload);
+    expect(emit).toHaveBeenCalledWith("piece.availability", compactPayload);
     expect(redisService.publish).toHaveBeenCalledWith(
       "music-room:piece-availability",
       expect.objectContaining({
         roomId: "room_1",
-        payload
+        payload: compactPayload
       })
     );
   });
@@ -773,6 +775,7 @@ describe("SignalingGateway", () => {
       announcedAt: new Date().toISOString()
     };
     trackAvailabilityRegistry.setAnnouncement("room_1", availability);
+    const compactAvailability = compactTrackAvailabilityAnnouncement(availability);
 
     await gateway.handlePieceAvailabilityRequest(client as never, {
       roomId: "room_1",
@@ -780,7 +783,7 @@ describe("SignalingGateway", () => {
       requesterPeerId: "peer_listener"
     });
 
-    expect(client.emit).toHaveBeenCalledWith("piece.availability", availability);
+    expect(client.emit).toHaveBeenCalledWith("piece.availability", compactAvailability);
     expect(roomEmit).toHaveBeenCalledWith("piece.availability.request", {
       roomId: "room_1",
       trackId: "track_1",
@@ -1306,6 +1309,7 @@ describe("SignalingGateway", () => {
     });
 
     const client = createClient({ id: "socket_new" });
+    const compactRedisAvailability = compactTrackAvailabilityAnnouncement(redisAvailability);
     await gateway.handleRoomSubscribe(client as never, {
       roomId: "room_1",
       sessionId: "guest_new",
@@ -1313,7 +1317,7 @@ describe("SignalingGateway", () => {
     });
 
     expect(redisService.getJson).toHaveBeenCalledWith("music-room:availability:room_1");
-    expect(client.emit).toHaveBeenCalledWith("piece.availability", redisAvailability);
+    expect(client.emit).toHaveBeenCalledWith("piece.availability", compactRedisAvailability);
   });
 
   it("ignores invalid piece availability received from redis before broadcasting or caching it", async () => {

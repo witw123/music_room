@@ -1,6 +1,8 @@
 export type SendPieceFrameHeader = {
   kind: "send-piece";
   requestId?: string;
+  streamId?: string;
+  generation?: number;
   trackId: string;
   chunkIndex: number;
   totalChunks: number;
@@ -12,6 +14,8 @@ export type SendPieceFrameHeader = {
 export type SendPieceFragmentFrameHeader = {
   kind: "send-piece-fragment";
   requestId?: string;
+  streamId?: string;
+  generation?: number;
   trackId: string;
   chunkIndex: number;
   totalChunks: number;
@@ -37,6 +41,8 @@ export type BinaryPieceFragmentMessage = SendPieceFragmentFrameHeader & {
 export type PendingIncomingPieceFragments = {
   peerId: string;
   requestId?: string;
+  streamId?: string;
+  generation?: number;
   trackId: string;
   chunkIndex: number;
   totalChunks: number;
@@ -165,6 +171,8 @@ function isPieceFrameHeader(value: unknown): value is PieceFrameHeader {
   const header = value as Record<string, unknown>;
   const hasBaseShape =
     (typeof header.requestId === "undefined" || typeof header.requestId === "string") &&
+    (typeof header.streamId === "undefined" || typeof header.streamId === "string") &&
+    (typeof header.generation === "undefined" || typeof header.generation === "number") &&
     typeof header.trackId === "string" &&
     typeof header.chunkIndex === "number" &&
     typeof header.totalChunks === "number" &&

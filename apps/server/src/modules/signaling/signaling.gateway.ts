@@ -42,7 +42,8 @@ import {
   roomSnapshotMissingPayloadSchema,
   roomSnapshotSchema,
   roomUnsubscribePayloadSchema,
-  trackAvailabilityAnnouncementSchema
+  trackAvailabilityAnnouncementSchema,
+  compactTrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -397,7 +398,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         message.roomId,
         parsed.data
       );
-      this.server.to(message.roomId).emit("piece.availability", mergedAnnouncement);
+      const compactAnnouncement = compactTrackAvailabilityAnnouncement(mergedAnnouncement);
+      this.server.to(message.roomId).emit("piece.availability", compactAnnouncement);
     }).then((unsubscribe) => {
       this.redisUnsubscribers.push(unsubscribe);
     });
@@ -497,13 +499,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       announcement.roomId,
       announcement
     );
-    client.to(announcement.roomId).emit("piece.availability", mergedAnnouncement);
+    const compactAnnouncement = compactTrackAvailabilityAnnouncement(mergedAnnouncement);
+    client.to(announcement.roomId).emit("piece.availability", compactAnnouncement);
     this.publishRealtime(pieceAvailabilityChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId: announcement.roomId,
-      payload: mergedAnnouncement
+      payload: compactAnnouncement
     });
-    return mergedAnnouncement;
+    return compactAnnouncement;
   }
 
   @SubscribeMessage("piece.availability.request")
@@ -529,7 +532,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       request.roomId,
       request.trackId
     )) {
-      client.emit("piece.availability", announcement);
+      client.emit("piece.availability", compactTrackAvailabilityAnnouncement(announcement));
     }
     client.to(request.roomId).emit("piece.availability.request", request);
     return { ok: true };
@@ -969,7 +972,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   private async emitAvailabilitySnapshot(roomId: string, client: Socket) {
     await this.trackAvailabilityRegistry.emitSnapshot(roomId, (announcement) => {
-      client.emit("piece.availability", announcement);
+      client.emit("piece.availability", compactTrackAvailabilityAnnouncement(announcement));
     });
   }
 

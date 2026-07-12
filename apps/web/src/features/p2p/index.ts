@@ -1,4 +1,5 @@
 import {
+  chunkIndexesToAvailabilityRanges,
   iceServerConfigSchema,
   type IceConfigResponse,
   type IceServerConfig,
@@ -131,6 +132,8 @@ export async function testTurnConnectivity(
 }
 
 export * from "./mesh";
+export * from "./cache-stream-producer";
+export * from "./cache-stream-scheduler";
 export * from "./chunk-scheduler";
 export * from "./diagnostics";
 export * from "./transport-health";
@@ -379,6 +382,7 @@ export async function buildTrackAvailabilityFromFile(input: {
     totalChunks,
     chunkSize,
     availableChunks,
+    availableRanges: chunkIndexesToAvailabilityRanges(availableChunks, totalChunks),
     pieceHashes,
     source: input.source,
     announcedAt: new Date().toISOString()
@@ -442,6 +446,7 @@ export function buildTrackAvailabilityFromManifest(input: {
       { length: manifest.totalChunks },
       (_, chunkIndex) => chunkIndex
     ),
+    availableRanges: [{ start: 0, end: Math.max(0, manifest.totalChunks - 1) }],
     pieceHashes: manifest.pieceHashes,
     source: input.source,
     announcedAt: new Date().toISOString()
@@ -774,6 +779,7 @@ export async function buildTrackAvailabilityFromCache(input: {
     totalChunks,
     chunkSize,
     availableChunks,
+    availableRanges: chunkIndexesToAvailabilityRanges(availableChunks, totalChunks),
     pieceHashes: resolvedManifest?.pieceHashes,
     source: "local_cache" as const,
     announcedAt: new Date().toISOString()

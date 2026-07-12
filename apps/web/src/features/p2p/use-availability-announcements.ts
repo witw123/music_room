@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TrackAvailabilityAnnouncement } from "@music-room/shared";
+import {
+  compactTrackAvailabilityAnnouncement,
+  type TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import {
   removeAvailabilityAnnouncementsByPeer,
@@ -43,7 +46,10 @@ export function flushAvailabilityEmitQueue(input: {
       continue;
     }
 
-    input.socket.emit("piece.availability", announcement);
+    input.socket.emit(
+      "piece.availability",
+      compactTrackAvailabilityAnnouncement(announcement)
+    );
   }
 
   input.pendingEmit.clear();
@@ -158,7 +164,10 @@ export function useAvailabilityAnnouncements({
     }
 
     for (const announcement of pendingAvailabilityRef.current.values()) {
-      socket.emit("piece.availability", announcement);
+      socket.emit(
+        "piece.availability",
+        compactTrackAvailabilityAnnouncement(announcement)
+      );
     }
 
     pendingAvailabilityRef.current.clear();

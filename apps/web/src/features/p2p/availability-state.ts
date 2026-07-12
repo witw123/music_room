@@ -1,5 +1,7 @@
 import {
+  chunkIndexesToAvailabilityRanges,
   mergeTrackAvailabilityAnnouncement,
+  resolveAnnouncementChunkIndexes,
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 
@@ -42,6 +44,10 @@ export function buildLocalPieceAvailabilityAnnouncement(input: {
     totalChunks: nextTotalChunks,
     chunkSize: nextChunkSize,
     availableChunks: [...availableChunkSet].sort((left, right) => left - right),
+    availableRanges: chunkIndexesToAvailabilityRanges(
+      [...availableChunkSet],
+      nextTotalChunks
+    ),
     source: existing?.source ?? ("local_cache" as const),
     announcedAt: new Date().toISOString()
   } satisfies TrackAvailabilityAnnouncement;
@@ -53,7 +59,15 @@ export function upsertAvailabilityAnnouncement(
 ) {
   const trackAvailability = current[announcement.trackId] ?? {};
   const existing = trackAvailability[announcement.ownerPeerId];
-  const nextAnnouncement = mergeTrackAvailabilityAnnouncement(existing, announcement);
+  const nextAnnouncement = mergeTrackAvailabilityAnnouncement(
+    existing,
+    announcement.availableChunks.length > 0
+      ? announcement
+      : {
+          ...announcement,
+          availableChunks: resolveAnnouncementChunkIndexes(announcement)
+        }
+  );
 
   if (
     existing === nextAnnouncement

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   mergeTrackAvailabilityAnnouncement,
+  compactTrackAvailabilityAnnouncement,
   trackAvailabilityAnnouncementSchema,
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
@@ -135,7 +136,7 @@ export class TrackAvailabilityRegistry {
       }
       await this.redisService.setJson(
         this.availabilitySnapshotKey(roomId),
-        announcements,
+        announcements.map(compactTrackAvailabilityAnnouncement),
         this.availabilitySnapshotTtlSeconds
       );
     } catch {
@@ -172,7 +173,7 @@ export class TrackAvailabilityRegistry {
       }
       await this.redisService.setJson(
         this.availabilitySnapshotKey(roomId),
-        announcements,
+        announcements.map(compactTrackAvailabilityAnnouncement),
         this.availabilitySnapshotTtlSeconds
       );
     } catch {

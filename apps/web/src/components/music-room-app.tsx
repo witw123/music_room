@@ -311,7 +311,6 @@ export function MusicRoomApp({
     setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
     setStatusMessage
   });
-
   const cacheActions = useRoomCacheLibraryActions({
     roomSnapshot,
     startManualCacheDownload: uploads.startManualCacheDownload,
@@ -319,7 +318,8 @@ export function MusicRoomApp({
     deleteCachedLibraryTrackEntry: uploads.deleteCachedLibraryTrackEntry,
     exportCachedLibraryTrack: uploads.exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom: uploads.importCachedLibraryTrackToRoom,
-    setStatusMessage
+    setStatusMessage,
+    clearCacheStreamTrack: (trackId) => appRefs.meshRef.current?.clearCacheStreamTrack(trackId)
   });
 
   useRoomPlaybackEffects({

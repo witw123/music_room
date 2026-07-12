@@ -648,6 +648,23 @@ export function useRoomRuntime({
     setStatusMessage
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
+  useEffect(() => {
+    if (!dataMeshBridge) {
+      return;
+    }
+
+    for (const [trackId, providersByPeer] of Object.entries(availabilityByTrack)) {
+      for (const announcement of Object.values(providersByPeer)) {
+        dataMeshBridge.updateCacheStreamProvider?.({
+          peerId: announcement.ownerPeerId,
+          trackId,
+          connected: connectedPeers.includes(announcement.ownerPeerId),
+          availableRanges: announcement.availableRanges,
+          availableChunks: announcement.availableChunks
+        });
+      }
+    }
+  }, [availabilityByTrack, connectedPeers, dataMeshBridge]);
   const activePlaybackTrackDurationMs =
     roomTracksRef.current?.find((track) => track.id === roomPlaybackCurrentTrackId)?.durationMs ??
     0;

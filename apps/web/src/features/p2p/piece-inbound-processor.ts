@@ -26,6 +26,8 @@ export type ReceivedPieceCallbackPayload = {
   payload: ArrayBuffer;
   requestId?: string;
   requestRttMs?: number | null;
+  streamId?: string;
+  generation?: number;
 };
 
 type PersistableIncomingPiece = {
@@ -49,6 +51,14 @@ type PieceInboundProcessorCallbacks = {
     peerId: string;
     requestId?: string;
     requestDurationMs: number;
+  }) => void;
+  onPieceNack?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    streamId: string;
+    generation: number;
+    reason: "hash-mismatch" | "decode-failure" | "storage-failure";
   }) => void;
 };
 
@@ -230,6 +240,19 @@ export class PieceInboundProcessor {
   }
 
   private reportValidationFailure(item: IncomingPieceBatchItem) {
+    const streamId = item.message.header.streamId;
+    const generation = item.message.header.generation;
+    if (streamId && typeof generation === "number") {
+      this.callbacks.onPieceNack?.({
+        peerId: item.peerId,
+        trackId: item.message.trackId,
+        chunkIndex: item.message.chunkIndex,
+        streamId,
+        generation,
+        reason: "hash-mismatch"
+      });
+      return;
+    }
     this.callbacks.onPieceRequestTimeout?.({
       trackId: item.message.trackId,
       chunkIndex: item.message.chunkIndex,
@@ -252,7 +275,9 @@ export class PieceInboundProcessor {
       payload: item.message.payload,
       requestId: item.message.header.requestId ?? item.pendingRequest?.requestId,
       requestRttMs:
-        item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null
+        item.pendingRequest ? Date.now() - item.pendingRequest.requestedAtMs : null,
+      streamId: item.message.header.streamId,
+      generation: item.message.header.generation
     };
   }
 
@@ -289,6 +314,19 @@ export class PieceInboundProcessor {
           await cacheTrackPieces(piecesToPersist);
           for (const payload of persistedPayloads) {
             this.callbacks.onPiecePersisted?.(payload);
+          }
+        } catch {
+          for (const payload of persistedPayloads) {
+            if (payload.streamId && typeof payload.generation === "number") {
+              this.callbacks.onPieceNack?.({
+                peerId: payload.peerId,
+                trackId: payload.trackId,
+                chunkIndex: payload.chunkIndex,
+                streamId: payload.streamId,
+                generation: payload.generation,
+                reason: "storage-failure"
+              });
+            }
           }
         } finally {
           this.persistenceBacklogBytes = Math.max(

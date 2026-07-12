@@ -8,6 +8,7 @@ import type {
   CachedLibraryTrackSummaryRecord,
   TrackPieceManifestRecord
 } from "@/lib/indexeddb";
+import { chunkIndexesToAvailabilityRanges } from "@music-room/shared";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
 
 type RehydratableRoomTrack = Pick<TrackMeta, "id" | "fileHash" | "ownerSessionId">;
@@ -116,6 +117,10 @@ export function buildManualCachePieceAvailabilityAnnouncement(input: {
     totalChunks: input.totalChunks,
     chunkSize: input.chunkSize,
     availableChunks: [...availableChunks].sort((left, right) => left - right),
+    availableRanges: chunkIndexesToAvailabilityRanges(
+      [...availableChunks],
+      input.totalChunks
+    ),
     source: "local_cache",
     announcedAt: new Date().toISOString()
   } satisfies TrackAvailabilityAnnouncement;

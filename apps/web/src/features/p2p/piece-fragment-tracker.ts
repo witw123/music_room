@@ -23,7 +23,9 @@ export class PieceFragmentTracker {
       peerId,
       message.trackId,
       message.chunkIndex,
-      message.requestId
+      message.requestId,
+      message.streamId,
+      message.generation
     );
     const existing = this.pendingFragments.get(fragmentKey);
     const fragmentState: PendingIncomingPieceFragments =
@@ -34,6 +36,8 @@ export class PieceFragmentTracker {
         : {
             peerId,
             requestId: message.requestId,
+            streamId: message.streamId,
+            generation: message.generation,
             trackId: message.trackId,
             chunkIndex: message.chunkIndex,
             totalChunks: message.totalChunks,
@@ -62,6 +66,8 @@ export class PieceFragmentTracker {
     return {
       kind: "send-piece",
       requestId: message.requestId,
+      streamId: message.streamId,
+      generation: message.generation,
       trackId: message.trackId,
       chunkIndex: message.chunkIndex,
       totalChunks: message.totalChunks,
@@ -71,6 +77,8 @@ export class PieceFragmentTracker {
       header: {
         kind: "send-piece",
         requestId: message.requestId,
+        streamId: message.streamId,
+        generation: message.generation,
         trackId: message.trackId,
         chunkIndex: message.chunkIndex,
         totalChunks: message.totalChunks,
@@ -99,7 +107,16 @@ function buildIncomingPieceFragmentKey(
   peerId: string,
   trackId: string,
   chunkIndex: number,
-  requestId?: string
+  requestId?: string,
+  streamId?: string,
+  generation?: number
 ) {
-  return `${peerId}:${trackId}:${chunkIndex}:${requestId ?? "none"}`;
+  return [
+    peerId,
+    trackId,
+    chunkIndex,
+    requestId ?? "none",
+    streamId ?? "none",
+    generation ?? "none"
+  ].join(":");
 }

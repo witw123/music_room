@@ -1,3 +1,4 @@
+import type { CacheStreamMessage } from "@music-room/shared";
 import type {
   BinaryPieceFragmentMessage,
   BinaryPieceMessage
@@ -23,6 +24,18 @@ type PieceServeRequest = {
 };
 
 type PieceMessageRouterCallbacks = {
+  onCacheStreamMessage?: (payload: {
+    peerId: string;
+    message: CacheStreamMessage;
+  }) => void | Promise<void>;
+  onCacheStreamPiece?: (payload: {
+    peerId: string;
+    trackId: string;
+    streamId: string;
+    generation: number;
+    chunkIndex: number;
+    payloadBytes: number;
+  }) => boolean;
   onPieceReceivedAck?: (payload: {
     peerId: string;
     trackId: string;
@@ -48,8 +61,9 @@ type PieceMessageRouterCallbacks = {
 
 export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = PieceMessageRouterPeerEntry> {
   private readonly pieceServeBatchConcurrency: number;
+  private readonly acceptLegacyBinaryFrames: boolean;
   private readonly pieceFragments: PieceFragmentTracker;
-  private readonly servePieceRequest: (input: {
+  private readonly servePieceRequest?: (input: {
     peerId: string;
     entry: TEntry;
     request: PieceServeRequest;
@@ -59,7 +73,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     entry: TEntry;
     requests: PieceServeRequest[];
   }) => Promise<void>;
-  private readonly takePendingRequest: (
+  private readonly takePendingRequest?: (
     trackId: string,
     chunkIndex: number
   ) => PendingPieceRequest | null;
@@ -75,7 +89,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
   constructor(input: {
     pieceServeBatchConcurrency: number;
     incomingPieceFragmentTtlMs: number;
-    servePieceRequest: (input: {
+    servePieceRequest?: (input: {
       peerId: string;
       entry: TEntry;
       request: PieceServeRequest;
@@ -85,7 +99,8 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       entry: TEntry;
       requests: PieceServeRequest[];
     }) => Promise<void>;
-    takePendingRequest: (trackId: string, chunkIndex: number) => PendingPieceRequest | null;
+    takePendingRequest?: (trackId: string, chunkIndex: number) => PendingPieceRequest | null;
+    acceptLegacyBinaryFrames?: boolean;
     failPendingRequest?: (input: {
       peerId: string;
       trackId: string;
@@ -95,6 +110,7 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     enqueueInboundPiece: (item: IncomingPieceBatchItem) => void;
   } & PieceMessageRouterCallbacks) {
     this.pieceServeBatchConcurrency = input.pieceServeBatchConcurrency;
+    this.acceptLegacyBinaryFrames = input.acceptLegacyBinaryFrames ?? true;
     this.pieceFragments = new PieceFragmentTracker({
       ttlMs: input.incomingPieceFragmentTtlMs
     });
@@ -116,7 +132,24 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       return;
     }
 
+    if (
+      message.kind === "cache-stream-open" ||
+      message.kind === "cache-stream-credit" ||
+      message.kind === "cache-stream-ack" ||
+      message.kind === "cache-stream-nack" ||
+      message.kind === "cache-stream-reset"
+    ) {
+      await this.callbacks.onCacheStreamMessage?.({
+        peerId: input.peerId,
+        message
+      });
+      return;
+    }
+
     if (message.kind === "request-piece") {
+      if (!this.servePieceRequest) {
+        return;
+      }
       await this.serveSinglePieceRequest(input.peerId, input.entry, {
         trackId: message.trackId,
         chunkIndex: message.chunkIndex,
@@ -126,6 +159,9 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     }
 
     if (message.kind === "request-pieces") {
+      if (!this.servePieceRequest) {
+        return;
+      }
       const chunkIndexes = [...new Set(message.chunkIndexes)].sort((left, right) => left - right);
       const requests = chunkIndexes.map((chunkIndex) => ({
         trackId: message.trackId,
@@ -145,11 +181,15 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
         return;
       }
 
+      const servePieceRequest = this.servePieceRequest;
+      if (!servePieceRequest) {
+        return;
+      }
       for (let offset = 0; offset < requests.length; offset += this.pieceServeBatchConcurrency) {
         const batch = requests.slice(offset, offset + this.pieceServeBatchConcurrency);
         await Promise.all(
           batch.map((request) =>
-            this.servePieceRequest({
+            servePieceRequest({
               peerId: input.peerId,
               entry: input.entry,
               request
@@ -190,12 +230,20 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
       return;
     }
 
-    if (message.kind === "send-piece" && isBinaryPieceMessage(message)) {
+    if (
+      message.kind === "send-piece" &&
+      isBinaryPieceMessage(message) &&
+      (this.acceptLegacyBinaryFrames || !!message.header.streamId)
+    ) {
       this.enqueueReceivedPiece(input.peerId, message);
       return;
     }
 
-    if (message.kind === "send-piece-fragment" && isBinaryPieceFragmentMessage(message)) {
+    if (
+      message.kind === "send-piece-fragment" &&
+      isBinaryPieceFragmentMessage(message) &&
+      (this.acceptLegacyBinaryFrames || !!message.header.streamId)
+    ) {
       this.handleIncomingPieceFragment(input.peerId, message);
     }
   }
@@ -210,6 +258,9 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
     request: PieceServeRequest
   ) {
     this.reportPieceRequest(peerId, request);
+    if (!this.servePieceRequest) {
+      return;
+    }
     await this.servePieceRequest({
       peerId,
       entry,
@@ -227,7 +278,24 @@ export class PieceMessageRouter<TEntry extends PieceMessageRouterPeerEntry = Pie
   }
 
   private enqueueReceivedPiece(peerId: string, message: BinaryPieceMessage) {
-    const pendingRequest = this.takePendingRequest(message.trackId, message.chunkIndex);
+    const streamId = message.header.streamId;
+    const generation = message.header.generation;
+    if (
+      streamId &&
+      typeof generation === "number" &&
+      this.callbacks.onCacheStreamPiece &&
+      !this.callbacks.onCacheStreamPiece({
+        peerId,
+        trackId: message.trackId,
+        streamId,
+        generation,
+        chunkIndex: message.chunkIndex,
+        payloadBytes: message.payload.byteLength
+      })
+    ) {
+      return;
+    }
+    const pendingRequest = this.takePendingRequest?.(message.trackId, message.chunkIndex);
 
     this.enqueueInboundPiece({
       peerId,

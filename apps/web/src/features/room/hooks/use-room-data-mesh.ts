@@ -11,6 +11,7 @@ import {
   resolveTrackPieceManifest,
   pieceMemoryBuffer
 } from "@/features/p2p";
+import type { CacheStreamProvider } from "@/features/p2p/cache-stream-scheduler";
 import {
   getCachedLibraryTrack,
   getTrackPieceManifest,
@@ -33,7 +34,7 @@ import type {
 type DataMeshRuntime = Pick<
   P2PMesh,
   "syncPeers" | "restartPeer" | "requestPieces" | "getConnectedPeerIds"
->;
+> & Partial<Pick<P2PMesh, "updateCacheStreamProvider" | "clearCacheStreamTrack">>;
 
 const pieceUnavailableRetryDelayMs = 150;
 
@@ -73,6 +74,12 @@ export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime |
     },
     getConnectedPeerIds() {
       return meshRef.current?.getConnectedPeerIds() ?? [];
+    },
+    updateCacheStreamProvider(provider: CacheStreamProvider) {
+      meshRef.current?.updateCacheStreamProvider?.(provider);
+    },
+    clearCacheStreamTrack(trackId: string) {
+      meshRef.current?.clearCacheStreamTrack?.(trackId);
     },
     isReady() {
       return !!meshRef.current;
@@ -599,6 +606,30 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
             reason: `unsupported-relay-protocol:${sample.relayProtocol}`
           });
         }
+      },
+      onCacheStreamMetrics: (metrics) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: metrics.peerId,
+          channelKind: "data",
+          direction: "local",
+          event: "cache-stream-metrics",
+          summary: "stream " + metrics.streamId + " " + Math.round(metrics.streamThroughputKbps) + " kbps",
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            streamThroughputKbps: metrics.streamThroughputKbps,
+            streamInFlightBytes: metrics.streamInFlightBytes,
+            streamCreditBytes: metrics.streamCreditBytes,
+            streamAckRttMs: metrics.streamAckRttMs,
+            streamNackCount: metrics.streamNackCount,
+            streamRetryCount: metrics.streamRetryCount,
+            providerContributionBytes: metrics.providerContributionBytes,
+            dataChannelBufferedAmountBytes: metrics.dataChannelBufferedAmountBytes,
+            availabilityCoveragePercent:
+              "availabilityCoveragePercent" in metrics
+                ? metrics.availabilityCoveragePercent
+                : snapshot.availabilityCoveragePercent
+          })
+        });
       },
       onPeerStalled: ({ peerId: remotePeerId, reason }) => {
         input.updateConnectionSupervisorSignalState({

@@ -39,4 +39,34 @@ describe("p2p signaling contracts", () => {
       }).success
     ).toBe(true);
   });
+
+  it("accepts versioned cache stream control messages", () => {
+    expect(
+      p2pDataMessageSchema.safeParse({
+        kind: "cache-stream-open",
+        protocolVersion: 2,
+        streamId: "stream-1",
+        trackId: "track_1",
+        generation: 3,
+        priority: "critical",
+        ranges: [{ start: 0, end: 4 }],
+        initialCreditBytes: 2 * 1024 * 1024
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects cache stream control messages from another protocol version", () => {
+    expect(
+      p2pDataMessageSchema.safeParse({
+        kind: "cache-stream-open",
+        protocolVersion: 1,
+        streamId: "stream-1",
+        trackId: "track_1",
+        generation: 0,
+        priority: "bulk",
+        ranges: [{ start: 0, end: 0 }],
+        initialCreditBytes: 2 * 1024 * 1024
+      }).success
+    ).toBe(false);
+  });
 });

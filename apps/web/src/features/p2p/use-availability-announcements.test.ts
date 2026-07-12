@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TrackAvailabilityAnnouncement } from "@music-room/shared";
+import {
+  compactTrackAvailabilityAnnouncement,
+  type TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import {
   flushAvailabilityEmitQueue,
   queueAvailabilityEmit
@@ -26,7 +29,10 @@ describe("availability announcement emits", () => {
     });
 
     expect(socket.emit).toHaveBeenCalledTimes(1);
-    expect(socket.emit).toHaveBeenCalledWith("piece.availability", latest);
+    expect(socket.emit).toHaveBeenCalledWith(
+      "piece.availability",
+      compactTrackAvailabilityAnnouncement(latest)
+    );
     expect(pendingEmit.size).toBe(0);
     expect(pendingDisconnected.size).toBe(0);
   });
