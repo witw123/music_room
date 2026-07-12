@@ -313,6 +313,39 @@ export class RoomService {
     return record.room;
   }
 
+  async handleTrackAvailabilityLoss(roomId: string, ownerPeerId: string, trackId: string) {
+    const record = await this.roomRecordRepository.getRoomRecord(roomId);
+    const playback = record.room.playback;
+    if (
+      playback.status !== "playing" ||
+      playback.currentTrackId !== trackId ||
+      !playback.sourceSessionId ||
+      playback.sourcePeerId !== ownerPeerId
+    ) {
+      return false;
+    }
+
+    const activePresence = await this.roomPresenceService.getActivePresence(
+      roomId,
+      record.room.members
+    );
+    if (activePresence.get(playback.sourceSessionId) !== ownerPeerId) {
+      return false;
+    }
+
+    const changed = await this.roomPlaybackService.handleSourceAvailabilityLoss(
+      record,
+      playback.sourceSessionId
+    );
+    if (!changed) {
+      return false;
+    }
+
+    this.incrementRoomRevision(record.room);
+    await this.roomRecordRepository.persistRecord(record);
+    return true;
+  }
+
   async touchRealtimePresence(roomId: string, sessionId: string, peerId: string) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, sessionId);

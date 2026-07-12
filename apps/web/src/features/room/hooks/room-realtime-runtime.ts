@@ -248,6 +248,15 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     socketRef: input.socketRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef
   });
+  const invalidateRemoteTrackAvailability = (trackId: string, ownerPeerId: string) => {
+    input.clearAvailabilityForTrackRef.current(trackId, ownerPeerId);
+    socket.emit("piece.availability.clear", {
+      roomId: input.roomId,
+      ownerPeerId,
+      trackId,
+      updatedAt: new Date().toISOString()
+    });
+  };
   const { mesh, resyncRealtimePeers } = createRoomDataMeshRuntime({
     roomId: input.roomId,
     peerId: input.peerId,
@@ -264,6 +273,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     clearManualCachePendingPiece: input.clearManualCachePendingPiece,
     clearManualCachePendingPieces: input.clearManualCachePendingPieces,
     deferManualCachePendingPiece: input.deferManualCachePendingPiece,
+    invalidateRemoteTrackAvailability,
     flushPendingAvailabilityRef: input.flushPendingAvailabilityRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
     recordPieceTransferRef: input.recordPieceTransferRef,

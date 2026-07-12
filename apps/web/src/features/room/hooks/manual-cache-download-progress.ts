@@ -42,6 +42,25 @@ export function isStableFullChunkIndexList(availableChunks: number[], totalChunk
   return fullChunkIndexListCache.get(Math.max(0, Math.floor(totalChunks))) === availableChunks;
 }
 
+function hasCompleteChunkAvailability(availableChunks: number[], totalChunks: number) {
+  if (totalChunks <= 0 || availableChunks.length < totalChunks) {
+    return false;
+  }
+
+  const availableChunkSet = new Set(availableChunks);
+  if (availableChunkSet.size < totalChunks) {
+    return false;
+  }
+
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+    if (!availableChunkSet.has(chunkIndex)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function resolveManualCacheProviderPeerIds(input: {
   manualCacheTrackIds: string[];
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
@@ -161,12 +180,24 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
     const track = tracksById.get(trackId) ?? null;
     const currentAvailability = input.availabilityByTrack[trackId] ?? {};
     const nextTrackAvailability: Record<string, TrackAvailabilityAnnouncement> = {};
+    const manifest = track?.relayManifest ?? track?.pieceManifest ?? null;
+    const owner = track ? membersBySessionId.get(track.ownerSessionId) ?? null : null;
 
     for (const announcement of Object.values(currentAvailability)) {
       if (
         announcement.roomId === input.roomId &&
         activeMemberPeerIds.has(announcement.ownerPeerId)
       ) {
+        const isStaleTrackOwnerAnnouncement =
+          !!manifest &&
+          !!owner?.peerId &&
+          announcement.ownerPeerId === owner.peerId &&
+          (announcement.totalChunks !== manifest.totalChunks ||
+            announcement.chunkSize !== manifest.chunkSize ||
+            !hasCompleteChunkAvailability(announcement.availableChunks, manifest.totalChunks));
+        if (isStaleTrackOwnerAnnouncement) {
+          continue;
+        }
         nextTrackAvailability[announcement.ownerPeerId] = announcement;
       }
     }
@@ -178,8 +209,6 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
       continue;
     }
 
-    const manifest = track.relayManifest ?? track.pieceManifest ?? null;
-    const owner = membersBySessionId.get(track.ownerSessionId) ?? null;
     const playbackSourcePeerId =
       input.playback?.currentTrackId === track.id
         ? input.playback.sourcePeerId
@@ -212,6 +241,7 @@ export function buildManualCacheSchedulerAvailabilityFromParts(input: {
         totalChunks: manifest.totalChunks,
         chunkSize: manifest.chunkSize,
         availableChunks: getStableFullChunkIndexList(manifest.totalChunks),
+        availableRanges: [{ start: 0, end: manifest.totalChunks - 1 }],
         source: "live_upload",
         announcedAt: "1970-01-01T00:00:00.000Z"
       };

@@ -67,6 +67,28 @@ export function mergeTrackAvailabilityAnnouncement(
     return announcement;
   }
 
+  // Announcements carrying ranges are full availability snapshots. Replace
+  // older snapshots so a provider that lost pieces cannot keep advertising
+  // the union of its historical cache.
+  if (announcement.availableRanges?.length) {
+    const existingAnnouncedAt = Date.parse(existing.announcedAt);
+    const incomingAnnouncedAt = Date.parse(announcement.announcedAt);
+    if (
+      Number.isFinite(existingAnnouncedAt) &&
+      Number.isFinite(incomingAnnouncedAt) &&
+      incomingAnnouncedAt < existingAnnouncedAt
+    ) {
+      return existing;
+    }
+
+    const chunkIndexes = resolveAnnouncementChunkIndexes(announcement);
+    return {
+      ...announcement,
+      availableChunks: chunkIndexes,
+      availableRanges: chunkIndexesToAvailabilityRanges(chunkIndexes, announcement.totalChunks)
+    } satisfies TrackAvailabilityAnnouncement;
+  }
+
   const mergedChunks = uniqueSortedValidChunks(
     [...existing.availableChunks, ...announcement.availableChunks],
     announcement.totalChunks

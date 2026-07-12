@@ -8,6 +8,7 @@ import {
   P2PMesh,
   resolvePreferredIceTransportPolicy,
   resolvePeerSendBudget,
+  resolvePeerTransferWindow,
   resolveTrackPieceManifest,
   pieceMemoryBuffer
 } from "@/features/p2p";
@@ -24,6 +25,7 @@ import type { CachedLibraryTrackRecord } from "@/lib/indexeddb";
 import { hashArrayBuffer } from "@/features/p2p";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
+import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import type {
   DataMeshBridge,
   ManualCachePieceReceivedInput,
@@ -41,7 +43,11 @@ type DataMeshRuntime = Pick<
   Partial<
     Pick<
       P2PMesh,
-      "updateCacheStreamProvider" | "removeCacheStreamProvider" | "clearCacheStreamTrack"
+      | "updateCacheStreamProvider"
+      | "removeCacheStreamProvider"
+      | "clearCacheStreamTrack"
+      | "markPeerTransportUnavailable"
+      | "markPeerTransportAvailable"
     >
   >;
 
@@ -252,6 +258,7 @@ export function createRoomDataMeshRuntime(input: {
     chunkIndex: number,
     options: { delayMs: number; providerPeerId?: string }
   ) => void;
+  invalidateRemoteTrackAvailability?: (trackId: string, ownerPeerId: string) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   isPageVisible: boolean;
@@ -263,7 +270,7 @@ export function createRoomDataMeshRuntime(input: {
   reportMeshResyncFailure: (error: unknown) => void;
 } & RoomDataMeshDiagnosticsRefs) {
   const peerBufferedAmountBytes = new Map<string, number>();
-  const rejectedRelayPeers = new Set<string>();
+  const unsupportedRelayPeers = new Set<string>();
   const cachedLibraryTrackCache =
     createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(1, 5_000);
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
@@ -281,6 +288,13 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
 
     return {
       currentRoundTripTimeMs: input.getPeerMedianRttMs(supervisorState),
+      incomingRateKbps:
+        latestTransportSample?.transportReceiveBitrateKbps ?? pieceTransferRates.downloadRateKbps,
+      outgoingRateKbps:
+        latestTransportSample?.transportSendBitrateKbps ?? null,
+      transportReceiveBitrateKbps: latestTransportSample?.transportReceiveBitrateKbps ?? null,
+      transportSendBitrateKbps: latestTransportSample?.transportSendBitrateKbps ?? null,
+      availableOutgoingBitrateKbps: latestTransportSample?.availableOutgoingBitrateKbps ?? null,
       downloadRateKbps: pieceTransferRates.downloadRateKbps,
       uploadRateKbps: pieceTransferRates.uploadRateKbps,
       candidateType:
@@ -352,6 +366,20 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         // validated playback piece must also survive in the durable cache.
         return true;
       },
+      onPieceValidated: ({ peerId: sourcePeerId }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: sourcePeerId,
+          channelKind: "data",
+          direction: "local",
+          event: "cache-piece-validated",
+          summary: "cache piece validated",
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            lastValidatedAt: new Date().toISOString()
+          })
+        });
+      },
       onPiecePersisted: ({
         peerId: sourcePeerId,
         trackId,
@@ -360,6 +388,18 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         chunkSize,
         mimeType
       }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: sourcePeerId,
+          channelKind: "data",
+          direction: "local",
+          event: "cache-piece-persisted",
+          summary: "cache piece persisted",
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            lastPersistedAt: new Date().toISOString()
+          })
+        });
         input.chunkSchedulerRef.current?.markPieceReceived(
           trackId,
           chunkIndex,
@@ -373,6 +413,36 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           totalChunks,
           chunkSize,
           mimeType
+        });
+      },
+      onPieceSent: ({ peerId: sourcePeerId, payloadBytes }) => {
+        input.recordPieceTransferRef.current({
+          peerId: sourcePeerId,
+          direction: "upload",
+          bytes: payloadBytes
+        });
+      },
+      onInboundBacklog: ({
+        peerId: sourcePeerId,
+        validationQueueBytes,
+        persistenceBacklogBytes,
+        persistenceWorkerCount,
+        lastNackReason
+      }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: sourcePeerId,
+          channelKind: "data",
+          direction: "local",
+          event: "cache-backlog",
+          summary: "cache persistence backlog updated",
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            validationQueueBytes,
+            persistenceBacklogBytes,
+            persistenceWorkerCount,
+            ...(lastNackReason ? { lastNackReason } : {})
+          })
         });
       },
       onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
@@ -499,11 +569,10 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           sample.relayProtocol.toLowerCase() !== "udp"
         ) {
           input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
-          if (!rejectedRelayPeers.has(remotePeerId)) {
-            rejectedRelayPeers.add(remotePeerId);
-            void mesh.restartPeer(remotePeerId).finally(() => {
-              rejectedRelayPeers.delete(remotePeerId);
-            });
+          mesh.markPeerTransportUnavailable(remotePeerId);
+          if (!unsupportedRelayPeers.has(remotePeerId)) {
+            unsupportedRelayPeers.add(remotePeerId);
+            void mesh.restartPeer(remotePeerId).catch(() => undefined);
           }
           queueDataPeerRecovery({
             peerId: remotePeerId,
@@ -511,6 +580,13 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
             dataChannelState: sample.dataChannelState,
             reason: `unsupported-relay-protocol:${sample.relayProtocol}`
           });
+        } else if (
+          sample.candidateType === "host" ||
+          sample.candidateType === "srflx" ||
+          (sample.candidateType === "relay" && sample.relayProtocol?.toLowerCase() === "udp")
+        ) {
+          unsupportedRelayPeers.delete(remotePeerId);
+          mesh.markPeerTransportAvailable(remotePeerId);
         }
       },
       onCacheStreamMetrics: (metrics) => {
@@ -522,6 +598,10 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           rttMs: metrics.streamAckRttMs ?? undefined,
           p95RttMs: metrics.streamAckRttMs ?? undefined,
           bufferedAmountBytes: metrics.dataChannelBufferedAmountBytes,
+          candidateType: resolvePeerLinkWindow(metrics.peerId).candidateType,
+          protocol: resolvePeerLinkWindow(metrics.peerId).protocol,
+          relayProtocol: resolvePeerLinkWindow(metrics.peerId).relayProtocol,
+          transportScore: resolvePeerLinkWindow(metrics.peerId).transportScore,
           nackRate:
             metrics.streamNackCount > 0
               ? metrics.streamNackCount /
@@ -533,7 +613,11 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           channelKind: "data",
           direction: "local",
           event: "cache-stream-metrics",
-          summary: "stream " + metrics.streamId + " " + Math.round(metrics.streamThroughputKbps) + " kbps",
+          summary:
+            "stream " +
+            metrics.streamId +
+            " " +
+            formatTransferRateMBps(metrics.streamThroughputKbps),
           update: (snapshot: PeerDiagnosticsSnapshot) => ({
             ...snapshot,
             streamThroughputKbps: metrics.streamThroughputKbps,
@@ -556,9 +640,26 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         });
       },
       onCacheStreamReset: ({ peerId, trackId, chunkIndexes, reason }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId,
+          channelKind: "data",
+          direction: "local",
+          event: "cache-stream-reset",
+          summary: `cache stream reset: ${reason}`,
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            lastResetReason: reason
+          })
+        });
         if (reason === "superseded") {
           input.chunkSchedulerRef.current?.clearTrack(trackId);
           return;
+        }
+
+        if (reason === "protocol-error") {
+          mesh.removeCacheStreamProvider(trackId, peerId);
+          input.invalidateRemoteTrackAvailability?.(trackId, peerId);
         }
 
         for (const chunkIndex of chunkIndexes) {
@@ -592,6 +693,13 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
       }),
       resolvePeerSendBudget: (remotePeerId) =>
         resolvePeerSendBudget(resolvePeerLinkWindow(remotePeerId)),
+      resolvePeerTransport: (remotePeerId) => resolvePeerLinkWindow(remotePeerId),
+      resolveInitialCreditBytes: ({ peerId: remotePeerId, chunkSize }) =>
+        resolvePeerTransferWindow(
+          resolvePeerLinkWindow(remotePeerId),
+          chunkSize,
+          "incoming"
+        ).targetInFlightBytes,
       resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         const uploadedTrack = input.uploadedTracksRef.current[trackId] ?? null;
@@ -641,7 +749,8 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
 
   input.meshRef.current = mesh;
   mesh.setStatsSamplingMode(
-    !input.currentTrackId || (!input.isPageVisible && input.playbackStatus !== "playing")
+    !input.enableManualTrackCaching &&
+    (!input.currentTrackId || (!input.isPageVisible && input.playbackStatus !== "playing"))
       ? "off"
       : input.bufferHealth !== "healthy"
         ? "active"

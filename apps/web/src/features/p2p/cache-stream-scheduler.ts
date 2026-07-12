@@ -4,11 +4,12 @@ import {
   type CacheStreamMessage,
   type PieceAvailabilityRange
 } from "@music-room/shared";
+import { isPeerTransportAllowed, resolvePeerLinkProfile } from "./peer-link-profile";
 
-const MIN_INITIAL_CREDIT_BYTES = 2 * 1024 * 1024;
-const MAX_INITIAL_CREDIT_BYTES = 64 * 1024 * 1024;
+const MIN_INITIAL_CREDIT_BYTES = 8 * 1024 * 1024;
+const MAX_INITIAL_CREDIT_BYTES = 32 * 1024 * 1024;
 const MAX_ACTIVE_STREAMS_PER_TRACK = 6;
-const STREAM_STALL_TIMEOUT_MS = 12_000;
+const MAX_ACTIVE_STREAMS_PER_PEER = 4;
 
 export type CacheStreamResetReason = Extract<
   CacheStreamMessage,
@@ -27,6 +28,10 @@ export type CacheStreamProvider = {
   bufferedAmountBytes?: number;
   failureRate?: number;
   nackRate?: number;
+  candidateType?: string | null;
+  protocol?: string | null;
+  relayProtocol?: string | null;
+  transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
 };
 
 export type CacheStreamSchedulerRequest = {
@@ -40,11 +45,12 @@ export type CacheStreamSchedulerRequest = {
   maxReplicas?: number;
   generation?: number;
   excludedPeerIds?: string[];
+  timeoutMs?: number;
 };
 
 export type CacheStreamRequestOptions = Pick<
   CacheStreamSchedulerRequest,
-  "allowRedundant" | "maxReplicas" | "priority"
+  "allowRedundant" | "maxReplicas" | "priority" | "timeoutMs"
 >;
 
 type SchedulerStream = {
@@ -56,11 +62,15 @@ type SchedulerStream = {
   chunkIndexes: Set<number>;
   received: Set<number>;
   acknowledged: Set<number>;
+  credited: Set<number>;
   unconfirmed: Set<number>;
   totalChunks: number;
   chunkSize: number;
   openedAtMs: number;
   lastProgressAtMs: number;
+  lastValidatedAtMs: number;
+  lastPersistedAtMs: number;
+  stallTimeoutMs: number;
   bytesAcked: number;
   nackCount: number;
   creditBytes: number;
@@ -85,6 +95,17 @@ export type CacheStreamSchedulerMetrics = {
 
 export class CacheStreamScheduler {
   private readonly sendControl: (peerId: string, message: CacheStreamMessage) => void;
+  private readonly resolvePeerTransport?: (peerId: string) => {
+    candidateType?: string | null;
+    protocol?: string | null;
+    relayProtocol?: string | null;
+    transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
+  } | null | undefined;
+  private readonly resolveInitialCreditBytes?: (input: {
+    peerId: string;
+    chunkSize: number;
+    priority: "critical" | "bulk";
+  }) => number | null | undefined;
   private readonly providers = new Map<string, CacheStreamProvider>();
   private readonly streams = new Map<string, SchedulerStream>();
   private readonly generationByTrack = new Map<string, number>();
@@ -101,16 +122,23 @@ export class CacheStreamScheduler {
 
   constructor(input: {
     sendControl: (peerId: string, message: CacheStreamMessage) => void;
+    resolvePeerTransport?: CacheStreamScheduler["resolvePeerTransport"];
+    resolveInitialCreditBytes?: CacheStreamScheduler["resolveInitialCreditBytes"];
     onStreamReset?: CacheStreamScheduler["onStreamReset"];
   }) {
     this.sendControl = input.sendControl;
+    this.resolvePeerTransport = input.resolvePeerTransport;
+    this.resolveInitialCreditBytes = input.resolveInitialCreditBytes;
     this.onStreamReset = input.onStreamReset;
   }
 
   setProvider(provider: CacheStreamProvider) {
-    this.providers.set(this.providerKey(provider.trackId, provider.peerId), {
+    const key = this.providerKey(provider.trackId, provider.peerId);
+    const previous = this.providers.get(key);
+    this.providers.set(key, {
+      ...previous,
       ...provider,
-      connected: provider.connected ?? true
+      connected: provider.connected ?? previous?.connected ?? true
     });
   }
 
@@ -187,6 +215,9 @@ export class CacheStreamScheduler {
         this.providerHasChunk(provider, chunkIndex)
       );
       const chunkCandidates = candidates.filter((provider) => {
+        if (this.getPeerStreams(provider.peerId).length >= MAX_ACTIVE_STREAMS_PER_PEER) {
+          return false;
+        }
         if (
           assignedPeers.size > 0 &&
           !(input.priority === "critical" && input.allowRedundant)
@@ -239,10 +270,11 @@ export class CacheStreamScheduler {
         break;
       }
       const provider = candidates.find((candidate) => candidate.peerId === peerId);
+      const transport = this.resolvePeerTransport?.(peerId) ?? provider ?? null;
       const streamId = this.createStreamId(input.trackId, generation);
       const message: CacheStreamMessage = {
         kind: "cache-stream-open",
-        protocolVersion: 2,
+        protocolVersion: 3,
         streamId,
         trackId: input.trackId,
         generation,
@@ -251,7 +283,13 @@ export class CacheStreamScheduler {
         initialCreditBytes: calculateInitialCreditBytes({
           chunkSize: input.chunkSize,
           throughputKbps: provider?.throughputKbps,
-          rttMs: provider?.p95RttMs ?? provider?.rttMs
+          rttMs: provider?.p95RttMs ?? provider?.rttMs,
+          profile: transport ? resolvePeerLinkProfile(transport) : undefined,
+          preferredCreditBytes: this.resolveInitialCreditBytes?.({
+            peerId,
+            chunkSize: input.chunkSize,
+            priority: input.priority
+          })
         })
       };
       const stream: SchedulerStream = {
@@ -263,11 +301,18 @@ export class CacheStreamScheduler {
         chunkIndexes: new Set(chunkIndexes),
         received: new Set(),
         acknowledged: new Set(),
+        credited: new Set(),
         unconfirmed: new Set(chunkIndexes),
         totalChunks: input.totalChunks,
         chunkSize: input.chunkSize,
         openedAtMs: Date.now(),
         lastProgressAtMs: Date.now(),
+        lastValidatedAtMs: Date.now(),
+        lastPersistedAtMs: Date.now(),
+        stallTimeoutMs: resolveStreamTimeoutMs({
+          inputTimeoutMs: input.timeoutMs,
+          profile: transport ? resolvePeerLinkProfile(transport) : undefined
+        }),
         bytesAcked: 0,
         nackCount: 0,
         creditBytes: message.initialCreditBytes,
@@ -298,6 +343,7 @@ export class CacheStreamScheduler {
     generation: number;
     trackId: string;
     chunkIndex: number;
+    payloadBytes?: number;
   }): "accepted" | "duplicate" | "rejected" {
     const stream = this.streams.get(input.streamId);
     if (
@@ -313,6 +359,10 @@ export class CacheStreamScheduler {
       return "duplicate";
     }
     stream.received.add(input.chunkIndex);
+    stream.creditBytes = Math.max(
+      0,
+      stream.creditBytes - Math.max(0, input.payloadBytes ?? stream.chunkSize)
+    );
     stream.lastProgressAtMs = Date.now();
     return "accepted";
   }
@@ -324,6 +374,15 @@ export class CacheStreamScheduler {
     chunkIndex: number;
     storedBytes: number;
   }) {
+    const stream = this.streams.get(input.streamId);
+    if (
+      !stream ||
+      stream.peerId !== input.peerId ||
+      stream.generation !== input.generation ||
+      !stream.acknowledged.has(input.chunkIndex)
+    ) {
+      return;
+    }
     this.sendControl(input.peerId, {
       kind: "cache-stream-ack",
       streamId: input.streamId,
@@ -331,12 +390,55 @@ export class CacheStreamScheduler {
       chunkIndex: input.chunkIndex,
       storedBytes: input.storedBytes
     });
+  }
+
+  markPeerTransportUnavailable(peerId: string) {
+    for (const provider of this.providers.values()) {
+      if (provider.peerId === peerId) {
+        provider.connected = false;
+      }
+    }
+    this.reassignPeerStreams(peerId, "peer-closed");
+  }
+
+  markPeerTransportAvailable(peerId: string) {
+    for (const provider of this.providers.values()) {
+      if (provider.peerId === peerId) {
+        provider.connected = true;
+      }
+    }
+  }
+
+  handleValidated(input: {
+    peerId: string;
+    streamId: string;
+    generation: number;
+    chunkIndex: number;
+    storedBytes: number;
+  }) {
+    const stream = this.streams.get(input.streamId);
+    if (
+      !stream ||
+      stream.peerId !== input.peerId ||
+      stream.generation !== input.generation ||
+      !stream.unconfirmed.has(input.chunkIndex) ||
+      !stream.received.has(input.chunkIndex) ||
+      stream.credited.has(input.chunkIndex)
+    ) {
+      return false;
+    }
+    stream.credited.add(input.chunkIndex);
+    stream.lastValidatedAtMs = Date.now();
+    stream.lastProgressAtMs = stream.lastValidatedAtMs;
+    stream.creditBytes += input.storedBytes;
     this.sendControl(input.peerId, {
       kind: "cache-stream-credit",
       streamId: input.streamId,
       generation: input.generation,
+      chunkIndex: input.chunkIndex,
       creditBytes: input.storedBytes
     });
+    return true;
   }
 
   handlePersisted(input: {
@@ -351,13 +453,19 @@ export class CacheStreamScheduler {
       return false;
     }
     const stream = this.streams.get(input.streamId);
-    if (!stream || stream.peerId !== input.peerId || stream.generation !== input.generation) {
+    if (
+      !stream ||
+      stream.peerId !== input.peerId ||
+      stream.generation !== input.generation ||
+      !stream.credited.has(input.chunkIndex) ||
+      stream.acknowledged.has(input.chunkIndex)
+    ) {
       return false;
     }
     stream.acknowledged.add(input.chunkIndex);
     stream.unconfirmed.delete(input.chunkIndex);
     stream.bytesAcked += input.storedBytes;
-    stream.creditBytes += input.storedBytes;
+    stream.lastPersistedAtMs = Date.now();
     stream.lastProgressAtMs = Date.now();
     this.sendControl(input.peerId, {
       kind: "cache-stream-ack",
@@ -365,12 +473,6 @@ export class CacheStreamScheduler {
       generation: input.generation,
       chunkIndex: input.chunkIndex,
       storedBytes: input.storedBytes
-    });
-    this.sendControl(input.peerId, {
-      kind: "cache-stream-credit",
-      streamId: input.streamId,
-      generation: input.generation,
-      creditBytes: input.storedBytes
     });
     if (stream.unconfirmed.size === 0) {
       this.removeStream(stream);
@@ -385,6 +487,7 @@ export class CacheStreamScheduler {
     trackId: string;
     chunkIndex: number;
     reason: Extract<CacheStreamMessage, { kind: "cache-stream-nack" }>["reason"];
+    refundCreditBytes: number;
   }) {
     const stream = this.streams.get(input.streamId);
     if (!stream || stream.peerId !== input.peerId || stream.generation !== input.generation) {
@@ -392,31 +495,43 @@ export class CacheStreamScheduler {
     }
     stream.nackCount += 1;
     stream.received.delete(input.chunkIndex);
+    const resetReason: CacheStreamResetReason =
+      input.reason === "hash-mismatch" || input.reason === "decode-failure"
+        ? "protocol-error"
+        : "peer-closed";
     this.sendControl(input.peerId, {
       kind: "cache-stream-nack",
       streamId: input.streamId,
       generation: input.generation,
       chunkIndex: input.chunkIndex,
-      reason: input.reason
+      reason: input.reason,
+      refundCreditBytes: input.refundCreditBytes
     });
-    if (input.reason === "storage-failure") {
-      stream.lastProgressAtMs = Date.now();
-      return;
-    }
-    this.releaseAssignment(stream.trackId, input.chunkIndex, stream.peerId);
-    stream.chunkIndexes.delete(input.chunkIndex);
-    stream.unconfirmed.delete(input.chunkIndex);
-    if (stream.unconfirmed.size === 0) {
-      this.removeStream(stream);
-    }
+    this.sendControl(input.peerId, {
+      kind: "cache-stream-reset",
+      streamId: input.streamId,
+      generation: input.generation,
+      reason: resetReason
+    });
+    const remaining = [...stream.unconfirmed];
+    this.onStreamReset?.({
+      peerId: stream.peerId,
+      trackId: stream.trackId,
+      streamId: stream.streamId,
+      generation: stream.generation,
+      chunkIndexes: remaining,
+      reason: resetReason
+    });
+    this.removeStream(stream);
     this.request({
       trackId: stream.trackId,
-      chunkIndexes: [input.chunkIndex],
-      totalChunks: Math.max(input.chunkIndex + 1, ...stream.chunkIndexes),
+      chunkIndexes: remaining,
+      totalChunks: stream.totalChunks,
       chunkSize: stream.chunkSize,
       priority: stream.priority,
       generation: stream.generation,
-      excludedPeerIds: input.reason === "hash-mismatch" ? [input.peerId] : []
+      excludedPeerIds: [input.peerId],
+      timeoutMs: stream.stallTimeoutMs
     });
   }
 
@@ -424,6 +539,7 @@ export class CacheStreamScheduler {
     peerId: string;
     streamId: string;
     generation: number;
+    reason?: CacheStreamResetReason;
   }) {
     const stream = this.streams.get(input.streamId);
     if (
@@ -435,13 +551,14 @@ export class CacheStreamScheduler {
     }
 
     const remaining = [...stream.unconfirmed];
+    const resetReason = input.reason ?? "peer-closed";
     this.onStreamReset?.({
       peerId: stream.peerId,
       trackId: stream.trackId,
       streamId: stream.streamId,
       generation: stream.generation,
       chunkIndexes: remaining,
-      reason: "peer-closed"
+      reason: resetReason
     });
     this.removeStream(stream);
     if (remaining.length > 0) {
@@ -452,7 +569,8 @@ export class CacheStreamScheduler {
         chunkSize: stream.chunkSize,
         priority: stream.priority,
         generation: stream.generation,
-        excludedPeerIds: [input.peerId]
+        excludedPeerIds: [input.peerId],
+        timeoutMs: stream.stallTimeoutMs
       });
     }
     return true;
@@ -515,9 +633,14 @@ export class CacheStreamScheduler {
         provider.trackId === input.trackId &&
         provider.connected !== false &&
         !input.excludedPeerIds?.includes(provider.peerId) &&
+        this.isProviderTransportAllowed(provider) &&
         (provider.peerId === input.preferredPeerId || provider.peerId !== "")
     );
-    if (input.preferredPeerId && !providers.some((provider) => provider.peerId === input.preferredPeerId)) {
+    if (
+      input.preferredPeerId &&
+      !providers.some((provider) => provider.peerId === input.preferredPeerId) &&
+      this.isProviderTransportAllowed({ peerId: input.preferredPeerId, trackId: input.trackId })
+    ) {
       providers.push({
         peerId: input.preferredPeerId,
         trackId: input.trackId,
@@ -525,6 +648,14 @@ export class CacheStreamScheduler {
       });
     }
     return providers.sort((left, right) => this.scoreProvider(left) - this.scoreProvider(right));
+  }
+
+  private isProviderTransportAllowed(provider: CacheStreamProvider) {
+    const transport = this.resolvePeerTransport?.(provider.peerId) ?? provider;
+    if (transport.transportScore === "failed" || transport.transportScore === "unstable") {
+      return false;
+    }
+    return isPeerTransportAllowed(transport);
   }
 
   private providerHasChunk(provider: CacheStreamProvider, chunkIndex: number) {
@@ -554,12 +685,12 @@ export class CacheStreamScheduler {
     return throughputPenalty + rttPenalty + bufferedPenalty + failurePenalty + nackPenalty - coverageBonus;
   }
 
-  private reassignPeerStreams(peerId: string) {
+  private reassignPeerStreams(peerId: string, reason: CacheStreamResetReason = "peer-closed") {
     for (const stream of [...this.streams.values()]) {
       if (stream.peerId !== peerId || stream.unconfirmed.size === 0) {
         continue;
       }
-      this.reassignStream(stream, "peer-closed");
+      this.reassignStream(stream, reason);
     }
   }
 
@@ -569,7 +700,7 @@ export class CacheStreamScheduler {
       if (
         (trackId && stream.trackId !== trackId) ||
         stream.unconfirmed.size === 0 ||
-        now - stream.lastProgressAtMs < 12_000
+        now - stream.lastValidatedAtMs < stream.stallTimeoutMs
       ) {
         continue;
       }
@@ -581,6 +712,12 @@ export class CacheStreamScheduler {
   private getTrackStreams(trackId: string) {
     return [...this.streams.values()].filter(
       (stream) => stream.trackId === trackId && stream.unconfirmed.size > 0
+    );
+  }
+
+  private getPeerStreams(peerId: string) {
+    return [...this.streams.values()].filter(
+      (stream) => stream.peerId === peerId && stream.unconfirmed.size > 0
     );
   }
 
@@ -629,7 +766,8 @@ export class CacheStreamScheduler {
         chunkSize: stream.chunkSize,
         priority: stream.priority,
         generation: stream.generation,
-        excludedPeerIds
+        excludedPeerIds,
+        timeoutMs: stream.stallTimeoutMs
       });
     }
   }
@@ -660,13 +798,13 @@ export class CacheStreamScheduler {
         return;
       }
 
-      if (Date.now() - current.lastProgressAtMs < STREAM_STALL_TIMEOUT_MS) {
+      if (Date.now() - current.lastValidatedAtMs < current.stallTimeoutMs) {
         this.scheduleWatchdog(current);
         return;
       }
 
       this.reassignStream(current, "timeout", [current.peerId]);
-    }, STREAM_STALL_TIMEOUT_MS);
+    }, Math.max(1_000, stream.stallTimeoutMs));
   }
 
   private providerKey(trackId: string, peerId: string) {
@@ -705,12 +843,32 @@ export function calculateInitialCreditBytes(input: {
   chunkSize: number;
   throughputKbps?: number;
   rttMs?: number;
+  profile?: ReturnType<typeof resolvePeerLinkProfile>;
+  preferredCreditBytes?: number | null;
 }) {
-  const throughputBytesPerSecond = Math.max(64 * 1024, (input.throughputKbps ?? 512) * 125);
+  const throughputBytesPerSecond = Math.max(64 * 1024, (input.throughputKbps ?? 2_048) * 125);
   const rttSeconds = Math.max(0.02, (input.rttMs ?? 120) / 1_000);
-  const bdpBytes = throughputBytesPerSecond * rttSeconds * 2;
-  const chunkFloor = Math.max(2 * input.chunkSize, MIN_INITIAL_CREDIT_BYTES);
-  return clampPowerOfTwo(Math.max(chunkFloor, bdpBytes), MIN_INITIAL_CREDIT_BYTES, MAX_INITIAL_CREDIT_BYTES);
+  const bdpBytes = throughputBytesPerSecond * rttSeconds;
+  const profileFloor =
+    input.profile === "fast-direct" || input.profile === "standard-direct"
+      ? 16 * 1024 * 1024
+      : input.profile === "relay-udp"
+        ? 8 * 1024 * 1024
+        : MIN_INITIAL_CREDIT_BYTES;
+  const chunkFloor = Math.max(2 * input.chunkSize, profileFloor);
+  return clampPowerOfTwo(
+    Math.max(chunkFloor, bdpBytes * 4, input.preferredCreditBytes ?? 0),
+    MIN_INITIAL_CREDIT_BYTES,
+    MAX_INITIAL_CREDIT_BYTES
+  );
+}
+
+function resolveStreamTimeoutMs(input: {
+  inputTimeoutMs?: number;
+  profile?: ReturnType<typeof resolvePeerLinkProfile>;
+}) {
+  const minimum = input.profile === "relay-udp" ? 25_000 : 15_000;
+  return Math.max(minimum, input.inputTimeoutMs ?? minimum);
 }
 
 function clampPowerOfTwo(value: number, min: number, max: number) {

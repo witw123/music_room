@@ -65,7 +65,7 @@ export const trackAvailabilityAnnouncementSchema = z.object({
 export const cacheStreamMessageSchema = z.union([
   z.object({
     kind: z.literal("cache-stream-open"),
-    protocolVersion: z.literal(2),
+    protocolVersion: z.literal(3),
     streamId: z.string().min(1),
     trackId: z.string().min(1),
     generation: z.number().int().nonnegative(),
@@ -77,6 +77,7 @@ export const cacheStreamMessageSchema = z.union([
     kind: z.literal("cache-stream-credit"),
     streamId: z.string().min(1),
     generation: z.number().int().nonnegative(),
+    chunkIndex: z.number().int().nonnegative(),
     creditBytes: z.number().int().positive()
   }),
   z.object({
@@ -91,7 +92,8 @@ export const cacheStreamMessageSchema = z.union([
     streamId: z.string().min(1),
     generation: z.number().int().nonnegative(),
     chunkIndex: z.number().int().nonnegative(),
-    reason: z.enum(["hash-mismatch", "decode-failure", "storage-failure"])
+    reason: z.enum(["hash-mismatch", "decode-failure", "storage-failure", "receiver-overloaded"]),
+    refundCreditBytes: z.number().int().nonnegative()
   }),
   z.object({
     kind: z.literal("cache-stream-reset"),
@@ -437,6 +439,14 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   streamNackCount: z.number().int().nonnegative().nullable().optional(),
   streamRetryCount: z.number().int().nonnegative().nullable().optional(),
   providerContributionBytes: z.number().int().nonnegative().nullable().optional(),
+  receiveWindowBytes: z.number().int().nonnegative().nullable().optional(),
+  validationQueueBytes: z.number().int().nonnegative().nullable().optional(),
+  persistenceBacklogBytes: z.number().int().nonnegative().nullable().optional(),
+  persistenceWorkerCount: z.number().int().nonnegative().nullable().optional(),
+  lastValidatedAt: z.string().datetime().nullable().optional(),
+  lastPersistedAt: z.string().datetime().nullable().optional(),
+  lastResetReason: z.string().nullable().optional(),
+  lastNackReason: z.string().nullable().optional(),
   availabilityCoveragePercent: z.number().min(0).max(100).nullable().optional(),
   lastAudibleProgressAt: z.string().datetime().nullable().optional(),
   lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),

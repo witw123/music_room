@@ -583,16 +583,25 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
           clearPayload.roomId,
           clearPayload.ownerPeerId
         );
-    if (!removed) {
-      return { ok: true };
+    const sourceChanged = clearPayload.trackId
+      ? (await this.roomService.handleTrackAvailabilityLoss?.(
+          clearPayload.roomId,
+          clearPayload.ownerPeerId,
+          clearPayload.trackId
+        )) ?? false
+      : false;
+    if (removed || sourceChanged) {
+      client.to(clearPayload.roomId).emit("piece.availability.clear", clearPayload);
+      this.publishRealtime(pieceAvailabilityClearChannel, {
+        sourceId: this.roomRealtimeBroadcaster.instanceId,
+        roomId: clearPayload.roomId,
+        payload: clearPayload
+      });
     }
 
-    client.to(clearPayload.roomId).emit("piece.availability.clear", clearPayload);
-    this.publishRealtime(pieceAvailabilityClearChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: clearPayload.roomId,
-      payload: clearPayload
-    });
+    if (sourceChanged) {
+      await this.roomRealtimePublisher.emitTopologySnapshot(clearPayload.roomId);
+    }
     return { ok: true };
   }
 

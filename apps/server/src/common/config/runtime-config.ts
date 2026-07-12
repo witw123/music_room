@@ -23,6 +23,16 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   }
 
   const turnEnabled = env.TURN_ENABLED !== "false";
+  const turnProtocols = (env.TURN_PROTOCOLS ?? "udp")
+    .split(",")
+    .map((protocol) => protocol.trim().toLowerCase())
+    .filter(Boolean);
+  if (turnProtocols.length === 0 || turnProtocols.some((protocol) => protocol !== "udp")) {
+    throw new Error("Production cache transport only supports TURN UDP.");
+  }
+  if (hasDisallowedStaticTurnProtocol(env)) {
+    throw new Error("Production ICE configuration cannot contain TCP/TLS TURN URLs.");
+  }
   const hasStaticTurnConfig = hasStaticTurnIceConfig(env);
   if (!turnEnabled) {
     if (!hasStaticTurnConfig) {
@@ -93,6 +103,39 @@ function hasStaticTurnIceConfig(env: NodeJS.ProcessEnv) {
   } catch {
     return false;
   }
+}
+
+function hasDisallowedStaticTurnProtocol(env: NodeJS.ProcessEnv) {
+  const urls = [env.NEXT_PUBLIC_TURN_URL?.trim() ?? ""];
+  const rawJson = env.NEXT_PUBLIC_WEBRTC_ICE_SERVERS?.trim() ?? "";
+  if (rawJson) {
+    try {
+      const parsed = JSON.parse(rawJson) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const server of parsed) {
+          if (!server || typeof server !== "object" || !("urls" in server)) {
+            continue;
+          }
+          const values = (server as { urls?: unknown }).urls;
+          if (typeof values === "string") {
+            urls.push(values);
+          } else if (Array.isArray(values)) {
+            urls.push(...values.filter((value): value is string => typeof value === "string"));
+          }
+        }
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return urls.some((value) => {
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized.startsWith("turns:") ||
+      (normalized.startsWith("turn:") && /(?:[?&]transport=)(tcp|tls)\b/.test(normalized))
+    );
+  });
 }
 
 function isTurnUrl(value: string) {

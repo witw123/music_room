@@ -147,7 +147,6 @@ curl http://127.0.0.1:3001/health
 - `TURN_PUBLIC_HOST_USE_APP_DOMAIN=0`
 - `TURN_PUBLIC_HOST_USE_REQUEST_HOST=0`
 - `TURN_PORT=3478`
-- `TURN_TLS_PORT=5349`
 - `TURN_SHARED_SECRET=<replace-me>`
 - `TURN_REALM=turn.example.com`
 - `TURN_MIN_PORT=49160`
@@ -158,8 +157,6 @@ curl http://127.0.0.1:3001/health
 ### 必须放通的端口
 
 - `3478/udp`
-- `3478/tcp`
-- `5349/tcp`
 - `TURN_MIN_PORT-TURN_MAX_PORT/udp`
 
 ### 现象判断

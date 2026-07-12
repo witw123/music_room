@@ -52,12 +52,15 @@ type ProducerState<TEntry extends ProducerPeerEntry = ProducerPeerEntry> = {
   inFlightBytes: number;
   sent: Set<number>;
   inFlight: Map<number, ProducerInFlight>;
+  credited: Set<number>;
   acked: Set<number>;
   retryIndexes: number[];
+  retryAttempts: Map<number, number>;
   pumping: boolean;
   closed: boolean;
   startedAtMs: number;
   bytesSent: number;
+  bytesAcked: number;
   nackCount: number;
 };
 
@@ -154,6 +157,14 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     }
 
     if (message.kind === "cache-stream-credit") {
+      if (
+        state.acked.has(message.chunkIndex) ||
+        !state.inFlight.has(message.chunkIndex) ||
+        state.credited.has(message.chunkIndex)
+      ) {
+        return;
+      }
+      state.credited.add(message.chunkIndex);
       state.creditBytes = Math.min(
         this.resolveMaxInFlightBytes(peerId),
         state.creditBytes + message.creditBytes
@@ -164,17 +175,15 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
 
     if (message.kind === "cache-stream-ack") {
       const inFlight = state.inFlight.get(message.chunkIndex);
-      if (inFlight) {
-        state.inFlight.delete(message.chunkIndex);
-        state.inFlightBytes = Math.max(0, state.inFlightBytes - inFlight.bytes);
-        state.acked.add(message.chunkIndex);
-        this.emitMetrics(state, Date.now() - inFlight.sentAtMs);
+      if (!inFlight || state.acked.has(message.chunkIndex)) {
+        return;
       }
-      if (
-        state.cursor >= state.pendingIndexes.length &&
-        state.retryIndexes.length === 0 &&
-        state.inFlight.size === 0
-      ) {
+      state.inFlight.delete(message.chunkIndex);
+      state.inFlightBytes = Math.max(0, state.inFlightBytes - inFlight.bytes);
+      state.acked.add(message.chunkIndex);
+      state.bytesAcked += inFlight.bytes;
+      this.emitMetrics(state, Date.now() - inFlight.sentAtMs);
+      if (state.acked.size >= state.pendingIndexes.length && state.inFlight.size === 0) {
         this.closeStream(state.streamId);
         return;
       }
@@ -183,17 +192,33 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     }
 
     if (message.kind === "cache-stream-nack") {
+      if (state.acked.has(message.chunkIndex) || !state.sent.has(message.chunkIndex)) {
+        return;
+      }
       const inFlight = state.inFlight.get(message.chunkIndex);
       if (inFlight) {
         state.inFlight.delete(message.chunkIndex);
         state.inFlightBytes = Math.max(0, state.inFlightBytes - inFlight.bytes);
-        state.creditBytes = Math.min(
-          this.resolveMaxInFlightBytes(peerId),
-          state.creditBytes + inFlight.bytes
-        );
       }
+      state.credited.delete(message.chunkIndex);
       state.nackCount += 1;
-      if (message.reason !== "hash-mismatch") {
+      const retryAttempt = (state.retryAttempts.get(message.chunkIndex) ?? 0) + 1;
+      state.retryAttempts.set(message.chunkIndex, retryAttempt);
+      state.creditBytes = Math.min(
+        this.resolveMaxInFlightBytes(peerId),
+        state.creditBytes + Math.max(0, message.refundCreditBytes)
+      );
+      if (retryAttempt > 3) {
+        this.sendControl(state.peerId, state.entry, {
+          kind: "cache-stream-reset",
+          streamId: state.streamId,
+          generation: state.generation,
+          reason: "protocol-error"
+        });
+        this.closeStream(state.streamId);
+        return;
+      }
+      if (!state.acked.has(message.chunkIndex) && !state.retryIndexes.includes(message.chunkIndex)) {
         state.retryIndexes.unshift(message.chunkIndex);
       }
       this.emitMetrics(state, null);
@@ -268,12 +293,15 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
       inFlightBytes: 0,
       sent: new Set(),
       inFlight: new Map(),
+      credited: new Set(),
       acked: new Set(),
       retryIndexes: [],
+      retryAttempts: new Map(),
       pumping: false,
       closed: false,
       startedAtMs: Date.now(),
       bytesSent: 0,
+      bytesAcked: 0,
       nackCount: 0
     };
     this.streams.set(message.streamId, state);
@@ -361,6 +389,13 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
             state.retryIndexes.unshift(chunkIndex);
             break;
           }
+          if (
+            state.inFlightBytes + piece.payload.byteLength >
+            this.resolveMaxInFlightBytes(state.peerId)
+          ) {
+            state.retryIndexes.unshift(chunkIndex);
+            break;
+          }
 
           await this.enqueuePiece(state, piece);
           sentAny = true;
@@ -423,6 +458,7 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
     state.creditBytes = Math.max(0, state.creditBytes - bytes);
     state.inFlightBytes += bytes;
     state.sent.add(piece.chunkIndex);
+    state.credited.delete(piece.chunkIndex);
     state.inFlight.set(piece.chunkIndex, { bytes, sentAtMs: Date.now() });
     state.bytesSent += bytes;
     for (const frame of frames) {
@@ -490,13 +526,13 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
       streamId: state.streamId,
       trackId: state.trackId,
       generation: state.generation,
-      streamThroughputKbps: (state.bytesSent * 8) / elapsedMs,
+      streamThroughputKbps: (state.bytesAcked * 8) / elapsedMs,
       streamInFlightBytes: state.inFlightBytes,
       streamCreditBytes: state.creditBytes,
       streamAckRttMs: ackRttMs,
       streamNackCount: state.nackCount,
-      streamRetryCount: state.retryIndexes.length,
-      providerContributionBytes: state.bytesSent,
+      streamRetryCount: [...state.retryAttempts.values()].reduce((total, count) => total + count, 0),
+      providerContributionBytes: state.bytesAcked,
       dataChannelBufferedAmountBytes: this.resolveDataChannelBufferedAmountBytes(
         state.peerId,
         state.entry

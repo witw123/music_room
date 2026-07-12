@@ -22,6 +22,8 @@ type SupervisorSample = {
   relayProtocol: string | null;
   currentRoundTripTimeMs: number | null;
   availableOutgoingBitrateKbps: number | null;
+  transportReceiveBitrateKbps: number | null;
+  transportSendBitrateKbps: number | null;
   packetLossRate: number | null;
   jitterMs: number | null;
   mediaReceiveBitrateKbps: number | null;
@@ -202,6 +204,8 @@ export function observePeerTransport(input: ObserveTransportInput) {
     relayProtocol: input.sample.relayProtocol ?? null,
     currentRoundTripTimeMs: input.sample.currentRoundTripTimeMs,
     availableOutgoingBitrateKbps: input.sample.availableOutgoingBitrateKbps,
+    transportReceiveBitrateKbps: input.sample.transportReceiveBitrateKbps ?? null,
+    transportSendBitrateKbps: input.sample.transportSendBitrateKbps ?? null,
     packetLossRate: input.sample.packetLossRate ?? null,
     jitterMs: input.sample.jitterMs,
     mediaReceiveBitrateKbps: input.sample.mediaReceiveBitrateKbps,

@@ -14,10 +14,7 @@
 至少开放：
 
 - UDP `3478`
-- TCP `3478`
-- TCP `5349`
 - `TURN_MIN_PORT`-`TURN_MAX_PORT` 的 UDP relay 端口段
-- `TURN_MIN_PORT`-`TURN_MAX_PORT` 的 TCP relay 端口段
 
 如果 UDP relay 端口段缺失，外网设备将无法建立可用的数据链路；项目不会再退化为 `relay/tcp`，避免中继/TCP 队头阻塞导致缓存速度异常。
 
@@ -32,7 +29,7 @@
 进入房间后打开 Mesh 诊断面板，逐个 peer 检查：
 
 - 数据路径：优先 `host` / `srflx`；跨 NAT 外网可接受 `relay`。
-- 协议：优先 `udp`；若显示 `tcp` 或 `relay/tcp`，缓存速度会受限。
+- 协议：缓存只接受 `udp`；若显示 `tcp` 或 `relay/tcp`，该 peer 应被标记为不可用于缓存并切换 provider。
 - RTT：`<=120ms` 适合高速缓存；`>=250ms` 会被调度器降级；`>=400ms` 会被视为严重慢链路。
 - DataChannel bufferedAmount：长期高于 `512KB` 说明发送端堆积，background 缓存会被限流。
 - piece download/upload rate：聚合速率达到 2-3MB/s 时才能稳定支撑大体积歌曲快速补齐。
@@ -41,4 +38,4 @@
 
 - `fast-direct`：非 relay、非 tcp、RTT ≤ 120ms、下载 ≥ 4000kbps，允许更高 bulk 水位和更大分片。
 - `relay-udp`：可用但限流，优先保障 critical chunk。
-- `constrained/severe`：TCP、高 RTT、高 bufferedAmount 或低速率时，background 缓存暂停/降速，active 播放 chunk 优先。
+- `constrained/severe`：高 RTT、高 bufferedAmount 或低速率时，background 缓存暂停/降速，active 播放 chunk 优先；TCP/TLS relay 不会进入缓存调度。

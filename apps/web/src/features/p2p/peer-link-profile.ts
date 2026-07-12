@@ -7,6 +7,11 @@ export type PeerLinkProfile =
 
 export type PeerLinkProfileInput = {
   currentRoundTripTimeMs?: number | null;
+  incomingRateKbps?: number | null;
+  outgoingRateKbps?: number | null;
+  transportReceiveBitrateKbps?: number | null;
+  transportSendBitrateKbps?: number | null;
+  availableOutgoingBitrateKbps?: number | null;
   downloadRateKbps?: number | null;
   uploadRateKbps?: number | null;
   candidateType?: string | null;
@@ -31,17 +36,29 @@ export type PeerTransferWindow = {
 export function isPeerTransportAllowed(input: PeerLinkProfileInput) {
   const candidateType = normalizeCandidateType(input.candidateType);
   const protocol = normalizeProtocol(input.relayProtocol ?? input.protocol);
-  if (protocol === "tcp") {
+  if (!candidateType) {
     return false;
   }
-  return candidateType !== "relay" || protocol === "udp";
+  if (candidateType === "relay") {
+    return protocol === "udp";
+  }
+  return (
+    candidateType === "direct" ||
+    candidateType === "host" ||
+    candidateType === "srflx" ||
+    candidateType === "prflx"
+  );
 }
 
-export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkProfile {
+export function resolvePeerLinkProfile(
+  input: PeerLinkProfileInput,
+  direction: "incoming" | "outgoing" = "incoming"
+): PeerLinkProfile {
   const bufferedAmountBytes = finitePositive(input.bufferedAmountBytes) ?? 0;
   const roundTripTimeMs = finitePositive(input.currentRoundTripTimeMs);
-  const transferRateKbps =
-    finitePositive(input.downloadRateKbps) ?? finitePositive(input.uploadRateKbps);
+  const incomingRateKbps = resolveIncomingRateKbps(input);
+  const outgoingRateKbps = resolveOutgoingRateKbps(input);
+  const transferRateKbps = direction === "outgoing" ? outgoingRateKbps : incomingRateKbps;
   const protocol = normalizeProtocol(input.relayProtocol ?? input.protocol);
   const isRelay = normalizeCandidateType(input.candidateType) === "relay";
   const isDirectCandidate =
@@ -98,8 +115,8 @@ export function resolvePeerLinkProfile(input: PeerLinkProfileInput): PeerLinkPro
 }
 
 export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudget {
-  const profile = resolvePeerLinkProfile(input);
-  const adaptiveWindow = resolvePeerTransferWindow(input, 256 * 1024);
+  const profile = resolvePeerLinkProfile(input, "outgoing");
+  const adaptiveWindow = resolvePeerTransferWindow(input, 256 * 1024, "outgoing");
   const adaptiveBulkWatermark = clamp(
     adaptiveWindow.targetInFlightBytes,
     1024 * 1024,
@@ -107,8 +124,8 @@ export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudg
   );
   if (profile === "fast-direct") {
     return {
-      highWatermarkBytes: Math.max(16 * 1024 * 1024, adaptiveBulkWatermark * 2),
-      bulkHighWatermarkBytes: Math.max(8 * 1024 * 1024, adaptiveBulkWatermark),
+      highWatermarkBytes: Math.min(32 * 1024 * 1024, Math.max(16 * 1024 * 1024, adaptiveBulkWatermark)),
+      bulkHighWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(8 * 1024 * 1024, adaptiveBulkWatermark)),
       maxPayloadBytes: 240 * 1024
     };
   }
@@ -117,47 +134,54 @@ export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudg
     return {
       // Relay still needs headroom to pipeline SCTP over TURN; keep below
       // direct but high enough to saturate modest WAN uplinks.
-      highWatermarkBytes: Math.max(8 * 1024 * 1024, adaptiveBulkWatermark * 2),
-      bulkHighWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark),
+      highWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(8 * 1024 * 1024, adaptiveBulkWatermark)),
+      bulkHighWatermarkBytes: Math.min(8 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
       maxPayloadBytes: 160 * 1024
     };
   }
 
   if (profile === "standard-direct") {
     return {
-      highWatermarkBytes: Math.max(8 * 1024 * 1024, adaptiveBulkWatermark * 2),
-      bulkHighWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark),
+      highWatermarkBytes: Math.min(32 * 1024 * 1024, Math.max(8 * 1024 * 1024, adaptiveBulkWatermark)),
+      bulkHighWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
       maxPayloadBytes: 192 * 1024
     };
   }
 
   return {
-    highWatermarkBytes: Math.max(4 * 1024 * 1024, adaptiveBulkWatermark * 2),
-    bulkHighWatermarkBytes: adaptiveBulkWatermark,
+    highWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
+    bulkHighWatermarkBytes: Math.min(8 * 1024 * 1024, adaptiveBulkWatermark),
     maxPayloadBytes: 128 * 1024
   };
 }
 
 export function resolvePeerTransferWindow(
   input: PeerLinkProfileInput,
-  chunkSize: number
+  chunkSize: number,
+  direction: "incoming" | "outgoing" = "incoming"
 ): PeerTransferWindow {
   const normalizedChunkSize = clamp(Math.round(chunkSize || 0), 16 * 1024, 4 * 1024 * 1024);
   const rttMs = finitePositive(input.currentRoundTripTimeMs) ?? 180;
+  const outgoingRateKbps = resolveOutgoingRateKbps(input);
+  const availableOutgoingRateKbps = finitePositive(input.availableOutgoingBitrateKbps);
   const transferRateKbps =
-    finitePositive(input.downloadRateKbps) ?? finitePositive(input.uploadRateKbps);
-  const profile = resolvePeerLinkProfile(input);
+    direction === "outgoing"
+      ? outgoingRateKbps === null || availableOutgoingRateKbps === null
+        ? outgoingRateKbps
+        : Math.min(outgoingRateKbps, availableOutgoingRateKbps)
+      : resolveIncomingRateKbps(input);
+  const profile = resolvePeerLinkProfile(input, direction);
   const bytesPerSecond = transferRateKbps === null ? null : transferRateKbps * 1000 / 8;
   // Cold-start optimistic BDP when rate is unknown/low. Using a tiny measured
   // rate as the sole BDP input keeps only a few chunks in flight and never
   // saturates direct LAN links during progressive startup.
   const optimisticFloorBytes =
     profile === "fast-direct"
-      ? 12 * 1024 * 1024
+      ? 16 * 1024 * 1024
       : profile === "standard-direct"
-        ? 8 * 1024 * 1024
+        ? 16 * 1024 * 1024
         : profile === "relay-udp"
-          ? 6 * 1024 * 1024
+          ? 8 * 1024 * 1024
           : 2 * 1024 * 1024;
   const measuredBdpBytes =
     bytesPerSecond === null ? null : bytesPerSecond * rttMs / 1000;
@@ -172,7 +196,7 @@ export function resolvePeerTransferWindow(
   const targetInFlightBytes = clamp(
     Math.ceil(Math.max(minInFlightBytes, bandwidthDelayProduct * 4)),
     minInFlightBytes,
-    64 * 1024 * 1024
+    32 * 1024 * 1024
   );
   const transferTimeMs = bytesPerSecond === null
     ? rttMs * 2
@@ -201,6 +225,34 @@ function finitePositive(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value
     : null;
+}
+
+function resolveIncomingRateKbps(input: PeerLinkProfileInput) {
+  if ("incomingRateKbps" in input) {
+    return (
+      finitePositive(input.incomingRateKbps) ??
+      finitePositive(input.transportReceiveBitrateKbps)
+    );
+  }
+  return (
+    finitePositive(input.incomingRateKbps) ??
+    finitePositive(input.transportReceiveBitrateKbps) ??
+    finitePositive(input.downloadRateKbps)
+  );
+}
+
+function resolveOutgoingRateKbps(input: PeerLinkProfileInput) {
+  if ("outgoingRateKbps" in input) {
+    return (
+      finitePositive(input.outgoingRateKbps) ??
+      finitePositive(input.transportSendBitrateKbps)
+    );
+  }
+  return (
+    finitePositive(input.outgoingRateKbps) ??
+    finitePositive(input.transportSendBitrateKbps) ??
+    finitePositive(input.uploadRateKbps)
+  );
 }
 
 function normalizeCandidateType(value: string | null | undefined) {

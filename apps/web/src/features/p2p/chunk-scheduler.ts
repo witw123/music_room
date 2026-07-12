@@ -50,6 +50,11 @@ type ChunkSchedulerRequestArgs = {
 
 type PeerRequestWindow = {
   currentRoundTripTimeMs?: number | null;
+  incomingRateKbps?: number | null;
+  outgoingRateKbps?: number | null;
+  transportReceiveBitrateKbps?: number | null;
+  transportSendBitrateKbps?: number | null;
+  availableOutgoingBitrateKbps?: number | null;
   downloadRateKbps?: number | null;
   candidateType?: string | null;
   protocol?: string | null;

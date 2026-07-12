@@ -220,7 +220,7 @@ function PeerDiagnosticCard({
           </DiagnosticGrid>
           {peer.dataCandidateType === "relay" || peer.dataProtocol === "tcp" || peer.dataRelayProtocol === "tcp" ? (
             <p className="mt-2 text-[10px] text-amber-300">
-              当前外网中继{peer.dataRelayProtocol === "tcp" || peer.dataProtocol === "tcp" ? "/TCP" : ""}链路，缓存速度可能受 TURN 带宽和网络延迟限制。
+              当前链路不满足缓存 UDP 要求，cache stream 将暂停并切换其他 provider。
             </p>
           ) : null}
           {peer.degradedReason ? (
@@ -236,6 +236,10 @@ function PeerDiagnosticCard({
             <span>分片 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
             <span>请求超时率: {formatMetric(peer.pieceTimeoutRate, "%")}</span>
             <span>最近分片: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
+            <span>校验队列: {formatMetric(peer.validationQueueBytes, " bytes")}</span>
+            <span>持久化积压: {formatMetric(peer.persistenceBacklogBytes, " bytes")}</span>
+            <span>最近校验: {formatMaybeTimestamp(peer.lastValidatedAt)}</span>
+            <span>最近落盘: {formatMaybeTimestamp(peer.lastPersistedAt)}</span>
           </DiagnosticGrid>
         </DiagnosticBlock>
       </div>

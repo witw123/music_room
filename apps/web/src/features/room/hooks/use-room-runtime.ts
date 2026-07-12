@@ -38,6 +38,7 @@ import { getPlaybackConsistencyVersion, toUserFacingError } from "@/lib/music-ro
 import { enableManualTrackCaching, enableTrackCaching } from "@/features/cache/cache-policy";
 import { useRoomDiagnosticsBridge } from "./use-room-diagnostics-bridge";
 import {
+  buildManualCacheSchedulerAvailability,
   useManualCacheDownloader,
   type ManualCachePeerRequestWindow,
   type ManualCacheRequestPriority,
@@ -652,12 +653,36 @@ export function useRoomRuntime({
     setStatusMessage
   });
   const dataMeshBridge = useRoomDataMesh({ meshRef });
+  const schedulerAvailabilityByTrack = useMemo(
+    () => {
+      if (runtimeManualCacheTrackIds.length === 0) {
+        return availabilityByTrack;
+      }
+
+      const correctedAvailability = buildManualCacheSchedulerAvailability({
+        availabilityByTrack,
+        manualCacheTrackIds: runtimeManualCacheTrackIds,
+        roomSnapshot,
+        localPeerId: peerId
+      });
+      const nextAvailability = { ...availabilityByTrack };
+      for (const trackId of runtimeManualCacheTrackIds) {
+        if (correctedAvailability[trackId]) {
+          nextAvailability[trackId] = correctedAvailability[trackId];
+        } else {
+          delete nextAvailability[trackId];
+        }
+      }
+      return nextAvailability;
+    },
+    [availabilityByTrack, peerId, roomSnapshot, runtimeManualCacheTrackIds]
+  );
   useEffect(() => {
     if (!dataMeshBridge) {
       return;
     }
 
-    for (const [trackId, providersByPeer] of Object.entries(availabilityByTrack)) {
+    for (const [trackId, providersByPeer] of Object.entries(schedulerAvailabilityByTrack)) {
       for (const announcement of Object.values(providersByPeer)) {
         dataMeshBridge.updateCacheStreamProvider?.({
           peerId: announcement.ownerPeerId,
@@ -668,7 +693,7 @@ export function useRoomRuntime({
         });
       }
     }
-  }, [availabilityByTrack, connectedPeers, dataMeshBridge]);
+  }, [connectedPeers, dataMeshBridge, schedulerAvailabilityByTrack]);
   const activePlaybackTrackDurationMs =
     roomTracksRef.current?.find((track) => track.id === roomPlaybackCurrentTrackId)?.durationMs ??
     0;
@@ -728,6 +753,13 @@ export function useRoomRuntime({
       );
       return {
         currentRoundTripTimeMs: getPeerMedianRttMs(supervisorState),
+        incomingRateKbps:
+          latestTransportSample?.transportReceiveBitrateKbps ?? pieceTransferRates.downloadRateKbps,
+        outgoingRateKbps:
+          latestTransportSample?.transportSendBitrateKbps ?? null,
+        transportReceiveBitrateKbps: latestTransportSample?.transportReceiveBitrateKbps ?? null,
+        transportSendBitrateKbps: latestTransportSample?.transportSendBitrateKbps ?? null,
+        availableOutgoingBitrateKbps: latestTransportSample?.availableOutgoingBitrateKbps ?? null,
         downloadRateKbps: pieceTransferRates.downloadRateKbps,
         uploadRateKbps: pieceTransferRates.uploadRateKbps,
         candidateType:

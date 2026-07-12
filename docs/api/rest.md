@@ -652,9 +652,7 @@ null
     },
     {
       "urls": [
-        "turn:turn.example.com:3478?transport=udp",
-        "turn:turn.example.com:3478?transport=tcp",
-        "turns:turn.example.com:5349?transport=tcp"
+        "turn:turn.example.com:3478?transport=udp"
       ],
       "username": "1713350400:user_xxx",
       "credential": "base64-hmac"

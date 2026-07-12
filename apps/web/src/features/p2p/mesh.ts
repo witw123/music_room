@@ -44,6 +44,14 @@ type MeshCallbacks = {
     streamId: string;
     generation: number;
   }) => boolean | void;
+  onPieceValidated?: (payload: {
+    peerId: string;
+    trackId: string;
+    chunkIndex: number;
+    payloadBytes: number;
+    streamId: string;
+    generation: number;
+  }) => void;
   onPiecePersisted?: (payload: {
     peerId: string;
     trackId: string;
@@ -60,6 +68,13 @@ type MeshCallbacks = {
     trackId: string;
     chunkIndex: number;
     payloadBytes: number;
+  }) => void;
+  onInboundBacklog?: (payload: {
+    peerId: string;
+    validationQueueBytes: number;
+    persistenceBacklogBytes: number;
+    persistenceWorkerCount: number;
+    lastNackReason?: string;
   }) => void;
   onCacheStreamMetrics?: (payload: CacheStreamProducerMetrics | CacheStreamSchedulerMetrics) => void;
   onCacheStreamReset?: (payload: {
@@ -123,6 +138,17 @@ type MeshOptions = {
     | null
     | undefined;
   resolvePeerSendBudget?: (peerId: string) => DataChannelSendBudget | null | undefined;
+  resolvePeerTransport?: (peerId: string) => {
+    candidateType?: string | null;
+    protocol?: string | null;
+    relayProtocol?: string | null;
+    transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
+  } | null | undefined;
+  resolveInitialCreditBytes?: (input: {
+    peerId: string;
+    chunkSize: number;
+    priority: "critical" | "bulk";
+  }) => number | null | undefined;
 };
 
 export class P2PMesh {
@@ -153,6 +179,8 @@ export class P2PMesh {
     this.resolveTrackCacheIdentity = options.resolveTrackCacheIdentity;
     this.cacheStreamScheduler = new CacheStreamScheduler({
       sendControl: (peerId, message) => this.sendCacheStreamControl(peerId, message),
+      resolvePeerTransport: options.resolvePeerTransport,
+      resolveInitialCreditBytes: options.resolveInitialCreditBytes,
       onStreamReset: this.callbacks.onCacheStreamReset
     });
     this.signaling = new SignalingTransport({
@@ -189,7 +217,13 @@ export class P2PMesh {
       resolveDataChannelBufferedAmountBytes: (peerId, entry) =>
         Math.max(entry.dataChannel?.bufferedAmount ?? 0, entry.channel?.bufferedAmount ?? 0),
       resolveMaxInFlightBytes: (peerId) =>
-        Math.max(2 * 1024 * 1024, options.resolvePeerSendBudget?.(peerId)?.highWatermarkBytes ?? 16 * 1024 * 1024),
+        Math.min(
+          32 * 1024 * 1024,
+          Math.max(
+            8 * 1024 * 1024,
+            options.resolvePeerSendBudget?.(peerId)?.highWatermarkBytes ?? 16 * 1024 * 1024
+          )
+        ),
       onMetrics: (metrics) => this.callbacks.onCacheStreamMetrics?.(metrics)
     });
     this.peerLifecycle = new PeerConnectionLifecycleManager({
@@ -215,6 +249,26 @@ export class P2PMesh {
         this.cacheStreamProducer.rememberManifestHeader(trackId, header),
       resolveTrackCacheIdentity: this.resolveTrackCacheIdentity,
       onPieceReceived: this.callbacks.onPieceReceived,
+      onPieceValidated: (payload) => {
+        this.callbacks.onPieceValidated?.({
+          peerId: payload.peerId,
+          trackId: payload.trackId,
+          chunkIndex: payload.chunkIndex,
+          payloadBytes: payload.payloadBytes,
+          streamId: payload.streamId,
+          generation: payload.generation
+        });
+        if (payload.streamId && typeof payload.generation === "number") {
+          this.cacheStreamScheduler.handleValidated({
+            peerId: payload.peerId,
+            streamId: payload.streamId,
+            generation: payload.generation,
+            chunkIndex: payload.chunkIndex,
+            storedBytes: payload.payloadBytes
+          });
+        }
+        this.reportInboundBacklog(payload.peerId);
+      },
       onPiecePersisted: (payload) => {
         this.callbacks.onPiecePersisted?.(payload);
         if (payload.streamId && typeof payload.generation === "number") {
@@ -227,16 +281,27 @@ export class P2PMesh {
             storedBytes: payload.payloadBytes
           });
         }
+        this.reportInboundBacklog(payload.peerId);
       },
-      onPieceNack: ({ peerId, trackId, chunkIndex, streamId, generation, reason }) => {
+      onPieceNack: ({
+        peerId,
+        trackId,
+        chunkIndex,
+        streamId,
+        generation,
+        reason,
+        refundCreditBytes
+      }) => {
         this.cacheStreamScheduler.handleNack({
           peerId,
           trackId,
           chunkIndex,
           streamId,
           generation,
-          reason
+          reason,
+          refundCreditBytes
         });
+        this.reportInboundBacklog(peerId, reason);
       }
     });
     this.pieceMessages = new PieceMessageRouter<PeerEntry>({
@@ -252,7 +317,8 @@ export class P2PMesh {
           this.cacheStreamScheduler.handleReset({
             peerId,
             streamId: message.streamId,
-            generation: message.generation
+            generation: message.generation,
+            reason: message.reason
           });
         }
         return this.cacheStreamProducer.handleMessage(peerId, entry, message);
@@ -263,7 +329,8 @@ export class P2PMesh {
           trackId,
           streamId,
           generation,
-          chunkIndex
+          chunkIndex,
+          payloadBytes
         });
         if (decision === "duplicate") {
           this.cacheStreamScheduler.ackDuplicate({
@@ -315,7 +382,7 @@ export class P2PMesh {
     trackId: string,
     chunkIndexes: number[],
     expectedTotalChunks?: number,
-    _timeoutMs = 10000,
+    timeoutMs = 10000,
     options?: CacheStreamRequestOptions
   ) {
     this.inboundPieces.resumeTrack(trackId);
@@ -327,12 +394,22 @@ export class P2PMesh {
       priority: options?.priority === "bulk" ? "bulk" : "critical",
       preferredPeerId: peerId,
       allowRedundant: options?.allowRedundant,
-      maxReplicas: options?.maxReplicas
+      maxReplicas: options?.maxReplicas,
+      timeoutMs: options?.timeoutMs ?? timeoutMs
     });
   }
 
   updateCacheStreamProvider(provider: Parameters<CacheStreamScheduler["setProvider"]>[0]) {
     this.cacheStreamScheduler.setProvider(provider);
+  }
+
+  markPeerTransportUnavailable(peerId: string) {
+    this.cacheStreamScheduler.markPeerTransportUnavailable(peerId);
+    this.cacheStreamProducer.clearPeer(peerId, "peer-closed");
+  }
+
+  markPeerTransportAvailable(peerId: string) {
+    this.cacheStreamScheduler.markPeerTransportAvailable(peerId);
   }
 
   removeCacheStreamProvider(trackId: string, peerId: string) {
@@ -447,6 +524,17 @@ export class P2PMesh {
       data: JSON.stringify(message),
       channel: "control",
       priority: "control"
+    });
+  }
+
+  private reportInboundBacklog(peerId: string, lastNackReason?: string) {
+    const backlog = this.inboundPieces.getBacklogSnapshot();
+    this.callbacks.onInboundBacklog?.({
+      peerId,
+      validationQueueBytes: backlog.validationQueueBytes,
+      persistenceBacklogBytes: backlog.persistenceBacklogBytes,
+      persistenceWorkerCount: backlog.persistenceWorkerCount,
+      lastNackReason
     });
   }
 }

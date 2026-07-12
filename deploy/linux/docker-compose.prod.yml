@@ -43,7 +43,6 @@ services:
       - --no-cli
       - --no-multicast-peers
       - --listening-port=${TURN_PORT:-3478}
-      - --tls-listening-port=${TURN_TLS_PORT:-5349}
 
   server:
     image: ${SERVER_IMAGE}
@@ -73,12 +72,11 @@ services:
       TURN_ENABLED: ${TURN_ENABLED}
       TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST}
       TURN_PORT: ${TURN_PORT}
-      TURN_TLS_PORT: ${TURN_TLS_PORT}
       TURN_MIN_PORT: ${TURN_MIN_PORT}
       TURN_MAX_PORT: ${TURN_MAX_PORT}
       TURN_SHARED_SECRET: ${TURN_SHARED_SECRET}
       TURN_REALM: ${TURN_REALM}
-      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp,tls}
+      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp}
       TURN_TTL_SECONDS: ${TURN_TTL_SECONDS}
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP}
       TURN_PUBLIC_HOST_USE_APP_DOMAIN: ${TURN_PUBLIC_HOST_USE_APP_DOMAIN:-0}

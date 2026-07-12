@@ -70,6 +70,89 @@ describe("buildManualCacheSchedulerAvailability", () => {
     });
   });
 
+  it("replaces a stale partial uploader announcement with the complete manifest range", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+
+    const availability = buildManualCacheSchedulerAvailability({
+      availabilityByTrack: {
+        track_a: {
+          peer_owner: {
+            roomId: "room_1",
+            trackId: "track_a",
+            ownerPeerId: "peer_owner",
+            nickname: "owner",
+            assetKind: "relay",
+            assetHash: "hash_a",
+            totalChunks: 4,
+            chunkSize: 128 * 1024,
+            availableChunks: [0, 1],
+            source: "local_cache",
+            announcedAt: new Date(0).toISOString()
+          }
+        }
+      },
+      manualCacheTrackIds: ["track_a"],
+      roomSnapshot,
+      localPeerId: "peer_local"
+    });
+
+    expect(availability.track_a?.peer_owner).toMatchObject({
+      availableChunks: [0, 1, 2, 3],
+      availableRanges: [{ start: 0, end: 3 }],
+      source: "live_upload"
+    });
+  });
+
+  it("keeps a partial announcement from a non-owner listener unchanged", () => {
+    const roomSnapshot = buildManualCacheRoomSnapshot({
+      ownerPeerId: "peer_owner"
+    });
+    const roomSnapshotWithListener = {
+      ...roomSnapshot,
+      room: {
+        ...roomSnapshot.room,
+        members: [
+          ...roomSnapshot.room.members,
+          {
+            id: "listener_1",
+            nickname: "listener",
+            role: "member" as const,
+            joinedAt: new Date(0).toISOString(),
+            peerId: "peer_listener",
+            presenceState: "online" as const
+          }
+        ]
+      }
+    };
+
+    const availability = buildManualCacheSchedulerAvailability({
+      availabilityByTrack: {
+        track_a: {
+          peer_listener: {
+            roomId: "room_1",
+            trackId: "track_a",
+            ownerPeerId: "peer_listener",
+            nickname: "listener",
+            assetKind: "relay",
+            assetHash: "hash_a",
+            totalChunks: 4,
+            chunkSize: 128 * 1024,
+            availableChunks: [0, 1],
+            source: "local_cache",
+            announcedAt: new Date(0).toISOString()
+          }
+        }
+      },
+      manualCacheTrackIds: ["track_a"],
+      roomSnapshot: roomSnapshotWithListener,
+      localPeerId: "peer_local"
+    });
+
+    expect(availability.track_a?.peer_listener?.availableChunks).toEqual([0, 1]);
+  });
+
   it("can synthesize availability from stable room parts without depending on playback changes", () => {
     const roomSnapshot = buildManualCacheRoomSnapshot({
       ownerPeerId: "peer_owner"
