@@ -186,6 +186,12 @@ export function useManualCacheDownloader(input: {
     queueMicrotask(() => triggerDirectRequestRef.current());
   };
 
+  const clearPendingPieces = () => {
+    directPendingRef.current.clear();
+    unavailableProviderChunksRef.current.clear();
+    queueMicrotask(() => triggerDirectRequestRef.current());
+  };
+
   return {
     availabilityProviderPeerIds,
     uploaderPeerIds,
@@ -193,6 +199,7 @@ export function useManualCacheDownloader(input: {
     remotePeerIds,
     schedulerAvailabilityByTrack,
     clearPendingPiece,
-    deferPendingPiece
+    deferPendingPiece,
+    clearPendingPieces
   };
 }

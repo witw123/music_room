@@ -453,8 +453,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const message = parsed.data;
 
     this.assertRealtimeClient(client, message.roomId);
-    this.assertRealtimeAvailable();
-
     if (client.data.peerId !== message.fromPeerId) {
       throw new WsException("Peer mismatch.");
     }
@@ -467,7 +465,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     } as PeerSignalMessage;
 
     this.emitPeerSignalToPeer(message.roomId, nextPayload.toPeerId, nextPayload);
-    await this.redisService.publish(peerSignalChannel, {
+    this.publishRealtime(peerSignalChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId: message.roomId,
       payload: nextPayload
@@ -491,8 +489,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const announcement = parsed.data;
 
     this.assertRealtimeClient(client, announcement.roomId);
-    this.assertRealtimeAvailable();
-
     if (client.data.peerId !== announcement.ownerPeerId) {
       throw new WsException("Peer mismatch.");
     }
@@ -502,7 +498,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       announcement
     );
     client.to(announcement.roomId).emit("piece.availability", mergedAnnouncement);
-    await this.redisService.publish(pieceAvailabilityChannel, {
+    this.publishRealtime(pieceAvailabilityChannel, {
       sourceId: this.roomRealtimeBroadcaster.instanceId,
       roomId: announcement.roomId,
       payload: mergedAnnouncement
@@ -525,7 +521,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
     const request = parsed.data;
     this.assertRealtimeClient(client, request.roomId);
-    this.assertRealtimeAvailable();
     if (client.data.peerId !== request.requesterPeerId) {
       throw new WsException("Peer mismatch.");
     }
@@ -589,8 +584,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     const message = parsed.data;
 
     this.ensureBroadcasterServer();
-    this.assertRealtimeAvailable();
-
     if (!message.sessionId || !message.peerId) {
       throw new WsException("Missing session identity.");
     }
@@ -703,7 +696,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     this.ensureBroadcasterServer();
     this.assertRealtimeClient(client, message.roomId);
-    this.assertRealtimeAvailable();
 
     if (client.data.sessionId !== message.sessionId || client.data.peerId !== message.peerId) {
       throw new WsException("Presence mismatch.");
@@ -836,17 +828,10 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
   }
 
-  private assertRealtimeAvailable() {
-    if (
-      typeof this.redisService.isAvailable === "function" &&
-      !this.redisService.isAvailable()
-    ) {
+  private publishRealtime(channel: string, payload: unknown) {
+    void Promise.resolve(this.redisService.publish(channel, payload)).catch(() => {
       this.metrics.incrementRealtimeFailure();
-      throw createWsApiException(
-        "Realtime sync unavailable.",
-        errorCodes.realtimeUnavailable
-      );
-    }
+    });
   }
 
   private nextSequence() {

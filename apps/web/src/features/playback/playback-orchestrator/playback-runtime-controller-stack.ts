@@ -136,6 +136,7 @@ export function usePlaybackRuntimeControllerStack({
   } = tickRefs;
   const {
     aggregatePieceDownloadRateKbps,
+    peerDiagnostics,
     canPrepareProgressiveLocal,
     canUseFullLocalForPlaybackSession,
     canWarmBufferedFullLocal,
@@ -275,6 +276,7 @@ export function usePlaybackRuntimeControllerStack({
     playbackCurrentTrackId,
     playbackMediaEpoch,
     playbackQualityMetrics,
+    peerDiagnostics,
     playbackStatus,
     progressiveFallbackReason,
     progressiveHealthSnapshot,
@@ -378,7 +380,7 @@ export function usePlaybackRuntimeControllerStack({
     setPlaybackStartIntent,
     setProgressiveFallbackReason,
     setStatusMessage,
-    startupBufferMs,
+    startupBufferMs: effectiveStartupBufferMs,
     uploadedTracks,
     volume
   });

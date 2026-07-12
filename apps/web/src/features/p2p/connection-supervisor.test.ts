@@ -69,7 +69,7 @@ describe("connection-supervisor", () => {
     expect(state.transportScore).toBe("unstable");
   });
 
-  it("switches to relay preference after repeated heavy recoveries and persists a stable relay path", () => {
+  it("keeps ICE candidate selection open after repeated heavy recoveries", () => {
     let state = createPeerConnectionSupervisorState({
       roomId: "room_1",
       peerId: "peer_b"
@@ -86,7 +86,7 @@ describe("connection-supervisor", () => {
       action: "hard-recreate",
       failureReason: "media-failed"
     });
-    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("all");
 
     const healthyRelaySample = {
       candidateType: "relay",
@@ -127,7 +127,7 @@ describe("connection-supervisor", () => {
     });
   });
 
-  it("switches to relay preference on the first hard recreate for a stuck peer", () => {
+  it("does not force relay after a hard recreate for a stuck peer", () => {
     let state = createPeerConnectionSupervisorState({
       roomId: "room_1",
       peerId: "peer_b"
@@ -139,7 +139,7 @@ describe("connection-supervisor", () => {
       failureReason: "ice-checking-stalled"
     });
 
-    expect(resolvePreferredIceTransportPolicy(state)).toBe("relay");
+    expect(resolvePreferredIceTransportPolicy(state)).toBe("all");
     expect(state.preferredTransportKind).toBe("relay");
   });
 

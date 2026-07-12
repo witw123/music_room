@@ -16,7 +16,7 @@ export function buildPeerConnectionConfig(input: {
   resolveConnectionConfig?: (peerId: string) => Partial<RTCConfiguration> | null | undefined;
 }): RTCConfiguration {
   return {
-    iceServers: restrictIceServersToUdp(
+    iceServers: normalizeIceServers(
       input.iceServers.length > 0
         ? input.iceServers
         : [{ urls: "stun:stun.l.google.com:19302" }]
@@ -25,22 +25,10 @@ export function buildPeerConnectionConfig(input: {
   };
 }
 
-function restrictIceServersToUdp(iceServers: IceServerConfig[]): IceServerConfig[] {
-  return iceServers.flatMap((server) => {
+function normalizeIceServers(iceServers: IceServerConfig[]): IceServerConfig[] {
+  return iceServers.filter((server) => {
     const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-    const filteredUrls = urls.filter((url) => {
-      const normalized = url.trim().toLowerCase();
-      return !normalized.startsWith("turn:") && !normalized.startsWith("turns:")
-        ? true
-        : normalized.includes("transport=udp");
-    });
-    if (filteredUrls.length === 0) {
-      return [];
-    }
-    return [{
-      ...server,
-      urls: Array.isArray(server.urls) ? filteredUrls : filteredUrls[0]!
-    }];
+    return urls.some((url) => url.trim().length > 0);
   });
 }
 

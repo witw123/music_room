@@ -497,6 +497,18 @@ export function useManualCacheDownloadEffects({
                 requestableChunks: plan.requestableChunks
               })
             );
+            // The provider can be present in the room snapshot while its
+            // DataChannel is still transitioning to open. Re-sync that
+            // provider and retry shortly after the channel transition instead
+            // of waiting for a later scheduler/state change.
+            void dataMesh
+              .syncPeers([plan.selectedProviderPeerId])
+              .then(() => {
+                window.setTimeout(() => {
+                  triggerDirectRequestRef.current();
+                }, 150);
+              })
+              .catch(() => undefined);
             continue;
           }
 

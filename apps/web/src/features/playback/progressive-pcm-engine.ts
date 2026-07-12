@@ -125,6 +125,10 @@ const pcmDecodedSegmentRetentionSeconds = 75;
 const pcmPlaybackRefillIntervalMs = 80;
 const pcmPlaybackRefillTargetAheadMs = 60_000;
 const pcmPlaybackRefillMinScheduledAheadMs = 25_000;
+// Stop before the last scheduled audio quantum is consumed. Waiting for an
+// actual underrun produces silence and makes recovery depend on a later outer
+// React/runtime tick.
+const pcmUnderrunGuardSeconds = 0.35;
 // Maximum gap between decoded segments that the coverage checker tolerates
 // before declaring the buffer missing.  P2P delivery is unordered and FLAC
 // frame extraction across chunk boundaries can produce small timing gaps;
@@ -217,6 +221,7 @@ export class ProgressivePcmEngine {
   private decodedNonZeroSampleCount = 0;
   private nextDecodedStartTimeSec = 0;
   private playing = false;
+  private waitingForBuffer = false;
   private pausedTrackTimeSec = 0;
   private anchorTrackTimeSec = 0;
   private anchorContextTimeSec = 0;
@@ -267,6 +272,9 @@ export class ProgressivePcmEngine {
   }
 
   getPlayoutState(): PcmEnginePlayoutState {
+    if (this.waitingForBuffer) {
+      return "buffering";
+    }
     if (!this.playing || this.audioContext?.state !== "running") {
       return "paused";
     }
@@ -446,6 +454,7 @@ export class ProgressivePcmEngine {
     if (!input.isPlaying) {
       this.pausedTrackTimeSec = positionSeconds;
       this.playing = false;
+      this.waitingForBuffer = false;
       this.stopPlaybackRefillLoop();
       this.stopScheduledSegments();
       this.audio.pause();
@@ -520,6 +529,7 @@ export class ProgressivePcmEngine {
 
     if (!this.hasBufferedPosition(positionSeconds, minimumAheadSeconds)) {
       this.playing = false;
+      this.waitingForBuffer = true;
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
       // Keep the refill loop warm while waiting for the contiguous prefix so
@@ -542,6 +552,7 @@ export class ProgressivePcmEngine {
     }
     if (this.audioContext.state !== "running") {
       this.playing = false;
+      this.waitingForBuffer = true;
       this.stopPlaybackRefillLoop();
       this.pausedTrackTimeSec = positionSeconds;
       this.stopScheduledSegments();
@@ -594,6 +605,7 @@ export class ProgressivePcmEngine {
 
     this.startPlaybackRefillLoop();
     this.scheduleAhead(positionSeconds);
+    this.waitingForBuffer = false;
 
     return {
       localReady: true,
@@ -632,6 +644,7 @@ export class ProgressivePcmEngine {
       }
     }
     this.playing = false;
+    this.waitingForBuffer = false;
     this.stopPlaybackRefillLoop();
     this.pausedTrackTimeSec = currentPlaybackSeconds;
     this.nativeHandoffTailReleaseAtMs =
@@ -791,7 +804,7 @@ export class ProgressivePcmEngine {
   private async refillPlaybackBuffer() {
     if (
       this.refillInFlight ||
-      !this.playing ||
+      (!this.playing && !this.waitingForBuffer) ||
       !this.audioContext ||
       isTerminalEngineStatus(this.status)
     ) {
@@ -801,26 +814,72 @@ export class ProgressivePcmEngine {
     this.refillInFlight = true;
     try {
       const currentPlaybackSeconds = this.getCurrentTimeSeconds();
-      this.scheduleAhead(currentPlaybackSeconds);
-      if (
-        this.getScheduledAheadMs(currentPlaybackSeconds) >=
-        pcmPlaybackRefillMinScheduledAheadMs
-      ) {
-        return;
+      if (this.playing) {
+        this.scheduleAhead(currentPlaybackSeconds);
+        if (
+          this.getScheduledAheadMs(currentPlaybackSeconds) >=
+          pcmPlaybackRefillMinScheduledAheadMs
+        ) {
+          return;
+        }
       }
       if (
-        this.getBufferedAheadMs(currentPlaybackSeconds) >= pcmPlaybackRefillTargetAheadMs ||
+        (this.playing &&
+          this.getBufferedAheadMs(currentPlaybackSeconds) >=
+            pcmPlaybackRefillTargetAheadMs) ||
         isTerminalEngineStatus(this.status)
       ) {
         return;
       }
 
       await this.sync();
-      if (!this.playing || !this.audioContext || isTerminalEngineStatus(this.status)) {
+      if (!this.audioContext || isTerminalEngineStatus(this.status)) {
         return;
       }
 
-      this.scheduleAhead(this.getCurrentTimeSeconds());
+      const nextPlaybackSeconds = this.getCurrentTimeSeconds();
+      if (this.waitingForBuffer) {
+        const minimumAheadSeconds = resolvePcmStartupMinimumAheadSeconds({
+          isAlreadyPlaying: false,
+          remainingSeconds: Math.max(
+            0,
+            this.manifest.durationMs / 1000 - nextPlaybackSeconds
+          )
+        });
+        if (
+          this.audioContext.state === "running" &&
+          this.hasBufferedPosition(nextPlaybackSeconds, minimumAheadSeconds)
+        ) {
+          this.playing = true;
+          this.waitingForBuffer = false;
+          this.anchorTrackTimeSec = nextPlaybackSeconds;
+          this.anchorContextTimeSec = this.audioContext.currentTime + 0.005;
+          if (this.gainNode) {
+            schedulePcmStartupFade({
+              gain: this.gainNode.gain,
+              nowSeconds: this.audioContext.currentTime,
+              startSeconds: this.audioContext.currentTime + 0.02,
+              volume: this.volume
+            });
+          }
+        }
+      }
+
+      if (this.playing) {
+        const scheduledPlaybackSeconds = this.getCurrentTimeSeconds();
+        this.scheduleAhead(scheduledPlaybackSeconds);
+        if (
+          this.getScheduledAheadMs(scheduledPlaybackSeconds) / 1000 <
+            pcmUnderrunGuardSeconds &&
+          !this.hasBufferedPosition(scheduledPlaybackSeconds, pcmUnderrunGuardSeconds)
+        ) {
+          const underrunPositionSeconds = scheduledPlaybackSeconds;
+          this.waitingForBuffer = true;
+          this.playing = false;
+          this.pausedTrackTimeSec = underrunPositionSeconds;
+          this.stopScheduledSegments();
+        }
+      }
     } finally {
       this.refillInFlight = false;
     }

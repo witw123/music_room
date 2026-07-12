@@ -1028,6 +1028,14 @@ export function useRoomRuntime({
     () => buildManualCachePendingPieceClearer(clearManualCachePendingPieceRef),
     []
   );
+  const clearManualCachePendingPiecesRef = useRef(manualCacheDownloader.clearPendingPieces);
+  useEffect(() => {
+    clearManualCachePendingPiecesRef.current = manualCacheDownloader.clearPendingPieces;
+  }, [manualCacheDownloader.clearPendingPieces]);
+  const clearManualCachePendingPieces = useMemo(
+    () => () => clearManualCachePendingPiecesRef.current(),
+    []
+  );
   const deferManualCachePendingPieceRef = useRef(manualCacheDownloader.deferPendingPiece);
   useEffect(() => {
     deferManualCachePendingPieceRef.current = manualCacheDownloader.deferPendingPiece;
@@ -1106,6 +1114,7 @@ export function useRoomRuntime({
       announceRoomTrackAvailabilityRef,
       handleManualCachePieceReceivedRef,
       clearManualCachePendingPiece,
+      clearManualCachePendingPieces,
       deferManualCachePendingPiece,
       flushPendingAvailabilityRef,
       recordPieceTransferRef,
@@ -1167,6 +1176,7 @@ export function useRoomRuntime({
     announceRoomTrackAvailabilityRef,
     clearAvailabilityForPeerRef,
     clearManualCachePendingPiece,
+    clearManualCachePendingPieces,
     deferManualCachePendingPiece,
     currentRoomRef,
     chunkSchedulerRef,

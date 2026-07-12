@@ -105,6 +105,25 @@ describe("wan link score helpers", () => {
     expect(failed.grade).toMatch(/D|F/);
   });
 
+  it("does not grade a playable complete local cache by its last sync rate", () => {
+    const score = buildWanLinkScore({
+      candidateType: "prflx",
+      protocol: "udp",
+      rttMs: 57,
+      downloadRateKbps: 1_280,
+      transportScore: "healthy",
+      dataChannelState: "open",
+      providers: [{ peerId: "peer_1", availableChunks: 124, totalChunks: 124 }],
+      ownedChunks: 124,
+      totalChunks: 124,
+      localPlaybackComplete: true
+    });
+
+    expect(score.metrics.downloadLabel).toBe("本地完整");
+    expect(score.grade).not.toBe("F");
+    expect(score.tips.join(" ")).not.toContain("pcm-buffer-missing");
+  });
+
   it("builds a score snapshot from peer diagnostics", () => {
     const diagnostic = createPeerSnapshot("peer_1", "2026-07-12T00:00:00.000Z");
     diagnostic.dataCandidateType = "relay";

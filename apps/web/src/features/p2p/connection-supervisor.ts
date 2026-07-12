@@ -430,7 +430,12 @@ export function toSupervisorDiagnosticPatch(state: PeerConnectionSupervisorState
 export function resolvePreferredIceTransportPolicy(
   state: PeerConnectionSupervisorState | null | undefined
 ) {
-  return state?.preferredTransportKind === "relay" ? "relay" : "all";
+  // ICE should always be allowed to select the best currently reachable path.
+  // A previous failed connection is not evidence that relay is better now;
+  // persisting relay-only policy can strand a peer on a slow TURN path for the
+  // whole transport preference TTL and prevent direct recovery.
+  void state;
+  return "all" as const;
 }
 
 export function resolveTransportKind(candidateType: string | null | undefined): StableTransportKind | null {

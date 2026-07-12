@@ -1242,7 +1242,7 @@ describe("ProgressivePcmEngine", () => {
       expect(result.blockedReason).toBe("pcm-buffer-missing");
       expect(result.playbackPositionSeconds).toBe(5);
       expect(engine.getSnapshot()).toMatchObject({
-        playoutState: "paused"
+        playoutState: "buffering"
       });
       expect(stop).toHaveBeenCalledTimes(1);
       expect(disconnect).toHaveBeenCalledTimes(1);
@@ -2432,7 +2432,7 @@ describe("ProgressivePcmEngine", () => {
       expect(result.blockedReason).toBe("audio-context-suspended");
       expect(engine.getSnapshot()).toMatchObject({
         audioContextState: "suspended",
-        playoutState: "paused"
+        playoutState: "buffering"
       });
     } finally {
       engine.destroy();

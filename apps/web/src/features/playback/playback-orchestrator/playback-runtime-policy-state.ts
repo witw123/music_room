@@ -11,6 +11,7 @@ import type {
   TrackAvailabilityAnnouncement,
   TrackMeta
 } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
 import {
   type ProgressiveEngineType,
   type ProgressiveHealthSnapshot,
@@ -19,6 +20,7 @@ import {
 import {
   buildProgressiveWarmupTimerKey,
   resolveAudibleLocalFallbackActive,
+  resolveAdaptiveStartupBufferMs,
   resolveBufferSafetyMarginMs,
   resolveEffectiveStartupBufferMs,
   resolveFullLocalBlockedReason,
@@ -75,6 +77,7 @@ type PlaybackRuntimePolicyStateInput = {
   playbackCurrentTrackId: string | null;
   playbackMediaEpoch: number | null;
   playbackQualityMetrics: PlaybackQualityMetrics;
+  peerDiagnostics: PeerDiagnosticsSnapshot[];
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
   progressiveFallbackReason: string | null;
   progressiveHealthSnapshot: ProgressiveHealthSnapshot;
@@ -107,6 +110,7 @@ export function usePlaybackRuntimePolicyState({
   playbackCurrentTrackId,
   playbackMediaEpoch,
   playbackQualityMetrics,
+  peerDiagnostics,
   playbackStatus,
   progressiveFallbackReason,
   progressiveHealthSnapshot,
@@ -216,13 +220,23 @@ export function usePlaybackRuntimePolicyState({
     ]
   );
   const effectiveStartupBufferMs = useMemo(
-    () =>
-      resolveEffectiveStartupBufferMs({
+    () => {
+      const adaptiveStartupBufferMs = resolveAdaptiveStartupBufferMs({
         baseStartupBufferMs: startupBufferMs,
+        aggregatePieceDownloadRateKbps,
+        peerDiagnostics,
         waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
         stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s
-      }),
+      });
+      return resolveEffectiveStartupBufferMs({
+        baseStartupBufferMs: adaptiveStartupBufferMs,
+        waitingEventsLast30s: playbackQualityMetrics.waitingEventsLast30s,
+        stalledEventsLast30s: playbackQualityMetrics.stalledEventsLast30s
+      });
+    },
     [
+      aggregatePieceDownloadRateKbps,
+      peerDiagnostics,
       playbackQualityMetrics.stalledEventsLast30s,
       playbackQualityMetrics.waitingEventsLast30s,
       startupBufferMs
@@ -294,14 +308,14 @@ export function usePlaybackRuntimePolicyState({
     progressiveManifestKey: currentProgressiveManifestKey,
     activePlaybackSource,
     progressiveEngineType: currentProgressiveEngineType,
-    startupBufferMs
+    startupBufferMs: effectiveStartupBufferMs
   });
   const progressiveWarmupRuntimeRef = useRef({
     activePlaybackSource,
     canUseFullLocalForPlaybackSession,
     currentProgressiveEngineType,
     progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
+    startupBufferMs: effectiveStartupBufferMs,
     progressiveLocalBlockedReason,
     isCurrentSourceOwner,
     playbackRecoveryStage,
@@ -312,7 +326,7 @@ export function usePlaybackRuntimePolicyState({
     canUseFullLocalForPlaybackSession,
     currentProgressiveEngineType,
     progressiveStartupReady: progressiveHealthSnapshot.startupReady,
-    startupBufferMs,
+    startupBufferMs: effectiveStartupBufferMs,
     progressiveLocalBlockedReason,
     isCurrentSourceOwner,
     playbackRecoveryStage,

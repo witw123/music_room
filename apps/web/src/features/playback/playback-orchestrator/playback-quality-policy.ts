@@ -1,4 +1,4 @@
-import type { RoomSnapshot } from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, RoomSnapshot } from "@music-room/shared";
 import type {
   ProgressiveEngineType,
   ProgressivePlaybackSource
@@ -81,6 +81,55 @@ export function resolveEffectiveStartupBufferMs(input: {
   }
 
   return input.baseStartupBufferMs;
+}
+
+export function resolveAdaptiveStartupBufferMs(input: {
+  baseStartupBufferMs: number;
+  aggregatePieceDownloadRateKbps: number | null;
+  peerDiagnostics: readonly Pick<
+    PeerDiagnosticsSnapshot,
+    "currentRoundTripTimeMs" | "dataCandidateType" | "dataRelayProtocol"
+  >[];
+  waitingEventsLast30s: number;
+  stalledEventsLast30s: number;
+}) {
+  const baseStartupBufferMs = Math.max(1_000, input.baseStartupBufferMs);
+  const validPeers = input.peerDiagnostics.filter(
+    (peer) =>
+      typeof peer.currentRoundTripTimeMs === "number" &&
+      Number.isFinite(peer.currentRoundTripTimeMs)
+  );
+  const maximumRttMs = validPeers.reduce(
+    (maximum, peer) => Math.max(maximum, peer.currentRoundTripTimeMs ?? 0),
+    0
+  );
+  const hasUdpRelay = input.peerDiagnostics.some(
+    (peer) =>
+      peer.dataCandidateType?.trim().toLowerCase() === "relay" &&
+      peer.dataRelayProtocol?.trim().toLowerCase() === "udp"
+  );
+  const downloadRateKbps = input.aggregatePieceDownloadRateKbps;
+  let targetBufferMs = baseStartupBufferMs;
+
+  if (downloadRateKbps === null || downloadRateKbps <= 0) {
+    targetBufferMs = Math.max(targetBufferMs, 12_000);
+  } else if (downloadRateKbps < 800) {
+    targetBufferMs = Math.max(targetBufferMs, 18_000);
+  } else if (downloadRateKbps < 3_000) {
+    targetBufferMs = Math.max(targetBufferMs, 12_000);
+  }
+
+  if (hasUdpRelay || maximumRttMs >= 180) {
+    targetBufferMs = Math.max(targetBufferMs, 12_000);
+  }
+  if (maximumRttMs >= 320) {
+    targetBufferMs = Math.max(targetBufferMs, 18_000);
+  }
+  if (input.waitingEventsLast30s >= 2 || input.stalledEventsLast30s > 0) {
+    targetBufferMs += 2_000;
+  }
+
+  return Math.min(20_000, targetBufferMs);
 }
 
 export function resolvePlaybackQualityMetrics(input: {

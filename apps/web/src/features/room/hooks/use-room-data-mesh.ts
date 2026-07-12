@@ -229,6 +229,7 @@ export function createRoomDataMeshRuntime(input: {
   ) => Promise<boolean>>;
   handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
   clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
+  clearManualCachePendingPieces?: () => void;
   deferManualCachePendingPiece: (
     trackId: string,
     chunkIndex: number,
@@ -482,6 +483,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           })
         });
         if (state === "closed" || state === "failed" || state === "disconnected") {
+          input.clearManualCachePendingPieces?.();
           peerBufferedAmountBytes.delete(remotePeerId);
           input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
           input.setConnectedPeers((current) => current.filter((peer) => peer !== remotePeerId));
@@ -538,6 +540,9 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           if (state === "open") {
             next.add(remotePeerId);
           } else {
+            if (state === "closed") {
+              input.clearManualCachePendingPieces?.();
+            }
             next.delete(remotePeerId);
           }
           return [...next];

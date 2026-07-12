@@ -1107,7 +1107,7 @@ describe("SignalingGateway", () => {
     ]);
   });
 
-  it("rejects room subscriptions when redis realtime is unavailable", async () => {
+  it("keeps room subscriptions available when redis realtime is unavailable", async () => {
     const { gateway } = createGateway({
       redisService: createRedisServiceMock({
         isAvailable: jest.fn(() => false)
@@ -1120,15 +1120,10 @@ describe("SignalingGateway", () => {
         sessionId: "guest_host",
         peerId: "peer_host"
       })
-    ).rejects.toMatchObject({
-      error: {
-        code: "REALTIME_UNAVAILABLE",
-        message: "Realtime sync unavailable."
-      }
-    });
+    ).resolves.toMatchObject({ ok: true });
   });
 
-  it("rejects peer signals when redis realtime is unavailable", async () => {
+  it("keeps peer signals available when redis realtime is unavailable", async () => {
     const { gateway } = createGateway({
       redisService: createRedisServiceMock({
         isAvailable: jest.fn(() => false)
@@ -1151,11 +1146,10 @@ describe("SignalingGateway", () => {
           payload: {}
         }
       )
-    ).rejects.toMatchObject({
-      error: {
-        code: "REALTIME_UNAVAILABLE",
-        message: "Realtime sync unavailable."
-      }
+    ).resolves.toMatchObject({
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b"
     });
   });
 

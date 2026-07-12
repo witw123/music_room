@@ -196,7 +196,9 @@ export class DataChannelManager {
         queue: input.entry.sendQueue,
         bufferedAmountBytes: channel.bufferedAmount,
         highWatermarkBytes: budget.highWatermarkBytes,
-        bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes
+        bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes,
+        resolveBufferedAmount: (item) =>
+          (resolveQueuedChannel(input.entry, item) ?? channel).bufferedAmount
       });
       if (nextItemIndex < 0) {
         break;
@@ -241,10 +243,22 @@ export class DataChannelManager {
       }
     }
 
-    this.updateBufferedAmountLowThreshold(input.peerId, input.entry, channel);
+    for (const targetChannel of new Set([
+      input.entry.controlChannel,
+      input.entry.dataChannel,
+      channel
+    ])) {
+      if (targetChannel) {
+        this.updateBufferedAmountLowThreshold(input.peerId, input.entry, targetChannel);
+      }
+    }
     this.callbacks.onDataBufferedAmountChange?.({
       peerId: input.peerId,
-      bufferedAmountBytes: channel.bufferedAmount
+      bufferedAmountBytes: Math.max(
+        channel.bufferedAmount,
+        input.entry.controlChannel?.bufferedAmount ?? 0,
+        input.entry.dataChannel?.bufferedAmount ?? 0
+      )
     });
   }
 
@@ -317,6 +331,7 @@ export function resolveNextSendQueueItemIndex(input: {
   bufferedAmountBytes: number;
   highWatermarkBytes: number;
   bulkHighWatermarkBytes: number;
+  resolveBufferedAmount?: (item: DataChannelQueuedSendItem) => number;
 }) {
   const priorities: Array<NonNullable<DataChannelQueuedSendItem["priority"]>> = [
     "control",
@@ -325,21 +340,19 @@ export function resolveNextSendQueueItemIndex(input: {
   ];
 
   for (const priority of priorities) {
-    if (
-      !shouldSendQueuedDataChannelItem({
+    const index = input.queue.findIndex((item) => {
+      if ((item.priority ?? "control") !== priority) {
+        return false;
+      }
+      const bufferedAmountBytes = input.resolveBufferedAmount?.(item) ?? input.bufferedAmountBytes;
+      return shouldSendQueuedDataChannelItem({
         queueLength: input.queue.length,
-        bufferedAmountBytes: input.bufferedAmountBytes,
+        bufferedAmountBytes,
         highWatermarkBytes: input.highWatermarkBytes,
         bulkHighWatermarkBytes: input.bulkHighWatermarkBytes,
         priority
-      })
-    ) {
-      continue;
-    }
-
-    const index = input.queue.findIndex(
-      (item) => (item.priority ?? "control") === priority
-    );
+      });
+    });
     if (index >= 0) {
       return index;
     }

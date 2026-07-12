@@ -35,6 +35,8 @@ export type WanLinkScoreInput = {
   ownedChunks?: number | null;
   totalChunks?: number | null;
   chunkSizeBytes?: number | null;
+  /** The active track is already complete in the local cache. */
+  localPlaybackComplete?: boolean;
 };
 
 export type WanLinkScore = {
@@ -152,7 +154,15 @@ function scoreFromRtt(rttMs: number | null) {
   return 0;
 }
 
-function scoreFromThroughput(downloadRateKbps: number | null) {
+function scoreFromThroughput(
+  downloadRateKbps: number | null,
+  localPlaybackComplete = false
+) {
+  if (localPlaybackComplete) {
+    // A low recent sync sample is not a playback bottleneck once the active
+    // track is complete locally.
+    return 18;
+  }
   if (downloadRateKbps === null) {
     return 8;
   }
@@ -240,7 +250,7 @@ export function buildWanLinkScore(input: WanLinkScoreInput): WanLinkScore {
   let score =
     scoreFromProfile(profile) +
     scoreFromRtt(rttMs) +
-    scoreFromThroughput(downloadRateKbps) +
+    scoreFromThroughput(downloadRateKbps, input.localPlaybackComplete) +
     scoreFromProviders(providerCount, fullProviderCount);
 
   if (input.dataChannelState && input.dataChannelState !== "open") {
@@ -277,7 +287,7 @@ export function buildWanLinkScore(input: WanLinkScoreInput): WanLinkScore {
   if (rttMs !== null && rttMs >= 250) {
     tips.push(`RTT ${Math.round(rttMs)}ms 偏高，分片管道效率会下降。`);
   }
-  if (downloadRateKbps !== null && downloadRateKbps < 3_000) {
+  if (!input.localPlaybackComplete && downloadRateKbps !== null && downloadRateKbps < 3_000) {
     tips.push("分片下载低于约 0.4MB/s，大体积 FLAC 容易出现 pcm-buffer-missing。");
   }
   if (providerCount <= 1) {
@@ -308,8 +318,11 @@ export function buildWanLinkScore(input: WanLinkScoreInput): WanLinkScore {
     summary,
     metrics: {
       rttLabel: rttMs === null ? "未知" : `${Math.round(rttMs)}ms`,
-      downloadLabel:
-        downloadRateKbps === null ? "未知" : formatTransferRateMBps(downloadRateKbps),
+      downloadLabel: input.localPlaybackComplete
+        ? "本地完整"
+        : downloadRateKbps === null
+          ? "未知"
+          : formatTransferRateMBps(downloadRateKbps),
       uploadLabel:
         uploadRateKbps === null ? "未知" : formatTransferRateMBps(uploadRateKbps),
       providerLabel:
@@ -331,6 +344,7 @@ export function buildWanLinkScoreFromPeerDiagnostic(input: {
   remainingBytes?: number | null;
   downloadRateKbps?: number | null;
   uploadRateKbps?: number | null;
+  localPlaybackComplete?: boolean;
   rttMs?: number | null;
 }): WanLinkScore {
   const diagnostic = input.diagnostic ?? null;
@@ -349,6 +363,7 @@ export function buildWanLinkScoreFromPeerDiagnostic(input: {
     remainingBytes: input.remainingBytes,
     ownedChunks: input.ownedChunks,
     totalChunks: input.totalChunks,
-    chunkSizeBytes: input.chunkSizeBytes
+    chunkSizeBytes: input.chunkSizeBytes,
+    localPlaybackComplete: input.localPlaybackComplete
   });
 }

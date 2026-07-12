@@ -28,7 +28,7 @@ const fullLocalMaxDriftMs = 180;
 const enableTrackCaching = true;
 const enableDirectProgressiveTakeover = enableTrackCaching;
 const enableListenerLocalTakeover = enableTrackCaching;
-const adaptiveStartupBufferMs = 60;
+const adaptiveStartupBufferMs = 8_000;
 const pcmSlidingWindowPlayRetryIntervalMs = 1_000;
 
 export function useProgressiveRuntime({

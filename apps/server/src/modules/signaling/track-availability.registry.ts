@@ -9,10 +9,14 @@ import { RedisService } from "../../infra/redis/redis.service";
 @Injectable()
 export class TrackAvailabilityRegistry {
   private readonly availabilitySnapshotTtlSeconds = 15 * 60;
+  private readonly availabilityPersistDebounceMs = 500;
   private readonly availabilityByRoom = new Map<
     string,
     Map<string, TrackAvailabilityAnnouncement>
   >();
+  private readonly persistenceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly persistenceInFlight = new Set<string>();
+  private readonly persistenceDirty = new Set<string>();
 
   constructor(private readonly redisService: RedisService) {}
 
@@ -34,7 +38,7 @@ export class TrackAvailabilityRegistry {
     );
     roomAvailability.set(key, mergedAnnouncement);
     this.availabilityByRoom.set(roomId, roomAvailability);
-    void this.persistSnapshot(roomId);
+    this.schedulePersistSnapshot(roomId);
     return mergedAnnouncement;
   }
 
@@ -63,6 +67,12 @@ export class TrackAvailabilityRegistry {
   }
 
   clearRoom(roomId: string) {
+    const timer = this.persistenceTimers.get(roomId);
+    if (timer) {
+      clearTimeout(timer);
+      this.persistenceTimers.delete(roomId);
+    }
+    this.persistenceDirty.delete(roomId);
     this.availabilityByRoom.delete(roomId);
     void this.deleteSnapshot(roomId);
   }
@@ -95,7 +105,28 @@ export class TrackAvailabilityRegistry {
     return `music-room:availability:${roomId}`;
   }
 
+  private schedulePersistSnapshot(roomId: string) {
+    this.persistenceDirty.add(roomId);
+    if (this.persistenceTimers.has(roomId) || this.persistenceInFlight.has(roomId)) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.persistenceTimers.delete(roomId);
+      void this.persistSnapshot(roomId);
+    }, this.availabilityPersistDebounceMs);
+    timer.unref?.();
+    this.persistenceTimers.set(roomId, timer);
+  }
+
   private async persistSnapshot(roomId: string) {
+    if (this.persistenceInFlight.has(roomId)) {
+      this.persistenceDirty.add(roomId);
+      return;
+    }
+
+    this.persistenceInFlight.add(roomId);
+    this.persistenceDirty.delete(roomId);
     try {
       const announcements = [...(this.availabilityByRoom.get(roomId)?.values() ?? [])];
       if (announcements.length === 0) {
@@ -109,6 +140,11 @@ export class TrackAvailabilityRegistry {
       );
     } catch {
       // Availability snapshots are an optimization; live announcements remain authoritative.
+    } finally {
+      this.persistenceInFlight.delete(roomId);
+      if (this.persistenceDirty.has(roomId)) {
+        this.schedulePersistSnapshot(roomId);
+      }
     }
   }
 

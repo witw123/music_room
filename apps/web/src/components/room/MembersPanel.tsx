@@ -387,6 +387,8 @@ function resolveRoomWanScore(input: {
     : undefined;
   const localOwnedChunks = localSummary?.currentTrackChunkCount ?? 0;
   const localTotalChunks = localSummary?.currentTrackTotalChunks ?? 0;
+  const localPlaybackComplete =
+    localTotalChunks > 0 && localOwnedChunks >= localTotalChunks;
   const localDownloadRateKbps = input.localMemberState?.pieceSummary.downloadRateKbps ?? null;
   const localUploadRateKbps = input.localMemberState?.pieceSummary.uploadRateKbps ?? null;
 
@@ -400,6 +402,7 @@ function resolveRoomWanScore(input: {
         providers,
         ownedChunks: localOwnedChunks,
         totalChunks: localTotalChunks,
+        localPlaybackComplete,
         downloadRateKbps: localDownloadRateKbps ?? snapshot.pieceDownloadRateKbps,
         uploadRateKbps: localUploadRateKbps ?? snapshot.pieceUploadRateKbps,
         rttMs: snapshot.currentRoundTripTimeMs
@@ -422,7 +425,8 @@ function resolveRoomWanScore(input: {
       (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
     providers,
     ownedChunks: localOwnedChunks,
-    totalChunks: localTotalChunks
+    totalChunks: localTotalChunks,
+    localPlaybackComplete
   });
 }
 

@@ -51,7 +51,9 @@ describe("RealtimeService", () => {
         { urls: "stun:stun.example.com:3478" },
         {
           urls: [
-            "turn:turn.example.com:3478?transport=udp"
+            "turn:turn.example.com:3478?transport=udp",
+            "turn:turn.example.com:3478?transport=tcp",
+            "turns:turn.example.com:5349?transport=tcp"
           ],
           username,
           credential
@@ -90,6 +92,20 @@ describe("RealtimeService", () => {
     expect(config.source).toBe("ephemeral");
     expect(config.iceServers[1]).toMatchObject({
       urls: expect.arrayContaining(["turn:turn.example.com:3478?transport=udp"])
+    });
+  });
+
+  it("derives the independent TURN root host from a subdomain app domain", () => {
+    process.env.TURN_ENABLED = "true";
+    delete process.env.TURN_PUBLIC_HOST;
+    process.env.APP_DOMAIN = "musicroom.witw.top";
+    process.env.TURN_SHARED_SECRET = "turn-secret";
+    const service = new RealtimeService();
+
+    const config = service.buildIceConfig("user_1");
+
+    expect(config.iceServers[1]).toMatchObject({
+      urls: expect.arrayContaining(["turn:turn.witw.top:3478?transport=udp"])
     });
   });
 

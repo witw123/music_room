@@ -252,6 +252,7 @@ export function usePlaybackRuntimeInputState({
 
   return {
     aggregatePieceDownloadRateKbps,
+    peerDiagnostics,
     canPrepareProgressiveLocal,
     canUseFullLocalForPlaybackSession,
     canWarmBufferedFullLocal,
