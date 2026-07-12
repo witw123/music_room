@@ -161,14 +161,14 @@ function adaptManualCacheBudgetToLink(input: {
     input.budget.maxPendingPerPeer,
     transferWindow.maxPendingChunks
   );
+  // Expand multi-round in-flight capacity from the BDP window, but keep each
+  // direct request batch at the profile batch size. A large cold-start window
+  // must not turn active playback refill into a single cache-completion burst.
   return withPendingTtl({
-    batchSize: Math.min(
-      maxPendingPerPeer,
-      Math.max(input.budget.batchSize, Math.ceil(maxPendingPerPeer / 2))
-    ),
+    batchSize: Math.min(maxPendingPerPeer, input.budget.batchSize),
     maxPendingPerTrack: Math.max(input.budget.maxPendingPerTrack, maxPendingPerPeer * 2),
     maxPendingPerPeer,
-    timeoutMs: transferWindow.requestTimeoutMs
+    timeoutMs: Math.max(input.budget.timeoutMs, transferWindow.requestTimeoutMs)
   });
 }
 
