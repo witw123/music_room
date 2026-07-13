@@ -54,19 +54,7 @@ export function contiguousPlaybackBufferMs(input: {
 export function resolveStartupUnitIndexes(input: {
   manifest: Pick<PlaybackAssetManifest, "segmentDurationMs" | "unitCount">;
   positionMs: number;
-  minimumBufferMs?: number;
 }) {
   const current = playbackUnitIndexAt(input.manifest, input.positionMs);
-  const offsetIntoCurrentUnitMs = Math.max(
-    0,
-    input.positionMs - current * input.manifest.segmentDurationMs
-  );
-  const count = Math.min(
-    input.manifest.unitCount - current,
-    Math.ceil(
-      (offsetIntoCurrentUnitMs + (input.minimumBufferMs ?? 6_000)) /
-        input.manifest.segmentDurationMs
-    )
-  );
-  return Array.from({ length: count }, (_, offset) => current + offset);
+  return [current];
 }

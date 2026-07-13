@@ -115,7 +115,7 @@ afterEach(() => {
 });
 
 describe("SegmentedOpusEngine", () => {
-  it("waits for the startup window before creating audible sources", async () => {
+  it("starts with the current segment instead of waiting for a multi-segment window", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
     const engine = new SegmentedOpusEngine();
@@ -125,11 +125,52 @@ describe("SegmentedOpusEngine", () => {
       playback: playback(Date.now()),
       serverNowMs: Date.now(),
       volume: 0.7,
-      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
+      getUnit: async (unitIndex) => unitIndex === 0 ? unit(unitIndex) : null
     });
 
     expect(result.state).toBe("buffering");
-    expect(sources).toHaveLength(0);
+    expect(sources).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("schedules the current segment before decode-ahead work finishes", async () => {
+    const { context, sources } = createContext();
+    let releaseDecodeAhead!: () => void;
+    const decodeAhead = new Promise<AudioBuffer>((resolve) => {
+      releaseDecodeAhead = () => resolve({
+        duration: 2,
+        sampleRate: 48_000,
+        length: 96_000,
+        numberOfChannels: 2,
+        getChannelData: () => new Float32Array(96_000)
+      } as unknown as AudioBuffer);
+    });
+    vi.mocked(context.decodeAudioData).mockImplementation(async (payload) =>
+      new Uint8Array(payload)[0] === 0
+        ? {
+            duration: 2,
+            sampleRate: 48_000,
+            length: 96_000,
+            numberOfChannels: 2,
+            getChannelData: () => new Float32Array(96_000)
+          } as unknown as AudioBuffer
+        : decodeAhead
+    );
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+
+    const syncing = engine.sync({
+      manifest,
+      playback: playback(Date.now()),
+      serverNowMs: Date.now(),
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+
+    releaseDecodeAhead();
+    await syncing;
+    expect(sources).toHaveLength(5);
     engine.destroy();
   });
 
@@ -173,6 +214,41 @@ describe("SegmentedOpusEngine", () => {
       getUnit: async (unitIndex) => unit(unitIndex)
     });
     expect(ended.state).toBe("ended");
+    engine.destroy();
+  });
+
+  it("stops the old timeline and schedules a seek target immediately", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+    const previousSources = [...sources];
+
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        positionMs: 4_000,
+        startAt: new Date(serverNowMs).toISOString(),
+        startedAt: new Date(serverNowMs).toISOString(),
+        playbackRevision: 2
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit: async (unitIndex) => unit(unitIndex)
+    });
+
+    expect(previousSources.every((source) => source.stopped)).toBe(true);
+    expect(sources).toHaveLength(8);
+    expect(sources[5]?.starts[0]).toEqual({ when: 10.04, offset: 0 });
     engine.destroy();
   });
 });

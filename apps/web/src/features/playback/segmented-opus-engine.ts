@@ -106,6 +106,34 @@ export class SegmentedOpusEngine {
       return { state: "buffering" as const, bufferedUnits: contiguousUnits.length };
     }
 
+    if (!this.timelineStarted) {
+      const currentUnit = contiguousUnits[0]!;
+      const currentDecoded = await this.getDecodedUnit(
+        context,
+        currentUnit,
+        input.manifest.sampleRate
+      );
+      if (this.destroyed || this.timelineKey !== timelineKey) {
+        return { state: "idle" as const, bufferedUnits: 0 };
+      }
+      this.establishTimelineAnchor({
+        context,
+        manifest: input.manifest,
+        playback: input.playback,
+        serverNowMs: input.serverNowMs,
+        startAtMs,
+        roomPositionMs,
+        currentUnit
+      });
+      this.scheduleUnit({
+        context,
+        decoded: currentDecoded,
+        unit: currentUnit,
+        roomPositionMs,
+        currentIndex
+      });
+    }
+
     const decodeTargets = contiguousUnits.filter(
       (unit) => !this.scheduled.has(unit.unitIndex) && !this.completed.has(unit.unitIndex)
     );
@@ -118,18 +146,6 @@ export class SegmentedOpusEngine {
     );
     if (this.destroyed || this.timelineKey !== timelineKey) {
       return { state: "idle" as const, bufferedUnits: 0 };
-    }
-
-    if (!this.timelineStarted) {
-      this.establishTimelineAnchor({
-        context,
-        manifest: input.manifest,
-        playback: input.playback,
-        serverNowMs: input.serverNowMs,
-        startAtMs,
-        roomPositionMs,
-        currentUnit: contiguousUnits[0]!
-      });
     }
 
     for (const unit of decodeTargets) {

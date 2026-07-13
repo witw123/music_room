@@ -54,4 +54,16 @@ describe("BottomPlayer source", () => {
     expect(playerSource).toContain("canSeekPlayback && canControlPlayback");
     expect(layoutSource).toContain("disabled={!currentTrackDuration || !canSeekPlayback}");
   });
+
+  it("commits range seeking for pointer and keyboard interaction", () => {
+    const layoutSource = readFileSync(
+      new URL("./bottom-player/bottom-player-layout.tsx", import.meta.url),
+      "utf8"
+    );
+
+    expect(layoutSource).toContain("onPointerUp={commitSeek}");
+    expect(layoutSource).toContain("onKeyUp={commitSeek}");
+    expect(layoutSource).not.toContain("onMouseUp={commitSeek}");
+    expect(layoutSource).not.toContain("onTouchEnd={commitSeek}");
+  });
 });

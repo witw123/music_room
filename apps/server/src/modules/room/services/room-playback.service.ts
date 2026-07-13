@@ -19,8 +19,6 @@ type TrackAvailabilityReader = {
   ) => boolean | Promise<boolean>;
 };
 
-const scheduledPlaybackLeadMs = 8_000;
-
 export class RoomPlaybackService {
   constructor(
     private readonly roomPresenceService: RoomPresenceService,
@@ -151,9 +149,7 @@ export class RoomPlaybackService {
 
       playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, input.positionMs ?? 0);
       if (playback.status === "playing") {
-        const startAt = currentTrack?.playbackAsset
-          ? this.resolveScheduledStartAt()
-          : new Date().toISOString();
+        const startAt = new Date().toISOString();
         playback.startAt = startAt;
         playback.startedAt = startAt;
       } else {
@@ -237,7 +233,7 @@ export class RoomPlaybackService {
     playback.sourcePeerId = sourceCandidate?.peerId ?? null;
     playback.sourceTrackId = isAssetPlayback ? null : trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
-    const startAt = isAssetPlayback ? this.resolveScheduledStartAt() : new Date().toISOString();
+    const startAt = new Date().toISOString();
     playback.startAt = startAt;
     playback.startedAt = startAt;
     // Queue-item switches need a media epoch bump so clients remount local
@@ -400,10 +396,6 @@ export class RoomPlaybackService {
 
   private bumpPlaybackVersion(playback: PlaybackSnapshot) {
     playback.playbackRevision += 1;
-  }
-
-  private resolveScheduledStartAt() {
-    return new Date(Date.now() + scheduledPlaybackLeadMs).toISOString();
   }
 
   private assertRequestedPlaybackAsset(

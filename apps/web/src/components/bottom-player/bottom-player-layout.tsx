@@ -103,8 +103,8 @@ export function MobileBottomPlayerLayout({
               max={currentTrackDuration || 1}
               disabled={!currentTrackDuration || !canSeekPlayback}
               onChange={(event) => setSeekDraft(Number(event.target.value))}
-              onMouseUp={commitSeek}
-              onTouchEnd={commitSeek}
+              onPointerUp={commitSeek}
+              onKeyUp={commitSeek}
             />
           </div>
           <span className="w-[44px] shrink-0 text-[11px] tabular-nums text-foreground-muted">
@@ -288,8 +288,8 @@ export function DesktopBottomPlayerLayout({
               max={currentTrackDuration || 1}
               disabled={!currentTrackDuration || !canSeekPlayback}
               onChange={(event) => setSeekDraft(Number(event.target.value))}
-              onMouseUp={commitSeek}
-              onTouchEnd={commitSeek}
+              onPointerUp={commitSeek}
+              onKeyUp={commitSeek}
             />
           </div>
           <span className="min-w-[40px] text-xs tabular-nums text-foreground-muted">

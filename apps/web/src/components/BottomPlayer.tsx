@@ -71,6 +71,7 @@ function BottomPlayerBase({
     progressMs,
     receivedAtMs: Date.now()
   });
+  const seekCommitTargetRef = useRef<number | null>(null);
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
@@ -132,6 +133,10 @@ function BottomPlayerBase({
   const commitSeek = useCallback(() => {
     if (seekDraft !== null && canSeekPlayback && canControlPlayback) {
       const targetPositionMs = clampProgressMs(seekDraft, currentTrackDuration);
+      if (seekCommitTargetRef.current === targetPositionMs) {
+        return;
+      }
+      seekCommitTargetRef.current = targetPositionMs;
       setRenderedProgressMs(targetPositionMs);
       progressAnchorRef.current = {
         progressMs: targetPositionMs,
@@ -139,7 +144,10 @@ function BottomPlayerBase({
       };
       startTransition(() => {
         void Promise.resolve(onSeek(targetPositionMs)).finally(() => {
-          setSeekDraft(null);
+          if (seekCommitTargetRef.current === targetPositionMs) {
+            seekCommitTargetRef.current = null;
+            setSeekDraft(null);
+          }
         });
       });
     }

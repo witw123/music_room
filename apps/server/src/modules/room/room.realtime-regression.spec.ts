@@ -370,6 +370,7 @@ describe("room realtime regression", () => {
     });
     expect(queueState.queue).toHaveLength(1);
 
+    const playbackRequestedAt = Date.now();
     const playback = await playbackController.updatePlayback(
       created.room.id,
       hostSession.token,
@@ -387,7 +388,23 @@ describe("room realtime regression", () => {
       sourcePeerId: null,
       startAt: expect.any(String)
     });
-    expect(Date.parse(playback.startAt ?? "")).toBeGreaterThan(Date.now());
+    expect(Date.parse(playback.startAt ?? "")).toBeGreaterThanOrEqual(playbackRequestedAt);
+    expect(Date.parse(playback.startAt ?? "")).toBeLessThanOrEqual(Date.now());
+
+    const seekRequestedAt = Date.now();
+    const seekedPlayback = await playbackController.updatePlayback(
+      created.room.id,
+      hostSession.token,
+      {
+        action: "seek",
+        positionMs: 60_000,
+        playbackAssetId,
+        expectedVersion: playback.playbackRevision
+      }
+    );
+    expect(seekedPlayback.positionMs).toBe(60_000);
+    expect(Date.parse(seekedPlayback.startAt ?? "")).toBeGreaterThanOrEqual(seekRequestedAt);
+    expect(Date.parse(seekedPlayback.startAt ?? "")).toBeLessThanOrEqual(Date.now());
 
     signalingGateway.handleDisconnect(
       createClient({

@@ -25,8 +25,8 @@ describe("playback segment scheduler", () => {
     })).toBe(3_000);
   });
 
-  it("requires at least six contiguous seconds before anchoring playback", () => {
-    expect(resolveStartupUnitIndexes({ manifest, positionMs: 60_000 })).toEqual([30, 31, 32]);
-    expect(resolveStartupUnitIndexes({ manifest, positionMs: 61_000 })).toEqual([30, 31, 32, 33]);
+  it("starts as soon as the segment containing the target position is available", () => {
+    expect(resolveStartupUnitIndexes({ manifest, positionMs: 60_000 })).toEqual([30]);
+    expect(resolveStartupUnitIndexes({ manifest, positionMs: 61_000 })).toEqual([30]);
   });
 });
