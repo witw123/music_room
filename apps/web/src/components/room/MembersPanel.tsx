@@ -2,11 +2,8 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
+import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
 import { formatTransferRateMBps } from "@/lib/music-room-ui";
-import {
-  buildDiagnosticsViewModel,
-  type DiagnosticsPlaybackInput
-} from "./diagnostics-view-model";
 import {
   buildWanLinkScore,
   buildWanLinkScoreFromPeerDiagnostic,
@@ -16,19 +13,19 @@ import {
 
 export type MemberTransferSummary = {
   memberId: string;
-  announcedTrackCount: number;
-  totalChunkCount: number;
-  currentTrackChunkCount: number;
-  currentTrackTotalChunks: number;
+  playbackAssetCount: number;
+  totalPlaybackUnitCount: number;
+  currentTrackOwnedUnitCount: number;
+  currentTrackTotalUnitCount: number;
   currentTrackSources: string[];
 };
+
+type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
 export type LocalMemberPanelState = {
   memberId: string;
   presenceState: RoomMember["presenceState"];
   audioUnlocked: boolean;
-  sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
-  lastSourceStartError: string | null;
   transportLabel: string;
   transportSummary: {
     totalRateKbps: number | null;
@@ -42,8 +39,8 @@ export type LocalMemberPanelState = {
     uploadRateKbps: number | null;
     sampleAgeMs: number | null;
   };
-  cachePlayback: DiagnosticsPlaybackInput | null;
-  playbackSampleAgeMs: number | null;
+  segmentedPlayback: SegmentedPlaybackSnapshot;
+  playbackBitrateKbps: number | null;
   dataReadyCount: number;
   playbackStatus: {
     label: string;
@@ -60,58 +57,44 @@ type MembersPanelProps = {
   localMemberState?: LocalMemberPanelState | null;
 };
 
-type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
-
 function getToneClasses(tone: StatusTone) {
-  switch (tone) {
-    case "success":
-      return {
-        badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-        progress: "bg-emerald-400"
-      };
-    case "accent":
-      return {
-        badge: "border-accent/30 bg-accent/10 text-accent",
-        progress: "bg-accent"
-      };
-    case "warning":
-      return {
-        badge: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-        progress: "bg-amber-400"
-      };
-    case "danger":
-      return {
-        badge: "border-red-500/30 bg-red-500/10 text-red-300",
-        progress: "bg-red-400"
-      };
-    default:
-      return {
-        badge: "border-surface-border bg-background/60 text-foreground-muted",
-        progress: "bg-white/30"
-      };
-  }
+  if (tone === "success") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  if (tone === "accent") return "border-accent/30 bg-accent/10 text-accent";
+  if (tone === "warning") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+  if (tone === "danger") return "border-red-500/30 bg-red-500/10 text-red-300";
+  return "border-surface-border bg-background/60 text-foreground-muted";
 }
 
-function formatCurrentTrackSources(sources: string[]) {
-  const labels = [...new Set(sources)]
-    .map((source) => {
-      if (source === "live_upload") {
-        return "原上传源";
-      }
+function formatRate(value: number | null, sampleAgeMs: number | null = null) {
+  if (value === null) return "未知";
+  const stale = sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
+  return `${formatTransferRateMBps(value)}${stale}`;
+}
 
-      if (source === "local_cache") {
-        return "成员缓存";
-      }
+function formatMetric(value: number | null, unit: string) {
+  if (value === null) return "未知";
+  return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
+}
 
-      return source;
-    })
-    .filter(Boolean);
+function formatDuration(ms: number) {
+  if (ms <= 0) return "0.0s";
+  return `${(ms / 1000).toFixed(1)}s`;
+}
 
-  if (labels.length === 0) {
-    return null;
+function formatSampleAge(sampleAgeMs: number | null) {
+  if (sampleAgeMs === null) return "暂无样本";
+  const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
+  return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
+}
+
+function getPresence(member: RoomMember) {
+  if (member.presenceState === "online") {
+    return { dot: "animate-pulse bg-green-500", text: "text-green-400", label: "在线" };
   }
-
-  return labels.join(" / ");
+  if (member.presenceState === "reconnecting") {
+    return { dot: "bg-amber-400", text: "text-amber-300", label: "重连中" };
+  }
+  return { dot: "bg-neutral-600", text: "text-foreground-muted", label: "离线" };
 }
 
 export function getCurrentTrackStatus(
@@ -119,63 +102,23 @@ export function getCurrentTrackStatus(
   presenceState: RoomMember["presenceState"]
 ) {
   if (presenceState === "offline") {
-    return {
-      label: "离线",
-      detail: "该成员当前不参与实时播放或房间分片提供。",
-      progressPercent: 0,
-      tone: "warning" as const
-    };
+    return { label: "离线", detail: "当前不提供播放资产单元。", tone: "warning" as const };
   }
-
   if (presenceState === "reconnecting") {
-    return {
-      label: "重连中",
-      detail: "连接宽限期内保留成员身份，等待其实时链路恢复。",
-      progressPercent: 0,
-      tone: "warning" as const
-    };
+    return { label: "重新声明中", detail: "连接恢复后会重新发布持有范围。", tone: "warning" as const };
   }
-
-  if (!summary || summary.currentTrackTotalChunks <= 0) {
-    return {
-      label: summary?.announcedTrackCount ? "未提供当前曲目分片" : "未提供分片",
-      detail: summary?.announcedTrackCount
-        ? "本地持有其他房间曲目，但当前曲目还没有可供回传的分片。"
-        : "当前没有可供回传的当前曲目分片，需要从其他在线缓存源拉取。",
-      progressPercent: 0,
-      tone: "neutral" as const
-    };
+  const owned = summary?.currentTrackOwnedUnitCount ?? 0;
+  const total = summary?.currentTrackTotalUnitCount ?? 0;
+  if (total <= 0) {
+    return { label: "等待播放资产", detail: "当前曲目尚未发布分段 Opus 清单。", tone: "neutral" as const };
   }
-
-  const progressPercent = Math.min(
-    100,
-    Math.round((summary.currentTrackChunkCount / summary.currentTrackTotalChunks) * 100)
-  );
-
-  if (summary.currentTrackChunkCount >= summary.currentTrackTotalChunks) {
-    return {
-      label: "已声明完整分片",
-      detail: "房间可见全部分片；是否可播放以 PCM 连续读取状态为准。",
-      progressPercent: 100,
-      tone: "success" as const
-    };
+  if (owned >= total) {
+    return { label: "持有全部播放单元", detail: `已声明 ${owned}/${total} 个 Opus 单元。`, tone: "success" as const };
   }
-
-  if (summary.currentTrackChunkCount > 0) {
-    return {
-      label: `已提供 ${progressPercent}%`,
-      detail: "当前只具备部分分片能力，只用于缓存下载与回传。",
-      progressPercent,
-      tone: progressPercent >= 50 ? ("accent" as const) : ("neutral" as const)
-    };
+  if (owned > 0) {
+    return { label: `持有 ${owned}/${total} 个单元`, detail: "只保留已播放和滚动窗口所需单元。", tone: "accent" as const };
   }
-
-  return {
-    label: "未提供分片",
-    detail: "当前没有可供回传的分片内容。",
-    progressPercent: 0,
-    tone: "neutral" as const
-  };
+  return { label: `持有 0/${total} 个单元`, detail: "当前没有可向其他成员提供的播放单元。", tone: "neutral" as const };
 }
 
 export function getPlaybackStatus(
@@ -184,249 +127,67 @@ export function getPlaybackStatus(
   now = Date.now()
 ) {
   if (presenceState === "offline") {
-    return {
-      label: "未参与缓存播放",
-      detail: "该成员已离线，不参与分片下载或缓存回传。",
-      tone: "warning" as const
-    };
+    return { label: "离线", detail: "该成员当前不参与实时音频传输。", tone: "warning" as const };
   }
-
   if (presenceState === "reconnecting") {
-    return {
-      label: "数据链路重连中",
-      detail: "成员正在恢复房间状态和分片数据通道。",
-      tone: "warning" as const
-    };
+    return { label: "链路重连中", detail: "正在恢复播放资产数据通道。", tone: "warning" as const };
   }
-
-  const playback = peerDiagnostics?.progressivePlaybackStatus ?? null;
-  if (
-    playback?.activeSource ||
-    playback?.fallbackReason ||
-    playback?.progressiveLocalBlockedReason ||
-    playback?.pendingPlaybackIntent ||
-    playback?.lastPlayStartFailure
-  ) {
-    const updatedAtMs = peerDiagnostics
-      ? new Date(peerDiagnostics.updatedAt).getTime()
-      : Number.NaN;
-    return buildDiagnosticsViewModel({
-      presenceState,
-      playback,
-      playbackSampleAgeMs: Number.isFinite(updatedAtMs)
-        ? Math.max(0, now - updatedAtMs)
-        : null
-    }).audibility;
-  }
-
   if (peerDiagnostics?.dataChannelState === "open") {
-    const updatedAtMs = new Date(peerDiagnostics.updatedAt).getTime();
-    const transfer = buildDiagnosticsViewModel({
-      transfer: {
-        downloadRateKbps: peerDiagnostics.pieceDownloadRateKbps,
-        uploadRateKbps: peerDiagnostics.pieceUploadRateKbps,
-        sampleAgeMs: Number.isFinite(updatedAtMs)
-          ? Math.max(0, now - updatedAtMs)
-          : null
-      }
-    }).transfer;
-    if (transfer.active) {
-      return {
-        label: "分片传输中",
-        detail: "数据通道已打开，正在为缓存播放交换音频分片。",
-        tone: "success" as const
-      };
-    }
-    return {
-      label: "数据通道就绪",
-      detail: "可用于按需缓存下载和向其他成员回传分片。",
-      tone: "accent" as const
-    };
+    const sampleAt = new Date(peerDiagnostics.updatedAt).getTime();
+    const sampleFresh = Number.isFinite(sampleAt) && now - sampleAt <= 6_000;
+    const transferring = sampleFresh &&
+      ((peerDiagnostics.pieceDownloadRateKbps ?? 0) > 0 || (peerDiagnostics.pieceUploadRateKbps ?? 0) > 0);
+    return transferring
+      ? { label: "播放单元传输中", detail: "本端观测到该成员正在收发分段资产。", tone: "success" as const }
+      : { label: "DataChannel 就绪", detail: "声音是否正在输出只在该成员本机可确认。", tone: "accent" as const };
   }
-
-  if (
-    peerDiagnostics?.dataConnectionState === "connecting" ||
-    peerDiagnostics?.dataIceState === "checking"
-  ) {
-    return {
-      label: "连接数据通道",
-      detail: "正在建立用于缓存下载的 P2P 数据链路。",
-      tone: "accent" as const
-    };
-  }
-
   if (peerDiagnostics?.transportHealth === "failed") {
     return {
       label: "数据链路失败",
-      detail: peerDiagnostics.lastFailureReason ?? "缓存下载链路不可用，需要等待重连。",
-      tone: "warning" as const
+      detail: peerDiagnostics.lastFailureReason ?? "当前无法交换播放资产单元。",
+      tone: "danger" as const
     };
   }
-
-  return {
-    label: "等待缓存链路",
-    detail: "当前还没有可观测的数据通道或本地播放状态。",
-    tone: "neutral" as const
-  };
+  return { label: "等待数据链路", detail: "尚未观测到可用的播放资产通道。", tone: "neutral" as const };
 }
 
-function getLibraryStatus(summary: MemberTransferSummary | undefined) {
-  if (!summary || summary.announcedTrackCount <= 0) {
-    return {
-      label: "暂无本地分片",
-      detail: "当前没有可供房间复用的本地分片。"
-    };
-  }
-
-  return {
-    label: `${summary.announcedTrackCount} 首房间曲目`,
-    detail: `共持有 ${summary.totalChunkCount} 片内容，可继续为房间提供分片。`
-  };
-}
-
-function getPresenceBadge(member: RoomMember) {
-  if (member.presenceState === "online") {
-    return {
-      dot: "animate-pulse bg-green-500",
-      text: "text-green-400",
-      label: "在线"
-    };
-  }
-
-  if (member.presenceState === "reconnecting") {
-    return {
-      dot: "bg-amber-400",
-      text: "text-amber-300",
-      label: "重连中"
-    };
-  }
-
-  return {
-    dot: "bg-neutral-600",
-    text: "text-foreground-muted",
-    label: "离线"
-  };
-}
-
-function formatMetric(value: number | null, unit: string) {
-  if (value === null) {
-    return "未知";
-  }
-
-  return `${value}${unit}`;
-}
-
-function formatPreciseMetric(
-  value: number | null,
-  unit: string,
-  sampleAgeMs: number | null = null
-) {
-  if (value === null) {
-    return "未知";
-  }
-
-  const rendered = Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value).toString();
-  const staleSuffix =
-    sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
-  return `${rendered}${unit}${staleSuffix}`;
-}
-
-function formatRateM(value: number | null, sampleAgeMs: number | null = null) {
-  if (value === null) {
-    return "未知";
-  }
-  const staleSuffix = sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
-  return `${formatTransferRateMBps(value)}${staleSuffix}`;
-}
-
-function formatSampleAge(sampleAgeMs: number | null) {
-  if (sampleAgeMs === null) {
-    return "暂无样本";
-  }
-
-  const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
-  return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
-}
-
-
-function buildRoomProviders(
-  memberTransferSummaries: MemberTransferSummary[],
-  members: RoomMember[],
-  localMemberId: string | null
-): WanProviderSummary[] {
-  const nicknameById = new Map(members.map((member) => [member.id, member.nickname]));
-  return memberTransferSummaries
-    .filter((summary) => summary.currentTrackChunkCount > 0)
+function buildRoomProviders(summaries: MemberTransferSummary[]): WanProviderSummary[] {
+  return summaries
+    .filter((summary) => summary.currentTrackOwnedUnitCount > 0)
     .map((summary) => ({
       peerId: summary.memberId,
-      nickname:
-        summary.memberId === localMemberId
-          ? nicknameById.get(summary.memberId) ?? "本机"
-          : nicknameById.get(summary.memberId) ?? null,
-      availableChunks: summary.currentTrackChunkCount,
-      totalChunks: summary.currentTrackTotalChunks,
-      isPreferredSource: false
+      availableUnits: summary.currentTrackOwnedUnitCount,
+      totalUnits: summary.currentTrackTotalUnitCount
     }));
 }
 
 function resolveRoomWanScore(input: {
-  members: RoomMember[];
-  memberTransferSummaries: MemberTransferSummary[];
+  summaries: MemberTransferSummary[];
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   localMemberState: LocalMemberPanelState | null;
 }): WanLinkScore {
-  const providers = buildRoomProviders(
-    input.memberTransferSummaries,
-    input.members,
-    input.localMemberState?.memberId ?? null
-  );
-  const localSummary = input.localMemberState
-    ? input.memberTransferSummaries.find(
-        (summary) => summary.memberId === input.localMemberState?.memberId
-      )
-    : undefined;
-  const localOwnedChunks = localSummary?.currentTrackChunkCount ?? 0;
-  const localTotalChunks = localSummary?.currentTrackTotalChunks ?? 0;
-  const localPlaybackComplete =
-    localTotalChunks > 0 && localOwnedChunks >= localTotalChunks;
-  const localDownloadRateKbps = input.localMemberState?.pieceSummary.downloadRateKbps ?? null;
-  const localUploadRateKbps = input.localMemberState?.pieceSummary.uploadRateKbps ?? null;
-
-  // Prefer the best remote peer path for room-level WAN score. Fill ETA prefers
-  // local aggregate piece download (multi-provider total) when available.
+  const providers = buildRoomProviders(input.summaries);
+  const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ?? 192;
   const remoteScores = input.peerDiagnostics
     .filter((snapshot) => snapshot.peerId !== "system")
-    .map((snapshot) =>
-      buildWanLinkScoreFromPeerDiagnostic({
-        diagnostic: snapshot,
-        providers,
-        ownedChunks: localOwnedChunks,
-        totalChunks: localTotalChunks,
-        localPlaybackComplete,
-        downloadRateKbps: localDownloadRateKbps ?? snapshot.pieceDownloadRateKbps,
-        uploadRateKbps: localUploadRateKbps ?? snapshot.pieceUploadRateKbps,
-        rttMs: snapshot.currentRoundTripTimeMs
-      })
-    )
+    .map((diagnostic) => buildWanLinkScoreFromPeerDiagnostic({
+      diagnostic,
+      providers,
+      playbackBitrateKbps,
+      downloadRateKbps:
+        input.localMemberState?.pieceSummary.downloadRateKbps ?? diagnostic.pieceDownloadRateKbps,
+      uploadRateKbps:
+        input.localMemberState?.pieceSummary.uploadRateKbps ?? diagnostic.pieceUploadRateKbps
+    }))
     .sort((left, right) => right.score - left.score);
-
-  if (remoteScores[0]) {
-    return remoteScores[0];
-  }
-
-  return buildWanLinkScore({
-    candidateType: null,
+  return remoteScores[0] ?? buildWanLinkScore({
     protocol: "udp",
     rttMs: input.localMemberState?.transportSummary.latencyMs ?? null,
-    downloadRateKbps: localDownloadRateKbps,
-    uploadRateKbps: localUploadRateKbps,
-    transportScore: "healthy",
-    dataChannelState:
-      (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
-    providers,
-    ownedChunks: localOwnedChunks,
-    totalChunks: localTotalChunks,
-    localPlaybackComplete
+    downloadRateKbps: input.localMemberState?.pieceSummary.downloadRateKbps ?? null,
+    uploadRateKbps: input.localMemberState?.pieceSummary.uploadRateKbps ?? null,
+    playbackBitrateKbps,
+    dataChannelState: (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
+    providers
   });
 }
 
@@ -436,414 +197,165 @@ function MembersPanelBase({
   peerDiagnostics = [],
   localMemberState = null
 }: MembersPanelProps) {
-  const summaryByMemberId = new Map(
-    memberTransferSummaries.map((summary) => [summary.memberId, summary])
-  );
-  const diagnosticsByPeerId = new Map(
-    peerDiagnostics.map((snapshot) => [snapshot.peerId, snapshot])
-  );
-  const localSummary = localMemberState
-    ? summaryByMemberId.get(localMemberState.memberId)
-    : undefined;
-  const localDiagnosticsView = localMemberState
-    ? buildDiagnosticsViewModel({
-        presenceState: localMemberState.presenceState,
-        playback: localMemberState.cachePlayback,
-        playbackSampleAgeMs: localMemberState.playbackSampleAgeMs,
-        currentTrack: {
-          visibleChunks: localSummary?.currentTrackChunkCount ?? 0,
-          totalChunks: localSummary?.currentTrackTotalChunks ?? 0
-        },
-        transfer: localMemberState.pieceSummary,
-        dataLink: {
-          openCount: localMemberState.dataReadyCount,
-          connectedPeerCount: localMemberState.dataReadyCount
-        }
-      })
-    : null;
-  const localPlaybackToneClasses = localMemberState
-    ? getToneClasses(localDiagnosticsView?.audibility.tone ?? "neutral")
-    : null;
-
+  const summaryByMemberId = new Map(memberTransferSummaries.map((item) => [item.memberId, item]));
+  const diagnosticsByPeerId = new Map(peerDiagnostics.map((item) => [item.peerId, item]));
   const roomWanScore = resolveRoomWanScore({
-    members,
-    memberTransferSummaries,
+    summaries: memberTransferSummaries,
     peerDiagnostics,
     localMemberState
   });
-  const wanToneClasses = getToneClasses(roomWanScore.tone);
 
   return (
-    <section className="flex w-full flex-col gap-2.5">
-      <div className="rounded-xl border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
-        在线状态、角色和缓存分片来自房间共享状态；链路速率、延迟和收发带宽来自当前设备的本端观测，
-        不同成员看到的数值不一定相同。
-      </div>
+    <section className="flex w-full flex-col gap-3">
+      <p className="rounded-lg border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
+        播放状态、AudioContext 与前向缓冲仅显示本机真实值；其他成员只展示其已声明的 v4 播放资产范围和本端 DataChannel 观测。
+      </p>
 
-      <div className="rounded-xl border border-surface-border bg-surface/30 p-2.5">
+      <section className="border-y border-surface-border py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
-                外网链路评分
-              </span>
-              <span
-                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${wanToneClasses.badge}`}
-              >
+              <span className="text-[10px] font-semibold text-foreground-muted">外网实时音频评分</span>
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getToneClasses(roomWanScore.tone)}`}>
                 {roomWanScore.grade} · {roomWanScore.score}
               </span>
             </div>
-            <strong className="mt-2 block text-sm font-semibold text-foreground">
-              {roomWanScore.pathLabel}
-            </strong>
-            <p className="mt-1 text-xs leading-5 text-foreground-muted">
-              {roomWanScore.summary}
-            </p>
+            <strong className="mt-1.5 block text-sm text-foreground">{roomWanScore.pathLabel}</strong>
+            <p className="mt-1 text-xs leading-5 text-foreground-muted">{roomWanScore.summary}</p>
           </div>
-          <div className="grid min-w-[14rem] grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-surface-border bg-background/35 px-2.5 py-2 text-[10px] text-foreground-muted">
-            <span>RTT：{roomWanScore.metrics.rttLabel}</span>
-            <span>下载：{roomWanScore.metrics.downloadLabel}</span>
-            <span>上传：{roomWanScore.metrics.uploadLabel}</span>
-            <span>供片：{roomWanScore.metrics.providerLabel}</span>
-            <span className="col-span-2">
-              预估满曲：{roomWanScore.metrics.fillEtaLabel}
-            </span>
-          </div>
+          <dl className="grid min-w-[15rem] grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-foreground-muted">
+            <div>RTT：{roomWanScore.metrics.rttLabel}</div>
+            <div>下载：{roomWanScore.metrics.downloadLabel}</div>
+            <div>音频：{roomWanScore.metrics.audioBitrateLabel}</div>
+            <div>余量：{roomWanScore.metrics.headroomLabel}</div>
+            <div>上传：{roomWanScore.metrics.uploadLabel}</div>
+            <div>来源：{roomWanScore.metrics.providerLabel}</div>
+          </dl>
         </div>
-        <ul className="mt-2 space-y-1 text-[10px] leading-4 text-foreground-muted">
-          {roomWanScore.tips.slice(0, 3).map((tip) => (
-            <li key={tip} className="flex gap-1.5">
-              <span className="text-foreground-muted/70">•</span>
-              <span>{tip}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+        <p className="mt-2 text-[10px] leading-4 text-foreground-muted">{roomWanScore.tips[0]}</p>
+      </section>
 
-      {localMemberState && localPlaybackToneClasses ? (
-        <div className="grid grid-cols-1 gap-2 rounded-xl border border-surface-border bg-surface/30 p-2.5 sm:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-lg border border-surface-border bg-background/35 px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
-                本机可听状态
-              </span>
-              <span
-                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${localPlaybackToneClasses.badge}`}
-              >
-                {localDiagnosticsView?.playbackMode ?? "尚未建立"}
-              </span>
-            </div>
-            <strong className="mt-2 block text-base font-semibold text-foreground">
-              {localDiagnosticsView?.audibility.label ?? "尚未建立"}
-            </strong>
-            <p className="mt-1 text-xs leading-5 text-foreground-muted">
-              {localDiagnosticsView?.audibility.detail ?? "尚未建立可听播放链路。"}
-            </p>
+      {localMemberState ? (
+        <section className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-surface-border pb-3 sm:grid-cols-4">
+          <div>
+            <span className="text-[10px] text-foreground-muted">本机输出</span>
+            <strong className="mt-1 block text-sm text-foreground">{localMemberState.playbackStatus.label}</strong>
           </div>
-
-          <div className="rounded-lg border border-surface-border bg-background/35 px-3 py-2 text-xs text-foreground-muted">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-foreground-muted">
-              当前链路
-            </span>
-            <strong className="mt-2 block text-sm font-semibold text-foreground">
-              {localMemberState.transportLabel}
+          <div>
+            <span className="text-[10px] text-foreground-muted">音频格式</span>
+            <strong className="mt-1 block text-sm text-foreground">
+              Opus · {localMemberState.playbackBitrateKbps ?? "--"} kbps
             </strong>
-            <p className="mt-1 leading-5">
-              音频解锁：{localMemberState.audioUnlocked ? "已解锁" : "等待点击播放"}
-            </p>
-            {localMemberState.lastSourceStartError ? (
-              <p className="mt-1 leading-5 text-red-300">
-                音源错误：{localMemberState.lastSourceStartError}
-              </p>
-            ) : null}
           </div>
-        </div>
+          <div>
+            <span className="text-[10px] text-foreground-muted">前向可播</span>
+            <strong className="mt-1 block text-sm text-foreground">
+              {formatDuration(localMemberState.segmentedPlayback.bufferedMs)}
+            </strong>
+          </div>
+          <div>
+            <span className="text-[10px] text-foreground-muted">AudioContext</span>
+            <strong className="mt-1 block text-sm text-foreground">
+              {localMemberState.segmentedPlayback.audioContextState ?? "未创建"}
+            </strong>
+          </div>
+          {localMemberState.segmentedPlayback.lastError ? (
+            <p className="col-span-2 text-[10px] leading-4 text-amber-300 sm:col-span-4">
+              最近错误：{localMemberState.segmentedPlayback.lastError}
+            </p>
+          ) : null}
+        </section>
       ) : null}
 
-      {members.length > 0 ? (
-        members.map((member) => {
-          const summary = summaryByMemberId.get(member.id);
-          const isLocalMember = localMemberState?.memberId === member.id;
-          const peerDiagnosticsSnapshot = member.peerId
-            ? diagnosticsByPeerId.get(member.peerId)
-            : undefined;
-          const playbackStatus = isLocalMember
-            ? localDiagnosticsView?.audibility ?? localMemberState.playbackStatus
-            : getPlaybackStatus(member.presenceState, peerDiagnosticsSnapshot);
-          const diagnosticsView = isLocalMember
-            ? localDiagnosticsView
-            : buildDiagnosticsViewModel({
-                presenceState: member.presenceState,
-                playback: peerDiagnosticsSnapshot?.progressivePlaybackStatus ?? null,
-                playbackSampleAgeMs: peerDiagnosticsSnapshot
-                  ? Math.max(0, Date.now() - new Date(peerDiagnosticsSnapshot.updatedAt).getTime())
-                  : null,
-                currentTrack: {
-                  visibleChunks: summary?.currentTrackChunkCount ?? 0,
-                  totalChunks: summary?.currentTrackTotalChunks ?? 0
-                },
-                transfer: peerDiagnosticsSnapshot
-                  ? {
-                      downloadRateKbps: peerDiagnosticsSnapshot.pieceDownloadRateKbps,
-                      uploadRateKbps: peerDiagnosticsSnapshot.pieceUploadRateKbps,
-                      sampleAgeMs: Math.max(
-                        0,
-                        Date.now() - new Date(peerDiagnosticsSnapshot.updatedAt).getTime()
-                      )
-                    }
-                  : null
-              });
-          const currentTrackStatus = getCurrentTrackStatus(summary, member.presenceState);
-          const libraryStatus = getLibraryStatus(summary);
-          const sourceSummary = formatCurrentTrackSources(summary?.currentTrackSources ?? []);
-          const toneClasses = getToneClasses(currentTrackStatus.tone);
-          const playbackToneClasses = getToneClasses(playbackStatus.tone);
-          const presenceBadge = getPresenceBadge(member);
-          const latencyMs = isLocalMember
-            ? localMemberState.transportSummary.latencyMs
-            : peerDiagnosticsSnapshot?.currentRoundTripTimeMs ?? null;
-          const pieceDownloadRateKbps = isLocalMember
-            ? localMemberState.pieceSummary.downloadRateKbps
-            : peerDiagnosticsSnapshot?.pieceDownloadRateKbps ?? null;
-          const pieceUploadRateKbps = isLocalMember
-            ? localMemberState.pieceSummary.uploadRateKbps
-            : peerDiagnosticsSnapshot?.pieceUploadRateKbps ?? null;
+      {members.length > 0 ? members.map((member) => {
+        const summary = summaryByMemberId.get(member.id);
+        const isLocal = localMemberState?.memberId === member.id;
+        const diagnostic = member.peerId ? diagnosticsByPeerId.get(member.peerId) : undefined;
+        const playbackStatus = isLocal
+          ? localMemberState.playbackStatus
+          : getPlaybackStatus(member.presenceState, diagnostic);
+        const assetStatus = getCurrentTrackStatus(summary, member.presenceState);
+        const presence = getPresence(member);
+        const downloadRate = isLocal
+          ? localMemberState.pieceSummary.downloadRateKbps
+          : diagnostic?.pieceDownloadRateKbps ?? null;
+        const uploadRate = isLocal
+          ? localMemberState.pieceSummary.uploadRateKbps
+          : diagnostic?.pieceUploadRateKbps ?? null;
+        const latency = isLocal
+          ? localMemberState.transportSummary.latencyMs
+          : diagnostic?.currentRoundTripTimeMs ?? null;
+        const sourceLabel = summary?.currentTrackSources.includes("live_upload")
+          ? "上传端播放资产"
+          : summary?.currentTrackSources.includes("local_cache")
+            ? "本地持有播放资产"
+            : "暂无声明";
+        const remoteWan = !isLocal && diagnostic
+          ? buildWanLinkScoreFromPeerDiagnostic({
+              diagnostic,
+              playbackBitrateKbps: localMemberState?.playbackBitrateKbps ?? 192,
+              providers: summary ? [{
+                peerId: member.id,
+                availableUnits: summary.currentTrackOwnedUnitCount,
+                totalUnits: summary.currentTrackTotalUnitCount
+              }] : []
+            })
+          : null;
 
-          return (
-            <div
-              key={member.id}
-              className="flex flex-col gap-2.5 rounded-xl border border-surface-border bg-surface/30 p-2.5"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <strong className="text-[13px] font-semibold leading-none text-foreground">
-                    {member.nickname}
-                  </strong>
-                  <span
-                    className={`text-[10px] ${
-                      member.role === "host" ? "font-bold text-accent" : "text-foreground-muted"
-                    }`}
-                  >
-                    {member.role === "host" ? "房主" : "成员"}
+        return (
+          <article key={member.id} className="rounded-lg border border-surface-border bg-surface/25 p-3">
+            <header className="flex items-center justify-between gap-3">
+              <div>
+                <strong className="text-[13px] text-foreground">{member.nickname}</strong>
+                <span className={`ml-2 text-[10px] ${member.role === "host" ? "font-semibold text-accent" : "text-foreground-muted"}`}>
+                  {member.role === "host" ? "房主" : "成员"}{isLocal ? " · 本机" : ""}
+                </span>
+              </div>
+              <span className={`flex items-center gap-1.5 text-xs ${presence.text}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />{presence.label}
+              </span>
+            </header>
+
+            <div className="mt-3 grid grid-cols-1 gap-3 border-t border-surface-border pt-3 sm:grid-cols-3">
+              <div>
+                <span className="text-[10px] text-foreground-muted">播放 / 数据状态</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <strong className="text-xs text-foreground">{playbackStatus.label}</strong>
+                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${getToneClasses(playbackStatus.tone)}`}>
+                    {isLocal ? localMemberState.playbackStatus.badgeText : diagnostic?.dataChannelState ?? "未知"}
                   </span>
                 </div>
-
-                <div className="flex items-center gap-1.5">
-                  <div className={`h-1.5 w-1.5 rounded-full ${presenceBadge.dot}`} />
-                  <em className={`text-xs not-italic ${presenceBadge.text}`}>
-                    {presenceBadge.label}
-                  </em>
-                </div>
+                <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{playbackStatus.detail}</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-2 text-[10px] leading-4 text-foreground-muted">
-                  <span className="block text-foreground-muted">
-                    {isLocalMember ? localMemberState.transportLabel : "数据链路（本端观测）"}
-                  </span>
-                  {isLocalMember ? (
-                    <>
-                      <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-                        <span>
-                          分片总速:{" "}
-                          {formatRateM(
-                            localMemberState.pieceSummary.downloadRateKbps === null &&
-                              localMemberState.pieceSummary.uploadRateKbps === null
-                              ? null
-                              : (localMemberState.pieceSummary.downloadRateKbps ?? 0) +
-                                (localMemberState.pieceSummary.uploadRateKbps ?? 0),
-                            localMemberState.pieceSummary.sampleAgeMs
-                          )}
-                        </span>
-                        <span>
-                          延迟:{" "}
-                          {formatPreciseMetric(
-                            localMemberState.transportSummary.latencyMs,
-                            "ms",
-                            localMemberState.transportSummary.sampleAgeMs
-                          )}
-                        </span>
-                        <span>
-                          Data 接收:{" "}
-                          {formatRateM(
-                            localMemberState.transportSummary.receiveRateKbps,
-                            localMemberState.transportSummary.sampleAgeMs
-                          )}
-                        </span>
-                        <span>
-                          Data 发送:{" "}
-                          {formatRateM(
-                            localMemberState.transportSummary.sendRateKbps,
-                            localMemberState.transportSummary.sampleAgeMs
-                          )}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[10px] text-foreground-muted/80">
-                        最近样本：{formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      {(() => {
-                        const remoteWanScore = peerDiagnosticsSnapshot
-                          ? buildWanLinkScoreFromPeerDiagnostic({
-                              diagnostic: peerDiagnosticsSnapshot,
-                              providers: [
-                                {
-                                  peerId: member.id,
-                                  availableChunks: summary?.currentTrackChunkCount ?? 0,
-                                  totalChunks: summary?.currentTrackTotalChunks ?? 0
-                                }
-                              ]
-                            })
-                          : null;
-                        return (
-                          <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-                            <span>DataChannel: {peerDiagnosticsSnapshot?.dataChannelState ?? "未知"}</span>
-                            <span>延迟: {formatMetric(latencyMs, "ms")}</span>
-                            <span>路径: {remoteWanScore?.pathLabel ?? "未知"}</span>
-                            <span>
-                              评分:{" "}
-                              {remoteWanScore
-                                ? `${remoteWanScore.grade} ${remoteWanScore.score}`
-                                : "未知"}
-                            </span>
-                            <span>
-                              buffered:{" "}
-                              {formatMetric(
-                                peerDiagnosticsSnapshot?.dataBufferedAmountBytes ?? null,
-                                " bytes"
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-2 text-[10px] leading-4 text-foreground-muted">
-                  <span className="block text-foreground-muted">
-                    {isLocalMember ? "分片同步（本机汇总）" : "分片同步（本端观测）"}
-                  </span>
-                  <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-                    <span>
-                      下载:{" "}
-                      {isLocalMember
-                        ? formatRateM(
-                            localMemberState.pieceSummary.downloadRateKbps,
-                            localMemberState.pieceSummary.sampleAgeMs
-                          )
-                        : formatRateM(pieceDownloadRateKbps)}
-                    </span>
-                    <span>
-                      上传:{" "}
-                      {isLocalMember
-                        ? formatRateM(
-                            localMemberState.pieceSummary.uploadRateKbps,
-                            localMemberState.pieceSummary.sampleAgeMs
-                          )
-                        : formatRateM(pieceUploadRateKbps)}
-                    </span>
-                  </div>
-                  {isLocalMember ? (
-                    <p className="mt-1 text-[10px] text-foreground-muted/80">
-                      最近样本：{formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}
-                    </p>
-                  ) : null}
-                </div>
+              <div>
+                <span className="text-[10px] text-foreground-muted">当前播放资产</span>
+                <strong className="mt-1 block text-xs text-foreground">{assetStatus.label}</strong>
+                <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{assetStatus.detail}</p>
+                <p className="mt-1 text-[10px] text-foreground-muted/80">来源：{sourceLabel}</p>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 xl:grid-cols-[1.05fr_1.05fr_0.9fr]">
-                <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
-                  <span className="block text-[10px] text-foreground-muted">播放状态</span>
-                  <div className="mt-1.5 flex items-center justify-between gap-3">
-                    <strong className="text-[13px] font-semibold text-foreground">
-                      {playbackStatus.label}
-                    </strong>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${playbackToneClasses.badge}`}
-                    >
-                      {isLocalMember
-                        ? diagnosticsView?.playbackMode ?? "尚未建立"
-                        : peerDiagnosticsSnapshot?.transportHealth ?? "未知"}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
-                    {playbackStatus.detail}
-                  </p>
-                  {isLocalMember && localMemberState.cachePlayback ? (
-                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-                      <span>模式：{diagnosticsView?.playbackMode ?? "尚未建立"}</span>
-                      <span>缓冲：{diagnosticsView?.cache.healthLabel ?? "暂无有效样本"}</span>
-                      <span>前向：{diagnosticsView?.cache.aheadLabel ?? "暂无有效样本"}</span>
-                      <span>
-                        PCM 连续片：{diagnosticsView?.cache.pcmContiguousChunks ?? "暂无有效样本"}
-                      </span>
-                      <span className="col-span-2">同步：{diagnosticsView?.sync.label ?? "暂无有效样本"}</span>
-                      {diagnosticsView?.activeIssue ? (
-                        <span className="col-span-2 text-amber-300">
-                          当前问题：{diagnosticsView.activeIssue}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
+              <div>
+                <span className="text-[10px] text-foreground-muted">本端链路观测</span>
+                <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
+                  <span>下载：{formatRate(downloadRate, isLocal ? localMemberState.pieceSummary.sampleAgeMs : null)}</span>
+                  <span>上传：{formatRate(uploadRate, isLocal ? localMemberState.pieceSummary.sampleAgeMs : null)}</span>
+                  <span>RTT：{formatMetric(latency, "ms")}</span>
+                  <span>路径：{remoteWan?.pathLabel ?? (isLocal ? "汇总" : "未知")}</span>
                 </div>
-
-                <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
-                  <span className="block text-[10px] text-foreground-muted">当前曲目分片</span>
-                  <div className="mt-1.5 flex items-center justify-between gap-3">
-                    <strong className="text-[13px] font-semibold text-foreground">
-                      {currentTrackStatus.label}
-                    </strong>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${toneClasses.badge}`}
-                    >
-                      {summary?.currentTrackTotalChunks
-                        ? `${summary.currentTrackChunkCount}/${summary.currentTrackTotalChunks}`
-                        : "0/0"}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/6">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${toneClasses.progress}`}
-                      style={{ width: `${currentTrackStatus.progressPercent}%` }}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
-                    {currentTrackStatus.detail}
+                {isLocal ? (
+                  <p className="mt-1 text-[10px] text-foreground-muted/80">
+                    样本：{formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}
                   </p>
-                </div>
-
-                <div className="rounded-lg border border-surface-border bg-background/40 px-2.5 py-2">
-                  <span className="block text-[10px] text-foreground-muted">本地分片库存</span>
-                  <strong className="mt-1.5 block text-[13px] font-semibold text-foreground">
-                    {libraryStatus.label}
-                  </strong>
-                  <p className="mt-1.5 text-[10px] leading-4 text-foreground-muted">
-                    {libraryStatus.detail}
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-surface-border bg-background/30 px-2.5 py-1.5 text-[10px] leading-4 text-foreground-muted">
-                {sourceSummary ? (
-                  <span>同步来源：{sourceSummary}</span>
-                ) : member.presenceState === "online" ? (
-                  <span>同步来源：当前没有可供回传的当前曲目分片，将依赖其他在线缓存源。</span>
-                ) : member.presenceState === "reconnecting" ? (
-                  <span>同步来源：连接恢复后会重新评估该成员的分片能力。</span>
-                ) : (
-                  <span>同步来源：离线成员当前不会参与缓存分发。</span>
-                )}
+                ) : null}
               </div>
             </div>
-          );
-        })
-      ) : (
-        <div className="rounded-xl border-2 border-dashed border-surface-border px-4 py-6 text-center">
-          <p className="text-xs text-foreground-muted/70">当前还没有成员进入房间。</p>
-        </div>
+          </article>
+        );
+      }) : (
+        <p className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
+          当前还没有成员进入房间。
+        </p>
       )}
     </section>
   );

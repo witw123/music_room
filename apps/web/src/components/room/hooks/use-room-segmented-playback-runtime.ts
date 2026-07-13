@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type {
   AssetAvailabilityAnnouncement,
-  PeerDiagnosticsSnapshot,
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
@@ -15,7 +14,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   peerId: string;
   volume: number;
   audioUnlocked: boolean;
-  peerDiagnostics: PeerDiagnosticsSnapshot[];
+  setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
   requestAssetUnits: Parameters<typeof useSegmentedOpusPlayback>[0]["requestAssetUnits"];
   emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
@@ -32,37 +31,8 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const setLastSourceStartError = input.setLastSourceStartError;
   const setMediaConnectionState = input.setMediaConnectionState;
   const setSourceStartState = input.setSourceStartState;
-  const network = useMemo(() => {
-    const throughput = input.peerDiagnostics.flatMap((diagnostic) =>
-      typeof diagnostic.streamThroughputKbps === "number"
-        ? [diagnostic.streamThroughputKbps]
-        : typeof diagnostic.transportReceiveBitrateKbps === "number"
-          ? [diagnostic.transportReceiveBitrateKbps]
-          : []
-    );
-    const rtt = input.peerDiagnostics.flatMap((diagnostic) =>
-      typeof diagnostic.pieceRttMsP95 === "number"
-        ? [diagnostic.pieceRttMsP95]
-        : typeof diagnostic.currentRoundTripTimeMs === "number"
-          ? [diagnostic.currentRoundTripTimeMs]
-          : []
-    );
-    return {
-      throughputKbps: throughput.length > 0 ? Math.max(...throughput) : null,
-      rttP95Ms: rtt.length > 0 ? Math.min(...rtt) : null,
-      playbackChannelBufferedBytes: Math.max(
-        0,
-        ...input.peerDiagnostics.map(
-          (diagnostic) => diagnostic.dataBufferedAmountBytes ?? 0
-        )
-      ),
-      deadlineMissesLast30s: input.peerDiagnostics.reduce(
-        (total, diagnostic) =>
-          total + (diagnostic.progressivePlaybackStatus?.waitingEventsLast30s ?? 0),
-        0
-      )
-    };
-  }, [input.peerDiagnostics]);
+  const setAudioUnlocked = input.setAudioUnlocked;
+  const audioUnlocked = input.audioUnlocked;
 
   const playback = useSegmentedOpusPlayback({
     roomSnapshot: input.roomSnapshot,
@@ -72,10 +42,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     audioUnlocked: input.audioUnlocked,
     availabilityByAsset: input.availabilityByAsset,
     requestAssetUnits: input.requestAssetUnits,
-    emitAssetAvailability: input.emitAssetAvailability,
-    network
+    emitAssetAvailability: input.emitAssetAvailability
   });
   const wasUnavailableRef = useRef(false);
+  const lastReportedErrorRef = useRef<string | null>(null);
   const completedTimelineRef = useRef<string | null>(null);
   useEffect(() => {
     if (playback.state === "unavailable") {
@@ -88,6 +58,37 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [playback.state, setStatusMessage]);
 
   useEffect(() => {
+    if (
+      audioUnlocked &&
+      playback.state === "awaiting-unlock" &&
+      playback.audioContextState !== "running"
+    ) {
+      setAudioUnlocked(false);
+      setStatusMessage("音频上下文已暂停，请点击播放或在房间内交互以恢复声音。");
+    }
+  }, [
+    audioUnlocked,
+    playback.audioContextState,
+    playback.state,
+    setAudioUnlocked,
+    setStatusMessage
+  ]);
+
+  useEffect(() => {
+    if (playback.lastError && playback.lastError !== lastReportedErrorRef.current) {
+      lastReportedErrorRef.current = playback.lastError;
+      setLastSourceStartError(playback.lastError);
+      setStatusMessage(`分段播放正在自动恢复：${playback.lastError}`);
+      return;
+    }
+    if (!playback.lastError && lastReportedErrorRef.current && playback.state === "live") {
+      lastReportedErrorRef.current = null;
+      setLastSourceStartError(null);
+      setStatusMessage("分段播放已自动恢复。");
+    }
+  }, [playback.lastError, playback.state, setLastSourceStartError, setStatusMessage]);
+
+  useEffect(() => {
     if (playback.state === "live") {
       setSourceStartState("live");
       setMediaConnectionState("live");
@@ -97,6 +98,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     if (playback.state === "buffering") {
       setSourceStartState("starting");
       setMediaConnectionState("buffering");
+      if (playback.lastError) {
+        setLastSourceStartError(playback.lastError);
+      }
       return;
     }
     if (playback.state === "awaiting-unlock") {
@@ -115,6 +119,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     setMediaConnectionState("idle");
   }, [
     playback.state,
+    playback.lastError,
     setLastSourceStartError,
     setMediaConnectionState,
     setSourceStartState

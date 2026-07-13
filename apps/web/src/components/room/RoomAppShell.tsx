@@ -75,7 +75,6 @@ export function RoomAppShell({
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
-        cachedTrackCount={uploads.cachedTrackCount}
         cacheLibraryTracks={uploads.cacheLibraryTracks}
         manualCacheTasks={uploads.manualCacheTasks}
         availabilitySummary={workspaceViewModel.availabilitySummary}

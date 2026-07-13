@@ -11,32 +11,23 @@ export type WanLinkTone = "neutral" | "success" | "warning" | "danger" | "accent
 export type WanProviderSummary = {
   peerId: string;
   nickname?: string | null;
-  availableChunks: number;
-  totalChunks: number;
+  availableUnits: number;
+  totalUnits: number;
   isPreferredSource?: boolean;
 };
 
 export type WanLinkScoreInput = {
-  /** Local observation of the peer path (or aggregate for local member). */
   candidateType?: string | null;
   protocol?: string | null;
   relayProtocol?: string | null;
   rttMs?: number | null;
   downloadRateKbps?: number | null;
   uploadRateKbps?: number | null;
+  playbackBitrateKbps?: number | null;
   transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
   dataChannelState?: string | null;
   bufferedAmountBytes?: number | null;
-  /** Current-track cache providers visible to this client. */
   providers?: WanProviderSummary[];
-  /** Remaining bytes for the active track fill estimate. */
-  remainingBytes?: number | null;
-  /** Owned contiguous / visible chunk progress for the active track. */
-  ownedChunks?: number | null;
-  totalChunks?: number | null;
-  chunkSizeBytes?: number | null;
-  /** The active track is already complete in the local cache. */
-  localPlaybackComplete?: boolean;
 };
 
 export type WanLinkScore = {
@@ -51,7 +42,8 @@ export type WanLinkScore = {
     downloadLabel: string;
     uploadLabel: string;
     providerLabel: string;
-    fillEtaLabel: string;
+    audioBitrateLabel: string;
+    headroomLabel: string;
   };
   tips: string[];
 };
@@ -88,63 +80,18 @@ export function resolveWanPathLabel(input: {
   return `${kind} (${candidate}/${protocol})`;
 }
 
-export function estimateTrackFillEtaSeconds(input: {
-  remainingBytes?: number | null;
-  downloadRateKbps?: number | null;
-}) {
-  const remainingBytes = finitePositive(input.remainingBytes);
-  const downloadRateKbps = finitePositive(input.downloadRateKbps);
-  if (!remainingBytes || !downloadRateKbps) {
-    return null;
-  }
-  const bytesPerSecond = (downloadRateKbps * 1000) / 8;
-  if (bytesPerSecond <= 0) {
-    return null;
-  }
-  return remainingBytes / bytesPerSecond;
-}
-
-export function formatEtaSeconds(seconds: number | null | undefined) {
-  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) {
-    return "无法估计";
-  }
-  if (seconds < 5) {
-    return "即将完成";
-  }
-  if (seconds < 60) {
-    return `约 ${Math.ceil(seconds)} 秒`;
-  }
-  if (seconds < 3600) {
-    const minutes = Math.floor(seconds / 60);
-    const rest = Math.ceil(seconds % 60);
-    return rest > 0 ? `约 ${minutes} 分 ${rest} 秒` : `约 ${minutes} 分钟`;
-  }
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.round((seconds % 3600) / 60);
-  return minutes > 0 ? `约 ${hours} 小时 ${minutes} 分` : `约 ${hours} 小时`;
-}
-
 function scoreFromProfile(profile: PeerLinkProfile) {
   switch (profile) {
-    case "fast-direct":
-      return 34;
-    case "standard-direct":
-      return 28;
-    case "relay-udp":
-      return 18;
-    case "constrained":
-      return 8;
-    case "severe":
-      return 0;
-    default:
-      return 12;
+    case "fast-direct": return 34;
+    case "standard-direct": return 28;
+    case "relay-udp": return 18;
+    case "constrained": return 8;
+    case "severe": return 0;
   }
 }
 
 function scoreFromRtt(rttMs: number | null) {
-  if (rttMs === null) {
-    return 8;
-  }
+  if (rttMs === null) return 8;
   if (rttMs <= 40) return 22;
   if (rttMs <= 80) return 20;
   if (rttMs <= 120) return 16;
@@ -154,39 +101,20 @@ function scoreFromRtt(rttMs: number | null) {
   return 0;
 }
 
-function scoreFromThroughput(
-  downloadRateKbps: number | null,
-  localPlaybackComplete = false
-) {
-  if (localPlaybackComplete) {
-    // A low recent sync sample is not a playback bottleneck once the active
-    // track is complete locally.
-    return 18;
-  }
-  if (downloadRateKbps === null) {
-    return 8;
-  }
-  // 24 Mbps (~3 MB/s) is the documented comfort target for large tracks.
-  if (downloadRateKbps >= 24_000) return 28;
-  if (downloadRateKbps >= 12_000) return 24;
-  if (downloadRateKbps >= 6_000) return 20;
-  if (downloadRateKbps >= 3_000) return 15;
-  if (downloadRateKbps >= 1_500) return 10;
-  if (downloadRateKbps >= 800) return 6;
+function scoreFromThroughput(downloadRateKbps: number | null, playbackBitrateKbps: number) {
+  if (downloadRateKbps === null) return 8;
+  const ratio = downloadRateKbps / playbackBitrateKbps;
+  if (ratio >= 8) return 28;
+  if (ratio >= 4) return 24;
+  if (ratio >= 2) return 20;
+  if (ratio >= 1.25) return 15;
+  if (ratio >= 1) return 10;
+  if (ratio >= 0.75) return 6;
   return 2;
 }
 
-function scoreFromProviders(providerCount: number, fullProviderCount: number) {
-  if (providerCount <= 0) {
-    return 0;
-  }
-  let score = Math.min(12, providerCount * 4);
-  if (fullProviderCount >= 2) {
-    score += 6;
-  } else if (fullProviderCount === 1) {
-    score += 3;
-  }
-  return Math.min(18, score);
+function scoreFromProviders(providerCount: number) {
+  return Math.min(18, Math.max(0, providerCount) * 6);
 }
 
 function gradeFromScore(score: number): WanLinkScore["grade"] {
@@ -198,21 +126,14 @@ function gradeFromScore(score: number): WanLinkScore["grade"] {
 }
 
 function toneFromGrade(grade: WanLinkScore["grade"]): WanLinkTone {
-  switch (grade) {
-    case "A":
-      return "success";
-    case "B":
-      return "accent";
-    case "C":
-      return "warning";
-    case "D":
-      return "warning";
-    case "F":
-      return "danger";
-  }
+  if (grade === "A") return "success";
+  if (grade === "B") return "accent";
+  if (grade === "C" || grade === "D") return "warning";
+  return "danger";
 }
 
 export function buildWanLinkScore(input: WanLinkScoreInput): WanLinkScore {
+  const playbackBitrateKbps = finitePositive(input.playbackBitrateKbps) ?? 192;
   const profileInput: PeerLinkProfileInput = {
     candidateType: input.candidateType,
     protocol: input.protocol,
@@ -229,107 +150,70 @@ export function buildWanLinkScore(input: WanLinkScoreInput): WanLinkScore {
   const uploadRateKbps = finitePositive(input.uploadRateKbps);
   const providers = input.providers ?? [];
   const providerCount = providers.length;
-  const fullProviderCount = providers.filter(
-    (provider) =>
-      provider.totalChunks > 0 && provider.availableChunks >= provider.totalChunks
-  ).length;
-
-  const totalChunks = finitePositive(input.totalChunks);
-  const ownedChunks = Math.max(0, input.ownedChunks ?? 0);
-  const chunkSizeBytes = finitePositive(input.chunkSizeBytes) ?? 256 * 1024;
-  const remainingChunks =
-    totalChunks !== null ? Math.max(0, totalChunks - ownedChunks) : null;
-  const remainingBytes =
-    finitePositive(input.remainingBytes) ??
-    (remainingChunks !== null ? remainingChunks * chunkSizeBytes : null);
-  const etaSeconds = estimateTrackFillEtaSeconds({
-    remainingBytes,
-    downloadRateKbps
-  });
+  const throughputRatio = downloadRateKbps === null ? null : downloadRateKbps / playbackBitrateKbps;
 
   let score =
     scoreFromProfile(profile) +
     scoreFromRtt(rttMs) +
-    scoreFromThroughput(downloadRateKbps, input.localPlaybackComplete) +
-    scoreFromProviders(providerCount, fullProviderCount);
-
-  if (input.dataChannelState && input.dataChannelState !== "open") {
-    score -= 25;
-  }
-  if (input.transportScore === "failed") {
-    score -= 30;
-  } else if (input.transportScore === "unstable") {
-    score -= 18;
-  } else if (input.transportScore === "degraded") {
-    score -= 10;
-  }
-  if ((input.bufferedAmountBytes ?? 0) >= 4 * 1024 * 1024) {
-    score -= 8;
-  }
+    scoreFromThroughput(downloadRateKbps, playbackBitrateKbps) +
+    scoreFromProviders(providerCount);
+  if (input.dataChannelState && input.dataChannelState !== "open") score -= 25;
+  if (input.transportScore === "failed") score -= 30;
+  else if (input.transportScore === "unstable") score -= 18;
+  else if (input.transportScore === "degraded") score -= 10;
+  if ((input.bufferedAmountBytes ?? 0) >= 4 * 1024 * 1024) score -= 8;
 
   score = clamp(Math.round(score), 0, 100);
   const grade = gradeFromScore(score);
-  const tone = toneFromGrade(grade);
   const pathLabel = resolveWanPathLabel({
     candidateType: input.candidateType,
     protocol: input.protocol,
     relayProtocol: input.relayProtocol,
     profile
   });
-
   const tips: string[] = [];
   if (profile === "relay-udp") {
-    tips.push("当前走 TURN UDP 中继，吞吐通常低于直连；优先保证源端上行与 TURN 端口开放。");
+    tips.push("当前走 TURN UDP 中继；已只保留播放窗口流量，不再自动下载原文件。");
   }
   if (profile === "constrained" || profile === "severe") {
-    tips.push("链路被判为受限/严重降级，调度会保守限流以保护当前播放。");
+    tips.push("链路被判为受限，播放调度会优先当前位置附近的音频单元。");
   }
   if (rttMs !== null && rttMs >= 250) {
-    tips.push(`RTT ${Math.round(rttMs)}ms 偏高，分片管道效率会下降。`);
+    tips.push(`RTT ${Math.round(rttMs)}ms 偏高，拖动进度后首个单元到达会更慢。`);
   }
-  if (!input.localPlaybackComplete && downloadRateKbps !== null && downloadRateKbps < 3_000) {
-    tips.push("分片下载低于约 0.4MB/s，大体积 FLAC 容易出现 pcm-buffer-missing。");
+  if (throughputRatio !== null && throughputRatio < 1.25) {
+    tips.push(`当前下载只有音频码率的 ${throughputRatio.toFixed(1)} 倍，低于稳定播放余量。`);
   }
-  if (providerCount <= 1) {
-    tips.push("当前曲目几乎只有单一供片源，建议让更多成员完成缓存后再分流。");
-  } else if (fullProviderCount >= 2) {
-    tips.push(`已有 ${fullProviderCount} 个完整缓存源，调度会优先更快的多 provider。`);
-  }
-  if (etaSeconds !== null && etaSeconds > 180) {
-    tips.push("按当前速率估算满曲缓存仍需数分钟，听感上会长时间边缓冲边追进度。");
+  if (providerCount === 0) {
+    tips.push("当前曲目没有可见的在线播放资产来源。");
+  } else if (providerCount === 1) {
+    tips.push("当前只有一个在线播放资产来源，来源离线时会中断补片。");
   }
   if (tips.length === 0) {
-    tips.push("链路指标健康，可支撑当前曲目的边缓存播放与补齐。");
+    tips.push("当前带宽高于音频码率并有可用来源，可支撑滚动分段播放。");
   }
 
   const summary =
     grade === "A" || grade === "B"
-      ? `外网评分 ${score}（${grade}）：${pathLabel}，适合稳定缓存播放。`
+      ? `外网评分 ${score}（${grade}）：可稳定承载当前分段 Opus 音频。`
       : grade === "C"
-        ? `外网评分 ${score}（${grade}）：${pathLabel}，可连通但吞吐一般。`
-        : `外网评分 ${score}（${grade}）：${pathLabel}，稳定性/速度受限。`;
+        ? `外网评分 ${score}（${grade}）：可播放，但跳转后的首段响应可能波动。`
+        : `外网评分 ${score}（${grade}）：实时音频余量不足或链路状态受限。`;
 
   return {
     score,
     grade,
-    tone,
+    tone: toneFromGrade(grade),
     profile,
     pathLabel,
     summary,
     metrics: {
       rttLabel: rttMs === null ? "未知" : `${Math.round(rttMs)}ms`,
-      downloadLabel: input.localPlaybackComplete
-        ? "本地完整"
-        : downloadRateKbps === null
-          ? "未知"
-          : formatTransferRateMBps(downloadRateKbps),
-      uploadLabel:
-        uploadRateKbps === null ? "未知" : formatTransferRateMBps(uploadRateKbps),
-      providerLabel:
-        providerCount <= 0
-          ? "0 个供片源"
-          : `${providerCount} 个供片源 · ${fullProviderCount} 个完整`,
-      fillEtaLabel: formatEtaSeconds(etaSeconds)
+      downloadLabel: downloadRateKbps === null ? "未知" : formatTransferRateMBps(downloadRateKbps),
+      uploadLabel: uploadRateKbps === null ? "未知" : formatTransferRateMBps(uploadRateKbps),
+      providerLabel: providerCount <= 0 ? "0 个来源" : `${providerCount} 个来源`,
+      audioBitrateLabel: `${Math.round(playbackBitrateKbps)} kbps`,
+      headroomLabel: throughputRatio === null ? "未知" : `${throughputRatio.toFixed(1)}x`
     },
     tips
   };
@@ -338,13 +222,9 @@ export function buildWanLinkScore(input: WanLinkScoreInput): WanLinkScore {
 export function buildWanLinkScoreFromPeerDiagnostic(input: {
   diagnostic?: PeerDiagnosticsSnapshot | null;
   providers?: WanProviderSummary[];
-  ownedChunks?: number | null;
-  totalChunks?: number | null;
-  chunkSizeBytes?: number | null;
-  remainingBytes?: number | null;
   downloadRateKbps?: number | null;
   uploadRateKbps?: number | null;
-  localPlaybackComplete?: boolean;
+  playbackBitrateKbps?: number | null;
   rttMs?: number | null;
 }): WanLinkScore {
   const diagnostic = input.diagnostic ?? null;
@@ -353,17 +233,12 @@ export function buildWanLinkScoreFromPeerDiagnostic(input: {
     protocol: diagnostic?.dataProtocol ?? null,
     relayProtocol: diagnostic?.dataRelayProtocol ?? null,
     rttMs: input.rttMs ?? diagnostic?.currentRoundTripTimeMs ?? null,
-    downloadRateKbps:
-      input.downloadRateKbps ?? diagnostic?.pieceDownloadRateKbps ?? null,
+    downloadRateKbps: input.downloadRateKbps ?? diagnostic?.pieceDownloadRateKbps ?? null,
     uploadRateKbps: input.uploadRateKbps ?? diagnostic?.pieceUploadRateKbps ?? null,
+    playbackBitrateKbps: input.playbackBitrateKbps,
     transportScore: diagnostic?.transportScore ?? null,
     dataChannelState: diagnostic?.dataChannelState ?? null,
     bufferedAmountBytes: diagnostic?.dataBufferedAmountBytes ?? null,
-    providers: input.providers,
-    remainingBytes: input.remainingBytes,
-    ownedChunks: input.ownedChunks,
-    totalChunks: input.totalChunks,
-    chunkSizeBytes: input.chunkSizeBytes,
-    localPlaybackComplete: input.localPlaybackComplete
+    providers: input.providers
   });
 }

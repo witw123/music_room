@@ -2,15 +2,16 @@
 
 import { useMemo } from "react";
 import type {
+  AssetAvailabilityAnnouncement,
   IceConfigResponse,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
-  RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
+import { rangesToUnitIndexes } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
-import { buildDiagnosticsViewModel } from "@/components/room/diagnostics-view-model";
+import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
 import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement
@@ -25,6 +26,8 @@ export type UseRoomDerivedStateInput = {
   activeDashboardTab: "queue" | "library" | "cache" | "members";
   currentTrack: RoomSnapshot["tracks"][number] | null;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
+  segmentedPlayback: SegmentedPlaybackSnapshot;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   canDeleteRoom: boolean;
@@ -34,10 +37,7 @@ export type UseRoomDerivedStateInput = {
   workspaceOnly: boolean;
   initialRoomId: string | null;
   activeSessionUserId?: string;
-  mediaConnectionState: RoomMediaConnectionState;
   audioUnlocked: boolean;
-  sourceStartState: LocalMemberPanelState["sourceStartState"];
-  lastSourceStartError: string | null;
   suppressRoomRecovery: boolean;
   isNavigatingRoomExit: boolean;
   isRecoveringRoom: boolean;
@@ -54,6 +54,8 @@ export function useRoomDerivedState({
   activeDashboardTab,
   currentTrack,
   availabilityByTrack,
+  availabilityByAsset,
+  segmentedPlayback,
   peerDiagnostics,
   peerRecentEvents,
   canDeleteRoom,
@@ -63,10 +65,7 @@ export function useRoomDerivedState({
   workspaceOnly,
   initialRoomId,
   activeSessionUserId,
-  mediaConnectionState,
   audioUnlocked,
-  sourceStartState,
-  lastSourceStartError,
   suppressRoomRecovery,
   isNavigatingRoomExit,
   isRecoveringRoom
@@ -98,11 +97,6 @@ export function useRoomDerivedState({
     },
     [availabilityByTrack, peerId, roomId, roomMembers, roomPlayback, roomTracks]
   );
-  const systemDiagnostic = useMemo(
-    () => peerDiagnostics.find((peer) => peer.peerId === "system") ?? null,
-    [peerDiagnostics]
-  );
-
   const canDisbandRoom =
     !!roomSnapshot &&
     canDeleteRoom &&
@@ -138,84 +132,21 @@ export function useRoomDerivedState({
     if (!roomSnapshot || activeDashboardTab !== "members") {
       return [];
     }
-
-    const memberIdByPeerId = new Map(
-      roomSnapshot.room.members
-        .filter((member) => !!member.peerId)
-        .map((member) => [member.peerId as string, member.id])
-    );
-    const currentTrackManifest = currentTrack
-      ? resolveCurrentRoomTrackManifest(
-          currentTrack,
-          derivedAvailabilityByTrack[currentTrack.id] ?? {},
-          roomSnapshot.room.id,
-          activeMemberPeerIds
-        )
-      : null;
-    const statsByMember = new Map<
-      string,
-      {
-        announcedTrackIds: Set<string>;
-        totalChunkCount: number;
-        currentTrackChunkCount: number;
-        currentTrackTotalChunks: number;
-        currentTrackSources: Set<string>;
-      }
-    >();
-
-    for (const track of roomSnapshot.tracks) {
-      for (const announcement of filterAvailabilityAnnouncementsByCurrentRoomPeers(
-        derivedAvailabilityByTrack[track.id] ?? {},
-        roomSnapshot.room.id,
-        activeMemberPeerIds
-      )) {
-        const memberId = memberIdByPeerId.get(announcement.ownerPeerId) ?? null;
-        if (!memberId) {
-          continue;
-        }
-
-        const existing =
-          statsByMember.get(memberId) ??
-          (() => {
-            const initial = {
-              announcedTrackIds: new Set<string>(),
-              totalChunkCount: 0,
-              currentTrackChunkCount: 0,
-              currentTrackTotalChunks: 0,
-              currentTrackSources: new Set<string>()
-            };
-            statsByMember.set(memberId, initial);
-            return initial;
-          })();
-
-        existing.announcedTrackIds.add(track.id);
-        existing.totalChunkCount += announcement.availableChunks.length;
-
-        if (currentTrack && track.id === currentTrack.id) {
-          existing.currentTrackChunkCount += announcement.availableChunks.length;
-          existing.currentTrackTotalChunks = Math.max(
-            existing.currentTrackTotalChunks,
-            announcement.totalChunks
-          );
-          existing.currentTrackSources.add(announcement.source);
-        }
-      }
-    }
-
-    return roomSnapshot.room.members.map((member) => {
-      const stats = statsByMember.get(member.id) ?? null;
-      const manifestTotalChunks = currentTrackManifest?.totalChunks ?? 0;
-
-      return {
-        memberId: member.id,
-        announcedTrackCount: stats?.announcedTrackIds.size ?? 0,
-        totalChunkCount: stats?.totalChunkCount ?? 0,
-        currentTrackChunkCount: stats?.currentTrackChunkCount ?? 0,
-        currentTrackTotalChunks: manifestTotalChunks || (stats?.currentTrackTotalChunks ?? 0),
-        currentTrackSources: [...(stats?.currentTrackSources ?? [])]
-      };
+    return buildMemberAssetSummaries({
+      roomSnapshot,
+      availabilityByAsset,
+      activeMemberPeerIds,
+      localPeerId: peerId,
+      segmentedPlayback
     });
-  }, [activeDashboardTab, activeMemberPeerIds, currentTrack, derivedAvailabilityByTrack, roomSnapshot]);
+  }, [
+    activeDashboardTab,
+    activeMemberPeerIds,
+    availabilityByAsset,
+    peerId,
+    roomSnapshot,
+    segmentedPlayback
+  ]);
 
   const visiblePeerDiagnostics = useMemo(() => {
     return filterVisiblePeerDiagnostics(
@@ -259,13 +190,21 @@ export function useRoomDerivedState({
       activePeerDiagnostics,
       "pieceUploadRateKbps"
     );
+    const totalDataReceiveRateKbps = sumDiagnosticsValue(
+      activePeerDiagnostics,
+      "transportReceiveBitrateKbps"
+    );
+    const totalDataSendRateKbps = sumDiagnosticsValue(
+      activePeerDiagnostics,
+      "transportSendBitrateKbps"
+    );
     const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
     const hasPieceMetricSample = hasPieceTransferSample(activePeerDiagnostics);
-    const isSourceOwner = roomSnapshot.room.playback.sourceSessionId === activeSessionUserId;
     const transportSampleAgeMs = getLatestMetricSampleAgeMs(
       activePeerDiagnostics,
       [
-        "availableOutgoingBitrateKbps",
+        "transportReceiveBitrateKbps",
+        "transportSendBitrateKbps",
         "currentRoundTripTimeMs"
       ]
     );
@@ -279,16 +218,11 @@ export function useRoomDerivedState({
       memberId: localMember.id,
       presenceState: localMember.presenceState,
       audioUnlocked,
-      sourceStartState,
-      lastSourceStartError,
-      transportLabel: "缓存播放链路（本机）",
+      transportLabel: "分段音频链路（本机）",
       transportSummary: {
-        totalRateKbps: sumNullableNumbers(
-          normalizedPieceDownloadRateKbps,
-          normalizedPieceUploadRateKbps
-        ),
-        receiveRateKbps: null,
-        sendRateKbps: null,
+        totalRateKbps: sumNullableNumbers(totalDataReceiveRateKbps, totalDataSendRateKbps),
+        receiveRateKbps: totalDataReceiveRateKbps,
+        sendRateKbps: totalDataSendRateKbps,
         latencyMs: averageLatencyMs,
         sampleAgeMs: transportSampleAgeMs
       },
@@ -297,80 +231,15 @@ export function useRoomDerivedState({
         uploadRateKbps: normalizedPieceUploadRateKbps,
         sampleAgeMs: pieceSampleAgeMs
       },
-      cachePlayback: systemDiagnostic?.progressivePlaybackStatus
-        ? {
-            activeSource: systemDiagnostic.progressivePlaybackStatus.activeSource,
-            engineType: systemDiagnostic.progressivePlaybackStatus.engineType,
-            aheadBufferedMs: systemDiagnostic.progressivePlaybackStatus.aheadBufferedMs,
-            fallbackReason: systemDiagnostic.progressivePlaybackStatus.fallbackReason,
-            fullLocalReady: systemDiagnostic.progressivePlaybackStatus.fullLocalReady ?? false,
-            progressiveLocalBlockedReason:
-              systemDiagnostic.progressivePlaybackStatus.progressiveLocalBlockedReason ?? null,
-            localAudioPaused: systemDiagnostic.progressivePlaybackStatus.localAudioPaused ?? null,
-            localAudioMuted: systemDiagnostic.progressivePlaybackStatus.localAudioMuted ?? null,
-            localAudioVolume: systemDiagnostic.progressivePlaybackStatus.localAudioVolume ?? null,
-            localAudioReadyState:
-              systemDiagnostic.progressivePlaybackStatus.localAudioReadyState ?? null,
-            localAudioCurrentSrc:
-              systemDiagnostic.progressivePlaybackStatus.localAudioCurrentSrc ?? null,
-            localAudioHasSrcObject:
-              systemDiagnostic.progressivePlaybackStatus.localAudioHasSrcObject ?? null,
-            fullLocalPlaybackMode:
-              systemDiagnostic.progressivePlaybackStatus.fullLocalPlaybackMode ?? null,
-            pcmEngineStatus:
-              systemDiagnostic.progressivePlaybackStatus.pcmEngineStatus ?? null,
-            pcmAudioContextState:
-              systemDiagnostic.progressivePlaybackStatus.pcmAudioContextState ?? null,
-            pcmDirectOutputConnected:
-              systemDiagnostic.progressivePlaybackStatus.pcmDirectOutputConnected ?? null,
-            pcmContiguousChunkCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmContiguousChunkCount ?? null,
-            pcmBufferedAheadMs:
-              systemDiagnostic.progressivePlaybackStatus.pcmBufferedAheadMs ?? null,
-            pcmDecodedSegmentCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmDecodedSegmentCount ?? null,
-            pcmScheduledSegmentCount:
-              systemDiagnostic.progressivePlaybackStatus.pcmScheduledSegmentCount ?? null,
-            pcmLastDecodeError:
-              systemDiagnostic.progressivePlaybackStatus.pcmLastDecodeError ?? null,
-            pcmLastBlockedReason:
-              systemDiagnostic.progressivePlaybackStatus.pcmLastBlockedReason ?? null,
-            serverClockOffsetMs:
-              systemDiagnostic.progressivePlaybackStatus.serverClockOffsetMs ?? null,
-            serverClockRoundTripMs:
-              systemDiagnostic.progressivePlaybackStatus.serverClockRoundTripMs ?? null,
-            averageDriftMs:
-              systemDiagnostic.progressivePlaybackStatus.averageDriftMs ?? null,
-            maxDriftMs: systemDiagnostic.progressivePlaybackStatus.maxDriftMs ?? null,
-            lastPlayStartFailure:
-              systemDiagnostic.progressivePlaybackStatus.lastPlayStartFailure ?? null,
-            lastSourceStartError:
-              systemDiagnostic.progressivePlaybackStatus.lastSourceStartError ?? null,
-            pendingPlaybackIntent:
-              systemDiagnostic.progressivePlaybackStatus.pendingPlaybackIntent ?? null
-          }
-        : null,
-      playbackSampleAgeMs: systemDiagnostic
-        ? Math.max(0, Date.now() - new Date(systemDiagnostic.updatedAt).getTime())
+      segmentedPlayback,
+      playbackBitrateKbps: currentTrack?.playbackAsset
+        ? currentTrack.playbackAsset.bitrate / 1000
         : null,
       dataReadyCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
       playbackStatus: getLocalPlaybackStatus({
         presenceState: localMember.presenceState,
-        mediaConnectionState,
-        isSourceOwner,
-        audioUnlocked,
-        sourceStartState,
-        lastSourceStartError,
-        mediaConnectedPeersCount: countPeersWithinActiveMembers(
-          mediaConnectedPeers,
-          activeMemberPeerIds
-        ),
         playbackStatus: roomSnapshot.room.playback.status,
-        cachePlayback: systemDiagnostic?.progressivePlaybackStatus ?? null,
-        dataReadyCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
-        pieceDownloadRateKbps: normalizedPieceDownloadRateKbps,
-        pieceUploadRateKbps: normalizedPieceUploadRateKbps,
-        pieceSampleAgeMs
+        segmentedPlayback
       })
     };
   }, [
@@ -378,13 +247,10 @@ export function useRoomDerivedState({
     activeSessionUserId,
     audioUnlocked,
     connectedPeers,
-    lastSourceStartError,
-    mediaConnectedPeers,
-    mediaConnectionState,
+    currentTrack,
     peerDiagnostics,
     roomSnapshot,
-    sourceStartState,
-    systemDiagnostic
+    segmentedPlayback
   ]);
 
   const statusTone =
@@ -452,6 +318,91 @@ export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"])
       .map((member) => member.peerId)
       .filter((memberPeerId): memberPeerId is string => !!memberPeerId)
   );
+}
+
+export function buildMemberAssetSummaries(input: {
+  roomSnapshot: RoomSnapshot;
+  availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
+  activeMemberPeerIds: Set<string>;
+  localPeerId: string;
+  segmentedPlayback: SegmentedPlaybackSnapshot;
+}) {
+  const memberIdByPeerId = new Map(
+    input.roomSnapshot.room.members
+      .filter((member) => !!member.peerId)
+      .map((member) => [member.peerId as string, member.id])
+  );
+  const currentTrackId = input.roomSnapshot.room.playback.currentTrackId;
+  const currentTrackTotalUnitCount = input.roomSnapshot.tracks.find(
+    (track) => track.id === currentTrackId
+  )?.playbackAsset?.unitCount ?? 0;
+  const statsByMember = new Map<string, {
+    playbackAssetIds: Set<string>;
+    totalPlaybackUnitCount: number;
+    currentTrackOwnedUnitCount: number;
+    currentTrackTotalUnitCount: number;
+    currentTrackSources: Set<string>;
+  }>();
+
+  for (const track of input.roomSnapshot.tracks) {
+    const playbackAsset = track.playbackAsset;
+    if (!playbackAsset) continue;
+    const announcements = Object.values(
+      input.availabilityByAsset[playbackAsset.assetId] ?? {}
+    ).filter(
+      (announcement) =>
+        announcement.roomId === input.roomSnapshot.room.id &&
+        announcement.assetKind === "playback" &&
+        input.activeMemberPeerIds.has(announcement.ownerPeerId)
+    );
+    for (const announcement of announcements) {
+      const memberId = memberIdByPeerId.get(announcement.ownerPeerId);
+      if (!memberId) continue;
+      const stats = statsByMember.get(memberId) ?? {
+        playbackAssetIds: new Set<string>(),
+        totalPlaybackUnitCount: 0,
+        currentTrackOwnedUnitCount: 0,
+        currentTrackTotalUnitCount: 0,
+        currentTrackSources: new Set<string>()
+      };
+      const ownedUnitCount = rangesToUnitIndexes(
+        announcement.availableRanges,
+        announcement.totalUnits
+      ).length;
+      stats.playbackAssetIds.add(playbackAsset.assetId);
+      stats.totalPlaybackUnitCount += ownedUnitCount;
+      if (track.id === currentTrackId) {
+        stats.currentTrackOwnedUnitCount = Math.max(
+          stats.currentTrackOwnedUnitCount,
+          ownedUnitCount
+        );
+        stats.currentTrackTotalUnitCount = playbackAsset.unitCount;
+        stats.currentTrackSources.add(announcement.source);
+      }
+      statsByMember.set(memberId, stats);
+    }
+  }
+
+  return input.roomSnapshot.room.members.map((member) => {
+    const stats = statsByMember.get(member.id);
+    const isLocalMember = member.peerId === input.localPeerId;
+    return {
+      memberId: member.id,
+      playbackAssetCount: stats?.playbackAssetIds.size ?? 0,
+      totalPlaybackUnitCount: stats?.totalPlaybackUnitCount ?? 0,
+      currentTrackOwnedUnitCount: isLocalMember
+        ? Math.max(stats?.currentTrackOwnedUnitCount ?? 0, input.segmentedPlayback.ownedUnitCount)
+        : stats?.currentTrackOwnedUnitCount ?? 0,
+      currentTrackTotalUnitCount: isLocalMember
+        ? Math.max(
+            currentTrackTotalUnitCount,
+            stats?.currentTrackTotalUnitCount ?? 0,
+            input.segmentedPlayback.totalUnitCount
+          )
+        : Math.max(currentTrackTotalUnitCount, stats?.currentTrackTotalUnitCount ?? 0),
+      currentTrackSources: [...(stats?.currentTrackSources ?? [])]
+    };
+  });
 }
 
 export function resolveDerivedAvailabilityByTrack(input: {
@@ -589,6 +540,8 @@ function sumDiagnosticsValue(
     | "pieceUploadRateKbps"
     | "mediaSendBitrateKbps"
     | "mediaReceiveBitrateKbps"
+    | "transportReceiveBitrateKbps"
+    | "transportSendBitrateKbps"
 ) {
   const values = diagnostics
     .map((peer) => peer[key])
@@ -631,9 +584,10 @@ function averageDiagnosticsValue(
 function getLatestMetricSampleAgeMs(
   diagnostics: PeerDiagnosticsSnapshot[],
   keys: Array<
-    | "availableOutgoingBitrateKbps"
     | "mediaReceiveBitrateKbps"
     | "mediaSendBitrateKbps"
+    | "transportReceiveBitrateKbps"
+    | "transportSendBitrateKbps"
     | "currentRoundTripTimeMs"
   >,
   now = Date.now()
@@ -692,22 +646,12 @@ function hasPieceTransferSample(diagnostics: PeerDiagnosticsSnapshot[]) {
 
 export function getLocalPlaybackStatus(input: {
   presenceState: RoomSnapshot["room"]["members"][number]["presenceState"];
-  mediaConnectionState: RoomMediaConnectionState;
-  isSourceOwner: boolean;
-  audioUnlocked: boolean;
-  sourceStartState: LocalMemberPanelState["sourceStartState"];
-  lastSourceStartError: string | null;
-  mediaConnectedPeersCount: number;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"];
-  cachePlayback: PeerDiagnosticsSnapshot["progressivePlaybackStatus"] | null;
-  dataReadyCount: number;
-  pieceDownloadRateKbps: number | null;
-  pieceUploadRateKbps: number | null;
-  pieceSampleAgeMs?: number | null;
+  segmentedPlayback: SegmentedPlaybackSnapshot;
 }): LocalMemberPanelState["playbackStatus"] {
   if (input.presenceState === "offline") {
     return {
-      label: "未参与缓存播放",
+      label: "本机已离线",
       detail: "当前成员已离线。",
       tone: "warning",
       badgeText: "offline"
@@ -716,8 +660,8 @@ export function getLocalPlaybackStatus(input: {
 
   if (input.presenceState === "reconnecting") {
     return {
-      label: "缓存链路重连中",
-      detail: "本机正在恢复房间状态和分片数据通道。",
+      label: "分段链路重连中",
+      detail: "本机正在恢复房间状态与播放资产数据通道。",
       tone: "warning",
       badgeText: "reconnecting"
     };
@@ -726,78 +670,65 @@ export function getLocalPlaybackStatus(input: {
   if (input.playbackStatus !== "playing") {
     return {
       label: "本地待机",
-      detail: "当前房间未处于播放状态，缓存链路保持待命。",
+      detail: "当前房间未播放，分段音频引擎保持待命。",
       tone: "neutral",
-      badgeText: "idle"
+      badgeText: "分段 Opus"
     };
   }
 
-  if (!input.audioUnlocked) {
-    return {
-      label: "等待本机音频解锁",
-      detail: "浏览器还未允许音频输出，点击播放或任意交互后继续。",
-      tone: "warning",
-      badgeText: "awaiting-unlock"
-    };
+  switch (input.segmentedPlayback.state) {
+    case "live":
+      return {
+        label: "正在发声",
+        detail: "分段 Opus 已按房间时钟调度到本机音频输出。",
+        tone: "success",
+        badgeText: "分段 Opus"
+      };
+    case "buffering":
+      return {
+        label: input.segmentedPlayback.lastError ? "正在自动恢复" : "正在缓冲播放单元",
+        detail:
+          input.segmentedPlayback.lastError ??
+          "正在补齐当前位置起的滚动播放窗口，首个可播单元到达后立即出声。",
+        tone: input.segmentedPlayback.lastError ? "warning" : "accent",
+        badgeText: "分段 Opus"
+      };
+    case "awaiting-unlock":
+      return {
+        label: "等待本机音频解锁",
+        detail: "AudioContext 当前未运行，点击播放或在房间内交互即可恢复。",
+        tone: "warning",
+        badgeText: "AudioContext"
+      };
+    case "unavailable":
+      return {
+        label: "暂无播放资产来源",
+        detail: "当前没有在线成员可提供所需的分段 Opus 单元。",
+        tone: "danger",
+        badgeText: "无可用源"
+      };
+    case "paused":
+      return {
+        label: "本地已暂停",
+        detail: "房间播放已暂停，已停止调度新的音频单元。",
+        tone: "neutral",
+        badgeText: "分段 Opus"
+      };
+    case "ended":
+      return {
+        label: "当前曲目已结束",
+        detail: "本机已完成最后一个播放单元。",
+        tone: "neutral",
+        badgeText: "分段 Opus"
+      };
+    default:
+      return {
+        label: "准备分段播放",
+        detail: "正在等待当前曲目的播放资产与房间时间线。",
+        tone: "neutral",
+        badgeText: "分段 Opus"
+      };
   }
-
-  if (
-    input.cachePlayback?.activeSource ||
-    input.cachePlayback?.fallbackReason ||
-    input.cachePlayback?.progressiveLocalBlockedReason ||
-    input.cachePlayback?.pendingPlaybackIntent ||
-    input.cachePlayback?.lastPlayStartFailure
-  ) {
-    const view = buildDiagnosticsViewModel({
-      presenceState: input.presenceState,
-      playback: input.cachePlayback,
-      transfer: {
-        downloadRateKbps: input.pieceDownloadRateKbps,
-        uploadRateKbps: input.pieceUploadRateKbps,
-        sampleAgeMs: input.pieceSampleAgeMs ?? 0
-      },
-      dataLink: {
-        openCount: input.dataReadyCount,
-        connectedPeerCount: input.dataReadyCount
-      }
-    });
-    return {
-      ...view.audibility,
-      badgeText: view.playbackMode
-    };
-  }
-
-  const transferActive = buildDiagnosticsViewModel({
-    transfer: {
-      downloadRateKbps: input.pieceDownloadRateKbps,
-      uploadRateKbps: input.pieceUploadRateKbps,
-      sampleAgeMs: input.pieceSampleAgeMs ?? 0
-    }
-  }).transfer.active;
-  if (transferActive) {
-    return {
-      label: "正在缓存播放片段",
-      detail: "已开始按当前播放进度拉取分片，等待本地播放窗口满足启动条件。",
-      tone: "accent",
-      badgeText: "cache-fill"
-    };
-  }
-
-  if (input.dataReadyCount > 0) {
-    return {
-      label: "等待可播缓存",
-      detail: "数据通道已就绪，等待当前曲目的可请求分片或本地解码窗口。",
-      tone: "accent",
-      badgeText: "data-ready"
-    };
-  }
-
-  return {
-    label: "等待缓存链路",
-    detail: "正在等待当前播放曲目的分片来源和数据通道。",
-    tone: "neutral",
-    badgeText: "idle"
-  };
 }
 
 export function filterVisiblePeerDiagnostics(

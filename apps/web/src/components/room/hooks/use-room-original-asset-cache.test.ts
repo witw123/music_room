@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createSHA256 } from "hash-wasm";
 import type { TrackMeta } from "@music-room/shared";
@@ -51,6 +52,13 @@ async function fixture() {
 }
 
 describe("assembleOriginalAsset", () => {
+  it("only polls original assets that the user explicitly queued", () => {
+    const source = readFileSync(new URL("./use-room-original-asset-cache.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("new Set(activeTrackIdsRef.current)");
+    expect(source).not.toContain("candidates.add(currentTrackId)");
+  });
+
   it("assembles ordered units and verifies the complete file hash", async () => {
     const { track, units } = await fixture();
     const blob = await assembleOriginalAsset({ track, units: [...units].reverse() });

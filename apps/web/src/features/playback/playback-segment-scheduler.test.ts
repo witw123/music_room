@@ -17,6 +17,20 @@ describe("playback segment scheduler", () => {
     })).toEqual([30, 31, 32, 33]);
   });
 
+  it("never fills beyond the rolling sixteen-second playback window", () => {
+    expect(resolvePlaybackUnitOrder({
+      manifest,
+      positionMs: 61_000,
+      ownedUnitIndexes: []
+    })).toEqual([30, 31, 32, 33, 34, 35, 36, 37, 38]);
+
+    expect(resolvePlaybackUnitOrder({
+      manifest,
+      positionMs: 61_000,
+      ownedUnitIndexes: [30, 31, 32, 33, 34, 35, 36, 37, 38]
+    })).toEqual([]);
+  });
+
   it("measures only contiguous playable time", () => {
     expect(contiguousPlaybackBufferMs({
       manifest,

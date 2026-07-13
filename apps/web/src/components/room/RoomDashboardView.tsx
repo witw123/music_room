@@ -37,7 +37,6 @@ type RoomDashboardViewProps = {
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  cachedTrackCount: number;
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
   availabilitySummary: AvailabilityEntry[];
@@ -123,7 +122,6 @@ function RoomDashboardViewBase({
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  cachedTrackCount,
   cacheLibraryTracks,
   manualCacheTasks,
   availabilitySummary,
@@ -341,10 +339,7 @@ function RoomDashboardViewBase({
               members={roomSnapshot.room.members}
               memberTransferSummaries={memberTransferSummaries}
               localMemberState={localMemberState}
-              availabilitySummary={availabilitySummary}
               connectedPeersCount={connectedPeersCount}
-              mediaConnectedPeersCount={mediaConnectedPeersCount}
-              cachedTrackCount={cachedTrackCount}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}

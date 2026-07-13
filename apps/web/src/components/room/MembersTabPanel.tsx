@@ -7,16 +7,13 @@ import {
   type LocalMemberPanelState,
   type MemberTransferSummary
 } from "./MembersPanel";
-import { MeshStatusPanel, type AvailabilityEntry } from "./MeshStatusPanel";
+import { MeshStatusPanel } from "./MeshStatusPanel";
 
 type MembersTabPanelProps = {
   members: RoomMember[];
   memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
-  availabilitySummary: AvailabilityEntry[];
   connectedPeersCount: number;
-  mediaConnectedPeersCount: number;
-  cachedTrackCount: number;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -28,10 +25,7 @@ function MembersTabPanelBase({
   members,
   memberTransferSummaries,
   localMemberState,
-  availabilitySummary,
   connectedPeersCount,
-  mediaConnectedPeersCount,
-  cachedTrackCount,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -49,10 +43,7 @@ function MembersTabPanelBase({
 
       <MeshStatusPanel
         members={members}
-        availabilitySummary={availabilitySummary}
         connectedPeersCount={connectedPeersCount}
-        mediaConnectedPeersCount={mediaConnectedPeersCount}
-        cachedTrackCount={cachedTrackCount}
         localMemberState={localMemberState}
         peerDiagnostics={peerDiagnostics}
         recentEvents={peerRecentEvents}

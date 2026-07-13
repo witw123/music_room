@@ -31,7 +31,6 @@ type RoomWorkspaceProps = {
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  cachedTrackCount: number;
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
   availabilitySummary: AvailabilityEntry[];
@@ -84,7 +83,6 @@ function RoomWorkspaceBase({
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  cachedTrackCount,
   cacheLibraryTracks,
   manualCacheTasks,
   availabilitySummary,
@@ -171,7 +169,6 @@ function RoomWorkspaceBase({
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}
-              cachedTrackCount={cachedTrackCount}
               cacheLibraryTracks={cacheLibraryTracks}
               manualCacheTasks={manualCacheTasks}
               availabilitySummary={availabilitySummary}

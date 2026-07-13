@@ -10,7 +10,6 @@ import type {
 import { Button } from "@/components/ui/button";
 import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import type { LocalMemberPanelState } from "./MembersPanel";
-import { buildDiagnosticsViewModel } from "./diagnostics-view-model";
 
 export type AvailabilityEntry = {
   track: TrackMeta;
@@ -24,10 +23,7 @@ export type AvailabilityEntry = {
 
 type MeshStatusPanelProps = {
   members: RoomMember[];
-  availabilitySummary: AvailabilityEntry[];
   connectedPeersCount: number;
-  mediaConnectedPeersCount: number;
-  cachedTrackCount: number;
   localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   recentEvents: PeerRecentEvent[];
@@ -38,11 +34,9 @@ type MeshStatusPanelProps = {
 
 function formatTimestamp(value: string) {
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString("zh-CN", { hour12: false });
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : parsed.toLocaleString("zh-CN", { hour12: false });
 }
 
 function formatMaybeTimestamp(value: string | null | undefined) {
@@ -50,108 +44,49 @@ function formatMaybeTimestamp(value: string | null | undefined) {
 }
 
 function formatMetric(value: number | null | undefined, unit: string) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
+  if (value === null || value === undefined) return "未知";
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
-function formatRateM(value: number | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-  return formatTransferRateMBps(value);
+function formatRate(value: number | null | undefined) {
+  return value === null || value === undefined ? "未知" : formatTransferRateMBps(value);
 }
 
-function formatBoolean(value: boolean | null | undefined) {
-  if (value === null || typeof value === "undefined") {
-    return "未知";
-  }
-
-  return value ? "是" : "否";
-}
-
-function formatCandidateType(value: string | null | undefined) {
-  if (!value) {
-    return "未知";
-  }
-
-  if (value === "relay") {
-    return "relay";
-  }
-
-  if (value === "host" || value === "srflx" || value === "prflx") {
-    return `direct (${value})`;
-  }
-
-  return value;
-}
-
-function formatSampleAge(sampleAgeMs: number | null) {
-  if (sampleAgeMs === null) {
-    return "暂无样本";
-  }
-
-  const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
-  return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
+function formatDuration(ms: number) {
+  return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
 }
 
 function formatEventLabel(event: PeerRecentEvent) {
-  const channelMap: Record<PeerRecentEvent["channelKind"], string> = {
+  const channels: Record<PeerRecentEvent["channelKind"], string> = {
     data: "数据",
     media: "音频",
     system: "系统"
   };
-  const directionMap: Record<PeerRecentEvent["direction"], string> = {
+  const directions: Record<PeerRecentEvent["direction"], string> = {
     sent: "发出",
     received: "收到",
     local: "本地"
   };
-
-  return `[${channelMap[event.channelKind]}/${directionMap[event.direction]}] ${event.summary}`;
-}
-
-function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
-  if (peer.dataCandidateType) {
-    const protocol = peer.dataRelayProtocol ?? peer.dataProtocol;
-    const protocolLabel = protocol ? `/${protocol}` : "";
-    return peer.dataCandidateType === "relay"
-      ? `数据通道经过 relay${protocolLabel}`
-      : `数据通道 direct (${peer.dataCandidateType}${protocolLabel})`;
-  }
-
-  if (peer.dataConnectionState || peer.dataChannelState) {
-    return `数据 ${peer.dataConnectionState ?? "未知"} / channel ${peer.dataChannelState ?? "未知"}`;
-  }
-
-  return null;
+  return `[${channels[event.channelKind]}/${directions[event.direction]}] ${event.summary}`;
 }
 
 function getHealthClass(peer: PeerDiagnosticsSnapshot) {
-  switch (peer.transportHealth) {
-    case "healthy":
-      return "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
-    case "degraded":
-    case "recovering":
-    case "reconnecting":
-      return "border-amber-500/25 bg-amber-500/10 text-amber-300";
-    case "failed":
-      return "border-red-500/25 bg-red-500/10 text-red-300";
-    default:
-      return "border-surface-border bg-background/60 text-foreground-muted";
+  if (peer.transportHealth === "healthy") {
+    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-300";
   }
+  if (peer.transportHealth === "failed") {
+    return "border-red-500/25 bg-red-500/10 text-red-300";
+  }
+  if (["degraded", "recovering", "reconnecting"].includes(peer.transportHealth ?? "")) {
+    return "border-amber-500/25 bg-amber-500/10 text-amber-300";
+  }
+  return "border-surface-border bg-background/60 text-foreground-muted";
 }
 
 function getEventClass(level: PeerRecentEvent["level"]) {
-  switch (level) {
-    case "error":
-      return "border-red-500/20 bg-red-500/10";
-    case "warning":
-      return "border-amber-500/20 bg-amber-500/10";
-    default:
-      return "border-surface-border bg-black/20";
-  }
+  if (level === "error") return "border-red-500/20 bg-red-500/10";
+  if (level === "warning") return "border-amber-500/20 bg-amber-500/10";
+  return "border-surface-border bg-black/20";
 }
 
 function DiagnosticGrid({ children }: { children: React.ReactNode }) {
@@ -162,86 +97,66 @@ function DiagnosticGrid({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DiagnosticBlock({
-  title,
-  children
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function DiagnosticSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-surface-border bg-background/30 p-3">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-foreground-muted/80">
-        {title}
-      </h3>
+    <section className="border-t border-surface-border pt-3">
+      <h3 className="mb-2 text-[10px] font-semibold text-foreground-muted">{title}</h3>
       {children}
-    </div>
+    </section>
   );
 }
 
-function PeerDiagnosticCard({
-  peer,
-  label
-}: {
-  peer: PeerDiagnosticsSnapshot;
-  label: string;
-}) {
+function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
+  if (!peer.dataCandidateType) return null;
+  const protocol = peer.dataRelayProtocol ?? peer.dataProtocol;
+  return peer.dataCandidateType === "relay"
+    ? `数据通道经过 relay${protocol ? `/${protocol}` : ""}`
+    : `数据通道 direct (${peer.dataCandidateType}${protocol ? `/${protocol}` : ""})`;
+}
+
+function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; label: string }) {
   return (
-    <details className="overflow-hidden rounded-lg border border-surface-border bg-background/30 px-3 py-2">
+    <details className="rounded-lg border border-surface-border bg-background/25 px-3 py-2">
       <summary className="cursor-pointer list-none">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <strong className="truncate text-xs font-semibold text-foreground">{label}</strong>
+            <strong className="truncate text-xs text-foreground">{label}</strong>
             <p className="mt-1 text-[10px] text-foreground-muted">
               {describeCandidatePath(peer) ??
                 `数据 ${peer.dataConnectionState ?? "未知"} / channel ${peer.dataChannelState ?? "未知"}`}
             </p>
           </div>
-          <span
-            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${getHealthClass(peer)}`}
-          >
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] ${getHealthClass(peer)}`}>
             {peer.transportHealth ?? "未知"}
           </span>
         </div>
-        {peer.lastError ? <p className="mt-2 text-[10px] text-red-400">{peer.lastError}</p> : null}
+        {peer.lastError ? <p className="mt-2 text-[10px] text-red-300">{peer.lastError}</p> : null}
       </summary>
-
-      <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
-        <DiagnosticBlock title="数据链路">
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <DiagnosticSection title="DataChannel">
           <DiagnosticGrid>
-            <span>数据连接: {peer.dataConnectionState ?? "未知"}</span>
-            <span>DataChannel: {peer.dataChannelState ?? "未知"}</span>
-            <span>链路类型: {formatCandidateType(peer.dataCandidateType)}</span>
-            <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "暂无样本"}</span>
+            <span>连接: {peer.dataConnectionState ?? "未知"}</span>
+            <span>通道: {peer.dataChannelState ?? "未知"}</span>
+            <span>候选: {peer.dataCandidateType ?? "未知"}</span>
+            <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "未知"}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
             <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
-            <span>传输接收: {formatRateM(peer.transportReceiveBitrateKbps)}</span>
-            <span>传输发送: {formatRateM(peer.transportSendBitrateKbps)}</span>
+            <span>接收: {formatRate(peer.transportReceiveBitrateKbps)}</span>
+            <span>发送: {formatRate(peer.transportSendBitrateKbps)}</span>
           </DiagnosticGrid>
-          {peer.dataCandidateType === "relay" || peer.dataProtocol === "tcp" || peer.dataRelayProtocol === "tcp" ? (
-            <p className="mt-2 text-[10px] text-amber-300">
-              当前链路不满足缓存 UDP 要求，cache stream 将暂停并切换其他 provider。
-            </p>
-          ) : null}
-          {peer.degradedReason ? (
-            <p className="mt-2 text-[10px] text-amber-300">降级原因: {peer.degradedReason}</p>
-          ) : null}
-        </DiagnosticBlock>
-
-        <DiagnosticBlock title="缓存传输">
+        </DiagnosticSection>
+        <DiagnosticSection title="v4 资产传输">
           <DiagnosticGrid>
-            <span>分片下载: {formatRateM(peer.pieceDownloadRateKbps)}</span>
-            <span>分片上传: {formatRateM(peer.pieceUploadRateKbps)}</span>
-            <span>分片 RTT p50: {formatMetric(peer.pieceRttMsP50, "ms")}</span>
-            <span>分片 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
+            <span>单元下载: {formatRate(peer.pieceDownloadRateKbps)}</span>
+            <span>单元上传: {formatRate(peer.pieceUploadRateKbps)}</span>
+            <span>单元 RTT p50: {formatMetric(peer.pieceRttMsP50, "ms")}</span>
+            <span>单元 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
             <span>请求超时率: {formatMetric(peer.pieceTimeoutRate, "%")}</span>
-            <span>最近分片: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
+            <span>最近单元: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
             <span>校验队列: {formatMetric(peer.validationQueueBytes, " bytes")}</span>
             <span>持久化积压: {formatMetric(peer.persistenceBacklogBytes, " bytes")}</span>
-            <span>最近校验: {formatMaybeTimestamp(peer.lastValidatedAt)}</span>
-            <span>最近落盘: {formatMaybeTimestamp(peer.lastPersistedAt)}</span>
           </DiagnosticGrid>
-        </DiagnosticBlock>
+        </DiagnosticSection>
       </div>
     </details>
   );
@@ -249,201 +164,125 @@ function PeerDiagnosticCard({
 
 function MeshStatusPanelBase({
   members,
-  availabilitySummary,
   connectedPeersCount,
-  cachedTrackCount,
   localMemberState,
   peerDiagnostics,
   recentEvents,
+  iceConfigSource,
+  iceConfigStatus,
   onVisibilityChange
 }: MeshStatusPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    onVisibilityChange?.(isOpen);
-  }, [isOpen, onVisibilityChange]);
-
-  useEffect(
-    () => () => {
-      onVisibilityChange?.(false);
-    },
-    [onVisibilityChange]
-  );
+  useEffect(() => onVisibilityChange?.(isOpen), [isOpen, onVisibilityChange]);
+  useEffect(() => () => onVisibilityChange?.(false), [onVisibilityChange]);
 
   const onlineCount = useMemo(
     () => members.filter((member) => member.presenceState === "online").length,
     [members]
   );
   const activePeerIds = useMemo(
-    () => new Set(members.map((member) => member.peerId).filter((peerId): peerId is string => !!peerId)),
+    () => new Set(members.flatMap((member) => member.peerId ? [member.peerId] : [])),
     [members]
   );
   const dataReadyCount = useMemo(
-    () =>
-      peerDiagnostics.filter(
-        (peer) => activePeerIds.has(peer.peerId) && peer.dataChannelState === "open"
-      ).length,
+    () => peerDiagnostics.filter(
+      (peer) => activePeerIds.has(peer.peerId) && peer.dataChannelState === "open"
+    ).length,
     [activePeerIds, peerDiagnostics]
   );
   const degradedCount = useMemo(
-    () =>
-      peerDiagnostics.filter(
-        (peer) =>
-          activePeerIds.has(peer.peerId) &&
-          (peer.transportHealth === "degraded" ||
-            peer.transportHealth === "recovering" ||
-            peer.transportHealth === "reconnecting" ||
-            peer.transportHealth === "failed")
-      ).length,
+    () => peerDiagnostics.filter(
+      (peer) => activePeerIds.has(peer.peerId) &&
+        ["degraded", "recovering", "reconnecting", "failed"].includes(peer.transportHealth ?? "")
+    ).length,
     [activePeerIds, peerDiagnostics]
   );
   const memberLabelByPeerId = useMemo(
-    () =>
-      new Map(
-        members
-          .filter((member) => !!member.peerId)
-          .map((member) => [
-            member.peerId!,
-            `${member.nickname} · ${member.role === "host" ? "房主" : "成员"}`
-          ])
-      ),
+    () => new Map(members.flatMap((member) => member.peerId
+      ? [[member.peerId, `${member.nickname} · ${member.role === "host" ? "房主" : "成员"}`] as const]
+      : [])),
     [members]
   );
-  const localDiagnosticsView = useMemo(
-    () =>
-      buildDiagnosticsViewModel({
-        presenceState: localMemberState?.presenceState,
-        playback: localMemberState?.cachePlayback ?? null,
-        playbackSampleAgeMs: localMemberState?.playbackSampleAgeMs ?? null,
-        transfer: localMemberState?.pieceSummary ?? null,
-        dataLink: {
-          openCount: dataReadyCount,
-          connectedPeerCount: connectedPeersCount
-        }
-      }),
-    [connectedPeersCount, dataReadyCount, localMemberState]
-  );
-  const visibleAvailability = availabilitySummary.slice(0, 6);
   const visibleEvents = recentEvents.slice(0, 8);
+  const playback = localMemberState?.segmentedPlayback ?? null;
 
   return (
-    <section className="flex w-full flex-col gap-4 rounded-2xl border border-surface-border bg-surface/20 p-4">
+    <section className="flex w-full flex-col gap-4 border-t border-surface-border pt-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-foreground">缓存播放诊断</h2>
+          <h2 className="text-sm font-bold text-foreground">分段播放诊断</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            默认展示可听、缓存与同步结论；需要定位问题时展开开发详情。
+            直接读取 v4 播放器、播放资产与 DataChannel 状态。
           </p>
         </div>
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsOpen((value) => !value)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => setIsOpen((value) => !value)}
+        >
           {isOpen ? "收起" : "开发详情"}
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono font-medium text-foreground-muted">
+      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-foreground-muted">
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">在线: {onlineCount}</span>
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">Data: {dataReadyCount}</span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          在线: {onlineCount}
+          播放: {localMemberState?.playbackStatus.label ?? "等待房间状态"}
         </span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          Data: {dataReadyCount}
-        </span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          播放: {localDiagnosticsView.audibility.label}
-        </span>
-        <span
-          className={`rounded border px-2 py-1 ${
-            degradedCount > 0
-              ? "border-amber-500/25 bg-amber-500/10 text-amber-300"
-              : "border-surface-border bg-background/40"
-          }`}
-        >
+        <span className={`rounded border px-2 py-1 ${degradedCount > 0 ? "border-amber-500/25 bg-amber-500/10 text-amber-300" : "border-surface-border bg-background/40"}`}>
           异常: {degradedCount}
-        </span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          缓存库: {cachedTrackCount}
         </span>
       </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-surface-border pt-4 text-xs sm:grid-cols-3">
-        <div>
-          <span className="text-[10px] text-foreground-muted">实际播放</span>
-          <strong className="mt-1 block text-foreground">{localDiagnosticsView.audibility.label}</strong>
-        </div>
-        <div>
-          <span className="text-[10px] text-foreground-muted">播放模式</span>
-          <strong className="mt-1 block text-foreground">{localDiagnosticsView.playbackMode}</strong>
-        </div>
-        <div>
-          <span className="text-[10px] text-foreground-muted">缓存可读性</span>
-          <strong className="mt-1 block text-foreground">
-            PCM 连续 {localDiagnosticsView.cache.pcmContiguousChunks ?? 0} 片
-          </strong>
-        </div>
-        <div>
-          <span className="text-[10px] text-foreground-muted">缓冲健康</span>
-          <strong className="mt-1 block text-foreground">
-            {localDiagnosticsView.cache.healthLabel} · {localDiagnosticsView.cache.aheadLabel}
-          </strong>
-        </div>
-        <div>
-          <span className="text-[10px] text-foreground-muted">同步状态</span>
-          <strong className="mt-1 block text-foreground">{localDiagnosticsView.sync.label}</strong>
-        </div>
-        <div>
-          <span className="text-[10px] text-foreground-muted">当前问题</span>
-          <strong className={`mt-1 block ${localDiagnosticsView.activeIssue ? "text-amber-300" : "text-foreground"}`}>
-            {localDiagnosticsView.activeIssue ?? "无"}
-          </strong>
-        </div>
+        <div><span className="text-[10px] text-foreground-muted">实际播放</span><strong className="mt-1 block text-foreground">{localMemberState?.playbackStatus.label ?? "等待房间状态"}</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">播放引擎</span><strong className="mt-1 block text-foreground">分段 Opus</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">音频码率</span><strong className="mt-1 block text-foreground">{localMemberState?.playbackBitrateKbps ?? "--"} kbps</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">前向可播</span><strong className="mt-1 block text-foreground">{formatDuration(playback?.bufferedMs ?? 0)}</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">AudioContext</span><strong className="mt-1 block text-foreground">{playback?.audioContextState ?? "未创建"}</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">当前问题</span><strong className={`mt-1 block ${playback?.lastError ? "text-amber-300" : "text-foreground"}`}>{playback?.lastError ?? "无"}</strong></div>
       </div>
 
       {isOpen ? (
-        <div className="flex flex-col gap-3 border-t border-surface-border pt-4">
-          {localMemberState ? (
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              <DiagnosticBlock title="音频与 PCM">
+        <div className="flex flex-col gap-3">
+          {localMemberState && playback ? (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <DiagnosticSection title="分段播放器">
                 <DiagnosticGrid>
-                  <span>实际播放: {localDiagnosticsView.audibility.label}</span>
-                  <span>模式: {localDiagnosticsView.playbackMode}</span>
-                  <span>音频上下文: {localMemberState.cachePlayback?.pcmAudioContextState ?? "暂无样本"}</span>
-                  <span>输出连接: {formatBoolean(localMemberState.cachePlayback?.pcmDirectOutputConnected)}</span>
-                  <span>连续分片: {localMemberState.cachePlayback?.pcmContiguousChunkCount ?? "暂无样本"}</span>
-                  <span>已解码段: {localMemberState.cachePlayback?.pcmDecodedSegmentCount ?? "暂无样本"}</span>
-                  <span>已调度段: {localMemberState.cachePlayback?.pcmScheduledSegmentCount ?? "暂无样本"}</span>
-                  <span>前向缓冲: {localDiagnosticsView.cache.aheadLabel}</span>
+                  <span>状态: {playback.state}</span>
+                  <span>AudioContext: {playback.audioContextState ?? "未创建"}</span>
+                  <span>前向可播: {formatDuration(playback.bufferedMs)}</span>
+                  <span>持有单元: {playback.ownedUnitCount}/{playback.totalUnitCount || 0}</span>
+                  <span>音频码率: {localMemberState.playbackBitrateKbps ?? "--"} kbps</span>
+                  <span>最近错误: {playback.lastError ?? "无"}</span>
                 </DiagnosticGrid>
-              </DiagnosticBlock>
-
-              <DiagnosticBlock title="缓存传输">
+              </DiagnosticSection>
+              <DiagnosticSection title="本机资产传输">
                 <DiagnosticGrid>
-                  <span>下载: {localDiagnosticsView.transfer.downloadLabel}</span>
-                  <span>上传: {localDiagnosticsView.transfer.uploadLabel}</span>
-                  <span>传输状态: {localDiagnosticsView.transfer.active ? "正在传输" : "当前无传输"}</span>
-                  <span>样本: {formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}</span>
+                  <span>下载: {formatRate(localMemberState.pieceSummary.downloadRateKbps)}</span>
+                  <span>上传: {formatRate(localMemberState.pieceSummary.uploadRateKbps)}</span>
+                  <span>Data 接收: {formatRate(localMemberState.transportSummary.receiveRateKbps)}</span>
+                  <span>Data 发送: {formatRate(localMemberState.transportSummary.sendRateKbps)}</span>
+                  <span>RTT: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>
+                  <span>就绪通道: {localMemberState.dataReadyCount}</span>
                 </DiagnosticGrid>
-              </DiagnosticBlock>
-
-              <DiagnosticBlock title="同步">
-                <DiagnosticGrid>
-                  <span>状态: {localDiagnosticsView.sync.label}</span>
-                  <span>{localDiagnosticsView.sync.detail}</span>
-                  <span>时钟偏移: {formatMetric(localMemberState.cachePlayback?.serverClockOffsetMs, "ms")}</span>
-                  <span>校准 RTT: {formatMetric(localMemberState.cachePlayback?.serverClockRoundTripMs, "ms")}</span>
-                  <span>平均漂移: {formatMetric(localMemberState.cachePlayback?.averageDriftMs, "ms")}</span>
-                  <span>最大漂移: {formatMetric(localMemberState.cachePlayback?.maxDriftMs, "ms")}</span>
-                </DiagnosticGrid>
-              </DiagnosticBlock>
-
-              <DiagnosticBlock title="数据链路">
+              </DiagnosticSection>
+              <DiagnosticSection title="房间连接">
                 <DiagnosticGrid>
                   <span>DataChannel: {dataReadyCount}</span>
-                  <span>连接成员: {connectedPeersCount}</span>
-                  <span>状态: {localDiagnosticsView.dataLink.label}</span>
-                  <span>延迟: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>
-                  <span>发送队列: 见成员链路</span>
-                  <span>样本: {formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}</span>
+                  <span>已连接成员: {connectedPeersCount}</span>
+                  <span>在线成员: {onlineCount}</span>
+                  <span>异常链路: {degradedCount}</span>
                 </DiagnosticGrid>
-              </DiagnosticBlock>
+              </DiagnosticSection>
+              <DiagnosticSection title="ICE">
+                <DiagnosticGrid>
+                  <span>配置来源: {iceConfigSource}</span>
+                  <span>{iceConfigStatus}</span>
+                </DiagnosticGrid>
+              </DiagnosticSection>
             </div>
           ) : null}
 
@@ -458,65 +297,20 @@ function MeshStatusPanelBase({
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
+            <p className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
               当前没有可展示的活跃链路诊断。
-            </div>
+            </p>
           )}
 
-          <details className="rounded-lg border border-surface-border bg-background/30 px-3 py-2">
-            <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">
-              曲目分片摘要
-            </summary>
+          <details className="rounded-lg border border-surface-border bg-background/25 px-3 py-2">
+            <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">最近事件</summary>
             <div className="mt-3 flex flex-col gap-2">
-              {visibleAvailability.length ? (
-                visibleAvailability.map(({ track, peerCount, remotePeerCount, localChunkCount, totalChunks, sources }) => (
-                  <div
-                    key={track.id}
-                    className="rounded-lg border border-surface-border bg-black/20 p-3 text-[10px]"
-                  >
-                    <strong className="block truncate text-xs text-foreground">{track.title}</strong>
-                    <div className="mt-1 flex items-center justify-between text-foreground-muted">
-                      <span>本地分片 {localChunkCount}/{totalChunks || 0}</span>
-                      <span>可见/远端 {peerCount}/{remotePeerCount}</span>
-                    </div>
-                    {sources.length ? (
-                      <p className="mt-1 truncate text-foreground-muted/80">
-                        {sources.slice(0, 3).join(" / ")}
-                      </p>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <p className="text-[10px] text-foreground-muted">当前还没有分片摘要。</p>
-              )}
-              {availabilitySummary.length > visibleAvailability.length ? (
-                <p className="text-[10px] text-foreground-muted">
-                  另有 {availabilitySummary.length - visibleAvailability.length} 首曲目已隐藏。
-                </p>
-              ) : null}
-            </div>
-          </details>
-
-          <details className="rounded-lg border border-surface-border bg-background/30 px-3 py-2">
-            <summary className="cursor-pointer list-none text-xs font-semibold text-foreground">
-              最近事件
-            </summary>
-            <div className="mt-3 flex flex-col gap-2">
-              {visibleEvents.length ? (
-                visibleEvents.map((event) => (
-                  <div
-                    key={event.id}
-                    className={`rounded-lg border px-3 py-2 text-[10px] ${getEventClass(event.level)}`}
-                  >
-                    <div className="flex items-center justify-between gap-2 text-foreground-muted">
-                      <span>{formatTimestamp(event.timestamp)}</span>
-                    </div>
-                    <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-[10px] text-foreground-muted">当前没有最近事件。</p>
-              )}
+              {visibleEvents.length ? visibleEvents.map((event) => (
+                <div key={event.id} className={`rounded-lg border px-3 py-2 text-[10px] ${getEventClass(event.level)}`}>
+                  <span className="text-foreground-muted">{formatTimestamp(event.timestamp)}</span>
+                  <p className="mt-1 text-foreground">{formatEventLabel(event)}</p>
+                </div>
+              )) : <p className="text-[10px] text-foreground-muted">当前没有最近事件。</p>}
             </div>
           </details>
         </div>

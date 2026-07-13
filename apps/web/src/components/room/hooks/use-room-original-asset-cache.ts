@@ -164,8 +164,6 @@ export function useRoomOriginalAssetCache(input: RuntimeInput) {
       const room = runtime.roomSnapshot;
       if (!room) return;
       const candidates = new Set(activeTrackIdsRef.current);
-      const currentTrackId = room.room.playback.currentTrackId;
-      if (currentTrackId) candidates.add(currentTrackId);
 
       for (const trackId of candidates) {
         const track = room.tracks.find((candidate) => candidate.id === trackId);

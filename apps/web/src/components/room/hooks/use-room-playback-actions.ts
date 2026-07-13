@@ -8,7 +8,6 @@ import {
   type SetStateAction
 } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
-import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import {
   createPlaybackStartIntent,
@@ -50,6 +49,10 @@ export function startBestEffortPlaybackAudioUnlock(input: {
   });
 }
 
+export function isSegmentedAudioOutputReady() {
+  return roomAudioOutput.isActivated() && roomAudioOutput.isAudioContextReady();
+}
+
 export function useRoomPlaybackActions({
   currentPlaybackPositionRef,
   roomSnapshot,
@@ -75,16 +78,17 @@ export function useRoomPlaybackActions({
 }: UseRoomPlaybackActionsInput) {
   const ensureRoomAudioUnlocked = useCallback(
     async (reason: string) => {
-      if (roomAudioOutput.isActivated()) {
+      if (isSegmentedAudioOutputReady()) {
         setAudioUnlocked(true);
         setLastSourceStartError(null);
         return true;
       }
 
       try {
-        const primeResult = await roomAudioOutput.primeOutputs({});
-        setAudioUnlocked(primeResult.ok);
-        if (!primeResult.ok) {
+        await roomAudioOutput.primeOutputs({});
+        const audioReady = isSegmentedAudioOutputReady();
+        setAudioUnlocked(audioReady);
+        if (!audioReady) {
           const message = "浏览器仍未允许房间音频输出";
           setLastSourceStartError(message);
           setStatusMessage(message);
@@ -97,15 +101,7 @@ export function useRoomPlaybackActions({
             summary: message,
             update: (snapshot) => ({
               ...snapshot,
-              lastError: message,
-              progressivePlaybackStatus: {
-                ...(
-                  snapshot.progressivePlaybackStatus ??
-                  createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-                ),
-                audioUnlocked: false,
-                lastSourceStartError: message
-              }
+              lastError: message
             })
           });
           return false;
@@ -120,20 +116,13 @@ export function useRoomPlaybackActions({
           recordEvent: false,
           update: (snapshot) => ({
             ...snapshot,
-            progressivePlaybackStatus: {
-              ...(
-                snapshot.progressivePlaybackStatus ??
-                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-              ),
-              audioUnlocked: true,
-              lastSourceStartError: null
-            }
+            lastError: null
           })
         });
         return true;
       } catch (error) {
         const message = toUserFacingError(error);
-        setAudioUnlocked(roomAudioOutput.isActivated());
+        setAudioUnlocked(isSegmentedAudioOutputReady());
         setLastSourceStartError(message);
         recordPeerDiagnostic({
           peerId: "system",
@@ -144,15 +133,7 @@ export function useRoomPlaybackActions({
           summary: `房间音频解锁失败：${message}`,
           update: (snapshot) => ({
             ...snapshot,
-            lastError: `房间音频解锁失败：${message}`,
-            progressivePlaybackStatus: {
-              ...(
-                snapshot.progressivePlaybackStatus ??
-                createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
-              ),
-              audioUnlocked: roomAudioOutput.isActivated(),
-              lastSourceStartError: message
-            }
+            lastError: `房间音频解锁失败：${message}`
           })
         });
         return false;
@@ -323,7 +304,7 @@ export function useRoomPlaybackActions({
       currentPlaybackTrackId
     ) {
       const timer = window.setTimeout(() => {
-        if (!roomAudioOutput.isActivated()) {
+        if (!isSegmentedAudioOutputReady()) {
           setAudioBlockedOverlay(true);
         }
       }, 1500);
@@ -341,9 +322,10 @@ export function useRoomPlaybackActions({
 
   const handleAudioUnlock = useCallback(async () => {
     setAudioBlockedOverlay(false);
-    const primeResult = await roomAudioOutput.primeOutputs({});
-    setAudioUnlocked(primeResult.ok);
-    if (primeResult.ok) {
+    await roomAudioOutput.primeOutputs({});
+    const audioReady = isSegmentedAudioOutputReady();
+    setAudioUnlocked(audioReady);
+    if (audioReady) {
       setStatusMessage("");
       return;
     }

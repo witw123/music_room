@@ -19,10 +19,34 @@ import {
   resolvePlaybackUnitOrder
 } from "./playback-segment-scheduler";
 import { SegmentedOpusEngine } from "./segmented-opus-engine";
-import {
-  shouldPauseOriginalAutoCache,
-  shouldStartOriginalAutoCache
-} from "@/features/cache/original-auto-cache-policy";
+import { roomAudioOutput } from "./room-audio-output";
+
+export type SegmentedPlaybackState =
+  | "idle"
+  | "awaiting-unlock"
+  | "buffering"
+  | "live"
+  | "paused"
+  | "unavailable"
+  | "ended";
+
+export type SegmentedPlaybackSnapshot = {
+  state: SegmentedPlaybackState;
+  bufferedMs: number;
+  ownedUnitCount: number;
+  totalUnitCount: number;
+  audioContextState: AudioContextState | null;
+  lastError: string | null;
+};
+
+const idleSnapshot: SegmentedPlaybackSnapshot = {
+  state: "idle",
+  bufferedMs: 0,
+  ownedUnitCount: 0,
+  totalUnitCount: 0,
+  audioContextState: null,
+  lastError: null
+};
 
 export function useSegmentedOpusPlayback(input: {
   roomSnapshot: RoomSnapshot | null;
@@ -41,12 +65,6 @@ export function useSegmentedOpusPlayback(input: {
     maxReplicas?: number;
   }) => boolean;
   emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
-  network: {
-    throughputKbps: number | null;
-    rttP95Ms: number | null;
-    playbackChannelBufferedBytes: number;
-    deadlineMissesLast30s: number;
-  };
 }) {
   const { roomSnapshot, currentTrack, peerId, audioUnlocked, volume } = input;
   const engineRef = useRef<SegmentedOpusEngine | null>(null);
@@ -54,15 +72,9 @@ export function useSegmentedOpusPlayback(input: {
   runtimeRef.current = input;
   const tickingRef = useRef(false);
   const announcedSignatureRef = useRef("");
-  const announcedOriginalSignatureRef = useRef("");
   const activePlaybackAssetIdRef = useRef<string | null>(null);
-  const availableStorageBytesRef = useRef<number | null>(null);
-  const lastStorageEstimateAtRef = useRef(0);
-  const originalAutoCacheActiveRef = useRef(false);
-  const [state, setState] = useState<
-    "idle" | "awaiting-unlock" | "buffering" | "live" | "paused" | "unavailable" | "ended"
-  >("idle");
-  const [bufferedMs, setBufferedMs] = useState(0);
+  const storedManifestAssetIdRef = useRef<string | null>(null);
+  const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
   const playbackAssetId = currentTrack?.playbackAsset?.assetId ?? null;
   const roomId = roomSnapshot?.room.id ?? null;
   const trackId = currentTrack?.id ?? null;
@@ -75,26 +87,17 @@ export function useSegmentedOpusPlayback(input: {
       engineRef.current?.destroy();
       engineRef.current = null;
       activePlaybackAssetIdRef.current = null;
-      originalAutoCacheActiveRef.current = false;
+      storedManifestAssetIdRef.current = null;
       announcedSignatureRef.current = "";
-      announcedOriginalSignatureRef.current = "";
-      setState("idle");
-      setBufferedMs(0);
+      setSnapshot(idleSnapshot);
       return;
     }
     if (activePlaybackAssetIdRef.current !== playbackAsset.assetId) {
       activePlaybackAssetIdRef.current = playbackAsset.assetId;
-      originalAutoCacheActiveRef.current = false;
+      storedManifestAssetIdRef.current = null;
       announcedSignatureRef.current = "";
-      announcedOriginalSignatureRef.current = "";
     }
     let cancelled = false;
-    engineRef.current ??= new SegmentedOpusEngine();
-    const playbackManifestReady = putAssetManifest(playbackAsset);
-    const initialOriginalAsset = initialRuntime.currentTrack?.originalAsset;
-    const originalManifestReady = initialOriginalAsset
-      ? putAssetManifest(initialOriginalAsset)
-      : Promise.resolve();
 
     const tick = async () => {
       if (cancelled || tickingRef.current) {
@@ -102,7 +105,6 @@ export function useSegmentedOpusPlayback(input: {
       }
       tickingRef.current = true;
       try {
-        await playbackManifestReady;
         const runtime = runtimeRef.current;
         const currentPlaybackAsset = runtime.currentTrack?.playbackAsset;
         const currentPlayback = runtime.roomSnapshot?.room.playback;
@@ -115,7 +117,10 @@ export function useSegmentedOpusPlayback(input: {
         ) {
           return;
         }
-        const originalAsset = runtime.currentTrack?.originalAsset ?? initialOriginalAsset;
+        if (storedManifestAssetIdRef.current !== currentPlaybackAsset.assetId) {
+          await putAssetManifest(currentPlaybackAsset);
+          storedManifestAssetIdRef.current = currentPlaybackAsset.assetId;
+        }
         const owned = await getAssetUnitIndexes(currentPlaybackAsset.assetId);
         const serverNowMs = getRoomPlaybackClockNowMs();
         const startAtMs = currentPlayback.startAt ? Date.parse(currentPlayback.startAt) : serverNowMs;
@@ -128,7 +133,7 @@ export function useSegmentedOpusPlayback(input: {
           positionMs,
           ownedUnitIndexes: owned
         });
-        setBufferedMs(bufferMs);
+        const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
 
         const wanted = resolvePlaybackUnitOrder({
           manifest: currentPlaybackAsset,
@@ -138,10 +143,10 @@ export function useSegmentedOpusPlayback(input: {
         });
         const providers = Object.values(runtime.availabilityByAsset[currentPlaybackAsset.assetId] ?? {})
           .filter((provider) => provider.ownerPeerId !== runtime.peerId);
+        const playbackUnavailable =
+          wanted.length > 0 && providers.length === 0 && bufferMs < 6_000;
         if (wanted.length > 0) {
-          if (providers.length === 0 && bufferMs < 6_000) {
-            setState("unavailable");
-          } else {
+          if (!playbackUnavailable) {
             const currentUnit = playbackUnitIndexAt(currentPlaybackAsset, positionMs);
             const criticalEnd = currentUnit + Math.ceil(10_000 / currentPlaybackAsset.segmentDurationMs);
             const criticalWanted = bufferMs < 10_000
@@ -193,97 +198,59 @@ export function useSegmentedOpusPlayback(input: {
           });
         }
 
-        if (originalAsset) {
-          if (originalAsset.assetId === initialOriginalAsset?.assetId) {
-            await originalManifestReady;
-          } else {
-            await putAssetManifest(originalAsset);
-          }
-          if (Date.now() - lastStorageEstimateAtRef.current >= 10_000) {
-            lastStorageEstimateAtRef.current = Date.now();
-            const estimate = await navigator.storage?.estimate?.().catch(() => null);
-            availableStorageBytesRef.current = estimate?.quota !== undefined && estimate.usage !== undefined
-              ? Math.max(0, estimate.quota - estimate.usage)
-              : null;
-          }
-          const localPlaybackComplete = owned.length === currentPlaybackAsset.unitCount ? 1 : 0;
-          const remotePlaybackComplete = Object.values(
-            runtime.availabilityByAsset[currentPlaybackAsset.assetId] ?? {}
-          ).filter((provider) => provider.ownerPeerId !== runtime.peerId && provider.complete).length;
-          const policyInput = {
-            playbackBufferedMs: bufferMs,
-            completePlaybackProviderCount: localPlaybackComplete + remotePlaybackComplete,
-            throughputKbps: runtime.network.throughputKbps,
-            rttP95Ms: runtime.network.rttP95Ms,
-            playbackChannelBufferedBytes: runtime.network.playbackChannelBufferedBytes,
-            deadlineMissesLast30s: runtime.network.deadlineMissesLast30s,
-            availableStorageBytes: availableStorageBytesRef.current,
-            originalSizeBytes: originalAsset.sizeBytes
-          };
-          if (originalAutoCacheActiveRef.current && shouldPauseOriginalAutoCache(policyInput)) {
-            originalAutoCacheActiveRef.current = false;
-          } else if (!originalAutoCacheActiveRef.current && shouldStartOriginalAutoCache(policyInput)) {
-            originalAutoCacheActiveRef.current = true;
-          }
-          const originalOwned = await getAssetUnitIndexes(originalAsset.assetId);
-          if (originalAutoCacheActiveRef.current && originalOwned.length < originalAsset.unitCount) {
-            const originalWanted = Array.from(
-              { length: Math.min(4, originalAsset.unitCount - originalOwned.length) },
-              (_, offset) => {
-                const ownedSet = new Set(originalOwned);
-                let index = 0;
-                let remaining = offset;
-                while (index < originalAsset.unitCount) {
-                  if (!ownedSet.has(index) && remaining-- === 0) return index;
-                  index += 1;
-                }
-                return -1;
-              }
-            ).filter((index) => index >= 0);
-            runtime.requestAssetUnits({
-              assetId: originalAsset.assetId,
-              assetKind: "original",
-              unitIndexes: originalWanted,
-              totalUnits: originalAsset.unitCount,
-              priority: "bulk",
-              preferredPeerId: Object.values(runtime.availabilityByAsset[originalAsset.assetId] ?? {})
-                .find((provider) => provider.ownerPeerId !== runtime.peerId)?.ownerPeerId ?? null,
-              maxReplicas: 1
-            });
-          }
-          const originalRanges = unitIndexesToRanges(originalOwned, originalAsset.unitCount);
-          const originalSignature = `${originalAsset.assetId}:${JSON.stringify(originalRanges)}`;
-          if (originalRanges.length > 0 && originalSignature !== announcedOriginalSignatureRef.current) {
-            announcedOriginalSignatureRef.current = originalSignature;
-            runtime.emitAssetAvailability({
-              protocolVersion: 4,
-              roomId: runtime.roomSnapshot!.room.id,
-              assetId: originalAsset.assetId,
-              assetKind: "original",
-              ownerPeerId: runtime.peerId,
-              nickname:
-                runtime.roomSnapshot!.room.members.find((member) => member.peerId === runtime.peerId)?.nickname ?? "Member",
-              totalUnits: originalAsset.unitCount,
-              availableRanges: originalRanges,
-              complete: originalOwned.length === originalAsset.unitCount,
-              source: "local_cache",
-              announcedAt: new Date().toISOString()
-            });
-          }
-        }
-
-        if (!runtime.audioUnlocked) {
-          setState("awaiting-unlock");
+        if (playbackUnavailable) {
+          setSnapshot({
+            state: "unavailable",
+            bufferedMs: bufferMs,
+            ownedUnitCount: owned.length,
+            totalUnitCount: currentPlaybackAsset.unitCount,
+            audioContextState,
+            lastError: null
+          });
           return;
         }
-        const result = await engineRef.current!.sync({
+
+        if (!runtime.audioUnlocked || audioContextState !== "running") {
+          setSnapshot({
+            state: "awaiting-unlock",
+            bufferedMs: bufferMs,
+            ownedUnitCount: owned.length,
+            totalUnitCount: currentPlaybackAsset.unitCount,
+            audioContextState,
+            lastError: null
+          });
+          return;
+        }
+        engineRef.current ??= new SegmentedOpusEngine();
+        const result = await engineRef.current.sync({
           manifest: currentPlaybackAsset,
           playback: currentPlayback,
           serverNowMs,
           volume: runtime.volume,
           getUnit: (unitIndex) => getAssetUnit(currentPlaybackAsset.assetId, unitIndex)
         });
-        setState(result.state);
+        setSnapshot({
+          state: result.state,
+          bufferedMs: bufferMs,
+          ownedUnitCount: owned.length,
+          totalUnitCount: currentPlaybackAsset.unitCount,
+          audioContextState,
+          lastError: null
+        });
+      } catch (error) {
+        const failedEngine = engineRef.current;
+        engineRef.current = null;
+        storedManifestAssetIdRef.current = null;
+        failedEngine?.destroy();
+        const runtime = runtimeRef.current;
+        const totalUnitCount = runtime.currentTrack?.playbackAsset?.unitCount ?? 0;
+        const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
+        setSnapshot((current) => buildSegmentedPlaybackFailureSnapshot({
+          current,
+          totalUnitCount,
+          audioContextState,
+          error
+        }));
       } finally {
         tickingRef.current = false;
       }
@@ -309,5 +276,27 @@ export function useSegmentedOpusPlayback(input: {
 
   useEffect(() => () => engineRef.current?.destroy(), []);
 
-  return { state, bufferedMs };
+  return snapshot;
+}
+
+function formatSegmentedPlaybackError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return "分段音频读取或解码失败";
+}
+
+export function buildSegmentedPlaybackFailureSnapshot(input: {
+  current: SegmentedPlaybackSnapshot;
+  totalUnitCount: number;
+  audioContextState: AudioContextState | null;
+  error: unknown;
+}): SegmentedPlaybackSnapshot {
+  return {
+    ...input.current,
+    state: input.audioContextState === "running" ? "buffering" : "awaiting-unlock",
+    totalUnitCount: input.totalUnitCount,
+    audioContextState: input.audioContextState,
+    lastError: formatSegmentedPlaybackError(input.error)
+  };
 }
