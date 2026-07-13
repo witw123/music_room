@@ -32,7 +32,10 @@ export default async function opus(opts) {
 	let FRAME_SIZE = 960 // 20ms at 48kHz
 	let ratio = OPUS_RATE / rate
 
-	let enc = new OpusScript(OPUS_RATE, nch, appConst)
+	// The WASM build resolves its binary relative to the worker URL, which is not
+	// emitted by Next.js. The asm.js backend is self-contained and uses the same
+	// libopus implementation without a runtime asset request.
+	let enc = new OpusScript(OPUS_RATE, nch, appConst, { wasm: false })
 	enc.setBitrate(bitrate)
 
 	let serial = (Math.random() * 0xFFFFFFFF) >>> 0

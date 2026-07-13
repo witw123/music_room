@@ -3,6 +3,7 @@
 type PendingEncode = {
   resolve: (payload: ArrayBuffer) => void;
   reject: (error: Error) => void;
+  timeoutId: ReturnType<typeof setTimeout>;
 };
 
 type EncodeResponse =
@@ -11,11 +12,13 @@ type EncodeResponse =
 
 export class OpusSegmentEncoder {
   private readonly worker: Worker;
+  private readonly timeoutMs: number;
   private readonly pending = new Map<number, PendingEncode>();
   private sequence = 0;
   private disposed = false;
 
-  constructor() {
+  constructor(options?: { timeoutMs?: number }) {
+    this.timeoutMs = options?.timeoutMs ?? 30_000;
     this.worker = new Worker(new URL("./opus-segment-encoder.worker.ts", import.meta.url), {
       type: "module",
       name: "music-room-opus-encoder"
@@ -26,6 +29,7 @@ export class OpusSegmentEncoder {
         return;
       }
       this.pending.delete(event.data.id);
+      clearTimeout(pending.timeoutId);
       if (event.data.ok) {
         pending.resolve(event.data.payload);
       } else {
@@ -33,7 +37,10 @@ export class OpusSegmentEncoder {
       }
     };
     this.worker.onerror = (event) => {
-      this.rejectAll(new Error(event.message || "Opus encoder worker failed."));
+      this.fail(new Error(event.message || "Opus encoder worker failed."));
+    };
+    this.worker.onmessageerror = () => {
+      this.fail(new Error("Opus encoder worker returned an unreadable response."));
     };
   }
 
@@ -48,8 +55,20 @@ export class OpusSegmentEncoder {
     const id = ++this.sequence;
     const transfer = input.channels.map((channel) => channel.buffer);
     return new Promise<ArrayBuffer>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, ...input }, { transfer });
+      const timeoutId = setTimeout(() => {
+        if (!this.pending.has(id)) {
+          return;
+        }
+        this.fail(new Error(`Opus encoding timed out after ${this.timeoutMs}ms.`));
+      }, this.timeoutMs);
+      this.pending.set(id, { resolve, reject, timeoutId });
+      try {
+        this.worker.postMessage({ id, ...input }, { transfer });
+      } catch (error) {
+        this.pending.delete(id);
+        clearTimeout(timeoutId);
+        reject(error instanceof Error ? error : new Error("Unable to start Opus encoding."));
+      }
     });
   }
 
@@ -57,15 +76,22 @@ export class OpusSegmentEncoder {
     if (this.disposed) {
       return;
     }
-    this.disposed = true;
-    this.worker.terminate();
-    this.rejectAll(new Error("Opus encoding was cancelled."));
+    this.fail(new Error("Opus encoding was cancelled."));
   }
 
   private rejectAll(error: Error) {
     for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeoutId);
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  private fail(error: Error) {
+    if (!this.disposed) {
+      this.disposed = true;
+      this.worker.terminate();
+    }
+    this.rejectAll(error);
   }
 }

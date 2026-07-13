@@ -224,6 +224,7 @@ export function useUploadPipelineActions({
             file,
             onProgress: ({ stage, completed, total }) => {
               const labels = {
+                inspecting: "正在检查音频资源",
                 hashing: "正在校验源文件",
                 "persisting-original": "正在保存源文件",
                 decoding: "正在解码音频",

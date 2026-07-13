@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { resolveSupportedUploadFormat, slicePcmSegment } from "./audio-asset-builder";
+import {
+  assertDecodedPcmWithinMemoryBudget,
+  estimateDecodedPcmBytes,
+  maxDecodedPcmBytes,
+  resolveSupportedUploadFormat,
+  slicePcmSegment
+} from "./audio-asset-builder";
 
 describe("audio asset preparation", () => {
   it("accepts only the supported room source formats", () => {
@@ -21,5 +27,13 @@ describe("audio asset preparation", () => {
     expect(segment.channels[0]).toHaveLength(48_000 * 2 + 48_000 * 0.08);
     expect(segment.trimStartSamples).toBe(3_840);
     expect(segment.channels[0]?.[0]).toBe(48_000 * 2 - 3_840);
+  });
+
+  it("rejects audio whose decoded PCM would exceed the browser memory budget", () => {
+    expect(estimateDecodedPcmBytes({ durationSeconds: 600, channels: 2 }))
+      .toBeLessThan(maxDecodedPcmBytes);
+    expect(() =>
+      assertDecodedPcmWithinMemoryBudget({ durationSeconds: 720, channels: 2 })
+    ).toThrow(/256 MB/);
   });
 });

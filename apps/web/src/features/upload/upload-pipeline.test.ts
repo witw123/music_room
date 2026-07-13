@@ -89,6 +89,30 @@ describe("processSelectedTrackFiles", () => {
     expect(revokedUrls).toEqual(["blob:existing.flac", "blob:busy.flac"]);
     expect([...inFlightUploadHashes]).toEqual(["user_1:hash_busy"]);
   });
+
+  it("revokes the object URL when audio preparation fails", async () => {
+    const file = new File(["broken"], "broken.wav", { type: "audio/wav" });
+    const revokedUrls: string[] = [];
+
+    await expect(processSelectedTrackFiles({
+      files: [file],
+      activeSession: { userId: "user_1", nickname: "Host" },
+      roomId: "room_1",
+      roomTracks: [],
+      manualTrackCachingEnabled: true,
+      inFlightUploadHashes: new Set(),
+      createObjectUrl: () => "blob:broken.wav",
+      revokeObjectUrl: (objectUrl) => revokedUrls.push(objectUrl),
+      buildTrackMeta: async () => {
+        throw new Error("encoder failed");
+      },
+      buildRegisterTrackPayload: () => ({}),
+      registerTrack: async () => buildTrack("unused", "unused"),
+      persistTrackIntoLibrary: async () => undefined
+    })).rejects.toThrow("encoder failed");
+
+    expect(revokedUrls).toEqual(["blob:broken.wav"]);
+  });
 });
 
 describe("applySelectedTrackFilesResult", () => {

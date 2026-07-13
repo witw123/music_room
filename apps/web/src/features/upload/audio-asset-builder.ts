@@ -12,6 +12,8 @@ import {
 } from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
 import {
+  deleteAudioAsset,
+  getAssetManifest,
   putAssetManifest,
   putVerifiedAssetUnit,
   upsertTranscodeJob
@@ -22,6 +24,7 @@ const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
+export const maxDecodedPcmBytes = 256 * 1024 * 1024;
 
 export type PreparedAudioAssets = {
   fileHash: string;
@@ -30,10 +33,23 @@ export type PreparedAudioAssets = {
 };
 
 export type AssetPreparationProgress = {
-  stage: "hashing" | "persisting-original" | "decoding" | "encoding" | "persisting-playback";
+  stage:
+    | "inspecting"
+    | "hashing"
+    | "persisting-original"
+    | "decoding"
+    | "encoding"
+    | "persisting-playback";
   completed: number;
   total: number;
 };
+
+class AudioDecodeMemoryLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AudioDecodeMemoryLimitError";
+  }
+}
 
 export function resolveSupportedUploadFormat(file: Pick<File, "name" | "type">) {
   const signature = `${file.type} ${file.name}`.trim().toLowerCase();
@@ -65,6 +81,7 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
+  await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
   const source = await prepareOriginalAsset(input);
   await upsertTranscodeJob({
     sourceFileHash: source.fileHash,
@@ -76,10 +93,29 @@ export async function prepareAudioAssets(input: {
   });
 
   try {
-    const playbackAsset = await preparePlaybackAsset({
+    const playback = await preparePlaybackAsset({
       ...input,
       fileHash: source.fileHash
     });
+    const preexistingAssetIds = new Set(
+      (
+        await Promise.all([
+          getAssetManifest(source.originalAsset.assetId),
+          getAssetManifest(playback.playbackAsset.assetId)
+        ])
+      )
+        .filter((record) => !!record)
+        .map((record) => record.assetId)
+    );
+    const createdAssetIds = [source.originalAsset.assetId, playback.playbackAsset.assetId]
+      .filter((assetId) => !preexistingAssetIds.has(assetId));
+    try {
+      await persistOriginalAsset(input, source);
+      await persistPlaybackAsset(input, playback);
+    } catch (error) {
+      await Promise.allSettled(createdAssetIds.map((assetId) => deleteAudioAsset(assetId)));
+      throw error;
+    }
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
       kind: "playback-transcode",
@@ -88,7 +124,11 @@ export async function prepareAudioAssets(input: {
       progress: 1,
       errorMessage: null
     });
-    return { ...source, playbackAsset };
+    return {
+      fileHash: source.fileHash,
+      originalAsset: source.originalAsset,
+      playbackAsset: playback.playbackAsset
+    };
   } catch (error) {
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
@@ -136,26 +176,7 @@ async function prepareOriginalAsset(input: {
     ...manifestWithoutId,
     assetId: await computeAssetId(manifestWithoutId)
   });
-  await putAssetManifest(originalAsset);
-
-  for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
-    throwIfAborted(input.signal);
-    const payload = await readFileUnit(input.file, unitIndex);
-    await putVerifiedAssetUnit({
-      descriptor: {
-        assetId: originalAsset.assetId,
-        kind: "original",
-        unitIndex,
-        payloadBytes: payload.byteLength,
-        contentHash: leafHashes[unitIndex]!,
-        proof: tree.proofs[unitIndex]!
-      },
-      payload
-    });
-    input.onProgress?.({ stage: "persisting-original", completed: unitIndex + 1, total: unitCount });
-  }
-
-  return { fileHash, originalAsset };
+  return { fileHash, originalAsset, leafHashes, proofs: tree.proofs };
 }
 
 async function preparePlaybackAsset(input: {
@@ -171,6 +192,10 @@ async function preparePlaybackAsset(input: {
   if (audioBuffer.numberOfChannels < 1 || audioBuffer.numberOfChannels > 2) {
     throw new Error("仅支持单声道或双声道音频。");
   }
+  assertDecodedPcmWithinMemoryBudget({
+    durationSeconds: audioBuffer.duration,
+    channels: audioBuffer.numberOfChannels
+  });
 
   const channels = audioBuffer.numberOfChannels as 1 | 2;
   const bitrate = channels === 1 ? 96_000 as const : 192_000 as const;
@@ -233,23 +258,121 @@ async function preparePlaybackAsset(input: {
     ...manifestWithoutId,
     assetId: await computeAssetId(manifestWithoutId)
   });
-  await putAssetManifest(playbackAsset);
+  return { playbackAsset, encodedUnits, leafHashes, proofs: tree.proofs };
+}
 
-  for (let unitIndex = 0; unitIndex < encodedUnits.length; unitIndex += 1) {
+async function persistOriginalAsset(
+  input: {
+    file: File;
+    signal?: AbortSignal;
+    onProgress?: (progress: AssetPreparationProgress) => void;
+  },
+  source: Awaited<ReturnType<typeof prepareOriginalAsset>>
+) {
+  await putAssetManifest(source.originalAsset);
+  for (let unitIndex = 0; unitIndex < source.originalAsset.unitCount; unitIndex += 1) {
     throwIfAborted(input.signal);
-    const unit = encodedUnits[unitIndex]!;
+    const payload = await readFileUnit(input.file, unitIndex);
+    await putVerifiedAssetUnit({
+      descriptor: {
+        assetId: source.originalAsset.assetId,
+        kind: "original",
+        unitIndex,
+        payloadBytes: payload.byteLength,
+        contentHash: source.leafHashes[unitIndex]!,
+        proof: source.proofs[unitIndex]!
+      },
+      payload
+    });
+    input.onProgress?.({
+      stage: "persisting-original",
+      completed: unitIndex + 1,
+      total: source.originalAsset.unitCount
+    });
+  }
+}
+
+async function persistPlaybackAsset(
+  input: {
+    signal?: AbortSignal;
+    onProgress?: (progress: AssetPreparationProgress) => void;
+  },
+  playback: Awaited<ReturnType<typeof preparePlaybackAsset>>
+) {
+  await putAssetManifest(playback.playbackAsset);
+  for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
+    throwIfAborted(input.signal);
+    const unit = playback.encodedUnits[unitIndex]!;
     await putVerifiedAssetUnit({
       descriptor: {
         ...unit.descriptor,
-        assetId: playbackAsset.assetId,
-        contentHash: leafHashes[unitIndex]!,
-        proof: tree.proofs[unitIndex]!
+        assetId: playback.playbackAsset.assetId,
+        contentHash: playback.leafHashes[unitIndex]!,
+        proof: playback.proofs[unitIndex]!
       },
       payload: unit.payload
     });
-    input.onProgress?.({ stage: "persisting-playback", completed: unitIndex + 1, total: encodedUnits.length });
+    input.onProgress?.({
+      stage: "persisting-playback",
+      completed: unitIndex + 1,
+      total: playback.encodedUnits.length
+    });
   }
-  return playbackAsset;
+}
+
+async function assertFileFitsDecodeMemoryBudget(
+  file: File,
+  onProgress?: (progress: AssetPreparationProgress) => void
+) {
+  onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
+  try {
+    const { parseBlob } = await import("music-metadata-browser");
+    const metadata = await parseBlob(file, { duration: true, skipCovers: true });
+    const durationSeconds = metadata.format.duration;
+    const channels = metadata.format.numberOfChannels;
+    if (
+      typeof durationSeconds === "number" &&
+      Number.isFinite(durationSeconds) &&
+      typeof channels === "number" &&
+      Number.isFinite(channels)
+    ) {
+      assertDecodedPcmWithinMemoryBudget({ durationSeconds, channels });
+    }
+  } catch (error) {
+    if (error instanceof AudioDecodeMemoryLimitError) {
+      throw error;
+    }
+    // Browser decoding remains the source of truth when metadata parsing is incomplete.
+  } finally {
+    onProgress?.({ stage: "inspecting", completed: 1, total: 1 });
+  }
+}
+
+export function estimateDecodedPcmBytes(input: {
+  durationSeconds: number;
+  channels: number;
+}) {
+  if (
+    !Number.isFinite(input.durationSeconds) ||
+    input.durationSeconds <= 0 ||
+    !Number.isFinite(input.channels) ||
+    input.channels <= 0
+  ) {
+    return 0;
+  }
+  return Math.ceil(input.durationSeconds * opusSampleRate * Math.ceil(input.channels) * 4);
+}
+
+export function assertDecodedPcmWithinMemoryBudget(input: {
+  durationSeconds: number;
+  channels: number;
+}) {
+  const estimatedBytes = estimateDecodedPcmBytes(input);
+  if (estimatedBytes > maxDecodedPcmBytes) {
+    throw new AudioDecodeMemoryLimitError(
+      "音频过长，预计解码内存超过 256 MB，请先切分音频再上传。"
+    );
+  }
 }
 
 export function slicePcmSegment(

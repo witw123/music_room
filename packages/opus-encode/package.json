@@ -18,7 +18,7 @@
   "repository": { "type": "git", "url": "git+https://github.com/audiojs/opus-encode.git" },
   "engines": { "node": ">=16" },
   "bugs": "https://github.com/audiojs/opus-encode/issues",
-  "scripts": { "test": "node test.js" },
+  "scripts": { "test": "node --test opus-encode.test.js" },
   "dependencies": { "opusscript": "^0.1.1" },
   "devDependencies": { "tst": "^9.2.2" }
 }

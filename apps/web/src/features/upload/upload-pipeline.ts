@@ -67,49 +67,54 @@ export async function processSelectedTrackFiles(input: {
 
   for (const file of input.files) {
     const objectUrl = input.createObjectUrl(file);
-    const track = await input.buildTrackMeta(file, objectUrl);
-    const uploadHashKey = `${input.activeSession.userId}:${track.fileHash}`;
-
-    if (input.inFlightUploadHashes.has(uploadHashKey)) {
-      input.revokeObjectUrl(objectUrl);
-      continue;
-    }
-
-    const existingTrack = currentTracksByHash.get(track.fileHash);
-    if (existingTrack) {
-      input.revokeObjectUrl(objectUrl);
-      continue;
-    }
-
-    input.inFlightUploadHashes.add(uploadHashKey);
-    let registered: TrackMeta;
+    let retainObjectUrl = false;
     try {
-      registered = await input.registerTrack(
-        input.roomId,
-        input.buildRegisterTrackPayload(track)
-      );
+      const track = await input.buildTrackMeta(file, objectUrl);
+      const uploadHashKey = `${input.activeSession.userId}:${track.fileHash}`;
+
+      if (input.inFlightUploadHashes.has(uploadHashKey)) {
+        continue;
+      }
+
+      const existingTrack = currentTracksByHash.get(track.fileHash);
+      if (existingTrack) {
+        continue;
+      }
+
+      input.inFlightUploadHashes.add(uploadHashKey);
+      let registered: TrackMeta;
+      try {
+        registered = await input.registerTrack(
+          input.roomId,
+          input.buildRegisterTrackPayload(track)
+        );
+      } finally {
+        input.inFlightUploadHashes.delete(uploadHashKey);
+      }
+
+      const upload = {
+        file,
+        objectUrl,
+        origin: "live-upload"
+      } satisfies UploadedTrack;
+      retainObjectUrl = true;
+      uploads[registered.id] = upload;
+      input.onTrackReady?.(registered.id, upload, registered);
+      registeredTracks.push(registered);
+      currentTracksByHash.set(registered.fileHash, registered);
+
+      if (input.manualTrackCachingEnabled) {
+        await input.persistTrackIntoLibrary({
+          track: registered,
+          roomId: input.roomId,
+          file
+        });
+      }
     } finally {
-      input.inFlightUploadHashes.delete(uploadHashKey);
+      if (!retainObjectUrl) {
+        input.revokeObjectUrl(objectUrl);
+      }
     }
-
-    const upload = {
-      file,
-      objectUrl,
-      origin: "live-upload"
-    } satisfies UploadedTrack;
-    uploads[registered.id] = upload;
-    input.onTrackReady?.(registered.id, upload, registered);
-    registeredTracks.push(registered);
-    currentTracksByHash.set(registered.fileHash, registered);
-
-    if (input.manualTrackCachingEnabled) {
-      await input.persistTrackIntoLibrary({
-        track: registered,
-        roomId: input.roomId,
-        file
-      });
-    }
-
   }
 
   return {

@@ -29,6 +29,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/check-env-sync.mjs
       - run: pnpm lint
+      - run: pnpm --filter @audio/opus-encode test
       - run: pnpm --filter @music-room/shared build
       - run: pnpm --filter @music-room/server typecheck
       - run: pnpm --filter @music-room/web typecheck
@@ -39,7 +40,9 @@ jobs:
 
   docker-images:
     if: github.event_name == 'push'
-    needs: validate-and-test
+    needs:
+      - validate-and-test
+      - e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

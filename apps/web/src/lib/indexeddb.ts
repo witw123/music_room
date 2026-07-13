@@ -311,6 +311,18 @@ export async function getAssetManifest(assetId: string) {
   return record ?? null;
 }
 
+export async function deleteAudioAsset(assetId: string) {
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.assetManifests,
+    musicRoomDatabase.assetUnits,
+    async () => {
+      await musicRoomDatabase.assetUnits.where("assetId").equals(assetId).delete();
+      await musicRoomDatabase.assetManifests.delete(assetId);
+    }
+  );
+}
+
 export async function putVerifiedAssetUnit(input: {
   descriptor: AssetUnitDescriptor;
   payload: ArrayBuffer;
