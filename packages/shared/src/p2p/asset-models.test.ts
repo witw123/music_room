@@ -72,7 +72,7 @@ describe("P2P v4 asset contracts", () => {
     }).success).toBe(false);
   });
 
-  it("requires the playback profile and encoder version to match", () => {
+  it("accepts only the current playback profile and encoder version", () => {
     const manifest = {
       assetId,
       kind: "playback" as const,
@@ -88,13 +88,17 @@ describe("P2P v4 asset contracts", () => {
       seekPrerollMs: 80 as const,
       unitCount: 1,
       merkleRoot: "c".repeat(64),
-      encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
+      encoder: { name: "@audio/opus-encode" as const, version: "2.0.0" as const }
     };
 
-    expect(playbackAssetManifestSchema.safeParse(manifest).success).toBe(false);
+    expect(playbackAssetManifestSchema.safeParse(manifest).success).toBe(true);
     expect(playbackAssetManifestSchema.safeParse({
       ...manifest,
-      encoder: { ...manifest.encoder, version: "2.0.0" as const }
-    }).success).toBe(true);
+      profileId: "opus-music-v1" as const
+    }).success).toBe(false);
+    expect(playbackAssetManifestSchema.safeParse({
+      ...manifest,
+      encoder: { ...manifest.encoder, version: "1.0.0" as const }
+    }).success).toBe(false);
   });
 });

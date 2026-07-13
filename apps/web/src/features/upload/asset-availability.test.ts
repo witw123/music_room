@@ -25,7 +25,7 @@ describe("asset availability", () => {
         kind: "playback",
         assetId: hash("d"),
         sourceFileHash: hash("b"),
-        profileId: "opus-music-v1",
+        profileId: "opus-music-v2",
         codec: "opus",
         container: "audio/ogg",
         sampleRate: 48_000,
@@ -36,7 +36,7 @@ describe("asset availability", () => {
         seekPrerollMs: 80,
         unitCount: 2,
         merkleRoot: hash("e"),
-        encoder: { name: "@audio/opus-encode", version: "1.0.0" }
+        encoder: { name: "@audio/opus-encode", version: "2.0.0" }
       }
     });
     expect(announcements.map((announcement) => announcement.assetKind)).toEqual([

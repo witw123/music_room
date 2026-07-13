@@ -4,6 +4,9 @@ export const sha256HexSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const assetKindSchema = z.enum(["original", "playback"]);
 
+export const playbackProfileId = "opus-music-v2" as const;
+export const playbackEncoderVersion = "2.0.0" as const;
+
 const assetManifestBaseSchema = z.object({
   assetId: sha256HexSchema,
   unitCount: z.number().int().positive(),
@@ -18,10 +21,10 @@ export const originalAssetManifestSchema = assetManifestBaseSchema.extend({
   unitSize: z.literal(1024 * 1024)
 });
 
-export const playbackAssetManifestSchema = assetManifestBaseSchema.extend({
+const playbackAssetManifestShapeSchema = assetManifestBaseSchema.extend({
   kind: z.literal("playback"),
   sourceFileHash: sha256HexSchema,
-  profileId: z.enum(["opus-music-v1", "opus-music-v2"]),
+  profileId: z.literal(playbackProfileId),
   codec: z.literal("opus"),
   container: z.literal("audio/ogg"),
   sampleRate: z.literal(48_000),
@@ -32,9 +35,11 @@ export const playbackAssetManifestSchema = assetManifestBaseSchema.extend({
   seekPrerollMs: z.literal(80),
   encoder: z.object({
     name: z.literal("@audio/opus-encode"),
-    version: z.enum(["1.0.0", "2.0.0"])
+    version: z.literal(playbackEncoderVersion)
   }).strict()
-}).superRefine((manifest, context) => {
+});
+
+export const playbackAssetManifestSchema = playbackAssetManifestShapeSchema.superRefine((manifest, context) => {
   const expectedBitrate = manifest.channels === 1 ? 96_000 : 192_000;
   if (manifest.bitrate !== expectedBitrate) {
     context.addIssue({
@@ -52,39 +57,13 @@ export const playbackAssetManifestSchema = assetManifestBaseSchema.extend({
       message: `Expected ${expectedUnits} playback units for the declared duration.`
     });
   }
-  if (
-    (manifest.profileId === "opus-music-v1" && manifest.encoder.version !== "1.0.0") ||
-    (manifest.profileId === "opus-music-v2" && manifest.encoder.version !== "2.0.0")
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["encoder", "version"],
-      message: "Playback profile and encoder version must match."
-    });
-  }
 });
 
 export const audioAssetManifestSchema = z.discriminatedUnion("kind", [
   originalAssetManifestSchema,
   // superRefine returns ZodEffects, so expose the playback shape to the union
   // and validate it with playbackAssetManifestSchema below.
-  assetManifestBaseSchema.extend({
-    kind: z.literal("playback"),
-    sourceFileHash: sha256HexSchema,
-    profileId: z.enum(["opus-music-v1", "opus-music-v2"]),
-    codec: z.literal("opus"),
-    container: z.literal("audio/ogg"),
-    sampleRate: z.literal(48_000),
-    channels: z.union([z.literal(1), z.literal(2)]),
-    bitrate: z.union([z.literal(96_000), z.literal(192_000)]),
-    durationMs: z.number().int().positive().max(24 * 60 * 60 * 1000),
-    segmentDurationMs: z.literal(2_000),
-    seekPrerollMs: z.literal(80),
-    encoder: z.object({
-      name: z.literal("@audio/opus-encode"),
-      version: z.enum(["1.0.0", "2.0.0"])
-    }).strict()
-  })
+  playbackAssetManifestShapeSchema
 ]).superRefine((manifest, context) => {
   if (manifest.kind !== "playback") {
     return;

@@ -313,7 +313,7 @@ describe("room realtime regression", () => {
     const playbackManifest = {
       kind: "playback" as const,
       sourceFileHash: "a".repeat(64),
-      profileId: "opus-music-v1" as const,
+      profileId: "opus-music-v2" as const,
       codec: "opus" as const,
       container: "audio/ogg" as const,
       sampleRate: 48_000 as const,
@@ -324,7 +324,7 @@ describe("room realtime regression", () => {
       seekPrerollMs: 80 as const,
       unitCount: 90,
       merkleRoot: "e".repeat(64),
-      encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
+      encoder: { name: "@audio/opus-encode" as const, version: "2.0.0" as const }
     };
     const originalAssetId = await computeAssetId(originalManifest);
     const playbackAssetId = await computeAssetId(playbackManifest);

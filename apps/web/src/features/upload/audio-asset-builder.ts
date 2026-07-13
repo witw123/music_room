@@ -5,7 +5,9 @@ import {
   computeAssetId,
   hashAssetUnit,
   originalAssetManifestSchema,
+  playbackEncoderVersion,
   playbackAssetManifestSchema,
+  playbackProfileId,
   type AssetUnitDescriptor,
   type OriginalAssetManifest,
   type PlaybackAssetManifest
@@ -24,6 +26,7 @@ const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
+export { playbackEncoderVersion, playbackProfileId };
 export const maxDecodedPcmBytes = 256 * 1024 * 1024;
 
 export type PreparedAudioAssets = {
@@ -85,7 +88,7 @@ export async function prepareAudioAssets(input: {
   await upsertTranscodeJob({
     sourceFileHash: source.fileHash,
     kind: "playback-transcode",
-    profileId: "opus-music-v2",
+    profileId: playbackProfileId,
     status: "running",
     progress: 0,
     errorMessage: null
@@ -118,7 +121,7 @@ export async function prepareAudioAssets(input: {
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
       kind: "playback-transcode",
-      profileId: "opus-music-v2",
+      profileId: playbackProfileId,
       status: "completed",
       progress: 1,
       errorMessage: null
@@ -132,7 +135,7 @@ export async function prepareAudioAssets(input: {
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
       kind: "playback-transcode",
-      profileId: "opus-music-v2",
+      profileId: playbackProfileId,
       status: "failed",
       progress: 0,
       errorMessage: error instanceof Error ? error.message : "音频转码失败。"
@@ -240,7 +243,7 @@ async function preparePlaybackAsset(input: {
   const manifestWithoutId = {
     kind: "playback" as const,
     sourceFileHash: input.fileHash,
-    profileId: "opus-music-v2" as const,
+    profileId: playbackProfileId,
     codec: "opus" as const,
     container: "audio/ogg" as const,
     sampleRate: opusSampleRate as 48000,
@@ -251,7 +254,7 @@ async function preparePlaybackAsset(input: {
     seekPrerollMs: seekPrerollMs as 80,
     unitCount,
     merkleRoot: tree.root,
-    encoder: { name: "@audio/opus-encode" as const, version: "2.0.0" as const }
+    encoder: { name: "@audio/opus-encode" as const, version: playbackEncoderVersion }
   };
   const playbackAsset = playbackAssetManifestSchema.parse({
     ...manifestWithoutId,

@@ -1,6 +1,7 @@
 import Dexie, { type IndexableType, type Table } from "dexie";
 import {
   assetUnitDescriptorSchema,
+  playbackProfileId,
   verifyAssetUnit,
   type AssetKind,
   type AssetUnitDescriptor,
@@ -129,7 +130,7 @@ export type TrackAssetLinkRecord = {
 export type TranscodeJobRecord = {
   sourceFileHash: string;
   kind: "original-reindex" | "playback-transcode";
-  profileId: "opus-music-v1" | "opus-music-v2";
+  profileId: typeof playbackProfileId;
   status: "queued" | "running" | "completed" | "failed";
   progress: number;
   errorMessage: string | null;
@@ -257,7 +258,7 @@ export class MusicRoomDatabase extends Dexie {
           queuedJobs.push({
             sourceFileHash: record.fileHash,
             kind: "original-reindex",
-            profileId: "opus-music-v2",
+            profileId: playbackProfileId,
             status: "queued",
             progress: 0,
             errorMessage: null,
@@ -268,6 +269,31 @@ export class MusicRoomDatabase extends Dexie {
           await jobs.bulkPut(queuedJobs);
         }
       });
+    this.version(10).upgrade(async (transaction) => {
+      const manifests = transaction.table<AudioAssetManifestRecord, string>("assetManifests");
+      const units = transaction.table<AudioAssetUnitRecord, string>("assetUnits");
+      const links = transaction.table<TrackAssetLinkRecord, string>("trackAssetLinks");
+      const jobs = transaction.table<TranscodeJobRecord, string>("transcodeJobs");
+
+      // IndexedDB has no runtime types, so old v1 records can still be present
+      // while this migration runs even though the current model is v2-only.
+      const obsoletePlaybackAssets = await manifests.filter((record) => {
+        const manifest = record.manifest as { kind?: unknown; profileId?: unknown };
+        return manifest.kind === "playback" && manifest.profileId !== playbackProfileId;
+      }).toArray();
+      const obsoleteAssetIds = obsoletePlaybackAssets.map((record) => record.assetId);
+
+      if (obsoleteAssetIds.length > 0) {
+        await Promise.all([
+          units.where("assetId").anyOf(obsoleteAssetIds).delete(),
+          links.where("playbackAssetId").anyOf(obsoleteAssetIds).delete(),
+          manifests.bulkDelete(obsoleteAssetIds)
+        ]);
+      }
+      await jobs.filter((job) =>
+        (job as { profileId?: unknown }).profileId !== playbackProfileId
+      ).delete();
+    });
   }
 }
 

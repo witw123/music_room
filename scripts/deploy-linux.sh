@@ -15,9 +15,11 @@ fi
 APP_DOMAIN_VALUE="$(grep '^APP_DOMAIN=' "$ENV_FILE" | cut -d '=' -f2-)"
 API_BASE_URL_VALUE="$(grep '^NEXT_PUBLIC_API_BASE_URL=' "$ENV_FILE" | cut -d '=' -f2-)"
 WS_BASE_URL_VALUE="$(grep '^NEXT_PUBLIC_WS_URL=' "$ENV_FILE" | cut -d '=' -f2-)"
+GHCR_OWNER_VALUE="$(grep '^GHCR_OWNER=' "$ENV_FILE" | cut -d '=' -f2-)"
+RELEASE_TAG_VALUE="$(grep '^RELEASE_TAG=' "$ENV_FILE" | cut -d '=' -f2-)"
 
-if [ -z "$APP_DOMAIN_VALUE" ] || [ -z "$API_BASE_URL_VALUE" ] || [ -z "$WS_BASE_URL_VALUE" ]; then
-  echo "APP_DOMAIN, NEXT_PUBLIC_API_BASE_URL and NEXT_PUBLIC_WS_URL must be set in $ENV_FILE"
+if [ -z "$APP_DOMAIN_VALUE" ] || [ -z "$API_BASE_URL_VALUE" ] || [ -z "$WS_BASE_URL_VALUE" ] || [ -z "$GHCR_OWNER_VALUE" ] || [ -z "$RELEASE_TAG_VALUE" ]; then
+  echo "APP_DOMAIN, NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_WS_URL, GHCR_OWNER and RELEASE_TAG must be set in $ENV_FILE"
   exit 1
 fi
 
@@ -33,6 +35,12 @@ fi
 if [ "$WS_BASE_URL_VALUE" != "$EXPECTED_WS_BASE_URL" ]; then
   echo "NEXT_PUBLIC_WS_URL must be $EXPECTED_WS_BASE_URL for production deployments."
   echo "Current value: $WS_BASE_URL_VALUE"
+  exit 1
+fi
+
+if ! printf '%s' "$RELEASE_TAG_VALUE" | grep -Eq '^sha-[0-9a-f]{40}$'; then
+  echo "RELEASE_TAG must be an immutable sha-<full-commit-sha> tag produced by CI."
+  echo "Current value: $RELEASE_TAG_VALUE"
   exit 1
 fi
 

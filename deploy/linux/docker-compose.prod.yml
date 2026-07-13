@@ -45,7 +45,7 @@ services:
       - --listening-port=${TURN_PORT:-3478}
 
   server:
-    image: ${SERVER_IMAGE}
+    image: ghcr.io/${GHCR_OWNER}/music-room-server:${RELEASE_TAG}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -90,7 +90,7 @@ services:
       retries: 10
 
   web:
-    image: ${WEB_IMAGE}
+    image: ghcr.io/${GHCR_OWNER}/music-room-web:${RELEASE_TAG}
     restart: unless-stopped
     depends_on:
       server:

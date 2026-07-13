@@ -3,11 +3,18 @@ import {
   assertDecodedPcmWithinMemoryBudget,
   estimateDecodedPcmBytes,
   maxDecodedPcmBytes,
+  playbackEncoderVersion,
+  playbackProfileId,
   resolveSupportedUploadFormat,
   slicePcmSegment
 } from "./audio-asset-builder";
 
 describe("audio asset preparation", () => {
+  it("publishes the server-compatible playback profile", () => {
+    expect(playbackProfileId).toBe("opus-music-v2");
+    expect(playbackEncoderVersion).toBe("2.0.0");
+  });
+
   it("accepts only the supported room source formats", () => {
     expect(resolveSupportedUploadFormat({ name: "song.flac", type: "" })).toBe("flac");
     expect(resolveSupportedUploadFormat({ name: "song", type: "audio/wav" })).toBe("wav");

@@ -37,7 +37,8 @@
 
 1. 复制环境变量模板
 2. 按实际公网域名、数据库、Redis、TURN 填值
-3. 执行：
+3. 将 `GHCR_OWNER` 设为镜像所属组织，将 `RELEASE_TAG` 设为 CI 生成的 `sha-<完整提交 SHA>`；Web 与 Server 必须使用同一标签
+4. 执行：
 
 ```bash
 npx pnpm deploy:linux
@@ -46,7 +47,8 @@ npx pnpm deploy:linux
 或手动执行：
 
 ```bash
-docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml up -d --build
+docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml pull
+docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-compose.prod.yml up -d
 ```
 
 ## 发布前检查

@@ -94,8 +94,7 @@ export class SegmentedOpusEngine {
       const decoded = await this.decodeUnit(
         context,
         unit,
-        input.manifest.sampleRate,
-        input.manifest.profileId
+        input.manifest.sampleRate
       );
       const segmentStartMs = unit.startMs ?? unitIndex * input.manifest.segmentDurationMs;
       const desiredWhen = contextStartTime + (segmentStartMs - input.playback.positionMs) / 1000;
@@ -145,8 +144,7 @@ export class SegmentedOpusEngine {
   private async decodeUnit(
     context: AudioContext,
     unit: AudioAssetUnitRecord,
-    sourceSampleRate: number,
-    profileId: PlaybackAssetManifest["profileId"]
+    sourceSampleRate: number
   ) {
     let decoded: AudioBuffer;
     try {
@@ -159,15 +157,10 @@ export class SegmentedOpusEngine {
         decoded.copyToChannel(Float32Array.from(channel), index)
       );
     }
-    // v1 already had the preroll removed by the Ogg Opus pre-skip. Applying
-    // trimStartSamples again is the source of the recurring 80ms gaps.
-    const explicitTrimStartSamples = profileId === "opus-music-v1"
-      ? 0
-      : unit.trimStartSamples ?? 0;
     const sampleScale = decoded.sampleRate / sourceSampleRate;
     const trimStart = Math.min(
       decoded.length,
-      Math.round(explicitTrimStartSamples * sampleScale)
+      Math.round((unit.trimStartSamples ?? 0) * sampleScale)
     );
     const trimEnd = Math.min(
       decoded.length - trimStart,
