@@ -126,6 +126,33 @@ describe("AssetTransferManager", () => {
     });
   });
 
+  it("retries a sole provider after a temporary timeout cooldown", async () => {
+    vi.useFakeTimers();
+    const { manager, controls } = createReceiver();
+    manager.setProvider(announcement("peer_a"));
+    manager.request({
+      assetId,
+      assetKind: "playback",
+      unitIndexes: [0],
+      totalUnits: 1,
+      priority: "playback-fill"
+    });
+
+    vi.advanceTimersByTime(5_001);
+    await Promise.resolve();
+    expect(controls.filter(({ message }) => message.kind === "asset-stream-open")).toHaveLength(1);
+
+    vi.advanceTimersByTime(2_001);
+    expect(manager.request({
+      assetId,
+      assetKind: "playback",
+      unitIndexes: [0],
+      totalUnits: 1,
+      priority: "playback-fill"
+    })).toBe(true);
+    expect(controls.filter(({ message }) => message.kind === "asset-stream-open")).toHaveLength(2);
+  });
+
   it("removes a provider after two consecutive integrity failures", async () => {
     const { manager, controls } = createReceiver({
       persistInboundUnit: async () => {

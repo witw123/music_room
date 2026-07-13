@@ -17,6 +17,12 @@ test("encodes PCM without an external WASM asset", async () => {
     payload.set(head, 0);
     payload.set(tail, head.byteLength);
     assert.equal(new TextDecoder().decode(payload.subarray(0, 4)), "OggS");
+    const opusHeadOffset = payload.findIndex((value, index) =>
+      index + 8 <= payload.byteLength &&
+      new TextDecoder().decode(payload.subarray(index, index + 8)) === "OpusHead"
+    );
+    assert.ok(opusHeadOffset >= 0);
+    assert.equal(new DataView(payload.buffer).getUint16(opusHeadOffset + 10, true), 3840);
   } finally {
     encoder.free();
   }

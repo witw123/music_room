@@ -129,7 +129,7 @@ export type TrackAssetLinkRecord = {
 export type TranscodeJobRecord = {
   sourceFileHash: string;
   kind: "original-reindex" | "playback-transcode";
-  profileId: "opus-music-v1";
+  profileId: "opus-music-v1" | "opus-music-v2";
   status: "queued" | "running" | "completed" | "failed";
   progress: number;
   errorMessage: string | null;
@@ -257,7 +257,7 @@ export class MusicRoomDatabase extends Dexie {
           queuedJobs.push({
             sourceFileHash: record.fileHash,
             kind: "original-reindex",
-            profileId: "opus-music-v1",
+            profileId: "opus-music-v2",
             status: "queued",
             progress: 0,
             errorMessage: null,

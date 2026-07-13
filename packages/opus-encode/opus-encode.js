@@ -41,7 +41,9 @@ export default async function opus(opts) {
 	let serial = (Math.random() * 0xFFFFFFFF) >>> 0
 	let pageSeq = 0
 	let granule = 0
-	let PRE_SKIP = 3840 // 80ms encoder delay (RFC 7845)
+	// Keep libopus' codec delay in the Ogg Opus header. Playback units add an
+	// explicit preroll so every independently decoded unit has the same length.
+	let PRE_SKIP = 3840
 
 	// buffered interleaved Int16 PCM at 48kHz
 	let pcmBuf = new Int16Array(0)

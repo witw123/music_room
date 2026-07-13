@@ -81,12 +81,11 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
-  await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
   const source = await prepareOriginalAsset(input);
   await upsertTranscodeJob({
     sourceFileHash: source.fileHash,
     kind: "playback-transcode",
-    profileId: "opus-music-v1",
+    profileId: "opus-music-v2",
     status: "running",
     progress: 0,
     errorMessage: null
@@ -119,7 +118,7 @@ export async function prepareAudioAssets(input: {
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
       kind: "playback-transcode",
-      profileId: "opus-music-v1",
+      profileId: "opus-music-v2",
       status: "completed",
       progress: 1,
       errorMessage: null
@@ -133,7 +132,7 @@ export async function prepareAudioAssets(input: {
     await upsertTranscodeJob({
       sourceFileHash: source.fileHash,
       kind: "playback-transcode",
-      profileId: "opus-music-v1",
+      profileId: "opus-music-v2",
       status: "failed",
       progress: 0,
       errorMessage: error instanceof Error ? error.message : "音频转码失败。"
@@ -241,7 +240,7 @@ async function preparePlaybackAsset(input: {
   const manifestWithoutId = {
     kind: "playback" as const,
     sourceFileHash: input.fileHash,
-    profileId: "opus-music-v1" as const,
+    profileId: "opus-music-v2" as const,
     codec: "opus" as const,
     container: "audio/ogg" as const,
     sampleRate: opusSampleRate as 48000,
@@ -252,7 +251,7 @@ async function preparePlaybackAsset(input: {
     seekPrerollMs: seekPrerollMs as 80,
     unitCount,
     merkleRoot: tree.root,
-    encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
+    encoder: { name: "@audio/opus-encode" as const, version: "2.0.0" as const }
   };
   const playbackAsset = playbackAssetManifestSchema.parse({
     ...manifestWithoutId,
@@ -320,34 +319,6 @@ async function persistPlaybackAsset(
   }
 }
 
-async function assertFileFitsDecodeMemoryBudget(
-  file: File,
-  onProgress?: (progress: AssetPreparationProgress) => void
-) {
-  onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
-  try {
-    const { parseBlob } = await import("music-metadata-browser");
-    const metadata = await parseBlob(file, { duration: true, skipCovers: true });
-    const durationSeconds = metadata.format.duration;
-    const channels = metadata.format.numberOfChannels;
-    if (
-      typeof durationSeconds === "number" &&
-      Number.isFinite(durationSeconds) &&
-      typeof channels === "number" &&
-      Number.isFinite(channels)
-    ) {
-      assertDecodedPcmWithinMemoryBudget({ durationSeconds, channels });
-    }
-  } catch (error) {
-    if (error instanceof AudioDecodeMemoryLimitError) {
-      throw error;
-    }
-    // Browser decoding remains the source of truth when metadata parsing is incomplete.
-  } finally {
-    onProgress?.({ stage: "inspecting", completed: 1, total: 1 });
-  }
-}
-
 export function estimateDecodedPcmBytes(input: {
   durationSeconds: number;
   channels: number;
@@ -384,13 +355,20 @@ export function slicePcmSegment(
   const contentStart = unitIndex * segmentSamples;
   const start = Math.max(0, contentStart - prerollSamples);
   const end = Math.min(audioBuffer.length, contentStart + segmentSamples);
+  const sourceChannels = Array.from({ length: audioBuffer.numberOfChannels }, (_, channelIndex) =>
+    audioBuffer.getChannelData(channelIndex).slice(start, end)
+  );
+  const leadingPaddingSamples = unitIndex === 0 ? prerollSamples : 0;
   return {
-    channels: Array.from({ length: audioBuffer.numberOfChannels }, (_, channelIndex) =>
-      audioBuffer.getChannelData(channelIndex).slice(start, end)
-    ),
-    trimStartSamples: unitIndex === 0
-      ? 0
-      : Math.round(((contentStart - start) / audioBuffer.sampleRate) * opusSampleRate)
+    channels: sourceChannels.map((channel) => {
+      if (leadingPaddingSamples === 0) {
+        return channel;
+      }
+      const padded = new Float32Array(leadingPaddingSamples + channel.length);
+      padded.set(channel, leadingPaddingSamples);
+      return padded;
+    }),
+    trimStartSamples: 0
   };
 }
 

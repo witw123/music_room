@@ -21,7 +21,7 @@ export const originalAssetManifestSchema = assetManifestBaseSchema.extend({
 export const playbackAssetManifestSchema = assetManifestBaseSchema.extend({
   kind: z.literal("playback"),
   sourceFileHash: sha256HexSchema,
-  profileId: z.literal("opus-music-v1"),
+  profileId: z.enum(["opus-music-v1", "opus-music-v2"]),
   codec: z.literal("opus"),
   container: z.literal("audio/ogg"),
   sampleRate: z.literal(48_000),
@@ -32,7 +32,7 @@ export const playbackAssetManifestSchema = assetManifestBaseSchema.extend({
   seekPrerollMs: z.literal(80),
   encoder: z.object({
     name: z.literal("@audio/opus-encode"),
-    version: z.literal("1.0.0")
+    version: z.enum(["1.0.0", "2.0.0"])
   }).strict()
 }).superRefine((manifest, context) => {
   const expectedBitrate = manifest.channels === 1 ? 96_000 : 192_000;
@@ -52,16 +52,26 @@ export const playbackAssetManifestSchema = assetManifestBaseSchema.extend({
       message: `Expected ${expectedUnits} playback units for the declared duration.`
     });
   }
+  if (
+    (manifest.profileId === "opus-music-v1" && manifest.encoder.version !== "1.0.0") ||
+    (manifest.profileId === "opus-music-v2" && manifest.encoder.version !== "2.0.0")
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["encoder", "version"],
+      message: "Playback profile and encoder version must match."
+    });
+  }
 });
 
 export const audioAssetManifestSchema = z.discriminatedUnion("kind", [
   originalAssetManifestSchema,
   // superRefine returns ZodEffects, so expose the playback shape to the union
-  // and validate the profile with audioAssetManifestSchema.superRefine below.
+  // and validate it with playbackAssetManifestSchema below.
   assetManifestBaseSchema.extend({
     kind: z.literal("playback"),
     sourceFileHash: sha256HexSchema,
-    profileId: z.literal("opus-music-v1"),
+    profileId: z.enum(["opus-music-v1", "opus-music-v2"]),
     codec: z.literal("opus"),
     container: z.literal("audio/ogg"),
     sampleRate: z.literal(48_000),
@@ -72,7 +82,7 @@ export const audioAssetManifestSchema = z.discriminatedUnion("kind", [
     seekPrerollMs: z.literal(80),
     encoder: z.object({
       name: z.literal("@audio/opus-encode"),
-      version: z.literal("1.0.0")
+      version: z.enum(["1.0.0", "2.0.0"])
     }).strict()
   })
 ]).superRefine((manifest, context) => {
@@ -84,6 +94,7 @@ export const audioAssetManifestSchema = z.discriminatedUnion("kind", [
     for (const issue of parsed.error.issues) {
       context.addIssue(issue);
     }
+    return;
   }
 });
 

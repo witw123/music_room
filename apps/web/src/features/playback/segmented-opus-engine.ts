@@ -40,8 +40,7 @@ export class SegmentedOpusEngine {
     const timelineKey = [
       input.manifest.assetId,
       input.playback.mediaEpoch,
-      input.playback.startAt,
-      input.playback.positionMs
+      input.playback.startAt
     ].join(":");
     if (timelineKey !== this.timelineKey) {
       this.resetTimeline();
@@ -92,7 +91,12 @@ export class SegmentedOpusEngine {
         }
         break;
       }
-      const decoded = await this.decodeUnit(context, unit);
+      const decoded = await this.decodeUnit(
+        context,
+        unit,
+        input.manifest.sampleRate,
+        input.manifest.profileId
+      );
       const segmentStartMs = unit.startMs ?? unitIndex * input.manifest.segmentDurationMs;
       const desiredWhen = contextStartTime + (segmentStartMs - input.playback.positionMs) / 1000;
       const when = Math.max(context.currentTime + 0.03, desiredWhen);
@@ -138,7 +142,12 @@ export class SegmentedOpusEngine {
     this.wasmDecoder = null;
   }
 
-  private async decodeUnit(context: AudioContext, unit: AudioAssetUnitRecord) {
+  private async decodeUnit(
+    context: AudioContext,
+    unit: AudioAssetUnitRecord,
+    sourceSampleRate: number,
+    profileId: PlaybackAssetManifest["profileId"]
+  ) {
     let decoded: AudioBuffer;
     try {
       decoded = await context.decodeAudioData(unit.payload.slice(0));
@@ -150,8 +159,20 @@ export class SegmentedOpusEngine {
         decoded.copyToChannel(Float32Array.from(channel), index)
       );
     }
-    const trimStart = Math.min(decoded.length, unit.trimStartSamples ?? 0);
-    const trimEnd = Math.min(decoded.length - trimStart, unit.trimEndSamples ?? 0);
+    // v1 already had the preroll removed by the Ogg Opus pre-skip. Applying
+    // trimStartSamples again is the source of the recurring 80ms gaps.
+    const explicitTrimStartSamples = profileId === "opus-music-v1"
+      ? 0
+      : unit.trimStartSamples ?? 0;
+    const sampleScale = decoded.sampleRate / sourceSampleRate;
+    const trimStart = Math.min(
+      decoded.length,
+      Math.round(explicitTrimStartSamples * sampleScale)
+    );
+    const trimEnd = Math.min(
+      decoded.length - trimStart,
+      Math.round((unit.trimEndSamples ?? 0) * sampleScale)
+    );
     if (trimStart === 0 && trimEnd === 0) {
       return decoded;
     }

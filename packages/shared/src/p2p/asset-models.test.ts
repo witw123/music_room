@@ -5,6 +5,7 @@ import {
   assetStreamMessageSchema
 } from "./asset-models";
 import { mergeAssetAvailability } from "./asset-availability";
+import { playbackAssetManifestSchema } from "../assets/models";
 
 const assetId = "a".repeat(64);
 
@@ -69,5 +70,31 @@ describe("P2P v4 asset contracts", () => {
       type: "offer",
       payload: { type: "offer", sdp: "v=0", audioPayload: "not-allowed" }
     }).success).toBe(false);
+  });
+
+  it("requires the playback profile and encoder version to match", () => {
+    const manifest = {
+      assetId,
+      kind: "playback" as const,
+      sourceFileHash: "b".repeat(64),
+      profileId: "opus-music-v2" as const,
+      codec: "opus" as const,
+      container: "audio/ogg" as const,
+      sampleRate: 48_000 as const,
+      channels: 1 as const,
+      bitrate: 96_000 as const,
+      durationMs: 2_000,
+      segmentDurationMs: 2_000 as const,
+      seekPrerollMs: 80 as const,
+      unitCount: 1,
+      merkleRoot: "c".repeat(64),
+      encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
+    };
+
+    expect(playbackAssetManifestSchema.safeParse(manifest).success).toBe(false);
+    expect(playbackAssetManifestSchema.safeParse({
+      ...manifest,
+      encoder: { ...manifest.encoder, version: "2.0.0" as const }
+    }).success).toBe(true);
   });
 });

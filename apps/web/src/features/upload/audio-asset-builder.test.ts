@@ -15,18 +15,26 @@ describe("audio asset preparation", () => {
     expect(resolveSupportedUploadFormat({ name: "song.m4a", type: "audio/mp4" })).toBeNull();
   });
 
-  it("adds preroll without changing the room timeline", () => {
+  it("adds codec preroll without changing the room timeline", () => {
     const channel = Float32Array.from({ length: 48_000 * 5 }, (_, index) => index);
-    const segment = slicePcmSegment({
+    const audioBuffer = {
       duration: 5,
       sampleRate: 48_000,
       numberOfChannels: 1,
       length: channel.length,
       getChannelData: () => channel
-    }, 1);
-    expect(segment.channels[0]).toHaveLength(48_000 * 2 + 48_000 * 0.08);
-    expect(segment.trimStartSamples).toBe(3_840);
-    expect(segment.channels[0]?.[0]).toBe(48_000 * 2 - 3_840);
+    };
+    const firstSegment = slicePcmSegment(audioBuffer, 0);
+    expect(firstSegment.channels[0]).toHaveLength(48_000 * 2 + 3_840);
+    expect(firstSegment.trimStartSamples).toBe(0);
+    expect(firstSegment.channels[0]?.[0]).toBe(0);
+    expect(firstSegment.channels[0]?.[3_839]).toBe(0);
+    expect(firstSegment.channels[0]?.[3_840]).toBe(channel[0]);
+
+    const laterSegment = slicePcmSegment(audioBuffer, 1);
+    expect(laterSegment.channels[0]).toHaveLength(48_000 * 2 + 3_840);
+    expect(laterSegment.trimStartSamples).toBe(0);
+    expect(laterSegment.channels[0]?.[0]).toBe(48_000 * 2 - 3_840);
   });
 
   it("rejects audio whose decoded PCM would exceed the browser memory budget", () => {

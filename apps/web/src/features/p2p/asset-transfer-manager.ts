@@ -40,12 +40,15 @@ type ReceiverStream = {
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
+const assetProviderRetryCooldownMs = 2_000;
+
 export class AssetTransferManager {
   private readonly providers = new Map<string, Map<string, AssetAvailabilityAnnouncement>>();
   private readonly producers = new Map<string, ProducerStream>();
   private readonly receivers = new Map<string, ReceiverStream>();
   private readonly fragments = new AssetFragmentTracker();
   private readonly integrityFailures = new Map<string, number>();
+  private readonly temporarilyUnavailableProviders = new Map<string, number>();
   private sequence = 0;
 
   constructor(private readonly callbacks: {
@@ -62,6 +65,9 @@ export class AssetTransferManager {
   }) {}
 
   setProvider(announcement: AssetAvailabilityAnnouncement) {
+    this.temporarilyUnavailableProviders.delete(
+      this.providerKey(announcement.assetId, announcement.ownerPeerId)
+    );
     const assetProviders = this.providers.get(announcement.assetId) ?? new Map();
     assetProviders.set(announcement.ownerPeerId, announcement);
     this.providers.set(announcement.assetId, assetProviders);
@@ -70,6 +76,7 @@ export class AssetTransferManager {
   removeProvider(assetId: string, peerId: string) {
     const providers = this.providers.get(assetId);
     providers?.delete(peerId);
+    this.temporarilyUnavailableProviders.delete(this.providerKey(assetId, peerId));
     if (providers?.size === 0) {
       this.providers.delete(assetId);
     }
@@ -111,6 +118,7 @@ export class AssetTransferManager {
     }
     const candidates = [...(this.providers.get(input.assetId)?.values() ?? [])]
       .filter((provider) => provider.assetKind === input.assetKind)
+      .filter((provider) => !this.isTemporarilyUnavailable(input.assetId, provider.ownerPeerId))
       .sort((left, right) => {
         const leftPreferred = left.ownerPeerId === input.preferredPeerId ? 0 : 1;
         const rightPreferred = right.ownerPeerId === input.preferredPeerId ? 0 : 1;
@@ -179,6 +187,7 @@ export class AssetTransferManager {
     this.producers.clear();
     this.providers.clear();
     this.integrityFailures.clear();
+    this.temporarilyUnavailableProviders.clear();
     this.fragments.clear();
   }
 
@@ -392,11 +401,10 @@ export class AssetTransferManager {
     clearTimeout(receiver.timeoutId);
     this.receivers.delete(streamId);
     if (reason === "timeout") {
-      const providers = this.providers.get(receiver.assetId);
-      providers?.delete(receiver.peerId);
-      if (providers?.size === 0) {
-        this.providers.delete(receiver.assetId);
-      }
+      this.temporarilyUnavailableProviders.set(
+        this.providerKey(receiver.assetId, receiver.peerId),
+        Date.now() + assetProviderRetryCooldownMs
+      );
     }
     if (notify) {
       this.callbacks.sendControl(receiver.peerId, {
@@ -439,6 +447,23 @@ export class AssetTransferManager {
         .filter((receiver) => receiver.assetId === assetId && receiver.wanted.has(unitIndex))
         .map((receiver) => receiver.peerId)
     );
+  }
+
+  private providerKey(assetId: string, peerId: string) {
+    return `${assetId}:${peerId}`;
+  }
+
+  private isTemporarilyUnavailable(assetId: string, peerId: string) {
+    const key = this.providerKey(assetId, peerId);
+    const unavailableUntil = this.temporarilyUnavailableProviders.get(key);
+    if (unavailableUntil === undefined) {
+      return false;
+    }
+    if (unavailableUntil <= Date.now()) {
+      this.temporarilyUnavailableProviders.delete(key);
+      return false;
+    }
+    return true;
   }
 
   private completeRedundantReceivers(
