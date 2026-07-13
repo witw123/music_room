@@ -15,10 +15,12 @@ import {
 import type { CacheStreamProvider } from "@/features/p2p/cache-stream-scheduler";
 import {
   getCachedLibraryTrack,
+  getAssetUnit,
   getTrackPieceManifest,
   getTrackPieceManifestByFileHash,
   localCacheOwnerKey,
   queueTrackPieceManifestUpsert,
+  putVerifiedAssetUnit,
   type TrackPieceManifestRecord
 } from "@/lib/indexeddb";
 import type { CachedLibraryTrackRecord } from "@/lib/indexeddb";
@@ -270,7 +272,6 @@ export function createRoomDataMeshRuntime(input: {
   reportMeshResyncFailure: (error: unknown) => void;
 } & RoomDataMeshDiagnosticsRefs) {
   const peerBufferedAmountBytes = new Map<string, number>();
-  const unsupportedRelayPeers = new Set<string>();
   const cachedLibraryTrackCache =
     createBoundedCachedLibraryTrackCache<CachedLibraryTrackRecord>(1, 5_000);
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
@@ -365,6 +366,33 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         // PCM may evict this piece from its memory window at any time, so every
         // validated playback piece must also survive in the durable cache.
         return true;
+      },
+      onAssetUnitPersisted: ({ peerId: sourcePeerId, descriptor, payloadBytes }) => {
+        input.recordPieceTransferRef.current({
+          peerId: sourcePeerId,
+          direction: "download",
+          bytes: payloadBytes
+        });
+        input.recordPeerDiagnosticRef.current({
+          peerId: sourcePeerId,
+          channelKind: "data",
+          direction: "local",
+          event: "asset-unit-persisted",
+          summary: `${descriptor.kind} unit ${descriptor.unitIndex} persisted`,
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            lastPersistedAt: new Date().toISOString()
+          })
+        });
+        const track = input.currentRoomRef.current?.tracks.find(
+          (candidate) =>
+            candidate.originalAsset?.assetId === descriptor.assetId ||
+            candidate.playbackAsset?.assetId === descriptor.assetId
+        );
+        if (track) {
+          void input.announceRoomTrackAvailabilityRef.current(track.id);
+        }
       },
       onPieceValidated: ({ peerId: sourcePeerId }) => {
         input.recordPeerDiagnosticRef.current({
@@ -564,28 +592,11 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           sample
         });
         if (
-          sample.candidateType === "relay" &&
-          sample.relayProtocol &&
-          sample.relayProtocol.toLowerCase() !== "udp"
-        ) {
-          input.chunkSchedulerRef.current?.markPeerUnavailable(remotePeerId);
-          mesh.markPeerTransportUnavailable(remotePeerId);
-          if (!unsupportedRelayPeers.has(remotePeerId)) {
-            unsupportedRelayPeers.add(remotePeerId);
-            void mesh.restartPeer(remotePeerId).catch(() => undefined);
-          }
-          queueDataPeerRecovery({
-            peerId: remotePeerId,
-            dataConnectionState: sample.connectionState,
-            dataChannelState: sample.dataChannelState,
-            reason: `unsupported-relay-protocol:${sample.relayProtocol}`
-          });
-        } else if (
           sample.candidateType === "host" ||
           sample.candidateType === "srflx" ||
-          (sample.candidateType === "relay" && sample.relayProtocol?.toLowerCase() === "udp")
+          sample.candidateType === "prflx" ||
+          sample.candidateType === "relay"
         ) {
-          unsupportedRelayPeers.delete(remotePeerId);
           mesh.markPeerTransportAvailable(remotePeerId);
         }
       },
@@ -701,6 +712,34 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           chunkSize,
           "incoming"
         ).targetInFlightBytes,
+      resolveLocalAssetUnit: async (assetId, unitIndex) => {
+        const record = await getAssetUnit(assetId, unitIndex);
+        if (!record) {
+          return null;
+        }
+        return {
+          descriptor: {
+            assetId: record.assetId,
+            kind: record.kind,
+            unitIndex: record.unitIndex,
+            payloadBytes: record.payloadBytes,
+            contentHash: record.contentHash,
+            proof: record.proof,
+            ...(record.startMs !== undefined ? { startMs: record.startMs } : {}),
+            ...(record.durationMs !== undefined ? { durationMs: record.durationMs } : {}),
+            ...(record.trimStartSamples !== undefined
+              ? { trimStartSamples: record.trimStartSamples }
+              : {}),
+            ...(record.trimEndSamples !== undefined
+              ? { trimEndSamples: record.trimEndSamples }
+              : {})
+          },
+          payload: record.payload
+        };
+      },
+      persistInboundAssetUnit: async (_sourcePeerId, descriptor, payload) => {
+        await putVerifiedAssetUnit({ descriptor, payload });
+      },
       resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {
         const track = input.currentRoomRef.current?.tracks.find((entry) => entry.id === trackId) ?? null;
         const uploadedTrack = input.uploadedTracksRef.current[trackId] ?? null;

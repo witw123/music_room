@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { originalAssetManifestSchema, playbackAssetManifestSchema } from "../assets/models";
 
 export const trackPieceManifestSchema = z.object({
   totalChunks: z.number().int().positive(),
@@ -21,6 +22,8 @@ export const trackMetaSchema = z.object({
   ownerSessionId: z.string(),
   ownerNickname: z.string(),
   sourceType: z.literal("local_upload"),
+  originalAsset: originalAssetManifestSchema.optional(),
+  playbackAsset: playbackAssetManifestSchema.optional(),
   pieceManifest: trackPieceManifestSchema.nullable().optional(),
   relayManifest: trackPieceManifestSchema.nullable().optional()
 });

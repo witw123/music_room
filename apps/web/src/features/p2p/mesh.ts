@@ -1,4 +1,7 @@
 import {
+  type AssetAvailabilityAnnouncement,
+  type AssetKind,
+  type AssetUnitDescriptor,
   type CacheStreamMessage,
   type IceServerConfig,
   type PeerSignalMessage
@@ -29,8 +32,20 @@ import {
   type CacheStreamSchedulerMetrics
 } from "./cache-stream-scheduler";
 import { pieceMemoryBuffer } from "./piece-memory-buffer";
+import { AssetTransferManager } from "./asset-transfer-manager";
 
 type MeshCallbacks = {
+  onAssetUnitPersisted?: (payload: {
+    peerId: string;
+    descriptor: AssetUnitDescriptor;
+    payloadBytes: number;
+  }) => void;
+  onAssetStreamReset?: (payload: {
+    peerId: string;
+    assetId: string;
+    unitIndexes: number[];
+    reason: string;
+  }) => void;
   onPieceReceived: (payload: {
     peerId: string;
     trackId: string;
@@ -149,6 +164,15 @@ type MeshOptions = {
     chunkSize: number;
     priority: "critical" | "bulk";
   }) => number | null | undefined;
+  resolveLocalAssetUnit?: (
+    assetId: string,
+    unitIndex: number
+  ) => Promise<{ descriptor: AssetUnitDescriptor; payload: ArrayBuffer } | null>;
+  persistInboundAssetUnit?: (
+    peerId: string,
+    descriptor: AssetUnitDescriptor,
+    payload: ArrayBuffer
+  ) => Promise<void>;
 };
 
 export class P2PMesh {
@@ -166,6 +190,7 @@ export class P2PMesh {
   private readonly pieceMessages: PieceMessageRouter<PeerEntry>;
   private readonly cacheStreamScheduler: CacheStreamScheduler;
   private readonly cacheStreamProducer: CacheStreamProducer<PeerEntry>;
+  private readonly assetTransfers: AssetTransferManager;
 
   constructor(
     private readonly roomId: string,
@@ -225,6 +250,37 @@ export class P2PMesh {
           )
         ),
       onMetrics: (metrics) => this.callbacks.onCacheStreamMetrics?.(metrics)
+    });
+    this.assetTransfers = new AssetTransferManager({
+      sendControl: (peerId, message) => {
+        const entry = this.peerLifecycle.getPeerEntry(peerId);
+        if (entry) {
+          this.enqueueSendItem(peerId, entry, {
+            data: JSON.stringify(message),
+            channel: "control",
+            priority: "control"
+          });
+        }
+      },
+      sendBinary: (peerId, kind, payload) => {
+        const entry = this.peerLifecycle.getPeerEntry(peerId);
+        if (entry) {
+          this.enqueueSendItem(peerId, entry, {
+            data: payload,
+            channel: kind === "playback" ? "playback" : "original",
+            priority: kind === "playback" ? "critical" : "bulk",
+            payloadBytes: payload.byteLength
+          });
+        }
+      },
+      resolveLocalUnit: options.resolveLocalAssetUnit ?? (async () => null),
+      persistInboundUnit:
+        options.persistInboundAssetUnit ??
+        (async () => {
+          throw new Error("No asset persistence callback is configured.");
+        }),
+      onUnitPersisted: this.callbacks.onAssetUnitPersisted,
+      onStreamReset: this.callbacks.onAssetStreamReset
     });
     this.peerLifecycle = new PeerConnectionLifecycleManager({
       localPeerId: this.localPeerId,
@@ -403,9 +459,37 @@ export class P2PMesh {
     this.cacheStreamScheduler.setProvider(provider);
   }
 
+  updateAssetProvider(announcement: AssetAvailabilityAnnouncement) {
+    if (announcement.ownerPeerId === this.localPeerId) {
+      return;
+    }
+    this.assetTransfers.setProvider(announcement);
+  }
+
+  requestAssetUnits(input: {
+    assetId: string;
+    assetKind: AssetKind;
+    unitIndexes: number[];
+    totalUnits: number;
+    priority: "critical" | "playback-fill" | "bulk";
+    preferredPeerId?: string | null;
+    maxReplicas?: number;
+  }) {
+    return this.assetTransfers.request(input);
+  }
+
+  cancelAssetRequests(assetId: string) {
+    this.assetTransfers.cancel(assetId);
+  }
+
+  removeAssetProvider(assetId: string, peerId: string) {
+    this.assetTransfers.removeProvider(assetId, peerId);
+  }
+
   markPeerTransportUnavailable(peerId: string) {
     this.cacheStreamScheduler.markPeerTransportUnavailable(peerId);
     this.cacheStreamProducer.clearPeer(peerId, "peer-closed");
+    this.assetTransfers.removePeer(peerId);
   }
 
   markPeerTransportAvailable(peerId: string) {
@@ -447,6 +531,7 @@ export class P2PMesh {
   }
 
   destroy() {
+    this.assetTransfers.clear();
     this.cacheStreamScheduler.clear();
     this.cacheStreamProducer.clear();
     this.inboundPieces.clear();
@@ -464,6 +549,9 @@ export class P2PMesh {
       clearPendingRequestsForPeer: (closedPeerId) => this.clearPendingRequestsForPeer(closedPeerId),
       schedulePeerReconnect: () => this.peerLifecycle.schedulePeerReconnect(peerId, entry),
       onMessage: async (event) => {
+        if (await this.assetTransfers.handleChannelMessage(peerId, event.data)) {
+          return;
+        }
         await this.pieceMessages.handleChannelMessage({
           peerId,
           entry,

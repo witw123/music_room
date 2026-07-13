@@ -1,6 +1,6 @@
 export type DataChannelQueuedSendItem = {
   data: string | ArrayBuffer;
-  channel?: "control" | "data";
+  channel?: "control" | "data" | "playback" | "original";
   priority?: "control" | "critical" | "bulk";
   trackId?: string;
   chunkIndex?: number;
@@ -17,6 +17,8 @@ type DataChannelLifecycleEntry = {
   channel?: RTCDataChannel | null;
   controlChannel?: RTCDataChannel | null;
   dataChannel?: RTCDataChannel | null;
+  playbackChannel?: RTCDataChannel | null;
+  originalChannel?: RTCDataChannel | null;
   dataChannelState: RTCDataChannelState | null;
   lastSignalProgressAtMs: number;
   reconnectAttempts: number;
@@ -82,6 +84,11 @@ export class DataChannelManager {
     const { channel, entry, peerId } = input;
     if (channel.label === "music-room-control") {
       entry.controlChannel = channel;
+    } else if (channel.label === "music-room-playback") {
+      entry.playbackChannel = channel;
+      entry.dataChannel = channel;
+    } else if (channel.label === "music-room-original") {
+      entry.originalChannel = channel;
     } else if (channel.label === "music-room-data") {
       entry.dataChannel = channel;
     }
@@ -246,6 +253,8 @@ export class DataChannelManager {
     for (const targetChannel of new Set([
       input.entry.controlChannel,
       input.entry.dataChannel,
+      input.entry.playbackChannel,
+      input.entry.originalChannel,
       channel
     ])) {
       if (targetChannel) {
@@ -257,7 +266,9 @@ export class DataChannelManager {
       bufferedAmountBytes: Math.max(
         channel.bufferedAmount,
         input.entry.controlChannel?.bufferedAmount ?? 0,
-        input.entry.dataChannel?.bufferedAmount ?? 0
+        input.entry.dataChannel?.bufferedAmount ?? 0,
+        input.entry.playbackChannel?.bufferedAmount ?? 0,
+        input.entry.originalChannel?.bufferedAmount ?? 0
       )
     });
   }
@@ -280,12 +291,17 @@ export class DataChannelManager {
     channel: RTCDataChannel
   ) {
     const budget = this.resolveSendBudget(peerId);
-    channel.bufferedAmountLowThreshold = resolveDataChannelBufferedAmountLowThreshold({
+    const resolvedLowWatermark = resolveDataChannelBufferedAmountLowThreshold({
       queue: entry.sendQueue,
       preferredLowWatermarkBytes: this.sendQueueLowWatermarkBytes,
       highWatermarkBytes: budget.highWatermarkBytes,
       bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes
     });
+    channel.bufferedAmountLowThreshold = channel.label === "music-room-playback"
+      ? Math.min(resolvedLowWatermark, 256 * 1024)
+      : channel.label === "music-room-original"
+        ? Math.min(resolvedLowWatermark, 512 * 1024)
+        : resolvedLowWatermark;
   }
 }
 
@@ -293,8 +309,14 @@ function resolveQueuedChannel(
   entry: DataChannelLifecycleEntry,
   item: DataChannelQueuedSendItem
 ) {
+  if (item.channel === "playback") {
+    return entry.playbackChannel ?? entry.dataChannel ?? entry.channel ?? null;
+  }
+  if (item.channel === "original") {
+    return entry.originalChannel ?? entry.dataChannel ?? entry.channel ?? null;
+  }
   if (item.channel === "data") {
-    return entry.dataChannel ?? entry.channel ?? null;
+    return entry.playbackChannel ?? entry.dataChannel ?? entry.channel ?? null;
   }
   return entry.controlChannel ?? entry.channel ?? null;
 }
@@ -313,16 +335,21 @@ export function shouldSendQueuedDataChannelItem(input: {
   highWatermarkBytes: number;
   bulkHighWatermarkBytes?: number;
   priority?: DataChannelQueuedSendItem["priority"];
+  channel?: DataChannelQueuedSendItem["channel"];
 }) {
   if (input.queueLength <= 0) {
     return false;
   }
 
   const priority = input.priority ?? "control";
-  const watermark =
-    priority === "bulk"
+  const adaptiveWatermark = priority === "bulk"
       ? input.bulkHighWatermarkBytes ?? input.highWatermarkBytes
       : input.highWatermarkBytes;
+  const watermark = input.channel === "playback"
+    ? Math.min(adaptiveWatermark, 512 * 1024)
+    : input.channel === "original"
+      ? Math.min(adaptiveWatermark, 1024 * 1024)
+      : adaptiveWatermark;
   return input.bufferedAmountBytes < watermark;
 }
 
@@ -350,7 +377,8 @@ export function resolveNextSendQueueItemIndex(input: {
         bufferedAmountBytes,
         highWatermarkBytes: input.highWatermarkBytes,
         bulkHighWatermarkBytes: input.bulkHighWatermarkBytes,
-        priority
+        priority,
+        channel: item.channel
       });
     });
     if (index >= 0) {

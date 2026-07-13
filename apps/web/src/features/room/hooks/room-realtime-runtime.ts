@@ -2,6 +2,7 @@
 
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
+  AssetAvailabilityAnnouncement,
   AuthSession,
   PeerDiagnosticsSnapshot,
   PeerSignalMessage,
@@ -203,9 +204,13 @@ type RoomRealtimeRuntimeInput = {
   >;
   ensureSourcePlaybackStartedRef: MutableRefObject<() => Promise<void>>;
   queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
+  queueAssetAvailabilityRef: MutableRefObject<(announcement: AssetAvailabilityAnnouncement) => void>;
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
   clearAvailabilityForTrackRef: MutableRefObject<
     (trackId: string, ownerPeerId?: string) => void
+  >;
+  clearAvailabilityForAssetRef: MutableRefObject<
+    (assetId: string, ownerPeerId?: string) => void
   >;
   deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[]) => Promise<void> | void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
@@ -781,6 +786,38 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     if (trackId) {
       input.mesh?.removeCacheStreamProvider(trackId, ownerPeerId);
       input.clearAvailabilityForTrackRef.current(trackId, ownerPeerId);
+    } else {
+      input.clearAvailabilityForPeerRef.current(ownerPeerId);
+    }
+  });
+
+  socket.on("asset.availability", (announcement: AssetAvailabilityAnnouncement) => {
+    if (announcement.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
+      return;
+    }
+    input.mesh?.updateAssetProvider(announcement);
+    input.queueAssetAvailabilityRef.current(announcement);
+  });
+
+  socket.on("asset.availability.request", ({ roomId, assetId }) => {
+    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
+      return;
+    }
+    const track = input.currentRoomRef.current?.tracks.find(
+      (candidate) => candidate.originalAsset?.assetId === assetId || candidate.playbackAsset?.assetId === assetId
+    );
+    if (track) {
+      void input.announceRoomTrackAvailabilityRef.current(track.id, { force: true });
+    }
+  });
+
+  socket.on("asset.availability.clear", ({ roomId, ownerPeerId, assetId }) => {
+    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
+      return;
+    }
+    if (assetId) {
+      input.mesh?.removeAssetProvider(assetId, ownerPeerId);
+      input.clearAvailabilityForAssetRef.current(assetId, ownerPeerId);
     } else {
       input.clearAvailabilityForPeerRef.current(ownerPeerId);
     }

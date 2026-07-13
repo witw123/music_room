@@ -141,7 +141,10 @@ describe("buildRoomSubscribePayload", () => {
     ).toEqual({
       roomId: "room_1",
       peerId: "peer_1",
-      sessionId: "user_1"
+      sessionId: "user_1",
+      protocolVersion: 4,
+      capabilities: ["segmented-opus-v1"],
+      buildId: "0.3.0"
     });
   });
 });

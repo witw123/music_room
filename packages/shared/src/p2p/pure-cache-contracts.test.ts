@@ -5,12 +5,14 @@ describe("p2p signaling contracts", () => {
   it("accepts data peer signals", () => {
     expect(
       peerSignalMessageSchema.safeParse({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
         channelKind: "data",
         type: "offer",
-        payload: {}
+        payload: { type: "offer", sdp: "v=0" }
       }).success
     ).toBe(true);
   });
@@ -18,14 +20,42 @@ describe("p2p signaling contracts", () => {
   it("rejects legacy media peer signals because playback uses original-piece data cache", () => {
     expect(
       peerSignalMessageSchema.safeParse({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
         channelKind: "media",
         type: "offer",
-        payload: {}
+        payload: { type: "offer", sdp: "v=0" }
       }).success
     ).toBe(false);
+  });
+
+  it("rejects pre-v4 data peer signals", () => {
+    expect(peerSignalMessageSchema.safeParse({
+      protocolVersion: 3,
+      capability: "segmented-opus-v1",
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b",
+      channelKind: "data",
+      type: "offer",
+      payload: { type: "offer", sdp: "v=0" }
+    }).success).toBe(false);
+  });
+
+  it("rejects non-signaling payload fields from the application websocket", () => {
+    expect(peerSignalMessageSchema.safeParse({
+      protocolVersion: 4,
+      capability: "segmented-opus-v1",
+      roomId: "room_1",
+      fromPeerId: "peer_a",
+      toPeerId: "peer_b",
+      channelKind: "data",
+      type: "offer",
+      payload: { type: "offer", sdp: "v=0", audioPayload: "base64" }
+    }).success).toBe(false);
   });
 
   it("rejects removed piece request notifications", () => {

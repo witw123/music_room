@@ -273,14 +273,20 @@ export class PeerConnectionLifecycleManager {
         const controlChannel = connection.createDataChannel("music-room-control", {
           ordered: true
         });
-        const dataChannel = connection.createDataChannel("music-room-data", {
+        const playbackChannel = connection.createDataChannel("music-room-playback", {
+          ordered: false
+        });
+        const originalChannel = connection.createDataChannel("music-room-original", {
           ordered: false
         });
         entry.controlChannel = controlChannel;
-        entry.dataChannel = dataChannel;
+        entry.playbackChannel = playbackChannel;
+        entry.originalChannel = originalChannel;
+        entry.dataChannel = playbackChannel;
         entry.channel = controlChannel;
         this.bindChannelCallback(peerId, entry, controlChannel);
-        this.bindChannelCallback(peerId, entry, dataChannel);
+        this.bindChannelCallback(peerId, entry, playbackChannel);
+        this.bindChannelCallback(peerId, entry, originalChannel);
         await this.signaling.createAndSendOffer(peerId, connection);
         entry.lastSignalProgressAtMs = Date.now();
       }

@@ -11,6 +11,7 @@ import {
   type SetStateAction
 } from "react";
 import type {
+  AssetAvailabilityAnnouncement,
   AuthSession,
   IceConfigResponse,
   RoomMediaConnectionState,
@@ -20,6 +21,7 @@ import type {
 import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
 import { ChunkScheduler } from "@/features/p2p";
+import type { P2PMesh } from "@/features/p2p";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
 import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
@@ -166,9 +168,12 @@ type UseRoomRuntimeInput = {
   lastSourceStartError: string | null;
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
+  availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
+  queueAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
   clearAvailabilityForTrack: (trackId: string, ownerPeerId?: string) => void;
+  clearAvailabilityForAsset: (assetId: string, ownerPeerId?: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   uploadedTracks: Record<string, UploadedTrack>;
@@ -203,6 +208,8 @@ type UseRoomRuntimeInput = {
 
 type UseRoomRuntimeResult = {
   ensureSourcePlaybackStarted: () => Promise<void>;
+  requestAssetUnits: (input: Parameters<P2PMesh["requestAssetUnits"]>[0]) => boolean;
+  cancelAssetRequests: (assetId: string) => void;
 };
 
 type SourceLocalPlaybackTrack = Pick<UploadedTrack, "objectUrl">;
@@ -498,9 +505,12 @@ export function useRoomRuntime({
   lastSourceStartError,
   setLastSourceStartError,
   availabilityByTrack,
+  availabilityByAsset,
   queueAvailability,
+  queueAssetAvailability,
   clearAvailabilityForPeer,
   clearAvailabilityForTrack,
+  clearAvailabilityForAsset,
   flushPendingAvailability,
   recordPeerDiagnostic,
   uploadedTracks,
@@ -526,6 +536,7 @@ export function useRoomRuntime({
   void mediaConnectedPeers;
   void setMediaConnectedPeers;
   void mediaConnectionState;
+  void availabilityByAsset;
 
   const roomPlayback = roomSnapshot?.room.playback ?? null;
   const roomPlaybackCurrentTrackId = roomPlayback?.currentTrackId ?? null;
@@ -609,8 +620,10 @@ export function useRoomRuntime({
     deleteRoomTrackArtifactsRef,
     resetPlayerSurfaceRef,
     queueAvailabilityRef,
+    queueAssetAvailabilityRef,
     clearAvailabilityForPeerRef,
     clearAvailabilityForTrackRef,
+    clearAvailabilityForAssetRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
     clearSocketDisconnectGrace,
@@ -641,8 +654,10 @@ export function useRoomRuntime({
     deleteRoomTrackArtifacts,
     resetPlayerSurface,
     queueAvailability,
+    queueAssetAvailability,
     clearAvailabilityForPeer,
     clearAvailabilityForTrack,
+    clearAvailabilityForAsset,
     flushPendingAvailability,
     recordPeerDiagnostic,
     enableTrackCaching
@@ -868,6 +883,19 @@ export function useRoomRuntime({
       updateSourceStartState("awaiting-unlock", {
         summary: "等待用户解锁本地音频播放",
         level: "warning",
+        recordEvent: false
+      });
+      return;
+    }
+
+    const roomTrack =
+      currentRoomRef.current?.tracks.find((track) => track.id === playback.currentTrackId) ??
+      roomTracksRef.current?.find((track) => track.id === playback.currentTrackId) ??
+      null;
+    if (roomTrack?.playbackAsset) {
+      audioRef.current?.pause();
+      updateSourceStartState("live", {
+        summary: "分段 Opus 播放已接管房间输出",
         recordEvent: false
       });
       return;
@@ -1196,8 +1224,10 @@ export function useRoomRuntime({
       requestRoomSnapshotResyncRef,
       ensureSourcePlaybackStartedRef,
       queueAvailabilityRef,
+      queueAssetAvailabilityRef,
       clearAvailabilityForPeerRef,
       clearAvailabilityForTrackRef,
+      clearAvailabilityForAssetRef,
       deleteRoomTrackArtifactsRef,
       lastRealtimeRoomEventAtRef,
       recoveryGenerationRef,
@@ -1228,6 +1258,7 @@ export function useRoomRuntime({
     activeSessionRef,
     activeRouteRoomIdRef,
     announceRoomTrackAvailabilityRef,
+    clearAvailabilityForAssetRef,
     clearAvailabilityForPeerRef,
     clearAvailabilityForTrackRef,
     clearManualCachePendingPiece,
@@ -1247,6 +1278,7 @@ export function useRoomRuntime({
     meshRef,
     pieceTransferRatesRef,
     queuePlaybackRecoveryRecommendation,
+    queueAssetAvailabilityRef,
     queueAvailabilityRef,
     recordPeerDiagnosticRef,
     recordPieceRequestSampleRef,
@@ -1306,7 +1338,19 @@ export function useRoomRuntime({
     lastDataActivityAtRef.current = Date.now();
   }, [lastDataActivityAtRef, updateConnectionSupervisorPlayout, connectedPeers.length]);
 
+  const requestAssetUnits = useCallback(
+    (request: Parameters<P2PMesh["requestAssetUnits"]>[0]) =>
+      meshRef.current?.requestAssetUnits(request) ?? false,
+    [meshRef]
+  );
+  const cancelAssetRequests = useCallback(
+    (assetId: string) => meshRef.current?.cancelAssetRequests(assetId),
+    [meshRef]
+  );
+
   return {
-    ensureSourcePlaybackStarted
+    ensureSourcePlaybackStarted,
+    requestAssetUnits,
+    cancelAssetRequests
   };
 }

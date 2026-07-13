@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
-import type { GuestSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import type {
+  AssetAvailabilityAnnouncement,
+  GuestSession,
+  RoomSnapshot,
+  TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteManualCacheTask,
@@ -79,6 +84,8 @@ export function useTrackUploads(options: {
   setStatusMessage: (message: string) => void;
   onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
+  onAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
+  emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
 }) {
   const {
     peerId,
@@ -87,7 +94,9 @@ export function useTrackUploads(options: {
     dispatchRoomStateEvent,
     setStatusMessage,
     onAvailability,
-    emitAvailability
+    emitAvailability,
+    onAssetAvailability,
+    emitAssetAvailability
   } = options;
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
   const [cachedTrackCount, setCachedTrackCount] = useState(0);
@@ -97,8 +106,6 @@ export function useTrackUploads(options: {
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
-  const availabilityAnnouncementInFlightRef = useRef<Set<string>>(new Set());
-  const availabilityAnnouncementTtlRef = useRef<Map<string, number>>(new Map());
   const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
   const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
   const manualCacheRetainedPieceTrackIdsRef = useRef<Set<string>>(new Set());
@@ -201,15 +208,13 @@ export function useTrackUploads(options: {
     handleFilesSelected
   } = useUploadPipelineActions({
     activeSession,
-    availabilityAnnouncementInFlightRef,
-    availabilityAnnouncementTtlRef,
     dispatchRoomStateEvent,
-    emitAvailability,
+    onAssetAvailability,
+    emitAssetAvailability,
     inFlightUploadHashesRef,
     manualCacheAssemblingTrackIdsRef,
     manualCacheChunkIndexesRef,
     manualCacheRetainedPieceTrackIdsRef,
-    onAvailability,
     peerId,
     refreshCacheLibrary,
     roomSnapshot,
@@ -250,14 +255,15 @@ export function useTrackUploads(options: {
   } = useCacheLibraryActions({
     activeSession,
     dropManualCacheTask,
-    emitAvailability,
+    emitAssetAvailability,
     manualCacheAssemblingTrackIdsRef,
     manualCacheChunkIndexesRef,
-    onAvailability,
+    onAssetAvailability,
     peerId,
     refreshCacheLibrary,
     roomSnapshot,
     setManualCacheTasks,
+    setStatusMessage,
     setUploadedTracks,
     syncRoomSnapshot
   });

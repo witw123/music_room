@@ -7,9 +7,9 @@ import {
   type SetStateAction
 } from "react";
 import type {
+  AssetAvailabilityAnnouncement,
   GuestSession,
-  RoomSnapshot,
-  TrackAvailabilityAnnouncement
+  RoomSnapshot
 } from "@music-room/shared";
 import {
   deleteCachedLibraryTrack as deleteCachedLibraryTrackRecord,
@@ -17,16 +17,16 @@ import {
   deleteManualCacheTasksForTracks,
   deleteCachedPiecesForTrack,
   deleteCachedPiecesForTracks,
-  getCachedLibraryTrack
+  getCachedLibraryTrack,
+  linkTrackAssets
 } from "@/lib/indexeddb";
 import { musicRoomApi } from "@/lib/music-room-api";
-import {
-  buildTrackAvailabilityFromFile
-} from "@/features/p2p";
 import {
   buildTrackMeta,
   type UploadedTrack
 } from "@/features/upload/audio-utils";
+import { buildCompleteAssetAnnouncements } from "./asset-availability";
+import { prepareAudioAssets, type PreparedAudioAssets } from "./audio-asset-builder";
 import {
   applyCachedLibraryRoomImportResult,
   createInFlightCachedLibraryTrackFileLoader,
@@ -43,22 +43,20 @@ import {
 import {
   buildCachedLibraryTrackRegisterPayload
 } from "./upload-pipeline";
-import {
-  shouldAnnounceTrackAvailability
-} from "./track-availability";
 import type { ManualCacheTask } from "./manual-cache-task-store";
 
 type CacheLibraryActionsInput = {
   activeSession: GuestSession | null;
   dropManualCacheTask: (trackId: string) => void;
-  emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
+  emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
   manualCacheAssemblingTrackIdsRef: MutableRefObject<Set<string>>;
   manualCacheChunkIndexesRef: MutableRefObject<Map<string, Set<number>>>;
-  onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
+  onAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
   peerId: string;
   refreshCacheLibrary: () => Promise<void>;
   roomSnapshot: RoomSnapshot | null;
   setManualCacheTasks: Dispatch<SetStateAction<Record<string, ManualCacheTask>>>;
+  setStatusMessage: (message: string) => void;
   setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
   syncRoomSnapshot: (roomId: string) => Promise<void>;
 };
@@ -66,14 +64,15 @@ type CacheLibraryActionsInput = {
 export function useCacheLibraryActions({
   activeSession,
   dropManualCacheTask,
-  emitAvailability,
+  emitAssetAvailability,
   manualCacheAssemblingTrackIdsRef,
   manualCacheChunkIndexesRef,
-  onAvailability,
+  onAssetAvailability,
   peerId,
   refreshCacheLibrary,
   roomSnapshot,
   setManualCacheTasks,
+  setStatusMessage,
   setUploadedTracks,
   syncRoomSnapshot
 }: CacheLibraryActionsInput) {
@@ -185,30 +184,52 @@ export function useCacheLibraryActions({
       }
 
       const importPromise = (async () => {
+        let preparedAssets: PreparedAudioAssets | null = null;
         const result = await importCachedLibraryTrackToRoomFromLibrary({
-        fileHash,
-        activeSession,
-        roomId: roomSnapshot.room.id,
-        roomTracks: roomSnapshot.tracks,
-        peerId,
-        shouldAnnounceAvailability: shouldAnnounceTrackAvailability({ peerId }),
-        loadCachedLibraryTrackFile,
-        createObjectUrl: (file) => URL.createObjectURL(file),
-        revokeObjectUrl: (href) => URL.revokeObjectURL(href),
-        buildTrackMeta: (file, objectUrl) => buildTrackMeta(file, objectUrl, activeSession),
-        buildRegisterTrackPayload: buildCachedLibraryTrackRegisterPayload,
-        registerTrack: (roomId, payload) =>
-          musicRoomApi.registerTrack(
-            roomId,
-            payload as Parameters<typeof musicRoomApi.registerTrack>[1]
-          ),
-        syncRoomSnapshot,
-        buildTrackAvailabilityFromFile,
-        publishAvailability: (availability) => {
-          onAvailability(availability);
-          emitAvailability(availability);
+          fileHash,
+          activeSession,
+          roomId: roomSnapshot.room.id,
+          roomTracks: roomSnapshot.tracks,
+          loadCachedLibraryTrackFile,
+          createObjectUrl: (file) => URL.createObjectURL(file),
+          revokeObjectUrl: (href) => URL.revokeObjectURL(href),
+          buildTrackMeta: async (file, objectUrl) => {
+            preparedAssets = await prepareAudioAssets({
+              file,
+              onProgress: ({ completed, total }) => {
+                const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                setStatusMessage(`正在重建成员端播放资产 ${percent}%`);
+              }
+            });
+            return buildTrackMeta(file, objectUrl, activeSession, preparedAssets);
+          },
+          buildRegisterTrackPayload: buildCachedLibraryTrackRegisterPayload,
+          registerTrack: (roomId, payload) =>
+            musicRoomApi.registerTrack(
+              roomId,
+              payload as Parameters<typeof musicRoomApi.registerTrack>[1]
+            ),
+          syncRoomSnapshot
+        });
+        const assets = preparedAssets as PreparedAudioAssets | null;
+        if (result && assets && peerId) {
+          await linkTrackAssets({
+            trackId: result.trackId,
+            originalAssetId: assets.originalAsset.assetId,
+            playbackAssetId: assets.playbackAsset.assetId
+          });
+          for (const announcement of buildCompleteAssetAnnouncements({
+            roomId: roomSnapshot.room.id,
+            peerId,
+            nickname: activeSession.nickname,
+            source: "local_cache",
+            originalAsset: assets.originalAsset,
+            playbackAsset: assets.playbackAsset
+          })) {
+            onAssetAvailability(announcement);
+            emitAssetAvailability(announcement);
+          }
         }
-      });
         return applyCachedLibraryRoomImportResult({
           result,
           setUploadedTracks
@@ -225,12 +246,13 @@ export function useCacheLibraryActions({
     },
     [
       activeSession,
-      emitAvailability,
+      emitAssetAvailability,
       loadCachedLibraryTrackFile,
-      onAvailability,
+      onAssetAvailability,
       peerId,
       roomSnapshot,
       setUploadedTracks,
+      setStatusMessage,
       syncRoomSnapshot
     ]
   );

@@ -4,6 +4,11 @@ import {
   peerSignalMessageSchema,
   trackAvailabilityAnnouncementSchema
 } from "../p2p/models";
+import {
+  assetAvailabilityAnnouncementSchema,
+  p2pProtocolVersion,
+  segmentedOpusCapability
+} from "../p2p/asset-models";
 import { roomSnapshotSchema } from "../room/models";
 import { playbackSnapshotSchema } from "../playback/models";
 import { queueItemSchema, trackMetaSchema } from "../playlist/models";
@@ -23,6 +28,9 @@ export const websocketEventSchema = z.union([
   z.literal("piece.availability"),
   z.literal("piece.availability.request"),
   z.literal("piece.availability.clear"),
+  z.literal("asset.availability"),
+  z.literal("asset.availability.request"),
+  z.literal("asset.availability.clear"),
   z.literal("peer.signal"),
   z.literal("room.chat")
 ]);
@@ -30,7 +38,23 @@ export const websocketEventSchema = z.union([
 export const roomSubscribePayloadSchema = z.object({
   roomId: z.string(),
   sessionId: z.string().optional(),
-  peerId: z.string().optional()
+  peerId: z.string().optional(),
+  protocolVersion: z.number().int().nonnegative().optional(),
+  capabilities: z.array(z.string().min(1).max(120)).max(20).optional(),
+  buildId: z.string().min(1).max(160).optional()
+});
+
+export const assetAvailabilityRequestPayloadSchema = z.object({
+  roomId: z.string(),
+  assetId: z.string().regex(/^[a-f0-9]{64}$/),
+  requesterPeerId: z.string()
+});
+
+export const assetAvailabilityClearPayloadSchema = z.object({
+  roomId: z.string(),
+  ownerPeerId: z.string(),
+  assetId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  updatedAt: z.string().datetime()
 });
 
 export const pieceAvailabilityRequestPayloadSchema = z.object({
@@ -48,6 +72,9 @@ export const roomSubscribeBootstrapMemberSchema = z.object({
 
 export const roomSubscribeAckPayloadSchema = z.object({
   ok: z.boolean(),
+  protocolVersion: z.literal(p2pProtocolVersion).optional(),
+  capability: z.literal(segmentedOpusCapability).optional(),
+  errorCode: z.literal("client_upgrade_required").optional(),
   serverNow: z.string().datetime().optional(),
   recoveryGeneration: z.number().int().nonnegative().optional(),
   bootstrap: z
@@ -179,6 +206,16 @@ export const pieceAvailabilityClearEventSchema = z.object({
   payload: pieceAvailabilityClearPayloadSchema
 });
 
+export const assetAvailabilityEventSchema = z.object({
+  event: z.literal("asset.availability"),
+  payload: assetAvailabilityAnnouncementSchema
+});
+
+export const assetAvailabilityClearEventSchema = z.object({
+  event: z.literal("asset.availability.clear"),
+  payload: assetAvailabilityClearPayloadSchema
+});
+
 export const roomChatPayloadSchema = z.object({
   roomId: z.string(),
   senderId: z.string(),
@@ -215,6 +252,8 @@ export type RoomPresencePatchPayload = z.infer<typeof roomPresencePatchPayloadSc
 export type RoomLibraryPatchPayload = z.infer<typeof roomLibraryPatchPayloadSchema>;
 export type PieceAvailabilityClearPayload = z.infer<typeof pieceAvailabilityClearPayloadSchema>;
 export type PieceAvailabilityRequestPayload = z.infer<typeof pieceAvailabilityRequestPayloadSchema>;
+export type AssetAvailabilityRequestPayload = z.infer<typeof assetAvailabilityRequestPayloadSchema>;
+export type AssetAvailabilityClearPayload = z.infer<typeof assetAvailabilityClearPayloadSchema>;
 export type RoomChatPayload = z.infer<typeof roomChatPayloadSchema>;
 export type RoomChatInputPayload = z.infer<typeof roomChatInputPayloadSchema>;
 export type P2PDataMessagePayload = z.infer<typeof p2pDataMessageSchema>;
@@ -231,6 +270,9 @@ export type ServerToClientEvents = {
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "piece.availability.request": (payload: PieceAvailabilityRequestPayload) => void;
   "piece.availability.clear": (payload: PieceAvailabilityClearPayload) => void;
+  "asset.availability": (payload: z.infer<typeof assetAvailabilityAnnouncementSchema>) => void;
+  "asset.availability.request": (payload: AssetAvailabilityRequestPayload) => void;
+  "asset.availability.clear": (payload: AssetAvailabilityClearPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatPayload) => void;
   connect: () => void;
@@ -247,6 +289,9 @@ export type ClientToServerEvents = {
   "piece.availability": (payload: z.infer<typeof trackAvailabilityAnnouncementSchema>) => void;
   "piece.availability.request": (payload: PieceAvailabilityRequestPayload) => void;
   "piece.availability.clear": (payload: PieceAvailabilityClearPayload) => void;
+  "asset.availability": (payload: z.infer<typeof assetAvailabilityAnnouncementSchema>) => void;
+  "asset.availability.request": (payload: AssetAvailabilityRequestPayload) => void;
+  "asset.availability.clear": (payload: AssetAvailabilityClearPayload) => void;
   "peer.signal": (payload: z.infer<typeof peerSignalMessageSchema>) => void;
   "room.chat": (payload: RoomChatInputPayload) => void;
 };

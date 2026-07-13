@@ -1,4 +1,4 @@
-import type { TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@music-room/shared";
 import type {
   CachedLibraryTrackRecord,
   CachedLibraryTrackSummaryRecord
@@ -240,8 +240,6 @@ export async function importCachedLibraryTrackToRoom(input: {
   activeSession: { userId: string; nickname: string } | null;
   roomId: string | null | undefined;
   roomTracks: TrackMeta[];
-  peerId: string;
-  shouldAnnounceAvailability: boolean;
   loadCachedLibraryTrackFile: (fileHash: string) => Promise<CachedLibraryTrackFile | null>;
   createObjectUrl: (file: File) => string;
   revokeObjectUrl: (href: string) => void;
@@ -249,22 +247,6 @@ export async function importCachedLibraryTrackToRoom(input: {
   buildRegisterTrackPayload: (track: TrackRegistrationDraft) => unknown;
   registerTrack: (roomId: string, payload: unknown) => Promise<TrackMeta>;
   syncRoomSnapshot: (roomId: string) => Promise<void>;
-  buildTrackAvailabilityFromFile: (input: {
-    roomId: string;
-    trackId: string;
-    fileHash: string;
-    file: File;
-    peerId: string;
-    nickname: string;
-    source: "live_upload" | "local_cache";
-    mimeType: string | null;
-    codec: string | null;
-    sizeBytes: number;
-    durationMs: number;
-    totalChunks?: number;
-    chunkSize?: number;
-  }) => Promise<TrackAvailabilityAnnouncement>;
-  publishAvailability: (availability: TrackAvailabilityAnnouncement) => void;
 }): Promise<{ trackId: string; upload: UploadedTrack } | null> {
   if (!input.activeSession || !input.roomId) {
     return null;
@@ -297,26 +279,6 @@ export async function importCachedLibraryTrackToRoom(input: {
   }
 
   const uploadObjectUrl = input.createObjectUrl(cachedTrack.file);
-  if (input.peerId && input.shouldAnnounceAvailability) {
-    input.publishAvailability(
-      await input.buildTrackAvailabilityFromFile({
-        roomId: input.roomId,
-        trackId: registeredTrack.id,
-        fileHash: registeredTrack.fileHash,
-        file: cachedTrack.file,
-        peerId: input.peerId,
-        nickname: input.activeSession.nickname,
-        source: "local_cache",
-        mimeType: registeredTrack.mimeType ?? null,
-        codec: registeredTrack.codec ?? null,
-        sizeBytes: registeredTrack.sizeBytes ?? cachedTrack.file.size,
-        durationMs: registeredTrack.durationMs,
-        totalChunks: registeredTrack.pieceManifest?.totalChunks,
-        chunkSize: registeredTrack.pieceManifest?.chunkSize
-      })
-    );
-  }
-
   return {
     trackId: registeredTrack.id,
     upload: {

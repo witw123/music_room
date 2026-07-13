@@ -183,7 +183,10 @@ export function buildRoomSubscribePayload(input: {
   return {
     roomId: input.roomId,
     sessionId: input.sessionId,
-    peerId: input.peerId
+    peerId: input.peerId,
+    protocolVersion: 4 as const,
+    capabilities: ["segmented-opus-v1" as const],
+    buildId: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.3.0"
   };
 }
 

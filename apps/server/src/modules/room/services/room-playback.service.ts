@@ -12,7 +12,14 @@ type TrackAvailabilityReader = {
     roomId: string,
     trackId: string
   ) => TrackAvailabilityAnnouncement[];
+  hasPlaybackProvider?: (
+    roomId: string,
+    assetId: string,
+    onlinePeerIds?: ReadonlySet<string>
+  ) => boolean | Promise<boolean>;
 };
+
+const scheduledPlaybackLeadMs = 8_000;
 
 export class RoomPlaybackService {
   constructor(
@@ -26,6 +33,7 @@ export class RoomPlaybackService {
       action: "play" | "pause" | "seek" | "next" | "prev";
       trackId?: string;
       queueItemId?: string;
+      playbackAssetId?: string;
       positionMs?: number;
     }
   ): Promise<PlaybackSnapshot> {
@@ -87,13 +95,16 @@ export class RoomPlaybackService {
           record,
           nextTrackId,
           startPositionMs,
-          nextQueueItemId
+          nextQueueItemId,
+          input.playbackAssetId
         );
       }
     }
 
     if (input.action === "pause") {
-      const sourceCandidate = playback.currentTrackId
+      const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+      this.assertRequestedPlaybackAsset(currentTrack, input.playbackAssetId);
+      const sourceCandidate = playback.currentTrackId && !currentTrack?.playbackAsset
         ? await this.resolveTrackSourceCandidate(record, playback.currentTrackId, {
             preferredSessionId: playback.sourceSessionId
           })
@@ -106,17 +117,25 @@ export class RoomPlaybackService {
         pausePositionMs
       );
       playback.startedAt = null;
+      playback.startAt = null;
       playback.sourceSessionId = sourceCandidate?.sessionId ?? playback.sourceSessionId;
       playback.sourcePeerId = sourceCandidate?.peerId ?? null;
     }
 
     if (input.action === "seek") {
-      const sourceCandidate = playback.currentTrackId
+      const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+      this.assertRequestedPlaybackAsset(currentTrack, input.playbackAssetId);
+      const sourceCandidate = playback.currentTrackId && !currentTrack?.playbackAsset
         ? await this.resolveTrackSourceCandidate(record, playback.currentTrackId, {
             preferredSessionId: playback.sourceSessionId
           })
         : null;
-      if (playback.status === "playing" && playback.currentTrackId && !sourceCandidate) {
+      if (
+        playback.status === "playing" &&
+        playback.currentTrackId &&
+        !currentTrack?.playbackAsset &&
+        !sourceCandidate
+      ) {
         throw new Error("Track owner is not online, so this song cannot be played right now.");
       }
 
@@ -132,8 +151,13 @@ export class RoomPlaybackService {
 
       playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, input.positionMs ?? 0);
       if (playback.status === "playing") {
-        playback.startedAt = new Date().toISOString();
+        const startAt = currentTrack?.playbackAsset
+          ? this.resolveScheduledStartAt()
+          : new Date().toISOString();
+        playback.startAt = startAt;
+        playback.startedAt = startAt;
       } else {
+        playback.startAt = null;
         playback.startedAt = null;
       }
     }
@@ -160,7 +184,8 @@ export class RoomPlaybackService {
     record: RoomRecord,
     trackId: string,
     positionMs: number,
-    queueItemId: string | null
+    queueItemId: string | null,
+    requestedPlaybackAssetId?: string
   ) {
     const playback = record.room.playback;
     const track = record.tracks.find((item) => item.id === trackId);
@@ -168,8 +193,30 @@ export class RoomPlaybackService {
       throw new Error(`Track not found in room: ${trackId}`);
     }
 
-    const sourceCandidate = await this.resolveTrackSourceCandidate(record, trackId);
-    if (!sourceCandidate) {
+    const isAssetPlayback = !!track.playbackAsset;
+    this.assertRequestedPlaybackAsset(track, requestedPlaybackAssetId);
+    const sourceCandidate = isAssetPlayback
+      ? null
+      : await this.resolveTrackSourceCandidate(record, trackId);
+    if (
+      isAssetPlayback &&
+      this.trackAvailabilityReader?.hasPlaybackProvider &&
+      !(await this.trackAvailabilityReader.hasPlaybackProvider(
+        record.room.id,
+        track.playbackAsset!.assetId,
+        new Set(
+          (
+            await this.roomPresenceService.getActivePresence(
+              record.room.id,
+              record.room.members
+            )
+          ).values()
+        )
+      ))
+    ) {
+      throw new Error("No room member currently provides this playback asset.");
+    }
+    if (!isAssetPlayback && !sourceCandidate) {
       throw new Error("Track owner is not online, so this song cannot be played right now.");
     }
 
@@ -177,17 +224,22 @@ export class RoomPlaybackService {
     const isQueueItemSwitch =
       queueItemId !== null && playback.currentQueueItemId !== queueItemId;
     const isSwitchingSource =
-      playback.sourceSessionId !== sourceCandidate.sessionId ||
-      playback.sourcePeerId !== sourceCandidate.peerId;
+      !isAssetPlayback && !!sourceCandidate && (
+        playback.sourceSessionId !== sourceCandidate.sessionId ||
+        playback.sourcePeerId !== sourceCandidate.peerId
+      );
 
     playback.status = "playing";
     playback.currentTrackId = trackId;
     playback.currentQueueItemId = queueItemId;
-    playback.sourceSessionId = sourceCandidate.sessionId;
-    playback.sourcePeerId = sourceCandidate.peerId;
-    playback.sourceTrackId = trackId;
+    playback.playbackAssetId = track.playbackAsset?.assetId ?? null;
+    playback.sourceSessionId = sourceCandidate?.sessionId ?? null;
+    playback.sourcePeerId = sourceCandidate?.peerId ?? null;
+    playback.sourceTrackId = isAssetPlayback ? null : trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
-    playback.startedAt = new Date().toISOString();
+    const startAt = isAssetPlayback ? this.resolveScheduledStartAt() : new Date().toISOString();
+    playback.startAt = startAt;
+    playback.startedAt = startAt;
     // Queue-item switches need a media epoch bump so clients remount local
     // playback even when the underlying track asset is unchanged.
     if (isTrackSwitch || isQueueItemSwitch || isSwitchingSource) {
@@ -199,6 +251,8 @@ export class RoomPlaybackService {
     playback.status = "paused";
     playback.currentTrackId = null;
     playback.currentQueueItemId = null;
+    playback.playbackAssetId = null;
+    playback.startAt = null;
     playback.sourceSessionId = null;
     playback.sourcePeerId = null;
     playback.sourceTrackId = null;
@@ -212,11 +266,14 @@ export class RoomPlaybackService {
 
   async handleSourceDeparture(record: RoomRecord, sessionId: string) {
     const playback = record.room.playback;
+    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
+    if (currentTrack?.playbackAsset) {
+      return;
+    }
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
       return;
     }
 
-    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
     const nextSourceCandidate = currentTrack
       ? await this.resolveTrackSourceCandidate(record, currentTrack.id, {
           excludedSessionIds: new Set([sessionId])
@@ -343,6 +400,22 @@ export class RoomPlaybackService {
 
   private bumpPlaybackVersion(playback: PlaybackSnapshot) {
     playback.playbackRevision += 1;
+  }
+
+  private resolveScheduledStartAt() {
+    return new Date(Date.now() + scheduledPlaybackLeadMs).toISOString();
+  }
+
+  private assertRequestedPlaybackAsset(
+    track: TrackMeta | undefined,
+    requestedPlaybackAssetId?: string
+  ) {
+    if (
+      requestedPlaybackAssetId !== undefined &&
+      requestedPlaybackAssetId !== (track?.playbackAsset?.assetId ?? null)
+    ) {
+      throw new Error("Playback asset does not belong to the selected track.");
+    }
   }
 
   private async resolveTrackSourceCandidate(

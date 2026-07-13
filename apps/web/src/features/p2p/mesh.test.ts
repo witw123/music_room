@@ -249,6 +249,8 @@ describe("P2PMesh", () => {
 
     await expect(
       mesh.handleSignal({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_b",
         toPeerId: "peer_a",
@@ -267,6 +269,8 @@ describe("P2PMesh", () => {
 
     await expect(
       mesh.handleSignal({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_b",
         toPeerId: "peer_a",
@@ -287,6 +291,8 @@ describe("P2PMesh", () => {
 
     await expect(
       mesh.handleSignal({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_b",
         toPeerId: "peer_a",
@@ -309,6 +315,8 @@ describe("P2PMesh", () => {
 
     await expect(
       mesh.handleSignal({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_b",
         toPeerId: "peer_a",
@@ -355,6 +363,8 @@ describe("P2PMesh", () => {
 
     await expect(
       mesh.handleSignal({
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_b",
         toPeerId: "peer_a",

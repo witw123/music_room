@@ -84,6 +84,24 @@ describe("data channel manager policy", () => {
     ).toBe(false);
   });
 
+  it("caps playback and original channels at their v4 watermarks", () => {
+    expect(shouldSendQueuedDataChannelItem({
+      queueLength: 1,
+      bufferedAmountBytes: 512 * 1024,
+      highWatermarkBytes: 16 * 1024 * 1024,
+      priority: "critical",
+      channel: "playback"
+    })).toBe(false);
+    expect(shouldSendQueuedDataChannelItem({
+      queueLength: 1,
+      bufferedAmountBytes: 1024 * 1024,
+      highWatermarkBytes: 16 * 1024 * 1024,
+      bulkHighWatermarkBytes: 8 * 1024 * 1024,
+      priority: "bulk",
+      channel: "original"
+    })).toBe(false);
+  });
+
   it("reports stalled and schedules reconnect only for unexpected closes", () => {
     expect(
       resolveDataChannelClosedAction({

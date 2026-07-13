@@ -9,9 +9,11 @@ import {
 describe("external peer link profile", () => {
   it("allows cold-start peers until candidate stats arrive", () => {
     expect(isPeerTransportAllowed({})).toBe(true);
-    expect(isPeerTransportAllowed({ protocol: "tcp" })).toBe(false);
-    expect(isPeerTransportAllowed({ candidateType: "relay" })).toBe(false);
+    expect(isPeerTransportAllowed({ protocol: "tcp" })).toBe(true);
+    expect(isPeerTransportAllowed({ candidateType: "relay" })).toBe(true);
     expect(isPeerTransportAllowed({ candidateType: "relay", protocol: "udp" })).toBe(true);
+    expect(isPeerTransportAllowed({ candidateType: "relay", protocol: "tcp" })).toBe(true);
+    expect(isPeerTransportAllowed({ candidateType: "relay", protocol: "tls" })).toBe(true);
   });
 
   it("keeps a healthy high-latency UDP relay in the relay profile", () => {

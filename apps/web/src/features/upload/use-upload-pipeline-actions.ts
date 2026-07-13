@@ -1,26 +1,22 @@
 import { useCallback, type Dispatch, type MutableRefObject } from "react";
-import type {
-  GuestSession,
-  RoomSnapshot,
-  TrackAvailabilityAnnouncement,
-  TrackMeta
+import {
+  unitIndexesToRanges,
+  type AssetAvailabilityAnnouncement,
+  type GuestSession,
+  type RoomSnapshot,
+  type TrackMeta
 } from "@music-room/shared";
 import {
-  assembleTrackFileFromPieces,
-  buildTrackAvailabilityFromCache,
-  buildTrackAvailabilityFromFile,
-  buildTrackAvailabilityFromManifest
+  assembleTrackFileFromPieces
 } from "@/features/p2p";
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
 import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteCachedPiecesForTrack,
-  getCachedLibraryTrack,
-  getCachedLibraryTrackSummary,
   getCachedPiecesForTrack,
-  getTrackPieceManifest,
-  getTrackPieceManifestByFileHash,
+  getAssetUnitIndexes,
+  linkTrackAssets,
   localCacheOwnerKey,
   upsertCachedLibraryTrack
 } from "@/lib/indexeddb";
@@ -29,12 +25,11 @@ import {
   buildTrackMeta,
   type UploadedTrack
 } from "@/features/upload/audio-utils";
+import { prepareAudioAssets } from "@/features/upload/audio-asset-builder";
+import { buildCompleteAssetAnnouncements } from "@/features/upload/asset-availability";
 import {
   buildCachedLibraryTrackUpsertRecord
 } from "./cache-library";
-import {
-  announceRoomTrackAvailability as announceRoomTrackAvailabilityFromSources
-} from "./track-availability";
 import {
   applySelectedTrackFilesResult,
   buildRegisterTrackPayload,
@@ -49,15 +44,11 @@ import type {
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
-  availabilityAnnouncementInFlightRef: MutableRefObject<Set<string>>;
-  availabilityAnnouncementTtlRef: MutableRefObject<Map<string, number>>;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
-  emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   inFlightUploadHashesRef: MutableRefObject<Set<string>>;
   manualCacheAssemblingTrackIdsRef: MutableRefObject<Set<string>>;
   manualCacheChunkIndexesRef: MutableRefObject<Map<string, Set<number>>>;
   manualCacheRetainedPieceTrackIdsRef: MutableRefObject<Set<string>>;
-  onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   peerId: string;
   refreshCacheLibrary: () => Promise<void>;
   roomSnapshot: RoomSnapshot | null;
@@ -65,26 +56,26 @@ type UploadPipelineActionsInput = {
   setUploadedTracks: (updater: (current: Record<string, UploadedTrack>) => Record<string, UploadedTrack>) => void;
   updateManualCacheTask: (trackId: string, patch: ManualCacheTaskPatch) => void;
   uploadedTracks: Record<string, UploadedTrack>;
+  onAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
+  emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
 };
 
 export function useUploadPipelineActions({
   activeSession,
-  availabilityAnnouncementInFlightRef,
-  availabilityAnnouncementTtlRef,
   dispatchRoomStateEvent,
-  emitAvailability,
   inFlightUploadHashesRef,
   manualCacheAssemblingTrackIdsRef,
   manualCacheChunkIndexesRef,
   manualCacheRetainedPieceTrackIdsRef,
-  onAvailability,
   peerId,
   refreshCacheLibrary,
   roomSnapshot,
   setStatusMessage,
   setUploadedTracks,
   updateManualCacheTask,
-  uploadedTracks
+  uploadedTracks,
+  onAssetAvailability,
+  emitAssetAvailability
 }: UploadPipelineActionsInput) {
   const syncRoomSnapshot = useCallback(
     async (roomId: string) => {
@@ -124,35 +115,42 @@ export function useUploadPipelineActions({
   );
 
   const announceRoomTrackAvailability = useCallback(
-    async (trackId: string, options?: { force?: boolean }) => {
-      return announceRoomTrackAvailabilityFromSources({
-        roomId: roomSnapshot?.room.id,
-        roomTracks: roomSnapshot?.tracks ?? [],
-        activeSession,
-        peerId,
-        trackId,
-        uploadedTrack: uploadedTracks[trackId] ?? null,
-        force: options?.force,
-        inFlightAnnouncements: availabilityAnnouncementInFlightRef.current,
-        announcementTtl: availabilityAnnouncementTtlRef.current,
-        getCachedLibraryTrackSummary,
-        getCachedLibraryTrack,
-        getTrackPieceManifestByFileHash,
-        getTrackPieceManifest,
-        buildTrackAvailabilityFromCache,
-        buildTrackAvailabilityFromManifest,
-        publishAvailability: (availability) => {
-          onAvailability(availability);
-          emitAvailability(availability);
+    async (trackId: string, _options?: { force?: boolean }) => {
+      const roomId = roomSnapshot?.room.id;
+      const track = roomSnapshot?.tracks.find((candidate) => candidate.id === trackId);
+      if (!roomId || !activeSession || !peerId || !track?.originalAsset || !track.playbackAsset) {
+        return false;
+      }
+      let announced = false;
+      for (const asset of [track.playbackAsset, track.originalAsset]) {
+        const owned = await getAssetUnitIndexes(asset.assetId);
+        const availableRanges = unitIndexesToRanges(owned, asset.unitCount);
+        if (availableRanges.length === 0) {
+          continue;
         }
-      });
+        const announcement: AssetAvailabilityAnnouncement = {
+          protocolVersion: 4,
+          roomId,
+          assetId: asset.assetId,
+          assetKind: asset.kind,
+          ownerPeerId: peerId,
+          nickname: activeSession.nickname,
+          totalUnits: asset.unitCount,
+          availableRanges,
+          complete: owned.length === asset.unitCount,
+          source: uploadedTracks[trackId] ? "live_upload" : "local_cache",
+          announcedAt: new Date().toISOString()
+        };
+        onAssetAvailability(announcement);
+        emitAssetAvailability(announcement);
+        announced = true;
+      }
+      return announced;
     },
     [
       activeSession,
-      availabilityAnnouncementInFlightRef,
-      availabilityAnnouncementTtlRef,
-      emitAvailability,
-      onAvailability,
+      emitAssetAvailability,
+      onAssetAvailability,
       peerId,
       roomSnapshot,
       uploadedTracks
@@ -217,12 +215,27 @@ export function useUploadPipelineActions({
         activeSession,
         roomId,
         roomTracks: roomSnapshot.tracks,
-        peerId,
         manualTrackCachingEnabled: enableManualTrackCaching,
         inFlightUploadHashes: inFlightUploadHashesRef.current,
         createObjectUrl: (file) => URL.createObjectURL(file),
         revokeObjectUrl: (objectUrl) => URL.revokeObjectURL(objectUrl),
-        buildTrackMeta: (file, objectUrl) => buildTrackMeta(file, objectUrl, activeSession),
+        buildTrackMeta: async (file, objectUrl) => {
+          const assets = await prepareAudioAssets({
+            file,
+            onProgress: ({ stage, completed, total }) => {
+              const labels = {
+                hashing: "正在校验源文件",
+                "persisting-original": "正在保存源文件",
+                decoding: "正在解码音频",
+                encoding: "正在生成播放分片",
+                "persisting-playback": "正在保存播放分片"
+              } as const;
+              const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+              setStatusMessage(`${labels[stage]} ${percent}%`);
+            }
+          });
+          return buildTrackMeta(file, objectUrl, activeSession, assets);
+        },
         buildRegisterTrackPayload,
         registerTrack: (registerRoomId, payload) =>
           musicRoomApi.registerTrack(
@@ -230,16 +243,29 @@ export function useUploadPipelineActions({
             payload as Parameters<typeof musicRoomApi.registerTrack>[1]
           ),
         persistTrackIntoLibrary,
-        onTrackReady: (trackId, upload) => {
+        onTrackReady: (trackId, upload, registeredTrack) => {
           setUploadedTracks((current) => ({
             ...current,
             [trackId]: upload
           }));
-        },
-        buildTrackAvailabilityFromFile,
-        publishAvailability: (availability) => {
-          onAvailability(availability);
-          emitAvailability(availability);
+          if (registeredTrack.originalAsset && registeredTrack.playbackAsset) {
+            void linkTrackAssets({
+              trackId,
+              originalAssetId: registeredTrack.originalAsset.assetId,
+              playbackAssetId: registeredTrack.playbackAsset.assetId
+            });
+            for (const announcement of buildCompleteAssetAnnouncements({
+              roomId,
+              peerId,
+              nickname: activeSession.nickname,
+              source: "live_upload",
+              originalAsset: registeredTrack.originalAsset,
+              playbackAsset: registeredTrack.playbackAsset
+            })) {
+              onAssetAvailability(announcement);
+              emitAssetAvailability(announcement);
+            }
+          }
         }
       });
 
@@ -253,9 +279,9 @@ export function useUploadPipelineActions({
     },
     [
       activeSession,
-      emitAvailability,
+      emitAssetAvailability,
       inFlightUploadHashesRef,
-      onAvailability,
+      onAssetAvailability,
       peerId,
       persistTrackIntoLibrary,
       roomSnapshot,

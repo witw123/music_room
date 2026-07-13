@@ -64,7 +64,9 @@ export function releasePeerConnectionEntry(input: {
   input.stopStatsSampling(input.entry);
   input.entry.controlChannel?.close();
   input.entry.dataChannel?.close();
-  if (!input.entry.controlChannel && !input.entry.dataChannel) {
+  input.entry.playbackChannel?.close();
+  input.entry.originalChannel?.close();
+  if (!input.entry.controlChannel && !input.entry.dataChannel && !input.entry.playbackChannel && !input.entry.originalChannel) {
     input.entry.channel?.close();
   }
   input.entry.connection.close();
@@ -163,6 +165,11 @@ export function bindPeerConnectionEvents(input: {
     const channel = event.channel;
     if (channel.label === "music-room-control") {
       input.entry.controlChannel = channel;
+    } else if (channel.label === "music-room-playback") {
+      input.entry.playbackChannel = channel;
+      input.entry.dataChannel = channel;
+    } else if (channel.label === "music-room-original") {
+      input.entry.originalChannel = channel;
     } else if (channel.label === "music-room-data") {
       input.entry.dataChannel = channel;
     }

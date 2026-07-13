@@ -165,4 +165,26 @@ describe("TrackAvailabilityRegistry", () => {
     );
     expect(registry.getTrackAnnouncements("room_1", "track_bad")).toEqual([]);
   });
+
+  it("only reports playback providers that are currently online when presence is supplied", () => {
+    const registry = new TrackAvailabilityRegistry(createRedisServiceMock() as never);
+    registry.setAssetAnnouncement("room_1", {
+      protocolVersion: 4,
+      roomId: "room_1",
+      assetId: "a".repeat(64),
+      assetKind: "playback",
+      ownerPeerId: "peer_offline",
+      nickname: "Offline",
+      totalUnits: 1,
+      availableRanges: [{ start: 0, end: 0 }],
+      complete: true,
+      source: "local_cache",
+      announcedAt: "2026-07-13T00:00:00.000Z"
+    });
+
+    expect(registry.hasPlaybackProvider("room_1", "a".repeat(64), new Set())).toBe(false);
+    expect(
+      registry.hasPlaybackProvider("room_1", "a".repeat(64), new Set(["peer_offline"]))
+    ).toBe(true);
+  });
 });

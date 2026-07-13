@@ -2,6 +2,7 @@
 
 import type { GuestSession } from "@music-room/shared";
 import { buildCanonicalTrackPieceManifest } from "@/features/p2p";
+import type { PreparedAudioAssets } from "./audio-asset-builder";
 
 type CapturedAudioGraph = {
   context: AudioContext | null;
@@ -38,13 +39,14 @@ export type CachedLibraryTrackFile = CachedLibraryTrack & {
 
 export type CapturedAudioStreamMode = CapturedAudioGraph["mode"];
 
-export async function buildTrackMeta(file: File, objectUrl: string, session: GuestSession) {
-  const buffer = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  const fileHash = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-  const durationMs = await readDuration(objectUrl);
+export async function buildTrackMeta(
+  file: File,
+  objectUrl: string,
+  session: GuestSession,
+  preparedAssets?: PreparedAudioAssets
+) {
+  const fileHash = preparedAssets?.fileHash ?? await hashFile(file);
+  const durationMs = preparedAssets?.playbackAsset.durationMs ?? await readDuration(objectUrl);
   const title = file.name.replace(/\.[^/.]+$/, "");
   const codec = file.type.split("/")[1]?.trim() || null;
   const pieceManifest = buildCanonicalTrackPieceManifest({
@@ -68,6 +70,12 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
     ownerSessionId: session.userId,
     ownerNickname: session.nickname,
     sourceType: "local_upload" as const,
+    ...(preparedAssets
+      ? {
+          originalAsset: preparedAssets.originalAsset,
+          playbackAsset: preparedAssets.playbackAsset
+        }
+      : {}),
     pieceManifest: {
       ...pieceManifest,
       pieceMimeType: pieceManifest.pieceMimeType
@@ -77,6 +85,13 @@ export async function buildTrackMeta(file: File, objectUrl: string, session: Gue
       pieceMimeType: pieceManifest.pieceMimeType
     }
   };
+}
+
+async function hashFile(file: File) {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export function readDuration(objectUrl: string) {

@@ -1,4 +1,4 @@
-import type { Room, RoomSnapshot } from "@music-room/shared";
+import { computeAssetId, type Room, type RoomSnapshot } from "@music-room/shared";
 import { RoomController } from "./room.controller";
 
 function buildSnapshot(overrides?: Partial<Room>): RoomSnapshot {
@@ -51,6 +51,56 @@ function createRoomRealtimePublisherMock() {
   };
 }
 
+async function buildTrackRegistration() {
+  const fileHash = "1".repeat(64);
+  const originalManifest = {
+    kind: "original" as const,
+    fileHash,
+    mimeType: "audio/flac",
+    sizeBytes: 1_000,
+    unitSize: 1_048_576 as const,
+    unitCount: 1,
+    merkleRoot: "2".repeat(64)
+  };
+  const playbackManifest = {
+    kind: "playback" as const,
+    sourceFileHash: fileHash,
+    profileId: "opus-music-v1" as const,
+    codec: "opus" as const,
+    container: "audio/ogg" as const,
+    sampleRate: 48_000 as const,
+    channels: 2 as const,
+    bitrate: 192_000 as const,
+    durationMs: 2_000,
+    segmentDurationMs: 2_000 as const,
+    seekPrerollMs: 80 as const,
+    unitCount: 1,
+    merkleRoot: "3".repeat(64),
+    encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
+  };
+  return {
+    title: "Song",
+    artist: "Artist",
+    album: null,
+    durationMs: 2_000,
+    bitrate: 192_000,
+    sizeBytes: 1_000,
+    codec: "flac",
+    mimeType: "audio/flac",
+    fileHash,
+    artworkUrl: null,
+    sourceType: "local_upload" as const,
+    originalAsset: {
+      ...originalManifest,
+      assetId: await computeAssetId(originalManifest)
+    },
+    playbackAsset: {
+      ...playbackManifest,
+      assetId: await computeAssetId(playbackManifest)
+    }
+  };
+}
+
 describe("RoomController", () => {
   function createAuthServiceMock() {
     return {
@@ -72,6 +122,30 @@ describe("RoomController", () => {
       removeTrackFromPlaylists: jest.fn().mockResolvedValue(undefined)
     };
   }
+
+  it("accepts canonical asset manifests and rejects forged asset ids", async () => {
+    const payload = await buildTrackRegistration();
+    const roomService = {
+      registerTrack: jest.fn(async (_roomId, _userId, track) => ({ id: "track_1", ...track }))
+    };
+    const roomRealtimePublisher = createRoomRealtimePublisherMock();
+    const controller = new RoomController(
+      roomService as never,
+      roomRealtimePublisher as never,
+      createAuthServiceMock() as never,
+      createPlaylistServiceMock() as never
+    );
+
+    await expect(controller.registerTrack("room_1", "token", payload)).resolves.toMatchObject({
+      id: "track_1",
+      playbackAsset: { assetId: payload.playbackAsset.assetId }
+    });
+    await expect(controller.registerTrack("room_1", "token", {
+      ...payload,
+      playbackAsset: { ...payload.playbackAsset, assetId: "f".repeat(64) }
+    })).rejects.toThrow("Track asset ids do not match their canonical manifests.");
+    expect(roomService.registerTrack).toHaveBeenCalledTimes(1);
+  });
 
   it("returns the recent room snapshot for a session", async () => {
     const snapshot = buildSnapshot();

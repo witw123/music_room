@@ -95,6 +95,8 @@ export class RoomService {
         status: "paused",
         currentTrackId: null,
         currentQueueItemId: null,
+        playbackAssetId: null,
+        startAt: null,
         sourceSessionId: hostSession.id,
         sourcePeerId: null,
         sourceTrackId: null,
@@ -620,6 +622,7 @@ export class RoomService {
       action: "play" | "pause" | "seek" | "next" | "prev";
       trackId?: string;
       queueItemId?: string;
+      playbackAssetId?: string;
       positionMs?: number;
       actorSessionId?: string;
       actorPeerId?: string;

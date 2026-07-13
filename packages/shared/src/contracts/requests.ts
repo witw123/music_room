@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { trackPieceManifestSchema } from "../playlist/models";
+import { originalAssetManifestSchema, playbackAssetManifestSchema } from "../assets/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const optionalNullableText = (max: number) =>
@@ -56,8 +56,8 @@ export const registerTrackRequestSchema = z
     ownerSessionId: stringId.optional(),
     ownerNickname: z.string().trim().max(80).optional(),
     sourceType: z.literal("local_upload"),
-    pieceManifest: trackPieceManifestSchema.strict().nullable().optional(),
-    relayManifest: trackPieceManifestSchema.strict().nullable().optional()
+    originalAsset: originalAssetManifestSchema.optional(),
+    playbackAsset: playbackAssetManifestSchema.optional()
   })
   .strict();
 
@@ -78,6 +78,7 @@ export const updatePlaybackRequestSchema = z
     action: z.enum(["play", "pause", "seek", "next", "prev"]),
     trackId: stringId.optional(),
     queueItemId: stringId.optional(),
+    playbackAssetId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     positionMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000).optional(),
     actorPeerId: stringId.optional(),
     expectedVersion: z.number().int().positive()

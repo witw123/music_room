@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  assetAvailabilityKey,
+  mergeAssetAvailability as mergeAssetAnnouncement,
   compactTrackAvailabilityAnnouncement,
+  type AssetAvailabilityAnnouncement,
   type TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -66,6 +69,10 @@ export function useAvailabilityAnnouncements({
   const availabilityFlushTimerRef = useRef<number | null>(null);
   const availabilityEmitTimerRef = useRef<number | null>(null);
   const [availabilityByTrack, setAvailabilityByTrack] = useState<AvailabilityState>({});
+  const [availabilityByAsset, setAvailabilityByAsset] = useState<
+    Record<string, Record<string, AssetAvailabilityAnnouncement>>
+  >({});
+  const pendingAssetAvailabilityRef = useRef(new Map<string, AssetAvailabilityAnnouncement>());
   const availabilityByTrackRef = useRef<AvailabilityState>({});
 
   useEffect(() => {
@@ -157,9 +164,37 @@ export function useAvailabilityAnnouncements({
     [scheduleAvailabilityEmit, socketRef]
   );
 
+  const mergeAssetAvailability = useCallback((announcement: AssetAvailabilityAnnouncement) => {
+    setAvailabilityByAsset((current) => {
+      const currentAsset = current[announcement.assetId] ?? {};
+      const existing = currentAsset[announcement.ownerPeerId];
+      const merged = mergeAssetAnnouncement(existing, announcement);
+      if (merged === existing) {
+        return current;
+      }
+      return {
+        ...current,
+        [announcement.assetId]: {
+          ...currentAsset,
+          [announcement.ownerPeerId]: merged
+        }
+      };
+    });
+  }, []);
+
+  const emitAssetAvailability = useCallback((announcement: AssetAvailabilityAnnouncement) => {
+    const socket = socketRef.current;
+    const key = assetAvailabilityKey(announcement);
+    if (!socket?.connected) {
+      pendingAssetAvailabilityRef.current.set(key, announcement);
+      return;
+    }
+    socket.emit("asset.availability", announcement);
+  }, [socketRef]);
+
   const flushPendingAvailability = useCallback(() => {
     const socket = socketRef.current;
-    if (!socket || !socket.connected || pendingAvailabilityRef.current.size === 0) {
+    if (!socket || !socket.connected) {
       return;
     }
 
@@ -171,6 +206,10 @@ export function useAvailabilityAnnouncements({
     }
 
     pendingAvailabilityRef.current.clear();
+    for (const announcement of pendingAssetAvailabilityRef.current.values()) {
+      socket.emit("asset.availability", announcement);
+    }
+    pendingAssetAvailabilityRef.current.clear();
   }, [socketRef]);
 
   const clearAvailabilityForPeer = useCallback((ownerPeerId: string) => {
@@ -195,6 +234,33 @@ export function useAvailabilityAnnouncements({
     setAvailabilityByTrack((current) => {
       const next = removeAvailabilityAnnouncementsByPeer(current, ownerPeerId);
       availabilityByTrackRef.current = next;
+      return next;
+    });
+    setAvailabilityByAsset((current) => Object.fromEntries(
+      Object.entries(current).flatMap(([assetId, announcements]) => {
+        const remaining = Object.fromEntries(
+          Object.entries(announcements).filter(([, announcement]) => announcement.ownerPeerId !== ownerPeerId)
+        );
+        return Object.keys(remaining).length > 0 ? [[assetId, remaining]] : [];
+      })
+    ));
+  }, []);
+
+  const clearAvailabilityForAsset = useCallback((assetId: string, ownerPeerId?: string) => {
+    setAvailabilityByAsset((current) => {
+      const announcements = current[assetId];
+      if (!announcements) {
+        return current;
+      }
+      const remaining = ownerPeerId
+        ? Object.fromEntries(Object.entries(announcements).filter(([peerId]) => peerId !== ownerPeerId))
+        : {};
+      const next = { ...current };
+      if (Object.keys(remaining).length > 0) {
+        next[assetId] = remaining;
+      } else {
+        delete next[assetId];
+      }
       return next;
     });
   }, []);
@@ -252,8 +318,10 @@ export function useAvailabilityAnnouncements({
     queuedAvailabilityRef.current.clear();
     pendingAvailabilityRef.current.clear();
     pendingAvailabilityEmitRef.current.clear();
+    pendingAssetAvailabilityRef.current.clear();
     availabilityByTrackRef.current = {};
     setAvailabilityByTrack({});
+    setAvailabilityByAsset({});
   }, []);
 
   useEffect(() => {
@@ -269,12 +337,16 @@ export function useAvailabilityAnnouncements({
 
   return {
     availabilityByTrack,
+    availabilityByAsset,
     queueAvailability,
     mergeAvailability,
     emitAvailability,
+    emitAssetAvailability,
+    mergeAssetAvailability,
     flushPendingAvailability,
     clearAvailabilityForPeer,
     clearAvailabilityForTrack,
+    clearAvailabilityForAsset,
     resetAvailabilityState
   };
 }

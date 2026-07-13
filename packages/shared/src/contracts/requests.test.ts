@@ -52,10 +52,32 @@ describe("request contracts", () => {
       fileHash: "hash",
       artworkUrl: null,
       sourceType: "local_upload" as const,
-      pieceManifest: {
-        totalChunks: 4,
-        chunkSize: 1024,
-        pieceMimeType: "audio/mpeg"
+      originalAsset: {
+        assetId: "a".repeat(64),
+        kind: "original" as const,
+        fileHash: "b".repeat(64),
+        mimeType: "audio/flac",
+        sizeBytes: 5_000_000,
+        unitSize: 1_048_576 as const,
+        unitCount: 5,
+        merkleRoot: "c".repeat(64)
+      },
+      playbackAsset: {
+        assetId: "d".repeat(64),
+        kind: "playback" as const,
+        sourceFileHash: "b".repeat(64),
+        profileId: "opus-music-v1" as const,
+        codec: "opus" as const,
+        container: "audio/ogg" as const,
+        sampleRate: 48_000 as const,
+        channels: 2 as const,
+        bitrate: 192_000 as const,
+        durationMs: 120_000,
+        segmentDurationMs: 2_000 as const,
+        seekPrerollMs: 80 as const,
+        unitCount: 60,
+        merkleRoot: "e".repeat(64),
+        encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
       }
     };
 
@@ -69,13 +91,14 @@ describe("request contracts", () => {
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,
-        pieceManifest: {
-          totalChunks: 0,
-          chunkSize: 1024,
-          pieceMimeType: "audio/mpeg"
-        }
+        relayManifest: { totalChunks: 1, chunkSize: 1024, pieceMimeType: "audio/mpeg" }
       })
     ).toThrow();
+    expect(() => registerTrackRequestSchema.parse({ ...validTrack, audioPayload: "base64" })).toThrow();
+    expect(() => registerTrackRequestSchema.parse({
+      ...validTrack,
+      playbackAsset: { ...validTrack.playbackAsset, payload: "base64" }
+    })).toThrow();
   });
 
   it("requires positive playback expectedVersion", () => {
@@ -97,6 +120,14 @@ describe("request contracts", () => {
       updatePlaybackRequestSchema.parse({
         action: "seek",
         positionMs: -1,
+        expectedVersion: 1
+      })
+    ).toThrow();
+
+    expect(() =>
+      updatePlaybackRequestSchema.parse({
+        action: "play",
+        playbackAssetId: "not-an-asset-id",
         expectedVersion: 1
       })
     ).toThrow();

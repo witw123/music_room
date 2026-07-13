@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import type { AuthSession, RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/shared";
+import type {
+  AssetAvailabilityAnnouncement,
+  AuthSession,
+  RoomSnapshot,
+  TrackAvailabilityAnnouncement
+} from "@music-room/shared";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import type { P2PMesh } from "@/features/p2p";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
@@ -45,8 +50,10 @@ export function useRoomRuntimeMutableState(input: {
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   resetPlayerSurface: () => void;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
+  queueAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
   clearAvailabilityForTrack: (trackId: string, ownerPeerId?: string) => void;
+  clearAvailabilityForAsset: (assetId: string, ownerPeerId?: string) => void;
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   enableTrackCaching: boolean;
@@ -82,8 +89,10 @@ export function useRoomRuntimeMutableState(input: {
   const deleteRoomTrackArtifactsRef = useRef(input.deleteRoomTrackArtifacts);
   const resetPlayerSurfaceRef = useRef(input.resetPlayerSurface);
   const queueAvailabilityRef = useRef(input.queueAvailability);
+  const queueAssetAvailabilityRef = useRef(input.queueAssetAvailability);
   const clearAvailabilityForPeerRef = useRef(input.clearAvailabilityForPeer);
   const clearAvailabilityForTrackRef = useRef(input.clearAvailabilityForTrack);
+  const clearAvailabilityForAssetRef = useRef(input.clearAvailabilityForAsset);
   const flushPendingAvailabilityRef = useRef(input.flushPendingAvailability);
   const recordPeerDiagnosticRef = useRef(input.recordPeerDiagnostic);
 
@@ -215,12 +224,20 @@ export function useRoomRuntimeMutableState(input: {
   }, [input.queueAvailability]);
 
   useEffect(() => {
+    queueAssetAvailabilityRef.current = input.queueAssetAvailability;
+  }, [input.queueAssetAvailability]);
+
+  useEffect(() => {
     clearAvailabilityForPeerRef.current = input.clearAvailabilityForPeer;
   }, [input.clearAvailabilityForPeer]);
 
   useEffect(() => {
     clearAvailabilityForTrackRef.current = input.clearAvailabilityForTrack;
   }, [input.clearAvailabilityForTrack]);
+
+  useEffect(() => {
+    clearAvailabilityForAssetRef.current = input.clearAvailabilityForAsset;
+  }, [input.clearAvailabilityForAsset]);
 
   useEffect(() => {
     flushPendingAvailabilityRef.current = input.flushPendingAvailability;
@@ -260,8 +277,10 @@ export function useRoomRuntimeMutableState(input: {
     deleteRoomTrackArtifactsRef,
     resetPlayerSurfaceRef,
     queueAvailabilityRef,
+    queueAssetAvailabilityRef,
     clearAvailabilityForPeerRef,
     clearAvailabilityForTrackRef,
+    clearAvailabilityForAssetRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
     clearSocketDisconnectGrace,

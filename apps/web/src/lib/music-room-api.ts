@@ -215,6 +215,7 @@ export const musicRoomApi = {
       action: "play" | "pause" | "seek" | "next" | "prev";
       trackId?: string;
       queueItemId?: string;
+      playbackAssetId?: string;
       positionMs?: number;
       actorPeerId?: string;
       expectedVersion: number;

@@ -9,6 +9,8 @@ export type PeerEntry = {
   channel: RTCDataChannel | null;
   controlChannel: RTCDataChannel | null;
   dataChannel: RTCDataChannel | null;
+  playbackChannel: RTCDataChannel | null;
+  originalChannel: RTCDataChannel | null;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
   pendingCandidates: RTCIceCandidateInit[];
@@ -35,6 +37,8 @@ export function createPeerEntry(input: {
     channel: null,
     controlChannel: null,
     dataChannel: null,
+    playbackChannel: null,
+    originalChannel: null,
     initiatorPeerId: input.initiatorPeerId,
     pendingCandidates: [],
     statsIntervalId: null,

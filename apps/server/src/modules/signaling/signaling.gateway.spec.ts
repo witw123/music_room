@@ -150,6 +150,8 @@ function createClient(input?: Partial<{
       roomId: input?.roomId,
       sessionId: input?.sessionId,
       peerId: input?.peerId,
+      protocolVersion: 4,
+      capabilities: ["segmented-opus-v1"],
       isRealtimeAuthenticated: input?.isRealtimeAuthenticated ?? false
     },
     join: jest.fn(),
@@ -218,6 +220,8 @@ describe("SignalingGateway", () => {
     expect(roomService.getAccessibleRoomSnapshot).toHaveBeenCalledWith("room_1", [], "guest_host");
     expect(response).toEqual({
       ok: true,
+      protocolVersion: 4,
+      capability: "segmented-opus-v1",
       serverNow: expect.any(String),
       recoveryGeneration: expect.any(Number),
       bootstrap: {
@@ -236,6 +240,26 @@ describe("SignalingGateway", () => {
       }
     });
     expect(client.emit).toHaveBeenCalledWith("room.snapshot", snapshot);
+  });
+
+  it("returns an explicit upgrade error for pre-v4 subscribers", async () => {
+    const { gateway, authService } = createGateway();
+    const client = createClient();
+
+    await expect(gateway.handleRoomSubscribe(client as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host",
+      protocolVersion: 3,
+      capabilities: []
+    })).resolves.toEqual({
+      ok: false,
+      protocolVersion: 4,
+      capability: "segmented-opus-v1",
+      errorCode: "client_upgrade_required"
+    });
+    expect(authService.assertSessionToken).not.toHaveBeenCalled();
+    expect(client.join).not.toHaveBeenCalled();
   });
 
   it("builds the subscribe snapshot after marking the peer online", async () => {
@@ -395,7 +419,7 @@ describe("SignalingGateway", () => {
     await Promise.resolve();
     gateway.onModuleDestroy();
 
-    expect(unsubscribeFns).toHaveLength(10);
+    expect(unsubscribeFns).toHaveLength(12);
     for (const unsubscribe of unsubscribeFns) {
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     }
@@ -615,12 +639,14 @@ describe("SignalingGateway", () => {
       sourceId: "other-instance",
       roomId: "room_1",
       payload: {
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
         channelKind: "media",
         type: "offer",
-        payload: {}
+        payload: { type: "offer", sdp: "v=0" }
       }
     });
 
@@ -655,6 +681,8 @@ describe("SignalingGateway", () => {
       sourceId: "other-instance",
       roomId: "room_1",
       payload: {
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -795,6 +823,8 @@ describe("SignalingGateway", () => {
     const { gateway, redisService } = createGateway();
     attachServerMock(gateway);
     const payload = {
+      protocolVersion: 4 as const,
+      capability: "segmented-opus-v1" as const,
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
@@ -842,7 +872,7 @@ describe("SignalingGateway", () => {
           toPeerId: "peer_b",
           channelKind: "media",
           type: "offer",
-          payload: {}
+          payload: { type: "offer", sdp: "v=0" }
         } as never
       )
     ).rejects.toMatchObject({
@@ -962,12 +992,14 @@ describe("SignalingGateway", () => {
       gateway.handleSignal(
         createClient() as never,
         {
+          protocolVersion: 4,
+          capability: "segmented-opus-v1",
           roomId: "room_1",
           fromPeerId: "peer_a",
           toPeerId: "peer_b",
           channelKind: "data",
           type: "offer",
-          payload: {}
+          payload: { type: "offer", sdp: "v=0" }
         }
       )
     ).rejects.toThrow("Unauthorized realtime request.");
@@ -1141,12 +1173,14 @@ describe("SignalingGateway", () => {
           isRealtimeAuthenticated: true
         }) as never,
         {
+          protocolVersion: 4,
+          capability: "segmented-opus-v1",
           roomId: "room_1",
           fromPeerId: "peer_a",
           toPeerId: "peer_b",
           channelKind: "data",
           type: "offer",
-          payload: {}
+          payload: { type: "offer", sdp: "v=0" }
         }
       )
     ).resolves.toMatchObject({
@@ -1269,6 +1303,8 @@ describe("SignalingGateway", () => {
         isRealtimeAuthenticated: true
       }) as never,
       {
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -1414,6 +1450,8 @@ describe("SignalingGateway", () => {
         isRealtimeAuthenticated: true
       }) as never,
       {
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -1469,6 +1507,8 @@ describe("SignalingGateway", () => {
         isRealtimeAuthenticated: true
       }) as never,
       {
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",

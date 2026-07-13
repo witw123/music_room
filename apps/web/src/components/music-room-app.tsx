@@ -22,36 +22,17 @@ import { useRoomWorkspaceViewModel } from "@/components/room/hooks/use-room-work
 import { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
 import { useRoomAppEntries } from "@/components/room/hooks/use-room-app-entries";
 import { useRoomAppRefs } from "@/components/room/hooks/use-room-app-refs";
-export {
-  getCachedFullLocalPlaybackLoadKey,
-  getCachedFullLocalPlaybackLoadMissKey,
-  getPlaybackSourceInitializationKey,
-  hasPlayableFullLocalPlaybackTrack,
-  resolveCachedFullLocalPlaybackLoadTarget,
-  resolveStableCurrentTrack,
-  selectFullLocalPlaybackTracks,
-  shouldNotifyCachedFullLocalPlaybackLoadMiss,
-  shouldClearCachedFullLocalPlaybackTrack,
-  shouldInitializePlaybackSource
-} from "@/components/room/hooks/use-room-page-derived";
-export {
-  runPlaybackMutationAfterLocalPrime,
-  shouldPrimeFullLocalTrackForPlayCommand,
-  startBestEffortPlaybackAudioUnlock
-} from "@/components/room/hooks/use-room-playback-actions";
+import { useRoomSegmentedPlaybackRuntime } from "@/components/room/hooks/use-room-segmented-playback-runtime";
+import { useRoomOriginalAssetCache } from "@/components/room/hooks/use-room-original-asset-cache";
+export * from "@/components/room/hooks/use-room-page-derived";
+export * from "@/components/room/hooks/use-room-playback-actions";
 
 const lastRoomStorageKey = "music-room-last-room";
 const peerStorageKey = "music-room-peer-id";
 
-type MusicRoomAppProps = {
-  workspaceOnly?: boolean;
-  initialRoomId?: string | null;
-};
+type MusicRoomAppProps = { workspaceOnly?: boolean; initialRoomId?: string | null };
 
-export function MusicRoomApp({
-  workspaceOnly = true,
-  initialRoomId = null
-}: MusicRoomAppProps) {
+export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: MusicRoomAppProps) {
   const router = useRouter();
   const appEntries = useRoomAppEntries({
     initialRoomId
@@ -94,12 +75,16 @@ export function MusicRoomApp({
 
   const {
     availabilityByTrack,
+    availabilityByAsset,
     queueAvailability,
+    mergeAssetAvailability,
     mergeAvailability,
     emitAvailability: stableEmitAvailability,
+    emitAssetAvailability: stableEmitAssetAvailability,
     flushPendingAvailability,
     clearAvailabilityForPeer,
     clearAvailabilityForTrack,
+    clearAvailabilityForAsset,
     resetAvailabilityState
   } = useAvailabilityAnnouncements({
     socketRef: appRefs.socketRef
@@ -116,21 +101,25 @@ export function MusicRoomApp({
     dispatchRoomStateEvent,
     setStatusMessage,
     onAvailability: mergeAvailability,
-    emitAvailability: stableEmitAvailability
+    emitAvailability: stableEmitAvailability,
+    onAssetAvailability: mergeAssetAvailability,
+    emitAssetAvailability: stableEmitAssetAvailability
   });
+
+  const legacyCurrentTrack = pageDerived.currentTrack?.playbackAsset ? null : pageDerived.currentTrack;
 
   const cachedPlayback = useRoomCachedFullLocalPlayback({
     uploadedTracks: uploads.uploadedTracks,
     cacheLibraryTracks: uploads.cacheLibraryTracks,
     loadCachedLibraryTrackFile: uploads.loadCachedLibraryTrackFile,
     roomSnapshot,
-    currentTrack: pageDerived.currentTrack,
+    currentTrack: legacyCurrentTrack,
     currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
     onCachedFullLocalPlaybackLoadMiss: uploads.startPlaybackDemandCacheDownload
   });
 
   const currentProgressiveEngineTypeForSource = useCurrentProgressiveEngineTypeForSource({
-    currentTrack: pageDerived.currentTrack,
+    currentTrack: legacyCurrentTrack,
     availabilityByTrack,
     peerId
   });
@@ -138,7 +127,7 @@ export function MusicRoomApp({
   const progressiveRuntime = useProgressiveRuntime({
       audioRef: appRefs.audioRef,
       roomSnapshot,
-      currentTrack: pageDerived.currentTrack,
+      currentTrack: legacyCurrentTrack,
       peerId,
       availabilityByTrack,
       uploadedTracks: uploads.uploadedTracks,
@@ -255,9 +244,12 @@ export function MusicRoomApp({
     lastSourceStartError: pageState.lastSourceStartError,
     setLastSourceStartError: pageState.setLastSourceStartError,
     availabilityByTrack,
+    availabilityByAsset,
     queueAvailability,
+    queueAssetAvailability: mergeAssetAvailability,
     clearAvailabilityForPeer,
     clearAvailabilityForTrack,
+    clearAvailabilityForAsset,
     flushPendingAvailability,
     recordPeerDiagnostic,
     uploadedTracks: uploads.uploadedTracks,
@@ -280,6 +272,13 @@ export function MusicRoomApp({
     refreshAvailableRooms: roomActions.refreshAvailableRooms,
     refreshPlaylists: roomActions.refreshPlaylists
   });
+  useRoomSegmentedPlaybackRuntime({
+    roomSnapshot, currentTrack: pageDerived.currentTrack, peerId, peerDiagnostics,
+    volume: pageState.volume, audioUnlocked: pageState.audioUnlocked, availabilityByAsset,
+    requestAssetUnits: roomRuntime.requestAssetUnits,
+    emitAssetAvailability: stableEmitAssetAvailability, setStatusMessage
+  });
+  const manualAssetCache = useRoomOriginalAssetCache({ roomSnapshot, requestAssetUnits: roomRuntime.requestAssetUnits, cancelAssetRequests: roomRuntime.cancelAssetRequests, setStatusMessage });
   const playbackActions = useRoomPlaybackActions({
     audioRef: appRefs.audioRef,
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
@@ -315,8 +314,8 @@ export function MusicRoomApp({
   });
   const cacheActions = useRoomCacheLibraryActions({
     roomSnapshot,
-    startManualCacheDownload: uploads.startManualCacheDownload,
-    pauseManualCacheDownload: uploads.pauseManualCacheDownload,
+    startManualCacheDownload: manualAssetCache.startManualCacheDownload,
+    pauseManualCacheDownload: manualAssetCache.pauseManualCacheDownload,
     deleteCachedLibraryTrackEntry: uploads.deleteCachedLibraryTrackEntry,
     exportCachedLibraryTrack: uploads.exportCachedLibraryTrack,
     importCachedLibraryTrackToRoom: uploads.importCachedLibraryTrackToRoom,
@@ -327,7 +326,7 @@ export function MusicRoomApp({
     cachedFullLocalPlaybackTrack: cachedPlayback.cachedFullLocalPlaybackTrack,
     currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
     currentProgressiveEngineTypeForSource,
-    currentTrack: pageDerived.currentTrack,
+    currentTrack: legacyCurrentTrack,
     dispatchRoomStateEvent,
     ensureSourcePlaybackStarted: roomRuntime.ensureSourcePlaybackStarted,
     hasPlayableFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,

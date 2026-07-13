@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@music-room/shared";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { applySelectedTrackFilesResult, processSelectedTrackFiles } from "./upload-pipeline";
 
@@ -27,7 +27,7 @@ const buildTrack = (id: string, fileHash: string): TrackMeta => ({
 });
 
 describe("processSelectedTrackFiles", () => {
-  it("registers new files, skips existing or in-flight hashes, and publishes availability", async () => {
+  it("registers new files and skips existing or in-flight hashes", async () => {
     const newFile = new File(["new"], "new.flac", { type: "audio/flac" });
     const existingFile = new File(["existing"], "existing.flac", { type: "audio/flac" });
     const busyFile = new File(["busy"], "busy.flac", { type: "audio/flac" });
@@ -36,7 +36,6 @@ describe("processSelectedTrackFiles", () => {
     const revokedUrls: string[] = [];
     const registeredPayloads: string[] = [];
     const persistedTracks: string[] = [];
-    const publishedAvailability: string[] = [];
     const readyTracks: string[] = [];
 
     const result = await processSelectedTrackFiles({
@@ -47,7 +46,6 @@ describe("processSelectedTrackFiles", () => {
       },
       roomId: "room_1",
       roomTracks: [buildTrack("track_existing", "hash_existing")],
-      peerId: "peer_1",
       manualTrackCachingEnabled: true,
       inFlightUploadHashes,
       createObjectUrl: (file) => `blob:${file.name}`,
@@ -74,20 +72,6 @@ describe("processSelectedTrackFiles", () => {
       },
       onTrackReady: (trackId) => {
         readyTracks.push(trackId);
-      },
-      buildTrackAvailabilityFromFile: async (input) => ({
-        roomId: input.roomId,
-        trackId: input.trackId,
-        ownerPeerId: input.peerId,
-        nickname: input.nickname,
-        totalChunks: 2,
-        chunkSize: 1024,
-        availableChunks: [0, 1],
-        source: "live_upload",
-        announcedAt: "2026-07-04T00:00:00.000Z"
-      }),
-      publishAvailability: (availability: TrackAvailabilityAnnouncement) => {
-        publishedAvailability.push(`${availability.roomId}:${availability.trackId}`);
       }
     });
 
@@ -101,7 +85,6 @@ describe("processSelectedTrackFiles", () => {
     expect(result.importedCount).toBe(1);
     expect(registeredPayloads).toEqual(["room_1:hash_new"]);
     expect(persistedTracks).toEqual(["room_1:track_new"]);
-    expect(publishedAvailability).toEqual(["room_1:track_new"]);
     expect(readyTracks).toEqual(["track_new"]);
     expect(revokedUrls).toEqual(["blob:existing.flac", "blob:busy.flac"]);
     expect([...inFlightUploadHashes]).toEqual(["user_1:hash_busy"]);

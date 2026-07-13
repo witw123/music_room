@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -9,9 +10,11 @@ import {
   UnauthorizedException
 } from "@nestjs/common";
 import {
+  computeAssetId,
   createRoomRequestSchema,
   joinRoomByCodeRequestSchema,
-  registerTrackRequestSchema
+  registerTrackRequestSchema,
+  type RegisterTrackRequest
 } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { AuthService } from "../auth/auth.service";
@@ -146,35 +149,31 @@ export class RoomController {
     @Param("roomId") roomId: string,
     @Headers("x-session-token") sessionToken: string | undefined,
     @Body()
-    body: {
-      id?: string;
-      title: string;
-      artist: string;
-      album: string | null;
-      durationMs: number;
-      bitrate: number | null;
-      sizeBytes?: number | null;
-      codec?: string | null;
-      mimeType?: string | null;
-      fileHash: string;
-      artworkUrl: string | null;
-      ownerSessionId?: string;
-      ownerNickname?: string;
-      sourceType: "local_upload";
-      pieceManifest?: {
-        totalChunks: number;
-        chunkSize: number;
-        pieceMimeType: string;
-      } | null;
-      relayManifest?: {
-        totalChunks: number;
-        chunkSize: number;
-        pieceMimeType: string;
-      } | null;
-    }
+    body: RegisterTrackRequest
   ) {
     const userId = await this.getCurrentUserId(sessionToken);
     const payload = parseRequestBody(registerTrackRequestSchema, body);
+    if (!payload.originalAsset || !payload.playbackAsset) {
+      throw new BadRequestException("P2P v4 tracks require original and playback assets.");
+    }
+    if (
+      payload.originalAsset.fileHash !== payload.fileHash ||
+      payload.playbackAsset.sourceFileHash !== payload.fileHash
+    ) {
+      throw new BadRequestException("Track asset source hashes do not match the registered file.");
+    }
+    const { assetId: originalAssetId, ...originalManifest } = payload.originalAsset;
+    const { assetId: playbackAssetId, ...playbackManifest } = payload.playbackAsset;
+    const [expectedOriginalAssetId, expectedPlaybackAssetId] = await Promise.all([
+      computeAssetId(originalManifest),
+      computeAssetId(playbackManifest)
+    ]);
+    if (
+      originalAssetId !== expectedOriginalAssetId ||
+      playbackAssetId !== expectedPlaybackAssetId
+    ) {
+      throw new BadRequestException("Track asset ids do not match their canonical manifests.");
+    }
     const track = await this.roomService.registerTrack(roomId, userId, {
       ...payload,
       ownerSessionId: payload.ownerSessionId ?? userId,

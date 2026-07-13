@@ -12,12 +12,15 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@audio/opus-encode": "1.0.0",
     "@music-room/shared": "workspace:*",
     "@tanstack/react-query": "^5.68.0",
     "@wasm-audio-decoders/flac": "0.2.10",
     "dexie": "^4.0.11",
+    "hash-wasm": "4.12.0",
     "music-metadata-browser": "^2.5.11",
     "next": "^15.2.2",
+    "ogg-opus-decoder": "1.7.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.55.0",

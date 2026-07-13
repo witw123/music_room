@@ -12,6 +12,9 @@ import {
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import type {
+  AssetAvailabilityAnnouncement,
+  AssetAvailabilityClearPayload,
+  AssetAvailabilityRequestPayload,
   PieceAvailabilityClearPayload,
   PieceAvailabilityRequestPayload,
   PeerSignalMessage,
@@ -28,6 +31,9 @@ import type {
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
 import {
+  assetAvailabilityAnnouncementSchema,
+  assetAvailabilityClearPayloadSchema,
+  assetAvailabilityRequestPayloadSchema,
   errorCodes,
   peerSignalMessageSchema,
   pieceAvailabilityClearPayloadSchema,
@@ -56,6 +62,8 @@ import { RoomService } from "../room/room.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
 import { TrackAvailabilityRegistry } from "./track-availability.registry";
 import {
+  assetAvailabilityChannel,
+  assetAvailabilityClearChannel,
   peerSignalChannel,
   pieceAvailabilityChannel,
   pieceAvailabilityClearChannel,
@@ -436,6 +444,51 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }).then((unsubscribe) => {
       this.redisUnsubscribers.push(unsubscribe);
     });
+
+    void this.redisService.subscribe(assetAvailabilityChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: AssetAvailabilityAnnouncement;
+      };
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+      const parsed = assetAvailabilityAnnouncementSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+      const merged = this.trackAvailabilityRegistry.setAssetAnnouncement(
+        parsed.data.roomId,
+        parsed.data
+      );
+      this.server.to(parsed.data.roomId).emit("asset.availability", merged);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
+
+    void this.redisService.subscribe(assetAvailabilityClearChannel, (payload) => {
+      const message = payload as {
+        sourceId?: string;
+        roomId?: string;
+        payload?: AssetAvailabilityClearPayload;
+      };
+      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
+        return;
+      }
+      const parsed = assetAvailabilityClearPayloadSchema.safeParse(message.payload);
+      if (!parsed.success || parsed.data.roomId !== message.roomId) {
+        return;
+      }
+      this.trackAvailabilityRegistry.removeAssetPeer(
+        parsed.data.roomId,
+        parsed.data.ownerPeerId,
+        parsed.data.assetId
+      );
+      this.server.to(parsed.data.roomId).emit("asset.availability.clear", parsed.data);
+    }).then((unsubscribe) => {
+      this.redisUnsubscribers.push(unsubscribe);
+    });
   }
 
   onModuleDestroy() {
@@ -473,7 +526,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     const nextPayload = {
       ...message,
-      sequence: (message as PeerSignalMessage & { sequence?: number }).sequence ?? this.nextSequence(),
+      sequence: this.nextSequence(),
       recoveryGeneration:
         message.recoveryGeneration ?? this.resolvePeerRecoveryGeneration(message.roomId, message.toPeerId)
     } as PeerSignalMessage;
@@ -520,6 +573,100 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       payload: compactAnnouncement
     });
     return compactAnnouncement;
+  }
+
+  @SubscribeMessage("asset.availability")
+  async handleAssetAvailability(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: AssetAvailabilityAnnouncement
+  ) {
+    const parsed = assetAvailabilityAnnouncementSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid asset availability payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    const announcement = parsed.data;
+    this.assertRealtimeClient(client, announcement.roomId);
+    await this.assertSessionLease(client);
+    if (client.data.peerId !== announcement.ownerPeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+    const merged = this.trackAvailabilityRegistry.setAssetAnnouncement(
+      announcement.roomId,
+      announcement
+    );
+    client.to(announcement.roomId).emit("asset.availability", merged);
+    this.publishRealtime(assetAvailabilityChannel, {
+      sourceId: this.roomRealtimeBroadcaster.instanceId,
+      roomId: announcement.roomId,
+      payload: merged
+    });
+    return merged;
+  }
+
+  @SubscribeMessage("asset.availability.request")
+  async handleAssetAvailabilityRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: AssetAvailabilityRequestPayload
+  ) {
+    const parsed = assetAvailabilityRequestPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid asset availability request.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    this.assertRealtimeClient(client, parsed.data.roomId);
+    await this.assertSessionLease(client);
+    if (client.data.peerId !== parsed.data.requesterPeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+    for (const announcement of this.trackAvailabilityRegistry.getAssetAnnouncements(
+      parsed.data.roomId,
+      parsed.data.assetId
+    )) {
+      client.emit("asset.availability", announcement);
+    }
+    client.to(parsed.data.roomId).emit("asset.availability.request", parsed.data);
+    return { ok: true };
+  }
+
+  @SubscribeMessage("asset.availability.clear")
+  async handleAssetAvailabilityClear(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: AssetAvailabilityClearPayload
+  ) {
+    const parsed = assetAvailabilityClearPayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw createWsApiException(
+        "Invalid asset availability clear payload.",
+        errorCodes.validationFailed,
+        parsed.error.flatten()
+      );
+    }
+    this.assertRealtimeClient(client, parsed.data.roomId);
+    await this.assertSessionLease(client);
+    if (client.data.peerId !== parsed.data.ownerPeerId) {
+      throw new WsException("Peer mismatch.");
+    }
+    const removed = this.trackAvailabilityRegistry.removeAssetPeer(
+      parsed.data.roomId,
+      parsed.data.ownerPeerId,
+      parsed.data.assetId
+    );
+    if (removed) {
+      client.to(parsed.data.roomId).emit("asset.availability.clear", parsed.data);
+      this.publishRealtime(assetAvailabilityClearChannel, {
+        sourceId: this.roomRealtimeBroadcaster.instanceId,
+        roomId: parsed.data.roomId,
+        payload: parsed.data
+      });
+    }
+    return { ok: true };
   }
 
   @SubscribeMessage("piece.availability.request")
@@ -605,6 +752,21 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return { ok: true };
   }
 
+  private emitAssetAvailabilityClear(roomId: string, ownerPeerId: string, assetId?: string) {
+    const payload: AssetAvailabilityClearPayload = {
+      roomId,
+      ownerPeerId,
+      ...(assetId ? { assetId } : {}),
+      updatedAt: new Date().toISOString()
+    };
+    this.server.to(roomId).emit("asset.availability.clear", payload);
+    void this.redisService.publish(assetAvailabilityClearChannel, {
+      sourceId: this.roomRealtimeBroadcaster.instanceId,
+      roomId,
+      payload
+    });
+  }
+
   @SubscribeMessage("room.chat")
   async handleRoomChat(
     @ConnectedSocket() client: Socket,
@@ -653,6 +815,18 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       );
     }
     const message = parsed.data;
+
+    if (
+      (message.protocolVersion ?? client.data.protocolVersion) !== 4 ||
+      !(message.capabilities ?? client.data.capabilities)?.includes("segmented-opus-v1")
+    ) {
+      return {
+        ok: false,
+        protocolVersion: 4,
+        capability: "segmented-opus-v1",
+        errorCode: "client_upgrade_required"
+      } satisfies RoomSubscribeAckPayload;
+    }
 
     this.ensureBroadcasterServer();
     if (!message.sessionId || !message.peerId) {
@@ -723,6 +897,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     client.data.sessionId = message.sessionId;
     client.data.peerId = message.peerId;
     client.data.sessionFenceToken = fenceToken;
+    client.data.protocolVersion = 4;
+    client.data.capabilities = ["segmented-opus-v1"];
     client.data.isRealtimeAuthenticated = true;
     client.join(message.roomId);
     const recoveryGeneration = this.registerRecoveryGeneration(
@@ -1009,6 +1185,8 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   private buildSubscribeAck(snapshot: RoomSnapshot, recoveryGeneration: number): RoomSubscribeAckPayload {
     return {
       ok: true,
+      protocolVersion: 4,
+      capability: "segmented-opus-v1",
       serverNow: new Date().toISOString(),
       recoveryGeneration,
       bootstrap: {
@@ -1089,6 +1267,9 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     await this.trackAvailabilityRegistry.emitSnapshot(roomId, (announcement) => {
       client.emit("piece.availability", compactTrackAvailabilityAnnouncement(announcement));
     });
+    await this.trackAvailabilityRegistry.emitAssetSnapshot(roomId, (announcement) => {
+      client.emit("asset.availability", announcement);
+    });
   }
 
   private async emitPeerSignalToPeer(
@@ -1143,12 +1324,14 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   private clearPeerAvailability(roomId: string, peerId: string) {
     const removed = this.trackAvailabilityRegistry.removePeer(roomId, peerId);
-    if (!removed) {
-      return false;
+    const removedAssets = this.trackAvailabilityRegistry.removeAssetPeer(roomId, peerId);
+    if (removed) {
+      this.emitPieceAvailabilityClear(roomId, peerId);
     }
-
-    this.emitPieceAvailabilityClear(roomId, peerId);
-    return true;
+    if (removedAssets) {
+      this.emitAssetAvailabilityClear(roomId, peerId);
+    }
+    return removed || removedAssets;
   }
 
   private scheduleDisconnectCleanup(

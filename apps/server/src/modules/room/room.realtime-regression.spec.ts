@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { computeAssetId } from "@music-room/shared";
 import { PlaybackController } from "../playback/playback.controller";
 import { MetricsService } from "../../common/metrics/metrics.service";
 import { QueueController } from "../queue/queue.controller";
@@ -153,6 +154,8 @@ function createClient(input: {
       roomId: input.roomId,
       sessionId: input.sessionId,
       peerId: input.peerId,
+      protocolVersion: 4,
+      capabilities: ["segmented-opus-v1"],
       isRealtimeAuthenticated: input.isRealtimeAuthenticated ?? false
     },
     join: jest.fn(),
@@ -298,6 +301,33 @@ describe("room realtime regression", () => {
       peerId: "peer_member"
     });
 
+    const originalManifest = {
+      kind: "original" as const,
+      fileHash: "a".repeat(64),
+      mimeType: "audio/mpeg",
+      sizeBytes: 1024,
+      unitSize: 1_048_576 as const,
+      unitCount: 1,
+      merkleRoot: "c".repeat(64)
+    };
+    const playbackManifest = {
+      kind: "playback" as const,
+      sourceFileHash: "a".repeat(64),
+      profileId: "opus-music-v1" as const,
+      codec: "opus" as const,
+      container: "audio/ogg" as const,
+      sampleRate: 48_000 as const,
+      channels: 2 as const,
+      bitrate: 192_000 as const,
+      durationMs: 180_000,
+      segmentDurationMs: 2_000 as const,
+      seekPrerollMs: 80 as const,
+      unitCount: 90,
+      merkleRoot: "e".repeat(64),
+      encoder: { name: "@audio/opus-encode" as const, version: "1.0.0" as const }
+    };
+    const originalAssetId = await computeAssetId(originalManifest);
+    const playbackAssetId = await computeAssetId(playbackManifest);
     const track = await roomController.registerTrack(created.room.id, hostSession.token, {
       title: "Realtime Track",
       artist: "Artist",
@@ -307,11 +337,33 @@ describe("room realtime regression", () => {
       sizeBytes: 1024,
       codec: "mp3",
       mimeType: "audio/mpeg",
-      fileHash: "realtime-track-hash",
+      fileHash: "a".repeat(64),
       artworkUrl: null,
-      sourceType: "local_upload"
+      sourceType: "local_upload",
+      originalAsset: {
+        ...originalManifest,
+        assetId: originalAssetId
+      },
+      playbackAsset: {
+        ...playbackManifest,
+        assetId: playbackAssetId
+      }
     });
     expect(track.ownerSessionId).toBe(hostSession.userId);
+
+    await signalingGateway.handleAssetAvailability(hostClient as never, {
+      protocolVersion: 4,
+      roomId: created.room.id,
+      assetId: playbackAssetId,
+      assetKind: "playback",
+      ownerPeerId: "peer_host",
+      nickname: "Host",
+      totalUnits: 90,
+      availableRanges: [{ start: 0, end: 89 }],
+      complete: true,
+      source: "live_upload",
+      announcedAt: new Date().toISOString()
+    });
 
     const queueState = await queueController.addQueueItem(created.room.id, memberSession.token, {
       trackId: track.id
@@ -330,9 +382,12 @@ describe("room realtime regression", () => {
     expect(playback).toMatchObject({
       status: "playing",
       currentTrackId: track.id,
-      sourceSessionId: hostSession.userId,
-      sourcePeerId: "peer_host"
+      playbackAssetId,
+      sourceSessionId: null,
+      sourcePeerId: null,
+      startAt: expect.any(String)
     });
+    expect(Date.parse(playback.startAt ?? "")).toBeGreaterThan(Date.now());
 
     signalingGateway.handleDisconnect(
       createClient({

@@ -44,6 +44,8 @@ export function buildDataPeerSignal(input: {
   payload: Record<string, unknown>;
 }): PeerSignalMessage {
   return {
+    protocolVersion: 4,
+    capability: "segmented-opus-v1",
     roomId: input.roomId,
     fromPeerId: input.localPeerId,
     toPeerId: input.remotePeerId,

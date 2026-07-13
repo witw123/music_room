@@ -77,7 +77,7 @@ function TrackListSectionBase({
         <input
           data-testid="track-upload-input"
           type="file"
-          accept="audio/*"
+          accept=".flac,.wav,.mp3,audio/flac,audio/wav,audio/x-wav,audio/mpeg,audio/mp3"
           multiple
           className="hidden"
           disabled={pendingAction !== null}

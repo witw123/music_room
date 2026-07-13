@@ -371,7 +371,6 @@ describe("cache-library adapters", () => {
     const revokedUrls: string[] = [];
     const registeredPayloads: string[] = [];
     const syncedRooms: string[] = [];
-    const publishedAvailability: string[] = [];
 
     const result = await importCachedLibraryTrackToRoom({
       fileHash: "hash_1",
@@ -381,8 +380,6 @@ describe("cache-library adapters", () => {
       },
       roomId: "room_1",
       roomTracks: [],
-      peerId: "peer_1",
-      shouldAnnounceAvailability: true,
       loadCachedLibraryTrackFile: async () => ({
         fileHash: "hash_1",
         title: "Cached",
@@ -414,23 +411,6 @@ describe("cache-library adapters", () => {
       },
       syncRoomSnapshot: async (roomId) => {
         syncedRooms.push(roomId);
-      },
-      buildTrackAvailabilityFromFile: async (input) => {
-        expect(input.source).toBe("local_cache");
-        return {
-        totalChunks: 2,
-        chunkSize: 1024,
-        roomId: input.roomId,
-        trackId: input.trackId,
-        ownerPeerId: input.peerId,
-        nickname: input.nickname,
-        availableChunks: [0, 1],
-        source: input.source,
-        announcedAt: "2026-07-04T00:00:00.000Z"
-        };
-      },
-      publishAvailability: (availability) => {
-        publishedAvailability.push(`${availability.roomId}:${availability.trackId}`);
       }
     });
 
@@ -446,7 +426,6 @@ describe("cache-library adapters", () => {
     expect(revokedUrls).toEqual(["blob:1"]);
     expect(registeredPayloads).toEqual(["room_1:Cached"]);
     expect(syncedRooms).toEqual(["room_1"]);
-    expect(publishedAvailability).toEqual(["room_1:track_registered"]);
   });
 
   it("applies cached library room import results to uploaded track state", () => {

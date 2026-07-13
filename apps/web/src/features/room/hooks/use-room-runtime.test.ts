@@ -171,12 +171,14 @@ describe("pure cache room runtime helpers", () => {
 
   it("accepts data peer signals and rejects legacy media signals", () => {
     const dataSignal = {
+      protocolVersion: 4 as const,
+      capability: "segmented-opus-v1" as const,
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
       channelKind: "data" as const,
       type: "offer" as const,
-      payload: {}
+      payload: { type: "offer", sdp: "v=0" }
     };
     const mediaSignal = {
       ...dataSignal,

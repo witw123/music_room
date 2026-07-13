@@ -8,3 +8,5 @@ export const roomLibraryPatchChannel = "music-room:room-library-patch";
 export const peerSignalChannel = "music-room:peer-signal";
 export const pieceAvailabilityChannel = "music-room:piece-availability";
 export const pieceAvailabilityClearChannel = "music-room:piece-availability-clear";
+export const assetAvailabilityChannel = "music-room:asset-availability-v4";
+export const assetAvailabilityClearChannel = "music-room:asset-availability-clear-v4";

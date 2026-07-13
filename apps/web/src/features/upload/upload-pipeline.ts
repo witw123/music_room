@@ -1,4 +1,4 @@
-import type { TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
+import type { TrackMeta } from "@music-room/shared";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type TrackRegistrationDraft = Omit<TrackMeta, "id"> & { id?: string };
@@ -19,8 +19,8 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
     ownerSessionId: track.ownerSessionId,
     ownerNickname: track.ownerNickname,
     sourceType: track.sourceType,
-    pieceManifest: track.pieceManifest,
-    relayManifest: track.relayManifest
+    originalAsset: track.originalAsset,
+    playbackAsset: track.playbackAsset
   };
 }
 
@@ -35,7 +35,6 @@ export async function processSelectedTrackFiles(input: {
   activeSession: { userId: string; nickname: string } | null;
   roomId: string | null | undefined;
   roomTracks: TrackMeta[];
-  peerId: string | null | undefined;
   manualTrackCachingEnabled: boolean;
   inFlightUploadHashes: Set<string>;
   createObjectUrl: (file: File) => string;
@@ -48,23 +47,7 @@ export async function processSelectedTrackFiles(input: {
     roomId: string;
     file: File;
   }) => Promise<void>;
-  buildTrackAvailabilityFromFile: (input: {
-    roomId: string;
-    trackId: string;
-    fileHash: string;
-    file: File;
-    peerId: string;
-    nickname: string;
-    source: "live_upload";
-    mimeType: string | null;
-    codec: string | null;
-    sizeBytes: number;
-    durationMs: number;
-    totalChunks?: number;
-    chunkSize?: number;
-  }) => Promise<TrackAvailabilityAnnouncement>;
-  publishAvailability: (availability: TrackAvailabilityAnnouncement) => void;
-  onTrackReady?: (trackId: string, upload: UploadedTrack) => void;
+  onTrackReady?: (trackId: string, upload: UploadedTrack, track: TrackMeta) => void;
 }) {
   const uploads: Record<string, UploadedTrack> = {};
   const registeredTracks: TrackMeta[] = [];
@@ -115,7 +98,7 @@ export async function processSelectedTrackFiles(input: {
       origin: "live-upload"
     } satisfies UploadedTrack;
     uploads[registered.id] = upload;
-    input.onTrackReady?.(registered.id, upload);
+    input.onTrackReady?.(registered.id, upload, registered);
     registeredTracks.push(registered);
     currentTracksByHash.set(registered.fileHash, registered);
 
@@ -127,25 +110,6 @@ export async function processSelectedTrackFiles(input: {
       });
     }
 
-    if (input.peerId) {
-      input.publishAvailability(
-        await input.buildTrackAvailabilityFromFile({
-          roomId: input.roomId,
-          trackId: registered.id,
-          fileHash: registered.fileHash,
-          file,
-          peerId: input.peerId,
-          nickname: input.activeSession.nickname,
-          source: "live_upload",
-          mimeType: registered.mimeType ?? null,
-          codec: registered.codec ?? null,
-          sizeBytes: registered.sizeBytes ?? file.size,
-          durationMs: registered.durationMs,
-          totalChunks: registered.pieceManifest?.totalChunks,
-          chunkSize: registered.pieceManifest?.chunkSize
-        })
-      );
-    }
   }
 
   return {

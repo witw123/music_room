@@ -314,13 +314,19 @@ export function useRoomActions({
       await runPlaybackMutation(
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
-        (expectedVersion) =>
-          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        (expectedVersion) => {
+          const selectedTrackId = trackId ?? roomSnapshot.room.playback.currentTrackId;
+          const playbackAssetId = roomSnapshot.tracks.find(
+            (track) => track.id === selectedTrackId
+          )?.playbackAsset?.assetId;
+          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
             trackId,
+            ...(playbackAssetId ? { playbackAssetId } : {}),
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          })
+          });
+        }
       );
     },
     [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]
@@ -335,13 +341,19 @@ export function useRoomActions({
       await runPlaybackMutation(
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
-        (expectedVersion) =>
-          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        (expectedVersion) => {
+          const queueTrackId = roomSnapshot.queue.find((item) => item.id === queueItemId)?.trackId;
+          const playbackAssetId = roomSnapshot.tracks.find(
+            (track) => track.id === queueTrackId
+          )?.playbackAsset?.assetId;
+          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "play",
             queueItemId,
+            ...(playbackAssetId ? { playbackAssetId } : {}),
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          })
+          });
+        }
       );
     },
     [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]
@@ -356,13 +368,18 @@ export function useRoomActions({
       await runPlaybackMutation(
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
-        (expectedVersion) =>
-          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        (expectedVersion) => {
+          const playbackAssetId = roomSnapshot.tracks.find(
+            (track) => track.id === roomSnapshot.room.playback.currentTrackId
+          )?.playbackAsset?.assetId;
+          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "pause",
             positionMs,
+            ...(playbackAssetId ? { playbackAssetId } : {}),
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          }),
+          });
+        },
         roomSnapshot.room.playback
       );
     },
@@ -565,13 +582,18 @@ export function useRoomActions({
       await runPlaybackMutation(
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
-        (expectedVersion) =>
-          musicRoomApi.updatePlayback(roomSnapshot.room.id, {
+        (expectedVersion) => {
+          const playbackAssetId = roomSnapshot.tracks.find(
+            (track) => track.id === roomSnapshot.room.playback.currentTrackId
+          )?.playbackAsset?.assetId;
+          return musicRoomApi.updatePlayback(roomSnapshot.room.id, {
             action: "seek",
             positionMs,
+            ...(playbackAssetId ? { playbackAssetId } : {}),
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          }),
+          });
+        },
         roomSnapshot.room.playback
       );
     },

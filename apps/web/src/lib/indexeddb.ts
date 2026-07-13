@@ -1,4 +1,11 @@
 import Dexie, { type IndexableType, type Table } from "dexie";
+import {
+  assetUnitDescriptorSchema,
+  verifyAssetUnit,
+  type AssetKind,
+  type AssetUnitDescriptor,
+  type AudioAssetManifest
+} from "@music-room/shared";
 
 type TrackAssetRecord = {
   trackId: string;
@@ -95,6 +102,40 @@ export type CachedLibraryDeleteLeaseRecord = {
   requestedAt: string;
 };
 
+export type AudioAssetManifestRecord = {
+  assetId: string;
+  kind: AssetKind;
+  sourceFileHash: string;
+  manifest: AudioAssetManifest;
+  complete: boolean;
+  createdAt: string;
+  lastAccessedAt: string;
+};
+
+export type AudioAssetUnitRecord = AssetUnitDescriptor & {
+  unitId: string;
+  payload: ArrayBuffer;
+  lastAccessedAt: string;
+  protectedUntil: string | null;
+};
+
+export type TrackAssetLinkRecord = {
+  trackId: string;
+  originalAssetId: string;
+  playbackAssetId: string;
+  linkedAt: string;
+};
+
+export type TranscodeJobRecord = {
+  sourceFileHash: string;
+  kind: "original-reindex" | "playback-transcode";
+  profileId: "opus-music-v1";
+  status: "queued" | "running" | "completed" | "failed";
+  progress: number;
+  errorMessage: string | null;
+  updatedAt: string;
+};
+
 export const localCacheOwnerKey = "__local__";
 const transientCacheRetentionMs = 30 * 24 * 60 * 60 * 1000;
 
@@ -106,6 +147,10 @@ export class MusicRoomDatabase extends Dexie {
   cachedTrackLibraryMetadata!: Table<CachedLibraryTrackSummaryRecord, string>;
   manualCacheTasks!: Table<ManualCacheTaskRecord, string>;
   cachedLibraryDeleteLeases!: Table<CachedLibraryDeleteLeaseRecord, string>;
+  assetManifests!: Table<AudioAssetManifestRecord, string>;
+  assetUnits!: Table<AudioAssetUnitRecord, string>;
+  trackAssetLinks!: Table<TrackAssetLinkRecord, string>;
+  transcodeJobs!: Table<TranscodeJobRecord, string>;
 
   constructor() {
     super("music-room");
@@ -180,6 +225,49 @@ export class MusicRoomDatabase extends Dexie {
       manualCacheTasks: "&taskKey, roomId, trackId, fileHash, status, updatedAt, [roomId+trackId]",
       cachedLibraryDeleteLeases: "&fileHash, leaseTrackId, requestedAt"
     });
+    this.version(9)
+      .stores({
+        trackAssets: "&trackId, fileHash, cachedAt",
+        trackPieces:
+          "&pieceId, trackId, fileHash, peerId, ownerKey, chunkIndex, [trackId+peerId], [trackId+peerId+chunkIndex], [trackId+ownerKey], [trackId+ownerKey+chunkIndex], [fileHash+ownerKey], [fileHash+ownerKey+chunkIndex], createdAt",
+        trackPieceManifests: "&trackId, fileHash, updatedAt",
+        cachedTrackLibrary: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+        cachedTrackLibraryMetadata: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+        manualCacheTasks: "&taskKey, roomId, trackId, fileHash, status, updatedAt, [roomId+trackId]",
+        cachedLibraryDeleteLeases: "&fileHash, leaseTrackId, requestedAt",
+        assetManifests: "&assetId, kind, sourceFileHash, complete, lastAccessedAt",
+        assetUnits: "&unitId, assetId, kind, unitIndex, [assetId+unitIndex], lastAccessedAt, protectedUntil",
+        trackAssetLinks: "&trackId, originalAssetId, playbackAssetId, linkedAt",
+        transcodeJobs: "&sourceFileHash, kind, status, updatedAt"
+      })
+      .upgrade(async (transaction) => {
+        await Promise.all([
+          transaction.table("trackAssets").clear(),
+          transaction.table("trackPieces").clear(),
+          transaction.table("trackPieceManifests").clear(),
+          transaction.table("manualCacheTasks").clear(),
+          transaction.table("cachedLibraryDeleteLeases").clear()
+        ]);
+
+        const library = transaction.table<CachedLibraryTrackRecord, string>("cachedTrackLibrary");
+        const jobs = transaction.table<TranscodeJobRecord, string>("transcodeJobs");
+        const now = new Date().toISOString();
+        const queuedJobs: TranscodeJobRecord[] = [];
+        await library.each((record) => {
+          queuedJobs.push({
+            sourceFileHash: record.fileHash,
+            kind: "original-reindex",
+            profileId: "opus-music-v1",
+            status: "queued",
+            progress: 0,
+            errorMessage: null,
+            updatedAt: now
+          });
+        });
+        if (queuedJobs.length > 0) {
+          await jobs.bulkPut(queuedJobs);
+        }
+      });
   }
 }
 
@@ -187,6 +275,145 @@ export const musicRoomDatabase = new MusicRoomDatabase();
 const queuedManifestUpserts = new Map<string, Omit<TrackPieceManifestRecord, "updatedAt">>();
 const queuedManifestTimers = new Map<string, number>();
 const manifestUpsertQueueDelayMs = 250;
+
+export function assetUnitId(assetId: string, unitIndex: number) {
+  if (!assetId || !Number.isInteger(unitIndex) || unitIndex < 0) {
+    throw new TypeError("A valid asset id and non-negative unit index are required.");
+  }
+  return `${assetId}:${unitIndex}`;
+}
+
+export async function putAssetManifest(
+  manifest: AudioAssetManifest,
+  options?: { complete?: boolean }
+) {
+  const now = new Date().toISOString();
+  const existing = await musicRoomDatabase.assetManifests.get(manifest.assetId);
+  await musicRoomDatabase.assetManifests.put({
+    assetId: manifest.assetId,
+    kind: manifest.kind,
+    sourceFileHash:
+      manifest.kind === "original" ? manifest.fileHash : manifest.sourceFileHash,
+    manifest,
+    complete: options?.complete ?? existing?.complete ?? false,
+    createdAt: existing?.createdAt ?? now,
+    lastAccessedAt: now
+  });
+}
+
+export async function getAssetManifest(assetId: string) {
+  const record = await musicRoomDatabase.assetManifests.get(assetId);
+  if (record) {
+    await musicRoomDatabase.assetManifests.update(assetId, {
+      lastAccessedAt: new Date().toISOString()
+    });
+  }
+  return record ?? null;
+}
+
+export async function putVerifiedAssetUnit(input: {
+  descriptor: AssetUnitDescriptor;
+  payload: ArrayBuffer;
+  protectedUntil?: string | null;
+}) {
+  const descriptor = assetUnitDescriptorSchema.parse(input.descriptor);
+  const manifestRecord = await musicRoomDatabase.assetManifests.get(descriptor.assetId);
+  if (!manifestRecord || manifestRecord.kind !== descriptor.kind) {
+    throw new Error("Asset manifest is missing or does not match the unit kind.");
+  }
+  if (descriptor.unitIndex >= manifestRecord.manifest.unitCount) {
+    throw new Error("Asset unit index exceeds the manifest unit count.");
+  }
+  if (input.payload.byteLength !== descriptor.payloadBytes) {
+    throw new Error("Asset unit payload length does not match its descriptor.");
+  }
+  if (descriptor.unitIndex >= manifestRecord.manifest.unitCount) {
+    throw new RangeError("Asset unit index exceeds the manifest unit count.");
+  }
+  const valid = await verifyAssetUnit({
+    unitIndex: descriptor.unitIndex,
+    payload: input.payload,
+    contentHash: descriptor.contentHash,
+    proof: descriptor.proof,
+    merkleRoot: manifestRecord.manifest.merkleRoot
+  });
+  if (!valid) {
+    throw new Error("Asset unit failed Merkle verification.");
+  }
+
+  const now = new Date().toISOString();
+  await musicRoomDatabase.assetUnits.put({
+    ...descriptor,
+    unitId: assetUnitId(descriptor.assetId, descriptor.unitIndex),
+    payload: input.payload,
+    lastAccessedAt: now,
+    protectedUntil: input.protectedUntil ?? null
+  });
+  const unitCount = await musicRoomDatabase.assetUnits.where("assetId").equals(descriptor.assetId).count();
+  if (unitCount >= manifestRecord.manifest.unitCount) {
+    await musicRoomDatabase.assetManifests.update(descriptor.assetId, {
+      complete: true,
+      lastAccessedAt: now
+    });
+  }
+}
+
+export async function getAssetUnit(assetId: string, unitIndex: number) {
+  const unitId = assetUnitId(assetId, unitIndex);
+  const record = await musicRoomDatabase.assetUnits.get(unitId);
+  if (record) {
+    await musicRoomDatabase.assetUnits.update(unitId, {
+      lastAccessedAt: new Date().toISOString()
+    });
+  }
+  return record ?? null;
+}
+
+export async function getAssetUnits(assetId: string, unitIndexes: readonly number[]) {
+  const uniqueIndexes = [...new Set(unitIndexes.filter((index) => Number.isInteger(index) && index >= 0))];
+  if (uniqueIndexes.length === 0) {
+    return [];
+  }
+  const records = await musicRoomDatabase.assetUnits.bulkGet(
+    uniqueIndexes.map((index) => assetUnitId(assetId, index))
+  );
+  return records.filter((record): record is AudioAssetUnitRecord => !!record);
+}
+
+export async function getAssetUnitIndexes(assetId: string) {
+  const keys = await musicRoomDatabase.assetUnits.where("assetId").equals(assetId).primaryKeys();
+  return keys.flatMap((key) => {
+    if (typeof key !== "string") {
+      return [];
+    }
+    const index = Number(key.slice(key.lastIndexOf(":") + 1));
+    return Number.isInteger(index) && index >= 0 ? [index] : [];
+  }).sort((left, right) => left - right);
+}
+
+export async function linkTrackAssets(input: Omit<TrackAssetLinkRecord, "linkedAt">) {
+  await musicRoomDatabase.trackAssetLinks.put({
+    ...input,
+    linkedAt: new Date().toISOString()
+  });
+}
+
+export async function getTrackAssetLink(trackId: string) {
+  return (await musicRoomDatabase.trackAssetLinks.get(trackId)) ?? null;
+}
+
+export async function upsertTranscodeJob(
+  input: Omit<TranscodeJobRecord, "updatedAt">
+) {
+  await musicRoomDatabase.transcodeJobs.put({
+    ...input,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+export async function listQueuedTranscodeJobs() {
+  return musicRoomDatabase.transcodeJobs.where("status").equals("queued").toArray();
+}
 
 export async function upsertCachedLibraryTrack(input: Omit<CachedLibraryTrackRecord, "cachedAt"> & {
   cachedAt?: string;

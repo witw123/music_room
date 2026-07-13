@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterCachedPiecesByGeometry,
+  assetUnitId,
   parseCachedPiecePrimaryKey,
   selectCachedPiecesForPlaybackFallback,
   selectCachedPiecesForTrackDeletion,
@@ -8,6 +9,14 @@ import {
   selectTrackPieceManifestIdsForDeletion,
   toCachedLibraryTrackSummaryRecord
 } from "./indexeddb";
+
+describe("assetUnitId", () => {
+  it("uses content asset identity instead of room track identity", () => {
+    expect(assetUnitId("a".repeat(64), 7)).toBe(`${"a".repeat(64)}:7`);
+    expect(() => assetUnitId("", 0)).toThrow();
+    expect(() => assetUnitId("a".repeat(64), -1)).toThrow();
+  });
+});
 
 describe("toCachedLibraryTrackSummaryRecord", () => {
   it("strips the full audio blob from cached-library list records", () => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { p2pProtocolVersion, segmentedOpusCapability } from "./asset-models";
 
 export const iceServerConfigSchema = z.object({
   urls: z.union([z.string(), z.array(z.string())]),
@@ -104,13 +105,53 @@ export const cacheStreamMessageSchema = z.union([
 ]);
 
 export const peerSignalMessageSchema = z.object({
+  protocolVersion: z.literal(p2pProtocolVersion),
+  capability: z.literal(segmentedOpusCapability),
   roomId: z.string(),
   fromPeerId: z.string(),
   toPeerId: z.string(),
   channelKind: z.literal("data"),
   recoveryGeneration: z.number().int().nonnegative().optional(),
+  sequence: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),
   payload: z.record(z.unknown())
+}).strict().superRefine((message, context) => {
+  const keys = Object.keys(message.payload);
+  if (message.type === "offer" || message.type === "answer") {
+    const allowed = new Set(["type", "sdp"]);
+    if (
+      keys.some((key) => !allowed.has(key)) ||
+      message.payload.type !== message.type ||
+      typeof message.payload.sdp !== "string" ||
+      message.payload.sdp.length > 1024 * 1024
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["payload"],
+        message: "Invalid SDP signaling payload."
+      });
+    }
+    return;
+  }
+  const allowed = new Set(["candidate", "sdpMid", "sdpMLineIndex", "usernameFragment"]);
+  const candidate = message.payload.candidate;
+  if (
+    keys.some((key) => !allowed.has(key)) ||
+    typeof candidate !== "string" ||
+    candidate.length > 16 * 1024 ||
+    (message.payload.sdpMid !== undefined && typeof message.payload.sdpMid !== "string") ||
+    (message.payload.sdpMLineIndex !== undefined &&
+      (!Number.isInteger(message.payload.sdpMLineIndex) ||
+        (message.payload.sdpMLineIndex as number) < 0)) ||
+    (message.payload.usernameFragment !== undefined &&
+      typeof message.payload.usernameFragment !== "string")
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["payload"],
+      message: "Invalid ICE candidate signaling payload."
+    });
+  }
 });
 
 export const p2pDataMessageSchema = cacheStreamMessageSchema;

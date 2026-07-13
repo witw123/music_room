@@ -54,6 +54,7 @@ export class PlaybackController {
       action: PlaybackAction;
       trackId?: string;
       queueItemId?: string;
+      playbackAssetId?: string;
       positionMs?: number;
       actorPeerId?: string;
       expectedVersion?: number;
@@ -116,6 +117,13 @@ export class PlaybackController {
       throw new HttpException(
         createApiErrorResponse(errorCodes.trackOwnerOffline, message),
         HttpStatus.CONFLICT
+      );
+    }
+
+    if (message.includes("Playback asset does not belong")) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.validationFailed, message),
+        HttpStatus.BAD_REQUEST
       );
     }
 

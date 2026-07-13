@@ -12,7 +12,8 @@
     "e2e": "pnpm --filter @music-room/web e2e",
     "check:toolchain": "node scripts/check-toolchain.mjs",
     "deploy:check": "node scripts/deploy-check.mjs",
-    "deploy:linux": "sh scripts/deploy-linux.sh"
+    "deploy:linux": "sh scripts/deploy-linux.sh",
+    "migrate:p2p-v4": "pnpm --filter @music-room/server migrate:p2p-v4"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

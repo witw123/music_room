@@ -12,6 +12,8 @@ function buildSignal(
   input: Partial<Parameters<SignalingTransport["handleIncomingSignal"]>[0]> = {}
 ) {
   return {
+    protocolVersion: 4 as const,
+    capability: "segmented-opus-v1" as const,
     roomId: "room_1",
     fromPeerId: "peer_b",
     toPeerId: "peer_a",
@@ -56,6 +58,8 @@ describe("SignalingTransport", () => {
         payload: { type: "offer", sdp: "fake-offer" }
       })
     ).toEqual({
+      protocolVersion: 4,
+      capability: "segmented-opus-v1",
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
@@ -89,6 +93,8 @@ describe("SignalingTransport", () => {
       type: "answer"
     });
     expect(sendSignal).toHaveBeenCalledWith({
+      protocolVersion: 4,
+      capability: "segmented-opus-v1",
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
