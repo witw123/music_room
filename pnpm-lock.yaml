@@ -118,8 +118,8 @@ importers:
   apps/web:
     dependencies:
       '@audio/opus-encode':
-        specifier: 1.0.0
-        version: 1.0.0
+        specifier: workspace:*
+        version: link:../../packages/opus-encode
       '@music-room/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -207,6 +207,16 @@ importers:
 
   packages/config-typescript: {}
 
+  packages/opus-encode:
+    dependencies:
+      opusscript:
+        specifier: ^0.1.1
+        version: 0.1.1
+    devDependencies:
+      tst:
+        specifier: ^9.2.2
+        version: 9.4.0
+
   packages/shared:
     dependencies:
       zod:
@@ -265,10 +275,6 @@ packages:
   '@angular-devkit/schematics@19.2.24':
     resolution: {integrity: sha512-lnw+ZM1Io+cJAkReC0NPDjqObL8NtKzKIkdgEEKC8CUmkhurYhedbicN8Y8NYHgG1uLd2GozW3+/QqPRZaN+Lw==}
     engines: {node: ^18.19.1 || ^20.11.1 || >=22.0.0, npm: ^6.11.0 || ^7.5.6 || >=8.0.0, yarn: '>= 1.13.0'}
-
-  '@audio/opus-encode@1.0.0':
-    resolution: {integrity: sha512-x6aZzXXbShKITYiTD1ktrX/Undh4hznmwvv5/Pq0RDKsz7s6HySGJASqbdrTykKoSSanYNvexPq+MJ4ae+kdYQ==}
-    engines: {node: '>=16'}
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -3989,6 +3995,9 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  tst@9.4.0:
+    resolution: {integrity: sha512-LFC1yasMqhvL9hBJdA07nozlfS1RGy/7uiBCwRZcQH9zB4+n7XpxwYszzK//WQ2JVOLAUgU3d8ABEcrFLZE0vg==}
+
   turbo@2.8.20:
     resolution: {integrity: sha512-Rb4qk5YT8RUwwdXtkLpkVhNEe/lor6+WV7S5tTlLpxSz6MjV5Qi8jGNn4gS6NAvrYGA/rNrE6YUQM85sCZUDbQ==}
     hasBin: true
@@ -4319,10 +4328,6 @@ snapshots:
       rxjs: 7.8.1
     transitivePeerDependencies:
       - chokidar
-
-  '@audio/opus-encode@1.0.0':
-    dependencies:
-      opusscript: 0.1.1
 
   '@babel/code-frame@7.29.0':
     dependencies:
@@ -8374,6 +8379,8 @@ snapshots:
       strip-bom: 3.0.0
 
   tslib@2.8.1: {}
+
+  tst@9.4.0: {}
 
   turbo@2.8.20:
     optionalDependencies:
