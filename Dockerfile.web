@@ -6,6 +6,7 @@ FROM base AS deps
 COPY package.json pnpm-workspace.yaml turbo.json pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY packages/opus-encode/package.json packages/opus-encode/package.json
 COPY packages/config-eslint/package.json packages/config-eslint/package.json
 COPY packages/config-typescript/package.json packages/config-typescript/package.json
 RUN pnpm install --filter @music-room/web... --frozen-lockfile=true
@@ -30,6 +31,7 @@ ENV NEXT_PUBLIC_WEBRTC_ICE_SERVERS=${NEXT_PUBLIC_WEBRTC_ICE_SERVERS}
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/opus-encode/node_modules ./packages/opus-encode/node_modules
 COPY . .
 RUN pnpm --filter @music-room/shared build
 RUN pnpm --filter @music-room/web build
