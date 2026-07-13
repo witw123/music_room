@@ -88,6 +88,7 @@ function createRedisServiceMock(overrides?: Partial<{
   setJson: jest.Mock;
   getJson: jest.Mock;
   delete: jest.Mock;
+  claimJsonLease: jest.Mock;
 }>) {
   return {
     isAvailable: jest.fn(() => true),
@@ -419,7 +420,7 @@ describe("SignalingGateway", () => {
     await Promise.resolve();
     gateway.onModuleDestroy();
 
-    expect(unsubscribeFns).toHaveLength(12);
+    expect(unsubscribeFns).toHaveLength(14);
     for (const unsubscribe of unsubscribeFns) {
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     }
@@ -779,8 +780,8 @@ describe("SignalingGateway", () => {
     );
   });
 
-  it("replays registered availability and asks room sources to reannounce on demand", async () => {
-    const { gateway, trackAvailabilityRegistry } = createGateway();
+  it("replays registered availability and asks sources on every server instance to reannounce", async () => {
+    const { gateway, redisService, trackAvailabilityRegistry } = createGateway();
     const roomEmit = jest.fn();
     const client = {
       ...createClient({
@@ -817,6 +818,82 @@ describe("SignalingGateway", () => {
       trackId: "track_1",
       requesterPeerId: "peer_listener"
     });
+    expect(redisService.publish).toHaveBeenCalledWith(
+      "music-room:piece-availability-request",
+      expect.objectContaining({
+        roomId: "room_1",
+        payload: {
+          roomId: "room_1",
+          trackId: "track_1",
+          requesterPeerId: "peer_listener"
+        }
+      })
+    );
+  });
+
+  it("forwards availability requests received from another server instance", () => {
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const { gateway } = createGateway({
+      redisService: createRedisServiceMock({
+        subscribe: jest.fn(async (channel: string, next: (payload: unknown) => void) => {
+          handlers.set(channel, next);
+        })
+      })
+    });
+    const { emit } = attachServerMock(gateway);
+    const assetRequest = {
+      roomId: "room_1",
+      assetId: "a".repeat(64),
+      requesterPeerId: "peer_remote"
+    };
+    const pieceRequest = {
+      roomId: "room_1",
+      trackId: "track_1",
+      requesterPeerId: "peer_remote"
+    };
+
+    gateway.afterInit();
+    handlers.get("music-room:asset-availability-request-v4")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: assetRequest
+    });
+    handlers.get("music-room:piece-availability-request")?.({
+      sourceId: "other-instance",
+      roomId: "room_1",
+      payload: pieceRequest
+    });
+
+    expect(gateway.server.to).toHaveBeenCalledWith("room_1");
+    expect(emit).toHaveBeenCalledWith("asset.availability.request", assetRequest);
+    expect(emit).toHaveBeenCalledWith("piece.availability.request", pieceRequest);
+  });
+
+  it("publishes v4 asset availability requests across server instances", async () => {
+    const { gateway, redisService } = createGateway();
+    const roomEmit = jest.fn();
+    const client = {
+      ...createClient({
+        roomId: "room_1",
+        peerId: "peer_listener",
+        isRealtimeAuthenticated: true
+      }),
+      emit: jest.fn(),
+      to: jest.fn().mockReturnValue({ emit: roomEmit })
+    };
+    const request = {
+      roomId: "room_1",
+      assetId: "a".repeat(64),
+      requesterPeerId: "peer_listener"
+    };
+
+    await gateway.handleAssetAvailabilityRequest(client as never, request);
+
+    expect(roomEmit).toHaveBeenCalledWith("asset.availability.request", request);
+    expect(redisService.publish).toHaveBeenCalledWith(
+      "music-room:asset-availability-request-v4",
+      expect.objectContaining({ roomId: "room_1", payload: request })
+    );
   });
 
   it("publishes peer signals so they can cross server instances", async () => {
@@ -919,6 +996,7 @@ describe("SignalingGateway", () => {
       sessionId: "guest_new",
       peerId: "peer_guest"
     });
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(client.emit).toHaveBeenCalledWith(
       "piece.availability",
@@ -1215,7 +1293,7 @@ describe("SignalingGateway", () => {
       peerId: "peer_host"
     });
 
-    expect(emit).toHaveBeenCalledWith("room.snapshot", snapshot);
+    expect(emit).not.toHaveBeenCalledWith("room.snapshot", expect.anything());
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({
@@ -1268,7 +1346,7 @@ describe("SignalingGateway", () => {
       "guest_host",
       "peer_host"
     );
-    expect(emit).toHaveBeenCalledWith("room.snapshot", snapshot);
+    expect(emit).not.toHaveBeenCalledWith("room.snapshot", expect.anything());
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({
@@ -1351,6 +1429,7 @@ describe("SignalingGateway", () => {
       sessionId: "guest_new",
       peerId: "peer_guest"
     });
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(redisService.getJson).toHaveBeenCalledWith("music-room:availability:room_1");
     expect(client.emit).toHaveBeenCalledWith("piece.availability", compactRedisAvailability);
@@ -1592,6 +1671,42 @@ describe("SignalingGateway", () => {
     );
   });
 
+  it("clears the old peer providers when a session moves from another server instance", async () => {
+    const redisService = createRedisServiceMock({
+      claimJsonLease: jest.fn().mockResolvedValue({
+        instanceId: "other-instance",
+        roomId: "room_1",
+        sessionId: "guest_host",
+        peerId: "peer_host_old",
+        socketId: "remote_socket",
+        fenceToken: "remote_fence"
+      })
+    });
+    const { gateway } = createGateway({ redisService });
+    const { emit } = attachServerMock(gateway);
+
+    await gateway.handleRoomSubscribe(createClient({ id: "socket_new" }) as never, {
+      roomId: "room_1",
+      sessionId: "guest_host",
+      peerId: "peer_host_new"
+    });
+
+    expect(emit).toHaveBeenCalledWith(
+      "asset.availability.clear",
+      expect.objectContaining({
+        roomId: "room_1",
+        ownerPeerId: "peer_host_old"
+      })
+    );
+    expect(redisService.publish).toHaveBeenCalledWith(
+      "music-room:asset-availability-clear-v4",
+      expect.objectContaining({
+        roomId: "room_1",
+        payload: expect.objectContaining({ ownerPeerId: "peer_host_old" })
+      })
+    );
+  });
+
   it("ignores stale room unsubscribe events from an older socket after the session has moved", async () => {
     const { gateway, roomService } = createGateway();
     attachServerMock(gateway);
@@ -1822,7 +1937,7 @@ describe("SignalingGateway", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(emit).toHaveBeenCalledWith("room.snapshot", snapshot);
+    expect(emit).not.toHaveBeenCalledWith("room.snapshot", expect.anything());
     expect(emit).toHaveBeenCalledWith(
       "room.presence.patch",
       expect.objectContaining({

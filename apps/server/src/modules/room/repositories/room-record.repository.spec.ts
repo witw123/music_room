@@ -56,6 +56,28 @@ function createRedisMock() {
 }
 
 describe("RoomRecordRepository", () => {
+  it("does not rewrite every member recent-room key on room state updates", async () => {
+    const prisma = {
+      isAvailable: jest.fn(() => false)
+    };
+    const redis = {
+      ...createRedisMock(),
+      setJsonIfRevisionMatches: jest.fn(async () => true)
+    };
+    const repository = new RoomRecordRepository(
+      new Map(),
+      prisma as never,
+      redis as never,
+      "music-room:rooms",
+      60,
+      60
+    );
+
+    await repository.persistRecord(createRoomRecord(1));
+
+    expect(redis.setString).not.toHaveBeenCalled();
+  });
+
   it("rejects stale Redis-only writes before refreshing cache projections", async () => {
     const prisma = {
       isAvailable: jest.fn(() => false)

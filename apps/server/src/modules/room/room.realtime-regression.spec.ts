@@ -482,7 +482,7 @@ describe("room realtime regression", () => {
     );
   });
 
-  it("keeps join and leave presence revisions monotonic across room.snapshot and room.presence.patch", async () => {
+  it("keeps join and leave presence revisions monotonic across presence patches", async () => {
     const {
       authService,
       broadcaster,
@@ -517,24 +517,24 @@ describe("room realtime regression", () => {
       joinCode: created.room.joinCode
     });
 
-    const joinSnapshotEvent = [...events]
+    const joinPatchEvent = [...events]
       .reverse()
       .find(
         (event) =>
           event.target === created.room.id &&
-          event.event === "room.snapshot" &&
-          (event.payload as { room?: { members?: Array<{ id: string }> } }).room?.members?.some(
+          event.event === "room.presence.patch" &&
+          (event.payload as { members?: Array<{ id: string }> }).members?.some(
             (member) => member.id === memberSession.userId
           )
       );
 
-    expect(joinSnapshotEvent).toBeDefined();
-    expect((joinSnapshotEvent?.payload as { room: { presenceRevision: number } }).room.presenceRevision)
+    expect(joinPatchEvent).toBeDefined();
+    expect((joinPatchEvent?.payload as { presenceRevision: number }).presenceRevision)
       .toBeGreaterThan(0);
     expect(
-      (joinSnapshotEvent?.payload as {
-        room: { members: Array<{ id: string; peerId: string | null; presenceState: string }> };
-      }).room.members.find((member) => member.id === memberSession.userId)
+      (joinPatchEvent?.payload as {
+        members: Array<{ id: string; peerId: string | null; presenceState: string }>;
+      }).members.find((member) => member.id === memberSession.userId)
     ).toMatchObject({
       id: memberSession.userId,
       peerId: null,
@@ -562,7 +562,7 @@ describe("room realtime regression", () => {
     expect(
       (joinPresencePatchEvent?.payload as { presenceRevision: number }).presenceRevision
     ).toBeGreaterThan(
-      (joinSnapshotEvent?.payload as { room: { presenceRevision: number } }).room.presenceRevision
+      (joinPatchEvent?.payload as { presenceRevision: number }).presenceRevision
     );
     expect(
       (joinPresencePatchEvent?.payload as {
@@ -576,30 +576,30 @@ describe("room realtime regression", () => {
 
     await roomController.leaveRoom(created.room.id, memberSession.token);
 
-    const leaveSnapshotEvent = [...events]
+    const leavePatchEvent = [...events]
       .reverse()
       .find(
         (event) =>
           event.target === created.room.id &&
-          event.event === "room.snapshot" &&
-          !(event.payload as { room?: { members?: Array<{ id: string }> } }).room?.members?.some(
+          event.event === "room.presence.patch" &&
+          !(event.payload as { members?: Array<{ id: string }> }).members?.some(
             (member) => member.id === memberSession.userId
           )
       );
 
-    expect(leaveSnapshotEvent).toBeDefined();
-    expect((leaveSnapshotEvent?.payload as { room: { presenceRevision: number } }).room.presenceRevision)
+    expect(leavePatchEvent).toBeDefined();
+    expect((leavePatchEvent?.payload as { presenceRevision: number }).presenceRevision)
       .toBeGreaterThan(
         (joinPresencePatchEvent?.payload as { presenceRevision: number }).presenceRevision
       );
     expect(
-      (leaveSnapshotEvent?.payload as { room: { members: Array<{ id: string }> } }).room.members.some(
+      (leavePatchEvent?.payload as { members: Array<{ id: string }> }).members.some(
         (member) => member.id === memberSession.userId
       )
     ).toBe(false);
   });
 
-  it("broadcasts a fresh online room snapshot when a member rejoins after leaving", async () => {
+  it("broadcasts a fresh online presence patch when a member rejoins after leaving", async () => {
     const {
       authService,
       broadcaster,
@@ -650,14 +650,14 @@ describe("room realtime regression", () => {
       peerId: "peer_member_rejoined"
     });
 
-    const finalSnapshotEvent = [...events]
+    const finalPresencePatchEvent = [...events]
       .reverse()
       .find(
         (event) =>
           event.target === created.room.id &&
-          event.event === "room.snapshot" &&
-          (event.payload as { room?: { members?: Array<{ id: string; peerId: string | null; presenceState: string }> } })
-            .room?.members?.some(
+          event.event === "room.presence.patch" &&
+          (event.payload as { members?: Array<{ id: string; peerId: string | null; presenceState: string }> })
+            .members?.some(
               (member) =>
                 member.id === memberSession.userId &&
                 member.peerId === "peer_member_rejoined" &&
@@ -665,15 +665,13 @@ describe("room realtime regression", () => {
             )
       );
 
-    expect(finalSnapshotEvent).toBeDefined();
+    expect(finalPresencePatchEvent).toBeDefined();
     expect(
       (
-        finalSnapshotEvent?.payload as {
-          room: {
-            members: Array<{ id: string; peerId: string | null; presenceState: string }>;
-          };
+        finalPresencePatchEvent?.payload as {
+          members: Array<{ id: string; peerId: string | null; presenceState: string }>;
         }
-      ).room.members.filter((member) => member.presenceState === "online" && !!member.peerId)
+      ).members.filter((member) => member.presenceState === "online" && !!member.peerId)
     ).toHaveLength(2);
   });
 });

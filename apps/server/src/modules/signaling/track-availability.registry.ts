@@ -26,6 +26,12 @@ export class TrackAvailabilityRegistry {
   private readonly persistenceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly persistenceInFlight = new Set<string>();
   private readonly persistenceDirty = new Set<string>();
+  private readonly assetPersistenceTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly assetPersistenceInFlight = new Set<string>();
+  private readonly assetPersistenceDirty = new Set<string>();
 
   constructor(private readonly redisService: RedisService) {}
 
@@ -50,28 +56,43 @@ export class TrackAvailabilityRegistry {
     const merged = mergeAssetAvailability(roomAvailability.get(key), announcement);
     roomAvailability.set(key, merged);
     this.assetAvailabilityByRoom.set(roomId, roomAvailability);
-    void this.persistAssetSnapshot(roomId);
+    this.schedulePersistAssetSnapshot(roomId);
     return merged;
   }
 
   removeAssetPeer(roomId: string, peerId: string, assetId?: string) {
     const roomAvailability = this.assetAvailabilityByRoom.get(roomId);
-    let removed = false;
     for (const [key, announcement] of roomAvailability?.entries() ?? []) {
       if (announcement.ownerPeerId === peerId && (!assetId || announcement.assetId === assetId)) {
         roomAvailability?.delete(key);
-        removed = true;
       }
     }
     if (roomAvailability?.size === 0) {
       this.assetAvailabilityByRoom.delete(roomId);
     }
-    void this.persistAssetSnapshot(roomId);
-    return removed;
+    if (roomAvailability) {
+      this.schedulePersistAssetSnapshot(roomId);
+    } else {
+      void this.removeAssetPeerFromPersistedSnapshot(roomId, peerId, assetId);
+    }
+
+    // The persisted snapshot may contain the provider after a process restart,
+    // so clear events must remain idempotent and always propagate.
+    return true;
   }
 
-  hasPlaybackProvider(roomId: string, assetId: string, onlinePeerIds?: ReadonlySet<string>) {
-    return this.getAssetAnnouncements(roomId, assetId).some(
+  async hasPlaybackProvider(
+    roomId: string,
+    assetId: string,
+    onlinePeerIds?: ReadonlySet<string>
+  ) {
+    let announcements = this.getAssetAnnouncements(roomId, assetId);
+    if (announcements.length === 0) {
+      await this.hydrateAssetSnapshot(roomId);
+      announcements = this.getAssetAnnouncements(roomId, assetId);
+    }
+
+    return announcements.some(
       (announcement) =>
         announcement.assetKind === "playback" &&
         announcement.availableRanges.length > 0 &&
@@ -140,10 +161,15 @@ export class TrackAvailabilityRegistry {
       this.persistenceTimers.delete(roomId);
     }
     this.persistenceDirty.delete(roomId);
+    const assetTimer = this.assetPersistenceTimers.get(roomId);
+    if (assetTimer) {
+      clearTimeout(assetTimer);
+      this.assetPersistenceTimers.delete(roomId);
+    }
     this.availabilityByRoom.delete(roomId);
     this.assetAvailabilityByRoom.delete(roomId);
     void this.deleteSnapshot(roomId);
-    void this.deleteAssetSnapshot(roomId);
+    this.schedulePersistAssetSnapshot(roomId, 0);
   }
 
   async emitSnapshot(roomId: string, emit: (announcement: TrackAvailabilityAnnouncement) => void) {
@@ -196,6 +222,13 @@ export class TrackAvailabilityRegistry {
   }
 
   private async persistAssetSnapshot(roomId: string) {
+    if (this.assetPersistenceInFlight.has(roomId)) {
+      this.assetPersistenceDirty.add(roomId);
+      return;
+    }
+
+    this.assetPersistenceInFlight.add(roomId);
+    this.assetPersistenceDirty.delete(roomId);
     try {
       const announcements = [...(this.assetAvailabilityByRoom.get(roomId)?.values() ?? [])];
       if (announcements.length === 0) {
@@ -209,6 +242,81 @@ export class TrackAvailabilityRegistry {
       );
     } catch {
       // Live asset announcements remain authoritative.
+    } finally {
+      this.assetPersistenceInFlight.delete(roomId);
+      if (this.assetPersistenceDirty.has(roomId)) {
+        this.schedulePersistAssetSnapshot(roomId);
+      }
+    }
+  }
+
+  private schedulePersistAssetSnapshot(
+    roomId: string,
+    delayMs = this.availabilityPersistDebounceMs
+  ) {
+    this.assetPersistenceDirty.add(roomId);
+    if (
+      this.assetPersistenceTimers.has(roomId) ||
+      this.assetPersistenceInFlight.has(roomId)
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.assetPersistenceTimers.delete(roomId);
+      void this.persistAssetSnapshot(roomId);
+    }, delayMs);
+    timer.unref?.();
+    this.assetPersistenceTimers.set(roomId, timer);
+  }
+
+  private async hydrateAssetSnapshot(roomId: string) {
+    const persisted = await this.loadAssetSnapshot(roomId);
+    if (persisted.length === 0) {
+      return;
+    }
+
+    const roomAvailability = this.assetAvailabilityByRoom.get(roomId) ?? new Map();
+    for (const announcement of persisted) {
+      const key = assetAvailabilityKey(announcement);
+      roomAvailability.set(
+        key,
+        mergeAssetAvailability(roomAvailability.get(key), announcement)
+      );
+    }
+    this.assetAvailabilityByRoom.set(roomId, roomAvailability);
+  }
+
+  private async removeAssetPeerFromPersistedSnapshot(
+    roomId: string,
+    peerId: string,
+    assetId?: string
+  ) {
+    try {
+      const announcements = (await this.loadAssetSnapshot(roomId)).filter(
+        (announcement) =>
+          announcement.ownerPeerId !== peerId ||
+          (!!assetId && announcement.assetId !== assetId)
+      );
+
+      // A live announcement may have populated memory while Redis was read.
+      // Persist that newer in-memory projection instead of overwriting it.
+      if (this.assetAvailabilityByRoom.has(roomId)) {
+        this.removeAssetPeer(roomId, peerId, assetId);
+        return;
+      }
+
+      if (announcements.length === 0) {
+        await this.deleteAssetSnapshot(roomId);
+        return;
+      }
+      await this.redisService.setJson(
+        this.assetAvailabilitySnapshotKey(roomId),
+        announcements,
+        this.availabilitySnapshotTtlSeconds
+      );
+    } catch {
+      // Live clear events remain authoritative if persistence is unavailable.
     }
   }
 

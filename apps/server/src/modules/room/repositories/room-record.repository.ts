@@ -114,24 +114,23 @@ export class RoomRecordRepository {
       }
     }
 
-    await this.redis.addToSet(this.roomRegistryKey, record.room.id);
-    if (databaseAvailable || !supportsRedisRevisionGuard) {
-      await this.redis.setJson(this.roomCacheKey(record.room.id), record, this.roomCacheTtlSeconds);
-    }
-    await this.redis.setJson(
-      this.joinCodeCacheKey(record.room.joinCode),
-      record,
-      this.roomCacheTtlSeconds
-    );
-    await Promise.all(
-      record.room.members.map((member) =>
-        this.redis.setString(
-          this.sessionRecentRoomKey(member.id),
-          record.room.id,
-          this.sessionRecentRoomTtlSeconds
-        )
+    await Promise.all([
+      this.redis.addToSet(this.roomRegistryKey, record.room.id),
+      ...(databaseAvailable || !supportsRedisRevisionGuard
+        ? [
+            this.redis.setJson(
+              this.roomCacheKey(record.room.id),
+              record,
+              this.roomCacheTtlSeconds
+            )
+          ]
+        : []),
+      this.redis.setJson(
+        this.joinCodeCacheKey(record.room.joinCode),
+        record,
+        this.roomCacheTtlSeconds
       )
-    );
+    ]);
     this.rooms.set(record.room.id, cloneRoomRecord(record));
   }
 

@@ -17,7 +17,7 @@ export class RoomRealtimePublisher {
   }
 
   async emitTopologySnapshot(roomId: string, playlists: Playlist[] = []) {
-    const snapshot = await this.emitSnapshot(roomId, playlists);
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, playlists);
     this.roomRealtimeBroadcaster.emitPresencePatch(
       roomId,
       {
@@ -31,7 +31,7 @@ export class RoomRealtimePublisher {
   }
 
   async emitQueueSnapshot(roomId: string, playlists: Playlist[] = []) {
-    const snapshot = await this.emitSnapshot(roomId, playlists);
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, playlists);
     this.roomRealtimeBroadcaster.emitQueuePatch(
       roomId,
       {
@@ -44,7 +44,7 @@ export class RoomRealtimePublisher {
   }
 
   async emitLibrarySnapshot(roomId: string, playlists: Playlist[] = []) {
-    const snapshot = await this.emitSnapshot(roomId, playlists);
+    const snapshot = await this.roomService.getRoomSnapshot(roomId, playlists);
     this.roomRealtimeBroadcaster.emitLibraryPatch(
       roomId,
       {

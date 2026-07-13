@@ -10,6 +10,7 @@ const mockRedisInstances: Array<{
   unsubscribe: jest.Mock;
   quit: jest.Mock;
   eval: jest.Mock;
+  mget: jest.Mock;
 }> = [];
 
 jest.mock("ioredis", () => {
@@ -25,6 +26,7 @@ jest.mock("ioredis", () => {
       unsubscribe = jest.fn(async () => undefined);
       quit = jest.fn(async () => undefined);
       eval = jest.fn(async () => 1);
+      mget = jest.fn(async (...keys: string[]) => keys.map((key) => `value:${key}`));
 
       constructor() {
         super();
@@ -79,5 +81,24 @@ describe("RedisService", () => {
       "1",
       "60"
     );
+  });
+
+  it("reports pubsub readiness separately and batches string reads", async () => {
+    const service = new RedisService();
+    const publisher = mockRedisInstances[0];
+    const subscriber = mockRedisInstances[1];
+    publisher.status = "ready";
+    subscriber.status = "wait";
+
+    expect(service.isAvailable()).toBe(true);
+    expect(service.isPubSubAvailable()).toBe(false);
+
+    subscriber.status = "ready";
+    expect(service.isPubSubAvailable()).toBe(true);
+    await expect(service.getStrings(["presence:a", "presence:b"])).resolves.toEqual([
+      "value:presence:a",
+      "value:presence:b"
+    ]);
+    expect(publisher.mget).toHaveBeenCalledWith("presence:a", "presence:b");
   });
 });

@@ -52,4 +52,7 @@ model Playlist {
   trackIds        Json
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([ownerId, updatedAt])
+  @@index([roomId])
 }

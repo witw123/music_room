@@ -41,6 +41,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.status === "ready";
   }
 
+  isPubSubAvailable() {
+    return this.client.status === "ready" && this.subscriber.status === "ready";
+  }
+
   getMode() {
     return this.mode;
   }
@@ -154,6 +158,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.assertReady(this.client, "publisher");
 
     return this.client.get(key);
+  }
+
+  async getStrings(keys: string[]) {
+    this.assertReady(this.client, "publisher");
+    if (keys.length === 0) {
+      return [];
+    }
+
+    return this.client.mget(...keys);
   }
 
   async getJson<T>(key: string): Promise<T | null> {

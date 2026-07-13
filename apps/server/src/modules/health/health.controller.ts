@@ -20,7 +20,7 @@ export class HealthController {
   @Get("readiness")
   readiness() {
     const prismaReady = this.prisma.isAvailable();
-    const redisReady = this.redis.isAvailable();
+    const redisReady = this.redis.isPubSubAvailable();
     const isReady = prismaReady && redisReady;
 
     return {

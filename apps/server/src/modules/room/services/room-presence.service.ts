@@ -56,12 +56,19 @@ export class RoomPresenceService {
       }
     }
 
-    const redisPresence = await Promise.all(
-      members.map(async (member) => ({
-        memberId: member.id,
-        rawValue: await this.redis.getString(this.realtimePresenceKey(roomId, member.id))
-      }))
+    const presenceKeys = members.map((member) =>
+      this.realtimePresenceKey(roomId, member.id)
     );
+    const redisWithBatchRead = this.redis as RedisService & {
+      getStrings?: (keys: string[]) => Promise<Array<string | null>>;
+    };
+    const rawValues = redisWithBatchRead.getStrings
+      ? await redisWithBatchRead.getStrings(presenceKeys)
+      : await Promise.all(presenceKeys.map((key) => this.redis.getString(key)));
+    const redisPresence = members.map((member, index) => ({
+      memberId: member.id,
+      rawValue: rawValues[index] ?? null
+    }));
 
     for (const entry of redisPresence) {
       const parsed = this.parseStoredPresence(entry.rawValue);

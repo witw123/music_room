@@ -656,7 +656,13 @@ export class RoomService {
   }
 
   isRealtimeAvailable() {
-    return typeof this.redis.isAvailable === "function" ? this.redis.isAvailable() : true;
+    const redis = this.redis as RedisService & {
+      isPubSubAvailable?: () => boolean;
+    };
+    if (typeof redis.isPubSubAvailable === "function") {
+      return redis.isPubSubAvailable();
+    }
+    return typeof redis.isAvailable === "function" ? redis.isAvailable() : true;
   }
 
   async getTracks(roomId: string) {
