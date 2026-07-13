@@ -20,7 +20,6 @@ export function useRoomAppRefs({ roomPlayback }: UseRoomAppRefsInput) {
   const activeSessionRef = useRef<ReturnType<typeof useSessionIdentity>["activeSession"]>(null);
   const currentRoomRef = useRef<RoomSnapshot | null>(null);
   const uploadedTrackIdsRef = useRef<string[]>([]);
-  const playbackSourceInitializationKeyRef = useRef<string | null>(null);
   const roomPlaybackRef = useRef(roomPlayback);
   roomPlaybackRef.current = roomPlayback;
 
@@ -31,7 +30,6 @@ export function useRoomAppRefs({ roomPlayback }: UseRoomAppRefsInput) {
     currentPlaybackPositionRef,
     currentRoomRef,
     meshRef,
-    playbackSourceInitializationKeyRef,
     roomPlaybackRef,
     socketRef,
     uploadedTrackIdsRef

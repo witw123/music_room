@@ -6,7 +6,6 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
-import type { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";
 import type { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
 import type { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
@@ -27,7 +26,6 @@ type RoomAppShellProps = {
   currentTrack: TrackMeta | null;
   pageState: ReturnType<typeof useRoomPageState>;
   playbackActions: ReturnType<typeof useRoomPlaybackActions>;
-  progressiveRuntime: ReturnType<typeof useProgressiveRuntime>;
   roomActions: ReturnType<typeof useRoomPageRoomActions>;
   roomSnapshot: RoomSnapshot | null;
   socket: RoomSocket | null;
@@ -49,7 +47,6 @@ export function RoomAppShell({
   currentTrack,
   pageState,
   playbackActions,
-  progressiveRuntime,
   roomActions,
   roomSnapshot,
   socket,
@@ -77,7 +74,6 @@ export function RoomAppShell({
         uploadedTracks={uploads.uploadedTracks}
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
-        activePlaybackSource={pageState.activePlaybackSource}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
         cachedTrackCount={uploads.cachedTrackCount}
         cacheLibraryTracks={uploads.cacheLibraryTracks}
@@ -121,19 +117,16 @@ export function RoomAppShell({
             roomSnapshot={roomSnapshot}
             activeSession={activeSession}
             currentTrack={currentTrack}
-            canSeekPlayback={pageState.activePlaybackSource === "full-local"}
+            canSeekPlayback={true}
             resetEpoch={pageState.playerResetEpoch}
             onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
             onPlaybackBucketChange={playbackActions.handlePlaybackBucketChange}
             onVolumeChange={pageState.setVolume}
-            getLocalPlaybackPositionMs={progressiveRuntime.getLocalPlaybackPositionMs}
             onPlay={playbackActions.handlePlayTrack}
             onPause={roomActions.pauseTrack}
             onSeek={roomActions.seekTrack}
             onPrev={playbackActions.handlePrevTrack}
             onNext={playbackActions.handleNextTrack}
-            onEnded={playbackActions.handlePlaybackEnded}
-            onLocalPlaybackReady={playbackActions.handleLocalPlaybackReady}
           />
         }
       />

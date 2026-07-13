@@ -3,7 +3,7 @@ import { getSourceModeLabel } from "./RoomStage";
 import { resolveCurrentSourceNickname } from "./RoomWorkspace";
 
 describe("room page state labels", () => {
-  const track = { id: "track_1" } as never;
+  const track = { id: "track_1", playbackAsset: { assetId: "asset_1" } } as never;
 
   it("shows the active cached provider instead of the original uploader", () => {
     expect(resolveCurrentSourceNickname([
@@ -12,13 +12,13 @@ describe("room page state labels", () => {
     ], "provider")).toBe("Provider");
   });
 
-  it("distinguishes progressive playback from a completed local cache", () => {
-    expect(getSourceModeLabel("live", "progressive-local", false, track)).toBe("边缓存边播放");
-    expect(getSourceModeLabel("live", "full-local", false, track)).toBe("完整缓存播放");
+  it("reports the single v4 playback path", () => {
+    expect(getSourceModeLabel("live", track)).toBe("分段 Opus 播放");
+    expect(getSourceModeLabel("buffering", track)).toBe("正在缓冲");
   });
 
-  it("keeps completed cache playback independent from remote connection failures", () => {
-    expect(getSourceModeLabel("failed", "full-local", false, track)).toBe("完整缓存播放");
-    expect(getSourceModeLabel("failed", "progressive-local", false, track)).toBe("音源暂不可用");
+  it("surfaces v4 connection failures and rejects legacy tracks", () => {
+    expect(getSourceModeLabel("failed", track)).toBe("音源暂不可用");
+    expect(getSourceModeLabel("live", { id: "legacy" } as never)).toBe("不支持的旧版曲目");
   });
 });

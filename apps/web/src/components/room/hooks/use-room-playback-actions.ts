@@ -5,34 +5,21 @@ import {
   useEffect,
   type Dispatch,
   type MutableRefObject,
-  type RefObject,
   type SetStateAction
 } from "react";
-import type { RoomMediaConnectionState, RoomSnapshot } from "@music-room/shared";
+import type { RoomSnapshot } from "@music-room/shared";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import {
   createPlaybackStartIntent,
   type PlaybackStartIntent
 } from "@/features/playback/playback-start-intent";
-import {
-  getEffectivePlaybackPositionMs,
-  type ProgressivePlaybackSource
-} from "@/features/playback/progressive-playback";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import type { FullLocalPlaybackTrack } from "@/features/playback/use-progressive-runtime";
-
-type FullLocalTrackLoader = (
-  trackId: string | null | undefined
-) => Promise<FullLocalPlaybackTrack | null>;
 
 type UseRoomPlaybackActionsInput = {
-  audioRef: RefObject<HTMLAudioElement | null>;
   currentPlaybackPositionRef: MutableRefObject<number>;
-  roomPlaybackRef: MutableRefObject<RoomSnapshot["room"]["playback"] | null>;
   roomSnapshot: RoomSnapshot | null;
-  currentTrack: RoomSnapshot["tracks"][number] | null;
   currentPlaybackTrackId: string | null;
   playbackMediaEpoch: number | null;
   playbackQueueVersion: number | null;
@@ -40,38 +27,19 @@ type UseRoomPlaybackActionsInput = {
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null;
   isCurrentSourceOwner: boolean;
   audioUnlocked: boolean;
-  volume: number;
-  fullLocalPlaybackTracks: Record<string, FullLocalPlaybackTrack>;
-  loadCachedFullLocalPlaybackTrack: FullLocalTrackLoader;
-  ensureSourcePlaybackStarted: () => void | Promise<void>;
   handleTrackFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   playTrack: (trackId?: string) => Promise<unknown>;
   playQueueItem: (queueItemId: string) => Promise<unknown>;
   prevTrack: () => Promise<unknown>;
   nextTrack: () => Promise<unknown>;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
-  setActivePlaybackSource: Dispatch<SetStateAction<ProgressivePlaybackSource>>;
   setAudioBlockedOverlay: Dispatch<SetStateAction<boolean>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
-  setMediaConnectionState: Dispatch<SetStateAction<RoomMediaConnectionState>>;
   setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
-  setProgressiveFallbackReason: Dispatch<SetStateAction<string | null>>;
   setSchedulerPlaybackBucketMs: Dispatch<SetStateAction<number>>;
   setStatusMessage: (value: string) => void;
 };
-
-export function runPlaybackMutationAfterLocalPrime(input: {
-  primeLocalPlayback: () => Promise<unknown>;
-  mutatePlayback: () => Promise<unknown>;
-}) {
-  void input.primeLocalPlayback().catch(() => undefined);
-  return input.mutatePlayback();
-}
-
-export function shouldPrimeFullLocalTrackForPlayCommand(trackId: string | undefined) {
-  return Boolean(trackId);
-}
 
 export function startBestEffortPlaybackAudioUnlock(input: {
   unlockAudio: () => Promise<unknown>;
@@ -83,11 +51,8 @@ export function startBestEffortPlaybackAudioUnlock(input: {
 }
 
 export function useRoomPlaybackActions({
-  audioRef,
   currentPlaybackPositionRef,
-  roomPlaybackRef,
   roomSnapshot,
-  currentTrack,
   currentPlaybackTrackId,
   playbackMediaEpoch,
   playbackQueueVersion,
@@ -95,23 +60,16 @@ export function useRoomPlaybackActions({
   playbackStatus,
   isCurrentSourceOwner,
   audioUnlocked,
-  volume,
-  fullLocalPlaybackTracks,
-  loadCachedFullLocalPlaybackTrack,
-  ensureSourcePlaybackStarted,
   handleTrackFilesSelected,
   playTrack,
   playQueueItem,
   prevTrack,
   nextTrack,
   recordPeerDiagnostic,
-  setActivePlaybackSource,
   setAudioBlockedOverlay,
   setAudioUnlocked,
   setLastSourceStartError,
-  setMediaConnectionState,
   setPlaybackStartIntent,
-  setProgressiveFallbackReason,
   setSchedulerPlaybackBucketMs,
   setStatusMessage
 }: UseRoomPlaybackActionsInput) {
@@ -124,9 +82,7 @@ export function useRoomPlaybackActions({
       }
 
       try {
-        const primeResult = await roomAudioOutput.primeOutputs({
-          localAudio: audioRef.current
-        });
+        const primeResult = await roomAudioOutput.primeOutputs({});
         setAudioUnlocked(primeResult.ok);
         if (!primeResult.ok) {
           const message = "浏览器仍未允许房间音频输出";
@@ -203,17 +159,12 @@ export function useRoomPlaybackActions({
       }
     },
     [
-      audioRef,
       recordPeerDiagnostic,
       setAudioUnlocked,
       setLastSourceStartError,
       setStatusMessage
     ]
   );
-
-  const handleLocalPlaybackReady = useCallback(() => {
-    void ensureSourcePlaybackStarted();
-  }, [ensureSourcePlaybackStarted]);
 
   const handlePlaybackPositionChange = useCallback((positionMs: number) => {
     currentPlaybackPositionRef.current = positionMs;
@@ -222,75 +173,6 @@ export function useRoomPlaybackActions({
   const handlePlaybackBucketChange = useCallback((bucketMs: number) => {
     setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
   }, [setSchedulerPlaybackBucketMs]);
-
-  const primeFullLocalTrackPlayback = useCallback(
-    async (trackId: string | null | undefined) => {
-      if (!trackId) {
-        return false;
-      }
-
-      const localTrack =
-        fullLocalPlaybackTracks[trackId] ?? (await loadCachedFullLocalPlaybackTrack(trackId));
-      const audio = audioRef.current;
-      if (!localTrack || !audio) {
-        return false;
-      }
-
-      const track =
-        roomSnapshot?.tracks.find((entry) => entry.id === trackId) ?? currentTrack ?? null;
-      const playback = roomPlaybackRef.current;
-      const positionMs =
-        playback?.currentTrackId === trackId
-          ? getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0)
-          : 0;
-
-      const hadSrcObject = !!audio.srcObject;
-      if (audio.srcObject) {
-        audio.srcObject = null;
-      }
-      if (audio.src !== localTrack.objectUrl || hadSrcObject) {
-        audio.src = localTrack.objectUrl;
-        audio.load();
-      }
-      audio.muted = false;
-      audio.volume = volume;
-      if (Number.isFinite(positionMs) && positionMs > 0) {
-        audio.currentTime = Math.max(0, positionMs / 1000);
-      }
-
-      const playResult = await roomAudioOutput.playElement(audio);
-      recordPeerDiagnostic({
-        peerId: "system",
-        channelKind: "system",
-        direction: "local",
-        event: playResult.ok ? "full-local-prime-play" : "full-local-prime-play-failed",
-        level: playResult.ok ? "info" : "warning",
-        summary: playResult.ok
-          ? `点击手势内已预启动本地完整音频 ${trackId}`
-          : `点击手势内本地完整音频启动失败 ${trackId}: ${playResult.error ?? "play() failed"}`,
-        recordEvent: false
-      });
-      if (playResult.ok) {
-        setActivePlaybackSource("full-local");
-        setProgressiveFallbackReason(null);
-        setMediaConnectionState("live");
-      }
-      return playResult.ok;
-    },
-    [
-      audioRef,
-      currentTrack,
-      fullLocalPlaybackTracks,
-      loadCachedFullLocalPlaybackTrack,
-      recordPeerDiagnostic,
-      roomPlaybackRef,
-      roomSnapshot?.tracks,
-      setActivePlaybackSource,
-      setMediaConnectionState,
-      setProgressiveFallbackReason,
-      volume
-    ]
-  );
 
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {
@@ -392,15 +274,9 @@ export function useRoomPlaybackActions({
         reason: trackId ? "track" : "resume-current",
         trackId: targetTrackId
       });
-      await runPlaybackMutationAfterLocalPrime({
-        primeLocalPlayback: () =>
-          shouldPrimeFullLocalTrackForPlayCommand(trackId)
-            ? primeFullLocalTrackPlayback(targetTrackId)
-            : Promise.resolve(false),
-        mutatePlayback: () => playTrack(trackId)
-      });
+      await playTrack(trackId);
     },
-    [armPlaybackStart, currentPlaybackTrackId, playTrack, primeFullLocalTrackPlayback]
+    [armPlaybackStart, currentPlaybackTrackId, playTrack]
   );
 
   const handlePlayQueueItem = useCallback(
@@ -413,16 +289,12 @@ export function useRoomPlaybackActions({
         trackId: queueTrackId,
         previousTrackId: currentPlaybackTrackId
       });
-      await runPlaybackMutationAfterLocalPrime({
-        primeLocalPlayback: () => primeFullLocalTrackPlayback(queueTrackId),
-        mutatePlayback: () => playQueueItem(queueItemId)
-      });
+      await playQueueItem(queueItemId);
     },
     [
       armPlaybackStart,
       currentPlaybackTrackId,
       playQueueItem,
-      primeFullLocalTrackPlayback,
       roomSnapshot?.queue
     ]
   );
@@ -436,14 +308,6 @@ export function useRoomPlaybackActions({
   }, [armPlaybackStart, currentPlaybackTrackId, prevTrack]);
 
   const handleNextTrack = useCallback(async () => {
-    await armPlaybackStart({
-      reason: "next",
-      previousTrackId: currentPlaybackTrackId
-    });
-    await nextTrack();
-  }, [armPlaybackStart, currentPlaybackTrackId, nextTrack]);
-
-  const handlePlaybackEnded = useCallback(async () => {
     await armPlaybackStart({
       reason: "next",
       previousTrackId: currentPlaybackTrackId
@@ -477,9 +341,7 @@ export function useRoomPlaybackActions({
 
   const handleAudioUnlock = useCallback(async () => {
     setAudioBlockedOverlay(false);
-    const primeResult = await roomAudioOutput.primeOutputs({
-      localAudio: audioRef.current
-    });
+    const primeResult = await roomAudioOutput.primeOutputs({});
     setAudioUnlocked(primeResult.ok);
     if (primeResult.ok) {
       setStatusMessage("");
@@ -487,16 +349,14 @@ export function useRoomPlaybackActions({
     }
     setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
     setAudioBlockedOverlay(true);
-  }, [audioRef, setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
+  }, [setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
 
   return {
     handleAudioUnlock,
     handleFilesSelected,
-    handleLocalPlaybackReady,
     handleNextTrack,
     handlePlayQueueItem,
     handlePlaybackBucketChange,
-    handlePlaybackEnded,
     handlePlaybackPositionChange,
     handlePlayTrack,
     handlePrevTrack

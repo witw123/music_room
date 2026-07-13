@@ -18,7 +18,6 @@ import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { PlaybackStartIntent } from "@/features/playback/playback-start-intent";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 import type { RoomRecoveryState } from "@/components/room/hooks/use-room-page-state";
 
@@ -38,16 +37,13 @@ type UseRoomPageRoomActionsInput = {
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   clearCacheStreamTrack: (trackId: string) => Promise<void> | void;
-  destroyProgressiveRuntime: () => void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   peerId: string;
   peerStorageKey: string;
-  playbackSourceInitializationKeyRef: MutableRefObject<string | null>;
   resetAvailabilityState: () => void;
   resetPeerDiagnostics: () => void;
   roomSnapshot: RoomSnapshot | null;
   router: RoomRouter;
-  setActivePlaybackSource: Dispatch<SetStateAction<ProgressivePlaybackSource>>;
   setAvailableRooms: Dispatch<SetStateAction<RoomSnapshot[]>>;
   setBufferHealth: Dispatch<SetStateAction<"healthy" | "low" | "critical">>;
   setIsNavigatingRoomExit: Dispatch<SetStateAction<boolean>>;
@@ -57,7 +53,6 @@ type UseRoomPageRoomActionsInput = {
   setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
   setPlayerResetEpoch: Dispatch<SetStateAction<number>>;
   setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
-  setProgressiveFallbackReason: Dispatch<SetStateAction<string | null>>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   setSchedulerPlaybackBucketMs: Dispatch<SetStateAction<number>>;
   setStatusMessage: (value: string) => void;
@@ -75,16 +70,13 @@ export function useRoomPageRoomActions({
   deleteRoomTrackArtifacts,
   deleteUploadedTrackArtifacts,
   clearCacheStreamTrack,
-  destroyProgressiveRuntime,
   dispatchRoomStateEvent,
   peerId,
   peerStorageKey,
-  playbackSourceInitializationKeyRef,
   resetAvailabilityState,
   resetPeerDiagnostics,
   roomSnapshot,
   router,
-  setActivePlaybackSource,
   setAvailableRooms,
   setBufferHealth,
   setIsNavigatingRoomExit,
@@ -94,7 +86,6 @@ export function useRoomPageRoomActions({
   setPlaybackStartIntent,
   setPlayerResetEpoch,
   setPlaylists,
-  setProgressiveFallbackReason,
   setRoomRecoveryState,
   setSchedulerPlaybackBucketMs,
   setStatusMessage,
@@ -154,7 +145,6 @@ export function useRoomPageRoomActions({
       localAudio.load();
     }
 
-    destroyProgressiveRuntime();
     resetAvailabilityState();
     resetPeerDiagnostics();
     currentPlaybackPositionRef.current = 0;
@@ -163,9 +153,6 @@ export function useRoomPageRoomActions({
     setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
-    playbackSourceInitializationKeyRef.current = null;
-    setActivePlaybackSource("progressive-local");
-    setProgressiveFallbackReason(null);
     setPlaybackStartIntent(null);
     setRoomRecoveryState({
       phase: "joining",
@@ -182,17 +169,13 @@ export function useRoomPageRoomActions({
   }, [
     audioRef,
     currentPlaybackPositionRef,
-    destroyProgressiveRuntime,
-    playbackSourceInitializationKeyRef,
     resetAvailabilityState,
     resetPeerDiagnostics,
-    setActivePlaybackSource,
     setBufferHealth,
     setMediaConnectedPeers,
     setMediaConnectionState,
     setPlaybackStartIntent,
     setPlayerResetEpoch,
-    setProgressiveFallbackReason,
     setRoomRecoveryState,
     setSchedulerPlaybackBucketMs
   ]);

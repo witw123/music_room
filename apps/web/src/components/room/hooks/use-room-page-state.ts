@@ -7,7 +7,6 @@ import type {
   RoomSnapshot,
   Playlist
 } from "@music-room/shared";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { PlaybackStartIntent } from "@/features/playback/playback-start-intent";
 
 type RoomRecoveryPhase =
@@ -34,8 +33,6 @@ export type RoomRecoveryState = {
 
 export type RoomPageState = {
   activeDashboardTab: "queue" | "library" | "cache" | "members";
-  activePlaybackSource: ProgressivePlaybackSource;
-  progressiveFallbackReason: string | null;
   playbackStartIntent: PlaybackStartIntent | null;
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;
@@ -77,8 +74,6 @@ export function createInitialRoomPageState(input: {
 }): RoomPageState {
   return {
     activeDashboardTab: "queue",
-    activePlaybackSource: "progressive-local",
-    progressiveFallbackReason: null,
     playbackStartIntent: null,
     roomRecoveryState: {
       phase: "joining",
@@ -201,16 +196,6 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
       dispatch({ type: "set", key: "activeDashboardTab", value }),
     []
   );
-  const setActivePlaybackSource = useCallback(
-    (value: SetStateAction<ProgressivePlaybackSource>) =>
-      dispatch({ type: "set", key: "activePlaybackSource", value }),
-    []
-  );
-  const setProgressiveFallbackReason = useCallback(
-    (value: SetStateAction<string | null>) =>
-      dispatch({ type: "set", key: "progressiveFallbackReason", value }),
-    []
-  );
   const setPlaybackStartIntent = useCallback(
     (value: SetStateAction<PlaybackStartIntent | null>) =>
       dispatch({ type: "set", key: "playbackStartIntent", value }),
@@ -286,8 +271,6 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
     setIceConfig,
     setIceConfigResolved,
     setActiveDashboardTab,
-    setActivePlaybackSource,
-    setProgressiveFallbackReason,
     setPlaybackStartIntent,
     setRoomRecoveryState,
     setIsDiagnosticsPanelOpen,

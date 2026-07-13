@@ -16,14 +16,11 @@ type BottomPlayerControllerProps = {
   onPlaybackPositionChange: (positionMs: number) => void;
   onPlaybackBucketChange: (bucketMs: number) => void;
   onVolumeChange: (volume: number) => void;
-  getLocalPlaybackPositionMs?: () => number | null;
   onPlay: () => void;
   onPause: (positionMs?: number) => void | Promise<void>;
   onSeek: (positionMs: number) => void | Promise<void>;
   onPrev: () => void;
   onNext: () => void;
-  onEnded: () => void;
-  onLocalPlaybackReady: () => void;
 };
 
 function BottomPlayerControllerBase({
@@ -36,14 +33,11 @@ function BottomPlayerControllerBase({
   onPlaybackPositionChange,
   onPlaybackBucketChange,
   onVolumeChange,
-  getLocalPlaybackPositionMs,
   onPlay,
   onPause,
   onSeek,
   onPrev,
-  onNext,
-  onEnded,
-  onLocalPlaybackReady
+  onNext
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
   const canControlPlayback = !!activeSession && !!roomSnapshot;
@@ -63,7 +57,7 @@ function BottomPlayerControllerBase({
     audioRef,
     playback,
     tracks: roomSnapshot?.tracks ?? [],
-    getLocalPlaybackPositionMs
+    getLocalPlaybackPositionMs: undefined
   });
   const visualizer = usePlayerAudioVisualizer({
     audioRef,
@@ -121,8 +115,6 @@ function BottomPlayerControllerBase({
       onSeek={onSeek}
       onPrev={onPrev}
       onNext={onNext}
-      onEnded={onEnded}
-      onLocalPlaybackReady={onLocalPlaybackReady}
     />
   );
 }

@@ -40,6 +40,17 @@ type ReceiverStream = {
   timeoutId: ReturnType<typeof setTimeout>;
 };
 
+type PendingRetry = {
+  assetId: string;
+  assetKind: AssetKind;
+  unitIndexes: Set<number>;
+  totalUnits: number;
+  priority: "critical" | "playback-fill" | "bulk";
+  preferredPeerId?: string | null;
+  maxReplicas?: number;
+  timeoutId: ReturnType<typeof setTimeout>;
+};
+
 const assetProviderRetryCooldownMs = 2_000;
 
 export class AssetTransferManager {
@@ -49,11 +60,12 @@ export class AssetTransferManager {
   private readonly fragments = new AssetFragmentTracker();
   private readonly integrityFailures = new Map<string, number>();
   private readonly temporarilyUnavailableProviders = new Map<string, number>();
+  private readonly pendingRetries = new Map<string, PendingRetry>();
   private sequence = 0;
 
   constructor(private readonly callbacks: {
-    sendControl: (peerId: string, message: AssetStreamMessage) => void;
-    sendBinary: (peerId: string, kind: AssetKind, payload: ArrayBuffer) => void;
+    sendControl: (peerId: string, message: AssetStreamMessage) => boolean;
+    sendBinary: (peerId: string, kind: AssetKind, payload: ArrayBuffer) => boolean;
     resolveLocalUnit: (assetId: string, unitIndex: number) => Promise<LocalAssetUnit | null>;
     persistInboundUnit: (
       peerId: string,
@@ -71,6 +83,7 @@ export class AssetTransferManager {
     const assetProviders = this.providers.get(announcement.assetId) ?? new Map();
     assetProviders.set(announcement.ownerPeerId, announcement);
     this.providers.set(announcement.assetId, assetProviders);
+    this.reschedulePendingRetry(announcement.assetId, 0);
   }
 
   removeProvider(assetId: string, peerId: string) {
@@ -99,6 +112,7 @@ export class AssetTransferManager {
         this.resetReceiver(streamId, "superseded");
       }
     }
+    this.clearPendingRetries(assetId);
   }
 
   request(input: {
@@ -145,10 +159,19 @@ export class AssetTransferManager {
         assignments.set(provider.ownerPeerId, indexes);
       }
     }
+    let openedStreams = 0;
+    const deferredIndexes = new Set<number>();
     for (const [peerId, unitIndexes] of assignments.entries()) {
-      this.openReceiverStream({ ...input, peerId, unitIndexes });
+      if (this.openReceiverStream({ ...input, peerId, unitIndexes })) {
+        openedStreams += 1;
+      } else {
+        unitIndexes.forEach((unitIndex) => deferredIndexes.add(unitIndex));
+      }
     }
-    return assignments.size > 0;
+    if (deferredIndexes.size > 0) {
+      this.scheduleRetry({ ...input, unitIndexes: [...deferredIndexes] }, 250);
+    }
+    return openedStreams > 0;
   }
 
   async handleChannelMessage(peerId: string, data: unknown) {
@@ -188,6 +211,10 @@ export class AssetTransferManager {
     this.providers.clear();
     this.integrityFailures.clear();
     this.temporarilyUnavailableProviders.clear();
+    for (const retry of this.pendingRetries.values()) {
+      clearTimeout(retry.timeoutId);
+    }
+    this.pendingRetries.clear();
     this.fragments.clear();
   }
 
@@ -202,6 +229,21 @@ export class AssetTransferManager {
   }) {
     const generation = 0;
     const streamId = `asset:${input.assetId.slice(0, 12)}:${++this.sequence}`;
+    const sent = this.callbacks.sendControl(input.peerId, {
+      kind: "asset-stream-open",
+      protocolVersion: 4,
+      streamId,
+      assetId: input.assetId,
+      assetKind: input.assetKind,
+      generation,
+      priority: input.priority,
+      ranges: unitIndexesToRanges(input.unitIndexes, input.totalUnits),
+      initialCreditBytes:
+        input.priority === "critical" ? 512 * 1024 : input.priority === "playback-fill" ? 1024 * 1024 : 4 * 1024 * 1024
+    });
+    if (!sent) {
+      return false;
+    }
     const timeoutId = setTimeout(() => this.resetReceiver(streamId, "timeout"), 5_000);
     this.receivers.set(streamId, {
       peerId: input.peerId,
@@ -215,18 +257,7 @@ export class AssetTransferManager {
       lastProgressAt: Date.now(),
       timeoutId
     });
-    this.callbacks.sendControl(input.peerId, {
-      kind: "asset-stream-open",
-      protocolVersion: 4,
-      streamId,
-      assetId: input.assetId,
-      assetKind: input.assetKind,
-      generation,
-      priority: input.priority,
-      ranges: unitIndexesToRanges(input.unitIndexes, input.totalUnits),
-      initialCreditBytes:
-        input.priority === "critical" ? 512 * 1024 : input.priority === "playback-fill" ? 1024 * 1024 : 4 * 1024 * 1024
-    });
+    return true;
   }
 
   private async handleControl(peerId: string, message: AssetStreamMessage) {
@@ -292,16 +323,17 @@ export class AssetTransferManager {
         if (unit.payload.byteLength > stream.creditBytes) {
           break;
         }
-        stream.unitIndexes.shift();
-        stream.creditBytes -= unit.payload.byteLength;
-        for (const frame of encodeAssetUnitFrames({
+        const frames = encodeAssetUnitFrames({
           streamId: stream.streamId,
           generation: stream.generation,
           descriptor: unit.descriptor,
           payload: unit.payload
-        })) {
-          this.callbacks.sendBinary(stream.peerId, stream.assetKind, frame);
+        });
+        if (frames.some((frame) => !this.callbacks.sendBinary(stream.peerId, stream.assetKind, frame))) {
+          break;
         }
+        stream.unitIndexes.shift();
+        stream.creditBytes -= unit.payload.byteLength;
       }
       if (stream.unitIndexes.length === 0) {
         this.producers.delete(streamId);
@@ -428,16 +460,65 @@ export class AssetTransferManager {
     });
     if (reason === "timeout" || reason === "peer-closed" || reason === "protocol-error") {
       const unitIndexes = [...receiver.wanted];
-      queueMicrotask(() => {
-        this.request({
-          assetId: receiver.assetId,
-          assetKind: receiver.assetKind,
-          unitIndexes,
-          totalUnits: receiver.totalUnits,
-          priority: receiver.priority,
-          maxReplicas: receiver.maxReplicas
+      this.scheduleRetry({
+        assetId: receiver.assetId,
+        assetKind: receiver.assetKind,
+        unitIndexes,
+        totalUnits: receiver.totalUnits,
+        priority: receiver.priority,
+        maxReplicas: receiver.maxReplicas
+      }, reason === "timeout" ? 0 : 250);
+    }
+  }
+
+  private scheduleRetry(
+    input: Parameters<AssetTransferManager["request"]>[0],
+    delayMs: number
+  ) {
+    const key = `${input.assetId}:${input.assetKind}`;
+    const existing = this.pendingRetries.get(key);
+    const unitIndexes = new Set([
+      ...(existing?.unitIndexes ?? []),
+      ...input.unitIndexes
+    ]);
+    if (existing) {
+      clearTimeout(existing.timeoutId);
+    }
+    const retry: PendingRetry = {
+      ...input,
+      unitIndexes,
+      timeoutId: setTimeout(() => {
+        this.pendingRetries.delete(key);
+        const requested = this.request({
+          ...retry,
+          unitIndexes: [...retry.unitIndexes]
         });
-      });
+        if (!requested) {
+          this.scheduleRetry({
+            ...retry,
+            unitIndexes: [...retry.unitIndexes]
+          }, 500);
+        }
+      }, delayMs)
+    };
+    this.pendingRetries.set(key, retry);
+  }
+
+  private reschedulePendingRetry(assetId: string, delayMs: number) {
+    for (const retry of [...this.pendingRetries.values()]) {
+      if (retry.assetId !== assetId) continue;
+      this.scheduleRetry({
+        ...retry,
+        unitIndexes: [...retry.unitIndexes]
+      }, delayMs);
+    }
+  }
+
+  private clearPendingRetries(assetId: string) {
+    for (const [key, retry] of [...this.pendingRetries.entries()]) {
+      if (retry.assetId !== assetId) continue;
+      clearTimeout(retry.timeoutId);
+      this.pendingRetries.delete(key);
     }
   }
 

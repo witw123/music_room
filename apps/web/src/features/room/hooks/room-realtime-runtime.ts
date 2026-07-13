@@ -202,7 +202,6 @@ type RoomRealtimeRuntimeInput = {
   requestRoomSnapshotResyncRef: MutableRefObject<
     (reason: RoomSnapshotResyncReason, roomId?: string | null) => Promise<void>
   >;
-  ensureSourcePlaybackStartedRef: MutableRefObject<() => Promise<void>>;
   queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
   queueAssetAvailabilityRef: MutableRefObject<(announcement: AssetAvailabilityAnnouncement) => void>;
   clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
@@ -230,11 +229,6 @@ type RoomRealtimeRuntimeInput = {
   emitPresence: () => void;
   startPresenceHeartbeat: () => void;
   exitCurrentRoom: (message: string) => void;
-  shouldKickSourcePlaybackFromRealtimeEvent: (input: {
-    previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-    nextPlayback: RoomSnapshot["room"]["playback"];
-    activeSessionId: string | null | undefined;
-  }) => boolean;
   shouldAcceptIncomingPeerSignalRecoveryGeneration: (input: {
     payloadRecoveryGeneration: number | null | undefined;
     currentRecoveryGeneration: number | null;
@@ -502,7 +496,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       if (currentTrackId) {
         void retryTrackAvailability(currentTrackId);
       }
-      void input.ensureSourcePlaybackStartedRef.current();
     }
     void input.requestRoomSnapshotResyncRef.current("socket-connect", input.roomId);
   });
@@ -515,25 +508,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     });
     if (remoteTrackId) {
       requestTrackAvailabilityWithRetries(remoteTrackId);
-    }
-    const shouldKick = input.shouldKickSourcePlaybackFromRealtimeEvent({
-      previousPlayback,
-      nextPlayback,
-      activeSessionId: input.activeSessionRef.current?.userId
-    });
-    if (shouldKick) {
-      window.setTimeout(() => {
-        if (input.activeRouteRoomIdRef.current === input.roomId) {
-          const sourceTrackId = resolveSourceAvailabilityReannounceTrackId({
-            activeSessionId: input.activeSessionRef.current?.userId,
-            playback: nextPlayback
-          });
-          if (sourceTrackId) {
-            void retryTrackAvailability(sourceTrackId);
-          }
-          void input.ensureSourcePlaybackStartedRef.current();
-        }
-      }, 0);
     }
   };
 

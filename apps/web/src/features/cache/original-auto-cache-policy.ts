@@ -10,15 +10,18 @@ export type OriginalAutoCacheInputs = {
 };
 
 export function shouldStartOriginalAutoCache(input: OriginalAutoCacheInputs) {
-  const requiredStorage = Math.max(Math.ceil(input.originalSizeBytes * 1.2), 500 * 1024 * 1024);
+  const requiredStorage = Math.ceil(input.originalSizeBytes * 1.15) + 32 * 1024 * 1024;
+  const throughputHealthy = input.throughputKbps === null || input.throughputKbps >= 512;
+  const latencyHealthy = input.rttP95Ms === null || input.rttP95Ms < 750;
   return (
-    input.playbackBufferedMs >= 30_000 &&
-    input.completePlaybackProviderCount >= 2 &&
-    (input.throughputKbps ?? 0) >= 768 &&
-    (input.rttP95Ms ?? Number.POSITIVE_INFINITY) < 500 &&
-    input.playbackChannelBufferedBytes < 512 * 1024 &&
-    input.deadlineMissesLast30s === 0 &&
-    (input.availableStorageBytes ?? 0) >= requiredStorage
+    input.playbackBufferedMs >= 12_000 &&
+    input.completePlaybackProviderCount >= 1 &&
+    throughputHealthy &&
+    latencyHealthy &&
+    input.playbackChannelBufferedBytes < 1024 * 1024 &&
+    input.deadlineMissesLast30s <= 1 &&
+    input.availableStorageBytes !== null &&
+    input.availableStorageBytes >= requiredStorage
   );
 }
 
@@ -27,9 +30,9 @@ export function shouldPauseOriginalAutoCache(input: Pick<
   "playbackBufferedMs" | "throughputKbps" | "playbackChannelBufferedBytes" | "deadlineMissesLast30s"
 >) {
   return (
-    input.playbackBufferedMs < 20_000 ||
-    (input.throughputKbps ?? 0) < 384 ||
-    input.playbackChannelBufferedBytes >= 512 * 1024 ||
-    input.deadlineMissesLast30s > 0
+    input.playbackBufferedMs < 8_000 ||
+    (input.throughputKbps !== null && input.throughputKbps < 256) ||
+    input.playbackChannelBufferedBytes >= 1024 * 1024 ||
+    input.deadlineMissesLast30s > 1
   );
 }

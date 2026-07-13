@@ -396,6 +396,58 @@ export async function putVerifiedAssetUnit(input: {
   }
 }
 
+export async function putLocallyGeneratedAssetUnits(input: {
+  assetId: string;
+  units: Array<{ descriptor: AssetUnitDescriptor; payload: ArrayBuffer }>;
+  complete?: boolean;
+}) {
+  if (input.units.length === 0) return;
+  const manifestRecord = await musicRoomDatabase.assetManifests.get(input.assetId);
+  if (!manifestRecord) {
+    throw new Error("Asset manifest is missing for locally generated units.");
+  }
+  const now = new Date().toISOString();
+  const records = input.units.map(({ descriptor: rawDescriptor, payload }) => {
+    const descriptor = assetUnitDescriptorSchema.parse(rawDescriptor);
+    if (
+      descriptor.assetId !== input.assetId ||
+      descriptor.kind !== manifestRecord.kind ||
+      descriptor.unitIndex >= manifestRecord.manifest.unitCount ||
+      payload.byteLength !== descriptor.payloadBytes
+    ) {
+      throw new Error("Locally generated asset unit does not match its manifest.");
+    }
+    return {
+      ...descriptor,
+      unitId: assetUnitId(descriptor.assetId, descriptor.unitIndex),
+      payload,
+      lastAccessedAt: now,
+      protectedUntil: null
+    } satisfies AudioAssetUnitRecord;
+  });
+  await musicRoomDatabase.transaction(
+    "rw",
+    musicRoomDatabase.assetManifests,
+    musicRoomDatabase.assetUnits,
+    async () => {
+      await musicRoomDatabase.assetUnits.bulkPut(records);
+      if (input.complete) {
+        const unitCount = await musicRoomDatabase.assetUnits
+          .where("assetId")
+          .equals(input.assetId)
+          .count();
+        if (unitCount !== manifestRecord.manifest.unitCount) {
+          throw new Error("Locally generated asset is incomplete after persistence.");
+        }
+        await musicRoomDatabase.assetManifests.update(input.assetId, {
+          complete: true,
+          lastAccessedAt: now
+        });
+      }
+    }
+  );
+}
+
 export async function getAssetUnit(assetId: string, unitIndex: number) {
   const unitId = assetUnitId(assetId, unitIndex);
   const record = await musicRoomDatabase.assetUnits.get(unitId);

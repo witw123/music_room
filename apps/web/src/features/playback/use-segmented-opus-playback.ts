@@ -60,7 +60,7 @@ export function useSegmentedOpusPlayback(input: {
   const lastStorageEstimateAtRef = useRef(0);
   const originalAutoCacheActiveRef = useRef(false);
   const [state, setState] = useState<
-    "idle" | "awaiting-unlock" | "buffering" | "live" | "paused" | "unavailable"
+    "idle" | "awaiting-unlock" | "buffering" | "live" | "paused" | "unavailable" | "ended"
   >("idle");
   const [bufferedMs, setBufferedMs] = useState(0);
   const playbackAssetId = currentTrack?.playbackAsset?.assetId ?? null;
@@ -141,35 +141,35 @@ export function useSegmentedOpusPlayback(input: {
         if (wanted.length > 0) {
           if (providers.length === 0 && bufferMs < 6_000) {
             setState("unavailable");
-            return;
-          }
-          const currentUnit = playbackUnitIndexAt(currentPlaybackAsset, positionMs);
-          const criticalEnd = currentUnit + Math.ceil(10_000 / currentPlaybackAsset.segmentDurationMs);
-          const criticalWanted = bufferMs < 10_000
-            ? wanted.filter((unitIndex) => unitIndex <= criticalEnd)
-            : [];
-          const fillWanted = wanted.filter((unitIndex) => !criticalWanted.includes(unitIndex));
-          if (criticalWanted.length > 0) {
-            runtime.requestAssetUnits({
-              assetId: currentPlaybackAsset.assetId,
-              assetKind: "playback",
-              unitIndexes: criticalWanted,
-              totalUnits: currentPlaybackAsset.unitCount,
-              priority: "critical",
-              preferredPeerId: providers[0]?.ownerPeerId ?? null,
-              maxReplicas: 2
-            });
-          }
-          if (fillWanted.length > 0) {
-            runtime.requestAssetUnits({
-              assetId: currentPlaybackAsset.assetId,
-              assetKind: "playback",
-              unitIndexes: fillWanted,
-              totalUnits: currentPlaybackAsset.unitCount,
-              priority: "playback-fill",
-              preferredPeerId: providers[0]?.ownerPeerId ?? null,
-              maxReplicas: 1
-            });
+          } else {
+            const currentUnit = playbackUnitIndexAt(currentPlaybackAsset, positionMs);
+            const criticalEnd = currentUnit + Math.ceil(10_000 / currentPlaybackAsset.segmentDurationMs);
+            const criticalWanted = bufferMs < 10_000
+              ? wanted.filter((unitIndex) => unitIndex <= criticalEnd)
+              : [];
+            const fillWanted = wanted.filter((unitIndex) => !criticalWanted.includes(unitIndex));
+            if (criticalWanted.length > 0) {
+              runtime.requestAssetUnits({
+                assetId: currentPlaybackAsset.assetId,
+                assetKind: "playback",
+                unitIndexes: criticalWanted,
+                totalUnits: currentPlaybackAsset.unitCount,
+                priority: "critical",
+                preferredPeerId: providers[0]?.ownerPeerId ?? null,
+                maxReplicas: 2
+              });
+            }
+            if (fillWanted.length > 0) {
+              runtime.requestAssetUnits({
+                assetId: currentPlaybackAsset.assetId,
+                assetKind: "playback",
+                unitIndexes: fillWanted,
+                totalUnits: currentPlaybackAsset.unitCount,
+                priority: "playback-fill",
+                preferredPeerId: providers[0]?.ownerPeerId ?? null,
+                maxReplicas: 1
+              });
+            }
           }
         }
 

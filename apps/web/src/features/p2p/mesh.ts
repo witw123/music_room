@@ -254,24 +254,28 @@ export class P2PMesh {
     this.assetTransfers = new AssetTransferManager({
       sendControl: (peerId, message) => {
         const entry = this.peerLifecycle.getPeerEntry(peerId);
-        if (entry) {
-          this.enqueueSendItem(peerId, entry, {
-            data: JSON.stringify(message),
-            channel: "control",
-            priority: "control"
-          });
+        if (!entry) {
+          return false;
         }
+        this.enqueueSendItem(peerId, entry, {
+          data: JSON.stringify(message),
+          channel: "control",
+          priority: "control"
+        });
+        return true;
       },
       sendBinary: (peerId, kind, payload) => {
         const entry = this.peerLifecycle.getPeerEntry(peerId);
-        if (entry) {
-          this.enqueueSendItem(peerId, entry, {
-            data: payload,
-            channel: kind === "playback" ? "playback" : "original",
-            priority: kind === "playback" ? "critical" : "bulk",
-            payloadBytes: payload.byteLength
-          });
+        if (!entry) {
+          return false;
         }
+        this.enqueueSendItem(peerId, entry, {
+          data: payload,
+          channel: kind === "playback" ? "playback" : "original",
+          priority: kind === "playback" ? "critical" : "bulk",
+          payloadBytes: payload.byteLength
+        });
+        return true;
       },
       resolveLocalUnit: options.resolveLocalAssetUnit ?? (async () => null),
       persistInboundUnit:

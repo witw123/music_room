@@ -8,7 +8,6 @@ describe("roomPageStateReducer", () => {
   it("initializes browser visibility and default playback controls", () => {
     expect(createInitialRoomPageState({ documentHidden: true })).toMatchObject({
       activeDashboardTab: "queue",
-      activePlaybackSource: "progressive-local",
       audioUnlocked: false,
       bufferHealth: "healthy",
       connectedPeers: [],
@@ -21,7 +20,6 @@ describe("roomPageStateReducer", () => {
       mediaConnectedPeers: [],
       mediaConnectionState: "idle",
       playbackStartIntent: null,
-      progressiveFallbackReason: null,
       roomRecoveryState: {
         phase: "joining",
         mode: "steady",
@@ -98,19 +96,9 @@ describe("roomPageStateReducer", () => {
     });
   });
 
-  it("updates playback assembly and recovery state through the reducer", () => {
+  it("updates recovery state through the reducer", () => {
     const initial = createInitialRoomPageState({ documentHidden: false });
-    const withSource = roomPageStateReducer(initial, {
-      type: "set",
-      key: "activePlaybackSource",
-      value: "full-local"
-    });
-    const withFallback = roomPageStateReducer(withSource, {
-      type: "set",
-      key: "progressiveFallbackReason",
-      value: "buffer-underrun"
-    });
-    const withRecovery = roomPageStateReducer(withFallback, {
+    const withRecovery = roomPageStateReducer(initial, {
       type: "set",
       key: "roomRecoveryState",
       value: (current) => ({
@@ -121,8 +109,6 @@ describe("roomPageStateReducer", () => {
     });
 
     expect(withRecovery).toMatchObject({
-      activePlaybackSource: "full-local",
-      progressiveFallbackReason: "buffer-underrun",
       roomRecoveryState: {
         phase: "steady",
         fullLocalRecoveryActive: true

@@ -17,7 +17,7 @@ import {
   deleteAudioAsset,
   getAssetManifest,
   putAssetManifest,
-  putVerifiedAssetUnit,
+  putLocallyGeneratedAssetUnits,
   upsertTranscodeJob
 } from "@/lib/indexeddb";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
@@ -26,6 +26,7 @@ const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
+const persistenceBatchSize = 8;
 export { playbackEncoderVersion, playbackProfileId };
 export const maxDecodedPcmBytes = 256 * 1024 * 1024;
 
@@ -84,7 +85,13 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
-  const source = await prepareOriginalAsset(input);
+  const sourcePromise = prepareOriginalAsset(input);
+  const playbackPromise = preparePlaybackAsset({
+    ...input,
+    fileHash: sourcePromise.then((source) => source.fileHash)
+  });
+  void playbackPromise.catch(() => undefined);
+  const source = await sourcePromise;
   await upsertTranscodeJob({
     sourceFileHash: source.fileHash,
     kind: "playback-transcode",
@@ -95,10 +102,7 @@ export async function prepareAudioAssets(input: {
   });
 
   try {
-    const playback = await preparePlaybackAsset({
-      ...input,
-      fileHash: source.fileHash
-    });
+    const playback = await playbackPromise;
     const preexistingAssetIds = new Set(
       (
         await Promise.all([
@@ -183,7 +187,7 @@ async function prepareOriginalAsset(input: {
 
 async function preparePlaybackAsset(input: {
   file: File;
-  fileHash: string;
+  fileHash: string | Promise<string>;
   signal?: AbortSignal;
   onProgress?: (progress: AssetPreparationProgress) => void;
 }) {
@@ -203,46 +207,63 @@ async function preparePlaybackAsset(input: {
   const bitrate = channels === 1 ? 96_000 as const : 192_000 as const;
   const durationMs = Math.max(1, Math.round(audioBuffer.duration * 1000));
   const unitCount = Math.ceil(durationMs / segmentDurationMs);
-  const encoder = new OpusSegmentEncoder();
   const encodedUnits: Array<{
     payload: ArrayBuffer;
     descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
-  }> = [];
-  const leafHashes: string[] = [];
+  } | undefined> = new Array(unitCount);
+  const leafHashes: Array<string | undefined> = new Array(unitCount);
+  const concurrency = resolveEncodingConcurrency(unitCount);
+  const encoders = Array.from({ length: concurrency }, () => new OpusSegmentEncoder());
+  let nextUnitIndex = 0;
+  let completedUnits = 0;
 
   try {
-    for (let unitIndex = 0; unitIndex < unitCount; unitIndex += 1) {
-      throwIfAborted(input.signal);
-      const segment = slicePcmSegment(audioBuffer, unitIndex);
-      const payload = await encoder.encode({
-        sampleRate: audioBuffer.sampleRate,
-        channels: segment.channels,
-        bitrateKbps: channels === 1 ? 96 : 192
-      });
-      const contentHash = await hashAssetUnit(unitIndex, payload);
-      leafHashes.push(contentHash);
-      encodedUnits.push({
-        payload,
-        descriptor: {
-          kind: "playback",
-          unitIndex,
-          payloadBytes: payload.byteLength,
-          startMs: unitIndex * segmentDurationMs,
-          durationMs: Math.min(segmentDurationMs, durationMs - unitIndex * segmentDurationMs),
-          trimStartSamples: segment.trimStartSamples,
-          trimEndSamples: 0
-        }
-      });
-      input.onProgress?.({ stage: "encoding", completed: unitIndex + 1, total: unitCount });
-    }
+    await Promise.all(encoders.map(async (encoder) => {
+      while (true) {
+        const unitIndex = nextUnitIndex++;
+        if (unitIndex >= unitCount) return;
+        throwIfAborted(input.signal);
+        const segment = slicePcmSegment(audioBuffer, unitIndex);
+        const payload = await encoder.encode({
+          sampleRate: audioBuffer.sampleRate,
+          channels: segment.channels,
+          bitrateKbps: channels === 1 ? 96 : 192
+        });
+        const contentHash = await hashAssetUnit(unitIndex, payload);
+        leafHashes[unitIndex] = contentHash;
+        encodedUnits[unitIndex] = {
+          payload,
+          descriptor: {
+            kind: "playback",
+            unitIndex,
+            payloadBytes: payload.byteLength,
+            startMs: unitIndex * segmentDurationMs,
+            durationMs: Math.min(segmentDurationMs, durationMs - unitIndex * segmentDurationMs),
+            trimStartSamples: segment.trimStartSamples,
+            trimEndSamples: 0
+          }
+        };
+        completedUnits += 1;
+        input.onProgress?.({ stage: "encoding", completed: completedUnits, total: unitCount });
+      }
+    }));
   } finally {
-    encoder.dispose();
+    encoders.forEach((encoder) => encoder.dispose());
   }
 
-  const tree = await buildMerkleTree(leafHashes);
+  const completeLeafHashes = leafHashes.map((hash) => {
+    if (!hash) throw new Error("Playback encoding did not produce every segment hash.");
+    return hash;
+  });
+  const completeEncodedUnits = encodedUnits.map((unit) => {
+    if (!unit) throw new Error("Playback encoding did not produce every segment.");
+    return unit;
+  });
+  const tree = await buildMerkleTree(completeLeafHashes);
+  const fileHash = await input.fileHash;
   const manifestWithoutId = {
     kind: "playback" as const,
-    sourceFileHash: input.fileHash,
+    sourceFileHash: fileHash,
     profileId: playbackProfileId,
     codec: "opus" as const,
     container: "audio/ogg" as const,
@@ -260,7 +281,12 @@ async function preparePlaybackAsset(input: {
     ...manifestWithoutId,
     assetId: await computeAssetId(manifestWithoutId)
   });
-  return { playbackAsset, encodedUnits, leafHashes, proofs: tree.proofs };
+  return {
+    playbackAsset,
+    encodedUnits: completeEncodedUnits,
+    leafHashes: completeLeafHashes,
+    proofs: tree.proofs
+  };
 }
 
 async function persistOriginalAsset(
@@ -272,23 +298,34 @@ async function persistOriginalAsset(
   source: Awaited<ReturnType<typeof prepareOriginalAsset>>
 ) {
   await putAssetManifest(source.originalAsset);
-  for (let unitIndex = 0; unitIndex < source.originalAsset.unitCount; unitIndex += 1) {
-    throwIfAborted(input.signal);
-    const payload = await readFileUnit(input.file, unitIndex);
-    await putVerifiedAssetUnit({
-      descriptor: {
-        assetId: source.originalAsset.assetId,
-        kind: "original",
-        unitIndex,
-        payloadBytes: payload.byteLength,
-        contentHash: source.leafHashes[unitIndex]!,
-        proof: source.proofs[unitIndex]!
-      },
-      payload
+  for (let batchStart = 0; batchStart < source.originalAsset.unitCount; batchStart += persistenceBatchSize) {
+    const batchEnd = Math.min(source.originalAsset.unitCount, batchStart + persistenceBatchSize);
+    const units = await Promise.all(
+      Array.from({ length: batchEnd - batchStart }, async (_, offset) => {
+        const unitIndex = batchStart + offset;
+        throwIfAborted(input.signal);
+        const payload = await readFileUnit(input.file, unitIndex);
+        return {
+          descriptor: {
+            assetId: source.originalAsset.assetId,
+            kind: "original" as const,
+            unitIndex,
+            payloadBytes: payload.byteLength,
+            contentHash: source.leafHashes[unitIndex]!,
+            proof: source.proofs[unitIndex]!
+          },
+          payload
+        };
+      })
+    );
+    await putLocallyGeneratedAssetUnits({
+      assetId: source.originalAsset.assetId,
+      units,
+      complete: batchEnd === source.originalAsset.unitCount
     });
     input.onProgress?.({
       stage: "persisting-original",
-      completed: unitIndex + 1,
+      completed: batchEnd,
       total: source.originalAsset.unitCount
     });
   }
@@ -302,10 +339,9 @@ async function persistPlaybackAsset(
   playback: Awaited<ReturnType<typeof preparePlaybackAsset>>
 ) {
   await putAssetManifest(playback.playbackAsset);
-  for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
+  const units = playback.encodedUnits.map((unit, unitIndex) => {
     throwIfAborted(input.signal);
-    const unit = playback.encodedUnits[unitIndex]!;
-    await putVerifiedAssetUnit({
+    return {
       descriptor: {
         ...unit.descriptor,
         assetId: playback.playbackAsset.assetId,
@@ -313,13 +349,29 @@ async function persistPlaybackAsset(
         proof: playback.proofs[unitIndex]!
       },
       payload: unit.payload
-    });
+    };
+  });
+  await putLocallyGeneratedAssetUnits({
+    assetId: playback.playbackAsset.assetId,
+    units,
+    complete: true
+  });
+  for (let unitIndex = 0; unitIndex < playback.encodedUnits.length; unitIndex += 1) {
     input.onProgress?.({
       stage: "persisting-playback",
       completed: unitIndex + 1,
       total: playback.encodedUnits.length
     });
   }
+}
+
+export function resolveEncodingConcurrency(unitCount: number, hardwareConcurrency =
+  typeof navigator === "undefined" ? 2 : navigator.hardwareConcurrency) {
+  if (!Number.isFinite(unitCount) || unitCount <= 0) return 1;
+  const availableWorkers = Number.isFinite(hardwareConcurrency)
+    ? Math.max(1, Math.floor(hardwareConcurrency) - 1)
+    : 2;
+  return Math.min(unitCount, 4, availableWorkers);
 }
 
 export function estimateDecodedPcmBytes(input: {

@@ -1,6 +1,5 @@
 import { memo, useEffect, useState } from "react";
 import type {
-  AuthSession,
   RoomMediaConnectionState,
   RoomMember,
   RoomSnapshot,
@@ -11,20 +10,17 @@ import { formatDuration, getOnlineMemberCount } from "@/lib/music-room-ui";
 import type { RoomSocket } from "@/lib/ws-client";
 import { VinylAuraVisualizer } from "./VinylAuraVisualizer";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
 type RoomStageProps = {
   roomSnapshot: RoomSnapshot;
   currentTrack: TrackMeta | null;
   currentTrackDuration: number;
   isPlaying: boolean;
-  activeSession: AuthSession | null;
   host: RoomMember | undefined;
   canDeleteRoom: boolean;
   canDisbandRoom: boolean;
   currentSourceOwnerNickname: string | null;
   mediaConnectionState: RoomMediaConnectionState;
-  activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
   iceConfigSource: string;
   onCopyJoinCode: () => Promise<void>;
@@ -37,19 +33,14 @@ type RoomStageProps = {
 
 export function getSourceModeLabel(
   mediaConnectionState: RoomMediaConnectionState,
-  activePlaybackSource: ProgressivePlaybackSource,
-  isSourceOwner: boolean,
   currentTrack: TrackMeta | null
 ) {
   if (!currentTrack) {
     return "未选择歌曲";
   }
 
-  if (isSourceOwner) {
-    return "本机音源";
-  }
-  if (activePlaybackSource === "full-local" || activePlaybackSource === "lossless-local") {
-    return "完整缓存播放";
+  if (!currentTrack.playbackAsset) {
+    return "不支持的旧版曲目";
   }
   if (mediaConnectionState === "failed") {
     return "音源暂不可用";
@@ -58,8 +49,7 @@ export function getSourceModeLabel(
     return "正在连接音源";
   }
   if (mediaConnectionState === "buffering") return "正在缓冲";
-  if (activePlaybackSource === "progressive-local") return "边缓存边播放";
-  return "边缓存边播放";
+  return "分段 Opus 播放";
 }
 
 
@@ -69,13 +59,11 @@ function RoomStageBase({
   currentTrack,
   currentTrackDuration,
   isPlaying,
-  activeSession,
   host,
   canDeleteRoom,
   canDisbandRoom,
   currentSourceOwnerNickname,
   mediaConnectionState,
-  activePlaybackSource,
   onCopyJoinCode,
   onLeaveRoom,
   onDeleteRoom
@@ -85,13 +73,11 @@ function RoomStageBase({
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeletingRoom, setIsDeletingRoom] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const isSourceOwner =
-    !!activeSession && activeSession.userId === roomSnapshot.room.playback.sourceSessionId;
   const compactStage = viewportHeight !== null && viewportHeight < 900;
   const ultraCompactStage = viewportHeight !== null && viewportHeight < 760;
   const onlineMemberCount = getOnlineMemberCount(roomSnapshot.room.members);
 
-  const sourceModeLabel = getSourceModeLabel(mediaConnectionState, activePlaybackSource, isSourceOwner, currentTrack);
+  const sourceModeLabel = getSourceModeLabel(mediaConnectionState, currentTrack);
 
   const handleCopyJoinCode = async () => {
     if (isCopying) return;

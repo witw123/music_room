@@ -3,18 +3,15 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   type Dispatch,
   type MutableRefObject,
-  type RefObject,
   type SetStateAction
 } from "react";
 import type {
   AssetAvailabilityAnnouncement,
   AuthSession,
   IceConfigResponse,
-  RoomMediaConnectionState,
   RoomSnapshot,
   TrackAvailabilityAnnouncement
 } from "@music-room/shared";
@@ -22,31 +19,12 @@ import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
 import { ChunkScheduler } from "@/features/p2p";
 import type { P2PMesh } from "@/features/p2p";
-import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import { getRoomPlaybackClockNowMs } from "@/features/playback/room-playback-clock";
-import { syncLocalPlaybackWindow } from "@/features/playback/playback-sync";
-import {
-  getEffectivePlaybackPositionMs,
-  hasActivePlaybackIntent,
-  type ProgressivePlaybackSource,
-  type ProgressiveSchedulerPolicy
-} from "@/features/playback/progressive-playback";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import { musicRoomApi } from "@/lib/music-room-api";
-import { getPlaybackConsistencyVersion, toUserFacingError } from "@/lib/music-room-ui";
-import { enableManualTrackCaching, enableTrackCaching } from "@/features/cache/cache-policy";
-import { useRoomDiagnosticsBridge } from "./use-room-diagnostics-bridge";
-import {
-  buildManualCacheSchedulerAvailability,
-  useManualCacheDownloader,
-  type ManualCachePeerRequestWindow,
-  type ManualCacheRequestPriority,
-  type ManualCacheTrackPlan
-} from "./use-manual-cache-downloader";
-import { useRoomDataMesh } from "./use-room-data-mesh";
+import { toUserFacingError } from "@/lib/music-room-ui";
 import {
   getPieceTransferRates,
   useRoomRuntimeObservability
@@ -132,8 +110,6 @@ type UseRoomRuntimeInput = {
   setPeerId: Dispatch<SetStateAction<string>>;
   connectedPeers: string[];
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
-  mediaConnectedPeers: string[];
-  setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
   suppressRoomRecovery: boolean;
   setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
   setIsRecoveringRoom: Dispatch<SetStateAction<boolean>>;
@@ -143,32 +119,14 @@ type UseRoomRuntimeInput = {
   setIceConfig: Dispatch<SetStateAction<IceConfigResponse | null>>;
   iceConfigResolved: boolean;
   setIceConfigResolved: Dispatch<SetStateAction<boolean>>;
-  mediaConnectionState: RoomMediaConnectionState;
-  setMediaConnectionState: Dispatch<SetStateAction<RoomMediaConnectionState>>;
   isPageVisible: boolean;
   setIsPageVisible: Dispatch<SetStateAction<boolean>>;
   schedulerMode: "normal" | "conservative" | "idle";
   setSchedulerMode: Dispatch<SetStateAction<"normal" | "conservative" | "idle">>;
-  schedulerPlaybackBucketMs: number;
   bufferHealth: "healthy" | "low" | "critical";
-  transportGovernorMode: "bootstrap" | "segment-catchup" | "local-primary" | "emergency-fallback";
-  activePlaybackSource: ProgressivePlaybackSource;
-  progressiveSchedulerPolicy: ProgressiveSchedulerPolicy | null;
-  isCurrentSourceOwner: boolean;
-  hasFullLocalTrack: boolean;
   audioUnlocked: boolean;
-  getLocalPlaybackPositionMs?: () => number | null;
-  setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   roomRecoveryState: RoomRecoveryState;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  sourceStartState: "idle" | "awaiting-unlock" | "starting" | "live" | "failed";
-  setSourceStartState: Dispatch<
-    SetStateAction<"idle" | "awaiting-unlock" | "starting" | "live" | "failed">
-  >;
-  lastSourceStartError: string | null;
-  setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
-  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
-  availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
   queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
   queueAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
   clearAvailabilityForPeer: (ownerPeerId: string) => void;
@@ -180,8 +138,6 @@ type UseRoomRuntimeInput = {
   fullLocalPlaybackTracks: Record<string, SourceLocalPlaybackTrack>;
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
-  manualCacheTrackIds: string[];
-  startPlaybackDemandCacheDownload: (trackId: string) => void;
   announceRoomTrackAvailability: (
     trackId: string,
     options?: { force?: boolean }
@@ -193,10 +149,8 @@ type UseRoomRuntimeInput = {
     chunkSize: number;
     mimeType: string;
   }) => void;
-  handleManualCachePlan: (plan: ManualCacheTrackPlan) => void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
-  audioRef: RefObject<HTMLAudioElement | null>;
   socketRef: MutableRefObject<RoomSocket | null>;
   chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   resetPlayerSurface: () => void;
@@ -207,222 +161,11 @@ type UseRoomRuntimeInput = {
 };
 
 type UseRoomRuntimeResult = {
-  ensureSourcePlaybackStarted: () => Promise<void>;
   requestAssetUnits: (input: Parameters<P2PMesh["requestAssetUnits"]>[0]) => boolean;
   cancelAssetRequests: (assetId: string) => void;
 };
 
 type SourceLocalPlaybackTrack = Pick<UploadedTrack, "objectUrl">;
-type PlaybackCacheIdentity = {
-  currentTrackId: string | null | undefined;
-  status: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  sourcePeerId: string | null | undefined;
-  sourceSessionId: string | null | undefined;
-} & Partial<
-    Omit<
-      RoomSnapshot["room"]["playback"],
-      "currentTrackId" | "status" | "sourcePeerId" | "sourceSessionId"
-    >
-  >;
-
-function isPlaybackCacheSourceDevice(input: {
-  playback: PlaybackCacheIdentity | null | undefined;
-  peerId: string | null | undefined;
-  activeSessionId: string | null | undefined;
-}) {
-  const playback = input.playback;
-  if (!playback?.currentTrackId) {
-    return false;
-  }
-
-  if (input.peerId && playback.sourcePeerId) {
-    return playback.sourcePeerId === input.peerId;
-  }
-
-  return Boolean(input.activeSessionId && playback.sourceSessionId === input.activeSessionId);
-}
-
-export function shouldKickSourcePlaybackFromRealtimeEvent(input: {
-  previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined;
-  nextPlayback: RoomSnapshot["room"]["playback"];
-  activeSessionId: string | null | undefined;
-}) {
-  const { previousPlayback, nextPlayback, activeSessionId } = input;
-  if (!activeSessionId || nextPlayback.sourceSessionId !== activeSessionId) {
-    return false;
-  }
-  if (
-    previousPlayback &&
-    getPlaybackConsistencyVersion(nextPlayback) < getPlaybackConsistencyVersion(previousPlayback)
-  ) {
-    return false;
-  }
-  return (
-    previousPlayback?.currentTrackId !== nextPlayback.currentTrackId ||
-    previousPlayback?.status !== nextPlayback.status ||
-    previousPlayback?.mediaEpoch !== nextPlayback.mediaEpoch
-  );
-}
-
-export function shouldStartPlaybackDemandCacheForPlayback(input: {
-  playback: PlaybackCacheIdentity | null | undefined;
-  peerId: string | null | undefined;
-  activeSessionId: string | null | undefined;
-  manualCacheTrackIds: string[];
-  hasLocalFullTrack?: boolean;
-  enableManualTrackCaching: boolean;
-}) {
-  const playback = input.playback;
-  if (
-    !input.enableManualTrackCaching ||
-    !playback?.currentTrackId ||
-    (playback.status !== "playing" && playback.status !== "buffering") ||
-    input.hasLocalFullTrack === true
-  ) {
-    return false;
-  }
-
-  if (isPlaybackCacheSourceDevice({
-    playback,
-    peerId: input.peerId,
-    activeSessionId: input.activeSessionId
-  }) && input.hasLocalFullTrack !== false) {
-    return false;
-  }
-
-  return !input.manualCacheTrackIds.includes(playback.currentTrackId);
-}
-
-export function shouldWaitForSourceAudioElementTrack(input: {
-  playbackTrackId: string | null | undefined;
-  playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
-  activePlaybackSource: ProgressivePlaybackSource;
-  uploadedTrackObjectUrl: string | null | undefined;
-  isCurrentSourceOwner: boolean;
-  audioCurrentSrc: string | null | undefined;
-  audioSrcObjectPresent: boolean;
-}) {
-  if (
-    !input.playbackTrackId ||
-    input.playbackStatus !== "playing" ||
-    input.activePlaybackSource !== "full-local" ||
-    !input.uploadedTrackObjectUrl
-  ) {
-    return false;
-  }
-
-  return input.audioSrcObjectPresent || input.audioCurrentSrc !== input.uploadedTrackObjectUrl;
-}
-
-export function resolveSourceLocalPlaybackTrack(input: {
-  trackId: string | null | undefined;
-  uploadedTracks: Record<string, SourceLocalPlaybackTrack>;
-  fullLocalPlaybackTracks: Record<string, SourceLocalPlaybackTrack>;
-}) {
-  if (!input.trackId) {
-    return null;
-  }
-
-  return input.uploadedTracks[input.trackId] ?? input.fullLocalPlaybackTracks[input.trackId] ?? null;
-}
-
-export function resolveRuntimeManualCacheTrackIds(input: {
-  playback: PlaybackCacheIdentity | null | undefined;
-  peerId: string | null | undefined;
-  activeSessionId: string | null | undefined;
-  manualCacheTrackIds: string[];
-  hasLocalFullTrack: boolean;
-  enableManualTrackCaching: boolean;
-}) {
-  const trackIds = new Set(input.manualCacheTrackIds.filter(Boolean));
-  const playback = input.playback;
-  if (
-    input.enableManualTrackCaching &&
-    playback?.currentTrackId &&
-    (playback.status === "playing" || playback.status === "buffering")
-  ) {
-    trackIds.add(playback.currentTrackId);
-  }
-
-  return [...trackIds].sort();
-}
-
-export function buildActivePlaybackCacheWindow(input: {
-  playback: RoomSnapshot["room"]["playback"] | null | undefined;
-  positionMs: number | null | undefined;
-  policy: ProgressiveSchedulerPolicy | null | undefined;
-}) {
-  const playback = input.playback;
-  if (
-    !playback?.currentTrackId ||
-    !hasActivePlaybackIntent(playback) ||
-    !input.policy
-  ) {
-    return null;
-  }
-
-  return {
-    trackId: playback.currentTrackId,
-    positionMs:
-      typeof input.positionMs === "number" && Number.isFinite(input.positionMs)
-        ? Math.max(0, input.positionMs)
-        : Math.max(0, playback.positionMs),
-    revision: playback.playbackRevision ?? playback.queueVersion,
-    mediaEpoch: playback.mediaEpoch,
-    status: playback.status,
-    policy: input.policy
-  };
-}
-
-export function resolveActivePlaybackCacheWindowPosition(input: {
-  localPlaybackPositionMs: number | null | undefined;
-  mediaConnectionState?: RoomMediaConnectionState | null | undefined;
-  playback: RoomSnapshot["room"]["playback"] | null | undefined;
-  durationMs: number;
-  schedulerPlaybackBucketMs: number;
-  now?: number;
-}) {
-  if (
-    typeof input.localPlaybackPositionMs === "number" &&
-    Number.isFinite(input.localPlaybackPositionMs)
-  ) {
-    return Math.max(0, input.localPlaybackPositionMs);
-  }
-
-  if (input.playback?.currentTrackId) {
-    return getEffectivePlaybackPositionMs(
-      input.playback,
-      input.durationMs,
-      input.now ?? getRoomPlaybackClockNowMs()
-    );
-  }
-
-  return Math.max(0, input.schedulerPlaybackBucketMs);
-}
-
-export function buildManualCachePendingPieceClearer(
-  clearPendingPieceRef: MutableRefObject<(trackId: string, chunkIndex: number) => void>
-) {
-  return (trackId: string, chunkIndex: number) => {
-    clearPendingPieceRef.current(trackId, chunkIndex);
-  };
-}
-
-export function buildManualCachePendingPieceDeferrer(
-  deferPendingPieceRef: MutableRefObject<(
-    trackId: string,
-    chunkIndex: number,
-    options: { delayMs: number; providerPeerId?: string }
-  ) => void>
-) {
-  return (
-    trackId: string,
-    chunkIndex: number,
-    options: { delayMs: number; providerPeerId?: string }
-  ) => {
-    deferPendingPieceRef.current(trackId, chunkIndex, options);
-  };
-}
 
 export function shouldStartRoomRealtimeRuntime(input: {
   roomId: string | null | undefined;
@@ -473,8 +216,6 @@ export function useRoomRuntime({
   setPeerId,
   connectedPeers,
   setConnectedPeers,
-  mediaConnectedPeers,
-  setMediaConnectedPeers,
   suppressRoomRecovery,
   setSuppressRoomRecovery,
   setIsRecoveringRoom,
@@ -484,28 +225,13 @@ export function useRoomRuntime({
   setIceConfig,
   iceConfigResolved,
   setIceConfigResolved,
-  mediaConnectionState,
-  setMediaConnectionState,
   isPageVisible,
   setIsPageVisible,
   setSchedulerMode,
-  schedulerPlaybackBucketMs,
   bufferHealth,
-  activePlaybackSource,
-  progressiveSchedulerPolicy,
-  isCurrentSourceOwner,
-  hasFullLocalTrack,
   audioUnlocked,
-  getLocalPlaybackPositionMs,
-  setAudioUnlocked,
   roomRecoveryState,
   setRoomRecoveryState,
-  sourceStartState,
-  setSourceStartState,
-  lastSourceStartError,
-  setLastSourceStartError,
-  availabilityByTrack,
-  availabilityByAsset,
   queueAvailability,
   queueAssetAvailability,
   clearAvailabilityForPeer,
@@ -517,14 +243,10 @@ export function useRoomRuntime({
   fullLocalPlaybackTracks,
   uploadedTrackIds,
   uploadedTrackIdsRef,
-  manualCacheTrackIds,
-  startPlaybackDemandCacheDownload,
   announceRoomTrackAvailability,
   handleManualCachePieceReceived,
-  handleManualCachePlan,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
-  audioRef,
   socketRef,
   chunkSchedulerRef,
   resetPlayerSurface,
@@ -533,18 +255,9 @@ export function useRoomRuntime({
   refreshAvailableRooms,
   refreshPlaylists
 }: UseRoomRuntimeInput): UseRoomRuntimeResult {
-  void mediaConnectedPeers;
-  void setMediaConnectedPeers;
-  void mediaConnectionState;
-  void availabilityByAsset;
-
   const roomPlayback = roomSnapshot?.room.playback ?? null;
   const roomPlaybackCurrentTrackId = roomPlayback?.currentTrackId ?? null;
   const roomPlaybackStatus = roomPlayback?.status ?? null;
-  const roomPlaybackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
-  const roomPlaybackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
-  const roomPlaybackRef = useRef(roomPlayback);
-  roomPlaybackRef.current = roomPlayback;
   const realtimeRuntimeStateRef = useRef({
     playbackStatus: roomPlaybackStatus,
     currentTrackId: roomPlaybackCurrentTrackId,
@@ -559,45 +272,6 @@ export function useRoomRuntime({
     isPageVisible,
     audioUnlocked
   };
-  const roomTracksRef = useRef(roomSnapshot?.tracks ?? null);
-  roomTracksRef.current = roomSnapshot?.tracks ?? null;
-  const roomPlaybackCacheIdentity = useMemo<PlaybackCacheIdentity | null>(
-    () =>
-      roomPlaybackCurrentTrackId
-        ? {
-            currentTrackId: roomPlaybackCurrentTrackId,
-            status: roomPlaybackStatus,
-            sourcePeerId: roomPlaybackSourcePeerId,
-            sourceSessionId: roomPlaybackSourceSessionId
-          }
-        : null,
-    [
-      roomPlaybackCurrentTrackId,
-      roomPlaybackSourcePeerId,
-      roomPlaybackSourceSessionId,
-      roomPlaybackStatus
-    ]
-  );
-
-  const runtimeManualCacheTrackIds = useMemo(
-    () =>
-      resolveRuntimeManualCacheTrackIds({
-        playback: roomPlaybackCacheIdentity,
-        peerId,
-        activeSessionId: activeSession?.userId,
-        manualCacheTrackIds,
-        hasLocalFullTrack: hasFullLocalTrack,
-        enableManualTrackCaching
-      }),
-    [
-      activeSession?.userId,
-      hasFullLocalTrack,
-      manualCacheTrackIds,
-      peerId,
-      roomPlaybackCacheIdentity
-    ]
-  );
-
   const {
     meshRef,
     initialRecoveryAttemptRef,
@@ -606,7 +280,6 @@ export function useRoomRuntime({
     socketDisconnectGraceUntilRef,
     resubscribeRoomRef,
     recoveryGenerationRef,
-    activePlaybackSourceRef,
     lastSubscribeAckAtRef,
     recoveryModeRef,
     lastRealtimeRoomEventAtRef,
@@ -626,8 +299,7 @@ export function useRoomRuntime({
     clearAvailabilityForAssetRef,
     flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
-    clearSocketDisconnectGrace,
-    updateSourceStartState
+    clearSocketDisconnectGrace
   } = useRoomRuntimeMutableState({
     initialRoomId,
     roomSnapshot,
@@ -638,14 +310,7 @@ export function useRoomRuntime({
     uploadedTrackIds,
     uploadedTrackIdsRef,
     roomRecoveryState,
-    activePlaybackSource,
-    audioUnlocked,
-    setAudioUnlocked,
-    sourceStartState,
-    setSourceStartState,
-    lastSourceStartError,
-    setLastSourceStartError,
-    manualCacheTrackIds: runtimeManualCacheTrackIds,
+    manualCacheTrackIds: [],
     uploadedTracks,
     fullLocalPlaybackTracks,
     announceRoomTrackAvailability,
@@ -660,72 +325,9 @@ export function useRoomRuntime({
     clearAvailabilityForAsset,
     flushPendingAvailability,
     recordPeerDiagnostic,
-    enableTrackCaching
+    enableTrackCaching: false
   });
 
-  const emitRuntimeEvent = useRoomDiagnosticsBridge({
-    recordPeerDiagnostic,
-    setStatusMessage
-  });
-  const dataMeshBridge = useRoomDataMesh({ meshRef });
-  const schedulerAvailabilityByTrack = useMemo(
-    () => {
-      if (runtimeManualCacheTrackIds.length === 0) {
-        return availabilityByTrack;
-      }
-
-      const correctedAvailability = buildManualCacheSchedulerAvailability({
-        availabilityByTrack,
-        manualCacheTrackIds: runtimeManualCacheTrackIds,
-        roomSnapshot,
-        localPeerId: peerId
-      });
-      const nextAvailability = { ...availabilityByTrack };
-      for (const trackId of runtimeManualCacheTrackIds) {
-        if (correctedAvailability[trackId]) {
-          nextAvailability[trackId] = correctedAvailability[trackId];
-        } else {
-          delete nextAvailability[trackId];
-        }
-      }
-      return nextAvailability;
-    },
-    [availabilityByTrack, peerId, roomSnapshot, runtimeManualCacheTrackIds]
-  );
-  useEffect(() => {
-    if (!dataMeshBridge) {
-      return;
-    }
-
-    for (const [trackId, providersByPeer] of Object.entries(schedulerAvailabilityByTrack)) {
-      for (const announcement of Object.values(providersByPeer)) {
-        dataMeshBridge.updateCacheStreamProvider?.({
-          peerId: announcement.ownerPeerId,
-          trackId,
-          connected: connectedPeers.includes(announcement.ownerPeerId),
-          availableRanges: announcement.availableRanges,
-          availableChunks: announcement.availableChunks
-        });
-      }
-    }
-  }, [connectedPeers, dataMeshBridge, schedulerAvailabilityByTrack]);
-  const activePlaybackTrackDurationMs =
-    roomTracksRef.current?.find((track) => track.id === roomPlaybackCurrentTrackId)?.durationMs ??
-    0;
-  const activePlaybackCacheWindow = buildActivePlaybackCacheWindow({
-    playback: roomPlayback,
-    positionMs: resolveActivePlaybackCacheWindowPosition({
-      localPlaybackPositionMs:
-        typeof getLocalPlaybackPositionMs === "function"
-          ? getLocalPlaybackPositionMs()
-          : null,
-      mediaConnectionState,
-      playback: roomPlayback,
-      durationMs: activePlaybackTrackDurationMs,
-      schedulerPlaybackBucketMs
-    }),
-    policy: progressiveSchedulerPolicy
-  });
   const {
     connectionSupervisorStatesRef,
     updateConnectionSupervisorSignalState,
@@ -734,7 +336,6 @@ export function useRoomRuntime({
   } = useRoomConnectionSupervisor({ lastSubscribeAckAtRef });
   const {
     pieceTransferRatesRef,
-    peerBufferedAmountBytesRef,
     updateDataTransportStatsRef,
     recordPieceTransferRef,
     recordPieceRequestSampleRef,
@@ -752,46 +353,6 @@ export function useRoomRuntime({
   } = useRoomPlaybackConnectionCoordinator({
     currentRoomRef
   });
-  const resolveManualCachePeerRequestWindow = useCallback(
-    (
-      remotePeerId: string,
-      _trackId: string,
-      _priority: ManualCacheRequestPriority
-    ): ManualCachePeerRequestWindow => {
-      const supervisorState =
-        connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
-      const latestTransportSample =
-        supervisorState?.samples[supervisorState.samples.length - 1] ?? null;
-      const pieceTransferRates = getPieceTransferRates(
-        pieceTransferRatesRef.current,
-        remotePeerId
-      );
-      return {
-        currentRoundTripTimeMs: getPeerMedianRttMs(supervisorState),
-        incomingRateKbps:
-          latestTransportSample?.transportReceiveBitrateKbps ?? pieceTransferRates.downloadRateKbps,
-        outgoingRateKbps:
-          latestTransportSample?.transportSendBitrateKbps ?? null,
-        transportReceiveBitrateKbps: latestTransportSample?.transportReceiveBitrateKbps ?? null,
-        transportSendBitrateKbps: latestTransportSample?.transportSendBitrateKbps ?? null,
-        availableOutgoingBitrateKbps: latestTransportSample?.availableOutgoingBitrateKbps ?? null,
-        downloadRateKbps: pieceTransferRates.downloadRateKbps,
-        uploadRateKbps: pieceTransferRates.uploadRateKbps,
-        candidateType:
-          latestTransportSample?.candidateType ?? supervisorState?.lastObservedTransportKind ?? null,
-        protocol:
-          latestTransportSample?.relayProtocol ?? latestTransportSample?.protocol ?? null,
-        transportScore: supervisorState?.transportScore ?? null,
-        bufferedAmountBytes: peerBufferedAmountBytesRef.current.get(remotePeerId) ?? null
-      };
-    },
-    [
-      connectionSupervisorStatesRef,
-      peerBufferedAmountBytesRef,
-      pieceTransferRatesRef
-    ]
-  );
-
   const roomSnapshotResyncController = useRef(
     createRoomSnapshotResyncController({
       loadSnapshot: (roomId) => musicRoomApi.getRoom(roomId),
@@ -870,116 +431,10 @@ export function useRoomRuntime({
     ]
   );
 
-  const ensureSourcePlaybackStarted = useCallback(async () => {
-    const playback = currentRoomRef.current?.room.playback ?? roomPlaybackRef.current;
-    if (!playback?.currentTrackId || playback.status !== "playing") {
-      updateSourceStartState("idle", { recordEvent: false });
-      return;
-    }
-
-    // Entering a room should not force local audio output until the user
-    // unlocks playback (explicit play click or previous activation).
-    if (!roomAudioOutput.isActivated()) {
-      updateSourceStartState("awaiting-unlock", {
-        summary: "等待用户解锁本地音频播放",
-        level: "warning",
-        recordEvent: false
-      });
-      return;
-    }
-
-    const roomTrack =
-      currentRoomRef.current?.tracks.find((track) => track.id === playback.currentTrackId) ??
-      roomTracksRef.current?.find((track) => track.id === playback.currentTrackId) ??
-      null;
-    if (roomTrack?.playbackAsset) {
-      audioRef.current?.pause();
-      updateSourceStartState("live", {
-        summary: "分段 Opus 播放已接管房间输出",
-        recordEvent: false
-      });
-      return;
-    }
-
-    const audio = audioRef.current;
-    if (!audio) {
-      updateSourceStartState("failed", {
-        error: "missing-audio-element",
-        summary: "本地音频元素不可用",
-        level: "error"
-      });
-      return;
-    }
-
-    try {
-      const sourceLocalTrack = resolveSourceLocalPlaybackTrack({
-        trackId: playback.currentTrackId,
-        uploadedTracks: uploadedTracksRef.current,
-        fullLocalPlaybackTracks
-      });
-      if (
-        shouldWaitForSourceAudioElementTrack({
-          playbackTrackId: playback.currentTrackId,
-          playbackStatus: playback.status,
-          activePlaybackSource: activePlaybackSourceRef.current,
-          uploadedTrackObjectUrl: sourceLocalTrack?.objectUrl,
-          isCurrentSourceOwner,
-          audioCurrentSrc: audio.currentSrc || audio.src || null,
-          audioSrcObjectPresent: !!audio.srcObject
-        }) &&
-        sourceLocalTrack
-      ) {
-        audio.pause();
-        audio.srcObject = null;
-        if (audio.src !== sourceLocalTrack.objectUrl) {
-          audio.src = sourceLocalTrack.objectUrl;
-          audio.load();
-        }
-        const track =
-          currentRoomRef.current?.tracks.find((entry) => entry.id === playback.currentTrackId) ??
-          roomTracksRef.current?.find((entry) => entry.id === playback.currentTrackId) ??
-          null;
-        const expectedSeconds =
-          getEffectivePlaybackPositionMs(playback, track?.durationMs ?? 0) / 1000;
-        syncLocalPlaybackWindow(audio, expectedSeconds, true, {
-          softDriftMs: 90,
-          hardDriftMs: 720,
-          correctionMode: "audible-local-follow"
-        });
-      }
-      audio.muted = false;
-      await roomAudioOutput.playElement(audio);
-      updateSourceStartState("live", {
-        summary: "本地缓存播放已启动",
-        recordEvent: false
-      });
-    } catch (error) {
-      updateSourceStartState("awaiting-unlock", {
-        error: toUserFacingError(error),
-        summary: "等待用户解锁本地音频播放",
-        level: "warning"
-      });
-    }
-  }, [
-    activePlaybackSourceRef,
-    audioRef,
-    currentRoomRef,
-    roomPlaybackRef,
-    roomTracksRef,
-    updateSourceStartState,
-    uploadedTracksRef,
-    fullLocalPlaybackTracks,
-    isCurrentSourceOwner
-  ]);
-
   const requestRoomSnapshotResyncRef = useRef(requestRoomSnapshotResync);
-  const ensureSourcePlaybackStartedRef = useRef(ensureSourcePlaybackStarted);
   useEffect(() => {
     requestRoomSnapshotResyncRef.current = requestRoomSnapshotResync;
   }, [requestRoomSnapshotResync]);
-  useEffect(() => {
-    ensureSourcePlaybackStartedRef.current = ensureSourcePlaybackStarted;
-  }, [ensureSourcePlaybackStarted]);
 
   const queuePlaybackRecoveryRecommendation = useCallback(
     (recommendation: Parameters<typeof noteRecoveryRecommendation>[0]) => {
@@ -1033,8 +488,8 @@ export function useRoomRuntime({
     peerId,
     socketRef,
     isNavigatingRoomExit,
-    enableManualTrackCaching,
-    enableTrackCaching,
+    enableManualTrackCaching: false,
+    enableTrackCaching: false,
     roomListenerSetHash: roomSnapshot?.room.members.map((member) => member.peerId ?? member.id).sort().join("|") ?? "",
     uploadedTrackIds,
     connectedPeers,
@@ -1088,68 +543,9 @@ export function useRoomRuntime({
     setStatusMessage
   });
 
-  const manualCacheDownloader = useManualCacheDownloader({
-    enableManualTrackCaching,
-    manualCacheTrackIds: runtimeManualCacheTrackIds,
-    roomSnapshot,
-    availabilityByTrack,
-    peerId,
-    connectedPeers,
-    dataMesh: dataMeshBridge,
-    activePlaybackWindow: activePlaybackCacheWindow,
-    onRuntimeEvent: emitRuntimeEvent,
-    onManualCachePlan: handleManualCachePlan,
-    resolvePeerRequestWindow: resolveManualCachePeerRequestWindow
-  });
-  const clearManualCachePendingPieceRef = useRef(manualCacheDownloader.clearPendingPiece);
-  useEffect(() => {
-    clearManualCachePendingPieceRef.current = manualCacheDownloader.clearPendingPiece;
-  }, [manualCacheDownloader.clearPendingPiece]);
-  const clearManualCachePendingPiece = useMemo(
-    () => buildManualCachePendingPieceClearer(clearManualCachePendingPieceRef),
-    []
-  );
-  const clearManualCachePendingPiecesRef = useRef(manualCacheDownloader.clearPendingPieces);
-  useEffect(() => {
-    clearManualCachePendingPiecesRef.current = manualCacheDownloader.clearPendingPieces;
-  }, [manualCacheDownloader.clearPendingPieces]);
-  const clearManualCachePendingPieces = useMemo(
-    () => () => clearManualCachePendingPiecesRef.current(),
-    []
-  );
-  const deferManualCachePendingPieceRef = useRef(manualCacheDownloader.deferPendingPiece);
-  useEffect(() => {
-    deferManualCachePendingPieceRef.current = manualCacheDownloader.deferPendingPiece;
-  }, [manualCacheDownloader.deferPendingPiece]);
-  const deferManualCachePendingPiece = useMemo(
-    () => buildManualCachePendingPieceDeferrer(deferManualCachePendingPieceRef),
-    []
-  );
-
-  useEffect(() => {
-    const playback = roomPlaybackCacheIdentity;
-    if (
-      !shouldStartPlaybackDemandCacheForPlayback({
-        playback,
-        peerId,
-        activeSessionId: activeSession?.userId,
-        manualCacheTrackIds,
-        hasLocalFullTrack: hasFullLocalTrack,
-        enableManualTrackCaching
-      })
-    ) {
-      return;
-    }
-
-    void startPlaybackDemandCacheDownload(playback!.currentTrackId!);
-  }, [
-    activeSession?.userId,
-    hasFullLocalTrack,
-    manualCacheTrackIds,
-    peerId,
-    roomPlaybackCacheIdentity,
-    startPlaybackDemandCacheDownload
-  ]);
+  const clearManualCachePendingPiece = useCallback(() => undefined, []);
+  const clearManualCachePendingPieces = useCallback(() => undefined, []);
+  const deferManualCachePendingPiece = useCallback(() => undefined, []);
 
   useEffect(() => {
     if (!statusMessage) {
@@ -1215,14 +611,13 @@ export function useRoomRuntime({
       playbackStatus: realtimeRuntimeState.playbackStatus ?? "paused",
       currentTrackId: realtimeRuntimeState.currentTrackId,
       bufferHealth: realtimeRuntimeState.bufferHealth,
-      enableManualTrackCaching,
-      enableTrackCaching,
+      enableManualTrackCaching: false,
+      enableTrackCaching: false,
       queuePlaybackRecoveryRecommendation,
       resubscribeRoomRef,
       activeSessionRef,
       activeRouteRoomIdRef,
       requestRoomSnapshotResyncRef,
-      ensureSourcePlaybackStartedRef,
       queueAvailabilityRef,
       queueAssetAvailabilityRef,
       clearAvailabilityForPeerRef,
@@ -1246,7 +641,6 @@ export function useRoomRuntime({
       emitPresence,
       startPresenceHeartbeat,
       exitCurrentRoom,
-      shouldKickSourcePlaybackFromRealtimeEvent,
       shouldAcceptIncomingPeerSignalRecoveryGeneration
     });
   }, [
@@ -1324,16 +718,6 @@ export function useRoomRuntime({
   ]);
 
   useEffect(() => {
-    setMediaConnectionState(
-      roomPlaybackCurrentTrackId
-        ? bufferHealth === "critical"
-          ? "buffering"
-          : "live"
-        : "idle"
-    );
-  }, [bufferHealth, roomPlaybackCurrentTrackId, setMediaConnectionState]);
-
-  useEffect(() => {
     updateConnectionSupervisorPlayout();
     lastDataActivityAtRef.current = Date.now();
   }, [lastDataActivityAtRef, updateConnectionSupervisorPlayout, connectedPeers.length]);
@@ -1349,7 +733,6 @@ export function useRoomRuntime({
   );
 
   return {
-    ensureSourcePlaybackStarted,
     requestAssetUnits,
     cancelAssetRequests
   };

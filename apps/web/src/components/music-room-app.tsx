@@ -5,13 +5,11 @@ import { useAvailabilityAnnouncements, usePeerDiagnostics } from "@/features/p2p
 import { RoomAppShell } from "@/components/room/RoomAppShell";
 import { useRouter } from "next/navigation";
 import { useSessionIdentity } from "@/features/session/use-session-identity";
-import { useProgressiveRuntime } from "@/features/playback/use-progressive-runtime";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import { useTrackUploads } from "@/features/upload/use-track-uploads";
 import { useRoomRuntime } from "@/features/room/hooks/use-room-runtime";
 import { initialRoomStateStore, roomStateReducer } from "@/features/room/room-state-reducer";
-import { useCurrentProgressiveEngineTypeForSource, useRoomPageDerived } from "@/components/room/hooks/use-room-page-derived";
-import { useRoomCachedFullLocalPlayback } from "@/components/room/hooks/use-room-cached-full-local-playback";
+import { useRoomPageDerived } from "@/components/room/hooks/use-room-page-derived";
 import { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
 import { useRoomCacheTrackCleanup } from "@/components/room/hooks/use-room-cache-track-cleanup";
 import { useRoomPlaybackEffects } from "@/components/room/hooks/use-room-playback-effects";
@@ -106,53 +104,6 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     emitAssetAvailability: stableEmitAssetAvailability
   });
 
-  const legacyCurrentTrack = pageDerived.currentTrack?.playbackAsset ? null : pageDerived.currentTrack;
-
-  const cachedPlayback = useRoomCachedFullLocalPlayback({
-    uploadedTracks: uploads.uploadedTracks,
-    cacheLibraryTracks: uploads.cacheLibraryTracks,
-    loadCachedLibraryTrackFile: uploads.loadCachedLibraryTrackFile,
-    roomSnapshot,
-    currentTrack: legacyCurrentTrack,
-    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
-    onCachedFullLocalPlaybackLoadMiss: uploads.startPlaybackDemandCacheDownload
-  });
-
-  const currentProgressiveEngineTypeForSource = useCurrentProgressiveEngineTypeForSource({
-    currentTrack: legacyCurrentTrack,
-    availabilityByTrack,
-    peerId
-  });
-
-  const progressiveRuntime = useProgressiveRuntime({
-      audioRef: appRefs.audioRef,
-      roomSnapshot,
-      currentTrack: legacyCurrentTrack,
-      peerId,
-      availabilityByTrack,
-      uploadedTracks: uploads.uploadedTracks,
-      fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
-      isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
-      activePlaybackSource: pageState.activePlaybackSource,
-      setActivePlaybackSource: pageState.setActivePlaybackSource,
-      progressiveFallbackReason: pageState.progressiveFallbackReason,
-      setProgressiveFallbackReason: pageState.setProgressiveFallbackReason,
-      playbackStartIntent: pageState.playbackStartIntent,
-      setPlaybackStartIntent: pageState.setPlaybackStartIntent,
-      audioUnlocked: pageState.audioUnlocked,
-      setAudioUnlocked: pageState.setAudioUnlocked,
-      roomRecoveryState: pageState.roomRecoveryState,
-      isPageVisible: pageState.isPageVisible,
-      volume: pageState.volume,
-      connectedPeersCount: pageState.connectedPeers.length,
-      mediaConnectedPeersCount: pageState.mediaConnectedPeers.length,
-      peerDiagnostics,
-      recordPeerDiagnostic,
-      setStatusMessage,
-      setSchedulerMode: pageState.setSchedulerMode,
-      setBufferHealth: pageState.setBufferHealth,
-      setMediaConnectionState: pageState.setMediaConnectionState
-  });
   const clearLocalCacheTrackRuntime = useRoomCacheTrackCleanup({ meshRef: appRefs.meshRef, socketRef: appRefs.socketRef, roomId: roomSnapshot?.room.id, peerId, clearAvailabilityForTrack });
   const roomActions = useRoomPageRoomActions({
     workspaceOnly,
@@ -166,15 +117,12 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
     deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
     clearCacheStreamTrack: clearLocalCacheTrackRuntime,
-    destroyProgressiveRuntime: progressiveRuntime.destroyProgressiveRuntime,
     dispatchRoomStateEvent,
     peerId,
     peerStorageKey,
-    playbackSourceInitializationKeyRef: appRefs.playbackSourceInitializationKeyRef,
     resetAvailabilityState,
     resetPeerDiagnostics,
     roomSnapshot,
-    setActivePlaybackSource: pageState.setActivePlaybackSource,
     setAvailableRooms: pageState.setAvailableRooms,
     setBufferHealth: pageState.setBufferHealth,
     setIsNavigatingRoomExit: pageState.setIsNavigatingRoomExit,
@@ -184,7 +132,6 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setPlaybackStartIntent: pageState.setPlaybackStartIntent,
     setPlayerResetEpoch: pageState.setPlayerResetEpoch,
     setPlaylists: pageState.setPlaylists,
-    setProgressiveFallbackReason: pageState.setProgressiveFallbackReason,
     setRoomRecoveryState: pageState.setRoomRecoveryState,
     setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
     setStatusMessage,
@@ -210,8 +157,6 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setPeerId,
     connectedPeers: pageState.connectedPeers,
     setConnectedPeers: pageState.setConnectedPeers,
-    mediaConnectedPeers: pageState.mediaConnectedPeers,
-    setMediaConnectedPeers: pageState.setMediaConnectedPeers,
     suppressRoomRecovery: pageState.suppressRoomRecovery,
     setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
     setIsRecoveringRoom: pageState.setIsRecoveringRoom,
@@ -221,30 +166,14 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setIceConfig: pageState.setIceConfig,
     iceConfigResolved: pageState.iceConfigResolved,
     setIceConfigResolved: pageState.setIceConfigResolved,
-    mediaConnectionState: pageState.mediaConnectionState,
-    setMediaConnectionState: pageState.setMediaConnectionState,
     isPageVisible: pageState.isPageVisible,
     setIsPageVisible: pageState.setIsPageVisible,
     schedulerMode: pageState.schedulerMode,
     setSchedulerMode: pageState.setSchedulerMode,
-    schedulerPlaybackBucketMs: pageState.schedulerPlaybackBucketMs,
     bufferHealth: pageState.bufferHealth,
-    transportGovernorMode: progressiveRuntime.transportGovernorMode,
-    activePlaybackSource: pageState.activePlaybackSource,
-    progressiveSchedulerPolicy: progressiveRuntime.progressiveSchedulerPolicy,
-    isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
-    hasFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,
     audioUnlocked: pageState.audioUnlocked,
-    getLocalPlaybackPositionMs: progressiveRuntime.getLocalPlaybackPositionMs,
-    setAudioUnlocked: pageState.setAudioUnlocked,
     roomRecoveryState: pageState.roomRecoveryState,
     setRoomRecoveryState: pageState.setRoomRecoveryState,
-    sourceStartState: pageState.sourceStartState,
-    setSourceStartState: pageState.setSourceStartState,
-    lastSourceStartError: pageState.lastSourceStartError,
-    setLastSourceStartError: pageState.setLastSourceStartError,
-    availabilityByTrack,
-    availabilityByAsset,
     queueAvailability,
     queueAssetAvailability: mergeAssetAvailability,
     clearAvailabilityForPeer,
@@ -253,17 +182,13 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     flushPendingAvailability,
     recordPeerDiagnostic,
     uploadedTracks: uploads.uploadedTracks,
-    fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
+    fullLocalPlaybackTracks: {},
     uploadedTrackIds: Object.keys(uploads.uploadedTracks),
     uploadedTrackIdsRef: appRefs.uploadedTrackIdsRef,
-    manualCacheTrackIds: uploads.manualCacheTrackIds,
-    startPlaybackDemandCacheDownload: uploads.startPlaybackDemandCacheDownload,
     announceRoomTrackAvailability: uploads.announceRoomTrackAvailability,
     handleManualCachePieceReceived: uploads.handleManualCachePieceReceived,
-    handleManualCachePlan: uploads.handleManualCachePlan,
     deleteUploadedTrackArtifacts: uploads.deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts: uploads.deleteRoomTrackArtifacts,
-    audioRef: appRefs.audioRef,
     socketRef: appRefs.socketRef,
     chunkSchedulerRef: appRefs.chunkSchedulerRef,
     resetPlayerSurface: roomActions.resetPlayerSurface,
@@ -276,15 +201,24 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     roomSnapshot, currentTrack: pageDerived.currentTrack, peerId, peerDiagnostics,
     volume: pageState.volume, audioUnlocked: pageState.audioUnlocked, availabilityByAsset,
     requestAssetUnits: roomRuntime.requestAssetUnits,
-    emitAssetAvailability: stableEmitAssetAvailability, setStatusMessage
+    emitAssetAvailability: stableEmitAssetAvailability,
+    onPlaybackEnded: roomActions.nextTrack,
+    setMediaConnectionState: pageState.setMediaConnectionState,
+    setSourceStartState: pageState.setSourceStartState,
+    setLastSourceStartError: pageState.setLastSourceStartError,
+    setStatusMessage
   });
-  const manualAssetCache = useRoomOriginalAssetCache({ roomSnapshot, requestAssetUnits: roomRuntime.requestAssetUnits, cancelAssetRequests: roomRuntime.cancelAssetRequests, setStatusMessage });
-  const playbackActions = useRoomPlaybackActions({
-    audioRef: appRefs.audioRef,
-    currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
-    roomPlaybackRef: appRefs.roomPlaybackRef,
+  const manualAssetCache = useRoomOriginalAssetCache({
     roomSnapshot,
-    currentTrack: pageDerived.currentTrack,
+    requestAssetUnits: roomRuntime.requestAssetUnits,
+    cancelAssetRequests: roomRuntime.cancelAssetRequests,
+    updateManualCacheTask: uploads.updateManualCacheTask,
+    refreshCacheLibrary: uploads.refreshCacheLibrary,
+    setStatusMessage
+  });
+  const playbackActions = useRoomPlaybackActions({
+    currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
+    roomSnapshot,
     currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
     playbackMediaEpoch: pageDerived.playbackMediaEpoch,
     playbackQueueVersion: pageDerived.playbackQueueVersion,
@@ -292,23 +226,16 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     playbackStatus: pageDerived.playbackStatus,
     isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
     audioUnlocked: pageState.audioUnlocked,
-    volume: pageState.volume,
-    fullLocalPlaybackTracks: cachedPlayback.fullLocalPlaybackTracks,
-    loadCachedFullLocalPlaybackTrack: cachedPlayback.loadCachedFullLocalPlaybackTrack,
-    ensureSourcePlaybackStarted: roomRuntime.ensureSourcePlaybackStarted,
     handleTrackFilesSelected: uploads.handleFilesSelected,
     playTrack: roomActions.playTrack,
     playQueueItem: roomActions.playQueueItem,
     prevTrack: roomActions.prevTrack,
     nextTrack: roomActions.nextTrack,
     recordPeerDiagnostic,
-    setActivePlaybackSource: pageState.setActivePlaybackSource,
     setAudioBlockedOverlay: pageState.setAudioBlockedOverlay,
     setAudioUnlocked: pageState.setAudioUnlocked,
     setLastSourceStartError: pageState.setLastSourceStartError,
-    setMediaConnectionState: pageState.setMediaConnectionState,
     setPlaybackStartIntent: pageState.setPlaybackStartIntent,
-    setProgressiveFallbackReason: pageState.setProgressiveFallbackReason,
     setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
     setStatusMessage
   });
@@ -323,23 +250,12 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     clearCacheStreamTrack: clearLocalCacheTrackRuntime
   });
   useRoomPlaybackEffects({
-    cachedFullLocalPlaybackTrack: cachedPlayback.cachedFullLocalPlaybackTrack,
-    currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
-    currentProgressiveEngineTypeForSource,
-    currentTrack: legacyCurrentTrack,
     dispatchRoomStateEvent,
-    ensureSourcePlaybackStarted: roomRuntime.ensureSourcePlaybackStarted,
-    hasPlayableFullLocalTrack: cachedPlayback.hasPlayableFullLocalTrack,
     initialRoomId,
-    isCurrentSourceOwner: pageDerived.isCurrentSourceOwner,
-    playbackSourceInitializationKeyRef: appRefs.playbackSourceInitializationKeyRef,
-    playbackStatus: pageDerived.playbackStatus,
     playbackSurfaceKey: pageDerived.playbackSurfaceKey,
     playbackTimelineKey: pageDerived.playbackTimelineKey,
     playbackTopologySnapshot: pageDerived.playbackTopologySnapshot,
-    recordPeerDiagnostic,
-    setActivePlaybackSource: pageState.setActivePlaybackSource,
-    setProgressiveFallbackReason: pageState.setProgressiveFallbackReason
+    recordPeerDiagnostic
   });
   const clipboardActions = useRoomClipboardActions({
     roomSnapshot,
@@ -385,7 +301,6 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
       currentTrack={pageDerived.currentTrack}
       pageState={pageState}
       playbackActions={playbackActions}
-      progressiveRuntime={progressiveRuntime}
       roomActions={roomActions}
       roomSnapshot={roomSnapshot}
       socket={appRefs.socketRef.current}

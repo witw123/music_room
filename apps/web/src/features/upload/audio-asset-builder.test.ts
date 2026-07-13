@@ -5,6 +5,7 @@ import {
   maxDecodedPcmBytes,
   playbackEncoderVersion,
   playbackProfileId,
+  resolveEncodingConcurrency,
   resolveSupportedUploadFormat,
   slicePcmSegment
 } from "./audio-asset-builder";
@@ -50,5 +51,11 @@ describe("audio asset preparation", () => {
     expect(() =>
       assertDecodedPcmWithinMemoryBudget({ durationSeconds: 720, channels: 2 })
     ).toThrow(/256 MB/);
+  });
+
+  it("bounds segment encoding concurrency by work and available CPU", () => {
+    expect(resolveEncodingConcurrency(1, 16)).toBe(1);
+    expect(resolveEncodingConcurrency(20, 16)).toBe(4);
+    expect(resolveEncodingConcurrency(20, 2)).toBe(1);
   });
 });

@@ -47,8 +47,11 @@ function createReceiver(options?: {
   const controls: Array<{ peerId: string; message: AssetStreamMessage }> = [];
   const persistInboundUnit = vi.fn(options?.persistInboundUnit ?? (async () => undefined));
   const manager = new AssetTransferManager({
-    sendControl: (peerId, message) => controls.push({ peerId, message }),
-    sendBinary: vi.fn(),
+    sendControl: (peerId, message) => {
+      controls.push({ peerId, message });
+      return true;
+    },
+    sendBinary: vi.fn(() => true),
     resolveLocalUnit: async () => null,
     persistInboundUnit: async () => persistInboundUnit(),
     onStreamReset: options?.onStreamReset
@@ -112,7 +115,7 @@ describe("AssetTransferManager", () => {
       priority: "playback-fill"
     });
 
-    vi.advanceTimersByTime(5_001);
+    await vi.advanceTimersByTimeAsync(5_001);
     await Promise.resolve();
 
     expect(onStreamReset).toHaveBeenCalledWith(expect.objectContaining({
@@ -138,19 +141,37 @@ describe("AssetTransferManager", () => {
       priority: "playback-fill"
     });
 
-    vi.advanceTimersByTime(5_001);
+    await vi.advanceTimersByTimeAsync(5_001);
     await Promise.resolve();
     expect(controls.filter(({ message }) => message.kind === "asset-stream-open")).toHaveLength(1);
 
-    vi.advanceTimersByTime(2_001);
+    await vi.advanceTimersByTimeAsync(2_001);
+    expect(controls.filter(({ message }) => message.kind === "asset-stream-open")).toHaveLength(2);
+  });
+
+  it("does not report a request as active until the peer transport accepts it", async () => {
+    vi.useFakeTimers();
+    const sendControl = vi.fn(() => false);
+    const manager = new AssetTransferManager({
+      sendControl,
+      sendBinary: vi.fn(() => true),
+      resolveLocalUnit: async () => null,
+      persistInboundUnit: async () => undefined
+    });
+    manager.setProvider(announcement("peer_a"));
+
     expect(manager.request({
       assetId,
       assetKind: "playback",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "playback-fill"
-    })).toBe(true);
-    expect(controls.filter(({ message }) => message.kind === "asset-stream-open")).toHaveLength(2);
+    })).toBe(false);
+
+    sendControl.mockReturnValue(true);
+    await vi.advanceTimersByTimeAsync(251);
+    expect(sendControl).toHaveBeenCalledTimes(2);
+    manager.clear();
   });
 
   it("removes a provider after two consecutive integrity failures", async () => {
@@ -202,8 +223,8 @@ describe("AssetTransferManager", () => {
     const binary = vi.fn();
     const payload = new Uint8Array(600 * 1024).buffer;
     const manager = new AssetTransferManager({
-      sendControl: vi.fn(),
-      sendBinary: binary,
+      sendControl: vi.fn(() => true),
+      sendBinary: binary.mockImplementation(() => true),
       resolveLocalUnit: async () => ({ descriptor: descriptor(payload), payload }),
       persistInboundUnit: async () => undefined
     });

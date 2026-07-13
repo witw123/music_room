@@ -340,6 +340,8 @@ export function useTrackUploads(options: {
     cacheLibraryTracks,
     manualCacheTasks,
     manualCacheTrackIds,
+    refreshCacheLibrary,
+    updateManualCacheTask,
     handleFilesSelected,
     announceRoomTrackAvailability,
     startManualCacheDownload,

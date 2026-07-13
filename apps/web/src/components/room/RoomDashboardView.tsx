@@ -18,7 +18,6 @@ import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 
 type TabId = "queue" | "library" | "cache" | "members";
 
@@ -37,7 +36,6 @@ type RoomDashboardViewProps = {
   uploadedTracks: Record<string, UploadedTrack>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
-  activePlaybackSource: ProgressivePlaybackSource;
   mediaConnectedPeersCount: number;
   cachedTrackCount: number;
   cacheLibraryTracks: CachedLibraryTrack[];
@@ -124,7 +122,6 @@ function RoomDashboardViewBase({
   uploadedTracks,
   connectedPeersCount,
   mediaConnectionState,
-  activePlaybackSource,
   mediaConnectedPeersCount,
   cachedTrackCount,
   cacheLibraryTracks,
@@ -195,13 +192,11 @@ function RoomDashboardViewBase({
             currentTrack={currentTrack}
             currentTrackDuration={currentTrackDuration}
             isPlaying={isPlaying}
-            activeSession={activeSession}
             host={host}
             canDeleteRoom={canDeleteRoom}
             canDisbandRoom={canDisbandRoom}
             currentSourceOwnerNickname={currentSourceOwnerNickname}
             mediaConnectionState={mediaConnectionState}
-            activePlaybackSource={activePlaybackSource}
             mediaConnectedPeersCount={mediaConnectedPeersCount}
             iceConfigSource={iceConfigSource}
             onCopyJoinCode={onCopyJoinCode}

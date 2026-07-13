@@ -34,8 +34,6 @@ type BottomPlayerProps = {
   onSeek: (positionMs: number) => void | Promise<void>;
   onPrev: () => void;
   onNext: () => void;
-  onEnded: () => void;
-  onLocalPlaybackReady: () => void;
 };
 
 function clampProgressMs(progressMs: number, durationMs: number) {
@@ -62,9 +60,7 @@ function BottomPlayerBase({
   onPause,
   onSeek,
   onPrev,
-  onNext,
-  onEnded,
-  onLocalPlaybackReady
+  onNext
 }: BottomPlayerProps) {
   const [isPending, startTransition] = useTransition();
   const [renderedProgressMs, setRenderedProgressMs] = useState(progressMs);
@@ -233,17 +229,12 @@ function BottomPlayerBase({
         ref={audioRef}
         className="hidden"
         playsInline
-        onEnded={() => void onEnded()}
         onLoadedMetadata={() => {
           syncDurationFromAudio();
           syncProgressFromAudio();
-          onLocalPlaybackReady();
         }}
         onDurationChange={syncDurationFromAudio}
-        onPlay={() => {
-          syncProgressFromAudio();
-          onLocalPlaybackReady();
-        }}
+        onPlay={syncProgressFromAudio}
         onPause={syncProgressFromAudio}
         onSeeked={syncProgressFromAudio}
       />
