@@ -89,6 +89,7 @@ describe("createDataMeshBridge", () => {
 describe("createRoomDataMeshRuntime piece persistence", () => {
   it("persists every validated playback piece and marks it owned only after persistence", () => {
     const markPieceReceived = vi.fn();
+    const markRequestTimeout = vi.fn();
     const clearManualCachePendingPiece = vi.fn();
     const handleManualCachePieceReceived = vi.fn();
     const meshRef = { current: null };
@@ -136,7 +137,8 @@ describe("createRoomDataMeshRuntime piece persistence", () => {
       getPeerMedianRttMs: vi.fn(() => null)
     });
     chunkSchedulerRef.current = {
-      markPieceReceived
+      markPieceReceived,
+      markRequestTimeout
     } as never;
     const callbacks = (
       runtime.mesh as unknown as {
@@ -159,6 +161,14 @@ describe("createRoomDataMeshRuntime piece persistence", () => {
             totalChunks: number;
             chunkSize: number;
             mimeType: string;
+          }) => void;
+          onCacheStreamReset: (payload: {
+            peerId: string;
+            trackId: string;
+            streamId: string;
+            generation: number;
+            chunkIndexes: number[];
+            reason: "timeout";
           }) => void;
         };
       }
@@ -198,6 +208,21 @@ describe("createRoomDataMeshRuntime piece persistence", () => {
       chunkSize: 4,
       mimeType: "audio/flac"
     });
+
+    clearManualCachePendingPiece.mockClear();
+    callbacks.onCacheStreamReset({
+      peerId: "peer_source",
+      trackId: "track_1",
+      streamId: "stream_1",
+      generation: 1,
+      chunkIndexes: [0, 1, 2],
+      reason: "timeout"
+    });
+    expect(clearManualCachePendingPiece.mock.calls).toEqual([
+      ["track_1", 0],
+      ["track_1", 1],
+      ["track_1", 2]
+    ]);
 
     runtime.mesh.destroy();
   });

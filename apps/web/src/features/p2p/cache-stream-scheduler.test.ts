@@ -308,6 +308,101 @@ describe("CacheStreamScheduler", () => {
     vi.useRealTimers();
   });
 
+  it("retries the same relay provider when it is the only source for a stalled critical stream", () => {
+    vi.useFakeTimers();
+    const sendControl = vi.fn();
+    const onStreamReset = vi.fn();
+    const scheduler = new CacheStreamScheduler({
+      sendControl,
+      onStreamReset,
+      resolvePeerTransport: () => ({
+        candidateType: "relay",
+        protocol: "udp",
+        transportScore: "degraded"
+      })
+    });
+    scheduler.setProvider({
+      peerId: "peer-only",
+      trackId: "track-1",
+      availableRanges: [{ start: 0, end: 2 }],
+      connected: true
+    });
+
+    expect(
+      scheduler.request({
+        trackId: "track-1",
+        chunkIndexes: [0, 1, 2],
+        totalChunks: 3,
+        chunkSize: 128 * 1024,
+        priority: "critical",
+        preferredPeerId: "peer-only",
+        timeoutMs: 40_000
+      })
+    ).toBe(true);
+
+    vi.advanceTimersByTime(8_000);
+
+    expect(onStreamReset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        peerId: "peer-only",
+        chunkIndexes: [0, 1, 2],
+        reason: "timeout"
+      })
+    );
+    expect(
+      sendControl.mock.calls.filter(
+        ([peerId, message]) => peerId === "peer-only" && message.kind === "cache-stream-open"
+      )
+    ).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("keeps an unstable UDP provider available for critical playback only", () => {
+    const createScheduler = () => {
+      const sendControl = vi.fn();
+      const scheduler = new CacheStreamScheduler({
+        sendControl,
+        resolvePeerTransport: () => ({
+          candidateType: "relay",
+          protocol: "udp",
+          transportScore: "unstable"
+        })
+      });
+      scheduler.setProvider({
+        peerId: "peer-only",
+        trackId: "track-1",
+        availableRanges: [{ start: 0, end: 0 }],
+        connected: true
+      });
+      return { scheduler, sendControl };
+    };
+    const critical = createScheduler();
+    const bulk = createScheduler();
+
+    expect(
+      critical.scheduler.request({
+        trackId: "track-1",
+        chunkIndexes: [0],
+        totalChunks: 1,
+        chunkSize: 128 * 1024,
+        priority: "critical"
+      })
+    ).toBe(true);
+    expect(
+      bulk.scheduler.request({
+        trackId: "track-1",
+        chunkIndexes: [0],
+        totalChunks: 1,
+        chunkSize: 128 * 1024,
+        priority: "bulk"
+      })
+    ).toBe(false);
+    expect(critical.sendControl).toHaveBeenCalled();
+    expect(bulk.sendControl).not.toHaveBeenCalled();
+    critical.scheduler.clear();
+    bulk.scheduler.clear();
+  });
+
   it("keeps a stream alive for storage-failure retries", () => {
     const sendControl = vi.fn();
     const scheduler = new CacheStreamScheduler({ sendControl });

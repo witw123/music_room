@@ -311,7 +311,8 @@ export class CacheStreamScheduler {
         lastPersistedAtMs: Date.now(),
         stallTimeoutMs: resolveStreamTimeoutMs({
           inputTimeoutMs: input.timeoutMs,
-          profile: transport ? resolvePeerLinkProfile(transport) : undefined
+          profile: transport ? resolvePeerLinkProfile(transport) : undefined,
+          priority: input.priority
         }),
         bytesAcked: 0,
         nackCount: 0,
@@ -604,13 +605,16 @@ export class CacheStreamScheduler {
         provider.trackId === input.trackId &&
         provider.connected !== false &&
         !input.excludedPeerIds?.includes(provider.peerId) &&
-        this.isProviderTransportAllowed(provider) &&
+        this.isProviderTransportAllowed(provider, input.priority) &&
         (provider.peerId === input.preferredPeerId || provider.peerId !== "")
     );
     if (
       input.preferredPeerId &&
       !providers.some((provider) => provider.peerId === input.preferredPeerId) &&
-      this.isProviderTransportAllowed({ peerId: input.preferredPeerId, trackId: input.trackId })
+      this.isProviderTransportAllowed(
+        { peerId: input.preferredPeerId, trackId: input.trackId },
+        input.priority
+      )
     ) {
       providers.push({
         peerId: input.preferredPeerId,
@@ -621,9 +625,15 @@ export class CacheStreamScheduler {
     return providers.sort((left, right) => this.scoreProvider(left) - this.scoreProvider(right));
   }
 
-  private isProviderTransportAllowed(provider: CacheStreamProvider) {
+  private isProviderTransportAllowed(
+    provider: CacheStreamProvider,
+    priority: CacheStreamSchedulerRequest["priority"]
+  ) {
     const transport = this.resolvePeerTransport?.(provider.peerId) ?? provider;
-    if (transport.transportScore === "failed" || transport.transportScore === "unstable") {
+    if (
+      transport.transportScore === "failed" ||
+      (transport.transportScore === "unstable" && priority !== "critical")
+    ) {
       return false;
     }
     return isPeerTransportAllowed(transport);
@@ -730,7 +740,7 @@ export class CacheStreamScheduler {
     });
     this.removeStream(stream);
     if (remaining.length > 0) {
-      this.request({
+      const request = {
         trackId: stream.trackId,
         chunkIndexes: remaining,
         totalChunks: stream.totalChunks,
@@ -739,7 +749,14 @@ export class CacheStreamScheduler {
         generation: stream.generation,
         excludedPeerIds,
         timeoutMs: stream.stallTimeoutMs
-      });
+      } satisfies CacheStreamSchedulerRequest;
+      const reassigned = this.request(request);
+      if (!reassigned && reason === "timeout" && excludedPeerIds.length > 0) {
+        this.request({
+          ...request,
+          excludedPeerIds: []
+        });
+      }
     }
   }
 
@@ -837,7 +854,14 @@ export function calculateInitialCreditBytes(input: {
 function resolveStreamTimeoutMs(input: {
   inputTimeoutMs?: number;
   profile?: ReturnType<typeof resolvePeerLinkProfile>;
+  priority: CacheStreamSchedulerRequest["priority"];
 }) {
+  if (input.priority === "critical") {
+    // This is a no-progress watchdog, not a whole-request deadline. Reliable
+    // SCTP may be slow over TURN, but eight seconds without one validated
+    // piece means startup should rebuild the stream instead of staying silent.
+    return 8_000;
+  }
   const minimum = input.profile === "relay-udp" ? 25_000 : 15_000;
   return Math.max(minimum, input.inputTimeoutMs ?? minimum);
 }

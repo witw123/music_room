@@ -663,6 +663,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         }
 
         for (const chunkIndex of chunkIndexes) {
+          input.clearManualCachePendingPiece(trackId, chunkIndex);
           input.chunkSchedulerRef.current?.markRequestTimeout(trackId, chunkIndex, peerId);
         }
       },
