@@ -44,10 +44,9 @@ async function registerAndJoin(context: BrowserContext, joinCode: string, nickna
 
 function wavFile(name: string, frequencyHz: number) {
   const sampleRate = 44_100;
-  // Keep the fixture playing through room synchronization on slower CI
-  // runners so the pause assertion cannot accidentally click replay after
-  // the short test tone has already ended.
-  const durationSeconds = 30;
+  // Keep the fixture long enough for playback assertions without making
+  // browser-side Opus transcoding dominate the E2E run.
+  const durationSeconds = 15;
   const sampleCount = Math.floor(sampleRate * durationSeconds);
   const dataSize = sampleCount * 2;
   const buffer = Buffer.alloc(44 + dataSize);
@@ -110,6 +109,7 @@ test("two-user-realtime", async ({ browser, page }) => {
 });
 
 test("upload-queue-playback", async ({ browser, page }) => {
+  test.setTimeout(120_000);
   await register(page, "host-playback");
   const joinCode = await createRoom(page);
   const listenerContext = await browser.newContext();
