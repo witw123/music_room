@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
 import {
   buildRoomSubscribePayload,
+  createRoomRealtimeEventGate,
   createRoomRealtimeRuntime,
   hasSubscribeBootstrapFullLocalTrack,
   isSocketDisconnectGraceActive,
@@ -70,6 +71,22 @@ describe("room realtime module boundaries", () => {
     expect(resolveRoomSnapshotWatchdogActionFromPolicy).toBe(resolveRoomSnapshotWatchdogAction);
     expect(createRoomRealtimeRuntimeFromRuntime).toBe(createRoomRealtimeRuntime);
     expect(typeof useRoomRealtimeConnectionEffects).toBe("function");
+  });
+});
+
+describe("room realtime event gate", () => {
+  it("rejects stale side effects even before the React snapshot ref catches up", () => {
+    const currentSnapshot = createSnapshot();
+    const gate = createRoomRealtimeEventGate(currentSnapshot);
+    const newerPlayback = createPlayback({ playbackRevision: 3, queueVersion: 3 });
+    const stalePlayback = createPlayback({ playbackRevision: 2, queueVersion: 2 });
+
+    expect(gate.acceptRoomRevision(3, currentSnapshot)).toBe(true);
+    expect(gate.acceptRoomRevision(2, currentSnapshot)).toBe(false);
+    expect(gate.acceptPresenceRevision(3, currentSnapshot)).toBe(true);
+    expect(gate.acceptPresenceRevision(2, currentSnapshot)).toBe(false);
+    expect(gate.acceptPlayback(newerPlayback, currentSnapshot).accepted).toBe(true);
+    expect(gate.acceptPlayback(stalePlayback, currentSnapshot).accepted).toBe(false);
   });
 });
 

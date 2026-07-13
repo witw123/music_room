@@ -4,6 +4,7 @@ import { useRoomRealtimeConnectionEffects } from "./room-realtime-effects";
 
 export {
   buildRoomSubscribePayload,
+  createRoomRealtimeEventGate,
   hasSubscribeBootstrapFullLocalTrack,
   isSocketDisconnectGraceActive,
   resolvePresenceRepairAction,

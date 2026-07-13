@@ -7,6 +7,7 @@ import {
   isPeerTransportAllowed,
   resolvePeerTransferWindow,
   resolveTrackPieceManifest,
+  type PeerLinkProfileInput,
   type ResolvedTrackPieceManifest
 } from "@/features/p2p";
 import type { CacheStreamRequestOptions } from "@/features/p2p/cache-stream-scheduler";
@@ -41,15 +42,7 @@ const activePlaybackMaxPendingPerPeer = 96;
 
 export type ManualCacheRequestPriority = "active" | "background";
 
-export type ManualCachePeerRequestWindow = {
-  currentRoundTripTimeMs?: number | null;
-  downloadRateKbps?: number | null;
-  uploadRateKbps?: number | null;
-  candidateType?: string | null;
-  protocol?: string | null;
-  transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
-  bufferedAmountBytes?: number | null;
-};
+export type ManualCachePeerRequestWindow = PeerLinkProfileInput;
 
 export type ManualCacheDirectRequestResult = {
   plan: ManualCacheTrackPlan;

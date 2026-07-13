@@ -100,10 +100,14 @@ export class PlaybackController {
 
     const message = error instanceof Error ? error.message : "Internal server error";
 
-    if (message.includes("Playback state version conflict")) {
+    if (
+      message.includes("Playback state version conflict") ||
+      message.includes("Room state revision conflict")
+    ) {
+      const conflictMessage = "Playback state version conflict.";
       this.metrics.incrementPlaybackConflict();
       throw new HttpException(
-        createApiErrorResponse(errorCodes.playbackVersionConflict, message),
+        createApiErrorResponse(errorCodes.playbackVersionConflict, conflictMessage),
         HttpStatus.CONFLICT
       );
     }

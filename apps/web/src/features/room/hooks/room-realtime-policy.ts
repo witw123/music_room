@@ -1,6 +1,70 @@
 "use client";
 
-import type { PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
+import type { PeerSignalMessage, PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
+import { shouldReplacePlaybackSnapshot } from "@/lib/music-room-ui";
+
+export function createRoomRealtimeEventGate(initialSnapshot?: RoomSnapshot | null) {
+  let latestRoomRevision = initialSnapshot?.room.roomRevision ?? 0;
+  let latestPresenceRevision = initialSnapshot?.room.presenceRevision ?? 0;
+  let latestPlayback: PlaybackSnapshot | null = initialSnapshot?.room.playback ?? null;
+
+  const syncCurrentSnapshot = (snapshot: RoomSnapshot | null | undefined) => {
+    if (!snapshot) {
+      return;
+    }
+    latestRoomRevision = Math.max(latestRoomRevision, snapshot.room.roomRevision ?? 0);
+    latestPresenceRevision = Math.max(
+      latestPresenceRevision,
+      snapshot.room.presenceRevision ?? 0
+    );
+    if (shouldReplacePlaybackSnapshot(latestPlayback, snapshot.room.playback)) {
+      latestPlayback = snapshot.room.playback;
+    }
+  };
+
+  return {
+    acceptRoomRevision(
+      incomingRevision: number | null | undefined,
+      currentSnapshot?: RoomSnapshot | null
+    ) {
+      syncCurrentSnapshot(currentSnapshot);
+      if (incomingRevision === null || incomingRevision === undefined) {
+        return true;
+      }
+      if (incomingRevision < latestRoomRevision) {
+        return false;
+      }
+      latestRoomRevision = incomingRevision;
+      return true;
+    },
+    acceptPresenceRevision(
+      incomingRevision: number,
+      currentSnapshot?: RoomSnapshot | null,
+      allowEqual = false
+    ) {
+      syncCurrentSnapshot(currentSnapshot);
+      const accepted = allowEqual
+        ? incomingRevision >= latestPresenceRevision
+        : incomingRevision > latestPresenceRevision;
+      if (accepted) {
+        latestPresenceRevision = incomingRevision;
+      }
+      return accepted;
+    },
+    acceptPlayback(
+      incomingPlayback: PlaybackSnapshot,
+      currentSnapshot?: RoomSnapshot | null
+    ) {
+      syncCurrentSnapshot(currentSnapshot);
+      const previousPlayback = latestPlayback;
+      if (!shouldReplacePlaybackSnapshot(previousPlayback, incomingPlayback)) {
+        return { accepted: false as const, previousPlayback };
+      }
+      latestPlayback = incomingPlayback;
+      return { accepted: true as const, previousPlayback };
+    }
+  };
+}
 
 export function isSocketDisconnectGraceActive(disconnectGraceUntilMs: number | null, now = Date.now()) {
   return typeof disconnectGraceUntilMs === "number" && disconnectGraceUntilMs > now;

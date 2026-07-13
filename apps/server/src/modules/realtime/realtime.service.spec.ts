@@ -33,7 +33,7 @@ describe("RealtimeService", () => {
     process.env = { ...envBackup };
   });
 
-  it("builds ephemeral ICE config when TURN host and secret are available", () => {
+  it("builds UDP-only ephemeral ICE config when TURN host and secret are available", () => {
     process.env.TURN_ENABLED = "true";
     process.env.TURN_PUBLIC_HOST = "turn.example.com";
     process.env.TURN_SHARED_SECRET = "turn-secret";
@@ -51,9 +51,7 @@ describe("RealtimeService", () => {
         { urls: "stun:stun.example.com:3478" },
         {
           urls: [
-            "turn:turn.example.com:3478?transport=udp",
-            "turn:turn.example.com:3478?transport=tcp",
-            "turns:turn.example.com:5349?transport=tcp"
+            "turn:turn.example.com:3478?transport=udp"
           ],
           username,
           credential

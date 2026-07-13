@@ -495,10 +495,7 @@ export class CacheStreamScheduler {
     }
     stream.nackCount += 1;
     stream.received.delete(input.chunkIndex);
-    const resetReason: CacheStreamResetReason =
-      input.reason === "hash-mismatch" || input.reason === "decode-failure"
-        ? "protocol-error"
-        : "peer-closed";
+    stream.lastProgressAtMs = Date.now();
     this.sendControl(input.peerId, {
       kind: "cache-stream-nack",
       streamId: input.streamId,
@@ -506,32 +503,6 @@ export class CacheStreamScheduler {
       chunkIndex: input.chunkIndex,
       reason: input.reason,
       refundCreditBytes: input.refundCreditBytes
-    });
-    this.sendControl(input.peerId, {
-      kind: "cache-stream-reset",
-      streamId: input.streamId,
-      generation: input.generation,
-      reason: resetReason
-    });
-    const remaining = [...stream.unconfirmed];
-    this.onStreamReset?.({
-      peerId: stream.peerId,
-      trackId: stream.trackId,
-      streamId: stream.streamId,
-      generation: stream.generation,
-      chunkIndexes: remaining,
-      reason: resetReason
-    });
-    this.removeStream(stream);
-    this.request({
-      trackId: stream.trackId,
-      chunkIndexes: remaining,
-      totalChunks: stream.totalChunks,
-      chunkSize: stream.chunkSize,
-      priority: stream.priority,
-      generation: stream.generation,
-      excludedPeerIds: [input.peerId],
-      timeoutMs: stream.stallTimeoutMs
     });
   }
 

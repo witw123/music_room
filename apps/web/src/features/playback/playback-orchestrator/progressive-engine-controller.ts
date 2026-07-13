@@ -41,13 +41,14 @@ export function shouldRecoverMissingProgressiveEngine(input: {
   hasManifest: boolean;
   hasAudio: boolean;
   hasMseEngine: boolean;
+  mseEngineFailed: boolean;
   hasPcmEngine: boolean;
 }) {
   return (
     input.canPrepareProgressiveLocal &&
     input.hasManifest &&
     input.hasAudio &&
-    !input.hasMseEngine &&
+    (!input.hasMseEngine || input.mseEngineFailed) &&
     !input.hasPcmEngine
   );
 }
@@ -82,6 +83,7 @@ export function useProgressiveEngineController({
           hasManifest: !!currentProgressiveManifest,
           hasAudio: !!audioRef.current,
           hasMseEngine: !!progressiveEngineRef.current,
+          mseEngineFailed: progressiveEngineRef.current?.engineStatus === "failed",
           hasPcmEngine: !!progressivePcmEngineRef.current
         })
       ) {

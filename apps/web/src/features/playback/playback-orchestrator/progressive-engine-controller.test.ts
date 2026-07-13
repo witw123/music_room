@@ -7,11 +7,22 @@ describe("shouldRecoverMissingProgressiveEngine", () => {
     hasManifest: true,
     hasAudio: true,
     hasMseEngine: false,
+    mseEngineFailed: false,
     hasPcmEngine: false
   };
 
   it("recovers when progressive playback is ready but both engine references are missing", () => {
     expect(shouldRecoverMissingProgressiveEngine(readyInput)).toBe(true);
+  });
+
+  it("recovers when the retained MSE engine has failed asynchronously", () => {
+    expect(
+      shouldRecoverMissingProgressiveEngine({
+        ...readyInput,
+        hasMseEngine: true,
+        mseEngineFailed: true
+      })
+    ).toBe(true);
   });
 
   it("does not recover while either progressive engine exists", () => {

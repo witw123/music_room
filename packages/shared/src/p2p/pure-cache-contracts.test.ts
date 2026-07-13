@@ -43,7 +43,7 @@ describe("p2p signaling contracts", () => {
     expect(
       p2pDataMessageSchema.safeParse({
         kind: "cache-stream-open",
-        protocolVersion: 2,
+        protocolVersion: 3,
         streamId: "stream-1",
         trackId: "track_1",
         generation: 3,

@@ -14,6 +14,7 @@ describe("mesh message codec", () => {
           kind: "cache-stream-credit",
           streamId: "stream-1",
           generation: 1,
+          chunkIndex: 0,
           creditBytes: 1024
         })
       )
@@ -21,6 +22,7 @@ describe("mesh message codec", () => {
       kind: "cache-stream-credit",
       streamId: "stream-1",
       generation: 1,
+      chunkIndex: 0,
       creditBytes: 1024
     });
 

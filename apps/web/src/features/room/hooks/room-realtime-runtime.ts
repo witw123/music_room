@@ -30,6 +30,7 @@ import type {
 } from "./room-runtime-types";
 import {
   buildRoomSubscribePayload,
+  createRoomRealtimeEventGate,
   hasSubscribeBootstrapFullLocalTrack,
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
@@ -318,6 +319,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
 
 function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   const socket = input.socket;
+  const realtimeEventGate = createRoomRealtimeEventGate(input.currentRoomRef.current);
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
   let subscribeRequestSequence = 0;
@@ -535,12 +537,29 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
 
-    const previousPlayback = input.currentRoomRef.current?.room.playback;
-    input.lastRealtimeRoomEventAtRef.current = Date.now();
+    const currentSnapshot = input.currentRoomRef.current;
     input.dispatchRoomStateEvent({
       type: "server-snapshot",
       snapshot
     });
+    if (
+      !realtimeEventGate.acceptRoomRevision(
+        snapshot.room.roomRevision,
+        currentSnapshot
+      )
+    ) {
+      return;
+    }
+    const playbackAcceptance = realtimeEventGate.acceptPlayback(
+      snapshot.room.playback,
+      currentSnapshot
+    );
+    const presenceAccepted = realtimeEventGate.acceptPresenceRevision(
+      snapshot.room.presenceRevision,
+      currentSnapshot,
+      true
+    );
+    input.lastRealtimeRoomEventAtRef.current = Date.now();
     input.setRoomRecoveryState((current: RoomRecoveryState) => ({
       ...current,
       phase: "steady",
@@ -550,37 +569,48 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }));
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
     input.flushPendingAvailabilityRef.current();
-    input.resyncRealtimePeers(snapshot.room.members);
-    applyPlaybackKick(previousPlayback, snapshot.room.playback);
+    if (presenceAccepted) {
+      input.resyncRealtimePeers(snapshot.room.members);
+    }
+    if (playbackAcceptance.accepted) {
+      applyPlaybackKick(playbackAcceptance.previousPlayback, snapshot.room.playback);
+    }
   });
 
   socket.on("room.playback.patch", ({ playback }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-    const previousPlayback = input.currentRoomRef.current?.room.playback;
+    const currentSnapshot = input.currentRoomRef.current;
     input.dispatchRoomStateEvent({
       type: "server-playback-patch",
       roomId: input.roomId,
       playback
     });
+    if (!currentSnapshot) {
+      void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+      return;
+    }
+    const playbackAcceptance = realtimeEventGate.acceptPlayback(playback, currentSnapshot);
+    if (!playbackAcceptance.accepted) {
+      return;
+    }
     if (
       shouldResyncSnapshotForPlaybackPatch({
-        currentSnapshot: input.currentRoomRef.current,
+        currentSnapshot,
         playback
       })
     ) {
       void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
     }
-    applyPlaybackKick(previousPlayback, playback);
+    applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
   });
 
   socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-    const previousPlayback = input.currentRoomRef.current?.room.playback;
-    input.lastRealtimeRoomEventAtRef.current = Date.now();
+    const currentSnapshot = input.currentRoomRef.current;
     input.dispatchRoomStateEvent({
       type: "server-queue-patch",
       roomId: input.roomId,
@@ -588,16 +618,30 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       playback,
       roomRevision
     });
+    if (!currentSnapshot) {
+      void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+      return;
+    }
+    const topologyAccepted = realtimeEventGate.acceptRoomRevision(
+      roomRevision,
+      currentSnapshot
+    );
+    const playbackAcceptance = realtimeEventGate.acceptPlayback(playback, currentSnapshot);
+    if (!topologyAccepted && !playbackAcceptance.accepted) {
+      return;
+    }
+    input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    applyPlaybackKick(previousPlayback, playback);
+    if (playbackAcceptance.accepted) {
+      applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
+    }
   });
 
   socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-    const previousPlayback = input.currentRoomRef.current?.room.playback;
-    input.lastRealtimeRoomEventAtRef.current = Date.now();
+    const currentSnapshot = input.currentRoomRef.current;
     input.dispatchRoomStateEvent({
       type: "server-presence-patch",
       roomId: input.roomId,
@@ -606,17 +650,34 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       presenceRevision,
       roomRevision
     });
+    if (!currentSnapshot) {
+      void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+      return;
+    }
+    const presenceAccepted = realtimeEventGate.acceptPresenceRevision(
+      presenceRevision,
+      currentSnapshot
+    );
+    const playbackAcceptance = realtimeEventGate.acceptPlayback(playback, currentSnapshot);
+    if (!presenceAccepted && !playbackAcceptance.accepted) {
+      return;
+    }
+    realtimeEventGate.acceptRoomRevision(roomRevision, currentSnapshot);
+    input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    input.resyncRealtimePeers(members);
-    applyPlaybackKick(previousPlayback, playback);
+    if (presenceAccepted) {
+      input.resyncRealtimePeers(members);
+    }
+    if (playbackAcceptance.accepted) {
+      applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
+    }
   });
 
   socket.on("room.library.patch", ({ tracks, queue, playback, roomRevision }) => {
     if (input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
     }
-    const previousPlayback = input.currentRoomRef.current?.room.playback;
-    input.lastRealtimeRoomEventAtRef.current = Date.now();
+    const currentSnapshot = input.currentRoomRef.current;
     input.dispatchRoomStateEvent({
       type: "server-library-patch",
       roomId: input.roomId,
@@ -625,8 +686,23 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       playback,
       roomRevision
     });
+    if (!currentSnapshot) {
+      void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
+      return;
+    }
+    const topologyAccepted = realtimeEventGate.acceptRoomRevision(
+      roomRevision,
+      currentSnapshot
+    );
+    const playbackAcceptance = realtimeEventGate.acceptPlayback(playback, currentSnapshot);
+    if (!topologyAccepted && !playbackAcceptance.accepted) {
+      return;
+    }
+    input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    applyPlaybackKick(previousPlayback, playback);
+    if (playbackAcceptance.accepted) {
+      applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
+    }
   });
 
   socket.on("peer.signal", (payload) => {

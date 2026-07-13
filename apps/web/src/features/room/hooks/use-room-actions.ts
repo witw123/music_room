@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, type Dispatch, type SetStateAction } from "react";
-import type { AuthSession, PlaybackSnapshot, RoomSnapshot } from "@music-room/shared";
-import { musicRoomApi } from "@/lib/music-room-api";
+import {
+  errorCodes,
+  type AuthSession,
+  type PlaybackSnapshot,
+  type RoomSnapshot
+} from "@music-room/shared";
+import { MusicRoomApiError, musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 
@@ -70,6 +75,21 @@ export function shouldResetPlayerAfterTrackRemoval(
   return removedTrackId === currentTrackId;
 }
 
+type PlaybackMutationTarget = Pick<
+  PlaybackSnapshot,
+  "currentTrackId" | "currentQueueItemId"
+>;
+
+export function shouldRetryPlaybackMutationAfterConflict(
+  expectedTarget: PlaybackMutationTarget,
+  latestPlayback: PlaybackMutationTarget
+) {
+  return (
+    expectedTarget.currentTrackId === latestPlayback.currentTrackId &&
+    expectedTarget.currentQueueItemId === latestPlayback.currentQueueItemId
+  );
+}
+
 export function useRoomActions({
   activeSession,
   roomSnapshot,
@@ -102,7 +122,8 @@ export function useRoomActions({
     async (
       roomId: string,
       expectedVersion: number,
-      requestPlayback: (nextExpectedVersion: number) => Promise<PlaybackSnapshot>
+      requestPlayback: (nextExpectedVersion: number) => Promise<PlaybackSnapshot>,
+      retryTarget?: PlaybackMutationTarget
     ) => {
       let nextExpectedVersion = expectedVersion;
 
@@ -118,7 +139,9 @@ export function useRoomActions({
           return playback;
         } catch (error) {
           const isVersionConflict =
-            error instanceof Error && error.message.includes("Playback state version conflict");
+            (error instanceof MusicRoomApiError &&
+              error.code === errorCodes.playbackVersionConflict) ||
+            (error instanceof Error && error.message.includes("Playback state version conflict"));
 
           if (!isVersionConflict || attempt === 1) {
             setStatusMessage(toUserFacingError(error));
@@ -127,6 +150,16 @@ export function useRoomActions({
 
           try {
             const snapshot = await syncRoomSnapshot(roomId);
+            if (
+              retryTarget &&
+              !shouldRetryPlaybackMutationAfterConflict(
+                retryTarget,
+                snapshot.room.playback
+              )
+            ) {
+              setStatusMessage("播放曲目已更新，本次操作未重试。");
+              return null;
+            }
             nextExpectedVersion = snapshot.room.playback.playbackRevision;
           } catch (refreshError) {
             setStatusMessage(toUserFacingError(refreshError));
@@ -329,7 +362,8 @@ export function useRoomActions({
             positionMs,
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          })
+          }),
+        roomSnapshot.room.playback
       );
     },
     [
@@ -537,7 +571,8 @@ export function useRoomActions({
             positionMs,
             actorPeerId: getCurrentPeerId?.() ?? undefined,
             expectedVersion
-          })
+          }),
+        roomSnapshot.room.playback
       );
     },
     [roomSnapshot, activeSession, getCurrentPeerId, runPlaybackMutation]

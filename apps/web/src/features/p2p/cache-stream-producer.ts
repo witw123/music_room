@@ -380,20 +380,20 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
         }
         let sentAny = false;
 
-        for (const chunkIndex of nextIndexes) {
+        for (const [index, chunkIndex] of nextIndexes.entries()) {
           const piece = piecesByIndex.get(chunkIndex);
           if (!piece || state.acked.has(chunkIndex) || state.inFlight.has(chunkIndex)) {
             continue;
           }
           if (piece.payload.byteLength > state.creditBytes) {
-            state.retryIndexes.unshift(chunkIndex);
+            this.requeueIndexes(state, nextIndexes.slice(index));
             break;
           }
           if (
             state.inFlightBytes + piece.payload.byteLength >
             this.resolveMaxInFlightBytes(state.peerId)
           ) {
-            state.retryIndexes.unshift(chunkIndex);
+            this.requeueIndexes(state, nextIndexes.slice(index));
             break;
           }
 
@@ -436,6 +436,17 @@ export class CacheStreamProducer<TEntry extends ProducerPeerEntry = ProducerPeer
       }
     }
     return indexes;
+  }
+
+  private requeueIndexes(state: ProducerState<TEntry>, indexes: number[]) {
+    const queued = new Set(state.retryIndexes);
+    const pending = indexes.filter(
+      (chunkIndex) =>
+        !queued.has(chunkIndex) &&
+        !state.acked.has(chunkIndex) &&
+        !state.inFlight.has(chunkIndex)
+    );
+    state.retryIndexes.unshift(...pending);
   }
 
   private async enqueuePiece(state: ProducerState<TEntry>, piece: Pick<TrackPieceRecord, "chunkIndex" | "chunkSize" | "hash" | "payload">) {

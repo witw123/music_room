@@ -194,6 +194,21 @@ describe("CacheStreamScheduler", () => {
     if (!firstOpen) {
       throw new Error("expected an initial stream");
     }
+    scheduler.inspectIncomingPiece({
+      peerId: firstOpen[0],
+      streamId: firstOpen[1].streamId,
+      generation: firstOpen[1].generation,
+      trackId: "track-1",
+      chunkIndex: firstOpen[1].ranges[0].start,
+      payloadBytes: 128 * 1024
+    });
+    scheduler.handleValidated({
+      peerId: firstOpen[0],
+      streamId: firstOpen[1].streamId,
+      generation: firstOpen[1].generation,
+      chunkIndex: firstOpen[1].ranges[0].start,
+      storedBytes: 128 * 1024
+    });
     scheduler.handlePersisted({
       peerId: firstOpen[0],
       streamId: firstOpen[1].streamId,
@@ -277,7 +292,7 @@ describe("CacheStreamScheduler", () => {
       preferredPeerId: "peer-a"
     });
 
-    vi.advanceTimersByTime(12_000);
+    vi.advanceTimersByTime(16_000);
 
     expect(onStreamReset).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -321,7 +336,8 @@ describe("CacheStreamScheduler", () => {
       generation: open[1].generation,
       trackId: "track-1",
       chunkIndex: 0,
-      reason: "storage-failure"
+      reason: "storage-failure",
+      refundCreditBytes: 0
     });
 
     expect(scheduler.getMetrics()).toHaveLength(1);
@@ -331,10 +347,10 @@ describe("CacheStreamScheduler", () => {
 });
 
 describe("calculateInitialCreditBytes", () => {
-  it("clamps the BDP window to 2MB-64MB", () => {
+  it("clamps the BDP window to 8MB-32MB", () => {
     expect(calculateInitialCreditBytes({ chunkSize: 128 * 1024, throughputKbps: 1, rttMs: 1 }))
-      .toBe(2 * 1024 * 1024);
+      .toBe(8 * 1024 * 1024);
     expect(calculateInitialCreditBytes({ chunkSize: 128 * 1024, throughputKbps: 1_000_000, rttMs: 10_000 }))
-      .toBe(64 * 1024 * 1024);
+      .toBe(32 * 1024 * 1024);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   runBestEffortRoomLeave,
+  shouldRetryPlaybackMutationAfterConflict,
   shouldResetPlayerAfterQueueRemoval,
   shouldResetPlayerAfterTrackRemoval
 } from "./use-room-actions";
@@ -14,6 +15,31 @@ describe("player cleanup after removal", () => {
   it("resets only when the removed library track is currently playing", () => {
     expect(shouldResetPlayerAfterTrackRemoval("track_1", "track_1")).toBe(true);
     expect(shouldResetPlayerAfterTrackRemoval("track_2", "track_1")).toBe(false);
+  });
+});
+
+describe("playback mutation conflict retry", () => {
+  it("retries only while the active track and queue item are unchanged", () => {
+    const expectedTarget = {
+      currentTrackId: "track_1",
+      currentQueueItemId: "queue_1"
+    };
+
+    expect(
+      shouldRetryPlaybackMutationAfterConflict(expectedTarget, expectedTarget)
+    ).toBe(true);
+    expect(
+      shouldRetryPlaybackMutationAfterConflict(expectedTarget, {
+        currentTrackId: "track_2",
+        currentQueueItemId: "queue_2"
+      })
+    ).toBe(false);
+    expect(
+      shouldRetryPlaybackMutationAfterConflict(expectedTarget, {
+        currentTrackId: "track_1",
+        currentQueueItemId: "queue_2"
+      })
+    ).toBe(false);
   });
 });
 
