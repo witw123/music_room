@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { assetKindSchema, sha256HexSchema } from "../assets/models";
+import { sha256HexSchema } from "../assets/models";
 
 export const p2pProtocolVersion = 4 as const;
 export const segmentedOpusCapability = "webrtc-opus-v1" as const;
