@@ -54,6 +54,8 @@ export function useSegmentedOpusPlayback(input: {
   const tickingRef = useRef(false);
   const activePlaybackAssetIdRef = useRef<string | null>(null);
   const storedManifestAssetIdRef = useRef<string | null>(null);
+  const playbackIdentityRef = useRef<string | null>(null);
+  const playbackGenerationRef = useRef(0);
   const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
   const playbackAssetId = currentTrack?.playbackAsset?.assetId ?? null;
   const roomId = roomSnapshot?.room.id ?? null;
@@ -73,6 +75,26 @@ export function useSegmentedOpusPlayback(input: {
     const initialRuntime = runtimeRef.current;
     const playbackAsset = initialRuntime.currentTrack?.playbackAsset;
     const playback = initialRuntime.roomSnapshot?.room.playback;
+    const playbackIdentity = playbackAsset && playback
+      ? [
+          playbackAsset.assetId,
+          playback.currentTrackId,
+          playback.mediaEpoch,
+          playback.startAt ?? "none",
+          playback.playbackRevision
+        ].join(":")
+      : null;
+    const generation = ++playbackGenerationRef.current;
+    if (
+      playbackIdentityRef.current !== null &&
+      playbackIdentity !== playbackIdentityRef.current
+    ) {
+      engineRef.current?.destroy();
+      engineRef.current = null;
+      activePlaybackAssetIdRef.current = null;
+      storedManifestAssetIdRef.current = null;
+    }
+    playbackIdentityRef.current = playbackIdentity;
     if (
       !playbackAsset ||
       !playback ||
@@ -119,6 +141,9 @@ export function useSegmentedOpusPlayback(input: {
         const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
 
         if (!runtime.audioUnlocked || audioContextState !== "running") {
+          if (cancelled || generation !== playbackGenerationRef.current) {
+            return;
+          }
           setSnapshot({
             state: "awaiting-unlock",
             bufferedMs: 0,
@@ -138,6 +163,9 @@ export function useSegmentedOpusPlayback(input: {
           getUnit: (unitIndex) => getAssetUnit(currentPlaybackAsset.assetId, unitIndex)
         });
         const sourceHealth = engineRef.current?.getSourceHealth();
+        if (cancelled || generation !== playbackGenerationRef.current) {
+          return;
+        }
         setSnapshot({
           state: result.state,
           bufferedMs: result.bufferedUnits * currentPlaybackAsset.segmentDurationMs,
@@ -156,12 +184,14 @@ export function useSegmentedOpusPlayback(input: {
         const runtime = runtimeRef.current;
         const totalUnitCount = runtime.currentTrack?.playbackAsset?.unitCount ?? 0;
         const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
-        setSnapshot((current) => buildSegmentedPlaybackFailureSnapshot({
-          current,
-          totalUnitCount,
-          audioContextState,
-          error
-        }));
+        if (!cancelled && generation === playbackGenerationRef.current) {
+          setSnapshot((current) => buildSegmentedPlaybackFailureSnapshot({
+            current,
+            totalUnitCount,
+            audioContextState,
+            error
+          }));
+        }
       } finally {
         tickingRef.current = false;
       }

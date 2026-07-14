@@ -87,8 +87,22 @@ type PeerConnectionLifecycleManagerInput = {
 type MediaRecoveryState = {
   degradedWindows: number;
   noPacketWindows: number;
+  highLossWindows: number;
+  highJitterWindows: number;
   restartTimesMs: number[];
+  disconnectedTimerId: ReturnType<typeof setTimeout> | null;
 };
+
+function createMediaRecoveryState(): MediaRecoveryState {
+  return {
+    degradedWindows: 0,
+    noPacketWindows: 0,
+    highLossWindows: 0,
+    highJitterWindows: 0,
+    restartTimesMs: [],
+    disconnectedTimerId: null
+  };
+}
 
 export class PeerConnectionLifecycleManager {
   private readonly peerConnections: PeerConnectionRegistry;
@@ -137,14 +151,16 @@ export class PeerConnectionLifecycleManager {
       steadyStatsSamplingIntervalMs: 5_000,
       onStatsSample: (payload) => {
         const mediaEntry = this.peerConnections.get(payload.peerId, "media");
-        const mediaSample = mediaEntry &&
+        const mediaSample = !!mediaEntry &&
           (mediaEntry.senderTrackState === "live" || mediaEntry.receiverTrackState === "live" ||
             payload.sample.mediaReceiveBitrateKbps !== null ||
             payload.sample.mediaSendBitrateKbps !== null);
+        const previousMedia = mediaEntry
+          ? this.latestMediaSamples.get(payload.peerId)
+          : null;
         if (mediaSample) {
           this.latestMediaSamples.set(payload.peerId, payload.sample);
         }
-        const previousMedia = this.latestMediaSamples.get(payload.peerId);
         const mergedSample = mediaSample || !previousMedia
           ? payload.sample
           : {
@@ -411,29 +427,13 @@ export class PeerConnectionLifecycleManager {
         this.onPeerConnectionChange?.(payload);
         if (payload.state === "connected") {
           if (linkKind === "media") {
+            this.clearMediaDisconnectRecovery(payload.peerId);
             void this.enqueueMediaOperation(payload.peerId, entry);
           }
-        } else if (linkKind === "media" &&
-          (payload.state === "failed" || payload.state === "disconnected") &&
-          !entry.releasing) {
-          const recoveryState = this.mediaRecovery.get(payload.peerId) ?? {
-            degradedWindows: 0,
-            noPacketWindows: 0,
-            restartTimesMs: []
-          } satisfies MediaRecoveryState;
-          const now = Date.now();
-          recoveryState.restartTimesMs = recoveryState.restartTimesMs
-            .filter((timestamp) => now - timestamp < 30_000);
-          recoveryState.restartTimesMs.push(now);
-          this.mediaRecovery.set(payload.peerId, recoveryState);
-          this.onMediaRecovery?.({
-            peerId: payload.peerId,
-            reason: "connection-failed",
-            restartCount: recoveryState.restartTimesMs.length
-          });
-          if (recoveryState.restartTimesMs.length <= 2) {
-            void this.restartMediaPeer(payload.peerId);
-          }
+        } else if (linkKind === "media" && payload.state === "failed" && !entry.releasing) {
+          this.triggerMediaRecovery(payload.peerId, "connection-failed");
+        } else if (linkKind === "media" && payload.state === "disconnected" && !entry.releasing) {
+          this.scheduleMediaDisconnectRecovery(payload.peerId, entry);
         }
       },
       onIceConnectionStateChange: this.onIceConnectionStateChange,
@@ -447,7 +447,17 @@ export class PeerConnectionLifecycleManager {
       bindChannel: (currentPeerId, currentEntry, channel) =>
         this.bindChannelCallback(currentPeerId, currentEntry, channel),
       onRemoteAudioTrack: this.onRemoteAudioTrack,
-      onMediaStateChange: this.onMediaStateChange,
+      onMediaStateChange: (payload) => {
+        this.onMediaStateChange?.(payload);
+        if (
+          linkKind === "media" &&
+          payload.direction === "receiver" &&
+          payload.state === "failed" &&
+          !entry.releasing
+        ) {
+          this.triggerMediaRecovery(payload.peerId, "no-packets");
+        }
+      },
       onMediaTrackMuted: this.onMediaTrackMuted
     });
 
@@ -496,6 +506,10 @@ export class PeerConnectionLifecycleManager {
   }
 
   private releasePeer(peerId: string, entry: PeerEntry) {
+    if (entry.linkKind === "media") {
+      this.latestMediaSamples.delete(peerId);
+      this.clearMediaDisconnectRecovery(peerId);
+    }
     releasePeerConnectionEntry({
       peerId,
       entry,
@@ -691,44 +705,89 @@ export class PeerConnectionLifecycleManager {
     if (!mediaObserved) {
       return;
     }
-    const state = this.mediaRecovery.get(peerId) ?? {
-      degradedWindows: 0,
-      noPacketWindows: 0,
-      restartTimesMs: []
-    } satisfies MediaRecoveryState;
+    const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
     const loss = sample.packetLossRate ?? 0;
     const jitter = sample.jitterMs ?? 0;
     const noPackets = entry.receiverTrackState === "live" &&
       (sample.mediaReceiveBitrateKbps ?? 0) <= 0;
-    state.degradedWindows = loss >= 3 ? state.degradedWindows + 1 : 0;
+    state.degradedWindows = loss >= 3 || jitter >= 20 ? state.degradedWindows + 1 : 0;
     state.noPacketWindows = noPackets ? state.noPacketWindows + 1 : 0;
+    state.highLossWindows = loss >= 5 ? state.highLossWindows + 1 : 0;
+    state.highJitterWindows = jitter >= 30 ? state.highJitterWindows + 1 : 0;
     const reason = noPackets && state.noPacketWindows >= 2
       ? "no-packets" as const
-      : loss >= 5
+      : state.highLossWindows >= 3
         ? "loss" as const
-        : jitter >= 30
+        : state.highJitterWindows >= 3
           ? "jitter" as const
           : state.degradedWindows >= 3
             ? "loss" as const
             : null;
-    if (!reason || entry.connection.signalingState !== "stable") {
+    if (!reason) {
       this.mediaRecovery.set(peerId, state);
       return;
     }
+    this.mediaRecovery.set(peerId, state);
+    this.triggerMediaRecovery(peerId, reason);
+  }
+
+  private scheduleMediaDisconnectRecovery(peerId: string, entry: PeerEntry) {
+    const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
+    if (state.disconnectedTimerId !== null) {
+      return;
+    }
+    state.disconnectedTimerId = setTimeout(() => {
+      state.disconnectedTimerId = null;
+      if (
+        !entry.releasing &&
+        (entry.connection.connectionState === "disconnected" ||
+          entry.connection.iceConnectionState === "disconnected")
+      ) {
+        this.triggerMediaRecovery(peerId, "connection-failed");
+      }
+    }, 2_000);
+    this.mediaRecovery.set(peerId, state);
+  }
+
+  private clearMediaDisconnectRecovery(peerId: string) {
+    const state = this.mediaRecovery.get(peerId);
+    if (!state || state.disconnectedTimerId === null) {
+      return;
+    }
+    clearTimeout(state.disconnectedTimerId);
+    state.disconnectedTimerId = null;
+    this.mediaRecovery.set(peerId, state);
+  }
+
+  private triggerMediaRecovery(
+    peerId: string,
+    reason: "loss" | "jitter" | "no-packets" | "connection-failed"
+  ) {
+    const entry = this.peerConnections.get(peerId, "media");
+    if (!entry || entry.releasing) {
+      return;
+    }
+    const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
     const now = Date.now();
     state.restartTimesMs = state.restartTimesMs.filter((timestamp) => now - timestamp < 30_000);
     if (state.restartTimesMs.length >= 2) {
+      this.mediaRecovery.set(peerId, state);
       this.onMediaRecovery?.({
         peerId,
         reason: "connection-failed",
         restartCount: state.restartTimesMs.length
       });
+      return;
+    }
+    if (entry.connection.signalingState !== "stable") {
       this.mediaRecovery.set(peerId, state);
       return;
     }
     state.restartTimesMs.push(now);
     state.degradedWindows = 0;
     state.noPacketWindows = 0;
+    state.highLossWindows = 0;
+    state.highJitterWindows = 0;
     this.mediaRecovery.set(peerId, state);
     this.onMediaRecovery?.({ peerId, reason, restartCount: state.restartTimesMs.length });
     void this.restartMediaPeer(peerId);

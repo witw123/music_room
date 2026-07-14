@@ -222,6 +222,7 @@ type RoomRealtimeRuntimeInput = {
   clearSocketDisconnectGrace: () => void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
+  setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
   setStatusMessage: (value: string) => void;
   isNavigatingRoomExit: boolean;
   audioUnlocked: boolean;
@@ -289,6 +290,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     pieceTransferRatesRef: input.pieceTransferRatesRef,
     getPeerMedianRttMs: input.getPeerMedianRttMs,
     setConnectedPeers: input.setConnectedPeers,
+    setMediaConnectedPeers: input.setMediaConnectedPeers,
     isPageVisible: input.isPageVisible,
     playbackStatus: input.playbackStatus,
     currentTrackId: input.currentTrackId,

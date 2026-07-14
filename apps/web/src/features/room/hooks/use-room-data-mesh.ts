@@ -267,6 +267,7 @@ export function createRoomDataMeshRuntime(input: {
   invalidateRemoteTrackAvailability?: (trackId: string, ownerPeerId: string) => void;
   flushPendingAvailabilityRef: MutableRefObject<() => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
+  setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
   isPageVisible: boolean;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
   currentTrackId: string | null | undefined;
@@ -527,6 +528,15 @@ export function createRoomDataMeshRuntime(input: {
           })
         });
         if (linkKind === "media") {
+          input.setMediaConnectedPeers((current) => {
+            const next = new Set(current);
+            if (state === "connected") {
+              next.add(remotePeerId);
+            } else {
+              next.delete(remotePeerId);
+            }
+            return [...next];
+          });
           return;
         }
         if (state === "closed" || state === "failed" || state === "disconnected") {

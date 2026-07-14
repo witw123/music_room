@@ -46,6 +46,7 @@ export type LocalMemberPanelState = {
   };
   segmentedPlayback: SegmentedPlaybackSnapshot;
   playbackBitrateKbps: number | null;
+  configuredPlaybackBitrateKbps?: number | null;
   mediaSourceMemberNickname?: string | null;
   dataReadyCount: number;
   playbackStatus: {
@@ -80,6 +81,23 @@ function formatRate(value: number | null, sampleAgeMs: number | null = null) {
 function formatMetric(value: number | null, unit: string) {
   if (value === null) return "未知";
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
+}
+
+export function formatOpusRate(
+  actualKbps: number | null,
+  configuredKbps: number | null | undefined,
+  sampleAgeMs: number | null
+) {
+  if (typeof actualKbps === "number" && actualKbps > 0) {
+    return `${Math.round(actualKbps)} kbps`;
+  }
+  if (actualKbps === 0 && sampleAgeMs !== null && sampleAgeMs <= 6_000) {
+    return configuredKbps ? `采样中 · 目标 ${Math.round(configuredKbps)} kbps` : "采样中";
+  }
+  if (configuredKbps) {
+    return `无 RTP · 目标 ${Math.round(configuredKbps)} kbps`;
+  }
+  return "未知";
 }
 
 function formatSampleAge(sampleAgeMs: number | null) {
@@ -182,7 +200,8 @@ function resolveRoomWanScore(input: {
   localMemberState: LocalMemberPanelState | null;
 }): WanLinkScore {
   const providers = buildRoomProviders(input.summaries);
-  const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ?? null;
+  const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ??
+    input.localMemberState?.configuredPlaybackBitrateKbps ?? null;
   const remoteScores = input.peerDiagnostics
     .filter((snapshot) => snapshot.peerId !== "system")
     .map((diagnostic) => buildWanLinkScoreFromPeerDiagnostic({
@@ -257,7 +276,11 @@ function MembersPanelBase({
           <div>
             <span className="text-[10px] text-foreground-muted">音频格式</span>
             <strong className="mt-1 block text-sm text-foreground">
-                  Opus · {localMemberState.mediaSummary?.sendRateKbps ?? localMemberState.playbackBitrateKbps ?? "--"} kbps
+                  Opus · {formatOpusRate(
+                    localMemberState.playbackBitrateKbps,
+                    localMemberState.configuredPlaybackBitrateKbps,
+                    localMemberState.mediaSummary?.sampleAgeMs ?? null
+                  )}
             </strong>
           </div>
           <div>
@@ -348,9 +371,13 @@ function MembersPanelBase({
                 <strong className="mt-1 block text-xs text-foreground">{mediaStatus.label}</strong>
                 <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{mediaStatus.detail}</p>
                 <p className="mt-1 text-[10px] text-foreground-muted/80">
-                  码率：{formatRate(isLocal
-                    ? localMemberState.mediaSummary?.sendRateKbps ?? localMemberState.playbackBitrateKbps
-                    : diagnostic?.mediaReceiveBitrateKbps ?? null)}
+                  码率：{isLocal
+                    ? formatOpusRate(
+                        localMemberState.playbackBitrateKbps,
+                        localMemberState.configuredPlaybackBitrateKbps,
+                        localMemberState.mediaSummary?.sampleAgeMs ?? null
+                      )
+                    : formatRate(diagnostic?.mediaReceiveBitrateKbps ?? null)}
                 </p>
               </div>
 

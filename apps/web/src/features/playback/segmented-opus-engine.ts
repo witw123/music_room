@@ -61,7 +61,8 @@ export class SegmentedOpusEngine {
     const timelineKey = [
       input.manifest.assetId,
       input.playback.mediaEpoch,
-      input.playback.startAt
+      input.playback.startAt,
+      input.playback.playbackRevision
     ].join(":");
     if (timelineKey !== this.timelineKey) {
       this.resetTimeline();

@@ -240,6 +240,9 @@ export function useRoomDerivedState({
       activePeerDiagnostics,
       ["mediaReceiveBitrateKbps", "mediaSendBitrateKbps"]
     );
+    const configuredPlaybackBitrateKbps = currentTrack?.playbackAsset?.bitrate
+      ? currentTrack.playbackAsset.bitrate / 1000
+      : null;
     const normalizedPieceDownloadRateKbps =
       totalPieceDownloadRateKbps ?? (hasPieceMetricSample ? 0 : null);
     const normalizedPieceUploadRateKbps =
@@ -271,6 +274,7 @@ export function useRoomDerivedState({
       playbackBitrateKbps: isLocalMediaSource
         ? totalMediaSendRateKbps
         : totalMediaReceiveRateKbps,
+      configuredPlaybackBitrateKbps,
       mediaSourceMemberNickname:
         roomSnapshot.room.members.find(
           (member) => member.id === roomSnapshot.room.playback.sourceSessionId
@@ -287,6 +291,7 @@ export function useRoomDerivedState({
     activeSessionUserId,
     audioUnlocked,
     connectedPeers,
+    currentTrack,
     peerId,
     peerDiagnostics,
     roomSnapshot,

@@ -110,6 +110,7 @@ type UseRoomRuntimeInput = {
   setPeerId: Dispatch<SetStateAction<string>>;
   connectedPeers: string[];
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
+  setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
   suppressRoomRecovery: boolean;
   setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
   setIsRecoveringRoom: Dispatch<SetStateAction<boolean>>;
@@ -222,6 +223,7 @@ export function useRoomRuntime({
   setPeerId,
   connectedPeers,
   setConnectedPeers,
+  setMediaConnectedPeers,
   suppressRoomRecovery,
   setSuppressRoomRecovery,
   setIsRecoveringRoom,
@@ -615,6 +617,7 @@ export function useRoomRuntime({
       pieceTransferRatesRef,
       getPeerMedianRttMs,
       setConnectedPeers,
+      setMediaConnectedPeers,
       isPageVisible: realtimeRuntimeState.isPageVisible,
       playbackStatus: realtimeRuntimeState.playbackStatus ?? "paused",
       currentTrackId: realtimeRuntimeState.currentTrackId,
@@ -695,6 +698,7 @@ export function useRoomRuntime({
     stopRecoveryWatchdog,
     clearSocketDisconnectGrace,
     setConnectedPeers,
+    setMediaConnectedPeers,
     setRoomRecoveryState,
     setStatusMessage,
     updateConnectionSupervisorSignalState,

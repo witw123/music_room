@@ -113,6 +113,7 @@ describe("createRoomDataMeshRuntime piece persistence", () => {
       deferManualCachePendingPiece: vi.fn(),
       flushPendingAvailabilityRef: { current: vi.fn() },
       setConnectedPeers: vi.fn(),
+      setMediaConnectedPeers: vi.fn(),
       isPageVisible: true,
       playbackStatus: "playing",
       currentTrackId: "track_1",

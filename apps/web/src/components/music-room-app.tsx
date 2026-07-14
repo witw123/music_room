@@ -157,6 +157,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setPeerId,
     connectedPeers: pageState.connectedPeers,
     setConnectedPeers: pageState.setConnectedPeers,
+    setMediaConnectedPeers: pageState.setMediaConnectedPeers,
     suppressRoomRecovery: pageState.suppressRoomRecovery,
     setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
     setIsRecoveringRoom: pageState.setIsRecoveringRoom,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   errorCodes,
   type AuthSession,
@@ -106,6 +106,31 @@ export function useRoomActions({
   onTrackDeleted,
   onRoomDeleted
 }: UseRoomActionsOptions) {
+  const playbackMutationChainRef = useRef<Promise<void>>(Promise.resolve());
+  const latestPlaybackStateRef = useRef<{
+    roomId: string | null;
+    revision: number | null;
+  }>({
+    roomId: roomSnapshot?.room.id ?? null,
+    revision: roomSnapshot?.room.playback.playbackRevision ?? null
+  });
+  const renderedRoomId = roomSnapshot?.room.id ?? null;
+  const renderedPlaybackRevision = roomSnapshot?.room.playback.playbackRevision ?? null;
+  if (latestPlaybackStateRef.current.roomId !== renderedRoomId) {
+    latestPlaybackStateRef.current = {
+      roomId: renderedRoomId,
+      revision: renderedPlaybackRevision
+    };
+  }
+  if (
+    renderedPlaybackRevision !== null &&
+    latestPlaybackStateRef.current.roomId === renderedRoomId &&
+    (latestPlaybackStateRef.current.revision === null ||
+      renderedPlaybackRevision >= latestPlaybackStateRef.current.revision)
+  ) {
+    latestPlaybackStateRef.current.revision = renderedPlaybackRevision;
+  }
+
   const syncRoomSnapshot = useCallback(
     async (roomId: string) => {
       const snapshot = await musicRoomApi.getRoom(roomId);
@@ -125,50 +150,96 @@ export function useRoomActions({
       requestPlayback: (nextExpectedVersion: number) => Promise<PlaybackSnapshot>,
       retryTarget?: PlaybackMutationTarget
     ) => {
-      let nextExpectedVersion = expectedVersion;
-
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          const playback = await requestPlayback(nextExpectedVersion);
-          dispatchRoomStateEvent({
-            type: "server-playback-patch",
+      const execute = async () => {
+        if (latestPlaybackStateRef.current.roomId !== roomId) {
+          latestPlaybackStateRef.current = {
             roomId,
-            playback
-          });
-          void syncRoomSnapshot(roomId).catch(() => undefined);
-          return playback;
-        } catch (error) {
-          const isVersionConflict =
-            (error instanceof MusicRoomApiError &&
-              error.code === errorCodes.playbackVersionConflict) ||
-            (error instanceof Error && error.message.includes("Playback state version conflict"));
+            revision: null
+          };
+        }
+        let nextExpectedVersion = Math.max(
+          expectedVersion,
+          latestPlaybackStateRef.current.revision ?? 0
+        );
 
-          if (!isVersionConflict || attempt === 1) {
-            setStatusMessage(toUserFacingError(error));
-            return null;
-          }
-
+        for (let attempt = 0; attempt < 2; attempt += 1) {
           try {
-            const snapshot = await syncRoomSnapshot(roomId);
-            if (
-              retryTarget &&
-              !shouldRetryPlaybackMutationAfterConflict(
-                retryTarget,
-                snapshot.room.playback
-              )
-            ) {
-              setStatusMessage("播放曲目已更新，本次操作未重试。");
+            const playback = await requestPlayback(nextExpectedVersion);
+            if (latestPlaybackStateRef.current.roomId === roomId) {
+              latestPlaybackStateRef.current.revision = playback.playbackRevision;
+            }
+            dispatchRoomStateEvent({
+              type: "server-playback-patch",
+              roomId,
+              playback
+            });
+            void syncRoomSnapshot(roomId).catch(() => undefined);
+            return playback;
+          } catch (error) {
+            const isVersionConflict =
+              (error instanceof MusicRoomApiError &&
+                error.code === errorCodes.playbackVersionConflict) ||
+              (error instanceof Error && error.message.includes("Playback state version conflict"));
+
+            if (!isVersionConflict) {
+              // A request can commit on the server while its response is lost.
+              // Reconcile once before reporting an error so the player does not
+              // remain on a stale track after a successful cut.
+              try {
+                const snapshot = await syncRoomSnapshot(roomId);
+                if (
+                  snapshot.room.playback.playbackRevision > nextExpectedVersion ||
+                  (retryTarget &&
+                    shouldRetryPlaybackMutationAfterConflict(
+                      retryTarget,
+                      snapshot.room.playback
+                    ))
+                ) {
+                  return snapshot.room.playback;
+                }
+              } catch {
+                // Preserve the original request error when reconciliation also fails.
+              }
+              setStatusMessage(toUserFacingError(error));
               return null;
             }
-            nextExpectedVersion = snapshot.room.playback.playbackRevision;
-          } catch (refreshError) {
-            setStatusMessage(toUserFacingError(refreshError));
-            return null;
+
+            if (attempt === 1) {
+              setStatusMessage(toUserFacingError(error));
+              return null;
+            }
+
+            try {
+              const snapshot = await syncRoomSnapshot(roomId);
+              if (latestPlaybackStateRef.current.roomId === roomId) {
+                latestPlaybackStateRef.current.revision = snapshot.room.playback.playbackRevision;
+              }
+              if (
+                retryTarget &&
+                !shouldRetryPlaybackMutationAfterConflict(
+                  retryTarget,
+                  snapshot.room.playback
+                )
+              ) {
+                setStatusMessage("播放曲目已更新，本次操作未重试。");
+                return null;
+              }
+              nextExpectedVersion = snapshot.room.playback.playbackRevision;
+            } catch (refreshError) {
+              setStatusMessage(toUserFacingError(refreshError));
+              return null;
+            }
           }
         }
-      }
 
-      return null;
+        return null;
+      };
+      const run = playbackMutationChainRef.current.then(execute, execute);
+      playbackMutationChainRef.current = run.then(
+        () => undefined,
+        () => undefined
+      );
+      return run;
     },
     [dispatchRoomStateEvent, setStatusMessage, syncRoomSnapshot]
   );

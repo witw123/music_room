@@ -9,7 +9,7 @@ import type {
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatTransferRateMBps } from "@/lib/music-room-ui";
-import type { LocalMemberPanelState } from "./MembersPanel";
+import { formatOpusRate, type LocalMemberPanelState } from "./MembersPanel";
 
 export type AvailabilityEntry = {
   track: TrackMeta;
@@ -239,7 +239,11 @@ function MeshStatusPanelBase({
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-surface-border pt-4 text-xs sm:grid-cols-3">
         <div><span className="text-[10px] text-foreground-muted">实际播放</span><strong className="mt-1 block text-foreground">{localMemberState?.playbackStatus.label ?? "等待房间状态"}</strong></div>
         <div><span className="text-[10px] text-foreground-muted">媒体引擎</span><strong className="mt-1 block text-foreground">WebRTC RTP Opus</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">音频码率</span><strong className="mt-1 block text-foreground">{localMemberState?.mediaSummary?.sendRateKbps ?? localMemberState?.playbackBitrateKbps ?? "--"} kbps</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">音频码率</span><strong className="mt-1 block text-foreground">{formatOpusRate(
+          localMemberState?.playbackBitrateKbps ?? null,
+          localMemberState?.configuredPlaybackBitrateKbps,
+          localMemberState?.mediaSummary?.sampleAgeMs ?? null
+        )}</strong></div>
         <div><span className="text-[10px] text-foreground-muted">媒体轨道</span><strong className="mt-1 block text-foreground">{playback?.state ?? "idle"}</strong></div>
         <div><span className="text-[10px] text-foreground-muted">AudioContext</span><strong className="mt-1 block text-foreground">{playback?.audioContextState ?? "未创建"}</strong></div>
         <div><span className="text-[10px] text-foreground-muted">当前问题</span><strong className={`mt-1 block ${playback?.lastError ? "text-amber-300" : "text-foreground"}`}>{playback?.lastError ?? "无"}</strong></div>
@@ -255,7 +259,11 @@ function MeshStatusPanelBase({
                   <span>AudioContext: {playback.audioContextState ?? "未创建"}</span>
                   <span>媒体轨道: {playback.state}</span>
                   <span>播放源: {localMemberState.playbackStatus.badgeText}</span>
-                  <span>音频码率: {localMemberState.mediaSummary?.sendRateKbps ?? localMemberState.playbackBitrateKbps ?? "--"} kbps</span>
+                  <span>音频码率: {formatOpusRate(
+                    localMemberState.playbackBitrateKbps,
+                    localMemberState.configuredPlaybackBitrateKbps,
+                    localMemberState.mediaSummary?.sampleAgeMs ?? null
+                  )}</span>
                   <span>最近错误: {playback.lastError ?? "无"}</span>
                 </DiagnosticGrid>
               </DiagnosticSection>
