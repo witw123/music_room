@@ -71,9 +71,19 @@ describe("peer connection lifecycle helpers", () => {
         iceServers: [],
         resolveConnectionConfig: () => ({ bundlePolicy: "max-bundle" })
       })
-    ).toEqual({
+    ).toMatchObject({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       bundlePolicy: "max-bundle"
+    });
+    expect(
+      buildPeerConnectionConfig({
+        peerId: "peer_b",
+        iceServers: []
+      })
+    ).toMatchObject({
+      iceTransportPolicy: "all",
+      rtcpMuxPolicy: "require",
+      iceCandidatePoolSize: 4
     });
 
     expect(
@@ -81,7 +91,7 @@ describe("peer connection lifecycle helpers", () => {
         peerId: "peer_b",
         iceServers: [{ urls: "turn:example.test?transport=udp" }]
       })
-    ).toEqual({
+    ).toMatchObject({
       iceServers: [{ urls: "turn:example.test?transport=udp" }]
     });
   });

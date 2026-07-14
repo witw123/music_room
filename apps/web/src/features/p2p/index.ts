@@ -47,7 +47,7 @@ export async function testTurnConnectivity(
 ): Promise<TurnConnectivityResult> {
   const startedAt = performance.now();
 
-  const turnServers: IceServerConfig[] = filterUdpIceServers(iceServers).filter((server) => {
+  const turnServers: IceServerConfig[] = normalizeIceServers(iceServers).filter((server) => {
     const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
     return urls.some((url) => url.startsWith("turn:") || url.startsWith("turns:"));
   });
@@ -120,7 +120,7 @@ export async function testTurnConnectivity(
   pc.close();
 
   return {
-    reachable: udpRelayCandidates.length > 0,
+    reachable: relayCandidates.length > 0,
     relayCandidates: relayCandidates.length,
     udpRelayCandidates: udpRelayCandidates.length,
     srflxCandidates: srflxCandidates.length,
@@ -159,7 +159,7 @@ export type ResolvedTrackPieceManifest = {
 
 export function getWebRTCIceServers(config?: IceConfigResponse | null): IceServerConfig[] {
   if (config?.iceServers?.length) {
-    return filterUdpIceServers(config.iceServers);
+    return normalizeIceServers(config.iceServers);
   }
 
   return getStaticWebRTCIceServers();
@@ -173,7 +173,7 @@ export function getStaticWebRTCIceServers(): IceServerConfig[] {
       const parsed = JSON.parse(rawJson) as unknown;
       const result = iceServerConfigSchema.array().safeParse(parsed);
       if (result.success && result.data.length > 0) {
-        return filterUdpIceServers(result.data);
+        return normalizeIceServers(result.data);
       }
     } catch {
       // Fallback to simple envs below.
@@ -186,7 +186,7 @@ export function getStaticWebRTCIceServers(): IceServerConfig[] {
   const stunUrl = process.env.NEXT_PUBLIC_STUN_URL?.trim() || "stun:stun.l.google.com:19302";
 
   const servers: IceServerConfig[] = [{ urls: stunUrl }];
-  if (turnUrl && isUdpTurnUrl(turnUrl)) {
+  if (turnUrl && isTurnUrl(turnUrl)) {
     servers.push({
       urls: turnUrl,
       username: turnUsername || undefined,
@@ -218,17 +218,15 @@ export function parseIceConfigResponse(payload: unknown) {
   }
 
   return {
-    iceServers: filterUdpIceServers(iceServersResult.data),
+    iceServers: normalizeIceServers(iceServersResult.data),
     ttlSeconds,
     source
   } satisfies IceConfigResponse;
 }
 
-function filterUdpIceServers(servers: IceServerConfig[]) {
+function normalizeIceServers(servers: IceServerConfig[]) {
   return servers.flatMap((server) => {
-    const urls = (Array.isArray(server.urls) ? server.urls : [server.urls]).filter((url) =>
-      !isTurnUrl(url) || isUdpTurnUrl(url)
-    );
+    const urls = (Array.isArray(server.urls) ? server.urls : [server.urls]).filter((url) => url.trim().length > 0);
     return urls.length > 0 ? [{ ...server, urls: urls.length === 1 ? urls[0] : urls }] : [];
   });
 }
@@ -238,10 +236,6 @@ function isTurnUrl(value: string) {
   return normalized.startsWith("turn:") || normalized.startsWith("turns:");
 }
 
-function isUdpTurnUrl(value: string) {
-  const normalized = value.trim().toLowerCase();
-  return normalized.startsWith("turn:") && !/(?:[?&]transport=)(tcp|tls)\b/.test(normalized);
-}
 
 export function getMissingChunkIndexes(
   totalChunks: number,

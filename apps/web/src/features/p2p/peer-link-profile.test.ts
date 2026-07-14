@@ -149,4 +149,32 @@ describe("external peer link profile", () => {
     expect(budget.bulkHighWatermarkBytes).toBe(0);
     expect(budget.maxPayloadBytes).toBeLessThanOrEqual(64 * 1024);
   });
+
+  it("pauses bulk cache traffic while RTP loss has degraded the media path", () => {
+    const budget = resolvePeerSendBudget({
+      candidateType: "relay",
+      relayProtocol: "udp",
+      currentRoundTripTimeMs: 64,
+      availableOutgoingBitrateKbps: 2_000,
+      mediaTrackActive: true,
+      mediaBitrateKbps: 128,
+      transportScore: "degraded"
+    });
+
+    expect(budget.bulkHighWatermarkBytes).toBe(0);
+  });
+
+  it("keeps bulk cache traffic paused even when the media path is healthy", () => {
+    const budget = resolvePeerSendBudget({
+      candidateType: "host",
+      protocol: "udp",
+      currentRoundTripTimeMs: 24,
+      availableOutgoingBitrateKbps: 20_000,
+      mediaTrackActive: true,
+      mediaBitrateKbps: 182,
+      transportScore: "healthy"
+    });
+
+    expect(budget.bulkHighWatermarkBytes).toBe(0);
+  });
 });

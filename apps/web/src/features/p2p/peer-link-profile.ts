@@ -161,21 +161,9 @@ export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudg
   }
 
   // RTP Opus shares the ICE/SCTP congestion controller with the manual
-  // original-file channel. Keep a small control window, and only allow bulk
-  // data after the measured link has room beyond the Opus reservation.
-  const availableOutgoingKbps = finitePositive(input.availableOutgoingBitrateKbps);
-  const mediaBitrateKbps = Math.max(64, finitePositive(input.mediaBitrateKbps) ?? 192);
-  const remainingKbps = availableOutgoingKbps === null
-    ? null
-    : availableOutgoingKbps - mediaBitrateKbps - 64;
-  const bulkHighWatermarkBytes = remainingKbps === null || remainingKbps <= 32
-    ? 0
-    : Math.min(
-        budget.bulkHighWatermarkBytes,
-        remainingKbps === null
-          ? 128 * 1024
-          : Math.max(64 * 1024, Math.round(remainingKbps * 1000 / 8 * 0.35))
-      );
+  // original-file channel. While audio is live, pause bulk transfer entirely
+  // so the sender's full uplink and TURN allocation remain available to RTP.
+  const bulkHighWatermarkBytes = 0;
 
   return {
     ...budget,

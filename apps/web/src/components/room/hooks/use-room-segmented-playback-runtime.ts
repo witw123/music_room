@@ -154,12 +154,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           const now = Date.now();
           const startupGraceElapsed = now - health.boundAtMs >= 2_500;
           const waitingTooLong = health.waitingSinceMs !== null &&
-            now - health.waitingSinceMs >= 600;
+            now - health.waitingSinceMs >= 1_500;
           const progressStalled = startupGraceElapsed &&
-            now - health.lastProgressAtMs >= 2_500 &&
+            now - health.lastProgressAtMs >= 5_000 &&
             audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
           const shouldNudge = waitingTooLong || progressStalled;
-          if (shouldNudge && now - health.lastRecoveryAtMs >= 3_000) {
+          if (shouldNudge && now - health.lastRecoveryAtMs >= 10_000) {
             health.lastRecoveryAtMs = now;
             health.waitingSinceMs = null;
             health.recoveryCount += 1;

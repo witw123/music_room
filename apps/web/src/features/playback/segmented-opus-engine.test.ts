@@ -217,6 +217,32 @@ describe("SegmentedOpusEngine", () => {
     engine.destroy();
   });
 
+  it("does not reread cached units on every scheduler tick", async () => {
+    const { context } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const getUnit = vi.fn(async (unitIndex: number) => unit(unitIndex));
+    const serverNowMs = Date.now();
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit
+    });
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs: serverNowMs + 100,
+      volume: 0.7,
+      getUnit
+    });
+
+    expect(getUnit).toHaveBeenCalledTimes(manifest.unitCount);
+    engine.destroy();
+  });
+
   it("stops the old timeline and schedules a seek target immediately", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);

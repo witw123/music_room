@@ -307,6 +307,7 @@ export function createRoomDataMeshRuntime(input: {
     const mediaBitrateKbps = observedMediaBitrateKbps ?? configuredMediaBitrateKbps;
     const mediaTrackActive = playback?.status === "playing" && (
       sourcePeerId === input.peerId ||
+      sourcePeerId === remotePeerId ||
       (latestTransportSample?.mediaReceiveBitrateKbps ?? 0) > 0
     );
 

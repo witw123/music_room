@@ -21,6 +21,14 @@ export function buildPeerConnectionConfig(input: {
         ? input.iceServers
         : [{ urls: "stun:stun.l.google.com:19302" }]
     ),
+    // Keep every configured candidate (direct, TURN UDP, TURN TCP/TLS) so ICE
+    // can escape a lossy relay path after a restart. Bundle all media/control
+    // components onto one transport to leave the largest possible allocation
+    // for the live RTP audio track.
+    iceTransportPolicy: "all",
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
+    iceCandidatePoolSize: 4,
     ...(input.resolveConnectionConfig?.(input.peerId) ?? {})
   };
 }
@@ -77,6 +85,10 @@ export function releasePeerConnectionEntry(input: {
   input.entry.configuredAudioMaxBitrateKbps = null;
   input.entry.appliedAudioBitrateKbps = null;
   input.entry.receiverTrackState = "none";
+  if (input.entry.receiverMuteTimerId) {
+    clearTimeout(input.entry.receiverMuteTimerId);
+    input.entry.receiverMuteTimerId = null;
+  }
   input.entry.mediaNegotiationPending = false;
   input.onDataBufferedAmountChange?.({
     peerId: input.peerId,
@@ -201,14 +213,23 @@ export function bindPeerConnectionEvents(input: {
     input.entry.audioReceiver = event.receiver ?? null;
     const receiver = event.receiver as (RTCRtpReceiver & {
       playoutDelayHint?: number;
+      jitterBufferTarget?: number;
     }) | null;
     if (receiver && "playoutDelayHint" in receiver) {
       try {
-        // A small jitter buffer absorbs short WAN bursts without adding a
-        // noticeable delay to synchronized room playback.
-        receiver.playoutDelayHint = 0.18;
+        // Keep a little more audio in the browser jitter buffer on WAN/relay
+        // paths. This absorbs short loss bursts without rebuilding the
+        // MediaStream, which would be audible as a larger dropout.
+        receiver.playoutDelayHint = 0.3;
       } catch {
         // Older browsers expose the property but reject runtime updates.
+      }
+    }
+    if (receiver && "jitterBufferTarget" in receiver) {
+      try {
+        receiver.jitterBufferTarget = 0.3;
+      } catch {
+        // Experimental in Chromium; ignore unsupported implementations.
       }
     }
     input.entry.remoteAudioStream = event.streams[0] ?? new MediaStream([event.track]);
@@ -242,17 +263,36 @@ export function bindPeerConnectionEvents(input: {
       if (input.entry.remoteAudioTrackId !== event.track.id) {
         return;
       }
-      input.entry.receiverTrackState = "failed";
-      input.onMediaStateChange?.({
-        peerId: input.peerId,
-        entry: input.entry,
-        direction: "receiver",
-        state: "failed"
-      });
+      if (input.entry.receiverMuteTimerId) {
+        clearTimeout(input.entry.receiverMuteTimerId);
+      }
+      // Remote tracks can briefly mute while the jitter buffer repairs a loss
+      // burst. Only publish failed after a sustained mute so the room runtime
+      // does not tear down a healthy audio element on every burst.
+      input.entry.receiverMuteTimerId = setTimeout(() => {
+        input.entry.receiverMuteTimerId = null;
+        if (
+          input.entry.remoteAudioTrackId === event.track.id &&
+          event.track.muted &&
+          event.track.readyState === "live"
+        ) {
+          input.entry.receiverTrackState = "failed";
+          input.onMediaStateChange?.({
+            peerId: input.peerId,
+            entry: input.entry,
+            direction: "receiver",
+            state: "failed"
+          });
+        }
+      }, 1_500);
     };
     event.track.onunmute = () => {
       if (input.entry.remoteAudioTrackId !== event.track.id) {
         return;
+      }
+      if (input.entry.receiverMuteTimerId) {
+        clearTimeout(input.entry.receiverMuteTimerId);
+        input.entry.receiverMuteTimerId = null;
       }
       input.entry.receiverTrackState = "live";
       input.onMediaStateChange?.({

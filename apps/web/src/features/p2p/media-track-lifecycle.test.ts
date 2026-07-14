@@ -4,7 +4,10 @@ import { SignalingTransport } from "./signaling-transport";
 
 class FakeSender {
   track: MediaStreamTrack | null;
-  readonly setParameters = vi.fn(async () => undefined);
+  lastParameters: RTCRtpSendParameters | null = null;
+  readonly setParameters = vi.fn(async (parameters: RTCRtpSendParameters) => {
+    this.lastParameters = parameters;
+  });
 
   constructor(track: MediaStreamTrack) {
     this.track = track;
@@ -102,6 +105,12 @@ describe("WebRTC media track lifecycle", () => {
 
     const connection = FakePeerConnection.instances[0]!;
     expect(connection.addTrack).toHaveBeenCalledWith(track, expect.anything());
+    const sender = (manager.getPeerEntry("peer_b")?.audioSender as unknown) as FakeSender;
+    expect(sender.lastParameters?.encodings?.[0]).toMatchObject({
+      maxBitrate: 192_000,
+      priority: "high",
+      networkPriority: "high"
+    });
     expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ type: "offer" }));
     expect(manager.getPeerMediaState("peer_b")).toMatchObject({
       senderTrackState: "live",

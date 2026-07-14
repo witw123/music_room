@@ -379,6 +379,28 @@ describe("p2p helpers", () => {
     });
   });
 
+  it("keeps TURN TCP/TLS fallbacks available alongside UDP", () => {
+    const parsed = parseIceConfigResponse({
+      iceServers: [{
+        urls: [
+          "turn:turn.example.com:3478?transport=udp",
+          "turn:turn.example.com:3478?transport=tcp",
+          "turns:turn.example.com:5349"
+        ],
+        username: "user",
+        credential: "credential"
+      }],
+      ttlSeconds: 3600,
+      source: "ephemeral"
+    });
+
+    expect(parsed?.iceServers[0]?.urls).toEqual([
+      "turn:turn.example.com:3478?transport=udp",
+      "turn:turn.example.com:3478?transport=tcp",
+      "turns:turn.example.com:5349"
+    ]);
+  });
+
   it("keeps static env parsing available for fallback", () => {
     process.env.NEXT_PUBLIC_STUN_URL = "stun:stun.example.com:3478";
     process.env.NEXT_PUBLIC_TURN_URL = "turn:turn.example.com:3478";

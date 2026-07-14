@@ -21,6 +21,7 @@ export class SegmentedOpusEngine {
   private readonly scheduled = new Map<number, ScheduledSource>();
   private readonly completed = new Set<number>();
   private readonly decoded = new Map<number, Promise<AudioBuffer>>();
+  private readonly unitRecords = new Map<number, AudioAssetUnitRecord>();
   private wasmDecoder: import("ogg-opus-decoder").OggOpusDecoder | null = null;
   private masterGain: GainNode | null = null;
   private broadcastGain: GainNode | null = null;
@@ -85,7 +86,21 @@ export class SegmentedOpusEngine {
       },
       (_, offset) => currentIndex + offset
     );
-    const units = await Promise.all(unitIndexes.map((unitIndex) => input.getUnit(unitIndex)));
+    // IndexedDB reads are considerably more expensive than the in-memory
+    // scheduler tick. Re-reading the same twelve units every 100ms can starve
+    // decoding on slower devices and make the source stream go silent even
+    // though the audio is already cached locally.
+    const units = await Promise.all(unitIndexes.map(async (unitIndex) => {
+      const cached = this.unitRecords.get(unitIndex);
+      if (cached) {
+        return cached;
+      }
+      const loaded = await input.getUnit(unitIndex);
+      if (loaded) {
+        this.unitRecords.set(unitIndex, loaded);
+      }
+      return loaded;
+    }));
     if (this.destroyed || this.timelineKey !== timelineKey) {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
@@ -372,6 +387,7 @@ export class SegmentedOpusEngine {
     this.contextAnchorTime = null;
     this.playbackAnchorPositionMs = 0;
     this.timelineStarted = false;
+    this.unitRecords.clear();
     this.masterGain?.disconnect();
     this.masterGain = null;
     this.broadcastGain?.disconnect();
