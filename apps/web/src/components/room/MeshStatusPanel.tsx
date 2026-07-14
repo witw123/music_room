@@ -227,7 +227,7 @@ function MeshStatusPanelBase({
 
       <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-foreground-muted">
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">在线: {onlineCount}</span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">Data: {dataReadyCount}</span>
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">控制/原文件通道: {dataReadyCount}</span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           播放: {localMemberState?.playbackStatus.label ?? "等待房间状态"}
         </span>
@@ -261,8 +261,8 @@ function MeshStatusPanelBase({
               </DiagnosticSection>
               <DiagnosticSection title="本机媒体与数据">
                 <DiagnosticGrid>
-                  <span>媒体接收: {formatRate(localMemberState.transportSummary.receiveRateKbps)}</span>
-                  <span>媒体发送: {formatRate(localMemberState.transportSummary.sendRateKbps)}</span>
+                  <span>媒体接收: {formatRate(localMemberState.mediaSummary?.receiveRateKbps ?? null)}</span>
+                  <span>媒体发送: {formatRate(localMemberState.mediaSummary?.sendRateKbps ?? null)}</span>
                   <span>Data 接收: {formatRate(localMemberState.transportSummary.receiveRateKbps)}</span>
                   <span>Data 发送: {formatRate(localMemberState.transportSummary.sendRateKbps)}</span>
                   <span>RTT: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>
@@ -271,7 +271,7 @@ function MeshStatusPanelBase({
               </DiagnosticSection>
               <DiagnosticSection title="房间连接">
                 <DiagnosticGrid>
-                  <span>DataChannel: {dataReadyCount}</span>
+                  <span>控制/原文件 DataChannel: {dataReadyCount}</span>
                   <span>已连接成员: {connectedPeersCount}</span>
                   <span>在线成员: {onlineCount}</span>
                   <span>异常链路: {degradedCount}</span>

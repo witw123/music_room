@@ -277,7 +277,7 @@ export function createRoomDataMeshRuntime(input: {
   const loadCachedLibraryTrackRecord = createInFlightCachedLibraryTrackRecordLoader(
     getCachedLibraryTrack
   );
-const resolvePeerLinkWindow = (remotePeerId: string) => {
+  const resolvePeerLinkWindow = (remotePeerId: string) => {
     const supervisorState =
       input.connectionSupervisorStatesRef.current.get(remotePeerId) ?? null;
     const latestTransportSample =
@@ -285,6 +285,29 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
     const pieceTransferRates = input.getPieceTransferRates(
       input.pieceTransferRatesRef.current,
       remotePeerId
+    );
+    const playback = input.currentRoomRef.current?.room.playback ?? null;
+    const sourcePeerId = playback?.sourcePeerId ?? (
+      playback?.sourceSessionId
+        ? input.currentRoomRef.current?.room.members.find(
+            (member) => member.id === playback.sourceSessionId
+          )?.peerId ?? null
+        : null
+    );
+    const playbackTrack = playback?.currentTrackId
+      ? input.currentRoomRef.current?.tracks.find((track) => track.id === playback.currentTrackId) ?? null
+      : null;
+    const configuredMediaBitrateKbps = playbackTrack?.playbackAsset?.bitrate
+      ? playbackTrack.playbackAsset.bitrate / 1000
+      : null;
+    const observedMediaBitrateKbps = [
+      latestTransportSample?.mediaSendBitrateKbps,
+      latestTransportSample?.mediaReceiveBitrateKbps
+    ].find((value): value is number => typeof value === "number" && value > 0) ?? null;
+    const mediaBitrateKbps = observedMediaBitrateKbps ?? configuredMediaBitrateKbps;
+    const mediaTrackActive = playback?.status === "playing" && (
+      sourcePeerId === input.peerId ||
+      (latestTransportSample?.mediaReceiveBitrateKbps ?? 0) > 0
     );
 
     return {
@@ -304,7 +327,9 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         latestTransportSample?.relayProtocol ?? latestTransportSample?.protocol ?? null,
       relayProtocol: latestTransportSample?.relayProtocol ?? null,
       transportScore: supervisorState?.transportScore ?? null,
-      bufferedAmountBytes: peerBufferedAmountBytes.get(remotePeerId) ?? null
+      bufferedAmountBytes: peerBufferedAmountBytes.get(remotePeerId) ?? null,
+      mediaTrackActive,
+      mediaBitrateKbps
     };
   };
   const queueDataPeerRecovery = (inputValue: {
@@ -590,6 +615,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           peerId: remotePeerId,
           sample
         });
+        mesh.refreshPeerDataBudget(remotePeerId);
         if (
           sample.candidateType === "host" ||
           sample.candidateType === "srflx" ||

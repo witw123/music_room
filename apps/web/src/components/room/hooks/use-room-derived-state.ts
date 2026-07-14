@@ -7,7 +7,8 @@ import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomSnapshot,
-  TrackAvailabilityAnnouncement
+  TrackAvailabilityAnnouncement,
+  TrackMeta
 } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
@@ -42,6 +43,14 @@ export type UseRoomDerivedStateInput = {
   isRecoveringRoom: boolean;
 };
 
+export type OriginalAssetAvailabilityEntry = {
+  trackId: string;
+  assetId: string;
+  remotePeerCount: number;
+  availableUnitCount: number;
+  totalUnits: number;
+};
+
 const emptyWorkspacePeerDiagnostics: PeerDiagnosticsSnapshot[] = [];
 const emptyWorkspacePeerRecentEvents: PeerRecentEvent[] = [];
 
@@ -53,7 +62,7 @@ export function useRoomDerivedState({
   activeDashboardTab,
   currentTrack,
   availabilityByTrack,
-  availabilityByAsset: _availabilityByAsset,
+  availabilityByAsset,
   segmentedPlayback,
   peerDiagnostics,
   peerRecentEvents,
@@ -118,6 +127,16 @@ export function useRoomDerivedState({
           })
         : [],
     [activeMemberPeerIds, derivedAvailabilityByTrack, peerId, roomId, roomTracks]
+  );
+  const originalAssetAvailabilitySummary = useMemo(
+    () => buildOriginalAssetAvailabilitySummary({
+      tracks: roomTracks ?? [],
+      availabilityByAsset,
+      roomId,
+      activeMemberPeerIds,
+      localPeerId: peerId
+    }),
+    [activeMemberPeerIds, availabilityByAsset, peerId, roomId, roomTracks]
   );
 
   const currentTrackAvailability = useMemo(
@@ -217,6 +236,10 @@ export function useRoomDerivedState({
       ]
     );
     const pieceSampleAgeMs = getLatestPieceSampleAgeMs(activePeerDiagnostics);
+    const mediaSampleAgeMs = getLatestMetricSampleAgeMs(
+      activePeerDiagnostics,
+      ["mediaReceiveBitrateKbps", "mediaSendBitrateKbps"]
+    );
     const normalizedPieceDownloadRateKbps =
       totalPieceDownloadRateKbps ?? (hasPieceMetricSample ? 0 : null);
     const normalizedPieceUploadRateKbps =
@@ -233,6 +256,11 @@ export function useRoomDerivedState({
         sendRateKbps: totalDataSendRateKbps,
         latencyMs: averageLatencyMs,
         sampleAgeMs: transportSampleAgeMs
+      },
+      mediaSummary: {
+        receiveRateKbps: totalMediaReceiveRateKbps,
+        sendRateKbps: totalMediaSendRateKbps,
+        sampleAgeMs: mediaSampleAgeMs
       },
       pieceSummary: {
         downloadRateKbps: normalizedPieceDownloadRateKbps,
@@ -299,6 +327,7 @@ export function useRoomDerivedState({
       activeMemberPeerIds
     ),
     availabilitySummary,
+    originalAssetAvailabilitySummary,
     currentTrackAvailability,
     memberTransferSummaries,
     localMemberState,
@@ -310,6 +339,65 @@ export function useRoomDerivedState({
     isRoomTransitionPending,
     showRoomTransitionState
   };
+}
+
+export function buildOriginalAssetAvailabilitySummary(input: {
+  tracks: TrackMeta[];
+  availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
+  roomId: string | null;
+  activeMemberPeerIds: Set<string>;
+  localPeerId: string;
+}): OriginalAssetAvailabilityEntry[] {
+  return input.tracks.flatMap((track) => {
+    const asset = track.originalAsset;
+    if (!asset) {
+      return [];
+    }
+    const announcements = Object.values(input.availabilityByAsset[asset.assetId] ?? {})
+      .filter((announcement) =>
+        (!input.roomId || announcement.roomId === input.roomId) &&
+        input.activeMemberPeerIds.has(announcement.ownerPeerId)
+      );
+    const remoteAnnouncements = announcements.filter(
+      (announcement) => announcement.ownerPeerId !== input.localPeerId
+    );
+    return [{
+      trackId: track.id,
+      assetId: asset.assetId,
+      remotePeerCount: remoteAnnouncements.filter((announcement) =>
+        announcement.availableRanges.some((range) => range.end >= range.start)
+      ).length,
+      availableUnitCount: resolveAvailableUnitCount(remoteAnnouncements),
+      totalUnits: asset.unitCount
+    }];
+  });
+}
+
+function resolveAvailableUnitCount(announcements: AssetAvailabilityAnnouncement[]) {
+  const ranges = announcements
+    .flatMap((announcement) => announcement.availableRanges)
+    .sort((left, right) => left.start - right.start);
+  let total = 0;
+  let currentStart: number | null = null;
+  let currentEnd: number | null = null;
+  for (const range of ranges) {
+    if (currentStart === null || currentEnd === null) {
+      currentStart = range.start;
+      currentEnd = range.end;
+      continue;
+    }
+    if (range.start > currentEnd + 1) {
+      total += currentEnd - currentStart + 1;
+      currentStart = range.start;
+      currentEnd = range.end;
+      continue;
+    }
+    currentEnd = Math.max(currentEnd, range.end);
+  }
+  if (currentStart !== null && currentEnd !== null) {
+    total += currentEnd - currentStart + 1;
+  }
+  return total;
 }
 
 function getDiagnosticPriority(peerId: string, sourcePeerId: string | null) {
@@ -363,8 +451,6 @@ export function buildMemberMediaSummaries(input: {
     };
   });
 }
-
-export const buildMemberAssetSummaries = buildMemberMediaSummaries;
 
 export function resolveDerivedAvailabilityByTrack(input: {
   roomSnapshot: RoomSnapshot | null;

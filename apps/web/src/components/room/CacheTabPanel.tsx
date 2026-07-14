@@ -7,6 +7,7 @@ import { formatDuration } from "@/lib/music-room-ui";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
 import type { CachedLibraryTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/manual-cache-task-store";
+import type { OriginalAssetAvailabilityEntry } from "./hooks/use-room-derived-state";
 import {
   deriveRoomCacheRow,
   filterRoomCacheRows,
@@ -21,6 +22,7 @@ import {
 type CacheTabPanelProps = {
   tracks: TrackMeta[];
   availabilitySummary: AvailabilityEntry[];
+  originalAssetAvailabilitySummary: OriginalAssetAvailabilityEntry[];
   activeSession: AuthSession | null;
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
@@ -34,7 +36,7 @@ type CacheTabPanelProps = {
 const roomFilters: Array<{ value: RoomCacheFilter; label: string }> = [
   { value: "all", label: "全部" },
   { value: "active", label: "下载中" },
-  { value: "available", label: "可缓存" },
+  { value: "available", label: "可下载" },
   { value: "completed", label: "已完成" }
 ];
 
@@ -55,6 +57,7 @@ const actionLabels: Record<RoomCacheAction, string> = {
 function CacheTabPanelBase({
   tracks,
   availabilitySummary,
+  originalAssetAvailabilitySummary,
   activeSession,
   cacheLibraryTracks,
   manualCacheTasks,
@@ -87,6 +90,10 @@ function CacheTabPanelBase({
     () => new Map(availabilitySummary.map((entry) => [entry.track.id, entry] as const)),
     [availabilitySummary]
   );
+  const originalAssetAvailabilityByTrackId = useMemo(
+    () => new Map(originalAssetAvailabilitySummary.map((entry) => [entry.trackId, entry] as const)),
+    [originalAssetAvailabilitySummary]
+  );
   const cacheLibraryByHash = useMemo(
     () => new Map(cacheLibraryTracks.map((track) => [track.fileHash, track] as const)),
     [cacheLibraryTracks]
@@ -96,15 +103,23 @@ function CacheTabPanelBase({
       .filter((track) => track.ownerSessionId !== activeSession?.userId)
       .map((track) => {
         const availability = availabilityByTrackId.get(track.id);
+        const originalAvailability = originalAssetAvailabilityByTrackId.get(track.id);
         return deriveRoomCacheRow({
           track,
           task: manualCacheTasks[track.id] ?? null,
           cachedTrack: cacheLibraryByHash.get(track.fileHash) ?? null,
-          remotePeerCount: availability?.remotePeerCount ?? 0,
-          availableTotalChunks: availability?.totalChunks ?? 0
+          remotePeerCount: originalAvailability?.remotePeerCount ?? availability?.remotePeerCount ?? 0,
+          availableTotalChunks: originalAvailability?.availableUnitCount ?? availability?.totalChunks ?? 0
         });
       }),
-    [activeSession?.userId, availabilityByTrackId, cacheLibraryByHash, manualCacheTasks, tracks]
+    [
+      activeSession?.userId,
+      availabilityByTrackId,
+      cacheLibraryByHash,
+      manualCacheTasks,
+      originalAssetAvailabilityByTrackId,
+      tracks
+    ]
   );
   const visibleRoomRows = useMemo(
     () => filterRoomCacheRows(roomRows, roomFilter),
@@ -126,9 +141,15 @@ function CacheTabPanelBase({
     () => cacheLibraryTracks.reduce((total, track) => total + Math.max(0, track.sizeBytes), 0),
     [cacheLibraryTracks]
   );
-  const activeTaskCount = roomRows.filter((row) =>
-    row.status.key === "downloading" || row.status.key === "assembling" || row.status.key === "finalizing"
-  ).length;
+  const manualTaskCount = Object.keys(manualCacheTasks).length;
+  const onlineSourceCount = useMemo(
+    () => roomRows.reduce((total, row) => {
+      const availability = availabilityByTrackId.get(row.track.id);
+      const originalAvailability = originalAssetAvailabilityByTrackId.get(row.track.id);
+      return total + (originalAvailability?.remotePeerCount ?? availability?.remotePeerCount ?? 0);
+    }, 0),
+    [availabilityByTrackId, originalAssetAvailabilityByTrackId, roomRows]
+  );
   const filterCounts = useMemo(
     () => ({
       all: roomRows.length,
@@ -155,13 +176,16 @@ function CacheTabPanelBase({
       <header className="border-b border-surface-border pb-5">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-foreground">本机缓存</h2>
-            <p className="mt-1 text-xs text-foreground-muted">管理房间歌曲的无损下载与本机文件。</p>
+            <h2 className="text-base font-semibold text-foreground">原文件缓存</h2>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-foreground-muted">
+              仅在你主动点击下载后传输；实时播放使用 WebRTC RTP Opus，不读取或写入这里的缓存。
+            </p>
           </div>
-          <dl className="grid grid-cols-3 gap-5 sm:gap-8">
-            <CacheMetric label="已缓存" value={`${cacheLibraryTracks.length} 首`} />
+          <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4 sm:gap-8">
+            <CacheMetric label="完整文件" value={`${cacheLibraryTracks.length} 首`} />
             <CacheMetric label="占用空间" value={formatCacheSize(totalCacheSize)} />
-            <CacheMetric label="进行中" value={`${activeTaskCount} 项`} />
+            <CacheMetric label="手动任务" value={`${manualTaskCount} 项`} />
+            <CacheMetric label="在线来源" value={`${onlineSourceCount} 个`} />
           </dl>
         </div>
       </header>
@@ -169,8 +193,8 @@ function CacheTabPanelBase({
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">房间歌曲</h3>
-            <p className="mt-1 text-xs text-foreground-muted">从在线成员下载完整无损文件。</p>
+            <h3 className="text-sm font-semibold text-foreground">手动下载</h3>
+            <p className="mt-1 text-xs text-foreground-muted">下载完整原文件到本机，不参与实时播放。</p>
           </div>
           <div className="inline-flex w-full overflow-x-auto rounded-lg border border-surface-border bg-background/40 p-1 sm:w-auto">
             {roomFilters.map((filter) => (
@@ -208,7 +232,7 @@ function CacheTabPanelBase({
                       </span>
                     </div>
                     <p className="mt-1 truncate text-xs text-foreground-muted">
-                      {row.track.artist || row.track.ownerNickname} · {row.track.ownerNickname} · {formatDuration(row.track.durationMs)}
+                      {row.track.artist || row.track.ownerNickname} · {row.track.ownerNickname} · {formatDuration(row.track.durationMs)} · {formatTrackBitrate(row.track.bitrate)}
                     </p>
                   </div>
 
@@ -222,7 +246,7 @@ function CacheTabPanelBase({
                       </span>
                     </div>
                     <div
-                      aria-label={`${row.track.title} 缓存进度`}
+                      aria-label={`${row.track.title} 原文件下载进度`}
                       aria-valuemax={100}
                       aria-valuemin={0}
                       aria-valuenow={row.progress.percent}
@@ -267,11 +291,11 @@ function CacheTabPanelBase({
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-foreground">本机文件</h3>
-            <p className="mt-1 text-xs text-foreground-muted">添加到房间曲库、导出或删除完整缓存。</p>
+            <h3 className="text-sm font-semibold text-foreground">本机原文件</h3>
+            <p className="mt-1 text-xs text-foreground-muted">管理已完成的原文件，可添加到曲库、导出或删除。</p>
           </div>
           <input
-            aria-label="搜索本机缓存"
+            aria-label="搜索本机原文件"
             className="h-9 w-full rounded-lg border border-surface-border bg-[#0d0d10] px-3 text-xs text-foreground [color-scheme:dark] outline-none transition-colors placeholder:text-foreground-muted/70 focus:border-accent sm:w-64"
             onChange={(event) => setLibraryQuery(event.target.value)}
             placeholder="搜索歌名、艺术家或上传者"
@@ -353,7 +377,7 @@ function CacheTabPanelBase({
           </div>
         ) : (
           <EmptyState>
-            {cacheLibraryTracks.length === 0 ? "本机还没有完整缓存。" : "没有匹配的本机缓存。"}
+            {cacheLibraryTracks.length === 0 ? "本机还没有完整原文件。" : "没有匹配的本机原文件。"}
           </EmptyState>
         )}
       </section>
@@ -368,6 +392,13 @@ function CacheMetric({ label, value }: { label: string; value: string }) {
       <dd className="mt-0.5 text-sm font-semibold text-foreground">{value}</dd>
     </div>
   );
+}
+
+function formatTrackBitrate(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "码率未知";
+  }
+  return `${Math.round(value / 1000)} kbps`;
 }
 
 function EmptyState({ children }: { children: string }) {

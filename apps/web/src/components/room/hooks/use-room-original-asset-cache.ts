@@ -249,7 +249,7 @@ export function useRoomOriginalAssetCache(input: RuntimeInput) {
     const track = runtime.roomSnapshot?.tracks.find((candidate) => candidate.id === trackId);
     const asset = track?.originalAsset;
     if (!track || !asset) {
-      runtime.setStatusMessage("该曲目没有可缓存的成员端源文件资产。");
+      runtime.setStatusMessage("该曲目没有可下载的成员端原文件。");
       return;
     }
     await putAssetManifest(asset);

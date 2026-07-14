@@ -34,6 +34,11 @@ export type LocalMemberPanelState = {
     latencyMs: number | null;
     sampleAgeMs: number | null;
   };
+  mediaSummary?: {
+    receiveRateKbps: number | null;
+    sendRateKbps: number | null;
+    sampleAgeMs: number | null;
+  };
   pieceSummary: {
     downloadRateKbps: number | null;
     uploadRateKbps: number | null;
@@ -191,8 +196,8 @@ function resolveRoomWanScore(input: {
   return remoteScores[0] ?? buildWanLinkScore({
     protocol: "udp",
     rttMs: input.localMemberState?.transportSummary.latencyMs ?? null,
-    downloadRateKbps: input.localMemberState?.transportSummary.receiveRateKbps ?? null,
-    uploadRateKbps: input.localMemberState?.transportSummary.sendRateKbps ?? null,
+    downloadRateKbps: input.localMemberState?.mediaSummary?.receiveRateKbps ?? null,
+    uploadRateKbps: input.localMemberState?.mediaSummary?.sendRateKbps ?? null,
     playbackBitrateKbps,
     dataChannelState: (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
     providers
@@ -291,10 +296,10 @@ function MembersPanelBase({
         const mediaStatus = getCurrentTrackStatus(summary, member.presenceState);
         const presence = getPresence(member);
         const downloadRate = isLocal
-          ? localMemberState.transportSummary.receiveRateKbps
+          ? localMemberState.mediaSummary?.receiveRateKbps ?? null
           : diagnostic?.mediaReceiveBitrateKbps ?? null;
         const uploadRate = isLocal
-          ? localMemberState.transportSummary.sendRateKbps
+          ? localMemberState.mediaSummary?.sendRateKbps ?? null
           : diagnostic?.mediaSendBitrateKbps ?? null;
         const latency = isLocal
           ? localMemberState.transportSummary.latencyMs
@@ -350,8 +355,8 @@ function MembersPanelBase({
               <div>
                 <span className="text-[10px] text-foreground-muted">本端链路观测</span>
                 <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-                  <span>接收：{formatRate(downloadRate, isLocal ? localMemberState.transportSummary.sampleAgeMs : null)}</span>
-                  <span>发送：{formatRate(uploadRate, isLocal ? localMemberState.transportSummary.sampleAgeMs : null)}</span>
+                  <span>接收：{formatRate(downloadRate, isLocal ? localMemberState.mediaSummary?.sampleAgeMs ?? null : null)}</span>
+                  <span>发送：{formatRate(uploadRate, isLocal ? localMemberState.mediaSummary?.sampleAgeMs ?? null : null)}</span>
                   <span>RTT：{formatMetric(latency, "ms")}</span>
                   <span>丢包：{formatMetric(diagnostic?.packetLossRate ?? null, "%")}</span>
                   <span>jitter：{formatMetric(diagnostic?.jitterMs ?? null, "ms")}</span>

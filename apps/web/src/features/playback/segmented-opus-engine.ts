@@ -14,7 +14,7 @@ type ScheduledSource = {
 };
 
 const scheduleLeadSeconds = 0.04;
-const decodeAheadUnitCount = 8;
+const decodeAheadUnitCount = 12;
 
 export class SegmentedOpusEngine {
   private timelineKey: string | null = null;

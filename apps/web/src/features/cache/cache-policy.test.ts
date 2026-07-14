@@ -7,14 +7,14 @@ import {
 } from "./cache-policy";
 
 describe("cachePolicy", () => {
-  it("exposes the enabled cache playback feature flags", () => {
+  it("keeps manual original caching enabled and playback caching disabled", () => {
     expect(cachePolicy).toEqual({
       manualTrackCaching: true,
-      automaticLocalPlaybackTakeover: true,
-      cacheOnlyPlayback: true
+      automaticLocalPlaybackTakeover: false,
+      cacheOnlyPlayback: false
     });
     expect(enableManualTrackCaching).toBe(true);
-    expect(enableTrackCaching).toBe(true);
-    expect(enableCacheOnlyPlayback).toBe(true);
+    expect(enableTrackCaching).toBe(false);
+    expect(enableCacheOnlyPlayback).toBe(false);
   });
 });

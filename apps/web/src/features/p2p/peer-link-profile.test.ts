@@ -122,4 +122,31 @@ describe("external peer link profile", () => {
     expect(window.targetInFlightBytes).toBeGreaterThanOrEqual(8 * 1024 * 1024);
     expect(window.maxPendingChunks).toBeGreaterThanOrEqual(16);
   });
+
+  it("reserves the RTP Opus budget before allowing bulk cache traffic", () => {
+    const budget = resolvePeerSendBudget({
+      candidateType: "prflx",
+      protocol: "udp",
+      currentRoundTripTimeMs: 80,
+      availableOutgoingBitrateKbps: 180,
+      mediaTrackActive: true,
+      mediaBitrateKbps: 160,
+      transportScore: "healthy"
+    });
+
+    expect(budget.bulkHighWatermarkBytes).toBe(0);
+    expect(budget.maxPayloadBytes).toBeLessThanOrEqual(64 * 1024);
+  });
+
+  it("pauses bulk cache traffic until media capacity is measured", () => {
+    const budget = resolvePeerSendBudget({
+      candidateType: "prflx",
+      protocol: "udp",
+      mediaTrackActive: true,
+      transportScore: "healthy"
+    });
+
+    expect(budget.bulkHighWatermarkBytes).toBe(0);
+    expect(budget.maxPayloadBytes).toBeLessThanOrEqual(64 * 1024);
+  });
 });

@@ -123,6 +123,7 @@ export class PeerConnectionLifecycleManager {
             configuredAudioMaxBitrateKbps: configured
           }
         });
+        void this.adaptAudioSenderBitrate(payload.peerId, payload.sample);
       },
       samplePeerConnectionStats
     });
@@ -485,8 +486,11 @@ export class PeerConnectionLifecycleManager {
     return enqueuePeerOperation(entry, () => this.syncLocalAudioToPeer(peerId, entry));
   }
 
-  private async applyAudioSenderParameters(sender: RTCRtpSender) {
-    if (this.localAudioMaxBitrateKbps === null || typeof sender.getParameters !== "function") {
+  private async applyAudioSenderParameters(
+    sender: RTCRtpSender,
+    effectiveMaxBitrateKbps: number | null = this.localAudioMaxBitrateKbps
+  ) {
+    if (effectiveMaxBitrateKbps === null || typeof sender.getParameters !== "function") {
       return;
     }
     try {
@@ -496,18 +500,55 @@ export class PeerConnectionLifecycleManager {
         : [{} as RTCRtpEncodingParameters];
       parameters.encodings = encodings.map((encoding) => ({
         ...encoding,
-        maxBitrate: Math.max(16_000, Math.round(this.localAudioMaxBitrateKbps! * 1000))
+        maxBitrate: Math.max(64_000, Math.round(effectiveMaxBitrateKbps * 1000))
       }));
       await sender.setParameters(parameters);
       for (const [, entry] of this.peerConnections.entries()) {
         if (entry.audioSender === sender) {
           entry.configuredAudioMaxBitrateKbps = this.localAudioMaxBitrateKbps;
+          entry.appliedAudioBitrateKbps = effectiveMaxBitrateKbps;
           break;
         }
       }
     } catch {
       // Browser codecs may reject a runtime bitrate update; RTP remains usable.
     }
+  }
+
+  private async adaptAudioSenderBitrate(
+    peerId: string,
+    sample: PeerConnectionStatsSample
+  ) {
+    const entry = this.peerConnections.get(peerId);
+    const requestedMaxBitrateKbps = this.localAudioMaxBitrateKbps;
+    const availableOutgoingBitrateKbps = sample.availableOutgoingBitrateKbps;
+    if (
+      !entry ||
+      !entry.audioSender ||
+      requestedMaxBitrateKbps === null ||
+      typeof availableOutgoingBitrateKbps !== "number" ||
+      !Number.isFinite(availableOutgoingBitrateKbps) ||
+      availableOutgoingBitrateKbps <= 0
+    ) {
+      return;
+    }
+
+    const effectiveMaxBitrateKbps = Math.max(
+      64,
+      Math.min(requestedMaxBitrateKbps, Math.floor(availableOutgoingBitrateKbps * 0.65))
+    );
+    if (
+      entry.appliedAudioBitrateKbps !== null &&
+      Math.abs(entry.appliedAudioBitrateKbps - effectiveMaxBitrateKbps) < 8
+    ) {
+      return;
+    }
+    await enqueuePeerOperation(entry, async () => {
+      if (entry.releasing || !entry.audioSender) {
+        return;
+      }
+      await this.applyAudioSenderParameters(entry.audioSender, effectiveMaxBitrateKbps);
+    });
   }
 
   private async recreatePeer(peerId: string, entry: PeerEntry) {

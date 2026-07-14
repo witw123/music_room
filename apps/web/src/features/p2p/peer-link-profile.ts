@@ -19,6 +19,8 @@ export type PeerLinkProfileInput = {
   relayProtocol?: string | null;
   transportScore?: "healthy" | "degraded" | "unstable" | "failed" | null;
   bufferedAmountBytes?: number | null;
+  mediaTrackActive?: boolean;
+  mediaBitrateKbps?: number | null;
 };
 
 export type PeerSendBudget = {
@@ -125,36 +127,60 @@ export function resolvePeerSendBudget(input: PeerLinkProfileInput): PeerSendBudg
     1024 * 1024,
     32 * 1024 * 1024
   );
+  let budget: PeerSendBudget;
   if (profile === "fast-direct") {
-    return {
+    budget = {
       highWatermarkBytes: Math.min(32 * 1024 * 1024, Math.max(16 * 1024 * 1024, adaptiveBulkWatermark)),
       bulkHighWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(8 * 1024 * 1024, adaptiveBulkWatermark)),
       maxPayloadBytes: 240 * 1024
     };
-  }
-
-  if (profile === "relay-udp") {
-    return {
+  } else if (profile === "relay-udp") {
+    budget = {
       // Relay still needs headroom to pipeline SCTP over TURN; keep below
       // direct but high enough to saturate modest WAN uplinks.
       highWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(8 * 1024 * 1024, adaptiveBulkWatermark)),
       bulkHighWatermarkBytes: Math.min(8 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
       maxPayloadBytes: 160 * 1024
     };
-  }
-
-  if (profile === "standard-direct") {
-    return {
+  } else if (profile === "standard-direct") {
+    budget = {
       highWatermarkBytes: Math.min(32 * 1024 * 1024, Math.max(8 * 1024 * 1024, adaptiveBulkWatermark)),
       bulkHighWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
       maxPayloadBytes: 192 * 1024
     };
+  } else {
+    budget = {
+      highWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
+      bulkHighWatermarkBytes: Math.min(8 * 1024 * 1024, adaptiveBulkWatermark),
+      maxPayloadBytes: 128 * 1024
+    };
   }
 
+  if (!input.mediaTrackActive) {
+    return budget;
+  }
+
+  // RTP Opus shares the ICE/SCTP congestion controller with the manual
+  // original-file channel. Keep a small control window, and only allow bulk
+  // data after the measured link has room beyond the Opus reservation.
+  const availableOutgoingKbps = finitePositive(input.availableOutgoingBitrateKbps);
+  const mediaBitrateKbps = Math.max(64, finitePositive(input.mediaBitrateKbps) ?? 192);
+  const remainingKbps = availableOutgoingKbps === null
+    ? null
+    : availableOutgoingKbps - mediaBitrateKbps - 64;
+  const bulkHighWatermarkBytes = remainingKbps === null || remainingKbps <= 32
+    ? 0
+    : Math.min(
+        budget.bulkHighWatermarkBytes,
+        remainingKbps === null
+          ? 128 * 1024
+          : Math.max(64 * 1024, Math.round(remainingKbps * 1000 / 8 * 0.35))
+      );
+
   return {
-    highWatermarkBytes: Math.min(16 * 1024 * 1024, Math.max(4 * 1024 * 1024, adaptiveBulkWatermark)),
-    bulkHighWatermarkBytes: Math.min(8 * 1024 * 1024, adaptiveBulkWatermark),
-    maxPayloadBytes: 128 * 1024
+    ...budget,
+    bulkHighWatermarkBytes,
+    maxPayloadBytes: Math.min(budget.maxPayloadBytes, 64 * 1024)
   };
 }
 

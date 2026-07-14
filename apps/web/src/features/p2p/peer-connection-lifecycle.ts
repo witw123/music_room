@@ -75,6 +75,7 @@ export function releasePeerConnectionEntry(input: {
   input.entry.remoteAudioTrackId = null;
   input.entry.senderTrackState = "none";
   input.entry.configuredAudioMaxBitrateKbps = null;
+  input.entry.appliedAudioBitrateKbps = null;
   input.entry.receiverTrackState = "none";
   input.entry.mediaNegotiationPending = false;
   input.onDataBufferedAmountChange?.({
@@ -198,6 +199,18 @@ export function bindPeerConnectionEvents(input: {
       return;
     }
     input.entry.audioReceiver = event.receiver ?? null;
+    const receiver = event.receiver as (RTCRtpReceiver & {
+      playoutDelayHint?: number;
+    }) | null;
+    if (receiver && "playoutDelayHint" in receiver) {
+      try {
+        // A small jitter buffer absorbs short WAN bursts without adding a
+        // noticeable delay to synchronized room playback.
+        receiver.playoutDelayHint = 0.18;
+      } catch {
+        // Older browsers expose the property but reject runtime updates.
+      }
+    }
     input.entry.remoteAudioStream = event.streams[0] ?? new MediaStream([event.track]);
     input.entry.remoteAudioTrackId = event.track.id;
     input.entry.receiverTrackState = event.track.readyState === "live" ? "live" : "ended";
@@ -223,6 +236,30 @@ export function bindPeerConnectionEvents(input: {
         entry: input.entry,
         direction: "receiver",
         state: "ended"
+      });
+    };
+    event.track.onmute = () => {
+      if (input.entry.remoteAudioTrackId !== event.track.id) {
+        return;
+      }
+      input.entry.receiverTrackState = "failed";
+      input.onMediaStateChange?.({
+        peerId: input.peerId,
+        entry: input.entry,
+        direction: "receiver",
+        state: "failed"
+      });
+    };
+    event.track.onunmute = () => {
+      if (input.entry.remoteAudioTrackId !== event.track.id) {
+        return;
+      }
+      input.entry.receiverTrackState = "live";
+      input.onMediaStateChange?.({
+        peerId: input.peerId,
+        entry: input.entry,
+        direction: "receiver",
+        state: "live"
       });
     };
   };

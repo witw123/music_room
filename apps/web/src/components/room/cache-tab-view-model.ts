@@ -27,7 +27,6 @@ export type RoomCacheRow = {
   detail: string;
   progress: { completed: number; total: number; percent: number; label: string };
   speedLabel: string | null;
-  aheadLabel: string | null;
   action: RoomCacheAction | null;
   actionDisabled: boolean;
 };
@@ -41,12 +40,15 @@ type DeriveRoomCacheRowInput = {
 };
 
 function buildProgress(input: DeriveRoomCacheRowInput) {
+  const assetUnitTotal = input.task?.totalChunks ?? input.track.originalAsset?.unitCount ?? 0;
+  const pieceManifestTotal = input.track.originalAsset
+    ? 0
+    : Math.max(input.track.relayManifest?.totalChunks ?? 0, input.track.pieceManifest?.totalChunks ?? 0);
   const total = Math.max(
     0,
-    input.task?.totalChunks ?? 0,
+    assetUnitTotal,
     input.availableTotalChunks,
-    input.track.relayManifest?.totalChunks ?? 0,
-    input.track.pieceManifest?.totalChunks ?? 0
+    pieceManifestTotal
   );
   const completed = input.cachedTrack
     ? total
@@ -56,9 +58,9 @@ function buildProgress(input: DeriveRoomCacheRowInput) {
     total,
     percent: input.cachedTrack ? 100 : total > 0 ? Math.min(100, Math.round(completed / total * 100)) : 0,
     label: input.cachedTrack
-      ? "缓存完整"
+      ? "完整原文件"
       : total > 0
-        ? `${completed}/${total} 分片`
+        ? `已接收 ${completed}/${total} 分片`
         : "等待分片信息"
   };
 }
@@ -71,22 +73,21 @@ export function deriveRoomCacheRow(input: DeriveRoomCacheRowInput): RoomCacheRow
   if (input.cachedTrack) {
     return {
       track: input.track,
-      status: { key: "cached", label: "已缓存", tone: "success" },
+      status: { key: "cached", label: "已完成", tone: "success" },
       category: "completed",
-      detail: "完整无损文件已保存在本机。",
+      detail: "完整原文件已保存在本机，可导出或添加到曲库。",
       progress,
       speedLabel: null,
-      aheadLabel: null,
       action: null,
       actionDisabled: true
     };
   }
 
   if (task?.status === "assembling") {
-    return buildTaskRow(input, progress, "assembling", "组装中", "正在校验并生成完整无损文件。", null, true);
+    return buildTaskRow(input, progress, "assembling", "组装中", "正在校验并生成完整原文件。", null, true);
   }
   if (task?.status === "ready") {
-    return buildTaskRow(input, progress, "finalizing", "正在完成", "缓存已完成，正在更新本机缓存库。", null, true);
+    return buildTaskRow(input, progress, "finalizing", "正在完成", "下载已完成，正在更新本机文件库。", null, true);
   }
   if (task?.status === "failed-integrity") {
     return buildTaskRow(
@@ -119,7 +120,7 @@ export function deriveRoomCacheRow(input: DeriveRoomCacheRowInput): RoomCacheRow
       progress,
       "downloading",
       "下载中",
-      "正在缓存完整无损文件。",
+      "正在下载原文件。",
       "pause",
       false
     );
@@ -129,22 +130,20 @@ export function deriveRoomCacheRow(input: DeriveRoomCacheRowInput): RoomCacheRow
       track: input.track,
       status: { key: "waiting", label: "等待来源", tone: "warning" },
       category: "available",
-      detail: "提供者上线后即可开始缓存。",
+      detail: "当前没有在线原文件来源，稍后可重试。",
       progress,
       speedLabel: null,
-      aheadLabel: null,
       action: null,
       actionDisabled: true
     };
   }
   return {
     track: input.track,
-    status: { key: "available", label: "可缓存", tone: "neutral" },
+    status: { key: "available", label: "可下载", tone: "neutral" },
     category: "available",
-    detail: "可下载完整无损文件到本机。",
+    detail: `检测到 ${input.remotePeerCount} 个在线来源，可手动下载原文件。`,
     progress,
     speedLabel: null,
-    aheadLabel: null,
     action: "download",
     actionDisabled: false
   };
@@ -188,7 +187,6 @@ function buildTaskRow(
     detail,
     progress,
     speedLabel: key === "downloading" ? formatDownloadRate(input.task?.downloadRateKbps) : null,
-    aheadLabel: null,
     action,
     actionDisabled
   };

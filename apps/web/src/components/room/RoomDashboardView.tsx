@@ -15,6 +15,7 @@ import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
 import type { AvailabilityEntry } from "./MeshStatusPanel";
+import type { OriginalAssetAvailabilityEntry } from "./hooks/use-room-derived-state";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
@@ -40,6 +41,7 @@ type RoomDashboardViewProps = {
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
   availabilitySummary: AvailabilityEntry[];
+  originalAssetAvailabilitySummary: OriginalAssetAvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
@@ -125,6 +127,7 @@ function RoomDashboardViewBase({
   cacheLibraryTracks,
   manualCacheTasks,
   availabilitySummary,
+  originalAssetAvailabilitySummary,
   memberTransferSummaries,
   localMemberState,
   peerDiagnostics,
@@ -323,6 +326,7 @@ function RoomDashboardViewBase({
             <CacheTabPanel
               tracks={roomSnapshot.tracks}
               availabilitySummary={availabilitySummary}
+              originalAssetAvailabilitySummary={originalAssetAvailabilitySummary}
               activeSession={activeSession}
               cacheLibraryTracks={cacheLibraryTracks}
               manualCacheTasks={manualCacheTasks}

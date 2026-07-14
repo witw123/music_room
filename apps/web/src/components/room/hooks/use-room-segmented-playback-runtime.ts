@@ -49,6 +49,14 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const audioUnlocked = input.audioUnlocked;
   const missingMediaSinceRef = useRef<number | null>(null);
   const boundMediaKeyRef = useRef<string | null>(null);
+  const receiverAudioHealthRef = useRef({
+    boundAtMs: 0,
+    lastProgressAtMs: 0,
+    lastCurrentTime: null as number | null,
+    waitingSinceMs: null as number | null,
+    lastRecoveryAtMs: 0,
+    recoveryCount: 0
+  });
   const [mediaPlayback, setMediaPlayback] = useState<SegmentedPlaybackSnapshot>(() => ({
     state: "idle",
     bufferedMs: 0,
@@ -105,6 +113,14 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         audio.pause();
         audio.srcObject = null;
         boundMediaKeyRef.current = null;
+        receiverAudioHealthRef.current = {
+          boundAtMs: 0,
+          lastProgressAtMs: 0,
+          lastCurrentTime: null,
+          waitingSinceMs: null,
+          lastRecoveryAtMs: 0,
+          recoveryCount: 0
+        };
       }
       if (playback?.status !== "playing") {
         missingMediaSinceRef.current = null;
@@ -125,11 +141,38 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       }
       if (remote?.remoteStream && remote.receiverTrackState === "live" && audio) {
         missingMediaSinceRef.current = null;
+        const health = receiverAudioHealthRef.current;
         if (audio.srcObject !== remote.remoteStream) {
           audio.srcObject = remote.remoteStream;
+          health.boundAtMs = Date.now();
+          health.lastProgressAtMs = health.boundAtMs;
+          health.lastCurrentTime = null;
+          health.waitingSinceMs = null;
         }
         boundMediaKeyRef.current = mediaKey;
         if (runtimeAudioUnlocked) {
+          const now = Date.now();
+          const startupGraceElapsed = now - health.boundAtMs >= 2_500;
+          const waitingTooLong = health.waitingSinceMs !== null &&
+            now - health.waitingSinceMs >= 600;
+          const progressStalled = startupGraceElapsed &&
+            now - health.lastProgressAtMs >= 2_500 &&
+            audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+          const shouldNudge = waitingTooLong || progressStalled;
+          if (shouldNudge && now - health.lastRecoveryAtMs >= 3_000) {
+            health.lastRecoveryAtMs = now;
+            health.waitingSinceMs = null;
+            health.recoveryCount += 1;
+            setMediaConnectionState("reconnecting");
+            audio.pause();
+            // Rebinding the same MediaStream makes the element rebuild its
+            // jitter-buffer attachment without renegotiating the PeerConnection.
+            audio.srcObject = null;
+            audio.srcObject = remote.remoteStream;
+            health.boundAtMs = now;
+            health.lastProgressAtMs = now;
+            health.lastCurrentTime = null;
+          }
           const result = await roomAudioOutput.playElement(audio);
           if (!cancelled && !result.ok) {
             setMediaPlayback({
@@ -139,6 +182,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
               lastError: result.error
             });
             return;
+          }
+          if (!cancelled && shouldNudge) {
+            setMediaConnectionState("live");
           }
         } else {
           if (!cancelled) {
@@ -194,6 +240,14 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         audio.pause();
         audio.srcObject = null;
       }
+      receiverAudioHealthRef.current = {
+        boundAtMs: 0,
+        lastProgressAtMs: 0,
+        lastCurrentTime: null,
+        waitingSinceMs: null,
+        lastRecoveryAtMs: 0,
+        recoveryCount: 0
+      };
     };
   }, [
     audioRef,
@@ -203,8 +257,48 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     runtimeCurrentTrack,
     runtimePeerId,
     runtimeRoomSnapshot,
-    setLocalAudioStream
+    setLocalAudioStream,
+    setMediaConnectionState
   ]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || isCurrentSource) {
+      return;
+    }
+
+    const health = receiverAudioHealthRef.current;
+    const markProgress = () => {
+      const now = Date.now();
+      const currentTime = Number.isFinite(audio.currentTime) ? audio.currentTime : null;
+      const advanced = currentTime !== null && (
+        health.lastCurrentTime === null || currentTime > health.lastCurrentTime + 0.01
+      );
+      if (advanced || !audio.paused) {
+        health.lastProgressAtMs = now;
+      }
+      health.lastCurrentTime = currentTime;
+      health.waitingSinceMs = null;
+    };
+    const markWaiting = () => {
+      health.waitingSinceMs ??= Date.now();
+    };
+
+    audio.addEventListener("playing", markProgress);
+    audio.addEventListener("timeupdate", markProgress);
+    audio.addEventListener("canplay", markProgress);
+    audio.addEventListener("waiting", markWaiting);
+    audio.addEventListener("stalled", markWaiting);
+    audio.addEventListener("error", markWaiting);
+    return () => {
+      audio.removeEventListener("playing", markProgress);
+      audio.removeEventListener("timeupdate", markProgress);
+      audio.removeEventListener("canplay", markProgress);
+      audio.removeEventListener("waiting", markWaiting);
+      audio.removeEventListener("stalled", markWaiting);
+      audio.removeEventListener("error", markWaiting);
+    };
+  }, [audioRef, isCurrentSource]);
 
   useEffect(() => {
     if (isCurrentSource) {

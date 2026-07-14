@@ -1,6 +1,6 @@
 # Docs
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-13`
 当前版本：`0.2.8`
 
 ## 当前项目现状
@@ -27,6 +27,7 @@ Music Room 现在是一套围绕“本地音乐多人同步播放”构建的完
 
 ## 先看哪几页
 
+- Web 双站点改版方案：[product/web-platform-redesign.md](./product/web-platform-redesign.md)
 - 当前状态：[engineering/status.md](./engineering/status.md)
 - 测试策略：[engineering/testing.md](./engineering/testing.md)
 - 工程路线：[engineering/roadmap.md](./engineering/roadmap.md)

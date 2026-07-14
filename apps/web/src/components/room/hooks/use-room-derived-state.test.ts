@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type {
+  AssetAvailabilityAnnouncement,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomSnapshot
 } from "@music-room/shared";
 import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
 import {
-  buildMemberAssetSummaries,
+  buildOriginalAssetAvailabilitySummary,
+  buildMemberMediaSummaries,
   countPeersWithinActiveMembers,
   filterVisiblePeerDiagnostics,
   getLocalPlaybackStatus,
@@ -80,7 +82,7 @@ const livePlayback: SegmentedPlaybackSnapshot = {
 
 describe("use-room-derived-state v4 helpers", () => {
   it("derives member media state from RTP diagnostics", () => {
-    expect(buildMemberAssetSummaries({
+    expect(buildMemberMediaSummaries({
       roomSnapshot,
       peerDiagnostics: [{
         peerId: "peer_host",
@@ -122,6 +124,50 @@ describe("use-room-derived-state v4 helpers", () => {
       playbackStatus: "playing",
       segmentedPlayback: livePlayback
     })).toMatchObject({ label: "正在发声", tone: "success", badgeText: "RTP Opus" });
+  });
+
+  it("uses original-asset announcements for manual cache availability", () => {
+    const assetId = "d".repeat(64);
+    const track = {
+      ...roomSnapshot.tracks[0],
+      originalAsset: {
+        assetId,
+        kind: "original" as const,
+        fileHash: "e".repeat(64),
+        mimeType: "audio/flac",
+        sizeBytes: 4 * 1024 * 1024,
+        unitSize: 1_048_576,
+        unitCount: 4,
+        merkleRoot: "f".repeat(64)
+      }
+    };
+    const announcement = {
+      protocolVersion: 4 as const,
+      roomId: "room_1",
+      assetId,
+      assetKind: "original" as const,
+      ownerPeerId: "peer_host",
+      nickname: "Host",
+      totalUnits: 4,
+      availableRanges: [{ start: 0, end: 1 }],
+      complete: false,
+      source: "live_upload" as const,
+      announcedAt: "2026-07-13T00:00:00.000Z"
+    } satisfies AssetAvailabilityAnnouncement;
+
+    expect(buildOriginalAssetAvailabilitySummary({
+      tracks: [track] as typeof roomSnapshot.tracks,
+      availabilityByAsset: { [assetId]: { peer_host: announcement } },
+      roomId: "room_1",
+      activeMemberPeerIds: new Set(["peer_host"]),
+      localPeerId: "peer_listener"
+    })).toEqual([{
+      trackId: "track_1",
+      assetId,
+      remotePeerCount: 1,
+      availableUnitCount: 2,
+      totalUnits: 4
+    }]);
   });
 
   it("reports a suspended AudioContext instead of trusting stale unlock state", () => {

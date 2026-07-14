@@ -1,7 +1,7 @@
 export const cachePolicy = {
   manualTrackCaching: true,
-  automaticLocalPlaybackTakeover: true,
-  cacheOnlyPlayback: true
+  automaticLocalPlaybackTakeover: false,
+  cacheOnlyPlayback: false
 } as const;
 
 export const enableManualTrackCaching = cachePolicy.manualTrackCaching;

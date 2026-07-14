@@ -78,6 +78,7 @@ export function RoomAppShell({
         cacheLibraryTracks={uploads.cacheLibraryTracks}
         manualCacheTasks={uploads.manualCacheTasks}
         availabilitySummary={workspaceViewModel.availabilitySummary}
+        originalAssetAvailabilitySummary={workspaceViewModel.originalAssetAvailabilitySummary}
         memberTransferSummaries={workspaceViewModel.memberTransferSummaries}
         localMemberState={workspaceViewModel.localMemberState}
         peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}

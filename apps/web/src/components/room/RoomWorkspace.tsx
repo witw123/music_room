@@ -14,6 +14,7 @@ import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageS
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/room/MembersPanel";
 import type { AvailabilityEntry } from "@/components/room/MeshStatusPanel";
+import type { OriginalAssetAvailabilityEntry } from "@/components/room/hooks/use-room-derived-state";
 import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
 import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
 
@@ -34,6 +35,7 @@ type RoomWorkspaceProps = {
   cacheLibraryTracks: CachedLibraryTrack[];
   manualCacheTasks: Record<string, ManualCacheTask>;
   availabilitySummary: AvailabilityEntry[];
+  originalAssetAvailabilitySummary: OriginalAssetAvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
@@ -86,6 +88,7 @@ function RoomWorkspaceBase({
   cacheLibraryTracks,
   manualCacheTasks,
   availabilitySummary,
+  originalAssetAvailabilitySummary,
   memberTransferSummaries,
   localMemberState,
   peerDiagnostics,
@@ -172,6 +175,7 @@ function RoomWorkspaceBase({
               cacheLibraryTracks={cacheLibraryTracks}
               manualCacheTasks={manualCacheTasks}
               availabilitySummary={availabilitySummary}
+              originalAssetAvailabilitySummary={originalAssetAvailabilitySummary}
               memberTransferSummaries={memberTransferSummaries}
               localMemberState={localMemberState}
               peerDiagnostics={peerDiagnostics}

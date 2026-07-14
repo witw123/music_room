@@ -568,6 +568,13 @@ export class P2PMesh {
     return this.peerLifecycle.restartIce(peerId);
   }
 
+  refreshPeerDataBudget(peerId: string) {
+    const entry = this.peerLifecycle.getPeerEntry(peerId);
+    if (entry) {
+      this.flushSendQueue(peerId, entry);
+    }
+  }
+
   destroy() {
     this.assetTransfers.clear();
     this.cacheStreamScheduler.clear();
