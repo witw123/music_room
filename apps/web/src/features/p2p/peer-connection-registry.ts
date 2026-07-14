@@ -3,6 +3,9 @@ import type {
   PeerConnectionStatsSnapshot
 } from "./connection-stats";
 import type { DataChannelQueuedSendItem } from "./data-channel-manager";
+import type { PeerLinkKind } from "./signaling-transport";
+
+export type { PeerLinkKind };
 
 export type PeerMediaTrackState = "none" | "live" | "ended" | "failed";
 
@@ -15,6 +18,7 @@ export type PeerMediaState = {
 };
 
 export type PeerEntry = {
+  linkKind: PeerLinkKind;
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
   controlChannel: RTCDataChannel | null;
@@ -50,8 +54,10 @@ export function createPeerEntry(input: {
   connection: RTCPeerConnection;
   initiatorPeerId: string | null;
   nowMs: number;
+  linkKind?: PeerLinkKind;
 }): PeerEntry {
   return {
+    linkKind: input.linkKind ?? "data",
     connection: input.connection,
     channel: null,
     controlChannel: null,
@@ -264,7 +270,7 @@ export function stopPeerStatsSampling(entry: PeerEntry) {
 }
 
 export class PeerConnectionRegistry {
-  private readonly peers = new Map<string, PeerEntry>();
+  private readonly peers = new Map<string, Map<PeerLinkKind, PeerEntry>>();
   private readonly expectedPeerIds = new Set<string>();
 
   constructor(private readonly localPeerId: string) {}
@@ -289,24 +295,45 @@ export class PeerConnectionRegistry {
     this.expectedPeerIds.clear();
   }
 
-  get(peerId: string) {
-    return this.peers.get(peerId) ?? null;
+  get(peerId: string, linkKind: PeerLinkKind = "data") {
+    return this.peers.get(peerId)?.get(linkKind) ?? null;
   }
 
-  set(peerId: string, entry: PeerEntry) {
-    this.peers.set(peerId, entry);
+  set(peerId: string, entry: PeerEntry, linkKind: PeerLinkKind = entry.linkKind) {
+    const links = this.peers.get(peerId) ?? new Map<PeerLinkKind, PeerEntry>();
+    links.set(linkKind, entry);
+    this.peers.set(peerId, links);
   }
 
-  entries() {
-    return this.peers.entries();
+  entries(linkKind: PeerLinkKind = "data") {
+    return [...this.peers.entries()]
+      .map(([peerId, links]) => {
+        const entry = links.get(linkKind);
+        return entry ? ([peerId, entry] as [string, PeerEntry]) : null;
+      })
+      .filter((item): item is [string, PeerEntry] => item !== null);
   }
 
-  deleteIfCurrent(peerId: string, entry: PeerEntry) {
-    if (this.peers.get(peerId) !== entry) {
+  allEntries() {
+    return [...this.peers.entries()].flatMap(([peerId, links]) =>
+      [...links.entries()].map(([linkKind, entry]) => [
+        peerId,
+        entry,
+        linkKind
+      ] as [string, PeerEntry, PeerLinkKind])
+    );
+  }
+
+  deleteIfCurrent(peerId: string, entry: PeerEntry, linkKind: PeerLinkKind = entry.linkKind) {
+    const links = this.peers.get(peerId);
+    if (links?.get(linkKind) !== entry) {
       return false;
     }
 
-    this.peers.delete(peerId);
+    links.delete(linkKind);
+    if (links.size === 0) {
+      this.peers.delete(peerId);
+    }
     return true;
   }
 
@@ -315,7 +342,7 @@ export class PeerConnectionRegistry {
   }
 
   getConnectedPeerIds() {
-    return [...this.peers.entries()]
+    return this.entries("data")
       .filter(([, entry]) => entry.channel?.readyState === "open")
       .map(([peerId]) => peerId);
   }

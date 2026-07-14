@@ -50,6 +50,7 @@ type DataMeshRuntime = Pick<
       | "clearCacheStreamTrack"
       | "markPeerTransportUnavailable"
       | "markPeerTransportAvailable"
+      | "restartMediaPeer"
     >
   >;
 
@@ -74,6 +75,9 @@ export function createDataMeshBridge(meshRef: MutableRefObject<DataMeshRuntime |
     },
     restartPeer(peerId) {
       return meshRef.current?.restartPeer(peerId) ?? Promise.resolve(null);
+    },
+    restartMediaPeer(peerId) {
+      return meshRef.current?.restartMediaPeer?.(peerId) ?? Promise.resolve(null);
     },
     requestPieces(peerId, trackId, chunkIndexes, totalChunks, timeoutMs, options) {
       return (
@@ -498,26 +502,33 @@ export function createRoomDataMeshRuntime(input: {
           })
         });
       },
-      onPeerConnectionChange: ({ peerId: remotePeerId, state }) => {
+      onPeerConnectionChange: ({ peerId: remotePeerId, state, linkKind = "data" }) => {
         const supervisorState = input.updateConnectionSupervisorSignalState({
           peerId: remotePeerId,
-          channelKind: "data",
-          dataConnectionState: state,
-          lastFailureReason: state === "failed" || state === "closed" ? "data-failed" : undefined
+          channelKind: linkKind,
+          ...(linkKind === "media"
+            ? { mediaConnectionState: state }
+            : {
+                dataConnectionState: state,
+                lastFailureReason: state === "failed" || state === "closed" ? "data-failed" : undefined
+              })
         });
         input.recordPeerDiagnosticRef.current({
           peerId: remotePeerId,
-          channelKind: "data",
+          channelKind: linkKind,
           direction: "local",
-          event: "connection-state",
-          summary: `Data 连接状态：${state}`,
+          event: linkKind === "media" ? "media-connection-state" : "connection-state",
+          summary: `${linkKind === "media" ? "Media" : "Data"} 连接状态：${state}`,
           update: (snapshot: PeerDiagnosticsSnapshot) => ({
             ...input.withResolvedTransportHealth({
               ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
-              dataConnectionState: state
+              ...(linkKind === "media" ? { mediaConnectionState: state } : { dataConnectionState: state })
             })
           })
         });
+        if (linkKind === "media") {
+          return;
+        }
         if (state === "closed" || state === "failed" || state === "disconnected") {
           input.clearManualCachePendingPieces?.();
           peerBufferedAmountBytes.delete(remotePeerId);
@@ -530,23 +541,27 @@ export function createRoomDataMeshRuntime(input: {
           });
         }
       },
-      onIceConnectionStateChange: ({ peerId: remotePeerId, state }) => {
+      onIceConnectionStateChange: ({ peerId: remotePeerId, state, linkKind = "data" }) => {
         const supervisorState = input.updateConnectionSupervisorSignalState({
           peerId: remotePeerId,
-          channelKind: "data",
-          dataIceState: state,
-          lastFailureReason: state === "failed" ? "ice-failed" : undefined
+          channelKind: linkKind,
+          ...(linkKind === "media"
+            ? { mediaIceState: state }
+            : {
+                dataIceState: state,
+                lastFailureReason: state === "failed" ? "ice-failed" : undefined
+              })
         });
         input.recordPeerDiagnosticRef.current({
           peerId: remotePeerId,
-          channelKind: "data",
+          channelKind: linkKind,
           direction: "local",
-          event: "ice-state",
-          summary: `Data ICE 状态：${state}`,
+          event: linkKind === "media" ? "media-ice-state" : "ice-state",
+          summary: `${linkKind === "media" ? "Media" : "Data"} ICE 状态：${state}`,
           update: (snapshot: PeerDiagnosticsSnapshot) => ({
             ...input.withResolvedTransportHealth({
               ...input.withSupervisorDiagnosticPatch(snapshot, supervisorState),
-              dataIceState: state
+              ...(linkKind === "media" ? { mediaIceState: state } : { dataIceState: state })
             })
           })
         });
@@ -612,7 +627,10 @@ export function createRoomDataMeshRuntime(input: {
           peerId: remotePeerId,
           sample
         });
-        input.updateDataTransportStatsRef.current({
+        const isMediaSample = sample.dataChannelState === null &&
+          (typeof sample.senderTrackId === "string" || typeof sample.receiverTrackId === "string" ||
+            sample.mediaReceiveBitrateKbps !== null || sample.mediaSendBitrateKbps !== null);
+        (isMediaSample ? input.updateMediaTransportStatsRef ?? input.updateDataTransportStatsRef : input.updateDataTransportStatsRef).current({
           peerId: remotePeerId,
           sample
         });
@@ -639,6 +657,16 @@ export function createRoomDataMeshRuntime(input: {
           })
         });
       },
+      onMediaTrackMuted: ({ peerId: remotePeerId, trackId }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: remotePeerId,
+          channelKind: "media",
+          direction: "received",
+          event: "media-track-muted",
+          summary: `媒体轨道短暂静音：${trackId}`,
+          level: "warning"
+        });
+      },
       onMediaStateChange: ({ peerId: remotePeerId, direction, state }) => {
         input.recordPeerDiagnosticRef.current({
           peerId: remotePeerId,
@@ -656,6 +684,18 @@ export function createRoomDataMeshRuntime(input: {
               ? { lastAudibleProgressAt: state === "live" ? new Date().toISOString() : snapshot.lastAudibleProgressAt }
               : {})
           })
+        });
+      },
+      onMediaRecovery: ({ peerId: remotePeerId, reason, restartCount }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: remotePeerId,
+          channelKind: "media",
+          direction: "local",
+          event: reason === "connection-failed" ? "media-recovery-failed" : "media-ice-restart",
+          summary: reason === "connection-failed"
+            ? "媒体连接连续恢复失败，检查 TURN/网络容量"
+            : `媒体链路已执行 ICE restart（${reason}，第 ${restartCount} 次）`,
+          level: reason === "connection-failed" ? "error" : "warning"
         });
       },
       onCacheStreamMetrics: (metrics) => {

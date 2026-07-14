@@ -21,6 +21,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   getPeerMediaState: (peerId: string) => {
     receiverTrackState: "none" | "live" | "ended" | "failed";
     remoteStream: MediaStream | null;
+    remoteTrackId?: string | null;
   } | null;
   onPlaybackEnded: () => void | Promise<void>;
   setMediaConnectionState: Dispatch<SetStateAction<"idle" | "connecting" | "live" | "buffering" | "reconnecting" | "failed">>;
@@ -49,6 +50,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   const audioUnlocked = input.audioUnlocked;
   const missingMediaSinceRef = useRef<number | null>(null);
   const boundMediaKeyRef = useRef<string | null>(null);
+  const lastSourceHealthRef = useRef<SegmentedPlaybackSnapshot["sourceHealth"]>(undefined);
   const receiverAudioHealthRef = useRef({
     boundAtMs: 0,
     lastProgressAtMs: 0,
@@ -78,25 +80,21 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   useEffect(() => {
     let cancelled = false;
     const syncMedia = async () => {
-      const playback = runtimeRoomSnapshot?.room.playback ?? null;
-      const sourcePeerId = playback?.sourcePeerId ??
-        (playback?.sourceSessionId
-          ? runtimeRoomSnapshot?.room.members.find((member) => member.id === playback.sourceSessionId)?.peerId ?? null
+      const roomPlayback = runtimeRoomSnapshot?.room.playback ?? null;
+      const sourcePeerId = roomPlayback?.sourcePeerId ??
+        (roomPlayback?.sourceSessionId
+          ? runtimeRoomSnapshot?.room.members.find((member) => member.id === roomPlayback.sourceSessionId)?.peerId ?? null
           : null);
       const bitrateKbps = runtimeCurrentTrack?.playbackAsset
         ? runtimeCurrentTrack.playbackAsset.bitrate / 1000
         : null;
       const audio = audioRef.current;
-      const mediaKey = [
-        playback?.currentTrackId ?? "none",
-        playback?.mediaEpoch ?? "none",
-        sourcePeerId ?? "none"
-      ].join(":");
 
       if (isCurrentSource) {
         missingMediaSinceRef.current = null;
         boundMediaKeyRef.current = null;
-        const sourceStream = playback?.status === "playing"
+        const sourceStream = roomPlayback?.status === "playing" &&
+          playbackStateIsReady(roomPlayback, playback.sourceHealth)
           ? roomAudioOutput.getBroadcastStream()
           : null;
         setLocalAudioStream(
@@ -109,6 +107,12 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
       setLocalAudioStream(null, sourcePeerId, null);
       const remote = sourcePeerId ? getPeerMediaState(sourcePeerId) : null;
+      const mediaKey = [
+        roomPlayback?.currentTrackId ?? "none",
+        roomPlayback?.mediaEpoch ?? "none",
+        sourcePeerId ?? "none",
+        remote?.remoteTrackId ?? "none"
+      ].join(":");
       if (boundMediaKeyRef.current !== mediaKey && audio) {
         audio.pause();
         audio.srcObject = null;
@@ -122,7 +126,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           recoveryCount: 0
         };
       }
-      if (playback?.status !== "playing") {
+      if (roomPlayback?.status !== "playing") {
         missingMediaSinceRef.current = null;
         if (audio) {
           audio.pause();
@@ -130,7 +134,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         }
         boundMediaKeyRef.current = null;
         setMediaPlayback({
-          state: playback ? "paused" : "idle",
+          state: roomPlayback ? "paused" : "idle",
           bufferedMs: 0,
           ownedUnitCount: 0,
           totalUnitCount: runtimeCurrentTrack?.playbackAsset?.unitCount ?? 0,
@@ -164,14 +168,9 @@ export function useRoomSegmentedPlaybackRuntime(input: {
             health.waitingSinceMs = null;
             health.recoveryCount += 1;
             setMediaConnectionState("reconnecting");
-            audio.pause();
-            // Rebinding the same MediaStream makes the element rebuild its
-            // jitter-buffer attachment without renegotiating the PeerConnection.
-            audio.srcObject = null;
-            audio.srcObject = remote.remoteStream;
-            health.boundAtMs = now;
-            health.lastProgressAtMs = now;
-            health.lastCurrentTime = null;
+            // Keep the same MediaStream binding. Replacing srcObject here
+            // destroys the browser jitter buffer and is a common source of
+            // repeated silence during short packet-loss bursts.
           }
           const result = await roomAudioOutput.playElement(audio);
           if (!cancelled && !result.ok) {
@@ -215,10 +214,10 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       if (!cancelled) {
         const now = Date.now();
         missingMediaSinceRef.current ??= now;
-        const timedOut = playback?.status === "playing" &&
+        const timedOut = roomPlayback?.status === "playing" &&
           now - missingMediaSinceRef.current >= 8_000;
         setMediaPlayback({
-          state: timedOut ? "unavailable" : playback?.status === "playing" ? "buffering" : "idle",
+          state: timedOut ? "unavailable" : roomPlayback?.status === "playing" ? "buffering" : "idle",
           bufferedMs: 0,
           ownedUnitCount: 0,
           totalUnitCount: runtimeCurrentTrack?.playbackAsset?.unitCount ?? 0,
@@ -257,6 +256,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     runtimeCurrentTrack,
     runtimePeerId,
     runtimeRoomSnapshot,
+    playback.sourceHealth,
     setLocalAudioStream,
     setMediaConnectionState
   ]);
@@ -345,6 +345,35 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   }, [playback.lastError, playback.state, setLastSourceStartError, setStatusMessage]);
 
   useEffect(() => {
+    if (!input.isCurrentSource) {
+      lastSourceHealthRef.current = undefined;
+      return;
+    }
+    if (playback.sourceHealth && playback.sourceHealth !== lastSourceHealthRef.current) {
+      lastSourceHealthRef.current = playback.sourceHealth;
+      if (playback.sourceHealth === "source-underrun") {
+        setStatusMessage("本地音频供给不足，正在预读并恢复播放。");
+      } else if (playback.sourceHealth === "source-silent") {
+        setStatusMessage("本地音频轨道暂时无能量，正在检查 AudioContext 和输出轨道。");
+      } else if (playback.sourceHealth === "source-ready") {
+        setStatusMessage("音频源已就绪，正在通过 WebRTC 实时发送。");
+      }
+    }
+  }, [input.isCurrentSource, playback.sourceHealth, setStatusMessage]);
+
+  useEffect(() => {
+    if (input.isCurrentSource) {
+      if (playback.sourceHealth === "source-underrun") {
+        setMediaConnectionState("buffering");
+      } else if (playback.sourceHealth === "source-silent") {
+        setMediaConnectionState("reconnecting");
+      } else if (playback.sourceHealth === "source-ready") {
+        setMediaConnectionState("live");
+      }
+    }
+  }, [input.isCurrentSource, playback.sourceHealth, setMediaConnectionState]);
+
+  useEffect(() => {
     if (playback.state === "live") {
       setSourceStartState("live");
       setMediaConnectionState("live");
@@ -413,4 +442,11 @@ function idlePlaybackSnapshot(): SegmentedPlaybackSnapshot {
     audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
     lastError: null
   };
+}
+
+function playbackStateIsReady(
+  _playback: { status?: string } | null,
+  sourceHealth?: SegmentedPlaybackSnapshot["sourceHealth"]
+) {
+  return sourceHealth === undefined || sourceHealth === "source-ready";
 }

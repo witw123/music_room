@@ -86,7 +86,7 @@ services:
       TURN_MAX_PORT: ${TURN_MAX_PORT:-49200}
       TURN_SHARED_SECRET: ${TURN_SHARED_SECRET:-replace-with-a-turn-shared-secret}
       TURN_REALM: ${TURN_REALM:-localhost}
-      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp}
+      TURN_PROTOCOLS: ${TURN_PROTOCOLS:-udp,tcp,tls}
       TURN_TTL_SECONDS: ${TURN_TTL_SECONDS:-3600}
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-your-public-ip}
     ports:

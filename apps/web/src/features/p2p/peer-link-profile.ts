@@ -39,9 +39,8 @@ export function isPeerTransportAllowed(input: PeerLinkProfileInput) {
   const candidateType = normalizeCandidateType(input.candidateType);
   const protocol = normalizeProtocol(input.relayProtocol ?? input.protocol);
   if (!candidateType) {
-    // Candidate-pair stats arrive after the data channel can become usable.
-    // Permit that cold-start window, then enforce UDP-only routing once the
-    // selected candidate is known.
+    // Candidate-pair stats arrive after a connection can become usable. Keep
+    // the cold-start window open until the selected route is known.
     return true;
   }
   if (candidateType === "relay") {

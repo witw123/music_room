@@ -156,10 +156,6 @@ export function useRoomRuntimeObservability(input: {
           value.sample?.remoteCandidateType ?? snapshot.dataRemoteCandidateType ?? null,
         dataProtocol: value.sample?.protocol ?? snapshot.dataProtocol ?? null,
         dataRelayProtocol: value.sample?.relayProtocol ?? snapshot.dataRelayProtocol ?? null,
-        mediaConnectionState: value.sample?.connectionState ?? snapshot.mediaConnectionState,
-        mediaIceState: value.sample?.iceConnectionState ?? snapshot.mediaIceState,
-        mediaCandidateType: value.sample?.candidateType ?? snapshot.mediaCandidateType,
-        mediaProtocol: value.sample?.protocol ?? snapshot.mediaProtocol,
         currentRoundTripTimeMs:
           value.sample?.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
         availableOutgoingBitrateKbps:
@@ -172,12 +168,29 @@ export function useRoomRuntimeObservability(input: {
         packetsLost: value.sample?.packetsLost ?? snapshot.packetsLost,
         jitterMs: value.sample?.jitterMs ?? snapshot.jitterMs,
         packetLossRate: value.sample?.packetLossRate ?? snapshot.packetLossRate,
-        mediaReceiveBitrateKbps:
-          value.sample?.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
-        mediaSendBitrateKbps:
-          value.sample?.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
-        targetAudioBitrateKbps:
-          value.sample?.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
+        targetAudioBitrateKbps: snapshot.targetAudioBitrateKbps
+      })
+    });
+  });
+
+  const updateMediaTransportStatsRef = useRef((value: DataTransportStatsInput) => {
+    recordPeerDiagnostic({
+      peerId: value.peerId,
+      channelKind: "media",
+      direction: "local",
+      event: "media-transport-stats",
+      summary: "Media RTP stats updated",
+      recordEvent: false,
+      update: (snapshot) => ({
+        ...snapshot,
+        mediaConnectionState: value.sample?.connectionState ?? snapshot.mediaConnectionState,
+        mediaIceState: value.sample?.iceConnectionState ?? snapshot.mediaIceState,
+        mediaCandidateType: value.sample?.candidateType ?? snapshot.mediaCandidateType,
+        mediaProtocol: value.sample?.protocol ?? snapshot.mediaProtocol,
+        currentRoundTripTimeMs: value.sample?.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
+        mediaReceiveBitrateKbps: value.sample?.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
+        mediaSendBitrateKbps: value.sample?.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
+        targetAudioBitrateKbps: value.sample?.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
         configuredAudioMaxBitrateKbps:
           value.sample?.configuredAudioMaxBitrateKbps ?? snapshot.configuredAudioMaxBitrateKbps,
         senderAudioMaxBitrateKbps:
@@ -193,12 +206,13 @@ export function useRoomRuntimeObservability(input: {
           snapshot.mediaTrackEstablishedAt,
         lastMediaPacketAt:
           formatDiagnosticsTimestamp(value.sample?.lastMediaPacketAtMs ?? null) ??
-          snapshot.lastMediaPacketAt
+          snapshot.lastMediaPacketAt,
+        packetsLost: value.sample?.packetsLost ?? snapshot.packetsLost,
+        packetLossRate: value.sample?.packetLossRate ?? snapshot.packetLossRate,
+        jitterMs: value.sample?.jitterMs ?? snapshot.jitterMs
       })
     });
   });
-
-  const updateMediaTransportStatsRef = useRef(() => undefined);
 
   const reportRealtimeFailureRef = useRef(
     (value: {

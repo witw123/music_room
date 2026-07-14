@@ -110,7 +110,12 @@ export const peerSignalMessageSchema = z.object({
   roomId: z.string(),
   fromPeerId: z.string(),
   toPeerId: z.string(),
+  // `channelKind` describes the signaling transport. `linkKind` selects the
+  // independent WebRTC connection that should receive the SDP/ICE payload.
+  // Missing values are interpreted as data by the transport for a short
+  // rolling-upgrade window.
   channelKind: z.literal("data"),
+  linkKind: z.enum(["data", "media"]).optional(),
   recoveryGeneration: z.number().int().nonnegative().optional(),
   sequence: z.number().int().nonnegative().optional(),
   type: z.enum(["offer", "answer", "candidate"]),

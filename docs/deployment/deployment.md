@@ -154,11 +154,13 @@ curl http://127.0.0.1:3001/health
 - `TURN_MIN_PORT=49160`
 - `TURN_MAX_PORT=49200`
 - `TURN_TTL_SECONDS=3600`
-- `TURN_PROTOCOLS=udp`
+- `TURN_PROTOCOLS=udp,tcp,tls`
 
 ### 必须放通的端口
 
 - `3478/udp`
+- `3478/tcp`
+- `5349/tcp`（TURN TLS）
 - `TURN_MIN_PORT-TURN_MAX_PORT/udp`
 
 ### 现象判断

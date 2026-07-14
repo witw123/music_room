@@ -473,8 +473,10 @@ function classifyTransportWindow(samples: SupervisorSample[]): PeerTransportScor
     samples.map((sample) => sample.mediaReceiveBitrateKbps)
   );
   const averageSendBitrateKbps = averageOf(samples.map((sample) => sample.mediaSendBitrateKbps));
-  const averageDataOpenRatio =
-    samples.filter((sample) => sample.dataChannelState === "open").length / samples.length;
+  const dataSamples = samples.filter((sample) => sample.dataChannelState !== null);
+  const averageDataOpenRatio = dataSamples.length === 0
+    ? 1
+    : dataSamples.filter((sample) => sample.dataChannelState === "open").length / dataSamples.length;
   const checkingRatio =
     samples.filter(
       (sample) =>

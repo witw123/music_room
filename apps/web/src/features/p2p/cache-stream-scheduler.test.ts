@@ -403,6 +403,48 @@ describe("CacheStreamScheduler", () => {
     bulk.scheduler.clear();
   });
 
+  it("pauses bulk cache traffic while the media path is degraded", () => {
+    const createScheduler = () => {
+      const sendControl = vi.fn();
+      const scheduler = new CacheStreamScheduler({
+        sendControl,
+        resolvePeerTransport: () => ({
+          candidateType: "relay",
+          protocol: "udp",
+          transportScore: "degraded"
+        })
+      });
+      scheduler.setProvider({
+        peerId: "peer-only",
+        trackId: "track-1",
+        availableRanges: [{ start: 0, end: 0 }],
+        connected: true
+      });
+      return { scheduler, sendControl };
+    };
+    const critical = createScheduler();
+    const bulk = createScheduler();
+
+    expect(critical.scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0],
+      totalChunks: 1,
+      chunkSize: 128 * 1024,
+      priority: "critical"
+    })).toBe(true);
+    expect(bulk.scheduler.request({
+      trackId: "track-1",
+      chunkIndexes: [0],
+      totalChunks: 1,
+      chunkSize: 128 * 1024,
+      priority: "bulk"
+    })).toBe(false);
+    expect(critical.sendControl).toHaveBeenCalled();
+    expect(bulk.sendControl).not.toHaveBeenCalled();
+    critical.scheduler.clear();
+    bulk.scheduler.clear();
+  });
+
   it("keeps a stream alive for storage-failure retries", () => {
     const sendControl = vi.fn();
     const scheduler = new CacheStreamScheduler({ sendControl });

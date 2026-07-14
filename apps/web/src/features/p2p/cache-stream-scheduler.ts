@@ -632,7 +632,8 @@ export class CacheStreamScheduler {
     const transport = this.resolvePeerTransport?.(provider.peerId) ?? provider;
     if (
       transport.transportScore === "failed" ||
-      (transport.transportScore === "unstable" && priority !== "critical")
+      ((transport.transportScore === "degraded" || transport.transportScore === "unstable") &&
+        priority !== "critical")
     ) {
       return false;
     }

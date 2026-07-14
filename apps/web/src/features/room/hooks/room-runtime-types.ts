@@ -23,6 +23,7 @@ export type DataMeshBridge = {
     options?: { forceReconnectDegraded?: boolean }
   ): Promise<boolean>;
   restartPeer(peerId: string): Promise<unknown>;
+  restartMediaPeer?(peerId: string): Promise<unknown>;
   requestPieces(
     peerId: string,
     trackId: string,
@@ -119,6 +120,7 @@ export type RoomDataMeshDiagnosticsRefs = {
     (peerId: string, bufferedAmountBytes: number) => void
   >;
   updateDataTransportStatsRef: MutableRefObject<(input: DataTransportStatsInput) => void>;
+  updateMediaTransportStatsRef?: MutableRefObject<(input: DataTransportStatsInput) => void>;
   connectionSupervisorStatesRef: MutableRefObject<Map<string, PeerConnectionSupervisorState>>;
   updateConnectionSupervisorSignalState: (
     input: ConnectionSupervisorSignalStateInput

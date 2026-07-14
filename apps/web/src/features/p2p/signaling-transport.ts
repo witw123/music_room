@@ -1,11 +1,13 @@
 import type { PeerSignalMessage } from "@music-room/shared";
 
 type SignalType = PeerSignalMessage["type"];
+export type PeerLinkKind = "data" | "media";
 
 type SignalDiagnosticRecorder = (payload: {
   peerId: string;
   direction: "sent" | "received";
   type: SignalType;
+  linkKind?: PeerLinkKind;
 }) => void;
 
 type SignalPeerEntry = {
@@ -26,7 +28,7 @@ type LocalOfferConnection = {
 };
 
 type IncomingSignalHandlers<TEntry extends SignalPeerEntry> = {
-  getOrCreatePeerEntry: (peerId: string) => Promise<TEntry>;
+  getOrCreatePeerEntry: (peerId: string, linkKind?: PeerLinkKind) => Promise<TEntry>;
   runPeerOperation: <T>(entry: TEntry, task: () => Promise<T>) => Promise<T | undefined>;
   applyRemoteDescription: (
     entry: TEntry,
@@ -43,6 +45,27 @@ export function buildDataPeerSignal(input: {
   type: SignalType;
   payload: Record<string, unknown>;
 }): PeerSignalMessage {
+  return buildPeerSignal({ ...input, linkKind: "data" });
+}
+
+export function buildMediaPeerSignal(input: {
+  roomId: string;
+  localPeerId: string;
+  remotePeerId: string;
+  type: SignalType;
+  payload: Record<string, unknown>;
+}): PeerSignalMessage {
+  return buildPeerSignal({ ...input, linkKind: "media" });
+}
+
+function buildPeerSignal(input: {
+  roomId: string;
+  localPeerId: string;
+  remotePeerId: string;
+  type: SignalType;
+  payload: Record<string, unknown>;
+  linkKind: PeerLinkKind;
+}): PeerSignalMessage {
   return {
     protocolVersion: 4,
     capability: "webrtc-opus-v1",
@@ -50,6 +73,7 @@ export function buildDataPeerSignal(input: {
     fromPeerId: input.localPeerId,
     toPeerId: input.remotePeerId,
     channelKind: "data",
+    linkKind: input.linkKind,
     type: input.type,
     payload: input.payload
   };
@@ -73,27 +97,35 @@ export class SignalingTransport {
     this.onSignal = input.onSignal;
   }
 
-  markReceived(peerId: string, type: SignalType) {
+  markReceived(peerId: string, type: SignalType, linkKind: PeerLinkKind = "data") {
     this.onSignal?.({
       peerId,
       direction: "received",
-      type
+      type,
+      linkKind
     });
   }
 
-  send(peerId: string, type: SignalType, payload: Record<string, unknown>) {
+  send(
+    peerId: string,
+    type: SignalType,
+    payload: Record<string, unknown>,
+    linkKind: PeerLinkKind = "data"
+  ) {
     this.onSignal?.({
       peerId,
       direction: "sent",
-      type
+      type,
+      linkKind
     });
     this.sendSignal(
-      buildDataPeerSignal({
+      buildPeerSignal({
         roomId: this.roomId,
         localPeerId: this.localPeerId,
         remotePeerId: peerId,
         type,
-        payload
+        payload,
+        linkKind
       })
     );
   }
@@ -101,11 +133,12 @@ export class SignalingTransport {
   async createAndSendOffer(
     peerId: string,
     connection: LocalOfferConnection,
-    options?: RTCOfferOptions
+    options?: RTCOfferOptions,
+    linkKind: PeerLinkKind = "data"
   ) {
     const offer = options ? await connection.createOffer(options) : await connection.createOffer();
     await connection.setLocalDescription(offer);
-    this.send(peerId, "offer", toSessionDescriptionPayload(offer));
+    this.send(peerId, "offer", toSessionDescriptionPayload(offer), linkKind);
     return offer;
   }
 
@@ -117,12 +150,13 @@ export class SignalingTransport {
       return;
     }
 
-    const entry = await handlers.getOrCreatePeerEntry(payload.fromPeerId);
+    const linkKind = payload.linkKind ?? "data";
+    const entry = await handlers.getOrCreatePeerEntry(payload.fromPeerId, linkKind);
     entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
 
     if (payload.type === "offer") {
       await handlers.runPeerOperation(entry, async () => {
-        this.markReceived(payload.fromPeerId, "offer");
+        this.markReceived(payload.fromPeerId, "offer", linkKind);
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
           return;
@@ -150,14 +184,14 @@ export class SignalingTransport {
         const answer = await entry.connection.createAnswer();
         await entry.connection.setLocalDescription(answer);
         entry.lastSignalProgressAtMs = (handlers.nowMs ?? Date.now)();
-        this.send(payload.fromPeerId, "answer", toSessionDescriptionPayload(answer));
+        this.send(payload.fromPeerId, "answer", toSessionDescriptionPayload(answer), linkKind);
       });
       return;
     }
 
     if (payload.type === "answer") {
       await handlers.runPeerOperation(entry, async () => {
-        this.markReceived(payload.fromPeerId, "answer");
+        this.markReceived(payload.fromPeerId, "answer", linkKind);
         const remoteDescription = toSessionDescriptionInit(payload.payload);
         if (!remoteDescription) {
           return;
@@ -176,7 +210,7 @@ export class SignalingTransport {
 
     if (payload.type === "candidate") {
       await handlers.runPeerOperation(entry, async () => {
-        this.markReceived(payload.fromPeerId, "candidate");
+        this.markReceived(payload.fromPeerId, "candidate", linkKind);
         const candidate = toIceCandidateInit(payload.payload);
         if (!candidate) {
           return;

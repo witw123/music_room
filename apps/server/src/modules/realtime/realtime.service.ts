@@ -73,24 +73,31 @@ export class RealtimeService {
     const expiry = Math.floor(Date.now() / 1000) + input.ttlSeconds;
     const username = `${expiry}:${input.userId}`;
     const credential = createHmac("sha1", input.turnSecret).update(username).digest("base64");
-    const protocols = (process.env.TURN_PROTOCOLS ?? "udp")
+    const configuredProtocols = (process.env.TURN_PROTOCOLS ?? "udp,tcp,tls")
       .split(",")
       .map((protocol) => protocol.trim().toLowerCase())
       .filter(Boolean)
       .filter((protocol, index, values) => values.indexOf(protocol) === index)
-      .filter((protocol) => protocol === "udp");
+      .filter((protocol): protocol is "udp" | "tcp" | "tls" =>
+        protocol === "udp" || protocol === "tcp" || protocol === "tls");
+    const protocols = (["udp", "tcp", "tls"] as const).filter((protocol) => configuredProtocols.includes(protocol));
 
     const urls: string[] = [];
     for (const protocol of protocols) {
       if (protocol === "udp") {
         urls.push(`turn:${input.turnHost}:${port}?transport=udp`);
+      } else if (protocol === "tcp") {
+        urls.push(`turn:${input.turnHost}:${port}?transport=tcp`);
+      } else if (protocol === "tls") {
+        const tlsPort = parsePositiveInt(process.env.TURN_TLS_PORT) ?? 5349;
+        urls.push(`turns:${input.turnHost}:${tlsPort}?transport=tcp`);
       }
     }
 
     return [
       { urls: input.stunUrl },
       {
-        urls: urls.filter((url) => isUdpTurnUrl(url)),
+        urls,
         username,
         credential
       }
@@ -104,7 +111,7 @@ export class RealtimeService {
         const parsed = JSON.parse(rawJson) as unknown;
         const result = iceConfigResponseSchema.shape.iceServers.safeParse(parsed);
         if (result.success && result.data.length > 0) {
-          return filterUdpIceServers(result.data);
+          return normalizeIceServers(result.data);
         }
       } catch {
         // Fall through to simple env parsing.
@@ -124,7 +131,7 @@ export class RealtimeService {
       });
     }
 
-    return filterUdpIceServers(servers);
+    return normalizeIceServers(servers);
   }
 }
 
@@ -178,10 +185,10 @@ function resolveTurnBaseDomain(appDomain: string) {
   return labels.length > 2 ? labels.slice(-2).join(".") : appDomain;
 }
 
-function filterUdpIceServers(servers: IceServerConfig[]) {
+function normalizeIceServers(servers: IceServerConfig[]) {
   return servers.flatMap((server) => {
     const urls = (Array.isArray(server.urls) ? server.urls : [server.urls]).filter((url) =>
-      !isTurnUrl(url) || isUdpTurnUrl(url)
+      !isTurnUrl(url) || isSupportedTurnUrl(url)
     );
     return urls.length > 0 ? [{ ...server, urls: urls.length === 1 ? urls[0] : urls }] : [];
   });
@@ -192,9 +199,16 @@ function isTurnUrl(value: string) {
   return normalized.startsWith("turn:") || normalized.startsWith("turns:");
 }
 
-function isUdpTurnUrl(value: string) {
+function isSupportedTurnUrl(value: string) {
   const normalized = value.trim().toLowerCase();
-  return normalized.startsWith("turn:") && !/(?:[?&]transport=)(tcp|tls)\b/.test(normalized);
+  if (normalized.startsWith("turns:")) {
+    return !/(?:[?&]transport=)(udp|tls)\b/.test(normalized);
+  }
+  if (!normalized.startsWith("turn:")) {
+    return false;
+  }
+  const transport = normalized.match(/(?:[?&]transport=)([^&]+)/)?.[1];
+  return transport === undefined || transport === "udp" || transport === "tcp";
 }
 
 function normalizeHostHeader(value?: string | null) {

@@ -26,6 +26,8 @@ export type SegmentedPlaybackSnapshot = {
   totalUnitCount: number;
   audioContextState: AudioContextState | null;
   lastError: string | null;
+  sourceHealth?: "source-ready" | "source-underrun" | "source-silent" | "source-ended";
+  sourceEnergy?: number;
 };
 
 const idleSnapshot: SegmentedPlaybackSnapshot = {
@@ -135,13 +137,16 @@ export function useSegmentedOpusPlayback(input: {
           volume: runtime.volume,
           getUnit: (unitIndex) => getAssetUnit(currentPlaybackAsset.assetId, unitIndex)
         });
+        const sourceHealth = engineRef.current?.getSourceHealth();
         setSnapshot({
           state: result.state,
           bufferedMs: result.bufferedUnits * currentPlaybackAsset.segmentDurationMs,
           ownedUnitCount: result.bufferedUnits,
           totalUnitCount: currentPlaybackAsset.unitCount,
           audioContextState,
-          lastError: null
+          lastError: null,
+          sourceHealth: sourceHealth?.state,
+          sourceEnergy: sourceHealth?.energy
         });
       } catch (error) {
         const failedEngine = engineRef.current;

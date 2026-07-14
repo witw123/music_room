@@ -343,6 +343,7 @@ export function useRoomRuntime({
   const {
     pieceTransferRatesRef,
     updateDataTransportStatsRef,
+    updateMediaTransportStatsRef,
     recordPieceTransferRef,
     recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef
@@ -604,6 +605,7 @@ export function useRoomRuntime({
       recordPieceRequestSampleRef,
       updatePeerBufferedAmountRef,
       updateDataTransportStatsRef,
+      updateMediaTransportStatsRef,
       connectionSupervisorStatesRef,
       updateConnectionSupervisorSignalState,
       updateConnectionSupervisorTransportStats,
@@ -698,6 +700,7 @@ export function useRoomRuntime({
     updateConnectionSupervisorSignalState,
     updateConnectionSupervisorTransportStats,
     updateDataTransportStatsRef,
+    updateMediaTransportStatsRef,
     updatePeerBufferedAmountRef,
     uploadedTrackIdsRef,
     uploadedTracksRef,

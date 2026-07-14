@@ -279,6 +279,7 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     recordPieceRequestSampleRef: input.recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef: input.updatePeerBufferedAmountRef,
     updateDataTransportStatsRef: input.updateDataTransportStatsRef,
+    updateMediaTransportStatsRef: input.updateMediaTransportStatsRef,
     connectionSupervisorStatesRef: input.connectionSupervisorStatesRef,
     updateConnectionSupervisorSignalState: input.updateConnectionSupervisorSignalState,
     updateConnectionSupervisorTransportStats: input.updateConnectionSupervisorTransportStats,

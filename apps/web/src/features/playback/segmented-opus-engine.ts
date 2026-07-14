@@ -13,8 +13,15 @@ type ScheduledSource = {
   revision: number;
 };
 
+export type SourceHealthState =
+  | "source-ready"
+  | "source-underrun"
+  | "source-silent"
+  | "source-ended";
+
 const scheduleLeadSeconds = 0.04;
-const decodeAheadUnitCount = 12;
+// Two-second units keep roughly 24-30 seconds of decoded audio available.
+const decodeAheadUnitCount = 15;
 
 export class SegmentedOpusEngine {
   private timelineKey: string | null = null;
@@ -25,12 +32,15 @@ export class SegmentedOpusEngine {
   private wasmDecoder: import("ogg-opus-decoder").OggOpusDecoder | null = null;
   private masterGain: GainNode | null = null;
   private broadcastGain: GainNode | null = null;
+  private broadcastAnalyser: AnalyserNode | null = null;
   private masterGainContext: AudioContext | null = null;
   private contextAnchorTime: number | null = null;
   private playbackAnchorPositionMs = 0;
   private timelineStarted = false;
   private revision = 0;
   private destroyed = false;
+  private sourceHealth: SourceHealthState = "source-underrun";
+  private sourceEnergy = 0;
 
   async sync(input: {
     manifest: PlaybackAssetManifest;
@@ -44,6 +54,7 @@ export class SegmentedOpusEngine {
     }
     if (input.playback.status !== "playing" || !input.playback.startAt) {
       this.resetTimeline();
+      this.sourceHealth = "source-ended";
       return { state: "paused" as const, bufferedUnits: 0 };
     }
 
@@ -59,6 +70,7 @@ export class SegmentedOpusEngine {
 
     const context = roomAudioOutput.getSharedAudioContext();
     if (!context || context.state !== "running") {
+      this.sourceHealth = "source-silent";
       return { state: "awaiting-unlock" as const, bufferedUnits: 0 };
     }
     this.ensureMasterGain(context, input.volume);
@@ -75,6 +87,7 @@ export class SegmentedOpusEngine {
       this.scheduled.size === 0 &&
       this.completed.has(input.manifest.unitCount - 1)
     ) {
+      this.sourceHealth = "source-ended";
       return { state: "ended" as const, bufferedUnits: 0 };
     }
     const unitIndexes = Array.from(
@@ -119,16 +132,24 @@ export class SegmentedOpusEngine {
       if (this.timelineStarted && !this.scheduled.has(currentIndex)) {
         this.enterUnderrun();
       }
+      this.sourceHealth = "source-underrun";
+      this.setBroadcastTrackEnabled(false);
       return { state: "buffering" as const, bufferedUnits: contiguousUnits.length };
     }
 
     if (!this.timelineStarted) {
       const currentUnit = contiguousUnits[0]!;
-      const currentDecoded = await this.getDecodedUnit(
-        context,
-        currentUnit,
-        input.manifest.sampleRate
-      );
+      let currentDecoded: AudioBuffer;
+      try {
+        currentDecoded = await this.getDecodedUnitWithRetry(
+          context,
+          currentUnit,
+          input.manifest.sampleRate
+        );
+      } catch {
+        this.enterUnderrun();
+        return { state: "buffering" as const, bufferedUnits: 0 };
+      }
       if (this.destroyed || this.timelineKey !== timelineKey) {
         return { state: "idle" as const, bufferedUnits: 0 };
       }
@@ -153,8 +174,8 @@ export class SegmentedOpusEngine {
     const decodeTargets = contiguousUnits.filter(
       (unit) => !this.scheduled.has(unit.unitIndex) && !this.completed.has(unit.unitIndex)
     );
-    await Promise.all(
-      decodeTargets.map((unit) => this.getDecodedUnit(
+    const decodeResults = await Promise.allSettled(
+      decodeTargets.map((unit) => this.getDecodedUnitWithRetry(
         context,
         unit,
         input.manifest.sampleRate
@@ -164,7 +185,10 @@ export class SegmentedOpusEngine {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
 
-    for (const unit of decodeTargets) {
+    for (const [index, unit] of decodeTargets.entries()) {
+      if (decodeResults[index]?.status === "rejected") {
+        continue;
+      }
       const decoded = await this.decoded.get(unit.unitIndex)!;
       this.scheduleUnit({
         context,
@@ -176,11 +200,17 @@ export class SegmentedOpusEngine {
     }
 
     const bufferedUnits = this.countContiguousScheduledUnits(currentIndex);
+    this.setBroadcastTrackEnabled(true);
+    this.sampleSourceEnergy(context);
+    const trackState = roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState;
+    this.sourceHealth = this.sourceEnergy > 0.002 && trackState === "live"
+      ? "source-ready"
+      : "source-silent";
     return {
       state: bufferedUnits >= Math.min(3, input.manifest.unitCount - currentIndex)
         ? "live" as const
         : "buffering" as const,
-      bufferedUnits
+      bufferedUnits,
     };
   }
 
@@ -276,6 +306,26 @@ export class SegmentedOpusEngine {
     return decoding;
   }
 
+  getSourceHealth() {
+    return {
+      state: this.sourceHealth,
+      energy: this.sourceEnergy,
+      trackState: roomAudioOutput.getBroadcastStream()?.getAudioTracks()[0]?.readyState ?? "ended",
+      audioContextState: this.masterGainContext?.state ?? null
+    } as const;
+  }
+
+  private getDecodedUnitWithRetry(
+    context: AudioContext,
+    unit: AudioAssetUnitRecord,
+    sourceSampleRate: number
+  ) {
+    return this.getDecodedUnit(context, unit, sourceSampleRate).catch(async () => {
+      this.decoded.delete(unit.unitIndex);
+      return this.getDecodedUnit(context, unit, sourceSampleRate);
+    });
+  }
+
   private async decodeUnit(
     context: AudioContext,
     unit: AudioAssetUnitRecord,
@@ -341,7 +391,10 @@ export class SegmentedOpusEngine {
       this.broadcastGain?.disconnect();
       this.broadcastGain = context.createGain();
       this.broadcastGain.gain.value = 1;
-      this.broadcastGain.connect(broadcastDestination);
+      this.broadcastAnalyser = context.createAnalyser();
+      this.broadcastAnalyser.fftSize = 1024;
+      this.broadcastGain.connect(this.broadcastAnalyser);
+      this.broadcastAnalyser.connect(broadcastDestination);
     } else {
       this.broadcastGain = null;
     }
@@ -362,6 +415,30 @@ export class SegmentedOpusEngine {
     this.completed.clear();
     this.contextAnchorTime = null;
     this.timelineStarted = false;
+    this.sourceHealth = "source-underrun";
+    this.setBroadcastTrackEnabled(false);
+  }
+
+  private setBroadcastTrackEnabled(enabled: boolean) {
+    for (const track of roomAudioOutput.getBroadcastStream()?.getAudioTracks() ?? []) {
+      track.enabled = enabled;
+    }
+  }
+
+  private sampleSourceEnergy(context: AudioContext) {
+    const analyser = this.broadcastAnalyser;
+    if (!analyser || context.state !== "running") {
+      this.sourceEnergy = 0;
+      return;
+    }
+    const values = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(values);
+    let sum = 0;
+    for (const value of values) {
+      const normalized = (value - 128) / 128;
+      sum += normalized * normalized;
+    }
+    this.sourceEnergy = Math.sqrt(sum / values.length);
   }
 
   private stopScheduledSources() {
@@ -392,7 +469,12 @@ export class SegmentedOpusEngine {
     this.masterGain = null;
     this.broadcastGain?.disconnect();
     this.broadcastGain = null;
+    this.broadcastAnalyser?.disconnect();
+    this.broadcastAnalyser = null;
     this.masterGainContext = null;
+    this.sourceHealth = "source-underrun";
+    this.sourceEnergy = 0;
+    this.setBroadcastTrackEnabled(false);
   }
 }
 

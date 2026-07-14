@@ -103,9 +103,9 @@ describe("WebRTC media track lifecycle", () => {
     manager.setLocalAudioStream(buildStream(track), "peer_a", 192);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const connection = FakePeerConnection.instances[0]!;
+    const connection = FakePeerConnection.instances[1]!;
     expect(connection.addTrack).toHaveBeenCalledWith(track, expect.anything());
-    const sender = (manager.getPeerEntry("peer_b")?.audioSender as unknown) as FakeSender;
+    const sender = (manager.getPeerEntry("peer_b", "media")?.audioSender as unknown) as FakeSender;
     expect(sender.lastParameters?.encodings?.[0]).toMatchObject({
       maxBitrate: 192_000,
       priority: "high",
@@ -119,6 +119,6 @@ describe("WebRTC media track lifecycle", () => {
 
     manager.setLocalAudioStream(buildStream(track), "peer_b");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(manager.getPeerEntry("peer_b")?.senderTrackState).toBe("none");
+    expect(manager.getPeerEntry("peer_b", "media")?.senderTrackState).toBe("none");
   });
 });

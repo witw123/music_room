@@ -257,7 +257,7 @@ function MembersPanelBase({
           <div>
             <span className="text-[10px] text-foreground-muted">音频格式</span>
             <strong className="mt-1 block text-sm text-foreground">
-              Opus · {localMemberState.playbackBitrateKbps ?? "--"} kbps
+                  Opus · {localMemberState.mediaSummary?.sendRateKbps ?? localMemberState.playbackBitrateKbps ?? "--"} kbps
             </strong>
           </div>
           <div>
@@ -348,7 +348,9 @@ function MembersPanelBase({
                 <strong className="mt-1 block text-xs text-foreground">{mediaStatus.label}</strong>
                 <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{mediaStatus.detail}</p>
                 <p className="mt-1 text-[10px] text-foreground-muted/80">
-                  码率：{formatRate(isLocal ? localMemberState.playbackBitrateKbps : diagnostic?.mediaReceiveBitrateKbps ?? null)}
+                  码率：{formatRate(isLocal
+                    ? localMemberState.mediaSummary?.sendRateKbps ?? localMemberState.playbackBitrateKbps
+                    : diagnostic?.mediaReceiveBitrateKbps ?? null)}
                 </p>
               </div>
 

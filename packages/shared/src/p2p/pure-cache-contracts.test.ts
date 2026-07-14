@@ -17,7 +17,7 @@ describe("p2p signaling contracts", () => {
     ).toBe(true);
   });
 
-  it("rejects legacy media peer signals because playback uses original-piece data cache", () => {
+  it("accepts media peer signals for the independent RTP link", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         protocolVersion: 4,
@@ -25,11 +25,12 @@ describe("p2p signaling contracts", () => {
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
-        channelKind: "media",
+        channelKind: "data",
+        linkKind: "media",
         type: "offer",
         payload: { type: "offer", sdp: "v=0" }
       }).success
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("rejects pre-v4 data peer signals", () => {

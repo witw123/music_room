@@ -3,6 +3,7 @@ import {
   clearPeerTimers,
   type PeerEntry
 } from "./peer-connection-registry";
+import type { PeerLinkKind } from "./signaling-transport";
 
 type PeerStalledReason = "watchdog-timeout" | "connection-failed" | "data-channel-closed";
 
@@ -56,7 +57,7 @@ export function resolveExistingPeerConnectionAction(input: {
 export function releasePeerConnectionEntry(input: {
   peerId: string;
   entry: PeerEntry;
-  deleteIfCurrent: (peerId: string, entry: PeerEntry) => boolean;
+  deleteIfCurrent: (peerId: string, entry: PeerEntry, linkKind?: "data" | "media") => boolean;
   clearPendingRequestsForPeer: (peerId: string) => void;
   stopStatsSampling: (entry: PeerEntry) => void;
   onDataBufferedAmountChange?: (payload: {
@@ -66,15 +67,23 @@ export function releasePeerConnectionEntry(input: {
 }) {
   input.entry.releasing = true;
   input.entry.sendQueue = [];
-  input.deleteIfCurrent(input.peerId, input.entry);
+  if (input.entry.linkKind === "data") {
+    input.deleteIfCurrent(input.peerId, input.entry);
+  } else {
+    input.deleteIfCurrent(input.peerId, input.entry, input.entry.linkKind);
+  }
   clearPeerTimers(input.entry);
-  input.clearPendingRequestsForPeer(input.peerId);
+  if (input.entry.linkKind === "data") {
+    input.clearPendingRequestsForPeer(input.peerId);
+  }
   input.stopStatsSampling(input.entry);
-  input.entry.controlChannel?.close();
-  input.entry.dataChannel?.close();
-  input.entry.originalChannel?.close();
-  if (!input.entry.controlChannel && !input.entry.dataChannel && !input.entry.originalChannel) {
-    input.entry.channel?.close();
+  if (input.entry.linkKind === "data") {
+    input.entry.controlChannel?.close();
+    input.entry.dataChannel?.close();
+    input.entry.originalChannel?.close();
+    if (!input.entry.controlChannel && !input.entry.dataChannel && !input.entry.originalChannel) {
+      input.entry.channel?.close();
+    }
   }
   input.entry.connection.close();
   input.entry.audioSender = null;
@@ -101,6 +110,7 @@ export function bindPeerConnectionEvents(input: {
   entry: PeerEntry;
   localPeerId: string;
   connection: RTCPeerConnection;
+  linkKind?: PeerLinkKind;
   autoReconnect: boolean;
   isCurrentEntry: (peerId: string, entry: PeerEntry) => boolean;
   isExpectedPeer: (peerId: string) => boolean;
@@ -108,10 +118,12 @@ export function bindPeerConnectionEvents(input: {
   onPeerConnectionChange?: (payload: {
     peerId: string;
     state: RTCPeerConnectionState;
+    linkKind?: PeerLinkKind;
   }) => void;
   onIceConnectionStateChange?: (payload: {
     peerId: string;
     state: RTCIceConnectionState;
+    linkKind?: PeerLinkKind;
   }) => void;
   onPeerStalled?: (payload: {
     peerId: string;
@@ -133,6 +145,7 @@ export function bindPeerConnectionEvents(input: {
     direction: "sender" | "receiver";
     state: PeerEntry["senderTrackState"];
   }) => void;
+  onMediaTrackMuted?: (payload: { peerId: string; trackId: string }) => void;
 }) {
   input.connection.onicecandidate = (event) => {
     if (!event.candidate) {
@@ -149,10 +162,12 @@ export function bindPeerConnectionEvents(input: {
     input.entry.lastSignalProgressAtMs = Date.now();
     input.onPeerConnectionChange?.({
       peerId: input.peerId,
-      state: input.connection.connectionState
+      state: input.connection.connectionState,
+      ...(input.entry.linkKind === "media" ? { linkKind: "media" as const } : {})
     });
 
-    if (input.connection.connectionState === "connected" && input.entry.channel?.readyState === "open") {
+    if (input.connection.connectionState === "connected" &&
+      (input.entry.linkKind === "media" || input.entry.channel?.readyState === "open")) {
       input.entry.reconnectAttempts = 0;
     }
 
@@ -169,7 +184,7 @@ export function bindPeerConnectionEvents(input: {
           peerId: input.peerId,
           reason: "connection-failed"
         });
-        if (input.autoReconnect) {
+        if (input.autoReconnect && input.entry.linkKind === "data") {
           input.schedulePeerReconnect(input.peerId, input.entry);
         }
         return;
@@ -179,21 +194,28 @@ export function bindPeerConnectionEvents(input: {
       return;
     }
 
-    input.schedulePeerWatchdog(input.peerId, input.entry);
+    if (input.entry.linkKind === "data") {
+      input.schedulePeerWatchdog(input.peerId, input.entry);
+    }
   };
 
   input.connection.oniceconnectionstatechange = () => {
     input.entry.lastSignalProgressAtMs = Date.now();
     input.onIceConnectionStateChange?.({
       peerId: input.peerId,
-      state: input.connection.iceConnectionState
+      state: input.connection.iceConnectionState,
+      ...(input.entry.linkKind === "media" ? { linkKind: "media" as const } : {})
     });
-    if (input.isCurrentEntry(input.peerId, input.entry)) {
+    if (input.isCurrentEntry(input.peerId, input.entry) && input.entry.linkKind === "data") {
       input.schedulePeerWatchdog(input.peerId, input.entry);
     }
   };
 
   input.connection.ondatachannel = (event) => {
+    if ((input.linkKind ?? input.entry.linkKind) !== "data") {
+      event.channel.close();
+      return;
+    }
     const channel = event.channel;
     if (channel.label === "music-room-control") {
       input.entry.controlChannel = channel;
@@ -207,6 +229,9 @@ export function bindPeerConnectionEvents(input: {
   };
 
   input.connection.ontrack = (event) => {
+    if ((input.linkKind ?? input.entry.linkKind) !== "media") {
+      return;
+    }
     if (event.track.kind !== "audio") {
       return;
     }
@@ -285,6 +310,7 @@ export function bindPeerConnectionEvents(input: {
           });
         }
       }, 1_500);
+      input.onMediaTrackMuted?.({ peerId: input.peerId, trackId: event.track.id });
     };
     event.track.onunmute = () => {
       if (input.entry.remoteAudioTrackId !== event.track.id) {

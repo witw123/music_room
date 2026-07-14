@@ -102,10 +102,12 @@ type MeshCallbacks = {
   onPeerConnectionChange?: (payload: {
     peerId: string;
     state: RTCPeerConnectionState;
+    linkKind?: "data" | "media";
   }) => void;
   onIceConnectionStateChange?: (payload: {
     peerId: string;
     state: RTCIceConnectionState;
+    linkKind?: "data" | "media";
   }) => void;
   onDataChannelStateChange?: (payload: {
     peerId: string;
@@ -137,6 +139,12 @@ type MeshCallbacks = {
     peerId: string;
     direction: "sender" | "receiver";
     state: "none" | "live" | "ended" | "failed";
+  }) => void;
+  onMediaTrackMuted?: (payload: { peerId: string; trackId: string }) => void;
+  onMediaRecovery?: (payload: {
+    peerId: string;
+    reason: "loss" | "jitter" | "no-packets" | "connection-failed";
+    restartCount: number;
   }) => void;
 };
 
@@ -317,7 +325,9 @@ export class P2PMesh {
       },
       onMediaStateChange: ({ peerId, direction, state }) => {
         this.callbacks.onMediaStateChange?.({ peerId, direction, state });
-      }
+      },
+      onMediaTrackMuted: this.callbacks.onMediaTrackMuted,
+      onMediaRecovery: this.callbacks.onMediaRecovery
     });
     this.inboundPieces = new PieceInboundProcessor({
       batchSize: this.incomingPieceBatchSize,
@@ -434,7 +444,8 @@ export class P2PMesh {
 
   async handleSignal(payload: PeerSignalMessage) {
     await this.signaling.handleIncomingSignal(payload, {
-      getOrCreatePeerEntry: (peerId) => this.peerLifecycle.getOrCreatePeerEntry(peerId),
+      getOrCreatePeerEntry: (peerId, linkKind) =>
+        this.peerLifecycle.getOrCreatePeerEntry(peerId, linkKind),
       runPeerOperation: (entry, task) => this.peerLifecycle.runPeerOperation(entry, task),
       applyRemoteDescription: (entry, remoteDescription) =>
         this.applyRemoteDescription(entry, remoteDescription),
@@ -566,6 +577,10 @@ export class P2PMesh {
 
   async restartIce(peerId: string) {
     return this.peerLifecycle.restartIce(peerId);
+  }
+
+  async restartMediaPeer(peerId: string) {
+    return this.peerLifecycle.restartMediaPeer(peerId);
   }
 
   refreshPeerDataBudget(peerId: string) {

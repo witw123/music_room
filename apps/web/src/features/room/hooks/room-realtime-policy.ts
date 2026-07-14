@@ -172,7 +172,8 @@ export function resolveRemoteAvailabilityRequestTrackId(input: {
 export function shouldAcceptIncomingPeerSignal(input: {
   payload: PeerSignalMessage;
 }) {
-  return input.payload.channelKind === "data";
+  return input.payload.channelKind === "data" &&
+    (input.payload.linkKind === "data" || input.payload.linkKind === "media");
 }
 
 export function buildRoomSubscribePayload(input: {

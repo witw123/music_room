@@ -234,12 +234,12 @@ describe("P2PMesh", () => {
 
     await Promise.all([mesh.syncPeers(["peer_b"]), mesh.syncPeers(["peer_b"])]);
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
     expect(
       sendSignal.mock.calls.filter(
         ([payload]) => payload && typeof payload === "object" && (payload as { type?: string }).type === "offer"
       )
-    ).toHaveLength(1);
+      ).toHaveLength(2);
   });
 
   it("does not reject when queued ICE candidates fail during offer handling", async () => {
@@ -335,7 +335,7 @@ describe("P2PMesh", () => {
     });
 
     await mesh.syncPeers(["peer_b"]);
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
 
     const firstPeer = FakeRTCPeerConnection.instances[0]!;
     firstPeer.connectionState = "failed";
@@ -343,7 +343,7 @@ describe("P2PMesh", () => {
 
     await mesh.syncPeers(["peer_b"]);
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(3);
   });
 
   it("ignores a stale data answer once the peer has already returned to stable", async () => {
@@ -384,14 +384,14 @@ describe("P2PMesh", () => {
     });
 
     await mesh.syncPeers(["peer_b"]);
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
 
     const firstPeer = FakeRTCPeerConnection.instances[0]!;
     firstPeer.channel.readyState = "connecting";
 
     await vi.advanceTimersByTimeAsync(10_500);
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(3);
   });
 
   it("does not auto-recreate stalled peers when autoReconnect is disabled", async () => {
@@ -420,7 +420,7 @@ describe("P2PMesh", () => {
       peerId: "peer_b",
       reason: "watchdog-timeout"
     });
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
   });
 
   it("can proactively restart ICE without recreating the peer", async () => {
@@ -434,7 +434,7 @@ describe("P2PMesh", () => {
 
     await mesh.restartIce("peer_b");
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
     expect(sendSignal).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: "offer",

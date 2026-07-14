@@ -64,6 +64,7 @@ describe("SignalingTransport", () => {
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
       channelKind: "data",
+      linkKind: "data",
       type: "offer",
       payload: { type: "offer", sdp: "fake-offer" }
     });
@@ -85,12 +86,14 @@ describe("SignalingTransport", () => {
     expect(onSignal).toHaveBeenNthCalledWith(1, {
       peerId: "peer_b",
       direction: "received",
-      type: "candidate"
+      type: "candidate",
+      linkKind: "data"
     });
     expect(onSignal).toHaveBeenNthCalledWith(2, {
       peerId: "peer_b",
       direction: "sent",
-      type: "answer"
+      type: "answer",
+      linkKind: "data"
     });
     expect(sendSignal).toHaveBeenCalledWith({
       protocolVersion: 4,
@@ -99,6 +102,7 @@ describe("SignalingTransport", () => {
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
       channelKind: "data",
+      linkKind: "data",
       type: "answer",
       payload: { type: "answer", sdp: "fake-answer" }
     });
@@ -205,7 +209,8 @@ describe("SignalingTransport", () => {
     expect(onSignal).toHaveBeenCalledWith({
       peerId: "peer_b",
       direction: "received",
-      type: "offer"
+      type: "offer",
+      linkKind: "data"
     });
     expect(applyRemoteDescription).toHaveBeenCalledWith(entry, {
       type: "offer",

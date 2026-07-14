@@ -94,7 +94,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     await manager.syncPeers(["peer_b", "peer_a", ""]);
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
     expect(bindChannel).toHaveBeenCalledWith(
       "peer_b",
       expect.any(Object),
@@ -122,7 +122,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     await manager.restartIce("peer_b");
 
-    expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+    expect(FakeRTCPeerConnection.instances).toHaveLength(2);
     expect(firstPeer.localDescription).toEqual({
       type: "offer",
       sdp: "fake-restart-offer"
