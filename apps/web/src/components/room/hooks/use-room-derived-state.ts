@@ -275,6 +275,8 @@ export function useRoomDerivedState({
         ? totalMediaSendRateKbps
         : totalMediaReceiveRateKbps,
       configuredPlaybackBitrateKbps,
+      mediaSourcePeerId: roomSnapshot.room.playback.sourcePeerId,
+      isMediaSource: isLocalMediaSource,
       mediaSourceMemberNickname:
         roomSnapshot.room.members.find(
           (member) => member.id === roomSnapshot.room.playback.sourceSessionId

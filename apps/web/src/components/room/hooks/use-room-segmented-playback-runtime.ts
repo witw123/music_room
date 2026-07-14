@@ -350,13 +350,20 @@ export function useRoomSegmentedPlaybackRuntime(input: {
       return;
     }
     if (playback.sourceHealth && playback.sourceHealth !== lastSourceHealthRef.current) {
+      const previousSourceHealth = lastSourceHealthRef.current;
       lastSourceHealthRef.current = playback.sourceHealth;
       if (playback.sourceHealth === "source-underrun") {
-        setStatusMessage("本地音频供给不足，正在预读并恢复播放。");
+        // The initial underrun is the normal decode warm-up window. It must not
+        // be presented as a missing local audio source before RTP is published.
+        if (previousSourceHealth) {
+          setStatusMessage("WebRTC RTP Opus 音频正在恢复。");
+        }
       } else if (playback.sourceHealth === "source-silent") {
-        setStatusMessage("本地音频轨道暂时无能量，正在检查 AudioContext 和输出轨道。");
+        if (previousSourceHealth) {
+          setStatusMessage("WebRTC RTP Opus 音频暂时无数据，正在恢复。");
+        }
       } else if (playback.sourceHealth === "source-ready") {
-        setStatusMessage("音频源已就绪，正在通过 WebRTC 实时发送。");
+        setStatusMessage("WebRTC RTP Opus 播放已启动。");
       }
     }
   }, [input.isCurrentSource, playback.sourceHealth, setStatusMessage]);

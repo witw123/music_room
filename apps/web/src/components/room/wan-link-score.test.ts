@@ -76,6 +76,76 @@ describe("wan link score helpers", () => {
     });
 
     expect(score.profile).toBe("relay-udp");
-    expect(score.metrics.providerLabel).toBe("1 个来源");
+    expect(score.metrics.providerLabel).toBe("1 条媒体连接");
+  });
+
+  it("scores the RTP direction instead of the data-channel direction", () => {
+    const base = buildWanLinkScore({
+      candidateType: "host",
+      protocol: "udp",
+      rttMs: 24,
+      downloadRateKbps: 0,
+      uploadRateKbps: 960,
+      playbackBitrateKbps: 192,
+      mediaDirection: "send",
+      mediaTrackState: "live",
+      mediaConnectionState: "connected",
+      packetLossRate: 0,
+      jitterMs: 8,
+      dataChannelState: "open",
+      transportScore: "healthy",
+      bufferedAmountBytes: 0
+    });
+    const dataDegraded = buildWanLinkScore({
+      candidateType: "host",
+      protocol: "udp",
+      rttMs: 24,
+      downloadRateKbps: 0,
+      uploadRateKbps: 960,
+      playbackBitrateKbps: 192,
+      mediaDirection: "send",
+      mediaTrackState: "live",
+      mediaConnectionState: "connected",
+      packetLossRate: 0,
+      jitterMs: 8,
+      dataChannelState: "closed",
+      transportScore: "failed",
+      bufferedAmountBytes: 16 * 1024 * 1024
+    });
+
+    expect(base.metrics.directionLabel).toBe("发送");
+    expect(base.metrics.headroomLabel).toBe("5.0x");
+    expect(dataDegraded.score).toBe(base.score);
+  });
+
+  it("penalizes RTP loss and jitter while keeping a healthy media path high", () => {
+    const healthy = buildWanLinkScore({
+      candidateType: "srflx",
+      protocol: "udp",
+      rttMs: 30,
+      downloadRateKbps: 800,
+      playbackBitrateKbps: 192,
+      mediaDirection: "receive",
+      mediaTrackState: "live",
+      mediaConnectionState: "connected",
+      packetLossRate: 0,
+      jitterMs: 8
+    });
+    const impaired = buildWanLinkScore({
+      candidateType: "srflx",
+      protocol: "udp",
+      rttMs: 30,
+      downloadRateKbps: 800,
+      playbackBitrateKbps: 192,
+      mediaDirection: "receive",
+      mediaTrackState: "live",
+      mediaConnectionState: "connected",
+      packetLossRate: 6,
+      jitterMs: 55
+    });
+
+    expect(healthy.score).toBeGreaterThan(impaired.score);
+    expect(impaired.metrics.packetLossLabel).toBe("6.0%");
+    expect(impaired.metrics.jitterLabel).toBe("55ms");
   });
 });

@@ -47,6 +47,8 @@ export type LocalMemberPanelState = {
   segmentedPlayback: SegmentedPlaybackSnapshot;
   playbackBitrateKbps: number | null;
   configuredPlaybackBitrateKbps?: number | null;
+  mediaSourcePeerId?: string | null;
+  isMediaSource?: boolean;
   mediaSourceMemberNickname?: string | null;
   dataReadyCount: number;
   playbackStatus: {
@@ -202,7 +204,20 @@ function resolveRoomWanScore(input: {
   const providers = buildRoomProviders(input.summaries);
   const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ??
     input.localMemberState?.configuredPlaybackBitrateKbps ?? null;
-  const remoteScores = input.peerDiagnostics
+  const mediaDiagnostics = input.peerDiagnostics.filter((snapshot) =>
+    snapshot.peerId !== "system" && (
+      snapshot.mediaConnectionState !== null ||
+      (snapshot.mediaReceiveBitrateKbps ?? 0) > 0 ||
+      (snapshot.mediaSendBitrateKbps ?? 0) > 0
+    )
+  );
+  const sourcePeerId = input.localMemberState?.mediaSourcePeerId ?? null;
+  const selectedDiagnostics = input.localMemberState?.isMediaSource
+    ? mediaDiagnostics
+    : sourcePeerId
+      ? mediaDiagnostics.filter((snapshot) => snapshot.peerId === sourcePeerId)
+      : mediaDiagnostics;
+  const remoteScores = selectedDiagnostics
     .filter((snapshot) => snapshot.peerId !== "system")
     .map((diagnostic) => buildWanLinkScoreFromPeerDiagnostic({
       diagnostic,
@@ -212,13 +227,19 @@ function resolveRoomWanScore(input: {
       uploadRateKbps: diagnostic.mediaSendBitrateKbps
     }))
     .sort((left, right) => right.score - left.score);
-  return remoteScores[0] ?? buildWanLinkScore({
+  const selectedRemoteScore = input.localMemberState?.isMediaSource
+    ? [...remoteScores].sort((left, right) => left.score - right.score)[0]
+    : remoteScores[0];
+  return selectedRemoteScore ?? buildWanLinkScore({
     protocol: "udp",
     rttMs: input.localMemberState?.transportSummary.latencyMs ?? null,
     downloadRateKbps: input.localMemberState?.mediaSummary?.receiveRateKbps ?? null,
     uploadRateKbps: input.localMemberState?.mediaSummary?.sendRateKbps ?? null,
     playbackBitrateKbps,
-    dataChannelState: (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
+    mediaDirection: input.localMemberState?.isMediaSource ? "send" : "receive",
+    mediaTrackState: input.localMemberState?.segmentedPlayback.state === "live" ? "live" : "none",
+    mediaConnectionState: input.localMemberState?.segmentedPlayback.state === "live" ? "connected" : null,
+    sampleAgeMs: input.localMemberState?.mediaSummary?.sampleAgeMs ?? null,
     providers
   });
 }
@@ -257,11 +278,15 @@ function MembersPanelBase({
           </div>
           <dl className="grid min-w-[15rem] grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-foreground-muted">
             <div>RTT：{roomWanScore.metrics.rttLabel}</div>
-            <div>下载：{roomWanScore.metrics.downloadLabel}</div>
-            <div>音频：{roomWanScore.metrics.audioBitrateLabel}</div>
+            <div>RTP 接收：{roomWanScore.metrics.downloadLabel}</div>
+            <div>目标：{roomWanScore.metrics.audioBitrateLabel}</div>
             <div>余量：{roomWanScore.metrics.headroomLabel}</div>
-            <div>上传：{roomWanScore.metrics.uploadLabel}</div>
-            <div>来源：{roomWanScore.metrics.providerLabel}</div>
+            <div>RTP 发送：{roomWanScore.metrics.uploadLabel}</div>
+            <div>媒体连接：{roomWanScore.metrics.providerLabel}</div>
+            <div>方向：{roomWanScore.metrics.directionLabel}</div>
+            <div>丢包：{roomWanScore.metrics.packetLossLabel}</div>
+            <div>jitter：{roomWanScore.metrics.jitterLabel}</div>
+            <div>样本：{roomWanScore.metrics.sampleAgeLabel}</div>
           </dl>
         </div>
         <p className="mt-2 text-[10px] leading-4 text-foreground-muted">{roomWanScore.tips[0]}</p>
