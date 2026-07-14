@@ -53,7 +53,14 @@ function createContext() {
       return source;
     }),
     decodeAudioData: vi.fn(async () => buffer),
-    createBuffer: vi.fn()
+    createBuffer: vi.fn((channels: number, length: number, sampleRate: number) => ({
+      duration: length / sampleRate,
+      sampleRate,
+      length,
+      numberOfChannels: channels,
+      getChannelData: () => new Float32Array(length),
+      copyToChannel: vi.fn()
+    }))
   } as unknown as AudioContext;
   return { context, sources, gain };
 }
@@ -102,7 +109,7 @@ function unit(unitIndex: number): AudioAssetUnitRecord {
     proof: [],
     startMs: unitIndex * 2_000,
     durationMs: 2_000,
-    trimStartSamples: 0,
+    trimStartSamples: unitIndex === 0 ? 0 : 3_840,
     trimEndSamples: 0,
     payload: new Uint8Array([unitIndex]).buffer,
     lastAccessedAt: new Date(0).toISOString(),

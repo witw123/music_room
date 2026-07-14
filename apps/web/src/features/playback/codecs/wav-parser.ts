@@ -42,6 +42,11 @@ export function parseWavHeader(input: ArrayBuffer | Uint8Array): WavHeader | nul
       sampleRate = view.getUint32(chunkDataOffset + 4, true);
       blockAlign = view.getUint16(chunkDataOffset + 12, true);
       bitsPerSample = view.getUint16(chunkDataOffset + 14, true);
+      if (audioFormat === 0xfffe && chunkSize >= 40) {
+        // WAVE_FORMAT_EXTENSIBLE stores the PCM/IEEE-float subtype in the
+        // first two bytes of its 16-byte subformat GUID.
+        audioFormat = view.getUint16(chunkDataOffset + 24, true);
+      }
     } else if (chunkId === "data") {
       dataOffset = chunkDataOffset;
       dataBytes = chunkSize;
@@ -60,7 +65,7 @@ export function parseWavHeader(input: ArrayBuffer | Uint8Array): WavHeader | nul
     bitsPerSample <= 0 ||
     blockAlign <= 0 ||
     dataOffset <= 0 ||
-    dataBytes <= 0
+    dataBytes < 0
   ) {
     return null;
   }

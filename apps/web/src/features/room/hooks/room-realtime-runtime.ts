@@ -121,12 +121,13 @@ export function createRoomSocketRuntime(input: {
   input.socketRef.current = socket;
 
   const emitPeerSignal = (payload: PeerSignalMessage) => {
+    const linkKind = payload.linkKind ?? "data";
     input.recordPeerDiagnosticRef.current({
       peerId: payload.toPeerId,
-      channelKind: payload.channelKind,
+      channelKind: linkKind,
       direction: "sent",
       event: payload.type,
-      summary: `向 ${payload.toPeerId} 发送 ${payload.channelKind} ${payload.type}`,
+      summary: `向 ${payload.toPeerId} 发送 ${linkKind} ${payload.type}`,
       update: (snapshot: PeerDiagnosticsSnapshot) => ({
         ...snapshot,
         signalStats: {
@@ -142,12 +143,13 @@ export function createRoomSocketRuntime(input: {
   };
 
   const handleSignalFailure = (payload: PeerSignalMessage, error: unknown) => {
+    const linkKind = payload.linkKind ?? "data";
     input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,
-      channelKind: payload.channelKind,
+      channelKind: linkKind,
       direction: "local",
       event: "signal-handle-failed",
-      summary: `Failed to apply ${payload.channelKind} ${payload.type} from ${payload.fromPeerId}: ${String(error)}`,
+      summary: `Failed to apply ${linkKind} ${payload.type} from ${payload.fromPeerId}: ${String(error)}`,
       level: "error"
     });
   };
@@ -631,7 +633,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     ) {
       input.recordPeerDiagnosticRef.current({
         peerId: payload.fromPeerId,
-        channelKind: payload.channelKind,
+        channelKind: payload.linkKind ?? "data",
         direction: "received",
         event: "stale-signal-dropped",
         summary: `丢弃旧恢复代次信令 ${payload.recoveryGeneration}`,
@@ -643,10 +645,10 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
 
     input.recordPeerDiagnosticRef.current({
       peerId: payload.fromPeerId,
-      channelKind: payload.channelKind,
+      channelKind: payload.linkKind ?? "data",
       direction: "received",
       event: payload.type,
-      summary: `收到 ${payload.fromPeerId} 的 ${payload.channelKind} ${payload.type}`,
+      summary: `收到 ${payload.fromPeerId} 的 ${payload.linkKind ?? "data"} ${payload.type}`,
       update: (snapshot: PeerDiagnosticsSnapshot) => ({
         ...snapshot,
         signalStats: {

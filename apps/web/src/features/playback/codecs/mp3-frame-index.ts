@@ -22,7 +22,7 @@ const mpeg1SampleRates = [44_100, 48_000, 32_000, 0];
 export function scanMp3FrameIndex(input: ArrayBuffer | Uint8Array): Mp3FrameIndex {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   const frames: Mp3FrameIndexEntry[] = [];
-  let offset = skipId3v2(bytes);
+  let offset = skipMp3Id3v2(bytes);
   let sampleStart = 0;
   let sampleRate = 0;
   let samplesPerFrame = 1152;
@@ -57,7 +57,7 @@ export function scanMp3FrameIndex(input: ArrayBuffer | Uint8Array): Mp3FrameInde
   };
 }
 
-function parseMp3FrameHeader(bytes: Uint8Array, offset: number) {
+export function parseMp3FrameHeader(bytes: Uint8Array, offset: number) {
   const b0 = bytes[offset];
   const b1 = bytes[offset + 1];
   const b2 = bytes[offset + 2];
@@ -94,11 +94,12 @@ function parseMp3FrameHeader(bytes: Uint8Array, offset: number) {
   return {
     sampleRate,
     samplesPerFrame,
-    frameLength
+    frameLength,
+    channels: ((bytes[offset + 3] >> 6) & 0x03) === 0x03 ? 1 : 2
   };
 }
 
-function skipId3v2(bytes: Uint8Array) {
+export function skipMp3Id3v2(bytes: Uint8Array) {
   if (
     bytes.byteLength < 10 ||
     bytes[0] !== 0x49 ||

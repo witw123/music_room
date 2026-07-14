@@ -64,4 +64,31 @@ describe("wav parser", () => {
       endByte: 384_044
     });
   });
+
+  it("recognizes PCM WAVE_FORMAT_EXTENSIBLE headers", () => {
+    const bytes = new Uint8Array(68);
+    const view = new DataView(bytes.buffer);
+    writeAscii(bytes, 0, "RIFF");
+    view.setUint32(4, 60, true);
+    writeAscii(bytes, 8, "WAVE");
+    writeAscii(bytes, 12, "fmt ");
+    view.setUint32(16, 40, true);
+    view.setUint16(20, 0xfffe, true);
+    view.setUint16(22, 2, true);
+    view.setUint32(24, 48_000, true);
+    view.setUint32(28, 192_000, true);
+    view.setUint16(32, 4, true);
+    view.setUint16(34, 16, true);
+    view.setUint16(36, 22, true);
+    view.setUint16(38, 16, true);
+    view.setUint16(44, 1, true);
+    writeAscii(bytes, 60, "data");
+    view.setUint32(64, 0, true);
+
+    expect(parseWavHeader(bytes)).toMatchObject({
+      format: "pcm",
+      channels: 2,
+      sampleRate: 48_000
+    });
+  });
 });

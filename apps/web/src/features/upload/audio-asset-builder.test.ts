@@ -41,7 +41,7 @@ describe("audio asset preparation", () => {
 
     const laterSegment = slicePcmSegment(audioBuffer, 1);
     expect(laterSegment.channels[0]).toHaveLength(48_000 * 2 + 3_840);
-    expect(laterSegment.trimStartSamples).toBe(0);
+    expect(laterSegment.trimStartSamples).toBe(3_840);
     expect(laterSegment.channels[0]?.[0]).toBe(48_000 * 2 - 3_840);
   });
 

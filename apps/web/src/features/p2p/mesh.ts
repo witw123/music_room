@@ -644,6 +644,12 @@ export class P2PMesh {
   ) {
     try {
       await entry.connection.setRemoteDescription(remoteDescription);
+      if (entry.linkKind === "media") {
+        const peerId = this.peerLifecycle.getPeerIdForEntry(entry);
+        if (peerId) {
+          this.peerLifecycle.notifyRemoteDescriptionApplied(peerId, entry);
+        }
+      }
     } catch (error) {
       if (
         remoteDescription.type === "answer" &&

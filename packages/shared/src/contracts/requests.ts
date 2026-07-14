@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { originalAssetManifestSchema, playbackAssetManifestSchema } from "../assets/models";
+import {
+  maxOriginalAssetSizeBytes,
+  originalAssetManifestSchema,
+  playbackAssetManifestSchema
+} from "../assets/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const optionalNullableText = (max: number) =>
@@ -48,7 +52,7 @@ export const registerTrackRequestSchema = z
     album: z.string().trim().max(240).nullable(),
     durationMs: z.number().int().nonnegative().max(24 * 60 * 60 * 1000),
     bitrate: z.number().int().positive().max(10_000_000).nullable(),
-    sizeBytes: z.number().int().nonnegative().max(200 * 1024 * 1024).nullable().optional(),
+    sizeBytes: z.number().int().nonnegative().max(maxOriginalAssetSizeBytes).nullable().optional(),
     codec: z.string().trim().max(80).nullable().optional(),
     mimeType: z.string().trim().max(120).nullable().optional(),
     fileHash: trimmedString(256),

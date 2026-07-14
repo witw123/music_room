@@ -6,6 +6,7 @@ export const assetKindSchema = z.enum(["original", "playback"]);
 
 export const playbackProfileId = "opus-music-v2" as const;
 export const playbackEncoderVersion = "2.0.0" as const;
+export const maxOriginalAssetSizeBytes = 1024 * 1024 * 1024;
 
 const assetManifestBaseSchema = z.object({
   assetId: sha256HexSchema,
@@ -17,7 +18,7 @@ export const originalAssetManifestSchema = assetManifestBaseSchema.extend({
   kind: z.literal("original"),
   fileHash: sha256HexSchema,
   mimeType: z.string().trim().min(1).max(120),
-  sizeBytes: z.number().int().positive().max(200 * 1024 * 1024),
+  sizeBytes: z.number().int().positive().max(maxOriginalAssetSizeBytes),
   unitSize: z.literal(1024 * 1024)
 });
 

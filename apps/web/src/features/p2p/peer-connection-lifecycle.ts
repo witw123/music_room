@@ -98,6 +98,10 @@ export function releasePeerConnectionEntry(input: {
     clearTimeout(input.entry.receiverMuteTimerId);
     input.entry.receiverMuteTimerId = null;
   }
+  if (input.entry.mediaWatchdogTimerId) {
+    clearTimeout(input.entry.mediaWatchdogTimerId);
+    input.entry.mediaWatchdogTimerId = null;
+  }
   input.entry.mediaNegotiationPending = false;
   input.onDataBufferedAmountChange?.({
     peerId: input.peerId,

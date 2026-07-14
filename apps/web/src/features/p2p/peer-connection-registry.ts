@@ -33,6 +33,7 @@ export type PeerEntry = {
   appliedAudioBitrateKbps: number | null;
   receiverTrackState: PeerMediaTrackState;
   receiverMuteTimerId: ReturnType<typeof setTimeout> | null;
+  mediaWatchdogTimerId: ReturnType<typeof setTimeout> | null;
   mediaNegotiationPending: boolean;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
@@ -72,6 +73,7 @@ export function createPeerEntry(input: {
     appliedAudioBitrateKbps: null,
     receiverTrackState: "none",
     receiverMuteTimerId: null,
+    mediaWatchdogTimerId: null,
     mediaNegotiationPending: false,
     initiatorPeerId: input.initiatorPeerId,
     pendingCandidates: [],

@@ -90,6 +90,7 @@ type MediaRecoveryState = {
   highLossWindows: number;
   highJitterWindows: number;
   restartTimesMs: number[];
+  failureReportedAtMs: number | null;
   disconnectedTimerId: ReturnType<typeof setTimeout> | null;
 };
 
@@ -100,6 +101,7 @@ function createMediaRecoveryState(): MediaRecoveryState {
     highLossWindows: 0,
     highJitterWindows: 0,
     restartTimesMs: [],
+    failureReportedAtMs: null,
     disconnectedTimerId: null
   };
 }
@@ -217,7 +219,6 @@ export class PeerConnectionLifecycleManager {
         (options?.forceReconnectDegraded || this.shouldRestartPeerEntry(existing))
       ) {
         await this.recreatePeer(peerId, existing);
-        continue;
       }
 
       if (!existing) {
@@ -230,6 +231,7 @@ export class PeerConnectionLifecycleManager {
       }
       const mediaEntry = this.peerConnections.get(peerId, "media") ??
         (await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media"));
+      this.scheduleMediaWatchdog(peerId, mediaEntry);
       void this.enqueueMediaOperation(peerId, mediaEntry);
     }
 
@@ -242,6 +244,10 @@ export class PeerConnectionLifecycleManager {
 
   getPeerEntry(peerId: string, linkKind: PeerLinkKind = "data") {
     return this.peerConnections.get(peerId, linkKind);
+  }
+
+  getPeerIdForEntry(entry: PeerEntry) {
+    return this.peerConnections.allEntries().find(([, currentEntry]) => currentEntry === entry)?.[0] ?? null;
   }
 
   getConnectedPeerIds() {
@@ -336,10 +342,15 @@ export class PeerConnectionLifecycleManager {
       return null;
     }
 
-    if (entry.connection.connectionState === "failed" || entry.connection.connectionState === "closed") {
+    const staleSignal = Date.now() - entry.lastSignalProgressAtMs >= 8_000;
+    if (
+      entry.connection.connectionState === "failed" ||
+      entry.connection.connectionState === "closed" ||
+      (entry.connection.signalingState !== "stable" && staleSignal)
+    ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
-      const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      const nextEntry = await this.ensurePeer(peerId, true, "media");
       nextEntry.reconnectAttempts = reconnectAttempts + 1;
       return nextEntry;
     }
@@ -349,8 +360,14 @@ export class PeerConnectionLifecycleManager {
         return null;
       }
 
-      await this.signaling.createAndSendOffer(peerId, entry.connection, { iceRestart: true }, "media");
+      await this.signaling.createAndSendOffer(
+        peerId,
+        entry.connection,
+        { iceRestart: Boolean(entry.connection.remoteDescription) },
+        "media"
+      );
       entry.lastSignalProgressAtMs = Date.now();
+      this.scheduleMediaWatchdog(peerId, entry);
       return entry;
     });
   }
@@ -428,12 +445,21 @@ export class PeerConnectionLifecycleManager {
         if (payload.state === "connected") {
           if (linkKind === "media") {
             this.clearMediaDisconnectRecovery(payload.peerId);
+            this.clearMediaWatchdog(entry);
+            this.markMediaRecovered(payload.peerId);
             void this.enqueueMediaOperation(payload.peerId, entry);
           }
         } else if (linkKind === "media" && payload.state === "failed" && !entry.releasing) {
           this.triggerMediaRecovery(payload.peerId, "connection-failed");
         } else if (linkKind === "media" && payload.state === "disconnected" && !entry.releasing) {
           this.scheduleMediaDisconnectRecovery(payload.peerId, entry);
+        }
+        if (
+          linkKind === "media" &&
+          payload.state !== "connected" &&
+          !entry.releasing
+        ) {
+          this.scheduleMediaWatchdog(payload.peerId, entry);
         }
       },
       onIceConnectionStateChange: this.onIceConnectionStateChange,
@@ -464,6 +490,8 @@ export class PeerConnectionLifecycleManager {
     this.peerConnections.set(peerId, entry, linkKind);
     if (linkKind === "data") {
       this.schedulePeerWatchdog(peerId, entry);
+    } else {
+      this.scheduleMediaWatchdog(peerId, entry);
     }
     try {
       if (shouldInitiate && linkKind === "data") {
@@ -681,6 +709,14 @@ export class PeerConnectionLifecycleManager {
     return nextEntry;
   }
 
+  /** Re-run media sender setup after an incoming SDP answer/offer is applied. */
+  notifyRemoteDescriptionApplied(peerId: string, entry: PeerEntry) {
+    if (entry.linkKind !== "media" || entry.releasing) {
+      return;
+    }
+    void this.enqueueMediaOperation(peerId, entry);
+  }
+
   private preferOpus(transceiver: RTCRtpTransceiver) {
     try {
       const capabilities = RTCRtpReceiver.getCapabilities?.("audio")?.codecs ?? [];
@@ -749,6 +785,44 @@ export class PeerConnectionLifecycleManager {
     this.mediaRecovery.set(peerId, state);
   }
 
+  private scheduleMediaWatchdog(peerId: string, entry: PeerEntry) {
+    if (entry.linkKind !== "media" || entry.releasing || entry.mediaWatchdogTimerId !== null) {
+      return;
+    }
+
+    entry.mediaWatchdogTimerId = setTimeout(() => {
+      entry.mediaWatchdogTimerId = null;
+      if (
+        entry.releasing ||
+        this.peerConnections.get(peerId, "media") !== entry ||
+        entry.connection.connectionState === "connected"
+      ) {
+        return;
+      }
+
+      const now = Date.now();
+      const staleForMs = now - entry.lastSignalProgressAtMs;
+      const ageMs = now - entry.createdAtMs;
+      if (staleForMs < 8_000 && ageMs < 15_000) {
+        this.scheduleMediaWatchdog(peerId, entry);
+        return;
+      }
+
+      // A lost offer/answer can leave a perfectly healthy data connection
+      // with a media connection stuck in new/checking/have-local-offer. A
+      // media-only offer retries that path without touching DataChannel.
+      this.triggerMediaRecovery(peerId, "connection-failed");
+    }, 8_000);
+  }
+
+  private clearMediaWatchdog(entry: PeerEntry) {
+    if (entry.mediaWatchdogTimerId === null) {
+      return;
+    }
+    clearTimeout(entry.mediaWatchdogTimerId);
+    entry.mediaWatchdogTimerId = null;
+  }
+
   private clearMediaDisconnectRecovery(peerId: string) {
     const state = this.mediaRecovery.get(peerId);
     if (!state || state.disconnectedTimerId === null) {
@@ -772,14 +846,23 @@ export class PeerConnectionLifecycleManager {
     state.restartTimesMs = state.restartTimesMs.filter((timestamp) => now - timestamp < 30_000);
     if (state.restartTimesMs.length >= 2) {
       this.mediaRecovery.set(peerId, state);
-      this.onMediaRecovery?.({
-        peerId,
-        reason: "connection-failed",
-        restartCount: state.restartTimesMs.length
-      });
+      if (
+        state.failureReportedAtMs === null ||
+        now - state.failureReportedAtMs >= 30_000
+      ) {
+        state.failureReportedAtMs = now;
+        this.onMediaRecovery?.({
+          peerId,
+          reason: "connection-failed",
+          restartCount: state.restartTimesMs.length
+        });
+      }
       return;
     }
-    if (entry.connection.signalingState !== "stable") {
+    if (
+      entry.connection.signalingState !== "stable" &&
+      Date.now() - entry.lastSignalProgressAtMs < 8_000
+    ) {
       this.mediaRecovery.set(peerId, state);
       return;
     }
@@ -788,9 +871,24 @@ export class PeerConnectionLifecycleManager {
     state.noPacketWindows = 0;
     state.highLossWindows = 0;
     state.highJitterWindows = 0;
+    state.failureReportedAtMs = null;
     this.mediaRecovery.set(peerId, state);
     this.onMediaRecovery?.({ peerId, reason, restartCount: state.restartTimesMs.length });
     void this.restartMediaPeer(peerId);
+  }
+
+  private markMediaRecovered(peerId: string) {
+    const state = this.mediaRecovery.get(peerId);
+    if (!state) {
+      return;
+    }
+    state.degradedWindows = 0;
+    state.noPacketWindows = 0;
+    state.highLossWindows = 0;
+    state.highJitterWindows = 0;
+    state.restartTimesMs = [];
+    state.failureReportedAtMs = null;
+    this.mediaRecovery.set(peerId, state);
   }
 
   private shouldInitiatePeer(peerId: string) {

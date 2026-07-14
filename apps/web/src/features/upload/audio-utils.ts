@@ -1,6 +1,7 @@
 "use client";
 
 import type { GuestSession } from "@music-room/shared";
+import { createSHA256 } from "hash-wasm";
 import { buildCanonicalTrackPieceManifest } from "@/features/p2p";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
 
@@ -88,10 +89,14 @@ export async function buildTrackMeta(
 }
 
 async function hashFile(file: File) {
-  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  const hasher = await createSHA256();
+  hasher.init();
+  const chunkSize = 4 * 1024 * 1024;
+  for (let offset = 0; offset < file.size; offset += chunkSize) {
+    const chunk = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + chunkSize)).arrayBuffer());
+    hasher.update(chunk);
+  }
+  return hasher.digest("hex");
 }
 
 export function readDuration(objectUrl: string) {

@@ -344,12 +344,17 @@ export async function buildTrackAvailabilityFromFile(input: {
   };
   const chunkSize = manifest.chunkSize;
   const totalChunks = manifest.totalChunks;
-  const chunks = await splitBlobIntoChunks(input.file, chunkSize);
   const pieces = [];
   const pieceHashes: string[] = [];
 
-  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
-    const chunk = chunks[chunkIndex];
+  // Read and persist one bounded batch at a time. Keeping every chunk in an
+  // array made a 1 GiB original upload temporarily consume another 1 GiB of
+  // heap before the first cache write completed.
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+    const chunk = await input.file.slice(
+      chunkIndex * chunkSize,
+      Math.min(input.file.size, (chunkIndex + 1) * chunkSize)
+    ).arrayBuffer();
     const hash = await hashArrayBuffer(chunk);
     pieceHashes.push(hash);
     pieces.push({
@@ -364,13 +369,13 @@ export async function buildTrackAvailabilityFromFile(input: {
       payload: chunk
     });
 
-    if (pieces.length >= piecePersistenceBatchSize || chunkIndex === chunks.length - 1) {
+    if (pieces.length >= piecePersistenceBatchSize || chunkIndex === totalChunks - 1) {
       await cacheTrackPieces(pieces.splice(0, pieces.length));
       await yieldToMainThread();
     }
   }
 
-  const availableChunks = chunks.map((_, chunkIndex) => chunkIndex);
+  const availableChunks = Array.from({ length: totalChunks }, (_, chunkIndex) => chunkIndex);
   const mimeType = manifest.pieceMimeType;
 
   await upsertTrackPieceManifest({
@@ -797,20 +802,6 @@ export async function buildTrackAvailabilityFromCache(input: {
     source: "local_cache" as const,
     announcedAt: new Date().toISOString()
   };
-}
-
-async function splitBlobIntoChunks(blob: Blob, chunkSize: number) {
-  const chunks: ArrayBuffer[] = [];
-
-  for (let offset = 0; offset < blob.size; offset += chunkSize) {
-    const nextChunk = blob.slice(offset, offset + chunkSize);
-    chunks.push(await nextChunk.arrayBuffer());
-    if (chunks.length % piecePersistenceBatchSize === 0) {
-      await yieldToMainThread();
-    }
-  }
-
-  return chunks;
 }
 
 async function yieldToMainThread() {
