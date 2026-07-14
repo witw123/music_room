@@ -13,11 +13,11 @@ import {
 
 export type MemberTransferSummary = {
   memberId: string;
-  playbackAssetCount: number;
-  totalPlaybackUnitCount: number;
-  currentTrackOwnedUnitCount: number;
-  currentTrackTotalUnitCount: number;
-  currentTrackSources: string[];
+  mediaTrackState: "none" | "live" | "ended" | "failed";
+  mediaReceiveBitrateKbps: number | null;
+  mediaSendBitrateKbps: number | null;
+  mediaJitterMs: number | null;
+  mediaPacketLossRate: number | null;
 };
 
 type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
@@ -41,6 +41,7 @@ export type LocalMemberPanelState = {
   };
   segmentedPlayback: SegmentedPlaybackSnapshot;
   playbackBitrateKbps: number | null;
+  mediaSourceMemberNickname?: string | null;
   dataReadyCount: number;
   playbackStatus: {
     label: string;
@@ -76,11 +77,6 @@ function formatMetric(value: number | null, unit: string) {
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
-function formatDuration(ms: number) {
-  if (ms <= 0) return "0.0s";
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
 function formatSampleAge(sampleAgeMs: number | null) {
   if (sampleAgeMs === null) return "暂无样本";
   const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
@@ -102,23 +98,21 @@ export function getCurrentTrackStatus(
   presenceState: RoomMember["presenceState"]
 ) {
   if (presenceState === "offline") {
-    return { label: "离线", detail: "当前不提供播放资产单元。", tone: "warning" as const };
+    return { label: "离线", detail: "当前不参与实时媒体传输。", tone: "warning" as const };
   }
   if (presenceState === "reconnecting") {
-    return { label: "重新声明中", detail: "连接恢复后会重新发布持有范围。", tone: "warning" as const };
+    return { label: "重连中", detail: "正在恢复 WebRTC 媒体轨道。", tone: "warning" as const };
   }
-  const owned = summary?.currentTrackOwnedUnitCount ?? 0;
-  const total = summary?.currentTrackTotalUnitCount ?? 0;
-  if (total <= 0) {
-    return { label: "等待播放资产", detail: "当前曲目尚未发布分段 Opus 清单。", tone: "neutral" as const };
+  if (summary?.mediaTrackState === "live") {
+    return { label: "Media track 实时", detail: "正在接收或发送 RTP Opus 音频。", tone: "success" as const };
   }
-  if (owned >= total) {
-    return { label: "持有全部播放单元", detail: `已声明 ${owned}/${total} 个 Opus 单元。`, tone: "success" as const };
+  if (summary?.mediaTrackState === "failed") {
+    return { label: "Media track 失败", detail: "当前媒体轨道不可用，等待重连。", tone: "danger" as const };
   }
-  if (owned > 0) {
-    return { label: `持有 ${owned}/${total} 个单元`, detail: "只保留已播放和滚动窗口所需单元。", tone: "accent" as const };
+  if (summary?.mediaTrackState === "ended") {
+    return { label: "媒体轨道已结束", detail: "当前轨道已停止，等待新的播放源。", tone: "warning" as const };
   }
-  return { label: `持有 0/${total} 个单元`, detail: "当前没有可向其他成员提供的播放单元。", tone: "neutral" as const };
+  return { label: "等待媒体轨道", detail: "尚未收到当前播放源的 RTP Opus 轨道。", tone: "neutral" as const };
 }
 
 export function getPlaybackStatus(
@@ -130,7 +124,22 @@ export function getPlaybackStatus(
     return { label: "离线", detail: "该成员当前不参与实时音频传输。", tone: "warning" as const };
   }
   if (presenceState === "reconnecting") {
-    return { label: "链路重连中", detail: "正在恢复播放资产数据通道。", tone: "warning" as const };
+    return { label: "链路重连中", detail: "正在恢复 WebRTC RTP Opus 媒体轨道。", tone: "warning" as const };
+  }
+  if (peerDiagnostics?.mediaConnectionState === "failed" || peerDiagnostics?.transportScore === "failed") {
+    return {
+      label: "媒体链路失败",
+      detail: peerDiagnostics.lastFailureReason ?? "当前无法接收 RTP Opus 音频。",
+      tone: "danger" as const
+    };
+  }
+  if ((peerDiagnostics?.mediaReceiveBitrateKbps ?? 0) > 0 || (peerDiagnostics?.mediaSendBitrateKbps ?? 0) > 0) {
+    return {
+      label: "Media track 实时",
+      detail: "本端已观测到 WebRTC RTP Opus 音频流。",
+      tone: "success" as const,
+      badgeText: "RTP Opus"
+    };
   }
   if (peerDiagnostics?.dataChannelState === "open") {
     const sampleAt = new Date(peerDiagnostics.updatedAt).getTime();
@@ -138,26 +147,27 @@ export function getPlaybackStatus(
     const transferring = sampleFresh &&
       ((peerDiagnostics.pieceDownloadRateKbps ?? 0) > 0 || (peerDiagnostics.pieceUploadRateKbps ?? 0) > 0);
     return transferring
-      ? { label: "播放单元传输中", detail: "本端观测到该成员正在收发分段资产。", tone: "success" as const }
-      : { label: "DataChannel 就绪", detail: "声音是否正在输出只在该成员本机可确认。", tone: "accent" as const };
+      ? { label: "原文件缓存传输中", detail: "本端观测到该成员正在收发手动缓存数据。", tone: "success" as const }
+      : { label: "数据通道就绪", detail: "数据通道仅用于控制和手动原文件缓存。", tone: "accent" as const };
   }
   if (peerDiagnostics?.transportHealth === "failed") {
     return {
       label: "数据链路失败",
-      detail: peerDiagnostics.lastFailureReason ?? "当前无法交换播放资产单元。",
+      detail: peerDiagnostics.lastFailureReason ?? "当前无法建立数据通道。",
       tone: "danger" as const
     };
   }
-  return { label: "等待数据链路", detail: "尚未观测到可用的播放资产通道。", tone: "neutral" as const };
+  return { label: "等待媒体链路", detail: "尚未观测到当前播放源的 RTP Opus 轨道。", tone: "neutral" as const };
 }
 
 function buildRoomProviders(summaries: MemberTransferSummary[]): WanProviderSummary[] {
   return summaries
-    .filter((summary) => summary.currentTrackOwnedUnitCount > 0)
+    .filter((summary) => summary.mediaTrackState === "live")
     .map((summary) => ({
       peerId: summary.memberId,
-      availableUnits: summary.currentTrackOwnedUnitCount,
-      totalUnits: summary.currentTrackTotalUnitCount
+      availableUnits: 1,
+      totalUnits: 1,
+      isPreferredSource: true
     }));
 }
 
@@ -167,24 +177,22 @@ function resolveRoomWanScore(input: {
   localMemberState: LocalMemberPanelState | null;
 }): WanLinkScore {
   const providers = buildRoomProviders(input.summaries);
-  const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ?? 192;
+  const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ?? null;
   const remoteScores = input.peerDiagnostics
     .filter((snapshot) => snapshot.peerId !== "system")
     .map((diagnostic) => buildWanLinkScoreFromPeerDiagnostic({
       diagnostic,
       providers,
       playbackBitrateKbps,
-      downloadRateKbps:
-        input.localMemberState?.pieceSummary.downloadRateKbps ?? diagnostic.pieceDownloadRateKbps,
-      uploadRateKbps:
-        input.localMemberState?.pieceSummary.uploadRateKbps ?? diagnostic.pieceUploadRateKbps
+      downloadRateKbps: diagnostic.mediaReceiveBitrateKbps,
+      uploadRateKbps: diagnostic.mediaSendBitrateKbps
     }))
     .sort((left, right) => right.score - left.score);
   return remoteScores[0] ?? buildWanLinkScore({
     protocol: "udp",
     rttMs: input.localMemberState?.transportSummary.latencyMs ?? null,
-    downloadRateKbps: input.localMemberState?.pieceSummary.downloadRateKbps ?? null,
-    uploadRateKbps: input.localMemberState?.pieceSummary.uploadRateKbps ?? null,
+    downloadRateKbps: input.localMemberState?.transportSummary.receiveRateKbps ?? null,
+    uploadRateKbps: input.localMemberState?.transportSummary.sendRateKbps ?? null,
     playbackBitrateKbps,
     dataChannelState: (input.localMemberState?.dataReadyCount ?? 0) > 0 ? "open" : "connecting",
     providers
@@ -208,7 +216,7 @@ function MembersPanelBase({
   return (
     <section className="flex w-full flex-col gap-3">
       <p className="rounded-lg border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
-        播放状态、AudioContext 与前向缓冲仅显示本机真实值；其他成员只展示其已声明的 v4 播放资产范围和本端 DataChannel 观测。
+        播放状态、媒体轨道、AudioContext 与 RTP 码率来自本端真实 WebRTC 观测；DataChannel 仅用于房间控制和手动原文件缓存。
       </p>
 
       <section className="border-y border-surface-border py-3">
@@ -248,9 +256,15 @@ function MembersPanelBase({
             </strong>
           </div>
           <div>
-            <span className="text-[10px] text-foreground-muted">前向可播</span>
+            <span className="text-[10px] text-foreground-muted">媒体轨道</span>
             <strong className="mt-1 block text-sm text-foreground">
-              {formatDuration(localMemberState.segmentedPlayback.bufferedMs)}
+              {localMemberState.playbackStatus.badgeText}
+            </strong>
+          </div>
+          <div>
+            <span className="text-[10px] text-foreground-muted">当前媒体源</span>
+            <strong className="mt-1 block text-sm text-foreground">
+              {localMemberState.mediaSourceMemberNickname ?? "未选择"}
             </strong>
           </div>
           <div>
@@ -274,30 +288,26 @@ function MembersPanelBase({
         const playbackStatus = isLocal
           ? localMemberState.playbackStatus
           : getPlaybackStatus(member.presenceState, diagnostic);
-        const assetStatus = getCurrentTrackStatus(summary, member.presenceState);
+        const mediaStatus = getCurrentTrackStatus(summary, member.presenceState);
         const presence = getPresence(member);
         const downloadRate = isLocal
-          ? localMemberState.pieceSummary.downloadRateKbps
-          : diagnostic?.pieceDownloadRateKbps ?? null;
+          ? localMemberState.transportSummary.receiveRateKbps
+          : diagnostic?.mediaReceiveBitrateKbps ?? null;
         const uploadRate = isLocal
-          ? localMemberState.pieceSummary.uploadRateKbps
-          : diagnostic?.pieceUploadRateKbps ?? null;
+          ? localMemberState.transportSummary.sendRateKbps
+          : diagnostic?.mediaSendBitrateKbps ?? null;
         const latency = isLocal
           ? localMemberState.transportSummary.latencyMs
           : diagnostic?.currentRoundTripTimeMs ?? null;
-        const sourceLabel = summary?.currentTrackSources.includes("live_upload")
-          ? "上传端播放资产"
-          : summary?.currentTrackSources.includes("local_cache")
-            ? "本地持有播放资产"
-            : "暂无声明";
         const remoteWan = !isLocal && diagnostic
           ? buildWanLinkScoreFromPeerDiagnostic({
               diagnostic,
-              playbackBitrateKbps: localMemberState?.playbackBitrateKbps ?? 192,
-              providers: summary ? [{
+              playbackBitrateKbps: localMemberState?.playbackBitrateKbps ?? null,
+              providers: summary?.mediaTrackState === "live" ? [{
                 peerId: member.id,
-                availableUnits: summary.currentTrackOwnedUnitCount,
-                totalUnits: summary.currentTrackTotalUnitCount
+                availableUnits: 1,
+                totalUnits: 1,
+                isPreferredSource: true
               }] : []
             })
           : null;
@@ -322,30 +332,34 @@ function MembersPanelBase({
                 <div className="mt-1 flex items-center gap-2">
                   <strong className="text-xs text-foreground">{playbackStatus.label}</strong>
                   <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${getToneClasses(playbackStatus.tone)}`}>
-                    {isLocal ? localMemberState.playbackStatus.badgeText : diagnostic?.dataChannelState ?? "未知"}
+                    {isLocal ? localMemberState.playbackStatus.badgeText : mediaStatus.label}
                   </span>
                 </div>
                 <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{playbackStatus.detail}</p>
               </div>
 
               <div>
-                <span className="text-[10px] text-foreground-muted">当前播放资产</span>
-                <strong className="mt-1 block text-xs text-foreground">{assetStatus.label}</strong>
-                <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{assetStatus.detail}</p>
-                <p className="mt-1 text-[10px] text-foreground-muted/80">来源：{sourceLabel}</p>
+                <span className="text-[10px] text-foreground-muted">媒体轨道</span>
+                <strong className="mt-1 block text-xs text-foreground">{mediaStatus.label}</strong>
+                <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{mediaStatus.detail}</p>
+                <p className="mt-1 text-[10px] text-foreground-muted/80">
+                  码率：{formatRate(isLocal ? localMemberState.playbackBitrateKbps : diagnostic?.mediaReceiveBitrateKbps ?? null)}
+                </p>
               </div>
 
               <div>
                 <span className="text-[10px] text-foreground-muted">本端链路观测</span>
                 <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-                  <span>下载：{formatRate(downloadRate, isLocal ? localMemberState.pieceSummary.sampleAgeMs : null)}</span>
-                  <span>上传：{formatRate(uploadRate, isLocal ? localMemberState.pieceSummary.sampleAgeMs : null)}</span>
+                  <span>接收：{formatRate(downloadRate, isLocal ? localMemberState.transportSummary.sampleAgeMs : null)}</span>
+                  <span>发送：{formatRate(uploadRate, isLocal ? localMemberState.transportSummary.sampleAgeMs : null)}</span>
                   <span>RTT：{formatMetric(latency, "ms")}</span>
+                  <span>丢包：{formatMetric(diagnostic?.packetLossRate ?? null, "%")}</span>
+                  <span>jitter：{formatMetric(diagnostic?.jitterMs ?? null, "ms")}</span>
                   <span>路径：{remoteWan?.pathLabel ?? (isLocal ? "汇总" : "未知")}</span>
                 </div>
                 {isLocal ? (
                   <p className="mt-1 text-[10px] text-foreground-muted/80">
-                    样本：{formatSampleAge(localMemberState.pieceSummary.sampleAgeMs)}
+                    样本：{formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}
                   </p>
                 ) : null}
               </div>

@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type {
-  AssetAvailabilityAnnouncement,
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
   RoomSnapshot
@@ -80,43 +79,39 @@ const livePlayback: SegmentedPlaybackSnapshot = {
 };
 
 describe("use-room-derived-state v4 helpers", () => {
-  it("counts member playback units from v4 asset ranges", () => {
-    const announcement: AssetAvailabilityAnnouncement = {
-      protocolVersion: 4,
-      roomId: "room_1",
-      assetId: playbackAsset.assetId,
-      assetKind: "playback",
-      ownerPeerId: "peer_host",
-      nickname: "Host",
-      totalUnits: 160,
-      availableRanges: [{ start: 0, end: 7 }, { start: 30, end: 31 }],
-      complete: false,
-      source: "live_upload",
-      announcedAt: "2026-07-13T00:00:00.000Z"
-    };
-
+  it("derives member media state from RTP diagnostics", () => {
     expect(buildMemberAssetSummaries({
       roomSnapshot,
-      availabilityByAsset: { [playbackAsset.assetId]: { peer_host: announcement } },
+      peerDiagnostics: [{
+        peerId: "peer_host",
+        ...({
+          mediaReceiveBitrateKbps: null,
+          mediaSendBitrateKbps: 192,
+          mediaConnectionState: "connected",
+          transportHealth: "healthy",
+          jitterMs: 4,
+          packetLossRate: 0
+        } as Partial<PeerDiagnosticsSnapshot>)
+      } as PeerDiagnosticsSnapshot],
       activeMemberPeerIds: new Set(["peer_host", "peer_listener"]),
       localPeerId: "peer_listener",
       segmentedPlayback: livePlayback
     })).toEqual([
       {
         memberId: "host",
-        playbackAssetCount: 1,
-        totalPlaybackUnitCount: 10,
-        currentTrackOwnedUnitCount: 10,
-        currentTrackTotalUnitCount: 160,
-        currentTrackSources: ["live_upload"]
+        mediaTrackState: "live",
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: 192,
+        mediaJitterMs: 4,
+        mediaPacketLossRate: 0
       },
       {
         memberId: "listener",
-        playbackAssetCount: 0,
-        totalPlaybackUnitCount: 0,
-        currentTrackOwnedUnitCount: 8,
-        currentTrackTotalUnitCount: 160,
-        currentTrackSources: []
+        mediaTrackState: "none",
+        mediaReceiveBitrateKbps: null,
+        mediaSendBitrateKbps: null,
+        mediaJitterMs: null,
+        mediaPacketLossRate: null
       }
     ]);
   });
@@ -126,7 +121,7 @@ describe("use-room-derived-state v4 helpers", () => {
       presenceState: "online",
       playbackStatus: "playing",
       segmentedPlayback: livePlayback
-    })).toMatchObject({ label: "正在发声", tone: "success", badgeText: "分段 Opus" });
+    })).toMatchObject({ label: "正在发声", tone: "success", badgeText: "RTP Opus" });
   });
 
   it("reports a suspended AudioContext instead of trusting stale unlock state", () => {
@@ -138,7 +133,7 @@ describe("use-room-derived-state v4 helpers", () => {
         state: "awaiting-unlock",
         audioContextState: "suspended"
       }
-    })).toMatchObject({ label: "等待本机音频解锁", badgeText: "AudioContext" });
+    })).toMatchObject({ label: "等待本机音频解锁", badgeText: "Audio unlock" });
   });
 
   it("keeps diagnostics scoped to active members and the members tab", () => {

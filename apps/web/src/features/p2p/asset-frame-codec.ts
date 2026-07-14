@@ -1,6 +1,5 @@
 import {
   assetUnitDescriptorSchema,
-  type AssetKind,
   type AssetUnitDescriptor
 } from "@music-room/shared";
 
@@ -16,7 +15,7 @@ type AssetFrameHeader = {
   streamId: string;
   generation: number;
   assetId: string;
-  assetKind: AssetKind;
+  assetKind: "original";
   unitIndex: number;
   fragmentIndex: number;
   fragmentCount: number;
@@ -34,6 +33,9 @@ export function encodeAssetUnitFrames(input: {
   descriptor: AssetUnitDescriptor;
   payload: ArrayBuffer;
 }) {
+  if (input.descriptor.kind !== "original") {
+    throw new Error("Only original asset units may use the asset transfer channel.");
+  }
   const fragmentCount = Math.max(1, Math.ceil(input.payload.byteLength / fragmentPayloadBytes));
   const frames: ArrayBuffer[] = [];
   for (let fragmentIndex = 0; fragmentIndex < fragmentCount; fragmentIndex += 1) {
@@ -44,7 +46,7 @@ export function encodeAssetUnitFrames(input: {
       streamId: input.streamId,
       generation: input.generation,
       assetId: input.descriptor.assetId,
-      assetKind: input.descriptor.kind,
+      assetKind: "original",
       unitIndex: input.descriptor.unitIndex,
       fragmentIndex,
       fragmentCount,
@@ -96,7 +98,7 @@ export function decodeAssetUnitFrame(data: ArrayBuffer): DecodedAssetFrame {
     typeof rawHeader.streamId !== "string" ||
     typeof rawHeader.generation !== "number" ||
     typeof rawHeader.assetId !== "string" ||
-    (rawHeader.assetKind !== "original" && rawHeader.assetKind !== "playback") ||
+    rawHeader.assetKind !== "original" ||
     typeof rawHeader.unitIndex !== "number" ||
     typeof rawHeader.fragmentIndex !== "number" ||
     typeof rawHeader.fragmentCount !== "number" ||

@@ -36,7 +36,6 @@ import {
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
   shouldQueueIncomingAvailability,
-  resolveRemoteAvailabilityRequestTrackId,
   resolveSourceAvailabilityReannounceTrackId,
   shouldResyncSnapshotForPlaybackPatch
 } from "./room-realtime-policy";
@@ -322,7 +321,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
   let subscribeRequestSequence = 0;
-  const availabilityRequestRetryIds = new Set<number>();
   const availabilityReannounceInFlight = new Map<string, Promise<boolean>>();
 
   const clearSubscribeTimers = () => {
@@ -333,38 +331,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     if (subscribeAckTimeoutId !== null) {
       window.clearTimeout(subscribeAckTimeoutId);
       subscribeAckTimeoutId = null;
-    }
-  };
-
-  const requestTrackAvailability = (trackId: string) => {
-    if (input.activeRouteRoomIdRef.current !== input.roomId || !socket.connected) {
-      return;
-    }
-    socket.emit("piece.availability.request", {
-      roomId: input.roomId,
-      trackId,
-      requesterPeerId: input.peerId
-    });
-  };
-
-  const requestTrackAvailabilityWithRetries = (trackId: string) => {
-    for (const retryId of availabilityRequestRetryIds) {
-      window.clearTimeout(retryId);
-    }
-    availabilityRequestRetryIds.clear();
-    requestTrackAvailability(trackId);
-    for (const delayMs of [800, 2_000, 5_000]) {
-      const retryId = window.setTimeout(() => {
-        availabilityRequestRetryIds.delete(retryId);
-        const playback = input.currentRoomRef.current?.room.playback;
-        if (
-          playback?.currentTrackId === trackId &&
-          playback.sourceSessionId !== input.activeSessionRef.current?.userId
-        ) {
-          requestTrackAvailability(trackId);
-        }
-      }, delayMs);
-      availabilityRequestRetryIds.add(retryId);
     }
   };
 
@@ -455,16 +421,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           enableTrackCaching: input.enableTrackCaching,
           audioUnlocked: input.audioUnlocked
         });
-        const remoteTrackId = ack.bootstrap
-          ? resolveRemoteAvailabilityRequestTrackId({
-              activeSessionId,
-              previousPlayback: null,
-              nextPlayback: ack.bootstrap.playback
-            })
-          : null;
-        if (remoteTrackId) {
-          requestTrackAvailabilityWithRetries(remoteTrackId);
-        }
       }
     );
   };
@@ -500,17 +456,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     void input.requestRoomSnapshotResyncRef.current("socket-connect", input.roomId);
   });
 
-  const applyPlaybackKick = (previousPlayback: RoomSnapshot["room"]["playback"] | null | undefined, nextPlayback: RoomSnapshot["room"]["playback"]) => {
-    const remoteTrackId = resolveRemoteAvailabilityRequestTrackId({
-      activeSessionId: input.activeSessionRef.current?.userId,
-      previousPlayback,
-      nextPlayback
-    });
-    if (remoteTrackId) {
-      requestTrackAvailabilityWithRetries(remoteTrackId);
-    }
-  };
-
   socket.on("room.snapshot", (snapshot: RoomSnapshot) => {
     if (snapshot.room.id !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
       return;
@@ -529,10 +474,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     ) {
       return;
     }
-    const playbackAcceptance = realtimeEventGate.acceptPlayback(
-      snapshot.room.playback,
-      currentSnapshot
-    );
+    realtimeEventGate.acceptPlayback(snapshot.room.playback, currentSnapshot);
     const presenceAccepted = realtimeEventGate.acceptPresenceRevision(
       snapshot.room.presenceRevision,
       currentSnapshot,
@@ -550,9 +492,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     input.flushPendingAvailabilityRef.current();
     if (presenceAccepted) {
       input.resyncRealtimePeers(snapshot.room.members);
-    }
-    if (playbackAcceptance.accepted) {
-      applyPlaybackKick(playbackAcceptance.previousPlayback, snapshot.room.playback);
     }
   });
 
@@ -582,7 +521,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     ) {
       void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
     }
-    applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
   });
 
   socket.on("room.queue.patch", ({ queue, playback, roomRevision }) => {
@@ -611,9 +549,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    if (playbackAcceptance.accepted) {
-      applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
-    }
   });
 
   socket.on("room.presence.patch", ({ members, playback, presenceRevision, roomRevision }) => {
@@ -647,9 +582,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     if (presenceAccepted) {
       input.resyncRealtimePeers(members);
     }
-    if (playbackAcceptance.accepted) {
-      applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
-    }
   });
 
   socket.on("room.library.patch", ({ tracks, queue, playback, roomRevision }) => {
@@ -679,9 +611,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     }
     input.lastRealtimeRoomEventAtRef.current = Date.now();
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    if (playbackAcceptance.accepted) {
-      applyPlaybackKick(playbackAcceptance.previousPlayback, playback);
-    }
   });
 
   socket.on("peer.signal", (payload) => {
@@ -778,7 +707,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     const track = input.currentRoomRef.current?.tracks.find(
-      (candidate) => candidate.originalAsset?.assetId === assetId || candidate.playbackAsset?.assetId === assetId
+      (candidate) => candidate.originalAsset?.assetId === assetId
     );
     if (track) {
       void input.announceRoomTrackAvailabilityRef.current(track.id, { force: true });
@@ -840,10 +769,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
 
   return () => {
     clearSubscribeTimers();
-    for (const retryId of availabilityRequestRetryIds) {
-      window.clearTimeout(retryId);
-    }
-    availabilityRequestRetryIds.clear();
     input.stopPresenceHeartbeat();
     input.stopRecoveryWatchdog();
     input.resubscribeRoomRef.current = null;

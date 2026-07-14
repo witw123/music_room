@@ -16,6 +16,8 @@ type ApplyRoomAudioVolumeInput = {
 };
 
 export class RoomAudioOutput {
+  private broadcastDestination: MediaStreamAudioDestinationNode | null = null;
+
   async primeOutputs(input: PrimeRoomAudioOutputInput): Promise<PrimeRoomAudioOutputsResult> {
     return roomAudioActivationManager.activateOutputs(input);
   }
@@ -43,6 +45,33 @@ export class RoomAudioOutput {
 
   getSharedAudioContext() {
     return roomAudioActivationManager.getSharedAudioContext();
+  }
+
+  getBroadcastDestination(context = this.getSharedAudioContext()) {
+    if (!context) {
+      return null;
+    }
+    if (this.broadcastDestination && this.broadcastDestination.context === context) {
+      return this.broadcastDestination;
+    }
+    if (typeof context.createMediaStreamDestination !== "function") {
+      return null;
+    }
+    this.broadcastDestination?.disconnect();
+    this.broadcastDestination = context.createMediaStreamDestination();
+    return this.broadcastDestination;
+  }
+
+  getBroadcastStream() {
+    return this.broadcastDestination?.stream ?? null;
+  }
+
+  clearBroadcastDestination() {
+    this.broadcastDestination?.disconnect();
+    for (const track of this.broadcastDestination?.stream.getTracks() ?? []) {
+      track.stop();
+    }
+    this.broadcastDestination = null;
   }
 }
 

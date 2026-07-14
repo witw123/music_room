@@ -185,7 +185,7 @@ export function buildRoomSubscribePayload(input: {
     sessionId: input.sessionId,
     peerId: input.peerId,
     protocolVersion: 4 as const,
-    capabilities: ["segmented-opus-v1" as const],
+    capabilities: ["webrtc-opus-v1" as const],
     buildId: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.3.0"
   };
 }

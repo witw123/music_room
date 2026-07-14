@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assetKindSchema, sha256HexSchema } from "../assets/models";
 
 export const p2pProtocolVersion = 4 as const;
-export const segmentedOpusCapability = "segmented-opus-v1" as const;
+export const segmentedOpusCapability = "webrtc-opus-v1" as const;
 
 export const assetUnitRangeSchema = z.object({
   start: z.number().int().nonnegative(),
@@ -13,7 +13,7 @@ export const assetAvailabilityAnnouncementSchema = z.object({
   protocolVersion: z.literal(p2pProtocolVersion),
   roomId: z.string().min(1),
   assetId: sha256HexSchema,
-  assetKind: assetKindSchema,
+  assetKind: z.literal("original"),
   ownerPeerId: z.string().min(1),
   nickname: z.string().min(1),
   totalUnits: z.number().int().positive(),
@@ -53,7 +53,7 @@ export const assetStreamMessageSchema = z.discriminatedUnion("kind", [
     protocolVersion: z.literal(p2pProtocolVersion),
     streamId: z.string().min(1),
     assetId: sha256HexSchema,
-    assetKind: assetKindSchema,
+    assetKind: z.literal("original"),
     generation: z.number().int().nonnegative(),
     priority: z.enum(["critical", "playback-fill", "bulk"]),
     ranges: z.array(assetUnitRangeSchema).min(1),

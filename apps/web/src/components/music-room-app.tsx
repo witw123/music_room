@@ -199,10 +199,12 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
   });
   const segmentedPlayback = useRoomSegmentedPlaybackRuntime({
     roomSnapshot, currentTrack: pageDerived.currentTrack, peerId,
-    volume: pageState.volume, audioUnlocked: pageState.audioUnlocked, availabilityByAsset,
+    isCurrentSource: pageDerived.isCurrentSourceOwner,
+    audioRef: appRefs.audioRef,
+    volume: pageState.volume, audioUnlocked: pageState.audioUnlocked,
     setAudioUnlocked: pageState.setAudioUnlocked,
-    requestAssetUnits: roomRuntime.requestAssetUnits,
-    emitAssetAvailability: stableEmitAssetAvailability,
+    setLocalAudioStream: roomRuntime.setLocalAudioStream,
+    getPeerMediaState: roomRuntime.getPeerMediaState,
     onPlaybackEnded: roomActions.nextTrack,
     setMediaConnectionState: pageState.setMediaConnectionState,
     setSourceStartState: pageState.setSourceStartState,
@@ -211,14 +213,15 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
   });
   const manualAssetCache = useRoomOriginalAssetCache({
     roomSnapshot,
-    requestAssetUnits: roomRuntime.requestAssetUnits,
-    cancelAssetRequests: roomRuntime.cancelAssetRequests,
+    requestOriginalAssetUnits: roomRuntime.requestOriginalAssetUnits,
+    cancelOriginalAssetRequests: roomRuntime.cancelOriginalAssetRequests,
     updateManualCacheTask: uploads.updateManualCacheTask,
     refreshCacheLibrary: uploads.refreshCacheLibrary,
     setStatusMessage
   });
   const playbackActions = useRoomPlaybackActions({
     currentPlaybackPositionRef: appRefs.currentPlaybackPositionRef,
+    audioRef: appRefs.audioRef,
     roomSnapshot,
     currentPlaybackTrackId: pageDerived.currentPlaybackTrackId,
     playbackMediaEpoch: pageDerived.playbackMediaEpoch,

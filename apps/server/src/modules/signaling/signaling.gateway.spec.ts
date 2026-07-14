@@ -152,7 +152,7 @@ function createClient(input?: Partial<{
       sessionId: input?.sessionId,
       peerId: input?.peerId,
       protocolVersion: 4,
-      capabilities: ["segmented-opus-v1"],
+      capabilities: ["webrtc-opus-v1"],
       isRealtimeAuthenticated: input?.isRealtimeAuthenticated ?? false
     },
     join: jest.fn(),
@@ -222,7 +222,7 @@ describe("SignalingGateway", () => {
     expect(response).toEqual({
       ok: true,
       protocolVersion: 4,
-      capability: "segmented-opus-v1",
+      capability: "webrtc-opus-v1",
       serverNow: expect.any(String),
       recoveryGeneration: expect.any(Number),
       bootstrap: {
@@ -256,7 +256,7 @@ describe("SignalingGateway", () => {
     })).resolves.toEqual({
       ok: false,
       protocolVersion: 4,
-      capability: "segmented-opus-v1",
+      capability: "webrtc-opus-v1",
       errorCode: "client_upgrade_required"
     });
     expect(authService.assertSessionToken).not.toHaveBeenCalled();
@@ -641,7 +641,7 @@ describe("SignalingGateway", () => {
       roomId: "room_1",
       payload: {
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -683,7 +683,7 @@ describe("SignalingGateway", () => {
       roomId: "room_1",
       payload: {
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -901,7 +901,7 @@ describe("SignalingGateway", () => {
     attachServerMock(gateway);
     const payload = {
       protocolVersion: 4 as const,
-      capability: "segmented-opus-v1" as const,
+      capability: "webrtc-opus-v1" as const,
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
@@ -1071,7 +1071,7 @@ describe("SignalingGateway", () => {
         createClient() as never,
         {
           protocolVersion: 4,
-          capability: "segmented-opus-v1",
+          capability: "webrtc-opus-v1",
           roomId: "room_1",
           fromPeerId: "peer_a",
           toPeerId: "peer_b",
@@ -1252,7 +1252,7 @@ describe("SignalingGateway", () => {
         }) as never,
         {
           protocolVersion: 4,
-          capability: "segmented-opus-v1",
+          capability: "webrtc-opus-v1",
           roomId: "room_1",
           fromPeerId: "peer_a",
           toPeerId: "peer_b",
@@ -1382,7 +1382,7 @@ describe("SignalingGateway", () => {
       }) as never,
       {
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -1530,7 +1530,7 @@ describe("SignalingGateway", () => {
       }) as never,
       {
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -1587,7 +1587,7 @@ describe("SignalingGateway", () => {
       }) as never,
       {
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",

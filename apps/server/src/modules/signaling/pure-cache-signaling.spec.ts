@@ -5,7 +5,7 @@ describe("room data signaling", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",

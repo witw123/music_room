@@ -19,7 +19,7 @@ function createAssetAvailability(input?: {
     protocolVersion: 4 as const,
     roomId: "room_1",
     assetId: input?.assetId ?? "a".repeat(64),
-    assetKind: "playback" as const,
+    assetKind: "original" as const,
     ownerPeerId: input?.peerId ?? "peer_owner",
     nickname: "Owner",
     totalUnits: 4,
@@ -186,49 +186,6 @@ describe("TrackAvailabilityRegistry", () => {
       })
     );
     expect(registry.getTrackAnnouncements("room_1", "track_bad")).toEqual([]);
-  });
-
-  it("only reports playback providers that are currently online when presence is supplied", async () => {
-    const registry = new TrackAvailabilityRegistry(createRedisServiceMock() as never);
-    registry.setAssetAnnouncement("room_1", {
-      protocolVersion: 4,
-      roomId: "room_1",
-      assetId: "a".repeat(64),
-      assetKind: "playback",
-      ownerPeerId: "peer_offline",
-      nickname: "Offline",
-      totalUnits: 1,
-      availableRanges: [{ start: 0, end: 0 }],
-      complete: true,
-      source: "local_cache",
-      announcedAt: "2026-07-13T00:00:00.000Z"
-    });
-
-    await expect(
-      registry.hasPlaybackProvider("room_1", "a".repeat(64), new Set())
-    ).resolves.toBe(false);
-    expect(
-      await registry.hasPlaybackProvider(
-        "room_1",
-        "a".repeat(64),
-        new Set(["peer_offline"])
-      )
-    ).toBe(true);
-  });
-
-  it("hydrates persisted playback providers before making a playability decision", async () => {
-    const redis = createRedisServiceMock();
-    redis.getJson.mockResolvedValue([createAssetAvailability({ peerId: "peer_remote" })]);
-    const registry = new TrackAvailabilityRegistry(redis as never);
-
-    await expect(
-      registry.hasPlaybackProvider(
-        "room_1",
-        "a".repeat(64),
-        new Set(["peer_remote"])
-      )
-    ).resolves.toBe(true);
-    expect(registry.getAssetAnnouncements("room_1", "a".repeat(64))).toHaveLength(1);
   });
 
   it("debounces growing asset snapshots into one Redis write", async () => {

@@ -52,10 +52,6 @@ function formatRate(value: number | null | undefined) {
   return value === null || value === undefined ? "未知" : formatTransferRateMBps(value);
 }
 
-function formatDuration(ms: number) {
-  return `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
-}
-
 function formatEventLabel(event: PeerRecentEvent) {
   const channels: Record<PeerRecentEvent["channelKind"], string> = {
     data: "数据",
@@ -140,12 +136,16 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
             <span>候选: {peer.dataCandidateType ?? "未知"}</span>
             <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "未知"}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
-            <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
-            <span>接收: {formatRate(peer.transportReceiveBitrateKbps)}</span>
-            <span>发送: {formatRate(peer.transportSendBitrateKbps)}</span>
-          </DiagnosticGrid>
+                  <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
+                  <span>接收: {formatRate(peer.transportReceiveBitrateKbps)}</span>
+                  <span>发送: {formatRate(peer.transportSendBitrateKbps)}</span>
+                  <span>Opus codec: {peer.opusCodec ?? "未知"}</span>
+                  <span>发送轨道: {peer.senderTrackId ?? "未知"}</span>
+                  <span>接收轨道: {peer.receiverTrackId ?? "未知"}</span>
+                  <span>媒体包: {formatMaybeTimestamp(peer.lastMediaPacketAt)}</span>
+                </DiagnosticGrid>
         </DiagnosticSection>
-        <DiagnosticSection title="v4 资产传输">
+        <DiagnosticSection title="原文件手动缓存">
           <DiagnosticGrid>
             <span>单元下载: {formatRate(peer.pieceDownloadRateKbps)}</span>
             <span>单元上传: {formatRate(peer.pieceUploadRateKbps)}</span>
@@ -210,9 +210,9 @@ function MeshStatusPanelBase({
     <section className="flex w-full flex-col gap-4 border-t border-surface-border pt-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-foreground">分段播放诊断</h2>
+          <h2 className="text-sm font-bold text-foreground">RTP Opus 媒体诊断</h2>
           <p className="mt-1 text-xs text-foreground-muted">
-            直接读取 v4 播放器、播放资产与 DataChannel 状态。
+            直接读取 WebRTC RTP Opus 媒体轨道、AudioContext 与 DataChannel 状态。
           </p>
         </div>
         <Button
@@ -238,9 +238,9 @@ function MeshStatusPanelBase({
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-surface-border pt-4 text-xs sm:grid-cols-3">
         <div><span className="text-[10px] text-foreground-muted">实际播放</span><strong className="mt-1 block text-foreground">{localMemberState?.playbackStatus.label ?? "等待房间状态"}</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">播放引擎</span><strong className="mt-1 block text-foreground">分段 Opus</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">媒体引擎</span><strong className="mt-1 block text-foreground">WebRTC RTP Opus</strong></div>
         <div><span className="text-[10px] text-foreground-muted">音频码率</span><strong className="mt-1 block text-foreground">{localMemberState?.playbackBitrateKbps ?? "--"} kbps</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">前向可播</span><strong className="mt-1 block text-foreground">{formatDuration(playback?.bufferedMs ?? 0)}</strong></div>
+        <div><span className="text-[10px] text-foreground-muted">媒体轨道</span><strong className="mt-1 block text-foreground">{playback?.state ?? "idle"}</strong></div>
         <div><span className="text-[10px] text-foreground-muted">AudioContext</span><strong className="mt-1 block text-foreground">{playback?.audioContextState ?? "未创建"}</strong></div>
         <div><span className="text-[10px] text-foreground-muted">当前问题</span><strong className={`mt-1 block ${playback?.lastError ? "text-amber-300" : "text-foreground"}`}>{playback?.lastError ?? "无"}</strong></div>
       </div>
@@ -249,20 +249,20 @@ function MeshStatusPanelBase({
         <div className="flex flex-col gap-3">
           {localMemberState && playback ? (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <DiagnosticSection title="分段播放器">
+              <DiagnosticSection title="WebRTC 媒体播放器">
                 <DiagnosticGrid>
                   <span>状态: {playback.state}</span>
                   <span>AudioContext: {playback.audioContextState ?? "未创建"}</span>
-                  <span>前向可播: {formatDuration(playback.bufferedMs)}</span>
-                  <span>持有单元: {playback.ownedUnitCount}/{playback.totalUnitCount || 0}</span>
+                  <span>媒体轨道: {playback.state}</span>
+                  <span>播放源: {localMemberState.playbackStatus.badgeText}</span>
                   <span>音频码率: {localMemberState.playbackBitrateKbps ?? "--"} kbps</span>
                   <span>最近错误: {playback.lastError ?? "无"}</span>
                 </DiagnosticGrid>
               </DiagnosticSection>
-              <DiagnosticSection title="本机资产传输">
+              <DiagnosticSection title="本机媒体与数据">
                 <DiagnosticGrid>
-                  <span>下载: {formatRate(localMemberState.pieceSummary.downloadRateKbps)}</span>
-                  <span>上传: {formatRate(localMemberState.pieceSummary.uploadRateKbps)}</span>
+                  <span>媒体接收: {formatRate(localMemberState.transportSummary.receiveRateKbps)}</span>
+                  <span>媒体发送: {formatRate(localMemberState.transportSummary.sendRateKbps)}</span>
                   <span>Data 接收: {formatRate(localMemberState.transportSummary.receiveRateKbps)}</span>
                   <span>Data 发送: {formatRate(localMemberState.transportSummary.sendRateKbps)}</span>
                   <span>RTT: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>

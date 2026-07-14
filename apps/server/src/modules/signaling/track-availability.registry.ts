@@ -81,31 +81,6 @@ export class TrackAvailabilityRegistry {
     return true;
   }
 
-  async hasPlaybackProvider(
-    roomId: string,
-    assetId: string,
-    onlinePeerIds?: ReadonlySet<string>
-  ) {
-    let announcements = this.getAssetAnnouncements(roomId, assetId);
-    if (announcements.length === 0) {
-      await this.hydrateAssetSnapshot(roomId);
-      announcements = this.getAssetAnnouncements(roomId, assetId);
-    }
-
-    return announcements.some(
-      (announcement) =>
-        announcement.assetKind === "playback" &&
-        announcement.availableRanges.length > 0 &&
-        (!onlinePeerIds || onlinePeerIds.has(announcement.ownerPeerId))
-    );
-  }
-
-  countCompletePlaybackProviders(roomId: string, assetId: string) {
-    return this.getAssetAnnouncements(roomId, assetId).filter(
-      (announcement) => announcement.assetKind === "playback" && announcement.complete
-    ).length;
-  }
-
   setAnnouncement(roomId: string, announcement: TrackAvailabilityAnnouncement) {
     const roomAvailability = this.availabilityByRoom.get(roomId) ?? new Map();
     const key = this.announcementKey(announcement);

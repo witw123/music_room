@@ -48,8 +48,8 @@ export function getSourceModeLabel(
   if (mediaConnectionState === "connecting" || mediaConnectionState === "reconnecting") {
     return "正在连接音源";
   }
-  if (mediaConnectionState === "buffering") return "正在缓冲";
-  return "分段 Opus 播放";
+  if (mediaConnectionState === "buffering") return "等待 RTP Opus 媒体轨道";
+  return "WebRTC RTP Opus 播放";
 }
 
 

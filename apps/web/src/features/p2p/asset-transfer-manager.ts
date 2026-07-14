@@ -3,7 +3,6 @@ import {
   rangesToUnitIndexes,
   unitIndexesToRanges,
   type AssetAvailabilityAnnouncement,
-  type AssetKind,
   type AssetStreamMessage,
   type AssetUnitDescriptor
 } from "@music-room/shared";
@@ -15,13 +14,14 @@ import {
 } from "./asset-frame-codec";
 
 type LocalAssetUnit = { descriptor: AssetUnitDescriptor; payload: ArrayBuffer };
+type OriginalAssetKind = "original";
 
 type ProducerStream = {
   peerId: string;
   streamId: string;
   generation: number;
   assetId: string;
-  assetKind: AssetKind;
+  assetKind: OriginalAssetKind;
   unitIndexes: number[];
   creditBytes: number;
   pumping: boolean;
@@ -30,7 +30,7 @@ type ProducerStream = {
 type ReceiverStream = {
   peerId: string;
   assetId: string;
-  assetKind: AssetKind;
+  assetKind: OriginalAssetKind;
   generation: number;
   totalUnits: number;
   priority: "critical" | "playback-fill" | "bulk";
@@ -42,7 +42,7 @@ type ReceiverStream = {
 
 type PendingRetry = {
   assetId: string;
-  assetKind: AssetKind;
+  assetKind: OriginalAssetKind;
   unitIndexes: Set<number>;
   totalUnits: number;
   priority: "critical" | "playback-fill" | "bulk";
@@ -65,7 +65,7 @@ export class AssetTransferManager {
 
   constructor(private readonly callbacks: {
     sendControl: (peerId: string, message: AssetStreamMessage) => boolean;
-    sendBinary: (peerId: string, kind: AssetKind, payload: ArrayBuffer) => boolean;
+    sendBinary: (peerId: string, kind: OriginalAssetKind, payload: ArrayBuffer) => boolean;
     resolveLocalUnit: (assetId: string, unitIndex: number) => Promise<LocalAssetUnit | null>;
     persistInboundUnit: (
       peerId: string,
@@ -77,6 +77,9 @@ export class AssetTransferManager {
   }) {}
 
   setProvider(announcement: AssetAvailabilityAnnouncement) {
+    if (announcement.assetKind !== "original") {
+      return;
+    }
     this.temporarilyUnavailableProviders.delete(
       this.providerKey(announcement.assetId, announcement.ownerPeerId)
     );
@@ -117,7 +120,7 @@ export class AssetTransferManager {
 
   request(input: {
     assetId: string;
-    assetKind: AssetKind;
+    assetKind: OriginalAssetKind;
     unitIndexes: number[];
     totalUnits: number;
     priority: "critical" | "playback-fill" | "bulk";
@@ -187,6 +190,9 @@ export class AssetTransferManager {
         if (!parsed.success) {
           return false;
         }
+        if (parsed.data.kind === "asset-stream-open" && parsed.data.assetKind !== "original") {
+          return false;
+        }
         await this.handleControl(peerId, parsed.data);
         return true;
       }
@@ -221,7 +227,7 @@ export class AssetTransferManager {
   private openReceiverStream(input: {
     peerId: string;
     assetId: string;
-    assetKind: AssetKind;
+    assetKind: OriginalAssetKind;
     unitIndexes: number[];
     totalUnits: number;
     priority: "critical" | "playback-fill" | "bulk";
@@ -262,6 +268,9 @@ export class AssetTransferManager {
 
   private async handleControl(peerId: string, message: AssetStreamMessage) {
     if (message.kind === "asset-stream-open") {
+      if (message.assetKind !== "original") {
+        return;
+      }
       this.producers.set(message.streamId, {
         peerId,
         streamId: message.streamId,
@@ -350,6 +359,7 @@ export class AssetTransferManager {
       !receiver ||
       receiver.peerId !== peerId ||
       receiver.assetId !== frame.header.assetId ||
+      frame.header.assetKind !== "original" ||
       receiver.assetKind !== frame.header.assetKind ||
       receiver.generation !== frame.header.generation ||
       !receiver.wanted.has(frame.header.unitIndex)

@@ -118,11 +118,11 @@ export function useUploadPipelineActions({
     async (trackId: string, _options?: { force?: boolean }) => {
       const roomId = roomSnapshot?.room.id;
       const track = roomSnapshot?.tracks.find((candidate) => candidate.id === trackId);
-      if (!roomId || !activeSession || !peerId || !track?.originalAsset || !track.playbackAsset) {
+      if (!roomId || !activeSession || !peerId || !track?.originalAsset) {
         return false;
       }
       let announced = false;
-      for (const asset of [track.playbackAsset, track.originalAsset]) {
+      for (const asset of [track.originalAsset]) {
         const owned = await getAssetUnitIndexes(asset.assetId);
         const availableRanges = unitIndexesToRanges(owned, asset.unitCount);
         if (availableRanges.length === 0) {
@@ -260,8 +260,7 @@ export function useUploadPipelineActions({
               peerId,
               nickname: activeSession.nickname,
               source: "live_upload",
-              originalAsset: registeredTrack.originalAsset,
-              playbackAsset: registeredTrack.playbackAsset
+              originalAsset: registeredTrack.originalAsset
             })) {
               onAssetAvailability(announcement);
               emitAssetAvailability(announcement);

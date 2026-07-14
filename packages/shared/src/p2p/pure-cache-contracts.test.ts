@@ -6,7 +6,7 @@ describe("p2p signaling contracts", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -21,7 +21,7 @@ describe("p2p signaling contracts", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         roomId: "room_1",
         fromPeerId: "peer_a",
         toPeerId: "peer_b",
@@ -35,7 +35,7 @@ describe("p2p signaling contracts", () => {
   it("rejects pre-v4 data peer signals", () => {
     expect(peerSignalMessageSchema.safeParse({
       protocolVersion: 3,
-      capability: "segmented-opus-v1",
+      capability: "webrtc-opus-v1",
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",
@@ -48,7 +48,7 @@ describe("p2p signaling contracts", () => {
   it("rejects non-signaling payload fields from the application websocket", () => {
     expect(peerSignalMessageSchema.safeParse({
       protocolVersion: 4,
-      capability: "segmented-opus-v1",
+      capability: "webrtc-opus-v1",
       roomId: "room_1",
       fromPeerId: "peer_a",
       toPeerId: "peer_b",

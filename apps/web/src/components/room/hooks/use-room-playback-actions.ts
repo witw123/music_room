@@ -5,6 +5,7 @@ import {
   useEffect,
   type Dispatch,
   type MutableRefObject,
+  type RefObject,
   type SetStateAction
 } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
@@ -18,6 +19,7 @@ import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics
 
 type UseRoomPlaybackActionsInput = {
   currentPlaybackPositionRef: MutableRefObject<number>;
+  audioRef: RefObject<HTMLAudioElement | null>;
   roomSnapshot: RoomSnapshot | null;
   currentPlaybackTrackId: string | null;
   playbackMediaEpoch: number | null;
@@ -55,6 +57,7 @@ export function isSegmentedAudioOutputReady() {
 
 export function useRoomPlaybackActions({
   currentPlaybackPositionRef,
+  audioRef,
   roomSnapshot,
   currentPlaybackTrackId,
   playbackMediaEpoch,
@@ -85,7 +88,7 @@ export function useRoomPlaybackActions({
       }
 
       try {
-        await roomAudioOutput.primeOutputs({});
+        await roomAudioOutput.primeOutputs({ localAudio: audioRef.current });
         const audioReady = isSegmentedAudioOutputReady();
         setAudioUnlocked(audioReady);
         if (!audioReady) {
@@ -141,6 +144,7 @@ export function useRoomPlaybackActions({
     },
     [
       recordPeerDiagnostic,
+      audioRef,
       setAudioUnlocked,
       setLastSourceStartError,
       setStatusMessage
@@ -322,7 +326,7 @@ export function useRoomPlaybackActions({
 
   const handleAudioUnlock = useCallback(async () => {
     setAudioBlockedOverlay(false);
-    await roomAudioOutput.primeOutputs({});
+    await roomAudioOutput.primeOutputs({ localAudio: audioRef.current });
     const audioReady = isSegmentedAudioOutputReady();
     setAudioUnlocked(audioReady);
     if (audioReady) {
@@ -331,7 +335,7 @@ export function useRoomPlaybackActions({
     }
     setStatusMessage("浏览器仍未允许音频输出，请再次点击播放或检查系统媒体权限。");
     setAudioBlockedOverlay(true);
-  }, [setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
+  }, [audioRef, setAudioBlockedOverlay, setAudioUnlocked, setStatusMessage]);
 
   return {
     handleAudioUnlock,

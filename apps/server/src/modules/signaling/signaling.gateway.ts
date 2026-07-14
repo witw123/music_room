@@ -875,12 +875,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     if (
       (message.protocolVersion ?? client.data.protocolVersion) !== 4 ||
-      !(message.capabilities ?? client.data.capabilities)?.includes("segmented-opus-v1")
+      !(message.capabilities ?? client.data.capabilities)?.includes("webrtc-opus-v1")
     ) {
       return {
         ok: false,
         protocolVersion: 4,
-        capability: "segmented-opus-v1",
+        capability: "webrtc-opus-v1",
         errorCode: "client_upgrade_required"
       } satisfies RoomSubscribeAckPayload;
     }
@@ -962,7 +962,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     client.data.peerId = message.peerId;
     client.data.sessionFenceToken = fenceToken;
     client.data.protocolVersion = 4;
-    client.data.capabilities = ["segmented-opus-v1"];
+    client.data.capabilities = ["webrtc-opus-v1"];
     client.data.isRealtimeAuthenticated = true;
     client.join(message.roomId);
     const recoveryGeneration = this.registerRecoveryGeneration(
@@ -1254,7 +1254,7 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     return {
       ok: true,
       protocolVersion: 4,
-      capability: "segmented-opus-v1",
+      capability: "webrtc-opus-v1",
       serverNow: new Date().toISOString(),
       recoveryGeneration,
       bootstrap: {

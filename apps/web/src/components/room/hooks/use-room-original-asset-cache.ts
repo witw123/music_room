@@ -29,8 +29,8 @@ type OriginalAssetRequest = {
 
 type RuntimeInput = {
   roomSnapshot: RoomSnapshot | null;
-  requestAssetUnits: (request: OriginalAssetRequest) => boolean;
-  cancelAssetRequests: (assetId: string) => void;
+  requestOriginalAssetUnits: (request: OriginalAssetRequest) => boolean;
+  cancelOriginalAssetRequests: (assetId: string) => void;
   updateManualCacheTask: (trackId: string, patch: ManualCacheTaskPatch) => void;
   refreshCacheLibrary: () => Promise<void>;
   setStatusMessage: (message: string) => void;
@@ -188,7 +188,7 @@ export function useRoomOriginalAssetCache(input: RuntimeInput) {
         const missing = Array.from({ length: asset.unitCount }, (_, index) => index)
           .filter((index) => !ownedSet.has(index));
         const requestedIndexes = missing.slice(0, requestBatchSize);
-        const requested = runtime.requestAssetUnits({
+        const requested = runtime.requestOriginalAssetUnits({
           assetId: asset.assetId,
           assetKind: "original",
           unitIndexes: requestedIndexes,
@@ -276,7 +276,7 @@ export function useRoomOriginalAssetCache(input: RuntimeInput) {
     const track = runtime.roomSnapshot?.tracks.find((candidate) => candidate.id === trackId);
     const assetId = track?.originalAsset?.assetId;
     activeTrackIdsRef.current.delete(trackId);
-    if (assetId) runtime.cancelAssetRequests(assetId);
+    if (assetId) runtime.cancelOriginalAssetRequests(assetId);
     runtime.updateManualCacheTask(trackId, {
       status: "paused",
       blockedReason: null,

@@ -267,8 +267,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
   }, [acceptedPlayback?.currentTrackId, tracks]);
 
   useEffect(() => {
-    const localAudio = audioRef.current;
-
     if (!acceptedPlayback || !progressTrack) {
       setProgressMs(0);
       setDisplayClockSource("room-fallback");
@@ -337,9 +335,6 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
       const audibleClockResolution =
         currentPlayback.status === "playing"
           ? resolveAudibleClockSample({
-              
-              localAudioCurrentTimeSeconds: localAudio?.currentTime ?? null,
-              localAudioPaused: localAudio?.paused ?? null,
               localPlaybackPositionMs:
                 typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null
             })
@@ -448,17 +443,10 @@ export function useRoomPlayback(options: UseRoomPlaybackOptions) {
 
     const now = getRoomPlaybackClockNowMs();
     const playbackSessionKey = getPlaybackClockSessionKey(currentPlayback);
-    const eventAudio = event?.currentTarget ?? null;
-    const preferredAudio = eventAudio === localAudio ? eventAudio : localAudio;
     const roomClockMs = getPlaybackEffectivePositionMs(currentPlayback, progressTrack.durationMs, now);
     const audibleClockResolution =
       currentPlayback.status === "playing"
         ? resolveAudibleClockSample({
-            
-            localAudioCurrentTimeSeconds:
-              preferredAudio ? preferredAudio.currentTime : localAudio?.currentTime ?? null,
-            localAudioPaused:
-              preferredAudio ? preferredAudio.paused : localAudio?.paused ?? null,
             localPlaybackPositionMs:
               typeof getLocalPlaybackPositionMs === "function" ? getLocalPlaybackPositionMs() : null
           })

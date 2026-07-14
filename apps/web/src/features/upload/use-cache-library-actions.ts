@@ -223,8 +223,7 @@ export function useCacheLibraryActions({
             peerId,
             nickname: activeSession.nickname,
             source: "local_cache",
-            originalAsset: assets.originalAsset,
-            playbackAsset: assets.playbackAsset
+            originalAsset: assets.originalAsset
           })) {
             onAssetAvailability(announcement);
             emitAssetAvailability(announcement);

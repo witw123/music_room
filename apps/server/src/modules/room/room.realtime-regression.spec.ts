@@ -155,7 +155,7 @@ function createClient(input: {
       sessionId: input.sessionId,
       peerId: input.peerId,
       protocolVersion: 4,
-      capabilities: ["segmented-opus-v1"],
+      capabilities: ["webrtc-opus-v1"],
       isRealtimeAuthenticated: input.isRealtimeAuthenticated ?? false
     },
     join: jest.fn(),
@@ -351,20 +351,6 @@ describe("room realtime regression", () => {
     });
     expect(track.ownerSessionId).toBe(hostSession.userId);
 
-    await signalingGateway.handleAssetAvailability(hostClient as never, {
-      protocolVersion: 4,
-      roomId: created.room.id,
-      assetId: playbackAssetId,
-      assetKind: "playback",
-      ownerPeerId: "peer_host",
-      nickname: "Host",
-      totalUnits: 90,
-      availableRanges: [{ start: 0, end: 89 }],
-      complete: true,
-      source: "live_upload",
-      announcedAt: new Date().toISOString()
-    });
-
     const queueState = await queueController.addQueueItem(created.room.id, memberSession.token, {
       trackId: track.id
     });
@@ -384,8 +370,8 @@ describe("room realtime regression", () => {
       status: "playing",
       currentTrackId: track.id,
       playbackAssetId,
-      sourceSessionId: null,
-      sourcePeerId: null,
+      sourceSessionId: hostSession.userId,
+      sourcePeerId: "peer_host",
       startAt: expect.any(String)
     });
     expect(Date.parse(playback.startAt ?? "")).toBeGreaterThanOrEqual(playbackRequestedAt);

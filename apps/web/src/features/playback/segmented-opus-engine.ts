@@ -23,6 +23,7 @@ export class SegmentedOpusEngine {
   private readonly decoded = new Map<number, Promise<AudioBuffer>>();
   private wasmDecoder: import("ogg-opus-decoder").OggOpusDecoder | null = null;
   private masterGain: GainNode | null = null;
+  private broadcastGain: GainNode | null = null;
   private masterGainContext: AudioContext | null = null;
   private contextAnchorTime: number | null = null;
   private playbackAnchorPositionMs = 0;
@@ -179,6 +180,7 @@ export class SegmentedOpusEngine {
     this.resetTimeline();
     this.wasmDecoder?.free();
     this.wasmDecoder = null;
+    roomAudioOutput.clearBroadcastDestination();
   }
 
   private establishTimelineAnchor(input: {
@@ -229,6 +231,9 @@ export class SegmentedOpusEngine {
     source.buffer = input.decoded;
     source.playbackRate.value = 1;
     source.connect(this.masterGain);
+    if (this.broadcastGain) {
+      source.connect(this.broadcastGain);
+    }
     const revision = this.revision;
     source.onended = () => {
       if (revision !== this.revision) return;
@@ -316,6 +321,15 @@ export class SegmentedOpusEngine {
     this.masterGain = context.createGain();
     this.masterGain.gain.value = normalizeVolume(volume);
     this.masterGain.connect(context.destination);
+    const broadcastDestination = roomAudioOutput.getBroadcastDestination(context);
+    if (broadcastDestination) {
+      this.broadcastGain?.disconnect();
+      this.broadcastGain = context.createGain();
+      this.broadcastGain.gain.value = 1;
+      this.broadcastGain.connect(broadcastDestination);
+    } else {
+      this.broadcastGain = null;
+    }
     this.masterGainContext = context;
   }
 
@@ -360,6 +374,8 @@ export class SegmentedOpusEngine {
     this.timelineStarted = false;
     this.masterGain?.disconnect();
     this.masterGain = null;
+    this.broadcastGain?.disconnect();
+    this.broadcastGain = null;
     this.masterGainContext = null;
   }
 }

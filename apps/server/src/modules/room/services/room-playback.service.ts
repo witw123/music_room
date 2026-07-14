@@ -12,11 +12,6 @@ type TrackAvailabilityReader = {
     roomId: string,
     trackId: string
   ) => TrackAvailabilityAnnouncement[];
-  hasPlaybackProvider?: (
-    roomId: string,
-    assetId: string,
-    onlinePeerIds?: ReadonlySet<string>
-  ) => boolean | Promise<boolean>;
 };
 
 export class RoomPlaybackService {
@@ -102,7 +97,7 @@ export class RoomPlaybackService {
     if (input.action === "pause") {
       const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
       this.assertRequestedPlaybackAsset(currentTrack, input.playbackAssetId);
-      const sourceCandidate = playback.currentTrackId && !currentTrack?.playbackAsset
+      const sourceCandidate = playback.currentTrackId
         ? await this.resolveTrackSourceCandidate(record, playback.currentTrackId, {
             preferredSessionId: playback.sourceSessionId
           })
@@ -123,7 +118,7 @@ export class RoomPlaybackService {
     if (input.action === "seek") {
       const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
       this.assertRequestedPlaybackAsset(currentTrack, input.playbackAssetId);
-      const sourceCandidate = playback.currentTrackId && !currentTrack?.playbackAsset
+      const sourceCandidate = playback.currentTrackId
         ? await this.resolveTrackSourceCandidate(record, playback.currentTrackId, {
             preferredSessionId: playback.sourceSessionId
           })
@@ -131,7 +126,6 @@ export class RoomPlaybackService {
       if (
         playback.status === "playing" &&
         playback.currentTrackId &&
-        !currentTrack?.playbackAsset &&
         !sourceCandidate
       ) {
         throw new Error("Track owner is not online, so this song cannot be played right now.");
@@ -189,30 +183,9 @@ export class RoomPlaybackService {
       throw new Error(`Track not found in room: ${trackId}`);
     }
 
-    const isAssetPlayback = !!track.playbackAsset;
     this.assertRequestedPlaybackAsset(track, requestedPlaybackAssetId);
-    const sourceCandidate = isAssetPlayback
-      ? null
-      : await this.resolveTrackSourceCandidate(record, trackId);
-    if (
-      isAssetPlayback &&
-      this.trackAvailabilityReader?.hasPlaybackProvider &&
-      !(await this.trackAvailabilityReader.hasPlaybackProvider(
-        record.room.id,
-        track.playbackAsset!.assetId,
-        new Set(
-          (
-            await this.roomPresenceService.getActivePresence(
-              record.room.id,
-              record.room.members
-            )
-          ).values()
-        )
-      ))
-    ) {
-      throw new Error("No room member currently provides this playback asset.");
-    }
-    if (!isAssetPlayback && !sourceCandidate) {
+    const sourceCandidate = await this.resolveTrackSourceCandidate(record, trackId);
+    if (!sourceCandidate) {
       throw new Error("Track owner is not online, so this song cannot be played right now.");
     }
 
@@ -220,7 +193,7 @@ export class RoomPlaybackService {
     const isQueueItemSwitch =
       queueItemId !== null && playback.currentQueueItemId !== queueItemId;
     const isSwitchingSource =
-      !isAssetPlayback && !!sourceCandidate && (
+      !!sourceCandidate && (
         playback.sourceSessionId !== sourceCandidate.sessionId ||
         playback.sourcePeerId !== sourceCandidate.peerId
       );
@@ -231,7 +204,7 @@ export class RoomPlaybackService {
     playback.playbackAssetId = track.playbackAsset?.assetId ?? null;
     playback.sourceSessionId = sourceCandidate?.sessionId ?? null;
     playback.sourcePeerId = sourceCandidate?.peerId ?? null;
-    playback.sourceTrackId = isAssetPlayback ? null : trackId;
+    playback.sourceTrackId = trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
     const startAt = new Date().toISOString();
     playback.startAt = startAt;
@@ -263,9 +236,6 @@ export class RoomPlaybackService {
   async handleSourceDeparture(record: RoomRecord, sessionId: string) {
     const playback = record.room.playback;
     const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
-    if (currentTrack?.playbackAsset) {
-      return;
-    }
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
       return;
     }

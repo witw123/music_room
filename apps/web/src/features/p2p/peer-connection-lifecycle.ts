@@ -64,12 +64,19 @@ export function releasePeerConnectionEntry(input: {
   input.stopStatsSampling(input.entry);
   input.entry.controlChannel?.close();
   input.entry.dataChannel?.close();
-  input.entry.playbackChannel?.close();
   input.entry.originalChannel?.close();
-  if (!input.entry.controlChannel && !input.entry.dataChannel && !input.entry.playbackChannel && !input.entry.originalChannel) {
+  if (!input.entry.controlChannel && !input.entry.dataChannel && !input.entry.originalChannel) {
     input.entry.channel?.close();
   }
   input.entry.connection.close();
+  input.entry.audioSender = null;
+  input.entry.audioReceiver = null;
+  input.entry.remoteAudioStream = null;
+  input.entry.remoteAudioTrackId = null;
+  input.entry.senderTrackState = "none";
+  input.entry.configuredAudioMaxBitrateKbps = null;
+  input.entry.receiverTrackState = "none";
+  input.entry.mediaNegotiationPending = false;
   input.onDataBufferedAmountChange?.({
     peerId: input.peerId,
     bufferedAmountBytes: 0
@@ -101,6 +108,18 @@ export function bindPeerConnectionEvents(input: {
   schedulePeerWatchdog: (peerId: string, entry: PeerEntry) => void;
   releasePeer: (peerId: string, entry: PeerEntry) => void;
   bindChannel: (peerId: string, entry: PeerEntry, channel: RTCDataChannel) => void;
+  onRemoteAudioTrack?: (payload: {
+    peerId: string;
+    entry: PeerEntry;
+    track: MediaStreamTrack;
+    streams: readonly MediaStream[];
+  }) => void;
+  onMediaStateChange?: (payload: {
+    peerId: string;
+    entry: PeerEntry;
+    direction: "sender" | "receiver";
+    state: PeerEntry["senderTrackState"];
+  }) => void;
 }) {
   input.connection.onicecandidate = (event) => {
     if (!event.candidate) {
@@ -165,9 +184,6 @@ export function bindPeerConnectionEvents(input: {
     const channel = event.channel;
     if (channel.label === "music-room-control") {
       input.entry.controlChannel = channel;
-    } else if (channel.label === "music-room-playback") {
-      input.entry.playbackChannel = channel;
-      input.entry.dataChannel = channel;
     } else if (channel.label === "music-room-original") {
       input.entry.originalChannel = channel;
     } else if (channel.label === "music-room-data") {
@@ -175,6 +191,40 @@ export function bindPeerConnectionEvents(input: {
     }
     input.entry.channel = input.entry.controlChannel ?? input.entry.dataChannel ?? channel;
     input.bindChannel(input.peerId, input.entry, channel);
+  };
+
+  input.connection.ontrack = (event) => {
+    if (event.track.kind !== "audio") {
+      return;
+    }
+    input.entry.audioReceiver = event.receiver ?? null;
+    input.entry.remoteAudioStream = event.streams[0] ?? new MediaStream([event.track]);
+    input.entry.remoteAudioTrackId = event.track.id;
+    input.entry.receiverTrackState = event.track.readyState === "live" ? "live" : "ended";
+    input.onMediaStateChange?.({
+      peerId: input.peerId,
+      entry: input.entry,
+      direction: "receiver",
+      state: input.entry.receiverTrackState
+    });
+    input.onRemoteAudioTrack?.({
+      peerId: input.peerId,
+      entry: input.entry,
+      track: event.track,
+      streams: event.streams
+    });
+    event.track.onended = () => {
+      if (input.entry.remoteAudioTrackId !== event.track.id) {
+        return;
+      }
+      input.entry.receiverTrackState = "ended";
+      input.onMediaStateChange?.({
+        peerId: input.peerId,
+        entry: input.entry,
+        direction: "receiver",
+        state: "ended"
+      });
+    };
   };
 }
 

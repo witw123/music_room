@@ -161,8 +161,14 @@ type UseRoomRuntimeInput = {
 };
 
 type UseRoomRuntimeResult = {
-  requestAssetUnits: (input: Parameters<P2PMesh["requestAssetUnits"]>[0]) => boolean;
-  cancelAssetRequests: (assetId: string) => void;
+  requestOriginalAssetUnits: (input: Parameters<P2PMesh["requestOriginalAssetUnits"]>[0]) => boolean;
+  cancelOriginalAssetRequests: (assetId: string) => void;
+  setLocalAudioStream: (
+    stream: MediaStream | null,
+    sourcePeerId: string | null,
+    maxBitrateKbps?: number | null
+  ) => void;
+  getPeerMediaState: (peerId: string) => ReturnType<P2PMesh["getPeerMediaState"]>;
 };
 
 type SourceLocalPlaybackTrack = Pick<UploadedTrack, "objectUrl">;
@@ -722,18 +728,29 @@ export function useRoomRuntime({
     lastDataActivityAtRef.current = Date.now();
   }, [lastDataActivityAtRef, updateConnectionSupervisorPlayout, connectedPeers.length]);
 
-  const requestAssetUnits = useCallback(
-    (request: Parameters<P2PMesh["requestAssetUnits"]>[0]) =>
-      meshRef.current?.requestAssetUnits(request) ?? false,
+  const requestOriginalAssetUnits = useCallback(
+    (request: Parameters<P2PMesh["requestOriginalAssetUnits"]>[0]) =>
+      meshRef.current?.requestOriginalAssetUnits(request) ?? false,
     [meshRef]
   );
-  const cancelAssetRequests = useCallback(
-    (assetId: string) => meshRef.current?.cancelAssetRequests(assetId),
+  const cancelOriginalAssetRequests = useCallback(
+    (assetId: string) => meshRef.current?.cancelOriginalAssetRequests(assetId),
+    [meshRef]
+  );
+  const setLocalAudioStream = useCallback(
+    (stream: MediaStream | null, sourcePeerId: string | null, maxBitrateKbps?: number | null) =>
+      meshRef.current?.setLocalAudioStream(stream, sourcePeerId, maxBitrateKbps),
+    [meshRef]
+  );
+  const getPeerMediaState = useCallback(
+    (remotePeerId: string) => meshRef.current?.getPeerMediaState(remotePeerId) ?? null,
     [meshRef]
   );
 
   return {
-    requestAssetUnits,
-    cancelAssetRequests
+    requestOriginalAssetUnits,
+    cancelOriginalAssetRequests,
+    setLocalAudioStream,
+    getPeerMediaState
   };
 }

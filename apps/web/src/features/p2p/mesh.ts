@@ -1,6 +1,5 @@
 import {
   type AssetAvailabilityAnnouncement,
-  type AssetKind,
   type AssetUnitDescriptor,
   type CacheStreamMessage,
   type IceServerConfig,
@@ -128,6 +127,16 @@ type MeshCallbacks = {
   onPeerStalled?: (payload: {
     peerId: string;
     reason: "watchdog-timeout" | "connection-failed" | "data-channel-closed";
+  }) => void;
+  onRemoteAudioTrack?: (payload: {
+    peerId: string;
+    stream: MediaStream;
+    track: MediaStreamTrack;
+  }) => void;
+  onMediaStateChange?: (payload: {
+    peerId: string;
+    direction: "sender" | "receiver";
+    state: "none" | "live" | "ended" | "failed";
   }) => void;
 };
 
@@ -265,14 +274,17 @@ export class P2PMesh {
         return true;
       },
       sendBinary: (peerId, kind, payload) => {
+        if (kind !== "original") {
+          return false;
+        }
         const entry = this.peerLifecycle.getPeerEntry(peerId);
         if (!entry) {
           return false;
         }
         this.enqueueSendItem(peerId, entry, {
           data: payload,
-          channel: kind === "playback" ? "playback" : "original",
-          priority: kind === "playback" ? "critical" : "bulk",
+          channel: "original",
+          priority: "bulk",
           payloadBytes: payload.byteLength
         });
         return true;
@@ -298,7 +310,14 @@ export class P2PMesh {
       onIceConnectionStateChange: this.callbacks.onIceConnectionStateChange,
       onDataBufferedAmountChange: this.callbacks.onDataBufferedAmountChange,
       onStatsSample: this.callbacks.onStatsSample,
-      onPeerStalled: this.callbacks.onPeerStalled
+      onPeerStalled: this.callbacks.onPeerStalled,
+      onRemoteAudioTrack: ({ peerId, entry, track, streams }) => {
+        const stream = entry.remoteAudioStream ?? streams[0] ?? new MediaStream([track]);
+        this.callbacks.onRemoteAudioTrack?.({ peerId, stream, track });
+      },
+      onMediaStateChange: ({ peerId, direction, state }) => {
+        this.callbacks.onMediaStateChange?.({ peerId, direction, state });
+      }
     });
     this.inboundPieces = new PieceInboundProcessor({
       batchSize: this.incomingPieceBatchSize,
@@ -464,15 +483,18 @@ export class P2PMesh {
   }
 
   updateAssetProvider(announcement: AssetAvailabilityAnnouncement) {
+    if (announcement.assetKind !== "original") {
+      return;
+    }
     if (announcement.ownerPeerId === this.localPeerId) {
       return;
     }
     this.assetTransfers.setProvider(announcement);
   }
 
-  requestAssetUnits(input: {
+  requestOriginalAssetUnits(input: {
     assetId: string;
-    assetKind: AssetKind;
+    assetKind: "original";
     unitIndexes: number[];
     totalUnits: number;
     priority: "critical" | "playback-fill" | "bulk";
@@ -482,7 +504,7 @@ export class P2PMesh {
     return this.assetTransfers.request(input);
   }
 
-  cancelAssetRequests(assetId: string) {
+  cancelOriginalAssetRequests(assetId: string) {
     this.assetTransfers.cancel(assetId);
   }
 
@@ -524,6 +546,18 @@ export class P2PMesh {
 
   getConnectedPeerIds() {
     return this.peerLifecycle.getConnectedPeerIds();
+  }
+
+  setLocalAudioStream(
+    stream: MediaStream | null,
+    sourcePeerId: string | null,
+    maxBitrateKbps: number | null = null
+  ) {
+    this.peerLifecycle.setLocalAudioStream(stream, sourcePeerId, maxBitrateKbps);
+  }
+
+  getPeerMediaState(peerId: string) {
+    return this.peerLifecycle.getPeerMediaState(peerId);
   }
 
   async restartPeer(peerId: string) {

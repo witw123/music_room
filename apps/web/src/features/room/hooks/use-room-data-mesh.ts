@@ -377,7 +377,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           peerId: sourcePeerId,
           channelKind: "data",
           direction: "local",
-          event: "asset-unit-persisted",
+          event: "original-asset-unit-persisted",
           summary: `${descriptor.kind} unit ${descriptor.unitIndex} persisted`,
           recordEvent: false,
           update: (snapshot: PeerDiagnosticsSnapshot) => ({
@@ -387,8 +387,7 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         });
         const track = input.currentRoomRef.current?.tracks.find(
           (candidate) =>
-            candidate.originalAsset?.assetId === descriptor.assetId ||
-            candidate.playbackAsset?.assetId === descriptor.assetId
+            candidate.originalAsset?.assetId === descriptor.assetId
         );
         if (track) {
           void input.announceRoomTrackAvailabilityRef.current(track.id);
@@ -600,6 +599,38 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
           mesh.markPeerTransportAvailable(remotePeerId);
         }
       },
+      onRemoteAudioTrack: ({ peerId: remotePeerId, track }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: remotePeerId,
+          channelKind: "media",
+          direction: "received",
+          event: "media-track-received",
+          summary: `收到媒体音频轨道 ${track.id}`,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            lastAudibleProgressAt: new Date().toISOString()
+          })
+        });
+      },
+      onMediaStateChange: ({ peerId: remotePeerId, direction, state }) => {
+        input.recordPeerDiagnosticRef.current({
+          peerId: remotePeerId,
+          channelKind: "media",
+          direction: "local",
+          event: `media-track-${state}`,
+          summary: `${direction === "sender" ? "发送" : "接收"}媒体轨道：${state}`,
+          recordEvent: false,
+          update: (snapshot: PeerDiagnosticsSnapshot) => ({
+            ...snapshot,
+            mediaConnectionState: state === "live"
+              ? "connected"
+              : state === "failed" ? "failed" : snapshot.mediaConnectionState,
+            ...(direction === "receiver"
+              ? { lastAudibleProgressAt: state === "live" ? new Date().toISOString() : snapshot.lastAudibleProgressAt }
+              : {})
+          })
+        });
+      },
       onCacheStreamMetrics: (metrics) => {
         const isReceiverStream = "availabilityCoveragePercent" in metrics;
         input.meshRef.current?.updateCacheStreamProvider?.({
@@ -738,6 +769,9 @@ const resolvePeerLinkWindow = (remotePeerId: string) => {
         };
       },
       persistInboundAssetUnit: async (_sourcePeerId, descriptor, payload) => {
+        if (descriptor.kind !== "original") {
+          return;
+        }
         await putVerifiedAssetUnit({ descriptor, payload });
       },
       resolvePieceRequestFallback: async ({ trackId, chunkIndex }) => {

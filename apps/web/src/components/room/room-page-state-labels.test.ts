@@ -12,9 +12,9 @@ describe("room page state labels", () => {
     ], "provider")).toBe("Provider");
   });
 
-  it("reports the single v4 playback path", () => {
-    expect(getSourceModeLabel("live", track)).toBe("分段 Opus 播放");
-    expect(getSourceModeLabel("buffering", track)).toBe("正在缓冲");
+  it("reports the single WebRTC RTP Opus playback path", () => {
+    expect(getSourceModeLabel("live", track)).toBe("WebRTC RTP Opus 播放");
+    expect(getSourceModeLabel("buffering", track)).toBe("等待 RTP Opus 媒体轨道");
   });
 
   it("surfaces v4 connection failures and rejects legacy tracks", () => {

@@ -14,7 +14,7 @@ function announcement(peerId: string): AssetAvailabilityAnnouncement {
     protocolVersion: 4,
     roomId: "room_1",
     assetId,
-    assetKind: "playback",
+    assetKind: "original",
     ownerPeerId: peerId,
     nickname: peerId,
     totalUnits: 1,
@@ -28,7 +28,7 @@ function announcement(peerId: string): AssetAvailabilityAnnouncement {
 function descriptor(payload: ArrayBuffer): AssetUnitDescriptor {
   return {
     assetId,
-    kind: "playback",
+    kind: "original",
     unitIndex: 0,
     payloadBytes: payload.byteLength,
     contentHash: "b".repeat(64),
@@ -36,7 +36,7 @@ function descriptor(payload: ArrayBuffer): AssetUnitDescriptor {
     startMs: 0,
     durationMs: 2_000,
     trimStartSamples: 0,
-    trimEndSamples: 0
+    trimEndSamples: undefined
   };
 }
 
@@ -71,7 +71,7 @@ describe("AssetTransferManager", () => {
 
     expect(manager.request({
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "critical",
@@ -109,7 +109,7 @@ describe("AssetTransferManager", () => {
     manager.setProvider(announcement("peer_b"));
     manager.request({
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "playback-fill"
@@ -135,7 +135,7 @@ describe("AssetTransferManager", () => {
     manager.setProvider(announcement("peer_a"));
     manager.request({
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "playback-fill"
@@ -162,7 +162,7 @@ describe("AssetTransferManager", () => {
 
     expect(manager.request({
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "playback-fill"
@@ -183,7 +183,7 @@ describe("AssetTransferManager", () => {
     manager.setProvider(announcement("peer_a"));
     manager.request({
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "critical"
@@ -205,7 +205,7 @@ describe("AssetTransferManager", () => {
 
     expect(manager.request({
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       unitIndexes: [0],
       totalUnits: 1,
       priority: "critical"
@@ -233,7 +233,7 @@ describe("AssetTransferManager", () => {
       protocolVersion: 4,
       streamId: "stream_1",
       assetId,
-      assetKind: "playback",
+      assetKind: "original",
       generation: 0,
       priority: "critical",
       ranges: [{ start: 0, end: 0 }],

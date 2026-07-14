@@ -1,6 +1,6 @@
 export type DataChannelQueuedSendItem = {
   data: string | ArrayBuffer;
-  channel?: "control" | "data" | "playback" | "original";
+  channel?: "control" | "data" | "original";
   priority?: "control" | "critical" | "bulk";
   trackId?: string;
   chunkIndex?: number;
@@ -17,7 +17,6 @@ type DataChannelLifecycleEntry = {
   channel?: RTCDataChannel | null;
   controlChannel?: RTCDataChannel | null;
   dataChannel?: RTCDataChannel | null;
-  playbackChannel?: RTCDataChannel | null;
   originalChannel?: RTCDataChannel | null;
   dataChannelState: RTCDataChannelState | null;
   lastSignalProgressAtMs: number;
@@ -84,9 +83,6 @@ export class DataChannelManager {
     const { channel, entry, peerId } = input;
     if (channel.label === "music-room-control") {
       entry.controlChannel = channel;
-    } else if (channel.label === "music-room-playback") {
-      entry.playbackChannel = channel;
-      entry.dataChannel = channel;
     } else if (channel.label === "music-room-original") {
       entry.originalChannel = channel;
     } else if (channel.label === "music-room-data") {
@@ -253,7 +249,6 @@ export class DataChannelManager {
     for (const targetChannel of new Set([
       input.entry.controlChannel,
       input.entry.dataChannel,
-      input.entry.playbackChannel,
       input.entry.originalChannel,
       channel
     ])) {
@@ -267,7 +262,6 @@ export class DataChannelManager {
         channel.bufferedAmount,
         input.entry.controlChannel?.bufferedAmount ?? 0,
         input.entry.dataChannel?.bufferedAmount ?? 0,
-        input.entry.playbackChannel?.bufferedAmount ?? 0,
         input.entry.originalChannel?.bufferedAmount ?? 0
       )
     });
@@ -297,9 +291,7 @@ export class DataChannelManager {
       highWatermarkBytes: budget.highWatermarkBytes,
       bulkHighWatermarkBytes: budget.bulkHighWatermarkBytes
     });
-    channel.bufferedAmountLowThreshold = channel.label === "music-room-playback"
-      ? Math.min(resolvedLowWatermark, 256 * 1024)
-      : channel.label === "music-room-original"
+    channel.bufferedAmountLowThreshold = channel.label === "music-room-original"
         ? Math.min(resolvedLowWatermark, 512 * 1024)
         : resolvedLowWatermark;
   }
@@ -309,14 +301,11 @@ function resolveQueuedChannel(
   entry: DataChannelLifecycleEntry,
   item: DataChannelQueuedSendItem
 ) {
-  if (item.channel === "playback") {
-    return entry.playbackChannel ?? entry.dataChannel ?? entry.channel ?? null;
-  }
   if (item.channel === "original") {
     return entry.originalChannel ?? entry.dataChannel ?? entry.channel ?? null;
   }
   if (item.channel === "data") {
-    return entry.playbackChannel ?? entry.dataChannel ?? entry.channel ?? null;
+    return entry.dataChannel ?? entry.channel ?? null;
   }
   return entry.controlChannel ?? entry.channel ?? null;
 }
@@ -345,9 +334,7 @@ export function shouldSendQueuedDataChannelItem(input: {
   const adaptiveWatermark = priority === "bulk"
       ? input.bulkHighWatermarkBytes ?? input.highWatermarkBytes
       : input.highWatermarkBytes;
-  const watermark = input.channel === "playback"
-    ? Math.min(adaptiveWatermark, 512 * 1024)
-    : input.channel === "original"
+  const watermark = input.channel === "original"
       ? Math.min(adaptiveWatermark, 1024 * 1024)
       : adaptiveWatermark;
   return input.bufferedAmountBytes < watermark;

@@ -84,14 +84,14 @@ describe("data channel manager policy", () => {
     ).toBe(false);
   });
 
-  it("caps playback and original channels at their v4 watermarks", () => {
+  it("keeps the shared data channel adaptive and caps original transfers", () => {
     expect(shouldSendQueuedDataChannelItem({
       queueLength: 1,
       bufferedAmountBytes: 512 * 1024,
       highWatermarkBytes: 16 * 1024 * 1024,
       priority: "critical",
-      channel: "playback"
-    })).toBe(false);
+      channel: "data"
+    })).toBe(true);
     expect(shouldSendQueuedDataChannelItem({
       queueLength: 1,
       bufferedAmountBytes: 1024 * 1024,

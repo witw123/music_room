@@ -1,23 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  unitIndexesToRanges,
-  type AssetAvailabilityAnnouncement,
-  type RoomSnapshot,
-  type TrackMeta
-} from "@music-room/shared";
+import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import {
   getAssetUnit,
-  getAssetUnitIndexes,
   putAssetManifest
 } from "@/lib/indexeddb";
 import { getRoomPlaybackClockNowMs } from "./room-playback-clock";
-import {
-  contiguousPlaybackBufferMs,
-  playbackUnitIndexAt,
-  resolvePlaybackUnitOrder
-} from "./playback-segment-scheduler";
 import { SegmentedOpusEngine } from "./segmented-opus-engine";
 import { roomAudioOutput } from "./room-audio-output";
 
@@ -52,50 +41,52 @@ export function useSegmentedOpusPlayback(input: {
   roomSnapshot: RoomSnapshot | null;
   currentTrack: TrackMeta | null;
   peerId: string;
+  isCurrentSource: boolean;
   volume: number;
   audioUnlocked: boolean;
-  availabilityByAsset: Record<string, Record<string, AssetAvailabilityAnnouncement>>;
-  requestAssetUnits: (input: {
-    assetId: string;
-    assetKind: "playback" | "original";
-    unitIndexes: number[];
-    totalUnits: number;
-    priority: "critical" | "playback-fill" | "bulk";
-    preferredPeerId?: string | null;
-    maxReplicas?: number;
-  }) => boolean;
-  emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
 }) {
-  const { roomSnapshot, currentTrack, peerId, audioUnlocked, volume } = input;
+  const { roomSnapshot, currentTrack, peerId, isCurrentSource, audioUnlocked, volume } = input;
   const engineRef = useRef<SegmentedOpusEngine | null>(null);
   const runtimeRef = useRef(input);
   runtimeRef.current = input;
   const tickingRef = useRef(false);
-  const announcedSignatureRef = useRef("");
   const activePlaybackAssetIdRef = useRef<string | null>(null);
   const storedManifestAssetIdRef = useRef<string | null>(null);
   const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
   const playbackAssetId = currentTrack?.playbackAsset?.assetId ?? null;
   const roomId = roomSnapshot?.room.id ?? null;
   const trackId = currentTrack?.id ?? null;
+  const playbackRuntimeKey = roomSnapshot?.room.playback
+    ? [
+        roomSnapshot.room.playback.currentTrackId,
+        roomSnapshot.room.playback.mediaEpoch,
+        roomSnapshot.room.playback.startAt,
+        roomSnapshot.room.playback.status,
+        roomSnapshot.room.playback.positionMs,
+        roomSnapshot.room.playback.sourcePeerId
+      ].join(":")
+    : null;
 
   useEffect(() => {
     const initialRuntime = runtimeRef.current;
     const playbackAsset = initialRuntime.currentTrack?.playbackAsset;
     const playback = initialRuntime.roomSnapshot?.room.playback;
-    if (!playbackAsset || !playback || playback.currentTrackId !== initialRuntime.currentTrack?.id) {
+    if (
+      !playbackAsset ||
+      !playback ||
+      playback.currentTrackId !== initialRuntime.currentTrack?.id ||
+      !initialRuntime.isCurrentSource
+    ) {
       engineRef.current?.destroy();
       engineRef.current = null;
       activePlaybackAssetIdRef.current = null;
       storedManifestAssetIdRef.current = null;
-      announcedSignatureRef.current = "";
       setSnapshot(idleSnapshot);
       return;
     }
     if (activePlaybackAssetIdRef.current !== playbackAsset.assetId) {
       activePlaybackAssetIdRef.current = playbackAsset.assetId;
       storedManifestAssetIdRef.current = null;
-      announcedSignatureRef.current = "";
     }
     let cancelled = false;
 
@@ -114,6 +105,7 @@ export function useSegmentedOpusPlayback(input: {
           currentPlaybackAsset.assetId !== playbackAsset.assetId ||
           !currentPlayback ||
           currentPlayback.currentTrackId !== runtime.currentTrack?.id
+          || !runtime.isCurrentSource
         ) {
           return;
         }
@@ -121,100 +113,14 @@ export function useSegmentedOpusPlayback(input: {
           await putAssetManifest(currentPlaybackAsset);
           storedManifestAssetIdRef.current = currentPlaybackAsset.assetId;
         }
-        const owned = await getAssetUnitIndexes(currentPlaybackAsset.assetId);
         const serverNowMs = getRoomPlaybackClockNowMs();
-        const startAtMs = currentPlayback.startAt ? Date.parse(currentPlayback.startAt) : serverNowMs;
-        const positionMs = Math.min(
-          currentPlaybackAsset.durationMs,
-          currentPlayback.positionMs + (currentPlayback.status === "playing" ? Math.max(0, serverNowMs - startAtMs) : 0)
-        );
-        const bufferMs = contiguousPlaybackBufferMs({
-          manifest: currentPlaybackAsset,
-          positionMs,
-          ownedUnitIndexes: owned
-        });
         const audioContextState = roomAudioOutput.getSharedAudioContext()?.state ?? null;
-
-        const wanted = resolvePlaybackUnitOrder({
-          manifest: currentPlaybackAsset,
-          positionMs,
-          ownedUnitIndexes: owned,
-          requestLimit: 16
-        });
-        const providers = Object.values(runtime.availabilityByAsset[currentPlaybackAsset.assetId] ?? {})
-          .filter((provider) => provider.ownerPeerId !== runtime.peerId);
-        const playbackUnavailable =
-          wanted.length > 0 && providers.length === 0 && bufferMs < 6_000;
-        if (wanted.length > 0) {
-          if (!playbackUnavailable) {
-            const currentUnit = playbackUnitIndexAt(currentPlaybackAsset, positionMs);
-            const criticalEnd = currentUnit + Math.ceil(10_000 / currentPlaybackAsset.segmentDurationMs);
-            const criticalWanted = bufferMs < 10_000
-              ? wanted.filter((unitIndex) => unitIndex <= criticalEnd)
-              : [];
-            const fillWanted = wanted.filter((unitIndex) => !criticalWanted.includes(unitIndex));
-            if (criticalWanted.length > 0) {
-              runtime.requestAssetUnits({
-                assetId: currentPlaybackAsset.assetId,
-                assetKind: "playback",
-                unitIndexes: criticalWanted,
-                totalUnits: currentPlaybackAsset.unitCount,
-                priority: "critical",
-                preferredPeerId: providers[0]?.ownerPeerId ?? null,
-                maxReplicas: 2
-              });
-            }
-            if (fillWanted.length > 0) {
-              runtime.requestAssetUnits({
-                assetId: currentPlaybackAsset.assetId,
-                assetKind: "playback",
-                unitIndexes: fillWanted,
-                totalUnits: currentPlaybackAsset.unitCount,
-                priority: "playback-fill",
-                preferredPeerId: providers[0]?.ownerPeerId ?? null,
-                maxReplicas: 1
-              });
-            }
-          }
-        }
-
-        const ranges = unitIndexesToRanges(owned, currentPlaybackAsset.unitCount);
-        const signature = `${currentPlaybackAsset.assetId}:${JSON.stringify(ranges)}`;
-        if (signature !== announcedSignatureRef.current && ranges.length > 0) {
-          announcedSignatureRef.current = signature;
-          runtime.emitAssetAvailability({
-            protocolVersion: 4,
-            roomId: runtime.roomSnapshot!.room.id,
-            assetId: currentPlaybackAsset.assetId,
-            assetKind: "playback",
-            ownerPeerId: runtime.peerId,
-            nickname:
-              runtime.roomSnapshot!.room.members.find((member) => member.peerId === runtime.peerId)?.nickname ?? "Member",
-            totalUnits: currentPlaybackAsset.unitCount,
-            availableRanges: ranges,
-            complete: owned.length === currentPlaybackAsset.unitCount,
-            source: "local_cache",
-            announcedAt: new Date().toISOString()
-          });
-        }
-
-        if (playbackUnavailable) {
-          setSnapshot({
-            state: "unavailable",
-            bufferedMs: bufferMs,
-            ownedUnitCount: owned.length,
-            totalUnitCount: currentPlaybackAsset.unitCount,
-            audioContextState,
-            lastError: null
-          });
-          return;
-        }
 
         if (!runtime.audioUnlocked || audioContextState !== "running") {
           setSnapshot({
             state: "awaiting-unlock",
-            bufferedMs: bufferMs,
-            ownedUnitCount: owned.length,
+            bufferedMs: 0,
+            ownedUnitCount: 0,
             totalUnitCount: currentPlaybackAsset.unitCount,
             audioContextState,
             lastError: null
@@ -231,8 +137,8 @@ export function useSegmentedOpusPlayback(input: {
         });
         setSnapshot({
           state: result.state,
-          bufferedMs: bufferMs,
-          ownedUnitCount: owned.length,
+          bufferedMs: result.bufferedUnits * currentPlaybackAsset.segmentDurationMs,
+          ownedUnitCount: result.bufferedUnits,
           totalUnitCount: currentPlaybackAsset.unitCount,
           audioContextState,
           lastError: null
@@ -257,7 +163,7 @@ export function useSegmentedOpusPlayback(input: {
     };
 
     void tick();
-    const interval = window.setInterval(() => void tick(), 250);
+    const interval = window.setInterval(() => void tick(), 100);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
@@ -267,7 +173,9 @@ export function useSegmentedOpusPlayback(input: {
     playbackAssetId,
     roomId,
     trackId,
+    playbackRuntimeKey,
     peerId,
+    isCurrentSource
   ]);
 
   useEffect(() => {

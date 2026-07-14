@@ -3,18 +3,18 @@ import { describe, expect, it } from "vitest";
 import { getCurrentTrackStatus, getPlaybackStatus } from "./MembersPanel";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 
-describe("MembersPanel v4 playback status", () => {
-  it("reports the actual current-track playback units", () => {
+describe("MembersPanel WebRTC media status", () => {
+  it("reports the actual current media track", () => {
     expect(getCurrentTrackStatus({
       memberId: "member_1",
-      playbackAssetCount: 1,
-      totalPlaybackUnitCount: 8,
-      currentTrackOwnedUnitCount: 8,
-      currentTrackTotalUnitCount: 160,
-      currentTrackSources: ["local_cache"]
+      mediaTrackState: "live",
+      mediaReceiveBitrateKbps: 192,
+      mediaSendBitrateKbps: null,
+      mediaJitterMs: 3,
+      mediaPacketLossRate: 0
     }, "online")).toMatchObject({
-      label: "持有 8/160 个单元",
-      tone: "accent"
+      label: "Media track 实时",
+      tone: "success"
     });
   });
 
@@ -22,9 +22,10 @@ describe("MembersPanel v4 playback status", () => {
     const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
     diagnostic.dataChannelState = "open";
 
+    diagnostic.mediaReceiveBitrateKbps = 192;
     expect(getPlaybackStatus("online", diagnostic)).toMatchObject({
-      label: "DataChannel 就绪",
-      detail: "声音是否正在输出只在该成员本机可确认。"
+      label: "Media track 实时",
+      detail: "本端已观测到 WebRTC RTP Opus 音频流。"
     });
   });
 

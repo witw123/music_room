@@ -4,13 +4,30 @@ import type {
 } from "./connection-stats";
 import type { DataChannelQueuedSendItem } from "./data-channel-manager";
 
+export type PeerMediaTrackState = "none" | "live" | "ended" | "failed";
+
+export type PeerMediaState = {
+  senderTrackState: PeerMediaTrackState;
+  receiverTrackState: PeerMediaTrackState;
+  remoteStream: MediaStream | null;
+  remoteTrackId: string | null;
+  mediaSourcePeerId: string | null;
+};
+
 export type PeerEntry = {
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
   controlChannel: RTCDataChannel | null;
   dataChannel: RTCDataChannel | null;
-  playbackChannel: RTCDataChannel | null;
   originalChannel: RTCDataChannel | null;
+  audioSender: RTCRtpSender | null;
+  audioReceiver: RTCRtpReceiver | null;
+  remoteAudioStream: MediaStream | null;
+  remoteAudioTrackId: string | null;
+  senderTrackState: PeerMediaTrackState;
+  configuredAudioMaxBitrateKbps: number | null;
+  receiverTrackState: PeerMediaTrackState;
+  mediaNegotiationPending: boolean;
   /** The peerId that initiated this connection (so we don't initiate twice) */
   initiatorPeerId: string | null;
   pendingCandidates: RTCIceCandidateInit[];
@@ -37,8 +54,15 @@ export function createPeerEntry(input: {
     channel: null,
     controlChannel: null,
     dataChannel: null,
-    playbackChannel: null,
     originalChannel: null,
+    audioSender: null,
+    audioReceiver: null,
+    remoteAudioStream: null,
+    remoteAudioTrackId: null,
+    senderTrackState: "none",
+    configuredAudioMaxBitrateKbps: null,
+    receiverTrackState: "none",
+    mediaNegotiationPending: false,
     initiatorPeerId: input.initiatorPeerId,
     pendingCandidates: [],
     statsIntervalId: null,

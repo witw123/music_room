@@ -156,6 +156,10 @@ export function useRoomRuntimeObservability(input: {
           value.sample?.remoteCandidateType ?? snapshot.dataRemoteCandidateType ?? null,
         dataProtocol: value.sample?.protocol ?? snapshot.dataProtocol ?? null,
         dataRelayProtocol: value.sample?.relayProtocol ?? snapshot.dataRelayProtocol ?? null,
+        mediaConnectionState: value.sample?.connectionState ?? snapshot.mediaConnectionState,
+        mediaIceState: value.sample?.iceConnectionState ?? snapshot.mediaIceState,
+        mediaCandidateType: value.sample?.candidateType ?? snapshot.mediaCandidateType,
+        mediaProtocol: value.sample?.protocol ?? snapshot.mediaProtocol,
         currentRoundTripTimeMs:
           value.sample?.currentRoundTripTimeMs ?? snapshot.currentRoundTripTimeMs,
         availableOutgoingBitrateKbps:
@@ -171,7 +175,25 @@ export function useRoomRuntimeObservability(input: {
         mediaReceiveBitrateKbps:
           value.sample?.mediaReceiveBitrateKbps ?? snapshot.mediaReceiveBitrateKbps,
         mediaSendBitrateKbps:
-          value.sample?.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps
+          value.sample?.mediaSendBitrateKbps ?? snapshot.mediaSendBitrateKbps,
+        targetAudioBitrateKbps:
+          value.sample?.targetAudioBitrateKbps ?? snapshot.targetAudioBitrateKbps,
+        configuredAudioMaxBitrateKbps:
+          value.sample?.configuredAudioMaxBitrateKbps ?? snapshot.configuredAudioMaxBitrateKbps,
+        senderAudioMaxBitrateKbps:
+          value.sample?.senderAudioMaxBitrateKbps ?? snapshot.senderAudioMaxBitrateKbps,
+        opusFmtpLine: value.sample?.opusFmtpLine ?? snapshot.opusFmtpLine,
+        senderTrackId: value.sample?.senderTrackId ?? snapshot.senderTrackId,
+        receiverTrackId: value.sample?.receiverTrackId ?? snapshot.receiverTrackId,
+        senderCodecId: value.sample?.senderCodecId ?? snapshot.senderCodecId,
+        receiverCodecId: value.sample?.receiverCodecId ?? snapshot.receiverCodecId,
+        opusCodec: value.sample?.opusCodec ?? snapshot.opusCodec,
+        mediaTrackEstablishedAt:
+          formatDiagnosticsTimestamp(value.sample?.mediaTrackEstablishedAtMs ?? null) ??
+          snapshot.mediaTrackEstablishedAt,
+        lastMediaPacketAt:
+          formatDiagnosticsTimestamp(value.sample?.lastMediaPacketAtMs ?? null) ??
+          snapshot.lastMediaPacketAt
       })
     });
   });

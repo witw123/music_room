@@ -45,7 +45,7 @@ export function buildDataPeerSignal(input: {
 }): PeerSignalMessage {
   return {
     protocolVersion: 4,
-    capability: "segmented-opus-v1",
+    capability: "webrtc-opus-v1",
     roomId: input.roomId,
     fromPeerId: input.localPeerId,
     toPeerId: input.remotePeerId,
@@ -133,6 +133,16 @@ export class SignalingTransport {
           entry.connection.signalingState !== "have-local-offer"
         ) {
           return;
+        }
+
+        if (entry.connection.signalingState === "have-local-offer") {
+          // The lexically larger peer is polite during renegotiation. It rolls
+          // back its local media offer so a source change cannot strand the
+          // connection in have-local-offer.
+          if (this.localPeerId.localeCompare(payload.fromPeerId) < 0) {
+            return;
+          }
+          await entry.connection.setLocalDescription({ type: "rollback" });
         }
 
         await handlers.applyRemoteDescription(entry, remoteDescription);

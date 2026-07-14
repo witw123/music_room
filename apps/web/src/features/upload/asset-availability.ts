@@ -1,7 +1,6 @@
 import type {
   AssetAvailabilityAnnouncement,
-  OriginalAssetManifest,
-  PlaybackAssetManifest
+  OriginalAssetManifest
 } from "@music-room/shared";
 
 export function buildCompleteAssetAnnouncements(input: {
@@ -10,11 +9,10 @@ export function buildCompleteAssetAnnouncements(input: {
   nickname: string;
   source: "live_upload" | "local_cache";
   originalAsset: OriginalAssetManifest;
-  playbackAsset: PlaybackAssetManifest;
   announcedAt?: string;
 }): AssetAvailabilityAnnouncement[] {
   const announcedAt = input.announcedAt ?? new Date().toISOString();
-  return [input.playbackAsset, input.originalAsset].map((asset) => ({
+  return [input.originalAsset].map((asset) => ({
     protocolVersion: 4 as const,
     roomId: input.roomId,
     assetId: asset.assetId,

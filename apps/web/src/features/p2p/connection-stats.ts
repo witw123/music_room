@@ -17,6 +17,13 @@ export type PeerConnectionStatsSample = {
   configuredAudioMaxBitrateKbps?: number | null;
   senderAudioMaxBitrateKbps?: number | null;
   opusFmtpLine?: string | null;
+  senderTrackId?: string | null;
+  receiverTrackId?: string | null;
+  senderCodecId?: string | null;
+  receiverCodecId?: string | null;
+  opusCodec?: string | null;
+  mediaTrackEstablishedAtMs?: number | null;
+  lastMediaPacketAtMs?: number | null;
   packetLossRate?: number | null;
   receiverJitterTargetMs?: number | null;
   mediaReceiveBitrateKbps: number | null;
@@ -128,6 +135,19 @@ export async function samplePeerConnectionStats(
           previousBytes: previousSnapshot?.outboundAudioBytes ?? null,
           previousTimestampMs: previousSnapshot?.outboundAudioTimestampMs ?? null
         }),
+        senderTrackId: getString(outboundAudio, "trackId") ?? getString(outboundAudio, "mediaSourceId"),
+        receiverTrackId:
+          getString(inboundAudio, "trackIdentifier") ?? getString(inboundAudio, "trackId"),
+        senderCodecId: getString(outboundAudio, "codecId"),
+        receiverCodecId: getString(inboundAudio, "codecId"),
+        opusCodec: resolveOpusCodec(statsById, inboundAudio, outboundAudio),
+        opusFmtpLine: resolveOpusFmtpLine(statsById, inboundAudio, outboundAudio),
+        targetAudioBitrateKbps: toKbps(getNumber(outboundAudio, "targetBitrate")),
+        senderAudioMaxBitrateKbps: toKbps(getNumber(outboundAudio, "maxBitrate")),
+        mediaTrackEstablishedAtMs: resolveMediaTrackEstablishedAtMs(inboundAudio, outboundAudio),
+        lastMediaPacketAtMs:
+          getNumber(inboundAudio, "lastPacketReceivedTimestamp") ??
+          getNumber(outboundAudio, "lastPacketSentTimestamp"),
         packetsLost: lossCounters?.lost ?? null,
         packetLossRate,
         jitterMs: toMilliseconds(getNumber(inboundAudio, "jitter"))
@@ -223,6 +243,50 @@ function findFirstStat(
   }
 
   return null;
+}
+
+function resolveCodecStat(
+  statsById: Map<string, StatsRecord>,
+  inboundAudio: StatsRecord | null,
+  outboundAudio: StatsRecord | null
+) {
+  const codecId = getString(outboundAudio, "codecId") ?? getString(inboundAudio, "codecId");
+  if (codecId) {
+    const linked = statsById.get(codecId);
+    if (linked) {
+      return linked;
+    }
+  }
+  return findFirstStat(
+    statsById,
+    (stat) => stat.type === "codec" && /^audio\/opus$/i.test(getString(stat, "mimeType") ?? "")
+  );
+}
+
+function resolveOpusCodec(
+  statsById: Map<string, StatsRecord>,
+  inboundAudio: StatsRecord | null,
+  outboundAudio: StatsRecord | null
+) {
+  return getString(resolveCodecStat(statsById, inboundAudio, outboundAudio), "mimeType");
+}
+
+function resolveOpusFmtpLine(
+  statsById: Map<string, StatsRecord>,
+  inboundAudio: StatsRecord | null,
+  outboundAudio: StatsRecord | null
+) {
+  return getString(resolveCodecStat(statsById, inboundAudio, outboundAudio), "sdpFmtpLine");
+}
+
+function resolveMediaTrackEstablishedAtMs(
+  inboundAudio: StatsRecord | null,
+  outboundAudio: StatsRecord | null
+) {
+  return getNumber(inboundAudio, "firstPacketReceivedTimestamp") ??
+    getNumber(outboundAudio, "firstPacketSentTimestamp") ??
+    getTimestampMs(inboundAudio) ??
+    getTimestampMs(outboundAudio);
 }
 
 function getLinkedStat(
