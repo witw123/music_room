@@ -29,7 +29,7 @@ const mockedSongUrl = song_url as jest.MockedFunction<typeof song_url>;
 
 describe("NeteaseApiClient", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it("converts QR responses without exposing the provider envelope", async () => {
@@ -95,6 +95,38 @@ describe("NeteaseApiClient", () => {
       status: "pending",
       cookie: null
     });
+  });
+
+  it("treats malformed QR responses as a retryable poll", async () => {
+    mockedLoginQrCheck.mockResolvedValue({
+      status: 200,
+      body: { unexpected: true },
+      cookie: []
+    } as never);
+
+    await expect(new NeteaseApiClient().checkQrCode("qr-key")).resolves.toEqual({
+      status: "pending",
+      cookie: null
+    });
+  });
+
+  it("falls back to api when login status validation is unavailable", async () => {
+    mockedLoginStatus
+      .mockRejectedValueOnce(new Error("upstream timeout"))
+      .mockResolvedValueOnce({
+        status: 200,
+        body: { code: 200, data: { profile: { userId: 7, nickname: "User" } } },
+        cookie: []
+      } as never);
+
+    await expect(new NeteaseApiClient().validateCookie("secret")).resolves.toMatchObject({
+      neteaseUserId: "7",
+      nickname: "User"
+    });
+    expect(mockedLoginStatus).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ cookie: "secret", crypto: "api", timeout: expect.any(Number) })
+    );
   });
 
   it("strips Set-Cookie attributes from a completed QR login", async () => {

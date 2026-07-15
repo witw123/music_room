@@ -49,7 +49,7 @@ export type NeteaseQrCheckResult = {
   message?: string;
 };
 
-type NeteaseCrypto = "weapi";
+type NeteaseCrypto = "api" | "weapi";
 
 @Injectable()
 export class NeteaseApiClient {
@@ -79,7 +79,7 @@ export class NeteaseApiClient {
     try {
       return await this.checkQrCodeWithCrypto(key);
     } catch (error) {
-      if (!(error instanceof NeteaseApiError) || error.kind !== "unavailable") {
+      if (!isRetryableProviderError(error)) {
         throw error;
       }
     }
@@ -87,7 +87,7 @@ export class NeteaseApiClient {
     try {
       return await this.checkQrCodeWithCrypto(key, "weapi");
     } catch (error) {
-      if (!(error instanceof NeteaseApiError) || error.kind !== "unavailable") {
+      if (!isRetryableProviderError(error)) {
         throw error;
       }
 
@@ -98,8 +98,20 @@ export class NeteaseApiClient {
   }
 
   async validateCookie(cookie: string) {
+    try {
+      return await this.validateCookieWithCrypto(cookie);
+    } catch (error) {
+      if (!isRetryableProviderError(error)) {
+        throw error;
+      }
+    }
+
+    return this.validateCookieWithCrypto(cookie, "api");
+  }
+
+  private async validateCookieWithCrypto(cookie: string, crypto?: NeteaseCrypto) {
     return this.call(async () => {
-      const request = withProviderOptions({ cookie }, this.requestTimeoutMs());
+      const request = withProviderOptions({ cookie }, this.requestTimeoutMs(), crypto);
       const response = (await login_status(request)) as NeteaseApiResponse;
       const body = parseBody(neteaseLoginStatusBodySchema, response.body);
       assertSuccessfulCode(body.code);
@@ -179,6 +191,10 @@ export class NeteaseApiClient {
       const code = body.code ?? body.data?.code ?? null;
       const cookie = readCookie(response, body);
 
+      if (code === null) {
+        throw new NeteaseApiError("invalid-response");
+      }
+
       // The provider also returns an anonymous cookie while the QR code is
       // pending. Only code 803 represents a completed user login.
       if (code === 803) {
@@ -206,6 +222,11 @@ export class NeteaseApiClient {
     const value = Number(process.env.NETEASE_REQUEST_TIMEOUT_MS ?? 15_000);
     return Number.isFinite(value) ? Math.max(1_000, Math.floor(value)) : 15_000;
   }
+}
+
+function isRetryableProviderError(error: unknown): error is NeteaseApiError {
+  return error instanceof NeteaseApiError &&
+    (error.kind === "unavailable" || error.kind === "invalid-response");
 }
 
 function parseBody<T>(schema: z.ZodType<T>, value: unknown): T {

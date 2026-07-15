@@ -81,7 +81,19 @@ export class NeteaseService {
 
     const result = await this.callProvider(userId, () => this.api.checkQrCode(attempt.key));
     if (result.status === "connected" && result.cookie) {
-      const profile = await this.callProvider(userId, () => this.api.validateCookie(result.cookie!));
+      let profile;
+      try {
+        profile = await this.callProvider(userId, () => this.api.validateCookie(result.cookie!));
+      } catch (error) {
+        if (!isNeteaseUnavailableError(error)) {
+          throw error;
+        }
+        await this.redis.delete(key);
+        return {
+          status: "failed" as const,
+          message: "二维码已扫码，但网易云登录验证失败，请重新生成二维码。"
+        };
+      }
       await this.accounts.saveAccount({
         userId,
         cookie: result.cookie,
@@ -400,4 +412,16 @@ function isAllowedAudioHost(hostname: string) {
     normalized.endsWith(".music.163.com") ||
     normalized.endsWith(".126.net") ||
     normalized.endsWith(".netease.com");
+}
+
+function isNeteaseUnavailableError(error: unknown) {
+  if (!(error instanceof HttpException) || error.getStatus() !== HttpStatus.BAD_GATEWAY) {
+    return false;
+  }
+
+  const response = error.getResponse();
+  return typeof response === "object" &&
+    response !== null &&
+    "code" in response &&
+    response.code === errorCodes.neteaseUnavailable;
 }

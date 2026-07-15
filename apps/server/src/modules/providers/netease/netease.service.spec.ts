@@ -1,6 +1,7 @@
 import { HttpException } from "@nestjs/common";
 import type { NeteaseAccountStatus } from "@music-room/shared";
 import { errorCodes } from "@music-room/shared";
+import { NeteaseApiError } from "./netease-api.client";
 import { NeteaseService } from "./netease.service";
 
 describe("NeteaseService", () => {
@@ -101,5 +102,27 @@ describe("NeteaseService", () => {
     await expect(service.startQrLogin("user_1")).rejects.toMatchObject({
       response: expect.objectContaining({ code: errorCodes.rateLimited })
     });
+  });
+
+  it("returns a recoverable QR failure when login validation is unavailable", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      checkQrCode: jest.fn().mockResolvedValue({
+        status: "connected",
+        cookie: "MUSIC_U=music-u"
+      }),
+      validateCookie: jest.fn().mockRejectedValue(new NeteaseApiError("unavailable"))
+    };
+    const redis = {
+      getJson: jest.fn().mockResolvedValue({ userId: "user_1", key: "qr-key" }),
+      delete: jest.fn().mockResolvedValue(undefined)
+    };
+    const service = new NeteaseService(api as never, {} as never, redis as never);
+
+    await expect(service.checkQrLogin("user_1", "attempt_1")).resolves.toEqual({
+      status: "failed",
+      message: "二维码已扫码，但网易云登录验证失败，请重新生成二维码。"
+    });
+    expect(redis.delete).toHaveBeenCalledWith("music-room:netease:qr:attempt_1");
   });
 });
