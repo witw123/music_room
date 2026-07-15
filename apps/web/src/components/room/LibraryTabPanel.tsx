@@ -6,8 +6,6 @@ import { TrackListSection } from "./TrackListSection";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import { Button } from "@/components/ui/button";
-import { NeteaseSourcePanel } from "./NeteaseSourcePanel";
-import type { NeteaseTrackCandidate } from "@music-room/shared";
 
 type LibraryTabPanelProps = {
   tracks: TrackMeta[];
@@ -20,7 +18,6 @@ type LibraryTabPanelProps = {
   onPlayTrack: (trackId: string) => Promise<void>;
   localStorageSummary: LocalStorageSummary;
   onCleanLocalStorage: () => Promise<void>;
-  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
 };
 
 function formatBytes(value: number | null) {
@@ -72,12 +69,6 @@ function LibraryTabPanelBase({
           {isCleaning ? "清理中…" : "清理无效存储"}
         </Button>
       </div>
-      {process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" ? (
-        <NeteaseSourcePanel
-          activeSession={trackListProps.activeSession}
-          onImportTrack={trackListProps.onImportNeteaseTrack}
-        />
-      ) : null}
       <TrackListSection
         {...trackListProps}
       />

@@ -22,9 +22,11 @@ describe("NeteaseService", () => {
             {
               id: 123,
               name: "Test Song",
+              fee: 1,
               dt: 123000,
               artists: [{ name: "Artist A" }, { name: "Artist B" }],
-              album: { name: "Album", picUrl: "https://example.com/cover.jpg" }
+              album: { name: "Album", picUrl: "https://example.com/cover.jpg" },
+              h: { br: 320000 }
             }
           ]
         }
@@ -50,6 +52,9 @@ describe("NeteaseService", () => {
         {
           provider: "netease",
           providerTrackId: "123",
+          market: "网易云音乐",
+          access: "vip",
+          quality: "exhigh",
           title: "Test Song",
           artist: "Artist A / Artist B",
           album: "Album",

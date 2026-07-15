@@ -24,11 +24,18 @@ import {
 type SongRecord = {
   id?: unknown;
   name?: unknown;
+  fee?: unknown;
   dt?: unknown;
   artists?: unknown;
   ar?: unknown;
   album?: unknown;
   al?: unknown;
+  h?: unknown;
+  m?: unknown;
+  l?: unknown;
+  sq?: unknown;
+  hr?: unknown;
+  privilege?: unknown;
 };
 
 type RateBucket = { timestamps: number[] };
@@ -268,6 +275,9 @@ export class NeteaseService {
 
   private toTrackCandidate(value: unknown): NeteaseTrackCandidate | null {
     const song = asRecord(value) as SongRecord | null;
+    if (!song) {
+      return null;
+    }
     const trackId = readString(song?.id);
     const title = readString(song?.name);
     if (!trackId || !/^\d+$/.test(trackId) || !title) {
@@ -287,6 +297,9 @@ export class NeteaseService {
     return {
       provider: "netease",
       providerTrackId: trackId,
+      market: "网易云音乐",
+      access: resolveTrackAccess(song),
+      quality: resolveTrackQuality(song),
       title,
       artist: artistNames.join(" / ") || "未知歌手",
       album: readString(album?.name),
@@ -383,7 +396,37 @@ function readString(value: unknown) {
 }
 
 function readNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function resolveTrackAccess(song: SongRecord) {
+  const privilege = asRecord(song.privilege);
+  const fee = readNumber(song.fee) ?? readNumber(privilege?.fee);
+  if (fee === 0 || fee === 8) return "free" as const;
+  if (fee === 1) return "vip" as const;
+  if (fee === 4) return "paid" as const;
+  return "unknown" as const;
+}
+
+function resolveTrackQuality(song: SongRecord) {
+  if (hasAudioFile(song.hr)) return "hires" as const;
+  if (hasAudioFile(song.sq)) return "lossless" as const;
+  if (hasAudioFile(song.h) || (readNumber(asRecord(song.privilege)?.maxbr) ?? 0) >= 320_000) {
+    return "exhigh" as const;
+  }
+  if (hasAudioFile(song.m)) return "high" as const;
+  if (hasAudioFile(song.l)) return "standard" as const;
+  return null;
+}
+
+function hasAudioFile(value: unknown) {
+  const record = asRecord(value);
+  return !!record && (readNumber(record.br) ?? 0) > 0;
 }
 
 function readAudioRecord(value: unknown) {

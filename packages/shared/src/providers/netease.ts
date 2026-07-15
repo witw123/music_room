@@ -38,6 +38,9 @@ export const neteaseTrackCandidateSchema = z
   .object({
     provider: z.literal("netease"),
     providerTrackId: z.string().regex(/^\d+$/),
+    market: z.string().min(1),
+    access: z.enum(["free", "vip", "paid", "unknown"]),
+    quality: z.enum(["standard", "high", "exhigh", "lossless", "hires"]).nullable(),
     title: z.string(),
     artist: z.string(),
     album: z.string().nullable(),

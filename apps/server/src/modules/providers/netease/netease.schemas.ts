@@ -4,6 +4,7 @@ const neteaseApiSongSchema = z
   .object({
     id: z.union([z.string(), z.number().int()]),
     name: z.string(),
+    fee: z.union([z.string(), z.number().int()]).optional().nullable(),
     dt: z.union([z.string(), z.number().finite()]).optional().nullable(),
     artists: z
       .array(z.object({ name: z.string().optional() }).strip())
@@ -18,6 +19,19 @@ const neteaseApiSongSchema = z
       .nullable(),
     al: z
       .object({ name: z.string().optional(), picUrl: z.string().optional().nullable() })
+      .strip()
+      .optional()
+      .nullable(),
+    h: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
+    m: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
+    l: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
+    sq: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
+    hr: z.object({ br: z.union([z.string(), z.number().finite()]).optional().nullable() }).strip().optional().nullable(),
+    privilege: z
+      .object({
+        fee: z.union([z.string(), z.number().int()]).optional().nullable(),
+        maxbr: z.union([z.string(), z.number().finite()]).optional().nullable()
+      })
       .strip()
       .optional()
       .nullable()

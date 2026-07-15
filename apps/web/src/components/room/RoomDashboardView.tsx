@@ -19,7 +19,7 @@ import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
 
-type TabId = "queue" | "library" | "members";
+type TabId = "queue" | "library" | "netease" | "members";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -63,8 +63,13 @@ type RoomDashboardViewProps = {
 const tabLabels: Record<TabId, string> = {
   queue: "队列",
   library: "曲库",
+  netease: "网易云",
   members: "成员"
 };
+
+const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true"
+  ? ["queue", "library", "netease", "members"]
+  : ["queue", "library", "members"];
 
 const LibraryTabPanel = dynamic(
   () => import("./LibraryTabPanel").then((mod) => mod.LibraryTabPanel),
@@ -83,6 +88,17 @@ const MembersTabPanel = dynamic(
     loading: () => (
       <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
         正在加载成员视图…
+      </div>
+    )
+  }
+);
+
+const NeteaseTabPanel = dynamic(
+  () => import("./NeteaseSourcePanel").then((mod) => mod.NeteaseSourcePanel),
+  {
+    loading: () => (
+      <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
+        正在加载网易云…
       </div>
     )
   }
@@ -139,11 +155,10 @@ function RoomDashboardViewBase({
     [onDiagnosticsVisibilityChange, onTabChange]
   );
   const handleTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, tab: TabId) => {
-    const tabs: TabId[] = ["queue", "library", "members"];
     const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (!direction) return;
     event.preventDefault();
-    const nextTab = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length];
+    const nextTab = tabIds[(tabIds.indexOf(tab) + direction + tabIds.length) % tabIds.length];
     handleTabChange(nextTab);
     document.getElementById(`room-tab-${nextTab}`)?.focus();
   }, [handleTabChange]);
@@ -231,7 +246,7 @@ function RoomDashboardViewBase({
           </div>
 
           <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-white/5 p-1" role="tablist">
-            {(["queue", "library", "members"] as TabId[]).map((tab) => (
+            {tabIds.map((tab) => (
               <button
                 key={tab}
                 id={`room-tab-${tab}`}
@@ -288,10 +303,16 @@ function RoomDashboardViewBase({
               canControlPlayback={canControlPlayback}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}
-              onImportNeteaseTrack={onImportNeteaseTrack}
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
+            />
+          ) : null}
+
+          {activeTab === "netease" ? (
+            <NeteaseTabPanel
+              activeSession={activeSession}
+              onImportTrack={onImportNeteaseTrack}
             />
           ) : null}
 

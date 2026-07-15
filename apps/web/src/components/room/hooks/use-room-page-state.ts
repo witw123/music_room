@@ -30,7 +30,7 @@ export type RoomRecoveryState = {
 };
 
 export type RoomPageState = {
-  activeDashboardTab: "queue" | "library" | "members";
+  activeDashboardTab: "queue" | "library" | "netease" | "members";
   playbackStartRequest: PlaybackStartRequest | null;
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;

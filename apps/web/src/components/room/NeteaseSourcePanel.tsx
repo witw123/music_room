@@ -14,6 +14,21 @@ import {
 } from "@/lib/music-room-api";
 import { Button } from "@/components/ui/button";
 
+const qualityLabels = {
+  standard: "标准",
+  high: "高品",
+  exhigh: "极高",
+  lossless: "无损",
+  hires: "Hi-Res"
+} as const;
+
+const accessLabels = {
+  free: "免费",
+  vip: "VIP",
+  paid: "付费",
+  unknown: "状态未知"
+} as const;
+
 type NeteaseSourcePanelProps = {
   activeSession: AuthSession | null;
   onImportTrack: (track: NeteaseTrackCandidate) => Promise<void>;
@@ -266,6 +281,11 @@ export function NeteaseSourcePanel({
                       <h3 className="truncate text-sm font-medium text-foreground">{track.title}</h3>
                       <p className="truncate text-xs text-foreground-muted">
                         {track.artist} · {track.album ?? "未知专辑"} · {formatDuration(track.durationMs)}
+                      </p>
+                      <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-foreground-muted">
+                        <span className="text-accent">市场 · {track.market}</span>
+                        <span>版权 · {accessLabels[track.access]}</span>
+                        <span>音质 · {track.quality ? qualityLabels[track.quality] : "未知"}</span>
                       </p>
                     </div>
                     <Button

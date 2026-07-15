@@ -57,7 +57,7 @@ type RoomWorkspaceProps = {
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  onTabChange: (tab: "queue" | "library" | "members") => void;
+  onTabChange: (tab: "queue" | "library" | "netease" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
   playerSlot: ReactNode;
