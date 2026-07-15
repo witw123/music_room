@@ -73,7 +73,9 @@ export class NeteaseApiClient {
       const code = body.code ?? body.data?.code ?? null;
       const cookie = readCookie(response, body);
 
-      if (code === 803 || cookie) {
+      // The provider also returns an anonymous cookie while the QR code is
+      // pending. Only code 803 represents a completed user login.
+      if (code === 803) {
         return { status: "connected" as const, cookie };
       }
       if (code === 802) {

@@ -1,4 +1,5 @@
 import {
+  login_qr_check,
   login_qr_create,
   login_qr_key,
   login_status,
@@ -9,6 +10,7 @@ import {
 import { NeteaseApiClient } from "./netease-api.client";
 
 jest.mock("@neteasecloudmusicapienhanced/api", () => ({
+  login_qr_check: jest.fn(),
   login_qr_create: jest.fn(),
   login_qr_key: jest.fn(),
   login_status: jest.fn(),
@@ -17,6 +19,7 @@ jest.mock("@neteasecloudmusicapienhanced/api", () => ({
   song_url: jest.fn()
 }));
 
+const mockedLoginQrCheck = login_qr_check as jest.MockedFunction<typeof login_qr_check>;
 const mockedLoginQrCreate = login_qr_create as jest.MockedFunction<typeof login_qr_create>;
 const mockedLoginQrKey = login_qr_key as jest.MockedFunction<typeof login_qr_key>;
 const mockedLoginStatus = login_status as jest.MockedFunction<typeof login_status>;
@@ -44,6 +47,19 @@ describe("NeteaseApiClient", () => {
     await expect(new NeteaseApiClient().createQrCode()).resolves.toEqual({
       key: "qr-key",
       qrimg: "data:image/png;base64,qr"
+    });
+  });
+
+  it("keeps QR login pending when the provider returns an anonymous cookie", async () => {
+    mockedLoginQrCheck.mockResolvedValue({
+      status: 200,
+      body: { code: 801 },
+      cookie: ["NMTID=anonymous"]
+    } as never);
+
+    await expect(new NeteaseApiClient().checkQrCode("qr-key")).resolves.toEqual({
+      status: "pending",
+      cookie: null
     });
   });
 
