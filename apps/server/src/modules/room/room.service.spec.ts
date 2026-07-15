@@ -714,6 +714,48 @@ describe("RoomService", () => {
     }
   });
 
+  it("binds direct track playback to its queue item before automatic next", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Repeated Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "direct-track-repeat",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+    const secondQueueItem = await roomService.addQueueItem(snapshot.room.id, member.id, track.id);
+
+    const playing = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+    const nextPlayback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+
+    expect(playing.currentQueueItemId).toBe(firstQueueItem.id);
+    expect(nextPlayback.currentQueueItemId).toBe(secondQueueItem.id);
+  });
+
   it("allows the original uploader to delete a track and removes it from queue and playback", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

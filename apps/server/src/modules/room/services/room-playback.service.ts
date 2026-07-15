@@ -47,7 +47,8 @@ export class RoomPlaybackService {
 
     if (input.action === "play") {
       let nextTrackId = input.trackId ?? playback.currentTrackId ?? record.queue[0]?.trackId ?? null;
-      let nextQueueItemId: string | null = input.queueItemId ?? null;
+      let nextQueueItemId: string | null =
+        input.queueItemId ?? (input.trackId === undefined ? playback.currentQueueItemId : null);
 
       if (input.queueItemId) {
         const queueItem = record.queue.find((item) => item.id === input.queueItemId);
@@ -56,6 +57,9 @@ export class RoomPlaybackService {
         }
         nextTrackId = queueItem.trackId;
         nextQueueItemId = queueItem.id;
+      }
+      if (!nextQueueItemId && nextTrackId) {
+        nextQueueItemId = record.queue.find((item) => item.trackId === nextTrackId)?.id ?? null;
       }
       if (!nextTrackId) {
         this.clearPlayback(playback, { bumpVersion: false });

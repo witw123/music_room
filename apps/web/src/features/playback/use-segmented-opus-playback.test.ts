@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildSegmentedPlaybackFailureSnapshot,
-  hasActiveSegmentedPlayback
+  hasActiveSegmentedPlayback,
+  resolveSegmentedPlaybackIdentity
 } from "./use-segmented-opus-playback";
 
 const current = {
@@ -15,6 +16,29 @@ const current = {
 };
 
 describe("segmented playback recovery", () => {
+  it("changes playback identity before a new timeline can reuse the old ended state", () => {
+    const first = resolveSegmentedPlaybackIdentity({
+      playback: {
+        currentTrackId: "track_1",
+        mediaEpoch: 1,
+        playbackRevision: 4,
+        startAt: "2026-07-15T00:00:00.000Z"
+      },
+      playbackAssetId: "asset-1"
+    });
+    const next = resolveSegmentedPlaybackIdentity({
+      playback: {
+        currentTrackId: "track_2",
+        mediaEpoch: 2,
+        playbackRevision: 5,
+        startAt: "2026-07-15T00:03:00.000Z"
+      },
+      playbackAssetId: "asset-2"
+    });
+
+    expect(first).not.toBe(next);
+  });
+
   it("releases the local engine when the authoritative playback has no track", () => {
     expect(hasActiveSegmentedPlayback({
       isCurrentSource: true,
