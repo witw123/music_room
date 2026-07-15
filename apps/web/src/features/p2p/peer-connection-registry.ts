@@ -2,7 +2,6 @@ import type {
   PeerConnectionStatsSample,
   PeerConnectionStatsSnapshot
 } from "./connection-stats";
-import type { DataChannelQueuedSendItem } from "./data-channel-manager";
 import type { PeerLinkKind } from "./signaling-transport";
 
 export type { PeerLinkKind };
@@ -21,9 +20,6 @@ export type PeerEntry = {
   linkKind: PeerLinkKind;
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
-  controlChannel: RTCDataChannel | null;
-  dataChannel: RTCDataChannel | null;
-  originalChannel: RTCDataChannel | null;
   audioSender: RTCRtpSender | null;
   audioReceiver: RTCRtpReceiver | null;
   remoteAudioStream: MediaStream | null;
@@ -48,7 +44,6 @@ export type PeerEntry = {
   reconnectAttempts: number;
   reconnectTimerId: ReturnType<typeof setTimeout> | null;
   watchdogTimerId: ReturnType<typeof setTimeout> | null;
-  sendQueue: DataChannelQueuedSendItem[];
   releasing: boolean;
   operationChain: Promise<void>;
 };
@@ -63,9 +58,6 @@ export function createPeerEntry(input: {
     linkKind: input.linkKind ?? "data",
     connection: input.connection,
     channel: null,
-    controlChannel: null,
-    dataChannel: null,
-    originalChannel: null,
     audioSender: null,
     audioReceiver: null,
     remoteAudioStream: null,
@@ -89,7 +81,6 @@ export function createPeerEntry(input: {
     reconnectAttempts: 0,
     reconnectTimerId: null,
     watchdogTimerId: null,
-    sendQueue: [],
     releasing: false,
     operationChain: Promise.resolve()
   };

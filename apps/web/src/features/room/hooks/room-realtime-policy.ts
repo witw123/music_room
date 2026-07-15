@@ -65,7 +65,6 @@ export function createRoomRealtimeEventGate(initialSnapshot?: RoomSnapshot | nul
     }
   };
 }
-
 export function isSocketDisconnectGraceActive(disconnectGraceUntilMs: number | null, now = Date.now()) {
   return typeof disconnectGraceUntilMs === "number" && disconnectGraceUntilMs > now;
 }
@@ -87,86 +86,6 @@ export function shouldResyncSnapshotForPlaybackPatch(input: {
   }
 
   return !input.currentSnapshot?.tracks.some((track) => track.id === trackId);
-}
-
-export function shouldQueueIncomingAvailability(input: {
-  announcementRoomId: string;
-  runtimeRoomId: string;
-  activeRouteRoomId: string | null | undefined;
-}) {
-  return (
-    input.announcementRoomId === input.runtimeRoomId &&
-    input.activeRouteRoomId === input.runtimeRoomId
-  );
-}
-
-export function shouldReannounceManualCacheAvailability(input: {
-  enableManualTrackCaching: boolean;
-  roomId: string | null | undefined;
-  roomListenerSetHash: string;
-  uploadedTrackIds: string[];
-  sourceReadyTrackIds?: string[];
-  lastBroadcastKey: string | null;
-}) {
-  if (!input.roomId || !input.roomListenerSetHash) {
-    return null;
-  }
-
-  const sortedTrackIds = [...input.uploadedTrackIds].filter(Boolean).sort();
-  if (sortedTrackIds.length === 0) {
-    return null;
-  }
-
-  const sortedSourceReadyTrackIds = [...(input.sourceReadyTrackIds ?? [])]
-    .filter(Boolean)
-    .sort();
-  const nextKey = [
-    input.roomId,
-    input.roomListenerSetHash,
-    sortedTrackIds.join(","),
-    sortedSourceReadyTrackIds.join(",")
-  ].join("|");
-  return nextKey === input.lastBroadcastKey ? null : nextKey;
-}
-
-export function resolveSourceAvailabilityReannounceTrackId(input: {
-  activeSessionId: string | null | undefined;
-  playback: Pick<RoomSnapshot["room"]["playback"], "currentTrackId" | "sourceSessionId">;
-}) {
-  return input.activeSessionId &&
-    input.playback.sourceSessionId === input.activeSessionId &&
-    input.playback.currentTrackId
-    ? input.playback.currentTrackId
-    : null;
-}
-
-export function resolveRemoteAvailabilityRequestTrackId(input: {
-  activeSessionId: string | null | undefined;
-  previousPlayback: Pick<
-    RoomSnapshot["room"]["playback"],
-    "currentTrackId" | "sourceSessionId" | "sourcePeerId" | "mediaEpoch"
-  > | null | undefined;
-  nextPlayback: Pick<
-    RoomSnapshot["room"]["playback"],
-    "currentTrackId" | "sourceSessionId" | "sourcePeerId" | "mediaEpoch"
-  >;
-}) {
-  const next = input.nextPlayback;
-  if (
-    !input.activeSessionId ||
-    !next.currentTrackId ||
-    !next.sourcePeerId ||
-    next.sourceSessionId === input.activeSessionId
-  ) {
-    return null;
-  }
-  const previous = input.previousPlayback;
-  return !previous ||
-    previous.currentTrackId !== next.currentTrackId ||
-    previous.sourcePeerId !== next.sourcePeerId ||
-    previous.mediaEpoch !== next.mediaEpoch
-    ? next.currentTrackId
-    : null;
 }
 
 export function shouldAcceptIncomingPeerSignal(input: {
@@ -303,34 +222,5 @@ export function resolveRoomSnapshotWatchdogAction(input: {
     nextLastRealtimeRoomEventAtMs: input.nowMs,
     resyncRoomId: input.snapshotRoomId,
     shouldRequestResync: true
-  };
-}
-
-export function resolveRecoveryWatchdogAction(input: {
-  snapshotRoomId: string | null;
-  enableTrackCaching: boolean;
-  connectedPeersCount: number;
-  snapshotMembersCount: number;
-  playbackConnectionKey: string | null;
-  sourcePeerId?: string | null;
-}) {
-  if (
-    !input.snapshotRoomId ||
-    !input.enableTrackCaching ||
-    input.connectedPeersCount > 0 ||
-    input.snapshotMembersCount <= 1
-  ) {
-    return { recommendation: null };
-  }
-
-  return {
-    recommendation: {
-      playbackConnectionKey: input.playbackConnectionKey,
-      peerId: input.sourcePeerId ?? null,
-      scope: "data" as const,
-      level: input.sourcePeerId ? ("hard-recreate" as const) : ("soft" as const),
-      reason: "watchdog-data-stalled" as const,
-      observedNoProgressMs: null
-    }
   };
 }

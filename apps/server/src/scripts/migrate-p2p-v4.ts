@@ -10,8 +10,6 @@ const roomRedisPatterns = [
   "music-room:join-code:*",
   "music-room:presence:*",
   "music-room:realtime-session:*",
-  "music-room:availability:*",
-  "music-room:asset-availability:v4:*",
   "music-room:session:*:recent-room"
 ] as const;
 

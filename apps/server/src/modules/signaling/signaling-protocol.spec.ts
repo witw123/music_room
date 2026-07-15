@@ -1,7 +1,7 @@
 import { peerSignalMessageSchema } from "@music-room/shared";
 
 describe("room data signaling", () => {
-  it("rejects legacy media peer signals at the shared boundary", () => {
+  it("rejects media signaling on the control channel boundary", () => {
     expect(
       peerSignalMessageSchema.safeParse({
         protocolVersion: 4,

@@ -7,15 +7,10 @@ export {
   createRoomRealtimeEventGate,
   isSocketDisconnectGraceActive,
   resolvePresenceRepairAction,
-  resolveRemoteAvailabilityRequestTrackId,
-  resolveRecoveryWatchdogAction,
   resolveRoomRealtimeSnapshotInputs,
   resolveRoomSnapshotWatchdogAction,
-  resolveSourceAvailabilityReannounceTrackId,
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
-  shouldQueueIncomingAvailability,
-  shouldReannounceManualCacheAvailability,
   shouldResyncSnapshotForPlaybackPatch,
   shouldSuppressPlaybackWatchdogEscalation
 } from "./room-realtime-policy";

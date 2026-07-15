@@ -151,7 +151,7 @@ describe("captureAudioStream", () => {
 });
 
 describe("buildTrackMeta", () => {
-  it("uses canonical 128KB manifests for standard uploads", async () => {
+  it("builds neutral metadata for standard uploads", async () => {
     const restoreCreateElement = mockAudioMetadataElement(12.3);
     const file = new File([new Uint8Array(300 * 1024)], "demo.mp3", { type: "audio/mpeg" });
 
@@ -162,18 +162,12 @@ describe("buildTrackMeta", () => {
       } as never);
 
       expect(meta.durationMs).toBe(12_300);
-      expect(meta.pieceManifest).toMatchObject({
-        totalChunks: 3,
-        chunkSize: 128 * 1024,
-        pieceMimeType: "audio/mpeg"
-      });
-      expect(meta.relayManifest).toEqual(meta.pieceManifest);
     } finally {
       restoreCreateElement();
     }
   });
 
-  it("uses canonical 256KB manifests for large lossless uploads", async () => {
+  it("keeps lossless upload metadata free of transfer manifests", async () => {
     const restoreCreateElement = mockAudioMetadataElement(18.5);
     const file = new File([new Uint8Array(26 * 1024 * 1024)], "demo.flac", {
       type: "audio/flac"
@@ -186,12 +180,6 @@ describe("buildTrackMeta", () => {
       } as never);
 
       expect(meta.durationMs).toBe(18_500);
-      expect(meta.pieceManifest).toMatchObject({
-        totalChunks: 104,
-        chunkSize: 256 * 1024,
-        pieceMimeType: "audio/flac"
-      });
-      expect(meta.relayManifest).toEqual(meta.pieceManifest);
     } finally {
       restoreCreateElement();
     }

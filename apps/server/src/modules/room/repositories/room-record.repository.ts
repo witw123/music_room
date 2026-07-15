@@ -226,10 +226,10 @@ export class RoomRecordRepository {
   }
 
   private isRedisAvailable() {
-    const redisWithAvailability = this.redis as RedisService & {
+    const redisService = this.redis as RedisService & {
       isAvailable?: () => boolean;
     };
-    return redisWithAvailability.isAvailable?.() ?? false;
+    return redisService.isAvailable?.() ?? false;
   }
 
   private async persistRecordToDatabase(record: RoomRecord) {

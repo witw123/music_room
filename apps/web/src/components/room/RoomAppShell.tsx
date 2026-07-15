@@ -7,7 +7,6 @@ import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { BottomPlayerController } from "@/components/BottomPlayerController";
 import { RoomWorkspace } from "@/components/room/RoomWorkspace";
 import type { useTrackUploads } from "@/features/upload/use-track-uploads";
-import type { useRoomCacheLibraryActions } from "@/components/room/hooks/use-room-cache-library-actions";
 import type { useRoomClipboardActions } from "@/components/room/hooks/use-room-clipboard-actions";
 import type { useRoomPageRoomActions } from "@/components/room/hooks/use-room-page-room-actions";
 import type { useRoomPageState } from "@/components/room/hooks/use-room-page-state";
@@ -18,7 +17,6 @@ type RoomAppShellProps = {
   activeSession: AuthSession | null;
   audioRef: RefObject<HTMLAudioElement | null>;
   authEntryHref: string;
-  cacheActions: ReturnType<typeof useRoomCacheLibraryActions>;
   canControlPlayback: boolean;
   canDeleteRoom: boolean;
   canReorderQueue: boolean;
@@ -39,7 +37,6 @@ export function RoomAppShell({
   activeSession,
   audioRef,
   authEntryHref,
-  cacheActions,
   canControlPlayback,
   canDeleteRoom,
   canReorderQueue,
@@ -75,10 +72,6 @@ export function RoomAppShell({
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
-        cacheLibraryTracks={uploads.cacheLibraryTracks}
-        manualCacheTasks={uploads.manualCacheTasks}
-        availabilitySummary={workspaceViewModel.availabilitySummary}
-        originalAssetAvailabilitySummary={workspaceViewModel.originalAssetAvailabilitySummary}
         memberTransferSummaries={workspaceViewModel.memberTransferSummaries}
         localMemberState={workspaceViewModel.localMemberState}
         peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
@@ -100,11 +93,6 @@ export function RoomAppShell({
         onAddToQueue={roomActions.addToQueue}
         onDeleteTrack={roomActions.deleteTrack}
         onPlayTrack={playbackActions.handlePlayTrack}
-        onStartManualCacheDownload={cacheActions.handleStartManualCacheDownload}
-        onPauseManualCacheDownload={cacheActions.handlePauseManualCacheDownload}
-        onAddCachedLibraryTrackToLibrary={cacheActions.handleAddCachedLibraryTrackToLibrary}
-        onExportCachedLibraryTrack={cacheActions.handleExportCachedLibraryTrack}
-        onDeleteCachedLibraryTrack={cacheActions.handleDeleteCachedLibraryTrack}
         onPlayQueueItem={playbackActions.handlePlayQueueItem}
         onRemoveQueueItem={roomActions.removeQueueItem}
         onReorderQueue={roomActions.reorderQueue}

@@ -1,28 +1,10 @@
-import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useEffect, type MutableRefObject, type SetStateAction, type Dispatch } from "react";
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import {
-  clearTransientTrackCacheData,
-  deleteCachedPiecesForTrack,
-  deleteManualCacheTask,
   getCachedLibraryTrack,
-  getCachedLibraryTrackSummary,
-  getCachedPieceIndexes,
-  listManualCacheTasksForRoom,
-  localCacheOwnerKey
+  getCachedLibraryTrackSummary
 } from "@/lib/indexeddb";
-import type {
-  CachedLibraryTrack,
-  UploadedTrack
-} from "@/features/upload/audio-utils";
-import { hasActivePlayback } from "@/features/playback/asset-transfer-scheduler";
-import {
-  applyHydratedManualCacheTasksResult,
-  hydrateManualCacheTasksForRoom,
-  type ManualCacheTask
-} from "./manual-cache-task-store";
-import {
-  resolveMissingOwnedUploadedTracks
-} from "./track-availability";
+import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
   applyOwnedUploadRehydrationResult,
   rehydrateOwnedUploadedTracksFromCache
@@ -30,22 +12,15 @@ import {
 import {
   applyUploadRuntimePruneForActiveTracks,
   cleanupUploadRuntimeRefs,
-  resolveRetainedCachePieceTrackIdsToConsume,
   syncUploadedTrackObjectUrls
 } from "./upload-runtime-cleanup";
 
 type UploadRuntimeEffectsInput = {
   activeSession: GuestSession | null;
-  cacheLibraryTracks: CachedLibraryTrack[];
+  cacheLibraryVersion: number;
   cacheLibraryTracksRef: MutableRefObject<Map<string, CachedLibraryTrack>>;
-  manualCacheAssemblingTrackIdsRef: MutableRefObject<Set<string>>;
-  manualCacheChunkIndexesRef: MutableRefObject<Map<string, Set<number>>>;
-  manualCacheRetainedPieceTrackIdsRef: MutableRefObject<Set<string>>;
-  peerId: string;
-  refreshCacheLibrary: () => Promise<void>;
   roomSnapshot: RoomSnapshot | null;
   roomTrackIdsKey: string;
-  setManualCacheTasks: Dispatch<SetStateAction<Record<string, ManualCacheTask>>>;
   setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
   uploadedTrackUrlsRef: MutableRefObject<Map<string, string>>;
   uploadedTracks: Record<string, UploadedTrack>;
@@ -53,16 +28,10 @@ type UploadRuntimeEffectsInput = {
 
 export function useUploadRuntimeEffects({
   activeSession,
-  cacheLibraryTracks,
+  cacheLibraryVersion,
   cacheLibraryTracksRef,
-  manualCacheAssemblingTrackIdsRef,
-  manualCacheChunkIndexesRef,
-  manualCacheRetainedPieceTrackIdsRef,
-  peerId,
-  refreshCacheLibrary,
   roomSnapshot,
   roomTrackIdsKey,
-  setManualCacheTasks,
   setUploadedTracks,
   uploadedTrackUrlsRef,
   uploadedTracks
@@ -76,118 +45,26 @@ export function useUploadRuntimeEffects({
   }, [uploadedTrackUrlsRef, uploadedTracks]);
 
   useEffect(() => {
-    void refreshCacheLibrary();
-  }, [refreshCacheLibrary]);
-
-  useEffect(() => {
-    if (!roomSnapshot?.room.id) {
-      return;
-    }
-    let cancelled = false;
-    void hydrateManualCacheTasksForRoom({
-      roomId: roomSnapshot.room.id,
-      peerId,
-      currentPlaybackTrackId: roomSnapshot.room.playback.currentTrackId ?? null,
-      roomTracks: roomSnapshot.tracks,
-      listManualCacheTasksForRoom,
-      getCachedPieceIndexes,
-      localCacheOwnerKey
-    }).then((result) => {
-      applyHydratedManualCacheTasksResult({
-        cancelled,
-        result,
-        currentPlaybackTrackId: roomSnapshot.room.playback.currentTrackId ?? null,
-        setManualCacheTasks,
-        chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-        deleteManualCacheTask
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    manualCacheChunkIndexesRef,
-    peerId,
-    roomSnapshot?.room.id,
-    roomSnapshot?.room.playback.currentTrackId,
-    roomSnapshot?.tracks,
-    setManualCacheTasks
-  ]);
-
-  useEffect(() => {
-    const trackIdsToConsume = resolveRetainedCachePieceTrackIdsToConsume({
-      retainedTrackIds: manualCacheRetainedPieceTrackIdsRef.current,
-      currentPlaybackTrackId: null,
-      playbackHasActiveIntent: false
-    });
-    for (const trackId of trackIdsToConsume) {
-      void deleteCachedPiecesForTrack(trackId, undefined, {
-        ownerKey: localCacheOwnerKey
-      });
-    }
-    manualCacheChunkIndexesRef.current.clear();
-    manualCacheAssemblingTrackIdsRef.current.clear();
-    manualCacheRetainedPieceTrackIdsRef.current.clear();
-    void clearTransientTrackCacheData();
-  }, [
-    manualCacheAssemblingTrackIdsRef,
-    manualCacheChunkIndexesRef,
-    manualCacheRetainedPieceTrackIdsRef,
-    roomSnapshot?.room.id
-  ]);
-
-  useEffect(() => {
-    const trackIdsToConsume = resolveRetainedCachePieceTrackIdsToConsume({
-      retainedTrackIds: manualCacheRetainedPieceTrackIdsRef.current,
-      currentPlaybackTrackId: roomSnapshot?.room.playback.currentTrackId ?? null,
-      playbackHasActiveIntent: hasActivePlayback(roomSnapshot?.room.playback)
-    });
-    if (trackIdsToConsume.length === 0) {
-      return;
-    }
-
-    for (const trackId of trackIdsToConsume) {
-      manualCacheRetainedPieceTrackIdsRef.current.delete(trackId);
-      manualCacheChunkIndexesRef.current.delete(trackId);
-      void deleteCachedPiecesForTrack(trackId, undefined, {
-        ownerKey: localCacheOwnerKey
-      });
-    }
-  }, [
-    manualCacheChunkIndexesRef,
-    manualCacheRetainedPieceTrackIdsRef,
-    roomSnapshot?.room.playback
-  ]);
-
-  useEffect(() => {
     if (!roomSnapshot?.room.id) {
       return;
     }
     const activeTrackIds = new Set(roomTrackIdsKey ? roomTrackIdsKey.split("|") : []);
     applyUploadRuntimePruneForActiveTracks({
       activeTrackIds,
-      setUploadedTracks,
-      chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-      assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current
+      setUploadedTracks
     });
-  }, [
-    manualCacheAssemblingTrackIdsRef,
-    manualCacheChunkIndexesRef,
-    roomSnapshot?.room.id,
-    roomTrackIdsKey,
-    setUploadedTracks
-  ]);
+  }, [roomSnapshot?.room.id, roomTrackIdsKey, setUploadedTracks]);
 
   useEffect(() => {
     if (!roomSnapshot?.room.id || !activeSession) {
       return;
     }
 
-    const missingOwnedTracks = resolveMissingOwnedUploadedTracks({
-      roomTracks: roomSnapshot.tracks,
-      activeSessionId: activeSession.userId,
-      uploadedTracks
-    });
+    const missingOwnedTracks = roomSnapshot.tracks.filter(
+      (track) =>
+        track.ownerSessionId === activeSession.userId &&
+        !uploadedTracks[track.id]
+    );
     if (missingOwnedTracks.length === 0) {
       return;
     }
@@ -215,7 +92,7 @@ export function useUploadRuntimeEffects({
     };
   }, [
     activeSession,
-    cacheLibraryTracks,
+    cacheLibraryVersion,
     cacheLibraryTracksRef,
     roomSnapshot?.room.id,
     roomSnapshot?.tracks,

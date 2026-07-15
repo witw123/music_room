@@ -67,7 +67,6 @@ describe("wan link score helpers", () => {
     diagnostic.dataRelayProtocol = "udp";
     diagnostic.dataChannelState = "open";
     diagnostic.currentRoundTripTimeMs = 180;
-    diagnostic.pieceDownloadRateKbps = 900;
 
     const score = buildWanLinkScoreFromPeerDiagnostic({
       diagnostic,

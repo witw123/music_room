@@ -28,13 +28,12 @@ describe("MusicRoomApp segmented playback wiring", () => {
     expect(isSegmentedAudioOutputReady()).toBe(false);
   });
 
-  it("does not wire automatic original-asset downloads into segmented playback", () => {
+  it("does not wire original assets into segmented playback", () => {
     const source = readFileSync(
       new URL("../features/playback/use-segmented-opus-playback.ts", import.meta.url),
       "utf8"
     );
 
     expect(source).not.toContain('assetKind: "original"');
-    expect(source).not.toContain("original-auto-cache-policy");
   });
 });

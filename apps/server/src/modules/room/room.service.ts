@@ -13,7 +13,6 @@ import type {
 import { PrismaService } from "../../infra/prisma/prisma.service";
 import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
-import { TrackAvailabilityRegistry } from "../signaling/track-availability.registry";
 import { type RoomRecord } from "./room.types";
 import { RoomRecordRepository } from "./repositories/room-record.repository";
 import { RoomPresenceService } from "./services/room-presence.service";
@@ -48,8 +47,6 @@ export class RoomService {
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
     @Optional()
-    availabilityReader?: TrackAvailabilityRegistry,
-    @Optional()
     roomRecordRepository?: RoomRecordRepository,
     @Optional()
     roomPresenceService?: RoomPresenceService,
@@ -72,7 +69,7 @@ export class RoomService {
       roomPresenceService ??
       new RoomPresenceService(redis, this.inMemoryPresence, this.presenceTtlSeconds);
     this.roomPlaybackService =
-      roomPlaybackService ?? new RoomPlaybackService(this.roomPresenceService, availabilityReader);
+      roomPlaybackService ?? new RoomPlaybackService(this.roomPresenceService);
     this.roomSnapshotService =
       roomSnapshotService ??
       new RoomSnapshotService(this.roomPresenceService, this.roomPlaybackService);
@@ -306,46 +303,13 @@ export class RoomService {
     }
 
     if (presenceState === "offline") {
-      await this.roomPlaybackService.handleSourceAvailabilityLoss(record, sessionId);
+      await this.roomPlaybackService.handleSourceDeparture(record, sessionId);
     }
 
     this.incrementPresenceRevision(record.room);
     this.incrementRoomRevision(record.room);
     await this.roomRecordRepository.persistRecord(record);
     return record.room;
-  }
-
-  async handleTrackAvailabilityLoss(roomId: string, ownerPeerId: string, trackId: string) {
-    const record = await this.roomRecordRepository.getRoomRecord(roomId);
-    const playback = record.room.playback;
-    if (
-      playback.status !== "playing" ||
-      playback.currentTrackId !== trackId ||
-      !playback.sourceSessionId ||
-      playback.sourcePeerId !== ownerPeerId
-    ) {
-      return false;
-    }
-
-    const activePresence = await this.roomPresenceService.getActivePresence(
-      roomId,
-      record.room.members
-    );
-    if (activePresence.get(playback.sourceSessionId) !== ownerPeerId) {
-      return false;
-    }
-
-    const changed = await this.roomPlaybackService.handleSourceAvailabilityLoss(
-      record,
-      playback.sourceSessionId
-    );
-    if (!changed) {
-      return false;
-    }
-
-    this.incrementRoomRevision(record.room);
-    await this.roomRecordRepository.persistRecord(record);
-    return true;
   }
 
   async touchRealtimePresence(roomId: string, sessionId: string, peerId: string) {

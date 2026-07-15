@@ -95,7 +95,7 @@ export class RoomAudioActivationManager {
       const originalVolume = element.volume;
       try {
         // Chromium permits muted autoplay even after the transient click token
-        // has expired. Start the concrete local-cache source muted, then restore
+        // has expired. Start the concrete local source muted, then restore
         // its audible state without replacing or reloading the element again.
         element.muted = true;
         await element.play();

@@ -1,359 +1,120 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
-import type {
-  AssetAvailabilityAnnouncement,
-  GuestSession,
-  RoomSnapshot,
-  TrackAvailabilityAnnouncement
-} from "@music-room/shared";
+import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
+import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
+import { listCachedLibraryTrackSummaries } from "@/lib/indexeddb";
+import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
-  deleteManualCacheTask,
-  getCachedLibraryTrackCount,
-  listCachedLibraryTrackSummaries,
-  upsertManualCacheTask
-} from "@/lib/indexeddb";
-import {
-  type CachedLibraryTrack,
-  type UploadedTrack
-} from "@/features/upload/audio-utils";
-import {
-  claimRoomEntryCacheAutoImport,
-  loadCacheLibrarySnapshot,
-  selectCachedLibraryTracksForRoomAutoImport
+  buildCachedLibraryTrackUpsertRecord,
+  createInFlightCachedLibraryTrackFileLoader,
+  hasUsableCachedLibraryFileForRoomTrack,
+  loadCacheLibrarySnapshot
 } from "./cache-library";
-import {
-  buildRoomTrackIdsKey,
-  resolveStalePlaybackDemandTaskIds,
-  selectActiveManualCacheTrackIds,
-  type ManualCacheTask
-} from "./upload-ui-state";
-import {
-  applyManualCacheTaskDrop,
-  applyManualCacheTaskUpdate
-} from "./manual-cache-task-store";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
-import { useManualCacheActions } from "./use-manual-cache-actions";
-import { useCacheLibraryActions } from "./use-cache-library-actions";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
 
 export {
-  buildCachedLibraryTrackRegisterPayload,
   buildRegisterTrackPayload,
   processSelectedTrackFiles
 } from "./upload-pipeline";
 export {
+  buildCachedLibraryFileName,
   createInFlightCachedLibraryTrackFileLoader,
-  hasUsableCachedLibraryFileForRoomTrack
+  hasUsableCachedLibraryFileForRoomTrack,
+  toCachedLibraryFile,
+  toCachedLibraryFileFromBlob,
+  toCachedLibraryTrack,
+  toCachedLibraryTrackFile
 } from "./cache-library";
-export {
-  announceRoomTrackAvailability,
-  buildManualCachePieceAvailabilityAnnouncement,
-  isManualCachePieceCompatible,
-  resolveMissingOwnedUploadedTracks,
-  resolveReusableCachedPieceManifest,
-  shouldAnnounceTrackAvailability
-} from "./track-availability";
-export {
-  buildRoomTrackIdsKey,
-  mergeHydratedManualCacheTasks,
-  mergeManualCachePieceTaskProgress,
-  mergeManualCachePlanTaskProgress,
-  pruneManualCacheChunkIndexesByActiveTracks,
-  resolveAutomaticPlaybackCacheTaskMode,
-  resolveManualCachePlanReceivedAction,
-  resolveStalePlaybackDemandTaskIds,
-  shouldAssembleManualCachePlanProgress,
-  shouldCreatePlaybackDemandTaskFromCachePiece,
-  shouldEnsurePlaybackDemandCacheTask,
-  shouldHydrateCacheTaskPieceIndexes,
-  shouldIgnoreManualCachePieceTaskUpdate,
-  selectActiveManualCacheTrackIds
-} from "./upload-ui-state";
-export type {
-  ManualCacheTask,
-  ManualCacheTaskStatus
-} from "./upload-ui-state";
 
 export function useTrackUploads(options: {
-  peerId: string;
   activeSession: GuestSession | null;
   roomSnapshot: RoomSnapshot | null;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setStatusMessage: (message: string) => void;
-  onAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
-  emitAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
-  onAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
-  emitAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
 }) {
   const {
-    peerId,
     activeSession,
     roomSnapshot,
     dispatchRoomStateEvent,
-    setStatusMessage,
-    onAvailability,
-    emitAvailability,
-    onAssetAvailability,
-    emitAssetAvailability
+    setStatusMessage
   } = options;
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
-  const [cachedTrackCount, setCachedTrackCount] = useState(0);
-  const [cacheLibraryTracks, setCacheLibraryTracks] = useState<CachedLibraryTrack[]>([]);
-  const [cacheLibraryHydrated, setCacheLibraryHydrated] = useState(false);
-  const [manualCacheTasks, setManualCacheTasks] = useState<Record<string, ManualCacheTask>>({});
+  const [cacheLibraryVersion, setCacheLibraryVersion] = useState(0);
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
-  const manualCacheChunkIndexesRef = useRef<Map<string, Set<number>>>(new Map());
-  const manualCacheAssemblingTrackIdsRef = useRef<Set<string>>(new Set());
-  const manualCacheRetainedPieceTrackIdsRef = useRef<Set<string>>(new Set());
-  const autoImportInFlightCacheKeysRef = useRef<Set<string>>(new Set());
-  const autoImportAttemptedCacheKeysRef = useRef<Set<string>>(new Set());
-  const autoImportClaimedEntryKeyRef = useRef<string | null>(null);
-  const autoImportActiveEntryKeyRef = useRef<string | null>(null);
-  const roomTrackIdsKey = useMemo(
-    () => buildRoomTrackIdsKey(roomSnapshot?.tracks),
-    [roomSnapshot?.tracks]
-  );
-
-  const manualCacheTrackIds = useMemo(
-    () =>
-      selectActiveManualCacheTrackIds({
-        tasks: manualCacheTasks,
-        currentPlaybackTrackId: roomSnapshot?.room.playback.currentTrackId
-      }),
-    [manualCacheTasks, roomSnapshot?.room.playback.currentTrackId]
-  );
+  const roomTrackIdsKey = [...new Set(roomSnapshot?.tracks.map((track) => track.id) ?? [])]
+    .sort()
+    .join("|");
 
   const refreshCacheLibrary = useCallback(async () => {
     const snapshot = await loadCacheLibrarySnapshot({
-      listCachedLibraryTrackSummaries,
-      getCachedLibraryTrackCount
+      listCachedLibraryTrackSummaries
     });
-
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
-    setCacheLibraryTracks(snapshot.tracks);
-    setCachedTrackCount(snapshot.count);
-    setCacheLibraryHydrated(true);
+    setCacheLibraryVersion((current) => current + 1);
   }, []);
 
   useUploadRuntimeEffects({
     activeSession,
-    cacheLibraryTracks,
+    cacheLibraryVersion,
     cacheLibraryTracksRef,
-    manualCacheAssemblingTrackIdsRef,
-    manualCacheChunkIndexesRef,
-    manualCacheRetainedPieceTrackIdsRef,
-    peerId,
-    refreshCacheLibrary,
     roomSnapshot,
     roomTrackIdsKey,
-    setManualCacheTasks,
     setUploadedTracks,
     uploadedTrackUrlsRef,
     uploadedTracks
   });
 
-  const updateManualCacheTask = useCallback(
-    (
-      trackId: string,
-      patch:
-        | Partial<ManualCacheTask>
-        | ((current: ManualCacheTask | null) => Partial<ManualCacheTask> | null)
-    ) => {
-      applyManualCacheTaskUpdate({
-        trackId,
-        patch,
-        roomId: roomSnapshot?.room.id,
-        roomTracks: roomSnapshot?.tracks,
-        updatedAt: new Date().toISOString(),
-        setManualCacheTasks,
-        upsertManualCacheTask
-      });
-    },
-    [roomSnapshot]
-  );
-
-  const dropManualCacheTask = useCallback((trackId: string) => {
-    applyManualCacheTaskDrop({
-      trackId,
-      roomId: roomSnapshot?.room.id,
-      chunkIndexesByTrack: manualCacheChunkIndexesRef.current,
-      assemblingTrackIdsByTrack: manualCacheAssemblingTrackIdsRef.current,
-      setManualCacheTasks,
-      deleteManualCacheTask
-    });
-  }, [roomSnapshot?.room.id]);
-
-  useEffect(() => {
-    const staleTrackIds = resolveStalePlaybackDemandTaskIds({
-      currentTasks: manualCacheTasks,
-      currentPlaybackTrackId: roomSnapshot?.room.playback.currentTrackId ?? null
-    });
-    if (staleTrackIds.length === 0) {
-      return;
-    }
-
-    for (const trackId of staleTrackIds) {
-      dropManualCacheTask(trackId);
-    }
-  }, [dropManualCacheTask, manualCacheTasks, roomSnapshot?.room.playback.currentTrackId]);
-
-  const {
-    syncRoomSnapshot,
-    announceRoomTrackAvailability,
-    assembleManualCacheTrack,
-    handleFilesSelected
-  } = useUploadPipelineActions({
+  const { syncRoomSnapshot, handleFilesSelected } = useUploadPipelineActions({
     activeSession,
     dispatchRoomStateEvent,
-    onAssetAvailability,
-    emitAssetAvailability,
     inFlightUploadHashesRef,
-    manualCacheAssemblingTrackIdsRef,
-    manualCacheChunkIndexesRef,
-    manualCacheRetainedPieceTrackIdsRef,
-    peerId,
     refreshCacheLibrary,
     roomSnapshot,
     setStatusMessage,
     setUploadedTracks,
-    updateManualCacheTask,
     uploadedTracks
   });
 
-  const {
-    startManualCacheDownload,
-    startPlaybackDemandCacheDownload,
-    pauseManualCacheDownload,
-    handleManualCachePieceReceived,
-    handleManualCachePlan
-  } = useManualCacheActions({
-    activeSession,
-    assembleManualCacheTrack,
-    cacheLibraryTracksRef,
-    emitAvailability,
-    manualCacheChunkIndexesRef,
-    manualCacheTasks,
-    onAvailability,
-    peerId,
-    roomSnapshot,
-    setStatusMessage,
-    updateManualCacheTask,
-    uploadedTracks
-  });
+  const deleteUploadedTrackArtifacts = useCallback(async (trackId: string) => {
+    setUploadedTracks((current) => {
+      if (!current[trackId]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[trackId];
+      return next;
+    });
+  }, []);
 
-  const {
-    deleteUploadedTrackArtifacts,
-    deleteRoomTrackArtifacts,
-    deleteCachedLibraryTrackEntry,
-    loadCachedLibraryTrackFile,
-    exportCachedLibraryTrack,
-    importCachedLibraryTrackToRoom
-  } = useCacheLibraryActions({
-    activeSession,
-    dropManualCacheTask,
-    emitAssetAvailability,
-    manualCacheAssemblingTrackIdsRef,
-    manualCacheChunkIndexesRef,
-    onAssetAvailability,
-    peerId,
-    refreshCacheLibrary,
-    roomSnapshot,
-    setManualCacheTasks,
-    setStatusMessage,
-    setUploadedTracks,
-    syncRoomSnapshot
-  });
+  const deleteRoomTrackArtifacts = useCallback(async (trackIds: string[]) => {
+    const removed = new Set(trackIds);
+    setUploadedTracks((current) => {
+      const next = { ...current };
+      for (const trackId of removed) {
+        delete next[trackId];
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
-    if (!activeSession || !roomSnapshot?.room.id) {
-      autoImportActiveEntryKeyRef.current = null;
-      autoImportClaimedEntryKeyRef.current = null;
-      return;
-    }
-
-    const entryKey = `${roomSnapshot.room.id}:${activeSession.userId}`;
-    autoImportActiveEntryKeyRef.current = entryKey;
-
-    const claim = claimRoomEntryCacheAutoImport({
-      cacheLibraryHydrated,
-      entryKey,
-      claimedEntryKey: autoImportClaimedEntryKeyRef.current
-    });
-    autoImportClaimedEntryKeyRef.current = claim.nextClaimedEntryKey;
-    if (!claim.shouldRun) {
-      return;
-    }
-
-    const fileHashes = selectCachedLibraryTracksForRoomAutoImport({
-      activeSessionNickname: activeSession.nickname,
-      activeSessionUserId: activeSession.userId,
-      roomId: roomSnapshot.room.id,
-      roomTracks: roomSnapshot.tracks,
-      cachedLibraryTracks: cacheLibraryTracks
-    });
-    if (fileHashes.length === 0) {
-      return;
-    }
-
-    void (async () => {
-      for (const fileHash of fileHashes) {
-        if (autoImportActiveEntryKeyRef.current !== entryKey) {
-          return;
-        }
-
-        const cacheKey = `${roomSnapshot.room.id}:${activeSession.userId}:${fileHash}`;
-        if (
-          autoImportInFlightCacheKeysRef.current.has(cacheKey) ||
-          autoImportAttemptedCacheKeysRef.current.has(cacheKey)
-        ) {
-          continue;
-        }
-
-        autoImportInFlightCacheKeysRef.current.add(cacheKey);
-        autoImportAttemptedCacheKeysRef.current.add(cacheKey);
-        try {
-          await importCachedLibraryTrackToRoom(fileHash);
-        } catch {
-          autoImportAttemptedCacheKeysRef.current.delete(cacheKey);
-        } finally {
-          autoImportInFlightCacheKeysRef.current.delete(cacheKey);
-        }
-      }
-    })();
-  }, [
-    activeSession,
-    cacheLibraryHydrated,
-    cacheLibraryTracks,
-    importCachedLibraryTrackToRoom,
-    roomSnapshot?.room.id,
-    roomSnapshot?.tracks
-  ]);
+    void refreshCacheLibrary();
+  }, [refreshCacheLibrary]);
 
   return {
     uploadedTracks,
     setUploadedTracks,
-    cachedTrackCount,
-    cacheLibraryTracks,
-    manualCacheTasks,
-    manualCacheTrackIds,
     refreshCacheLibrary,
-    updateManualCacheTask,
     handleFilesSelected,
-    announceRoomTrackAvailability,
-    startManualCacheDownload,
-    startPlaybackDemandCacheDownload,
-    pauseManualCacheDownload,
-    handleManualCachePieceReceived,
-    handleManualCachePlan,
+    syncRoomSnapshot,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
-    deleteCachedLibraryTrackEntry,
-    loadCachedLibraryTrackFile,
-    exportCachedLibraryTrack,
-    importCachedLibraryTrackToRoom
+    hasUsableCachedLibraryFileForRoomTrack,
+    createInFlightCachedLibraryTrackFileLoader,
+    buildCachedLibraryTrackUpsertRecord
   };
 }

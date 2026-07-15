@@ -4,16 +4,11 @@ import type { MutableRefObject, RefObject } from "react";
 import type {
   AuthSession,
   PeerDiagnosticsSnapshot,
-  RoomSnapshot,
-  TrackAvailabilityAnnouncement
+  RoomSnapshot
 } from "@music-room/shared";
 import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats";
 import type { PeerConnectionSupervisorState } from "@/features/p2p/connection-supervisor";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
-import type {
-  CacheStreamProvider,
-  CacheStreamRequestOptions
-} from "@/features/p2p/cache-stream-scheduler";
 import type { RoomSocket } from "@/lib/ws-client";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 
@@ -24,61 +19,8 @@ export type DataMeshBridge = {
   ): Promise<boolean>;
   restartPeer(peerId: string): Promise<unknown>;
   restartMediaPeer?(peerId: string): Promise<unknown>;
-  requestPieces(
-    peerId: string,
-    trackId: string,
-    chunkIndexes: number[],
-    totalChunks: number,
-    timeoutMs?: number,
-    options?: CacheStreamRequestOptions
-  ): boolean;
   getConnectedPeerIds(): string[];
-  updateCacheStreamProvider?(provider: CacheStreamProvider): void;
-  removeCacheStreamProvider?(trackId: string, peerId: string): void;
-  clearCacheStreamTrack?(trackId: string): Promise<void> | void;
   isReady(): boolean;
-};
-
-export type ManualCacheDownloadBridge = Pick<
-  DataMeshBridge,
-  "syncPeers" | "requestPieces" | "getConnectedPeerIds"
->;
-
-export type ManualCachePieceReceivedInput = {
-  trackId: string;
-  chunkIndex: number;
-  totalChunks: number;
-  chunkSize: number;
-  mimeType: string;
-};
-
-export type PieceTransferInput = {
-  peerId: string;
-  direction: "download" | "upload";
-  bytes: number;
-  durationMs?: number | null;
-};
-
-export type PieceRequestSampleInput = {
-  peerId: string;
-  outcome: "completed" | "timeout";
-  durationMs: number;
-};
-
-export type PieceTransferSample = {
-  startedAtMs?: number;
-  timestampMs: number;
-  bytes: number;
-};
-
-export type PieceTransferWindow = {
-  downloads: PieceTransferSample[];
-  uploads: PieceTransferSample[];
-};
-
-export type PieceTransferRates = {
-  downloadRateKbps: number | null;
-  uploadRateKbps: number | null;
 };
 
 export type DataTransportStatsInput = {
@@ -102,18 +44,8 @@ export type ConnectionSupervisorSignalStateInput = {
   mediaIceState?: string;
 };
 
-export type PeerRoundTripTimeSource =
-  | PeerConnectionSupervisorState
-  | {
-      pieceRttMsP50?: number | null;
-    }
-  | null
-  | undefined;
-
 export type RoomDataMeshDiagnosticsRefs = {
   recordPeerDiagnosticRef: MutableRefObject<PeerDiagnosticRecorder>;
-  recordPieceTransferRef: MutableRefObject<(input: PieceTransferInput) => void>;
-  recordPieceRequestSampleRef: MutableRefObject<(input: PieceRequestSampleInput) => void>;
   updatePeerBufferedAmountRef: MutableRefObject<
     (peerId: string, bufferedAmountBytes: number) => void
   >;
@@ -134,13 +66,6 @@ export type RoomDataMeshDiagnosticsRefs = {
     snapshot: PeerDiagnosticsSnapshot,
     state: PeerConnectionSupervisorState | null
   ) => PeerDiagnosticsSnapshot;
-  getPieceTransferRates: (
-    transferWindows: Map<string, PieceTransferWindow>,
-    peerId: string,
-    now?: number
-  ) => PieceTransferRates;
-  pieceTransferRatesRef: MutableRefObject<Map<string, PieceTransferWindow>>;
-  getPeerMedianRttMs: (state: PeerRoundTripTimeSource) => number | null;
 };
 
 export type PlaybackConnectionKey = string;
@@ -216,5 +141,4 @@ export type RoomRuntimeBaseContext = {
   socketRef: MutableRefObject<RoomSocket | null>;
   audioRef: RefObject<HTMLAudioElement | null>;
   uploadedTracks: Record<string, UploadedTrack>;
-  availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
 };

@@ -10,7 +10,6 @@ import { RoomRealtimePublisher } from "./services/room-realtime.publisher";
 import { RoomSnapshotService } from "./services/room-snapshot.service";
 import { RoomService } from "./room.service";
 import { RoomRealtimeBroadcaster } from "../signaling/room-realtime.broadcaster";
-import { TrackAvailabilityRegistry } from "../signaling/track-availability.registry";
 
 const ROOM_RECORDS = Symbol("ROOM_RECORDS");
 const ROOM_PRESENCE = Symbol("ROOM_PRESENCE");
@@ -53,14 +52,10 @@ type RoomPresenceStore = Map<
       useFactory: (redis: RedisService, presence: RoomPresenceStore) =>
         new RoomPresenceService(redis, presence, 60)
     },
-    TrackAvailabilityRegistry,
     {
       provide: RoomPlaybackService,
-      inject: [RoomPresenceService, TrackAvailabilityRegistry],
-      useFactory: (
-        presence: RoomPresenceService,
-        availability: TrackAvailabilityRegistry
-      ) => new RoomPlaybackService(presence, availability)
+      inject: [RoomPresenceService],
+      useFactory: (presence: RoomPresenceService) => new RoomPlaybackService(presence)
     },
     {
       provide: RoomSnapshotService,
@@ -75,8 +70,7 @@ type RoomPresenceStore = Map<
   exports: [
     RoomService,
     RoomRealtimePublisher,
-    RoomRealtimeBroadcaster,
-    TrackAvailabilityRegistry
+    RoomRealtimeBroadcaster
   ]
 })
 export class RoomCoreModule {}

@@ -5,7 +5,7 @@ import { resolveCurrentSourceNickname } from "./RoomWorkspace";
 describe("room page state labels", () => {
   const track = { id: "track_1", playbackAsset: { assetId: "asset_1" } } as never;
 
-  it("shows the active cached provider instead of the original uploader", () => {
+  it("shows the active source provider instead of the original uploader", () => {
     expect(resolveCurrentSourceNickname([
       { id: "uploader", nickname: "Uploader" },
       { id: "provider", nickname: "Provider" }

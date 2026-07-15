@@ -7,7 +7,7 @@ import {
 } from "./use-room-playback-connection-coordinator";
 
 describe("resolvePlaybackConnectionKey", () => {
-  it("uses playback epoch without transport epoch for pure cache playback", () => {
+  it("uses the room media epoch as the playback connection identity", () => {
     expect(
       resolvePlaybackConnectionKey({
         roomId: "room_1",

@@ -2,27 +2,20 @@
 
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
-  AssetAvailabilityAnnouncement,
   AuthSession,
   PeerDiagnosticsSnapshot,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
   RoomSnapshotMissingPayload,
-  RoomSnapshot,
-  TrackAvailabilityAnnouncement
+  RoomSnapshot
 } from "@music-room/shared";
 import { createRoomSocket, type RoomSocket } from "@/lib/ws-client";
-import { ChunkScheduler, getWebRTCIceServers, P2PMesh } from "@/features/p2p";
+import { getWebRTCIceServers, P2PMesh } from "@/features/p2p";
 import { createRoomDataMeshRuntime } from "./use-room-data-mesh";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
-import { announceTrackAvailabilityWithRetry } from "@/features/upload/track-availability";
 import { calibrateRoomPlaybackClock } from "@/features/playback/room-playback-clock";
 import type {
-  ManualCachePieceReceivedInput,
-  PieceRequestSampleInput,
-  PieceTransferInput,
   PlaybackRecoveryRecommendation,
   RoomDataMeshDiagnosticsRefs,
   RoomRecoveryMode,
@@ -33,8 +26,6 @@ import {
   createRoomRealtimeEventGate,
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
-  shouldQueueIncomingAvailability,
-  resolveSourceAvailabilityReannounceTrackId,
   shouldResyncSnapshotForPlaybackPatch
 } from "./room-realtime-policy";
 
@@ -50,8 +41,6 @@ function applyRoomSubscribeBootstrap(input: {
   recoveryModeRef: MutableRefObject<RoomRecoveryMode>;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  uploadedTracks: Record<string, unknown>;
-  enableTrackCaching: boolean;
   audioUnlocked: boolean;
 }) {
   if (!input.ack.bootstrap || input.ack.bootstrap.roomId !== input.activeRouteRoomIdRef.current) {
@@ -94,7 +83,7 @@ function applyRoomSubscribeBootstrap(input: {
     bootstrapStartedAt: input.ack.serverNow ?? new Date().toISOString(),
     bootstrapSourcePeerId: input.ack.bootstrap?.playback.sourcePeerId ?? null,
     pendingSnapshot: true,
-    pendingData: input.enableTrackCaching,
+    pendingData: false,
     pendingMedia: false,
     listenerBootstrapAttempts: current.listenerBootstrapAttempts ?? 0,
   }));
@@ -156,49 +145,19 @@ type RoomRealtimeRuntimeInput = {
   iceConfig: Parameters<typeof getWebRTCIceServers>[0];
   socketRef: MutableRefObject<RoomSocket | null>;
   meshRef: MutableRefObject<P2PMesh | null>;
-  chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
-  uploadedTracksRef: MutableRefObject<Record<string, UploadedTrack>>;
-  uploadedTrackIdsRef: MutableRefObject<string[]>;
-  manualCacheTrackIdsRef: MutableRefObject<string[]>;
-  announceRoomTrackAvailabilityRef: MutableRefObject<(
-    trackId: string,
-    options?: { force?: boolean }
-  ) => Promise<boolean>>;
-  handleManualCachePieceReceivedRef: MutableRefObject<(input: ManualCachePieceReceivedInput) => void>;
-  clearManualCachePendingPiece: (trackId: string, chunkIndex: number) => void;
-  clearManualCachePendingPieces: () => void;
-  deferManualCachePendingPiece: (
-    trackId: string,
-    chunkIndex: number,
-    options: { delayMs: number; providerPeerId?: string }
-  ) => void;
-  flushPendingAvailabilityRef: MutableRefObject<() => void>;
-  recordPieceTransferRef: MutableRefObject<(input: PieceTransferInput) => void>;
-  recordPieceRequestSampleRef: MutableRefObject<(input: PieceRequestSampleInput) => void>;
   updatePeerBufferedAmountRef: MutableRefObject<(peerId: string, bufferedAmountBytes: number) => void>;
   setConnectedPeers: Dispatch<SetStateAction<string[]>>;
   isPageVisible: boolean;
   playbackStatus: RoomSnapshot["room"]["playback"]["status"] | null | undefined;
   currentTrackId: string | null | undefined;
   bufferHealth: "healthy" | "low" | "critical";
-  enableManualTrackCaching: boolean;
-  enableTrackCaching: boolean;
   queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
   resubscribeRoomRef: MutableRefObject<(() => void) | null>;
   activeSessionRef: MutableRefObject<AuthSession | null>;
   activeRouteRoomIdRef: MutableRefObject<string | null>;
   requestRoomSnapshotResyncRef: MutableRefObject<
     (reason: RoomSnapshotResyncReason, roomId?: string | null) => Promise<void>
-  >;
-  queueAvailabilityRef: MutableRefObject<(announcement: TrackAvailabilityAnnouncement) => void>;
-  queueAssetAvailabilityRef: MutableRefObject<(announcement: AssetAvailabilityAnnouncement) => void>;
-  clearAvailabilityForPeerRef: MutableRefObject<(ownerPeerId: string) => void>;
-  clearAvailabilityForTrackRef: MutableRefObject<
-    (trackId: string, ownerPeerId?: string) => void
-  >;
-  clearAvailabilityForAssetRef: MutableRefObject<
-    (assetId: string, ownerPeerId?: string) => void
   >;
   deleteRoomTrackArtifactsRef: MutableRefObject<(trackIds: string[]) => Promise<void> | void>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
@@ -238,36 +197,14 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     socketRef: input.socketRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef
   });
-  const invalidateRemoteTrackAvailability = (trackId: string, ownerPeerId: string) => {
-    input.clearAvailabilityForTrackRef.current(trackId, ownerPeerId);
-    socket.emit("piece.availability.clear", {
-      roomId: input.roomId,
-      ownerPeerId,
-      trackId,
-      updatedAt: new Date().toISOString()
-    });
-  };
   const { mesh, resyncRealtimePeers } = createRoomDataMeshRuntime({
     roomId: input.roomId,
     peerId: input.peerId,
     emitPeerSignal,
     iceServers,
     meshRef: input.meshRef,
-    chunkSchedulerRef: input.chunkSchedulerRef,
     currentRoomRef: input.currentRoomRef,
-    uploadedTracksRef: input.uploadedTracksRef,
-    uploadedTrackIdsRef: input.uploadedTrackIdsRef,
-    manualCacheTrackIdsRef: input.manualCacheTrackIdsRef,
-    announceRoomTrackAvailabilityRef: input.announceRoomTrackAvailabilityRef,
-    handleManualCachePieceReceivedRef: input.handleManualCachePieceReceivedRef,
-    clearManualCachePendingPiece: input.clearManualCachePendingPiece,
-    clearManualCachePendingPieces: input.clearManualCachePendingPieces,
-    deferManualCachePendingPiece: input.deferManualCachePendingPiece,
-    invalidateRemoteTrackAvailability,
-    flushPendingAvailabilityRef: input.flushPendingAvailabilityRef,
     recordPeerDiagnosticRef: input.recordPeerDiagnosticRef,
-    recordPieceTransferRef: input.recordPieceTransferRef,
-    recordPieceRequestSampleRef: input.recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef: input.updatePeerBufferedAmountRef,
     updateDataTransportStatsRef: input.updateDataTransportStatsRef,
     updateMediaTransportStatsRef: input.updateMediaTransportStatsRef,
@@ -276,16 +213,12 @@ export function createRoomRealtimeRuntime(input: RoomRealtimeRuntimeInput) {
     updateConnectionSupervisorTransportStats: input.updateConnectionSupervisorTransportStats,
     withResolvedTransportHealth: input.withResolvedTransportHealth,
     withSupervisorDiagnosticPatch: input.withSupervisorDiagnosticPatch,
-    getPieceTransferRates: input.getPieceTransferRates,
-    pieceTransferRatesRef: input.pieceTransferRatesRef,
-    getPeerMedianRttMs: input.getPeerMedianRttMs,
     setConnectedPeers: input.setConnectedPeers,
     setMediaConnectedPeers: input.setMediaConnectedPeers,
     isPageVisible: input.isPageVisible,
     playbackStatus: input.playbackStatus,
     currentTrackId: input.currentTrackId,
     bufferHealth: input.bufferHealth,
-    enableManualTrackCaching: input.enableManualTrackCaching,
     queuePlaybackRecoveryRecommendation: input.queuePlaybackRecoveryRecommendation,
     reportMeshResyncFailure: (error) => {
       input.recordPeerDiagnosticRef.current({
@@ -314,7 +247,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   let subscribeRetryId: number | null = null;
   let subscribeAckTimeoutId: number | null = null;
   let subscribeRequestSequence = 0;
-  const availabilityReannounceInFlight = new Map<string, Promise<boolean>>();
 
   const clearSubscribeTimers = () => {
     if (subscribeRetryId !== null) {
@@ -325,23 +257,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       window.clearTimeout(subscribeAckTimeoutId);
       subscribeAckTimeoutId = null;
     }
-  };
-
-  const retryTrackAvailability = (trackId: string) => {
-    const existing = availabilityReannounceInFlight.get(trackId);
-    if (existing) {
-      return existing;
-    }
-    const retry = announceTrackAvailabilityWithRetry({
-      trackId,
-      announce: (requestedTrackId, options) =>
-        input.announceRoomTrackAvailabilityRef.current(requestedTrackId, options),
-      isActive: () => input.activeRouteRoomIdRef.current === input.roomId
-    }).finally(() => {
-      availabilityReannounceInFlight.delete(trackId);
-    });
-    availabilityReannounceInFlight.set(trackId, retry);
-    return retry;
   };
 
   const scheduleSubscribeRetry = (attempt: number) => {
@@ -409,8 +324,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           recoveryModeRef: input.recoveryModeRef,
           dispatchRoomStateEvent: input.dispatchRoomStateEvent,
           setRoomRecoveryState: input.setRoomRecoveryState,
-          uploadedTracks: input.uploadedTracksRef.current,
-          enableTrackCaching: input.enableTrackCaching,
           audioUnlocked: input.audioUnlocked
         });
       }
@@ -424,27 +337,9 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
   };
 
   socket.on("connect", () => {
-    const currentRoom = input.currentRoomRef.current;
     input.clearSocketDisconnectGrace();
     subscribeToRoom();
-    input.flushPendingAvailabilityRef.current();
-    for (const trackId of currentRoom?.tracks.map((track) => track.id) ?? input.uploadedTrackIdsRef.current) {
-      void input.announceRoomTrackAvailabilityRef.current(trackId);
-    }
     input.resyncRealtimePeers();
-    if (
-      currentRoom &&
-      input.activeSessionRef.current?.userId &&
-      currentRoom.room.playback.sourceSessionId === input.activeSessionRef.current.userId
-    ) {
-      const currentTrackId = resolveSourceAvailabilityReannounceTrackId({
-        activeSessionId: input.activeSessionRef.current.userId,
-        playback: currentRoom.room.playback
-      });
-      if (currentTrackId) {
-        void retryTrackAvailability(currentTrackId);
-      }
-    }
     void input.requestRoomSnapshotResyncRef.current("socket-connect", input.roomId);
   });
 
@@ -481,7 +376,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       pendingMedia: false
     }));
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    input.flushPendingAvailabilityRef.current();
     if (presenceAccepted) {
       input.resyncRealtimePeers(snapshot.room.members);
     }
@@ -654,68 +548,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
     void input.mesh.handleSignal(payload).catch((error: unknown) => {
       input.handleSignalFailure(payload, error);
     });
-  });
-
-  socket.on("piece.availability", (announcement: TrackAvailabilityAnnouncement) => {
-    if (!shouldQueueIncomingAvailability({
-      announcementRoomId: announcement.roomId,
-      runtimeRoomId: input.roomId,
-      activeRouteRoomId: input.activeRouteRoomIdRef.current
-    })) {
-      return;
-    }
-    input.queueAvailabilityRef.current(announcement);
-  });
-
-  socket.on("piece.availability.request", ({ roomId, trackId }) => {
-    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    void retryTrackAvailability(trackId);
-  });
-
-  socket.on("piece.availability.clear", ({ roomId, ownerPeerId, trackId }) => {
-    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    if (trackId) {
-      input.mesh?.removeCacheStreamProvider(trackId, ownerPeerId);
-      input.clearAvailabilityForTrackRef.current(trackId, ownerPeerId);
-    } else {
-      input.clearAvailabilityForPeerRef.current(ownerPeerId);
-    }
-  });
-
-  socket.on("asset.availability", (announcement: AssetAvailabilityAnnouncement) => {
-    if (announcement.roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    input.mesh?.updateAssetProvider(announcement);
-    input.queueAssetAvailabilityRef.current(announcement);
-  });
-
-  socket.on("asset.availability.request", ({ roomId, assetId }) => {
-    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    const track = input.currentRoomRef.current?.tracks.find(
-      (candidate) => candidate.originalAsset?.assetId === assetId
-    );
-    if (track) {
-      void input.announceRoomTrackAvailabilityRef.current(track.id, { force: true });
-    }
-  });
-
-  socket.on("asset.availability.clear", ({ roomId, ownerPeerId, assetId }) => {
-    if (roomId !== input.roomId || input.activeRouteRoomIdRef.current !== input.roomId) {
-      return;
-    }
-    if (assetId) {
-      input.mesh?.removeAssetProvider(assetId, ownerPeerId);
-      input.clearAvailabilityForAssetRef.current(assetId, ownerPeerId);
-    } else {
-      input.clearAvailabilityForPeerRef.current(ownerPeerId);
-    }
   });
 
   socket.on("room.session.replaced", ({ roomId }) => {

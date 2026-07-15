@@ -10,6 +10,7 @@ import {
 } from "./peer-connection-lifecycle";
 
 class FakeDataChannel {
+  label = "music-room-control";
   readyState: RTCDataChannelState = "connecting";
   close = vi.fn(() => {
     this.readyState = "closed";
@@ -120,7 +121,6 @@ describe("peer connection lifecycle helpers", () => {
     const channel = new FakeDataChannel();
     const connection = new FakePeerConnection();
     const entry = buildEntry({ connection, channel });
-    entry.sendQueue = [{ data: "queued" }];
     entry.watchdogTimerId = setTimeout(() => undefined, 1_000);
     entry.reconnectTimerId = setTimeout(() => undefined, 1_000);
     const deleteIfCurrent = vi.fn(() => true);
@@ -138,7 +138,6 @@ describe("peer connection lifecycle helpers", () => {
     });
 
     expect(entry.releasing).toBe(true);
-    expect(entry.sendQueue).toEqual([]);
     expect(entry.watchdogTimerId).toBeNull();
     expect(entry.reconnectTimerId).toBeNull();
     expect(deleteIfCurrent).toHaveBeenCalledWith("peer_b", entry);

@@ -1,180 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   isPeerTransportAllowed,
-  resolvePeerLinkProfile,
-  resolvePeerSendBudget,
-  resolvePeerTransferWindow
+  resolvePeerLinkProfile
 } from "./peer-link-profile";
 
-describe("external peer link profile", () => {
-  it("allows cold-start peers until candidate stats arrive", () => {
+describe("peer link profile", () => {
+  it("accepts direct and supported relay routes", () => {
     expect(isPeerTransportAllowed({})).toBe(true);
-    expect(isPeerTransportAllowed({ protocol: "tcp" })).toBe(true);
-    expect(isPeerTransportAllowed({ candidateType: "relay" })).toBe(true);
+    expect(isPeerTransportAllowed({ candidateType: "host" })).toBe(true);
     expect(isPeerTransportAllowed({ candidateType: "relay", protocol: "udp" })).toBe(true);
     expect(isPeerTransportAllowed({ candidateType: "relay", protocol: "tcp" })).toBe(true);
-    expect(isPeerTransportAllowed({ candidateType: "relay", protocol: "tls" })).toBe(true);
   });
 
-  it("keeps a healthy high-latency UDP relay in the relay profile", () => {
-    expect(
-      resolvePeerLinkProfile({
-        candidateType: "relay",
-        protocol: "udp",
-        currentRoundTripTimeMs: 480,
-        bufferedAmountBytes: 2 * 1024 * 1024,
-        transportScore: "healthy"
-      })
-    ).toBe("relay-udp");
-  });
-
-  it("does not assume an unknown relay protocol is udp", () => {
-    expect(
-      resolvePeerLinkProfile({
-        candidateType: "relay",
-        relayProtocol: null,
-        currentRoundTripTimeMs: 80,
-        downloadRateKbps: 5_000
-      })
-    ).toBe("constrained");
-  });
-
-  it("keeps enough bulk queue to saturate a constrained external link", () => {
-    const budget = resolvePeerSendBudget({
-      currentRoundTripTimeMs: 320,
-      downloadRateKbps: 1_200,
-      transportScore: "degraded"
-    });
-
-    expect(budget.bulkHighWatermarkBytes).toBeGreaterThanOrEqual(1024 * 1024);
-    expect(budget.maxPayloadBytes).toBeGreaterThanOrEqual(128 * 1024);
-  });
-
-  it("sizes the in-flight window from the measured bandwidth-delay product", () => {
-    const window = resolvePeerTransferWindow({
-      candidateType: "relay",
-      protocol: "udp",
-      currentRoundTripTimeMs: 240,
-      downloadRateKbps: 80_000,
-      transportScore: "healthy"
-    }, 256 * 1024);
-
-    expect(window.targetInFlightBytes).toBeGreaterThanOrEqual(6_000_000);
-    expect(window.maxPendingChunks).toBeGreaterThan(13);
-    expect(window.requestTimeoutMs).toBeGreaterThanOrEqual(3_000);
-  });
-
-  it("does not classify a healthy direct peer as constrained on a temporarily low measured rate", () => {
-    expect(
-      resolvePeerLinkProfile({
-        candidateType: "prflx",
-        protocol: "udp",
-        currentRoundTripTimeMs: 80,
-        downloadRateKbps: 1_200,
-        transportScore: "healthy"
-      })
-    ).toBe("standard-direct");
-  });
-
-    it("opens a larger cold-start window and send budget for healthy relay-udp peers", () => {
-    const input = {
-      candidateType: "relay" as const,
-      protocol: "udp",
-      currentRoundTripTimeMs: 200,
-      downloadRateKbps: null as number | null,
-      transportScore: "healthy" as const
-    };
-    const window = resolvePeerTransferWindow(input, 256 * 1024);
-    const budget = resolvePeerSendBudget({
-      ...input,
-      downloadRateKbps: 8_000
-    });
-
-    expect(window.targetInFlightBytes).toBeGreaterThanOrEqual(6 * 1024 * 1024);
-    expect(window.maxPendingChunks).toBeGreaterThanOrEqual(12);
-    expect(budget.maxPayloadBytes).toBeGreaterThanOrEqual(160 * 1024);
-    expect(budget.bulkHighWatermarkBytes).toBeGreaterThanOrEqual(4 * 1024 * 1024);
-  });
-
-  it("keeps a cold-start optimistic in-flight floor for direct peers with unknown rate", () => {
-    const window = resolvePeerTransferWindow({
-      candidateType: "prflx",
-      protocol: "udp",
-      currentRoundTripTimeMs: 80,
-      downloadRateKbps: null,
-      transportScore: "healthy"
-    }, 256 * 1024);
-
-    expect(window.targetInFlightBytes).toBeGreaterThanOrEqual(8 * 1024 * 1024);
-    expect(window.maxPendingChunks).toBeGreaterThanOrEqual(12);
-  });
-
-  it("does not collapse the transfer window when a direct peer is only measuring ~0.3 MB/s", () => {
-    const window = resolvePeerTransferWindow({
-      candidateType: "prflx",
-      protocol: "udp",
-      currentRoundTripTimeMs: 100,
-      downloadRateKbps: 2_400,
-      transportScore: "healthy"
-    }, 256 * 1024);
-
-    // 0.3 MB/s * 100ms RTT is tiny; optimistic floor should still open a useful window.
-    expect(window.targetInFlightBytes).toBeGreaterThanOrEqual(8 * 1024 * 1024);
-    expect(window.maxPendingChunks).toBeGreaterThanOrEqual(16);
-  });
-
-  it("reserves the RTP Opus budget before allowing bulk cache traffic", () => {
-    const budget = resolvePeerSendBudget({
-      candidateType: "prflx",
-      protocol: "udp",
-      currentRoundTripTimeMs: 80,
-      availableOutgoingBitrateKbps: 180,
-      mediaTrackActive: true,
-      mediaBitrateKbps: 160,
-      transportScore: "healthy"
-    });
-
-    expect(budget.bulkHighWatermarkBytes).toBe(0);
-    expect(budget.maxPayloadBytes).toBeLessThanOrEqual(64 * 1024);
-  });
-
-  it("pauses bulk cache traffic until media capacity is measured", () => {
-    const budget = resolvePeerSendBudget({
-      candidateType: "prflx",
-      protocol: "udp",
-      mediaTrackActive: true,
-      transportScore: "healthy"
-    });
-
-    expect(budget.bulkHighWatermarkBytes).toBe(0);
-    expect(budget.maxPayloadBytes).toBeLessThanOrEqual(64 * 1024);
-  });
-
-  it("pauses bulk cache traffic while RTP loss has degraded the media path", () => {
-    const budget = resolvePeerSendBudget({
-      candidateType: "relay",
-      relayProtocol: "udp",
-      currentRoundTripTimeMs: 64,
-      availableOutgoingBitrateKbps: 2_000,
-      mediaTrackActive: true,
-      mediaBitrateKbps: 128,
-      transportScore: "degraded"
-    });
-
-    expect(budget.bulkHighWatermarkBytes).toBe(0);
-  });
-
-  it("keeps bulk cache traffic paused even when the media path is healthy", () => {
-    const budget = resolvePeerSendBudget({
+  it("classifies healthy direct and degraded relay paths", () => {
+    expect(resolvePeerLinkProfile({
       candidateType: "host",
       protocol: "udp",
-      currentRoundTripTimeMs: 24,
-      availableOutgoingBitrateKbps: 20_000,
-      mediaTrackActive: true,
-      mediaBitrateKbps: 182,
-      transportScore: "healthy"
-    });
-
-    expect(budget.bulkHighWatermarkBytes).toBe(0);
+      currentRoundTripTimeMs: 30,
+      incomingRateKbps: 4_000
+    })).toBe("fast-direct");
+    expect(resolvePeerLinkProfile({
+      candidateType: "relay",
+      relayProtocol: "tcp",
+      currentRoundTripTimeMs: 500
+    })).toBe("constrained");
   });
 });

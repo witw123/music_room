@@ -25,13 +25,13 @@ const capabilities = [
     eyebrow: "Ultra-Low Latency",
     title: "极低延迟的毫秒级状态同步",
     body: "基于先进的 WebRTC 实时通信技术。播放、暂停、进度调节全员实时响应，智能应对弱网环境，绝非简单的单机播放器加聊天室。",
-    points: ["全员状态对齐", "P2P 缓存分发", "智能断线恢复"]
+    points: ["全员状态对齐", "RTP Opus 音频", "智能断线恢复"]
   },
   {
     eyebrow: "Privacy & Performance",
     title: "本地曲库，全球无缝共享",
     body: "无需漫长的云端上传，您的音频文件始终保留在本地设备。通过创新的 P2P 调度算法，直接向房间内的其他成员分发可验证的音频分片。",
-    points: ["本地文件直读", "P2P 分片缓存", "隐私数据保护"]
+    points: ["本地上传资源", "WebRTC 音频传输", "隐私数据保护"]
   }
 ];
 
@@ -45,8 +45,8 @@ const architectureItems = [
     body: "高可用分布式信令服务，确保房间元数据与状态永远保持一致。"
   },
   {
-    title: "High-Performance Cache",
-    body: "毫秒级实时状态广播机制，结合智能的端到端分片可用性追踪。"
+    title: "Stable Media Transport",
+    body: "稳定的实时状态广播机制，结合单一的 WebRTC RTP Opus 音频链路。"
   },
   {
     title: "Responsive Web Platform",
@@ -58,7 +58,7 @@ function ProductRoomPreview() {
   const queue = [
     { title: "Night Drive", owner: "Host local FLAC", active: true },
     { title: "City Lights", owner: "Alice upload", active: false },
-    { title: "After Hours", owner: "Cached by Ben", active: false }
+    { title: "After Hours", owner: "Ben upload", active: false }
   ];
   const members = [
     { name: "HOST", color: "bg-accent/20 text-accent" },
@@ -205,7 +205,7 @@ function ProductRoomPreview() {
             {[
               { label: "Source owner", value: "Host", tone: "text-accent" },
               { label: "Transport", value: "WebRTC ready", tone: "text-emerald-300" },
-              { label: "Cache", value: "18 / 24 chunks", tone: "text-amber-300" }
+              { label: "Audio", value: "RTP Opus", tone: "text-emerald-300" }
             ].map((item) => (
               <div key={item.label} className="rounded-xl border border-white/[0.05] bg-white/[0.025] p-4">
                 <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/[0.35]">

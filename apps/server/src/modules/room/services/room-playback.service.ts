@@ -1,24 +1,9 @@
-import {
-  resolveAnnouncementChunkIndexes,
-  type PlaybackSnapshot,
-  type TrackAvailabilityAnnouncement,
-  type TrackMeta
-} from "@music-room/shared";
+import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 
-type TrackAvailabilityReader = {
-  getTrackAvailabilityAnnouncements: (
-    roomId: string,
-    trackId: string
-  ) => TrackAvailabilityAnnouncement[];
-};
-
 export class RoomPlaybackService {
-  constructor(
-    private readonly roomPresenceService: RoomPresenceService,
-    private readonly trackAvailabilityReader?: TrackAvailabilityReader
-  ) {}
+  constructor(private readonly roomPresenceService: RoomPresenceService) {}
 
   async updatePlayback(
     record: RoomRecord,
@@ -256,35 +241,6 @@ export class RoomPlaybackService {
     this.bumpPlaybackVersion(playback);
   }
 
-  async handleSourceAvailabilityLoss(record: RoomRecord, sessionId: string) {
-    const playback = record.room.playback;
-    if (
-      playback.status !== "playing" ||
-      !playback.currentTrackId ||
-      playback.sourceSessionId !== sessionId
-    ) {
-      return false;
-    }
-
-    const nextSourceCandidate = await this.resolveTrackSourceCandidate(
-      record,
-      playback.currentTrackId,
-      {
-        excludedSessionIds: new Set([sessionId])
-      }
-    );
-
-    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
-    playback.startedAt = nextSourceCandidate ? new Date().toISOString() : null;
-    playback.status = nextSourceCandidate ? "playing" : "paused";
-    playback.sourceSessionId = nextSourceCandidate?.sessionId ?? playback.sourceSessionId;
-    playback.sourcePeerId = nextSourceCandidate?.peerId ?? null;
-    playback.sourceTrackId = nextSourceCandidate ? playback.currentTrackId : null;
-    playback.mediaEpoch += 1;
-    this.bumpPlaybackVersion(playback);
-    return true;
-  }
-
   handleSourcePeerOnline(record: RoomRecord, sessionId: string, peerId: string) {
     const playback = record.room.playback;
     if (
@@ -397,11 +353,10 @@ export class RoomPlaybackService {
       record.room.id,
       record.room.members
     );
-    return this.pickTrackSourceCandidate(record.room.id, track, activePresence, options);
+    return this.pickTrackSourceCandidate(track, activePresence, options);
   }
 
   private pickTrackSourceCandidate(
-    roomId: string,
     track: TrackMeta,
     activePresence: Map<string, string>,
     options?: {
@@ -411,11 +366,6 @@ export class RoomPlaybackService {
   ) {
     const excludedSessionIds = options?.excludedSessionIds ?? new Set<string>();
     const preferredSessionId = options?.preferredSessionId ?? null;
-    const sessionByPeerId = new Map<string, string>();
-    for (const [sessionId, peerId] of activePresence.entries()) {
-      sessionByPeerId.set(peerId, sessionId);
-    }
-
     const isSessionAvailable = (sessionId: string | null | undefined) =>
       !!sessionId && !excludedSessionIds.has(sessionId) && activePresence.has(sessionId);
 
@@ -426,113 +376,13 @@ export class RoomPlaybackService {
       };
     }
 
-    const ownerAnnouncement = this.trackAvailabilityReader
-      ?.getTrackAvailabilityAnnouncements(roomId, track.id)
-      .find(
-        (announcement) =>
-          announcement.ownerPeerId === activePresence.get(track.ownerSessionId) &&
-          this.isUsableFullTrackAvailability(roomId, track, announcement)
-      );
-    if (
-      isSessionAvailable(track.ownerSessionId) &&
-      (track.sourceType === "local_upload" ||
-        !this.trackAvailabilityReader ||
-        ownerAnnouncement)
-    ) {
+    if (isSessionAvailable(track.ownerSessionId)) {
       return {
         sessionId: track.ownerSessionId,
         peerId: activePresence.get(track.ownerSessionId) as string
       };
     }
-
-    const bestAnnouncementsBySessionId = new Map<
-      string,
-      TrackAvailabilityAnnouncement & { availableChunkCount: number; fullyCached: boolean }
-    >();
-    for (const announcement of this.trackAvailabilityReader?.getTrackAvailabilityAnnouncements(
-      roomId,
-      track.id
-    ) ?? []) {
-      if (!this.isUsableFullTrackAvailability(roomId, track, announcement)) {
-        continue;
-      }
-
-      const sessionId = sessionByPeerId.get(announcement.ownerPeerId);
-      if (!sessionId || !isSessionAvailable(sessionId)) {
-        continue;
-      }
-
-      const candidate = {
-        ...announcement,
-        availableChunkCount: this.countValidAvailableChunks(announcement),
-        fullyCached: true
-      };
-      const existing = bestAnnouncementsBySessionId.get(sessionId);
-      if (
-        !existing ||
-        Number(candidate.fullyCached) > Number(existing.fullyCached) ||
-        candidate.availableChunkCount > existing.availableChunkCount
-      ) {
-        bestAnnouncementsBySessionId.set(sessionId, candidate);
-      }
-    }
-
-    const fallbackCandidate = [...bestAnnouncementsBySessionId.entries()]
-      .sort((left, right) => {
-        const [, leftAnnouncement] = left;
-        const [, rightAnnouncement] = right;
-        if (leftAnnouncement.fullyCached !== rightAnnouncement.fullyCached) {
-          return Number(rightAnnouncement.fullyCached) - Number(leftAnnouncement.fullyCached);
-        }
-        if (leftAnnouncement.availableChunkCount !== rightAnnouncement.availableChunkCount) {
-          return rightAnnouncement.availableChunkCount - leftAnnouncement.availableChunkCount;
-        }
-        if (leftAnnouncement.source !== rightAnnouncement.source) {
-          return leftAnnouncement.source === "local_cache" ? -1 : 1;
-        }
-        return left[0].localeCompare(right[0]);
-      })
-      .at(0);
-
-    if (!fallbackCandidate) {
-      return null;
-    }
-
-    return {
-      sessionId: fallbackCandidate[0],
-      peerId: fallbackCandidate[1].ownerPeerId
-    };
-  }
-
-  private isUsableFullTrackAvailability(
-    roomId: string,
-    track: TrackMeta,
-    announcement: TrackAvailabilityAnnouncement
-  ) {
-    if (
-      announcement.roomId !== roomId ||
-      announcement.trackId !== track.id ||
-      announcement.totalChunks <= 0 ||
-      announcement.chunkSize <= 0 ||
-      (announcement.assetHash && announcement.assetHash !== track.fileHash)
-    ) {
-      return false;
-    }
-
-    const expectedManifest = track.relayManifest ?? track.pieceManifest ?? null;
-    if (
-      expectedManifest &&
-      (announcement.totalChunks !== expectedManifest.totalChunks ||
-        announcement.chunkSize !== expectedManifest.chunkSize)
-    ) {
-      return false;
-    }
-
-    return this.countValidAvailableChunks(announcement) >= announcement.totalChunks;
-  }
-
-  private countValidAvailableChunks(announcement: TrackAvailabilityAnnouncement) {
-    return resolveAnnouncementChunkIndexes(announcement).length;
+    return null;
   }
 
   private clampPositionMs(record: RoomRecord, trackId: string | null, positionMs: number) {

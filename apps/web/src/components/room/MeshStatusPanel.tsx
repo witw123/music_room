@@ -4,22 +4,11 @@ import { memo, useEffect, useMemo, useState } from "react";
 import type {
   PeerDiagnosticsSnapshot,
   PeerRecentEvent,
-  RoomMember,
-  TrackMeta
+  RoomMember
 } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
 import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import { formatOpusRate, type LocalMemberPanelState } from "./MembersPanel";
-
-export type AvailabilityEntry = {
-  track: TrackMeta;
-  peerCount: number;
-  remotePeerCount: number;
-  localChunkCount: number;
-  totalChunks: number;
-  sources: string[];
-  cachedMemberNicknames: string[];
-};
 
 type MeshStatusPanelProps = {
   members: RoomMember[];
@@ -145,18 +134,6 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
                   <span>媒体包: {formatMaybeTimestamp(peer.lastMediaPacketAt)}</span>
                 </DiagnosticGrid>
         </DiagnosticSection>
-        <DiagnosticSection title="原文件手动缓存">
-          <DiagnosticGrid>
-            <span>单元下载: {formatRate(peer.pieceDownloadRateKbps)}</span>
-            <span>单元上传: {formatRate(peer.pieceUploadRateKbps)}</span>
-            <span>单元 RTT p50: {formatMetric(peer.pieceRttMsP50, "ms")}</span>
-            <span>单元 RTT p95: {formatMetric(peer.pieceRttMsP95, "ms")}</span>
-            <span>请求超时率: {formatMetric(peer.pieceTimeoutRate, "%")}</span>
-            <span>最近单元: {formatMaybeTimestamp(peer.lastPieceReceivedAt)}</span>
-            <span>校验队列: {formatMetric(peer.validationQueueBytes, " bytes")}</span>
-            <span>持久化积压: {formatMetric(peer.persistenceBacklogBytes, " bytes")}</span>
-          </DiagnosticGrid>
-        </DiagnosticSection>
       </div>
     </details>
   );
@@ -227,7 +204,7 @@ function MeshStatusPanelBase({
 
       <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-foreground-muted">
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">在线: {onlineCount}</span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">控制/原文件通道: {dataReadyCount}</span>
+        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">控制通道: {dataReadyCount}</span>
         <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
           播放: {localMemberState?.playbackStatus.label ?? "等待房间状态"}
         </span>
@@ -279,7 +256,7 @@ function MeshStatusPanelBase({
               </DiagnosticSection>
               <DiagnosticSection title="房间连接">
                 <DiagnosticGrid>
-                  <span>控制/原文件 DataChannel: {dataReadyCount}</span>
+                  <span>控制 DataChannel: {dataReadyCount}</span>
                   <span>已连接成员: {connectedPeersCount}</span>
                   <span>在线成员: {onlineCount}</span>
                   <span>异常链路: {degradedCount}</span>

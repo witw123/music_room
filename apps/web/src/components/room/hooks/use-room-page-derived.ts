@@ -24,8 +24,6 @@ type StableTrackMeta = Pick<
   | "ownerSessionId"
   | "ownerNickname"
   | "sourceType"
-  | "pieceManifest"
-  | "relayManifest"
 >;
 
 type UseRoomPageDerivedInput = {
@@ -33,25 +31,6 @@ type UseRoomPageDerivedInput = {
   peerId: string;
   roomSnapshot: RoomSnapshot | null;
 };
-
-function areTrackPieceManifestsEqual(
-  previous: StableTrackMeta["pieceManifest"] | StableTrackMeta["relayManifest"],
-  next: StableTrackMeta["pieceManifest"] | StableTrackMeta["relayManifest"]
-) {
-  if (previous === next) {
-    return true;
-  }
-
-  if (!previous || !next) {
-    return previous === next;
-  }
-
-  return (
-    previous.totalChunks === next.totalChunks &&
-    previous.chunkSize === next.chunkSize &&
-    previous.pieceMimeType === next.pieceMimeType
-  );
-}
 
 function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
   return (
@@ -68,9 +47,7 @@ function areTrackMetasEqual(previous: StableTrackMeta, next: StableTrackMeta) {
     previous.artworkUrl === next.artworkUrl &&
     previous.ownerSessionId === next.ownerSessionId &&
     previous.ownerNickname === next.ownerNickname &&
-    previous.sourceType === next.sourceType &&
-    areTrackPieceManifestsEqual(previous.pieceManifest, next.pieceManifest) &&
-    areTrackPieceManifestsEqual(previous.relayManifest, next.relayManifest)
+    previous.sourceType === next.sourceType
   );
 }
 

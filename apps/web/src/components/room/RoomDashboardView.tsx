@@ -14,13 +14,10 @@ import type {
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
-import type { AvailabilityEntry } from "./MeshStatusPanel";
-import type { OriginalAssetAvailabilityEntry } from "./hooks/use-room-derived-state";
-import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
-import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { RoomSocket } from "@/lib/ws-client";
 
-type TabId = "queue" | "library" | "cache" | "members";
+type TabId = "queue" | "library" | "members";
 
 type RoomDashboardViewProps = {
   roomSnapshot: RoomSnapshot;
@@ -38,10 +35,6 @@ type RoomDashboardViewProps = {
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  cacheLibraryTracks: CachedLibraryTrack[];
-  manualCacheTasks: Record<string, ManualCacheTask>;
-  availabilitySummary: AvailabilityEntry[];
-  originalAssetAvailabilitySummary: OriginalAssetAvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
@@ -55,11 +48,6 @@ type RoomDashboardViewProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
-  onStartManualCacheDownload: (trackId: string) => Promise<void>;
-  onPauseManualCacheDownload: (trackId: string) => void;
-  onAddCachedLibraryTrackToLibrary: (fileHash: string) => Promise<void>;
-  onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
-  onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
@@ -71,7 +59,6 @@ type RoomDashboardViewProps = {
 const tabLabels: Record<TabId, string> = {
   queue: "队列",
   library: "曲库",
-  cache: "缓存",
   members: "成员"
 };
 
@@ -97,17 +84,6 @@ const MembersTabPanel = dynamic(
   }
 );
 
-const CacheTabPanel = dynamic(
-  () => import("./CacheTabPanel").then((mod) => mod.CacheTabPanel),
-  {
-    loading: () => (
-      <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-        正在加载缓存页…
-      </div>
-    )
-  }
-);
-
 function RoomDashboardViewBase({
   roomSnapshot,
   currentTrack,
@@ -124,10 +100,6 @@ function RoomDashboardViewBase({
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  cacheLibraryTracks,
-  manualCacheTasks,
-  availabilitySummary,
-  originalAssetAvailabilitySummary,
   memberTransferSummaries,
   localMemberState,
   peerDiagnostics,
@@ -141,11 +113,6 @@ function RoomDashboardViewBase({
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
-  onStartManualCacheDownload,
-  onPauseManualCacheDownload,
-  onAddCachedLibraryTrackToLibrary,
-  onExportCachedLibraryTrack,
-  onDeleteCachedLibraryTrack,
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
@@ -166,7 +133,7 @@ function RoomDashboardViewBase({
     [onDiagnosticsVisibilityChange, onTabChange]
   );
   const handleTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, tab: TabId) => {
-    const tabs: TabId[] = ["queue", "library", "cache", "members"];
+    const tabs: TabId[] = ["queue", "library", "members"];
     const direction = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
     if (!direction) return;
     event.preventDefault();
@@ -258,7 +225,7 @@ function RoomDashboardViewBase({
           </div>
 
           <div aria-label="房间视图" className="flex items-center gap-1 rounded-xl bg-white/5 p-1" role="tablist">
-            {(["queue", "library", "cache", "members"] as TabId[]).map((tab) => (
+            {(["queue", "library", "members"] as TabId[]).map((tab) => (
               <button
                 key={tab}
                 id={`room-tab-${tab}`}
@@ -310,8 +277,6 @@ function RoomDashboardViewBase({
             <LibraryTabPanel
               tracks={roomSnapshot.tracks}
               uploadedTracks={uploadedTracks}
-              cacheLibraryTracks={cacheLibraryTracks}
-              availabilitySummary={availabilitySummary}
               canControlPlayback={canControlPlayback}
               canManageLibraryTracks={canDeleteRoom}
               activeSession={activeSession}
@@ -319,22 +284,6 @@ function RoomDashboardViewBase({
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
-            />
-          ) : null}
-
-          {activeTab === "cache" ? (
-            <CacheTabPanel
-              tracks={roomSnapshot.tracks}
-              availabilitySummary={availabilitySummary}
-              originalAssetAvailabilitySummary={originalAssetAvailabilitySummary}
-              activeSession={activeSession}
-              cacheLibraryTracks={cacheLibraryTracks}
-              manualCacheTasks={manualCacheTasks}
-              onStartManualCacheDownload={onStartManualCacheDownload}
-              onPauseManualCacheDownload={onPauseManualCacheDownload}
-              onAddCachedLibraryTrackToLibrary={onAddCachedLibraryTrackToLibrary}
-              onExportCachedLibraryTrack={onExportCachedLibraryTrack}
-              onDeleteCachedLibraryTrack={onDeleteCachedLibraryTrack}
             />
           ) : null}
 

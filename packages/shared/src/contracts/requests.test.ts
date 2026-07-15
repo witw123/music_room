@@ -88,12 +88,6 @@ describe("request contracts", () => {
         durationMs: -1
       })
     ).toThrow();
-    expect(() =>
-      registerTrackRequestSchema.parse({
-        ...validTrack,
-        relayManifest: { totalChunks: 1, chunkSize: 1024, pieceMimeType: "audio/mpeg" }
-      })
-    ).toThrow();
     expect(() => registerTrackRequestSchema.parse({ ...validTrack, audioPayload: "base64" })).toThrow();
     expect(() => registerTrackRequestSchema.parse({
       ...validTrack,

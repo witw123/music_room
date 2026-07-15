@@ -13,10 +13,7 @@ import type { RoomSocket } from "@/lib/ws-client";
 import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageStates";
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState, MemberTransferSummary } from "@/components/room/MembersPanel";
-import type { AvailabilityEntry } from "@/components/room/MeshStatusPanel";
-import type { OriginalAssetAvailabilityEntry } from "@/components/room/hooks/use-room-derived-state";
-import type { CachedLibraryTrack, UploadedTrack } from "@/features/upload/audio-utils";
-import type { ManualCacheTask } from "@/features/upload/use-track-uploads";
+import type { UploadedTrack } from "@/features/upload/audio-utils";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -32,10 +29,6 @@ type RoomWorkspaceProps = {
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  cacheLibraryTracks: CachedLibraryTrack[];
-  manualCacheTasks: Record<string, ManualCacheTask>;
-  availabilitySummary: AvailabilityEntry[];
-  originalAssetAvailabilitySummary: OriginalAssetAvailabilityEntry[];
   memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
@@ -57,15 +50,10 @@ type RoomWorkspaceProps = {
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
-  onStartManualCacheDownload: (trackId: string) => Promise<void>;
-  onPauseManualCacheDownload: (trackId: string) => void;
-  onAddCachedLibraryTrackToLibrary: (fileHash: string) => Promise<void>;
-  onExportCachedLibraryTrack: (fileHash: string) => Promise<void>;
-  onDeleteCachedLibraryTrack: (fileHash: string) => Promise<void>;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
   onRemoveQueueItem: (queueItemId: string) => Promise<void>;
   onReorderQueue: (queueItemIds: string[]) => Promise<void>;
-  onTabChange: (tab: "queue" | "library" | "cache" | "members") => void;
+  onTabChange: (tab: "queue" | "library" | "members") => void;
   onDiagnosticsVisibilityChange: (open: boolean) => void;
   socket: RoomSocket | null;
   playerSlot: ReactNode;
@@ -85,10 +73,6 @@ function RoomWorkspaceBase({
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  cacheLibraryTracks,
-  manualCacheTasks,
-  availabilitySummary,
-  originalAssetAvailabilitySummary,
   memberTransferSummaries,
   localMemberState,
   peerDiagnostics,
@@ -109,11 +93,6 @@ function RoomWorkspaceBase({
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
-  onStartManualCacheDownload,
-  onPauseManualCacheDownload,
-  onAddCachedLibraryTrackToLibrary,
-  onExportCachedLibraryTrack,
-  onDeleteCachedLibraryTrack,
   onPlayQueueItem,
   onRemoveQueueItem,
   onReorderQueue,
@@ -172,10 +151,6 @@ function RoomWorkspaceBase({
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}
-              cacheLibraryTracks={cacheLibraryTracks}
-              manualCacheTasks={manualCacheTasks}
-              availabilitySummary={availabilitySummary}
-              originalAssetAvailabilitySummary={originalAssetAvailabilitySummary}
               memberTransferSummaries={memberTransferSummaries}
               localMemberState={localMemberState}
               peerDiagnostics={peerDiagnostics}
@@ -189,11 +164,6 @@ function RoomWorkspaceBase({
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}
-              onStartManualCacheDownload={onStartManualCacheDownload}
-              onPauseManualCacheDownload={onPauseManualCacheDownload}
-              onAddCachedLibraryTrackToLibrary={onAddCachedLibraryTrackToLibrary}
-              onExportCachedLibraryTrack={onExportCachedLibraryTrack}
-              onDeleteCachedLibraryTrack={onDeleteCachedLibraryTrack}
               onPlayQueueItem={onPlayQueueItem}
               onRemoveQueueItem={onRemoveQueueItem}
               onReorderQueue={onReorderQueue}

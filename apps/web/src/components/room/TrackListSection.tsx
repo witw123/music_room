@@ -1,17 +1,14 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useState } from "react";
 import type { AuthSession, TrackMeta } from "@music-room/shared";
 import { formatDuration } from "@/lib/music-room-ui";
 import { Button } from "@/components/ui/button";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
-import type { AvailabilityEntry } from "./MeshStatusPanel";
 
 type TrackListSectionProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
-  cachedLibraryFileHashes: string[];
-  availabilitySummary: AvailabilityEntry[];
   canControlPlayback: boolean;
   canManageLibraryTracks: boolean;
   activeSession: AuthSession | null;
@@ -24,8 +21,6 @@ type TrackListSectionProps = {
 function TrackListSectionBase({
   tracks,
   uploadedTracks,
-  cachedLibraryFileHashes,
-  availabilitySummary,
   canControlPlayback,
   canManageLibraryTracks,
   activeSession,
@@ -44,15 +39,6 @@ function TrackListSectionBase({
       setPendingAction(null);
     }
   };
-  const cachedLibraryFileHashSet = useMemo(
-    () => buildCachedLibraryFileHashSet(cachedLibraryFileHashes),
-    [cachedLibraryFileHashes]
-  );
-  const availabilityByTrackId = useMemo(
-    () => new Map(availabilitySummary.map((entry) => [entry.track.id, entry] as const)),
-    [availabilitySummary]
-  );
-
   return (
     <section className="relative flex w-full flex-col gap-8">
       <label className="group relative flex cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-accent/20 bg-accent/5 p-8 text-center transition-all hover:border-accent/40 hover:bg-accent/10 sm:p-12">
@@ -96,10 +82,6 @@ function TrackListSectionBase({
               });
               const uploadedTrack = uploadedTracks[track.id] ?? null;
               const isUploadedLocally = !!uploadedTrack;
-              const isInCacheLibrary = cachedLibraryFileHashSet.has(track.fileHash);
-              const cachedMemberLabel = formatCachedMemberNames(
-                availabilityByTrackId.get(track.id)?.cachedMemberNicknames ?? []
-              );
 
               return (
                 <article
@@ -118,28 +100,22 @@ function TrackListSectionBase({
                         className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${
                           isUploadedLocally
                             ? "bg-green-500"
-                            : isInCacheLibrary
-                              ? "bg-emerald-500"
                             : "bg-blue-500"
                         }`}
                       />
                       {isUploadedLocally
                         ? "本地上传源可直接播放"
-                        : isInCacheLibrary
-                          ? "已缓存到个人库"
                         : "房间可用"}{" "}
                       {track.ownerNickname} 上传
                     </p>
                   </div>
 
                   <div className="min-w-0 text-xs text-foreground-muted">
-                    <p className="truncate">{cachedMemberLabel}</p>
+                    <p className="truncate">
+                      {isUploadedLocally ? "本机上传源" : "房间歌曲"}
+                    </p>
                     <p className="mt-1 truncate text-[11px] text-foreground-muted/70">
-                      {isUploadedLocally
-                        ? "本机上传源"
-                        : isInCacheLibrary
-                          ? "本机完整缓存"
-                          : "等待可用音源"}
+                      仅保存本人上传歌曲
                     </p>
                   </div>
 
@@ -222,17 +198,6 @@ function TrackListSectionBase({
 }
 
 export const TrackListSection = memo(TrackListSectionBase);
-
-export function buildCachedLibraryFileHashSet(cachedLibraryFileHashes: string[]) {
-  return new Set(cachedLibraryFileHashes);
-}
-
-export function formatCachedMemberNames(memberNames: string[]) {
-  const uniqueNames = [...new Set(memberNames.filter(Boolean))];
-  return uniqueNames.length > 0
-    ? `完整缓存：${uniqueNames.join("、")}`
-    : "暂无成员持有完整缓存";
-}
 
 export function canDeleteLibraryTrack(input: {
   track: Pick<TrackMeta, "ownerSessionId">;

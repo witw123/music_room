@@ -83,7 +83,6 @@ describe("PeerConnectionRegistry", () => {
       reconnectAttempts: 0,
       reconnectTimerId: null,
       watchdogTimerId: null,
-      sendQueue: [],
       releasing: false
     });
   });

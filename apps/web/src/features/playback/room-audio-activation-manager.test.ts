@@ -147,7 +147,7 @@ describe("RoomAudioActivationManager", () => {
   it("recovers a blocked audible source by starting muted and restoring sound", async () => {
     const manager = new RoomAudioActivationManager();
     const audio = createAudioElementMock();
-    audio.src = "blob:cached-track";
+    audio.src = "blob:local-upload";
     audio.play = vi.fn(async () => {
       if (!audio.muted) {
         throw new DOMException("blocked", "NotAllowedError");

@@ -2,7 +2,6 @@
 
 import type { GuestSession } from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
-import { buildCanonicalTrackPieceManifest } from "@/features/p2p";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
 
 type CapturedAudioGraph = {
@@ -16,7 +15,7 @@ const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 export type UploadedTrack = {
   file: File;
   objectUrl: string;
-  origin: "live-upload" | "cached-library-import";
+  origin: "live-upload";
 };
 
 export type CachedLibraryTrack = {
@@ -50,12 +49,6 @@ export async function buildTrackMeta(
   const durationMs = preparedAssets?.playbackAsset.durationMs ?? await readDuration(objectUrl);
   const title = file.name.replace(/\.[^/.]+$/, "");
   const codec = file.type.split("/")[1]?.trim() || null;
-  const pieceManifest = buildCanonicalTrackPieceManifest({
-    file,
-    codec,
-    mimeType: file.type || null,
-    sizeBytes: file.size
-  });
 
   return {
     title,
@@ -76,15 +69,7 @@ export async function buildTrackMeta(
           originalAsset: preparedAssets.originalAsset,
           playbackAsset: preparedAssets.playbackAsset
         }
-      : {}),
-    pieceManifest: {
-      ...pieceManifest,
-      pieceMimeType: pieceManifest.pieceMimeType
-    },
-    relayManifest: {
-      ...pieceManifest,
-      pieceMimeType: pieceManifest.pieceMimeType
-    }
+      : {})
   };
 }
 

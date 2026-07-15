@@ -35,7 +35,6 @@ export async function processSelectedTrackFiles(input: {
   activeSession: { userId: string; nickname: string } | null;
   roomId: string | null | undefined;
   roomTracks: TrackMeta[];
-  manualTrackCachingEnabled: boolean;
   inFlightUploadHashes: Set<string>;
   createObjectUrl: (file: File) => string;
   revokeObjectUrl: (objectUrl: string) => void;
@@ -103,13 +102,11 @@ export async function processSelectedTrackFiles(input: {
       registeredTracks.push(registered);
       currentTracksByHash.set(registered.fileHash, registered);
 
-      if (input.manualTrackCachingEnabled) {
-        await input.persistTrackIntoLibrary({
-          track: registered,
-          roomId: input.roomId,
-          file
-        });
-      }
+      await input.persistTrackIntoLibrary({
+        track: registered,
+        roomId: input.roomId,
+        file
+      });
     } finally {
       if (!retainObjectUrl) {
         input.revokeObjectUrl(objectUrl);

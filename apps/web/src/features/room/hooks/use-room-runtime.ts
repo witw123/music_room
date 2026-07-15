@@ -9,27 +9,20 @@ import {
   type SetStateAction
 } from "react";
 import type {
-  AssetAvailabilityAnnouncement,
   AuthSession,
   IceConfigResponse,
-  RoomSnapshot,
-  TrackAvailabilityAnnouncement
+  RoomSnapshot
 } from "@music-room/shared";
 import type { Route } from "next";
 import type { RoomSocket } from "@/lib/ws-client";
-import { ChunkScheduler } from "@/features/p2p";
 import type { P2PMesh } from "@/features/p2p";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
-import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
-import {
-  getPieceTransferRates,
-  useRoomRuntimeObservability
-} from "./use-room-runtime-observability";
+import { useRoomRuntimeObservability } from "./use-room-runtime-observability";
 import {
   useRoomConnectionSupervisor,
   withResolvedTransportHealth,
@@ -37,11 +30,8 @@ import {
 } from "./use-room-connection-supervisor";
 import {
   createRoomRealtimeRuntime,
-  resolveRemoteAvailabilityRequestTrackId,
-  resolveSourceAvailabilityReannounceTrackId,
   useRoomRealtimeConnection,
-  shouldAcceptIncomingPeerSignal,
-  shouldReannounceManualCacheAvailability
+  shouldAcceptIncomingPeerSignal
 } from "./use-room-realtime-connection";
 import { useRoomRuntimeMutableState } from "./use-room-runtime-mutable-state";
 import { useRoomRuntimeLifecycle } from "./use-room-runtime-lifecycle";
@@ -51,21 +41,9 @@ import {
   resolvePlaybackRecoveryDropReason,
   useRoomPlaybackConnectionCoordinator
 } from "./use-room-playback-connection-coordinator";
-import type { PeerRoundTripTimeSource, RoomRecoveryState } from "./room-runtime-types";
+import type { RoomRecoveryState } from "./room-runtime-types";
 
-export {
-  resolveManualCacheProviderPeerIds,
-  resolveManualCacheUploaderPeerIds,
-  shouldForceManualCacheBootstrap,
-  resolveManualCacheMeshRecoveryMode,
-  shouldRecoverManualCacheDataPeers
-} from "./use-manual-cache-downloader";
-export {
-  resolveRemoteAvailabilityRequestTrackId,
-  resolveSourceAvailabilityReannounceTrackId,
-  shouldAcceptIncomingPeerSignal,
-  shouldReannounceManualCacheAvailability
-};
+export { shouldAcceptIncomingPeerSignal };
 export { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 export {
   resetInitialRoomRecoveryAttemptOnCancellation,
@@ -129,31 +107,10 @@ type UseRoomRuntimeInput = {
   audioUnlocked: boolean;
   roomRecoveryState: RoomRecoveryState;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  queueAvailability: (announcement: TrackAvailabilityAnnouncement) => void;
-  queueAssetAvailability: (announcement: AssetAvailabilityAnnouncement) => void;
-  clearAvailabilityForPeer: (ownerPeerId: string) => void;
-  clearAvailabilityForTrack: (trackId: string, ownerPeerId?: string) => void;
-  clearAvailabilityForAsset: (assetId: string, ownerPeerId?: string) => void;
-  flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
-  uploadedTracks: Record<string, UploadedTrack>;
-  uploadedTrackIds: string[];
-  uploadedTrackIdsRef: MutableRefObject<string[]>;
-  announceRoomTrackAvailability: (
-    trackId: string,
-    options?: { force?: boolean }
-  ) => Promise<boolean>;
-  handleManualCachePieceReceived: (input: {
-    trackId: string;
-    chunkIndex: number;
-    totalChunks: number;
-    chunkSize: number;
-    mimeType: string;
-  }) => void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   socketRef: MutableRefObject<RoomSocket | null>;
-  chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   resetPlayerSurface: () => void;
   setStatusMessage: (value: string) => void;
   statusMessage: string;
@@ -162,8 +119,6 @@ type UseRoomRuntimeInput = {
 };
 
 type UseRoomRuntimeResult = {
-  requestOriginalAssetUnits: (input: Parameters<P2PMesh["requestOriginalAssetUnits"]>[0]) => boolean;
-  cancelOriginalAssetRequests: (assetId: string) => void;
   setLocalAudioStream: (
     stream: MediaStream | null,
     sourcePeerId: string | null,
@@ -192,13 +147,6 @@ export function shouldAcceptIncomingPeerSignalRecoveryGeneration(input: {
     return true;
   }
   return input.payloadRecoveryGeneration >= input.currentRecoveryGeneration;
-}
-
-function getPeerMedianRttMs(state: PeerRoundTripTimeSource) {
-  if (!state || !("pieceRttMsP50" in state)) {
-    return null;
-  }
-  return typeof state.pieceRttMsP50 === "number" ? state.pieceRttMsP50 : null;
 }
 
 export function useRoomRuntime({
@@ -238,22 +186,10 @@ export function useRoomRuntime({
   audioUnlocked,
   roomRecoveryState,
   setRoomRecoveryState,
-  queueAvailability,
-  queueAssetAvailability,
-  clearAvailabilityForPeer,
-  clearAvailabilityForTrack,
-  clearAvailabilityForAsset,
-  flushPendingAvailability,
   recordPeerDiagnostic,
-  uploadedTracks,
-  uploadedTrackIds,
-  uploadedTrackIdsRef,
-  announceRoomTrackAvailability,
-  handleManualCachePieceReceived,
   deleteUploadedTrackArtifacts,
   deleteRoomTrackArtifacts,
   socketRef,
-  chunkSchedulerRef,
   resetPlayerSurface,
   setStatusMessage,
   statusMessage,
@@ -290,18 +226,8 @@ export function useRoomRuntime({
     lastRealtimeRoomEventAtRef,
     lastDataActivityAtRef,
     socketDisconnectGraceTimeoutRef,
-    manualCacheTrackIdsRef,
-    uploadedTracksRef,
-    announceRoomTrackAvailabilityRef,
-    handleManualCachePieceReceivedRef,
     deleteRoomTrackArtifactsRef,
     resetPlayerSurfaceRef,
-    queueAvailabilityRef,
-    queueAssetAvailabilityRef,
-    clearAvailabilityForPeerRef,
-    clearAvailabilityForTrackRef,
-    clearAvailabilityForAssetRef,
-    flushPendingAvailabilityRef,
     recordPeerDiagnosticRef,
     clearSocketDisconnectGrace
   } = useRoomRuntimeMutableState({
@@ -311,24 +237,11 @@ export function useRoomRuntime({
     activeSession,
     activeSessionRef,
     socketRef,
-    uploadedTrackIds,
-    uploadedTrackIdsRef,
     roomRecoveryState,
-    manualCacheTrackIds: [],
-    uploadedTracks,
-    announceRoomTrackAvailability,
-    handleManualCachePieceReceived,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,
     resetPlayerSurface,
-    queueAvailability,
-    queueAssetAvailability,
-    clearAvailabilityForPeer,
-    clearAvailabilityForTrack,
-    clearAvailabilityForAsset,
-    flushPendingAvailability,
     recordPeerDiagnostic,
-    enableTrackCaching: false
   });
 
   const {
@@ -338,11 +251,8 @@ export function useRoomRuntime({
     updateConnectionSupervisorPlayout
   } = useRoomConnectionSupervisor({ lastSubscribeAckAtRef });
   const {
-    pieceTransferRatesRef,
     updateDataTransportStatsRef,
     updateMediaTransportStatsRef,
-    recordPieceTransferRef,
-    recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef
   } = useRoomRuntimeObservability({
     roomSnapshot,
@@ -493,12 +403,7 @@ export function useRoomRuntime({
     peerId,
     socketRef,
     isNavigatingRoomExit,
-    enableManualTrackCaching: false,
-    enableTrackCaching: false,
-    roomListenerSetHash: roomSnapshot?.room.members.map((member) => member.peerId ?? member.id).sort().join("|") ?? "",
-    uploadedTrackIds,
-    connectedPeers,
-    announceRoomTrackAvailabilityRef,
+    uploadedTrackIds: [],
     lastRealtimeRoomEventAtRef,
     lastSubscribeAckAtRef,
     recoveryGenerationRef,
@@ -506,9 +411,7 @@ export function useRoomRuntime({
     resubscribeRoomRef,
     meshRef,
     socketDisconnectGraceUntilRef,
-    requestRoomSnapshotResync,
-    getCurrentPlaybackConnectionKey,
-    queuePlaybackRecoveryRecommendation
+    requestRoomSnapshotResync
   });
 
   useRoomRuntimeLifecycle({
@@ -548,10 +451,6 @@ export function useRoomRuntime({
     setStatusMessage
   });
 
-  const clearManualCachePendingPiece = useCallback(() => undefined, []);
-  const clearManualCachePendingPieces = useCallback(() => undefined, []);
-  const deferManualCachePendingPiece = useCallback(() => undefined, []);
-
   useEffect(() => {
     if (!statusMessage) {
       return;
@@ -587,19 +486,7 @@ export function useRoomRuntime({
       socketRef,
       recordPeerDiagnosticRef,
       meshRef,
-      chunkSchedulerRef,
       currentRoomRef,
-      uploadedTracksRef,
-      uploadedTrackIdsRef,
-      manualCacheTrackIdsRef,
-      announceRoomTrackAvailabilityRef,
-      handleManualCachePieceReceivedRef,
-      clearManualCachePendingPiece,
-      clearManualCachePendingPieces,
-      deferManualCachePendingPiece,
-      flushPendingAvailabilityRef,
-      recordPieceTransferRef,
-      recordPieceRequestSampleRef,
       updatePeerBufferedAmountRef,
       updateDataTransportStatsRef,
       updateMediaTransportStatsRef,
@@ -608,27 +495,17 @@ export function useRoomRuntime({
       updateConnectionSupervisorTransportStats,
       withResolvedTransportHealth,
       withSupervisorDiagnosticPatch,
-      getPieceTransferRates,
-      pieceTransferRatesRef,
-      getPeerMedianRttMs,
       setConnectedPeers,
       setMediaConnectedPeers,
       isPageVisible: realtimeRuntimeState.isPageVisible,
       playbackStatus: realtimeRuntimeState.playbackStatus ?? "paused",
       currentTrackId: realtimeRuntimeState.currentTrackId,
       bufferHealth: realtimeRuntimeState.bufferHealth,
-      enableManualTrackCaching: false,
-      enableTrackCaching: false,
       queuePlaybackRecoveryRecommendation,
       resubscribeRoomRef,
       activeSessionRef,
       activeRouteRoomIdRef,
       requestRoomSnapshotResyncRef,
-      queueAvailabilityRef,
-      queueAssetAvailabilityRef,
-      clearAvailabilityForPeerRef,
-      clearAvailabilityForTrackRef,
-      clearAvailabilityForAssetRef,
       deleteRoomTrackArtifactsRef,
       lastRealtimeRoomEventAtRef,
       recoveryGenerationRef,
@@ -657,31 +534,15 @@ export function useRoomRuntime({
     peerId,
     activeSessionRef,
     activeRouteRoomIdRef,
-    announceRoomTrackAvailabilityRef,
-    clearAvailabilityForAssetRef,
-    clearAvailabilityForPeerRef,
-    clearAvailabilityForTrackRef,
-    clearManualCachePendingPiece,
-    clearManualCachePendingPieces,
-    deferManualCachePendingPiece,
     currentRoomRef,
-    chunkSchedulerRef,
     connectionSupervisorStatesRef,
     deleteRoomTrackArtifactsRef,
     dispatchRoomStateEvent,
-    flushPendingAvailabilityRef,
-    handleManualCachePieceReceivedRef,
     lastRealtimeRoomEventAtRef,
     lastSubscribeAckAtRef,
-    manualCacheTrackIdsRef,
     meshRef,
-    pieceTransferRatesRef,
     queuePlaybackRecoveryRecommendation,
-    queueAssetAvailabilityRef,
-    queueAvailabilityRef,
     recordPeerDiagnosticRef,
-    recordPieceRequestSampleRef,
-    recordPieceTransferRef,
     recoveryGenerationRef,
     recoveryModeRef,
     resubscribeRoomRef,
@@ -700,8 +561,6 @@ export function useRoomRuntime({
     updateDataTransportStatsRef,
     updateMediaTransportStatsRef,
     updatePeerBufferedAmountRef,
-    uploadedTrackIdsRef,
-    uploadedTracksRef,
     exitCurrentRoom,
     emitPresence,
     startPresenceHeartbeat,
@@ -729,15 +588,6 @@ export function useRoomRuntime({
     lastDataActivityAtRef.current = Date.now();
   }, [lastDataActivityAtRef, updateConnectionSupervisorPlayout, connectedPeers.length]);
 
-  const requestOriginalAssetUnits = useCallback(
-    (request: Parameters<P2PMesh["requestOriginalAssetUnits"]>[0]) =>
-      meshRef.current?.requestOriginalAssetUnits(request) ?? false,
-    [meshRef]
-  );
-  const cancelOriginalAssetRequests = useCallback(
-    (assetId: string) => meshRef.current?.cancelOriginalAssetRequests(assetId),
-    [meshRef]
-  );
   const setLocalAudioStream = useCallback(
     (stream: MediaStream | null, sourcePeerId: string | null, maxBitrateKbps?: number | null) =>
       meshRef.current?.setLocalAudioStream(stream, sourcePeerId, maxBitrateKbps),
@@ -749,8 +599,6 @@ export function useRoomRuntime({
   );
 
   return {
-    requestOriginalAssetUnits,
-    cancelOriginalAssetRequests,
     setLocalAudioStream,
     getPeerMediaState
   };

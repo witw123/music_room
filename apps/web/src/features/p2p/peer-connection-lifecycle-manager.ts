@@ -498,19 +498,8 @@ export class PeerConnectionLifecycleManager {
         const controlChannel = connection.createDataChannel("music-room-control", {
           ordered: true
         });
-        const dataChannel = connection.createDataChannel("music-room-data", {
-          ordered: false
-        });
-        const originalChannel = connection.createDataChannel("music-room-original", {
-          ordered: false
-        });
-        entry.controlChannel = controlChannel;
-        entry.dataChannel = dataChannel;
-        entry.originalChannel = originalChannel;
         entry.channel = controlChannel;
         this.bindChannelCallback(peerId, entry, controlChannel);
-        this.bindChannelCallback(peerId, entry, dataChannel);
-        this.bindChannelCallback(peerId, entry, originalChannel);
         await enqueuePeerOperation(entry, async () => {
           await this.signaling.createAndSendOffer(peerId, connection);
           entry.lastSignalProgressAtMs = Date.now();

@@ -135,7 +135,7 @@ export async function samplePeerConnectionStats(
           previousBytes: previousSnapshot?.outboundAudioBytes ?? null,
           previousTimestampMs: previousSnapshot?.outboundAudioTimestampMs ?? null
         }),
-        senderTrackId: getString(outboundAudio, "trackId") ?? getString(outboundAudio, "mediaSourceId"),
+        senderTrackId: getString(outboundAudio, "trackId"),
         receiverTrackId:
           getString(inboundAudio, "trackIdentifier") ?? getString(inboundAudio, "trackId"),
         senderCodecId: getString(outboundAudio, "codecId"),

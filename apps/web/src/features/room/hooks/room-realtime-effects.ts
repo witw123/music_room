@@ -9,16 +9,11 @@ import {
 import type { AuthSession, RoomSnapshot } from "@music-room/shared";
 import type { RoomSocket } from "@/lib/ws-client";
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
-import type {
-  PlaybackRecoveryRecommendation,
-  RoomRecoveryMode
-} from "./room-runtime-types";
+import type { RoomRecoveryMode } from "./room-runtime-types";
 import {
   resolvePresenceRepairAction,
-  resolveRecoveryWatchdogAction,
   resolveRoomRealtimeSnapshotInputs,
-  resolveRoomSnapshotWatchdogAction,
-  shouldReannounceManualCacheAvailability
+  resolveRoomSnapshotWatchdogAction
 } from "./room-realtime-policy";
 export function useRoomRealtimeConnectionEffects(input: {
   roomSnapshot: RoomSnapshot | null;
@@ -31,15 +26,7 @@ export function useRoomRealtimeConnectionEffects(input: {
   peerId: string;
   socketRef: MutableRefObject<RoomSocket | null>;
   isNavigatingRoomExit: boolean;
-  enableManualTrackCaching: boolean;
-  enableTrackCaching: boolean;
-  roomListenerSetHash: string;
   uploadedTrackIds: string[];
-  connectedPeers: string[];
-  announceRoomTrackAvailabilityRef: MutableRefObject<(
-    trackId: string,
-    options?: { force?: boolean }
-  ) => Promise<boolean>>;
   lastRealtimeRoomEventAtRef: MutableRefObject<number>;
   lastSubscribeAckAtRef: MutableRefObject<number | null>;
   recoveryGenerationRef: MutableRefObject<number | null>;
@@ -51,27 +38,18 @@ export function useRoomRealtimeConnectionEffects(input: {
     reason: RoomSnapshotResyncReason,
     roomId?: string | null
   ) => Promise<void>;
-  getCurrentPlaybackConnectionKey?: () => string | null;
-  queuePlaybackRecoveryRecommendation?: (recommendation: PlaybackRecoveryRecommendation) => void;
 }) {
   const {
     activeRouteRoomIdRef,
     activeSession,
     activeSessionRef,
-    announceRoomTrackAvailabilityRef,
-    connectedPeers,
     currentRoomRef,
-    enableManualTrackCaching,
-    enableTrackCaching,
-    getCurrentPlaybackConnectionKey,
     hydrated,
     initialRoomId,
     isNavigatingRoomExit,
     lastRealtimeRoomEventAtRef,
     peerId,
-    queuePlaybackRecoveryRecommendation,
     requestRoomSnapshotResync,
-    roomListenerSetHash,
     roomSnapshot,
     socketRef,
     uploadedTrackIds
@@ -82,21 +60,16 @@ export function useRoomRealtimeConnectionEffects(input: {
     localMemberPresenceState,
     snapshotMembersCount,
     snapshotPresenceRevision,
-    snapshotRoomId,
-    snapshotTrackIds,
-    snapshotTrackIdsKey
+    snapshotRoomId
   } = resolveRoomRealtimeSnapshotInputs({
     roomSnapshot,
     activeSessionId: activeSession?.userId,
     fallbackUploadedTrackIds: uploadedTrackIds
   });
   const presenceIntervalRef = useRef<number | null>(null);
-  const snapshotSourcePeerId = roomSnapshot?.room.playback.sourcePeerId ?? null;
   const roomSnapshotWatchdogIntervalRef = useRef<number | null>(null);
-  const recoveryWatchdogIntervalRef = useRef<number | null>(null);
   const presenceRepairKeyRef = useRef<string | null>(null);
   const initialRoomSnapshotResyncKeyRef = useRef<string | null>(null);
-  const lastManualCacheAvailabilityBroadcastKeyRef = useRef<string | null>(null);
 
   const stopPresenceHeartbeat = useCallback(() => {
     if (presenceIntervalRef.current !== null) {
@@ -112,12 +85,7 @@ export function useRoomRealtimeConnectionEffects(input: {
     }
   }, []);
 
-  const stopRecoveryWatchdog = useCallback(() => {
-    if (recoveryWatchdogIntervalRef.current !== null) {
-      window.clearInterval(recoveryWatchdogIntervalRef.current);
-      recoveryWatchdogIntervalRef.current = null;
-    }
-  }, []);
+  const stopRecoveryWatchdog = useCallback(() => undefined, []);
 
   const emitPresence = useCallback(() => {
     const currentSession = activeSessionRef.current;
@@ -257,70 +225,6 @@ export function useRoomRealtimeConnectionEffects(input: {
     isNavigatingRoomExit,
     requestRoomSnapshotResync,
     snapshotRoomId
-  ]);
-
-  useEffect(() => {
-    const nextBroadcastKey = shouldReannounceManualCacheAvailability({
-      enableManualTrackCaching,
-      roomId: snapshotRoomId,
-      roomListenerSetHash,
-      uploadedTrackIds: snapshotTrackIds,
-      sourceReadyTrackIds: uploadedTrackIds,
-      lastBroadcastKey: lastManualCacheAvailabilityBroadcastKeyRef.current
-    });
-    if (!nextBroadcastKey) {
-      if (
-        !snapshotRoomId ||
-        !roomListenerSetHash ||
-        snapshotTrackIds.length === 0
-      ) {
-        lastManualCacheAvailabilityBroadcastKeyRef.current = null;
-      }
-      return;
-    }
-    lastManualCacheAvailabilityBroadcastKeyRef.current = nextBroadcastKey;
-    for (const trackId of snapshotTrackIds) {
-      void announceRoomTrackAvailabilityRef.current(trackId);
-    }
-  }, [
-    announceRoomTrackAvailabilityRef,
-    enableManualTrackCaching,
-    roomListenerSetHash,
-    snapshotRoomId,
-    snapshotTrackIds,
-    snapshotTrackIdsKey,
-    uploadedTrackIds
-  ]);
-
-  useEffect(() => {
-    if (!snapshotRoomId) {
-      stopRecoveryWatchdog();
-      return;
-    }
-    stopRecoveryWatchdog();
-    recoveryWatchdogIntervalRef.current = window.setInterval(() => {
-      const recoveryAction = resolveRecoveryWatchdogAction({
-        snapshotRoomId,
-        enableTrackCaching,
-        connectedPeersCount: connectedPeers.length,
-        snapshotMembersCount,
-        playbackConnectionKey: getCurrentPlaybackConnectionKey?.() ?? null,
-        sourcePeerId: snapshotSourcePeerId
-      });
-      if (recoveryAction.recommendation) {
-        queuePlaybackRecoveryRecommendation?.(recoveryAction.recommendation);
-      }
-    }, 5_000);
-    return () => stopRecoveryWatchdog();
-  }, [
-    connectedPeers.length,
-    enableTrackCaching,
-    getCurrentPlaybackConnectionKey,
-    queuePlaybackRecoveryRecommendation,
-    snapshotMembersCount,
-    snapshotRoomId,
-    snapshotSourcePeerId,
-    stopRecoveryWatchdog
   ]);
 
   return {

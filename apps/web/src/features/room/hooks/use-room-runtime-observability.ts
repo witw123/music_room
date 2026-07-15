@@ -4,65 +4,12 @@ import { useCallback, useRef } from "react";
 import type { RoomSnapshot } from "@music-room/shared";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
-import type {
-  DataTransportStatsInput,
-  PieceTransferSample,
-  PieceTransferWindow
-} from "./room-runtime-types";
-
-const pieceTransferWindowMs = 12_000;
+import type { DataTransportStatsInput } from "./room-runtime-types";
 
 export function formatDiagnosticsTimestamp(timestampMs: number | null) {
   return typeof timestampMs === "number" && Number.isFinite(timestampMs)
     ? new Date(timestampMs).toISOString()
     : null;
-}
-
-function prunePieceTransferSamples(samples: PieceTransferSample[], now: number) {
-  return samples.filter((sample) => now - sample.timestampMs <= pieceTransferWindowMs);
-}
-
-export function calculatePieceTransferRateKbps(samples: PieceTransferSample[]) {
-  if (samples.length === 0) {
-    return 0;
-  }
-  const endMs = Math.max(...samples.map((sample) => sample.timestampMs));
-  const explicitStarts = samples
-    .map((sample) => sample.startedAtMs)
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  const startMs = explicitStarts.length > 0
-    ? Math.min(...explicitStarts)
-    : samples.length > 1
-      ? Math.min(...samples.map((sample) => sample.timestampMs))
-      : endMs;
-  const elapsedMs = endMs - startMs;
-  if (elapsedMs <= 0) {
-    return 0;
-  }
-  const measuredSamples = explicitStarts.length > 0 ? samples : samples.slice(1);
-  const bytes = measuredSamples.reduce((total, sample) => total + sample.bytes, 0);
-  return Math.round((bytes * 8) / elapsedMs);
-}
-
-export function getPieceTransferRates(
-  windows: Map<string, PieceTransferWindow>,
-  peerId: string,
-  now = Date.now()
-) {
-  const window = windows.get(peerId);
-  if (!window) {
-    return {
-      downloadRateKbps: null,
-      uploadRateKbps: null
-    };
-  }
-
-  window.downloads = prunePieceTransferSamples(window.downloads, now);
-  window.uploads = prunePieceTransferSamples(window.uploads, now);
-  return {
-    downloadRateKbps: calculatePieceTransferRateKbps(window.downloads),
-    uploadRateKbps: calculatePieceTransferRateKbps(window.uploads)
-  };
 }
 
 export function useRoomRuntimeObservability(input: {
@@ -71,56 +18,7 @@ export function useRoomRuntimeObservability(input: {
   recordPeerDiagnostic: PeerDiagnosticRecorder;
 }) {
   const { recordPeerDiagnostic } = input;
-  const pieceTransferRatesRef = useRef<Map<string, PieceTransferWindow>>(new Map());
-  const pieceRequestSamplesRef = useRef<Map<string, unknown>>(new Map());
   const peerBufferedAmountBytesRef = useRef<Map<string, number>>(new Map());
-
-  const recordPieceTransferRef = useRef(
-    (value: {
-      peerId: string;
-      direction: "download" | "upload";
-      bytes: number;
-      durationMs?: number | null;
-    }) => {
-      const now = Date.now();
-      const current =
-        pieceTransferRatesRef.current.get(value.peerId) ?? { downloads: [], uploads: [] };
-      const samples = value.direction === "download" ? current.downloads : current.uploads;
-      samples.push({
-        ...(typeof value.durationMs === "number" && Number.isFinite(value.durationMs)
-          ? { startedAtMs: now - Math.max(1, value.durationMs) }
-          : {}),
-        timestampMs: now,
-        bytes: value.bytes
-      });
-      current.downloads = prunePieceTransferSamples(current.downloads, now);
-      current.uploads = prunePieceTransferSamples(current.uploads, now);
-      pieceTransferRatesRef.current.set(value.peerId, current);
-
-      const rates = getPieceTransferRates(pieceTransferRatesRef.current, value.peerId, now);
-      recordPeerDiagnostic({
-        peerId: value.peerId,
-        channelKind: "data",
-        direction: value.direction === "download" ? "received" : "sent",
-        event: "piece-transfer",
-        summary: `${value.direction} ${value.bytes} bytes`,
-        recordEvent: false,
-        update: (snapshot) => ({
-          ...snapshot,
-          pieceDownloadRateKbps: rates.downloadRateKbps,
-          pieceUploadRateKbps: rates.uploadRateKbps,
-          lastPieceReceivedAt:
-            value.direction === "download" ? new Date(now).toISOString() : snapshot.lastPieceReceivedAt
-        })
-      });
-    }
-  );
-
-  const recordPieceRequestSampleRef = useRef(
-    (value: { peerId: string; outcome: "completed" | "timeout"; durationMs: number }) => {
-      pieceRequestSamplesRef.current.set(value.peerId, value);
-    }
-  );
 
   const updatePeerBufferedAmountRef = useRef((peerId: string, bufferedAmountBytes: number) => {
     peerBufferedAmountBytesRef.current.set(peerId, bufferedAmountBytes);
@@ -244,7 +142,7 @@ export function useRoomRuntimeObservability(input: {
         channelKind: "system",
         direction: "local",
         event: "runtime-status",
-        summary: "Pure cache runtime status updated",
+        summary: "Segmented Opus runtime status updated",
         recordEvent: false,
         update: (snapshot) => ({
           ...snapshot,
@@ -262,14 +160,10 @@ export function useRoomRuntimeObservability(input: {
   );
 
   return {
-    pieceTransferRatesRef,
-    pieceRequestSamplesRef,
     peerBufferedAmountBytesRef,
     updateDataTransportStatsRef,
     updateMediaTransportStatsRef,
     reportRealtimeFailureRef,
-    recordPieceTransferRef,
-    recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef,
     updateSystemSegmentedStatus
   };

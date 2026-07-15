@@ -36,11 +36,9 @@ type UseRoomPageRoomActionsInput = {
   currentPlaybackPositionRef: MutableRefObject<number>;
   deleteRoomTrackArtifacts: (trackIds: string[]) => Promise<void> | void;
   deleteUploadedTrackArtifacts: (trackId: string) => Promise<void> | void;
-  clearCacheStreamTrack: (trackId: string) => Promise<void> | void;
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   peerId: string;
   peerStorageKey: string;
-  resetAvailabilityState: () => void;
   resetPeerDiagnostics: () => void;
   roomSnapshot: RoomSnapshot | null;
   router: RoomRouter;
@@ -68,11 +66,9 @@ export function useRoomPageRoomActions({
   currentPlaybackPositionRef,
   deleteRoomTrackArtifacts,
   deleteUploadedTrackArtifacts,
-  clearCacheStreamTrack,
   dispatchRoomStateEvent,
   peerId,
   peerStorageKey,
-  resetAvailabilityState,
   resetPeerDiagnostics,
   roomSnapshot,
   router,
@@ -118,19 +114,15 @@ export function useRoomPageRoomActions({
 
   const handleTrackDeleted = useCallback(
     async (trackId: string) => {
-      await clearCacheStreamTrack(trackId);
       await deleteUploadedTrackArtifacts(trackId);
     },
-    [clearCacheStreamTrack, deleteUploadedTrackArtifacts]
+    [deleteUploadedTrackArtifacts]
   );
   const handleRoomDeleted = useCallback(
     async (trackIds: string[]) => {
-      for (const trackId of trackIds) {
-        await clearCacheStreamTrack(trackId);
-      }
       await deleteRoomTrackArtifacts(trackIds);
     },
-    [clearCacheStreamTrack, deleteRoomTrackArtifacts]
+    [deleteRoomTrackArtifacts]
   );
 
   const resetPlayerSurface = useCallback(() => {
@@ -143,7 +135,6 @@ export function useRoomPageRoomActions({
       localAudio.load();
     }
 
-    resetAvailabilityState();
     resetPeerDiagnostics();
     currentPlaybackPositionRef.current = 0;
     setPlayerResetEpoch((current) => current + 1);
@@ -165,7 +156,6 @@ export function useRoomPageRoomActions({
   }, [
     audioRef,
     currentPlaybackPositionRef,
-    resetAvailabilityState,
     resetPeerDiagnostics,
     setBufferHealth,
     setMediaConnectedPeers,

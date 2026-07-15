@@ -8,7 +8,6 @@ import { useSessionIdentity } from "@/features/session/use-session-identity";
 import { buildAppEntryHref } from "@/lib/client-shell";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
-import { clearMusicRoomLocalCache } from "@/lib/local-cache";
 
 type AuthMode = "login" | "register";
 
@@ -23,7 +22,6 @@ export function AuthPage() {
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerNickname, setRegisterNickname] = useState("");
   const [isPending, startTransition] = useTransition();
-  const [isClearingCache, setIsClearingCache] = useState(false);
   const {
     activeSession,
     hydrated,
@@ -82,20 +80,6 @@ export function AuthPage() {
       );
     } catch (error) {
       setStatusMessage(toUserFacingError(error));
-    }
-  }
-
-  async function handleClearLocalCache() {
-    if (isClearingCache) {
-      return;
-    }
-
-    setIsClearingCache(true);
-
-    try {
-      await clearMusicRoomLocalCache();
-    } finally {
-      window.location.reload();
     }
   }
 
@@ -269,15 +253,6 @@ export function AuthPage() {
                   </button>
                 </p>
                 
-                <div className="pt-2">
-                  <button
-                    onClick={handleClearLocalCache}
-                    disabled={isClearingCache}
-                    className="text-[11px] text-white/20 hover:text-white/40 transition-colors uppercase tracking-widest font-bold"
-                  >
-                    {isClearingCache ? "正在清理..." : "清除本地数据缓存"}
-                  </button>
-                </div>
               </div>
             </div>
           </div>

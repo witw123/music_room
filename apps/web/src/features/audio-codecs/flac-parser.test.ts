@@ -178,7 +178,7 @@ describe("FLAC parser helpers", () => {
     expect(streamInfo?.description.byteLength).toBe(42);
   });
 
-  it("extracts timestamped frames from a cached playback window without requiring the full prefix", () => {
+  it("extracts timestamped frames from an indexed playback window without requiring the full prefix", () => {
     const streamInfoPayload = new Uint8Array(34);
     streamInfoPayload[0] = 0x01;
     streamInfoPayload[1] = 0x00;

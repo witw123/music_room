@@ -39,11 +39,6 @@ export type LocalMemberPanelState = {
     sendRateKbps: number | null;
     sampleAgeMs: number | null;
   };
-  pieceSummary: {
-    downloadRateKbps: number | null;
-    uploadRateKbps: number | null;
-    sampleAgeMs: number | null;
-  };
   segmentedPlayback: SegmentedPlaybackSnapshot;
   playbackBitrateKbps: number | null;
   configuredPlaybackBitrateKbps?: number | null;
@@ -142,8 +137,7 @@ export function getCurrentTrackStatus(
 
 export function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
-  peerDiagnostics: PeerDiagnosticsSnapshot | undefined,
-  now = Date.now()
+  peerDiagnostics: PeerDiagnosticsSnapshot | undefined
 ) {
   if (presenceState === "offline") {
     return { label: "离线", detail: "该成员当前不参与实时音频传输。", tone: "warning" as const };
@@ -167,13 +161,7 @@ export function getPlaybackStatus(
     };
   }
   if (peerDiagnostics?.dataChannelState === "open") {
-    const sampleAt = new Date(peerDiagnostics.updatedAt).getTime();
-    const sampleFresh = Number.isFinite(sampleAt) && now - sampleAt <= 6_000;
-    const transferring = sampleFresh &&
-      ((peerDiagnostics.pieceDownloadRateKbps ?? 0) > 0 || (peerDiagnostics.pieceUploadRateKbps ?? 0) > 0);
-    return transferring
-      ? { label: "原文件缓存传输中", detail: "本端观测到该成员正在收发手动缓存数据。", tone: "success" as const }
-      : { label: "数据通道就绪", detail: "数据通道仅用于控制和手动原文件缓存。", tone: "accent" as const };
+    return { label: "控制通道就绪", detail: "房间控制通道已连接，媒体播放使用 RTP Opus。", tone: "accent" as const };
   }
   if (peerDiagnostics?.transportHealth === "failed") {
     return {
@@ -261,7 +249,7 @@ function MembersPanelBase({
   return (
     <section className="flex w-full flex-col gap-3">
       <p className="rounded-lg border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
-        播放状态、媒体轨道、AudioContext 与 RTP 码率来自本端真实 WebRTC 观测；DataChannel 仅用于房间控制和手动原文件缓存。
+        播放状态、媒体轨道、AudioContext 与 RTP 码率来自本端真实 WebRTC 观测；控制通道不承载音频数据。
       </p>
 
       <section className="border-y border-surface-border py-3">

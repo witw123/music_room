@@ -66,7 +66,6 @@ export function releasePeerConnectionEntry(input: {
   }) => void;
 }) {
   input.entry.releasing = true;
-  input.entry.sendQueue = [];
   if (input.entry.linkKind === "data") {
     input.deleteIfCurrent(input.peerId, input.entry);
   } else {
@@ -78,12 +77,7 @@ export function releasePeerConnectionEntry(input: {
   }
   input.stopStatsSampling(input.entry);
   if (input.entry.linkKind === "data") {
-    input.entry.controlChannel?.close();
-    input.entry.dataChannel?.close();
-    input.entry.originalChannel?.close();
-    if (!input.entry.controlChannel && !input.entry.dataChannel && !input.entry.originalChannel) {
-      input.entry.channel?.close();
-    }
+    input.entry.channel?.close();
   }
   input.entry.connection.close();
   input.entry.audioSender = null;
@@ -226,14 +220,11 @@ export function bindPeerConnectionEvents(input: {
       return;
     }
     const channel = event.channel;
-    if (channel.label === "music-room-control") {
-      input.entry.controlChannel = channel;
-    } else if (channel.label === "music-room-original") {
-      input.entry.originalChannel = channel;
-    } else if (channel.label === "music-room-data") {
-      input.entry.dataChannel = channel;
+    if (channel.label !== "music-room-control") {
+      channel.close();
+      return;
     }
-    input.entry.channel = input.entry.controlChannel ?? input.entry.dataChannel ?? channel;
+    input.entry.channel = channel;
     input.bindChannel(input.peerId, input.entry, channel);
   };
 

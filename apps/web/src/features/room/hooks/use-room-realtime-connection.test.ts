@@ -8,10 +8,8 @@ import {
   createRoomRealtimeEventGate,
   createRoomRealtimeRuntime,
   isSocketDisconnectGraceActive,
-  shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
   resolvePresenceRepairAction,
-  resolveRecoveryWatchdogAction,
   resolveRoomRealtimeSnapshotInputs,
   resolveRoomSnapshotWatchdogAction,
   shouldResyncSnapshotForPlaybackPatch,
@@ -72,7 +70,6 @@ describe("room realtime module boundaries", () => {
     expect(typeof useRoomRealtimeConnectionEffects).toBe("function");
   });
 });
-
 describe("room realtime event gate", () => {
   it("rejects stale side effects even before the React snapshot ref catches up", () => {
     const currentSnapshot = createSnapshot();
@@ -88,7 +85,6 @@ describe("room realtime event gate", () => {
     expect(gate.acceptPlayback(stalePlayback, currentSnapshot).accepted).toBe(false);
   });
 });
-
 describe("isSocketDisconnectGraceActive", () => {
   it("stays active before the grace window expires", () => {
     expect(isSocketDisconnectGraceActive(12_000, 10_000)).toBe(true);
@@ -99,7 +95,6 @@ describe("isSocketDisconnectGraceActive", () => {
     expect(isSocketDisconnectGraceActive(null, 12_001)).toBe(false);
   });
 });
-
 describe("shouldSuppressPlaybackWatchdogEscalation", () => {
   it("suppresses watchdog escalation while the page is backgrounded", () => {
     expect(
@@ -236,28 +231,6 @@ describe("shouldResyncSnapshotForPlaybackPatch", () => {
           playbackRevision: 2,
           queueVersion: 2
         })
-      })
-    ).toBe(false);
-  });
-});
-
-describe("shouldQueueIncomingAvailability", () => {
-  it("accepts availability for the active room even when manual caching is disabled", () => {
-    expect(
-      shouldQueueIncomingAvailability({
-        announcementRoomId: "room_1",
-        runtimeRoomId: "room_1",
-        activeRouteRoomId: "room_1"
-      })
-    ).toBe(true);
-  });
-
-  it("ignores availability for inactive rooms", () => {
-    expect(
-      shouldQueueIncomingAvailability({
-        announcementRoomId: "room_2",
-        runtimeRoomId: "room_1",
-        activeRouteRoomId: "room_1"
       })
     ).toBe(false);
   });
@@ -445,71 +418,5 @@ describe("resolveRoomSnapshotWatchdogAction", () => {
         staleAfterMs: 8_000
       }).shouldRequestResync
     ).toBe(false);
-  });
-});
-
-describe("resolveRecoveryWatchdogAction", () => {
-  it("recommends data recovery when a multi-member cached room has no connected peers", () => {
-    expect(
-      resolveRecoveryWatchdogAction({
-        snapshotRoomId: "room_1",
-        enableTrackCaching: true,
-        connectedPeersCount: 0,
-        snapshotMembersCount: 2,
-        playbackConnectionKey: "room_1|peer_source|7",
-        sourcePeerId: "peer_source"
-      })
-    ).toEqual({
-      recommendation: {
-        playbackConnectionKey: "room_1|peer_source|7",
-        peerId: "peer_source",
-        scope: "data",
-        level: "hard-recreate",
-        reason: "watchdog-data-stalled",
-        observedNoProgressMs: null
-      }
-    });
-  });
-
-  it("skips data recovery when room, caching, peer, or member gates are not ready", () => {
-    expect(
-      resolveRecoveryWatchdogAction({
-        snapshotRoomId: null,
-        enableTrackCaching: true,
-        connectedPeersCount: 0,
-        snapshotMembersCount: 2,
-        playbackConnectionKey: null
-      }).recommendation
-    ).toBeNull();
-
-    expect(
-      resolveRecoveryWatchdogAction({
-        snapshotRoomId: "room_1",
-        enableTrackCaching: false,
-        connectedPeersCount: 0,
-        snapshotMembersCount: 2,
-        playbackConnectionKey: null
-      }).recommendation
-    ).toBeNull();
-
-    expect(
-      resolveRecoveryWatchdogAction({
-        snapshotRoomId: "room_1",
-        enableTrackCaching: true,
-        connectedPeersCount: 1,
-        snapshotMembersCount: 2,
-        playbackConnectionKey: null
-      }).recommendation
-    ).toBeNull();
-
-    expect(
-      resolveRecoveryWatchdogAction({
-        snapshotRoomId: "room_1",
-        enableTrackCaching: true,
-        connectedPeersCount: 0,
-        snapshotMembersCount: 1,
-        playbackConnectionKey: null
-      }).recommendation
-    ).toBeNull();
   });
 });

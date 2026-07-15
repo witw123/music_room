@@ -39,7 +39,7 @@ describe("isCachedLibraryTrackUsableForRoomTrack", () => {
     ).toBe(true);
   });
 
-  it("rejects stale same-hash cache metadata so playback keeps downloading current pieces", () => {
+  it("rejects stale same-hash personal library metadata", () => {
     expect(
       isCachedLibraryTrackUsableForRoomTrack({
         cachedTrack: {

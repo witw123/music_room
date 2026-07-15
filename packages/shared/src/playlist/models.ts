@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { originalAssetManifestSchema, playbackAssetManifestSchema } from "../assets/models";
 
-export const trackPieceManifestSchema = z.object({
-  totalChunks: z.number().int().positive(),
-  chunkSize: z.number().int().positive(),
-  pieceMimeType: z.string()
-});
-
 export const trackMetaSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -23,9 +17,7 @@ export const trackMetaSchema = z.object({
   ownerNickname: z.string(),
   sourceType: z.literal("local_upload"),
   originalAsset: originalAssetManifestSchema.optional(),
-  playbackAsset: playbackAssetManifestSchema.optional(),
-  pieceManifest: trackPieceManifestSchema.nullable().optional(),
-  relayManifest: trackPieceManifestSchema.nullable().optional()
+  playbackAsset: playbackAssetManifestSchema.optional()
 });
 
 export const queueItemSchema = z.object({
@@ -51,6 +43,5 @@ export const playlistSchema = z.object({
 });
 
 export type TrackMeta = z.infer<typeof trackMetaSchema>;
-export type TrackPieceManifest = z.infer<typeof trackPieceManifestSchema>;
 export type QueueItem = z.infer<typeof queueItemSchema>;
 export type Playlist = z.infer<typeof playlistSchema>;

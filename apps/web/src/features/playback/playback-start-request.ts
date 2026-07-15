@@ -1,5 +1,8 @@
 import type { PlaybackSnapshot } from "@music-room/shared";
-import { hasActivePlayback } from "./asset-transfer-scheduler";
+
+function hasActivePlayback(playback: PlaybackSnapshot | null | undefined) {
+  return playback?.status === "playing" || playback?.status === "buffering";
+}
 
 export type PlaybackStartRequestReason =
   | "user-play"

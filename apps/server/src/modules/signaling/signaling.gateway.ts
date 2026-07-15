@@ -12,11 +12,6 @@ import {
 } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import type {
-  AssetAvailabilityAnnouncement,
-  AssetAvailabilityClearPayload,
-  AssetAvailabilityRequestPayload,
-  PieceAvailabilityClearPayload,
-  PieceAvailabilityRequestPayload,
   PeerSignalMessage,
   RoomSubscribeAckPayload,
   RoomChatInputPayload,
@@ -27,17 +22,11 @@ import type {
   RoomQueuePatchPayload,
   RoomSubscribePayload,
   RoomSnapshot,
-  RoomUnsubscribePayload,
-  TrackAvailabilityAnnouncement
+  RoomUnsubscribePayload
 } from "@music-room/shared";
 import {
-  assetAvailabilityAnnouncementSchema,
-  assetAvailabilityClearPayloadSchema,
-  assetAvailabilityRequestPayloadSchema,
   errorCodes,
   peerSignalMessageSchema,
-  pieceAvailabilityClearPayloadSchema,
-  pieceAvailabilityRequestPayloadSchema,
   roomChatInputPayloadSchema,
   roomDeletedPayloadSchema,
   roomLibraryPatchPayloadSchema,
@@ -48,9 +37,7 @@ import {
   roomSubscribePayloadSchema,
   roomSnapshotMissingPayloadSchema,
   roomSnapshotSchema,
-  roomUnsubscribePayloadSchema,
-  trackAvailabilityAnnouncementSchema,
-  compactTrackAvailabilityAnnouncement
+  roomUnsubscribePayloadSchema
 } from "@music-room/shared";
 import { createWsApiException } from "../../common/errors/ws-error";
 import { MetricsService } from "../../common/metrics/metrics.service";
@@ -60,15 +47,8 @@ import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
 import { RoomRealtimeBroadcaster } from "./room-realtime.broadcaster";
-import { TrackAvailabilityRegistry } from "./track-availability.registry";
 import {
-  assetAvailabilityChannel,
-  assetAvailabilityClearChannel,
-  assetAvailabilityRequestChannel,
   peerSignalChannel,
-  pieceAvailabilityChannel,
-  pieceAvailabilityClearChannel,
-  pieceAvailabilityRequestChannel,
   roomDeletedChannel,
   roomLibraryPatchChannel,
   roomPlaybackPatchChannel,
@@ -131,7 +111,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly roomRealtimeBroadcaster: RoomRealtimeBroadcaster,
-    private readonly trackAvailabilityRegistry: TrackAvailabilityRegistry,
     private readonly authService: AuthService,
     private readonly metrics: MetricsService
   ) {}
@@ -146,7 +125,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   emitRoomMissing(roomId: string) {
     this.ensureBroadcasterServer();
-    this.trackAvailabilityRegistry.clearRoom(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
     this.metrics.clearRoom(roomId);
@@ -156,7 +134,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
   emitRoomDeleted(roomId: string, trackIds: string[]) {
     this.ensureBroadcasterServer();
-    this.trackAvailabilityRegistry.clearRoom(roomId);
     this.peerSocketsByRoom.delete(roomId);
     this.activeSessionsByRoom.delete(roomId);
     this.metrics.clearRoom(roomId);
@@ -195,25 +172,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
   emitLibraryPatch(roomId: string, payload: Omit<RoomLibraryPatchPayload, "roomId" | "updatedAt">) {
     this.ensureBroadcasterServer();
     this.roomRealtimeBroadcaster.emitLibraryPatch(roomId, payload);
-  }
-
-  getTrackAvailabilityAnnouncements(roomId: string, trackId: string) {
-    return this.trackAvailabilityRegistry.getTrackAnnouncements(roomId, trackId);
-  }
-
-  private emitPieceAvailabilityClear(roomId: string, ownerPeerId: string, trackId?: string) {
-    const payload: PieceAvailabilityClearPayload = {
-      roomId,
-      ownerPeerId,
-      ...(trackId ? { trackId } : {}),
-      updatedAt: new Date().toISOString()
-    };
-    this.server.to(roomId).emit("piece.availability.clear", payload);
-    void this.redisService.publish(pieceAvailabilityClearChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId,
-      payload
-    });
   }
 
   afterInit() {
@@ -256,7 +214,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return;
       }
 
-      this.trackAvailabilityRegistry.clearRoom(parsed.data.roomId);
       this.peerSocketsByRoom.delete(parsed.data.roomId);
       this.activeSessionsByRoom.delete(parsed.data.roomId);
       this.metrics.clearRoom(parsed.data.roomId);
@@ -285,7 +242,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return;
       }
 
-      this.trackAvailabilityRegistry.clearRoom(parsed.data.roomId);
       this.peerSocketsByRoom.delete(parsed.data.roomId);
       this.activeSessionsByRoom.delete(parsed.data.roomId);
       this.metrics.clearRoom(parsed.data.roomId);
@@ -400,142 +356,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       this.redisUnsubscribers.push(unsubscribe);
     });
 
-    void this.redisService.subscribe(pieceAvailabilityChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: TrackAvailabilityAnnouncement;
-      };
-
-      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
-        return;
-      }
-
-      const parsed = trackAvailabilityAnnouncementSchema.safeParse(message.payload);
-      if (!parsed.success || parsed.data.roomId !== message.roomId) {
-        return;
-      }
-
-      const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(
-        message.roomId,
-        parsed.data
-      );
-      const compactAnnouncement = compactTrackAvailabilityAnnouncement(mergedAnnouncement);
-      this.server.to(message.roomId).emit("piece.availability", compactAnnouncement);
-    }).then((unsubscribe) => {
-      this.redisUnsubscribers.push(unsubscribe);
-    });
-
-    void this.redisService.subscribe(pieceAvailabilityClearChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: PieceAvailabilityClearPayload;
-      };
-
-      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
-        return;
-      }
-
-      const parsed = pieceAvailabilityClearPayloadSchema.safeParse(message.payload);
-      if (!parsed.success || parsed.data.roomId !== message.roomId) {
-        return;
-      }
-
-      if (parsed.data.trackId) {
-        this.trackAvailabilityRegistry.removeTrack(
-          message.roomId,
-          parsed.data.ownerPeerId,
-          parsed.data.trackId
-        );
-      } else {
-        this.trackAvailabilityRegistry.removePeer(message.roomId, parsed.data.ownerPeerId);
-      }
-      this.server.to(message.roomId).emit("piece.availability.clear", parsed.data);
-    }).then((unsubscribe) => {
-      this.redisUnsubscribers.push(unsubscribe);
-    });
-
-    void this.redisService.subscribe(assetAvailabilityChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: AssetAvailabilityAnnouncement;
-      };
-      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
-        return;
-      }
-      const parsed = assetAvailabilityAnnouncementSchema.safeParse(message.payload);
-      if (!parsed.success || parsed.data.roomId !== message.roomId) {
-        return;
-      }
-      const merged = this.trackAvailabilityRegistry.setAssetAnnouncement(
-        parsed.data.roomId,
-        parsed.data
-      );
-      this.server.to(parsed.data.roomId).emit("asset.availability", merged);
-    }).then((unsubscribe) => {
-      this.redisUnsubscribers.push(unsubscribe);
-    });
-
-    void this.redisService.subscribe(assetAvailabilityClearChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: AssetAvailabilityClearPayload;
-      };
-      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
-        return;
-      }
-      const parsed = assetAvailabilityClearPayloadSchema.safeParse(message.payload);
-      if (!parsed.success || parsed.data.roomId !== message.roomId) {
-        return;
-      }
-      this.trackAvailabilityRegistry.removeAssetPeer(
-        parsed.data.roomId,
-        parsed.data.ownerPeerId,
-        parsed.data.assetId
-      );
-      this.server.to(parsed.data.roomId).emit("asset.availability.clear", parsed.data);
-    }).then((unsubscribe) => {
-      this.redisUnsubscribers.push(unsubscribe);
-    });
-
-    void this.redisService.subscribe(assetAvailabilityRequestChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: AssetAvailabilityRequestPayload;
-      };
-      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
-        return;
-      }
-      const parsed = assetAvailabilityRequestPayloadSchema.safeParse(message.payload);
-      if (!parsed.success || parsed.data.roomId !== message.roomId) {
-        return;
-      }
-      this.server.to(parsed.data.roomId).emit("asset.availability.request", parsed.data);
-    }).then((unsubscribe) => {
-      this.redisUnsubscribers.push(unsubscribe);
-    });
-
-    void this.redisService.subscribe(pieceAvailabilityRequestChannel, (payload) => {
-      const message = payload as {
-        sourceId?: string;
-        roomId?: string;
-        payload?: PieceAvailabilityRequestPayload;
-      };
-      if (!hasForeignRedisEnvelope(message, this.roomRealtimeBroadcaster.instanceId)) {
-        return;
-      }
-      const parsed = pieceAvailabilityRequestPayloadSchema.safeParse(message.payload);
-      if (!parsed.success || parsed.data.roomId !== message.roomId) {
-        return;
-      }
-      this.server.to(parsed.data.roomId).emit("piece.availability.request", parsed.data);
-    }).then((unsubscribe) => {
-      this.redisUnsubscribers.push(unsubscribe);
-    });
   }
 
   onModuleDestroy() {
@@ -585,243 +405,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       payload: nextPayload
     });
     return nextPayload;
-  }
-
-  @SubscribeMessage("piece.availability")
-  async handlePieceAvailability(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: TrackAvailabilityAnnouncement
-  ) {
-    const parsed = trackAvailabilityAnnouncementSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw createWsApiException(
-        "Invalid piece availability payload.",
-        errorCodes.validationFailed,
-        parsed.error.flatten()
-      );
-    }
-    const announcement = parsed.data;
-
-    this.assertRealtimeClient(client, announcement.roomId);
-    await this.assertSessionLease(client);
-    if (client.data.peerId !== announcement.ownerPeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-
-    const mergedAnnouncement = this.trackAvailabilityRegistry.setAnnouncement(
-      announcement.roomId,
-      announcement
-    );
-    const compactAnnouncement = compactTrackAvailabilityAnnouncement(mergedAnnouncement);
-    client.to(announcement.roomId).emit("piece.availability", compactAnnouncement);
-    this.publishRealtime(pieceAvailabilityChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: announcement.roomId,
-      payload: compactAnnouncement
-    });
-    return compactAnnouncement;
-  }
-
-  @SubscribeMessage("asset.availability")
-  async handleAssetAvailability(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: AssetAvailabilityAnnouncement
-  ) {
-    const parsed = assetAvailabilityAnnouncementSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw createWsApiException(
-        "Invalid asset availability payload.",
-        errorCodes.validationFailed,
-        parsed.error.flatten()
-      );
-    }
-    const announcement = parsed.data;
-    this.assertRealtimeClient(client, announcement.roomId);
-    await this.assertSessionLease(client);
-    if (client.data.peerId !== announcement.ownerPeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-    const merged = this.trackAvailabilityRegistry.setAssetAnnouncement(
-      announcement.roomId,
-      announcement
-    );
-    client.to(announcement.roomId).emit("asset.availability", merged);
-    this.publishRealtime(assetAvailabilityChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: announcement.roomId,
-      payload: merged
-    });
-    return merged;
-  }
-
-  @SubscribeMessage("asset.availability.request")
-  async handleAssetAvailabilityRequest(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: AssetAvailabilityRequestPayload
-  ) {
-    const parsed = assetAvailabilityRequestPayloadSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw createWsApiException(
-        "Invalid asset availability request.",
-        errorCodes.validationFailed,
-        parsed.error.flatten()
-      );
-    }
-    this.assertRealtimeClient(client, parsed.data.roomId);
-    await this.assertSessionLease(client);
-    if (client.data.peerId !== parsed.data.requesterPeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-    for (const announcement of this.trackAvailabilityRegistry.getAssetAnnouncements(
-      parsed.data.roomId,
-      parsed.data.assetId
-    )) {
-      client.emit("asset.availability", announcement);
-    }
-    client.to(parsed.data.roomId).emit("asset.availability.request", parsed.data);
-    this.publishRealtime(assetAvailabilityRequestChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: parsed.data.roomId,
-      payload: parsed.data
-    });
-    return { ok: true };
-  }
-
-  @SubscribeMessage("asset.availability.clear")
-  async handleAssetAvailabilityClear(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: AssetAvailabilityClearPayload
-  ) {
-    const parsed = assetAvailabilityClearPayloadSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw createWsApiException(
-        "Invalid asset availability clear payload.",
-        errorCodes.validationFailed,
-        parsed.error.flatten()
-      );
-    }
-    this.assertRealtimeClient(client, parsed.data.roomId);
-    await this.assertSessionLease(client);
-    if (client.data.peerId !== parsed.data.ownerPeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-    const removed = this.trackAvailabilityRegistry.removeAssetPeer(
-      parsed.data.roomId,
-      parsed.data.ownerPeerId,
-      parsed.data.assetId
-    );
-    if (removed) {
-      client.to(parsed.data.roomId).emit("asset.availability.clear", parsed.data);
-      this.publishRealtime(assetAvailabilityClearChannel, {
-        sourceId: this.roomRealtimeBroadcaster.instanceId,
-        roomId: parsed.data.roomId,
-        payload: parsed.data
-      });
-    }
-    return { ok: true };
-  }
-
-  @SubscribeMessage("piece.availability.request")
-  async handlePieceAvailabilityRequest(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: PieceAvailabilityRequestPayload
-  ) {
-    const parsed = pieceAvailabilityRequestPayloadSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw createWsApiException(
-        "Invalid piece availability request.",
-        errorCodes.validationFailed,
-        parsed.error.flatten()
-      );
-    }
-    const request = parsed.data;
-    this.assertRealtimeClient(client, request.roomId);
-    await this.assertSessionLease(client);
-    if (client.data.peerId !== request.requesterPeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-
-    for (const announcement of this.trackAvailabilityRegistry.getTrackAnnouncements(
-      request.roomId,
-      request.trackId
-    )) {
-      client.emit("piece.availability", compactTrackAvailabilityAnnouncement(announcement));
-    }
-    client.to(request.roomId).emit("piece.availability.request", request);
-    this.publishRealtime(pieceAvailabilityRequestChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId: request.roomId,
-      payload: request
-    });
-    return { ok: true };
-  }
-
-  @SubscribeMessage("piece.availability.clear")
-  async handlePieceAvailabilityClear(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: PieceAvailabilityClearPayload
-  ) {
-    const parsed = pieceAvailabilityClearPayloadSchema.safeParse(payload);
-    if (!parsed.success) {
-      throw createWsApiException(
-        "Invalid piece availability clear payload.",
-        errorCodes.validationFailed,
-        parsed.error.flatten()
-      );
-    }
-
-    const clearPayload = parsed.data;
-    this.assertRealtimeClient(client, clearPayload.roomId);
-    await this.assertSessionLease(client);
-    if (client.data.peerId !== clearPayload.ownerPeerId) {
-      throw new WsException("Peer mismatch.");
-    }
-
-    const removed = clearPayload.trackId
-      ? this.trackAvailabilityRegistry.removeTrack(
-          clearPayload.roomId,
-          clearPayload.ownerPeerId,
-          clearPayload.trackId
-        )
-      : this.trackAvailabilityRegistry.removePeer(
-          clearPayload.roomId,
-          clearPayload.ownerPeerId
-        );
-    const sourceChanged = clearPayload.trackId
-      ? (await this.roomService.handleTrackAvailabilityLoss?.(
-          clearPayload.roomId,
-          clearPayload.ownerPeerId,
-          clearPayload.trackId
-        )) ?? false
-      : false;
-    if (removed || sourceChanged) {
-      client.to(clearPayload.roomId).emit("piece.availability.clear", clearPayload);
-      this.publishRealtime(pieceAvailabilityClearChannel, {
-        sourceId: this.roomRealtimeBroadcaster.instanceId,
-        roomId: clearPayload.roomId,
-        payload: clearPayload
-      });
-    }
-
-    if (sourceChanged) {
-      await this.roomRealtimePublisher.emitTopologySnapshot(clearPayload.roomId);
-    }
-    return { ok: true };
-  }
-
-  private emitAssetAvailabilityClear(roomId: string, ownerPeerId: string, assetId?: string) {
-    const payload: AssetAvailabilityClearPayload = {
-      roomId,
-      ownerPeerId,
-      ...(assetId ? { assetId } : {}),
-      updatedAt: new Date().toISOString()
-    };
-    this.server.to(roomId).emit("asset.availability.clear", payload);
-    void this.redisService.publish(assetAvailabilityClearChannel, {
-      sourceId: this.roomRealtimeBroadcaster.instanceId,
-      roomId,
-      payload
-    });
   }
 
   @SubscribeMessage("room.chat")
@@ -928,9 +511,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       if (previousSessionId) {
         void this.updatePeerPresence(previousRoomId, previousSessionId, null, "offline");
       }
-      if (previousPeerId) {
-        this.clearPeerAvailability(previousRoomId, previousPeerId);
-      }
     }
     client.data ??= {};
 
@@ -942,21 +522,13 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     );
 
     const fenceToken = randomUUID();
-    const previousLease = await this.claimSessionLease(
+    await this.claimSessionLease(
       message.roomId,
       message.sessionId,
       message.peerId,
       client.id,
       fenceToken
     );
-    if (
-      previousLease?.instanceId !== this.roomRealtimeBroadcaster.instanceId &&
-      previousLease?.peerId &&
-      previousLease.peerId !== message.peerId
-    ) {
-      this.clearPeerAvailability(message.roomId, previousLease.peerId);
-    }
-
     client.data.roomId = message.roomId;
     client.data.sessionId = message.sessionId;
     client.data.peerId = message.peerId;
@@ -991,16 +563,12 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
         return { ok: false };
       }
       this.metrics.bindRealtimeSocket(client.id, message.roomId);
-      // Flush the compact subscribe ack before potentially large snapshot and
-      // availability payloads so peer negotiation can start immediately.
+      // Flush the compact subscribe ack before the snapshot so peer negotiation can start immediately.
       setImmediate(() => {
         if (!this.isActiveSessionSocket(message.roomId, message.sessionId, client.id)) {
           return;
         }
         client.emit("room.snapshot", snapshot);
-        void this.emitAvailabilitySnapshot(message.roomId, client).catch(() => {
-          this.metrics.incrementRealtimeFailure();
-        });
       });
       return this.buildSubscribeAck(snapshot, recoveryGeneration);
     } catch (error) {
@@ -1091,7 +659,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       );
     }
     if (peerId) {
-      this.clearPeerAvailability(message.roomId, peerId);
       this.clearPendingPeerSignals(message.roomId, peerId);
     }
     this.clearRecoveryGeneration(message.roomId, sessionId, peerId);
@@ -1331,15 +898,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     }
   }
 
-  private async emitAvailabilitySnapshot(roomId: string, client: Socket) {
-    await this.trackAvailabilityRegistry.emitSnapshot(roomId, (announcement) => {
-      client.emit("piece.availability", compactTrackAvailabilityAnnouncement(announcement));
-    });
-    await this.trackAvailabilityRegistry.emitAssetSnapshot(roomId, (announcement) => {
-      client.emit("asset.availability", announcement);
-    });
-  }
-
   private async emitPeerSignalToPeer(
     roomId: string,
     peerId: string,
@@ -1388,18 +946,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
     } catch {
       return true;
     }
-  }
-
-  private clearPeerAvailability(roomId: string, peerId: string) {
-    const removed = this.trackAvailabilityRegistry.removePeer(roomId, peerId);
-    const removedAssets = this.trackAvailabilityRegistry.removeAssetPeer(roomId, peerId);
-    if (removed) {
-      this.emitPieceAvailabilityClear(roomId, peerId);
-    }
-    if (removedAssets) {
-      this.emitAssetAvailabilityClear(roomId, peerId);
-    }
-    return removed || removedAssets;
   }
 
   private scheduleDisconnectCleanup(
@@ -1452,7 +998,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
 
     await this.updatePeerPresence(roomId, sessionId, null, "offline");
     if (peerId) {
-      this.clearPeerAvailability(roomId, peerId);
       this.clearPendingPeerSignals(roomId, peerId);
     }
     this.clearRecoveryGeneration(roomId, sessionId, peerId);
@@ -1736,7 +1281,6 @@ export class SignalingGateway implements OnGatewayInit, OnGatewayDisconnect, OnM
       return;
     }
 
-    this.clearPeerAvailability(roomId, existing.peerId);
 
     await this.roomService.handleDuplicateSessionReplacement(roomId, sessionId);
     await this.roomRealtimePublisher.emitTopologySnapshot(roomId);

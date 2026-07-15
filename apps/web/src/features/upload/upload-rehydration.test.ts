@@ -20,13 +20,7 @@ describe("rehydrateOwnedUploadedTracksFromCache", () => {
     artworkUrl: null,
     ownerSessionId: "user_1",
     ownerNickname: "Host",
-    sourceType: "local_upload" as const,
-    relayManifest: null,
-    pieceManifest: {
-      totalChunks: 1,
-      chunkSize: 1024,
-      pieceMimeType: "audio/flac"
-    }
+    sourceType: "local_upload" as const
   };
 
   it("rehydrates missing owned room tracks from usable cached files", async () => {

@@ -18,92 +18,6 @@ export const roomMediaConnectionStateSchema = z.enum([
   "failed"
 ]);
 
-export const trackPieceInfoSchema = z.object({
-  id: z.string(),
-  trackId: z.string(),
-  chunkIndex: z.number().int().nonnegative(),
-  chunkSize: z.number().int().positive(),
-  hash: z.string(),
-  ownerPeerId: z.string()
-});
-
-export const trackAvailabilitySchema = z.object({
-  trackId: z.string(),
-  ownerPeerId: z.string(),
-  availableChunks: z.array(z.number().int().nonnegative()).default([]),
-  availableRanges: z
-    .array(
-      z.object({
-        start: z.number().int().nonnegative(),
-        end: z.number().int().nonnegative()
-      })
-    )
-    .optional(),
-  announcedAt: z.string().datetime()
-});
-
-export const pieceAvailabilityRangeSchema = z.object({
-  start: z.number().int().nonnegative(),
-  end: z.number().int().nonnegative()
-});
-
-export const trackAvailabilityAnnouncementSchema = z.object({
-  roomId: z.string(),
-  trackId: z.string(),
-  ownerPeerId: z.string(),
-  nickname: z.string(),
-  assetKind: z.enum(["relay", "original"]).optional(),
-  assetHash: z.string().optional(),
-  totalChunks: z.number().int().nonnegative(),
-  chunkSize: z.number().int().positive(),
-  availableChunks: z.array(z.number().int().nonnegative()).default([]),
-  availableRanges: z.array(pieceAvailabilityRangeSchema).optional(),
-  pieceHashes: z.array(z.string()).optional(),
-  source: z.enum(["live_upload", "local_cache"]),
-  announcedAt: z.string().datetime()
-});
-
-export const cacheStreamMessageSchema = z.union([
-  z.object({
-    kind: z.literal("cache-stream-open"),
-    protocolVersion: z.literal(3),
-    streamId: z.string().min(1),
-    trackId: z.string().min(1),
-    generation: z.number().int().nonnegative(),
-    priority: z.enum(["critical", "bulk"]),
-    ranges: z.array(pieceAvailabilityRangeSchema).min(1),
-    initialCreditBytes: z.number().int().positive()
-  }),
-  z.object({
-    kind: z.literal("cache-stream-credit"),
-    streamId: z.string().min(1),
-    generation: z.number().int().nonnegative(),
-    chunkIndex: z.number().int().nonnegative(),
-    creditBytes: z.number().int().positive()
-  }),
-  z.object({
-    kind: z.literal("cache-stream-ack"),
-    streamId: z.string().min(1),
-    generation: z.number().int().nonnegative(),
-    chunkIndex: z.number().int().nonnegative(),
-    storedBytes: z.number().int().positive()
-  }),
-  z.object({
-    kind: z.literal("cache-stream-nack"),
-    streamId: z.string().min(1),
-    generation: z.number().int().nonnegative(),
-    chunkIndex: z.number().int().nonnegative(),
-    reason: z.enum(["hash-mismatch", "decode-failure", "storage-failure", "receiver-overloaded"]),
-    refundCreditBytes: z.number().int().nonnegative()
-  }),
-  z.object({
-    kind: z.literal("cache-stream-reset"),
-    streamId: z.string().min(1),
-    generation: z.number().int().nonnegative(),
-    reason: z.enum(["peer-closed", "timeout", "superseded", "protocol-error"])
-  })
-]);
-
 export const peerSignalMessageSchema = z.object({
   protocolVersion: z.literal(p2pProtocolVersion),
   capability: z.literal(segmentedOpusCapability),
@@ -158,8 +72,6 @@ export const peerSignalMessageSchema = z.object({
     });
   }
 });
-
-export const p2pDataMessageSchema = cacheStreamMessageSchema;
 
 export const peerRecentEventSchema = z.object({
   id: z.string(),
@@ -273,8 +185,6 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   iceRestartCount: z.number().int().nonnegative().nullable().optional(),
   hardRecreateCount: z.number().int().nonnegative().nullable().optional(),
   degradedReason: z.string().nullable().optional(),
-  lastAvailabilitySeenAt: z.string().datetime().nullable().optional(),
-  lastPieceReceivedAt: z.string().datetime().nullable().optional(),
   iceConfigSource: iceConfigSourceSchema.nullable().optional(),
   dataCandidateType: z.string().nullable(),
   dataRemoteCandidateType: z.string().nullable().optional(),
@@ -303,28 +213,7 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   lastStablePlaybackAt: z.string().datetime().nullable().optional(),
   mediaReceiveBitrateKbps: z.number().nonnegative().nullable(),
   mediaSendBitrateKbps: z.number().nonnegative().nullable(),
-  pieceDownloadRateKbps: z.number().nonnegative().nullable(),
-  pieceUploadRateKbps: z.number().nonnegative().nullable(),
-  pieceRttMsP50: z.number().nonnegative().nullable().optional(),
-  pieceRttMsP95: z.number().nonnegative().nullable().optional(),
-  pieceTimeoutRate: z.number().min(0).max(100).nullable().optional(),
   dataBufferedAmountBytes: z.number().int().nonnegative().nullable().optional(),
-  streamThroughputKbps: z.number().nonnegative().nullable().optional(),
-  streamInFlightBytes: z.number().int().nonnegative().nullable().optional(),
-  streamCreditBytes: z.number().int().nonnegative().nullable().optional(),
-  streamAckRttMs: z.number().nonnegative().nullable().optional(),
-  streamNackCount: z.number().int().nonnegative().nullable().optional(),
-  streamRetryCount: z.number().int().nonnegative().nullable().optional(),
-  providerContributionBytes: z.number().int().nonnegative().nullable().optional(),
-  receiveWindowBytes: z.number().int().nonnegative().nullable().optional(),
-  validationQueueBytes: z.number().int().nonnegative().nullable().optional(),
-  persistenceBacklogBytes: z.number().int().nonnegative().nullable().optional(),
-  persistenceWorkerCount: z.number().int().nonnegative().nullable().optional(),
-  lastValidatedAt: z.string().datetime().nullable().optional(),
-  lastPersistedAt: z.string().datetime().nullable().optional(),
-  lastResetReason: z.string().nullable().optional(),
-  lastNackReason: z.string().nullable().optional(),
-  availabilityCoveragePercent: z.number().min(0).max(100).nullable().optional(),
   lastAudibleProgressAt: z.string().datetime().nullable().optional(),
   lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),
   lastDataActivityAt: z.string().datetime().nullable().optional(),
@@ -349,13 +238,7 @@ export const iceConfigResponseSchema = z.object({
   source: iceConfigSourceSchema
 });
 
-export type TrackPieceInfo = z.infer<typeof trackPieceInfoSchema>;
-export type TrackAvailability = z.infer<typeof trackAvailabilitySchema>;
-export type TrackAvailabilityAnnouncement = z.infer<typeof trackAvailabilityAnnouncementSchema>;
-export type PieceAvailabilityRange = z.infer<typeof pieceAvailabilityRangeSchema>;
-export type CacheStreamMessage = z.infer<typeof cacheStreamMessageSchema>;
 export type PeerSignalMessage = z.infer<typeof peerSignalMessageSchema>;
-export type P2PDataMessage = z.infer<typeof p2pDataMessageSchema>;
 export type IceServerConfig = z.infer<typeof iceServerConfigSchema>;
 export type RoomMediaConnectionState = z.infer<typeof roomMediaConnectionStateSchema>;
 export type IceConfigSource = z.infer<typeof iceConfigSourceSchema>;

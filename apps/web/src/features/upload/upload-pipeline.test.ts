@@ -18,12 +18,6 @@ const buildTrack = (id: string, fileHash: string): TrackMeta => ({
   ownerSessionId: "user_1",
   ownerNickname: "Host",
   sourceType: "local_upload",
-  pieceManifest: {
-    totalChunks: 2,
-    chunkSize: 1024,
-    pieceMimeType: "audio/flac"
-  },
-  relayManifest: null
 });
 
 describe("processSelectedTrackFiles", () => {
@@ -46,7 +40,6 @@ describe("processSelectedTrackFiles", () => {
       },
       roomId: "room_1",
       roomTracks: [buildTrack("track_existing", "hash_existing")],
-      manualTrackCachingEnabled: true,
       inFlightUploadHashes,
       createObjectUrl: (file) => `blob:${file.name}`,
       revokeObjectUrl: (objectUrl) => {
@@ -99,7 +92,6 @@ describe("processSelectedTrackFiles", () => {
       activeSession: { userId: "user_1", nickname: "Host" },
       roomId: "room_1",
       roomTracks: [],
-      manualTrackCachingEnabled: true,
       inFlightUploadHashes: new Set(),
       createObjectUrl: () => "blob:broken.wav",
       revokeObjectUrl: (objectUrl) => revokedUrls.push(objectUrl),

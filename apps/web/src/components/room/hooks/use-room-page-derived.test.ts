@@ -19,13 +19,7 @@ const track = {
   artworkUrl: null,
   ownerSessionId: "host",
   ownerNickname: "Host",
-  sourceType: "local_upload",
-  pieceManifest: {
-    totalChunks: 12,
-    chunkSize: 256_000,
-    pieceMimeType: "audio/flac"
-  },
-  relayManifest: null
+  sourceType: "local_upload"
 } satisfies RoomSnapshot["tracks"][number];
 
 function createSnapshot(input: {
@@ -82,14 +76,7 @@ function createSnapshot(input: {
 
 describe("room page derived state", () => {
   it("keeps currentTrack stable across equivalent snapshot track refreshes", () => {
-    const refreshedTrack = {
-      ...track,
-      pieceManifest: {
-        totalChunks: 12,
-        chunkSize: 256_000,
-        pieceMimeType: "audio/flac"
-      }
-    };
+    const refreshedTrack = { ...track };
 
     expect(resolveStableCurrentTrack(track, "track_cached", [refreshedTrack])).toBe(track);
   });
