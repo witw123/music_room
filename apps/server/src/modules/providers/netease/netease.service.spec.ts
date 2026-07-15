@@ -30,7 +30,8 @@ describe("NeteaseService", () => {
             }
           ]
         }
-      })
+      }),
+      getTracks: jest.fn().mockResolvedValue({ songs: [] })
     };
     const accounts = {
       getCookieOrThrow: jest.fn().mockResolvedValue("cookie"),
@@ -52,7 +53,6 @@ describe("NeteaseService", () => {
         {
           provider: "netease",
           providerTrackId: "123",
-          market: "网易云音乐",
           access: "vip",
           quality: "exhigh",
           title: "Test Song",

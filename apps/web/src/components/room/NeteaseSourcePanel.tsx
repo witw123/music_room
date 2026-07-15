@@ -25,8 +25,7 @@ const qualityLabels = {
 const accessLabels = {
   free: "免费",
   vip: "VIP",
-  paid: "付费",
-  unknown: "状态未知"
+  paid: "付费"
 } as const;
 
 type NeteaseSourcePanelProps = {
@@ -267,25 +266,35 @@ export function NeteaseSourcePanel({
           </form>
 
           {results.length > 0 ? (
-            <div className="flex flex-col divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border">
+            <div className="flex items-center justify-between text-[11px] text-foreground-muted">
+              <span>搜索结果</span>
+              <span className="font-mono tabular-nums">{results.length} 首</span>
+            </div>
+          ) : null}
+
+          {results.length > 0 ? (
+            <div className="netease-results-scroll max-h-[min(32rem,58dvh)] overflow-y-auto overscroll-contain rounded-lg border border-surface-border">
+              <div className="flex flex-col divide-y divide-surface-border">
               {results.map((track) => {
                 const isImporting = pendingAction === `import:${track.providerTrackId}`;
+                const accessLabel = track.access === "unknown" ? null : accessLabels[track.access];
+                const qualityLabel = track.quality ? qualityLabels[track.quality] : "标准";
                 return (
                   <article
-                    className="flex flex-col gap-3 bg-background/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex min-h-[76px] flex-col gap-3 bg-background/40 px-3 py-3 transition-colors hover:bg-surface-hover/60 sm:flex-row sm:items-center sm:justify-between"
                     data-testid="netease-search-result"
                     data-track-id={track.providerTrackId}
                     key={track.providerTrackId}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h3 className="truncate text-sm font-medium text-foreground">{track.title}</h3>
-                      <p className="truncate text-xs text-foreground-muted">
-                        {track.artist} · {track.album ?? "未知专辑"} · {formatDuration(track.durationMs)}
+                      <p className="mt-1 flex min-w-0 items-center gap-2 text-xs text-foreground-muted">
+                        <span className="min-w-0 truncate">{track.artist} · {track.album ?? "未知专辑"}</span>
+                        <span className="shrink-0 font-mono tabular-nums text-foreground/70">{formatDuration(track.durationMs)}</span>
                       </p>
-                      <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-foreground-muted">
-                        <span className="text-accent">市场 · {track.market}</span>
-                        <span>版权 · {accessLabels[track.access]}</span>
-                        <span>音质 · {track.quality ? qualityLabels[track.quality] : "未知"}</span>
+                      <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-foreground-muted">
+                        {accessLabel ? <span className="rounded bg-accent/10 px-1.5 py-0.5 text-accent">{accessLabel}</span> : null}
+                        <span className="rounded bg-white/[0.06] px-1.5 py-0.5">{qualityLabel}</span>
                       </p>
                     </div>
                     <Button
@@ -300,6 +309,7 @@ export function NeteaseSourcePanel({
                   </article>
                 );
               })}
+              </div>
             </div>
           ) : null}
         </>

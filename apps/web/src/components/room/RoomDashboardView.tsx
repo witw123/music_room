@@ -63,7 +63,7 @@ type RoomDashboardViewProps = {
 const tabLabels: Record<TabId, string> = {
   queue: "队列",
   library: "曲库",
-  netease: "网易云",
+  netease: "第三方",
   members: "成员"
 };
 

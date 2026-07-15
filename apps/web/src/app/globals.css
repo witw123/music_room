@@ -46,4 +46,7 @@
   .thin-scrollbar::-webkit-scrollbar {
     display: none;
   }
+  .netease-results-scroll {
+    scrollbar-gutter: stable;
+  }
 }

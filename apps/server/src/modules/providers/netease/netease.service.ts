@@ -25,6 +25,7 @@ type SongRecord = {
   id?: unknown;
   name?: unknown;
   fee?: unknown;
+  duration?: unknown;
   dt?: unknown;
   artists?: unknown;
   ar?: unknown;
@@ -142,9 +143,17 @@ export class NeteaseService {
       this.api.searchTracks({ ...query, cookie })
     );
     const songs = response.result?.songs ?? [];
+    const detailByTrackId = await this.getSearchTrackDetails(userId, cookie, songs);
     return {
       items: songs
-        .map((song) => this.toTrackCandidate(song))
+        .map((song) => {
+          const trackId = readString(asRecord(song)?.id);
+          const detail = trackId ? detailByTrackId.get(trackId) : undefined;
+          return this.toTrackCandidate({
+            ...(asRecord(song) ?? {}),
+            ...(asRecord(detail) ?? {})
+          });
+        })
         .filter((song): song is NeteaseTrackCandidate => !!song),
       limit: query.limit,
       offset: query.offset
@@ -297,15 +306,42 @@ export class NeteaseService {
     return {
       provider: "netease",
       providerTrackId: trackId,
-      market: "网易云音乐",
       access: resolveTrackAccess(song),
       quality: resolveTrackQuality(song),
       title,
       artist: artistNames.join(" / ") || "未知歌手",
       album: readString(album?.name),
-      durationMs: readNumber(song?.dt) ?? 0,
+      durationMs: readNumber(song?.duration) ?? readNumber(song?.dt) ?? 0,
       artworkUrl: artworkUrl && /^https?:\/\//.test(artworkUrl) ? artworkUrl : null
     };
+  }
+
+  private async getSearchTrackDetails(userId: string, cookie: string, songs: unknown[]) {
+    const trackIds = songs
+      .map((song) => readString(asRecord(song)?.id))
+      .filter((trackId): trackId is string => !!trackId && /^\d+$/.test(trackId));
+    if (trackIds.length === 0) {
+      return new Map<string, unknown>();
+    }
+
+    try {
+      const response = await this.callProvider(userId, () =>
+        this.api.getTracks({ trackIds, cookie })
+      );
+      const detailByTrackId = new Map<string, unknown>();
+      for (const song of response.songs) {
+        const trackId = readString(asRecord(song)?.id);
+        if (trackId) {
+          detailByTrackId.set(trackId, song);
+        }
+      }
+      return detailByTrackId;
+    } catch (error) {
+      if (isNeteaseUnavailableError(error)) {
+        return new Map<string, unknown>();
+      }
+      throw error;
+    }
   }
 
   private assertEnabled() {

@@ -150,9 +150,13 @@ export class NeteaseApiClient {
   }
 
   async getTrack(input: { trackId: string; cookie: string }) {
+    return this.getTracks({ trackIds: [input.trackId], cookie: input.cookie });
+  }
+
+  async getTracks(input: { trackIds: string[]; cookie: string }) {
     return this.call(async () => {
       const request = withProviderOptions({
-        ids: input.trackId,
+        ids: input.trackIds.join(","),
         cookie: input.cookie
       }, this.requestTimeoutMs());
       const response = (await song_detail(request)) as NeteaseApiResponse;

@@ -5,6 +5,7 @@ const neteaseApiSongSchema = z
     id: z.union([z.string(), z.number().int()]),
     name: z.string(),
     fee: z.union([z.string(), z.number().int()]).optional().nullable(),
+    duration: z.union([z.string(), z.number().finite()]).optional().nullable(),
     dt: z.union([z.string(), z.number().finite()]).optional().nullable(),
     artists: z
       .array(z.object({ name: z.string().optional() }).strip())
