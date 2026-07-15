@@ -270,9 +270,6 @@ export function toUserFacingError(error: unknown) {
   // are case-insensitive to tolerate minor message text drift.
   const lowerMessage = message.toLowerCase();
 
-  if (lowerMessage.includes("only the host can control playback")) {
-    return "只有房主可以控制当前房间的播放。";
-  }
   if (lowerMessage.includes("only the host or the requester can remove this queue item")) {
     return "只有房主或点歌人可以移除这首歌。";
   }

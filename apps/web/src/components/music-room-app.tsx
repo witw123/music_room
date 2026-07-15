@@ -58,7 +58,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
 
   const canControlPlayback = !!activeSession && !!roomSnapshot;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
-  const canReorderQueue = canDeleteRoom;
+  const canReorderQueue = canControlPlayback;
   const pageDerived = useRoomPageDerived({
     activeSessionId: activeSession?.userId,
     peerId,

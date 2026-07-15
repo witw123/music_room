@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect } from "react";
-import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
+import type { AuthSession, PlaybackSnapshot, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { BottomPlayer } from "@/components/BottomPlayer";
 import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-visualizer";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
@@ -19,7 +19,7 @@ type BottomPlayerControllerProps = {
   onVolumeChange: (volume: number) => void;
   onPlay: () => void;
   onPause: (positionMs?: number) => void | Promise<void>;
-  onSeek: (positionMs: number) => void | Promise<void>;
+  onSeek: (positionMs: number) => Promise<PlaybackSnapshot | null>;
   onPrev: () => void;
   onNext: () => void;
 };

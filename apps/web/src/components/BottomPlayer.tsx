@@ -11,6 +11,11 @@ import {
   resolveAnchoredProgressMs,
   resolveProgressRenderIntervalMs
 } from "@/features/playback/render-scheduler";
+import {
+  isPendingSeekTargetReached,
+  shouldResolvePendingSeek,
+  type PendingSeek
+} from "@/components/bottom-player/seek-state";
 
 type BottomPlayerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -31,7 +36,7 @@ type BottomPlayerProps = {
   visualizerMaxDevicePixelRatio?: number;
   onPlay: () => void;
   onPause: (positionMs?: number) => void | Promise<void>;
-  onSeek: (positionMs: number) => void | Promise<void>;
+  onSeek: (positionMs: number) => Promise<PlaybackSnapshot | null>;
   onPrev: () => void;
   onNext: () => void;
 };
@@ -72,6 +77,8 @@ function BottomPlayerBase({
     receivedAtMs: Date.now()
   });
   const seekCommitTargetRef = useRef<number | null>(null);
+  const seekRequestIdRef = useRef(0);
+  const [pendingSeek, setPendingSeek] = useState<PendingSeek | null>(null);
   const isPlaying = playback?.status === "playing";
   const currentTrackDuration = audioDurationMs;
   const effectiveProgressMs = Math.max(0, seekDraft ?? renderedProgressMs);
@@ -130,6 +137,43 @@ function BottomPlayerBase({
     };
   }, [currentTrackDuration, isPlaying, progressRenderIntervalMs, seekDraft]);
 
+  const clearPendingSeek = useCallback(
+    (requestId: number) => {
+      if (seekRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      seekCommitTargetRef.current = null;
+      setPendingSeek(null);
+      setSeekDraft(null);
+    },
+    [setSeekDraft]
+  );
+
+  useEffect(() => {
+    if (!pendingSeek) {
+      return;
+    }
+
+    if (!playback || playback.currentTrackId !== pendingSeek.trackId) {
+      clearPendingSeek(pendingSeek.requestId);
+      return;
+    }
+
+    if (!shouldResolvePendingSeek({ pendingSeek, playback })) {
+      return;
+    }
+
+    if (isPendingSeekTargetReached({ pendingSeek, playback })) {
+      setRenderedProgressMs(clampProgressMs(pendingSeek.targetPositionMs, currentTrackDuration));
+      progressAnchorRef.current = {
+        progressMs: pendingSeek.targetPositionMs,
+        receivedAtMs: Date.now()
+      };
+    }
+    clearPendingSeek(pendingSeek.requestId);
+  }, [clearPendingSeek, currentTrackDuration, pendingSeek, playback]);
+
   const commitSeek = useCallback(() => {
     if (seekDraft !== null && canSeekPlayback && canControlPlayback) {
       const targetPositionMs = clampProgressMs(seekDraft, currentTrackDuration);
@@ -137,21 +181,56 @@ function BottomPlayerBase({
         return;
       }
       seekCommitTargetRef.current = targetPositionMs;
+      const requestId = seekRequestIdRef.current + 1;
+      seekRequestIdRef.current = requestId;
+      setPendingSeek({
+        requestId,
+        trackId: playback?.currentTrackId ?? null,
+        targetPositionMs,
+        expectedPlaybackRevision: null
+      });
       setRenderedProgressMs(targetPositionMs);
       progressAnchorRef.current = {
         progressMs: targetPositionMs,
         receivedAtMs: Date.now()
       };
       startTransition(() => {
-        void Promise.resolve(onSeek(targetPositionMs)).finally(() => {
-          if (seekCommitTargetRef.current === targetPositionMs) {
-            seekCommitTargetRef.current = null;
-            setSeekDraft(null);
-          }
-        });
+        void onSeek(targetPositionMs)
+          .then((nextPlayback) => {
+            if (seekRequestIdRef.current !== requestId) {
+              return;
+            }
+
+            if (!nextPlayback) {
+              clearPendingSeek(requestId);
+              return;
+            }
+
+            setPendingSeek((current) =>
+              current?.requestId === requestId
+                ? {
+                    ...current,
+                    expectedPlaybackRevision: nextPlayback.playbackRevision
+                  }
+                : current
+            );
+          })
+          .catch(() => {
+            clearPendingSeek(requestId);
+          });
       });
     }
-  }, [canControlPlayback, canSeekPlayback, currentTrackDuration, onSeek, seekDraft, setSeekDraft, startTransition]);
+  }, [
+    canControlPlayback,
+    canSeekPlayback,
+    clearPendingSeek,
+    currentTrackDuration,
+    onSeek,
+    playback?.currentTrackId,
+    seekDraft,
+    setPendingSeek,
+    startTransition
+  ]);
 
   const applyVolume = useCallback(
     (nextVolume: number) => {

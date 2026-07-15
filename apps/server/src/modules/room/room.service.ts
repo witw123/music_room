@@ -431,8 +431,8 @@ export class RoomService {
       throw new Error(`Track not found in room: ${trackId}`);
     }
 
-    if (record.room.hostId !== sessionId && track.ownerSessionId !== sessionId) {
-      throw new Error("Only the host or original uploader can delete this track.");
+    if (track.ownerSessionId !== sessionId) {
+      throw new Error("Only the original uploader can delete this track.");
     }
 
     this.removeTracksById(record, new Set([trackId]));
@@ -550,7 +550,6 @@ export class RoomService {
   async reorderQueue(roomId: string, actorSessionId: string, queueItemIds: string[]) {
     const record = await this.roomRecordRepository.getRoomRecord(roomId);
     this.assertMember(record, actorSessionId);
-    await this.assertHost(record, actorSessionId);
 
     const existingIds = record.queue.map((item) => item.id);
     if (
@@ -657,12 +656,6 @@ export class RoomService {
       peerId: null,
       presenceState: "offline"
     };
-  }
-
-  private async assertHost(record: RoomRecord, sessionId: string) {
-    if (record.room.hostId !== sessionId) {
-      throw new Error("Only the host can control playback.");
-    }
   }
 
   private assertMember(record: RoomRecord, sessionId: string) {

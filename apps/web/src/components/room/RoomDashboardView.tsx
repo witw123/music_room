@@ -283,7 +283,6 @@ function RoomDashboardViewBase({
               localStorageSummary={localStorageSummary}
               onCleanLocalStorage={onCleanLocalStorage}
               canControlPlayback={canControlPlayback}
-              canManageLibraryTracks={canDeleteRoom}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}
               onAddToQueue={onAddToQueue}

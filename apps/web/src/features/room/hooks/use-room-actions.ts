@@ -646,10 +646,10 @@ export function useRoomActions({
   const seekTrack = useCallback(
     async (positionMs: number) => {
       if (!roomSnapshot || !activeSession) {
-        return;
+        return null;
       }
 
-      await runPlaybackMutation(
+      return runPlaybackMutation(
         roomSnapshot.room.id,
         roomSnapshot.room.playback.playbackRevision,
         (expectedVersion) => {

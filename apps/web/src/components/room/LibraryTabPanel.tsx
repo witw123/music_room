@@ -11,7 +11,6 @@ type LibraryTabPanelProps = {
   tracks: TrackMeta[];
   uploadedTracks: Record<string, UploadedTrack>;
   canControlPlayback: boolean;
-  canManageLibraryTracks: boolean;
   activeSession: AuthSession | null;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
