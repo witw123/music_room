@@ -114,7 +114,11 @@ export class NeteaseApiClient {
       const request = withProviderOptions({ cookie }, this.requestTimeoutMs(), crypto);
       const response = (await login_status(request)) as NeteaseApiResponse;
       const body = parseBody(neteaseLoginStatusBodySchema, response.body);
-      assertSuccessfulCode(body.code);
+      const code = body.code ?? body.data?.code ?? null;
+      if (code === null) {
+        throw new NeteaseApiError("invalid-response");
+      }
+      assertSuccessfulCode(code);
       const profile = body.data?.profile ?? body.profile;
       const neteaseUserId = readString(profile?.userId) ?? readString(profile?.id);
       if (!profile || !neteaseUserId) {

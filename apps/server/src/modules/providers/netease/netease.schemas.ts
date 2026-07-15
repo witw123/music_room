@@ -65,14 +65,18 @@ export const neteaseQrCheckBodySchema = z
 
 export const neteaseLoginStatusBodySchema = z
   .object({
-    code: z.number().int(),
+    code: z.number().int().optional(),
     data: z
-      .object({ profile: neteaseProfileSchema.optional().nullable() })
+      .object({
+        code: z.number().int().optional(),
+        profile: neteaseProfileSchema.optional().nullable()
+      })
       .strip()
       .optional(),
     profile: neteaseProfileSchema.optional().nullable()
   })
-  .strip();
+  .strip()
+  .refine((body) => body.code !== undefined || body.data?.code !== undefined);
 
 export const neteaseSearchBodySchema = z
   .object({

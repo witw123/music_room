@@ -181,7 +181,7 @@ describe("NeteaseApiClient", () => {
   it("validates login profile, song detail, and audio URL shapes", async () => {
     mockedLoginStatus.mockResolvedValue({
       status: 200,
-      body: { code: 200, data: { profile: { userId: 7, nickname: "User" } } },
+      body: { data: { code: 200, profile: { userId: 7, nickname: "User" } } },
       cookie: []
     } as never);
     mockedSongDetail.mockResolvedValue({
