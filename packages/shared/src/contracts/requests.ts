@@ -4,6 +4,7 @@ import {
   originalAssetManifestSchema,
   playbackAssetManifestSchema
 } from "../assets/models";
+import { neteaseTrackSourceRefSchema } from "../playlist/models";
 
 const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const optionalNullableText = (max: number) =>
@@ -59,11 +60,29 @@ export const registerTrackRequestSchema = z
     artworkUrl: z.string().trim().max(4096).nullable(),
     ownerSessionId: stringId.optional(),
     ownerNickname: z.string().trim().max(80).optional(),
-    sourceType: z.literal("local_upload"),
+    sourceType: z.enum(["local_upload", "netease"]),
+    sourceRef: neteaseTrackSourceRefSchema.nullable().optional(),
     originalAsset: originalAssetManifestSchema.optional(),
     playbackAsset: playbackAssetManifestSchema.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((track, context) => {
+    if (track.sourceType === "netease" && !track.sourceRef) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceRef"],
+        message: "NetEase tracks require a source reference."
+      });
+    }
+
+    if (track.sourceType === "local_upload" && track.sourceRef !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sourceRef"],
+        message: "Local uploads cannot include a provider source reference."
+      });
+    }
+  });
 
 export const addQueueItemRequestSchema = z
   .object({

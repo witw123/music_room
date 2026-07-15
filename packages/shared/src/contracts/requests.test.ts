@@ -93,6 +93,35 @@ describe("request contracts", () => {
       ...validTrack,
       playbackAsset: { ...validTrack.playbackAsset, payload: "base64" }
     })).toThrow();
+
+    expect(
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "netease",
+        sourceRef: { provider: "netease", trackId: "123456" }
+      })
+    ).toMatchObject({
+      sourceType: "netease",
+      sourceRef: { provider: "netease", trackId: "123456" }
+    });
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "netease"
+      })
+    ).toThrow();
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceRef: { provider: "netease", trackId: "not-numeric" }
+      })
+    ).toThrow();
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceRef: null
+      })
+    ).toThrow();
   });
 
   it("requires positive playback expectedVersion", () => {

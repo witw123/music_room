@@ -13,6 +13,7 @@ import { ConfigFactoryModule } from "./infra/config/config.module";
 import { PrismaModule } from "./infra/prisma/prisma.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { MetricsModule } from "./common/metrics/metrics.module";
+import { NeteaseModule } from "./modules/providers/netease/netease.module";
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { MetricsModule } from "./common/metrics/metrics.module";
     RealtimeModule,
     RoomModule,
     SignalingModule,
-    TrackModule
+    TrackModule,
+    NeteaseModule
   ]
 })
 export class AppModule {}

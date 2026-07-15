@@ -17,6 +17,12 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     return;
   }
 
+  if (env.NETEASE_ENABLED === "true" && !isValidNeteaseEncryptionKey(env.NETEASE_COOKIE_ENCRYPTION_KEY)) {
+    throw new Error(
+      "NETEASE_COOKIE_ENCRYPTION_KEY must be a 32-byte hex or base64 key when NetEase is enabled."
+    );
+  }
+
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
   if (insecureJwtSecrets.has(jwtSecret.toLowerCase())) {
     throw new Error("Invalid JWT_SECRET for production startup.");
@@ -100,6 +106,23 @@ function hasStaticTurnIceConfig(env: NodeJS.ProcessEnv) {
 
       return Array.isArray(urls) && urls.some((value) => typeof value === "string" && isTurnUrl(value));
     });
+  } catch {
+    return false;
+  }
+}
+
+export function isValidNeteaseEncryptionKey(value: string | undefined) {
+  if (!value?.trim()) {
+    return false;
+  }
+
+  const normalized = value.trim();
+  if (/^[a-f0-9]{64}$/i.test(normalized)) {
+    return true;
+  }
+
+  try {
+    return Buffer.from(normalized, "base64").length === 32;
   } catch {
     return false;
   }

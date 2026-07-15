@@ -68,7 +68,8 @@
 - `durationMs`、`bitrate`、`sizeBytes`
 - `codec`、`mimeType`、`fileHash`、`artworkUrl`
 - `ownerSessionId`、`ownerNickname`
-- `sourceType`: 当前固定为 `local_upload`
+- `sourceType`: `local_upload` 或 `netease`
+- `sourceRef`: 网易云曲目必须携带 `{ provider: "netease", trackId: string }`；本地上传不得携带该字段
 - `originalAsset`：可选的本地原始资产清单
 - `playbackAsset`：可选的本地分段 Opus 资产清单
 

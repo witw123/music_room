@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
-import type { GuestSession, RoomSnapshot } from "@music-room/shared";
+import type { GuestSession, NeteaseTrackCandidate, RoomSnapshot } from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   cleanupOrphanedLocalAudioStorage,
@@ -97,7 +97,7 @@ export function useTrackUploads(options: {
     uploadedTracks
   });
 
-  const { syncRoomSnapshot, handleFilesSelected } = useUploadPipelineActions({
+  const { syncRoomSnapshot, handleFilesSelected, handleNeteaseTrackImport } = useUploadPipelineActions({
     activeSession,
     dispatchRoomStateEvent,
     inFlightUploadHashesRef,
@@ -172,6 +172,8 @@ export function useTrackUploads(options: {
     localStorageSummary,
     cleanLocalStorage,
     handleFilesSelected,
+    handleNeteaseTrackImport: (candidate: NeteaseTrackCandidate) =>
+      handleNeteaseTrackImport(candidate),
     syncRoomSnapshot,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,

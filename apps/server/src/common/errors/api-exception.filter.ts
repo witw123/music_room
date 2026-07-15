@@ -55,6 +55,25 @@ export function toHttpApiError(exception: unknown): {
 }
 
 export function mapErrorCode(message: string, status?: number): ErrorCode {
+  if (message.includes("NetEase integration is disabled")) {
+    return errorCodes.neteaseDisabled;
+  }
+  if (message.includes("NetEase account is required")) {
+    return errorCodes.neteaseAccountRequired;
+  }
+  if (message.includes("NetEase account") && message.includes("bound again")) {
+    return errorCodes.neteaseAuthExpired;
+  }
+  if (message.includes("NetEase audio") && message.includes("too large")) {
+    return errorCodes.neteaseImportTooLarge;
+  }
+  if (message.includes("unsupported audio")) {
+    return errorCodes.neteaseAudioUnsupported;
+  }
+  if (message.includes("NetEase")) {
+    return errorCodes.neteaseUnavailable;
+  }
+
   if (message.includes("Realtime sync unavailable") || message.includes("Redis unavailable")) {
     return errorCodes.realtimeUnavailable;
   }
@@ -149,6 +168,20 @@ export function mapErrorStatus(code: ErrorCode): number {
       return HttpStatus.FORBIDDEN;
     case errorCodes.realtimeUnavailable:
       return HttpStatus.SERVICE_UNAVAILABLE;
+    case errorCodes.neteaseUnavailable:
+      return HttpStatus.BAD_GATEWAY;
+    case errorCodes.neteaseDisabled:
+      return HttpStatus.SERVICE_UNAVAILABLE;
+    case errorCodes.neteaseAccountRequired:
+    case errorCodes.neteaseAuthExpired:
+    case errorCodes.neteaseQrExpired:
+      return HttpStatus.CONFLICT;
+    case errorCodes.neteaseTrackNotFound:
+      return HttpStatus.NOT_FOUND;
+    case errorCodes.neteaseAudioUnsupported:
+      return HttpStatus.UNSUPPORTED_MEDIA_TYPE;
+    case errorCodes.neteaseImportTooLarge:
+      return HttpStatus.PAYLOAD_TOO_LARGE;
     default:
       return HttpStatus.INTERNAL_SERVER_ERROR;
   }

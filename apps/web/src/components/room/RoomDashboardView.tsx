@@ -11,6 +11,7 @@ import type {
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
+import type { NeteaseTrackCandidate } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState } from "./MembersPanel";
@@ -47,6 +48,7 @@ type RoomDashboardViewProps = {
   onLeaveRoom: () => void;
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
+  onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
@@ -113,6 +115,7 @@ function RoomDashboardViewBase({
   onLeaveRoom,
   onDeleteRoom,
   onFilesSelected,
+  onImportNeteaseTrack,
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
@@ -285,6 +288,7 @@ function RoomDashboardViewBase({
               canControlPlayback={canControlPlayback}
               activeSession={activeSession}
               onFilesSelected={onFilesSelected}
+              onImportNeteaseTrack={onImportNeteaseTrack}
               onAddToQueue={onAddToQueue}
               onDeleteTrack={onDeleteTrack}
               onPlayTrack={onPlayTrack}

@@ -1,6 +1,6 @@
 "use client";
 
-import type { GuestSession } from "@music-room/shared";
+import type { GuestSession, NeteaseTrackCandidate, NeteaseTrackSourceRef } from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
 
@@ -15,7 +15,7 @@ const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 export type UploadedTrack = {
   file: File;
   objectUrl: string;
-  origin: "live-upload";
+  origin: "live-upload" | "netease-import";
 };
 
 export type CachedLibraryTrack = {
@@ -43,27 +43,34 @@ export async function buildTrackMeta(
   file: File,
   objectUrl: string,
   session: GuestSession,
-  preparedAssets?: PreparedAudioAssets
+  preparedAssets?: PreparedAudioAssets,
+  source?: {
+    type: "local_upload" | "netease";
+    metadata?: Pick<NeteaseTrackCandidate, "title" | "artist" | "album" | "artworkUrl">;
+    sourceRef?: NeteaseTrackSourceRef;
+  }
 ) {
   const fileHash = preparedAssets?.fileHash ?? await hashFile(file);
   const durationMs = preparedAssets?.playbackAsset.durationMs ?? await readDuration(objectUrl);
-  const title = file.name.replace(/\.[^/.]+$/, "");
+  const title = source?.metadata?.title ?? file.name.replace(/\.[^/.]+$/, "");
   const codec = file.type.split("/")[1]?.trim() || null;
+  const sourceType = source?.type ?? "local_upload";
 
   return {
     title,
-    artist: "本地上传",
-    album: null,
+    artist: source?.metadata?.artist ?? "本地上传",
+    album: source?.metadata?.album ?? null,
     durationMs,
     bitrate: null,
     sizeBytes: file.size,
     codec,
     mimeType: file.type || null,
     fileHash,
-    artworkUrl: null,
+    artworkUrl: source?.metadata?.artworkUrl ?? null,
     ownerSessionId: session.userId,
     ownerNickname: session.nickname,
-    sourceType: "local_upload" as const,
+    sourceType,
+    ...(source?.sourceRef ? { sourceRef: source.sourceRef } : {}),
     ...(preparedAssets
       ? {
           originalAsset: preparedAssets.originalAsset,

@@ -15,7 +15,7 @@ type UploadedTracksStateSetter = (updater: (current: UploadedTracksState) => Upl
 
 type MissingOwnedRoomTrack = Pick<
   TrackMeta,
-  "id" | "fileHash"
+  "id" | "fileHash" | "sourceType"
 > &
   Partial<Pick<TrackMeta, "durationMs" | "sizeBytes">>;
 
@@ -71,7 +71,7 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
     uploads[track.id] = {
       file: cachedFile,
       objectUrl,
-      origin: "live-upload"
+      origin: track.sourceType === "netease" ? "netease-import" : "live-upload"
     };
   }
 

@@ -397,6 +397,15 @@ export class RoomService {
         item.fileHash === track.fileHash &&
         item.ownerSessionId === track.ownerSessionId
     );
+    const duplicateBySourceIndex = track.sourceType === "netease" && track.sourceRef
+      ? record.tracks.findIndex(
+          (item) =>
+            item.ownerSessionId === track.ownerSessionId &&
+            item.sourceType === "netease" &&
+            item.sourceRef?.provider === track.sourceRef?.provider &&
+            item.sourceRef?.trackId === track.sourceRef?.trackId
+        )
+      : -1;
     const existingIndex = record.tracks.findIndex((item) => item.id === track.id);
 
     if (duplicateByFileHashIndex >= 0) {
@@ -409,6 +418,18 @@ export class RoomService {
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
       return record.tracks[duplicateByFileHashIndex];
+    }
+
+    if (duplicateBySourceIndex >= 0) {
+      const existingTrack = record.tracks[duplicateBySourceIndex];
+      record.tracks[duplicateBySourceIndex] = {
+        ...existingTrack,
+        ...track,
+        id: existingTrack.id
+      };
+      this.incrementRoomRevision(record.room);
+      await this.roomRecordRepository.persistRecord(record);
+      return record.tracks[duplicateBySourceIndex];
     }
 
     if (existingIndex >= 0) {

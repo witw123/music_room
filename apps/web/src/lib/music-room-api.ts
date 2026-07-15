@@ -4,6 +4,11 @@ import {
   type ApiErrorResponse,
   type AuthSession,
   type IceConfigResponse,
+  type NeteaseAccountStatus,
+  type NeteaseQrStartResponse,
+  type NeteaseQrStatusResponse,
+  type NeteaseSearchResponse,
+  type NeteaseTrackCandidate,
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
@@ -146,6 +151,46 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return rawBody as T;
 }
 
+async function requestBlob(path: string, init?: RequestInit) {
+  const sessionToken = getSessionToken();
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      ...(sessionToken ? { "x-session-token": sessionToken } : {}),
+      ...(init?.headers ?? {})
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const rawErrorBody = await response.text();
+    const apiError = extractApiError(rawErrorBody);
+    const message = apiError?.message ?? extractApiErrorMessage(rawErrorBody);
+    if (
+      response.status === 401 &&
+      apiError?.code === errorCodes.unauthorized &&
+      typeof window !== "undefined"
+    ) {
+      window.localStorage.removeItem(sessionStorageKey);
+      window.dispatchEvent(
+        new CustomEvent("music-room-auth-expired", {
+          detail: { message }
+        })
+      );
+    }
+    throw new MusicRoomApiError(
+      message || `Request failed: ${response.status}`,
+      apiError?.code ?? null,
+      apiError?.details
+    );
+  }
+
+  return {
+    blob: await response.blob(),
+    contentType: response.headers.get("content-type") ?? "application/octet-stream"
+  };
+}
+
 export const musicRoomApi = {
   register: (username: string, password: string, nickname: string) =>
     request<AuthSession>("/v1/auth/register", {
@@ -226,6 +271,39 @@ export const musicRoomApi = {
       body: JSON.stringify(payload)
     }),
   getIceConfig: () => request<IceConfigResponse>("/v1/realtime/ice-config"),
+  getNeteaseAccount: () =>
+    request<NeteaseAccountStatus>("/v1/providers/netease/account"),
+  startNeteaseQrLogin: () =>
+    request<NeteaseQrStartResponse>("/v1/providers/netease/account/qr/start", {
+      method: "POST"
+    }),
+  getNeteaseQrStatus: (attemptId: string) =>
+    request<NeteaseQrStatusResponse>(
+      `/v1/providers/netease/account/qr/${encodeURIComponent(attemptId)}/status`
+    ),
+  disconnectNeteaseAccount: () =>
+    request<{ ok: boolean }>("/v1/providers/netease/account", {
+      method: "DELETE"
+    }),
+  searchNeteaseTracks: (keywords: string, options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      keywords,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<NeteaseSearchResponse>(`/v1/providers/netease/search?${params.toString()}`);
+  },
+  getNeteaseTrack: (trackId: string) =>
+    request<NeteaseTrackCandidate>(`/v1/providers/netease/tracks/${encodeURIComponent(trackId)}`),
+  downloadNeteaseTrack: (
+    trackId: string,
+    quality: "standard" | "high" | "exhigh" = "exhigh",
+    signal?: AbortSignal
+  ) =>
+    requestBlob(
+      `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
+      { signal }
+    ),
   listMyPlaylists: () =>
     request<Playlist[]>("/v1/playlists"),
   updatePlaylist: (

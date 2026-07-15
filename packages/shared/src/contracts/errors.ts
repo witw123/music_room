@@ -13,7 +13,15 @@ export const errorCodes = {
   realtimeUnavailable: "REALTIME_UNAVAILABLE",
   playbackVersionConflict: "PLAYBACK_VERSION_CONFLICT",
   trackOwnerOffline: "TRACK_OWNER_OFFLINE",
-  unauthorizedRoomAction: "UNAUTHORIZED_ROOM_ACTION"
+  unauthorizedRoomAction: "UNAUTHORIZED_ROOM_ACTION",
+  neteaseDisabled: "NETEASE_DISABLED",
+  neteaseAccountRequired: "NETEASE_ACCOUNT_REQUIRED",
+  neteaseAuthExpired: "NETEASE_AUTH_EXPIRED",
+  neteaseQrExpired: "NETEASE_QR_EXPIRED",
+  neteaseTrackNotFound: "NETEASE_TRACK_NOT_FOUND",
+  neteaseAudioUnsupported: "NETEASE_AUDIO_UNSUPPORTED",
+  neteaseImportTooLarge: "NETEASE_IMPORT_TOO_LARGE",
+  neteaseUnavailable: "NETEASE_UNAVAILABLE"
 } as const;
 
 export const apiErrorResponseSchema = z.object({
@@ -30,7 +38,15 @@ export const apiErrorResponseSchema = z.object({
     errorCodes.realtimeUnavailable,
     errorCodes.playbackVersionConflict,
     errorCodes.trackOwnerOffline,
-    errorCodes.unauthorizedRoomAction
+    errorCodes.unauthorizedRoomAction,
+    errorCodes.neteaseDisabled,
+    errorCodes.neteaseAccountRequired,
+    errorCodes.neteaseAuthExpired,
+    errorCodes.neteaseQrExpired,
+    errorCodes.neteaseTrackNotFound,
+    errorCodes.neteaseAudioUnsupported,
+    errorCodes.neteaseImportTooLarge,
+    errorCodes.neteaseUnavailable
   ]),
   message: z.string(),
   details: z.unknown().optional()

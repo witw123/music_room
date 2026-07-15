@@ -17,6 +17,38 @@
 - 房间、队列、曲库、歌单接口除了返回 REST 响应外，通常还会触发 Socket.IO 快照或 patch 广播
 - 播放控制依赖 Redis 可用；当 Realtime 不可用时，`PATCH /v1/rooms/{roomId}/playback` 会直接失败
 
+## 网易云 provider
+
+网易云接口默认关闭。启用后需要配置 `NETEASE_COOKIE_ENCRYPTION_KEY`，用户通过二维码绑定自己的网易云账号。网易云 cookie 只在服务端加密保存，不返回浏览器。
+
+### `GET /v1/providers/netease/account`
+
+读取当前用户的网易云绑定状态。
+
+### `POST /v1/providers/netease/account/qr/start`
+
+创建一个有效期 180 秒的二维码登录尝试，返回 `attemptId`、`qrimg` 和 `expiresAt`。
+
+### `GET /v1/providers/netease/account/qr/{attemptId}/status`
+
+轮询二维码状态。状态为 `connected` 时返回账号摘要；二维码登录状态保存在 Redis，不写入数据库。
+
+### `DELETE /v1/providers/netease/account`
+
+删除当前用户保存的网易云绑定。
+
+### `GET /v1/providers/netease/search`
+
+查询参数：`keywords`、`limit`、`offset`。返回规范化的网易云歌曲候选，不返回原始 provider 响应。
+
+### `GET /v1/providers/netease/tracks/{trackId}`
+
+读取网易云歌曲详情。
+
+### `GET /v1/providers/netease/tracks/{trackId}/audio`
+
+服务端解析网易云临时地址并流式转发音频，支持 `quality=standard|high|exhigh` 和 `Range`。音频不写入服务端持久化存储，响应设置为 `Cache-Control: no-store`。
+
 ## 标准错误码
 
 当前前后端共享错误码定义在 `packages/shared/src/contracts/errors.ts`。稳定上线阶段优先保证这些 code 可被前端识别：
@@ -29,6 +61,14 @@
 - `UNAUTHORIZED`
 - `RATE_LIMITED`
 - `INTERNAL_ERROR`
+- `NETEASE_DISABLED`
+- `NETEASE_ACCOUNT_REQUIRED`
+- `NETEASE_AUTH_EXPIRED`
+- `NETEASE_QR_EXPIRED`
+- `NETEASE_TRACK_NOT_FOUND`
+- `NETEASE_AUDIO_UNSUPPORTED`
+- `NETEASE_IMPORT_TOO_LARGE`
+- `NETEASE_UNAVAILABLE`
 
 ## 认证
 

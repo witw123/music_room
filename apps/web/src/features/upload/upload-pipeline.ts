@@ -19,6 +19,7 @@ export function buildRegisterTrackPayload(track: Omit<TrackMeta, "id"> & { id?: 
     ownerSessionId: track.ownerSessionId,
     ownerNickname: track.ownerNickname,
     sourceType: track.sourceType,
+    ...(track.sourceRef ? { sourceRef: track.sourceRef } : {}),
     originalAsset: track.originalAsset,
     playbackAsset: track.playbackAsset
   };
