@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("./MeshStatusPanel.tsx", import.meta.url), "utf8");
 
 describe("MeshStatusPanel WebRTC diagnostics", () => {
-  it("shows RTP playback, bitrate and current AudioContext state", () => {
-    expect(source).toContain("RTP Opus 媒体诊断");
-    expect(source).toContain("WebRTC RTP Opus");
-    expect(source).toContain("音频码率");
-    expect(source).toContain("AudioContext");
-    expect(source).toContain("播放源");
+  it("shows unique connection details without repeating the member summary", () => {
+    expect(source).toContain("连接诊断");
+    expect(source).toContain("唯一诊断样本");
+    expect(source).toContain("连接路径");
+    expect(source).toContain("音频轨道");
+    expect(source).toContain("查看详情");
   });
 
   it("removes legacy playback and full-track cache values", () => {

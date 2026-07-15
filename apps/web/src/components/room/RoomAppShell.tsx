@@ -74,7 +74,6 @@ export function RoomAppShell({
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
-        memberTransferSummaries={workspaceViewModel.memberTransferSummaries}
         localMemberState={workspaceViewModel.localMemberState}
         peerDiagnostics={workspaceViewModel.workspacePeerDiagnostics.peerDiagnostics}
         peerRecentEvents={workspaceViewModel.workspacePeerDiagnostics.peerRecentEvents}

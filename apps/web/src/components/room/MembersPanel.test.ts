@@ -1,19 +1,20 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getCurrentTrackStatus, getPlaybackStatus } from "./MembersPanel";
+import { getPlaybackStatus } from "./MembersPanel";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 
 describe("MembersPanel WebRTC media status", () => {
   it("reports the actual current media track", () => {
-    expect(getCurrentTrackStatus({
-      memberId: "member_1",
-      mediaTrackState: "live",
-      mediaReceiveBitrateKbps: 192,
-      mediaSendBitrateKbps: null,
-      mediaJitterMs: 3,
-      mediaPacketLossRate: 0
-    }, "online")).toMatchObject({
-      label: "Media track 实时",
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.mediaConnectionState = "connected";
+    diagnostic.mediaReceiveBitrateKbps = 192;
+    diagnostic.lastMediaStatsProgressAt = new Date().toISOString();
+
+    expect(getPlaybackStatus("online", diagnostic, {
+      playbackActive: true,
+      isCurrentSource: true
+    })).toMatchObject({
+      label: "RTP 正常",
       tone: "success"
     });
   });
@@ -23,16 +24,19 @@ describe("MembersPanel WebRTC media status", () => {
     diagnostic.dataChannelState = "open";
 
     diagnostic.mediaReceiveBitrateKbps = 192;
+    diagnostic.lastMediaStatsProgressAt = new Date().toISOString();
     expect(getPlaybackStatus("online", diagnostic)).toMatchObject({
-      label: "Media track 实时",
-      detail: "本端已观测到 WebRTC RTP Opus 音频流。"
+      label: "RTP 正常",
+      detail: "最近 6 秒内已观测到当前媒体源的 RTP Opus 数据。"
     });
   });
 
-  it("renders bitrate and excludes removed playback models", () => {
+  it("keeps the member view on the live RTP model", () => {
     const source = readFileSync(new URL("./MembersPanel.tsx", import.meta.url), "utf8");
 
-    expect(source).toContain("playbackBitrateKbps");
+    expect(source).toContain("mediaSummary");
+    expect(source).not.toContain("playbackBitrateKbps");
+    expect(source).not.toContain("transportSummary");
     expect(source).not.toContain("PCM");
     expect(source).not.toContain("legacy playback source");
     expect(source).not.toContain("完整本地缓存");

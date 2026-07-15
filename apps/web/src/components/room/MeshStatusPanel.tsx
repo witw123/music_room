@@ -1,19 +1,12 @@
 "use client";
 
 import { memo, useEffect, useMemo, useState } from "react";
-import type {
-  PeerDiagnosticsSnapshot,
-  PeerRecentEvent,
-  RoomMember
-} from "@music-room/shared";
+import type { PeerDiagnosticsSnapshot, PeerRecentEvent, RoomMember } from "@music-room/shared";
 import { Button } from "@/components/ui/button";
-import { formatTransferRateMBps } from "@/lib/music-room-ui";
-import { formatOpusRate, type LocalMemberPanelState } from "./MembersPanel";
+import { dedupePeerDiagnostics, dedupeRoomMembers } from "./member-data";
 
 type MeshStatusPanelProps = {
   members: RoomMember[];
-  connectedPeersCount: number;
-  localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   recentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -29,16 +22,12 @@ function formatTimestamp(value: string) {
 }
 
 function formatMaybeTimestamp(value: string | null | undefined) {
-  return value ? formatTimestamp(value) : "未知";
+  return value ? formatTimestamp(value) : "暂无";
 }
 
 function formatMetric(value: number | null | undefined, unit: string) {
-  if (value === null || value === undefined) return "未知";
+  if (value === null || value === undefined) return "暂无";
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
-}
-
-function formatRate(value: number | null | undefined) {
-  return value === null || value === undefined ? "未知" : formatTransferRateMBps(value);
 }
 
 function formatEventLabel(event: PeerRecentEvent) {
@@ -92,11 +81,10 @@ function DiagnosticSection({ title, children }: { title: string; children: React
 }
 
 function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
-  if (!peer.dataCandidateType) return null;
-  const protocol = peer.dataRelayProtocol ?? peer.dataProtocol;
-  return peer.dataCandidateType === "relay"
-    ? `数据通道经过 relay${protocol ? `/${protocol}` : ""}`
-    : `数据通道 direct (${peer.dataCandidateType}${protocol ? `/${protocol}` : ""})`;
+  const candidate = peer.mediaCandidateType ?? peer.dataCandidateType;
+  const protocol = peer.mediaProtocol ?? peer.dataRelayProtocol ?? peer.dataProtocol;
+  if (!candidate && !protocol) return "路径暂无样本";
+  return `${candidate ?? "未知候选"}${protocol ? ` / ${protocol}` : ""}`;
 }
 
 function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; label: string }) {
@@ -107,32 +95,35 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
           <div className="min-w-0">
             <strong className="truncate text-xs text-foreground">{label}</strong>
             <p className="mt-1 text-[10px] text-foreground-muted">
-              {describeCandidatePath(peer) ??
-                `数据 ${peer.dataConnectionState ?? "未知"} / channel ${peer.dataChannelState ?? "未知"}`}
+              数据 {peer.dataChannelState ?? "未建立"} · 媒体 {peer.mediaConnectionState ?? "未建立"}
             </p>
           </div>
           <span className={`rounded-full border px-2 py-0.5 text-[10px] ${getHealthClass(peer)}`}>
-            {peer.transportHealth ?? "未知"}
+            {peer.transportHealth ?? "暂无状态"}
           </span>
         </div>
         {peer.lastError ? <p className="mt-2 text-[10px] text-red-300">{peer.lastError}</p> : null}
       </summary>
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <DiagnosticSection title="DataChannel">
+        <DiagnosticSection title="连接路径">
           <DiagnosticGrid>
-            <span>连接: {peer.dataConnectionState ?? "未知"}</span>
-            <span>通道: {peer.dataChannelState ?? "未知"}</span>
-            <span>候选: {peer.dataCandidateType ?? "未知"}</span>
-            <span>协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "未知"}</span>
+            <span>路径: {describeCandidatePath(peer)}</span>
+            <span>数据 ICE: {peer.dataIceState ?? "暂无"}</span>
+            <span>媒体 ICE: {peer.mediaIceState ?? "暂无"}</span>
             <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
-                  <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
-                  <span>接收: {formatRate(peer.transportReceiveBitrateKbps)}</span>
-                  <span>发送: {formatRate(peer.transportSendBitrateKbps)}</span>
-                  <span>Opus codec: {peer.opusCodec ?? "未知"}</span>
-                  <span>发送轨道: {peer.senderTrackId ?? "未知"}</span>
-                  <span>接收轨道: {peer.receiverTrackId ?? "未知"}</span>
-                  <span>媒体包: {formatMaybeTimestamp(peer.lastMediaPacketAt)}</span>
-                </DiagnosticGrid>
+            <span>数据协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "暂无"}</span>
+            <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
+          </DiagnosticGrid>
+        </DiagnosticSection>
+        <DiagnosticSection title="音频轨道">
+          <DiagnosticGrid>
+            <span>编码: {peer.opusCodec ?? "暂无"}</span>
+            <span>发送轨道: {peer.senderTrackId ?? "暂无"}</span>
+            <span>接收轨道: {peer.receiverTrackId ?? "暂无"}</span>
+            <span>媒体包: {formatMaybeTimestamp(peer.lastMediaPacketAt)}</span>
+            <span>发送连接: {peer.mediaConnectionState ?? "暂无"}</span>
+            <span>最近恢复: {peer.lastRecoveryAction ?? "暂无"}</span>
+          </DiagnosticGrid>
         </DiagnosticSection>
       </div>
     </details>
@@ -141,8 +132,6 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
 
 function MeshStatusPanelBase({
   members,
-  connectedPeersCount,
-  localMemberState,
   peerDiagnostics,
   recentEvents,
   iceConfigSource,
@@ -153,43 +142,36 @@ function MeshStatusPanelBase({
   useEffect(() => onVisibilityChange?.(isOpen), [isOpen, onVisibilityChange]);
   useEffect(() => () => onVisibilityChange?.(false), [onVisibilityChange]);
 
-  const onlineCount = useMemo(
-    () => members.filter((member) => member.presenceState === "online").length,
-    [members]
+  const normalizedMembers = useMemo(() => dedupeRoomMembers(members), [members]);
+  const normalizedDiagnostics = useMemo(
+    () => dedupePeerDiagnostics(peerDiagnostics),
+    [peerDiagnostics]
   );
   const activePeerIds = useMemo(
-    () => new Set(members.flatMap((member) => member.peerId ? [member.peerId] : [])),
-    [members]
-  );
-  const dataReadyCount = useMemo(
-    () => peerDiagnostics.filter(
-      (peer) => activePeerIds.has(peer.peerId) && peer.dataChannelState === "open"
-    ).length,
-    [activePeerIds, peerDiagnostics]
-  );
-  const degradedCount = useMemo(
-    () => peerDiagnostics.filter(
-      (peer) => activePeerIds.has(peer.peerId) &&
-        ["degraded", "recovering", "reconnecting", "failed"].includes(peer.transportHealth ?? "")
-    ).length,
-    [activePeerIds, peerDiagnostics]
+    () => new Set(normalizedMembers.flatMap((member) => member.peerId ? [member.peerId] : [])),
+    [normalizedMembers]
   );
   const memberLabelByPeerId = useMemo(
-    () => new Map(members.flatMap((member) => member.peerId
+    () => new Map(normalizedMembers.flatMap((member) => member.peerId
       ? [[member.peerId, `${member.nickname} · ${member.role === "host" ? "房主" : "成员"}`] as const]
       : [])),
-    [members]
+    [normalizedMembers]
   );
-  const visibleEvents = recentEvents.slice(0, 8);
-  const playback = localMemberState?.segmentedPlayback ?? null;
+  const visibleDiagnostics = normalizedDiagnostics.filter(
+    (peer) => peer.peerId === "system" || activePeerIds.has(peer.peerId)
+  );
+  const visibleEvents = useMemo(
+    () => [...new Map(recentEvents.map((event) => [event.id, event])).values()].slice(0, 8),
+    [recentEvents]
+  );
 
   return (
-    <section className="flex w-full flex-col gap-4 border-t border-surface-border pt-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold text-foreground">RTP Opus 媒体诊断</h2>
-          <p className="mt-1 text-xs text-foreground-muted">
-            直接读取 WebRTC RTP Opus 媒体轨道、AudioContext 与 DataChannel 状态。
+    <section className="flex w-full flex-col gap-3 border-t border-surface-border pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-foreground">连接诊断</h2>
+          <p className="mt-1 text-[10px] text-foreground-muted">
+            {visibleDiagnostics.length} 条唯一诊断样本
           </p>
         </div>
         <Button
@@ -197,83 +179,24 @@ function MeshStatusPanelBase({
           size="sm"
           className="h-7 px-2 text-xs"
           onClick={() => setIsOpen((value) => !value)}
+          aria-expanded={isOpen}
         >
-          {isOpen ? "收起" : "开发详情"}
+          {isOpen ? "收起" : "查看详情"}
         </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-foreground-muted">
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">在线: {onlineCount}</span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">控制通道: {dataReadyCount}</span>
-        <span className="rounded border border-surface-border bg-background/40 px-2 py-1">
-          播放: {localMemberState?.playbackStatus.label ?? "等待房间状态"}
-        </span>
-        <span className={`rounded border px-2 py-1 ${degradedCount > 0 ? "border-amber-500/25 bg-amber-500/10 text-amber-300" : "border-surface-border bg-background/40"}`}>
-          异常: {degradedCount}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-surface-border pt-4 text-xs sm:grid-cols-3">
-        <div><span className="text-[10px] text-foreground-muted">实际播放</span><strong className="mt-1 block text-foreground">{localMemberState?.playbackStatus.label ?? "等待房间状态"}</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">媒体引擎</span><strong className="mt-1 block text-foreground">WebRTC RTP Opus</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">音频码率</span><strong className="mt-1 block text-foreground">{formatOpusRate(
-          localMemberState?.playbackBitrateKbps ?? null,
-          localMemberState?.configuredPlaybackBitrateKbps,
-          localMemberState?.mediaSummary?.sampleAgeMs ?? null
-        )}</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">媒体轨道</span><strong className="mt-1 block text-foreground">{playback?.state ?? "idle"}</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">AudioContext</span><strong className="mt-1 block text-foreground">{playback?.audioContextState ?? "未创建"}</strong></div>
-        <div><span className="text-[10px] text-foreground-muted">当前问题</span><strong className={`mt-1 block ${playback?.lastError ? "text-amber-300" : "text-foreground"}`}>{playback?.lastError ?? "无"}</strong></div>
       </div>
 
       {isOpen ? (
         <div className="flex flex-col gap-3">
-          {localMemberState && playback ? (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <DiagnosticSection title="WebRTC 媒体播放器">
-                <DiagnosticGrid>
-                  <span>状态: {playback.state}</span>
-                  <span>AudioContext: {playback.audioContextState ?? "未创建"}</span>
-                  <span>媒体轨道: {playback.state}</span>
-                  <span>播放源: {localMemberState.playbackStatus.badgeText}</span>
-                  <span>音频码率: {formatOpusRate(
-                    localMemberState.playbackBitrateKbps,
-                    localMemberState.configuredPlaybackBitrateKbps,
-                    localMemberState.mediaSummary?.sampleAgeMs ?? null
-                  )}</span>
-                  <span>最近错误: {playback.lastError ?? "无"}</span>
-                </DiagnosticGrid>
-              </DiagnosticSection>
-              <DiagnosticSection title="本机媒体与数据">
-                <DiagnosticGrid>
-                  <span>媒体接收: {formatRate(localMemberState.mediaSummary?.receiveRateKbps ?? null)}</span>
-                  <span>媒体发送: {formatRate(localMemberState.mediaSummary?.sendRateKbps ?? null)}</span>
-                  <span>Data 接收: {formatRate(localMemberState.transportSummary.receiveRateKbps)}</span>
-                  <span>Data 发送: {formatRate(localMemberState.transportSummary.sendRateKbps)}</span>
-                  <span>RTT: {formatMetric(localMemberState.transportSummary.latencyMs, "ms")}</span>
-                  <span>就绪通道: {localMemberState.dataReadyCount}</span>
-                </DiagnosticGrid>
-              </DiagnosticSection>
-              <DiagnosticSection title="房间连接">
-                <DiagnosticGrid>
-                  <span>控制 DataChannel: {dataReadyCount}</span>
-                  <span>已连接成员: {connectedPeersCount}</span>
-                  <span>在线成员: {onlineCount}</span>
-                  <span>异常链路: {degradedCount}</span>
-                </DiagnosticGrid>
-              </DiagnosticSection>
-              <DiagnosticSection title="ICE">
-                <DiagnosticGrid>
-                  <span>配置来源: {iceConfigSource}</span>
-                  <span>{iceConfigStatus}</span>
-                </DiagnosticGrid>
-              </DiagnosticSection>
-            </div>
-          ) : null}
+          <DiagnosticSection title="ICE 配置">
+            <DiagnosticGrid>
+              <span>配置来源: {iceConfigSource}</span>
+              <span>{iceConfigStatus}</span>
+            </DiagnosticGrid>
+          </DiagnosticSection>
 
-          {peerDiagnostics.length ? (
+          {visibleDiagnostics.length > 0 ? (
             <div className="flex flex-col gap-2">
-              {peerDiagnostics.map((peer) => (
+              {visibleDiagnostics.map((peer) => (
                 <PeerDiagnosticCard
                   key={peer.peerId}
                   peer={peer}
@@ -282,8 +205,8 @@ function MeshStatusPanelBase({
               ))}
             </div>
           ) : (
-            <p className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
-              当前没有可展示的活跃链路诊断。
+            <p className="border-y border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
+              当前没有可展示的连接样本。
             </p>
           )}
 

@@ -1,19 +1,23 @@
 "use client";
 
 import { memo } from "react";
-import type { PeerDiagnosticsSnapshot, PeerRecentEvent, RoomMember } from "@music-room/shared";
+import type {
+  PeerDiagnosticsSnapshot,
+  PeerRecentEvent,
+  PlaybackSnapshot,
+  RoomMember
+} from "@music-room/shared";
 import {
   MembersPanel,
-  type LocalMemberPanelState,
-  type MemberTransferSummary
+  type LocalMemberPanelState
 } from "./MembersPanel";
 import { MeshStatusPanel } from "./MeshStatusPanel";
 
 type MembersTabPanelProps = {
   members: RoomMember[];
-  memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
-  connectedPeersCount: number;
+  playbackStatus: PlaybackSnapshot["status"];
+  sourcePeerId: string | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
   iceConfigSource: string;
@@ -23,9 +27,9 @@ type MembersTabPanelProps = {
 
 function MembersTabPanelBase({
   members,
-  memberTransferSummaries,
   localMemberState,
-  connectedPeersCount,
+  playbackStatus,
+  sourcePeerId,
   peerDiagnostics,
   peerRecentEvents,
   iceConfigSource,
@@ -36,15 +40,14 @@ function MembersTabPanelBase({
     <div className="animate-fade-in flex w-full flex-col gap-5">
       <MembersPanel
         members={members}
-        memberTransferSummaries={memberTransferSummaries}
         peerDiagnostics={peerDiagnostics}
         localMemberState={localMemberState}
+        playbackStatus={playbackStatus}
+        sourcePeerId={sourcePeerId}
       />
 
       <MeshStatusPanel
         members={members}
-        connectedPeersCount={connectedPeersCount}
-        localMemberState={localMemberState}
         peerDiagnostics={peerDiagnostics}
         recentEvents={peerRecentEvents}
         iceConfigSource={iceConfigSource}

@@ -13,7 +13,7 @@ import type {
 } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
-import type { LocalMemberPanelState, MemberTransferSummary } from "./MembersPanel";
+import type { LocalMemberPanelState } from "./MembersPanel";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { RoomSocket } from "@/lib/ws-client";
 
@@ -35,7 +35,6 @@ type RoomDashboardViewProps = {
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
-  memberTransferSummaries: MemberTransferSummary[];
   localMemberState: LocalMemberPanelState | null;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
@@ -100,7 +99,6 @@ function RoomDashboardViewBase({
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
-  memberTransferSummaries,
   localMemberState,
   peerDiagnostics,
   peerRecentEvents,
@@ -290,9 +288,9 @@ function RoomDashboardViewBase({
           {activeTab === "members" ? (
             <MembersTabPanel
               members={roomSnapshot.room.members}
-              memberTransferSummaries={memberTransferSummaries}
               localMemberState={localMemberState}
-              connectedPeersCount={connectedPeersCount}
+              playbackStatus={roomSnapshot.room.playback.status}
+              sourcePeerId={roomSnapshot.room.playback.sourcePeerId}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}

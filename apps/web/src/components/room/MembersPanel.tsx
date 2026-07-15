@@ -1,51 +1,25 @@
 "use client";
 
 import { memo } from "react";
-import type { PeerDiagnosticsSnapshot, RoomMember } from "@music-room/shared";
-import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
+import type { PeerDiagnosticsSnapshot, PlaybackSnapshot, RoomMember } from "@music-room/shared";
 import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import {
-  buildWanLinkScore,
-  buildWanLinkScoreFromPeerDiagnostic,
-  type WanLinkScore,
-  type WanProviderSummary
-} from "./wan-link-score";
-
-export type MemberTransferSummary = {
-  memberId: string;
-  mediaTrackState: "none" | "live" | "ended" | "failed";
-  mediaReceiveBitrateKbps: number | null;
-  mediaSendBitrateKbps: number | null;
-  mediaJitterMs: number | null;
-  mediaPacketLossRate: number | null;
-};
+  dedupePeerDiagnostics,
+  dedupeRoomMembers,
+  getMediaSampleAgeMs,
+  hasFreshMediaObservation,
+  realtimeMediaSampleWindowMs
+} from "./member-data";
 
 type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
 
 export type LocalMemberPanelState = {
   memberId: string;
-  presenceState: RoomMember["presenceState"];
-  audioUnlocked: boolean;
-  transportLabel: string;
-  transportSummary: {
-    totalRateKbps: number | null;
-    receiveRateKbps: number | null;
-    sendRateKbps: number | null;
-    latencyMs: number | null;
-    sampleAgeMs: number | null;
-  };
   mediaSummary?: {
     receiveRateKbps: number | null;
     sendRateKbps: number | null;
     sampleAgeMs: number | null;
   };
-  segmentedPlayback: SegmentedPlaybackSnapshot;
-  playbackBitrateKbps: number | null;
-  configuredPlaybackBitrateKbps?: number | null;
-  sourcePeerId?: string | null;
-  isSourceOwner?: boolean;
-  sourceMemberNickname?: string | null;
-  dataReadyCount: number;
   playbackStatus: {
     label: string;
     detail: string;
@@ -56,9 +30,10 @@ export type LocalMemberPanelState = {
 
 type MembersPanelProps = {
   members: RoomMember[];
-  memberTransferSummaries?: MemberTransferSummary[];
   peerDiagnostics?: PeerDiagnosticsSnapshot[];
   localMemberState?: LocalMemberPanelState | null;
+  playbackStatus: PlaybackSnapshot["status"];
+  sourcePeerId: string | null;
 };
 
 function getToneClasses(tone: StatusTone) {
@@ -69,38 +44,19 @@ function getToneClasses(tone: StatusTone) {
   return "border-surface-border bg-background/60 text-foreground-muted";
 }
 
-function formatRate(value: number | null, sampleAgeMs: number | null = null) {
-  if (value === null) return "未知";
-  const stale = sampleAgeMs !== null && sampleAgeMs > 6_000 ? " · stale" : "";
-  return `${formatTransferRateMBps(value)}${stale}`;
+function formatRate(value: number | null) {
+  return value === null ? null : formatTransferRateMBps(value);
 }
 
-function formatMetric(value: number | null, unit: string) {
-  if (value === null) return "未知";
+function formatMetric(value: number | null | undefined, unit: string) {
+  if (value === null || value === undefined) return null;
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
 }
 
-export function formatOpusRate(
-  actualKbps: number | null,
-  configuredKbps: number | null | undefined,
-  sampleAgeMs: number | null
-) {
-  if (typeof actualKbps === "number" && actualKbps > 0) {
-    return `${Math.round(actualKbps)} kbps`;
-  }
-  if (actualKbps === 0 && sampleAgeMs !== null && sampleAgeMs <= 6_000) {
-    return configuredKbps ? `采样中 · 目标 ${Math.round(configuredKbps)} kbps` : "采样中";
-  }
-  if (configuredKbps) {
-    return `无 RTP · 目标 ${Math.round(configuredKbps)} kbps`;
-  }
-  return "未知";
-}
-
 function formatSampleAge(sampleAgeMs: number | null) {
-  if (sampleAgeMs === null) return "暂无样本";
+  if (sampleAgeMs === null) return null;
   const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
-  return sampleAgeMs > 6_000 ? `stale · ${seconds}s前` : `${seconds}s前`;
+  return sampleAgeMs > realtimeMediaSampleWindowMs ? `样本过期 · ${seconds}s前` : `样本 ${seconds}s前`;
 }
 
 function getPresence(member: RoomMember) {
@@ -113,308 +69,178 @@ function getPresence(member: RoomMember) {
   return { dot: "bg-neutral-600", text: "text-foreground-muted", label: "离线" };
 }
 
-export function getCurrentTrackStatus(
-  summary: MemberTransferSummary | undefined,
-  presenceState: RoomMember["presenceState"]
-) {
-  if (presenceState === "offline") {
-    return { label: "离线", detail: "当前不参与实时媒体传输。", tone: "warning" as const };
-  }
-  if (presenceState === "reconnecting") {
-    return { label: "重连中", detail: "正在恢复 WebRTC 媒体轨道。", tone: "warning" as const };
-  }
-  if (summary?.mediaTrackState === "live") {
-    return { label: "Media track 实时", detail: "正在接收或发送 RTP Opus 音频。", tone: "success" as const };
-  }
-  if (summary?.mediaTrackState === "failed") {
-    return { label: "Media track 失败", detail: "当前媒体轨道不可用，等待重连。", tone: "danger" as const };
-  }
-  if (summary?.mediaTrackState === "ended") {
-    return { label: "媒体轨道已结束", detail: "当前轨道已停止，等待新的播放源。", tone: "warning" as const };
-  }
-  return { label: "等待媒体轨道", detail: "尚未收到当前播放源的 RTP Opus 轨道。", tone: "neutral" as const };
-}
-
 export function getPlaybackStatus(
   presenceState: RoomMember["presenceState"],
-  peerDiagnostics: PeerDiagnosticsSnapshot | undefined
+  peerDiagnostics: PeerDiagnosticsSnapshot | undefined,
+  options: { playbackActive?: boolean; isCurrentSource?: boolean } = {}
 ) {
+  const playbackActive = options.playbackActive ?? true;
+  const isCurrentSource = options.isCurrentSource ?? true;
+
   if (presenceState === "offline") {
-    return { label: "离线", detail: "该成员当前不参与实时音频传输。", tone: "warning" as const };
+    return { label: "离线", detail: "该成员当前不参与实时音频传输。", tone: "warning" as const, badgeText: "offline" };
   }
   if (presenceState === "reconnecting") {
-    return { label: "链路重连中", detail: "正在恢复 WebRTC RTP Opus 媒体轨道。", tone: "warning" as const };
+    return { label: "链路重连中", detail: "正在恢复 WebRTC RTP Opus 媒体轨道。", tone: "warning" as const, badgeText: "reconnecting" };
+  }
+  if (!playbackActive) {
+    return peerDiagnostics?.dataChannelState === "open"
+      ? { label: "已连接", detail: "控制通道已连接，当前房间没有播放。", tone: "accent" as const, badgeText: "Data open" }
+      : { label: "在线", detail: "成员在线，尚未观测到控制通道。", tone: "neutral" as const, badgeText: "online" };
+  }
+  if (!isCurrentSource) {
+    return peerDiagnostics?.dataChannelState === "open"
+      ? { label: "已连接", detail: "当前不是音频源，不承担本次 RTP Opus 发送。", tone: "accent" as const, badgeText: "not source" }
+      : { label: "在线", detail: "当前不是音频源，暂无本次媒体链路样本。", tone: "neutral" as const, badgeText: "not source" };
   }
   if (peerDiagnostics?.mediaConnectionState === "failed" || peerDiagnostics?.transportScore === "failed") {
     return {
       label: "媒体链路失败",
       detail: peerDiagnostics.lastFailureReason ?? "当前无法接收 RTP Opus 音频。",
-      tone: "danger" as const
+      tone: "danger" as const,
+      badgeText: "Media failed"
     };
   }
-  if ((peerDiagnostics?.mediaReceiveBitrateKbps ?? 0) > 0 || (peerDiagnostics?.mediaSendBitrateKbps ?? 0) > 0) {
+  if (hasFreshMediaObservation(peerDiagnostics)) {
     return {
-      label: "Media track 实时",
-      detail: "本端已观测到 WebRTC RTP Opus 音频流。",
+      label: "RTP 正常",
+      detail: "最近 6 秒内已观测到当前媒体源的 RTP Opus 数据。",
       tone: "success" as const,
       badgeText: "RTP Opus"
     };
   }
-  if (peerDiagnostics?.dataChannelState === "open") {
-    return { label: "控制通道就绪", detail: "房间控制通道已连接，媒体播放使用 RTP Opus。", tone: "accent" as const };
+  if (peerDiagnostics?.mediaConnectionState === "connected" || peerDiagnostics?.senderTrackId || peerDiagnostics?.receiverTrackId) {
+    return { label: "等待音频数据", detail: "媒体连接已建立，但最近没有有效 RTP 速率样本。", tone: "warning" as const, badgeText: "Media waiting" };
   }
-  if (peerDiagnostics?.transportHealth === "failed") {
-    return {
-      label: "数据链路失败",
-      detail: peerDiagnostics.lastFailureReason ?? "当前无法建立数据通道。",
-      tone: "danger" as const
-    };
-  }
-  return { label: "等待媒体链路", detail: "尚未观测到当前播放源的 RTP Opus 轨道。", tone: "neutral" as const };
+  return { label: "等待媒体样本", detail: "当前没有可确认的 RTP Opus 媒体观测。", tone: "neutral" as const, badgeText: "Media pending" };
 }
 
-function buildRoomProviders(summaries: MemberTransferSummary[]): WanProviderSummary[] {
-  return summaries
-    .filter((summary) => summary.mediaTrackState === "live")
-    .map((summary) => ({
-      peerId: summary.memberId,
-      availableUnits: 1,
-      totalUnits: 1,
-      isPreferredSource: true
-    }));
-}
-
-function resolveRoomWanScore(input: {
-  summaries: MemberTransferSummary[];
-  peerDiagnostics: PeerDiagnosticsSnapshot[];
+function MemberMetrics({
+  diagnostic,
+  localMemberState,
+  isLocal
+}: {
+  diagnostic: PeerDiagnosticsSnapshot | undefined;
   localMemberState: LocalMemberPanelState | null;
-}): WanLinkScore {
-  const providers = buildRoomProviders(input.summaries);
-  const playbackBitrateKbps = input.localMemberState?.playbackBitrateKbps ??
-    input.localMemberState?.configuredPlaybackBitrateKbps ?? null;
-  const mediaDiagnostics = input.peerDiagnostics.filter((snapshot) =>
-    snapshot.peerId !== "system" && (
-      snapshot.mediaConnectionState !== null ||
-      (snapshot.mediaReceiveBitrateKbps ?? 0) > 0 ||
-      (snapshot.mediaSendBitrateKbps ?? 0) > 0
-    )
+  isLocal: boolean;
+}) {
+  const mediaSampleAgeMs = isLocal
+    ? localMemberState?.mediaSummary?.sampleAgeMs ?? null
+    : getMediaSampleAgeMs(diagnostic);
+  const mediaSampleIsFresh = mediaSampleAgeMs !== null && mediaSampleAgeMs <= realtimeMediaSampleWindowMs;
+  const receiveRate = isLocal
+    ? localMemberState?.mediaSummary?.receiveRateKbps ?? null
+    : diagnostic?.mediaReceiveBitrateKbps ?? null;
+  const sendRate = isLocal
+    ? localMemberState?.mediaSummary?.sendRateKbps ?? null
+    : diagnostic?.mediaSendBitrateKbps ?? null;
+  const metrics: string[] = [];
+
+  if (mediaSampleIsFresh && receiveRate !== null && receiveRate > 0) {
+    metrics.push(`RTP 接收 ${formatRate(receiveRate)}`);
+  }
+  if (mediaSampleIsFresh && sendRate !== null && sendRate > 0) {
+    metrics.push(`RTP 发送 ${formatRate(sendRate)}`);
+  }
+  if (diagnostic && !isLocal) {
+    const rtt = formatMetric(diagnostic.currentRoundTripTimeMs, "ms");
+    const loss = mediaSampleIsFresh ? formatMetric(diagnostic.packetLossRate, "%") : null;
+    const jitter = mediaSampleIsFresh ? formatMetric(diagnostic.jitterMs, "ms") : null;
+    if (rtt) metrics.push(`RTT ${rtt}`);
+    if (loss) metrics.push(`丢包 ${loss}`);
+    if (jitter) metrics.push(`jitter ${jitter}`);
+  }
+  const sampleLabel = formatSampleAge(mediaSampleAgeMs);
+  if (sampleLabel) metrics.push(sampleLabel);
+
+  return (
+    <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
+      {metrics.length > 0 ? metrics.map((metric) => <span key={metric}>{metric}</span>) : <span>暂无实时样本</span>}
+    </div>
   );
-  const sourcePeerId = input.localMemberState?.sourcePeerId ?? null;
-  const selectedDiagnostics = input.localMemberState?.isSourceOwner
-    ? mediaDiagnostics
-    : sourcePeerId
-      ? mediaDiagnostics.filter((snapshot) => snapshot.peerId === sourcePeerId)
-      : mediaDiagnostics;
-  const remoteScores = selectedDiagnostics
-    .filter((snapshot) => snapshot.peerId !== "system")
-    .map((diagnostic) => buildWanLinkScoreFromPeerDiagnostic({
-      diagnostic,
-      providers,
-      playbackBitrateKbps,
-      downloadRateKbps: diagnostic.mediaReceiveBitrateKbps,
-      uploadRateKbps: diagnostic.mediaSendBitrateKbps
-    }))
-    .sort((left, right) => right.score - left.score);
-  const selectedRemoteScore = input.localMemberState?.isSourceOwner
-    ? [...remoteScores].sort((left, right) => left.score - right.score)[0]
-    : remoteScores[0];
-  return selectedRemoteScore ?? buildWanLinkScore({
-    protocol: "udp",
-    rttMs: input.localMemberState?.transportSummary.latencyMs ?? null,
-    downloadRateKbps: input.localMemberState?.mediaSummary?.receiveRateKbps ?? null,
-    uploadRateKbps: input.localMemberState?.mediaSummary?.sendRateKbps ?? null,
-    playbackBitrateKbps,
-    mediaDirection: input.localMemberState?.isSourceOwner ? "send" : "receive",
-    mediaTrackState: input.localMemberState?.segmentedPlayback.state === "live" ? "live" : "none",
-    mediaConnectionState: input.localMemberState?.segmentedPlayback.state === "live" ? "connected" : null,
-    sampleAgeMs: input.localMemberState?.mediaSummary?.sampleAgeMs ?? null,
-    providers
-  });
 }
 
 function MembersPanelBase({
   members,
-  memberTransferSummaries = [],
   peerDiagnostics = [],
-  localMemberState = null
+  localMemberState = null,
+  playbackStatus: roomPlaybackStatus,
+  sourcePeerId
 }: MembersPanelProps) {
-  const summaryByMemberId = new Map(memberTransferSummaries.map((item) => [item.memberId, item]));
-  const diagnosticsByPeerId = new Map(peerDiagnostics.map((item) => [item.peerId, item]));
-  const roomWanScore = resolveRoomWanScore({
-    summaries: memberTransferSummaries,
-    peerDiagnostics,
-    localMemberState
-  });
+  const normalizedMembers = dedupeRoomMembers(members);
+  const diagnosticsByPeerId = new Map(
+    dedupePeerDiagnostics(peerDiagnostics).map((item) => [item.peerId, item])
+  );
+  const onlineCount = normalizedMembers.filter((member) => member.presenceState === "online").length;
 
   return (
     <section className="flex w-full flex-col gap-3">
-      <p className="rounded-lg border border-surface-border bg-background/20 px-3 py-2 text-[10px] leading-4 text-foreground-muted">
-        播放状态、媒体轨道、AudioContext 与 RTP 码率来自本端真实 WebRTC 观测；控制通道不承载音频数据。
-      </p>
-
-      <section className="border-y border-surface-border py-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold text-foreground-muted">外网实时音频评分</span>
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getToneClasses(roomWanScore.tone)}`}>
-                {roomWanScore.grade} · {roomWanScore.score}
-              </span>
-            </div>
-            <strong className="mt-1.5 block text-sm text-foreground">{roomWanScore.pathLabel}</strong>
-            <p className="mt-1 text-xs leading-5 text-foreground-muted">{roomWanScore.summary}</p>
-          </div>
-          <dl className="grid min-w-[15rem] grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-foreground-muted">
-            <div>RTT：{roomWanScore.metrics.rttLabel}</div>
-            <div>RTP 接收：{roomWanScore.metrics.downloadLabel}</div>
-            <div>目标：{roomWanScore.metrics.audioBitrateLabel}</div>
-            <div>余量：{roomWanScore.metrics.headroomLabel}</div>
-            <div>RTP 发送：{roomWanScore.metrics.uploadLabel}</div>
-            <div>媒体连接：{roomWanScore.metrics.providerLabel}</div>
-            <div>方向：{roomWanScore.metrics.directionLabel}</div>
-            <div>丢包：{roomWanScore.metrics.packetLossLabel}</div>
-            <div>jitter：{roomWanScore.metrics.jitterLabel}</div>
-            <div>样本：{roomWanScore.metrics.sampleAgeLabel}</div>
-          </dl>
+      <header className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-foreground">房间成员</h2>
+          <p className="mt-1 text-[10px] text-foreground-muted">
+            {onlineCount} 人在线 · 共 {normalizedMembers.length} 人
+          </p>
         </div>
-        <p className="mt-2 text-[10px] leading-4 text-foreground-muted">{roomWanScore.tips[0]}</p>
-      </section>
+        <span className="rounded-full border border-surface-border bg-background/40 px-2.5 py-1 text-[10px] font-mono text-foreground-muted">
+          {normalizedMembers.length}
+        </span>
+      </header>
 
-      {localMemberState ? (
-        <section className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-surface-border pb-3 sm:grid-cols-4">
-          <div>
-            <span className="text-[10px] text-foreground-muted">本机输出</span>
-            <strong className="mt-1 block text-sm text-foreground">{localMemberState.playbackStatus.label}</strong>
-          </div>
-          <div>
-            <span className="text-[10px] text-foreground-muted">音频格式</span>
-            <strong className="mt-1 block text-sm text-foreground">
-                  Opus · {formatOpusRate(
-                    localMemberState.playbackBitrateKbps,
-                    localMemberState.configuredPlaybackBitrateKbps,
-                    localMemberState.mediaSummary?.sampleAgeMs ?? null
-                  )}
-            </strong>
-          </div>
-          <div>
-            <span className="text-[10px] text-foreground-muted">媒体轨道</span>
-            <strong className="mt-1 block text-sm text-foreground">
-              {localMemberState.playbackStatus.badgeText}
-            </strong>
-          </div>
-          <div>
-            <span className="text-[10px] text-foreground-muted">当前媒体源</span>
-            <strong className="mt-1 block text-sm text-foreground">
-              {localMemberState.sourceMemberNickname ?? "未选择"}
-            </strong>
-          </div>
-          <div>
-            <span className="text-[10px] text-foreground-muted">AudioContext</span>
-            <strong className="mt-1 block text-sm text-foreground">
-              {localMemberState.segmentedPlayback.audioContextState ?? "未创建"}
-            </strong>
-          </div>
-          {localMemberState.segmentedPlayback.lastError ? (
-            <p className="col-span-2 text-[10px] leading-4 text-amber-300 sm:col-span-4">
-              最近错误：{localMemberState.segmentedPlayback.lastError}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
+      {normalizedMembers.length > 0 ? (
+        <div className="divide-y divide-surface-border border-y border-surface-border">
+          {normalizedMembers.map((member) => {
+            const isLocal = localMemberState?.memberId === member.id;
+            const diagnostic = member.peerId ? diagnosticsByPeerId.get(member.peerId) : undefined;
+            const isCurrentSource = member.peerId !== null && member.peerId === sourcePeerId;
+            const status = isLocal
+              ? localMemberState.playbackStatus
+              : getPlaybackStatus(member.presenceState, diagnostic, {
+                  playbackActive: roomPlaybackStatus === "playing",
+                  isCurrentSource
+                });
+            const presence = getPresence(member);
 
-      {members.length > 0 ? members.map((member) => {
-        const summary = summaryByMemberId.get(member.id);
-        const isLocal = localMemberState?.memberId === member.id;
-        const diagnostic = member.peerId ? diagnosticsByPeerId.get(member.peerId) : undefined;
-        const playbackStatus = isLocal
-          ? localMemberState.playbackStatus
-          : getPlaybackStatus(member.presenceState, diagnostic);
-        const mediaStatus = getCurrentTrackStatus(summary, member.presenceState);
-        const presence = getPresence(member);
-        const downloadRate = isLocal
-          ? localMemberState.mediaSummary?.receiveRateKbps ?? null
-          : diagnostic?.mediaReceiveBitrateKbps ?? null;
-        const uploadRate = isLocal
-          ? localMemberState.mediaSummary?.sendRateKbps ?? null
-          : diagnostic?.mediaSendBitrateKbps ?? null;
-        const latency = isLocal
-          ? localMemberState.transportSummary.latencyMs
-          : diagnostic?.currentRoundTripTimeMs ?? null;
-        const remoteWan = !isLocal && diagnostic
-          ? buildWanLinkScoreFromPeerDiagnostic({
-              diagnostic,
-              playbackBitrateKbps: localMemberState?.playbackBitrateKbps ?? null,
-              providers: summary?.mediaTrackState === "live" ? [{
-                peerId: member.id,
-                availableUnits: 1,
-                totalUnits: 1,
-                isPreferredSource: true
-              }] : []
-            })
-          : null;
-
-        return (
-          <article key={member.id} className="rounded-lg border border-surface-border bg-surface/25 p-3">
-            <header className="flex items-center justify-between gap-3">
-              <div>
-                <strong className="text-[13px] text-foreground">{member.nickname}</strong>
-                <span className={`ml-2 text-[10px] ${member.role === "host" ? "font-semibold text-accent" : "text-foreground-muted"}`}>
-                  {member.role === "host" ? "房主" : "成员"}{isLocal ? " · 本机" : ""}
-                </span>
-              </div>
-              <span className={`flex items-center gap-1.5 text-xs ${presence.text}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />{presence.label}
-              </span>
-            </header>
-
-            <div className="mt-3 grid grid-cols-1 gap-3 border-t border-surface-border pt-3 sm:grid-cols-3">
-              <div>
-                <span className="text-[10px] text-foreground-muted">播放 / 数据状态</span>
-                <div className="mt-1 flex items-center gap-2">
-                  <strong className="text-xs text-foreground">{playbackStatus.label}</strong>
-                  <span className={`rounded-full border px-1.5 py-0.5 text-[9px] ${getToneClasses(playbackStatus.tone)}`}>
-                    {isLocal ? localMemberState.playbackStatus.badgeText : mediaStatus.label}
+            return (
+              <article key={member.id} className="py-3 first:pt-3 last:pb-3">
+                <header className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[10px] font-semibold text-foreground">
+                        {member.nickname.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <strong className="block truncate text-[13px] text-foreground">{member.nickname}</strong>
+                        <span className="text-[10px] text-foreground-muted">
+                          {member.role === "host" ? "房主" : "成员"}{isLocal ? " · 本机" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className={`flex shrink-0 items-center gap-1.5 text-xs ${presence.text}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${presence.dot}`} />
+                    {presence.label}
                   </span>
-                </div>
-                <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{playbackStatus.detail}</p>
-              </div>
+                </header>
 
-              <div>
-                <span className="text-[10px] text-foreground-muted">媒体轨道</span>
-                <strong className="mt-1 block text-xs text-foreground">{mediaStatus.label}</strong>
-                <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{mediaStatus.detail}</p>
-                <p className="mt-1 text-[10px] text-foreground-muted/80">
-                  码率：{isLocal
-                    ? formatOpusRate(
-                        localMemberState.playbackBitrateKbps,
-                        localMemberState.configuredPlaybackBitrateKbps,
-                        localMemberState.mediaSummary?.sampleAgeMs ?? null
-                      )
-                    : formatRate(diagnostic?.mediaReceiveBitrateKbps ?? null)}
-                </p>
-              </div>
-
-              <div>
-                <span className="text-[10px] text-foreground-muted">本端链路观测</span>
-                <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-                  <span>接收：{formatRate(downloadRate, isLocal ? localMemberState.mediaSummary?.sampleAgeMs ?? null : null)}</span>
-                  <span>发送：{formatRate(uploadRate, isLocal ? localMemberState.mediaSummary?.sampleAgeMs ?? null : null)}</span>
-                  <span>RTT：{formatMetric(latency, "ms")}</span>
-                  <span>丢包：{formatMetric(diagnostic?.packetLossRate ?? null, "%")}</span>
-                  <span>jitter：{formatMetric(diagnostic?.jitterMs ?? null, "ms")}</span>
-                  <span>路径：{remoteWan?.pathLabel ?? (isLocal ? "汇总" : "未知")}</span>
+                <div className="ml-9 mt-2 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getToneClasses(status.tone)}`}>
+                      {status.label}
+                    </span>
+                    {roomPlaybackStatus === "playing" && isCurrentSource ? (
+                      <span className="text-[10px] text-accent">当前音源</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{status.detail}</p>
+                  <MemberMetrics diagnostic={diagnostic} localMemberState={localMemberState} isLocal={isLocal} />
                 </div>
-                {isLocal ? (
-                  <p className="mt-1 text-[10px] text-foreground-muted/80">
-                    样本：{formatSampleAge(localMemberState.transportSummary.sampleAgeMs)}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </article>
-        );
-      }) : (
-        <p className="rounded-lg border border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="border-y border-dashed border-surface-border px-4 py-6 text-center text-xs text-foreground-muted">
           当前还没有成员进入房间。
         </p>
       )}

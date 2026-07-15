@@ -9,13 +9,16 @@ import type {
 } from "@music-room/shared";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import type { SegmentedPlaybackSnapshot } from "@/features/playback/use-segmented-opus-playback";
+import {
+  dedupePeerDiagnostics,
+  dedupeRoomMembers,
+  hasRecentMediaSample
+} from "../member-data";
 export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
-  peerId: string;
   connectedPeers: string[];
   mediaConnectedPeers: string[];
   activeDashboardTab: "queue" | "library" | "members";
-  currentTrack: RoomSnapshot["tracks"][number] | null;
   segmentedPlayback: SegmentedPlaybackSnapshot;
   peerDiagnostics: PeerDiagnosticsSnapshot[];
   peerRecentEvents: PeerRecentEvent[];
@@ -26,7 +29,6 @@ export type UseRoomDerivedStateInput = {
   workspaceOnly: boolean;
   initialRoomId: string | null;
   activeSessionUserId?: string;
-  audioUnlocked: boolean;
   suppressRoomRecovery: boolean;
   isNavigatingRoomExit: boolean;
   isRecoveringRoom: boolean;
@@ -37,11 +39,8 @@ const emptyWorkspacePeerRecentEvents: PeerRecentEvent[] = [];
 
 export function useRoomDerivedState({
   roomSnapshot,
-  peerId,
   connectedPeers,
   mediaConnectedPeers,
-  activeDashboardTab,
-  currentTrack,
   segmentedPlayback,
   peerDiagnostics,
   peerRecentEvents,
@@ -52,12 +51,14 @@ export function useRoomDerivedState({
   workspaceOnly,
   initialRoomId,
   activeSessionUserId,
-  audioUnlocked,
   suppressRoomRecovery,
   isNavigatingRoomExit,
   isRecoveringRoom
 }: UseRoomDerivedStateInput) {
-  const roomMembers = roomSnapshot?.room.members ?? null;
+  const roomMembers = useMemo(
+    () => (roomSnapshot ? dedupeRoomMembers(roomSnapshot.room.members) : null),
+    [roomSnapshot]
+  );
   const host = roomMembers?.find((member) => member.role === "host");
   const activeMemberPeerIds = useMemo(
     () => getActiveMemberPeerIds(roomMembers ?? []),
@@ -68,30 +69,10 @@ export function useRoomDerivedState({
     canDeleteRoom &&
     (() => {
       const uploaderIds = new Set(roomSnapshot.tracks.map((track) => track.ownerSessionId));
-      return !roomSnapshot.room.members.some(
+      return !roomMembers?.some(
         (member) => uploaderIds.has(member.id) && member.presenceState !== "online"
       );
     })();
-
-  const memberTransferSummaries = useMemo(() => {
-    if (!roomSnapshot || activeDashboardTab !== "members") {
-      return [];
-    }
-    return buildMemberMediaSummaries({
-      roomSnapshot,
-      peerDiagnostics,
-      activeMemberPeerIds,
-      localPeerId: peerId,
-      segmentedPlayback
-    });
-  }, [
-    activeDashboardTab,
-    activeMemberPeerIds,
-    peerId,
-    peerDiagnostics,
-    roomSnapshot,
-    segmentedPlayback
-  ]);
 
   const visiblePeerDiagnostics = useMemo(() => {
     return filterVisiblePeerDiagnostics(
@@ -121,74 +102,34 @@ export function useRoomDerivedState({
     }
 
     const localMember =
-      roomSnapshot.room.members.find((member) => member.id === activeSessionUserId) ?? null;
+      roomMembers?.find((member) => member.id === activeSessionUserId) ?? null;
     if (!localMember) {
       return null;
     }
 
-    const activePeerDiagnostics = peerDiagnostics.filter((peer) => activeMemberPeerIds.has(peer.peerId));
-    const totalDataReceiveRateKbps = sumDiagnosticsValue(
-      activePeerDiagnostics,
-      "transportReceiveBitrateKbps"
+    const activePeerDiagnostics = dedupePeerDiagnostics(peerDiagnostics).filter((peer) =>
+      activeMemberPeerIds.has(peer.peerId)
     );
-    const totalDataSendRateKbps = sumDiagnosticsValue(
-      activePeerDiagnostics,
-      "transportSendBitrateKbps"
-    );
+    const activeMediaDiagnostics = activePeerDiagnostics.filter((peer) => hasRecentMediaSample(peer));
     const totalMediaReceiveRateKbps = sumDiagnosticsValue(
-      activePeerDiagnostics,
+      activeMediaDiagnostics,
       "mediaReceiveBitrateKbps"
     );
     const totalMediaSendRateKbps = sumDiagnosticsValue(
-      activePeerDiagnostics,
+      activeMediaDiagnostics,
       "mediaSendBitrateKbps"
-    );
-    const isLocalSourceOwner = roomSnapshot.room.playback.sourcePeerId === peerId;
-    const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
-    const transportSampleAgeMs = getLatestMetricSampleAgeMs(
-      activePeerDiagnostics,
-      [
-        "transportReceiveBitrateKbps",
-        "transportSendBitrateKbps",
-        "currentRoundTripTimeMs"
-      ]
     );
     const mediaSampleAgeMs = getLatestMetricSampleAgeMs(
       activePeerDiagnostics,
       ["mediaReceiveBitrateKbps", "mediaSendBitrateKbps"]
     );
-    const configuredPlaybackBitrateKbps = currentTrack?.playbackAsset?.bitrate
-      ? currentTrack.playbackAsset.bitrate / 1000
-      : null;
     return {
       memberId: localMember.id,
-      presenceState: localMember.presenceState,
-      audioUnlocked,
-      transportLabel: "WebRTC RTP Opus（本机）",
-      transportSummary: {
-        totalRateKbps: sumNullableNumbers(totalDataReceiveRateKbps, totalDataSendRateKbps),
-        receiveRateKbps: totalDataReceiveRateKbps,
-        sendRateKbps: totalDataSendRateKbps,
-        latencyMs: averageLatencyMs,
-        sampleAgeMs: transportSampleAgeMs
-      },
       mediaSummary: {
         receiveRateKbps: totalMediaReceiveRateKbps,
         sendRateKbps: totalMediaSendRateKbps,
         sampleAgeMs: mediaSampleAgeMs
       },
-      segmentedPlayback,
-      playbackBitrateKbps: isLocalSourceOwner
-        ? totalMediaSendRateKbps
-        : totalMediaReceiveRateKbps,
-      configuredPlaybackBitrateKbps,
-      sourcePeerId: roomSnapshot.room.playback.sourcePeerId,
-      isSourceOwner: isLocalSourceOwner,
-      sourceMemberNickname:
-        roomSnapshot.room.members.find(
-          (member) => member.id === roomSnapshot.room.playback.sourceSessionId
-        )?.nickname ?? null,
-      dataReadyCount: countPeersWithinActiveMembers(connectedPeers, activeMemberPeerIds),
       playbackStatus: getLocalPlaybackStatus({
         presenceState: localMember.presenceState,
         playbackStatus: roomSnapshot.room.playback.status,
@@ -198,12 +139,9 @@ export function useRoomDerivedState({
   }, [
     activeMemberPeerIds,
     activeSessionUserId,
-    audioUnlocked,
-    connectedPeers,
-    currentTrack,
-    peerId,
     peerDiagnostics,
     roomSnapshot,
+    roomMembers,
     segmentedPlayback
   ]);
 
@@ -240,7 +178,6 @@ export function useRoomDerivedState({
       mediaConnectedPeers,
       activeMemberPeerIds
     ),
-    memberTransferSummaries,
     localMemberState,
     visiblePeerDiagnostics,
     visiblePeerRecentEvents,
@@ -272,37 +209,6 @@ export function getActiveMemberPeerIds(members: RoomSnapshot["room"]["members"])
   );
 }
 
-export function buildMemberMediaSummaries(input: {
-  roomSnapshot: RoomSnapshot;
-  peerDiagnostics: PeerDiagnosticsSnapshot[];
-  activeMemberPeerIds: Set<string>;
-  localPeerId: string;
-  segmentedPlayback: SegmentedPlaybackSnapshot;
-}) {
-  return input.roomSnapshot.room.members.map((member) => {
-    const diagnostic = member.peerId
-      ? input.peerDiagnostics.find((candidate) => candidate.peerId === member.peerId)
-      : null;
-    const isLocalSource = member.peerId === input.localPeerId &&
-      input.roomSnapshot.room.playback.sourcePeerId === input.localPeerId;
-    const mediaTrackState: "none" | "live" | "ended" | "failed" = isLocalSource
-      ? input.segmentedPlayback.state === "live" ? "live" : "none"
-      : diagnostic?.mediaConnectionState === "failed" || diagnostic?.transportHealth === "failed"
-        ? "failed"
-        : (diagnostic?.mediaReceiveBitrateKbps ?? 0) > 0 || (diagnostic?.mediaSendBitrateKbps ?? 0) > 0
-          ? "live"
-          : "none";
-    return {
-      memberId: member.id,
-      mediaTrackState,
-      mediaReceiveBitrateKbps: diagnostic?.mediaReceiveBitrateKbps ?? null,
-      mediaSendBitrateKbps: diagnostic?.mediaSendBitrateKbps ?? null,
-      mediaJitterMs: diagnostic?.jitterMs ?? null,
-      mediaPacketLossRate: diagnostic?.packetLossRate ?? null
-    };
-  });
-}
-
 export function selectWorkspacePeerDiagnostics(input: {
   activeDashboardTab: "queue" | "library" | "members";
   visiblePeerDiagnostics: PeerDiagnosticsSnapshot[];
@@ -325,16 +231,12 @@ export function countPeersWithinActiveMembers(
   peerIds: string[],
   activeMemberPeerIds: Set<string>
 ) {
-  return peerIds.filter((peerId) => activeMemberPeerIds.has(peerId)).length;
+  return new Set(peerIds.filter((peerId) => activeMemberPeerIds.has(peerId))).size;
 }
 
 function sumDiagnosticsValue(
   diagnostics: PeerDiagnosticsSnapshot[],
-  key:
-    | "mediaSendBitrateKbps"
-    | "mediaReceiveBitrateKbps"
-    | "transportReceiveBitrateKbps"
-    | "transportSendBitrateKbps"
+  key: "mediaSendBitrateKbps" | "mediaReceiveBitrateKbps"
 ) {
   const values = diagnostics
     .map((peer) => peer[key])
@@ -347,42 +249,9 @@ function sumDiagnosticsValue(
   return Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10;
 }
 
-function sumNullableNumbers(...values: Array<number | null>) {
-  const numbers = values.filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value)
-  );
-
-  if (numbers.length === 0) {
-    return null;
-  }
-
-  return Math.round(numbers.reduce((sum, value) => sum + value, 0) * 10) / 10;
-}
-
-function averageDiagnosticsValue(
-  diagnostics: PeerDiagnosticsSnapshot[],
-  key: "currentRoundTripTimeMs"
-) {
-  const values = diagnostics
-    .map((peer) => peer[key])
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-  if (values.length === 0) {
-    return null;
-  }
-
-  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
-}
-
 function getLatestMetricSampleAgeMs(
   diagnostics: PeerDiagnosticsSnapshot[],
-  keys: Array<
-    | "mediaReceiveBitrateKbps"
-    | "mediaSendBitrateKbps"
-    | "transportReceiveBitrateKbps"
-    | "transportSendBitrateKbps"
-    | "currentRoundTripTimeMs"
-  >,
+  keys: Array<"mediaReceiveBitrateKbps" | "mediaSendBitrateKbps">,
   now = Date.now()
 ) {
   const latestTimestampMs = diagnostics.reduce<number | null>((latest, diagnostic) => {
@@ -393,7 +262,11 @@ function getLatestMetricSampleAgeMs(
       return latest;
     }
 
-    const timestampMs = new Date(diagnostic.updatedAt).getTime();
+    const timestamp = diagnostic.lastMediaStatsProgressAt ?? diagnostic.lastMediaPacketAt ?? null;
+    if (!timestamp) {
+      return latest;
+    }
+    const timestampMs = new Date(timestamp).getTime();
     if (!Number.isFinite(timestampMs)) {
       return latest;
     }
@@ -504,5 +377,5 @@ export function filterVisiblePeerDiagnostics(
     visiblePeerIds.add(sourcePeerId);
   }
 
-  return peerDiagnostics.filter((peer) => visiblePeerIds.has(peer.peerId));
+  return dedupePeerDiagnostics(peerDiagnostics).filter((peer) => visiblePeerIds.has(peer.peerId));
 }

@@ -206,11 +206,9 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
 
   const workspaceViewModel = useRoomWorkspaceViewModel({
     roomSnapshot,
-    peerId,
     connectedPeers: pageState.connectedPeers,
     mediaConnectedPeers: pageState.mediaConnectedPeers,
     activeDashboardTab: pageState.activeDashboardTab,
-    currentTrack: pageDerived.currentTrack,
     segmentedPlayback,
     peerDiagnostics,
     peerRecentEvents,
@@ -221,7 +219,6 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     workspaceOnly,
     initialRoomId,
     activeSessionUserId: activeSession?.userId,
-    audioUnlocked: pageState.audioUnlocked,
     suppressRoomRecovery: pageState.suppressRoomRecovery,
     isNavigatingRoomExit: pageState.isNavigatingRoomExit,
     isRecoveringRoom: pageState.isRecoveringRoom
