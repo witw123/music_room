@@ -1,13 +1,15 @@
-# TURN 外网链路检查清单
+# TURN 外网媒体链路检查清单
 
-本项目的外网缓存速度取决于 WebRTC 实际 ICE 路径。内网常见 `host/srflx + udp` 直连会很快；外网如果落到 `relay/tcp`，缓存吞吐会明显下降，调度器会优先保护 active 播放 chunk。
+最后更新：`2026-07-15`
+
+本项目的跨网络播放质量取决于 WebRTC Media RTP 的实际 ICE 路径。控制 DataChannel 和媒体连接独立建立，但两者都依赖正确的信令、候选地址和 TURN 配置。房间不通过 WebRTC 传输音频文件或缓存分片。
 
 ## 必填配置
 
-- `TURN_PUBLIC_HOST`：填写客户端可访问的公网域名或公网 IP，不得是 `localhost`、`127.0.0.1` 或内网地址。
-- `TURN_EXTERNAL_IP`：填写 coturn 对外出口的真实公网 IP；云主机/NAT 场景不能填容器 IP 或 VPC 内网 IP。
-- `TURN_PROTOCOLS=udp,tcp,tls`：优先 UDP，TCP/TLS 作为媒体 ICE 恢复的可用候选。
-- `TURN_MIN_PORT` / `TURN_MAX_PORT`：relay 端口段必须和 coturn 配置、防火墙、安全组保持一致。
+- `TURN_PUBLIC_HOST`：填写客户端可访问的公网域名或公网 IP，不得是 `localhost`、`127.0.0.1` 或内网地址
+- `TURN_EXTERNAL_IP`：填写 coturn 对外出口的真实公网 IP；云主机/NAT 场景不能填容器 IP 或 VPC 内网 IP
+- `TURN_PROTOCOLS=udp,tcp,tls`：优先 UDP，TCP/TLS 作为媒体恢复候选
+- `TURN_MIN_PORT` / `TURN_MAX_PORT`：relay 端口段必须和 coturn、防火墙、安全组一致
 
 ## 端口开放
 
@@ -18,26 +20,38 @@
 - TCP `5349`（TURN TLS）
 - `TURN_MIN_PORT`-`TURN_MAX_PORT` 的 UDP relay 端口段
 
-如果 relay 端口段缺失，外网设备将无法建立稳定的媒体链路。媒体 RTP 与 DataChannel 已拆分，TCP/TLS 只作为媒体恢复候选，原文件 bulk 传输仍会在媒体 degraded 时暂停。
+relay 端口段缺失时，外网设备可能无法建立稳定的 RTP 媒体链路，或只能在短时间内连接后进入 `reconnecting`。
 
 ## DNS / Cloudflare
 
-- TURN 域名必须直接解析到 TURN 服务器公网 IP。
-- 使用 Cloudflare 时，TURN 记录必须设置为 **DNS-only**，不能启用橙云代理。
-- 不要把 `turn:` / `turns:` 服务放在只代理 HTTP/HTTPS 的 CDN 后面。
+- TURN 域名必须直接解析到 TURN 服务器公网 IP
+- 使用 Cloudflare 时，TURN 记录必须设置为 **DNS-only**，不能启用橙云代理
+- 不要把 `turn:` / `turns:` 服务放在只代理 HTTP/HTTPS 的 CDN 后面
 
 ## 客户端验证
 
-进入房间后打开 Mesh 诊断面板，逐个 peer 检查：
+进入房间后打开“成员与诊断”，逐个 peer 检查：
 
-- 数据路径：优先 `host` / `srflx`；跨 NAT 外网可接受 `relay`。
-- 协议：媒体优先 `udp`，必要时可切换 `tcp/tls`；DataChannel bulk 在 relay/TCP 或媒体 degraded 时暂停。
-- RTT：`<=120ms` 适合高速缓存；`>=250ms` 会被调度器降级；`>=400ms` 会被视为严重慢链路。
-- DataChannel bufferedAmount：长期高于 `512KB` 说明发送端堆积，background 缓存会被限流。
-- piece download/upload rate：聚合速率达到 2-3MB/s 时才能稳定支撑大体积歌曲快速补齐。
+- `dataIceState` / `mediaIceState`
+- `dataConnectionState` / `mediaConnectionState`
+- candidate type：直连通常为 `host`/`srflx`，跨 NAT 可接受 `relay`
+- media protocol：优先 UDP，必要时使用 TCP/TLS
+- `currentRoundTripTimeMs`、`jitterMs`、`packetLossRate`
+- `mediaReceiveBitrateKbps` / `mediaSendBitrateKbps`
+- `senderTrackId` / `receiverTrackId`
+- `remoteTrackStatus.hasSrcObject`、`lastAudioEvent` 和 `lastPlayAttemptResult`
 
 ## 期望现象
 
-- `fast-direct`：非 relay、非 tcp、RTT ≤ 120ms、下载 ≥ 4000kbps，允许更高 bulk 水位和更大分片。
-- `relay-udp`：可用但限流，优先保障 critical chunk。
-- `constrained/severe`：高 RTT、高丢包或低速率时，background 缓存暂停，RTP 音频优先；不通过降低 Opus 码率掩盖容量不足。
+- 控制和媒体连接都达到 connected/connected 或对应的稳定状态
+- RTP bitrate 持续大于零，`lastMediaPacketAt` 持续更新
+- `remoteTrackId` 在非重连期间保持不变
+- `bufferedAheadMs` 和 `scheduledAheadMs` 能覆盖调度保护窗口
+- 没有持续增长的 `underrunCount`，limiter 后 peak 不超过 0dBFS
+
+## 快速判断
+
+- offer/answer 正常但 ICE failed：先检查 TURN 域名、relay 端口和 UDP 出口
+- Media connected 但 RTP bitrate 为零：检查发送端 output Track、媒体协商方向和源端 AudioContext
+- RTP 有数据但无声：检查远端 Track 绑定、`audio.play()`、浏览器自动播放策略和页面静音状态
+- RTP 有数据且反复 underrun：检查源端 IndexedDB 读取、解码耗时、buffer ahead、jitter 和 packet loss

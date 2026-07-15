@@ -1,20 +1,16 @@
 # 测试场景手册
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-15`
 当前版本：`0.2.8`
 
 ## 使用方式
 
 - 先读 [REST API](./rest.md) 和 [WebSocket 事件](./websocket-events.md)
 - 本文按主流程组织场景，不重复字段定义
-- 每组场景都默认至少准备两个用户：`host` 和 `member`
+- 每组房间场景默认至少准备两个用户：`host` 和 `member`
+- 音频文件必须由拥有者在自己的浏览器中导入；测试成员不会从房间下载音频资产
 
 ## 1. 注册并登录
-
-### 前置条件
-
-- 服务端已启动
-- 数据库或 fallback auth 可用
 
 ### 步骤
 
@@ -24,263 +20,119 @@
 4. `POST /v1/auth/logout`
 5. `POST /v1/auth/login`
 
-### 预期接口响应
+### 断言
 
 - 注册返回 `AuthSession`
-- `GET /v1/auth/me` 返回与登录态一致的用户信息
+- `GET /v1/auth/me` 返回一致的用户信息
 - 注销返回 `{ ok: true }`
-- 再次登录返回新的 `AuthSession`
+- `username` 为小写，`nickname` 保持原值，`token` 非空
 
-### 关键字段断言
+### 异常
 
-- `username` 为小写
-- `nickname` 保持原值
-- `token` 为非空字符串
-
-### 异常分支
-
-- 重复注册同用户名：`409`
+- 重复注册：`409`
 - 密码少于 6 位：`400`
-- 连续错误登录触发限流：`429`
+- 连续错误登录限流：`429`
 
 ## 2. 创建房间并订阅实时通道
 
-### 前置条件
-
-- 已拿到 `host` 的 `x-session-token`
-
-### 步骤
-
 1. `POST /v1/rooms`
-2. 保存返回的 `roomId`、`joinCode`
+2. 保存 `roomId`、`joinCode`
 3. 建立 Socket.IO 连接
 4. 发送 `room.subscribe`
 
-### 预期接口响应
+断言：建房返回 `RoomSnapshot`，ack 返回 `ok: true`，随后收到 `room.snapshot`；`room.hostId` 等于房主 ID，`bootstrap.roomId` 与快照一致。
 
-- 建房返回 `RoomSnapshot`
-- `room.subscribe` ack 返回 `ok: true`
-- 随后收到 `room.snapshot`
-
-### 预期事件
-
-- 当前连接收到 `room.snapshot`
-
-### 关键字段断言
-
-- `room.hostId === host.userId`
-- `room.playback.queueVersion === 1`
-- ack 里的 `bootstrap.roomId` 与快照一致
-
-### 异常分支
-
-- `room.subscribe` 缺 `peerId`：WsException
-- token 与 `sessionId` 不匹配：WsException
-
-## 3. 第二个成员通过房间码加入
-
-### 前置条件
-
-- `host` 已完成场景 2
-- `member` 已登录
-
-### 步骤
+## 3. 第二个成员加入并建立媒体连接
 
 1. `member` 调 `POST /v1/rooms/join-by-code`
 2. `member` 建立 Socket.IO 连接并发送 `room.subscribe`
-3. `host` 和 `member` 都监听房间事件
+3. 两个客户端监听 `room.snapshot`、`room.presence.patch` 和 `peer.signal`
+4. 等待控制连接和媒体连接进入稳定状态
 
-### 预期接口响应
+断言：成员列表包含双方，`presenceRevision` 增加，成员 `peerId` 生效；没有音频资产下载事件，媒体连接只由当前曲目拥有者发布。
 
-- `join-by-code` 返回最新 `RoomSnapshot`
+## 4. 上传曲目并同步曲库
 
-### 预期事件
+1. 房主在浏览器选择本地音频文件
+2. 浏览器生成原始资产和分段 Opus 播放资产并写入 IndexedDB
+3. `POST /v1/rooms/{roomId}/tracks` 注册曲目元数据和资产清单
+4. 观察 `room.snapshot` 和 `room.library.patch`
 
-- `host` 侧收到 `room.snapshot`
-- `host` 侧收到 `room.presence.patch`
-- `member` 侧收到 `room.snapshot`
-
-### 关键字段断言
-
-- `members` 中包含 `host` 和 `member`
-- `presenceRevision` 增加
-- `member.peerId` 在成功订阅后生效
-
-### 异常分支
-
-- 错误 `joinCode`
-- 重名昵称加入同房间
-
-## 4. 上传曲目元数据并同步曲库
-
-### 前置条件
-
-- `host` 已在房间内并已订阅 realtime
-
-### 步骤
-
-1. `POST /v1/rooms/{roomId}/tracks`
-2. 观察 `host` 和 `member` 的房间事件
-
-### 预期接口响应
-
-- 返回 `TrackMeta`
-
-### 预期事件
-
-- `room.snapshot`
-- `room.library.patch`
-
-### 关键字段断言
+断言：
 
 - `sourceType === "local_upload"`
 - `ownerSessionId === host.userId`
-- `fileHash`、`pieceManifest` 被保留
-
-### 异常分支
-
-- 非房间成员上传
-- 同一上传者重复上传同一 `fileHash`，应走覆盖而非重复新增
+- `originalAsset` 和 `playbackAsset` 清单存在且校验通过
+- Server 和成员只收到元数据/清单，不收到文件本体
+- 同一上传者重复上传同一 `fileHash` 时按覆盖规则处理
 
 ## 5. 加歌、重排、删除队列
 
-### 前置条件
-
-- 房间中至少有 2 首曲目
-
-### 步骤
-
 1. `POST /v1/rooms/{roomId}/queue`
-2. 再加第二首歌
+2. 再加入第二首歌
 3. `PATCH /v1/rooms/{roomId}/queue/reorder`
 4. `DELETE /v1/rooms/{roomId}/queue/{queueItemId}`
 
-### 预期接口响应
-
-- 每次成功都返回 `{ queue, playback }`
-
-### 预期事件
-
-- 每次成功都触发：
-  - `room.snapshot`
-  - `room.queue.patch`
-
-### 关键字段断言
-
-- `queue[*].position` 连续递增
-- `requestedById` 对应当前操作人
-- 删除当前播放项时，`playback` 应同步变化
-
-### 异常分支
-
-- 非房主重排
-- 非房主且非点歌人删除队列项
+断言：每次成功返回 `{ queue, playback }`，并触发 `room.snapshot` 与 `room.queue.patch`；`queue[*].position` 连续递增，删除当前播放项时 `playback` 同步变化。
 
 ## 6. 播放、暂停、seek、next、prev
 
-### 前置条件
+1. 使用最新 `playback.playbackRevision` 调 `PATCH /v1/rooms/{roomId}/playback` `action=play`
+2. 依次测试 `seek`、`pause`、`next`、`prev`
+3. 在成员端观察 `audio.srcObject`、`remoteTrackId` 和 `currentTime`
+4. 在房主端观察 `bufferedAheadMs`、`scheduledAheadMs`、limiter peak/RMS 和 underrun
 
-- 队列至少有 2 项
-- 已知最新 `playback.playbackRevision`
+断言：
 
-### 步骤
-
-1. `PATCH /v1/rooms/{roomId}/playback` `action=play`
-2. `PATCH ... action=seek`
-3. `PATCH ... action=pause`
-4. `PATCH ... action=next`
-5. `PATCH ... action=prev`
-
-### 预期接口响应
-
-- 每次成功都返回最新 `PlaybackSnapshot`
-
-### 预期事件
-
-- 每次成功都触发 `room.playback.patch`
-
-### 关键字段断言
-
+- 每次成功返回最新 `PlaybackSnapshot` 并广播 `room.playback.patch`
 - `expectedVersion` 必须等于当前 `playbackRevision`
-- 成功后新的 `playbackRevision` 应递增
-- `positionMs` 与动作匹配
-
-### 异常分支
-
-- 使用过期 `expectedVersion`：`409`
-- 高频 `seek`：`429`
-- Redis 不可用：`503`
+- 播放控制不应在同一媒体会话内替换 output/remote Track
+- 暂停、短暂缺片和解码等待不调用 `replaceTrack(null)`
+- `waiting`/`stalled` 恢复只重试 `audio.play()`，不清空 `srcObject`
+- 过期版本：`409`；高频 seek：`429`；Redis 不可用：`503`
 
 ## 7. 保存歌单并重新导入房间
-
-### 前置条件
-
-- 当前队列非空
-
-### 步骤
 
 1. `POST /v1/playlists/from-room`
 2. `GET /v1/playlists`
 3. `POST /v1/playlists/{playlistId}/import-to-room`
 
-### 预期接口响应
+断言：保存返回 `Playlist`，导回返回 `{ queue, playback }` 并触发 `room.snapshot` / `room.queue.patch`；导回只使用当前房间曲库中存在的曲目。
 
-- 保存返回 `Playlist`
-- 列表中能看到新歌单
-- 导回房间返回 `{ queue, playback }`
+## 8. 成员变化不应重建媒体会话
 
-### 预期事件
+1. 在播放中让第三个成员加入/离开
+2. 触发 presence 心跳和普通房间快照刷新
+3. 改变房主本地音量
+4. 观察 `mediaSessionKey`、`outputTrackId`、`remoteTrackId` 和 `audio.srcObject`
 
-- 保存歌单后：`room.snapshot`
-- 导回队列后：
-  - `room.snapshot`
-  - `room.queue.patch`
+断言：这些操作不改变媒体会话和 Track identity，不造成可听中断；广播音量不受监听端本地音量影响。
 
-### 关键字段断言
+## 9. 断线重连、媒体恢复和房间删除
 
-- 新歌单 `trackIds` 顺序等于房间当前队列顺序
-- 导回时只导入当前房间曲库中存在的曲目
-
-### 异常分支
-
-- 非 owner 导入歌单
-- 歌单中无任何曲目存在于当前房间
-
-## 8. 断线重连、重复会话替换、房间删除
-
-### 前置条件
-
-- 房间内已有至少一个在线成员和已建立的 Socket.IO 连接
-
-### 步骤
-
-1. 人为断开 `member` 的 socket
-2. 观察 `host` 侧 presence 变化
-3. 在 `25s` 内重新连接并再次 `room.subscribe`
-4. 用同一 `sessionId` 再建立第三条连接，但使用不同 `peerId`
+1. 断开成员 Socket，观察 `reconnecting`
+2. 在 `25s` 内重新连接并发送 `room.subscribe`
+3. 断开/恢复媒体连接，观察 ICE restart 或媒体恢复
+4. 使用不同 `peerId` 建立重复 session，验证旧连接收到 `room.session.replaced`
 5. 最后由房主 `DELETE /v1/rooms/{roomId}`
 
-### 预期接口响应
+断言：
 
-- 房间删除返回 `{ ok: true }`
+- 新订阅返回新的 `recoveryGeneration`
+- 旧 generation 的 signal 被丢弃
+- 媒体恢复尽量保留当前 output Track；只有 media session 真正变化才替换 Track
+- 房间删除广播 `room.deleted` 和 `room.snapshot.missing`
+- 曲目拥有者离线时不从其他成员寻找替代音频源
 
-### 预期事件
+## 10. 长时间双浏览器媒体验收
 
-- 断线后先看到 `room.presence.patch`，成员转 `reconnecting`
-- 宽限期内恢复后重新变成 `online`
-- 会话替换时旧连接收到 `room.session.replaced`
-- 删除房间时全员收到：
-  - `room.deleted`
-  - `room.snapshot.missing`
+使用两个 Chromium context 连续播放至少 30 分钟，并穿插成员变化、暂停/恢复、切歌、seek、快速音量变化和模拟 RTP 丢包。
 
-### 关键字段断言
+必须验证：
 
-- `recoveryGeneration` 在重订阅后更新
-- `piece.availability.clear` 会在 peer 被清理时出现
-- `room.deleted.trackIds` 覆盖房间内全部曲目
-
-### 异常分支
-
-- 超过宽限期不恢复，应转 `offline`
-- 非房主删房
-- 有曲目上传者离线时删房
+- `currentTime` 持续推进
+- `remoteTrackId` 在非重连期间不变化
+- `audio.srcObject` 不被反复清空
+- `bufferedAheadMs` / `scheduledAheadMs` 不持续降到零
+- limiter 后 peak 不超过 0dBFS
+- 没有持续高频噪声、突发尖峰、click/pop 或持续增长的 underrun

@@ -7,7 +7,7 @@
 ### `apps/web`
 
 - Next.js 15 前端，提供网页工作区、房间页和播放器 UI
-- 负责账号、房间、队列、WebSocket、WebRTC Data/Media、IndexedDB 资产缓存
+- 负责账号、房间、队列、Socket.IO、WebRTC 控制/媒体连接和 IndexedDB 个人上传资产
 - 播放只使用分段 Opus 引擎和 WebRTC RTP 输出
 
 ### `apps/server`
@@ -18,7 +18,7 @@
 ### `packages/shared`
 
 - 前后端共享的 Zod schema 和类型
-- 包含 `RoomSnapshot`、`PlaybackSnapshot`、资产传输协议和 WebRTC 诊断模型
+- 包含 `RoomSnapshot`、`PlaybackSnapshot`、资产清单和 WebRTC/播放诊断模型
 
 ## 播放主流程
 
@@ -32,6 +32,8 @@ IndexedDB 分段 Opus
 ```
 
 房间普通快照、presence、成员变化、队列刷新和音量变化不会重建媒体会话。只有切换 source peer、离开房间或媒体会话彻底重建时才释放输出 Track。
+
+WebRTC 的 `music-room-control` DataChannel 只用于控制和连接健康协调，音频不经过 DataChannel，也不在成员之间传输原始或播放资产。曲目拥有者离线时，房间不会从其他成员或服务端寻找替代音频源。
 
 ## 基础设施
 

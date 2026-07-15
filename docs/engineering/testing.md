@@ -4,9 +4,9 @@
 
 ## 已覆盖
 
-- shared 房间、会话、事件和 P2P 模型约束
+- shared 房间、会话、事件、资产清单和 WebRTC 模型约束
 - 服务端认证、房间、队列、播放、实时和信令
-- 前端房间运行时、P2P 资产调度、IndexedDB 资产处理、上传工具和组件
+- 前端房间运行时、WebRTC 连接、IndexedDB 个人资产处理、上传工具和组件
 - 分段 Opus 引擎的缓冲、去重、时间线 generation、fade、limiter 和音量 ramp
 - 播放媒体会话 key、启动请求、AudioContext 激活和 WebRTC Track 生命周期
 

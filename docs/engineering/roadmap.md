@@ -1,100 +1,56 @@
 # 路线图
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-15`
 
-## Phase 0: Foundation
+路线图以当前单一 Segmented Opus/WebRTC 架构为基线。已删除的资产传输、缓存下载和旧播放实现不再列为待办，也不通过 feature flag 保留。
 
-状态：`已完成`
+## 已完成：基础与 MVP
 
 - [x] Monorepo、pnpm workspace、Turborepo
-- [x] Web 前端和 Server 服务端基础工程
-- [x] 共享 schema 和类型包
-- [x] Docker Compose、本地 PostgreSQL、Redis
-- [x] README 和基础工程文档
+- [x] Web 前端、Server 服务端和共享 schema
+- [x] Docker Compose、本地 PostgreSQL、Redis、coturn 配置
+- [x] 账号注册、登录、登出
+- [x] 房主建房、房间码加入、最近房间恢复
+- [x] 官网 `/` 与客户端入口 `/app`
+- [x] 本地曲目导入、个人 IndexedDB 曲库恢复
+- [x] 房间共享队列和房主播放控制
+- [x] 播放、暂停、下一首、上一首、seek
+- [x] 歌单保存、重命名、删除和重新导入房间
+- [x] Socket.IO 房间快照、patch、presence 和信令
+- [x] WebRTC 控制 DataChannel 与独立媒体 RTP 连接
 
-## Phase 1: MVP 闭环
+## 已完成：单一播放链路
 
-状态：`已完成`
+- [x] 上传阶段生成 2 秒分段 Opus 播放资产
+- [x] IndexedDB 分段 Opus 读取、解码和调度
+- [x] 共享 AudioContext / MediaStreamAudioDestinationNode 输出总线
+- [x] 稳定 output Track 与监听端单一 `audio.srcObject`
+- [x] session key、media epoch、playback revision 和 source peer 生命周期
+- [x] single-flight sync、timeline generation、unit 去重和调度窗口
+- [x] source fade、underrun 静音/恢复、limiter 和音频诊断
+- [x] 删除 PCM、MSE、FLAC progressive、旧 orchestrator 和运行时 fallback
+- [x] 删除房间缓存下载、手动缓存 UI、P2P 资产传输和 availability 协议
 
-- [x] 账号注册 / 登录 / 登出
-- [x] 房主建房
-- [x] 按房间码加入
-- [x] 最近活跃房间恢复
-- [x] 按房间恢复接口
-- [x] 官网 `/` 与客户端入口 `/app` 分流
-- [x] 本地曲目导入
-- [x] 房间共享队列
-- [x] 播放/暂停/下一首/seek
-- [x] 房主播放控制权限
-- [x] 歌单保存
-- [x] 歌单重命名和删除
-- [x] 歌单重新导入房间
-- [x] WebSocket 房间快照广播
-- [x] WebSocket 订阅后立即下发当前快照
-- [x] IndexedDB 本地曲目缓存与刷新恢复
-- [x] 分片可用性广播和前端 P2P 状态面板
-- [x] WebRTC DataChannel chunk 请求/接收 PoC
-- [x] chunk hash 校验和整曲 hash 校验
-- [x] 当前曲目优先拉取和下一首预取
-- [x] socket 自动重连和房间重订阅
-- [x] 房间默认工作区收敛为 `共享队列 / 曲库 / 缓存 / 成员`
-- [ ] 更细粒度的播放时钟同步
-- [ ] 完整的错误码和错误提示体系
+## 进行中：Realtime 与发布稳态
 
-## Phase 2: Persistence And Realtime Hardening
-
-状态：`进行中`
-
-- [x] Prisma 持久化接入
-- [x] 无数据库降级模式
-- [x] Redis 广播接入
-- [x] Redis 最近活跃房间索引
-- [x] Redis 房间注册表恢复
-- [x] 订阅后房间快照即时下发
-- [x] 基础重连与房间重订阅
-- [x] 房间服务关键测试
-- [x] 房间控制器和网关测试
-- [x] 房间实时回归测试
-- [ ] Redis 房间状态快照加强
+- [ ] Redis 房间状态快照和重连补偿加强
+- [ ] 多实例下事件顺序与单写权威边界验证
 - [ ] 服务端重启后的完整房间恢复
-- [ ] 多实例下更稳的事件分发
-- [ ] 重连恢复与状态补偿
+- [ ] TURN、ICE restart、媒体恢复和 source owner 离线场景的浏览器集成测试
+- [ ] 双 Chromium context 长时间播放、切歌、seek、成员进出和快速音量变化回归
+- [ ] 真实设备上的 limiter、RMS、jitter、packet loss 和 underrun 指标采集
+- [ ] 发布 smoke check、客户端错误收集和媒体链路告警
 
-## Phase 3: P2P Media Delivery
+## 产品层待办
 
-状态：`进行中`
-
-- [x] WebRTC DataChannel 建链 PoC
-- [x] 分片可用性广播
-- [x] 当前曲目优先拉取
-- [x] 下一首预取
-- [x] IndexedDB 分片缓存基础能力
-- [x] 二进制分片通道
-- [x] 手动缓存下载与缓存回库
-- [x] MP3 渐进式本地播放
-- [x] FLAC 渐进式本地播放
-- [x] 完整分片重组与 hash 校验
-- [x] 成员诊断与传输健康视图
-- [ ] 成员互传调度优化
-- [ ] 下载失败重试与 peer 切换
-- [ ] 弱网与 NAT/TURN 稳态策略
-
-## Phase 4: Product Hardening
-
-状态：`进行中`
-
-- [x] 产品交付收敛为桌面与移动浏览器共用的响应式 Web 应用
-- [x] 部分前端组件 / Hook / 播放引擎测试
-- [x] 基础 E2E 自动化测试
-- [ ] 协作歌单前端回归
+- [ ] 协作歌单前端回归和更清晰的入口设计
 - [ ] 更完整的成员权限模型
 - [ ] 操作审计和房间事件历史
-- [ ] 观测指标和错误追踪
-- [ ] 更完整的弱网、多端和真实 WebRTC / Media 集成测试
-- [ ] 上线部署手册收口
+- [ ] 浏览器兼容性基线与移动端音频解锁提示优化
 
-## 最近两轮必须做的事
+## 当前优先顺序
 
-1. 把 Redis 从“恢复索引”推进到“更稳的状态恢复 + 重连补偿”。
-2. 补 DataChannel / Media 在弱网下的重试、peer 切换和稳态调度。
-3. 扩展浏览器级交互测试和 E2E，覆盖弱网、多端、切歌、重连与缓存工作流。
+1. 先证明重连、source owner 离线和媒体会话恢复的行为稳定
+2. 再补真实 WebRTC/Media 长时间 E2E 与弱网测试
+3. 再补统一观测、告警和发布 smoke check
+4. 最后处理歌单入口和更完整权限模型

@@ -1,23 +1,19 @@
-# 播放链路迁移记录
+# 重构记录
 
 最后更新：`2026-07-15`
 
-本目录记录旧播放实现向单一 Segmented Opus/WebRTC 链路的迁移结果。历史方案不再是当前架构，也不提供运行时兼容开关。
+本目录包含已经完成的播放链路迁移记录，以及早期重构提案的归档说明。历史提案不代表当前实现，不应作为新增功能或协议的依据。
 
-## 当前结果
+## 当前有效记录
 
-- IndexedDB 分段 Opus 是唯一播放输入
-- `SegmentedOpusEngine` 是唯一播放引擎
-- 共享 AudioContext、destination 和 RTP Opus Track 由房间媒体会话持有
-- 监听端只绑定单一 `audio.srcObject`
-- 原始资产解析、上传 PCM、FLAC metadata 和资源缓存保留在非播放模块
+- [01 · 单一播放运行时迁移](./01-playback-runtime.md)：已完成，描述当前唯一 Segmented Opus/WebRTC 播放链路
 
-## 关键约束
+## 已归档提案
 
-- 房间快照和 presence 更新只更新 ref，不重建媒体 effect
-- 同一个媒体会话复用 destination 与 Track
-- 欠载和解码等待输出平滑静音
-- source 停止先 fade，再延迟断开
-- 旧 schema、旧播放字段和旧 fallback 不接受
+- [02 · WebRTC Peer 连接重构](./02-p2p-mesh.md)
+- [03 · 上传流水线重构](./03-track-uploads.md)
+- [04 · 房间缓存下载器重构](./04-manual-cache-downloader.md)
+- [05 · 房间实时连接重构](./05-room-realtime-connection.md)
+- [06 · 顶层组件编排重构](./06-music-room-app.md)
 
-详见：[当前播放同步模型](../architecture/playback-sync.md) 和 [迁移实施说明](./01-playback-runtime.md)。
+这些文档保留文件级背景，具体实现和协议以 `apps/**`、`packages/shared/**` 以及 `docs/architecture/**` 为准。

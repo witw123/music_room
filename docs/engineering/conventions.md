@@ -16,11 +16,10 @@
 
 - 房间生命周期状态放在 `room`
 - 播放控制状态放在 `player` 或 `playback`
-- P2P 节点与缓存状态放在 `p2p`
+- WebRTC peer、控制通道、媒体连接和诊断状态放在 `p2p`
 
 ## shared 使用规则
 
 - 前后端协议变更必须先改 shared
 - 不允许在 web 和 server 内部分别复制 DTO
 - schema 优先于手写类型
-

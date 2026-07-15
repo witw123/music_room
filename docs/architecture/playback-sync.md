@@ -16,6 +16,8 @@
 - `sourceSessionId`
 - `sourcePeerId`
 
+曲目的 `playbackAssetId` 指向曲目拥有者本地 IndexedDB 中的分段 Opus 资产。该资产不会通过房间实时通道下载给其他成员。
+
 `playbackRevision` 变化表示需要重新定位时间线，`mediaEpoch` 变化表示媒体拓扑发生变化。普通房间快照刷新不改变媒体会话身份。
 
 ## 唯一播放链路
@@ -30,7 +32,7 @@ AudioBufferSource -> sourceGain -> limiter -> playbackGate
 
 输出总线固定保留 `MediaStream` 和 `MediaStreamTrack`。暂停、缺片、解码等待和短暂欠载只把 `playbackGate` 平滑降到静音，恢复时再平滑升起。
 
-监听端只绑定同一个远端 `MediaStream`。`remoteTrackId` 或媒体会话 key 真正变化时才重新绑定 `audio.srcObject`；`waiting`、`stalled` 恢复只重新调用 `play()`。
+监听端只绑定同一个远端 `MediaStream`。`remoteTrackId` 或媒体会话 key 真正变化时才重新绑定 `audio.srcObject`；`waiting`、`stalled` 恢复只重新调用 `play()`，不清空或重新设置 `srcObject`。
 
 ## 会话身份
 
@@ -57,4 +59,4 @@ startAt | sourcePeerId | remoteTrackId
 
 ## 诊断
 
-共享 `segmentedPlaybackStatus` 只描述分段 Opus/WebRTC 会话：资产、会话 key、源 peer、AudioContext、输出/远端 Track、缓冲、欠载、解码峰值/RMS、解码错误和媒体恢复状态。
+共享 `segmentedPlaybackStatus` 只描述分段 Opus/WebRTC 会话：资产、会话 key、源 peer、AudioContext、输出/远端 Track、缓冲、欠载、解码峰值/RMS、解码错误和媒体恢复状态。它不描述资产下载、缓存同步或播放 fallback。

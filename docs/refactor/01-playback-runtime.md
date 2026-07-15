@@ -31,7 +31,7 @@ IndexedDB 分段 Opus
 
 ## 删除和保留
 
-已删除旧播放引擎、旧编排器、旧源控制、旧时间窗和旧诊断字段。上传阶段的 PCM accumulator、FLAC parser、metadata/frame index、原始资产下载和中性 P2P 资产调度继续保留。
+已删除旧播放引擎、旧编排器、旧源控制、旧时间窗和旧诊断字段。上传阶段的 PCM accumulator、FLAC parser、metadata/frame index 和个人本地资产处理继续保留；房间资产下载和成员间资产传输不再存在。
 
 ## 验收重点
 

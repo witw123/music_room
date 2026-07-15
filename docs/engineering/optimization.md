@@ -1,93 +1,58 @@
 # 工程优化重点
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-15`
 当前版本：`0.2.8`
 
-## 说明
-
-这份文档不再保留早期那份“全仓静态审计清单”。当时列出的很多问题已经被修复、重构或被新架构替代，继续保留会误导后续判断。
-
-当前这份文档只记录仍然有现实意义的优化方向。
+这份文档只记录当前单一 Segmented Opus/WebRTC 链路仍有现实意义的优化方向。旧的 P2P 资产缓存、分片下载调度和 progressive 播放优化已不再适用。
 
 ## 当前结论
 
-项目已经从“先把链路跑通”进入“围绕稳态、测试和可运维性继续加固”的阶段。优化优先级应围绕下面四类问题展开：
+项目已经从“先把链路跑通”进入“围绕稳态、测试和可运维性继续加固”的阶段。优化优先级如下：
 
-1. Realtime 与恢复稳态
-2. 浏览器级测试覆盖
-3. 可观测性
-4. 缓存与分片调度效率
+1. Realtime 与媒体恢复稳态
+2. 浏览器级长时间测试
+3. 音频质量和可观测性
+4. 部署与发布可靠性
 
-## P0：稳态与一致性
+## P0：媒体会话稳定性
 
-### 1. 重连恢复和多实例行为
+- 保证普通 `RoomSnapshot`、presence、成员变化和音量变化不重建媒体会话
+- 保证 destination、output Track 和 listener `srcObject` 在同一会话内保持 identity
+- 验证切歌、seek、source peer 切换只按 session key/media epoch 触发媒体变更
+- 持续覆盖 underrun fade-out/fade-in、source fade、limiter 和 AudioParam ramp
+- 采集 limiter 前后 peak、RMS、最大瞬时跃变，区分削波、click/pop 和持续噪声
+- 对 IndexedDB 读取/解码延迟、旧 generation 丢弃和重复 unit 调度做压力测试
 
-当前最值得优先优化的是：
+## P0：Realtime 与恢复
 
-- `room.subscribe` / `room.presence` / `room.unsubscribe` 在重连边界的稳定性
-- duplicate session replacement 的副作用可预测性
-- 多实例下快照、patch、availability、signal 的一致性
-- 服务重启后房间恢复与补偿路径
+- 稳定 `room.subscribe`、`room.presence`、`room.unsubscribe` 的断线边界
+- 验证 duplicate session replacement 不污染当前媒体会话
+- 验证 `peer.signal` 的 recovery generation、媒体协商和 ICE restart
+- 明确 source owner 离线时的暂停、恢复和成员提示
+- 验证单实例发布边界以及 Redis 故障时的错误反馈和状态补偿
 
-### 2. Realtime 依赖失效时的降级体验
+## P1：真实浏览器测试
 
-当前播放控制在 Redis 不可用时直接失败，这个行为是合理但生硬的。后续优化重点包括：
+需要两个 Chromium context 覆盖：
 
-- 错误反馈更明确
-- 恢复后状态补偿更完整
-- 前端能更清楚地区分“接口失败”和“状态冲突”
+- 连续播放 30 分钟
+- 成员加入/离开、presence 更新和普通房间快照刷新
+- 播放、暂停、seek、切歌和快速音量变化
+- 缺片、解码延迟、RTP 丢包和媒体连接恢复
+- 远端 `srcObject` 不被反复清空
+- 非重连期间 `remoteTrackId` 不变化
+- `currentTime` 持续推进，limiter 后 peak 不超过 0dBFS
 
-## P1：测试覆盖
+## P1：网络与音频观测
 
-### 1. 浏览器级 E2E
-
-当前最缺的是可重复验证主流程的 E2E：
-
-- 登录
-- 建房 / 入房
-- 导入曲目
-- 加歌 / 重排 / 删除
-- 播放 / 暂停 / seek / next / prev
-- 重连恢复
-- 删房
-
-### 2. 真实 WebRTC / Media 集成测试
-
-目前已有大量纯逻辑测试，但仍缺：
-
-- 真正的 Data / Media 建链回归
-- 弱网和 candidate 变化下的恢复行为
-- `piece.availability.clear`、待回放 `peer.signal` 的集成验证
-
-## P1：观测与排障
-
-当前前端诊断面板已经很强，但服务端观测仍偏基础。下一阶段最值得补的是：
-
-- Redis / Prisma / Server 可用性指标
-- Realtime 失败、版本冲突、ICE 失败聚合
-- 客户端错误收集
-- 发布后 smoke check 自动化
-
-## P2：缓存与分片调度
-
-当前已经有当前曲目优先、下一首预取、手动缓存下载和缓存回库。后续优化可以集中在：
-
-- 弱网下 peer 切换和重试策略
-- 缓存命中与淘汰策略
-- 浏览器后台限速下的调度保守性
-- 当前曲目、本地连续缓冲、渐进缓存播放与完整本地缓存之间的切换稳定性
-
-## P2：产品面收口
-
-从工程角度看，接下来最需要明确的是：
-
-- 歌单是否恢复前端主入口
-- 房间是否继续维持“队列为主、歌单保留”的产品路径
-- Web 发布节奏与浏览器兼容性基线
+- 服务端聚合 Redis、数据库、信令和 ICE 失败
+- 客户端记录 AudioContext 状态、buffer ahead、underrun、RTP bitrate、jitter 和 packet loss
+- 将 `sourcePeerId`、`mediaSessionKey`、`outputTrackId` 和 `remoteTrackId` 放入同一诊断上下文
+- 发布后执行 `/health`、`/health/readiness`、ICE 配置和双浏览器 smoke check
 
 ## 当前建议顺序
 
-1. 先补重连恢复、多实例和服务重启后的行为证明
-2. 再补 E2E 和真实 WebRTC / Media 集成测试
-3. 再补统一观测和告警
-4. 最后处理歌单入口和更完整权限模型这类产品层优化
+1. 先补媒体会话 identity 和 source owner 离线回归
+2. 再补弱网、TURN、ICE restart 和长时间双浏览器测试
+3. 再接入 limiter/underrun/RTP 指标告警
+4. 最后处理产品层的歌单入口和权限细化

@@ -169,10 +169,11 @@ curl http://127.0.0.1:3001/health
 
 - `offer / answer` 正常
 - `ICE disconnected` 或 `failed`
-- `分片传输: 0`
-- `P2P 节点: 0`
+- `mediaConnectionState` 长时间不是 `connected`
+- `mediaReceiveBitrateKbps` 为 `0`
+- `remoteTrackStatus.hasSrcObject` 为 `false`
 
-优先检查 TURN，不要先怀疑播放器 UI。
+优先检查 TURN、媒体候选路径和远端 Track 绑定，不要先怀疑播放器 UI。
 
 ## Shell Public Origin
 

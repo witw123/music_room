@@ -1,6 +1,6 @@
 # REST API
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-15`
 当前版本：`0.2.8`
 
 ## 使用约定
@@ -13,7 +13,7 @@
 
 ## 现状说明
 
-- 注册曲目只上传元数据，不上传音频文件本体
+- 注册曲目上传元数据和经过校验的 `originalAsset` / `playbackAsset` 清单，不上传音频文件本体
 - 房间、队列、曲库、歌单接口除了返回 REST 响应外，通常还会触发 Socket.IO 快照或 patch 广播
 - 播放控制依赖 Redis 可用；当 Realtime 不可用时，`PATCH /v1/rooms/{roomId}/playback` 会直接失败
 
@@ -358,15 +358,36 @@ null
   "sizeBytes": 7340032,
   "codec": "mp3",
   "mimeType": "audio/mpeg",
-  "fileHash": "sha256:xxxx",
+  "fileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "artworkUrl": null,
   "sourceType": "local_upload",
-  "pieceManifest": {
-    "totalChunks": 32,
-    "chunkSize": 262144,
-    "pieceMimeType": "audio/mpeg"
+  "originalAsset": {
+    "assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kind": "original",
+    "fileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "mimeType": "audio/mpeg",
+    "sizeBytes": 7340032,
+    "unitCount": 7,
+    "unitSize": 1048576,
+    "merkleRoot": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   },
-  "relayManifest": null
+  "playbackAsset": {
+    "assetId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "kind": "playback",
+    "sourceFileHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "profileId": "opus-music-v2",
+    "codec": "opus",
+    "container": "audio/ogg",
+    "sampleRate": 48000,
+    "channels": 2,
+    "bitrate": 192000,
+    "durationMs": 180000,
+    "segmentDurationMs": 2000,
+    "seekPrerollMs": 80,
+    "unitCount": 90,
+    "merkleRoot": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "encoder": { "name": "@audio/opus-encode", "version": "2.0.0" }
+  }
 }
 ```
 
@@ -375,11 +396,11 @@ null
   - `401`：登录态无效
   - 其他未包装业务错误：非房间成员
 - 副作用：
-  - 只保存元数据，不上传音频本体
+  - 只保存元数据和资产清单，不上传音频本体
   - 相同 `fileHash + ownerSessionId` 会覆盖旧条目而不是新增重复曲目
   - 触发 `room.snapshot`
   - 触发 `room.library.patch`
-- 测试要点：重复上传同文件应复用原条目 ID；`ownerNickname` 默认取当前用户昵称
+- 测试要点：重复上传同文件应复用原条目 ID；`ownerNickname` 默认取当前用户昵称；资产清单由上传端先校验
 
 ### `DELETE /v1/rooms/{roomId}/tracks/{trackId}`
 
