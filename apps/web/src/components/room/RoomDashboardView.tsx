@@ -15,6 +15,7 @@ import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState } from "./MembersPanel";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
 
 type TabId = "queue" | "library" | "members";
@@ -32,6 +33,8 @@ type RoomDashboardViewProps = {
   canReorderQueue: boolean;
   currentSourceOwnerNickname: string | null;
   uploadedTracks: Record<string, UploadedTrack>;
+  localStorageSummary: LocalStorageSummary;
+  onCleanLocalStorage: () => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -96,6 +99,8 @@ function RoomDashboardViewBase({
   canReorderQueue,
   currentSourceOwnerNickname,
   uploadedTracks,
+  localStorageSummary,
+  onCleanLocalStorage,
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
@@ -275,6 +280,8 @@ function RoomDashboardViewBase({
             <LibraryTabPanel
               tracks={roomSnapshot.tracks}
               uploadedTracks={uploadedTracks}
+              localStorageSummary={localStorageSummary}
+              onCleanLocalStorage={onCleanLocalStorage}
               canControlPlayback={canControlPlayback}
               canManageLibraryTracks={canDeleteRoom}
               activeSession={activeSession}

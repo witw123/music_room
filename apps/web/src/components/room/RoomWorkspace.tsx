@@ -14,6 +14,7 @@ import { EmptyRoomState, RoomTransitionState } from "@/components/room/RoomPageS
 import { RoomDashboardView } from "@/components/room/RoomDashboardView";
 import type { LocalMemberPanelState } from "@/components/room/MembersPanel";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
+import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 
 type RoomWorkspaceProps = {
   activeSession: AuthSession | null;
@@ -26,6 +27,8 @@ type RoomWorkspaceProps = {
   canDisbandRoom: boolean;
   canReorderQueue: boolean;
   uploadedTracks: Record<string, UploadedTrack>;
+  localStorageSummary: LocalStorageSummary;
+  onCleanLocalStorage: () => Promise<void>;
   connectedPeersCount: number;
   mediaConnectionState: RoomMediaConnectionState;
   mediaConnectedPeersCount: number;
@@ -69,6 +72,8 @@ function RoomWorkspaceBase({
   canDisbandRoom,
   canReorderQueue,
   uploadedTracks,
+  localStorageSummary,
+  onCleanLocalStorage,
   connectedPeersCount,
   mediaConnectionState,
   mediaConnectedPeersCount,
@@ -146,6 +151,8 @@ function RoomWorkspaceBase({
               canReorderQueue={canReorderQueue}
               currentSourceOwnerNickname={currentSourceOwnerNickname}
               uploadedTracks={uploadedTracks}
+              localStorageSummary={localStorageSummary}
+              onCleanLocalStorage={onCleanLocalStorage}
               connectedPeersCount={connectedPeersCount}
               mediaConnectionState={mediaConnectionState}
               mediaConnectedPeersCount={mediaConnectedPeersCount}

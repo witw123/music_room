@@ -674,6 +674,118 @@ export async function deleteLocalTrackDataForTracks(trackIds: readonly string[])
   );
 }
 
+export async function cleanupOrphanedLocalAudioStorage(input: {
+  preserveTrackIds: readonly string[];
+  preserveAssetIds?: readonly string[];
+}) {
+  await backfillCachedLibraryTrackMetadataIfNeeded();
+
+  const preservedTrackIds = new Set(input.preserveTrackIds.filter(Boolean));
+  const preservedAssetIds = new Set(input.preserveAssetIds?.filter(Boolean) ?? []);
+
+  return musicRoomDatabase.transaction(
+    "rw",
+    [
+      musicRoomDatabase.cachedTrackLibrary,
+      musicRoomDatabase.cachedTrackLibraryMetadata,
+      musicRoomDatabase.trackAssetLinks,
+      musicRoomDatabase.assetManifests,
+      musicRoomDatabase.assetUnits,
+      musicRoomDatabase.transcodeJobs
+    ],
+    async () => {
+      const summaries = await musicRoomDatabase.cachedTrackLibraryMetadata.toArray();
+      let deletedCacheCount = 0;
+      const deletedCacheHashes = new Set<string>();
+
+      for (const summary of summaries) {
+        if (summary.sourceTrackIds.length === 0) {
+          await musicRoomDatabase.cachedTrackLibrary.delete(summary.fileHash);
+          await musicRoomDatabase.cachedTrackLibraryMetadata.delete(summary.fileHash);
+          deletedCacheCount += 1;
+          deletedCacheHashes.add(summary.fileHash);
+          continue;
+        }
+        const staleTrackIds = summary.sourceTrackIds.filter(
+          (trackId) => !preservedTrackIds.has(trackId)
+        );
+        if (staleTrackIds.length === 0) {
+          continue;
+        }
+
+        const record = await musicRoomDatabase.cachedTrackLibrary.get(summary.fileHash);
+        const nextReferences = removeCachedLibrarySourceReferences(summary, staleTrackIds);
+        if (nextReferences.isUnreferenced) {
+          await musicRoomDatabase.cachedTrackLibrary.delete(summary.fileHash);
+          await musicRoomDatabase.cachedTrackLibraryMetadata.delete(summary.fileHash);
+          deletedCacheCount += 1;
+          deletedCacheHashes.add(summary.fileHash);
+          continue;
+        }
+
+        if (record) {
+          await musicRoomDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
+        }
+        await musicRoomDatabase.cachedTrackLibraryMetadata.put({
+          ...summary,
+          ...nextReferences
+        });
+      }
+
+      const links = await musicRoomDatabase.trackAssetLinks.toArray();
+      const staleLinks = links.filter((link) => !preservedTrackIds.has(link.trackId));
+      const remainingLinks = links.filter((link) => preservedTrackIds.has(link.trackId));
+      const referencedAssetIds = new Set([
+        ...preservedAssetIds,
+        ...remainingLinks.flatMap((link) => [link.originalAssetId, link.playbackAssetId])
+      ]);
+      const manifests = await musicRoomDatabase.assetManifests.toArray();
+      const orphanedManifests = manifests.filter(
+        (manifest) => !referencedAssetIds.has(manifest.assetId)
+      );
+      const orphanedAssetIds = orphanedManifests.map((manifest) => manifest.assetId);
+
+      if (staleLinks.length > 0) {
+        await musicRoomDatabase.trackAssetLinks.bulkDelete(
+          staleLinks.map((link) => link.trackId)
+        );
+      }
+      if (orphanedAssetIds.length > 0) {
+        await musicRoomDatabase.assetUnits.where("assetId").anyOf(orphanedAssetIds).delete();
+        await musicRoomDatabase.assetManifests.bulkDelete(orphanedAssetIds);
+      }
+
+      const remainingCacheHashes = new Set(
+        (await musicRoomDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
+          .filter((key): key is string => typeof key === "string")
+      );
+      const remainingAssetSourceFileHashes = new Set(
+        manifests
+          .filter((manifest) => !orphanedAssetIds.includes(manifest.assetId))
+          .map((manifest) => manifest.sourceFileHash)
+      );
+      const sourceFileHashesToDelete = [
+        ...new Set([
+          ...deletedCacheHashes,
+          ...orphanedManifests.map((manifest) => manifest.sourceFileHash)
+        ])
+      ].filter(
+        (fileHash) =>
+          !remainingCacheHashes.has(fileHash) && !remainingAssetSourceFileHashes.has(fileHash)
+      );
+      if (sourceFileHashesToDelete.length > 0) {
+        await musicRoomDatabase.transcodeJobs.bulkDelete(sourceFileHashesToDelete);
+      }
+
+      return {
+        deletedCacheCount,
+        deletedAssetCount: orphanedAssetIds.length,
+        deletedLinkCount: staleLinks.length
+      };
+    }
+  );
+}
+
 export function toCachedLibraryTrackSummaryRecord(
   record: CachedLibraryTrackRecord
 ): CachedLibraryTrackSummaryRecord {

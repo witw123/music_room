@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
+  cleanupOrphanedLocalAudioStorage,
   deleteLocalTrackDataForTracks,
   listCachedLibraryTrackSummaries
 } from "@/lib/indexeddb";
@@ -16,6 +17,12 @@ import {
 } from "./cache-library";
 import { useUploadRuntimeEffects } from "./upload-runtime-effects";
 import { useUploadPipelineActions } from "./use-upload-pipeline-actions";
+
+export type LocalStorageSummary = {
+  usageBytes: number | null;
+  quotaBytes: number | null;
+  cachedTrackCount: number;
+};
 
 export {
   buildRegisterTrackPayload,
@@ -45,6 +52,11 @@ export function useTrackUploads(options: {
   } = options;
   const [uploadedTracks, setUploadedTracks] = useState<Record<string, UploadedTrack>>({});
   const [cacheLibraryVersion, setCacheLibraryVersion] = useState(0);
+  const [localStorageSummary, setLocalStorageSummary] = useState<LocalStorageSummary>({
+    usageBytes: null,
+    quotaBytes: null,
+    cachedTrackCount: 0
+  });
   const uploadedTrackUrlsRef = useRef<Map<string, string>>(new Map());
   const cacheLibraryTracksRef = useRef<Map<string, CachedLibraryTrack>>(new Map());
   const inFlightUploadHashesRef = useRef<Set<string>>(new Set());
@@ -58,6 +70,19 @@ export function useTrackUploads(options: {
     });
     cacheLibraryTracksRef.current = snapshot.tracksByHash;
     setCacheLibraryVersion((current) => current + 1);
+    let estimate: StorageEstimate | null = null;
+    try {
+      estimate = typeof navigator !== "undefined" && navigator.storage
+        ? await navigator.storage.estimate()
+        : null;
+    } catch {
+      estimate = null;
+    }
+    setLocalStorageSummary({
+      usageBytes: estimate?.usage ?? null,
+      quotaBytes: estimate?.quota ?? null,
+      cachedTrackCount: snapshot.tracks.length
+    });
   }, []);
 
   useUploadRuntimeEffects({
@@ -93,7 +118,8 @@ export function useTrackUploads(options: {
       return next;
     });
     await deleteLocalTrackDataForTracks([trackId]);
-  }, []);
+    await refreshCacheLibrary();
+  }, [refreshCacheLibrary]);
 
   const deleteRoomTrackArtifacts = useCallback(async (trackIds: string[]) => {
     const removed = new Set(trackIds);
@@ -105,7 +131,35 @@ export function useTrackUploads(options: {
       return next;
     });
     await deleteLocalTrackDataForTracks([...removed]);
-  }, []);
+    await refreshCacheLibrary();
+  }, [refreshCacheLibrary]);
+
+  const cleanLocalStorage = useCallback(async () => {
+    try {
+      const preserveTrackIds = roomSnapshot?.tracks.map((track) => track.id) ?? [];
+      const preserveAssetIds = roomSnapshot?.tracks.flatMap((track) => [
+        track.originalAsset?.assetId,
+        track.playbackAsset?.assetId
+      ].filter((assetId): assetId is string => !!assetId)) ?? [];
+      const result = await cleanupOrphanedLocalAudioStorage({
+        preserveTrackIds,
+        preserveAssetIds
+      });
+      const preserved = new Set(preserveTrackIds);
+      setUploadedTracks((current) =>
+        Object.fromEntries(Object.entries(current).filter(([trackId]) => preserved.has(trackId)))
+      );
+      await refreshCacheLibrary();
+      setStatusMessage(
+        result.deletedCacheCount > 0 || result.deletedAssetCount > 0
+          ? `已清理 ${result.deletedCacheCount} 个缓存文件和 ${result.deletedAssetCount} 个播放资产。`
+          : "没有发现可清理的无效本机存储。"
+      );
+    } catch (error) {
+      setStatusMessage("本机存储清理失败，请重试。");
+      throw error;
+    }
+  }, [refreshCacheLibrary, roomSnapshot, setStatusMessage]);
 
   useEffect(() => {
     void refreshCacheLibrary();
@@ -115,6 +169,8 @@ export function useTrackUploads(options: {
     uploadedTracks,
     setUploadedTracks,
     refreshCacheLibrary,
+    localStorageSummary,
+    cleanLocalStorage,
     handleFilesSelected,
     syncRoomSnapshot,
     deleteUploadedTrackArtifacts,

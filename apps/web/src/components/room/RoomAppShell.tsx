@@ -71,6 +71,8 @@ export function RoomAppShell({
         canDisbandRoom={workspaceViewModel.canDisbandRoom}
         canReorderQueue={canReorderQueue}
         uploadedTracks={uploads.uploadedTracks}
+        localStorageSummary={uploads.localStorageSummary}
+        onCleanLocalStorage={uploads.cleanLocalStorage}
         connectedPeersCount={workspaceViewModel.connectedPeersCount}
         mediaConnectionState={pageState.mediaConnectionState}
         mediaConnectedPeersCount={workspaceViewModel.mediaConnectedPeersCount}
