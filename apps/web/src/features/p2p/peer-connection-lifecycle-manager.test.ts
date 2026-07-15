@@ -25,6 +25,10 @@ class FakeRTCPeerConnection {
   oniceconnectionstatechange: (() => void) | null = null;
   ondatachannel: ((event: RTCDataChannelEvent) => void) | null = null;
   channel = new FakeDataChannel();
+  mediaSender: {
+    track: MediaStreamTrack | null;
+    replaceTrack: ReturnType<typeof vi.fn>;
+  } | null = null;
 
   constructor() {
     FakeRTCPeerConnection.instances.push(this);
@@ -32,6 +36,19 @@ class FakeRTCPeerConnection {
 
   createDataChannel() {
     return this.channel as unknown as RTCDataChannel;
+  }
+
+  addTransceiver() {
+    this.mediaSender = {
+      track: null,
+      replaceTrack: vi.fn(async (track: MediaStreamTrack | null) => {
+        this.mediaSender!.track = track;
+      })
+    };
+    return {
+      sender: this.mediaSender,
+      setCodecPreferences: vi.fn()
+    } as unknown as RTCRtpTransceiver;
   }
 
   async createOffer(options?: RTCOfferOptions) {
@@ -150,5 +167,45 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(clearPendingRequestsForPeer).toHaveBeenCalledWith("peer_b");
     expect(peer.connectionState).toBe("closed");
     expect(manager.getPeerEntry("peer_b")).toBeNull();
+  });
+
+  it("publishes an already-playing source track with one initial media offer", async () => {
+    const { manager, sendSignal } = createManager();
+    const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender);
+    expect(mediaPeer?.mediaSender?.track).toBe(track);
+    expect(
+      (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((calls) => {
+        const payload = calls[0] as PeerSignalMessage;
+        return payload.linkKind === "media" && payload.type === "offer";
+      }
+      )
+    ).toHaveLength(1);
+  });
+
+  it("retries a transient local track binding failure without recreating the peer", async () => {
+    const { manager } = createManager();
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaPeer.signalingState = "stable";
+    mediaPeer.mediaSender!.replaceTrack.mockRejectedValueOnce(new Error("transient"));
+    const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(mediaPeer.mediaSender!.replaceTrack).toHaveBeenCalledTimes(2);
+    expect(mediaPeer.mediaSender!.track).toBe(track);
   });
 });

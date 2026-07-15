@@ -462,10 +462,10 @@ export function slicePcmSegment(
       padded.set(channel, leadingPaddingSamples);
       return padded;
     }),
-    // Every segment after the first includes the preceding seek preroll. The
-    // playback decoder must remove that overlap before scheduling the segment
-    // on the room timeline, otherwise each 2s boundary repeats 80ms of audio.
-    trimStartSamples: unitIndex === 0 ? 0 : prerollSamples
+    // The encoder writes the same 80ms as OpusHead pre-skip. Keep the source
+    // overlap in the encoded input so the decoder can discard it, while the
+    // published timeline remains exactly one 2s segment per unit.
+    trimStartSamples: 0
   };
 }
 
@@ -580,7 +580,7 @@ class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
     this.pcm.trimBefore(Math.max(0, contentEnd - this.prerollSamples));
     return {
       channels: output,
-      trimStartSamples: unitIndex === 0 ? 0 : this.prerollSamples
+      trimStartSamples: 0
     };
   }
 
@@ -1074,7 +1074,7 @@ async function readWavPlaybackSegment(
           return padded;
         })
       : normalizedChannels,
-    trimStartSamples: unitIndex === 0 ? 0 : targetPrerollSamples
+    trimStartSamples: 0
   };
 }
 

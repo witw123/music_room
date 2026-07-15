@@ -518,9 +518,14 @@ export class PeerConnectionLifecycleManager {
       } else if (shouldInitiate && linkKind === "media") {
         await enqueuePeerOperation(entry, async () => {
           await this.syncLocalAudioToPeer(peerId, entry, false);
-          await this.signaling.createAndSendOffer(peerId, connection, undefined, "media");
-          entry.mediaNegotiationPending = false;
-          entry.lastSignalProgressAtMs = Date.now();
+          try {
+            await this.signaling.createAndSendOffer(peerId, connection, undefined, "media");
+            entry.mediaNegotiationPending = false;
+            entry.lastSignalProgressAtMs = Date.now();
+            this.clearMediaSyncRetry(entry);
+          } catch {
+            this.scheduleMediaSyncRetry(peerId, entry);
+          }
         });
       }
 
@@ -629,6 +634,7 @@ export class PeerConnectionLifecycleManager {
           direction: "sender",
           state: "failed"
         });
+        this.scheduleMediaSyncRetry(peerId, entry);
       }
     }
 
@@ -642,15 +648,62 @@ export class PeerConnectionLifecycleManager {
       }
     }
 
-    if (entry.mediaNegotiationPending && entry.connection.signalingState === "stable") {
-      await this.signaling.createAndSendOffer(peerId, entry.connection, undefined, "media");
-      entry.lastSignalProgressAtMs = Date.now();
-      entry.mediaNegotiationPending = false;
+    if (
+      entry.mediaNegotiationPending &&
+      renegotiate &&
+      entry.connection.signalingState === "stable"
+    ) {
+      try {
+        await this.signaling.createAndSendOffer(peerId, entry.connection, undefined, "media");
+        entry.lastSignalProgressAtMs = Date.now();
+        entry.mediaNegotiationPending = false;
+        this.clearMediaSyncRetry(entry);
+      } catch {
+        this.scheduleMediaSyncRetry(peerId, entry);
+      }
+    } else if (entry.mediaNegotiationPending && renegotiate) {
+      this.scheduleMediaSyncRetry(peerId, entry);
     }
   }
 
   private enqueueMediaOperation(peerId: string, entry: PeerEntry) {
-    return enqueuePeerOperation(entry, () => this.syncLocalAudioToPeer(peerId, entry));
+    const operation = enqueuePeerOperation(entry, () => this.syncLocalAudioToPeer(peerId, entry));
+    void operation.catch(() => {
+      this.scheduleMediaSyncRetry(peerId, entry);
+    });
+    return operation;
+  }
+
+  private scheduleMediaSyncRetry(peerId: string, entry: PeerEntry) {
+    if (
+      entry.releasing ||
+      this.peerConnections.get(peerId, "media") !== entry ||
+      entry.mediaSyncRetryTimerId !== null
+    ) {
+      return;
+    }
+
+    const attempt = Math.min(entry.mediaSyncRetryAttempts + 1, 8);
+    entry.mediaSyncRetryAttempts = attempt;
+    const delayMs = Math.min(2_000, 100 * 2 ** (attempt - 1));
+    entry.mediaSyncRetryTimerId = setTimeout(() => {
+      entry.mediaSyncRetryTimerId = null;
+      if (
+        entry.releasing ||
+        this.peerConnections.get(peerId, "media") !== entry
+      ) {
+        return;
+      }
+      void this.enqueueMediaOperation(peerId, entry);
+    }, delayMs);
+  }
+
+  private clearMediaSyncRetry(entry: PeerEntry) {
+    if (entry.mediaSyncRetryTimerId !== null) {
+      clearTimeout(entry.mediaSyncRetryTimerId);
+      entry.mediaSyncRetryTimerId = null;
+    }
+    entry.mediaSyncRetryAttempts = 0;
   }
 
   private async applyAudioSenderParameters(

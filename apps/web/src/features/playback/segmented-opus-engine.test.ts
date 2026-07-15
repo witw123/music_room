@@ -33,10 +33,27 @@ class FakeSource {
 
 function createContext() {
   const sources: FakeSource[] = [];
-  const gains: Array<{ gain: { value: number }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
+  const gains: Array<{
+    gain: {
+      value: number;
+      setValueAtTime: ReturnType<typeof vi.fn>;
+      linearRampToValueAtTime: ReturnType<typeof vi.fn>;
+    };
+    connect: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+  }> = [];
   const createGain = vi.fn(() => {
+    const gain = {
+      value: 1,
+      setValueAtTime: vi.fn((value: number) => {
+        gain.value = value;
+      }),
+      linearRampToValueAtTime: vi.fn((value: number) => {
+        gain.value = value;
+      })
+    };
     const next = {
-      gain: { value: 1 },
+      gain,
       connect: vi.fn(),
       disconnect: vi.fn()
     };
@@ -144,6 +161,7 @@ describe("SegmentedOpusEngine", () => {
     });
 
     expect(result.state).toBe("buffering");
+    expect(context.createBuffer).not.toHaveBeenCalled();
     expect(sources).toHaveLength(2);
     engine.destroy();
   });
@@ -207,6 +225,7 @@ describe("SegmentedOpusEngine", () => {
     expect(context.decodeAudioData).toHaveBeenCalledTimes(5);
     expect(context.createGain).toHaveBeenCalledTimes(8);
     expect(gains[2]?.gain.value).toBe(0.65);
+    expect(gains[4]?.gain.linearRampToValueAtTime).not.toHaveBeenCalled();
     expect(sources).toHaveLength(5);
     expect(sources.every((source) => source.connectedTo !== gains[2])).toBe(true);
     expect(sources.map((source) => source.starts[0]?.when)).toEqual([11, 13, 15, 17, 19]);

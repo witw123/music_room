@@ -102,6 +102,11 @@ export function releasePeerConnectionEntry(input: {
     clearTimeout(input.entry.mediaWatchdogTimerId);
     input.entry.mediaWatchdogTimerId = null;
   }
+  if (input.entry.mediaSyncRetryTimerId !== null) {
+    clearTimeout(input.entry.mediaSyncRetryTimerId);
+    input.entry.mediaSyncRetryTimerId = null;
+  }
+  input.entry.mediaSyncRetryAttempts = 0;
   input.entry.mediaNegotiationPending = false;
   input.onDataBufferedAmountChange?.({
     peerId: input.peerId,

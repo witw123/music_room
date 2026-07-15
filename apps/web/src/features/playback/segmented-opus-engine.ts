@@ -210,11 +210,7 @@ export class SegmentedOpusEngine {
       const currentUnit = contiguousUnits[0]!;
       let currentDecoded: AudioBuffer;
       try {
-        currentDecoded = await this.getDecodedUnitWithRetry(
-          context,
-          currentUnit,
-          input.manifest.sampleRate
-        );
+        currentDecoded = await this.getDecodedUnitWithRetry(context, currentUnit);
       } catch {
         this.enterUnderrun();
         return { state: "buffering" as const, bufferedUnits: 0 };
@@ -244,11 +240,7 @@ export class SegmentedOpusEngine {
       (unit) => !this.scheduled.has(unit.unitIndex) && !this.completed.has(unit.unitIndex)
     );
     const decodeResults = await Promise.allSettled(
-      decodeTargets.map((unit) => this.getDecodedUnitWithRetry(
-        context,
-        unit,
-        input.manifest.sampleRate
-      ))
+      decodeTargets.map((unit) => this.getDecodedUnitWithRetry(context, unit))
     );
     if (this.destroyed || this.timelineKey !== timelineKey || generation !== this.timelineGeneration) {
       return { state: "idle" as const, bufferedUnits: 0 };
@@ -376,21 +368,27 @@ export class SegmentedOpusEngine {
       sourceGain.disconnect();
     };
     const startAt = Math.max(earliestStart, desiredAudibleStart);
-    const fadeInEnd = startAt + fadeDurationSeconds;
-    setAudioParamValueAt(sourceGain.gain, 0, startAt);
-    rampAudioParamTo(sourceGain.gain, 1, fadeInEnd);
+    if (input.unit.unitIndex === input.currentIndex) {
+      // Only a timeline entry point needs a fade-in. Reapplying it to every
+      // 2s continuation creates a periodic dip even when the buffers are
+      // sample-contiguous.
+      const fadeInEnd = startAt + fadeDurationSeconds;
+      setAudioParamValueAt(sourceGain.gain, 0, startAt);
+      rampAudioParamTo(sourceGain.gain, 1, fadeInEnd);
+    } else {
+      setAudioParamValueAt(sourceGain.gain, 1, startAt);
+    }
     source.start(startAt, offsetSeconds);
     this.scheduled.set(input.unit.unitIndex, { source, gain: sourceGain, revision });
   }
 
   private getDecodedUnit(
     context: AudioContext,
-    unit: AudioAssetUnitRecord,
-    sourceSampleRate: number
+    unit: AudioAssetUnitRecord
   ) {
     const existing = this.decoded.get(unit.unitIndex);
     if (existing) return existing;
-    const decoding = this.decodeUnit(context, unit, sourceSampleRate).catch((error) => {
+    const decoding = this.decodeUnit(context, unit).catch((error) => {
       if (this.decoded.get(unit.unitIndex) === decoding) {
         this.decoded.delete(unit.unitIndex);
       }
@@ -423,14 +421,13 @@ export class SegmentedOpusEngine {
 
   private getDecodedUnitWithRetry(
     context: AudioContext,
-    unit: AudioAssetUnitRecord,
-    sourceSampleRate: number
+    unit: AudioAssetUnitRecord
   ) {
-    return this.getDecodedUnit(context, unit, sourceSampleRate).catch(async (firstError) => {
+    return this.getDecodedUnit(context, unit).catch(async (firstError) => {
       this.lastDecodeError = formatDecodeError(firstError);
       this.decoded.delete(unit.unitIndex);
       try {
-        return await this.getDecodedUnit(context, unit, sourceSampleRate);
+        return await this.getDecodedUnit(context, unit);
       } catch (retryError) {
         this.lastDecodeError = formatDecodeError(retryError);
         throw retryError;
@@ -440,8 +437,7 @@ export class SegmentedOpusEngine {
 
   private async decodeUnit(
     context: AudioContext,
-    unit: AudioAssetUnitRecord,
-    sourceSampleRate: number
+    unit: AudioAssetUnitRecord
   ) {
     let decoded: AudioBuffer;
     try {
@@ -458,26 +454,11 @@ export class SegmentedOpusEngine {
         decoded.copyToChannel(Float32Array.from(channel), index)
       );
     }
-    const sampleScale = decoded.sampleRate / sourceSampleRate;
-    const trimStart = Math.min(
-      decoded.length,
-      Math.round((unit.trimStartSamples ?? 0) * sampleScale)
-    );
-    const trimEnd = Math.min(
-      decoded.length - trimStart,
-      Math.round((unit.trimEndSamples ?? 0) * sampleScale)
-    );
-    if (trimStart === 0 && trimEnd === 0) return decoded;
-
-    const length = Math.max(1, decoded.length - trimStart - trimEnd);
-    const trimmed = context.createBuffer(decoded.numberOfChannels, length, decoded.sampleRate);
-    for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
-      trimmed.copyToChannel(
-        decoded.getChannelData(channel).subarray(trimStart, trimStart + length),
-        channel
-      );
-    }
-    return trimmed;
+    // @audio/opus-encode writes an 80ms OpusHead pre-skip and each encoded
+    // unit includes the matching seek preroll. Native and WASM Opus decoders
+    // already remove that pre-skip. Applying descriptor trim metadata here a
+    // second time drops 80ms at every 2s boundary and creates audible gaps.
+    return decoded;
   }
 
   private async getWasmDecoder() {
