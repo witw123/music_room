@@ -161,7 +161,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
 
   useEffect(() => {
     let cancelled = false;
-    const syncMedia = async () => {
+    const runSyncMedia = async () => {
       const runtime = runtimeInputRef.current;
       const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
       const sourcePeerId = roomPlayback?.sourcePeerId ??
@@ -327,6 +327,28 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           lastError: timedOut ? "当前播放源的 WebRTC 音频轨道未建立。" : null
         });
       }
+    };
+
+    let syncInFlight: Promise<void> | null = null;
+    const syncMedia = () => {
+      if (syncInFlight) {
+        return syncInFlight;
+      }
+      const operation = runSyncMedia();
+      syncInFlight = operation;
+      operation.then(
+        () => {
+          if (syncInFlight === operation) {
+            syncInFlight = null;
+          }
+        },
+        () => {
+          if (syncInFlight === operation) {
+            syncInFlight = null;
+          }
+        }
+      );
+      return operation;
     };
 
     void syncMedia();

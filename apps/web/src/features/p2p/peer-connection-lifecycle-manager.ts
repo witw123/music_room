@@ -434,7 +434,9 @@ export class PeerConnectionLifecycleManager {
     });
     if (linkKind === "media" && typeof connection.addTransceiver === "function") {
       const transceiver = connection.addTransceiver("audio", {
-        direction: this.hasLocalAudioTrack() ? "sendonly" : "recvonly"
+        // Negotiate the audio m-line once in both directions. Playback source
+        // changes then use replaceTrack and never require a renegotiation.
+        direction: "sendrecv"
       });
       entry.audioTransceiver = transceiver;
       entry.audioSender = transceiver.sender;
@@ -460,9 +462,6 @@ export class PeerConnectionLifecycleManager {
             this.clearMediaDisconnectRecovery(payload.peerId);
             this.clearMediaWatchdog(entry);
             this.markMediaRecovered(payload.peerId);
-            if (this.hasLocalAudioTrack()) {
-              entry.mediaNegotiationPending = true;
-            }
             void this.enqueueMediaOperation(payload.peerId, entry);
             if (this.hasExpectedRemoteAudioTrack(payload.peerId)) {
               this.scheduleMediaWatchdog(payload.peerId, entry);
@@ -594,16 +593,6 @@ export class PeerConnectionLifecycleManager {
         ? this.localAudioStream?.getAudioTracks().find((track) => track.readyState === "live") ?? null
         : null;
     const currentTrack = entry.audioSender?.track ?? null;
-    const desiredDirection = desiredTrack ? "sendonly" : "recvonly";
-
-    if (
-      entry.audioTransceiver &&
-      entry.audioTransceiver.direction !== desiredDirection
-    ) {
-      entry.audioTransceiver.direction = desiredDirection;
-      entry.mediaNegotiationPending = true;
-    }
-
     if (!desiredTrack && !entry.audioSender) {
       entry.senderTrackState = "none";
       return;
@@ -643,7 +632,6 @@ export class PeerConnectionLifecycleManager {
       try {
         await entry.audioSender.replaceTrack(desiredTrack);
         entry.senderTrackState = desiredTrack ? "live" : "none";
-        entry.mediaNegotiationPending = true;
         await this.applyAudioSenderParameters(entry.audioSender);
         this.onMediaStateChange?.({
           peerId,
@@ -798,8 +786,9 @@ export class PeerConnectionLifecycleManager {
     }
     if (remoteDescriptionType === "offer") {
       // An incoming offer is still being answered by the signaling operation.
-      // Bind the local source and direction before createAnswer so the answer
-      // itself advertises the real sendonly/recvonly media role.
+       // Bind the local source before createAnswer. The media m-line was
+       // negotiated as sendrecv, so changing the source never needs another
+       // offer.
       await this.syncLocalAudioToPeer(peerId, entry, false);
       entry.mediaNegotiationPending = false;
       return;
@@ -1028,11 +1017,6 @@ export class PeerConnectionLifecycleManager {
     state.restartTimesMs = [];
     state.failureReportedAtMs = null;
     this.mediaRecovery.set(peerId, state);
-  }
-
-  private hasLocalAudioTrack() {
-    return this.localAudioSourcePeerId === this.localPeerId &&
-      !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
   }
 
   private hasExpectedRemoteAudioTrack(peerId: string) {

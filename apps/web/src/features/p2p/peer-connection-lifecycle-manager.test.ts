@@ -200,12 +200,12 @@ describe("PeerConnectionLifecycleManager", () => {
     ).toHaveLength(1);
   });
 
-  it("uses recvonly until the source track exists, then negotiates sendonly with the track", async () => {
+  it("keeps a sendrecv media m-line while replacing the source track", async () => {
     const { manager, sendSignal } = createManager();
     await manager.syncPeers(["peer_b"]);
 
     const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
-    expect(mediaPeer.mediaTransceiver?.direction).toBe("recvonly");
+    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendrecv");
     mediaPeer.signalingState = "stable";
 
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
@@ -215,12 +215,12 @@ describe("PeerConnectionLifecycleManager", () => {
     manager.setLocalAudioStream(stream, "peer_a");
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendonly");
+    expect(mediaPeer.mediaTransceiver?.direction).toBe("sendrecv");
     expect(mediaPeer.mediaSender?.track).toBe(track);
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(2);
+    expect(mediaOffers).toHaveLength(1);
   });
 
   it("binds the source track before answering an incoming media offer", async () => {
@@ -234,7 +234,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const entry = await manager.getOrCreatePeerEntry("peer_b", "media");
     await manager.notifyRemoteDescriptionApplied("peer_b", entry, "offer");
 
-    expect(entry.audioTransceiver?.direction).toBe("sendonly");
+    expect(entry.audioTransceiver?.direction).toBe("sendrecv");
     expect(entry.audioSender?.track).toBe(track);
     expect(entry.mediaNegotiationPending).toBe(false);
   });
@@ -258,7 +258,7 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaPeer.mediaSender!.track).toBe(track);
   });
 
-  it("reoffers the active source track when a media connection becomes connected", async () => {
+  it("does not renegotiate when an already-bound source media connection becomes connected", async () => {
     const { manager, sendSignal } = createManager();
     const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
     const stream = {
@@ -276,7 +276,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(2);
+    expect(mediaOffers).toHaveLength(1);
   });
 
   it("restarts a connected listener media peer when its remote track never arrives", async () => {
