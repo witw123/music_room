@@ -63,6 +63,59 @@ describe("NeteaseApiClient", () => {
     });
   });
 
+  it("falls back to weapi when the default QR transport is unavailable", async () => {
+    mockedLoginQrCheck
+      .mockRejectedValueOnce(new Error("upstream timeout"))
+      .mockResolvedValueOnce({
+        status: 200,
+        body: { code: 802 },
+        cookie: []
+      } as never);
+
+    await expect(new NeteaseApiClient().checkQrCode("qr-key")).resolves.toEqual({
+      status: "scanned",
+      cookie: null
+    });
+    expect(mockedLoginQrCheck).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ key: "qr-key", timeout: expect.any(Number) })
+    );
+    expect(mockedLoginQrCheck).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ key: "qr-key", crypto: "weapi", timeout: expect.any(Number) })
+    );
+  });
+
+  it("keeps polling when both QR transports are temporarily unavailable", async () => {
+    mockedLoginQrCheck
+      .mockRejectedValueOnce(new Error("eapi unavailable"))
+      .mockRejectedValueOnce(new Error("weapi unavailable"));
+
+    await expect(new NeteaseApiClient().checkQrCode("qr-key")).resolves.toEqual({
+      status: "pending",
+      cookie: null
+    });
+  });
+
+  it("strips Set-Cookie attributes from a completed QR login", async () => {
+    mockedLoginQrCheck.mockResolvedValue({
+      status: 200,
+      body: {
+        code: 803,
+        cookie: "MUSIC_U=music-u; Max-Age=315360000; Path=/; NMTID=nmtid; Path=/"
+      },
+      cookie: [
+        "MUSIC_U=music-u; Max-Age=315360000; Path=/",
+        "NMTID=nmtid; Path=/"
+      ]
+    } as never);
+
+    await expect(new NeteaseApiClient().checkQrCode("qr-key")).resolves.toEqual({
+      status: "connected",
+      cookie: "MUSIC_U=music-u; NMTID=nmtid"
+    });
+  });
+
   it("maps provider auth expiry and rejects malformed search responses", async () => {
     mockedSearch.mockResolvedValue({
       status: 200,
