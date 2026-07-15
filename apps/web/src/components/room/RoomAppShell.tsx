@@ -22,6 +22,7 @@ type RoomAppShellProps = {
   canReorderQueue: boolean;
   clipboardActions: ReturnType<typeof useRoomClipboardActions>;
   currentTrack: TrackMeta | null;
+  isSourceOwner: boolean;
   pageState: ReturnType<typeof useRoomPageState>;
   playbackActions: ReturnType<typeof useRoomPlaybackActions>;
   roomActions: ReturnType<typeof useRoomPageRoomActions>;
@@ -42,6 +43,7 @@ export function RoomAppShell({
   canReorderQueue,
   clipboardActions,
   currentTrack,
+  isSourceOwner,
   pageState,
   playbackActions,
   roomActions,
@@ -102,6 +104,7 @@ export function RoomAppShell({
         playerSlot={
           <BottomPlayerController
             audioRef={audioRef}
+            isSourceOwner={isSourceOwner}
             roomSnapshot={roomSnapshot}
             activeSession={activeSession}
             currentTrack={currentTrack}

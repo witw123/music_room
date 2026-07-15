@@ -88,6 +88,7 @@ export function releasePeerConnectionEntry(input: {
   input.entry.configuredAudioMaxBitrateKbps = null;
   input.entry.appliedAudioBitrateKbps = null;
   input.entry.receiverTrackState = "none";
+  input.entry.receiverRtpActive = false;
   if (input.entry.receiverMuteTimerId) {
     clearTimeout(input.entry.receiverMuteTimerId);
     input.entry.receiverMuteTimerId = null;
@@ -259,6 +260,7 @@ export function bindPeerConnectionEvents(input: {
     }
     input.entry.remoteAudioStream = event.streams[0] ?? new MediaStream([event.track]);
     input.entry.remoteAudioTrackId = event.track.id;
+    input.entry.receiverRtpActive = event.track.muted !== true;
     input.entry.receiverTrackState = event.track.readyState === "live" ? "live" : "ended";
     input.onMediaStateChange?.({
       peerId: input.peerId,
@@ -301,6 +303,7 @@ export function bindPeerConnectionEvents(input: {
           event.track.muted &&
           event.track.readyState === "live"
         ) {
+          input.entry.receiverRtpActive = false;
           input.entry.receiverTrackState = "failed";
           input.onMediaStateChange?.({
             peerId: input.peerId,
@@ -320,6 +323,7 @@ export function bindPeerConnectionEvents(input: {
         clearTimeout(input.entry.receiverMuteTimerId);
         input.entry.receiverMuteTimerId = null;
       }
+      input.entry.receiverRtpActive = true;
       input.entry.receiverTrackState = "live";
       input.onMediaStateChange?.({
         peerId: input.peerId,

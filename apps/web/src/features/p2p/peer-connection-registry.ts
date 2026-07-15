@@ -13,6 +13,7 @@ export type PeerMediaState = {
   receiverTrackState: PeerMediaTrackState;
   remoteStream: MediaStream | null;
   remoteTrackId: string | null;
+  receiverRtpActive: boolean;
   sourcePeerId: string | null;
 };
 
@@ -28,6 +29,7 @@ export type PeerEntry = {
   configuredAudioMaxBitrateKbps: number | null;
   appliedAudioBitrateKbps: number | null;
   receiverTrackState: PeerMediaTrackState;
+  receiverRtpActive: boolean;
   receiverMuteTimerId: ReturnType<typeof setTimeout> | null;
   mediaWatchdogTimerId: ReturnType<typeof setTimeout> | null;
   mediaSyncRetryTimerId: ReturnType<typeof setTimeout> | null;
@@ -66,6 +68,7 @@ export function createPeerEntry(input: {
     configuredAudioMaxBitrateKbps: null,
     appliedAudioBitrateKbps: null,
     receiverTrackState: "none",
+    receiverRtpActive: false,
     receiverMuteTimerId: null,
     mediaWatchdogTimerId: null,
     mediaSyncRetryTimerId: null,

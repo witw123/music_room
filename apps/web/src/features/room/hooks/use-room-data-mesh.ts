@@ -208,10 +208,7 @@ export function createRoomDataMeshRuntime(input: {
           direction: "received",
           event: "media-track-received",
           summary: `收到媒体音频轨道 ${track.id}`,
-          update: (snapshot: PeerDiagnosticsSnapshot) => ({
-            ...snapshot,
-            lastAudibleProgressAt: new Date().toISOString()
-          })
+          update: (snapshot: PeerDiagnosticsSnapshot) => snapshot
         });
       },
       onMediaTrackMuted: ({ peerId, trackId }) => {
@@ -240,9 +237,6 @@ export function createRoomDataMeshRuntime(input: {
                 : state === "failed"
                   ? "failed"
                   : snapshot.mediaConnectionState,
-            ...(direction === "receiver" && state === "live"
-              ? { lastAudibleProgressAt: new Date().toISOString() }
-              : {})
           })
         });
       },

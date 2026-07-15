@@ -43,9 +43,10 @@ describe("RoomAudioActivationManager", () => {
     });
 
     expect(audio.play).toHaveBeenCalledTimes(1);
-    expect(audio.pause).toHaveBeenCalledTimes(1);
-    expect(audio.load).toHaveBeenCalledTimes(2);
-    expect(audio.removeAttribute).toHaveBeenCalledWith("src");
+    expect(audio.pause).not.toHaveBeenCalled();
+    expect(audio.load).toHaveBeenCalledTimes(1);
+    expect(audio.removeAttribute).not.toHaveBeenCalled();
+    expect(audio.src).toContain("data:audio/wav");
     expect(audio.muted).toBe(false);
     expect(audio.volume).toBe(0.72);
     expect(audio.preload).toBe("none");

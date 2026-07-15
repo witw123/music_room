@@ -237,6 +237,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
       canReorderQueue={canReorderQueue}
       clipboardActions={clipboardActions}
       currentTrack={pageDerived.currentTrack}
+      isSourceOwner={pageDerived.isCurrentSourceOwner}
       pageState={pageState}
       playbackActions={playbackActions}
       roomActions={roomActions}

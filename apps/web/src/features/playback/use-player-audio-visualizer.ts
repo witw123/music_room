@@ -30,6 +30,7 @@ export type PlayerAudioVisualizerState = {
 
 type UsePlayerAudioVisualizerInput = {
   audioRef: RefObject<HTMLAudioElement | null>;
+  outputStream?: MediaStream | null;
   playbackStatus: PlaybackSnapshot["status"] | null | undefined;
   currentTrackId: string | null | undefined;
   mediaEpoch?: number | null;
@@ -114,6 +115,7 @@ function resolveVisualizerGraphKey(input: {
 
 export function resolveVisualizerSourceSelection(input: {
   audioElement: HTMLAudioElement | null | undefined;
+  outputStream?: MediaStream | null;
   currentTrackId: string | null | undefined;
   mediaEpoch?: number | null;
   sourcePeerId?: string | null;
@@ -130,12 +132,14 @@ export function resolveVisualizerSourceSelection(input: {
   }
 
   const localElement = input.audioElement ?? null;
-  const localStream = asMediaStream(localElement?.srcObject ?? null);
+  const elementStream = asMediaStream(localElement?.srcObject ?? null);
+  const localStream = elementStream ??
+    asMediaStream(input.outputStream ?? null);
   if (localStream && hasLiveAudioTrack(localStream)) {
     return {
       kind: "local-stream",
       stream: localStream,
-      element: localElement,
+      element: elementStream ? localElement : null,
       graphKey: resolveVisualizerGraphKey({
         currentTrackId: input.currentTrackId,
         mediaEpoch: input.mediaEpoch,
@@ -324,6 +328,7 @@ export function usePlayerAudioVisualizer(
   const idleSamples = useMemo(() => buildIdleWaveformSamples(sampleCount), [sampleCount]);
   const sourceSelection = resolveVisualizerSourceSelection({
     audioElement: input.audioRef.current,
+    outputStream: input.outputStream,
     currentTrackId: input.currentTrackId,
     mediaEpoch: input.mediaEpoch,
     sourcePeerId: input.sourcePeerId,
@@ -604,7 +609,8 @@ export function usePlayerAudioVisualizer(
     sourceSelection.hasSignal,
     sourceSelection.kind,
     sourceSelection.element,
-    sourceSelection.stream
+    sourceSelection.stream,
+    input.outputStream
   ]);
 
   return {

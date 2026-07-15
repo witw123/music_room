@@ -81,6 +81,16 @@ export function useRoomRuntimeObservability(input: {
       recordEvent: false,
       update: (snapshot) => ({
         ...snapshot,
+        ...(value.sample && value.sample.mediaReceiveBitrateKbps !== null &&
+        value.sample.mediaReceiveBitrateKbps > 0
+          ? {
+              lastAudibleProgressAt: new Date().toISOString(),
+              lastMediaStatsProgressAt: new Date().toISOString()
+            }
+          : value.sample && value.sample.mediaSendBitrateKbps !== null &&
+              value.sample.mediaSendBitrateKbps > 0
+            ? { lastMediaStatsProgressAt: new Date().toISOString() }
+            : {}),
         mediaConnectionState: value.sample?.connectionState ?? snapshot.mediaConnectionState,
         mediaIceState: value.sample?.iceConnectionState ?? snapshot.mediaIceState,
         mediaCandidateType: value.sample?.candidateType ?? snapshot.mediaCandidateType,

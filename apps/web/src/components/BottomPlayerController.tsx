@@ -5,9 +5,11 @@ import type { AuthSession, RoomSnapshot, TrackMeta } from "@music-room/shared";
 import { BottomPlayer } from "@/components/BottomPlayer";
 import { usePlayerAudioVisualizer } from "@/features/playback/use-player-audio-visualizer";
 import { useRoomPlayback } from "@/features/playback/use-room-playback";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 type BottomPlayerControllerProps = {
   audioRef: React.RefObject<HTMLAudioElement | null>;
+  isSourceOwner: boolean;
   roomSnapshot: RoomSnapshot | null;
   activeSession: AuthSession | null;
   currentTrack: TrackMeta | null;
@@ -24,6 +26,7 @@ type BottomPlayerControllerProps = {
 
 function BottomPlayerControllerBase({
   audioRef,
+  isSourceOwner,
   roomSnapshot,
   activeSession,
   currentTrack,
@@ -59,6 +62,7 @@ function BottomPlayerControllerBase({
   });
   const visualizer = usePlayerAudioVisualizer({
     audioRef,
+    outputStream: isSourceOwner ? roomAudioOutput.getBroadcastStream() : null,
     playbackStatus: playback?.status,
     currentTrackId: playback?.currentTrackId,
     mediaEpoch: playback?.mediaEpoch ?? null,

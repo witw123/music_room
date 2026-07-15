@@ -264,6 +264,8 @@ export class PeerConnectionLifecycleManager {
       receiverTrackState: entry.receiverTrackState,
       remoteStream: entry.remoteAudioStream,
       remoteTrackId: entry.remoteAudioTrackId,
+      receiverRtpActive: entry.receiverRtpActive ||
+        (this.latestMediaSamples.get(peerId)?.mediaReceiveBitrateKbps ?? 0) > 0,
       sourcePeerId: entry.remoteAudioStream ? peerId : null
     };
   }
@@ -790,6 +792,11 @@ export class PeerConnectionLifecycleManager {
       (sample.mediaReceiveBitrateKbps ?? 0) <= 0;
     state.degradedWindows = loss >= 3 || jitter >= 20 ? state.degradedWindows + 1 : 0;
     state.noPacketWindows = noPackets ? state.noPacketWindows + 1 : 0;
+    if ((sample.mediaReceiveBitrateKbps ?? 0) > 0) {
+      entry.receiverRtpActive = true;
+    } else if (noPackets && state.noPacketWindows >= 1) {
+      entry.receiverRtpActive = false;
+    }
     state.highLossWindows = loss >= 5 ? state.highLossWindows + 1 : 0;
     state.highJitterWindows = jitter >= 30 ? state.highJitterWindows + 1 : 0;
     const reason = noPackets && state.noPacketWindows >= 2

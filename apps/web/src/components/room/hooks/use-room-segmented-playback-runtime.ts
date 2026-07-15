@@ -22,6 +22,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   setLocalAudioStream: (stream: MediaStream | null, sourcePeerId: string | null, maxBitrateKbps?: number | null) => void;
   getPeerMediaState: (peerId: string) => {
     receiverTrackState: "none" | "live" | "ended" | "failed";
+    receiverRtpActive?: boolean;
     remoteStream: MediaStream | null;
     remoteTrackId?: string | null;
   } | null;
@@ -300,7 +301,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         }
         if (!cancelled) {
           setMediaPlayback({
-            state: "live",
+            state: remote?.receiverRtpActive ? "live" : "buffering",
             bufferedMs: 0,
             ownedUnitCount: 0,
             totalUnitCount,

@@ -56,6 +56,27 @@ describe("resolveVisualizerSourceSelection", () => {
     });
   });
 
+  it("selects the shared broadcast output when the source owns playback", () => {
+    const outputStream = {
+      getAudioTracks: () => [{ readyState: "live", enabled: true }]
+    } as unknown as MediaStream;
+
+    expect(
+      resolveVisualizerSourceSelection({
+        audioElement: {} as HTMLAudioElement,
+        outputStream,
+        currentTrackId: "track-a",
+        mediaEpoch: 3,
+        sourcePeerId: "peer_source"
+      })
+    ).toMatchObject({
+      kind: "local-stream",
+      element: null,
+      stream: outputStream,
+      hasSignal: true
+    });
+  });
+
   it("returns an idle source when no active track is present", () => {
     expect(
       resolveVisualizerSourceSelection({

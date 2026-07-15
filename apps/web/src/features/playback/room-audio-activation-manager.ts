@@ -144,8 +144,8 @@ export class RoomAudioActivationManager {
     const originalMuted = element.muted;
     const originalVolume = element.volume;
     const originalPreload = element.preload;
-    const wasPaused = element.paused;
     let usedSilentSource = false;
+    let primingSucceeded = false;
 
     try {
       element.muted = true;
@@ -162,6 +162,7 @@ export class RoomAudioActivationManager {
       }
 
       await element.play();
+      primingSucceeded = true;
       return {
         ok: true,
         error: null
@@ -175,17 +176,12 @@ export class RoomAudioActivationManager {
         error: error instanceof Error ? error.message : "play-rejected"
       };
     } finally {
-      // Keep a bound WebRTC element playing after priming so a later RTP
-      // recovery does not need another user gesture.
-      // Pausing here would require a new user gesture for the next play(),
-      // which browsers block once the gesture token expires. The element
-      // should remain in "playing" state so scheduled audio flows naturally
-      // through the Web Audio graph without requiring another play() call.
-      if (wasPaused && !hadSrcObject && !hadSrc) {
+      // Keep the successful silent resource playing. If the WebRTC stream is
+      // attached after this gesture, the same media element can continue
+      // without a second autoplay decision. A failed prime must still leave
+      // the element untouched for the next user gesture.
+      if (!primingSucceeded && usedSilentSource) {
         this.safeCall(() => element.pause());
-      }
-
-      if (usedSilentSource) {
         this.safeCall(() => element.removeAttribute("src"));
         this.safeCall(() => element.load());
       }
