@@ -28,6 +28,7 @@
 ### `POST /v1/providers/netease/account/qr/start`
 
 创建一个有效期 180 秒的二维码登录尝试，返回 `attemptId`、`qrimg` 和 `expiresAt`。
+同一用户每分钟最多创建 3 次二维码登录尝试。
 
 ### `GET /v1/providers/netease/account/qr/{attemptId}/status`
 

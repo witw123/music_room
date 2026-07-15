@@ -83,12 +83,17 @@ export function NeteaseSourcePanel({
           setErrorMessage(status.message ?? "二维码已失效，请重新生成。");
           return;
         }
+        setErrorMessage(null);
         timer = setTimeout(() => void poll(), 2000);
       } catch (error) {
         if (!cancelled) {
-          setQrSession(null);
-          setPendingAction(null);
           setErrorMessage(toProviderErrorMessage(error));
+          if (shouldStopQrPolling(error)) {
+            setQrSession(null);
+            setPendingAction(null);
+            return;
+          }
+          timer = setTimeout(() => void poll(), 2000);
         }
       }
     };
@@ -294,9 +299,23 @@ function toProviderErrorMessage(error: unknown) {
     if (error.code === "NETEASE_ACCOUNT_REQUIRED") return "请先绑定网易云账号。";
     if (error.code === "NETEASE_AUTH_EXPIRED") return "网易云登录已失效，请重新绑定。";
     if (error.code === "NETEASE_DISABLED") return "网易云功能当前未启用。";
+    if (error.code === "RATE_LIMITED") return "二维码请求过于频繁，请一分钟后再试。";
     if (error.code === "NETEASE_IMPORT_TOO_LARGE") return "歌曲文件过大，无法导入。";
     if (error.code === "NETEASE_AUDIO_UNSUPPORTED") return "网易云返回了当前播放器不支持的音频格式。";
     return error.message;
   }
   return error instanceof Error ? error.message : "网易云操作失败，请稍后重试。";
+}
+
+function shouldStopQrPolling(error: unknown) {
+  if (!(error instanceof MusicRoomApiError)) {
+    return false;
+  }
+
+  return [
+    "UNAUTHORIZED",
+    "NETEASE_DISABLED",
+    "NETEASE_AUTH_EXPIRED",
+    "NETEASE_QR_EXPIRED"
+  ].includes(error.code ?? "");
 }

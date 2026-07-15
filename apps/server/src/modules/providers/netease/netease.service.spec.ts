@@ -80,4 +80,26 @@ describe("NeteaseService", () => {
       expect(response.code).toBe(errorCodes.neteaseDisabled);
     }
   });
+
+  it("limits QR login starts to three attempts per minute", async () => {
+    process.env.NETEASE_ENABLED = "true";
+    const api = {
+      createQrCode: jest.fn().mockResolvedValue({
+        key: "qr-key",
+        qrimg: "data:image/png;base64,qr"
+      })
+    };
+    const redis = {
+      setJson: jest.fn().mockResolvedValue(undefined)
+    };
+    const service = new NeteaseService(api as never, {} as never, redis as never);
+
+    await service.startQrLogin("user_1");
+    await service.startQrLogin("user_1");
+    await service.startQrLogin("user_1");
+
+    await expect(service.startQrLogin("user_1")).rejects.toMatchObject({
+      response: expect.objectContaining({ code: errorCodes.rateLimited })
+    });
+  });
 });

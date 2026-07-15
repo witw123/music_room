@@ -54,7 +54,7 @@ export class NeteaseService {
 
   async startQrLogin(userId: string) {
     this.assertEnabled();
-    this.assertRateLimit(`qr:${userId}`, 3, 10 * 60 * 1000);
+    this.assertRateLimit(`qr:${userId}`, 3, 60_000);
     const qr = await this.callProvider(undefined, () => this.api.createQrCode());
     const attemptId = randomUUID();
     await this.redis.setJson(`${qrKeyPrefix}${attemptId}`, { userId, key: qr.key }, qrTtlSeconds);
