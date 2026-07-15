@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { assetUnitId, toCachedLibraryTrackSummaryRecord } from "./indexeddb";
+import {
+  assetUnitId,
+  removeCachedLibrarySourceReferences,
+  toCachedLibraryTrackSummaryRecord
+} from "./indexeddb";
 
 describe("assetUnitId", () => {
   it("uses content asset identity and rejects invalid indexes", () => {
@@ -33,6 +37,38 @@ describe("toCachedLibraryTrackSummaryRecord", () => {
       title: "Track",
       sizeBytes: 48_000_000,
       sourceTrackIds: ["track_1"]
+    });
+  });
+});
+
+describe("removeCachedLibrarySourceReferences", () => {
+  it("marks a cache entry unreferenced when its final track is deleted", () => {
+    expect(removeCachedLibrarySourceReferences({
+      sourceTrackIds: ["track_1"],
+      lastSourceTrackId: "track_1",
+      lastSourceRoomId: "room_1",
+      lastOwnerNickname: "Host"
+    }, ["track_1"])).toEqual({
+      sourceTrackIds: [],
+      lastSourceTrackId: null,
+      lastSourceRoomId: null,
+      lastOwnerNickname: null,
+      isUnreferenced: true
+    });
+  });
+
+  it("keeps a shared file while another uploaded track still references it", () => {
+    expect(removeCachedLibrarySourceReferences({
+      sourceTrackIds: ["track_1", "track_2"],
+      lastSourceTrackId: "track_2",
+      lastSourceRoomId: "room_2",
+      lastOwnerNickname: "Host"
+    }, ["track_2"])).toEqual({
+      sourceTrackIds: ["track_1"],
+      lastSourceTrackId: "track_1",
+      lastSourceRoomId: null,
+      lastOwnerNickname: null,
+      isUnreferenced: false
     });
   });
 });

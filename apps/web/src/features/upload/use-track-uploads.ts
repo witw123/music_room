@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type { GuestSession, RoomSnapshot } from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
-import { listCachedLibraryTrackSummaries } from "@/lib/indexeddb";
+import {
+  deleteLocalTrackDataForTracks,
+  listCachedLibraryTrackSummaries
+} from "@/lib/indexeddb";
 import type { CachedLibraryTrack, UploadedTrack } from "./audio-utils";
 import {
   buildCachedLibraryTrackUpsertRecord,
@@ -61,6 +64,7 @@ export function useTrackUploads(options: {
     activeSession,
     cacheLibraryVersion,
     cacheLibraryTracksRef,
+    deleteLocalTrackData: deleteLocalTrackDataForTracks,
     roomSnapshot,
     roomTrackIdsKey,
     setUploadedTracks,
@@ -88,6 +92,7 @@ export function useTrackUploads(options: {
       delete next[trackId];
       return next;
     });
+    await deleteLocalTrackDataForTracks([trackId]);
   }, []);
 
   const deleteRoomTrackArtifacts = useCallback(async (trackIds: string[]) => {
@@ -99,6 +104,7 @@ export function useTrackUploads(options: {
       }
       return next;
     });
+    await deleteLocalTrackDataForTracks([...removed]);
   }, []);
 
   useEffect(() => {

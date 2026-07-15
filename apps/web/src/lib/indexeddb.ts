@@ -26,6 +26,29 @@ export type CachedLibraryTrackRecord = {
 
 export type CachedLibraryTrackSummaryRecord = Omit<CachedLibraryTrackRecord, "file">;
 
+export function removeCachedLibrarySourceReferences(
+  record: Pick<
+    CachedLibraryTrackRecord,
+    "sourceTrackIds" | "lastSourceTrackId" | "lastSourceRoomId" | "lastOwnerNickname"
+  >,
+  removedTrackIds: readonly string[]
+) {
+  const removed = new Set(removedTrackIds);
+  const sourceTrackIds = record.sourceTrackIds.filter((trackId) => !removed.has(trackId));
+  const lastSourceTrackId = record.lastSourceTrackId && sourceTrackIds.includes(record.lastSourceTrackId)
+    ? record.lastSourceTrackId
+    : sourceTrackIds[sourceTrackIds.length - 1] ?? null;
+  const lastSourceWasRemoved = lastSourceTrackId !== record.lastSourceTrackId;
+
+  return {
+    sourceTrackIds,
+    lastSourceTrackId,
+    lastSourceRoomId: lastSourceWasRemoved ? null : record.lastSourceRoomId,
+    lastOwnerNickname: lastSourceWasRemoved ? null : record.lastOwnerNickname,
+    isUnreferenced: sourceTrackIds.length === 0
+  };
+}
+
 export type AudioAssetManifestRecord = {
   assetId: string;
   kind: AssetKind;
@@ -537,6 +560,118 @@ export async function deleteCachedLibraryTrack(fileHash: string) {
     }
   );
   return record;
+}
+
+export async function deleteLocalTrackDataForTracks(trackIds: readonly string[]) {
+  const uniqueTrackIds = [...new Set(trackIds.filter(Boolean))];
+  if (uniqueTrackIds.length === 0) {
+    return;
+  }
+
+  await musicRoomDatabase.transaction(
+    "rw",
+    [
+      musicRoomDatabase.cachedTrackLibrary,
+      musicRoomDatabase.cachedTrackLibraryMetadata,
+      musicRoomDatabase.trackAssetLinks,
+      musicRoomDatabase.assetManifests,
+      musicRoomDatabase.assetUnits,
+      musicRoomDatabase.transcodeJobs
+    ],
+    async () => {
+      const cachedSummaryKeys = await musicRoomDatabase.cachedTrackLibraryMetadata
+        .where("sourceTrackIds")
+        .anyOf(uniqueTrackIds)
+        .primaryKeys();
+      const cachedRecordKeys = await musicRoomDatabase.cachedTrackLibrary
+        .where("sourceTrackIds")
+        .anyOf(uniqueTrackIds)
+        .primaryKeys();
+      const fileHashes = [
+        ...new Set(
+          [...cachedSummaryKeys, ...cachedRecordKeys].filter(
+            (key): key is string => typeof key === "string"
+          )
+        )
+      ];
+      const deletedCacheHashes = new Set<string>();
+
+      for (const fileHash of fileHashes) {
+        const record = await musicRoomDatabase.cachedTrackLibrary.get(fileHash);
+        const summary = await musicRoomDatabase.cachedTrackLibraryMetadata.get(fileHash);
+        const source = record ?? summary;
+        if (!source) {
+          continue;
+        }
+
+        const nextReferences = removeCachedLibrarySourceReferences(source, uniqueTrackIds);
+        if (nextReferences.isUnreferenced) {
+          await musicRoomDatabase.cachedTrackLibrary.delete(fileHash);
+          await musicRoomDatabase.cachedTrackLibraryMetadata.delete(fileHash);
+          deletedCacheHashes.add(fileHash);
+          continue;
+        }
+
+        if (record) {
+          await musicRoomDatabase.cachedTrackLibrary.put({ ...record, ...nextReferences });
+        }
+        const nextSummary = summary ?? (record ? toCachedLibraryTrackSummaryRecord(record) : null);
+        if (nextSummary) {
+          await musicRoomDatabase.cachedTrackLibraryMetadata.put({
+            ...nextSummary,
+            ...nextReferences
+          });
+        }
+      }
+
+      const removedLinks = await musicRoomDatabase.trackAssetLinks
+        .where("trackId")
+        .anyOf(uniqueTrackIds)
+        .toArray();
+      const remainingLinks = await musicRoomDatabase.trackAssetLinks
+        .filter((link) => !uniqueTrackIds.includes(link.trackId))
+        .toArray();
+      const remainingAssetIds = new Set(
+        remainingLinks.flatMap((link) => [link.originalAssetId, link.playbackAssetId])
+      );
+      const removableAssetIds = [
+        ...new Set(
+          removedLinks.flatMap((link) => [link.originalAssetId, link.playbackAssetId])
+        )
+      ].filter((assetId) => !remainingAssetIds.has(assetId));
+      const removableManifests = await musicRoomDatabase.assetManifests.bulkGet(removableAssetIds);
+      const removableSourceFileHashes = new Set(
+        removableManifests
+          .filter((manifest): manifest is AudioAssetManifestRecord => !!manifest)
+          .map((manifest) => manifest.sourceFileHash)
+      );
+
+      await musicRoomDatabase.trackAssetLinks.bulkDelete(uniqueTrackIds);
+      if (removableAssetIds.length > 0) {
+        await musicRoomDatabase.assetUnits.where("assetId").anyOf(removableAssetIds).delete();
+        await musicRoomDatabase.assetManifests.bulkDelete(removableAssetIds);
+      }
+
+      if (deletedCacheHashes.size > 0 || removableSourceFileHashes.size > 0) {
+        const remainingCachedHashes = new Set(
+          (await musicRoomDatabase.cachedTrackLibraryMetadata.toCollection().primaryKeys())
+            .filter((key): key is string => typeof key === "string")
+        );
+        const remainingAssetSourceFileHashes = new Set(
+          (await musicRoomDatabase.assetManifests.toArray()).map((manifest) => manifest.sourceFileHash)
+        );
+        const sourceFileHashesToDelete = [
+          ...new Set([...deletedCacheHashes, ...removableSourceFileHashes])
+        ].filter(
+          (fileHash) =>
+            !remainingCachedHashes.has(fileHash) && !remainingAssetSourceFileHashes.has(fileHash)
+        );
+        if (sourceFileHashesToDelete.length > 0) {
+          await musicRoomDatabase.transcodeJobs.bulkDelete(sourceFileHashesToDelete);
+        }
+      }
+    }
+  );
 }
 
 export function toCachedLibraryTrackSummaryRecord(
