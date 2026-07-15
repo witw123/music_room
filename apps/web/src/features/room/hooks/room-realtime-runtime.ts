@@ -315,7 +315,7 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           return;
         }
 
-        applyRoomSubscribeBootstrap({
+        const bootstrapApplied = applyRoomSubscribeBootstrap({
           ack,
           activeRouteRoomIdRef: input.activeRouteRoomIdRef,
           currentRoomRef: input.currentRoomRef,
@@ -326,6 +326,12 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           setRoomRecoveryState: input.setRoomRecoveryState,
           audioUnlocked: input.audioUnlocked
         });
+        if (bootstrapApplied) {
+          // The subscribe ack is the first authoritative source of live peer
+          // ids after a join/reconnect. Sync immediately so media negotiation
+          // does not depend on a later room snapshot or presence patch.
+          input.resyncRealtimePeers(ack.bootstrap?.members ?? []);
+        }
       }
     );
   };
@@ -362,12 +368,17 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       return;
     }
     realtimeEventGate.acceptPlayback(snapshot.room.playback, currentSnapshot);
-    const presenceAccepted = realtimeEventGate.acceptPresenceRevision(
+    realtimeEventGate.acceptPresenceRevision(
       snapshot.room.presenceRevision,
       currentSnapshot,
       true
     );
     input.lastRealtimeRoomEventAtRef.current = Date.now();
+    // A full snapshot is authoritative for both room state and the live peer
+    // topology. Reconcile it even when the React ref still contains the
+    // previous snapshot, otherwise a missed presence event can leave the
+    // media peer absent while the data peer remains visible.
+    input.resyncRealtimePeers(snapshot.room.members);
     input.setRoomRecoveryState((current: RoomRecoveryState) => ({
       ...current,
       phase: "steady",
@@ -376,9 +387,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
       pendingMedia: false
     }));
     void input.requestRoomSnapshotResyncRef.current("realtime-room-event", input.roomId);
-    if (presenceAccepted) {
-      input.resyncRealtimePeers(snapshot.room.members);
-    }
   });
 
   socket.on("room.playback.patch", ({ playback }) => {

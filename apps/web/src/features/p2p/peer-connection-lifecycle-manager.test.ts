@@ -229,4 +229,19 @@ describe("PeerConnectionLifecycleManager", () => {
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
     expect(mediaOffers).toHaveLength(2);
   });
+
+  it("restarts a connected listener media peer when its remote track never arrives", async () => {
+    const { manager, sendSignal } = createManager();
+
+    await manager.syncPeers(["peer_b"]);
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaPeer.signalingState = "stable";
+    manager.setLocalAudioStream(null, "peer_b");
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(2);
+  });
 });

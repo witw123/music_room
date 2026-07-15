@@ -189,10 +189,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
         return;
       }
 
-      const listenerBindingKey = `listener:${sourcePeerId ?? "none"}`;
+      const expectedSourcePeerId = roomPlayback?.status === "playing" ? sourcePeerId : null;
+      const listenerBindingKey = `listener:${expectedSourcePeerId ?? "none"}`;
       if (localMediaBindingRef.current !== listenerBindingKey) {
         localMediaBindingRef.current = listenerBindingKey;
-        runtime.setLocalAudioStream(null, sourcePeerId, null);
+        runtime.setLocalAudioStream(null, expectedSourcePeerId, null);
       }
       const remote = sourcePeerId ? runtime.getPeerMediaState(sourcePeerId) : null;
       // Playback revisions and clock anchors can change while the negotiated

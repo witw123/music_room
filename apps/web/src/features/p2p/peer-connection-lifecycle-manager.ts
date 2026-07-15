@@ -95,6 +95,8 @@ type MediaRecoveryState = {
   disconnectedTimerId: ReturnType<typeof setTimeout> | null;
 };
 
+const mediaTrackWatchdogGraceMs = 3_000;
+
 function createMediaRecoveryState(): MediaRecoveryState {
   return {
     degradedWindows: 0,
@@ -292,6 +294,10 @@ export class PeerConnectionLifecycleManager {
       if (maxBitrateKbps === null) {
         entry.configuredAudioMaxBitrateKbps = null;
       }
+      if (peerId === sourcePeerId) {
+        this.clearMediaWatchdog(entry);
+        this.scheduleMediaWatchdog(peerId, entry);
+      }
       void this.enqueueMediaOperation(peerId, entry);
     }
   }
@@ -455,6 +461,9 @@ export class PeerConnectionLifecycleManager {
               entry.mediaNegotiationPending = true;
             }
             void this.enqueueMediaOperation(payload.peerId, entry);
+            if (this.hasExpectedRemoteAudioTrack(payload.peerId)) {
+              this.scheduleMediaWatchdog(payload.peerId, entry);
+            }
           }
         } else if (linkKind === "media" && payload.state === "failed" && !entry.releasing) {
           this.triggerMediaRecovery(payload.peerId, "connection-failed");
@@ -482,6 +491,13 @@ export class PeerConnectionLifecycleManager {
       onRemoteAudioTrack: this.onRemoteAudioTrack,
       onMediaStateChange: (payload) => {
         this.onMediaStateChange?.(payload);
+        if (
+          linkKind === "media" &&
+          payload.direction === "receiver" &&
+          payload.state === "live"
+        ) {
+          this.clearMediaWatchdog(entry);
+        }
         if (
           linkKind === "media" &&
           payload.direction === "receiver" &&
@@ -851,13 +867,49 @@ export class PeerConnectionLifecycleManager {
       return;
     }
 
+    const watchdogDelayMs =
+      entry.connection.connectionState === "connected" &&
+      this.hasExpectedRemoteAudioTrack(peerId)
+        ? mediaTrackWatchdogGraceMs
+        : 8_000;
     entry.mediaWatchdogTimerId = setTimeout(() => {
       entry.mediaWatchdogTimerId = null;
       if (
         entry.releasing ||
-        this.peerConnections.get(peerId, "media") !== entry ||
-        entry.connection.connectionState === "connected"
+        this.peerConnections.get(peerId, "media") !== entry
       ) {
+        return;
+      }
+
+      const waitingForRemoteTrack =
+        entry.connection.connectionState === "connected" &&
+        this.hasExpectedRemoteAudioTrack(peerId) &&
+        entry.receiverTrackState !== "live";
+      if (waitingForRemoteTrack) {
+        const waitingForMs = Date.now() - entry.lastSignalProgressAtMs;
+        if (waitingForMs < mediaTrackWatchdogGraceMs) {
+          this.scheduleMediaWatchdog(peerId, entry);
+          return;
+        }
+        if (
+          entry.connection.signalingState !== "stable" &&
+          waitingForMs < 8_000
+        ) {
+          // Let an in-flight answer finish before declaring negotiation lost.
+          // The timer must be kept alive; otherwise have-local-offer can leave
+          // the listener waiting forever when the answer is delayed.
+          this.scheduleMediaWatchdog(peerId, entry);
+          return;
+        }
+
+        // ICE can be connected while the media m-line/track negotiation was
+        // lost. Re-offer the media peer so the receiver gets ontrack without
+        // disturbing the already healthy data peer.
+        this.triggerMediaRecovery(peerId, "no-packets");
+        return;
+      }
+
+      if (entry.connection.connectionState === "connected") {
         return;
       }
 
@@ -873,7 +925,7 @@ export class PeerConnectionLifecycleManager {
       // with a media connection stuck in new/checking/have-local-offer. A
       // media-only offer retries that path without touching DataChannel.
       this.triggerMediaRecovery(peerId, "connection-failed");
-    }, 8_000);
+    }, watchdogDelayMs);
   }
 
   private clearMediaWatchdog(entry: PeerEntry) {
@@ -957,6 +1009,12 @@ export class PeerConnectionLifecycleManager {
   private hasLocalAudioTrack() {
     return this.localAudioSourcePeerId === this.localPeerId &&
       !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
+  }
+
+  private hasExpectedRemoteAudioTrack(peerId: string) {
+    return this.localAudioSourcePeerId !== null &&
+      this.localAudioSourcePeerId !== this.localPeerId &&
+      this.localAudioSourcePeerId === peerId;
   }
 
   private shouldInitiatePeer(peerId: string) {
