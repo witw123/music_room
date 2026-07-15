@@ -7,7 +7,6 @@ import {
   buildRoomSubscribePayload,
   createRoomRealtimeEventGate,
   createRoomRealtimeRuntime,
-  hasSubscribeBootstrapFullLocalTrack,
   isSocketDisconnectGraceActive,
   shouldQueueIncomingAvailability,
   shouldExitRoomOnSnapshotMissing,
@@ -149,46 +148,6 @@ describe("buildRoomSubscribePayload", () => {
   });
 });
 
-describe("hasSubscribeBootstrapFullLocalTrack", () => {
-  it("treats a loaded full-local cache as bootstrap-ready even without a live upload binding", () => {
-    expect(
-      hasSubscribeBootstrapFullLocalTrack({
-        enableTrackCaching: true,
-        currentTrackId: "track_cached",
-        uploadedTracks: {},
-        fullLocalPlaybackTracks: {
-          track_cached: {
-            objectUrl: "blob:cached"
-          }
-        }
-      })
-    ).toBe(true);
-  });
-
-  it("does not mark bootstrap data ready when caching is disabled or the track is missing", () => {
-    expect(
-      hasSubscribeBootstrapFullLocalTrack({
-        enableTrackCaching: false,
-        currentTrackId: "track_cached",
-        uploadedTracks: {
-          track_cached: {
-            objectUrl: "blob:uploaded"
-          }
-        },
-        fullLocalPlaybackTracks: {}
-      })
-    ).toBe(false);
-
-    expect(
-      hasSubscribeBootstrapFullLocalTrack({
-        enableTrackCaching: true,
-        currentTrackId: "track_cached",
-        uploadedTracks: {},
-        fullLocalPlaybackTracks: {}
-      })
-    ).toBe(false);
-  });
-});
 
 describe("shouldExitRoomOnSnapshotMissing", () => {
   it("exits the current room when the server reports its snapshot missing", () => {

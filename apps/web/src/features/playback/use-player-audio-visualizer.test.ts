@@ -71,7 +71,7 @@ describe("resolveVisualizerSourceSelection", () => {
     });
   });
 
-  it("falls back to element capture when a local element has a src but no srcObject", () => {
+  it("does not treat an element src as a playback source", () => {
     const localAudio = {
       currentSrc: "blob:track-a"
     } as unknown as HTMLAudioElement;
@@ -84,11 +84,12 @@ describe("resolveVisualizerSourceSelection", () => {
         sourcePeerId: "peer_source",
         sourceSessionId: "member_source"
       })
-    ).toMatchObject({
-      kind: "local-element",
-      element: localAudio,
+    ).toEqual({
+      kind: "none",
       stream: null,
-      hasSignal: true
+      element: null,
+      graphKey: "none",
+      hasSignal: false
     });
   });
 

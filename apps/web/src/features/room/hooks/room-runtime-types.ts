@@ -44,8 +44,6 @@ export type ManualCacheDownloadBridge = Pick<
   "syncPeers" | "requestPieces" | "getConnectedPeerIds"
 >;
 
-export type FullLocalPlaybackTrackRecord = Record<string, Pick<UploadedTrack, "objectUrl">>;
-
 export type ManualCachePieceReceivedInput = {
   trackId: string;
   chunkIndex: number;
@@ -177,7 +175,6 @@ export type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
   | "bootstrapping-data"
-  | "playing-local-fallback"
   | "steady";
 
 export type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
@@ -192,7 +189,6 @@ export type RoomRecoveryState = {
   pendingData: boolean;
   pendingMedia: boolean;
   listenerBootstrapAttempts: number | null;
-  fullLocalRecoveryActive: boolean;
 };
 
 export type RoomRuntimeEvent =

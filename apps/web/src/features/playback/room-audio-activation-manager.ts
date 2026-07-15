@@ -12,6 +12,10 @@ export type RoomAudioElementPlayResult = {
   error: string | null;
 };
 
+export type RoomAudioElementPlayOptions = {
+  force?: boolean;
+};
+
 export type PrimeRoomAudioOutputsResult = {
   ok: boolean;
   local: RoomAudioElementPlayResult;
@@ -41,7 +45,10 @@ export class RoomAudioActivationManager {
     };
   }
 
-  async playElement(element: HTMLAudioElement | null | undefined): Promise<RoomAudioElementPlayResult> {
+  async playElement(
+    element: HTMLAudioElement | null | undefined,
+    options: RoomAudioElementPlayOptions = {}
+  ): Promise<RoomAudioElementPlayResult> {
     if (!element) {
       return {
         ok: false,
@@ -58,7 +65,11 @@ export class RoomAudioActivationManager {
       // the element may still report paused=false from the previous source;
       // in that case we must call play() for the new source or the UI can
       // advance while the new song stays silent.
-      if (!element.paused && this.playedElementSourceKeys.get(element) === sourceKey) {
+      if (
+        !options.force &&
+        !element.paused &&
+        this.playedElementSourceKeys.get(element) === sourceKey
+      ) {
         this.activated = true;
         return {
           ok: true,
@@ -164,8 +175,8 @@ export class RoomAudioActivationManager {
         error: error instanceof Error ? error.message : "play-rejected"
       };
     } finally {
-      // Keep the element playing when it already had a media source attached
-      // (e.g. MediaStream from PCM engine or a blob URL for full-local).
+      // Keep a bound WebRTC element playing after priming so a later RTP
+      // recovery does not need another user gesture.
       // Pausing here would require a new user gesture for the next play(),
       // which browsers block once the gesture token expires. The element
       // should remain in "playing" state so scheduled audio flows naturally

@@ -17,7 +17,7 @@ import { musicRoomApi } from "@/lib/music-room-api";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
 import { useRoomActions } from "@/features/room/hooks/use-room-actions";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
-import type { PlaybackStartIntent } from "@/features/playback/playback-start-intent";
+import type { PlaybackStartRequest } from "@/features/playback/playback-start-request";
 import { useRoomLifecycleActions } from "@/components/room/hooks/use-room-lifecycle-actions";
 import type { RoomRecoveryState } from "@/components/room/hooks/use-room-page-state";
 
@@ -50,11 +50,10 @@ type UseRoomPageRoomActionsInput = {
   setMediaConnectedPeers: Dispatch<SetStateAction<string[]>>;
   setMediaConnectionState: Dispatch<SetStateAction<RoomMediaConnectionState>>;
   setPeerId: Dispatch<SetStateAction<string>>;
-  setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
+  setPlaybackStartRequest: Dispatch<SetStateAction<PlaybackStartRequest | null>>;
   setPlayerResetEpoch: Dispatch<SetStateAction<number>>;
   setPlaylists: Dispatch<SetStateAction<Playlist[]>>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
-  setSchedulerPlaybackBucketMs: Dispatch<SetStateAction<number>>;
   setStatusMessage: (value: string) => void;
   setSuppressRoomRecovery: Dispatch<SetStateAction<boolean>>;
   workspaceEntryHref: string;
@@ -83,11 +82,10 @@ export function useRoomPageRoomActions({
   setMediaConnectedPeers,
   setMediaConnectionState,
   setPeerId,
-  setPlaybackStartIntent,
+  setPlaybackStartRequest,
   setPlayerResetEpoch,
   setPlaylists,
   setRoomRecoveryState,
-  setSchedulerPlaybackBucketMs,
   setStatusMessage,
   setSuppressRoomRecovery,
   workspaceEntryHref,
@@ -149,11 +147,10 @@ export function useRoomPageRoomActions({
     resetPeerDiagnostics();
     currentPlaybackPositionRef.current = 0;
     setPlayerResetEpoch((current) => current + 1);
-    setSchedulerPlaybackBucketMs(0);
     setBufferHealth("healthy");
     setMediaConnectionState("idle");
     setMediaConnectedPeers([]);
-    setPlaybackStartIntent(null);
+    setPlaybackStartRequest(null);
     setRoomRecoveryState({
       phase: "joining",
       mode: "steady",
@@ -164,7 +161,6 @@ export function useRoomPageRoomActions({
       pendingData: false,
       pendingMedia: false,
       listenerBootstrapAttempts: null,
-      fullLocalRecoveryActive: false
     });
   }, [
     audioRef,
@@ -174,10 +170,9 @@ export function useRoomPageRoomActions({
     setBufferHealth,
     setMediaConnectedPeers,
     setMediaConnectionState,
-    setPlaybackStartIntent,
+    setPlaybackStartRequest,
     setPlayerResetEpoch,
-    setRoomRecoveryState,
-    setSchedulerPlaybackBucketMs
+    setRoomRecoveryState
   ]);
 
   const {

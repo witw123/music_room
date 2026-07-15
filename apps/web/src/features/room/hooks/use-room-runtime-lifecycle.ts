@@ -9,6 +9,7 @@ import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics
 import type { RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import { testTurnConnectivity } from "@/features/p2p";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -394,6 +395,7 @@ export function useRoomRuntimeLifecycle(input: {
     setIsRecoveringRoom(false);
     setIsNavigatingRoomExit(false);
     resetPlayerSurfaceRef.current();
+    roomAudioOutput.releaseRoomAudioSession();
 
     if (roomSnapshot?.room.id && roomSnapshot.room.id !== initialRoomId) {
       dispatchRoomStateEvent({ type: "local-reset" });

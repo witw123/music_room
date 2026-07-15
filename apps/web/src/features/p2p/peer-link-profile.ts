@@ -190,7 +190,7 @@ export function resolvePeerTransferWindow(
   const bytesPerSecond = transferRateKbps === null ? null : transferRateKbps * 1000 / 8;
   // Cold-start optimistic BDP when rate is unknown/low. Using a tiny measured
   // rate as the sole BDP input keeps only a few chunks in flight and never
-  // saturates direct LAN links during progressive startup.
+  // saturates direct LAN links during segmented asset startup.
   const optimisticFloorBytes =
     profile === "fast-direct"
       ? 16 * 1024 * 1024

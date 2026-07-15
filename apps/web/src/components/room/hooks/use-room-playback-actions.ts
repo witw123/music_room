@@ -11,9 +11,9 @@ import {
 import type { RoomSnapshot } from "@music-room/shared";
 import { toUserFacingError } from "@/lib/music-room-ui";
 import {
-  createPlaybackStartIntent,
-  type PlaybackStartIntent
-} from "@/features/playback/playback-start-intent";
+  createPlaybackStartRequest,
+  type PlaybackStartRequest
+} from "@/features/playback/playback-start-request";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 
@@ -37,8 +37,7 @@ type UseRoomPlaybackActionsInput = {
   setAudioBlockedOverlay: Dispatch<SetStateAction<boolean>>;
   setAudioUnlocked: Dispatch<SetStateAction<boolean>>;
   setLastSourceStartError: Dispatch<SetStateAction<string | null>>;
-  setPlaybackStartIntent: Dispatch<SetStateAction<PlaybackStartIntent | null>>;
-  setSchedulerPlaybackBucketMs: Dispatch<SetStateAction<number>>;
+  setPlaybackStartRequest: Dispatch<SetStateAction<PlaybackStartRequest | null>>;
   setStatusMessage: (value: string) => void;
 };
 
@@ -75,8 +74,7 @@ export function useRoomPlaybackActions({
   setAudioBlockedOverlay,
   setAudioUnlocked,
   setLastSourceStartError,
-  setPlaybackStartIntent,
-  setSchedulerPlaybackBucketMs,
+  setPlaybackStartRequest,
   setStatusMessage
 }: UseRoomPlaybackActionsInput) {
   const ensureRoomAudioUnlocked = useCallback(
@@ -155,10 +153,6 @@ export function useRoomPlaybackActions({
     currentPlaybackPositionRef.current = positionMs;
   }, [currentPlaybackPositionRef]);
 
-  const handlePlaybackBucketChange = useCallback((bucketMs: number) => {
-    setSchedulerPlaybackBucketMs((current) => (current === bucketMs ? current : bucketMs));
-  }, [setSchedulerPlaybackBucketMs]);
-
   const handleFilesSelected = useCallback(
     async (files: FileList | File[] | null) => {
       try {
@@ -175,17 +169,15 @@ export function useRoomPlaybackActions({
 
   const armPlaybackStart = useCallback(
     async (input: {
-      reason: PlaybackStartIntent["reason"];
+      reason: PlaybackStartRequest["reason"];
       trackId?: string | null;
       queueItemId?: string | null;
-      previousTrackId?: string | null;
     }) => {
-      setPlaybackStartIntent(
-        createPlaybackStartIntent({
+      setPlaybackStartRequest(
+        createPlaybackStartRequest({
           reason: input.reason,
           trackId: input.trackId,
           queueItemId: input.queueItemId,
-          previousTrackId: input.previousTrackId,
           targetPlaybackRevision:
             (playbackRevision ??
               playbackQueueVersion ??
@@ -221,7 +213,7 @@ export function useRoomPlaybackActions({
       playbackMediaEpoch,
       playbackQueueVersion,
       playbackRevision,
-      setPlaybackStartIntent,
+      setPlaybackStartRequest,
       setStatusMessage
     ]
   );
@@ -256,7 +248,7 @@ export function useRoomPlaybackActions({
     async (trackId?: string) => {
       const targetTrackId = trackId ?? currentPlaybackTrackId ?? null;
       await armPlaybackStart({
-        reason: trackId ? "track" : "resume-current",
+        reason: trackId ? "track-change" : "user-play",
         trackId: targetTrackId
       });
       await playTrack(trackId);
@@ -269,16 +261,14 @@ export function useRoomPlaybackActions({
       const queueTrackId =
         roomSnapshot?.queue.find((item) => item.id === queueItemId)?.trackId ?? null;
       await armPlaybackStart({
-        reason: "queue-item",
+        reason: "queue-advance",
         queueItemId,
-        trackId: queueTrackId,
-        previousTrackId: currentPlaybackTrackId
+        trackId: queueTrackId
       });
       await playQueueItem(queueItemId);
     },
     [
       armPlaybackStart,
-      currentPlaybackTrackId,
       playQueueItem,
       roomSnapshot?.queue
     ]
@@ -286,19 +276,17 @@ export function useRoomPlaybackActions({
 
   const handlePrevTrack = useCallback(async () => {
     await armPlaybackStart({
-      reason: "prev",
-      previousTrackId: currentPlaybackTrackId
+      reason: "queue-advance"
     });
     await prevTrack();
-  }, [armPlaybackStart, currentPlaybackTrackId, prevTrack]);
+  }, [armPlaybackStart, prevTrack]);
 
   const handleNextTrack = useCallback(async () => {
     await armPlaybackStart({
-      reason: "next",
-      previousTrackId: currentPlaybackTrackId
+      reason: "queue-advance"
     });
     await nextTrack();
-  }, [armPlaybackStart, currentPlaybackTrackId, nextTrack]);
+  }, [armPlaybackStart, nextTrack]);
 
   useEffect(() => {
     if (
@@ -342,7 +330,6 @@ export function useRoomPlaybackActions({
     handleFilesSelected,
     handleNextTrack,
     handlePlayQueueItem,
-    handlePlaybackBucketChange,
     handlePlaybackPositionChange,
     handlePlayTrack,
     handlePrevTrack

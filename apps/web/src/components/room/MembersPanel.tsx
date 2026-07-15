@@ -47,9 +47,9 @@ export type LocalMemberPanelState = {
   segmentedPlayback: SegmentedPlaybackSnapshot;
   playbackBitrateKbps: number | null;
   configuredPlaybackBitrateKbps?: number | null;
-  mediaSourcePeerId?: string | null;
-  isMediaSource?: boolean;
-  mediaSourceMemberNickname?: string | null;
+  sourcePeerId?: string | null;
+  isSourceOwner?: boolean;
+  sourceMemberNickname?: string | null;
   dataReadyCount: number;
   playbackStatus: {
     label: string;
@@ -211,8 +211,8 @@ function resolveRoomWanScore(input: {
       (snapshot.mediaSendBitrateKbps ?? 0) > 0
     )
   );
-  const sourcePeerId = input.localMemberState?.mediaSourcePeerId ?? null;
-  const selectedDiagnostics = input.localMemberState?.isMediaSource
+  const sourcePeerId = input.localMemberState?.sourcePeerId ?? null;
+  const selectedDiagnostics = input.localMemberState?.isSourceOwner
     ? mediaDiagnostics
     : sourcePeerId
       ? mediaDiagnostics.filter((snapshot) => snapshot.peerId === sourcePeerId)
@@ -227,7 +227,7 @@ function resolveRoomWanScore(input: {
       uploadRateKbps: diagnostic.mediaSendBitrateKbps
     }))
     .sort((left, right) => right.score - left.score);
-  const selectedRemoteScore = input.localMemberState?.isMediaSource
+  const selectedRemoteScore = input.localMemberState?.isSourceOwner
     ? [...remoteScores].sort((left, right) => left.score - right.score)[0]
     : remoteScores[0];
   return selectedRemoteScore ?? buildWanLinkScore({
@@ -236,7 +236,7 @@ function resolveRoomWanScore(input: {
     downloadRateKbps: input.localMemberState?.mediaSummary?.receiveRateKbps ?? null,
     uploadRateKbps: input.localMemberState?.mediaSummary?.sendRateKbps ?? null,
     playbackBitrateKbps,
-    mediaDirection: input.localMemberState?.isMediaSource ? "send" : "receive",
+    mediaDirection: input.localMemberState?.isSourceOwner ? "send" : "receive",
     mediaTrackState: input.localMemberState?.segmentedPlayback.state === "live" ? "live" : "none",
     mediaConnectionState: input.localMemberState?.segmentedPlayback.state === "live" ? "connected" : null,
     sampleAgeMs: input.localMemberState?.mediaSummary?.sampleAgeMs ?? null,
@@ -317,7 +317,7 @@ function MembersPanelBase({
           <div>
             <span className="text-[10px] text-foreground-muted">当前媒体源</span>
             <strong className="mt-1 block text-sm text-foreground">
-              {localMemberState.mediaSourceMemberNickname ?? "未选择"}
+              {localMemberState.sourceMemberNickname ?? "未选择"}
             </strong>
           </div>
           <div>

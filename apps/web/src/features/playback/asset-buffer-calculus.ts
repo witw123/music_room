@@ -1,4 +1,4 @@
-import type { ProgressiveTrackManifest } from "./progressive-playback";
+import type { AssetTransferManifest } from "./asset-transfer-scheduler";
 
 export function getContiguousChunkCount(availableChunks: number[]) {
   if (availableChunks.length === 0) {
@@ -19,7 +19,7 @@ export function getContiguousChunkCount(availableChunks: number[]) {
 
 export function chunkIndexToPositionMs(
   chunkIndex: number,
-  manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">
+  manifest: Pick<AssetTransferManifest, "durationMs" | "totalChunks">
 ) {
   if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
     return 0;
@@ -29,7 +29,7 @@ export function chunkIndexToPositionMs(
 }
 
 export function getChunkIndexForPositionMs(
-  manifest: Pick<ProgressiveTrackManifest, "durationMs" | "totalChunks">,
+  manifest: Pick<AssetTransferManifest, "durationMs" | "totalChunks">,
   positionMs: number
 ) {
   if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
@@ -43,7 +43,7 @@ export function getChunkIndexForPositionMs(
 }
 
 export function getContiguousBufferedMs(
-  manifest: ProgressiveTrackManifest | null,
+  manifest: AssetTransferManifest | null,
   availableChunks: number[]
 ) {
   if (!manifest || manifest.totalChunks <= 0 || manifest.durationMs <= 0) {
@@ -90,7 +90,7 @@ function getContiguousChunkCountFrom(input: {
 }
 
 export function getAheadBufferedMs(input: {
-  manifest: ProgressiveTrackManifest | null;
+  manifest: AssetTransferManifest | null;
   availableChunks: number[];
   playbackPositionMs: number;
 }) {
@@ -121,7 +121,7 @@ export function getAheadBufferedMs(input: {
 }
 
 export function getDecodableAheadBufferedMs(input: {
-  manifest: ProgressiveTrackManifest | null;
+  manifest: AssetTransferManifest | null;
   availableChunks: number[];
   playbackPositionMs: number;
 }) {

@@ -9,8 +9,7 @@ import {
   resolvePreferredIceTransportPolicy,
   resolvePeerSendBudget,
   resolvePeerTransferWindow,
-  resolveTrackPieceManifest,
-  pieceMemoryBuffer
+  resolveTrackPieceManifest
 } from "@/features/p2p";
 import type { CacheStreamProvider } from "@/features/p2p/cache-stream-scheduler";
 import {
@@ -310,7 +309,7 @@ export function createRoomDataMeshRuntime(input: {
       latestTransportSample?.mediaReceiveBitrateKbps
     ].find((value): value is number => typeof value === "number" && value > 0) ?? null;
     const mediaBitrateKbps = observedMediaBitrateKbps ?? configuredMediaBitrateKbps;
-    const mediaTrackActive = playback?.status === "playing" && (
+    const mediaTrackActive = !!playback?.currentTrackId && (
       sourcePeerId === input.peerId ||
       sourcePeerId === remotePeerId ||
       (latestTransportSample?.mediaReceiveBitrateKbps ?? 0) > 0
@@ -357,18 +356,11 @@ export function createRoomDataMeshRuntime(input: {
       onPieceReceived: ({
         peerId: sourcePeerId,
         trackId,
-        chunkIndex,
         totalChunks,
         chunkSize,
         mimeType,
-        payloadBytes,
-        payload
+        payloadBytes
       }) => {
-        // Store validated piece in the in-memory buffer so the PCM engine can
-        // read it instantly without an IndexedDB round-trip. This eliminates
-        // the primary latency bottleneck for first-time playback.
-        pieceMemoryBuffer.put(trackId, chunkIndex, payload);
-
         input.recordPieceTransferRef.current({
           peerId: sourcePeerId,
           direction: "download",
@@ -394,8 +386,8 @@ export function createRoomDataMeshRuntime(input: {
             });
           })();
         }
-        // PCM may evict this piece from its memory window at any time, so every
-        // validated playback piece must also survive in the durable cache.
+        // The in-memory piece may be evicted at any time, so every validated
+        // asset piece must also survive in the durable cache.
         return true;
       },
       onAssetUnitPersisted: ({ peerId: sourcePeerId, descriptor, payloadBytes }) => {

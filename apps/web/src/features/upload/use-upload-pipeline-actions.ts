@@ -10,7 +10,7 @@ import {
   assembleTrackFileFromPieces
 } from "@/features/p2p";
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
-import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
+import { hasActivePlayback } from "@/features/playback/asset-transfer-scheduler";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteCachedPiecesForTrack,
@@ -161,7 +161,7 @@ export function useUploadPipelineActions({
     async (trackId: string, mimeType: string | null, totalChunks: number) => {
       const playback = roomSnapshot?.room.playback ?? null;
       const retainCachedPiecesAfterAssembly =
-        playback?.currentTrackId === trackId && hasActivePlaybackIntent(playback);
+        playback?.currentTrackId === trackId && hasActivePlayback(playback);
       await assembleManualCacheTrackFromPieces({
         manualTrackCachingEnabled: enableManualTrackCaching,
         assemblingTrackIds: manualCacheAssemblingTrackIdsRef.current,

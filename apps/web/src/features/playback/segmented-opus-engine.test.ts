@@ -14,12 +14,15 @@ class FakeSource {
   starts: Array<{ when: number; offset: number }> = [];
   connectedTo: unknown = null;
   stopped = false;
+  disconnectCount = 0;
 
   connect(target: unknown) {
     this.connectedTo = target;
     return target;
   }
-  disconnect() {}
+  disconnect() {
+    this.disconnectCount += 1;
+  }
   start(when = 0, offset = 0) {
     this.starts.push({ when, offset });
   }
@@ -30,11 +33,16 @@ class FakeSource {
 
 function createContext() {
   const sources: FakeSource[] = [];
-  const gain = {
-    gain: { value: 1 },
-    connect: vi.fn(),
-    disconnect: vi.fn()
-  };
+  const gains: Array<{ gain: { value: number }; connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
+  const createGain = vi.fn(() => {
+    const next = {
+      gain: { value: 1 },
+      connect: vi.fn(),
+      disconnect: vi.fn()
+    };
+    gains.push(next);
+    return next;
+  });
   const buffer = {
     duration: 2,
     sampleRate: 48_000,
@@ -46,7 +54,7 @@ function createContext() {
     state: "running",
     currentTime: 10,
     destination: {},
-    createGain: vi.fn(() => gain),
+    createGain,
     createBufferSource: vi.fn(() => {
       const source = new FakeSource();
       sources.push(source);
@@ -62,7 +70,7 @@ function createContext() {
       copyToChannel: vi.fn()
     }))
   } as unknown as AudioContext;
-  return { context, sources, gain };
+  return { context, sources, gains };
 }
 
 const manifest = {
@@ -122,7 +130,7 @@ afterEach(() => {
 });
 
 describe("SegmentedOpusEngine", () => {
-  it("starts with the current segment instead of waiting for a multi-segment window", async () => {
+  it("requires the configured startup window before scheduling", async () => {
     const { context, sources } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
     const engine = new SegmentedOpusEngine();
@@ -132,11 +140,11 @@ describe("SegmentedOpusEngine", () => {
       playback: playback(Date.now()),
       serverNowMs: Date.now(),
       volume: 0.7,
-      getUnit: async (unitIndex) => unitIndex === 0 ? unit(unitIndex) : null
+      getUnit: async (unitIndex) => unitIndex < 2 ? unit(unitIndex) : null
     });
 
     expect(result.state).toBe("buffering");
-    expect(sources).toHaveLength(1);
+    expect(sources).toHaveLength(2);
     engine.destroy();
   });
 
@@ -182,7 +190,7 @@ describe("SegmentedOpusEngine", () => {
   });
 
   it("parallel-decodes ahead and schedules one contiguous master-gain timeline", async () => {
-    const { context, sources, gain } = createContext();
+    const { context, sources, gains } = createContext();
     vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
     const engine = new SegmentedOpusEngine();
     const serverNowMs = Date.now();
@@ -197,10 +205,10 @@ describe("SegmentedOpusEngine", () => {
 
     expect(result).toEqual({ state: "live", bufferedUnits: 5 });
     expect(context.decodeAudioData).toHaveBeenCalledTimes(5);
-    expect(context.createGain).toHaveBeenCalledTimes(1);
-    expect(gain.gain.value).toBe(0.65);
+    expect(context.createGain).toHaveBeenCalledTimes(8);
+    expect(gains[2]?.gain.value).toBe(0.65);
     expect(sources).toHaveLength(5);
-    expect(sources.every((source) => source.connectedTo === gain)).toBe(true);
+    expect(sources.every((source) => source.connectedTo !== gains[2])).toBe(true);
     expect(sources.map((source) => source.starts[0]?.when)).toEqual([11, 13, 15, 17, 19]);
 
     await engine.sync({
@@ -211,7 +219,7 @@ describe("SegmentedOpusEngine", () => {
       getUnit: async (unitIndex) => unit(unitIndex)
     });
     expect(context.createBufferSource).toHaveBeenCalledTimes(5);
-    expect(gain.gain.value).toBe(0.4);
+    expect(gains[2]?.gain.value).toBe(0.4);
     sources.forEach((source) => source.onended?.());
     const ended = await engine.sync({
       manifest,
@@ -280,8 +288,9 @@ describe("SegmentedOpusEngine", () => {
     });
 
     expect(previousSources.every((source) => source.stopped)).toBe(true);
+    expect(previousSources.every((source) => source.disconnectCount === 0)).toBe(true);
     expect(sources).toHaveLength(8);
-    expect(sources[5]?.starts[0]).toEqual({ when: 10.04, offset: 0 });
+    expect(sources[5]?.starts[0]).toEqual({ when: 10.08, offset: 0 });
     engine.destroy();
   });
 });

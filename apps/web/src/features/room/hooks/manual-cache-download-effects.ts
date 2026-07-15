@@ -17,7 +17,7 @@ import {
   shouldRecordManualCacheBootstrapAttempt,
   shouldRestartManualCacheProviderPeer,
   shouldRetryManualCacheProviderBootstrap,
-  type ActivePlaybackCacheWindow,
+  type ActiveAssetTransferWindow,
   type ManualCacheTrackPlan
 } from "./manual-cache-download-queue";
 import { mergePeerIds } from "./manual-cache-download-progress";
@@ -36,7 +36,7 @@ const directRequestIntervalMs = 200;
 type ManualCacheDownloadEffectsInput = {
   activePlaybackPendingKey: string | null;
   activePlaybackPendingKeyRef: MutableRefObject<string | null>;
-  activePlaybackWindowRef: MutableRefObject<ActivePlaybackCacheWindow | null>;
+  activePlaybackWindowRef: MutableRefObject<ActiveAssetTransferWindow | null>;
   connectedPeers: string[];
   dataMesh: DataMeshBridge | null;
   directPendingRef: MutableRefObject<Map<string, Map<number, number>>>;

@@ -1,29 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { progressivePlaybackStatusSchema } from "./models";
+import { segmentedPlaybackStatusSchema } from "./models";
 
-describe("progressive playback diagnostics", () => {
-  it("accepts signed drift and server clock calibration metrics", () => {
-    const result = progressivePlaybackStatusSchema.safeParse({
-      activeSource: "progressive-local",
-      engineType: "pcm",
-      contiguousBufferedMs: 0,
-      aheadBufferedMs: 0,
-      schedulerPolicy: null,
-      startupReady: false,
-      fallbackReason: null,
-      averageDriftMs: -42,
-      maxDriftMs: 75,
-      serverClockOffsetMs: -1_250,
-      serverClockRoundTripMs: 38
+describe("segmented playback diagnostics", () => {
+  it("accepts stable media session metrics", () => {
+    const result = segmentedPlaybackStatusSchema.safeParse({
+      playbackAssetId: "asset_1",
+      mediaSessionKey: "track_1|asset_1|1|2|start|peer_a|none",
+      sourcePeerId: "peer_a",
+      isSourceOwner: true,
+      listenerPlaybackState: "live",
+      sourceStartState: "live",
+      audioContextState: "running",
+      outputTrackId: "track_audio",
+      remoteTrackId: null,
+      bufferedAheadMs: 12_000,
+      scheduledAheadMs: 20_000,
+      underrunCount: 0,
+      lastUnderrunAt: null,
+      decodedPeak: 0.7,
+      decodedRms: 0.1,
+      lastDecodeError: null,
+      mediaRecoveryState: null
     });
 
     expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data).toMatchObject({
-        averageDriftMs: -42,
-        serverClockOffsetMs: -1_250,
-        serverClockRoundTripMs: 38
-      });
-    }
   });
 });

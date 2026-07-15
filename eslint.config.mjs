@@ -64,13 +64,6 @@ export default tseslint.config(
     }
   },
   {
-    files: ["apps/web/src/features/playback/use-progressive-runtime.ts"],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "error",
-      "react-hooks/exhaustive-deps": "error"
-    }
-  },
-  {
     files: ["apps/web/src/features/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

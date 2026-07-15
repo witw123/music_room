@@ -29,9 +29,9 @@ import {
 import {
   extractFlacPackets,
   parseFlacStreamInfo,
-  type ProgressiveFlacFramePacket,
-  type ProgressiveFlacStreamInfo
-} from "@/features/playback/progressive-flac";
+  type FlacFramePacket,
+  type FlacStreamInfo
+} from "@/features/audio-codecs/flac-parser";
 import {
   parseMp3FrameHeader,
   skipMp3Id3v2
@@ -498,7 +498,7 @@ type StreamingAudioDecoderConstructor = {
   isConfigSupported?: (config: unknown) => Promise<{ supported?: boolean }>;
 };
 
-type CompressedFrame = ProgressiveFlacFramePacket;
+type CompressedFrame = FlacFramePacket;
 
 class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
   private readonly targetSegmentSamples = Math.round((segmentDurationMs / 1000) * opusSampleRate);
@@ -824,7 +824,7 @@ async function isAudioDecoderConfigSupported(
   }
 }
 
-async function readFlacStreamInfo(file: File): Promise<ProgressiveFlacStreamInfo | null> {
+async function readFlacStreamInfo(file: File): Promise<FlacStreamInfo | null> {
   let probeBytes = 1024 * 1024;
   const maxProbeBytes = Math.min(file.size, 32 * 1024 * 1024);
   while (probeBytes <= maxProbeBytes) {
@@ -837,7 +837,7 @@ async function readFlacStreamInfo(file: File): Promise<ProgressiveFlacStreamInfo
   return null;
 }
 
-async function resolveFlacDurationMs(file: File, streamInfo: ProgressiveFlacStreamInfo) {
+async function resolveFlacDurationMs(file: File, streamInfo: FlacStreamInfo) {
   if (streamInfo.totalSamples && streamInfo.totalSamples > 0) {
     return Math.max(1, Math.round((streamInfo.totalSamples / streamInfo.sampleRate) * 1000));
   }
@@ -867,7 +867,7 @@ class FlacFrameReader implements CompressedFrameReader {
   private eof = false;
   private pending: CompressedFrame[] = [];
 
-  constructor(private readonly file: File, private readonly streamInfo: ProgressiveFlacStreamInfo) {
+  constructor(private readonly file: File, private readonly streamInfo: FlacStreamInfo) {
     this.offset = streamInfo.audioOffset;
   }
 

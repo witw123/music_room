@@ -14,7 +14,7 @@ export type PeerMediaState = {
   receiverTrackState: PeerMediaTrackState;
   remoteStream: MediaStream | null;
   remoteTrackId: string | null;
-  mediaSourcePeerId: string | null;
+  sourcePeerId: string | null;
 };
 
 export type PeerEntry = {

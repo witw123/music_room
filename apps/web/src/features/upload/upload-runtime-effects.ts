@@ -14,7 +14,7 @@ import type {
   CachedLibraryTrack,
   UploadedTrack
 } from "@/features/upload/audio-utils";
-import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
+import { hasActivePlayback } from "@/features/playback/asset-transfer-scheduler";
 import {
   applyHydratedManualCacheTasksResult,
   hydrateManualCacheTasksForRoom,
@@ -140,7 +140,7 @@ export function useUploadRuntimeEffects({
     const trackIdsToConsume = resolveRetainedCachePieceTrackIdsToConsume({
       retainedTrackIds: manualCacheRetainedPieceTrackIdsRef.current,
       currentPlaybackTrackId: roomSnapshot?.room.playback.currentTrackId ?? null,
-      playbackHasActiveIntent: hasActivePlaybackIntent(roomSnapshot?.room.playback)
+      playbackHasActiveIntent: hasActivePlayback(roomSnapshot?.room.playback)
     });
     if (trackIdsToConsume.length === 0) {
       return;

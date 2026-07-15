@@ -16,7 +16,7 @@ Music Room focuses on collaborative playback of users' own local audio files. Th
 The current goals are:
 
 - Let users listen together using their own local audio files
-- Build a complete room experience with a shared queue, P2P chunks, and local cache playback
+- Build a complete room experience with a shared queue, P2P asset transfer, and stable RTP Opus playback
 - Keep audio files off the server while still providing stable collaborative playback
 
 ## Current Status
@@ -26,7 +26,7 @@ The core loop is already runnable. The project is in a "usable product, ongoing 
 - `/` is the public website entry, and `/app` is the client workspace
 - Registration/login, room creation/join/recovery, shared queue, and host playback control are connected
 - The room workspace currently focuses on `Queue`, `Library`, `Cache`, and `Members`
-- P2P chunk cache and progressive local playback for MP3/FLAC are integrated
+- P2P asset transfer and the single Segmented Opus/WebRTC playback path are integrated
 - All product functionality is delivered through one responsive web application on desktop and mobile browsers
 
 More details:
@@ -165,14 +165,14 @@ The member page's "connection and cache diagnostics" panel reports:
 - Per-peer `offer / answer / candidate` send/receive events
 - Data-channel ICE state and connection state
 - Per-peer cache availability, piece transfer rate, request RTT, and timeout rate
-- Local progressive/full-cache playback engine state and buffer window
+- Segmented Opus buffer, limiter peak/RMS, underrun, AudioContext, and WebRTC Track state
 - Recent event stream and error summary
 
 Diagnostic rules of thumb:
 
 - `offer / answer` exists, but no candidates or ICE never reaches `connected`: check TURN, network egress, and firewall rules first
 - Data channel is open but no pieces arrive: check cache availability announcements and source peer membership
-- Pieces arrive but playback waits: check local buffer window, PCM/MSE engine state, and browser audio unlock
+- Pieces arrive but playback waits: check the segmented asset window, AudioContext state, RTP Track state, and browser audio unlock
 
 ## Docker Deployment
 

@@ -30,7 +30,6 @@ import {
   type CacheStreamResetReason,
   type CacheStreamSchedulerMetrics
 } from "./cache-stream-scheduler";
-import { pieceMemoryBuffer } from "./piece-memory-buffer";
 import { AssetTransferManager } from "./asset-transfer-manager";
 
 type MeshCallbacks = {
@@ -547,7 +546,6 @@ export class P2PMesh {
   async clearCacheStreamTrack(trackId: string) {
     this.cacheStreamScheduler.clearTrack(trackId);
     this.cacheStreamProducer.clearTrack(trackId);
-    pieceMemoryBuffer.clearTrack(trackId);
     await this.inboundPieces.clearTrack(trackId);
   }
 

@@ -120,7 +120,6 @@ export function RoomAppShell({
             canSeekPlayback={true}
             resetEpoch={pageState.playerResetEpoch}
             onPlaybackPositionChange={playbackActions.handlePlaybackPositionChange}
-            onPlaybackBucketChange={playbackActions.handlePlaybackBucketChange}
             onVolumeChange={pageState.setVolume}
             onPlay={playbackActions.handlePlayTrack}
             onPause={roomActions.pauseTrack}

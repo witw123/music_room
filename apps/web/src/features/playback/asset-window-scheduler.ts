@@ -1,11 +1,11 @@
-export type SlidingWindowManifest = {
+export type AssetTransferWindowManifest = {
   durationMs: number;
   totalChunks: number;
   chunkSize: number;
 };
 
 export function chunkIndexForPlaybackPosition(
-  manifest: Pick<SlidingWindowManifest, "durationMs" | "totalChunks">,
+  manifest: Pick<AssetTransferWindowManifest, "durationMs" | "totalChunks">,
   playbackPositionMs: number
 ) {
   if (manifest.durationMs <= 0 || manifest.totalChunks <= 0) {
@@ -20,7 +20,7 @@ export function chunkIndexForPlaybackPosition(
 }
 
 export function getRequiredDecodablePrefixChunkCount(input: {
-  manifest: Pick<SlidingWindowManifest, "durationMs" | "totalChunks">;
+  manifest: Pick<AssetTransferWindowManifest, "durationMs" | "totalChunks">;
   playbackPositionMs: number;
   lookAheadMs: number;
 }) {
@@ -38,8 +38,8 @@ export function getRequiredDecodablePrefixChunkCount(input: {
   );
 }
 
-export function resolveSlidingWindowChunkOrder(input: {
-  manifest: SlidingWindowManifest;
+export function resolveAssetChunkOrder(input: {
+  manifest: AssetTransferWindowManifest;
   playbackPositionMs: number;
   availableChunks: number[];
   pendingChunks?: number[];

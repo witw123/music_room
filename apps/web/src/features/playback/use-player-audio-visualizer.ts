@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PlaybackSnapshot } from "@music-room/shared";
-import { captureAudioStream } from "@/features/upload/audio-utils";
 import { audioVisualizerStore } from "./audio-visualizer-store";
 
 const analyserFftSize = 256;
@@ -47,13 +46,6 @@ type VisualizerSourceSelection =
       hasSignal: boolean;
     }
   | {
-      kind: "local-element";
-      stream: null;
-      element: HTMLAudioElement;
-      graphKey: string;
-      hasSignal: boolean;
-    }
-  | {
       kind: "none";
       stream: null;
       element: null;
@@ -94,15 +86,6 @@ function getMediaStreamIdentity(stream: MediaStream) {
   return nextIdentity;
 }
 
-function getAudioElementSourceKey(audio: HTMLAudioElement) {
-  const attributeSrc =
-    typeof audio.getAttribute === "function" ? audio.getAttribute("src") : null;
-  const currentSrc = audio.currentSrc || attributeSrc || "no-src";
-  const readyState = Number.isFinite(audio.readyState) ? audio.readyState : "na";
-  const paused = typeof audio.paused === "boolean" ? (audio.paused ? "paused" : "playing") : "na";
-  return `${currentSrc}|${readyState}|${paused}`;
-}
-
 function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
   if (!stream || typeof stream.getAudioTracks !== "function") {
     return false;
@@ -111,16 +94,6 @@ function hasLiveAudioTrack(stream: MediaStream | null | undefined) {
   return stream
     .getAudioTracks()
     .some((track) => track.readyState === "live" && track.enabled !== false);
-}
-
-function hasElementCaptureSource(audio: HTMLAudioElement | null | undefined) {
-  if (!audio) {
-    return false;
-  }
-
-  const attributeSrc =
-    typeof audio.getAttribute === "function" ? audio.getAttribute("src") : null;
-  return Boolean(audio.currentSrc || attributeSrc || audio.srcObject);
 }
 
 function resolveVisualizerGraphKey(input: {
@@ -169,22 +142,6 @@ export function resolveVisualizerSourceSelection(input: {
         sourcePeerId: input.sourcePeerId,
         sourceSessionId: input.sourceSessionId,
         sourceIdentity: getMediaStreamIdentity(localStream)
-      }),
-      hasSignal: true
-    };
-  }
-
-  if (localElement && hasElementCaptureSource(localElement)) {
-    return {
-      kind: "local-element",
-      stream: null,
-      element: localElement,
-      graphKey: resolveVisualizerGraphKey({
-        currentTrackId: input.currentTrackId,
-        mediaEpoch: input.mediaEpoch,
-        sourcePeerId: input.sourcePeerId,
-        sourceSessionId: input.sourceSessionId,
-        sourceIdentity: getAudioElementSourceKey(localElement)
       }),
       hasSignal: true
     };
@@ -494,11 +451,7 @@ export function usePlayerAudioVisualizer(
       graphRef.current = null;
       timeDomainBufferRef.current = null;
 
-      const sourceStream =
-        sourceSelection.stream ??
-        captureAudioStream(sourceSelection.element, {
-          preferAudioContext: sourceSelection.kind === "local-element"
-        });
+      const sourceStream = sourceSelection.stream;
       if (!sourceStream) {
         audioVisualizerStore.lastError = "visualizer-stream-unavailable";
         return null;

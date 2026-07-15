@@ -28,6 +28,12 @@ export type SegmentedPlaybackSnapshot = {
   lastError: string | null;
   sourceHealth?: "source-ready" | "source-underrun" | "source-silent" | "source-ended";
   sourceEnergy?: number;
+  decodedPeak?: number;
+  decodedRms?: number;
+  maxSampleDelta?: number;
+  underrunCount?: number;
+  lastUnderrunAt?: string | null;
+  lastDecodeError?: string | null;
 };
 
 const idleSnapshot: SegmentedPlaybackSnapshot = {
@@ -47,7 +53,7 @@ export function useSegmentedOpusPlayback(input: {
   volume: number;
   audioUnlocked: boolean;
 }) {
-  const { roomSnapshot, currentTrack, peerId, isCurrentSource, audioUnlocked, volume } = input;
+  const { roomSnapshot, peerId, isCurrentSource, volume } = input;
   const engineRef = useRef<SegmentedOpusEngine | null>(null);
   const runtimeRef = useRef(input);
   runtimeRef.current = input;
@@ -57,61 +63,9 @@ export function useSegmentedOpusPlayback(input: {
   const playbackIdentityRef = useRef<string | null>(null);
   const playbackGenerationRef = useRef(0);
   const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
-  const playbackAssetId = currentTrack?.playbackAsset?.assetId ?? null;
   const roomId = roomSnapshot?.room.id ?? null;
-  const trackId = currentTrack?.id ?? null;
-  const playbackRuntimeKey = roomSnapshot?.room.playback
-    ? [
-        roomSnapshot.room.playback.currentTrackId,
-        roomSnapshot.room.playback.mediaEpoch,
-        roomSnapshot.room.playback.startAt,
-        roomSnapshot.room.playback.status,
-        roomSnapshot.room.playback.positionMs,
-        roomSnapshot.room.playback.sourcePeerId
-      ].join(":")
-    : null;
 
   useEffect(() => {
-    const initialRuntime = runtimeRef.current;
-    const playbackAsset = initialRuntime.currentTrack?.playbackAsset;
-    const playback = initialRuntime.roomSnapshot?.room.playback;
-    const playbackIdentity = playbackAsset && playback
-      ? [
-          playbackAsset.assetId,
-          playback.currentTrackId,
-          playback.mediaEpoch,
-          playback.startAt ?? "none",
-          playback.playbackRevision
-        ].join(":")
-      : null;
-    const generation = ++playbackGenerationRef.current;
-    if (
-      playbackIdentityRef.current !== null &&
-      playbackIdentity !== playbackIdentityRef.current
-    ) {
-      engineRef.current?.destroy();
-      engineRef.current = null;
-      activePlaybackAssetIdRef.current = null;
-      storedManifestAssetIdRef.current = null;
-    }
-    playbackIdentityRef.current = playbackIdentity;
-    if (
-      !playbackAsset ||
-      !playback ||
-      playback.currentTrackId !== initialRuntime.currentTrack?.id ||
-      !initialRuntime.isCurrentSource
-    ) {
-      engineRef.current?.destroy();
-      engineRef.current = null;
-      activePlaybackAssetIdRef.current = null;
-      storedManifestAssetIdRef.current = null;
-      setSnapshot(idleSnapshot);
-      return;
-    }
-    if (activePlaybackAssetIdRef.current !== playbackAsset.assetId) {
-      activePlaybackAssetIdRef.current = playbackAsset.assetId;
-      storedManifestAssetIdRef.current = null;
-    }
     let cancelled = false;
 
     const tick = async () => {
@@ -119,18 +73,37 @@ export function useSegmentedOpusPlayback(input: {
         return;
       }
       tickingRef.current = true;
+      let generation = playbackGenerationRef.current;
       try {
         const runtime = runtimeRef.current;
         const currentPlaybackAsset = runtime.currentTrack?.playbackAsset;
         const currentPlayback = runtime.roomSnapshot?.room.playback;
+        const playbackIdentity = currentPlaybackAsset && currentPlayback
+          ? [
+              currentPlaybackAsset.assetId,
+              currentPlayback.currentTrackId,
+              currentPlayback.mediaEpoch,
+              currentPlayback.startAt ?? "none",
+              currentPlayback.playbackRevision
+            ].join(":")
+          : null;
+        if (playbackIdentityRef.current !== playbackIdentity) {
+          engineRef.current?.destroy();
+          engineRef.current = null;
+          activePlaybackAssetIdRef.current = null;
+          storedManifestAssetIdRef.current = null;
+          playbackIdentityRef.current = playbackIdentity;
+          playbackGenerationRef.current += 1;
+        }
+        generation = playbackGenerationRef.current;
         if (
           cancelled ||
           !currentPlaybackAsset ||
-          currentPlaybackAsset.assetId !== playbackAsset.assetId ||
           !currentPlayback ||
           currentPlayback.currentTrackId !== runtime.currentTrack?.id
           || !runtime.isCurrentSource
         ) {
+          setSnapshot(idleSnapshot);
           return;
         }
         if (storedManifestAssetIdRef.current !== currentPlaybackAsset.assetId) {
@@ -174,7 +147,13 @@ export function useSegmentedOpusPlayback(input: {
           audioContextState,
           lastError: null,
           sourceHealth: sourceHealth?.state,
-          sourceEnergy: sourceHealth?.energy
+          sourceEnergy: sourceHealth?.energy,
+          decodedPeak: sourceHealth?.decodedPeak,
+          decodedRms: sourceHealth?.decodedRms,
+          maxSampleDelta: sourceHealth?.maxSampleDelta,
+          underrunCount: sourceHealth?.underrunCount,
+          lastUnderrunAt: sourceHealth?.lastUnderrunAt,
+          lastDecodeError: sourceHealth?.lastDecodeError
         });
       } catch (error) {
         const failedEngine = engineRef.current;
@@ -202,13 +181,15 @@ export function useSegmentedOpusPlayback(input: {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      engineRef.current?.destroy();
+      engineRef.current = null;
+      playbackIdentityRef.current = null;
+      activePlaybackAssetIdRef.current = null;
+      storedManifestAssetIdRef.current = null;
+      setSnapshot(idleSnapshot);
     };
   }, [
-    audioUnlocked,
-    playbackAssetId,
     roomId,
-    trackId,
-    playbackRuntimeKey,
     peerId,
     isCurrentSource
   ]);

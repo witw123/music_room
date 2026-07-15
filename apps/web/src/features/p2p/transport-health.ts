@@ -12,11 +12,11 @@ export function resolveTransportHealth(
     | "dataConnectionState"
     | "dataChannelState"
     | "recoveryActionLevel"
-    | "audibleSource"
+    | "playbackTransport"
   >
 ) {
   const dataReady = isDataChannelReady(snapshot);
-  const audible = snapshot.audibleSource !== null;
+  const audible = snapshot.playbackTransport !== null;
   const failed =
     !dataReady &&
     (snapshot.dataConnectionState === "failed" ||

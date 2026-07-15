@@ -1,4 +1,4 @@
-export type ProgressiveFlacStreamInfo = {
+export type FlacStreamInfo = {
   description: Uint8Array;
   audioOffset: number;
   minBlockSize: number;
@@ -9,16 +9,16 @@ export type ProgressiveFlacStreamInfo = {
   totalSamples: number | null;
 };
 
-export type ProgressiveFlacFramePacket = {
+export type FlacFramePacket = {
   data: Uint8Array;
   sampleCount: number;
   timestampUs: number;
   durationUs: number;
 };
 
-export type ProgressiveFlacPacketExtraction = {
-  streamInfo: ProgressiveFlacStreamInfo | null;
-  packets: ProgressiveFlacFramePacket[];
+export type FlacPacketExtraction = {
+  streamInfo: FlacStreamInfo | null;
+  packets: FlacFramePacket[];
   nextOffset: number;
   nextSampleIndex: number;
 };
@@ -32,7 +32,7 @@ function createFlacDecoderDescription(streamInfoBlock: Uint8Array) {
   return description;
 }
 
-export function parseFlacStreamInfo(bytes: Uint8Array): ProgressiveFlacStreamInfo | null {
+export function parseFlacStreamInfo(bytes: Uint8Array): FlacStreamInfo | null {
   if (bytes.byteLength < 8) {
     return null;
   }
@@ -118,12 +118,12 @@ export function extractFlacPackets(input: {
   bytes: Uint8Array;
   startOffset: number;
   sampleRate: number;
-  streamInfo?: ProgressiveFlacStreamInfo | null;
+  streamInfo?: FlacStreamInfo | null;
   nextSampleIndex: number;
   finalChunk: boolean;
 }) {
   const { bytes, sampleRate, finalChunk } = input;
-  const packets: ProgressiveFlacFramePacket[] = [];
+  const packets: FlacFramePacket[] = [];
   let cursor = Math.max(0, input.startOffset);
   let nextSampleIndex = Math.max(0, input.nextSampleIndex);
 
@@ -219,7 +219,7 @@ export function extractFlacPacketsFromBitstream(input: {
       packets: [],
       nextOffset: input.startOffset,
       nextSampleIndex: input.nextSampleIndex
-    } satisfies ProgressiveFlacPacketExtraction;
+    } satisfies FlacPacketExtraction;
   }
 
   const packetExtraction = extractFlacPackets({
@@ -236,12 +236,12 @@ export function extractFlacPacketsFromBitstream(input: {
     packets: packetExtraction.packets,
     nextOffset: packetExtraction.nextOffset,
     nextSampleIndex: packetExtraction.nextSampleIndex
-  } satisfies ProgressiveFlacPacketExtraction;
+  } satisfies FlacPacketExtraction;
 }
 
 export function extractFlacPacketsFromWindow(input: {
   bytes: Uint8Array;
-  streamInfo: ProgressiveFlacStreamInfo;
+  streamInfo: FlacStreamInfo;
   absoluteStartOffset: number;
   finalChunk: boolean;
 }) {
@@ -259,7 +259,7 @@ export function extractFlacPacketsFromWindow(input: {
     packets: packetExtraction.packets,
     nextOffset: input.absoluteStartOffset + packetExtraction.nextOffset,
     nextSampleIndex: packetExtraction.nextSampleIndex
-  } satisfies ProgressiveFlacPacketExtraction;
+  } satisfies FlacPacketExtraction;
 }
 
 type ParsedFlacFrameHeader = {
@@ -387,7 +387,7 @@ function parseUtf8LikeNumber(bytes: Uint8Array, offset: number) {
 }
 
 function resolveFrameSampleIndex(
-  streamInfo: ProgressiveFlacStreamInfo | null | undefined,
+  streamInfo: FlacStreamInfo | null | undefined,
   header: ParsedFlacFrameHeader,
   fallbackSampleIndex: number
 ) {

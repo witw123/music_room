@@ -1,32 +1,19 @@
-import type { ProgressiveSchedulerPolicy } from "@/features/playback/progressive-playback";
-import { getProgressiveEngineType, type ProgressiveTrackManifest } from "@/features/playback/progressive-playback";
+import type { AssetTransferPolicy, AssetTransferManifest } from "@/features/playback/asset-transfer-scheduler";
 
 /**
- * Derives the effective scheduler policy for requesting chunks of the current
- * playback track based on engine capability, buffer state, and track completion.
- *
- * This is the chunk-scheduler-side counterpart to resolveSchedulerPolicy() —
- * it translates the playback-layer policy into a concrete chunk request policy
- * that respects PCM/MSE engine differences.
+ * Derives the effective asset transfer policy for the current room track.
  */
 export function resolveCurrentTrackWantedPolicy(input: {
-  policy: ProgressiveSchedulerPolicy;
+  policy: AssetTransferPolicy;
   shouldEnterOutrunRecovery: boolean;
-  manifest: ProgressiveTrackManifest | null;
+  manifest: AssetTransferManifest | null;
   isTrackComplete: boolean;
   playbackStatus: string | null | undefined;
   aheadBufferedMs: number;
   comfortableBufferMs: number;
-}): ProgressiveSchedulerPolicy {
+}): AssetTransferPolicy {
   if (input.shouldEnterOutrunRecovery) {
     return "outrun-recovery";
-  }
-
-  // Engine type "none" means no progressive engine can decode this format
-  // (e.g. unsupported codec in this browser). Fall back to pause-fill to
-  // download the whole file.
-  if (input.manifest && getProgressiveEngineType(input.manifest) === "none") {
-    return input.policy === "startup" ? "startup" : "pause-fill";
   }
 
   // While playing and comfortably buffered, switch to pause-fill to pull

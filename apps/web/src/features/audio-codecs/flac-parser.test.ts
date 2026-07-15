@@ -3,9 +3,9 @@ import {
   extractFlacPacketsFromWindow,
   extractFlacPacketsFromBitstream,
   parseFlacStreamInfo
-} from "./progressive-flac";
+} from "./flac-parser";
 
-describe("progressive flac helpers", () => {
+describe("FLAC parser helpers", () => {
   it("parses streaminfo and splits contiguous FLAC frames", () => {
     const streamInfoPayload = new Uint8Array(34);
     streamInfoPayload[0] = 0x10;

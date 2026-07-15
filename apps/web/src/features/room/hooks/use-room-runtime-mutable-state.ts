@@ -11,7 +11,7 @@ import type { P2PMesh } from "@/features/p2p";
 import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics";
 import type { RoomSocket } from "@/lib/ws-client";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
-import type { FullLocalPlaybackTrackRecord, RoomRecoveryState } from "./room-runtime-types";
+import type { RoomRecoveryState } from "./room-runtime-types";
 
 export function useRoomRuntimeMutableState(input: {
   initialRoomId: string | null;
@@ -25,7 +25,6 @@ export function useRoomRuntimeMutableState(input: {
   roomRecoveryState: RoomRecoveryState;
   manualCacheTrackIds: string[];
   uploadedTracks: Record<string, UploadedTrack>;
-  fullLocalPlaybackTracks: FullLocalPlaybackTrackRecord;
   announceRoomTrackAvailability: (
     trackId: string,
     options?: { force?: boolean }
@@ -64,9 +63,6 @@ export function useRoomRuntimeMutableState(input: {
   const socketDisconnectGraceTimeoutRef = useRef<number | null>(null);
   const manualCacheTrackIdsRef = useRef(input.manualCacheTrackIds);
   const uploadedTracksRef = useRef(input.uploadedTracks);
-  const fullLocalPlaybackTracksRef = useRef<FullLocalPlaybackTrackRecord>(
-    input.fullLocalPlaybackTracks
-  );
   const announceRoomTrackAvailabilityRef = useRef(input.announceRoomTrackAvailability);
   const handleManualCachePieceReceivedRef = useRef(input.handleManualCachePieceReceived);
   const deleteUploadedTrackArtifactsRef = useRef(input.deleteUploadedTrackArtifacts);
@@ -113,10 +109,6 @@ export function useRoomRuntimeMutableState(input: {
   useEffect(() => {
     uploadedTracksRef.current = input.uploadedTracks;
   }, [input.uploadedTracks]);
-
-  useEffect(() => {
-    fullLocalPlaybackTracksRef.current = input.fullLocalPlaybackTracks;
-  }, [input.fullLocalPlaybackTracks]);
 
   useEffect(() => {
     announceRoomTrackAvailabilityRef.current = input.announceRoomTrackAvailability;
@@ -182,7 +174,6 @@ export function useRoomRuntimeMutableState(input: {
     socketDisconnectGraceTimeoutRef,
     manualCacheTrackIdsRef,
     uploadedTracksRef,
-    fullLocalPlaybackTracksRef,
     announceRoomTrackAvailabilityRef,
     handleManualCachePieceReceivedRef,
     deleteUploadedTrackArtifactsRef,

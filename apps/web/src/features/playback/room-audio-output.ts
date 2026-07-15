@@ -3,6 +3,7 @@
 import {
   roomAudioActivationManager,
   type PrimeRoomAudioOutputsResult,
+  type RoomAudioElementPlayOptions,
   type RoomAudioElementPlayResult
 } from "./room-audio-activation-manager";
 
@@ -17,21 +18,47 @@ type ApplyRoomAudioVolumeInput = {
 
 export class RoomAudioOutput {
   private broadcastDestination: MediaStreamAudioDestinationNode | null = null;
+  private readonly volumeAnimationFrames = new WeakMap<HTMLAudioElement, number>();
 
   async primeOutputs(input: PrimeRoomAudioOutputInput): Promise<PrimeRoomAudioOutputsResult> {
     return roomAudioActivationManager.activateOutputs(input);
   }
 
   async playElement(
-    element: HTMLAudioElement | null | undefined
+    element: HTMLAudioElement | null | undefined,
+    options?: RoomAudioElementPlayOptions
   ): Promise<RoomAudioElementPlayResult> {
-    return roomAudioActivationManager.playElement(element);
+    return roomAudioActivationManager.playElement(element, options);
   }
 
   applyVolume(input: ApplyRoomAudioVolumeInput) {
     const safeVolume = normalizeOutputVolume(input.volume);
     if (input.localAudio) {
-      input.localAudio.volume = safeVolume;
+      const element = input.localAudio;
+      const previousFrame = this.volumeAnimationFrames.get(element);
+      if (previousFrame !== undefined && typeof window !== "undefined") {
+        window.cancelAnimationFrame(previousFrame);
+      }
+      if (
+        typeof window === "undefined" ||
+        typeof window.requestAnimationFrame !== "function"
+      ) {
+        element.volume = safeVolume;
+        return;
+      }
+      const startVolume = element.volume;
+      const startedAt = performance.now();
+      const durationMs = 20;
+      const animate = (now: number) => {
+        const progress = Math.min(1, Math.max(0, (now - startedAt) / durationMs));
+        element.volume = startVolume + (safeVolume - startVolume) * progress;
+        if (progress < 1) {
+          this.volumeAnimationFrames.set(element, window.requestAnimationFrame(animate));
+        } else {
+          this.volumeAnimationFrames.delete(element);
+        }
+      };
+      this.volumeAnimationFrames.set(element, window.requestAnimationFrame(animate));
     }
   }
 
@@ -57,7 +84,7 @@ export class RoomAudioOutput {
     if (typeof context.createMediaStreamDestination !== "function") {
       return null;
     }
-    this.broadcastDestination?.disconnect();
+    this.disposeBroadcastDestination();
     this.broadcastDestination = context.createMediaStreamDestination();
     return this.broadcastDestination;
   }
@@ -66,7 +93,15 @@ export class RoomAudioOutput {
     return this.broadcastDestination?.stream ?? null;
   }
 
-  clearBroadcastDestination() {
+  getBroadcastTrackId() {
+    return this.broadcastDestination?.stream.getAudioTracks()[0]?.id ?? null;
+  }
+
+  releaseRoomAudioSession() {
+    this.disposeBroadcastDestination();
+  }
+
+  private disposeBroadcastDestination() {
     this.broadcastDestination?.disconnect();
     for (const track of this.broadcastDestination?.stream.getTracks() ?? []) {
       track.stop();

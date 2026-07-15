@@ -34,7 +34,7 @@ describe("MembersPanel WebRTC media status", () => {
 
     expect(source).toContain("playbackBitrateKbps");
     expect(source).not.toContain("PCM");
-    expect(source).not.toContain("full-local");
+    expect(source).not.toContain("legacy playback source");
     expect(source).not.toContain("完整本地缓存");
     expect(source).not.toContain("缓存播放链路");
     expect(source).not.toContain("预估满曲");

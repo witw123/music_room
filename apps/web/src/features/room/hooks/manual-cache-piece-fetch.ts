@@ -13,13 +13,13 @@ import {
 import type { CacheStreamRequestOptions } from "@/features/p2p/cache-stream-scheduler";
 import {
   getStartupWindowMs,
-} from "@/features/playback/progressive-playback";
-import { getRequiredDecodablePrefixChunkCount } from "@/features/playback/sliding-window/playback-window-scheduler";
+} from "@/features/playback/asset-transfer-scheduler";
+import { getRequiredDecodablePrefixChunkCount } from "@/features/playback/asset-window-scheduler";
 import {
   resolveManualCacheActivePriorityChunks,
   resolveManualCacheTrackPlan,
   resolveManualCacheTrackProviderPeerId,
-  type ActivePlaybackCacheWindow,
+  type ActiveAssetTransferWindow,
   type ManualCachePeerSummary,
   type ManualCacheRequestGroup,
   type ManualCacheRequestGroupPriority,
@@ -36,7 +36,7 @@ const maxPendingPerTrack = 128;
 const maxPendingPerPeer = 32;
 const maxRedundantActivePlaybackChunks = 2;
 // Keep enough active in-flight work to reach multi-MB/s links without letting
-// cache writes starve the PCM reader/decoder during cache completion.
+// cache writes must not starve active asset transfer during cache completion.
 const activePlaybackMaxPendingPerTrack = 256;
 const activePlaybackMaxPendingPerPeer = 96;
 
@@ -169,7 +169,7 @@ function resolveManualCacheDirectRequestBudget(input: {
   trackId: string;
   track?: TrackMeta | null;
   manifest?: ResolvedTrackPieceManifest | null;
-  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow?: ActiveAssetTransferWindow | null;
   peerWindow?: ManualCachePeerRequestWindow | null;
 }): ManualCacheDirectRequestBudget {
   if (input.activePlaybackWindow?.trackId === input.trackId) {
@@ -282,7 +282,7 @@ function isProviderEligibleForRequest(input: {
 function resolveCurrentPlaybackChunkIndex(input: {
   track: TrackMeta;
   manifest: ResolvedTrackPieceManifest;
-  activePlaybackWindow: ActivePlaybackCacheWindow;
+  activePlaybackWindow: ActiveAssetTransferWindow;
 }) {
   if (
     !Number.isFinite(input.track.durationMs) ||
@@ -306,7 +306,7 @@ function resolveRedundantActivePlaybackChunks(input: {
   plan: ManualCacheTrackPlan;
   track: TrackMeta;
   manifest: ResolvedTrackPieceManifest;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
 }) {
   if (
     input.activePlaybackWindow?.trackId !== input.track.id ||
@@ -340,7 +340,7 @@ function resolveActiveCacheAheadMs(input: {
   track: TrackMeta;
   manifest: ResolvedTrackPieceManifest;
   localPieceIndexes: readonly number[];
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
 }) {
   if (
     input.activePlaybackWindow?.trackId !== input.track.id ||
@@ -383,7 +383,7 @@ function buildManualCachePlanRuntimeMetrics(input: {
   manifest: ResolvedTrackPieceManifest;
   localPieceIndexes: readonly number[];
   requestGroups: readonly ManualCacheRequestGroup[];
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
   resolvePeerRequestWindow?: (
     providerPeerId: string,
     trackId: string,
@@ -442,7 +442,7 @@ function buildManualCacheRequestGroups(input: {
   track: TrackMeta;
   manifest: ResolvedTrackPieceManifest;
   requestPriority: ManualCacheRequestPriority;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
   requestedChunkCountByPeer: Map<string, number>;
   resolvePeerRequestWindow?: (
     providerPeerId: string,
@@ -578,7 +578,7 @@ function resolveAggregateRequestBatchSize(input: {
   trackId: string;
   track: TrackMeta;
   manifest: ResolvedTrackPieceManifest | null;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   connectedPeerIds: string[];
   requestPriority: ManualCacheRequestPriority;
@@ -620,7 +620,7 @@ function resolveAggregateRequestBatchSize(input: {
 
 function resolveBackgroundRequestChunkLimit(input: {
   requestPriority: ManualCacheRequestPriority;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
   activeAheadMs: number | null;
 }) {
   if (input.requestPriority !== "background" || !input.activePlaybackWindow?.trackId) {
@@ -667,7 +667,7 @@ function resolveManualCacheTrackRequestOrder(input: {
 function resolveActivePlaybackDecodablePrefixChunkCount(input: {
   track: TrackMeta | null;
   manifest: ResolvedTrackPieceManifest | null;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
 }) {
   if (!input.track || !input.manifest || !input.activePlaybackWindow) {
     return 0;
@@ -691,7 +691,7 @@ function resolveActivePlaybackPendingPriorityState(input: {
   manifest: ResolvedTrackPieceManifest;
   localPieceIndexes: number[];
   pendingForTrack: Map<number, number>;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined;
+  activePlaybackWindow: ActiveAssetTransferWindow | null | undefined;
 }) {
   if (input.activePlaybackWindow?.trackId !== input.track.id) {
     return {
@@ -722,7 +722,7 @@ function releaseStaleActivePlaybackPendingChunks(input: {
   manifest: ResolvedTrackPieceManifest;
   localPieceIndexes: number[];
   pendingForTrack: Map<number, number>;
-  activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined;
+  activePlaybackWindow: ActiveAssetTransferWindow | null | undefined;
   maxPendingChunks: number;
   targetFreeSlots: number;
 }) {
@@ -767,7 +767,7 @@ export async function planManualCacheDirectRequests(input: {
   connectedPeerIds: string[];
   availabilityByTrack: Record<string, Record<string, TrackAvailabilityAnnouncement>>;
   pendingByTrack: Map<string, Map<number, number>>;
-  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow?: ActiveAssetTransferWindow | null;
   now?: number;
   getCachedManifest: (track: TrackMeta) => Promise<TrackPieceManifestRecord | null>;
   getLocalPieceIndexes: (

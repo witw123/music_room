@@ -237,7 +237,7 @@ export function useRoomRuntimeObservability(input: {
     }
   );
 
-  const updateSystemProgressiveStatus = useCallback(
+  const updateSystemSegmentedStatus = useCallback(
     (patch: Record<string, unknown>) => {
       recordPeerDiagnostic({
         peerId: "system",
@@ -248,10 +248,10 @@ export function useRoomRuntimeObservability(input: {
         recordEvent: false,
         update: (snapshot) => ({
           ...snapshot,
-          progressivePlaybackStatus: {
+          segmentedPlaybackStatus: {
             ...(
-              snapshot.progressivePlaybackStatus ??
-              createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).progressivePlaybackStatus!
+              snapshot.segmentedPlaybackStatus ??
+              createPeerSnapshot(snapshot.peerId, snapshot.updatedAt).segmentedPlaybackStatus!
             ),
             ...patch
           }
@@ -271,6 +271,6 @@ export function useRoomRuntimeObservability(input: {
     recordPieceTransferRef,
     recordPieceRequestSampleRef,
     updatePeerBufferedAmountRef,
-    updateSystemProgressiveStatus
+    updateSystemSegmentedStatus
   };
 }

@@ -383,7 +383,7 @@ describe("resolveManualCachePieceReceivedAction", () => {
       },
       peerId: "peer_1",
       playback: null,
-      hasLocalFullTrack: false,
+      hasLocalOriginalAsset: false,
       nowIso: "2026-07-06T00:00:00.000Z"
     });
 
@@ -432,7 +432,7 @@ describe("resolveManualCachePieceReceivedAction", () => {
       },
       peerId: "peer_1",
       playback: null,
-      hasLocalFullTrack: false,
+      hasLocalOriginalAsset: false,
       nowIso: "2026-07-06T00:00:00.000Z"
     });
 

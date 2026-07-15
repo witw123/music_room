@@ -1,5 +1,5 @@
 import type { RoomSnapshot } from "@music-room/shared";
-import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
+import { hasActivePlayback } from "@/features/playback/asset-transfer-scheduler";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import {
   buildManualCachePieceAvailabilityAnnouncement,
@@ -51,7 +51,7 @@ export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
   trackId: string;
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
-  hasLocalFullTrack?: boolean;
+  hasLocalOriginalAsset?: boolean;
   hasCurrentTask: boolean;
 }) {
   const playback = input.playback;
@@ -59,7 +59,7 @@ export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
     input.hasCurrentTask ||
     !playback?.currentTrackId ||
     playback.currentTrackId !== input.trackId ||
-    !hasActivePlaybackIntent(playback)
+    !hasActivePlayback(playback)
   ) {
     return false;
   }
@@ -68,7 +68,7 @@ export function shouldCreatePlaybackDemandTaskFromCachePiece(input: {
     playback,
     peerId: input.peerId,
     activeSessionId: input.activeSessionId
-  }) || input.hasLocalFullTrack === false;
+  }) || input.hasLocalOriginalAsset === false;
 }
 
 export function mergeManualCachePlanTaskProgress(input: {
@@ -171,7 +171,7 @@ export function resolveManualCachePieceReceivedAction(input: {
   activeSession: { userId: string; nickname: string } | null;
   peerId: string | null | undefined;
   playback: RoomSnapshot["room"]["playback"] | null | undefined;
-  hasLocalFullTrack: boolean;
+  hasLocalOriginalAsset: boolean;
   nowIso: string;
 }) {
   const expectedManifest = input.track?.relayManifest ?? input.track?.pieceManifest ?? null;
@@ -217,7 +217,7 @@ export function resolveManualCachePieceReceivedAction(input: {
       trackId: input.piece.trackId,
       peerId: input.peerId,
       activeSessionId: input.activeSession?.userId,
-      hasLocalFullTrack: input.hasLocalFullTrack,
+      hasLocalOriginalAsset: input.hasLocalOriginalAsset,
       hasCurrentTask: false
     })
   ) {
@@ -321,14 +321,14 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
   trackExists: boolean;
   peerId: string | null | undefined;
   activeSessionId: string | null | undefined;
-  hasLocalFullTrack?: boolean;
+  hasLocalOriginalAsset?: boolean;
   existingTask: Pick<ManualCacheTask, "mode" | "status"> | null | undefined;
 }) {
   const playback = input.playback;
   if (
     !input.enableManualTrackCaching ||
     !playback?.currentTrackId ||
-    !hasActivePlaybackIntent(playback) ||
+    !hasActivePlayback(playback) ||
     !input.trackExists
   ) {
     return false;
@@ -340,7 +340,7 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
       peerId: input.peerId,
       activeSessionId: input.activeSessionId
     }) &&
-    input.hasLocalFullTrack !== false
+    input.hasLocalOriginalAsset !== false
   ) {
     return false;
   }
@@ -351,7 +351,7 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
 
   if (input.existingTask.mode === "manual") {
     if (input.existingTask.status === "ready") {
-      return input.hasLocalFullTrack === false;
+      return input.hasLocalOriginalAsset === false;
     }
 
     return (
@@ -362,7 +362,7 @@ export function shouldEnsurePlaybackDemandCacheTask(input: {
   }
 
   if (input.existingTask.status === "ready") {
-    return input.hasLocalFullTrack === false;
+    return input.hasLocalOriginalAsset === false;
   }
 
   return (

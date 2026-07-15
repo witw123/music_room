@@ -224,7 +224,7 @@ export function useRoomDerivedState({
       activePeerDiagnostics,
       "mediaSendBitrateKbps"
     );
-    const isLocalMediaSource = roomSnapshot.room.playback.sourcePeerId === peerId;
+    const isLocalSourceOwner = roomSnapshot.room.playback.sourcePeerId === peerId;
     const averageLatencyMs = averageDiagnosticsValue(activePeerDiagnostics, "currentRoundTripTimeMs");
     const hasPieceMetricSample = hasPieceTransferSample(activePeerDiagnostics);
     const transportSampleAgeMs = getLatestMetricSampleAgeMs(
@@ -271,13 +271,13 @@ export function useRoomDerivedState({
         sampleAgeMs: pieceSampleAgeMs
       },
       segmentedPlayback,
-      playbackBitrateKbps: isLocalMediaSource
+      playbackBitrateKbps: isLocalSourceOwner
         ? totalMediaSendRateKbps
         : totalMediaReceiveRateKbps,
       configuredPlaybackBitrateKbps,
-      mediaSourcePeerId: roomSnapshot.room.playback.sourcePeerId,
-      isMediaSource: isLocalMediaSource,
-      mediaSourceMemberNickname:
+      sourcePeerId: roomSnapshot.room.playback.sourcePeerId,
+      isSourceOwner: isLocalSourceOwner,
+      sourceMemberNickname:
         roomSnapshot.room.members.find(
           (member) => member.id === roomSnapshot.room.playback.sourceSessionId
         )?.nickname ?? null,

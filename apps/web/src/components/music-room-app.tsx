@@ -129,11 +129,10 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setMediaConnectedPeers: pageState.setMediaConnectedPeers,
     setMediaConnectionState: pageState.setMediaConnectionState,
     setPeerId,
-    setPlaybackStartIntent: pageState.setPlaybackStartIntent,
+    setPlaybackStartRequest: pageState.setPlaybackStartRequest,
     setPlayerResetEpoch: pageState.setPlayerResetEpoch,
     setPlaylists: pageState.setPlaylists,
     setRoomRecoveryState: pageState.setRoomRecoveryState,
-    setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
     setStatusMessage,
     setSuppressRoomRecovery: pageState.setSuppressRoomRecovery,
   });
@@ -183,7 +182,6 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     flushPendingAvailability,
     recordPeerDiagnostic,
     uploadedTracks: uploads.uploadedTracks,
-    fullLocalPlaybackTracks: {},
     uploadedTrackIds: Object.keys(uploads.uploadedTracks),
     uploadedTrackIdsRef: appRefs.uploadedTrackIdsRef,
     announceRoomTrackAvailability: uploads.announceRoomTrackAvailability,
@@ -210,7 +208,8 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setMediaConnectionState: pageState.setMediaConnectionState,
     setSourceStartState: pageState.setSourceStartState,
     setLastSourceStartError: pageState.setLastSourceStartError,
-    setStatusMessage
+    setStatusMessage,
+    recordPeerDiagnostic
   });
   const manualAssetCache = useRoomOriginalAssetCache({
     roomSnapshot,
@@ -240,8 +239,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     setAudioBlockedOverlay: pageState.setAudioBlockedOverlay,
     setAudioUnlocked: pageState.setAudioUnlocked,
     setLastSourceStartError: pageState.setLastSourceStartError,
-    setPlaybackStartIntent: pageState.setPlaybackStartIntent,
-    setSchedulerPlaybackBucketMs: pageState.setSchedulerPlaybackBucketMs,
+    setPlaybackStartRequest: pageState.setPlaybackStartRequest,
     setStatusMessage
   });
   const cacheActions = useRoomCacheLibraryActions({

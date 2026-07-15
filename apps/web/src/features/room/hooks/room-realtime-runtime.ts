@@ -20,7 +20,6 @@ import type { UploadedTrack } from "@/features/upload/audio-utils";
 import { announceTrackAvailabilityWithRetry } from "@/features/upload/track-availability";
 import { calibrateRoomPlaybackClock } from "@/features/playback/room-playback-clock";
 import type {
-  FullLocalPlaybackTrackRecord,
   ManualCachePieceReceivedInput,
   PieceRequestSampleInput,
   PieceTransferInput,
@@ -32,7 +31,6 @@ import type {
 import {
   buildRoomSubscribePayload,
   createRoomRealtimeEventGate,
-  hasSubscribeBootstrapFullLocalTrack,
   shouldAcceptIncomingPeerSignal,
   shouldExitRoomOnSnapshotMissing,
   shouldQueueIncomingAvailability,
@@ -53,7 +51,6 @@ function applyRoomSubscribeBootstrap(input: {
   dispatchRoomStateEvent: Dispatch<RoomStateEvent>;
   setRoomRecoveryState: Dispatch<SetStateAction<RoomRecoveryState>>;
   uploadedTracks: Record<string, unknown>;
-  fullLocalPlaybackTracks: Record<string, unknown>;
   enableTrackCaching: boolean;
   audioUnlocked: boolean;
 }) {
@@ -89,25 +86,17 @@ function applyRoomSubscribeBootstrap(input: {
     roomRevision: input.ack.bootstrap.roomRevision
   });
 
-  const currentTrackId = input.ack.bootstrap.playback.currentTrackId ?? null;
-  const hasFullLocalTrack = hasSubscribeBootstrapFullLocalTrack({
-    enableTrackCaching: input.enableTrackCaching,
-    currentTrackId,
-    uploadedTracks: input.uploadedTracks,
-    fullLocalPlaybackTracks: input.fullLocalPlaybackTracks
-  });
   input.setRoomRecoveryState((current) => ({
     ...current,
-    phase: hasFullLocalTrack && input.audioUnlocked ? "playing-local-fallback" : "resyncing",
+    phase: "resyncing",
     mode: nextRecoveryMode,
     generation: input.ack.recoveryGeneration ?? null,
     bootstrapStartedAt: input.ack.serverNow ?? new Date().toISOString(),
     bootstrapSourcePeerId: input.ack.bootstrap?.playback.sourcePeerId ?? null,
     pendingSnapshot: true,
-    pendingData: input.enableTrackCaching && !hasFullLocalTrack,
+    pendingData: input.enableTrackCaching,
     pendingMedia: false,
     listenerBootstrapAttempts: current.listenerBootstrapAttempts ?? 0,
-    fullLocalRecoveryActive: hasFullLocalTrack
   }));
 
   return true;
@@ -170,7 +159,6 @@ type RoomRealtimeRuntimeInput = {
   chunkSchedulerRef: MutableRefObject<ChunkScheduler | null>;
   currentRoomRef: MutableRefObject<RoomSnapshot | null>;
   uploadedTracksRef: MutableRefObject<Record<string, UploadedTrack>>;
-  fullLocalPlaybackTracksRef: MutableRefObject<FullLocalPlaybackTrackRecord>;
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   manualCacheTrackIdsRef: MutableRefObject<string[]>;
   announceRoomTrackAvailabilityRef: MutableRefObject<(
@@ -422,7 +410,6 @@ function attachRoomSocketHandlers(input: RoomSocketHandlersInput) {
           dispatchRoomStateEvent: input.dispatchRoomStateEvent,
           setRoomRecoveryState: input.setRoomRecoveryState,
           uploadedTracks: input.uploadedTracksRef.current,
-          fullLocalPlaybackTracks: input.fullLocalPlaybackTracksRef.current,
           enableTrackCaching: input.enableTrackCaching,
           audioUnlocked: input.audioUnlocked
         });

@@ -15,7 +15,7 @@ import {
 } from "@/lib/indexeddb";
 import { enableManualTrackCaching } from "@/features/cache/cache-policy";
 import { isCachedLibraryTrackUsableForRoomTrack } from "@/features/upload/cached-library-track-policy";
-import { hasActivePlaybackIntent } from "@/features/playback/progressive-playback";
+import { hasActivePlayback } from "@/features/playback/asset-transfer-scheduler";
 import { isCurrentPlaybackSourceDevice } from "@/features/playback/playback-source-identity";
 import type { ManualCacheTrackPlan } from "@/features/room/hooks/use-manual-cache-downloader";
 import type {
@@ -154,7 +154,7 @@ export function useManualCacheActions({
     const cachedLibraryTrack = track
       ? cacheLibraryTracksRef.current.get(track.fileHash)
       : null;
-    const hasLocalFullTrack =
+    const hasLocalOriginalAsset =
       !!uploadedTracks[trackId] ||
       isCachedLibraryTrackUsableForRoomTrack({
         cachedTrack: cachedLibraryTrack,
@@ -167,7 +167,7 @@ export function useManualCacheActions({
         trackExists,
         peerId,
         activeSessionId: activeSession?.userId,
-        hasLocalFullTrack,
+        hasLocalOriginalAsset,
         existingTask: manualCacheTasks[trackId] ?? null
       })
     ) {
@@ -198,7 +198,7 @@ export function useManualCacheActions({
       const track = roomSnapshot?.tracks.find((entry) => entry.id === input.trackId) ?? null;
       const knownChunkIndexes =
         manualCacheChunkIndexesRef.current.get(input.trackId) ?? new Set<number>();
-      const hasLocalFullTrack =
+      const hasLocalOriginalAsset =
         !!uploadedTracks[input.trackId] ||
         isCachedLibraryTrackUsableForRoomTrack({
           cachedTrack: track ? cacheLibraryTracksRef.current.get(track.fileHash) : null,
@@ -213,7 +213,7 @@ export function useManualCacheActions({
         activeSession,
         peerId,
         playback: roomSnapshot?.room.playback,
-        hasLocalFullTrack,
+        hasLocalOriginalAsset,
         nowIso: new Date().toISOString()
       });
 
@@ -257,7 +257,7 @@ export function useManualCacheActions({
       }
       const knownChunkIndexes =
         manualCacheChunkIndexesRef.current.get(plan.trackId) ?? new Set<number>();
-      const hasLocalFullTrack =
+      const hasLocalOriginalAsset =
         !!uploadedTracks[plan.trackId] ||
         isCachedLibraryTrackUsableForRoomTrack({
           cachedTrack: cacheLibraryTracksRef.current.get(track.fileHash),
@@ -265,13 +265,13 @@ export function useManualCacheActions({
         });
       const isCurrentPlaybackDemand =
         plan.trackId === roomSnapshot.room.playback.currentTrackId &&
-        hasActivePlaybackIntent(roomSnapshot.room.playback) &&
+        hasActivePlayback(roomSnapshot.room.playback) &&
         (!isCurrentPlaybackSourceDevice({
           playback: roomSnapshot.room.playback,
           peerId,
           activeSessionId: activeSession?.userId
         }) ||
-          !hasLocalFullTrack);
+          !hasLocalOriginalAsset);
       const result = resolveManualCachePlanReceivedAction({
         plan,
         currentTask: manualCacheTasks[plan.trackId] ?? null,

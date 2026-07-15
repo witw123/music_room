@@ -1,7 +1,7 @@
 import type { TrackMeta } from "@music-room/shared";
 import { resolvePeerLinkProfile } from "@/features/p2p";
 import type { ResolvedTrackPieceManifest } from "@/features/p2p";
-import type { ActivePlaybackCacheWindow } from "./manual-cache-download-queue";
+import type { ActiveAssetTransferWindow } from "./manual-cache-download-queue";
 
 type ManualCacheLinkProfile = "fast" | "standard" | "constrained" | "severe";
 
@@ -117,12 +117,12 @@ export function resolveManualCacheDirectRequestBudget(input: {
   trackId: string;
   track?: TrackMeta | null;
   manifest?: ResolvedTrackPieceManifest | null;
-  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow?: ActiveAssetTransferWindow | null;
   peerWindow?: ManualCachePeerRequestWindow | null;
   resolveActivePlaybackDecodablePrefixChunkCount: (input: {
     track: TrackMeta | null;
     manifest: ResolvedTrackPieceManifest | null;
-    activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined;
+    activePlaybackWindow: ActiveAssetTransferWindow | null | undefined;
   }) => number;
 }): ManualCacheDirectRequestBudget {
   if (input.activePlaybackWindow?.trackId === input.trackId) {

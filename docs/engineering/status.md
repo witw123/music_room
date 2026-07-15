@@ -1,83 +1,35 @@
 # 项目状态
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-15`
 当前版本：`0.2.8`
 
-## 总览
+## 当前主链路
 
-Music Room 当前已经是一套可运行的多人同步听歌产品，代码状态更接近“核心闭环已完成，正在补强稳态和测试”。当前主链路是：
+- 账号、房间、队列和播放控制可用
+- WebRTC DataChannel 负责资产分片传输
+- IndexedDB 保存播放资产分段 Opus
+- `SegmentedOpusEngine` 使用固定 AudioContext 输出总线
+- 源端通过 MediaStreamAudioDestinationNode 发布 RTP Opus
+- 监听端只使用一个 `audio.srcObject`
+- 诊断协议使用 `segmentedPlaybackStatus`
 
-- 首页 `/` 提供项目入口，`/app` 承载网页工作区
-- 桌面和移动浏览器进入同一套响应式房间系统
-- 用户通过账号登录注册进入房间
-- 房主导入本地音频，服务端只保存元数据，不保存音频文件
-- 房间内通过共享队列和房主权威播放状态进行同步
-- 成员之间使用 WebRTC DataChannel 分发歌曲分片
-- 客户端会根据缓存情况在 `progressive-local`、`full-local` 之间切换
-- 房间默认工作区现在包含 `共享队列`、`曲库`、`缓存`、`成员`
-- 成员页已提供连接、缓存、ICE、播放源和最近事件诊断
+## 稳定性措施
+
+- sync single-flight 和 timeline generation 防止旧异步结果污染新时间线
+- unit 读取、解码和调度去重
+- 20ms source fade、欠载静音门和 limiter 降低 click/pop 与削波风险
+- 本地音量和监听端恢复均采用平滑操作
+- 房间快照、成员变化、presence 和音量变化不会重建媒体会话
 
 ## 已完成
 
-- Monorepo 仓库结构稳定：`apps/web`、`apps/server`、`packages/shared`
-- 首页 / 工作区分流已落地：首页走 `/`，网页工作区走 `/app`
-- 账号体系可用：注册、登录、登出、`/v1/auth/me`
-- 房间链路可用：创建、加入、最近房间恢复、按房间恢复、离开、删除
-- 曲库链路可用：本地音频导入、元数据解析、曲目注册、曲目删除、从曲库加入队列
-- 队列链路可用：加入队列、删除、重排、按队列项播放
-- 播放控制可用：播放、暂停、切歌、上一首、拖动进度
-- P2P 分片传输可用：分片请求、分片回传、可用性广播、本地 IndexedDB 持久化、手动缓存下载
-- 缓存链路可用：缓存浏览、回库、导出、删除
-- WebRTC data channel 分片同步可用，TURN 支持短期凭证
-- 渐进式本地播放已接入：
-  - MP3 在 Chromium 浏览器中走 MSE
-  - FLAC 在 Chromium 浏览器中走 PCM / WebCodecs + AudioContext
-  - 完整缓存后可切换到 `full-local`
-- 项目已收敛为纯网页交付，不再维护桌面或移动原生壳
-- 自动化测试已形成基础盘：当前仓库共有 `112` 个 `*.test.ts` / `*.spec.ts` 文件，覆盖 shared 协议、服务端核心模块、前端房间/P2P/播放纯逻辑、部分组件/Hook 和 Playwright E2E
-- 播放运行时、房间实时连接、P2P Mesh、上传、手动缓存下载器和顶层房间组件已拆分为更小的模块；重构记录见 [../refactor/README.md](../refactor/README.md)
+- 旧播放引擎、旧播放编排、旧播放源控制和旧 fallback 已移除
+- FLAC 解析、metadata、frame index 和上传阶段 PCM 工具仍保留
+- 原始资产缓存和手动下载与播放链路解耦
+- shared 诊断 schema 已切换为中性分段播放模型
 
-## 部分完成
+## 后续风险
 
-- 歌单后端能力仍然存在：
-  - 保存当前队列为歌单
-  - 重命名、删除歌单
-  - 导回房间队列
-- 但房间内默认 UI 目前已收掉歌单区域，主界面当前保留：
-  - `共享队列`
-  - `曲库`
-  - `缓存`
-  - `成员与诊断`
-- 观测能力仍偏基础，主要依赖日志和前端诊断面板，缺少统一 metrics / tracing / error reporting
-- 自动化测试已覆盖大量纯逻辑、状态机、部分组件 / Hook 和核心 E2E 主流程，但真实 WebRTC 与 Media 集成测试仍然不足
-
-## 当前已知风险
-
-- 直接在宿主机部署时，如果错误复用 Docker 版 Nginx upstream（`web:3000` / `server:3001`），会直接出现 `502 Bad Gateway`
-- 如果没有 `systemd`、`pm2` 或 Docker restart policy 守护 `web` / `server` 进程，服务掉线后用户侧会表现成“站点总是崩”
-- TURN 配置不完整时，复杂网络下分片同步会退化，诊断面板通常会看到 `ICE: stun-only` 或 `disconnected / failed`
-- FLAC 的首次起播依赖本地连续缓冲，缓存追不上时会进入恢复和保守调度
-- 真实 WebRTC、MediaSource 与 AudioContext 集成测试仍需要继续补强
-- 当前正式版按“单 server 实例 + Redis 广播增强”交付，不支持 server 水平扩容；多实例一致性需要后续 Redis CAS 或数据库事务化方案单独落地
-
-## 当前建议的部署方式
-
-- 首选：Docker Compose 生产编排
-- 次选：宿主机直部署，但需要自己提供：
-  - `systemd` 或等价进程守护
-  - 正确的 Nginx upstream
-  - PostgreSQL / Redis / coturn
-  - 健康检查和日志轮转
-
-## 近期优先级
-
-1. 补强多实例 / 服务重启后的状态恢复与补偿
-2. 增加真实 WebRTC / MediaSource / AudioContext 浏览器集成测试
-3. 继续完善播放链路和房间工作流的交互级测试，覆盖弱网、重连、切歌、暂停和 seek
-4. 补齐统一观测能力，包括服务端错误收集、资源监控和告警
-5. 视产品取舍决定是否恢复歌单前端主入口或继续维持“后端保留、主 UI 收起”的策略
-
-## 不再采用的旧路径
-
-- Electron 桌面壳已废弃，不再作为当前方案
-- 以游客临时会话为主的旧文档表述已过时，当前主路径是账号登录注册
+- 仍需在 CI 中持续运行双 Chromium context 的长时间 WebRTC 播放回归
+- 需要采集真实设备上的 limiter peak、RMS、瞬时跃变和欠载恢复数据
+- TURN 配置异常时跨网络媒体仍可能进入 reconnecting，但不应改变播放链路

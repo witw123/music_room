@@ -2,7 +2,6 @@
 
 import { useCallback, useRef, type MutableRefObject } from "react";
 import type { PeerDiagnosticsSnapshot } from "@music-room/shared";
-import type { ProgressivePlaybackSource } from "@/features/playback/progressive-playback";
 import type { PeerConnectionStatsSample } from "@/features/p2p/connection-stats";
 import {
   createPeerConnectionSupervisorState,
@@ -174,12 +173,12 @@ export function useRoomConnectionSupervisor(input: {
   const updateConnectionSupervisorPlayout = useCallback(() => null, []);
 
   const resolveCurrentAudibleSource = useCallback(
-    (activePlaybackSource: ProgressivePlaybackSource = "progressive-local") => activePlaybackSource,
+    (isSourceOwner = true) => isSourceOwner ? "segmented-opus-local" as const : "webrtc-opus-remote" as const,
     []
   );
   const resolveSourceContinuityState = useCallback(
-    (activePlaybackSource: ProgressivePlaybackSource = "progressive-local") => ({
-      audibleSource: activePlaybackSource,
+    (isSourceOwner = true) => ({
+      playbackTransport: isSourceOwner ? "segmented-opus-local" as const : "webrtc-opus-remote" as const,
       bufferingWhileAudible: false,
       recentAudioProgress: true,
       recentTransportProgress: true,

@@ -6,6 +6,7 @@ import type { Playlist } from "@music-room/shared";
 import type { Route } from "next";
 import { musicRoomApi } from "@/lib/music-room-api";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 type RoomRouter = {
   push: (href: Route) => void;
@@ -46,6 +47,7 @@ export function useRoomLifecycleActions({
   const handleClearIdentity = useCallback(() => {
     setSuppressRoomRecovery(true);
     resetPlayerSurface();
+    roomAudioOutput.releaseRoomAudioSession();
     resetRealtimePeer();
     clearIdentity();
     dispatchRoomStateEvent({ type: "local-reset" });

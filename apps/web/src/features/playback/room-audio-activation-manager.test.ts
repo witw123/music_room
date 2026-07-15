@@ -164,4 +164,26 @@ describe("RoomAudioActivationManager", () => {
     expect(audio.volume).toBe(0.72);
     expect(manager.isActivated()).toBe(true);
   });
+
+  it("forces play for a stalled element without changing its source", async () => {
+    const manager = new RoomAudioActivationManager();
+    const audio = createAudioElementMock();
+    const stream = {} as MediaStream;
+    audio.srcObject = stream;
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      value: false
+    });
+
+    await manager.activateOutputs({ localAudio: audio });
+    vi.mocked(audio.play).mockClear();
+
+    await expect(manager.playElement(audio, { force: true })).resolves.toEqual({
+      ok: true,
+      error: null
+    });
+
+    expect(audio.play).toHaveBeenCalledTimes(1);
+    expect(audio.srcObject).toBe(stream);
+  });
 });

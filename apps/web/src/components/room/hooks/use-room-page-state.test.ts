@@ -19,7 +19,7 @@ describe("roomPageStateReducer", () => {
       lastSourceStartError: null,
       mediaConnectedPeers: [],
       mediaConnectionState: "idle",
-      playbackStartIntent: null,
+      playbackStartRequest: null,
       roomRecoveryState: {
         phase: "joining",
         mode: "steady",
@@ -30,10 +30,8 @@ describe("roomPageStateReducer", () => {
         pendingData: false,
         pendingMedia: false,
         listenerBootstrapAttempts: null,
-        fullLocalRecoveryActive: false
       },
       volume: 0.72,
-      schedulerPlaybackBucketMs: 0,
       schedulerMode: "normal",
       playerResetEpoch: 0,
       audioBlockedOverlay: false,
@@ -45,24 +43,19 @@ describe("roomPageStateReducer", () => {
 
   it("accepts direct values and updater functions like React setState", () => {
     const initial = createInitialRoomPageState({ documentHidden: false });
-    const withBucket = roomPageStateReducer(initial, {
-      type: "set",
-      key: "schedulerPlaybackBucketMs",
-      value: 12_000
-    });
-    const withSameBucket = roomPageStateReducer(withBucket, {
-      type: "set",
-      key: "schedulerPlaybackBucketMs",
-      value: (current) => (current === 12_000 ? current : 0)
-    });
-    const withResetEpoch = roomPageStateReducer(withSameBucket, {
+    const withEpoch = roomPageStateReducer(initial, {
       type: "set",
       key: "playerResetEpoch",
-      value: (current) => current + 1
+      value: 1
+    });
+    const withSameEpoch = roomPageStateReducer(withEpoch, {
+      type: "set",
+      key: "playerResetEpoch",
+      value: (current) => (current === 1 ? current : 0)
     });
 
-    expect(withSameBucket).toBe(withBucket);
-    expect(withResetEpoch.playerResetEpoch).toBe(1);
+    expect(withSameEpoch).toBe(withEpoch);
+    expect(withSameEpoch.playerResetEpoch).toBe(1);
   });
 
   it("updates runtime assembly state without losing other page state", () => {
@@ -104,14 +97,12 @@ describe("roomPageStateReducer", () => {
       value: (current) => ({
         ...current,
         phase: "steady",
-        fullLocalRecoveryActive: true
       })
     });
 
     expect(withRecovery).toMatchObject({
       roomRecoveryState: {
         phase: "steady",
-        fullLocalRecoveryActive: true
       }
     });
   });

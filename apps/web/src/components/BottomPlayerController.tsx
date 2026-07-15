@@ -14,7 +14,6 @@ type BottomPlayerControllerProps = {
   canSeekPlayback: boolean;
   resetEpoch: number;
   onPlaybackPositionChange: (positionMs: number) => void;
-  onPlaybackBucketChange: (bucketMs: number) => void;
   onVolumeChange: (volume: number) => void;
   onPlay: () => void;
   onPause: (positionMs?: number) => void | Promise<void>;
@@ -31,7 +30,6 @@ function BottomPlayerControllerBase({
   canSeekPlayback,
   resetEpoch,
   onPlaybackPositionChange,
-  onPlaybackBucketChange,
   onVolumeChange,
   onPlay,
   onPause,
@@ -70,8 +68,7 @@ function BottomPlayerControllerBase({
 
   useEffect(() => {
     onPlaybackPositionChange(progressMs);
-    onPlaybackBucketChange(Math.floor(progressMs / 4_000) * 4_000);
-  }, [progressMs, onPlaybackPositionChange, onPlaybackBucketChange]);
+  }, [progressMs, onPlaybackPositionChange]);
 
   useEffect(() => {
     onVolumeChange(volume);
@@ -82,14 +79,12 @@ function BottomPlayerControllerBase({
     setAudioDurationMs(0);
     setSeekDraft(null);
     onPlaybackPositionChange(0);
-    onPlaybackBucketChange(0);
   }, [
     resetEpoch,
     setProgressMs,
     setAudioDurationMs,
     setSeekDraft,
-    onPlaybackPositionChange,
-    onPlaybackBucketChange
+    onPlaybackPositionChange
   ]);
 
   return (

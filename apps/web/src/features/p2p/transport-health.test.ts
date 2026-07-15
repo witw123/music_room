@@ -9,7 +9,7 @@ describe("transport-health", () => {
         dataConnectionState: "connected",
         dataChannelState: "open",
         recoveryActionLevel: "observe",
-        audibleSource: "progressive-local"
+        playbackTransport: "segmented-opus-local"
       })
     ).toMatchObject({
       transportHealth: "healthy",
@@ -23,7 +23,7 @@ describe("transport-health", () => {
         dataConnectionState: "closed",
         dataChannelState: "open",
         recoveryActionLevel: "observe",
-        audibleSource: "progressive-local"
+        playbackTransport: "segmented-opus-local"
       })
     ).toMatchObject({
       transportHealth: "healthy",
@@ -37,7 +37,7 @@ describe("transport-health", () => {
         dataConnectionState: "connected",
         dataChannelState: "open",
         recoveryActionLevel: "peer-restart",
-        audibleSource: "progressive-local"
+        playbackTransport: "segmented-opus-local"
       })
     ).toMatchObject({
       transportHealth: "recovering",
@@ -51,7 +51,7 @@ describe("transport-health", () => {
         dataConnectionState: "disconnected",
         dataChannelState: "closed",
         recoveryActionLevel: "hard-reconnect",
-        audibleSource: null
+        playbackTransport: null
       })
     ).toMatchObject({
       transportHealth: "failed",
@@ -65,7 +65,7 @@ describe("transport-health", () => {
         dataConnectionState: "connecting",
         dataChannelState: "connecting",
         recoveryActionLevel: "observe",
-        audibleSource: "progressive-local"
+        playbackTransport: "segmented-opus-local"
       })
     ).toMatchObject({
       transportHealth: "degraded",

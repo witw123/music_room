@@ -5,7 +5,7 @@ import type { RoomSnapshot, TrackAvailabilityAnnouncement } from "@music-room/sh
 import type { DataMeshBridge, RoomRuntimeEvent } from "./room-runtime-types";
 import {
   getActivePlaybackPendingKey,
-  type ActivePlaybackCacheWindow,
+  type ActiveAssetTransferWindow,
   type ManualCacheTrackPlan
 } from "./manual-cache-download-queue";
 import {
@@ -33,7 +33,7 @@ export {
   shouldRetryManualCacheProviderBootstrap
 } from "./manual-cache-download-queue";
 export type {
-  ActivePlaybackCacheWindow,
+  ActiveAssetTransferWindow,
   ManualCacheBlockedReason,
   ManualCacheManifestSource,
   ManualCacheTrackPlan
@@ -62,7 +62,7 @@ export function useManualCacheDownloader(input: {
   connectedPeers: string[];
   dataMesh: DataMeshBridge | null;
   pauseDirectRequests?: boolean;
-  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow?: ActiveAssetTransferWindow | null;
   onRuntimeEvent?: (event: RoomRuntimeEvent) => void;
   onManualCachePlan?: (plan: ManualCacheTrackPlan) => void;
   resolvePeerRequestWindow?: (
@@ -92,7 +92,7 @@ export function useManualCacheDownloader(input: {
   const directPendingRef = useRef<Map<string, Map<number, number>>>(new Map());
   const triggerDirectRequestRef = useRef<() => void>(() => {});
   const activePlaybackPendingKeyRef = useRef<string | null>(null);
-  const activePlaybackWindowRef = useRef<ActivePlaybackCacheWindow | null>(
+  const activePlaybackWindowRef = useRef<ActiveAssetTransferWindow | null>(
     activePlaybackWindow ?? null
   );
   const providerUnavailableSinceRef = useRef<Map<string, number>>(new Map());

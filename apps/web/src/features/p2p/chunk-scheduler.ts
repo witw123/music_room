@@ -1,12 +1,12 @@
 import type { RoomSnapshot, TrackAvailabilityAnnouncement, TrackMeta } from "@music-room/shared";
 import {
-  buildProgressiveTrackManifest,
+  buildAssetTransferManifest,
   getAheadBufferedMs,
   getLowBufferThresholdMs,
   getPriorityChunkIndexes,
   getTargetSteadyBufferMs,
-  type ProgressiveSchedulerPolicy
-} from "@/features/playback/progressive-playback";
+  type AssetTransferPolicy
+} from "@/features/playback/asset-transfer-scheduler";
 import { resolvePeerLinkProfile, resolvePeerTransferWindow } from "./peer-link-profile";
 import { resolveCurrentTrackWantedPolicy } from "./chunk-scheduler-policy";
 
@@ -36,7 +36,7 @@ type ChunkSchedulerSyncInput = {
   mode?: ChunkSchedulerMode;
   bufferHealth?: ChunkBufferHealth;
   playbackClockSource?: PlaybackClockSource;
-  policy?: ProgressiveSchedulerPolicy;
+  policy?: AssetTransferPolicy;
 };
 
 type ChunkSchedulerRequestArgs = {
@@ -130,7 +130,7 @@ export class ChunkScheduler {
   private mode: ChunkSchedulerMode = "normal";
   private bufferHealth: ChunkBufferHealth = "healthy";
   private playbackClockSource: PlaybackClockSource = "snapshot";
-  private policy: ProgressiveSchedulerPolicy = "startup";
+  private policy: AssetTransferPolicy = "startup";
   private readonly trackStates = new Map<string, ChunkSchedulerTrackState>();
   private lastScheduleAt = 0;
   private scheduleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -399,7 +399,7 @@ export class ChunkScheduler {
         ? this.roomSnapshot.queue.findIndex((item) => item.trackId === currentTrack.id)
         : -1;
     const plans: TrackPlan[] = [];
-    let currentTrackManifest: ReturnType<typeof buildProgressiveTrackManifest> = null;
+    let currentTrackManifest: ReturnType<typeof buildAssetTransferManifest> = null;
     let currentTrackState: ChunkSchedulerTrackState | null = null;
     let currentTrackAheadBufferedMs = 0;
     let comfortableCurrentTrackBufferMs = 0;
@@ -407,7 +407,7 @@ export class ChunkScheduler {
 
     if (currentTrack && !this.uploadedTrackIds.has(currentTrack.id)) {
       const localAnnouncement = this.availabilityByTrack[currentTrack.id]?.[this.localPeerId] ?? null;
-      currentTrackManifest = buildProgressiveTrackManifest(
+      currentTrackManifest = buildAssetTransferManifest(
         currentTrack,
         localAnnouncement ?? Object.values(this.availabilityByTrack[currentTrack.id] ?? {})[0] ?? null
       );
@@ -507,7 +507,7 @@ export class ChunkScheduler {
       : null;
 
     if (nextQueuedTrack) {
-      const queuedManifest = buildProgressiveTrackManifest(
+      const queuedManifest = buildAssetTransferManifest(
         nextQueuedTrack,
         this.availabilityByTrack[nextQueuedTrack.id]?.[this.localPeerId] ??
           Object.values(this.availabilityByTrack[nextQueuedTrack.id] ?? {})[0] ??
@@ -820,7 +820,8 @@ export class ChunkScheduler {
   ) {
     const window = this.resolvePeerRequestWindow(peerId, trackId, priority);
     // Unknown peer stats should still allow enough concurrent pieces for cold
-    // progressive startup; 2 MiB only covered ~8 small chunks and starved PCM.
+    // segmented startup; 2 MiB only covered ~8 small chunks and starved the
+    // asset decoder.
     if (!window) {
       return Math.max(8 * 1024 * 1024, 16 * this.getTrackChunkSize(trackId));
     }
@@ -924,7 +925,7 @@ function getTrackStreamingProfile(
   track: TrackMeta,
   mode: ChunkSchedulerMode,
   bufferHealth: ChunkBufferHealth,
-  policy: ProgressiveSchedulerPolicy
+  policy: AssetTransferPolicy
 ) {
   const streamProfile = deriveTrackStreamProfile(track);
 
@@ -955,7 +956,7 @@ function getTrackStreamingProfile(
       maxConcurrent: streamProfile === "large-lossless" ? 40 : 32,
       maxConcurrentPerPeer: streamProfile === "large-lossless" ? 16 : 12,
       lookBehindMs: 0,
-      // Pull a longer contiguous prefix so late-join PCM can catch the live clock.
+      // Pull a longer contiguous prefix so late joiners can catch the live clock.
       lookAheadMs: streamProfile === "large-lossless" ? 180_000 : 120_000,
       timeoutMs: streamProfile === "large-lossless" ? 900 : 1_000
     };

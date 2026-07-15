@@ -1,20 +1,3 @@
-export function isChromeOrEdgeBrowser() {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  const userAgent = navigator.userAgent;
-  const isChromium = /(Chrome|Chromium|Edg)\//.test(userAgent);
-  const isWebKitOnly = /Version\/[\d.]+ .*Safari\//.test(userAgent) && !/Chrome\//.test(userAgent);
-  const isFirefox = /Firefox\//.test(userAgent);
-
-  return isChromium && !isWebKitOnly && !isFirefox;
-}
-
-export function canUseProgressivePlayback() {
-  return typeof window !== "undefined";
-}
-
 export function isLosslessTrack(input: { mimeType?: string | null; codec?: string | null }) {
   const mimeType = input.mimeType?.toLowerCase() ?? "";
   const codec = input.codec?.toLowerCase() ?? "";

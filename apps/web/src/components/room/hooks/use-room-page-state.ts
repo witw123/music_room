@@ -7,13 +7,12 @@ import type {
   RoomSnapshot,
   Playlist
 } from "@music-room/shared";
-import type { PlaybackStartIntent } from "@/features/playback/playback-start-intent";
+import type { PlaybackStartRequest } from "@/features/playback/playback-start-request";
 
 type RoomRecoveryPhase =
   | "joining"
   | "resyncing"
   | "bootstrapping-data"
-  | "playing-local-fallback"
   | "steady";
 
 type RoomRecoveryMode = "late-join" | "rejoin" | "steady";
@@ -28,12 +27,11 @@ export type RoomRecoveryState = {
   pendingData: boolean;
   pendingMedia: boolean;
   listenerBootstrapAttempts: number | null;
-  fullLocalRecoveryActive: boolean;
 };
 
 export type RoomPageState = {
   activeDashboardTab: "queue" | "library" | "cache" | "members";
-  playbackStartIntent: PlaybackStartIntent | null;
+  playbackStartRequest: PlaybackStartRequest | null;
   roomRecoveryState: RoomRecoveryState;
   isDiagnosticsPanelOpen: boolean;
   isPageVisible: boolean;
@@ -49,7 +47,6 @@ export type RoomPageState = {
   iceConfigResolved: boolean;
   schedulerMode: "normal" | "conservative" | "idle";
   volume: number;
-  schedulerPlaybackBucketMs: number;
   playerResetEpoch: number;
   bufferHealth: "healthy" | "low" | "critical";
   audioUnlocked: boolean;
@@ -74,7 +71,7 @@ export function createInitialRoomPageState(input: {
 }): RoomPageState {
   return {
     activeDashboardTab: "queue",
-    playbackStartIntent: null,
+    playbackStartRequest: null,
     roomRecoveryState: {
       phase: "joining",
       mode: "steady",
@@ -85,7 +82,6 @@ export function createInitialRoomPageState(input: {
       pendingData: false,
       pendingMedia: false,
       listenerBootstrapAttempts: null,
-      fullLocalRecoveryActive: false
     },
     isDiagnosticsPanelOpen: false,
     isPageVisible: !input.documentHidden,
@@ -101,7 +97,6 @@ export function createInitialRoomPageState(input: {
     iceConfigResolved: false,
     schedulerMode: "normal",
     volume: 0.72,
-    schedulerPlaybackBucketMs: 0,
     playerResetEpoch: 0,
     bufferHealth: "healthy",
     audioUnlocked: input.audioUnlocked ?? false,
@@ -196,9 +191,9 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
       dispatch({ type: "set", key: "activeDashboardTab", value }),
     []
   );
-  const setPlaybackStartIntent = useCallback(
-    (value: SetStateAction<PlaybackStartIntent | null>) =>
-      dispatch({ type: "set", key: "playbackStartIntent", value }),
+  const setPlaybackStartRequest = useCallback(
+    (value: SetStateAction<PlaybackStartRequest | null>) =>
+      dispatch({ type: "set", key: "playbackStartRequest", value }),
     []
   );
   const setRoomRecoveryState = useCallback(
@@ -222,11 +217,6 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
   );
   const setVolume = useCallback(
     (value: SetStateAction<number>) => dispatch({ type: "set", key: "volume", value }),
-    []
-  );
-  const setSchedulerPlaybackBucketMs = useCallback(
-    (value: SetStateAction<number>) =>
-      dispatch({ type: "set", key: "schedulerPlaybackBucketMs", value }),
     []
   );
   const setPlayerResetEpoch = useCallback(
@@ -271,13 +261,12 @@ export function useRoomPageState(input: { audioUnlocked?: boolean } = {}) {
     setIceConfig,
     setIceConfigResolved,
     setActiveDashboardTab,
-    setPlaybackStartIntent,
+    setPlaybackStartRequest,
     setRoomRecoveryState,
     setIsDiagnosticsPanelOpen,
     setIsPageVisible,
     setSchedulerMode,
     setVolume,
-    setSchedulerPlaybackBucketMs,
     setPlayerResetEpoch,
     setBufferHealth,
     setAudioUnlocked,

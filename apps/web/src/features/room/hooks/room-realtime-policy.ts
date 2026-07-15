@@ -191,19 +191,6 @@ export function buildRoomSubscribePayload(input: {
   };
 }
 
-export function hasSubscribeBootstrapFullLocalTrack(input: {
-  enableTrackCaching: boolean;
-  currentTrackId: string | null | undefined;
-  uploadedTracks: Record<string, unknown>;
-  fullLocalPlaybackTracks: Record<string, unknown>;
-}) {
-  return !!(
-    input.enableTrackCaching &&
-    input.currentTrackId &&
-    (input.uploadedTracks[input.currentTrackId] ||
-      input.fullLocalPlaybackTracks[input.currentTrackId])
-  );
-}
 
 export function shouldExitRoomOnSnapshotMissing(input: {
   currentRoomId: string;

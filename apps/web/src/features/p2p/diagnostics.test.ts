@@ -47,20 +47,29 @@ describe("p2p diagnostics", () => {
       peerId: "system",
       channelKind: "system",
       direction: "local",
-      event: "progressive-status",
-      summary: "播放源 full-local / 策略 background",
+      event: "segmented-status",
+      summary: "分段 Opus 播放状态",
       now: "2026-04-01T00:00:00.000Z",
       update: (snapshot) => ({
         ...snapshot,
-        progressivePlaybackStatus: {
-          activeSource: "full-local",
-          transportGovernorMode: "local-primary",
-          engineType: "pcm",
-          aheadBufferedMs: 80_000,
-          startupReady: true,
-          fallbackReason: null,
-          schedulerPolicy: "background",
-          contiguousBufferedMs: 120_000
+        segmentedPlaybackStatus: {
+          playbackAssetId: "asset_1",
+          mediaSessionKey: "session_1",
+          sourcePeerId: "peer_a",
+          isSourceOwner: true,
+          listenerPlaybackState: "live",
+          sourceStartState: "live",
+          audioContextState: "running",
+          outputTrackId: "track_1",
+          remoteTrackId: null,
+          bufferedAheadMs: 80_000,
+          scheduledAheadMs: 100_000,
+          underrunCount: 0,
+          lastUnderrunAt: null,
+          decodedPeak: 0.5,
+          decodedRms: 0.1,
+          lastDecodeError: null,
+          mediaRecoveryState: null
         }
       })
     });
@@ -69,20 +78,29 @@ describe("p2p diagnostics", () => {
       peerId: "system",
       channelKind: "system",
       direction: "local",
-      event: "progressive-status",
-      summary: "播放源 full-local / 策略 background",
+      event: "segmented-status",
+      summary: "分段 Opus 播放状态",
       now: "2026-04-01T00:00:05.000Z",
       update: (snapshot) => ({
         ...snapshot,
-        progressivePlaybackStatus: {
-          activeSource: "full-local",
-          transportGovernorMode: "local-primary",
-          engineType: "pcm",
-          aheadBufferedMs: 96_000,
-          startupReady: true,
-          fallbackReason: null,
-          schedulerPolicy: "background",
-          contiguousBufferedMs: 180_000
+        segmentedPlaybackStatus: {
+          playbackAssetId: "asset_1",
+          mediaSessionKey: "session_1",
+          sourcePeerId: "peer_a",
+          isSourceOwner: true,
+          listenerPlaybackState: "live",
+          sourceStartState: "live",
+          audioContextState: "running",
+          outputTrackId: "track_1",
+          remoteTrackId: null,
+          bufferedAheadMs: 96_000,
+          scheduledAheadMs: 120_000,
+          underrunCount: 0,
+          lastUnderrunAt: null,
+          decodedPeak: 0.5,
+          decodedRms: 0.1,
+          lastDecodeError: null,
+          mediaRecoveryState: null
         }
       })
     });
@@ -90,6 +108,6 @@ describe("p2p diagnostics", () => {
     expect(state.recentEvents).toHaveLength(1);
     expect(state.peers.system?.recentEvents).toHaveLength(1);
     expect(state.recentEvents[0]?.timestamp).toBe("2026-04-01T00:00:05.000Z");
-    expect(state.peers.system?.progressivePlaybackStatus?.contiguousBufferedMs).toBe(180_000);
+    expect(state.peers.system?.segmentedPlaybackStatus?.bufferedAheadMs).toBe(96_000);
   });
 });

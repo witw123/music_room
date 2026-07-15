@@ -6,14 +6,11 @@ import {
 } from "./music-room-app";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
-describe("MusicRoomApp v4 playback wiring", () => {
-  it("mounts segmented playback without the removed progressive/full-local runtimes", () => {
+describe("MusicRoomApp segmented playback wiring", () => {
+  it("mounts the single segmented playback runtime", () => {
     const source = readFileSync(new URL("./music-room-app.tsx", import.meta.url), "utf8");
 
     expect(source).toContain("useRoomSegmentedPlaybackRuntime");
-    expect(source).not.toContain("useProgressiveRuntime");
-    expect(source).not.toContain("useRoomCachedFullLocalPlayback");
-    expect(source).not.toContain("primeFullLocalTrackPlayback");
   });
 
   it("starts audio-context unlock without blocking the playback command", () => {

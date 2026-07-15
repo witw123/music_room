@@ -198,10 +198,10 @@ describe("use-room-derived-state v4 helpers", () => {
     })).toEqual({ peerDiagnostics: [], peerRecentEvents: [] });
   });
 
-  it("does not derive member state from the retired progressive diagnostics model", () => {
+  it("does not derive member state from the playback diagnostics model", () => {
     const source = readFileSync(new URL("./use-room-derived-state.ts", import.meta.url), "utf8");
 
-    expect(source).not.toContain("progressivePlaybackStatus");
+    expect(source).not.toContain("segmentedPlaybackStatus");
     expect(source).not.toContain("buildDiagnosticsViewModel");
     expect(source).not.toContain("缓存播放链路");
   });

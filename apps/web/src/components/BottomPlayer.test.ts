@@ -36,7 +36,7 @@ describe("BottomPlayer source", () => {
     expect(source).toContain('top-0 h-[2px]');
   });
 
-  it("allows room-timeline seeking without a legacy full-local source", () => {
+  it("allows room-timeline seeking on the segmented source", () => {
     const playerSource = readFileSync(new URL("./BottomPlayer.tsx", import.meta.url), "utf8");
     const controllerSource = readFileSync(
       new URL("./BottomPlayerController.tsx", import.meta.url),

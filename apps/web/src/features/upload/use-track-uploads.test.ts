@@ -747,7 +747,7 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         trackExists: true,
         peerId: "peer_listener",
         activeSessionId: "listener",
-        hasLocalFullTrack: true,
+        hasLocalOriginalAsset: true,
         existingTask: {
           mode: "playback-demand",
           status: "ready"
@@ -764,7 +764,7 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         trackExists: true,
         peerId: "peer_listener",
         activeSessionId: "listener",
-        hasLocalFullTrack: true,
+        hasLocalOriginalAsset: true,
         existingTask: null
       })
     ).toBe(true);
@@ -778,7 +778,7 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         trackExists: true,
         peerId: "peer_listener",
         activeSessionId: "listener",
-        hasLocalFullTrack: false,
+        hasLocalOriginalAsset: false,
         existingTask: {
           mode: "playback-demand",
           status: "ready"
@@ -795,7 +795,7 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         trackExists: true,
         peerId: "peer_listener",
         activeSessionId: "listener",
-        hasLocalFullTrack: false,
+        hasLocalOriginalAsset: false,
         existingTask: {
           mode: "manual",
           status: "ready"
@@ -817,20 +817,20 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
     ).toBe(false);
   });
 
-  it("creates a task from an incoming source-device piece when the full-local file is missing", () => {
+  it("creates a task when the local original asset is missing", () => {
     expect(
       shouldCreatePlaybackDemandTaskFromCachePiece({
         playback: remotePlayback,
         trackId: "track_1",
         peerId: "peer_host",
         activeSessionId: "host",
-        hasLocalFullTrack: false,
+        hasLocalOriginalAsset: false,
         hasCurrentTask: false
       })
     ).toBe(true);
   });
 
-  it("auto-caches on a selected source device when its trusted full-local file is missing", () => {
+  it("auto-caches on a selected source device when its trusted original asset is missing", () => {
     expect(
       shouldEnsurePlaybackDemandCacheTask({
         enableManualTrackCaching: true,
@@ -838,7 +838,7 @@ describe("shouldEnsurePlaybackDemandCacheTask", () => {
         trackExists: true,
         peerId: "peer_host",
         activeSessionId: "host",
-        hasLocalFullTrack: false,
+        hasLocalOriginalAsset: false,
         existingTask: null
       })
     ).toBe(true);

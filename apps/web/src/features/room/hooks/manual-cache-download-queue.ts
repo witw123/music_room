@@ -6,12 +6,12 @@ import {
   getPriorityChunkIndexes,
   getStartupWindowMs,
   isFlacTrack,
-  type ProgressiveSchedulerPolicy
-} from "@/features/playback/progressive-playback";
+  type AssetTransferPolicy
+} from "@/features/playback/asset-transfer-scheduler";
 import {
   getRequiredDecodablePrefixChunkCount,
-  resolveSlidingWindowChunkOrder
-} from "@/features/playback/sliding-window/playback-window-scheduler";
+  resolveAssetChunkOrder
+} from "@/features/playback/asset-window-scheduler";
 import {
   resolveTrackPieceManifest,
   selectCanonicalTrackAvailabilityAnnouncement,
@@ -80,17 +80,17 @@ export type ManualCacheTrackPlan = {
   peerSummaries?: ManualCachePeerSummary[];
 };
 
-export type ActivePlaybackCacheWindow = {
+export type ActiveAssetTransferWindow = {
   trackId: string;
   positionMs: number;
   revision: number;
   mediaEpoch: number;
   status: RoomSnapshot["room"]["playback"]["status"];
-  policy: ProgressiveSchedulerPolicy;
+  policy: AssetTransferPolicy;
 };
 
 export function getActivePlaybackPendingKey(
-  activePlaybackWindow: ActivePlaybackCacheWindow | null | undefined
+  activePlaybackWindow: ActiveAssetTransferWindow | null | undefined
 ) {
   if (!activePlaybackWindow) {
     return null;
@@ -274,7 +274,7 @@ export function resolveManualCacheActivePriorityChunks(input: {
   manifest: ResolvedTrackPieceManifest;
   track: TrackMeta;
   localPieceIndexes: number[];
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
 }) {
   if (input.activePlaybackWindow?.trackId !== input.track.id) {
     return [];
@@ -309,7 +309,7 @@ export function resolveManualCacheActivePriorityChunks(input: {
     });
   }
 
-  return resolveSlidingWindowChunkOrder({
+  return resolveAssetChunkOrder({
     manifest: {
       durationMs: input.track.durationMs,
       totalChunks: input.manifest.totalChunks,
@@ -335,7 +335,7 @@ function resolveManualCacheRequestOrder(input: {
   manifest: ResolvedTrackPieceManifest;
   track: TrackMeta;
   localPieceIndexes: number[];
-  activePlaybackWindow: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow: ActiveAssetTransferWindow | null;
 }) {
   const localPieceSet = new Set(input.localPieceIndexes);
   if (input.activePlaybackWindow?.trackId !== input.track.id) {
@@ -430,7 +430,7 @@ export function resolveManualCacheTrackPlan(input: {
   pendingChunkIndexes: number[];
   maxRequestChunks?: number;
   maxPendingChunks?: number;
-  activePlaybackWindow?: ActivePlaybackCacheWindow | null;
+  activePlaybackWindow?: ActiveAssetTransferWindow | null;
 }): ManualCacheTrackPlan {
   const trackId = input.track?.id ?? "";
   if (!input.track) {

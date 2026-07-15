@@ -25,6 +25,7 @@ import type { PeerDiagnosticRecorder } from "@/features/p2p/use-peer-diagnostics
 import { createRoomSnapshotResyncController, type RoomSnapshotResyncReason } from "@/features/room/room-snapshot-resync";
 import { musicRoomApi } from "@/lib/music-room-api";
 import { toUserFacingError } from "@/lib/music-room-ui";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 import {
   getPieceTransferRates,
   useRoomRuntimeObservability
@@ -136,7 +137,6 @@ type UseRoomRuntimeInput = {
   flushPendingAvailability: () => void;
   recordPeerDiagnostic: PeerDiagnosticRecorder;
   uploadedTracks: Record<string, UploadedTrack>;
-  fullLocalPlaybackTracks: Record<string, SourceLocalPlaybackTrack>;
   uploadedTrackIds: string[];
   uploadedTrackIdsRef: MutableRefObject<string[]>;
   announceRoomTrackAvailability: (
@@ -171,8 +171,6 @@ type UseRoomRuntimeResult = {
   ) => void;
   getPeerMediaState: (peerId: string) => ReturnType<P2PMesh["getPeerMediaState"]>;
 };
-
-type SourceLocalPlaybackTrack = Pick<UploadedTrack, "objectUrl">;
 
 export function shouldStartRoomRealtimeRuntime(input: {
   roomId: string | null | undefined;
@@ -248,7 +246,6 @@ export function useRoomRuntime({
   flushPendingAvailability,
   recordPeerDiagnostic,
   uploadedTracks,
-  fullLocalPlaybackTracks,
   uploadedTrackIds,
   uploadedTrackIdsRef,
   announceRoomTrackAvailability,
@@ -295,7 +292,6 @@ export function useRoomRuntime({
     socketDisconnectGraceTimeoutRef,
     manualCacheTrackIdsRef,
     uploadedTracksRef,
-    fullLocalPlaybackTracksRef,
     announceRoomTrackAvailabilityRef,
     handleManualCachePieceReceivedRef,
     deleteRoomTrackArtifactsRef,
@@ -320,7 +316,6 @@ export function useRoomRuntime({
     roomRecoveryState,
     manualCacheTrackIds: [],
     uploadedTracks,
-    fullLocalPlaybackTracks,
     announceRoomTrackAvailability,
     handleManualCachePieceReceived,
     deleteUploadedTrackArtifacts,
@@ -392,6 +387,7 @@ export function useRoomRuntime({
       setStatusMessage(message);
       setIsNavigatingRoomExit(true);
       resetPlayerSurfaceRef.current();
+      roomAudioOutput.releaseRoomAudioSession();
       dispatchRoomStateEvent({ type: "local-reset" });
       router.replace(
         buildRoomExitHref({
@@ -594,7 +590,6 @@ export function useRoomRuntime({
       chunkSchedulerRef,
       currentRoomRef,
       uploadedTracksRef,
-      fullLocalPlaybackTracksRef,
       uploadedTrackIdsRef,
       manualCacheTrackIdsRef,
       announceRoomTrackAvailabilityRef,
@@ -675,7 +670,6 @@ export function useRoomRuntime({
     deleteRoomTrackArtifactsRef,
     dispatchRoomStateEvent,
     flushPendingAvailabilityRef,
-    fullLocalPlaybackTracksRef,
     handleManualCachePieceReceivedRef,
     lastRealtimeRoomEventAtRef,
     lastSubscribeAckAtRef,

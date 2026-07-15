@@ -666,7 +666,7 @@ describe("ChunkScheduler", () => {
     expect(requestedTrackIds.every((entry) => entry === "track_1:current")).toBe(true);
   });
 
-  it("keeps downloading the full current FLAC once startup is satisfied and progressive local is unavailable", () => {
+  it("keeps downloading the current asset after startup is satisfied", () => {
     const requestPiece = vi.fn(() => true);
     const scheduler = new ChunkScheduler("peer_member", {
       now: () => 1_000,

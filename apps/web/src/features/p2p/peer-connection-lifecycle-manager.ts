@@ -264,7 +264,7 @@ export class PeerConnectionLifecycleManager {
       receiverTrackState: entry.receiverTrackState,
       remoteStream: entry.remoteAudioStream,
       remoteTrackId: entry.remoteAudioTrackId,
-      mediaSourcePeerId: entry.remoteAudioStream ? peerId : null
+      sourcePeerId: entry.remoteAudioStream ? peerId : null
     };
   }
 
