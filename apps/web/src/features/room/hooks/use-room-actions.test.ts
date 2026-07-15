@@ -8,8 +8,24 @@ import {
 
 describe("player cleanup after removal", () => {
   it("resets only when the removed queue item is currently playing", () => {
-    expect(shouldResetPlayerAfterQueueRemoval("queue_1", "queue_1")).toBe(true);
-    expect(shouldResetPlayerAfterQueueRemoval("queue_2", "queue_1")).toBe(false);
+    expect(
+      shouldResetPlayerAfterQueueRemoval(
+        { currentTrackId: "track_1" },
+        { currentTrackId: null }
+      )
+    ).toBe(true);
+    expect(
+      shouldResetPlayerAfterQueueRemoval(
+        { currentTrackId: "track_1" },
+        { currentTrackId: "track_2" }
+      )
+    ).toBe(false);
+    expect(
+      shouldResetPlayerAfterQueueRemoval(
+        { currentTrackId: null },
+        { currentTrackId: null }
+      )
+    ).toBe(false);
   });
 
   it("resets only when the removed library track is currently playing", () => {

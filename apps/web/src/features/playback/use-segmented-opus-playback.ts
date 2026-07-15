@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomSnapshot, TrackMeta } from "@music-room/shared";
 import {
   getAssetUnit,
@@ -64,6 +64,28 @@ export function useSegmentedOpusPlayback(input: {
   const playbackGenerationRef = useRef(0);
   const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
   const roomId = roomSnapshot?.room.id ?? null;
+  const hasActivePlayback = hasActiveSegmentedPlayback({
+    isCurrentSource,
+    currentTrackId: roomSnapshot?.room.playback.currentTrackId,
+    hasPlaybackAsset: !!input.currentTrack?.playbackAsset
+  });
+  const releaseEngine = useCallback(() => {
+    playbackGenerationRef.current += 1;
+    engineRef.current?.destroy();
+    engineRef.current = null;
+    activePlaybackAssetIdRef.current = null;
+    storedManifestAssetIdRef.current = null;
+    playbackIdentityRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (hasActivePlayback) {
+      return;
+    }
+
+    releaseEngine();
+    setSnapshot(idleSnapshot);
+  }, [hasActivePlayback, releaseEngine]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,17 +203,14 @@ export function useSegmentedOpusPlayback(input: {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      engineRef.current?.destroy();
-      engineRef.current = null;
-      playbackIdentityRef.current = null;
-      activePlaybackAssetIdRef.current = null;
-      storedManifestAssetIdRef.current = null;
+      releaseEngine();
       setSnapshot(idleSnapshot);
     };
   }, [
     roomId,
     peerId,
-    isCurrentSource
+    isCurrentSource,
+    releaseEngine
   ]);
 
   useEffect(() => {
@@ -201,6 +220,14 @@ export function useSegmentedOpusPlayback(input: {
   useEffect(() => () => engineRef.current?.destroy(), []);
 
   return snapshot;
+}
+
+export function hasActiveSegmentedPlayback(input: {
+  isCurrentSource: boolean;
+  currentTrackId: string | null | undefined;
+  hasPlaybackAsset: boolean;
+}) {
+  return input.isCurrentSource && Boolean(input.currentTrackId) && input.hasPlaybackAsset;
 }
 
 function formatSegmentedPlaybackError(error: unknown) {

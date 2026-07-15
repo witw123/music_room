@@ -225,6 +225,106 @@ describe("RoomService", () => {
     ).resolves.toEqual([]);
   });
 
+  it("clears the player when the currently playing queue item is removed", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "First",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "remove-current-first",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Second",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "remove-current-second",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const firstQueueItem = await roomService.addQueueItem(snapshot.room.id, host.id, firstTrack.id);
+    await roomService.addQueueItem(snapshot.room.id, host.id, secondTrack.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: firstQueueItem.id,
+      actorSessionId: host.id
+    });
+
+    await roomService.removeQueueItem(snapshot.room.id, firstQueueItem.id, host.id);
+    const afterRemoval = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(afterRemoval.queue).toHaveLength(1);
+    expect(afterRemoval.queue[0]?.trackId).toBe(secondTrack.id);
+    expect(afterRemoval.room.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: null,
+      currentQueueItemId: null,
+      playbackAssetId: null,
+      sourceSessionId: null,
+      sourcePeerId: null
+    });
+  });
+
+  it("clears direct playback when its matching queue item is removed", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Direct playback",
+      artist: "Artist",
+      album: null,
+      durationMs: 90000,
+      bitrate: null,
+      fileHash: "remove-direct-playback",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const queueItem = await roomService.addQueueItem(snapshot.room.id, host.id, track.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id
+    });
+
+    await roomService.removeQueueItem(snapshot.room.id, queueItem.id, host.id);
+    const afterRemoval = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(afterRemoval.room.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: null,
+      currentQueueItemId: null,
+      playbackAssetId: null,
+      sourceSessionId: null,
+      sourcePeerId: null
+    });
+  });
+
   it("keeps the host record offline and preserves host ownership when the host leaves", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

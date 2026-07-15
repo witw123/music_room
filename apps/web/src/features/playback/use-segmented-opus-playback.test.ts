@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { buildSegmentedPlaybackFailureSnapshot } from "./use-segmented-opus-playback";
+import {
+  buildSegmentedPlaybackFailureSnapshot,
+  hasActiveSegmentedPlayback
+} from "./use-segmented-opus-playback";
 
 const current = {
   state: "live" as const,
@@ -12,6 +15,19 @@ const current = {
 };
 
 describe("segmented playback recovery", () => {
+  it("releases the local engine when the authoritative playback has no track", () => {
+    expect(hasActiveSegmentedPlayback({
+      isCurrentSource: true,
+      currentTrackId: null,
+      hasPlaybackAsset: true
+    })).toBe(false);
+    expect(hasActiveSegmentedPlayback({
+      isCurrentSource: true,
+      currentTrackId: "track_1",
+      hasPlaybackAsset: true
+    })).toBe(true);
+  });
+
   it("keeps a decode failure recoverable while AudioContext is running", () => {
     expect(buildSegmentedPlaybackFailureSnapshot({
       current,

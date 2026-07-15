@@ -526,20 +526,15 @@ export class RoomService {
       .filter((item) => item.id !== queueItemId)
       .map((item, index) => ({ ...item, position: index }));
 
-    if (removed && record.room.playback.currentQueueItemId === removed.id) {
-      const nextItem = nextQueue[removed.position] ?? nextQueue[removed.position - 1] ?? null;
-      if (nextItem) {
-        await this.roomPlaybackService.applyTrackPlayback(record, nextItem.trackId, 0, nextItem.id);
-        this.incrementPlaybackRevision(record.room.playback);
-        record.queue = nextQueue;
-        this.incrementQueueVersion(record.room.playback);
-        this.incrementRoomRevision(record.room);
-        await this.roomRecordRepository.persistRecord(record);
-        return record.queue;
-      }
+    const playback = record.room.playback;
+    const removesCurrentQueueItem = playback.currentQueueItemId === removed.id;
+    const removesDirectlyPlayingTrack =
+      playback.currentQueueItemId === null && playback.currentTrackId === removed.trackId;
+
+    if (removesCurrentQueueItem || removesDirectlyPlayingTrack) {
       record.queue = nextQueue;
-      this.roomPlaybackService.clearPlayback(record.room.playback);
-      this.incrementQueueVersion(record.room.playback);
+      this.roomPlaybackService.clearPlayback(playback);
+      this.incrementQueueVersion(playback);
       this.incrementRoomRevision(record.room);
       await this.roomRecordRepository.persistRecord(record);
       return record.queue;

@@ -63,10 +63,10 @@ export async function runBestEffortRoomLeave(input: {
 }
 
 export function shouldResetPlayerAfterQueueRemoval(
-  removedQueueItemId: string,
-  currentQueueItemId: string | null | undefined
+  previousPlayback: Pick<PlaybackSnapshot, "currentTrackId">,
+  nextPlayback: Pick<PlaybackSnapshot, "currentTrackId">
 ) {
-  return removedQueueItemId === currentQueueItemId;
+  return Boolean(previousPlayback.currentTrackId && !nextPlayback.currentTrackId);
 }
 
 export function shouldResetPlayerAfterTrackRemoval(
@@ -598,20 +598,16 @@ export function useRoomActions({
       }
 
       try {
-        const shouldResetPlayer = shouldResetPlayerAfterQueueRemoval(
-          queueItemId,
-          roomSnapshot.room.playback.currentQueueItemId
-        );
         const result = await musicRoomApi.removeQueueItem(roomSnapshot.room.id, queueItemId);
-        if (shouldResetPlayer) {
-          resetPlayerSurface();
-        }
         dispatchRoomStateEvent({
           type: "server-queue-patch",
           roomId: roomSnapshot.room.id,
           queue: result.queue,
           playback: result.playback
         });
+        if (shouldResetPlayerAfterQueueRemoval(roomSnapshot.room.playback, result.playback)) {
+          resetPlayerSurface();
+        }
         void syncRoomSnapshot(roomSnapshot.room.id).catch(() => undefined);
         setStatusMessage("歌曲已从队列中移除。");
       } catch (error) {
