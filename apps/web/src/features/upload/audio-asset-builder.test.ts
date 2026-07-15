@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   assertDecodedPcmWithinMemoryBudget,
@@ -11,6 +12,16 @@ import {
 } from "./audio-asset-builder";
 
 describe("audio asset preparation", () => {
+  it("uses one browser decode path for every supported upload format", () => {
+    const source = readFileSync(new URL("./audio-asset-builder.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("const audioBuffer = await decodeAudioFile(input.file);");
+    expect(source).toContain("return await encodePlaybackAsset(input, audioBuffer);");
+    expect(source).not.toContain("AudioDecoder");
+    expect(source).not.toContain("resolveWavPlaybackSource");
+    expect(source).not.toContain("resolveCompressedPlaybackSource");
+  });
+
   it("publishes the server-compatible playback profile", () => {
     expect(playbackProfileId).toBe("opus-music-v2");
     expect(playbackEncoderVersion).toBe("2.0.0");

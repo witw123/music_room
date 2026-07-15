@@ -21,29 +21,11 @@ import {
   upsertTranscodeJob
 } from "@/lib/indexeddb";
 import { OpusSegmentEncoder } from "./opus-segment-encoder";
-import {
-  parseWavHeader,
-  resolveWavByteRangeForSamples,
-  type WavHeader
-} from "@/features/playback/codecs/wav-parser";
-import {
-  extractFlacPackets,
-  parseFlacStreamInfo,
-  type FlacFramePacket,
-  type FlacStreamInfo
-} from "@/features/audio-codecs/flac-parser";
-import {
-  parseMp3FrameHeader,
-  skipMp3Id3v2
-} from "@/features/playback/codecs/mp3-frame-index";
 
 const originalUnitSize = 1024 * 1024;
 const segmentDurationMs = 2_000;
 const seekPrerollMs = 80;
 const opusSampleRate = 48_000;
-const wavHeaderProbeBytes = 1024 * 1024;
-const compressedDecodeWindowBytes = 4 * 1024 * 1024;
-const compressedDecodeBatchFrames = 192;
 const persistenceBatchSize = 8;
 export { playbackEncoderVersion, playbackProfileId };
 export const maxDecodedPcmBytes = 256 * 1024 * 1024;
@@ -103,6 +85,7 @@ export async function prepareAudioAssets(input: {
     throw new Error("音频文件为空。");
   }
 
+  await assertFileFitsDecodeMemoryBudget(input.file, input.onProgress);
   const sourcePromise = prepareOriginalAsset(input);
   const playbackPromise = preparePlaybackAsset({
     ...input,
@@ -211,42 +194,41 @@ async function preparePlaybackAsset(input: {
 }) {
   throwIfAborted(input.signal);
   input.onProgress?.({ stage: "decoding", completed: 0, total: 1 });
-  const wavSource = resolveSupportedUploadFormat(input.file) === "wav"
-    ? await resolveWavPlaybackSource(input.file)
-    : null;
-  const compressedSource = wavSource
-    ? null
-    : await resolveCompressedPlaybackSource(input.file);
-  const audioBuffer = wavSource || compressedSource ? null : await decodeAudioFile(input.file);
+  const audioBuffer = await decodeAudioFile(input.file);
   input.onProgress?.({ stage: "decoding", completed: 1, total: 1 });
-  if (!wavSource && !compressedSource && audioBuffer && (audioBuffer.numberOfChannels < 1 || audioBuffer.numberOfChannels > 2)) {
+  return await encodePlaybackAsset(input, audioBuffer);
+}
+
+async function encodePlaybackAsset(
+  input: {
+    fileHash: string | Promise<string>;
+    signal?: AbortSignal;
+    onProgress?: (progress: AssetPreparationProgress) => void;
+  },
+  audioBuffer: Pick<
+    AudioBuffer,
+    "duration" | "sampleRate" | "numberOfChannels" | "length" | "getChannelData"
+  >
+) {
+  if (audioBuffer.numberOfChannels < 1 || audioBuffer.numberOfChannels > 2) {
     throw new Error("仅支持单声道或双声道音频。");
   }
-  if (!wavSource && !compressedSource && !audioBuffer) {
-    throw new Error("音频解码失败。");
-  }
-  if (!wavSource && !compressedSource && audioBuffer) {
-    assertDecodedPcmWithinMemoryBudget({
-      durationSeconds: audioBuffer.duration,
-      channels: audioBuffer.numberOfChannels
-    });
-  }
+  assertDecodedPcmWithinMemoryBudget({
+    durationSeconds: audioBuffer.duration,
+    channels: audioBuffer.numberOfChannels
+  });
 
-  const channels = (wavSource?.channels ?? compressedSource?.channels ?? audioBuffer!.numberOfChannels) as 1 | 2;
+  const channels = audioBuffer.numberOfChannels as 1 | 2;
   const bitrate = channels === 1 ? 96_000 as const : 192_000 as const;
-  const durationMs = wavSource?.durationMs ?? compressedSource?.durationMs ?? Math.max(1, Math.round(audioBuffer!.duration * 1000));
-  const sourceSampleRate = wavSource?.sampleRate ?? compressedSource?.sampleRate ?? audioBuffer!.sampleRate;
+  const durationMs = Math.max(1, Math.round(audioBuffer.duration * 1000));
+  const sourceSampleRate = audioBuffer.sampleRate;
   const unitCount = Math.ceil(durationMs / segmentDurationMs);
   const encodedUnits: Array<{
     payload: ArrayBuffer;
     descriptor: Omit<AssetUnitDescriptor, "assetId" | "contentHash" | "proof">;
   } | undefined> = new Array(unitCount);
   const leafHashes: Array<string | undefined> = new Array(unitCount);
-  // Compressed decoders are intentionally consumed in file order. Keeping a
-  // single encoder worker also bounds decoded PCM memory for multi-gigabyte
-  // FLAC/MP3 files; WAV remains safe to encode concurrently because it reads
-  // independent byte ranges.
-  const concurrency = compressedSource ? 1 : resolveEncodingConcurrency(unitCount);
+  const concurrency = resolveEncodingConcurrency(unitCount);
   const encoders = Array.from({ length: concurrency }, () => new OpusSegmentEncoder());
   let nextUnitIndex = 0;
   let completedUnits = 0;
@@ -257,11 +239,7 @@ async function preparePlaybackAsset(input: {
         const unitIndex = nextUnitIndex++;
         if (unitIndex >= unitCount) return;
         throwIfAborted(input.signal);
-        const segment = wavSource
-          ? await wavSource.getSegment(unitIndex)
-          : compressedSource
-            ? await compressedSource.getSegment(unitIndex)
-            : slicePcmSegment(audioBuffer!, unitIndex);
+        const segment = slicePcmSegment(audioBuffer, unitIndex);
         const payload = await encoder.encode({
           sampleRate: sourceSampleRate,
           channels: segment.channels,
@@ -287,7 +265,6 @@ async function preparePlaybackAsset(input: {
     }));
   } finally {
     encoders.forEach((encoder) => encoder.dispose());
-    await compressedSource?.dispose();
   }
 
   const completeLeafHashes = leafHashes.map((hash) => {
@@ -413,6 +390,34 @@ export function resolveEncodingConcurrency(unitCount: number, hardwareConcurrenc
   return Math.min(unitCount, 4, availableWorkers);
 }
 
+async function assertFileFitsDecodeMemoryBudget(
+  file: File,
+  onProgress?: (progress: AssetPreparationProgress) => void
+) {
+  onProgress?.({ stage: "inspecting", completed: 0, total: 1 });
+  try {
+    const { parseBlob } = await import("music-metadata-browser");
+    const metadata = await parseBlob(file, { duration: true, skipCovers: true });
+    const durationSeconds = metadata.format.duration;
+    const channels = metadata.format.numberOfChannels;
+    if (
+      typeof durationSeconds === "number" &&
+      Number.isFinite(durationSeconds) &&
+      typeof channels === "number" &&
+      Number.isFinite(channels)
+    ) {
+      assertDecodedPcmWithinMemoryBudget({ durationSeconds, channels });
+    }
+  } catch (error) {
+    if (error instanceof AudioDecodeMemoryLimitError) {
+      throw error;
+    }
+    // The browser decoder remains authoritative when container metadata is incomplete.
+  } finally {
+    onProgress?.({ stage: "inspecting", completed: 1, total: 1 });
+  }
+}
+
 export function estimateDecodedPcmBytes(input: {
   durationSeconds: number;
   channels: number;
@@ -467,675 +472,6 @@ export function slicePcmSegment(
     // published timeline remains exactly one 2s segment per unit.
     trimStartSamples: 0
   };
-}
-
-type EncodablePlaybackSegment = {
-  channels: Float32Array[];
-  trimStartSamples: number;
-};
-
-type CompressedPlaybackSource = {
-  channels: 1 | 2;
-  sampleRate: 48_000;
-  durationMs: number;
-  getSegment: (unitIndex: number) => Promise<EncodablePlaybackSegment>;
-  dispose: () => Promise<void>;
-};
-
-type EncodedAudioChunkLike = {
-  new (init: { type: "key" | "delta"; timestamp: number; duration?: number; data: Uint8Array }): unknown;
-};
-
-type StreamingAudioDecoder = {
-  configure: (config: unknown) => void;
-  decode: (chunk: unknown) => void;
-  flush: () => Promise<void>;
-  close: () => void;
-};
-
-type StreamingAudioDecoderConstructor = {
-  new (init: { output: (audioData: unknown) => void; error: (error: unknown) => void }): StreamingAudioDecoder;
-  isConfigSupported?: (config: unknown) => Promise<{ supported?: boolean }>;
-};
-
-type CompressedFrame = FlacFramePacket;
-
-class StreamingCompressedPlaybackSource implements CompressedPlaybackSource {
-  private readonly targetSegmentSamples = Math.round((segmentDurationMs / 1000) * opusSampleRate);
-  private readonly prerollSamples = Math.round((seekPrerollMs / 1000) * opusSampleRate);
-  private readonly pcm: PcmAccumulator;
-  private readonly decoder: StreamingAudioDecoder;
-  private readonly encodedChunkConstructor: EncodedAudioChunkLike;
-  private readonly frameReader: CompressedFrameReader;
-  private decodeError: Error | null = null;
-  private pcmAppendPromise: Promise<void> = Promise.resolve();
-  private eof = false;
-  private lastUnitIndex = -1;
-  private disposed = false;
-  private operation: Promise<unknown> = Promise.resolve();
-
-  constructor(
-    public readonly channels: 1 | 2,
-    private readonly sourceSampleRate: number,
-    public readonly durationMs: number,
-    frameReader: CompressedFrameReader,
-    decoder: StreamingAudioDecoder,
-    encodedChunkConstructor: EncodedAudioChunkLike
-  ) {
-    this.frameReader = frameReader;
-    this.decoder = decoder;
-    this.encodedChunkConstructor = encodedChunkConstructor;
-    this.pcm = new PcmAccumulator(channels);
-  }
-
-  get sampleRate(): 48_000 {
-    return opusSampleRate;
-  }
-
-  getSegment(unitIndex: number) {
-    const run = this.operation.then(() => this.readSegment(unitIndex));
-    this.operation = run.catch(() => undefined);
-    return run;
-  }
-
-  async dispose() {
-    if (this.disposed) return;
-    this.disposed = true;
-    try {
-      this.decoder.close();
-    } catch {
-      // Decoder may already be closed after a fatal codec error.
-    }
-    await this.frameReader.dispose?.();
-  }
-
-  private async readSegment(unitIndex: number): Promise<EncodablePlaybackSegment> {
-    if (this.disposed) throw new Error("音频转码已取消。");
-    if (unitIndex !== this.lastUnitIndex + 1) {
-      throw new Error("压缩音频转码必须按顺序读取播放片段。");
-    }
-
-    const contentStart = unitIndex * this.targetSegmentSamples;
-    const contentEnd = Math.min(
-      Math.ceil((this.durationMs / 1000) * opusSampleRate),
-      contentStart + this.targetSegmentSamples
-    );
-    const desiredStart = Math.max(0, contentStart - this.prerollSamples);
-    await this.decodeUntil(contentEnd);
-    if (this.pcm.endSample < contentEnd) {
-      throw this.decodeError ?? new Error("压缩音频解码提前结束。");
-    }
-
-    const channels = this.pcm.slice(desiredStart, contentEnd);
-    const leadingPaddingSamples = unitIndex === 0 ? this.prerollSamples : 0;
-    const output = leadingPaddingSamples > 0
-      ? channels.map((channel) => {
-          const padded = new Float32Array(leadingPaddingSamples + channel.length);
-          padded.set(channel, leadingPaddingSamples);
-          return padded;
-        })
-      : channels;
-
-    this.lastUnitIndex = unitIndex;
-    this.pcm.trimBefore(Math.max(0, contentEnd - this.prerollSamples));
-    return {
-      channels: output,
-      trimStartSamples: 0
-    };
-  }
-
-  private async decodeUntil(targetSample: number) {
-    while (this.pcm.endSample < targetSample && !this.eof) {
-      const frames = await this.frameReader.readFrames(compressedDecodeBatchFrames);
-      if (frames.length === 0) {
-        this.eof = true;
-        await this.decoder.flush();
-        await this.pcmAppendPromise;
-        break;
-      }
-
-      for (const frame of frames) {
-        try {
-          const EncodedAudioChunk = this.encodedChunkConstructor;
-          this.decoder.decode(new EncodedAudioChunk({
-            type: "key",
-            timestamp: frame.timestampUs,
-            duration: frame.durationUs,
-            data: frame.data
-          }));
-        } catch (error) {
-          this.decodeError = error instanceof Error ? error : new Error("压缩音频解码失败。");
-          throw this.decodeError;
-        }
-      }
-      await this.decoder.flush();
-      await this.pcmAppendPromise;
-      if (this.decodeError) throw this.decodeError;
-    }
-  }
-
-  appendDecoded(audioData: unknown) {
-    const data = audioData as {
-      numberOfChannels?: number;
-      numberOfFrames?: number;
-      sampleRate?: number;
-      copyTo?: (destination: Float32Array, options: { planeIndex: number; format?: string }) => void;
-      close?: () => void;
-    };
-    const numberOfChannels = Math.min(this.channels, Math.max(1, Math.floor(data.numberOfChannels ?? this.channels)));
-    const numberOfFrames = Math.max(0, Math.floor(data.numberOfFrames ?? 0));
-    const sampleRate = Number.isFinite(data.sampleRate) ? Number(data.sampleRate) : this.sourceSampleRate;
-    if (!data.copyTo || numberOfFrames <= 0) {
-      data.close?.();
-      return;
-    }
-    const channels = Array.from({ length: numberOfChannels }, (_, planeIndex) => {
-      const channel = new Float32Array(numberOfFrames);
-      try {
-        data.copyTo!(channel, { planeIndex, format: "f32-planar" });
-      } catch {
-        data.copyTo!(channel, { planeIndex });
-      }
-      return channel;
-    });
-    data.close?.();
-    this.pcmAppendPromise = this.pcmAppendPromise.then(() =>
-      this.appendNormalizedChannels(channels, sampleRate)
-    );
-  }
-
-  setDecoderError(error: unknown) {
-    this.decodeError = error instanceof Error ? error : new Error("压缩音频解码失败。");
-  }
-
-  private async appendNormalizedChannels(channels: Float32Array[], sampleRate: number) {
-    if (sampleRate === opusSampleRate) {
-      this.pcm.append(channels);
-      return;
-    }
-    const { resample } = await import("wave-resampler");
-    this.pcm.append(channels.map((channel) => Float32Array.from(resample(
-      channel,
-      sampleRate,
-      opusSampleRate,
-      { method: "sinc", LPF: true, LPFType: "FIR", LPFOrder: 71, sincFilterSize: 12 }
-    ))));
-  }
-}
-
-class PcmAccumulator {
-  private readonly chunks: Array<{ start: number; length: number; channels: Float32Array[] }> = [];
-  private _startSample = 0;
-  private _endSample = 0;
-
-  constructor(private readonly channels: number) {}
-
-  get startSample() {
-    return this._startSample;
-  }
-
-  get endSample() {
-    return this._endSample;
-  }
-
-  append(channels: Float32Array[]) {
-    const frameCount = channels[0]?.length ?? 0;
-    if (!frameCount) return;
-    const normalizedChannels = Array.from({ length: this.channels }, (_, channelIndex) =>
-      channels[channelIndex] ?? channels[0]!
-    );
-    this.chunks.push({ start: this._endSample, length: frameCount, channels: normalizedChannels });
-    this._endSample += frameCount;
-  }
-
-  slice(startSample: number, endSample: number) {
-    const start = Math.max(this._startSample, startSample);
-    const end = Math.max(start, Math.min(this._endSample, endSample));
-    const output = Array.from({ length: this.channels }, () => new Float32Array(end - start));
-    for (const chunk of this.chunks) {
-      const overlapStart = Math.max(start, chunk.start);
-      const overlapEnd = Math.min(end, chunk.start + chunk.length);
-      if (overlapEnd <= overlapStart) continue;
-      const sourceStart = overlapStart - chunk.start;
-      const targetStart = overlapStart - start;
-      for (let channelIndex = 0; channelIndex < this.channels; channelIndex += 1) {
-        output[channelIndex]!.set(
-          chunk.channels[channelIndex]!.subarray(sourceStart, sourceStart + overlapEnd - overlapStart),
-          targetStart
-        );
-      }
-    }
-    return output;
-  }
-
-  trimBefore(sample: number) {
-    const target = Math.max(this._startSample, Math.min(sample, this._endSample));
-    while (this.chunks.length > 0) {
-      const first = this.chunks[0]!;
-      const firstEnd = first.start + first.length;
-      if (firstEnd <= target) {
-        this.chunks.shift();
-        continue;
-      }
-      if (first.start < target) {
-        const offset = target - first.start;
-        first.channels = first.channels.map((channel) => channel.slice(offset));
-        first.start = target;
-        first.length -= offset;
-      }
-      break;
-    }
-    this._startSample = target;
-  }
-}
-
-type CompressedFrameReader = {
-  readFrames: (limit: number) => Promise<CompressedFrame[]>;
-  dispose?: () => Promise<void>;
-};
-
-async function resolveCompressedPlaybackSource(file: File): Promise<CompressedPlaybackSource | null> {
-  const format = resolveSupportedUploadFormat(file);
-  if (format !== "flac" && format !== "mp3") return null;
-
-  const globals = globalThis as unknown as {
-    AudioDecoder?: StreamingAudioDecoderConstructor;
-    EncodedAudioChunk?: EncodedAudioChunkLike;
-  };
-  if (!globals.AudioDecoder || !globals.EncodedAudioChunk) {
-    // The existing AudioContext path remains available for browsers without
-    // WebCodecs. Modern Chromium/Firefox use the bounded streaming path.
-    return null;
-  }
-
-  if (format === "flac") {
-    const streamInfo = await readFlacStreamInfo(file);
-    if (!streamInfo || streamInfo.numberOfChannels < 1 || streamInfo.numberOfChannels > 2) {
-      return null;
-    }
-    const durationMs = await resolveFlacDurationMs(file, streamInfo);
-    const reader = new FlacFrameReader(file, streamInfo);
-    const decoderConfig: Record<string, unknown> = {
-      codec: "flac",
-      sampleRate: streamInfo.sampleRate,
-      numberOfChannels: streamInfo.numberOfChannels,
-      description: streamInfo.description
-    };
-    if (!(await isAudioDecoderConfigSupported(globals.AudioDecoder, decoderConfig))) {
-      await reader.dispose();
-      return null;
-    }
-    let source: StreamingCompressedPlaybackSource | null = null;
-    const decoder = new globals.AudioDecoder({
-      output: (audioData) => source?.appendDecoded(audioData),
-      error: (error) => source?.setDecoderError(error)
-    });
-    decoder.configure(decoderConfig);
-    source = new StreamingCompressedPlaybackSource(
-      streamInfo.numberOfChannels as 1 | 2,
-      streamInfo.sampleRate,
-      durationMs,
-      reader,
-      decoder,
-      globals.EncodedAudioChunk
-    );
-    return source;
-  }
-
-  const metadata = await scanMp3Metadata(file);
-  if (!metadata) return null;
-  const reader = new Mp3FrameReader(file, metadata.audioOffset);
-  const decoderConfig: Record<string, unknown> = {
-    codec: "mp3",
-    sampleRate: metadata.sampleRate,
-    numberOfChannels: metadata.channels
-  };
-  if (!(await isAudioDecoderConfigSupported(globals.AudioDecoder, decoderConfig))) {
-    await reader.dispose();
-    return null;
-  }
-  let source: StreamingCompressedPlaybackSource | null = null;
-  const decoder = new globals.AudioDecoder({
-    output: (audioData) => source?.appendDecoded(audioData),
-    error: (error) => source?.setDecoderError(error)
-  });
-  decoder.configure(decoderConfig);
-  source = new StreamingCompressedPlaybackSource(
-    metadata.channels,
-    metadata.sampleRate,
-    Math.max(1, Math.round((metadata.totalSamples / metadata.sampleRate) * 1000)),
-    reader,
-    decoder,
-    globals.EncodedAudioChunk
-  );
-  return source;
-}
-
-async function isAudioDecoderConfigSupported(
-  constructor: StreamingAudioDecoderConstructor,
-  config: unknown
-) {
-  if (!constructor.isConfigSupported) return true;
-  try {
-    const result = await constructor.isConfigSupported(config);
-    return result.supported !== false;
-  } catch {
-    return false;
-  }
-}
-
-async function readFlacStreamInfo(file: File): Promise<FlacStreamInfo | null> {
-  let probeBytes = 1024 * 1024;
-  const maxProbeBytes = Math.min(file.size, 32 * 1024 * 1024);
-  while (probeBytes <= maxProbeBytes) {
-    const bytes = new Uint8Array(await file.slice(0, Math.min(file.size, probeBytes)).arrayBuffer());
-    const streamInfo = parseFlacStreamInfo(bytes);
-    if (streamInfo) return streamInfo;
-    if (probeBytes >= file.size) break;
-    probeBytes = Math.min(maxProbeBytes, probeBytes * 2);
-  }
-  return null;
-}
-
-async function resolveFlacDurationMs(file: File, streamInfo: FlacStreamInfo) {
-  if (streamInfo.totalSamples && streamInfo.totalSamples > 0) {
-    return Math.max(1, Math.round((streamInfo.totalSamples / streamInfo.sampleRate) * 1000));
-  }
-  const reader = new FlacFrameReader(file, streamInfo);
-  let lastSample = 0;
-  try {
-    while (true) {
-      const frames = await reader.readFrames(compressedDecodeBatchFrames);
-      if (frames.length === 0) break;
-      for (const frame of frames) {
-        lastSample = Math.max(
-          lastSample,
-          Math.round((frame.timestampUs / 1_000_000) * streamInfo.sampleRate) + frame.sampleCount
-        );
-      }
-    }
-  } finally {
-    await reader.dispose();
-  }
-  return Math.max(1, Math.round((lastSample / streamInfo.sampleRate) * 1000));
-}
-
-class FlacFrameReader implements CompressedFrameReader {
-  private offset: number;
-  private carry = new Uint8Array(0);
-  private nextSampleIndex = 0;
-  private eof = false;
-  private pending: CompressedFrame[] = [];
-
-  constructor(private readonly file: File, private readonly streamInfo: FlacStreamInfo) {
-    this.offset = streamInfo.audioOffset;
-  }
-
-  async readFrames(limit: number) {
-    while (this.pending.length < limit && !this.eof) {
-      const nextBytes = new Uint8Array(await this.file.slice(
-        this.offset,
-        Math.min(this.file.size, this.offset + compressedDecodeWindowBytes)
-      ).arrayBuffer());
-      if (nextBytes.byteLength === 0) {
-        this.eof = true;
-        break;
-      }
-      this.offset += nextBytes.byteLength;
-      const bytes = concatBytes(this.carry, nextBytes);
-      const extraction = extractFlacPackets({
-        bytes,
-        startOffset: 0,
-        sampleRate: this.streamInfo.sampleRate,
-        // The reader starts after metadata. Keep audioOffset at zero for
-        // subsequent windows so the extractor does not skip every chunk.
-        streamInfo: { ...this.streamInfo, audioOffset: 0 },
-        nextSampleIndex: this.nextSampleIndex,
-        finalChunk: this.offset >= this.file.size
-      });
-      this.pending.push(...extraction.packets);
-      this.nextSampleIndex = extraction.nextSampleIndex;
-      this.carry = bytes.slice(extraction.nextOffset);
-      if (this.offset >= this.file.size) this.eof = true;
-      if (this.carry.byteLength > compressedDecodeWindowBytes * 2) {
-        throw new Error("FLAC 帧边界无法解析。");
-      }
-    }
-    return this.pending.splice(0, limit);
-  }
-
-  async dispose() {
-    this.carry = new Uint8Array(0);
-    this.pending = [];
-  }
-}
-
-class Mp3FrameReader implements CompressedFrameReader {
-  private offset: number;
-  private carry = new Uint8Array(0);
-  private sampleIndex = 0;
-  private eof = false;
-  private pending: CompressedFrame[] = [];
-
-  constructor(private readonly file: File, audioOffset: number) {
-    this.offset = audioOffset;
-  }
-
-  async readFrames(limit: number) {
-    while (this.pending.length < limit && !this.eof) {
-      const nextBytes = new Uint8Array(await this.file.slice(
-        this.offset,
-        Math.min(this.file.size, this.offset + compressedDecodeWindowBytes)
-      ).arrayBuffer());
-      if (nextBytes.byteLength === 0) {
-        this.eof = true;
-        break;
-      }
-      this.offset += nextBytes.byteLength;
-      const bytes = concatBytes(this.carry, nextBytes);
-      let cursor = 0;
-      while (cursor + 4 <= bytes.byteLength) {
-        const header = parseMp3FrameHeader(bytes, cursor);
-        if (!header) {
-          cursor += 1;
-          continue;
-        }
-        if (cursor + header.frameLength > bytes.byteLength) break;
-        const durationUs = Math.round((header.samplesPerFrame / header.sampleRate) * 1_000_000);
-        this.pending.push({
-          data: bytes.slice(cursor, cursor + header.frameLength),
-          sampleCount: header.samplesPerFrame,
-          timestampUs: Math.round((this.sampleIndex / header.sampleRate) * 1_000_000),
-          durationUs
-        });
-        this.sampleIndex += header.samplesPerFrame;
-        cursor += header.frameLength;
-      }
-      this.carry = bytes.slice(cursor);
-      if (this.offset >= this.file.size) {
-        this.eof = true;
-        if (this.carry.byteLength > 0) {
-          this.carry = new Uint8Array(0);
-        }
-      }
-      if (this.carry.byteLength > compressedDecodeWindowBytes * 2) {
-        throw new Error("MP3 帧边界无法解析。");
-      }
-    }
-    return this.pending.splice(0, limit);
-  }
-
-  async dispose() {
-    this.carry = new Uint8Array(0);
-    this.pending = [];
-  }
-}
-
-async function scanMp3Metadata(file: File) {
-  const firstBytes = new Uint8Array(await file.slice(0, Math.min(file.size, 10)).arrayBuffer());
-  const audioOffset = skipMp3Id3v2(firstBytes);
-  let offset = audioOffset;
-  let carry = new Uint8Array(0);
-  let totalSamples = 0;
-  let sampleRate = 0;
-  let channels: 1 | 2 = 2;
-  let foundFrame = false;
-
-  while (offset < file.size) {
-    const nextBytes = new Uint8Array(await file.slice(
-      offset,
-      Math.min(file.size, offset + compressedDecodeWindowBytes)
-    ).arrayBuffer());
-    if (!nextBytes.byteLength) break;
-    offset += nextBytes.byteLength;
-    const bytes = concatBytes(carry, nextBytes);
-    let cursor = 0;
-    while (cursor + 4 <= bytes.byteLength) {
-      const header = parseMp3FrameHeader(bytes, cursor);
-      if (!header) {
-        cursor += 1;
-        continue;
-      }
-      if (cursor + header.frameLength > bytes.byteLength) break;
-      if (!foundFrame) {
-        sampleRate = header.sampleRate;
-        channels = header.channels as 1 | 2;
-        foundFrame = true;
-      }
-      totalSamples += header.samplesPerFrame;
-      cursor += header.frameLength;
-    }
-    carry = bytes.slice(cursor);
-  }
-
-  if (!foundFrame || sampleRate <= 0 || totalSamples <= 0) return null;
-  return { audioOffset, sampleRate, channels, totalSamples };
-}
-
-function concatBytes(left: Uint8Array, right: Uint8Array) {
-  if (left.byteLength === 0) return right;
-  if (right.byteLength === 0) return left;
-  const merged = new Uint8Array(left.byteLength + right.byteLength);
-  merged.set(left);
-  merged.set(right, left.byteLength);
-  return merged;
-}
-
-type WavPlaybackSource = {
-  channels: 1 | 2;
-  sampleRate: 48_000;
-  durationMs: number;
-  getSegment: (unitIndex: number) => Promise<EncodablePlaybackSegment>;
-};
-
-async function resolveWavPlaybackSource(file: File): Promise<WavPlaybackSource | null> {
-  const probe = await file.slice(0, Math.min(file.size, wavHeaderProbeBytes)).arrayBuffer();
-  const header = parseWavHeader(probe);
-  const supportedBitDepth = header?.format === "float"
-    ? header.bitsPerSample === 32 || header.bitsPerSample === 64
-    : header?.bitsPerSample === 8 ||
-      header?.bitsPerSample === 16 ||
-      header?.bitsPerSample === 24 ||
-      header?.bitsPerSample === 32;
-  if (!header || header.dataBytes <= 0 || header.channels < 1 || header.channels > 2 || !supportedBitDepth) {
-    return null;
-  }
-
-  return {
-    channels: header.channels as 1 | 2,
-    sampleRate: opusSampleRate,
-    durationMs: Math.max(1, Math.round((header.totalSamples / header.sampleRate) * 1000)),
-    getSegment: (unitIndex) => readWavPlaybackSegment(file, header, unitIndex)
-  };
-}
-
-async function readWavPlaybackSegment(
-  file: File,
-  header: WavHeader,
-  unitIndex: number
-): Promise<EncodablePlaybackSegment> {
-  const sourceSegmentSamples = Math.round((segmentDurationMs / 1000) * header.sampleRate);
-  const sourcePrerollSamples = Math.round((seekPrerollMs / 1000) * header.sampleRate);
-  const contentStart = unitIndex * sourceSegmentSamples;
-  const sampleStart = Math.max(0, contentStart - sourcePrerollSamples);
-  const sampleEnd = Math.min(header.totalSamples, contentStart + sourceSegmentSamples);
-  const range = resolveWavByteRangeForSamples(header, sampleStart, sampleEnd);
-  const bytes = new Uint8Array(await file.slice(range.startByte, range.endByte).arrayBuffer());
-  const channels = decodeWavPcmChannels(bytes, header);
-  const normalizedChannels = await resampleWavChannels(channels, header.sampleRate);
-  const targetPrerollSamples = Math.round((seekPrerollMs / 1000) * opusSampleRate);
-  const leadingPaddingSamples = unitIndex === 0 ? targetPrerollSamples : 0;
-
-  return {
-    channels: leadingPaddingSamples > 0
-      ? normalizedChannels.map((channel) => {
-          const padded = new Float32Array(leadingPaddingSamples + channel.length);
-          padded.set(channel, leadingPaddingSamples);
-          return padded;
-        })
-      : normalizedChannels,
-    trimStartSamples: 0
-  };
-}
-
-function decodeWavPcmChannels(bytes: Uint8Array, header: WavHeader) {
-  const bytesPerSample = Math.max(1, Math.floor(header.bitsPerSample / 8));
-  const frameCount = Math.floor(bytes.byteLength / header.blockAlign);
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const channels = Array.from({ length: header.channels }, () => new Float32Array(frameCount));
-
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const frameOffset = frame * header.blockAlign;
-    for (let channel = 0; channel < header.channels; channel += 1) {
-      const offset = frameOffset + channel * bytesPerSample;
-      channels[channel]![frame] = decodeWavSample(view, offset, header.format, header.bitsPerSample);
-    }
-  }
-  return channels;
-}
-
-function decodeWavSample(
-  view: DataView,
-  offset: number,
-  format: WavHeader["format"],
-  bitsPerSample: number
-) {
-  if (format === "float") {
-    if (bitsPerSample === 64) {
-      return view.getFloat64(offset, true);
-    }
-    return view.getFloat32(offset, true);
-  }
-  if (bitsPerSample === 8) {
-    return (view.getUint8(offset) - 128) / 128;
-  }
-  if (bitsPerSample === 16) {
-    return view.getInt16(offset, true) / 32_768;
-  }
-  if (bitsPerSample === 24) {
-    const value = view.getUint8(offset) |
-      (view.getUint8(offset + 1) << 8) |
-      (view.getUint8(offset + 2) << 16);
-    const signed = (value & 0x800000) !== 0 ? value | 0xff000000 : value;
-    return signed / 8_388_608;
-  }
-  if (bitsPerSample === 32) {
-    return view.getInt32(offset, true) / 2_147_483_648;
-  }
-  throw new Error(`不支持的 WAV PCM 位深：${bitsPerSample}`);
-}
-
-async function resampleWavChannels(channels: Float32Array[], sampleRate: number) {
-  if (sampleRate === opusSampleRate) {
-    return channels;
-  }
-  const { resample } = await import("wave-resampler");
-  return channels.map((channel) => Float32Array.from(resample(
-    channel,
-    sampleRate,
-    opusSampleRate,
-    { method: "sinc", LPF: true, LPFType: "FIR", LPFOrder: 71, sincFilterSize: 12 }
-  )));
 }
 
 async function readFileUnit(file: File, unitIndex: number) {
