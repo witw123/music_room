@@ -87,6 +87,7 @@ type PeerConnectionLifecycleManagerInput = {
 type MediaRecoveryState = {
   degradedWindows: number;
   noPacketWindows: number;
+  noSendPacketWindows: number;
   highLossWindows: number;
   highJitterWindows: number;
   restartTimesMs: number[];
@@ -98,6 +99,7 @@ function createMediaRecoveryState(): MediaRecoveryState {
   return {
     degradedWindows: 0,
     noPacketWindows: 0,
+    noSendPacketWindows: 0,
     highLossWindows: 0,
     highJitterWindows: 0,
     restartTimesMs: [],
@@ -449,6 +451,9 @@ export class PeerConnectionLifecycleManager {
             this.clearMediaDisconnectRecovery(payload.peerId);
             this.clearMediaWatchdog(entry);
             this.markMediaRecovered(payload.peerId);
+            if (this.hasLocalAudioTrack()) {
+              entry.mediaNegotiationPending = true;
+            }
             void this.enqueueMediaOperation(payload.peerId, entry);
           }
         } else if (linkKind === "media" && payload.state === "failed" && !entry.releasing) {
@@ -533,6 +538,7 @@ export class PeerConnectionLifecycleManager {
     if (entry.linkKind === "media") {
       this.latestMediaSamples.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
+      this.mediaRecovery.delete(peerId);
     }
     releasePeerConnectionEntry({
       peerId,
@@ -788,18 +794,24 @@ export class PeerConnectionLifecycleManager {
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
     const loss = sample.packetLossRate ?? 0;
     const jitter = sample.jitterMs ?? 0;
-    const noPackets = entry.receiverTrackState === "live" &&
+    const noReceivePackets = entry.receiverTrackState === "live" &&
       (sample.mediaReceiveBitrateKbps ?? 0) <= 0;
+    const noSendPackets = entry.senderTrackState === "live" &&
+      (sample.mediaSendBitrateKbps ?? 0) <= 0;
     state.degradedWindows = loss >= 3 || jitter >= 20 ? state.degradedWindows + 1 : 0;
-    state.noPacketWindows = noPackets ? state.noPacketWindows + 1 : 0;
+    state.noPacketWindows = noReceivePackets ? state.noPacketWindows + 1 : 0;
+    state.noSendPacketWindows = noSendPackets ? state.noSendPacketWindows + 1 : 0;
     if ((sample.mediaReceiveBitrateKbps ?? 0) > 0) {
       entry.receiverRtpActive = true;
-    } else if (noPackets && state.noPacketWindows >= 1) {
+    } else if (noReceivePackets && state.noPacketWindows >= 1) {
       entry.receiverRtpActive = false;
     }
     state.highLossWindows = loss >= 5 ? state.highLossWindows + 1 : 0;
     state.highJitterWindows = jitter >= 30 ? state.highJitterWindows + 1 : 0;
-    const reason = noPackets && state.noPacketWindows >= 2
+    const reason = (
+      (noReceivePackets && state.noPacketWindows >= 2) ||
+      (noSendPackets && state.noSendPacketWindows >= 2)
+    )
       ? "no-packets" as const
       : state.highLossWindows >= 3
         ? "loss" as const
@@ -918,6 +930,7 @@ export class PeerConnectionLifecycleManager {
     state.restartTimesMs.push(now);
     state.degradedWindows = 0;
     state.noPacketWindows = 0;
+    state.noSendPacketWindows = 0;
     state.highLossWindows = 0;
     state.highJitterWindows = 0;
     state.failureReportedAtMs = null;
@@ -933,11 +946,17 @@ export class PeerConnectionLifecycleManager {
     }
     state.degradedWindows = 0;
     state.noPacketWindows = 0;
+    state.noSendPacketWindows = 0;
     state.highLossWindows = 0;
     state.highJitterWindows = 0;
     state.restartTimesMs = [];
     state.failureReportedAtMs = null;
     this.mediaRecovery.set(peerId, state);
+  }
+
+  private hasLocalAudioTrack() {
+    return this.localAudioSourcePeerId === this.localPeerId &&
+      !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
   }
 
   private shouldInitiatePeer(peerId: string) {

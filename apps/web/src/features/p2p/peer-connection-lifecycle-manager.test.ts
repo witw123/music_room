@@ -208,4 +208,25 @@ describe("PeerConnectionLifecycleManager", () => {
     expect(mediaPeer.mediaSender!.replaceTrack).toHaveBeenCalledTimes(2);
     expect(mediaPeer.mediaSender!.track).toBe(track);
   });
+
+  it("reoffers the active source track when a media connection becomes connected", async () => {
+    const { manager, sendSignal } = createManager();
+    const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    mediaPeer.signalingState = "stable";
+    mediaPeer.onconnectionstatechange?.();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(2);
+  });
 });
