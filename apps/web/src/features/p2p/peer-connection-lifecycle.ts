@@ -80,6 +80,7 @@ export function releasePeerConnectionEntry(input: {
     input.entry.channel?.close();
   }
   input.entry.connection.close();
+  input.entry.audioTransceiver = null;
   input.entry.audioSender = null;
   input.entry.audioReceiver = null;
   input.entry.remoteAudioStream = null;

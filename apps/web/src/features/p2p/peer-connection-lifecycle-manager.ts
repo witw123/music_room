@@ -433,7 +433,10 @@ export class PeerConnectionLifecycleManager {
       linkKind
     });
     if (linkKind === "media" && typeof connection.addTransceiver === "function") {
-      const transceiver = connection.addTransceiver("audio", { direction: "sendrecv" });
+      const transceiver = connection.addTransceiver("audio", {
+        direction: this.hasLocalAudioTrack() ? "sendonly" : "recvonly"
+      });
+      entry.audioTransceiver = transceiver;
       entry.audioSender = transceiver.sender;
       this.preferOpus(transceiver);
     }
@@ -591,6 +594,15 @@ export class PeerConnectionLifecycleManager {
         ? this.localAudioStream?.getAudioTracks().find((track) => track.readyState === "live") ?? null
         : null;
     const currentTrack = entry.audioSender?.track ?? null;
+    const desiredDirection = desiredTrack ? "sendonly" : "recvonly";
+
+    if (
+      entry.audioTransceiver &&
+      entry.audioTransceiver.direction !== desiredDirection
+    ) {
+      entry.audioTransceiver.direction = desiredDirection;
+      entry.mediaNegotiationPending = true;
+    }
 
     if (!desiredTrack && !entry.audioSender) {
       entry.senderTrackState = "none";
@@ -776,8 +788,20 @@ export class PeerConnectionLifecycleManager {
   }
 
   /** Re-run media sender setup after an incoming SDP answer/offer is applied. */
-  notifyRemoteDescriptionApplied(peerId: string, entry: PeerEntry) {
+  async notifyRemoteDescriptionApplied(
+    peerId: string,
+    entry: PeerEntry,
+    remoteDescriptionType: "offer" | "answer"
+  ) {
     if (entry.linkKind !== "media" || entry.releasing) {
+      return;
+    }
+    if (remoteDescriptionType === "offer") {
+      // An incoming offer is still being answered by the signaling operation.
+      // Bind the local source and direction before createAnswer so the answer
+      // itself advertises the real sendonly/recvonly media role.
+      await this.syncLocalAudioToPeer(peerId, entry, false);
+      entry.mediaNegotiationPending = false;
       return;
     }
     void this.enqueueMediaOperation(peerId, entry);

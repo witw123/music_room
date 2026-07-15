@@ -21,6 +21,7 @@ export type PeerEntry = {
   linkKind: PeerLinkKind;
   connection: RTCPeerConnection;
   channel: RTCDataChannel | null;
+  audioTransceiver: RTCRtpTransceiver | null;
   audioSender: RTCRtpSender | null;
   audioReceiver: RTCRtpReceiver | null;
   remoteAudioStream: MediaStream | null;
@@ -60,6 +61,7 @@ export function createPeerEntry(input: {
     linkKind: input.linkKind ?? "data",
     connection: input.connection,
     channel: null,
+    audioTransceiver: null,
     audioSender: null,
     audioReceiver: null,
     remoteAudioStream: null,

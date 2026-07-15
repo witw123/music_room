@@ -202,7 +202,11 @@ export class P2PMesh {
       if (entry.linkKind === "media") {
         const peerId = this.peerLifecycle.getPeerIdForEntry(entry);
         if (peerId) {
-          this.peerLifecycle.notifyRemoteDescriptionApplied(peerId, entry);
+          await this.peerLifecycle.notifyRemoteDescriptionApplied(
+            peerId,
+            entry,
+            remoteDescription.type === "offer" ? "offer" : "answer"
+          );
         }
       }
     } catch (error) {
