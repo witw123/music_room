@@ -162,13 +162,13 @@ export function SpotifySourcePanel({
       </div>
 
       {!account?.connected || isConfiguring ? (
-        <form className="flex flex-col gap-3 rounded-lg border border-surface-border bg-background/30 p-3" onSubmit={saveAccount}>
+        <form className="flex flex-col gap-3 rounded-lg border border-surface-border bg-black/20 p-3" onSubmit={saveAccount}>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1.5 text-xs text-foreground-muted">
               Client ID
               <input
                 autoComplete="off"
-                className="rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+                className="rounded-lg border border-white/15 bg-[#111113] px-3 py-2 text-sm text-zinc-100 caret-white outline-none placeholder:text-zinc-500 focus:border-accent focus:ring-2 focus:ring-accent/25"
                 onChange={(event) => setClientId(event.target.value)}
                 placeholder="Spotify Client ID"
                 value={clientId}
@@ -178,7 +178,7 @@ export function SpotifySourcePanel({
               Client Secret
               <input
                 autoComplete="new-password"
-                className="rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+                className="rounded-lg border border-white/15 bg-[#111113] px-3 py-2 text-sm text-zinc-100 caret-white outline-none placeholder:text-zinc-500 focus:border-accent focus:ring-2 focus:ring-accent/25"
                 onChange={(event) => setClientSecret(event.target.value)}
                 placeholder="Spotify Client Secret"
                 type="password"
@@ -190,7 +190,8 @@ export function SpotifySourcePanel({
             credentials.json
             <input
               accept="application/json,.json"
-              className="rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-foreground file:px-2 file:py-1 file:text-xs file:text-background"
+              className="rounded-lg border border-white/15 bg-[#111113] px-3 py-2 text-sm text-zinc-200 file:mr-3 file:rounded file:border-0 file:bg-zinc-800 file:px-2 file:py-1 file:text-xs file:text-zinc-100"
+              style={{ colorScheme: "dark" }}
               onChange={(event) => void readCredentialsFile(event.target.files?.[0])}
               type="file"
             />
@@ -254,7 +255,7 @@ export function SpotifySourcePanel({
           <form className="flex flex-col gap-2 sm:flex-row" onSubmit={searchTracks}>
             <input
               aria-label="搜索 Spotify"
-              className="min-w-0 flex-1 rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground outline-none placeholder:text-foreground-muted focus:border-accent"
+              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#111113] px-3 py-2 text-sm text-zinc-100 caret-white outline-none placeholder:text-zinc-500 focus:border-accent focus:ring-2 focus:ring-accent/25"
               onChange={(event) => setKeywords(event.target.value)}
               placeholder="搜索歌曲、艺人或专辑"
               value={keywords}
