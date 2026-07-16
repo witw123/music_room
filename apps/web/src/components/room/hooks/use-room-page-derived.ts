@@ -144,7 +144,6 @@ export function useRoomPageDerived({
       currentPlaybackTrackId,
       currentSourcePeerId,
       peerId,
-      playbackSourcePeerId,
       playbackSourceSessionId
     ]
   );
