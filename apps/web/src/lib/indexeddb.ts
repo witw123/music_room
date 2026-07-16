@@ -90,10 +90,19 @@ export type LocalAudioDirectoryRecord = {
   updatedAt: string;
 };
 
+export type LocalAudioStorageKind = "cache" | "saved";
+
 export type LocalAudioFileRecord = {
   fileHash: string;
   fileName: string;
+  storageKind?: LocalAudioStorageKind;
   savedAt: string;
+};
+
+export type LocalAudioCacheFileRecord = {
+  fileHash: string;
+  fileName: string;
+  cachedAt: string;
 };
 
 export class MusicRoomDatabase extends Dexie {
@@ -105,6 +114,7 @@ export class MusicRoomDatabase extends Dexie {
   transcodeJobs!: Table<TranscodeJobRecord, string>;
   localAudioDirectory!: Table<LocalAudioDirectoryRecord, string>;
   localAudioFiles!: Table<LocalAudioFileRecord, string>;
+  localAudioCacheFiles!: Table<LocalAudioCacheFileRecord, string>;
 
   constructor() {
     super("music-room");
@@ -291,6 +301,17 @@ export class MusicRoomDatabase extends Dexie {
       transcodeJobs: "&sourceFileHash, kind, status, updatedAt",
       localAudioDirectory: "&id",
       localAudioFiles: "&fileHash, savedAt"
+    });
+    this.version(14).stores({
+      cachedTrackLibrary: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+      cachedTrackLibraryMetadata: "&fileHash, cachedAt, *sourceTrackIds, *sourceRoomIds",
+      assetManifests: "&assetId, kind, sourceFileHash, complete, lastAccessedAt",
+      assetUnits: "&unitId, assetId, kind, unitIndex, [assetId+unitIndex], lastAccessedAt, protectedUntil",
+      trackAssetLinks: "&trackId, originalAssetId, playbackAssetId, linkedAt",
+      transcodeJobs: "&sourceFileHash, kind, status, updatedAt",
+      localAudioDirectory: "&id",
+      localAudioFiles: "&fileHash, savedAt",
+      localAudioCacheFiles: "&fileHash, cachedAt"
     });
   }
 }
@@ -614,12 +635,48 @@ export async function saveLocalAudioDirectory(input: {
   });
 }
 
-export async function listLocalAudioFiles() {
-  return musicRoomDatabase.localAudioFiles.orderBy("savedAt").reverse().toArray();
+export async function listLocalAudioFiles(storageKind: LocalAudioStorageKind = "saved") {
+  const records = await musicRoomDatabase.localAudioFiles.orderBy("savedAt").reverse().toArray();
+  return records.filter((record) => (record.storageKind ?? "saved") === storageKind);
 }
 
-export async function getLocalAudioFileRecord(fileHash: string) {
-  return (await musicRoomDatabase.localAudioFiles.get(fileHash)) ?? null;
+export async function listLocalAudioCacheFiles() {
+  return musicRoomDatabase.localAudioCacheFiles.orderBy("cachedAt").reverse().toArray();
+}
+
+export async function getLocalAudioFileRecord(
+  fileHash: string,
+  storageKind: LocalAudioStorageKind = "saved"
+) {
+  const record = await musicRoomDatabase.localAudioFiles.get(fileHash);
+  return record && (record.storageKind ?? "saved") === storageKind ? record : null;
+}
+
+export async function deleteLocalAudioFileRecord(
+  fileHash: string,
+  storageKind: LocalAudioStorageKind = "saved"
+) {
+  const record = await getLocalAudioFileRecord(fileHash, storageKind);
+  if (record) {
+    await musicRoomDatabase.localAudioFiles.delete(fileHash);
+  }
+}
+
+export async function getLocalAudioCacheFileRecord(fileHash: string) {
+  return (await musicRoomDatabase.localAudioCacheFiles.get(fileHash)) ?? null;
+}
+
+export async function saveLocalAudioCacheFileRecord(input: Omit<LocalAudioCacheFileRecord, "cachedAt"> & {
+  cachedAt?: string;
+}) {
+  await musicRoomDatabase.localAudioCacheFiles.put({
+    ...input,
+    cachedAt: input.cachedAt ?? new Date().toISOString()
+  });
+}
+
+export async function deleteLocalAudioCacheFileRecord(fileHash: string) {
+  await musicRoomDatabase.localAudioCacheFiles.delete(fileHash);
 }
 
 export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord, "savedAt"> & {
@@ -627,6 +684,7 @@ export async function saveLocalAudioFileRecord(input: Omit<LocalAudioFileRecord,
 }) {
   await musicRoomDatabase.localAudioFiles.put({
     ...input,
+    storageKind: input.storageKind ?? "saved",
     savedAt: input.savedAt ?? new Date().toISOString()
   });
 }

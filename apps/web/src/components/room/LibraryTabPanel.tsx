@@ -73,9 +73,9 @@ function LibraryTabPanelBase({
           </p>
           <p className="mt-1 truncate text-[10px] text-foreground-muted/70">
             {localStorageSummary.localFolderName
-              ? `本地文件夹：${localStorageSummary.localFolderName} · 已保存 ${localStorageSummary.localSavedFileHashes.length} 首`
+              ? `Music Room：${localStorageSummary.localFolderName} · cache ${localStorageSummary.localCachedFileHashes.length} 首 · saved ${localStorageSummary.localSavedFileHashes.length} 首`
               : localStorageSummary.supportsLocalFolder
-                ? "尚未选择本地文件夹"
+                ? "尚未选择 Music Room 根文件夹"
                 : "当前浏览器保存时将使用下载"
             }
           </p>
@@ -91,7 +91,11 @@ function LibraryTabPanelBase({
               onClick={() => void handleChooseFolder()}
               type="button"
             >
-              {isChoosingFolder ? "选择中…" : localStorageSummary.localFolderName ? "更改文件夹" : "选择文件夹"}
+              {isChoosingFolder
+                ? "选择中…"
+                : localStorageSummary.localFolderName
+                  ? "更改根文件夹"
+                  : "选择根文件夹"}
             </Button>
           ) : null}
           <Button

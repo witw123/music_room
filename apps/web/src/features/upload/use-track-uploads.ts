@@ -25,7 +25,9 @@ import {
 import {
   buildLocalAudioFileName,
   chooseLocalAudioDirectory,
+  cleanupLocalAudioCacheFiles,
   downloadAudioFile,
+  getLocalAudioCacheFile,
   getLocalAudioFile,
   getLocalAudioStorageState,
   saveAudioFileToLocalDirectory,
@@ -39,6 +41,7 @@ export type LocalStorageSummary = {
   quotaBytes: number | null;
   cachedTrackCount: number;
   localFolderName: string | null;
+  localCachedFileHashes: string[];
   localSavedFileHashes: string[];
   supportsLocalFolder: boolean;
 };
@@ -76,6 +79,7 @@ export function useTrackUploads(options: {
     quotaBytes: null,
     cachedTrackCount: 0,
     localFolderName: null,
+    localCachedFileHashes: [],
     localSavedFileHashes: [],
     supportsLocalFolder: false
   });
@@ -106,6 +110,7 @@ export function useTrackUploads(options: {
       quotaBytes: estimate?.quota ?? null,
       cachedTrackCount: snapshot.tracks.length,
       localFolderName: localStorageState.directoryName,
+      localCachedFileHashes: localStorageState.cachedFileHashes,
       localSavedFileHashes: localStorageState.savedFileHashes,
       supportsLocalFolder: localStorageState.supported
     });
@@ -144,6 +149,7 @@ export function useTrackUploads(options: {
       return next;
     });
     await deleteLocalTrackDataForTracks([trackId]);
+    await cleanupLocalAudioCacheFiles();
     await refreshCacheLibrary();
   }, [refreshCacheLibrary]);
 
@@ -157,6 +163,7 @@ export function useTrackUploads(options: {
       return next;
     });
     await deleteLocalTrackDataForTracks([...removed]);
+    await cleanupLocalAudioCacheFiles();
     await refreshCacheLibrary();
   }, [refreshCacheLibrary]);
 
@@ -164,7 +171,7 @@ export function useTrackUploads(options: {
     try {
       const folderName = await chooseLocalAudioDirectory();
       await refreshCacheLibrary();
-      setStatusMessage(`本地音频文件夹已设置为“${folderName}”。`);
+      setStatusMessage(`Music Room 本地存储文件夹已设置为“${folderName}”，已创建 cache 和 saved 子文件夹。`);
     } catch (error) {
       setStatusMessage(error instanceof Error && error.name === "AbortError"
         ? "已取消选择本地音频文件夹。"
@@ -184,6 +191,12 @@ export function useTrackUploads(options: {
             mimeType: cachedRecord.mimeType,
             fileHash: cachedRecord.fileHash
           });
+        }
+      }
+      if (!file) {
+        const localCachedFile = await getLocalAudioCacheFile(track.fileHash);
+        if (localCachedFile) {
+          file = localCachedFile;
         }
       }
       if (!file) {
@@ -235,14 +248,15 @@ export function useTrackUploads(options: {
         preserveTrackIds,
         preserveAssetIds
       });
+      const deletedLocalCacheFiles = await cleanupLocalAudioCacheFiles();
       const preserved = new Set(preserveTrackIds);
       setUploadedTracks((current) =>
         Object.fromEntries(Object.entries(current).filter(([trackId]) => preserved.has(trackId)))
       );
       await refreshCacheLibrary();
       setStatusMessage(
-        result.deletedCacheCount > 0 || result.deletedAssetCount > 0
-          ? `已清理 ${result.deletedCacheCount} 个缓存文件和 ${result.deletedAssetCount} 个播放资产。`
+        result.deletedCacheCount > 0 || result.deletedAssetCount > 0 || deletedLocalCacheFiles > 0
+          ? `已清理 ${result.deletedCacheCount + deletedLocalCacheFiles} 个缓存文件和 ${result.deletedAssetCount} 个播放资产。`
           : "没有发现可清理的无效本机存储。"
       );
     } catch (error) {

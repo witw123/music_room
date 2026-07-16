@@ -28,6 +28,7 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
   getCachedLibraryTrack: (
     fileHash: string
   ) => Promise<CachedLibraryTrackRecord | null | undefined>;
+  getLocalAudioCacheFile?: (fileHash: string) => Promise<File | null | undefined>;
   getLocalAudioFile?: (fileHash: string) => Promise<File | null | undefined>;
   createObjectUrl: (file: File) => string;
 }): Promise<{
@@ -64,7 +65,8 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
           mimeType: usableCachedRecord.mimeType,
           fileHash: usableCachedRecord.fileHash
         })
-      : await input.getLocalAudioFile?.(track.fileHash);
+      : await input.getLocalAudioCacheFile?.(track.fileHash) ??
+        await input.getLocalAudioFile?.(track.fileHash);
     if (!cachedFile) {
       continue;
     }

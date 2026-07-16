@@ -3,12 +3,23 @@
 import {
   deleteCachedLibraryTrackFile,
   deleteOriginalAssetForTrack,
+  deleteLocalAudioCacheFileRecord,
   getLocalAudioDirectory,
   getLocalAudioFileRecord,
+  getLocalAudioCacheFileRecord,
+  listCachedLibraryTracks,
+  listCachedLibraryTrackSummaries,
+  listLocalAudioCacheFiles,
   listLocalAudioFiles,
+  saveLocalAudioCacheFileRecord,
   saveLocalAudioDirectory,
   saveLocalAudioFileRecord
 } from "@/lib/indexeddb";
+
+export const localAudioSubdirectories = {
+  cache: "cache",
+  saved: "saved"
+} as const;
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: (options?: {
@@ -25,6 +36,7 @@ export type LocalAudioStorageState = {
   supported: boolean;
   directoryName: string | null;
   savedFileHashes: string[];
+  cachedFileHashes: string[];
   permission: PermissionState | null;
 };
 
@@ -42,14 +54,17 @@ export async function chooseLocalAudioDirectory() {
   }
 
   const handle = await picker({ mode: "readwrite" });
+  await ensureLocalAudioSubdirectories(handle);
   await saveLocalAudioDirectory({ handle, name: handle.name });
+  await migrateIndexedDbCacheToLocalDirectory();
   return handle.name;
 }
 
 export async function getLocalAudioStorageState(): Promise<LocalAudioStorageState> {
-  const [directory, files] = await Promise.all([
+  const [directory, files, cachedFiles] = await Promise.all([
     getLocalAudioDirectory(),
-    listLocalAudioFiles()
+    listLocalAudioFiles("saved"),
+    listLocalAudioCacheFiles()
   ]);
   let permission: PermissionState | null = null;
   if (directory) {
@@ -61,6 +76,7 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
     supported: supportsLocalAudioDirectory(),
     directoryName: directory?.name ?? null,
     savedFileHashes: files.map((file) => file.fileHash),
+    cachedFileHashes: cachedFiles.map((file) => file.fileHash),
     permission
   };
 }
@@ -68,7 +84,7 @@ export async function getLocalAudioStorageState(): Promise<LocalAudioStorageStat
 export async function getLocalAudioFile(fileHash: string) {
   const [directory, fileRecord] = await Promise.all([
     getLocalAudioDirectory(),
-    getLocalAudioFileRecord(fileHash)
+    getLocalAudioFileRecord(fileHash, "saved")
   ]);
   if (!directory || !fileRecord) {
     return null;
@@ -81,12 +97,38 @@ export async function getLocalAudioFile(fileHash: string) {
     return null;
   }
 
+  const savedFile = await readLocalAudioFile(directory.handle, fileRecord.fileName, "saved");
+  if (savedFile || fileRecord.storageKind === "saved") {
+    return savedFile;
+  }
+
+  // Records created before the subfolder layout point directly at the old
+  // selected directory. Keep them readable until the user saves them again.
   try {
     const fileHandle = await directory.handle.getFileHandle(fileRecord.fileName);
     return await fileHandle.getFile();
   } catch {
     return null;
   }
+}
+
+export async function getLocalAudioCacheFile(fileHash: string) {
+  const [directory, fileRecord] = await Promise.all([
+    getLocalAudioDirectory(),
+    getLocalAudioCacheFileRecord(fileHash)
+  ]);
+  if (!directory || !fileRecord) {
+    return null;
+  }
+
+  const permission = await asPermissionedHandle(directory.handle)
+    .queryPermission({ mode: "read" })
+    .catch(() => "denied" as PermissionState);
+  if (permission !== "granted") {
+    return null;
+  }
+
+  return readLocalAudioFile(directory.handle, fileRecord.fileName, "cache");
 }
 
 export async function saveAudioFileToLocalDirectory(input: {
@@ -110,25 +152,118 @@ export async function saveAudioFileToLocalDirectory(input: {
   }
 
   const fileName = buildLocalAudioFileName(input);
-  const fileHandle = await directory.handle.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  try {
-    await writable.write(input.file);
-    await writable.close();
-  } catch (error) {
-    await writable.abort().catch(() => undefined);
-    throw error;
-  }
+  await deleteLocalAudioCacheFile(input.fileHash);
+  await writeLocalAudioFile(directory.handle, "saved", fileName, input.file);
 
   await saveLocalAudioFileRecord({
     fileHash: input.fileHash,
-    fileName
+    fileName,
+    storageKind: "saved"
   });
   await deleteCachedLibraryTrackFile(input.fileHash);
   if (input.trackId) {
     await deleteOriginalAssetForTrack(input.trackId);
   }
   return { fileName };
+}
+
+export async function saveCachedAudioFileToLocalDirectory(input: {
+  file: Blob;
+  fileHash: string;
+  title: string;
+  mimeType: string;
+}) {
+  const directory = await getLocalAudioDirectory();
+  if (!directory) {
+    throw new Error("请先选择 Music Room 本地存储文件夹。 ");
+  }
+
+  const permission = await requestDirectoryPermission(
+    asPermissionedHandle(directory.handle),
+    "readwrite"
+  );
+  if (!permission) {
+    throw new Error("没有获得 Music Room 本地存储文件夹写入权限。 ");
+  }
+
+  const fileName = buildLocalAudioFileName(input);
+  await writeLocalAudioFile(directory.handle, "cache", fileName, input.file);
+  await saveLocalAudioCacheFileRecord({
+    fileHash: input.fileHash,
+    fileName
+  });
+  await deleteCachedLibraryTrackFile(input.fileHash);
+  return { fileName };
+}
+
+export async function deleteLocalAudioCacheFile(fileHash: string) {
+  const fileRecord = await getLocalAudioCacheFileRecord(fileHash);
+  if (!fileRecord) {
+    return false;
+  }
+
+  const directory = await getLocalAudioDirectory();
+  if (!directory) {
+    return false;
+  }
+
+  const permission = await requestDirectoryPermission(
+    asPermissionedHandle(directory.handle),
+    "readwrite"
+  );
+  if (!permission) {
+    return false;
+  }
+
+  const cacheDirectory = await getStorageSubdirectory(directory.handle, "cache", false);
+  if (cacheDirectory) {
+    try {
+      await cacheDirectory.removeEntry(fileRecord.fileName);
+    } catch (error) {
+      if ((error as DOMException).name !== "NotFoundError") {
+        return false;
+      }
+    }
+  }
+  await deleteLocalAudioCacheFileRecord(fileHash);
+  return true;
+}
+
+async function migrateIndexedDbCacheToLocalDirectory() {
+  const records = await listCachedLibraryTracks();
+  for (const record of records) {
+    try {
+      await saveCachedAudioFileToLocalDirectory({
+        file: record.file,
+        fileHash: record.fileHash,
+        title: record.title,
+        mimeType: record.mimeType
+      });
+    } catch {
+      // Keep the IndexedDB copy when a single file cannot be migrated.
+    }
+  }
+}
+
+export async function cleanupLocalAudioCacheFiles() {
+  const [directory, cachedFiles, cachedSummaries] = await Promise.all([
+    getLocalAudioDirectory(),
+    listLocalAudioCacheFiles(),
+    listCachedLibraryTrackSummaries()
+  ]);
+  if (!directory || cachedFiles.length === 0) {
+    return 0;
+  }
+
+  const activeHashes = new Set(cachedSummaries.map((summary) => summary.fileHash));
+  const orphaned = cachedFiles.filter((file) => !activeHashes.has(file.fileHash));
+  let deleted = 0;
+  for (const file of orphaned) {
+    if (await deleteLocalAudioCacheFile(file.fileHash)) {
+      deleted += 1;
+    }
+  }
+  return deleted;
 }
 
 export function downloadAudioFile(file: Blob, fileName: string) {
@@ -165,6 +300,61 @@ async function requestDirectoryPermission(
 
 function asPermissionedHandle(handle: FileSystemDirectoryHandle) {
   return handle as PermissionedDirectoryHandle;
+}
+
+async function ensureLocalAudioSubdirectories(handle: FileSystemDirectoryHandle) {
+  await handle.getDirectoryHandle(localAudioSubdirectories.cache, { create: true });
+  await handle.getDirectoryHandle(localAudioSubdirectories.saved, { create: true });
+}
+
+async function getStorageSubdirectory(
+  handle: FileSystemDirectoryHandle,
+  kind: keyof typeof localAudioSubdirectories,
+  create: boolean
+) {
+  try {
+    return await handle.getDirectoryHandle(localAudioSubdirectories[kind], { create });
+  } catch {
+    return null;
+  }
+}
+
+async function writeLocalAudioFile(
+  root: FileSystemDirectoryHandle,
+  kind: keyof typeof localAudioSubdirectories,
+  fileName: string,
+  file: Blob
+) {
+  const directory = await getStorageSubdirectory(root, kind, true);
+  if (!directory) {
+    throw new Error("无法创建 Music Room 本地存储子文件夹。 ");
+  }
+  const fileHandle = await directory.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  try {
+    await writable.write(file);
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => undefined);
+    throw error;
+  }
+}
+
+async function readLocalAudioFile(
+  root: FileSystemDirectoryHandle,
+  fileName: string,
+  kind: keyof typeof localAudioSubdirectories
+) {
+  try {
+    const directory = await getStorageSubdirectory(root, kind, false);
+    if (!directory) {
+      return null;
+    }
+    const fileHandle = await directory.getFileHandle(fileName);
+    return await fileHandle.getFile();
+  } catch {
+    return null;
+  }
 }
 
 function inferFileExtension(mimeType: string) {

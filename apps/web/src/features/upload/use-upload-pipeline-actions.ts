@@ -15,6 +15,7 @@ import {
   processSelectedTrackFiles
 } from "./upload-pipeline";
 import { buildCachedLibraryTrackUpsertRecord } from "./cache-library";
+import { saveCachedAudioFileToLocalDirectory } from "./local-audio-storage";
 
 type UploadPipelineActionsInput = {
   activeSession: GuestSession | null;
@@ -70,6 +71,16 @@ export function useUploadPipelineActions({
       file: File | Blob;
     }) => {
       await upsertCachedLibraryTrack(buildCachedLibraryTrackUpsertRecord(input));
+      try {
+        await saveCachedAudioFileToLocalDirectory({
+          file: input.file,
+          fileHash: input.track.fileHash,
+          title: input.track.title,
+          mimeType: input.track.mimeType || input.file.type || "audio/mpeg"
+        });
+      } catch {
+        // IndexedDB remains the fallback when the selected folder is unavailable.
+      }
       await refreshCacheLibrary();
     },
     [refreshCacheLibrary]
