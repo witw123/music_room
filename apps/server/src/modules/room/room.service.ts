@@ -397,11 +397,12 @@ export class RoomService {
         item.fileHash === track.fileHash &&
         item.ownerSessionId === track.ownerSessionId
     );
-    const duplicateBySourceIndex = track.sourceType === "netease" && track.sourceRef
+    const duplicateBySourceIndex =
+      (track.sourceType === "netease" || track.sourceType === "spotify") && track.sourceRef
       ? record.tracks.findIndex(
           (item) =>
             item.ownerSessionId === track.ownerSessionId &&
-            item.sourceType === "netease" &&
+            item.sourceType === track.sourceType &&
             item.sourceRef?.provider === track.sourceRef?.provider &&
             item.sourceRef?.trackId === track.sourceRef?.trackId
         )

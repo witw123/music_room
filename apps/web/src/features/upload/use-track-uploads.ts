@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type {
   GuestSession,
   NeteaseTrackCandidate,
+  SpotifyTrackCandidate,
   RoomSnapshot,
   TrackMeta
 } from "@music-room/shared";
@@ -128,7 +129,12 @@ export function useTrackUploads(options: {
     uploadedTracks
   });
 
-  const { syncRoomSnapshot, handleFilesSelected, handleNeteaseTrackImport } = useUploadPipelineActions({
+  const {
+    syncRoomSnapshot,
+    handleFilesSelected,
+    handleNeteaseTrackImport,
+    handleSpotifyTrackImport
+  } = useUploadPipelineActions({
     activeSession,
     dispatchRoomStateEvent,
     inFlightUploadHashesRef,
@@ -280,6 +286,8 @@ export function useTrackUploads(options: {
     handleFilesSelected,
     handleNeteaseTrackImport: (candidate: NeteaseTrackCandidate) =>
       handleNeteaseTrackImport(candidate),
+    handleSpotifyTrackImport: (candidate: SpotifyTrackCandidate) =>
+      handleSpotifyTrackImport(candidate),
     syncRoomSnapshot,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,

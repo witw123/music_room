@@ -14,6 +14,7 @@ import { PrismaModule } from "./infra/prisma/prisma.module";
 import { RedisModule } from "./infra/redis/redis.module";
 import { MetricsModule } from "./common/metrics/metrics.module";
 import { NeteaseModule } from "./modules/providers/netease/netease.module";
+import { SpotifyModule } from "./modules/providers/spotify/spotify.module";
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { NeteaseModule } from "./modules/providers/netease/netease.module";
     RoomModule,
     SignalingModule,
     TrackModule,
-    NeteaseModule
+    NeteaseModule,
+    SpotifyModule
   ]
 })
 export class AppModule {}

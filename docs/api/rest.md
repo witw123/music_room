@@ -50,6 +50,26 @@
 
 服务端解析网易云临时地址并流式转发音频，支持 `quality=standard|high|exhigh` 和 `Range`。音频不写入服务端持久化存储，响应设置为 `Cache-Control: no-store`。
 
+## Spotify provider
+
+Spotify 默认关闭。启用后需要配置 Spotify Web API 的 `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`，以及服务端可执行的 Zotify 和 `credentials.json`。Zotify 与 FFmpeg 需要预先安装在 server 容器或宿主机中；凭证和下载缓存目录应通过部署卷提供。
+
+### `GET /v1/providers/spotify/account`
+
+返回服务端全局 Spotify Web API、Zotify 和下载凭证的就绪状态。
+
+### `GET /v1/providers/spotify/search`
+
+查询参数：`q`、`limit`、`offset`。返回 Spotify 标准化歌曲候选。
+
+### `GET /v1/providers/spotify/tracks/{trackId}`
+
+读取 Spotify 歌曲详情，`trackId` 为 22 位 Spotify track id。
+
+### `GET /v1/providers/spotify/tracks/{trackId}/audio`
+
+服务端串行调用 Zotify 下载并缓存完整音频，再流式返回给浏览器。支持 `quality=normal|high|very_high`；缓存命中时不重复下载。
+
 ## 标准错误码
 
 当前前后端共享错误码定义在 `packages/shared/src/contracts/errors.ts`。稳定上线阶段优先保证这些 code 可被前端识别：
@@ -70,6 +90,13 @@
 - `NETEASE_AUDIO_UNSUPPORTED`
 - `NETEASE_IMPORT_TOO_LARGE`
 - `NETEASE_UNAVAILABLE`
+- `SPOTIFY_DISABLED`
+- `SPOTIFY_ACCOUNT_REQUIRED`
+- `SPOTIFY_AUTH_EXPIRED`
+- `SPOTIFY_TRACK_NOT_FOUND`
+- `SPOTIFY_DOWNLOAD_FAILED`
+- `SPOTIFY_IMPORT_TOO_LARGE`
+- `SPOTIFY_UNAVAILABLE`
 
 ## 认证
 

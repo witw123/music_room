@@ -76,7 +76,12 @@ export async function rehydrateOwnedUploadedTracksFromCache(input: {
     uploads[track.id] = {
       file: cachedFile,
       objectUrl,
-      origin: track.sourceType === "netease" ? "netease-import" : "live-upload"
+      origin:
+        track.sourceType === "netease"
+          ? "netease-import"
+          : track.sourceType === "spotify"
+            ? "spotify-import"
+            : "live-upload"
     };
   }
 

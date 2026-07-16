@@ -122,6 +122,29 @@ describe("request contracts", () => {
         sourceRef: null
       })
     ).toThrow();
+    expect(
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "spotify",
+        sourceRef: { provider: "spotify", trackId: "3Z0oQ8r78OUaHvGPiDBR3W" }
+      })
+    ).toMatchObject({
+      sourceType: "spotify",
+      sourceRef: { provider: "spotify", trackId: "3Z0oQ8r78OUaHvGPiDBR3W" }
+    });
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "spotify"
+      })
+    ).toThrow();
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "spotify",
+        sourceRef: { provider: "netease", trackId: "123456" }
+      })
+    ).toThrow();
   });
 
   it("requires positive playback expectedVersion", () => {

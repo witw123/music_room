@@ -23,6 +23,22 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
     );
   }
 
+  if (env.SPOTIFY_ENABLED === "true") {
+    if (!env.SPOTIFY_CLIENT_ID?.trim() || !env.SPOTIFY_CLIENT_SECRET?.trim()) {
+      throw new Error(
+        "SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required when Spotify is enabled."
+      );
+    }
+    if (!env.SPOTIFY_CREDENTIALS_PATH?.trim()) {
+      throw new Error(
+        "SPOTIFY_CREDENTIALS_PATH is required when Spotify is enabled."
+      );
+    }
+    if (!env.SPOTIFY_ZOTIFY_BIN?.trim()) {
+      throw new Error("SPOTIFY_ZOTIFY_BIN is required when Spotify is enabled.");
+    }
+  }
+
   const jwtSecret = env.JWT_SECRET?.trim() ?? "";
   if (insecureJwtSecrets.has(jwtSecret.toLowerCase())) {
     throw new Error("Invalid JWT_SECRET for production startup.");

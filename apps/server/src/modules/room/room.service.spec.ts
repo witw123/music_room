@@ -1605,6 +1605,61 @@ describe("RoomService", () => {
     expect(latestSnapshot.tracks.filter((track) => track.fileHash === "same-hash")).toHaveLength(1);
   });
 
+  it("deduplicates Spotify imports by provider track id for the same uploader", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    const sourceRef = {
+      provider: "spotify" as const,
+      trackId: "3Z0oQ8r78OUaHvGPiDBR3W"
+    };
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Spotify Song",
+      artist: "Artist",
+      album: "Album",
+      durationMs: 180_000,
+      bitrate: null,
+      sizeBytes: 1024,
+      codec: "mp3",
+      fileHash: "spotify-hash-1",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: "Host",
+      sourceType: "spotify",
+      sourceRef
+    });
+
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Spotify Song (retry)",
+      artist: "Artist",
+      album: "Album",
+      durationMs: 180_000,
+      bitrate: null,
+      sizeBytes: 1024,
+      codec: "mp3",
+      fileHash: "spotify-hash-2",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: "Host",
+      sourceType: "spotify",
+      sourceRef
+    });
+
+    const latestSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+
+    expect(secondTrack.id).toBe(firstTrack.id);
+    expect(
+      latestSnapshot.tracks.filter(
+        (track) => track.sourceRef?.provider === "spotify" && track.sourceRef.trackId === sourceRef.trackId
+      )
+    ).toHaveLength(1);
+  });
+
   it("keeps the full room roster in snapshots even when some members are offline", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

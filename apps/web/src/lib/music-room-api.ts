@@ -9,6 +9,9 @@ import {
   type NeteaseQrStatusResponse,
   type NeteaseSearchResponse,
   type NeteaseTrackCandidate,
+  type SpotifyAccountStatus,
+  type SpotifySearchResponse,
+  type SpotifyTrackCandidate,
   type PlaybackSnapshot,
   type Playlist,
   type QueueItem,
@@ -302,6 +305,27 @@ export const musicRoomApi = {
   ) =>
     requestBlob(
       `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
+      { signal }
+    ),
+  getSpotifyAccount: () =>
+    request<SpotifyAccountStatus>("/v1/providers/spotify/account"),
+  searchSpotifyTracks: (query: string, options?: { limit?: number; offset?: number }) => {
+    const params = new URLSearchParams({
+      q: query,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<SpotifySearchResponse>(`/v1/providers/spotify/search?${params.toString()}`);
+  },
+  getSpotifyTrack: (trackId: string) =>
+    request<SpotifyTrackCandidate>(`/v1/providers/spotify/tracks/${encodeURIComponent(trackId)}`),
+  downloadSpotifyTrack: (
+    trackId: string,
+    quality: "normal" | "high" | "very_high" = "high",
+    signal?: AbortSignal
+  ) =>
+    requestBlob(
+      `/v1/providers/spotify/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
       { signal }
     ),
   listMyPlaylists: () =>

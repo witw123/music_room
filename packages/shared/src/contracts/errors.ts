@@ -21,7 +21,14 @@ export const errorCodes = {
   neteaseTrackNotFound: "NETEASE_TRACK_NOT_FOUND",
   neteaseAudioUnsupported: "NETEASE_AUDIO_UNSUPPORTED",
   neteaseImportTooLarge: "NETEASE_IMPORT_TOO_LARGE",
-  neteaseUnavailable: "NETEASE_UNAVAILABLE"
+  neteaseUnavailable: "NETEASE_UNAVAILABLE",
+  spotifyDisabled: "SPOTIFY_DISABLED",
+  spotifyAccountRequired: "SPOTIFY_ACCOUNT_REQUIRED",
+  spotifyAuthExpired: "SPOTIFY_AUTH_EXPIRED",
+  spotifyTrackNotFound: "SPOTIFY_TRACK_NOT_FOUND",
+  spotifyDownloadFailed: "SPOTIFY_DOWNLOAD_FAILED",
+  spotifyImportTooLarge: "SPOTIFY_IMPORT_TOO_LARGE",
+  spotifyUnavailable: "SPOTIFY_UNAVAILABLE"
 } as const;
 
 export const apiErrorResponseSchema = z.object({
@@ -46,7 +53,14 @@ export const apiErrorResponseSchema = z.object({
     errorCodes.neteaseTrackNotFound,
     errorCodes.neteaseAudioUnsupported,
     errorCodes.neteaseImportTooLarge,
-    errorCodes.neteaseUnavailable
+    errorCodes.neteaseUnavailable,
+    errorCodes.spotifyDisabled,
+    errorCodes.spotifyAccountRequired,
+    errorCodes.spotifyAuthExpired,
+    errorCodes.spotifyTrackNotFound,
+    errorCodes.spotifyDownloadFailed,
+    errorCodes.spotifyImportTooLarge,
+    errorCodes.spotifyUnavailable
   ]),
   message: z.string(),
   details: z.unknown().optional()

@@ -1,6 +1,12 @@
 "use client";
 
-import type { GuestSession, NeteaseTrackCandidate, NeteaseTrackSourceRef } from "@music-room/shared";
+import type {
+  GuestSession,
+  NeteaseTrackCandidate,
+  NeteaseTrackSourceRef,
+  SpotifyTrackCandidate,
+  SpotifyTrackSourceRef
+} from "@music-room/shared";
 import { createSHA256 } from "hash-wasm";
 import type { PreparedAudioAssets } from "./audio-asset-builder";
 
@@ -15,7 +21,7 @@ const capturedAudioGraphs = new WeakMap<HTMLAudioElement, CapturedAudioGraph>();
 export type UploadedTrack = {
   file: File;
   objectUrl: string;
-  origin: "live-upload" | "netease-import";
+  origin: "live-upload" | "netease-import" | "spotify-import";
 };
 
 export type CachedLibraryTrack = {
@@ -45,9 +51,12 @@ export async function buildTrackMeta(
   session: GuestSession,
   preparedAssets?: PreparedAudioAssets,
   source?: {
-    type: "local_upload" | "netease";
-    metadata?: Pick<NeteaseTrackCandidate, "title" | "artist" | "album" | "artworkUrl">;
-    sourceRef?: NeteaseTrackSourceRef;
+    type: "local_upload" | "netease" | "spotify";
+    metadata?: Pick<
+      NeteaseTrackCandidate | SpotifyTrackCandidate,
+      "title" | "artist" | "album" | "artworkUrl"
+    >;
+    sourceRef?: NeteaseTrackSourceRef | SpotifyTrackSourceRef;
   }
 ) {
   const fileHash = preparedAssets?.fileHash ?? await hashFile(file);

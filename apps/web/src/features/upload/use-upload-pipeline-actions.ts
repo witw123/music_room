@@ -1,5 +1,10 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import type { GuestSession, NeteaseTrackCandidate, RoomSnapshot } from "@music-room/shared";
+import type {
+  GuestSession,
+  NeteaseTrackCandidate,
+  RoomSnapshot,
+  SpotifyTrackCandidate
+} from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteLocalTrackDataForTracks,
@@ -185,7 +190,7 @@ export function useUploadPipelineActions({
         setStatusMessage(`正在获取《${candidate.title}》音频…`);
         const source = await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh");
         const mimeType = normalizeImportedMimeType(source.contentType);
-        const extension = mimeType === "audio/flac" ? "flac" : "mp3";
+        const extension = importedFileExtension(mimeType);
         const file = new File([source.blob], `${sanitizeFileName(candidate.title)}.${extension}`, {
           type: mimeType
         });
@@ -277,11 +282,132 @@ export function useUploadPipelineActions({
     ]
   );
 
+  const handleSpotifyTrackImport = useCallback(
+    async (candidate: SpotifyTrackCandidate) => {
+      if (!activeSession || !roomSnapshot) {
+        throw new Error("请先进入一个房间后再导入 Spotify 歌曲。");
+      }
+
+      const importKey = `${activeSession.userId}:spotify:${candidate.providerTrackId}`;
+      const importLock = `${activeSession.userId}:spotify:active`;
+      if (
+        inFlightUploadHashesRef.current.has(importLock) ||
+        inFlightUploadHashesRef.current.has(importKey)
+      ) {
+        return;
+      }
+
+      inFlightUploadHashesRef.current.add(importLock);
+      inFlightUploadHashesRef.current.add(importKey);
+      let objectUrl: string | null = null;
+      let retainedObjectUrl = false;
+      let registeredTrackId: string | null = null;
+      let shouldRollbackRegisteredTrack = false;
+      try {
+        setStatusMessage(`正在获取《${candidate.title}》音频…`);
+        const source = await musicRoomApi.downloadSpotifyTrack(
+          candidate.providerTrackId,
+          "high"
+        );
+        const mimeType = normalizeImportedMimeType(source.contentType);
+        const extension = importedFileExtension(mimeType);
+        const file = new File([source.blob], `${sanitizeFileName(candidate.title)}.${extension}`, {
+          type: mimeType
+        });
+        objectUrl = URL.createObjectURL(file);
+        const assets = await prepareAudioAssets({
+          file,
+          onProgress: ({ stage, completed, total }) => {
+            const labels = {
+              inspecting: "正在检查 Spotify 音频",
+              hashing: "正在校验 Spotify 音频",
+              "persisting-original": "正在保存源文件",
+              decoding: "正在解码音频",
+              encoding: "正在生成播放分片",
+              "persisting-playback": "正在保存播放分片"
+            } as const;
+            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+            setStatusMessage(`${labels[stage]} ${percent}%`);
+          }
+        });
+        const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, {
+          type: "spotify",
+          metadata: candidate,
+          sourceRef: {
+            provider: "spotify",
+            trackId: candidate.providerTrackId
+          }
+        });
+        const existingTrack = roomSnapshot.tracks.find(
+          (track) =>
+            track.ownerSessionId === activeSession.userId &&
+            ((track.sourceType === "spotify" &&
+              track.sourceRef?.provider === "spotify" &&
+              track.sourceRef.trackId === candidate.providerTrackId) ||
+              track.fileHash === assets.fileHash)
+        );
+        const registered = await musicRoomApi.registerTrack(
+          roomSnapshot.room.id,
+          buildRegisterTrackPayload(draft)
+        );
+        registeredTrackId = registered.id;
+        shouldRollbackRegisteredTrack = !existingTrack;
+        if (registered.originalAsset && registered.playbackAsset) {
+          await linkTrackAssets({
+            trackId: registered.id,
+            originalAssetId: registered.originalAsset.assetId,
+            playbackAssetId: registered.playbackAsset.assetId
+          });
+        }
+        await persistTrackIntoLibrary({
+          track: registered,
+          roomId: roomSnapshot.room.id,
+          file
+        });
+        setUploadedTracks((current) => ({
+          ...current,
+          [registered.id]: {
+            file,
+            objectUrl: objectUrl!,
+            origin: "spotify-import"
+          }
+        }));
+        retainedObjectUrl = true;
+        await syncRoomSnapshot(roomSnapshot.room.id);
+        setStatusMessage(`《${candidate.title}》已导入曲库。`);
+      } catch (error) {
+        if (registeredTrackId && shouldRollbackRegisteredTrack) {
+          await Promise.allSettled([
+            musicRoomApi.deleteTrack(roomSnapshot.room.id, registeredTrackId),
+            deleteLocalTrackDataForTracks([registeredTrackId])
+          ]);
+        }
+        throw error;
+      } finally {
+        inFlightUploadHashesRef.current.delete(importLock);
+        inFlightUploadHashesRef.current.delete(importKey);
+        if (objectUrl && !retainedObjectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      }
+    },
+    [
+      activeSession,
+      inFlightUploadHashesRef,
+      persistTrackIntoLibrary,
+      roomSnapshot,
+      setStatusMessage,
+      setUploadedTracks,
+      syncRoomSnapshot
+    ]
+  );
+
   return {
     syncRoomSnapshot,
     persistTrackIntoLibrary,
     handleFilesSelected,
-    handleNeteaseTrackImport
+    handleNeteaseTrackImport,
+    handleSpotifyTrackImport
   };
 }
 
@@ -290,7 +416,20 @@ function normalizeImportedMimeType(value: string) {
   if (baseType === "audio/flac" || baseType === "audio/x-flac") {
     return "audio/flac";
   }
+  if (baseType === "audio/ogg" || baseType === "audio/opus" || baseType === "application/ogg") {
+    return "audio/ogg";
+  }
+  if (baseType === "audio/mp4" || baseType === "audio/aac" || baseType === "audio/x-m4a") {
+    return "audio/mp4";
+  }
   return "audio/mpeg";
+}
+
+function importedFileExtension(mimeType: string) {
+  if (mimeType === "audio/flac") return "flac";
+  if (mimeType === "audio/ogg") return "ogg";
+  if (mimeType === "audio/mp4") return "m4a";
+  return "mp3";
 }
 
 function sanitizeFileName(value: string) {
