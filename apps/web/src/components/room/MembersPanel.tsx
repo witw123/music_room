@@ -104,6 +104,61 @@ export function getPlaybackStatus(
   return { label: "连接中", detail: "", tone: "neutral" as const, badgeText: "连接中" };
 }
 
+const memberReportedTelemetryFreshMs = 6_000;
+
+export function resolveMemberMediaRates(input: {
+  diagnostic: PeerDiagnosticsSnapshot | undefined;
+  isLocal: boolean;
+  localMemberState: LocalMemberPanelState | null;
+  now?: number;
+}) {
+  const now = input.now ?? Date.now();
+
+  if (input.isLocal) {
+    const sampleAgeMs = input.localMemberState?.mediaSummary?.sampleAgeMs ?? null;
+    const localFresh =
+      sampleAgeMs === null || sampleAgeMs <= memberReportedTelemetryFreshMs;
+    const sendRateKbps = localFresh
+      ? input.localMemberState?.mediaSummary?.sendRateKbps ??
+        input.diagnostic?.reportedSendRateKbps ??
+        input.diagnostic?.mediaSendBitrateKbps ??
+        null
+      : null;
+    const receiveRateKbps = localFresh
+      ? input.localMemberState?.mediaSummary?.receiveRateKbps ??
+        input.diagnostic?.reportedReceiveRateKbps ??
+        input.diagnostic?.mediaReceiveBitrateKbps ??
+        null
+      : null;
+    return {
+      sendRateKbps,
+      receiveRateKbps,
+      sampleAgeMs
+    };
+  }
+
+  // Only use the remote peer's self-reported aggregate rates. Local path samples
+  // (mediaSend/Receive on this browser) describe this browser's link, not that member's totals.
+  const reportedAt = input.diagnostic?.reportedTelemetryAt;
+  const reportedAtMs = reportedAt ? Date.parse(reportedAt) : Number.NaN;
+  const sampleAgeMs = Number.isFinite(reportedAtMs) ? Math.max(0, now - reportedAtMs) : null;
+  const reportedFresh =
+    sampleAgeMs !== null && sampleAgeMs <= memberReportedTelemetryFreshMs;
+  if (!reportedFresh) {
+    return {
+      sendRateKbps: null,
+      receiveRateKbps: null,
+      sampleAgeMs
+    };
+  }
+
+  return {
+    sendRateKbps: input.diagnostic?.reportedSendRateKbps ?? null,
+    receiveRateKbps: input.diagnostic?.reportedReceiveRateKbps ?? null,
+    sampleAgeMs
+  };
+}
+
 function MemberTelemetry({
   diagnostic,
   isLocal,
@@ -113,12 +168,9 @@ function MemberTelemetry({
   isLocal: boolean;
   localMemberState: LocalMemberPanelState | null;
 }) {
-  const receiveRate = isLocal
-    ? localMemberState?.mediaSummary?.receiveRateKbps ?? null
-    : diagnostic?.mediaReceiveBitrateKbps ?? null;
-  const sendRate = isLocal
-    ? localMemberState?.mediaSummary?.sendRateKbps ?? null
-    : diagnostic?.mediaSendBitrateKbps ?? null;
+  const rates = resolveMemberMediaRates({ diagnostic, isLocal, localMemberState });
+  const receiveRate = rates.receiveRateKbps;
+  const sendRate = rates.sendRateKbps;
   const telemetry = isLocal
     ? [
         `上传 ${formatTelemetryMetric(sendRate, " kbps")}`,

@@ -32,6 +32,10 @@ AudioBufferSource -> sourceGain -> limiter -> playbackGate
 
 输出总线固定保留 `MediaStream` 和 `MediaStreamTrack`。暂停、缺片、解码等待和短暂欠载只把 `playbackGate` 平滑降到静音，恢复时再平滑升起。
 
+曲终后队列不循环：没有下一首可播放（或剩余曲目 owner 均离线）时暂停在队尾。服务端 watchdog 会在 `positionMs` 越过 `durationMs` 且客户端未切歌时自动推进。
+
+播放控制：房主可写全部动作；当前媒体源 session 可调用 next/prev（曲终自动切歌）。媒体源始终是曲目拥有者（在线时）。
+
 监听端只绑定同一个远端 `MediaStream`。`remoteTrackId` 或媒体会话 key 真正变化时才重新绑定 `audio.srcObject`；`waiting`、`stalled` 恢复只重新调用 `play()`，不清空或重新设置 `srcObject`。
 
 ## 会话身份

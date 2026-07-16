@@ -56,7 +56,7 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     sessionStorageKey: "music-room-session"
   });
 
-  const canControlPlayback = !!activeSession && !!roomSnapshot;
+  const canControlPlayback = !!activeSession && !!roomSnapshot && roomSnapshot.room.hostId === activeSession.userId;
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canControlPlayback;
   const pageDerived = useRoomPageDerived({
@@ -70,8 +70,12 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
 
   const { peerDiagnostics, peerRecentEvents, recordPeerDiagnostic, resetPeerDiagnostics } =
     usePeerDiagnostics({
+      // Members panel needs sub-second upload/download updates for every peer.
       highFrequencyEnabled:
-        pageState.activeDashboardTab === "members" && pageState.isDiagnosticsPanelOpen
+        !!roomSnapshot ||
+        pageState.activeDashboardTab === "members" ||
+        pageState.isDiagnosticsPanelOpen,
+      highFrequencyFlushDelayMs: 200
     });
   const uploads = useTrackUploads({
     activeSession,

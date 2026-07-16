@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { PeerDiagnosticsSnapshot, PeerSignalMessage, RoomSnapshot } from "@music-room/shared";
 import { P2PMesh, resolvePreferredIceTransportPolicy } from "@/features/p2p";
+import { createPeerTelemetryReport, sumFiniteRates } from "@/features/p2p/peer-telemetry";
 import type {
   DataMeshBridge,
   PlaybackRecoveryRecommendation,
@@ -98,6 +99,71 @@ export function createRoomDataMeshRuntime(input: {
   reportMeshResyncFailure: (error: unknown) => void;
 } & RoomDataMeshDiagnosticsRefs) {
   const peerBufferedAmountBytes = new Map<string, number>();
+  const latestMediaSamples = new Map<string, {
+    sendRateKbps: number | null;
+    receiveRateKbps: number | null;
+    rttMs: number | null;
+    updatedAtMs: number;
+  }>();
+  let lastTelemetryBroadcastAtMs = 0;
+  let lastPublishedHadTraffic = false;
+
+  const publishLocalTelemetry = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastTelemetryBroadcastAtMs < 750) {
+      return;
+    }
+
+    // Drop stale peer samples so totals stay accurate after peer leave.
+    for (const [peerId, sample] of [...latestMediaSamples.entries()]) {
+      if (now - sample.updatedAtMs > 4_000) {
+        latestMediaSamples.delete(peerId);
+      }
+    }
+
+    const samples = [...latestMediaSamples.values()];
+    const sendRateKbps = sumFiniteRates(samples.map((sample) => sample.sendRateKbps));
+    const receiveRateKbps = sumFiniteRates(samples.map((sample) => sample.receiveRateKbps));
+    const hasAnySample = samples.length > 0;
+    const nextSend = sendRateKbps ?? 0;
+    const nextReceive = receiveRateKbps ?? 0;
+    const hasTraffic = nextSend > 0 || nextReceive > 0;
+    // Publish zeros once traffic ends so remotes do not freeze the last non-zero rates.
+    if (!force && !hasAnySample && !hasTraffic && !lastPublishedHadTraffic) {
+      return;
+    }
+
+    lastTelemetryBroadcastAtMs = now;
+    lastPublishedHadTraffic = hasTraffic;
+    const report = createPeerTelemetryReport({
+      fromPeerId: input.peerId,
+      sendRateKbps: nextSend,
+      receiveRateKbps: nextReceive,
+      reportedAt: new Date(now).toISOString()
+    });
+    // Keep local member diagnostics current even before remote peers are connected.
+    input.recordPeerDiagnosticRef.current({
+      peerId: "system",
+      channelKind: "system",
+      direction: "local",
+      event: "local-media-telemetry",
+      summary: "Local aggregate media telemetry updated",
+      recordEvent: false,
+      update: (snapshot) => ({
+        ...snapshot,
+        reportedSendRateKbps: report.sendRateKbps,
+        reportedReceiveRateKbps: report.receiveRateKbps,
+        reportedTelemetryAt: report.reportedAt,
+        // Do not overwrite path-level mediaSend/Receive with aggregate totals.
+        lastMediaStatsProgressAt:
+          (report.sendRateKbps ?? 0) > 0 || (report.receiveRateKbps ?? 0) > 0
+            ? report.reportedAt
+            : snapshot.lastMediaStatsProgressAt
+      })
+    });
+    input.meshRef.current?.sendPeerTelemetry(report);
+  };
+
   const queueDataPeerRecovery = (peerId: string, reason: string, dataChannelState?: string) => {
     const recommendation = resolveDataPeerRecoveryRecommendation({
       peerId,
@@ -143,6 +209,10 @@ export function createRoomDataMeshRuntime(input: {
             else next.delete(peerId);
             return [...next];
           });
+          if (state !== "connected") {
+            latestMediaSamples.delete(peerId);
+            publishLocalTelemetry(true);
+          }
           return;
         }
         input.setConnectedPeers((current) => {
@@ -181,8 +251,29 @@ export function createRoomDataMeshRuntime(input: {
           else next.delete(peerId);
           return [...next];
         });
+        if (state === "open") {
+          // Push current aggregate immediately so the new peer does not wait a full sample cycle.
+          publishLocalTelemetry(true);
+        }
         if (state === "closed") {
+          latestMediaSamples.delete(peerId);
+          // Remote self-report becomes unavailable once the control channel drops.
+          input.recordPeerDiagnosticRef.current({
+            peerId,
+            channelKind: "data",
+            direction: "local",
+            event: "peer-media-telemetry-cleared",
+            summary: "Cleared remote media telemetry after data channel closed",
+            recordEvent: false,
+            update: (snapshot) => ({
+              ...snapshot,
+              reportedSendRateKbps: null,
+              reportedReceiveRateKbps: null,
+              reportedTelemetryAt: null
+            })
+          });
           queueDataPeerRecovery(peerId, "data-channel-closed", state);
+          publishLocalTelemetry(true);
         }
       },
       onDataBufferedAmountChange: ({ peerId, bufferedAmountBytes }) => {
@@ -197,9 +288,48 @@ export function createRoomDataMeshRuntime(input: {
             typeof sample.receiverTrackId === "string" ||
             sample.mediaReceiveBitrateKbps !== null ||
             sample.mediaSendBitrateKbps !== null);
+        if (isMediaSample) {
+          latestMediaSamples.set(peerId, {
+            sendRateKbps: sample.mediaSendBitrateKbps,
+            receiveRateKbps: sample.mediaReceiveBitrateKbps,
+            rttMs: sample.currentRoundTripTimeMs,
+            updatedAtMs: Date.now()
+          });
+          publishLocalTelemetry();
+        } else if (latestMediaSamples.has(peerId)) {
+          // Keep publishing after media samples pause so zeros/stale totals clear promptly.
+          publishLocalTelemetry();
+        }
         (isMediaSample
           ? input.updateMediaTransportStatsRef ?? input.updateDataTransportStatsRef
           : input.updateDataTransportStatsRef).current({ peerId, sample });
+      },
+      onPeerTelemetry: ({ peerId, report }) => {
+        const reporterPeerId = report.fromPeerId || peerId;
+        if (reporterPeerId === input.peerId) {
+          return;
+        }
+        input.recordPeerDiagnosticRef.current({
+          peerId: reporterPeerId,
+          channelKind: "data",
+          direction: "received",
+          event: "peer-media-telemetry",
+          summary: "Remote peer media telemetry updated",
+          recordEvent: false,
+          update: (snapshot) => ({
+            ...snapshot,
+            // Keep mediaSend/Receive as this browser's path samples for mesh diagnostics.
+            // Store self-reported aggregates separately for the members panel.
+            reportedSendRateKbps: report.sendRateKbps,
+            reportedReceiveRateKbps: report.receiveRateKbps,
+            reportedTelemetryAt: report.reportedAt,
+            lastMediaStatsProgressAt:
+              (report.sendRateKbps ?? 0) > 0 || (report.receiveRateKbps ?? 0) > 0
+                ? report.reportedAt
+                : snapshot.lastMediaStatsProgressAt,
+            currentRoundTripTimeMs: report.rttMs ?? snapshot.currentRoundTripTimeMs
+          })
+        });
       },
       onRemoteAudioTrack: ({ peerId, track }) => {
         input.recordPeerDiagnosticRef.current({

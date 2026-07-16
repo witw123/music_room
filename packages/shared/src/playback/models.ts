@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+// Server-authoritative statuses are "playing" | "paused".
+// "buffering" remains accepted for backward-compatible clients but is not written by the server.
 export const playbackSnapshotSchema = z.object({
   status: z.enum(["playing", "paused", "buffering"]),
   currentTrackId: z.string().nullable(),

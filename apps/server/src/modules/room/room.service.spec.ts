@@ -63,7 +63,7 @@ describe("RoomService", () => {
     jest.useRealTimers();
   });
 
-  it("allows any room member to control playback and uses the track owner as source", async () => {
+  it("restricts playback control to the host and uses the track owner as source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -92,23 +92,21 @@ describe("RoomService", () => {
 
     await expect(
       roomService.updatePlayback(snapshot.room.id, {
-        action: "pause",
+        action: "play",
+        trackId: track.id,
         actorSessionId: member.id
       })
-    ).resolves.toMatchObject({
-      status: "paused"
-    });
+    ).rejects.toThrow("Only the room host can control playback.");
 
     await expect(
       roomService.updatePlayback(snapshot.room.id, {
         action: "play",
         trackId: track.id,
-        actorSessionId: host.id,
-        positionMs: 5000
+        actorSessionId: host.id
       })
     ).resolves.toMatchObject({
       status: "playing",
-      positionMs: 5000,
+      currentTrackId: track.id,
       sourceSessionId: host.id,
       sourceTrackId: track.id,
       sourcePeerId: "peer-host"
@@ -421,7 +419,7 @@ describe("RoomService", () => {
     await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
       trackId: memberTrack.id,
-      actorSessionId: member.id
+      actorSessionId: host.id
     });
 
     const roomAfterLeave = await roomService.leaveRoom(snapshot.room.id, member.id);
@@ -590,7 +588,7 @@ describe("RoomService", () => {
       roomService.updatePlayback(snapshot.room.id, {
         action: "play",
         queueItemId: secondQueueItem.id,
-        actorSessionId: member.id
+        actorSessionId: host.id
       })
     ).resolves.toMatchObject({
       currentTrackId: secondTrack.id,
@@ -782,7 +780,7 @@ describe("RoomService", () => {
     await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
       trackId: track.id,
-      actorSessionId: member.id
+      actorSessionId: host.id
     });
 
     await expect(
@@ -920,13 +918,13 @@ describe("RoomService", () => {
     await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
       trackId: track.id,
-      actorSessionId: member.id,
+      actorSessionId: host.id,
       positionMs: 4000
     });
 
     const paused = await roomService.updatePlayback(snapshot.room.id, {
       action: "pause",
-      actorSessionId: member.id,
+      actorSessionId: host.id,
       positionMs: 12000
     });
 
@@ -942,7 +940,7 @@ describe("RoomService", () => {
 
     const seeked = await roomService.updatePlayback(snapshot.room.id, {
       action: "seek",
-      actorSessionId: member.id,
+      actorSessionId: host.id,
       positionMs: 30000
     });
 
@@ -998,7 +996,7 @@ describe("RoomService", () => {
     ).rejects.toThrow("Playback state version conflict.");
   });
 
-  it("reassigns the active source when the host leaves but the current track owner stays online", async () => {
+  it("keeps member-owned playback running when the host leaves but is not the media source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -1047,6 +1045,7 @@ describe("RoomService", () => {
         })
       ])
     );
+    // Host left but is not the track owner/source, so media continues from the member.
     expect(roomAfterLeave.playback).toMatchObject({
       status: "playing",
       currentTrackId: memberTrack.id,
@@ -1055,6 +1054,53 @@ describe("RoomService", () => {
       sourceTrackId: memberTrack.id
     });
     expect(roomAfterLeave.playback.queueVersion).toBe(playback.queueVersion);
+  });
+
+  it("pauses playback when the track owner leaves the room", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Source Leave",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "member-source-leave",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: memberTrack.id,
+      actorSessionId: host.id,
+      positionMs: 2_500
+    });
+    const roomAfterOwnerLeave = await roomService.leaveRoom(snapshot.room.id, member.id);
+
+    expect(roomAfterOwnerLeave.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: memberTrack.id,
+      sourceSessionId: member.id,
+      sourcePeerId: null,
+      startAt: null,
+      startedAt: null
+    });
+    expect(roomAfterOwnerLeave.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
+    expect(roomAfterOwnerLeave.playback.positionMs).toBeGreaterThanOrEqual(2_500);
   });
 
   it("starts a different track from the beginning when play switches songs", async () => {
@@ -1099,7 +1145,7 @@ describe("RoomService", () => {
     await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
       trackId: firstTrack.id,
-      actorSessionId: member.id,
+      actorSessionId: host.id,
       positionMs: 45000
     });
 
@@ -1107,7 +1153,7 @@ describe("RoomService", () => {
       roomService.updatePlayback(snapshot.room.id, {
         action: "play",
         trackId: secondTrack.id,
-        actorSessionId: member.id
+        actorSessionId: host.id
       })
     ).resolves.toMatchObject({
       currentTrackId: secondTrack.id,
@@ -1194,21 +1240,21 @@ describe("RoomService", () => {
     const playing = await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
       trackId: track.id,
-      actorSessionId: member.id
+      actorSessionId: host.id
     });
     const paused = await roomService.updatePlayback(snapshot.room.id, {
       action: "pause",
-      actorSessionId: member.id,
+      actorSessionId: host.id,
       positionMs: 5000
     });
     const seeked = await roomService.updatePlayback(snapshot.room.id, {
       action: "seek",
-      actorSessionId: member.id,
+      actorSessionId: host.id,
       positionMs: 20000
     });
     const resumed = await roomService.updatePlayback(snapshot.room.id, {
       action: "play",
-      actorSessionId: member.id
+      actorSessionId: host.id
     });
 
     expect(paused.mediaEpoch).toBe(playing.mediaEpoch);
@@ -1263,7 +1309,7 @@ describe("RoomService", () => {
     }
   });
 
-  it("clears playback with a single playback revision bump when next has no queue item", async () => {
+  it("pauses at the end with a single playback revision bump when next has no queue item", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -1292,13 +1338,20 @@ describe("RoomService", () => {
       actorSessionId: host.id
     });
 
-    const cleared = await roomService.updatePlayback(snapshot.room.id, {
+    const afterNext = await roomService.updatePlayback(snapshot.room.id, {
       action: "next",
       actorSessionId: host.id
     });
 
-    expect(cleared.currentTrackId).toBeNull();
-    expect(cleared.playbackRevision).toBe(playing.playbackRevision + 1);
+    // Direct-play with no queue: next has nothing playable to advance to, so pause at end.
+    expect(afterNext).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      startAt: null,
+      startedAt: null,
+      positionMs: 120000
+    });
+    expect(afterNext.playbackRevision).toBe(playing.playbackRevision + 1);
   });
 
   it("does not rewind an already playing track when play is submitted again", async () => {
@@ -1332,14 +1385,14 @@ describe("RoomService", () => {
       const playing = await roomService.updatePlayback(snapshot.room.id, {
         action: "play",
         trackId: track.id,
-        actorSessionId: member.id
+        actorSessionId: host.id
       });
 
       jest.setSystemTime(new Date("2026-04-04T00:00:05.000Z"));
 
       const repeatedPlay = await roomService.updatePlayback(snapshot.room.id, {
         action: "play",
-        actorSessionId: member.id
+        actorSessionId: host.id
       });
 
       expect(playing.positionMs).toBe(0);
@@ -1751,7 +1804,7 @@ describe("RoomService", () => {
     });
     expect(pausedPlayback.mediaEpoch).toBe(playback.mediaEpoch + 1);
     expect(pausedPlayback.playbackRevision).toBeGreaterThan(playback.playbackRevision);
-    expect(pausedPlayback.positionMs).toBe(3_500);
+    expect(pausedPlayback.positionMs).toBeGreaterThanOrEqual(3_500);
     expect(nextSnapshot.room.playback).toMatchObject({
       status: "paused",
       currentTrackId: track.id,
@@ -1759,6 +1812,315 @@ describe("RoomService", () => {
       sourcePeerId: null
     });
   });
+
+
+  it("allows the active media source to advance next even when they are not host", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member A",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "source-next-a",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+    const hostTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Host B",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "source-next-b",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const firstItem = await roomService.addQueueItem(snapshot.room.id, host.id, memberTrack.id);
+    const secondItem = await roomService.addQueueItem(snapshot.room.id, host.id, hostTrack.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: firstItem.id,
+      actorSessionId: host.id
+    });
+
+    await expect(
+      roomService.updatePlayback(snapshot.room.id, {
+        action: "pause",
+        actorSessionId: member.id
+      })
+    ).rejects.toThrow("Only the room host can control playback.");
+
+    const afterNext = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: member.id
+    });
+
+    expect(afterNext).toMatchObject({
+      status: "playing",
+      currentTrackId: hostTrack.id,
+      currentQueueItemId: secondItem.id,
+      sourceSessionId: host.id
+    });
+  });
+
+  it("pauses and clears startAt when the active source goes offline", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    const track = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Offline Source",
+      artist: "Artist",
+      album: null,
+      durationMs: 120000,
+      bitrate: null,
+      fileHash: "offline-source-track",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const playback = await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      trackId: track.id,
+      actorSessionId: host.id,
+      positionMs: 4_000
+    });
+
+    const roomAfterOffline = await roomService.updatePeerPresence(
+      snapshot.room.id,
+      host.id,
+      null,
+      "offline"
+    );
+
+    expect(roomAfterOffline.playback).toMatchObject({
+      status: "paused",
+      currentTrackId: track.id,
+      sourceSessionId: host.id,
+      sourcePeerId: null,
+      startAt: null,
+      startedAt: null
+    });
+    expect(roomAfterOffline.playback.positionMs).toBeGreaterThanOrEqual(4_000);
+    expect(roomAfterOffline.playback.mediaEpoch).toBe(playback.mediaEpoch + 1);
+    expect(roomAfterOffline.playback.playbackRevision).toBeGreaterThan(playback.playbackRevision);
+  });
+
+  it("does not wrap next past the end of the queue", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "First",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "next-wrap-1",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Second",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "next-wrap-2",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const firstItem = await roomService.addQueueItem(snapshot.room.id, host.id, firstTrack.id);
+    const secondItem = await roomService.addQueueItem(snapshot.room.id, host.id, secondTrack.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: secondItem.id,
+      actorSessionId: host.id
+    });
+
+    const afterNext = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+
+    expect(afterNext).toMatchObject({
+      status: "paused",
+      currentTrackId: secondTrack.id,
+      currentQueueItemId: secondItem.id,
+      startAt: null,
+      startedAt: null,
+      positionMs: 60_000
+    });
+    expect(afterNext.currentTrackId).not.toBe(firstTrack.id);
+    expect(firstItem.id).toBeTruthy();
+  });
+
+  it("skips offline-owner tracks when advancing next", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const member = await authService.createGuestSession("Member");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.joinRoom(snapshot.room.id, member.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+    await roomService.touchRealtimePresence(snapshot.room.id, member.id, "peer-member");
+
+    const hostTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Host Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "skip-offline-1",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const memberTrack = await roomService.registerTrack(snapshot.room.id, member.id, {
+      title: "Member Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "skip-offline-2",
+      artworkUrl: null,
+      ownerSessionId: member.id,
+      ownerNickname: member.nickname,
+      sourceType: "local_upload"
+    });
+    const thirdTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Third Track",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "skip-offline-3",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+
+    const firstItem = await roomService.addQueueItem(snapshot.room.id, host.id, hostTrack.id);
+    await roomService.addQueueItem(snapshot.room.id, host.id, memberTrack.id);
+    const thirdItem = await roomService.addQueueItem(snapshot.room.id, host.id, thirdTrack.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: firstItem.id,
+      actorSessionId: host.id
+    });
+
+    await roomService.clearRealtimePresence(snapshot.room.id, member.id);
+
+    const afterNext = await roomService.updatePlayback(snapshot.room.id, {
+      action: "next",
+      actorSessionId: host.id
+    });
+
+    expect(afterNext).toMatchObject({
+      status: "playing",
+      currentTrackId: thirdTrack.id,
+      currentQueueItemId: thirdItem.id,
+      sourceSessionId: host.id
+    });
+  });
+
+  it("advances ended playback via the server watchdog", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    await roomService.touchRealtimePresence(snapshot.room.id, host.id, "peer-host");
+
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Short",
+      artist: "Artist",
+      album: null,
+      durationMs: 5_000,
+      bitrate: null,
+      fileHash: "watchdog-1",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "Next",
+      artist: "Artist",
+      album: null,
+      durationMs: 60_000,
+      bitrate: null,
+      fileHash: "watchdog-2",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: host.nickname,
+      sourceType: "local_upload"
+    });
+    const firstItem = await roomService.addQueueItem(snapshot.room.id, host.id, firstTrack.id);
+    const secondItem = await roomService.addQueueItem(snapshot.room.id, host.id, secondTrack.id);
+
+    await roomService.updatePlayback(snapshot.room.id, {
+      action: "play",
+      queueItemId: firstItem.id,
+      actorSessionId: host.id,
+      positionMs: 0
+    });
+
+    jest.setSystemTime(new Date("2026-01-01T00:00:06.000Z"));
+    const advanced = await roomService.advanceEndedPlaybacks();
+    expect(advanced).toHaveLength(1);
+    expect(advanced[0]?.playback).toMatchObject({
+      status: "playing",
+      currentTrackId: secondTrack.id,
+      currentQueueItemId: secondItem.id
+    });
+    jest.useRealTimers();
+  });
+
 
   it("allows the host to delete a room and blocks non-host members", async () => {
     const prisma = createPrismaMock();

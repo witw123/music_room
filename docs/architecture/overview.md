@@ -34,7 +34,7 @@ IndexedDB 分段 Opus
 
 房间普通快照、presence、成员变化、队列刷新和音量变化不会重建媒体会话。只有切换 source peer、离开房间或媒体会话彻底重建时才释放输出 Track。
 
-WebRTC 的 `music-room-control` DataChannel 只用于控制和连接健康协调，音频不经过 DataChannel，也不在成员之间传输原始或播放资产。曲目拥有者离线时，房间不会从其他成员或服务端寻找替代音频源。
+WebRTC 的 `music-room-control` DataChannel 只用于控制和连接健康协调，音频不经过 DataChannel，也不在成员之间传输原始或播放资产。曲目拥有者离线时，服务端暂停播放并清空 startAt/sourcePeerId，不会从其他成员或服务端寻找替代音频源。
 
 ## 基础设施
 

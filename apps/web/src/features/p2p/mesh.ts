@@ -6,6 +6,11 @@ import {
   type PeerConnectionStatsSample
 } from "./connection-stats";
 import {
+  decodePeerTelemetryReport,
+  encodePeerTelemetryReport,
+  type PeerTelemetryReport
+} from "./peer-telemetry";
+import {
   SignalingTransport,
   shouldIgnoreStaleAnswerError
 } from "./signaling-transport";
@@ -62,6 +67,10 @@ type MeshCallbacks = {
     peerId: string;
     reason: "loss" | "jitter" | "no-packets" | "connection-failed";
     restartCount: number;
+  }) => void;
+  onPeerTelemetry?: (payload: {
+    peerId: string;
+    report: PeerTelemetryReport;
   }) => void;
 };
 
@@ -177,6 +186,27 @@ export class P2PMesh {
     return this.peerLifecycle.restartMediaPeer(peerId);
   }
 
+  sendPeerTelemetry(report: PeerTelemetryReport, targetPeerId?: string) {
+    const payload = encodePeerTelemetryReport(report);
+    const entries = targetPeerId
+      ? [[targetPeerId, this.peerLifecycle.getPeerEntry(targetPeerId, "data")] as const]
+      : this.peerLifecycle
+          .getConnectedPeerIds()
+          .map((peerId) => [peerId, this.peerLifecycle.getPeerEntry(peerId, "data")] as const);
+
+    for (const [peerId, entry] of entries) {
+      const channel = entry?.channel;
+      if (!channel || channel.readyState !== "open") {
+        continue;
+      }
+      try {
+        channel.send(payload);
+      } catch {
+        // A closed/racing channel is recovered by the mesh supervisor.
+      }
+    }
+  }
+
   destroy() {
     this.peerLifecycle.destroy();
   }
@@ -189,7 +219,22 @@ export class P2PMesh {
       schedulePeerWatchdog: () => this.peerLifecycle.schedulePeerWatchdog(peerId, entry),
       clearPendingRequestsForPeer: () => undefined,
       schedulePeerReconnect: () => this.peerLifecycle.schedulePeerReconnect(peerId, entry),
-      onMessage: () => undefined
+      onMessage: (event) => {
+        const raw =
+          typeof event.data === "string"
+            ? event.data
+            : event.data instanceof ArrayBuffer
+              ? new TextDecoder().decode(event.data)
+              : null;
+        const report = decodePeerTelemetryReport(raw);
+        if (!report) {
+          return;
+        }
+        this.callbacks.onPeerTelemetry?.({
+          peerId,
+          report
+        });
+      }
     });
   }
 

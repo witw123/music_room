@@ -42,7 +42,11 @@ export function getMediaSampleAgeMs(
     return null;
   }
 
-  const timestamp = diagnostic.lastMediaStatsProgressAt ?? diagnostic.lastMediaPacketAt ?? null;
+  const timestamp =
+    diagnostic.reportedTelemetryAt ??
+    diagnostic.lastMediaStatsProgressAt ??
+    diagnostic.lastMediaPacketAt ??
+    null;
   if (!timestamp) {
     return null;
   }
@@ -60,8 +64,8 @@ export function hasFreshMediaObservation(
   }
 
   const hasMediaRate =
-    (diagnostic.mediaReceiveBitrateKbps ?? 0) > 0 ||
-    (diagnostic.mediaSendBitrateKbps ?? 0) > 0;
+    (diagnostic.reportedReceiveRateKbps ?? diagnostic.mediaReceiveBitrateKbps ?? 0) > 0 ||
+    (diagnostic.reportedSendRateKbps ?? diagnostic.mediaSendBitrateKbps ?? 0) > 0;
   return hasRecentMediaSample(diagnostic, now) && hasMediaRate;
 }
 

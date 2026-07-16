@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { getPlaybackStatus } from "./MembersPanel";
+import { getPlaybackStatus, resolveMemberMediaRates } from "./MembersPanel";
 import { createPeerSnapshot } from "@/features/p2p/diagnostics";
 
 describe("MembersPanel WebRTC media status", () => {
@@ -73,5 +73,49 @@ describe("MembersPanel WebRTC media status", () => {
     expect(source).not.toContain("缓存播放链路");
     expect(source).not.toContain("预估满曲");
     expect(source).not.toContain("尚未建立");
+  });
+
+  it("prefers self-reported rates for remote members", () => {
+    const source = readFileSync(new URL("./MembersPanel.tsx", import.meta.url), "utf8");
+    expect(source).toContain("reportedSendRateKbps");
+    expect(source).toContain("reportedReceiveRateKbps");
+    expect(source).toContain("resolveMemberMediaRates");
+  });
+
+  it("uses only remote self-reported aggregates for member rates", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.mediaSendBitrateKbps = 999;
+    diagnostic.mediaReceiveBitrateKbps = 888;
+    diagnostic.reportedSendRateKbps = 192;
+    diagnostic.reportedReceiveRateKbps = 12;
+    diagnostic.reportedTelemetryAt = new Date().toISOString();
+
+    const rates = resolveMemberMediaRates({
+      diagnostic,
+      isLocal: false,
+      localMemberState: null
+    });
+    expect(rates).toMatchObject({
+      sendRateKbps: 192,
+      receiveRateKbps: 12
+    });
+  });
+
+  it("hides stale remote reported rates", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.reportedSendRateKbps = 192;
+    diagnostic.reportedReceiveRateKbps = 12;
+    diagnostic.reportedTelemetryAt = new Date(Date.now() - 10_000).toISOString();
+
+    const rates = resolveMemberMediaRates({
+      diagnostic,
+      isLocal: false,
+      localMemberState: null,
+      now: Date.now()
+    });
+    expect(rates).toMatchObject({
+      sendRateKbps: null,
+      receiveRateKbps: null
+    });
   });
 });

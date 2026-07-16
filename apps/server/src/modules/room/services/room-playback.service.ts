@@ -2,6 +2,11 @@ import type { PlaybackSnapshot, TrackMeta } from "@music-room/shared";
 import type { RoomRecord } from "../room.types";
 import { RoomPresenceService } from "./room-presence.service";
 
+type SourceCandidate = {
+  sessionId: string;
+  peerId: string;
+};
+
 export class RoomPlaybackService {
   constructor(private readonly roomPresenceService: RoomPresenceService) {}
 
@@ -18,31 +23,16 @@ export class RoomPlaybackService {
     const playback = record.room.playback;
 
     if (input.action === "next") {
-      const currentIndex = this.getCurrentQueueIndex(record);
-      const nextItem = (currentIndex >= 0 ? record.queue[currentIndex + 1] : null) ?? record.queue[0];
-      if (nextItem) {
-        await this.applyTrackPlayback(record, nextItem.trackId, input.positionMs ?? 0, nextItem.id);
-      } else {
-        this.clearPlayback(playback, { bumpVersion: false });
-      }
+      await this.advanceToNextPlayable(record, {
+        positionMs: input.positionMs ?? 0,
+        wrap: false
+      });
     }
 
     if (input.action === "prev") {
-      const currentIndex = this.getCurrentQueueIndex(record);
-      const previousItem =
-        currentIndex > 0
-          ? record.queue[currentIndex - 1]
-          : currentIndex === -1
-            ? record.queue[0]
-            : record.queue[currentIndex] ?? record.queue[0];
-      if (previousItem) {
-        await this.applyTrackPlayback(
-          record,
-          previousItem.trackId,
-          input.positionMs ?? 0,
-          previousItem.id
-        );
-      }
+      await this.advanceToPreviousPlayable(record, {
+        positionMs: input.positionMs ?? 0
+      });
     }
 
     if (input.action === "play") {
@@ -70,6 +60,7 @@ export class RoomPlaybackService {
           nextQueueItemId !== null && nextQueueItemId !== playback.currentQueueItemId;
         const isTrackSwitch = nextTrackId !== playback.currentTrackId;
         const shouldRestart = isTrackSwitch || isQueueItemSwitch;
+        // Prefer client-supplied position; only derive from wall clock when omitted.
         const startPositionMs =
           input.positionMs ??
           (shouldRestart ? 0 : this.getEffectivePlaybackPositionMs(record, playback));
@@ -91,17 +82,12 @@ export class RoomPlaybackService {
             preferredSessionId: playback.sourceSessionId
           })
         : null;
-      const pausePositionMs = input.positionMs ?? this.getEffectivePlaybackPositionMs(record, playback);
-      playback.status = "paused";
-      playback.positionMs = this.clampPositionMs(
-        record,
-        playback.currentTrackId,
-        pausePositionMs
-      );
-      playback.startedAt = null;
-      playback.startAt = null;
-      playback.sourceSessionId = sourceCandidate?.sessionId ?? playback.sourceSessionId;
-      playback.sourcePeerId = sourceCandidate?.peerId ?? null;
+      const pausePositionMs =
+        input.positionMs ?? this.getEffectivePlaybackPositionMs(record, playback);
+      this.pausePlaybackAt(record, pausePositionMs, {
+        sourceCandidate,
+        bumpMediaEpoch: false
+      });
     }
 
     if (input.action === "seek") {
@@ -130,7 +116,12 @@ export class RoomPlaybackService {
         playback.mediaEpoch += 1;
       }
 
-      playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, input.positionMs ?? 0);
+      // Seek position is always client-authoritative when provided.
+      playback.positionMs = this.clampPositionMs(
+        record,
+        playback.currentTrackId,
+        input.positionMs ?? 0
+      );
       if (playback.status === "playing") {
         const startAt = new Date().toISOString();
         playback.startAt = startAt;
@@ -182,17 +173,16 @@ export class RoomPlaybackService {
     const isQueueItemSwitch =
       queueItemId !== null && playback.currentQueueItemId !== queueItemId;
     const isSwitchingSource =
-      !!sourceCandidate && (
-        playback.sourceSessionId !== sourceCandidate.sessionId ||
-        playback.sourcePeerId !== sourceCandidate.peerId
-      );
+      !!sourceCandidate &&
+      (playback.sourceSessionId !== sourceCandidate.sessionId ||
+        playback.sourcePeerId !== sourceCandidate.peerId);
 
     playback.status = "playing";
     playback.currentTrackId = trackId;
     playback.currentQueueItemId = queueItemId;
     playback.playbackAssetId = track.playbackAsset?.assetId ?? null;
-    playback.sourceSessionId = sourceCandidate?.sessionId ?? null;
-    playback.sourcePeerId = sourceCandidate?.peerId ?? null;
+    playback.sourceSessionId = sourceCandidate.sessionId;
+    playback.sourcePeerId = sourceCandidate.peerId;
     playback.sourceTrackId = trackId;
     playback.positionMs = this.clampPositionMs(record, trackId, positionMs);
     const startAt = new Date().toISOString();
@@ -203,6 +193,126 @@ export class RoomPlaybackService {
     if (isTrackSwitch || isQueueItemSwitch || isSwitchingSource) {
       playback.mediaEpoch += 1;
     }
+  }
+
+  /**
+   * Advance to the next playable queue item after the current one.
+   * Does not wrap to the start of the queue. Skips tracks whose owners are offline.
+   * When nothing playable remains, pauses at the end of the current track.
+   */
+  async advanceToNextPlayable(
+    record: RoomRecord,
+    options?: {
+      positionMs?: number;
+      wrap?: boolean;
+    }
+  ): Promise<"advanced" | "paused-at-end" | "cleared"> {
+    const playback = record.room.playback;
+    const currentIndex = this.getCurrentQueueIndex(record);
+    const startIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+    const candidate = await this.findPlayableQueueItem(record, startIndex, 1, {
+      wrap: options?.wrap === true
+    });
+
+    if (candidate) {
+      await this.applyTrackPlayback(
+        record,
+        candidate.trackId,
+        options?.positionMs ?? 0,
+        candidate.id
+      );
+      return "advanced";
+    }
+
+    if (playback.currentTrackId) {
+      const endPositionMs = this.getTrackDurationMs(record, playback.currentTrackId);
+      this.pausePlaybackAt(record, endPositionMs, {
+        sourceCandidate: null,
+        bumpMediaEpoch: true,
+        clearSourcePeer: true
+      });
+      return "paused-at-end";
+    }
+
+    this.clearPlayback(playback, { bumpVersion: false });
+    return "cleared";
+  }
+
+  async advanceToPreviousPlayable(
+    record: RoomRecord,
+    options?: {
+      positionMs?: number;
+    }
+  ): Promise<"advanced" | "restarted" | "cleared"> {
+    const playback = record.room.playback;
+    const currentIndex = this.getCurrentQueueIndex(record);
+
+    if (currentIndex > 0) {
+      const candidate = await this.findPlayableQueueItem(record, currentIndex - 1, -1, {
+        wrap: false
+      });
+      if (candidate) {
+        await this.applyTrackPlayback(
+          record,
+          candidate.trackId,
+          options?.positionMs ?? 0,
+          candidate.id
+        );
+        return "advanced";
+      }
+    }
+
+    if (playback.currentTrackId) {
+      // Stay on the first / current track and restart from the requested position.
+      await this.applyTrackPlayback(
+        record,
+        playback.currentTrackId,
+        options?.positionMs ?? 0,
+        playback.currentQueueItemId
+      );
+      return "restarted";
+    }
+
+    if (record.queue[0]) {
+      const candidate = await this.findPlayableQueueItem(record, 0, 1, { wrap: false });
+      if (candidate) {
+        await this.applyTrackPlayback(
+          record,
+          candidate.trackId,
+          options?.positionMs ?? 0,
+          candidate.id
+        );
+        return "advanced";
+      }
+    }
+
+    this.clearPlayback(playback, { bumpVersion: false });
+    return "cleared";
+  }
+
+  /**
+   * Server-side guard for tracks that finished without a client next call.
+   * Returns true when playback state was mutated.
+   */
+  async advanceIfTrackEnded(record: RoomRecord): Promise<boolean> {
+    const playback = record.room.playback;
+    if (playback.status !== "playing" || !playback.currentTrackId) {
+      return false;
+    }
+
+    const durationMs = this.getTrackDurationMs(record, playback.currentTrackId);
+    if (durationMs <= 0) {
+      return false;
+    }
+
+    const positionMs = this.getEffectivePlaybackPositionMs(record, playback);
+    if (positionMs < durationMs) {
+      return false;
+    }
+
+    await this.advanceToNextPlayable(record, { positionMs: 0, wrap: false });
+    this.bumpPlaybackVersion(playback);
+    return true;
   }
 
   clearPlayback(playback: PlaybackSnapshot, options?: { bumpVersion?: boolean }) {
@@ -222,27 +332,25 @@ export class RoomPlaybackService {
     }
   }
 
-  async handleSourceDeparture(record: RoomRecord, sessionId: string) {
+  /**
+   * Source owner went offline. Pause in place; do not hand media off to other members
+   * because only the owner holds the local playback asset.
+   */
+  handleSourceDeparture(record: RoomRecord, sessionId: string) {
     const playback = record.room.playback;
-    const currentTrack = record.tracks.find((track) => track.id === playback.currentTrackId);
     if (!playback.currentTrackId || playback.sourceSessionId !== sessionId) {
-      return;
+      return false;
     }
 
-    const nextSourceCandidate = currentTrack
-      ? await this.resolveTrackSourceCandidate(record, currentTrack.id, {
-          excludedSessionIds: new Set([sessionId])
-        })
-      : null;
-
-    playback.status = nextSourceCandidate ? "playing" : "paused";
-    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
-    playback.startedAt = nextSourceCandidate ? new Date().toISOString() : null;
-    playback.sourceSessionId = nextSourceCandidate?.sessionId ?? null;
-    playback.sourcePeerId = nextSourceCandidate?.peerId ?? null;
-    playback.sourceTrackId = nextSourceCandidate ? playback.currentTrackId : null;
-    playback.mediaEpoch += 1;
+    const positionMs = this.getEffectivePlaybackPositionMs(record, playback);
+    this.pausePlaybackAt(record, positionMs, {
+      sourceCandidate: null,
+      bumpMediaEpoch: true,
+      clearSourcePeer: true,
+      keepSourceSessionId: true
+    });
     this.bumpPlaybackVersion(playback);
+    return true;
   }
 
   handleSourcePeerOnline(record: RoomRecord, sessionId: string, peerId: string) {
@@ -267,44 +375,95 @@ export class RoomPlaybackService {
       return false;
     }
 
-    playback.status = "paused";
-    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
-    playback.startedAt = null;
-    playback.sourcePeerId = null;
-    playback.mediaEpoch += 1;
+    const positionMs = this.getEffectivePlaybackPositionMs(record, playback);
+    this.pausePlaybackAt(record, positionMs, {
+      sourceCandidate: null,
+      bumpMediaEpoch: true,
+      clearSourcePeer: true,
+      keepSourceSessionId: true
+    });
     this.bumpPlaybackVersion(playback);
     return true;
   }
 
-  pausePlaybackForSourceDisconnect(record: RoomRecord, sessionId: string) {
+  private pausePlaybackAt(
+    record: RoomRecord,
+    positionMs: number,
+    options: {
+      sourceCandidate?: SourceCandidate | null;
+      bumpMediaEpoch: boolean;
+      clearSourcePeer?: boolean;
+      keepSourceSessionId?: boolean;
+    }
+  ) {
     const playback = record.room.playback;
-    if (
-      playback.status !== "playing" ||
-      !playback.currentTrackId ||
-      playback.sourceSessionId !== sessionId
-    ) {
-      return false;
+    playback.status = "paused";
+    playback.positionMs = this.clampPositionMs(record, playback.currentTrackId, positionMs);
+    playback.startedAt = null;
+    playback.startAt = null;
+
+    if (options.sourceCandidate) {
+      playback.sourceSessionId = options.sourceCandidate.sessionId;
+      playback.sourcePeerId = options.sourceCandidate.peerId;
+    } else if (options.clearSourcePeer) {
+      playback.sourcePeerId = null;
+      if (!options.keepSourceSessionId) {
+        playback.sourceSessionId = null;
+      }
     }
 
-    playback.status = "paused";
-    playback.positionMs = this.getEffectivePlaybackPositionMs(record, playback);
-    playback.startedAt = null;
-    playback.sourcePeerId = null;
-    playback.mediaEpoch += 1;
-    this.bumpPlaybackVersion(playback);
-    return true;
+    if (options.bumpMediaEpoch) {
+      playback.mediaEpoch += 1;
+    }
   }
 
-  private async resolveSourcePeerId(record: RoomRecord, sourceSessionId: string | null) {
-    if (!sourceSessionId) {
+  private async findPlayableQueueItem(
+    record: RoomRecord,
+    startIndex: number,
+    direction: 1 | -1,
+    options: { wrap: boolean }
+  ) {
+    if (record.queue.length === 0) {
       return null;
     }
 
-    const activePresence = await this.roomPresenceService.getActivePresence(
-      record.room.id,
-      record.room.members
-    );
-    return activePresence.get(sourceSessionId) ?? null;
+    const visited = new Set<number>();
+    let index = startIndex;
+
+    while (index >= 0 && index < record.queue.length && !visited.has(index)) {
+      visited.add(index);
+      const item = record.queue[index]!;
+      const sourceCandidate = await this.resolveTrackSourceCandidate(record, item.trackId);
+      if (sourceCandidate) {
+        return item;
+      }
+      index += direction;
+    }
+
+    if (!options.wrap) {
+      return null;
+    }
+
+    // Wrap is intentionally unused by public next; kept for potential loop mode later.
+    if (direction > 0) {
+      for (let i = 0; i < startIndex && i < record.queue.length; i += 1) {
+        const item = record.queue[i]!;
+        const sourceCandidate = await this.resolveTrackSourceCandidate(record, item.trackId);
+        if (sourceCandidate) {
+          return item;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private getTrackDurationMs(record: RoomRecord, trackId: string | null) {
+    if (!trackId) {
+      return 0;
+    }
+    const track = record.tracks.find((item) => item.id === trackId);
+    return track?.durationMs && track.durationMs > 0 ? track.durationMs : 0;
   }
 
   private getCurrentQueueIndex(record: RoomRecord) {
@@ -367,13 +526,18 @@ export class RoomPlaybackService {
       preferredSessionId?: string | null;
       excludedSessionIds?: Set<string>;
     }
-  ) {
+  ): SourceCandidate | null {
     const excludedSessionIds = options?.excludedSessionIds ?? new Set<string>();
     const preferredSessionId = options?.preferredSessionId ?? null;
     const isSessionAvailable = (sessionId: string | null | undefined) =>
       !!sessionId && !excludedSessionIds.has(sessionId) && activePresence.has(sessionId);
 
-    if (isSessionAvailable(preferredSessionId)) {
+    // Preferred session is only accepted when it is the track owner. Other members
+    // never hold the local playback asset, so they cannot become the media source.
+    if (
+      isSessionAvailable(preferredSessionId) &&
+      preferredSessionId === track.ownerSessionId
+    ) {
       return {
         sessionId: preferredSessionId as string,
         peerId: activePresence.get(preferredSessionId as string) as string
@@ -403,7 +567,7 @@ export class RoomPlaybackService {
     return Math.min(normalized, track.durationMs);
   }
 
-  private getEffectivePlaybackPositionMs(record: RoomRecord, playback: PlaybackSnapshot) {
+  getEffectivePlaybackPositionMs(record: RoomRecord, playback: PlaybackSnapshot) {
     if (
       playback.status !== "playing" ||
       !playback.currentTrackId ||

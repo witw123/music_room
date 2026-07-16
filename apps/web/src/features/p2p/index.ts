@@ -10,6 +10,7 @@ export * from "./transport-health";
 export * from "./connection-supervisor";
 export * from "./peer-link-profile";
 export * from "./use-peer-diagnostics";
+export * from "./peer-telemetry";
 
 export function getWebRTCIceServers(config?: IceConfigResponse | null): IceServerConfig[] {
   if (config?.iceServers?.length) {

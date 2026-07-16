@@ -614,6 +614,7 @@ export class RoomService {
 
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
+      this.assertCanControlPlayback(record, input.actorSessionId, input.action);
       if (input.actorPeerId) {
         await this.roomPresenceService.touchRealtimePresence(
           roomId,
@@ -677,10 +678,73 @@ export class RoomService {
     };
   }
 
+  /**
+   * Server watchdog entry: advance rooms whose current track has passed durationMs
+   * without a client next call (e.g. source tab suspended).
+   */
+  async advanceEndedPlaybacks(): Promise<
+    Array<{ roomId: string; playback: import("@music-room/shared").PlaybackSnapshot }>
+  > {
+    if (!this.isRealtimeAvailable()) {
+      return [];
+    }
+
+    const records = await this.roomRecordRepository.listRecoverableRecords();
+    const advanced: Array<{
+      roomId: string;
+      playback: import("@music-room/shared").PlaybackSnapshot;
+    }> = [];
+
+    for (const listed of records) {
+      if (listed.room.playback.status !== "playing" || !listed.room.playback.currentTrackId) {
+        continue;
+      }
+
+      try {
+        // Re-load so CAS uses the freshest revision under concurrent host controls.
+        const record = await this.roomRecordRepository.getRoomRecord(listed.room.id);
+        const didAdvance = await this.roomPlaybackService.advanceIfTrackEnded(record);
+        if (!didAdvance) {
+          continue;
+        }
+        this.incrementRoomRevision(record.room);
+        await this.roomRecordRepository.persistRecord(record);
+        const playback = await this.roomPlaybackService.buildPlaybackForSnapshot(record);
+        advanced.push({ roomId: record.room.id, playback });
+      } catch {
+        // Conflict or missing room under concurrent updates: skip this tick.
+        continue;
+      }
+    }
+
+    return advanced;
+  }
+
   private assertMember(record: RoomRecord, sessionId: string) {
     if (!record.room.members.some((member) => member.id === sessionId)) {
       throw new Error("Only room members can perform this action.");
     }
+  }
+
+  private assertCanControlPlayback(
+    record: RoomRecord,
+    sessionId: string,
+    action: "play" | "pause" | "seek" | "next" | "prev"
+  ) {
+    if (record.room.hostId === sessionId) {
+      return;
+    }
+
+    // Allow the active media source to auto-advance or step the queue when a
+    // track ends on their device. Host remains the only actor for play/pause/seek.
+    if (
+      (action === "next" || action === "prev") &&
+      record.room.playback.sourceSessionId === sessionId
+    ) {
+      return;
+    }
+
+    throw new Error("Only the room host can control playback.");
   }
 
   private assertUniqueNickname(record: RoomRecord, sessionId: string, nickname: string) {

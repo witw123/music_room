@@ -41,7 +41,7 @@ function BottomPlayerControllerBase({
   onNext
 }: BottomPlayerControllerProps) {
   const playback = roomSnapshot?.room.playback ?? null;
-  const canControlPlayback = !!activeSession && !!roomSnapshot;
+  const canControlPlayback = !!activeSession && !!roomSnapshot && roomSnapshot.room.hostId === activeSession.userId;
   const {
     progressTrack,
     progressMs,

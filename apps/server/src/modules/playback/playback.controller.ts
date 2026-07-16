@@ -4,6 +4,7 @@ import {
   Headers,
   HttpException,
   HttpStatus,
+  Optional,
   Param,
   Patch,
   ServiceUnavailableException,
@@ -13,6 +14,7 @@ import { Logger } from "@nestjs/common";
 import { createApiErrorResponse, errorCodes, updatePlaybackRequestSchema } from "@music-room/shared";
 import { parseRequestBody } from "../../common/validation/zod-validation";
 import { MetricsService } from "../../common/metrics/metrics.service";
+import { RedisService } from "../../infra/redis/redis.service";
 import { AuthService } from "../auth/auth.service";
 import { RoomRealtimePublisher } from "../room/services/room-realtime.publisher";
 import { RoomService } from "../room/room.service";
@@ -33,7 +35,8 @@ export class PlaybackController {
     private readonly roomService: RoomService,
     private readonly roomRealtimePublisher: RoomRealtimePublisher,
     private readonly authService: AuthService,
-    private readonly metrics: MetricsService
+    private readonly metrics: MetricsService,
+    @Optional() private readonly redisService?: RedisService
   ) {}
 
   private async getCurrentUserId(sessionToken?: string) {
@@ -73,7 +76,7 @@ export class PlaybackController {
       );
     }
 
-    this.assertPlaybackRateLimit(roomId, userId, payload.action);
+    await this.assertPlaybackRateLimit(roomId, userId, payload.action);
 
     try {
       const playback = await this.roomService.updatePlayback(roomId, {
@@ -134,7 +137,10 @@ export class PlaybackController {
       );
     }
 
-    if (message.includes("Only room members can perform this action")) {
+    if (
+      message.includes("Only room members can perform this action") ||
+      message.includes("Only the room host can control playback")
+    ) {
       throw new HttpException(
         createApiErrorResponse(errorCodes.unauthorizedRoomAction, message),
         HttpStatus.FORBIDDEN
@@ -151,14 +157,26 @@ export class PlaybackController {
     throw error instanceof Error ? error : new Error(message);
   }
 
-  private assertPlaybackRateLimit(roomId: string, userId: string, action: PlaybackAction) {
-    const now = Date.now();
+  private async assertPlaybackRateLimit(roomId: string, userId: string, action: PlaybackAction) {
     const windowMs = 1_000;
     const limits =
       action === "seek"
         ? { perUser: 8, perRoom: 24 }
         : { perUser: 4, perRoom: 12 };
 
+    const redisResult = await this.tryRedisRateLimit(roomId, userId, action, limits, windowMs);
+    if (redisResult === "limited") {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.rateLimited, "Playback control rate limit exceeded."),
+        HttpStatus.TOO_MANY_REQUESTS
+      );
+    }
+    if (redisResult === "accepted") {
+      return;
+    }
+
+    // Fallback to process-local buckets when Redis is unavailable.
+    const now = Date.now();
     this.pruneRateLimitBucket(this.userRateLimits, `${userId}:${action}`, now, windowMs);
     this.pruneRateLimitBucket(this.roomRateLimits, `${roomId}:${action}`, now, windowMs);
 
@@ -174,6 +192,49 @@ export class PlaybackController {
 
     userBucket.timestamps.push(now);
     roomBucket.timestamps.push(now);
+  }
+
+  private async tryRedisRateLimit(
+    roomId: string,
+    userId: string,
+    action: PlaybackAction,
+    limits: { perUser: number; perRoom: number },
+    windowMs: number
+  ): Promise<"accepted" | "limited" | "fallback"> {
+    if (!this.redisService || typeof this.redisService.incrementWithTtlMs !== "function") {
+      return "fallback";
+    }
+
+    try {
+      const available =
+        typeof this.redisService.isAvailable === "function"
+          ? this.redisService.isAvailable()
+          : true;
+      if (!available) {
+        return "fallback";
+      }
+
+      const [userCount, roomCount] = await Promise.all([
+        this.redisService.incrementWithTtlMs(
+          `music-room:rate:playback:user:${userId}:${action}`,
+          windowMs
+        ),
+        this.redisService.incrementWithTtlMs(
+          `music-room:rate:playback:room:${roomId}:${action}`,
+          windowMs
+        )
+      ]);
+
+      if (userCount > limits.perUser || roomCount > limits.perRoom) {
+        return "limited";
+      }
+      return "accepted";
+    } catch (error) {
+      this.logger.warn(
+        `Playback redis rate limit unavailable; falling back to memory. ${String(error)}`
+      );
+      return "fallback";
+    }
   }
 
   private pruneRateLimitBucket(

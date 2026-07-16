@@ -570,9 +570,10 @@ export function useRoomRuntime({
 
   useEffect(() => {
     meshRef.current?.setStatsSamplingMode(
-      !roomPlaybackCurrentTrackId || (!isPageVisible && roomPlaybackStatus !== "playing")
+      !isPageVisible && roomPlaybackStatus !== "playing"
         ? "off"
-        : bufferHealth !== "healthy"
+        : // Keep active sampling so member upload/download rates stay timely.
+          roomPlaybackStatus === "playing" || !!roomPlaybackCurrentTrackId || bufferHealth !== "healthy"
           ? "active"
           : "steady"
     );

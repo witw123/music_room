@@ -28,7 +28,7 @@
 - 稳定 `room.subscribe`、`room.presence`、`room.unsubscribe` 的断线边界
 - 验证 duplicate session replacement 不污染当前媒体会话
 - 验证 `peer.signal` 的 recovery generation、媒体协商和 ICE restart
-- 明确 source owner 离线时的暂停、恢复和成员提示
+- source owner 离线暂停语义已落地（清 startAt/sourcePeerId + mediaEpoch）；继续补恢复提示与双浏览器回归
 - 验证单实例发布边界以及 Redis 故障时的错误反馈和状态补偿
 
 ## P1：真实浏览器测试

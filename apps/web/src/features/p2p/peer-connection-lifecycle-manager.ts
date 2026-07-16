@@ -154,8 +154,8 @@ export class PeerConnectionLifecycleManager {
     this.onMediaRecovery = input.onMediaRecovery;
     this.peerConnections = new PeerConnectionRegistry(input.localPeerId);
     this.statsSampler = new PeerStatsSampler({
-      activeStatsSamplingIntervalMs: 1_000,
-      steadyStatsSamplingIntervalMs: 5_000,
+      activeStatsSamplingIntervalMs: 750,
+      steadyStatsSamplingIntervalMs: 2_000,
       onStatsSample: (payload) => {
         const mediaEntry = this.peerConnections.get(payload.peerId, "media");
         const mediaSample = !!mediaEntry &&

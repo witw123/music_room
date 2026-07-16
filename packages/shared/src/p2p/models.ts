@@ -213,6 +213,11 @@ export const peerDiagnosticsSnapshotSchema = z.object({
   lastStablePlaybackAt: z.string().datetime().nullable().optional(),
   mediaReceiveBitrateKbps: z.number().nonnegative().nullable(),
   mediaSendBitrateKbps: z.number().nonnegative().nullable(),
+  // Self-reported aggregate media rates from the remote peer's own browser.
+  // These are preferred for member-panel upload/download display.
+  reportedSendRateKbps: z.number().nonnegative().nullable().optional(),
+  reportedReceiveRateKbps: z.number().nonnegative().nullable().optional(),
+  reportedTelemetryAt: z.string().datetime().nullable().optional(),
   dataBufferedAmountBytes: z.number().int().nonnegative().nullable().optional(),
   lastAudibleProgressAt: z.string().datetime().nullable().optional(),
   lastMediaStatsProgressAt: z.string().datetime().nullable().optional(),

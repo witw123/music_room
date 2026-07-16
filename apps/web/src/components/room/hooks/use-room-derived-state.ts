@@ -112,22 +112,29 @@ export function useRoomDerivedState({
       return null;
     }
 
-    const activePeerDiagnostics = dedupePeerDiagnostics(peerDiagnostics).filter((peer) =>
+    const diagnostics = dedupePeerDiagnostics(peerDiagnostics);
+    const systemDiagnostic = diagnostics.find((peer) => peer.peerId === "system");
+    const activePeerDiagnostics = diagnostics.filter((peer) =>
       activeMemberPeerIds.has(peer.peerId)
     );
     const activeMediaDiagnostics = activePeerDiagnostics.filter((peer) => hasRecentMediaSample(peer));
-    const totalMediaReceiveRateKbps = sumDiagnosticsValue(
-      activeMediaDiagnostics,
-      "mediaReceiveBitrateKbps"
-    );
-    const totalMediaSendRateKbps = sumDiagnosticsValue(
-      activeMediaDiagnostics,
-      "mediaSendBitrateKbps"
-    );
-    const mediaSampleAgeMs = getLatestMetricSampleAgeMs(
-      activePeerDiagnostics,
-      ["mediaReceiveBitrateKbps", "mediaSendBitrateKbps"]
-    );
+    // Prefer the local aggregate that this browser itself measured and reported.
+    // Fall back to summing live peer-link samples only when self-report is missing/stale.
+    const reportedAgeMs = getReportedTelemetryAgeMs(systemDiagnostic);
+    const hasFreshReportedTelemetry =
+      reportedAgeMs !== null && reportedAgeMs <= 6_000;
+    const totalMediaReceiveRateKbps = hasFreshReportedTelemetry
+      ? systemDiagnostic?.reportedReceiveRateKbps ?? 0
+      : sumDiagnosticsValue(activeMediaDiagnostics, "mediaReceiveBitrateKbps");
+    const totalMediaSendRateKbps = hasFreshReportedTelemetry
+      ? systemDiagnostic?.reportedSendRateKbps ?? 0
+      : sumDiagnosticsValue(activeMediaDiagnostics, "mediaSendBitrateKbps");
+    const mediaSampleAgeMs =
+      reportedAgeMs ??
+      getLatestMetricSampleAgeMs(activePeerDiagnostics, [
+        "mediaReceiveBitrateKbps",
+        "mediaSendBitrateKbps"
+      ]);
     return {
       memberId: localMember.id,
       mediaSummary: {
@@ -237,6 +244,18 @@ export function countPeersWithinActiveMembers(
   activeMemberPeerIds: Set<string>
 ) {
   return new Set(peerIds.filter((peerId) => activeMemberPeerIds.has(peerId))).size;
+}
+
+
+function getReportedTelemetryAgeMs(diagnostic: PeerDiagnosticsSnapshot | undefined, now = Date.now()) {
+  if (!diagnostic?.reportedTelemetryAt) {
+    return null;
+  }
+  const timestampMs = Date.parse(diagnostic.reportedTelemetryAt);
+  if (!Number.isFinite(timestampMs)) {
+    return null;
+  }
+  return Math.max(0, now - timestampMs);
 }
 
 function sumDiagnosticsValue(
