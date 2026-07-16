@@ -56,7 +56,10 @@ export function MusicRoomApp({ workspaceOnly = true, initialRoomId = null }: Mus
     sessionStorageKey: "music-room-session"
   });
 
-  const canControlPlayback = !!activeSession && !!roomSnapshot && roomSnapshot.room.hostId === activeSession.userId;
+  const canControlPlayback =
+    !!activeSession &&
+    !!roomSnapshot &&
+    roomSnapshot.room.members.some((member) => member.id === activeSession.userId);
   const canDeleteRoom = !!activeSession && roomSnapshot?.room.hostId === activeSession.userId;
   const canReorderQueue = canControlPlayback;
   const pageDerived = useRoomPageDerived({

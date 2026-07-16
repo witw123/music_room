@@ -111,7 +111,11 @@ export class SegmentedOpusEngine {
       return { state: "idle" as const, bufferedUnits: 0 };
     }
     if (input.playback.status !== "playing" || !input.playback.startAt) {
-      this.resetTimeline();
+      this.resetTimeline({ preserveCache: true });
+      this.pruneDecodedCache(
+        playbackUnitIndexAt(input.manifest, input.playback.positionMs),
+        input.manifest.segmentDurationMs
+      );
       this.sourceHealth = "source-ended";
       return { state: "paused" as const, bufferedUnits: 0 };
     }
@@ -123,7 +127,9 @@ export class SegmentedOpusEngine {
       input.playback.playbackRevision
     ].join(":");
     if (timelineKey !== this.timelineKey) {
-      this.resetTimeline();
+      // Pause, resume, and seek all create a new room timeline. Keep decoded
+      // units and the output graph so the new timeline can start immediately.
+      this.resetTimeline({ preserveCache: true });
       this.timelineKey = timelineKey;
       this.timelineGeneration += 1;
     }
@@ -143,6 +149,7 @@ export class SegmentedOpusEngine {
       input.playback.positionMs + elapsedMs
     );
     const currentIndex = playbackUnitIndexAt(input.manifest, roomPositionMs);
+    this.pruneDecodedCache(currentIndex, input.manifest.segmentDurationMs);
     if (
       roomPositionMs >= input.manifest.durationMs &&
       this.scheduled.size === 0 &&
@@ -527,6 +534,16 @@ export class SegmentedOpusEngine {
     return count;
   }
 
+  private pruneDecodedCache(currentIndex: number, segmentDurationMs: number) {
+    const retainAheadUnitCount = Math.max(1, Math.ceil(scheduleAheadMs / segmentDurationMs) + 1);
+    const lastRetainedIndex = currentIndex + retainAheadUnitCount;
+    for (const unitIndex of this.decoded.keys()) {
+      if (unitIndex < currentIndex || unitIndex > lastRetainedIndex) {
+        this.decoded.delete(unitIndex);
+      }
+    }
+  }
+
   private enterUnderrun() {
     this.underrunCount += 1;
     this.lastUnderrunAt = new Date().toISOString();
@@ -592,15 +609,17 @@ export class SegmentedOpusEngine {
     }
   }
 
-  private resetTimeline() {
+  private resetTimeline(options: { preserveCache?: boolean } = {}) {
     this.stopScheduledSources();
     this.completed.clear();
-    this.decoded.clear();
     this.timelineKey = null;
     this.contextAnchorTime = null;
     this.playbackAnchorPositionMs = 0;
     this.timelineStarted = false;
-    this.unitRecords.clear();
+    if (!options.preserveCache) {
+      this.decoded.clear();
+      this.unitRecords.clear();
+    }
     this.sourceHealth = "source-underrun";
     this.sourceEnergy = 0;
     this.decodedPeak = 0;

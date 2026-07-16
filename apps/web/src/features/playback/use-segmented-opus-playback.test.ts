@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSegmentedPlaybackFailureSnapshot,
   hasActiveSegmentedPlayback,
+  resolveSegmentedPlaybackEngineIdentity,
   resolveSegmentedPlaybackIdentity
 } from "./use-segmented-opus-playback";
 
@@ -37,6 +38,29 @@ describe("segmented playback recovery", () => {
     });
 
     expect(first).not.toBe(next);
+  });
+
+  it("keeps the media engine identity stable across timeline-only changes", () => {
+    const first = resolveSegmentedPlaybackEngineIdentity({
+      playback: {
+        currentTrackId: "track_1",
+        mediaEpoch: 1,
+        playbackRevision: 4,
+        startAt: "2026-07-15T00:00:00.000Z"
+      },
+      playbackAssetId: "asset-1"
+    });
+    const resumed = resolveSegmentedPlaybackEngineIdentity({
+      playback: {
+        currentTrackId: "track_1",
+        mediaEpoch: 1,
+        playbackRevision: 5,
+        startAt: "2026-07-15T00:01:00.000Z"
+      },
+      playbackAssetId: "asset-1"
+    });
+
+    expect(resumed).toBe(first);
   });
 
   it("releases the local engine when the authoritative playback has no track", () => {

@@ -137,10 +137,7 @@ export class PlaybackController {
       );
     }
 
-    if (
-      message.includes("Only room members can perform this action") ||
-      message.includes("Only the room host can control playback")
-    ) {
+    if (message.includes("Only room members can perform this action")) {
       throw new HttpException(
         createApiErrorResponse(errorCodes.unauthorizedRoomAction, message),
         HttpStatus.FORBIDDEN

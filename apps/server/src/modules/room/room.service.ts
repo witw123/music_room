@@ -615,7 +615,6 @@ export class RoomService {
 
     if (input.actorSessionId) {
       this.assertMember(record, input.actorSessionId);
-      this.assertCanControlPlayback(record, input.actorSessionId, input.action);
       if (input.actorPeerId) {
         await this.roomPresenceService.touchRealtimePresence(
           roomId,
@@ -725,27 +724,6 @@ export class RoomService {
     if (!record.room.members.some((member) => member.id === sessionId)) {
       throw new Error("Only room members can perform this action.");
     }
-  }
-
-  private assertCanControlPlayback(
-    record: RoomRecord,
-    sessionId: string,
-    action: "play" | "pause" | "seek" | "next" | "prev"
-  ) {
-    if (record.room.hostId === sessionId) {
-      return;
-    }
-
-    // Allow the active media source to auto-advance or step the queue when a
-    // track ends on their device. Host remains the only actor for play/pause/seek.
-    if (
-      (action === "next" || action === "prev") &&
-      record.room.playback.sourceSessionId === sessionId
-    ) {
-      return;
-    }
-
-    throw new Error("Only the room host can control playback.");
   }
 
   private assertUniqueNickname(record: RoomRecord, sessionId: string, nickname: string) {

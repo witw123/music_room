@@ -63,7 +63,7 @@ describe("RoomService", () => {
     jest.useRealTimers();
   });
 
-  it("restricts playback control to the host and uses the track owner as source", async () => {
+  it("allows any room member to control playback and uses the track owner as source", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -95,14 +95,6 @@ describe("RoomService", () => {
         action: "play",
         trackId: track.id,
         actorSessionId: member.id
-      })
-    ).rejects.toThrow("Only the room host can control playback.");
-
-    await expect(
-      roomService.updatePlayback(snapshot.room.id, {
-        action: "play",
-        trackId: track.id,
-        actorSessionId: host.id
       })
     ).resolves.toMatchObject({
       status: "playing",
@@ -1910,7 +1902,10 @@ describe("RoomService", () => {
         action: "pause",
         actorSessionId: member.id
       })
-    ).rejects.toThrow("Only the room host can control playback.");
+    ).resolves.toMatchObject({
+      status: "paused",
+      currentTrackId: memberTrack.id
+    });
 
     const afterNext = await roomService.updatePlayback(snapshot.room.id, {
       action: "next",

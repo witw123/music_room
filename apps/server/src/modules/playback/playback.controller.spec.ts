@@ -76,10 +76,10 @@ describe("PlaybackController", () => {
   });
 
 
-  it("maps host-only playback control failures to http 403", async () => {
+  it("maps non-member playback control failures to http 403", async () => {
     const roomService = {
       isRealtimeAvailable: jest.fn().mockReturnValue(true),
-      updatePlayback: jest.fn().mockRejectedValue(new Error("Only the room host can control playback."))
+      updatePlayback: jest.fn().mockRejectedValue(new Error("Only room members can perform this action."))
     };
     const controller = new PlaybackController(
       roomService as never,
@@ -96,7 +96,7 @@ describe("PlaybackController", () => {
     ).rejects.toMatchObject({
       response: {
         code: "UNAUTHORIZED_ROOM_ACTION",
-        message: "Only the room host can control playback."
+        message: "Only room members can perform this action."
       },
       status: 403
     });

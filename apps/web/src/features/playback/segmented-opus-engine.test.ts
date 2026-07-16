@@ -312,4 +312,54 @@ describe("SegmentedOpusEngine", () => {
     expect(sources[5]?.starts[0]).toEqual({ when: 10.08, offset: 0 });
     engine.destroy();
   });
+
+  it("reuses decoded units when pausing and resuming the same track", async () => {
+    const { context, sources } = createContext();
+    vi.spyOn(roomAudioOutput, "getSharedAudioContext").mockReturnValue(context);
+    const engine = new SegmentedOpusEngine();
+    const serverNowMs = Date.now();
+    const getUnit = vi.fn(async (unitIndex: number) => unit(unitIndex));
+    const decodeAudioData = vi.mocked(context.decodeAudioData);
+
+    await engine.sync({
+      manifest,
+      playback: playback(serverNowMs),
+      serverNowMs,
+      volume: 0.7,
+      getUnit
+    });
+    const initialDecodeCount = decodeAudioData.mock.calls.length;
+
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        status: "paused",
+        positionMs: 2_000,
+        startAt: null,
+        startedAt: null,
+        playbackRevision: 2
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit
+    });
+    await engine.sync({
+      manifest,
+      playback: {
+        ...playback(serverNowMs),
+        positionMs: 2_000,
+        startAt: new Date(serverNowMs).toISOString(),
+        startedAt: new Date(serverNowMs).toISOString(),
+        playbackRevision: 3
+      },
+      serverNowMs,
+      volume: 0.7,
+      getUnit
+    });
+
+    expect(decodeAudioData.mock.calls.length).toBe(initialDecodeCount);
+    expect(sources.length).toBeGreaterThan(5);
+    engine.destroy();
+  });
 });

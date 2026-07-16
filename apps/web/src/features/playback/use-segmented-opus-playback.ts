@@ -62,7 +62,7 @@ export function useSegmentedOpusPlayback(input: {
   const tickingRef = useRef(false);
   const activePlaybackAssetIdRef = useRef<string | null>(null);
   const storedManifestAssetIdRef = useRef<string | null>(null);
-  const playbackIdentityRef = useRef<string | null>(null);
+  const playbackEngineIdentityRef = useRef<string | null>(null);
   const playbackGenerationRef = useRef(0);
   const [snapshot, setSnapshot] = useState<SegmentedPlaybackSnapshot>(idleSnapshot);
   const roomId = roomSnapshot?.room.id ?? null;
@@ -81,7 +81,7 @@ export function useSegmentedOpusPlayback(input: {
     engineRef.current = null;
     activePlaybackAssetIdRef.current = null;
     storedManifestAssetIdRef.current = null;
-    playbackIdentityRef.current = null;
+    playbackEngineIdentityRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -110,12 +110,16 @@ export function useSegmentedOpusPlayback(input: {
           playback: currentPlayback,
           playbackAssetId: currentPlaybackAsset?.assetId
         });
-        if (playbackIdentityRef.current !== currentPlaybackIdentity) {
+        const currentPlaybackEngineIdentity = resolveSegmentedPlaybackEngineIdentity({
+          playback: currentPlayback,
+          playbackAssetId: currentPlaybackAsset?.assetId
+        });
+        if (playbackEngineIdentityRef.current !== currentPlaybackEngineIdentity) {
           engineRef.current?.destroy();
           engineRef.current = null;
           activePlaybackAssetIdRef.current = null;
           storedManifestAssetIdRef.current = null;
-          playbackIdentityRef.current = currentPlaybackIdentity;
+          playbackEngineIdentityRef.current = currentPlaybackEngineIdentity;
           playbackGenerationRef.current += 1;
         }
         generation = playbackGenerationRef.current;
@@ -258,6 +262,31 @@ export function resolveSegmentedPlaybackIdentity(input: {
     input.playback.mediaEpoch,
     input.playback.startAt ?? "none",
     input.playback.playbackRevision
+  ].join(":");
+}
+
+/**
+ * Identifies the local media source, excluding timeline-only changes such as
+ * pause/resume and seek. Those changes are handled inside the existing engine.
+ */
+export function resolveSegmentedPlaybackEngineIdentity(input: {
+  playback:
+    | Pick<
+        RoomSnapshot["room"]["playback"],
+        "currentTrackId" | "mediaEpoch" | "playbackRevision" | "startAt"
+      >
+    | null
+    | undefined;
+  playbackAssetId: string | null | undefined;
+}) {
+  if (!input.playbackAssetId || !input.playback?.currentTrackId) {
+    return null;
+  }
+
+  return [
+    input.playbackAssetId,
+    input.playback.currentTrackId,
+    input.playback.mediaEpoch
   ].join(":");
 }
 
