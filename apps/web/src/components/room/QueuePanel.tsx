@@ -10,7 +10,6 @@ type QueuePanelProps = {
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
   activeSession: AuthSession | null;
-  hostId: string;
   canControlPlayback: boolean;
   canReorderQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
@@ -24,7 +23,6 @@ function QueuePanelBase({
   tracks,
   currentQueueItemId,
   activeSession,
-  hostId,
   canControlPlayback,
   canReorderQueue,
   onPlayQueueItem,
@@ -123,9 +121,7 @@ function QueuePanelBase({
           {queue.map((item, index) => {
             const track = tracks.find((entry) => entry.id === item.trackId);
             const isCurrent = currentQueueItemId === item.id;
-            const canRemoveQueueItem =
-              !!activeSession &&
-              (hostId === activeSession.userId || item.requestedById === activeSession.userId);
+            const canRemoveQueueItem = !!activeSession && canReorderQueue;
             const isDropTarget =
               dropTargetQueueItemId === item.id && draggingQueueItemId !== null && draggingQueueItemId !== item.id;
 

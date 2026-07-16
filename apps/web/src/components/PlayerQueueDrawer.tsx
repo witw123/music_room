@@ -10,7 +10,6 @@ type PlayerQueueDrawerProps = {
   tracks: TrackMeta[];
   currentQueueItemId: string | null;
   activeSessionId?: string;
-  hostId?: string;
   canControlPlayback: boolean;
   canReorderQueue: boolean;
   onPlayQueueItem: (queueItemId: string) => Promise<void>;
@@ -23,7 +22,6 @@ export function PlayerQueueDrawer({
   tracks,
   currentQueueItemId,
   activeSessionId,
-  hostId,
   canControlPlayback,
   canReorderQueue,
   onPlayQueueItem,
@@ -99,9 +97,7 @@ export function PlayerQueueDrawer({
           <div className="flex-1 overflow-y-auto hide-scrollbar p-2 flex flex-col gap-1 relative">
             {queueWithTracks.length ? (
               queueWithTracks.map(({ item, track }, index) => {
-                const canRemove =
-                  !!activeSessionId &&
-                  (hostId === activeSessionId || item.requestedById === activeSessionId);
+                const canRemove = !!activeSessionId && canReorderQueue;
                 const isCurrent = currentQueueItemId === item.id;
 
                 return (

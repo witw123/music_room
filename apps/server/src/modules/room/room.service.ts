@@ -541,8 +541,6 @@ export class RoomService {
       return record.queue;
     }
 
-    await this.assertCanManageQueue(record, actorSessionId, removed);
-
     const nextQueue = record.queue
       .filter((item) => item.id !== queueItemId)
       .map((item, index) => ({ ...item, position: index }));
@@ -695,19 +693,6 @@ export class RoomService {
       )
     ) {
       throw new Error("Nickname already exists in this room.");
-    }
-  }
-
-  private async assertCanManageQueue(
-    record: RoomRecord,
-    actorSessionId: string,
-    queueItem: QueueItem
-  ) {
-    if (
-      record.room.hostId !== actorSessionId &&
-      queueItem.requestedById !== actorSessionId
-    ) {
-      throw new Error("Only the host or the requester can remove this queue item.");
     }
   }
 

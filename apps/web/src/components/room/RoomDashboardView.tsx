@@ -216,7 +216,6 @@ function RoomDashboardViewBase({
                 tracks={roomSnapshot.tracks}
                 currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
                 activeSession={activeSession}
-                hostId={roomSnapshot.room.hostId}
                 canControlPlayback={canControlPlayback}
                 canReorderQueue={canReorderQueue}
                 onPlayQueueItem={onPlayQueueItem}
@@ -292,7 +291,6 @@ function RoomDashboardViewBase({
                 tracks={roomSnapshot.tracks}
                 currentQueueItemId={roomSnapshot.room.playback.currentQueueItemId ?? null}
                 activeSession={activeSession}
-                hostId={roomSnapshot.room.hostId}
                 canControlPlayback={canControlPlayback}
                 canReorderQueue={canReorderQueue}
                 onPlayQueueItem={onPlayQueueItem}

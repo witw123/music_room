@@ -186,7 +186,7 @@ describe("RoomService", () => {
     expect(afterPlayback.room.playback.status).toBe("playing");
   });
 
-  it("only allows the host or requester to remove a queue item", async () => {
+  it("allows any room member to remove a queue item", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();
     const authService = new AuthService(prisma as never);
@@ -218,10 +218,6 @@ describe("RoomService", () => {
 
     await expect(
       roomService.removeQueueItem(snapshot.room.id, queueItem.id, otherMember.id)
-    ).rejects.toThrow("Only the host or the requester can remove this queue item.");
-
-    await expect(
-      roomService.removeQueueItem(snapshot.room.id, queueItem.id, requester.id)
     ).resolves.toEqual([]);
   });
 
