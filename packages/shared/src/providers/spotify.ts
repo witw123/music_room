@@ -3,10 +3,11 @@ import { z } from "zod";
 export const spotifyAccountStatusSchema = z
   .object({
     connected: z.boolean(),
-    mode: z.literal("server_credentials"),
+    mode: z.literal("user_credentials"),
     hasWebApiCredentials: z.boolean(),
     hasDownloadCredentials: z.boolean(),
     hasZotifyBinary: z.boolean(),
+    lastValidatedAt: z.string().datetime().nullable(),
     message: z.string().nullable()
   })
   .strict();

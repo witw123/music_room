@@ -4,11 +4,19 @@ import { SpotifyController } from "./spotify.controller";
 import { SpotifyService } from "./spotify.service";
 import { SpotifyWebApiClient } from "./spotify-web-api.client";
 import { ZotifyDownloadService } from "./zotify-download.service";
+import { SpotifyAccountService } from "./spotify-account.service";
+import { SpotifyCryptoService } from "./spotify-crypto.service";
 
 @Module({
   imports: [AuthModule],
   controllers: [SpotifyController],
-  providers: [SpotifyService, SpotifyWebApiClient, ZotifyDownloadService],
+  providers: [
+    SpotifyService,
+    SpotifyWebApiClient,
+    ZotifyDownloadService,
+    SpotifyAccountService,
+    SpotifyCryptoService
+  ],
   exports: [SpotifyService]
 })
 export class SpotifyModule {}

@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { createApiErrorResponse, errorCodes } from "@music-room/shared";
 import type { SpotifyQuality } from "./spotify.schemas";
+import type { SpotifyStoredConfig } from "./spotify-account.service";
 
 export type ZotifyDownloadResult = {
   filePath: string;
@@ -29,29 +30,21 @@ export class ZotifyDownloadService {
   private active = false;
 
   async getAccountReadiness() {
-    const credentialsPath = this.credentialsPath();
     const bin = this.zotifyBin();
-    const hasDownloadCredentials = await this.fileExists(credentialsPath);
     const hasZotifyBinary = await this.commandLooksAvailable(bin);
     return {
-      hasDownloadCredentials,
       hasZotifyBinary,
-      credentialsPath,
       zotifyBin: bin
     };
   }
 
-  async openAudio(trackId: string, quality: SpotifyQuality): Promise<ZotifyDownloadResult> {
+  async openAudio(
+    userId: string,
+    config: SpotifyStoredConfig,
+    trackId: string,
+    quality: SpotifyQuality
+  ): Promise<ZotifyDownloadResult> {
     const readiness = await this.getAccountReadiness();
-    if (!readiness.hasDownloadCredentials) {
-      throw new HttpException(
-        createApiErrorResponse(
-          errorCodes.spotifyAccountRequired,
-          "Spotify download credentials are not configured on the server."
-        ),
-        HttpStatus.CONFLICT
-      );
-    }
     if (!readiness.hasZotifyBinary) {
       throw new HttpException(
         createApiErrorResponse(
@@ -63,11 +56,11 @@ export class ZotifyDownloadService {
     }
 
     return this.enqueue(async () => {
-      const cached = await this.findCachedAudio(trackId);
+      const cached = await this.findCachedAudio(userId, trackId);
       if (cached) {
         return cached;
       }
-      return this.downloadTrack(trackId, quality);
+      return this.downloadTrack(userId, config, trackId, quality);
     });
   }
 
@@ -75,16 +68,27 @@ export class ZotifyDownloadService {
     return createReadStream(filePath);
   }
 
-  private async downloadTrack(trackId: string, quality: SpotifyQuality): Promise<ZotifyDownloadResult> {
-    const downloadRoot = this.downloadDir();
+  async deleteUserCache(userId: string) {
+    await fs.rm(this.userDownloadDir(userId), { recursive: true, force: true });
+  }
+
+  private async downloadTrack(
+    userId: string,
+    config: SpotifyStoredConfig,
+    trackId: string,
+    quality: SpotifyQuality
+  ): Promise<ZotifyDownloadResult> {
+    const downloadRoot = this.userDownloadDir(userId);
     const jobDir = path.join(downloadRoot, "jobs", `${trackId}-${Date.now()}`);
     await fs.mkdir(jobDir, { recursive: true });
     await fs.mkdir(downloadRoot, { recursive: true });
+    const credentialsPath = path.join(jobDir, "credentials.json");
+    await fs.writeFile(credentialsPath, config.credentialsJson, { encoding: "utf8", mode: 0o600 });
 
     const format = this.downloadFormat();
     const args = [
       "--credentials-location",
-      this.credentialsPath(),
+      credentialsPath,
       "--root-path",
       jobDir,
       "--output",
@@ -142,8 +146,8 @@ export class ZotifyDownloadService {
     }
   }
 
-  private async findCachedAudio(trackId: string): Promise<ZotifyDownloadResult | null> {
-    const downloadRoot = this.downloadDir();
+  private async findCachedAudio(userId: string, trackId: string): Promise<ZotifyDownloadResult | null> {
+    const downloadRoot = this.userDownloadDir(userId);
     let entries;
     try {
       entries = await fs.readdir(downloadRoot, { withFileTypes: true });
@@ -213,18 +217,23 @@ export class ZotifyDownloadService {
 
       let stderr = "";
       let stdout = "";
+      let timedOut = false;
+      let settled = false;
+      let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
       const timer = setTimeout(() => {
+        timedOut = true;
         child.kill("SIGTERM");
-        reject(
-          new HttpException(
-            createApiErrorResponse(
-              errorCodes.spotifyDownloadFailed,
-              "Zotify download timed out."
-            ),
-            HttpStatus.GATEWAY_TIMEOUT
-          )
-        );
+        forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
       }, timeoutMs);
+
+      const finish = (error?: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (forceKillTimer) clearTimeout(forceKillTimer);
+        if (error) reject(error);
+        else resolve();
+      };
 
       child.stdout.on("data", (chunk: Buffer) => {
         stdout = appendCapped(stdout, chunk.toString("utf8"));
@@ -233,8 +242,7 @@ export class ZotifyDownloadService {
         stderr = appendCapped(stderr, chunk.toString("utf8"));
       });
       child.on("error", (error) => {
-        clearTimeout(timer);
-        reject(
+        finish(
           new HttpException(
             createApiErrorResponse(
               errorCodes.spotifyUnavailable,
@@ -245,12 +253,23 @@ export class ZotifyDownloadService {
         );
       });
       child.on("close", (code) => {
-        clearTimeout(timer);
-        if (code === 0) {
-          resolve();
+        if (timedOut) {
+          finish(
+            new HttpException(
+              createApiErrorResponse(
+                errorCodes.spotifyDownloadFailed,
+                "Zotify download timed out."
+              ),
+              HttpStatus.GATEWAY_TIMEOUT
+            )
+          );
           return;
         }
-        reject(this.mapProcessFailure(stderr, stdout, code));
+        if (code === 0) {
+          finish();
+          return;
+        }
+        finish(this.mapProcessFailure(stderr, stdout, code));
       });
     });
   }
@@ -311,18 +330,16 @@ export class ZotifyDownloadService {
     this.active = false;
   }
 
-  private credentialsPath() {
-    return (
-      process.env.SPOTIFY_CREDENTIALS_PATH?.trim() ||
-      path.resolve(process.cwd(), "data", "spotify", "credentials.json")
-    );
-  }
-
   private downloadDir() {
     return (
       process.env.SPOTIFY_DOWNLOAD_DIR?.trim() ||
       path.resolve(process.cwd(), "data", "spotify", "downloads")
     );
+  }
+
+  private userDownloadDir(userId: string) {
+    const safeUserId = userId.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    return path.join(this.downloadDir(), safeUserId);
   }
 
   private zotifyBin() {
@@ -361,15 +378,6 @@ export class ZotifyDownloadService {
     return Number.isFinite(value) && value > 0 ? value : 180_000;
   }
 
-  private async fileExists(filePath: string) {
-    try {
-      const stats = await fs.stat(filePath);
-      return stats.isFile() && stats.size > 0;
-    } catch {
-      return false;
-    }
-  }
-
   private async commandLooksAvailable(bin: string) {
     if (path.isAbsolute(bin) || bin.includes("/") || bin.includes("\\")) {
       return this.fileExists(bin);
@@ -380,6 +388,15 @@ export class ZotifyDownloadService {
         windowsHide: true
       });
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async fileExists(filePath: string) {
+    try {
+      const stats = await fs.stat(filePath);
+      return stats.isFile() && stats.size > 0;
     } catch {
       return false;
     }

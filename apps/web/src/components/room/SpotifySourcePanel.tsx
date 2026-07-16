@@ -21,6 +21,10 @@ export function SpotifySourcePanel({
 }: SpotifySourcePanelProps) {
   const [account, setAccount] = useState<SpotifyAccountStatus | null>(null);
   const [keywords, setKeywords] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [credentialsJson, setCredentialsJson] = useState("");
+  const [isConfiguring, setIsConfiguring] = useState(false);
   const [results, setResults] = useState<SpotifyTrackCandidate[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,6 +32,7 @@ export function SpotifySourcePanel({
   useEffect(() => {
     if (!activeSession) {
       setAccount(null);
+      setIsConfiguring(false);
       return;
     }
 
@@ -84,14 +89,66 @@ export function SpotifySourcePanel({
     }
   };
 
+  const saveAccount = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (pendingAction || !clientId.trim() || !clientSecret.trim() || !credentialsJson.trim()) {
+      return;
+    }
+    setPendingAction("save-account");
+    setErrorMessage(null);
+    try {
+      const nextAccount = await musicRoomApi.saveSpotifyAccount({
+        clientId,
+        clientSecret,
+        credentialsJson
+      });
+      setAccount(nextAccount);
+      setClientSecret("");
+      setCredentialsJson("");
+      setIsConfiguring(false);
+      setResults([]);
+    } catch (error) {
+      setErrorMessage(toSpotifyErrorMessage(error));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const disconnect = async () => {
+    if (pendingAction) return;
+    setPendingAction("disconnect-account");
+    setErrorMessage(null);
+    try {
+      await musicRoomApi.disconnectSpotifyAccount();
+      setAccount(null);
+      setClientId("");
+      setClientSecret("");
+      setCredentialsJson("");
+      setIsConfiguring(false);
+      setResults([]);
+    } catch (error) {
+      setErrorMessage(toSpotifyErrorMessage(error));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const readCredentialsFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      setCredentialsJson(await file.text());
+      setErrorMessage(null);
+    } catch {
+      setErrorMessage("无法读取 credentials.json。 ");
+    }
+  };
+
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-surface-border bg-surface/30 p-4 sm:p-5">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">Spotify</h2>
-          <p className="mt-1 text-xs text-foreground-muted">
-            服务端使用已配置的 Spotify 凭证下载完整音频。
-          </p>
+          <p className="mt-1 text-xs text-foreground-muted">当前用户的 Spotify 配置</p>
         </div>
         <span
           className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-medium ${
@@ -104,7 +161,91 @@ export function SpotifySourcePanel({
         </span>
       </div>
 
-      {!account?.connected ? (
+      {!account?.connected || isConfiguring ? (
+        <form className="flex flex-col gap-3 rounded-lg border border-surface-border bg-background/30 p-3" onSubmit={saveAccount}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5 text-xs text-foreground-muted">
+              Client ID
+              <input
+                autoComplete="off"
+                className="rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+                onChange={(event) => setClientId(event.target.value)}
+                placeholder="Spotify Client ID"
+                value={clientId}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs text-foreground-muted">
+              Client Secret
+              <input
+                autoComplete="new-password"
+                className="rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+                onChange={(event) => setClientSecret(event.target.value)}
+                placeholder="Spotify Client Secret"
+                type="password"
+                value={clientSecret}
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1.5 text-xs text-foreground-muted">
+            credentials.json
+            <input
+              accept="application/json,.json"
+              className="rounded-lg border border-surface-border bg-background/60 px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-foreground file:px-2 file:py-1 file:text-xs file:text-background"
+              onChange={(event) => void readCredentialsFile(event.target.files?.[0])}
+              type="file"
+            />
+          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] text-foreground-muted">
+              {credentialsJson ? "credentials.json 已读取" : "请选择 credentials.json"}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {isConfiguring ? (
+                <Button
+                  disabled={pendingAction !== null}
+                  onClick={() => setIsConfiguring(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  取消
+                </Button>
+              ) : null}
+              <Button
+                disabled={pendingAction !== null || !clientId.trim() || !clientSecret.trim() || !credentialsJson.trim()}
+                type="submit"
+              >
+                {pendingAction === "save-account" ? "保存中…" : "保存并连接"}
+              </Button>
+            </div>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2">
+          <span className="text-xs text-emerald-200">配置已保存，密钥不会回显。</span>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => setIsConfiguring(true)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              修改配置
+            </Button>
+            <Button
+              disabled={pendingAction !== null}
+              onClick={() => void disconnect()}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {pendingAction === "disconnect-account" ? "删除中…" : "删除配置"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!account?.connected || isConfiguring ? (
         <div className="rounded-lg border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-200">
           {account?.message ?? "正在检查服务端 Spotify 配置…"}
         </div>
@@ -191,7 +332,7 @@ export function SpotifySourcePanel({
 
 function toSpotifyErrorMessage(error: unknown) {
   if (error instanceof MusicRoomApiError) {
-    if (error.code === "SPOTIFY_ACCOUNT_REQUIRED") return "请先在服务端配置 Spotify 凭证。";
+    if (error.code === "SPOTIFY_ACCOUNT_REQUIRED") return "请先配置 Spotify 凭证。";
     if (error.code === "SPOTIFY_AUTH_EXPIRED") return "Spotify 凭证已失效，请重新生成。";
     if (error.code === "SPOTIFY_DISABLED") return "Spotify 功能当前未启用。";
     if (error.code === "SPOTIFY_DOWNLOAD_FAILED") return "Spotify 音频下载失败，请重试。";

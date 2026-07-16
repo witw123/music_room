@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import SpotifyWebApi from "spotify-web-api-node";
 import type { SpotifyTrackCandidate } from "@music-room/shared";
+import type { SpotifyStoredConfig } from "./spotify-account.service";
 
 export type SpotifyWebApiErrorKind = "auth-expired" | "not-found" | "unavailable" | "invalid-response";
 
@@ -32,27 +34,13 @@ type SpotifyTrackBody = {
 
 @Injectable()
 export class SpotifyWebApiClient {
-  private readonly api: SpotifyWebApi;
-  private accessToken: string | null = null;
-  private accessTokenExpiresAt = 0;
+  private readonly accessTokens = new Map<string, { token: string; expiresAt: number }>();
 
-  constructor() {
-    this.api = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID?.trim() ?? "",
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET?.trim() ?? ""
-    });
-  }
-
-  hasClientCredentials() {
-    return Boolean(
-      process.env.SPOTIFY_CLIENT_ID?.trim() && process.env.SPOTIFY_CLIENT_SECRET?.trim()
-    );
-  }
-
-  async searchTracks(input: { q: string; limit: number; offset: number }) {
-    await this.ensureAccessToken();
+  async searchTracks(config: SpotifyStoredConfig, input: { q: string; limit: number; offset: number }) {
+    const cacheKey = this.cacheKey(config);
+    const api = await this.createAuthenticatedApi(config, cacheKey);
     try {
-      const response = await this.api.searchTracks(input.q, {
+      const response = await api.searchTracks(input.q, {
         limit: input.limit,
         offset: input.offset,
         market: process.env.SPOTIFY_MARKET?.trim() || undefined
@@ -62,14 +50,15 @@ export class SpotifyWebApiClient {
         .map((track) => this.toTrackCandidate(track as SpotifyTrackBody))
         .filter((track): track is SpotifyTrackCandidate => !!track);
     } catch (error) {
-      throw this.mapError(error);
+      throw this.mapError(error, cacheKey);
     }
   }
 
-  async getTrack(trackId: string) {
-    await this.ensureAccessToken();
+  async getTrack(config: SpotifyStoredConfig, trackId: string) {
+    const cacheKey = this.cacheKey(config);
+    const api = await this.createAuthenticatedApi(config, cacheKey);
     try {
-      const response = await this.api.getTrack(trackId, {
+      const response = await api.getTrack(trackId, {
         market: process.env.SPOTIFY_MARKET?.trim() || undefined
       });
       const track = this.toTrackCandidate(response.body as SpotifyTrackBody);
@@ -81,32 +70,32 @@ export class SpotifyWebApiClient {
       if (error instanceof SpotifyWebApiClientError) {
         throw error;
       }
-      throw this.mapError(error);
+      throw this.mapError(error, cacheKey);
     }
   }
 
-  private async ensureAccessToken() {
-    if (!this.hasClientCredentials()) {
-      throw new SpotifyWebApiClientError(
-        "auth-expired",
-        "Spotify Web API client credentials are not configured."
-      );
+  private async createAuthenticatedApi(config: SpotifyStoredConfig, cacheKey: string) {
+    const clientId = config.clientId.trim();
+    const clientSecret = config.clientSecret.trim();
+    if (!clientId || !clientSecret) {
+      throw new SpotifyWebApiClientError("auth-expired", "Spotify Web API credentials are missing.");
     }
-
-    if (this.accessToken && Date.now() < this.accessTokenExpiresAt - 30_000) {
-      this.api.setAccessToken(this.accessToken);
-      return;
+    const api = new SpotifyWebApi({ clientId, clientSecret });
+    const cached = this.accessTokens.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt - 30_000) {
+      api.setAccessToken(cached.token);
+      return api;
     }
-
     try {
-      this.api.setClientId(process.env.SPOTIFY_CLIENT_ID?.trim() ?? "");
-      this.api.setClientSecret(process.env.SPOTIFY_CLIENT_SECRET?.trim() ?? "");
-      const grant = await this.api.clientCredentialsGrant();
-      this.accessToken = grant.body.access_token;
-      this.accessTokenExpiresAt = Date.now() + grant.body.expires_in * 1000;
-      this.api.setAccessToken(this.accessToken);
+      const grant = await api.clientCredentialsGrant();
+      this.accessTokens.set(cacheKey, {
+        token: grant.body.access_token,
+        expiresAt: Date.now() + grant.body.expires_in * 1000
+      });
+      api.setAccessToken(grant.body.access_token);
+      return api;
     } catch (error) {
-      throw this.mapError(error);
+      throw this.mapError(error, cacheKey);
     }
   }
 
@@ -148,7 +137,7 @@ export class SpotifyWebApiClient {
     return "high";
   }
 
-  private mapError(error: unknown): SpotifyWebApiClientError {
+  private mapError(error: unknown, cacheKey?: string): SpotifyWebApiClientError {
     const status =
       typeof error === "object" &&
       error !== null &&
@@ -163,13 +152,18 @@ export class SpotifyWebApiClient {
           : null;
 
     if (status === 401 || status === 403) {
-      this.accessToken = null;
-      this.accessTokenExpiresAt = 0;
+      if (cacheKey) this.accessTokens.delete(cacheKey);
       return new SpotifyWebApiClientError("auth-expired");
     }
     if (status === 404) {
       return new SpotifyWebApiClientError("not-found");
     }
     return new SpotifyWebApiClientError("unavailable");
+  }
+
+  private cacheKey(config: SpotifyStoredConfig) {
+    return `${config.clientId.trim()}:${createHash("sha256")
+      .update(config.clientSecret)
+      .digest("hex")}`;
   }
 }

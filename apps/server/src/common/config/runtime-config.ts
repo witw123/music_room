@@ -24,18 +24,10 @@ export function validateRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   }
 
   if (env.SPOTIFY_ENABLED === "true") {
-    if (!env.SPOTIFY_CLIENT_ID?.trim() || !env.SPOTIFY_CLIENT_SECRET?.trim()) {
+    if (!isValidEncryptionKey(env.SPOTIFY_CREDENTIALS_ENCRYPTION_KEY)) {
       throw new Error(
-        "SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required when Spotify is enabled."
+        "SPOTIFY_CREDENTIALS_ENCRYPTION_KEY must be a 32-byte hex or base64 key when Spotify is enabled."
       );
-    }
-    if (!env.SPOTIFY_CREDENTIALS_PATH?.trim()) {
-      throw new Error(
-        "SPOTIFY_CREDENTIALS_PATH is required when Spotify is enabled."
-      );
-    }
-    if (!env.SPOTIFY_ZOTIFY_BIN?.trim()) {
-      throw new Error("SPOTIFY_ZOTIFY_BIN is required when Spotify is enabled.");
     }
   }
 
@@ -128,6 +120,10 @@ function hasStaticTurnIceConfig(env: NodeJS.ProcessEnv) {
 }
 
 export function isValidNeteaseEncryptionKey(value: string | undefined) {
+  return isValidEncryptionKey(value);
+}
+
+export function isValidEncryptionKey(value: string | undefined) {
   if (!value?.trim()) {
     return false;
   }

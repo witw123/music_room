@@ -52,11 +52,19 @@
 
 ## Spotify provider
 
-Spotify 默认关闭。启用后需要配置 Spotify Web API 的 `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`，以及服务端可执行的 Zotify 和 `credentials.json`。Zotify 与 FFmpeg 需要预先安装在 server 容器或宿主机中；凭证和下载缓存目录应通过部署卷提供。
+Spotify 默认关闭。启用后需要配置 `SPOTIFY_CREDENTIALS_ENCRYPTION_KEY` 和服务端可执行的 Zotify。用户在前端提交自己的 Spotify Client ID、Client Secret 和 `credentials.json`；服务端使用 AES-GCM 加密保存，不向前端回显。
 
 ### `GET /v1/providers/spotify/account`
 
-返回服务端全局 Spotify Web API、Zotify 和下载凭证的就绪状态。
+返回当前用户的 Spotify Client ID、Zotify 和下载凭证就绪状态，不返回任何密钥。
+
+### `PUT /v1/providers/spotify/account`
+
+保存当前用户的 Spotify 配置。请求体为 `{ "clientId": string, "clientSecret": string, "credentialsJson": string }`。请求必须通过 HTTPS 传输；服务端不返回原始凭证。
+
+### `DELETE /v1/providers/spotify/account`
+
+删除当前用户保存的 Spotify 配置和对应下载缓存不会自动删除。
 
 ### `GET /v1/providers/spotify/search`
 

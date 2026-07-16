@@ -19,6 +19,11 @@ import {
   type SpotifySearchQuery
 } from "./spotify.schemas";
 import { ZotifyDownloadService } from "./zotify-download.service";
+import {
+  SpotifyAccountCredentialsInvalidError,
+  SpotifyAccountService,
+  SpotifyAccountStorageUnavailableError
+} from "./spotify-account.service";
 
 type RateBucket = { timestamps: number[] };
 
@@ -28,41 +33,55 @@ export class SpotifyService {
 
   constructor(
     private readonly api: SpotifyWebApiClient,
-    private readonly downloads: ZotifyDownloadService
+    private readonly downloads: ZotifyDownloadService,
+    private readonly accounts: SpotifyAccountService
   ) {}
 
-  async getAccountStatus(_userId: string): Promise<SpotifyAccountStatus> {
+  async getAccountStatus(userId: string): Promise<SpotifyAccountStatus> {
     this.assertEnabled();
     const readiness = await this.downloads.getAccountReadiness();
-    const hasWebApiCredentials = this.api.hasClientCredentials();
-    const connected =
-      hasWebApiCredentials && readiness.hasDownloadCredentials && readiness.hasZotifyBinary;
-
-    let message: string | null = null;
-    if (!hasWebApiCredentials) {
-      message = "Spotify Web API client credentials are not configured.";
-    } else if (!readiness.hasDownloadCredentials) {
-      message = "Spotify download credentials.json is missing on the server.";
-    } else if (!readiness.hasZotifyBinary) {
-      message = "Zotify binary is not available on the server.";
+    try {
+      return await this.accounts.getStatus(userId, readiness.hasZotifyBinary);
+    } catch (error) {
+      if (error instanceof SpotifyAccountStorageUnavailableError) {
+        throw new HttpException(
+          createApiErrorResponse(errorCodes.spotifyUnavailable, "Spotify account storage is unavailable."),
+          HttpStatus.SERVICE_UNAVAILABLE
+        );
+      }
+      throw error;
     }
+  }
 
-    return {
-      connected,
-      mode: "server_credentials",
-      hasWebApiCredentials,
-      hasDownloadCredentials: readiness.hasDownloadCredentials,
-      hasZotifyBinary: readiness.hasZotifyBinary,
-      message
-    };
+  async saveAccount(userId: string, config: import("./spotify-account.service").SpotifyStoredConfig) {
+    this.assertEnabled();
+    validateCredentialsJson(config.credentialsJson);
+    try {
+      await this.accounts.saveAccount(userId, config);
+    } catch (error) {
+      this.throwAccountStorageError(error);
+    }
+    return this.getAccountStatus(userId);
+  }
+
+  async disconnectAccount(userId: string) {
+    this.assertEnabled();
+    let result;
+    try {
+      result = await this.accounts.disconnect(userId);
+    } catch (error) {
+      this.throwAccountStorageError(error);
+    }
+    await this.downloads.deleteUserCache(userId);
+    return result;
   }
 
   async searchTracks(userId: string, query: SpotifySearchQuery): Promise<SpotifySearchResponse> {
     this.assertEnabled();
-    this.assertConfiguredForSearch();
+    const config = await this.getConfigOrThrow(userId);
     this.assertRateLimit(`search:${userId}`, 30, 60_000);
     try {
-      const items = await this.api.searchTracks(query);
+      const items = await this.api.searchTracks(config, query);
       return {
         items,
         limit: query.limit,
@@ -75,10 +94,10 @@ export class SpotifyService {
 
   async getTrack(userId: string, trackId: string): Promise<SpotifyTrackCandidate> {
     this.assertEnabled();
-    this.assertConfiguredForSearch();
+    const config = await this.getConfigOrThrow(userId);
     this.assertRateLimit(`track:${userId}`, 30, 60_000);
     try {
-      return await this.api.getTrack(trackId);
+      return await this.api.getTrack(config, trackId);
     } catch (error) {
       throw this.mapProviderError(error);
     }
@@ -92,14 +111,14 @@ export class SpotifyService {
       ? parsedQuality.data
       : this.defaultQuality();
 
-    this.assertConfiguredForSearch();
+    const config = await this.getConfigOrThrow(userId);
     try {
-      await this.api.getTrack(trackId);
+      await this.api.getTrack(config, trackId);
     } catch (error) {
       throw this.mapProviderError(error);
     }
 
-    return this.downloads.openAudio(trackId, selectedQuality);
+    return this.downloads.openAudio(userId, config, trackId, selectedQuality);
   }
 
   private assertEnabled() {
@@ -111,16 +130,38 @@ export class SpotifyService {
     }
   }
 
-  private assertConfiguredForSearch() {
-    if (!this.api.hasClientCredentials()) {
+  private async getConfigOrThrow(userId: string) {
+    try {
+      return await this.accounts.getConfigOrThrow(userId);
+    } catch (error) {
+      if (error instanceof SpotifyAccountStorageUnavailableError) {
+        throw new HttpException(
+          createApiErrorResponse(errorCodes.spotifyUnavailable, "Spotify account storage is unavailable."),
+          HttpStatus.SERVICE_UNAVAILABLE
+        );
+      }
+      const code =
+        error instanceof SpotifyAccountCredentialsInvalidError
+          ? errorCodes.spotifyAuthExpired
+          : errorCodes.spotifyAccountRequired;
       throw new HttpException(
         createApiErrorResponse(
-          errorCodes.spotifyAccountRequired,
-          "Spotify Web API client credentials are not configured."
+          code,
+          error instanceof Error ? error.message : "Spotify account credentials are required."
         ),
-        HttpStatus.CONFLICT
+        code === errorCodes.spotifyAuthExpired ? HttpStatus.UNAUTHORIZED : HttpStatus.CONFLICT
       );
     }
+  }
+
+  private throwAccountStorageError(error: unknown): never {
+    if (error instanceof SpotifyAccountStorageUnavailableError) {
+      throw new HttpException(
+        createApiErrorResponse(errorCodes.spotifyUnavailable, "Spotify account storage is unavailable."),
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+    throw error;
   }
 
   private defaultQuality(): SpotifyQuality {
@@ -173,6 +214,23 @@ export class SpotifyService {
     throw new HttpException(
       createApiErrorResponse(errorCodes.spotifyUnavailable, "Spotify provider request failed."),
       HttpStatus.BAD_GATEWAY
+    );
+  }
+}
+
+function validateCredentialsJson(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error();
+    }
+  } catch {
+    throw new HttpException(
+      createApiErrorResponse(
+        errorCodes.validationFailed,
+        "Spotify credentials.json must contain a valid JSON object."
+      ),
+      HttpStatus.BAD_REQUEST
     );
   }
 }

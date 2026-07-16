@@ -1,10 +1,13 @@
 import {
   Controller,
+  Body,
+  Delete,
   Get,
   Headers,
   HttpException,
   HttpStatus,
   Param,
+  Put,
   Query,
   Req,
   Res,
@@ -17,6 +20,7 @@ import { AuthService } from "../../auth/auth.service";
 import { parseRequestBody } from "../../../common/validation/zod-validation";
 import {
   spotifyQualitySchema,
+  spotifyAccountConfigSchema,
   spotifySearchQuerySchema,
   spotifyTrackIdSchema
 } from "./spotify.schemas";
@@ -34,6 +38,21 @@ export class SpotifyController {
   @Get("account")
   async getAccount(@Headers("x-session-token") sessionToken: string | undefined) {
     return this.service.getAccountStatus(await this.getCurrentUserId(sessionToken));
+  }
+
+  @Put("account")
+  async saveAccount(
+    @Headers("x-session-token") sessionToken: string | undefined,
+    @Body() body: Record<string, unknown>
+  ) {
+    const userId = await this.getCurrentUserId(sessionToken);
+    const config = parseRequestBody(spotifyAccountConfigSchema, body);
+    return this.service.saveAccount(userId, config);
+  }
+
+  @Delete("account")
+  async disconnect(@Headers("x-session-token") sessionToken: string | undefined) {
+    return this.service.disconnectAccount(await this.getCurrentUserId(sessionToken));
   }
 
   @Get("search")

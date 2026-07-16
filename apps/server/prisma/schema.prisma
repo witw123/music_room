@@ -16,6 +16,7 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   neteaseAccount NeteaseAccount?
+  spotifyAccount SpotifyAccount?
 }
 
 model NeteaseAccount {
@@ -28,6 +29,19 @@ model NeteaseAccount {
   lastValidatedAt  DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SpotifyAccount {
+  id                    String   @id
+  userId                String   @unique
+  encryptedClientId     String
+  encryptedClientSecret String
+  encryptedCredentials  String
+  lastValidatedAt       DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

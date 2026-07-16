@@ -309,6 +309,19 @@ export const musicRoomApi = {
     ),
   getSpotifyAccount: () =>
     request<SpotifyAccountStatus>("/v1/providers/spotify/account"),
+  saveSpotifyAccount: (payload: {
+    clientId: string;
+    clientSecret: string;
+    credentialsJson: string;
+  }) =>
+    request<SpotifyAccountStatus>("/v1/providers/spotify/account", {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  disconnectSpotifyAccount: () =>
+    request<{ ok: boolean }>("/v1/providers/spotify/account", {
+      method: "DELETE"
+    }),
   searchSpotifyTracks: (query: string, options?: { limit?: number; offset?: number }) => {
     const params = new URLSearchParams({
       q: query,

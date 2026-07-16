@@ -27,5 +27,13 @@ export const spotifySearchQuerySchema = z
 
 export const spotifyQualitySchema = z.enum(["normal", "high", "very_high"]);
 
+export const spotifyAccountConfigSchema = z
+  .object({
+    clientId: z.string().trim().min(1).max(160),
+    clientSecret: z.string().trim().min(1).max(240),
+    credentialsJson: z.string().trim().min(2).max(5_000_000)
+  })
+  .strict();
+
 export type SpotifySearchQuery = z.infer<typeof spotifySearchQuerySchema>;
 export type SpotifyQuality = z.infer<typeof spotifyQualitySchema>;
