@@ -11,6 +11,10 @@ export function isCurrentPlaybackSourceDevice(input: {
     return false;
   }
 
+  if (input.activeSessionId && playback.sourceSessionId) {
+    return playback.sourceSessionId === input.activeSessionId;
+  }
+
   const sourcePeerId = input.sourcePeerId ?? playback.sourcePeerId;
   if (input.peerId && sourcePeerId) {
     return sourcePeerId === input.peerId;

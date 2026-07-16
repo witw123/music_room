@@ -3,6 +3,7 @@ import type { PeerSignalMessage } from "@music-room/shared";
 import { SignalingTransport } from "./signaling-transport";
 import { PeerConnectionLifecycleManager } from "./peer-connection-lifecycle-manager";
 import type { PeerEntry } from "./peer-connection-registry";
+import type { PeerConnectionStatsSample } from "./connection-stats";
 
 class FakeDataChannel {
   readyState: RTCDataChannelState = "connecting";
@@ -300,6 +301,41 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaOffers).toHaveLength(1);
+  });
+
+  it("does not restart a local source for unknown or zero outbound bitrate samples", async () => {
+    const { manager, sendSignal } = createManager();
+    const track = { id: "source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+
+    manager.setLocalAudioStream(stream, "peer_a");
+    await manager.syncPeers(["peer_b"]);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender)!;
+    const mediaEntry = manager.getPeerEntry("peer_b", "media")!;
+    const observeMediaHealth = (manager as unknown as {
+      observeMediaHealth: (peerId: string, sample: PeerConnectionStatsSample) => void;
+    }).observeMediaHealth.bind(manager);
+    const sample = {
+      mediaReceiveBitrateKbps: null,
+      mediaSendBitrateKbps: null,
+      packetLossRate: null,
+      jitterMs: null
+    } as PeerConnectionStatsSample;
+
+    observeMediaHealth("peer_b", sample);
+    observeMediaHealth("peer_b", { ...sample, mediaSendBitrateKbps: 0 });
+    observeMediaHealth("peer_b", { ...sample, mediaSendBitrateKbps: 0 });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .map(([payload]) => payload as PeerSignalMessage)
+      .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
+    expect(mediaPeer.mediaSender?.track).toBe(track);
+    expect(mediaEntry.senderTrackState).toBe("live");
     expect(mediaOffers).toHaveLength(1);
   });
 

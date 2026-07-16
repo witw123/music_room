@@ -284,10 +284,14 @@ export class PeerConnectionLifecycleManager {
     maxBitrateKbps: number | null = null
   ) {
     const normalizedBitrateKbps = normalizeAudioBitrateKbps(maxBitrateKbps);
+    const previousTrack = this.localAudioStream?.getAudioTracks()[0] ?? null;
+    const nextTrack = stream?.getAudioTracks()[0] ?? null;
     if (
       this.localAudioStream === stream &&
       this.localAudioSourcePeerId === sourcePeerId &&
-      this.localAudioMaxBitrateKbps === normalizedBitrateKbps
+      this.localAudioMaxBitrateKbps === normalizedBitrateKbps &&
+      previousTrack === nextTrack &&
+      (nextTrack === null || nextTrack.readyState === "live")
     ) {
       return;
     }
@@ -889,10 +893,17 @@ export class PeerConnectionLifecycleManager {
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
     const loss = sample.packetLossRate ?? 0;
     const jitter = sample.jitterMs ?? 0;
+    // A null bitrate means that the browser did not provide a comparable
+    // stats sample yet. Treating it as zero creates false recovery cycles,
+    // especially for a source that joined as the non-initiating peer.
     const noReceivePackets = entry.receiverTrackState === "live" &&
-      (sample.mediaReceiveBitrateKbps ?? 0) <= 0;
+      sample.mediaReceiveBitrateKbps !== null &&
+      sample.mediaReceiveBitrateKbps <= 0;
     const noSendPackets = entry.senderTrackState === "live" &&
-      (sample.mediaSendBitrateKbps ?? 0) <= 0;
+      sample.mediaSendBitrateKbps !== null &&
+      sample.mediaSendBitrateKbps <= 0;
+    const localSourceIsActive = this.localAudioSourcePeerId === this.localPeerId &&
+      !!this.localAudioStream?.getAudioTracks().some((track) => track.readyState === "live");
     state.degradedWindows = loss >= 3 || jitter >= 20 ? state.degradedWindows + 1 : 0;
     state.noPacketWindows = noReceivePackets ? state.noPacketWindows + 1 : 0;
     state.noSendPacketWindows = noSendPackets ? state.noSendPacketWindows + 1 : 0;
@@ -902,11 +913,17 @@ export class PeerConnectionLifecycleManager {
     } else if (noReceivePackets && state.noPacketWindows >= 1) {
       entry.receiverRtpActive = false;
     }
+    if (localSourceIsActive && noSendPackets && state.noSendPacketWindows === 1) {
+      // Keep the source peer alive. A zero outbound sample can be a silent
+      // audio window or a stats gap; refresh the sender binding without
+      // tearing down the ICE/DTLS connection that is still carrying media.
+      void this.enqueueMediaOperation(peerId, entry);
+    }
     state.highLossWindows = loss >= 5 ? state.highLossWindows + 1 : 0;
     state.highJitterWindows = jitter >= 30 ? state.highJitterWindows + 1 : 0;
     const reason = (
       (noReceivePackets && state.noPacketWindows >= 2) ||
-      (noSendPackets && state.noSendPacketWindows >= 2)
+      (!localSourceIsActive && noSendPackets && state.noSendPacketWindows >= 2)
     )
       ? "no-packets" as const
       : state.highLossWindows >= 3

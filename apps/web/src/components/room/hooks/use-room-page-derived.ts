@@ -126,6 +126,13 @@ export function useRoomPageDerived({
         return false;
       }
 
+      // Session identity is stable during a room visit. The presence peerId
+      // may be refreshed while a browser reconnects, and must not unload the
+      // local source engine for that short transition.
+      if (activeSessionId && playbackSourceSessionId) {
+        return activeSessionId === playbackSourceSessionId;
+      }
+
       if (peerId && currentSourcePeerId) {
         return currentSourcePeerId === peerId;
       }

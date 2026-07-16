@@ -223,8 +223,11 @@ export function useRoomSegmentedPlaybackRuntime(input: {
           : `source:none:${runtime.peerId}`;
         if (localMediaBindingRef.current !== bindingKey) {
           localMediaBindingRef.current = bindingKey;
-          runtime.setLocalAudioStream(sourceStream, runtime.peerId, bitrateKbps);
         }
+        // Keep this idempotent call in the source poll. It lets the manager
+        // notice a replaced/ended destination track without renegotiating
+        // healthy media on every tick.
+        runtime.setLocalAudioStream(sourceStream, runtime.peerId, bitrateKbps);
         return;
       }
 

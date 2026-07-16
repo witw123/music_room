@@ -126,4 +126,20 @@ describe("room page derived state", () => {
 
     expect(playback.isCurrentSourceOwner).toBe(true);
   });
+
+  it("keeps the local source active while its presence peer id is refreshed", () => {
+    const snapshot = createSnapshot({
+      sourceSessionId: "member",
+      sourcePeerId: "peer_member_old",
+      memberPeerId: "peer_member_current"
+    });
+
+    const playback = resolveRoomPagePlaybackState({
+      roomSnapshot: snapshot,
+      peerId: "peer_member_old",
+      activeSessionId: "member"
+    });
+
+    expect(playback.isCurrentSourceOwner).toBe(true);
+  });
 });
