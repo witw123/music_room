@@ -1605,6 +1605,51 @@ describe("RoomService", () => {
     expect(latestSnapshot.tracks.filter((track) => track.fileHash === "same-hash")).toHaveLength(1);
   });
 
+  it("deduplicates provider tracks by source reference for the same uploader", async () => {
+    const prisma = createPrismaMock();
+    const redis = createRedisMock();
+    const authService = new AuthService(prisma as never);
+    const roomService = new RoomService(authService, prisma as never, redis as never);
+
+    const host = await authService.createGuestSession("Host");
+    const snapshot = await roomService.createRoom(host.id);
+    const firstTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "QQ Song",
+      artist: "Artist",
+      album: null,
+      durationMs: 180_000,
+      bitrate: null,
+      sizeBytes: 1024,
+      codec: "mp3",
+      fileHash: "qq-hash-1",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: "Host",
+      sourceType: "qqmusic",
+      sourceRef: { provider: "qqmusic", trackId: "003abc" }
+    });
+    const secondTrack = await roomService.registerTrack(snapshot.room.id, host.id, {
+      title: "QQ Song Updated",
+      artist: "Artist",
+      album: null,
+      durationMs: 181_000,
+      bitrate: null,
+      sizeBytes: 1024,
+      codec: "mp3",
+      fileHash: "qq-hash-2",
+      artworkUrl: null,
+      ownerSessionId: host.id,
+      ownerNickname: "Host",
+      sourceType: "qqmusic",
+      sourceRef: { provider: "qqmusic", trackId: "003abc" }
+    });
+
+    const latestSnapshot = await roomService.getRoomSnapshot(snapshot.room.id, []);
+    expect(secondTrack.id).toBe(firstTrack.id);
+    expect(latestSnapshot.tracks.filter((track) => track.sourceRef?.trackId === "003abc"))
+      .toHaveLength(1);
+  });
+
   it("keeps the full room roster in snapshots even when some members are offline", async () => {
     const prisma = createPrismaMock();
     const redis = createRedisMock();

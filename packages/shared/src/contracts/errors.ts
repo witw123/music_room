@@ -21,7 +21,12 @@ export const errorCodes = {
   neteaseTrackNotFound: "NETEASE_TRACK_NOT_FOUND",
   neteaseAudioUnsupported: "NETEASE_AUDIO_UNSUPPORTED",
   neteaseImportTooLarge: "NETEASE_IMPORT_TOO_LARGE",
-  neteaseUnavailable: "NETEASE_UNAVAILABLE"
+  neteaseUnavailable: "NETEASE_UNAVAILABLE",
+  metingDisabled: "METING_DISABLED",
+  metingTrackNotFound: "METING_TRACK_NOT_FOUND",
+  metingAudioUnsupported: "METING_AUDIO_UNSUPPORTED",
+  metingImportTooLarge: "METING_IMPORT_TOO_LARGE",
+  metingUnavailable: "METING_UNAVAILABLE"
 } as const;
 
 export const apiErrorResponseSchema = z.object({
@@ -46,7 +51,12 @@ export const apiErrorResponseSchema = z.object({
     errorCodes.neteaseTrackNotFound,
     errorCodes.neteaseAudioUnsupported,
     errorCodes.neteaseImportTooLarge,
-    errorCodes.neteaseUnavailable
+    errorCodes.neteaseUnavailable,
+    errorCodes.metingDisabled,
+    errorCodes.metingTrackNotFound,
+    errorCodes.metingAudioUnsupported,
+    errorCodes.metingImportTooLarge,
+    errorCodes.metingUnavailable
   ]),
   message: z.string(),
   details: z.unknown().optional()

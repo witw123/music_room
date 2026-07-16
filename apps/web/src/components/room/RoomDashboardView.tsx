@@ -12,6 +12,7 @@ import type {
   TrackMeta
 } from "@music-room/shared";
 import type { NeteaseTrackCandidate } from "@music-room/shared";
+import type { MetingTrackCandidate } from "@music-room/shared";
 import { RoomStage } from "./RoomStage";
 import { QueuePanel } from "./QueuePanel";
 import type { LocalMemberPanelState } from "./MembersPanel";
@@ -52,6 +53,7 @@ type RoomDashboardViewProps = {
   onDeleteRoom: () => void;
   onFilesSelected: (files: FileList | File[] | null) => Promise<void>;
   onImportNeteaseTrack: (track: NeteaseTrackCandidate) => Promise<void>;
+  onImportMetingTrack: (track: MetingTrackCandidate) => Promise<void>;
   onAddToQueue: (trackId: string) => Promise<void>;
   onDeleteTrack: (trackId: string) => Promise<void>;
   onPlayTrack: (trackId: string) => Promise<void>;
@@ -70,7 +72,12 @@ const tabLabels: Record<TabId, string> = {
   members: "成员"
 };
 
-const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true"
+const tabIds: TabId[] = process.env.NEXT_PUBLIC_NETEASE_ENABLED === "true" || [
+  process.env.NEXT_PUBLIC_QQMUSIC_ENABLED,
+  process.env.NEXT_PUBLIC_KUGOU_ENABLED,
+  process.env.NEXT_PUBLIC_KUWO_ENABLED,
+  process.env.NEXT_PUBLIC_BAIDU_ENABLED
+].some((value) => value === "true")
   ? ["queue", "library", "netease", "members"]
   : ["queue", "library", "members"];
 
@@ -96,12 +103,12 @@ const MembersTabPanel = dynamic(
   }
 );
 
-const NeteaseTabPanel = dynamic(
-  () => import("./NeteaseSourcePanel").then((mod) => mod.NeteaseSourcePanel),
+const ThirdPartyTabPanel = dynamic(
+  () => import("./ThirdPartySourcePanel").then((mod) => mod.ThirdPartySourcePanel),
   {
     loading: () => (
       <div className="animate-fade-in rounded-2xl border border-surface-border bg-surface/30 px-6 py-12 text-center text-sm text-foreground-muted">
-        正在加载网易云…
+        正在加载第三方音乐平台…
       </div>
     )
   }
@@ -137,6 +144,7 @@ function RoomDashboardViewBase({
   onDeleteRoom,
   onFilesSelected,
   onImportNeteaseTrack,
+  onImportMetingTrack,
   onAddToQueue,
   onDeleteTrack,
   onPlayTrack,
@@ -319,9 +327,10 @@ function RoomDashboardViewBase({
           ) : null}
 
           {activeTab === "netease" ? (
-            <NeteaseTabPanel
+            <ThirdPartyTabPanel
               activeSession={activeSession}
-              onImportTrack={onImportNeteaseTrack}
+              onImportNeteaseTrack={onImportNeteaseTrack}
+              onImportMetingTrack={onImportMetingTrack}
             />
           ) : null}
 

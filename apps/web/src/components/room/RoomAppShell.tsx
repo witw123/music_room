@@ -96,6 +96,7 @@ export function RoomAppShell({
         onDeleteRoom={roomActions.handleDeleteRoomAction}
         onFilesSelected={playbackActions.handleFilesSelected}
         onImportNeteaseTrack={uploads.handleNeteaseTrackImport}
+        onImportMetingTrack={uploads.handleMetingTrackImport}
         onAddToQueue={roomActions.addToQueue}
         onDeleteTrack={roomActions.deleteTrack}
         onPlayTrack={playbackActions.handlePlayTrack}

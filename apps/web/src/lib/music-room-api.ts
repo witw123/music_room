@@ -4,6 +4,9 @@ import {
   type ApiErrorResponse,
   type AuthSession,
   type IceConfigResponse,
+  type MetingProvider,
+  type MetingSearchResponse,
+  type MetingTrackCandidate,
   type NeteaseAccountStatus,
   type NeteaseQrStartResponse,
   type NeteaseQrStatusResponse,
@@ -302,6 +305,34 @@ export const musicRoomApi = {
   ) =>
     requestBlob(
       `/v1/providers/netease/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
+      { signal }
+    ),
+  searchMetingTracks: (
+    provider: MetingProvider,
+    keywords: string,
+    options?: { limit?: number; offset?: number }
+  ) => {
+    const params = new URLSearchParams({
+      keywords,
+      limit: String(options?.limit ?? 20),
+      offset: String(options?.offset ?? 0)
+    });
+    return request<MetingSearchResponse>(
+      `/v1/providers/${encodeURIComponent(provider)}/search?${params.toString()}`
+    );
+  },
+  getMetingTrack: (provider: MetingProvider, trackId: string) =>
+    request<MetingTrackCandidate>(
+      `/v1/providers/${encodeURIComponent(provider)}/tracks/${encodeURIComponent(trackId)}`
+    ),
+  downloadMetingTrack: (
+    provider: MetingProvider,
+    trackId: string,
+    quality: "standard" | "high" | "exhigh" = "exhigh",
+    signal?: AbortSignal
+  ) =>
+    requestBlob(
+      `/v1/providers/${encodeURIComponent(provider)}/tracks/${encodeURIComponent(trackId)}/audio?quality=${quality}`,
       { signal }
     ),
   listMyPlaylists: () =>

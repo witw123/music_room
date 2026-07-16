@@ -1,6 +1,6 @@
 # 部署说明
 
-最后更新：`2026-07-07`
+最后更新：`2026-07-16`
 
 ## 当前支持的部署形态
 
@@ -66,6 +66,25 @@ docker compose --env-file deploy/linux/.env.production -f deploy/linux/docker-co
 ```bash
 npx pnpm deploy:check
 ```
+
+## 国内音乐 provider
+
+项目使用 Node.js 包 `@meting/core`，不需要额外安装 PHP、Composer 或 sidecar 服务。四个平台默认关闭，按需在生产环境设置：
+
+```dotenv
+QQMUSIC_ENABLED=true
+KUGOU_ENABLED=true
+KUWO_ENABLED=true
+BAIDU_ENABLED=true
+METING_DEFAULT_QUALITY=exhigh
+METING_MAX_IMPORT_BYTES=209715200
+METING_REQUEST_TIMEOUT_MS=15000
+METING_URL_RETRY_COUNT=1
+```
+
+Web 的 `NEXT_PUBLIC_QQMUSIC_ENABLED`、`NEXT_PUBLIC_KUGOU_ENABLED`、`NEXT_PUBLIC_KUWO_ENABLED` 和 `NEXT_PUBLIC_BAIDU_ENABLED` 会在 Web 镜像构建时写入前端 bundle。修改这些变量后必须重新构建并发布 Web 镜像；仅重启已有镜像不会改变前端可见平台。Server 端开关仍然是最终权限控制。
+
+首期不提供 QQ、酷狗、酷我或百度账号登录，也不保证会员、付费或受限歌曲可用。平台接口、CDN 和版权状态可能变化，解析失败时不会自动切换到其他平台，也不会在服务端保存音频文件。
 
 ## 必查健康项
 

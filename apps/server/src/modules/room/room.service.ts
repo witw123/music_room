@@ -397,13 +397,14 @@ export class RoomService {
         item.fileHash === track.fileHash &&
         item.ownerSessionId === track.ownerSessionId
     );
-    const duplicateBySourceIndex = track.sourceType === "netease" && track.sourceRef
+    const sourceRef = track.sourceType !== "local_upload" ? track.sourceRef : null;
+    const duplicateBySourceIndex = sourceRef
       ? record.tracks.findIndex(
           (item) =>
             item.ownerSessionId === track.ownerSessionId &&
-            item.sourceType === "netease" &&
-            item.sourceRef?.provider === track.sourceRef?.provider &&
-            item.sourceRef?.trackId === track.sourceRef?.trackId
+            item.sourceType !== "local_upload" &&
+            item.sourceRef?.provider === sourceRef.provider &&
+            item.sourceRef?.trackId === sourceRef.trackId
         )
       : -1;
     const existingIndex = record.tracks.findIndex((item) => item.id === track.id);

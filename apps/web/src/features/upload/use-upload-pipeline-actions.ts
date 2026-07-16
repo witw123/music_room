@@ -1,5 +1,12 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import type { GuestSession, NeteaseTrackCandidate, RoomSnapshot } from "@music-room/shared";
+import type {
+  GuestSession,
+  MetingTrackCandidate,
+  NeteaseTrackCandidate,
+  RemoteTrackSourceRef,
+  RoomSnapshot,
+  TrackSourceType
+} from "@music-room/shared";
 import type { RoomStateEvent } from "@/features/room/room-state-reducer";
 import {
   deleteLocalTrackDataForTracks,
@@ -161,111 +168,44 @@ export function useUploadPipelineActions({
   );
 
   const handleNeteaseTrackImport = useCallback(
-    async (candidate: NeteaseTrackCandidate) => {
-      if (!activeSession || !roomSnapshot) {
-        throw new Error("请先进入一个房间后再导入网易云歌曲。");
-      }
+    (candidate: NeteaseTrackCandidate) => importProviderTrack({
+      activeSession,
+      candidate,
+      download: () => musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh"),
+      inFlightUploadHashesRef,
+      origin: "netease-import",
+      persistTrackIntoLibrary,
+      roomSnapshot,
+      setStatusMessage,
+      setUploadedTracks,
+      sourceType: "netease",
+      syncRoomSnapshot
+    }),
+    [
+      activeSession,
+      inFlightUploadHashesRef,
+      persistTrackIntoLibrary,
+      roomSnapshot,
+      setStatusMessage,
+      setUploadedTracks,
+      syncRoomSnapshot
+    ]
+  );
 
-      const importKey = `${activeSession.userId}:netease:${candidate.providerTrackId}`;
-      const importLock = `${activeSession.userId}:netease:active`;
-      if (
-        inFlightUploadHashesRef.current.has(importLock) ||
-        inFlightUploadHashesRef.current.has(importKey)
-      ) {
-        return;
-      }
-
-      inFlightUploadHashesRef.current.add(importLock);
-      inFlightUploadHashesRef.current.add(importKey);
-      let objectUrl: string | null = null;
-      let retainedObjectUrl = false;
-      let registeredTrackId: string | null = null;
-      let shouldRollbackRegisteredTrack = false;
-      try {
-        setStatusMessage(`正在获取《${candidate.title}》音频…`);
-        const source = await musicRoomApi.downloadNeteaseTrack(candidate.providerTrackId, "exhigh");
-        const mimeType = normalizeImportedMimeType(source.contentType);
-        const extension = mimeType === "audio/flac" ? "flac" : "mp3";
-        const file = new File([source.blob], `${sanitizeFileName(candidate.title)}.${extension}`, {
-          type: mimeType
-        });
-        objectUrl = URL.createObjectURL(file);
-        const assets = await prepareAudioAssets({
-          file,
-          onProgress: ({ stage, completed, total }) => {
-            const labels = {
-              inspecting: "正在检查网易云音频",
-              hashing: "正在校验网易云音频",
-              "persisting-original": "正在保存源文件",
-              decoding: "正在解码音频",
-              encoding: "正在生成播放分片",
-              "persisting-playback": "正在保存播放分片"
-            } as const;
-            const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-            setStatusMessage(`${labels[stage]} ${percent}%`);
-          }
-        });
-        const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, {
-          type: "netease",
-          metadata: candidate,
-          sourceRef: {
-            provider: "netease",
-            trackId: candidate.providerTrackId
-          }
-        });
-        const existingTrack = roomSnapshot.tracks.find(
-          (track) =>
-            track.ownerSessionId === activeSession.userId &&
-            ((track.sourceType === "netease" &&
-              track.sourceRef?.provider === "netease" &&
-              track.sourceRef.trackId === candidate.providerTrackId) ||
-              track.fileHash === assets.fileHash)
-        );
-        const registered = await musicRoomApi.registerTrack(
-          roomSnapshot.room.id,
-          buildRegisterTrackPayload(draft)
-        );
-        registeredTrackId = registered.id;
-        shouldRollbackRegisteredTrack = !existingTrack;
-        if (registered.originalAsset && registered.playbackAsset) {
-          await linkTrackAssets({
-            trackId: registered.id,
-            originalAssetId: registered.originalAsset.assetId,
-            playbackAssetId: registered.playbackAsset.assetId
-          });
-        }
-        await persistTrackIntoLibrary({
-          track: registered,
-          roomId: roomSnapshot.room.id,
-          file
-        });
-        setUploadedTracks((current) => ({
-          ...current,
-          [registered.id]: {
-            file,
-            objectUrl: objectUrl!,
-            origin: "netease-import"
-          }
-        }));
-        retainedObjectUrl = true;
-        await syncRoomSnapshot(roomSnapshot.room.id);
-        setStatusMessage(`《${candidate.title}》已导入曲库。`);
-      } catch (error) {
-        if (registeredTrackId && shouldRollbackRegisteredTrack) {
-          await Promise.allSettled([
-            musicRoomApi.deleteTrack(roomSnapshot.room.id, registeredTrackId),
-            deleteLocalTrackDataForTracks([registeredTrackId])
-          ]);
-        }
-        throw error;
-      } finally {
-        inFlightUploadHashesRef.current.delete(importLock);
-        inFlightUploadHashesRef.current.delete(importKey);
-        if (objectUrl && !retainedObjectUrl) {
-          URL.revokeObjectURL(objectUrl);
-        }
-      }
-    },
+  const handleMetingTrackImport = useCallback(
+    (candidate: MetingTrackCandidate) => importProviderTrack({
+      activeSession,
+      candidate,
+      download: () => musicRoomApi.downloadMetingTrack(candidate.provider, candidate.providerTrackId, "exhigh"),
+      inFlightUploadHashesRef,
+      origin: "meting-import",
+      persistTrackIntoLibrary,
+      roomSnapshot,
+      setStatusMessage,
+      setUploadedTracks,
+      sourceType: candidate.provider,
+      syncRoomSnapshot
+    }),
     [
       activeSession,
       inFlightUploadHashesRef,
@@ -281,8 +221,153 @@ export function useUploadPipelineActions({
     syncRoomSnapshot,
     persistTrackIntoLibrary,
     handleFilesSelected,
-    handleNeteaseTrackImport
+    handleNeteaseTrackImport,
+    handleMetingTrackImport
   };
+}
+
+type ProviderTrackCandidate = NeteaseTrackCandidate | MetingTrackCandidate;
+
+async function importProviderTrack(input: {
+  activeSession: GuestSession | null;
+  candidate: ProviderTrackCandidate;
+  download: () => Promise<{ blob: Blob; contentType: string }>;
+  inFlightUploadHashesRef: MutableRefObject<Set<string>>;
+  origin: UploadedTrack["origin"];
+  persistTrackIntoLibrary: (input: {
+    track: import("@music-room/shared").TrackMeta;
+    roomId: string;
+    file: File;
+  }) => Promise<void>;
+  roomSnapshot: RoomSnapshot | null;
+  setStatusMessage: (message: string) => void;
+  setUploadedTracks: Dispatch<SetStateAction<Record<string, UploadedTrack>>>;
+  sourceType: Exclude<TrackSourceType, "local_upload">;
+  syncRoomSnapshot: (roomId: string) => Promise<void>;
+}) {
+  const {
+    activeSession,
+    candidate,
+    download,
+    inFlightUploadHashesRef,
+    origin,
+    persistTrackIntoLibrary,
+    roomSnapshot,
+    setStatusMessage,
+    setUploadedTracks,
+    sourceType,
+    syncRoomSnapshot
+  } = input;
+  if (!activeSession || !roomSnapshot) {
+    throw new Error(`请先进入一个房间后再导入${sourceTypeLabel(sourceType)}歌曲。`);
+  }
+
+  const importKey = `${activeSession.userId}:${sourceType}:${candidate.providerTrackId}`;
+  const importLock = `${activeSession.userId}:${sourceType}:active`;
+  if (
+    inFlightUploadHashesRef.current.has(importLock) ||
+    inFlightUploadHashesRef.current.has(importKey)
+  ) return;
+
+  inFlightUploadHashesRef.current.add(importLock);
+  inFlightUploadHashesRef.current.add(importKey);
+  let objectUrl: string | null = null;
+  let retainedObjectUrl = false;
+  let registeredTrackId: string | null = null;
+  let shouldRollbackRegisteredTrack = false;
+  try {
+    setStatusMessage(`正在获取《${candidate.title}》音频…`);
+    const source = await download();
+    const mimeType = normalizeImportedMimeType(source.contentType);
+    const extension = mimeType === "audio/flac" ? "flac" : "mp3";
+    const file = new File([source.blob], `${sanitizeFileName(candidate.title, sourceType)}.${extension}`, {
+      type: mimeType
+    });
+    objectUrl = URL.createObjectURL(file);
+    const assets = await prepareAudioAssets({
+      file,
+      onProgress: ({ stage, completed, total }) => {
+        const labels = {
+          inspecting: "正在检查音频资源",
+          hashing: "正在校验音频",
+          "persisting-original": "正在保存源文件",
+          decoding: "正在解码音频",
+          encoding: "正在生成播放分片",
+          "persisting-playback": "正在保存播放分片"
+        } as const;
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        setStatusMessage(`${labels[stage]} ${percent}%`);
+      }
+    });
+    const sourceRef = buildProviderSourceRef(sourceType, candidate.providerTrackId);
+    const draft = await buildTrackMeta(file, objectUrl, activeSession, assets, {
+      type: sourceType,
+      metadata: candidate,
+      sourceRef
+    });
+    const existingTrack = roomSnapshot.tracks.find(
+      (track) =>
+        track.ownerSessionId === activeSession.userId &&
+        ((track.sourceType === sourceType &&
+          track.sourceRef?.provider === sourceRef.provider &&
+          track.sourceRef.trackId === sourceRef.trackId) ||
+          track.fileHash === assets.fileHash)
+    );
+    const registered = await musicRoomApi.registerTrack(
+      roomSnapshot.room.id,
+      buildRegisterTrackPayload(draft)
+    );
+    registeredTrackId = registered.id;
+    shouldRollbackRegisteredTrack = !existingTrack;
+    if (registered.originalAsset && registered.playbackAsset) {
+      await linkTrackAssets({
+        trackId: registered.id,
+        originalAssetId: registered.originalAsset.assetId,
+        playbackAssetId: registered.playbackAsset.assetId
+      });
+    }
+    await persistTrackIntoLibrary({
+      track: registered,
+      roomId: roomSnapshot.room.id,
+      file
+    });
+    setUploadedTracks((current) => ({
+      ...current,
+      [registered.id]: { file, objectUrl: objectUrl!, origin }
+    }));
+    retainedObjectUrl = true;
+    await syncRoomSnapshot(roomSnapshot.room.id);
+    setStatusMessage(`《${candidate.title}》已导入曲库。`);
+  } catch (error) {
+    if (registeredTrackId && shouldRollbackRegisteredTrack) {
+      await Promise.allSettled([
+        musicRoomApi.deleteTrack(roomSnapshot.room.id, registeredTrackId),
+        deleteLocalTrackDataForTracks([registeredTrackId])
+      ]);
+    }
+    throw error;
+  } finally {
+    inFlightUploadHashesRef.current.delete(importLock);
+    inFlightUploadHashesRef.current.delete(importKey);
+    if (objectUrl && !retainedObjectUrl) URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function buildProviderSourceRef(
+  sourceType: Exclude<TrackSourceType, "local_upload">,
+  trackId: string
+): RemoteTrackSourceRef {
+  return { provider: sourceType, trackId } as RemoteTrackSourceRef;
+}
+
+function sourceTypeLabel(sourceType: Exclude<TrackSourceType, "local_upload">) {
+  return {
+    netease: "网易云",
+    qqmusic: "QQ音乐",
+    kugou: "酷狗音乐",
+    kuwo: "酷我音乐",
+    baidu: "百度音乐"
+  }[sourceType];
 }
 
 function normalizeImportedMimeType(value: string) {
@@ -293,6 +378,6 @@ function normalizeImportedMimeType(value: string) {
   return "audio/mpeg";
 }
 
-function sanitizeFileName(value: string) {
-  return value.replace(/[\\/:*?"<>|]+/g, " ").trim() || "netease-track";
+function sanitizeFileName(value: string, sourceType: TrackSourceType) {
+  return value.replace(/[\\/:*?"<>|]+/g, " ").trim() || `${sourceType}-track`;
 }

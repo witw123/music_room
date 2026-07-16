@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch } from "react";
 import type {
   GuestSession,
+  MetingTrackCandidate,
   NeteaseTrackCandidate,
   RoomSnapshot,
   TrackMeta
@@ -128,7 +129,12 @@ export function useTrackUploads(options: {
     uploadedTracks
   });
 
-  const { syncRoomSnapshot, handleFilesSelected, handleNeteaseTrackImport } = useUploadPipelineActions({
+  const {
+    syncRoomSnapshot,
+    handleFilesSelected,
+    handleNeteaseTrackImport,
+    handleMetingTrackImport
+  } = useUploadPipelineActions({
     activeSession,
     dispatchRoomStateEvent,
     inFlightUploadHashesRef,
@@ -280,6 +286,8 @@ export function useTrackUploads(options: {
     handleFilesSelected,
     handleNeteaseTrackImport: (candidate: NeteaseTrackCandidate) =>
       handleNeteaseTrackImport(candidate),
+    handleMetingTrackImport: (candidate: MetingTrackCandidate) =>
+      handleMetingTrackImport(candidate),
     syncRoomSnapshot,
     deleteUploadedTrackArtifacts,
     deleteRoomTrackArtifacts,

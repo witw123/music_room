@@ -104,6 +104,16 @@ describe("request contracts", () => {
       sourceType: "netease",
       sourceRef: { provider: "netease", trackId: "123456" }
     });
+    expect(
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "qqmusic",
+        sourceRef: { provider: "qqmusic", trackId: "003abc" }
+      })
+    ).toMatchObject({
+      sourceType: "qqmusic",
+      sourceRef: { provider: "qqmusic", trackId: "003abc" }
+    });
     expect(() =>
       registerTrackRequestSchema.parse({
         ...validTrack,
@@ -120,6 +130,20 @@ describe("request contracts", () => {
       registerTrackRequestSchema.parse({
         ...validTrack,
         sourceRef: null
+      })
+    ).toThrow();
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "kugou",
+        sourceRef: { provider: "kuwo", trackId: "123" }
+      })
+    ).toThrow();
+    expect(() =>
+      registerTrackRequestSchema.parse({
+        ...validTrack,
+        sourceType: "local_upload",
+        sourceRef: { provider: "baidu", trackId: "123" }
       })
     ).toThrow();
   });

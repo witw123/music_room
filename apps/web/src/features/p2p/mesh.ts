@@ -194,7 +194,7 @@ export class P2PMesh {
           .getConnectedPeerIds()
           .map((peerId) => [peerId, this.peerLifecycle.getPeerEntry(peerId, "data")] as const);
 
-    for (const [peerId, entry] of entries) {
+    for (const [, entry] of entries) {
       const channel = entry?.channel;
       if (!channel || channel.readyState !== "open") {
         continue;

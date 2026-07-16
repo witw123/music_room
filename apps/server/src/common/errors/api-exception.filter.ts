@@ -182,6 +182,16 @@ export function mapErrorStatus(code: ErrorCode): number {
       return HttpStatus.UNSUPPORTED_MEDIA_TYPE;
     case errorCodes.neteaseImportTooLarge:
       return HttpStatus.PAYLOAD_TOO_LARGE;
+    case errorCodes.metingUnavailable:
+      return HttpStatus.BAD_GATEWAY;
+    case errorCodes.metingDisabled:
+      return HttpStatus.SERVICE_UNAVAILABLE;
+    case errorCodes.metingTrackNotFound:
+      return HttpStatus.NOT_FOUND;
+    case errorCodes.metingAudioUnsupported:
+      return HttpStatus.UNSUPPORTED_MEDIA_TYPE;
+    case errorCodes.metingImportTooLarge:
+      return HttpStatus.PAYLOAD_TOO_LARGE;
     default:
       return HttpStatus.INTERNAL_SERVER_ERROR;
   }
