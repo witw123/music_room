@@ -2,13 +2,10 @@
 
 import { memo } from "react";
 import type { PeerDiagnosticsSnapshot, PlaybackSnapshot, RoomMember } from "@music-room/shared";
-import { formatTransferRateMBps } from "@/lib/music-room-ui";
 import {
   dedupePeerDiagnostics,
   dedupeRoomMembers,
-  getMediaSampleAgeMs,
   hasFreshMediaObservation,
-  realtimeMediaSampleWindowMs
 } from "./member-data";
 
 type StatusTone = "neutral" | "accent" | "success" | "warning" | "danger";
@@ -44,10 +41,6 @@ function getToneClasses(tone: StatusTone) {
   return "border-surface-border bg-background/60 text-foreground-muted";
 }
 
-function formatRate(value: number | null) {
-  return value === null ? null : formatTransferRateMBps(value);
-}
-
 function formatMetric(value: number | null | undefined, unit: string) {
   if (value === null || value === undefined) return null;
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
@@ -55,12 +48,6 @@ function formatMetric(value: number | null | undefined, unit: string) {
 
 function formatTelemetryMetric(value: number | null | undefined, unit: string) {
   return formatMetric(value, unit) ?? "暂无";
-}
-
-function formatSampleAge(sampleAgeMs: number | null) {
-  if (sampleAgeMs === null) return null;
-  const seconds = Math.max(0, Math.ceil(sampleAgeMs / 1000));
-  return sampleAgeMs > realtimeMediaSampleWindowMs ? `样本过期 · ${seconds}s前` : `样本 ${seconds}s前`;
 }
 
 function formatTimestamp(value: string | null | undefined) {
@@ -101,6 +88,34 @@ export function getPlaybackStatus(
       : { label: "在线", detail: "成员在线，尚未观测到控制通道。", tone: "neutral" as const, badgeText: "online" };
   }
   if (!isCurrentSource) {
+    if (peerDiagnostics?.mediaConnectionState === "failed" || peerDiagnostics?.transportScore === "failed") {
+      return {
+        label: "媒体链路失败",
+        detail: peerDiagnostics.lastFailureReason ?? "当前无法接收音频轨道。",
+        tone: "danger" as const,
+        badgeText: "Media failed"
+      };
+    }
+    if (
+      peerDiagnostics &&
+      hasFreshMediaObservation(peerDiagnostics) &&
+      (peerDiagnostics.receiverTrackId || (peerDiagnostics.mediaReceiveBitrateKbps ?? 0) > 0)
+    ) {
+      return {
+        label: "RTP 正常",
+        detail: "接收端已收到当前音源的 RTP Opus 音频。",
+        tone: "success" as const,
+        badgeText: "RTP Opus"
+      };
+    }
+    if (peerDiagnostics?.mediaConnectionState === "connected") {
+      return {
+        label: "等待媒体轨道",
+        detail: "媒体连接已建立，但接收端尚未收到音频轨道。",
+        tone: "warning" as const,
+        badgeText: "Media track pending"
+      };
+    }
     return peerDiagnostics?.dataChannelState === "open"
       ? { label: "已连接", detail: "当前不是音频源，不承担本次 RTP Opus 发送。", tone: "accent" as const, badgeText: "not source" }
       : { label: "在线", detail: "当前不是音频源，暂无本次媒体链路样本。", tone: "neutral" as const, badgeText: "not source" };
@@ -127,58 +142,6 @@ export function getPlaybackStatus(
   return { label: "等待媒体样本", detail: "当前没有可确认的 RTP Opus 媒体观测。", tone: "neutral" as const, badgeText: "Media pending" };
 }
 
-function MemberMetrics({
-  diagnostic,
-  localMemberState,
-  isLocal
-}: {
-  diagnostic: PeerDiagnosticsSnapshot | undefined;
-  localMemberState: LocalMemberPanelState | null;
-  isLocal: boolean;
-}) {
-  const mediaSampleAgeMs = isLocal
-    ? localMemberState?.mediaSummary?.sampleAgeMs ?? null
-    : getMediaSampleAgeMs(diagnostic);
-  const mediaSampleIsFresh = mediaSampleAgeMs !== null && mediaSampleAgeMs <= realtimeMediaSampleWindowMs;
-  const receiveRate = isLocal
-    ? localMemberState?.mediaSummary?.receiveRateKbps ?? null
-    : diagnostic?.mediaReceiveBitrateKbps ?? null;
-  const sendRate = isLocal
-    ? localMemberState?.mediaSummary?.sendRateKbps ?? null
-    : diagnostic?.mediaSendBitrateKbps ?? null;
-  const metrics: string[] = [];
-
-  if (mediaSampleIsFresh && receiveRate !== null && receiveRate > 0) {
-    metrics.push(`RTP 接收 ${formatRate(receiveRate)}`);
-  }
-  if (mediaSampleIsFresh && sendRate !== null && sendRate > 0) {
-    metrics.push(`RTP 发送 ${formatRate(sendRate)}`);
-  }
-  if (diagnostic && !isLocal) {
-    const rtt = formatMetric(diagnostic.currentRoundTripTimeMs, "ms");
-    const loss = mediaSampleIsFresh ? formatMetric(diagnostic.packetLossRate, "%") : null;
-    const jitter = mediaSampleIsFresh ? formatMetric(diagnostic.jitterMs, "ms") : null;
-    if (rtt) metrics.push(`RTT ${rtt}`);
-    if (loss) metrics.push(`丢包 ${loss}`);
-    if (jitter) metrics.push(`jitter ${jitter}`);
-  }
-  const sampleLabel = formatSampleAge(mediaSampleAgeMs);
-  if (sampleLabel) metrics.push(sampleLabel);
-
-  return (
-    <>
-      <div className="mt-2 flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-foreground-muted">
-        {metrics.length > 0 ? metrics.map((metric) => <span key={metric}>{metric}</span>) : <span>暂无实时样本</span>}
-      </div>
-      <MemberTelemetry
-        diagnostic={diagnostic}
-        isLocal={isLocal}
-        localMemberState={localMemberState}
-      />
-    </>
-  );
-}
-
 function MemberTelemetry({
   diagnostic,
   isLocal,
@@ -197,28 +160,25 @@ function MemberTelemetry({
     : diagnostic?.mediaSendBitrateKbps ?? null;
   const telemetry = isLocal
     ? [
+        "本机",
         `播放 ${playback?.listenerPlaybackState ?? localMemberState?.playbackStatus.badgeText ?? "暂无"}`,
-        `AudioContext ${playback?.audioContextState ?? "暂无"}`,
+        `音频 ${playback?.audioContextState ?? "暂无"}`,
         `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
-        `观测 ${formatTimestamp(diagnostic?.updatedAt)}`
+        `采样 ${formatTimestamp(diagnostic?.updatedAt)}`
       ]
     : [
-        `数据 ${diagnostic?.dataConnectionState ?? "暂无"} / ${diagnostic?.dataChannelState ?? "暂无"}`,
-        `媒体 ${diagnostic?.mediaConnectionState ?? "暂无"} / ICE ${diagnostic?.mediaIceState ?? "暂无"}`,
+        "本机观测",
+        `数据 ${diagnostic?.dataConnectionState ?? "暂无"}/${diagnostic?.dataChannelState ?? "暂无"}`,
+        `媒体 ${diagnostic?.mediaConnectionState ?? "暂无"}/${diagnostic?.mediaIceState ?? "暂无"}`,
         `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
-        `RTT ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, "ms")} · 丢包 ${formatTelemetryMetric(diagnostic?.packetLossRate, "%")} · jitter ${formatTelemetryMetric(diagnostic?.jitterMs, "ms")}`,
-        `观测 ${formatTimestamp(diagnostic?.updatedAt)}`
+        `RTT ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, "ms")} · 丢包 ${formatTelemetryMetric(diagnostic?.packetLossRate, "%")}`,
+        `采样 ${formatTimestamp(diagnostic?.updatedAt)}`
       ];
 
   return (
-    <div className="mt-2 rounded-md border border-white/[0.06] bg-black/20 px-2 py-1.5 text-[10px] leading-4 text-foreground-muted">
-      <div className="mb-0.5 font-medium text-foreground/70">
-        {isLocal ? "本机真实状态" : "本机对该成员的实时观测"}
-      </div>
-      <div className="grid gap-x-3 sm:grid-cols-2">
-        {telemetry.map((item) => <span key={item} className="min-w-0 break-words">{item}</span>)}
-      </div>
-    </div>
+    <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-4 text-foreground-muted/80">
+      {telemetry.map((item) => <span key={item} className="whitespace-nowrap">{item}</span>)}
+    </p>
   );
 }
 
@@ -268,7 +228,7 @@ function MembersPanelBase({
             const presence = getPresence(member);
 
             return (
-              <article key={member.id} className="py-3 first:pt-3 last:pb-3">
+              <article key={member.id} className="py-2.5 first:pt-2.5 last:pb-2.5">
                 <header className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
@@ -299,7 +259,11 @@ function MembersPanelBase({
                     ) : null}
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{status.detail}</p>
-                  <MemberMetrics diagnostic={diagnostic} localMemberState={localMemberState} isLocal={isLocal} />
+                  <MemberTelemetry
+                    diagnostic={diagnostic}
+                    isLocal={isLocal}
+                    localMemberState={localMemberState}
+                  />
                 </div>
               </article>
             );

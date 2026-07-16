@@ -200,7 +200,7 @@ describe("PeerConnectionLifecycleManager", () => {
     ).toHaveLength(1);
   });
 
-  it("keeps a sendrecv media m-line while replacing the source track", async () => {
+  it("renegotiates a sendrecv media m-line when replacing the source track", async () => {
     const { manager, sendSignal } = createManager();
     await manager.syncPeers(["peer_b"]);
 
@@ -220,7 +220,7 @@ describe("PeerConnectionLifecycleManager", () => {
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");
-    expect(mediaOffers).toHaveLength(1);
+    expect(mediaOffers).toHaveLength(2);
   });
 
   it("binds the source track before answering an incoming media offer", async () => {

@@ -31,6 +31,20 @@ describe("MembersPanel WebRTC media status", () => {
     });
   });
 
+  it("exposes a missing receiver track even when the data channel is open", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.dataChannelState = "open";
+    diagnostic.mediaConnectionState = "connected";
+
+    expect(getPlaybackStatus("online", diagnostic, {
+      playbackActive: true,
+      isCurrentSource: false
+    })).toMatchObject({
+      label: "等待媒体轨道",
+      tone: "warning"
+    });
+  });
+
   it("keeps the member view on the live RTP model", () => {
     const source = readFileSync(new URL("./MembersPanel.tsx", import.meta.url), "utf8");
 

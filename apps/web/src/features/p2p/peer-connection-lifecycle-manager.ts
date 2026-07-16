@@ -351,18 +351,27 @@ export class PeerConnectionLifecycleManager {
   async restartMediaPeer(peerId: string) {
     const entry = this.peerConnections.get(peerId, "media");
     if (!entry || entry.releasing) {
-      return this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      // A recovery-created media peer must actively announce itself. The
+      // normal lexical initiator rule is only for the initial topology sync;
+      // otherwise a listener can create a new recv peer and wait forever for
+      // an offer from the source that still owns the old peer.
+      return this.ensurePeer(peerId, true, "media");
     }
 
-    const staleSignal = Date.now() - entry.lastSignalProgressAtMs >= 8_000;
+    const now = Date.now();
+    const staleSignal = now - entry.lastSignalProgressAtMs >= 8_000;
+    const missingExpectedTrack = this.hasExpectedRemoteAudioTrack(peerId) &&
+      entry.receiverTrackState !== "live" &&
+      now - entry.lastSignalProgressAtMs >= mediaTrackWatchdogGraceMs;
     if (
       entry.connection.connectionState === "failed" ||
       entry.connection.connectionState === "closed" ||
-      (entry.connection.signalingState !== "stable" && staleSignal)
+      (entry.connection.signalingState !== "stable" && staleSignal) ||
+      (entry.connection.signalingState === "stable" && missingExpectedTrack)
     ) {
       const reconnectAttempts = entry.reconnectAttempts;
       this.releasePeer(peerId, entry);
-      const nextEntry = await this.ensurePeer(peerId, this.shouldInitiatePeer(peerId), "media");
+      const nextEntry = await this.ensurePeer(peerId, true, "media");
       nextEntry.reconnectAttempts = reconnectAttempts + 1;
       return nextEntry;
     }
@@ -372,7 +381,7 @@ export class PeerConnectionLifecycleManager {
     if (
       this.hasExpectedRemoteAudioTrack(peerId) &&
       entry.receiverTrackState !== "live" &&
-      Date.now() - entry.lastSignalProgressAtMs < mediaTrackWatchdogGraceMs
+      now - entry.lastSignalProgressAtMs < mediaTrackWatchdogGraceMs
     ) {
       this.scheduleMediaWatchdog(peerId, entry);
       return entry;
@@ -645,6 +654,11 @@ export class PeerConnectionLifecycleManager {
       try {
         await entry.audioSender.replaceTrack(desiredTrack);
         entry.senderTrackState = desiredTrack ? "live" : "none";
+        // A track attached after the initial sendrecv offer still needs a
+        // media re-offer so the remote peer receives the track identity/MSID
+        // and fires ontrack. replaceTrack alone can leave a connected but
+        // permanently silent receiver when the first offer had no track.
+        entry.mediaNegotiationPending = true;
         await this.applyAudioSenderParameters(entry.audioSender);
         this.onMediaStateChange?.({
           peerId,
