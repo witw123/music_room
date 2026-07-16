@@ -26,6 +26,7 @@ export type PeerEntry = {
   audioReceiver: RTCRtpReceiver | null;
   remoteAudioStream: MediaStream | null;
   remoteAudioTrackId: string | null;
+  senderStreamId: string | null;
   senderTrackState: PeerMediaTrackState;
   configuredAudioMaxBitrateKbps: number | null;
   appliedAudioBitrateKbps: number | null;
@@ -66,6 +67,7 @@ export function createPeerEntry(input: {
     audioReceiver: null,
     remoteAudioStream: null,
     remoteAudioTrackId: null,
+    senderStreamId: null,
     senderTrackState: "none",
     configuredAudioMaxBitrateKbps: null,
     appliedAudioBitrateKbps: null,

@@ -50,14 +50,6 @@ function formatTelemetryMetric(value: number | null | undefined, unit: string) {
   return formatMetric(value, unit) ?? "暂无";
 }
 
-function formatTimestamp(value: string | null | undefined) {
-  if (!value) return "暂无";
-  const timestamp = new Date(value);
-  return Number.isNaN(timestamp.getTime())
-    ? value
-    : timestamp.toLocaleTimeString("zh-CN", { hour12: false });
-}
-
 function getPresence(member: RoomMember) {
   if (member.presenceState === "online") {
     return { dot: "animate-pulse bg-green-500", text: "text-green-400", label: "在线" };
@@ -160,19 +152,14 @@ function MemberTelemetry({
     : diagnostic?.mediaSendBitrateKbps ?? null;
   const telemetry = isLocal
     ? [
-        "本机",
         `播放 ${playback?.listenerPlaybackState ?? localMemberState?.playbackStatus.badgeText ?? "暂无"}`,
         `音频 ${playback?.audioContextState ?? "暂无"}`,
-        `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
-        `采样 ${formatTimestamp(diagnostic?.updatedAt)}`
+        `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`
       ]
     : [
-        "本机观测",
-        `数据 ${diagnostic?.dataConnectionState ?? "暂无"}/${diagnostic?.dataChannelState ?? "暂无"}`,
         `媒体 ${diagnostic?.mediaConnectionState ?? "暂无"}/${diagnostic?.mediaIceState ?? "暂无"}`,
         `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
-        `RTT ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, "ms")} · 丢包 ${formatTelemetryMetric(diagnostic?.packetLossRate, "%")}`,
-        `采样 ${formatTimestamp(diagnostic?.updatedAt)}`
+        `RTT ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, "ms")}`
       ];
 
   return (
@@ -258,7 +245,9 @@ function MembersPanelBase({
                       <span className="text-[10px] text-accent">当前音源</span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{status.detail}</p>
+                  {status.tone === "warning" || status.tone === "danger" ? (
+                    <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{status.detail}</p>
+                  ) : null}
                   <MemberTelemetry
                     diagnostic={diagnostic}
                     isLocal={isLocal}

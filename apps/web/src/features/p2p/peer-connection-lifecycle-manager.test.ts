@@ -28,6 +28,7 @@ class FakeRTCPeerConnection {
   mediaSender: {
     track: MediaStreamTrack | null;
     replaceTrack: ReturnType<typeof vi.fn>;
+    setStreams: ReturnType<typeof vi.fn>;
   } | null = null;
   mediaTransceiver: {
     sender: NonNullable<FakeRTCPeerConnection["mediaSender"]>;
@@ -51,7 +52,8 @@ class FakeRTCPeerConnection {
       track: null,
       replaceTrack: vi.fn(async (track: MediaStreamTrack | null) => {
         this.mediaSender!.track = track;
-      })
+      }),
+      setStreams: vi.fn()
     };
     this.mediaTransceiver = {
       sender: this.mediaSender,
@@ -217,6 +219,7 @@ describe("PeerConnectionLifecycleManager", () => {
 
     expect(mediaPeer.mediaTransceiver?.direction).toBe("sendrecv");
     expect(mediaPeer.mediaSender?.track).toBe(track);
+    expect(mediaPeer.mediaSender?.setStreams).toHaveBeenCalledWith(stream);
     const mediaOffers = (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls
       .map(([payload]) => payload as PeerSignalMessage)
       .filter((payload) => payload.linkKind === "media" && payload.type === "offer");

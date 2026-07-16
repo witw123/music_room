@@ -456,8 +456,9 @@ export class PeerConnectionLifecycleManager {
     });
     if (linkKind === "media" && typeof connection.addTransceiver === "function") {
       const transceiver = connection.addTransceiver("audio", {
-        // Negotiate the audio m-line once in both directions. Playback source
-        // changes then use replaceTrack and never require a renegotiation.
+        // Keep one bidirectional m-line for both source and listener roles.
+        // The sender stream is attached explicitly when a source starts so
+        // late joins and source changes still produce a usable ontrack event.
         direction: "sendrecv"
       });
       entry.audioTransceiver = transceiver;
@@ -629,6 +630,7 @@ export class PeerConnectionLifecycleManager {
         desiredTrack,
         this.localAudioStream ?? new MediaStream([desiredTrack])
       );
+      entry.senderStreamId = this.localAudioStream?.id ?? null;
       entry.senderTrackState = "live";
       entry.mediaNegotiationPending = true;
       await this.applyAudioSenderParameters(entry.audioSender);
@@ -648,6 +650,28 @@ export class PeerConnectionLifecycleManager {
 
     if (!entry.audioSender) {
       return;
+    }
+
+    const desiredStream = desiredTrack ? this.localAudioStream : null;
+    if (
+      desiredStream &&
+      entry.senderStreamId !== desiredStream.id &&
+      typeof entry.audioSender.setStreams === "function"
+    ) {
+      try {
+        // addTransceiver creates a sender without an associated MediaStream.
+        // Keep the stream id on the sender so the next SDP carries a stable
+        // msid and the remote peer can reliably fire ontrack after a late
+        // source start or media-peer recovery.
+        entry.audioSender.setStreams(desiredStream);
+        entry.senderStreamId = desiredStream.id;
+        entry.mediaNegotiationPending = true;
+      } catch {
+        // setStreams is optional in older WebRTC implementations. The RTP
+        // sender remains usable through replaceTrack below.
+      }
+    } else if (!desiredTrack) {
+      entry.senderStreamId = null;
     }
 
     if (currentTrack !== desiredTrack) {

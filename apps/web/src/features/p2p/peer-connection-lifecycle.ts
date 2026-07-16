@@ -85,6 +85,7 @@ export function releasePeerConnectionEntry(input: {
   input.entry.audioReceiver = null;
   input.entry.remoteAudioStream = null;
   input.entry.remoteAudioTrackId = null;
+  input.entry.senderStreamId = null;
   input.entry.senderTrackState = "none";
   input.entry.configuredAudioMaxBitrateKbps = null;
   input.entry.appliedAudioBitrateKbps = null;
