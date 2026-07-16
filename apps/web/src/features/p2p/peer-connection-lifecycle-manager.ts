@@ -96,6 +96,7 @@ type MediaRecoveryState = {
 };
 
 const mediaTrackWatchdogGraceMs = 3_000;
+const mediaRecoveryCooldownMs = 3_000;
 
 function createMediaRecoveryState(): MediaRecoveryState {
   return {
@@ -265,6 +266,7 @@ export class PeerConnectionLifecycleManager {
     if (!entry) {
       return null;
     }
+    this.recoverRemoteAudioTrackFromReceiver(peerId, entry);
     return {
       senderTrackState: entry.senderTrackState,
       receiverTrackState: entry.receiverTrackState,
@@ -484,7 +486,14 @@ export class PeerConnectionLifecycleManager {
           if (linkKind === "media") {
             this.clearMediaDisconnectRecovery(payload.peerId);
             this.clearMediaWatchdog(entry);
-            this.markMediaRecovered(payload.peerId);
+            const hasOperationalMedia =
+              entry.receiverTrackState === "live" ||
+              (!this.hasExpectedRemoteAudioTrack(payload.peerId) &&
+                entry.senderTrackState === "live") ||
+              (this.latestMediaSamples.get(payload.peerId)?.mediaReceiveBitrateKbps ?? 0) > 0;
+            if (hasOperationalMedia) {
+              this.markMediaRecovered(payload.peerId);
+            }
             void this.enqueueMediaOperation(payload.peerId, entry);
             if (this.hasExpectedRemoteAudioTrack(payload.peerId)) {
               this.scheduleMediaWatchdog(payload.peerId, entry);
@@ -522,6 +531,7 @@ export class PeerConnectionLifecycleManager {
           payload.state === "live"
         ) {
           this.clearMediaWatchdog(entry);
+          this.markMediaRecovered(payload.peerId);
         }
         if (
           linkKind === "media" &&
@@ -579,7 +589,12 @@ export class PeerConnectionLifecycleManager {
     if (entry.linkKind === "media") {
       this.latestMediaSamples.delete(peerId);
       this.clearMediaDisconnectRecovery(peerId);
-      this.mediaRecovery.delete(peerId);
+      // Keep recovery history while an expected media peer is being replaced.
+      // Otherwise every failed recreation starts at attempt zero and the
+      // listener can loop forever without reaching a stable retry path.
+      if (!this.peerConnections.expects(peerId)) {
+        this.mediaRecovery.delete(peerId);
+      }
     }
     releasePeerConnectionEntry({
       peerId,
@@ -883,6 +898,7 @@ export class PeerConnectionLifecycleManager {
     state.noSendPacketWindows = noSendPackets ? state.noSendPacketWindows + 1 : 0;
     if ((sample.mediaReceiveBitrateKbps ?? 0) > 0) {
       entry.receiverRtpActive = true;
+      this.markMediaRecovered(peerId);
     } else if (noReceivePackets && state.noPacketWindows >= 1) {
       entry.receiverRtpActive = false;
     }
@@ -1021,19 +1037,10 @@ export class PeerConnectionLifecycleManager {
     const state = this.mediaRecovery.get(peerId) ?? createMediaRecoveryState();
     const now = Date.now();
     state.restartTimesMs = state.restartTimesMs.filter((timestamp) => now - timestamp < 30_000);
-    if (state.restartTimesMs.length >= 2) {
+    const lastRecoveryAtMs = state.restartTimesMs[state.restartTimesMs.length - 1] ?? null;
+    if (lastRecoveryAtMs !== null && now - lastRecoveryAtMs < mediaRecoveryCooldownMs) {
       this.mediaRecovery.set(peerId, state);
-      if (
-        state.failureReportedAtMs === null ||
-        now - state.failureReportedAtMs >= 30_000
-      ) {
-        state.failureReportedAtMs = now;
-        this.onMediaRecovery?.({
-          peerId,
-          reason: "connection-failed",
-          restartCount: state.restartTimesMs.length
-        });
-      }
+      this.scheduleMediaWatchdog(peerId, entry);
       return;
     }
     if (
@@ -1041,6 +1048,7 @@ export class PeerConnectionLifecycleManager {
       Date.now() - entry.lastSignalProgressAtMs < 8_000
     ) {
       this.mediaRecovery.set(peerId, state);
+      this.scheduleMediaWatchdog(peerId, entry);
       return;
     }
     state.restartTimesMs.push(now);
@@ -1049,9 +1057,18 @@ export class PeerConnectionLifecycleManager {
     state.noSendPacketWindows = 0;
     state.highLossWindows = 0;
     state.highJitterWindows = 0;
-    state.failureReportedAtMs = null;
+    const restartCount = state.restartTimesMs.length;
+    const shouldReportFailure = restartCount >= 2 &&
+      (state.failureReportedAtMs === null || now - state.failureReportedAtMs >= 30_000);
+    if (shouldReportFailure) {
+      state.failureReportedAtMs = now;
+    }
     this.mediaRecovery.set(peerId, state);
-    this.onMediaRecovery?.({ peerId, reason, restartCount: state.restartTimesMs.length });
+    this.onMediaRecovery?.({
+      peerId,
+      reason: shouldReportFailure ? "connection-failed" : reason,
+      restartCount
+    });
     void this.restartMediaPeer(peerId);
   }
 
@@ -1074,6 +1091,43 @@ export class PeerConnectionLifecycleManager {
     return this.localAudioSourcePeerId !== null &&
       this.localAudioSourcePeerId !== this.localPeerId &&
       this.localAudioSourcePeerId === peerId;
+  }
+
+  private recoverRemoteAudioTrackFromReceiver(peerId: string, entry: PeerEntry) {
+    if (entry.remoteAudioStream || entry.releasing) {
+      return;
+    }
+
+    let receiver = entry.audioReceiver;
+    if (!receiver) {
+      try {
+        const receivers = entry.connection.getReceivers?.() ?? [];
+        receiver = receivers.find((candidate) => candidate.track?.kind === "audio") ?? null;
+      } catch {
+        return;
+      }
+    }
+
+    const track = receiver?.track;
+    if (!receiver || !track || track.kind !== "audio" || track.readyState !== "live") {
+      return;
+    }
+
+    // Chromium can expose the receiver track before delivering ontrack after
+    // a renegotiation. Adopt it on the next runtime poll so a connected media
+    // Peer cannot remain permanently silent just because that event was lost.
+    try {
+      entry.audioReceiver = receiver;
+      entry.remoteAudioStream = new MediaStream([track]);
+      entry.remoteAudioTrackId = track.id;
+      entry.receiverTrackState = "live";
+      entry.receiverRtpActive = track.muted !== true;
+      this.clearMediaWatchdog(entry);
+      this.markMediaRecovered(peerId);
+    } catch {
+      // MediaStream construction is unavailable only in non-browser test or
+      // embedded environments; the normal ontrack path remains intact.
+    }
   }
 
   private shouldInitiatePeer(peerId: string) {

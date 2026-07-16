@@ -154,7 +154,7 @@ export function bindPeerConnectionEvents(input: {
   onMediaTrackMuted?: (payload: { peerId: string; trackId: string }) => void;
 }) {
   input.connection.onicecandidate = (event) => {
-    if (!event.candidate) {
+    if (!event.candidate || !input.isCurrentEntry(input.peerId, input.entry)) {
       return;
     }
     input.entry.lastSignalProgressAtMs = Date.now();
@@ -166,6 +166,9 @@ export function bindPeerConnectionEvents(input: {
 
   input.connection.onconnectionstatechange = () => {
     input.entry.lastSignalProgressAtMs = Date.now();
+    if (!input.isCurrentEntry(input.peerId, input.entry)) {
+      return;
+    }
     input.onPeerConnectionChange?.({
       peerId: input.peerId,
       state: input.connection.connectionState,
@@ -175,10 +178,6 @@ export function bindPeerConnectionEvents(input: {
     if (input.connection.connectionState === "connected" &&
       (input.entry.linkKind === "media" || input.entry.channel?.readyState === "open")) {
       input.entry.reconnectAttempts = 0;
-    }
-
-    if (!input.isCurrentEntry(input.peerId, input.entry)) {
-      return;
     }
 
     if (
@@ -207,12 +206,15 @@ export function bindPeerConnectionEvents(input: {
 
   input.connection.oniceconnectionstatechange = () => {
     input.entry.lastSignalProgressAtMs = Date.now();
+    if (!input.isCurrentEntry(input.peerId, input.entry)) {
+      return;
+    }
     input.onIceConnectionStateChange?.({
       peerId: input.peerId,
       state: input.connection.iceConnectionState,
       ...(input.entry.linkKind === "media" ? { linkKind: "media" as const } : {})
     });
-    if (input.isCurrentEntry(input.peerId, input.entry) && input.entry.linkKind === "data") {
+    if (input.entry.linkKind === "data") {
       input.schedulePeerWatchdog(input.peerId, input.entry);
     }
   };
@@ -232,6 +234,9 @@ export function bindPeerConnectionEvents(input: {
   };
 
   input.connection.ontrack = (event) => {
+    if (!input.isCurrentEntry(input.peerId, input.entry)) {
+      return;
+    }
     if ((input.linkKind ?? input.entry.linkKind) !== "media") {
       return;
     }

@@ -31,16 +31,32 @@ describe("MembersPanel WebRTC media status", () => {
     });
   });
 
-  it("exposes a missing receiver track even when the data channel is open", () => {
+  it("does not expect a remote non-source member to receive the room track", () => {
     const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
     diagnostic.dataChannelState = "open";
     diagnostic.mediaConnectionState = "connected";
+    diagnostic.mediaSendBitrateKbps = 184;
+    diagnostic.lastMediaStatsProgressAt = new Date().toISOString();
 
     expect(getPlaybackStatus("online", diagnostic, {
       playbackActive: true,
       isCurrentSource: false
     })).toMatchObject({
-      label: "等待媒体轨道",
+      label: "已连接",
+      tone: "accent",
+      badgeText: "Media send"
+    });
+  });
+
+  it("shows missing media data for the current source connection", () => {
+    const diagnostic = createPeerSnapshot("peer_1", new Date().toISOString());
+    diagnostic.mediaConnectionState = "connected";
+
+    expect(getPlaybackStatus("online", diagnostic, {
+      playbackActive: true,
+      isCurrentSource: true
+    })).toMatchObject({
+      label: "等待音频数据",
       tone: "warning"
     });
   });

@@ -100,12 +100,25 @@ export function getPlaybackStatus(
         badgeText: "RTP Opus"
       };
     }
+    if (
+      peerDiagnostics &&
+      hasFreshMediaObservation(peerDiagnostics) &&
+      (peerDiagnostics.mediaSendBitrateKbps ?? 0) > 0 &&
+      (peerDiagnostics.mediaReceiveBitrateKbps ?? 0) <= 0
+    ) {
+      return {
+        label: "已连接",
+        detail: "当前成员不是音频源，本机正在向其发送房间音频。",
+        tone: "accent" as const,
+        badgeText: "Media send"
+      };
+    }
     if (peerDiagnostics?.mediaConnectionState === "connected") {
       return {
-        label: "等待媒体轨道",
-        detail: "媒体连接已建立，但接收端尚未收到音频轨道。",
-        tone: "warning" as const,
-        badgeText: "Media track pending"
+        label: "已连接",
+        detail: "当前成员不是音频源，音频由当前音源发送。",
+        tone: "accent" as const,
+        badgeText: "not source"
       };
     }
     return peerDiagnostics?.dataChannelState === "open"
