@@ -18,6 +18,7 @@ import type { LocalMemberPanelState } from "./MembersPanel";
 import type { UploadedTrack } from "@/features/upload/audio-utils";
 import type { LocalStorageSummary } from "@/features/upload/use-track-uploads";
 import type { RoomSocket } from "@/lib/ws-client";
+import { resolveCurrentSourcePeerId } from "./hooks/use-room-page-derived";
 
 type TabId = "queue" | "library" | "netease" | "members";
 
@@ -147,6 +148,10 @@ function RoomDashboardViewBase({
   onDiagnosticsVisibilityChange
 }: RoomDashboardViewProps) {
   const [activeTab, setActiveTab] = useState<TabId>("queue");
+  const currentSourcePeerId = resolveCurrentSourcePeerId(
+    roomSnapshot,
+    roomSnapshot.room.playback
+  );
 
   const handleTabChange = useCallback(
     (tab: TabId) => {
@@ -327,7 +332,7 @@ function RoomDashboardViewBase({
               members={roomSnapshot.room.members}
               localMemberState={localMemberState}
               playbackStatus={roomSnapshot.room.playback.status}
-              sourcePeerId={roomSnapshot.room.playback.sourcePeerId}
+              sourcePeerId={currentSourcePeerId}
               peerDiagnostics={peerDiagnostics}
               peerRecentEvents={peerRecentEvents}
               iceConfigSource={iceConfigSource}

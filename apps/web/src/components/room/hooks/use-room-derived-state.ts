@@ -14,6 +14,7 @@ import {
   dedupeRoomMembers,
   hasRecentMediaSample
 } from "../member-data";
+import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 export type UseRoomDerivedStateInput = {
   roomSnapshot: RoomSnapshot | null;
   connectedPeers: string[];
@@ -64,6 +65,10 @@ export function useRoomDerivedState({
     () => getActiveMemberPeerIds(roomMembers ?? []),
     [roomMembers]
   );
+  const currentSourcePeerId = useMemo(
+    () => resolveCurrentSourcePeerId(roomSnapshot, roomSnapshot?.room.playback),
+    [roomSnapshot]
+  );
   const canDisbandRoom =
     !!roomSnapshot &&
     canDeleteRoom &&
@@ -78,18 +83,18 @@ export function useRoomDerivedState({
     return filterVisiblePeerDiagnostics(
       peerDiagnostics,
       activeMemberPeerIds,
-      roomSnapshot?.room.playback.sourcePeerId ?? null
+      currentSourcePeerId
     )
       .sort((left, right) => {
-        const leftPriority = getDiagnosticPriority(left.peerId, roomSnapshot?.room.playback.sourcePeerId ?? null);
-        const rightPriority = getDiagnosticPriority(right.peerId, roomSnapshot?.room.playback.sourcePeerId ?? null);
+        const leftPriority = getDiagnosticPriority(left.peerId, currentSourcePeerId);
+        const rightPriority = getDiagnosticPriority(right.peerId, currentSourcePeerId);
         if (leftPriority !== rightPriority) {
           return leftPriority - rightPriority;
         }
 
         return right.updatedAt.localeCompare(left.updatedAt);
       });
-  }, [activeMemberPeerIds, peerDiagnostics, roomSnapshot?.room.playback.sourcePeerId]);
+  }, [activeMemberPeerIds, currentSourcePeerId, peerDiagnostics]);
 
   const visiblePeerRecentEvents = useMemo(() => {
     const visiblePeerIds = new Set(visiblePeerDiagnostics.map((item) => item.peerId));

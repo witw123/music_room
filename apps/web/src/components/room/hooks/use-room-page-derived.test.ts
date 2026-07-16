@@ -26,7 +26,9 @@ function createSnapshot(input: {
   track?: RoomSnapshot["tracks"][number];
   sourcePeerId?: string | null;
   sourceSessionId?: string | null;
+  memberPeerId?: string | null;
 }) {
+  const sourceSessionId = input.sourceSessionId ?? "host";
   return {
     room: {
       id: "room_1",
@@ -39,7 +41,7 @@ function createSnapshot(input: {
         currentQueueItemId: "queue_1",
         positionMs: 12_000,
         startedAt: "2026-07-06T00:00:01.000Z",
-        sourceSessionId: input.sourceSessionId ?? "host",
+        sourceSessionId,
         sourcePeerId: input.sourcePeerId ?? "peer_host",
         sourceTrackId: "track_cached",
         queueVersion: 3,
@@ -54,7 +56,17 @@ function createSnapshot(input: {
           role: "host",
           joinedAt: "2026-07-06T00:00:00.000Z",
           presenceState: "online"
-        }
+        },
+        ...(sourceSessionId === "member"
+          ? [{
+              id: "member",
+              peerId: input.memberPeerId ?? "peer_member",
+              nickname: "Member",
+              role: "member" as const,
+              joinedAt: "2026-07-06T00:00:00.000Z",
+              presenceState: "online" as const
+            }]
+          : [])
       ],
       presenceRevision: 1,
       roomRevision: 1
@@ -97,5 +109,21 @@ describe("room page derived state", () => {
     expect(refreshed.playbackTimelineKey).toBe(first.playbackTimelineKey);
     expect(refreshed.playbackTopologySnapshot).toEqual(first.playbackTopologySnapshot);
     expect(refreshed.isCurrentSourceOwner).toBe(true);
+  });
+
+  it("uses the current presence peer when a member becomes the source", () => {
+    const snapshot = createSnapshot({
+      sourceSessionId: "member",
+      sourcePeerId: "peer_member_old",
+      memberPeerId: "peer_member_current"
+    });
+
+    const playback = resolveRoomPagePlaybackState({
+      roomSnapshot: snapshot,
+      peerId: "peer_member_current",
+      activeSessionId: "member"
+    });
+
+    expect(playback.isCurrentSourceOwner).toBe(true);
   });
 });

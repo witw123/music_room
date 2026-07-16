@@ -202,7 +202,7 @@ export function useRoomPageDerived({
   };
 }
 
-function resolveCurrentSourcePeerId(
+export function resolveCurrentSourcePeerId(
   roomSnapshot: RoomSnapshot | null | undefined,
   playback: RoomSnapshot["room"]["playback"] | null | undefined
 ) {

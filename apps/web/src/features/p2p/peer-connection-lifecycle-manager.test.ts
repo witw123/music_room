@@ -202,6 +202,27 @@ describe("PeerConnectionLifecycleManager", () => {
     ).toHaveLength(1);
   });
 
+  it("publishes a member source track even when the remote peer initiates first", async () => {
+    const { manager, sendSignal } = createManager({ localPeerId: "peer_b" });
+    await manager.syncPeers(["peer_a"]);
+
+    const track = { id: "member-source-track", readyState: "live" } as MediaStreamTrack;
+    const stream = {
+      getAudioTracks: () => [track]
+    } as unknown as MediaStream;
+    manager.setLocalAudioStream(stream, "peer_b", 192);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const mediaPeer = FakeRTCPeerConnection.instances.find((entry) => entry.mediaSender);
+    expect(mediaPeer?.mediaSender?.track).toBe(track);
+    expect(
+      (sendSignal as unknown as { mock: { calls: unknown[][] } }).mock.calls.some(([value]) => {
+        const payload = value as PeerSignalMessage;
+        return payload.linkKind === "media" && payload.type === "offer";
+      })
+    ).toBe(true);
+  });
+
   it("renegotiates a sendrecv media m-line when replacing the source track", async () => {
     const { manager, sendSignal } = createManager();
     await manager.syncPeers(["peer_b"]);

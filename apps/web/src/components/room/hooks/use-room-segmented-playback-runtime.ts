@@ -9,6 +9,7 @@ import {
 } from "@/features/playback/use-segmented-opus-playback";
 import { createPlaybackMediaSession } from "@/features/playback/playback-media-session";
 import { roomAudioOutput } from "@/features/playback/room-audio-output";
+import { resolveCurrentSourcePeerId } from "./use-room-page-derived";
 
 export function useRoomSegmentedPlaybackRuntime(input: {
   roomSnapshot: RoomSnapshot | null;
@@ -119,7 +120,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
   useEffect(() => {
     const runtime = runtimeInputRef.current;
     const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
-    const sourcePeerId = resolveSourcePeerId(runtime.roomSnapshot, roomPlayback);
+    const sourcePeerId = resolveCurrentSourcePeerId(runtime.roomSnapshot, roomPlayback);
     const remote = sourcePeerId ? runtime.getPeerMediaState(sourcePeerId) : null;
     const visiblePlayback = runtime.isCurrentSource ? playback : mediaPlayback;
     const track = runtime.currentTrack;
@@ -204,10 +205,7 @@ export function useRoomSegmentedPlaybackRuntime(input: {
     const runSyncMedia = async () => {
       const runtime = runtimeInputRef.current;
       const roomPlayback = runtime.roomSnapshot?.room.playback ?? null;
-      const sourcePeerId = roomPlayback?.sourcePeerId ??
-        (roomPlayback?.sourceSessionId
-          ? runtime.roomSnapshot?.room.members.find((member) => member.id === roomPlayback.sourceSessionId)?.peerId ?? null
-          : null);
+      const sourcePeerId = resolveCurrentSourcePeerId(runtime.roomSnapshot, roomPlayback);
       const bitrateKbps = runtime.currentTrack?.playbackAsset
         ? runtime.currentTrack.playbackAsset.bitrate / 1000
         : null;
@@ -626,16 +624,6 @@ function idlePlaybackSnapshot(): SegmentedPlaybackSnapshot {
     audioContextState: roomAudioOutput.getSharedAudioContext()?.state ?? null,
     lastError: null
   };
-}
-
-function resolveSourcePeerId(
-  roomSnapshot: RoomSnapshot | null,
-  playback: RoomSnapshot["room"]["playback"] | null
-) {
-  const presencePeerId = playback?.sourceSessionId
-    ? roomSnapshot?.room.members.find((member) => member.id === playback.sourceSessionId)?.peerId ?? null
-    : null;
-  return presencePeerId ?? playback?.sourcePeerId ?? null;
 }
 
 function toDiagnosticPlaybackState(state: SegmentedPlaybackSnapshot["state"]) {
