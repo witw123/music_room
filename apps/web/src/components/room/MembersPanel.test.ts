@@ -14,7 +14,7 @@ describe("MembersPanel WebRTC media status", () => {
       playbackActive: true,
       isCurrentSource: true
     })).toMatchObject({
-      label: "RTP 正常",
+      label: "正常出声",
       tone: "success"
     });
   });
@@ -26,8 +26,8 @@ describe("MembersPanel WebRTC media status", () => {
     diagnostic.mediaReceiveBitrateKbps = 192;
     diagnostic.lastMediaStatsProgressAt = new Date().toISOString();
     expect(getPlaybackStatus("online", diagnostic)).toMatchObject({
-      label: "RTP 正常",
-      detail: "最近 6 秒内已观测到当前媒体源的 RTP Opus 数据。"
+      label: "正常出声",
+      detail: ""
     });
   });
 
@@ -42,9 +42,9 @@ describe("MembersPanel WebRTC media status", () => {
       playbackActive: true,
       isCurrentSource: false
     })).toMatchObject({
-      label: "已连接",
+      label: "连接正常",
       tone: "accent",
-      badgeText: "Media send"
+      badgeText: "连接正常"
     });
   });
 
@@ -56,7 +56,7 @@ describe("MembersPanel WebRTC media status", () => {
       playbackActive: true,
       isCurrentSource: true
     })).toMatchObject({
-      label: "等待音频数据",
+      label: "音频准备中",
       tone: "warning"
     });
   });

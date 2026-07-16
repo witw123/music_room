@@ -632,10 +632,10 @@ function resolveSourcePeerId(
   roomSnapshot: RoomSnapshot | null,
   playback: RoomSnapshot["room"]["playback"] | null
 ) {
-  return playback?.sourcePeerId ??
-    (playback?.sourceSessionId
-      ? roomSnapshot?.room.members.find((member) => member.id === playback.sourceSessionId)?.peerId ?? null
-      : null);
+  const presencePeerId = playback?.sourceSessionId
+    ? roomSnapshot?.room.members.find((member) => member.id === playback.sourceSessionId)?.peerId ?? null
+    : null;
+  return presencePeerId ?? playback?.sourcePeerId ?? null;
 }
 
 function toDiagnosticPlaybackState(state: SegmentedPlaybackSnapshot["state"]) {

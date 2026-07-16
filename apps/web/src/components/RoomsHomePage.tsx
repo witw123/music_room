@@ -11,6 +11,7 @@ import { getOnlineMemberCount, toUserFacingError } from "@/lib/music-room-ui";
 import { storeRoomSnapshotHandoff } from "@/lib/room-snapshot-handoff";
 import { Button } from "@/components/ui/button";
 import { filterOpenPublicRooms } from "@/features/room/room-list-visibility";
+import { roomAudioOutput } from "@/features/playback/room-audio-output";
 
 const lastRoomStorageKey = "music-room-last-room";
 
@@ -97,6 +98,7 @@ export function RoomsHomePage() {
   }, [activeSession, refreshAvailableRooms, refreshRecentRoom]);
 
   async function handleCreateRoom(visibility: "public" | "private" = "public") {
+    primeRoomAudioFromUserGesture();
     try {
       const snapshot = await musicRoomApi.createRoom(visibility);
       storeRoomSnapshotHandoff(snapshot);
@@ -113,6 +115,7 @@ export function RoomsHomePage() {
       return;
     }
 
+    primeRoomAudioFromUserGesture();
     try {
       const snapshot = await musicRoomApi.joinRoomByCode(code.trim());
       storeRoomSnapshotHandoff(snapshot);
@@ -128,6 +131,7 @@ export function RoomsHomePage() {
       return;
     }
 
+    primeRoomAudioFromUserGesture();
     try {
       const recovered = await musicRoomApi.recoverRoom(recentRoom.room.id);
       if (recovered) {
@@ -425,4 +429,11 @@ export function RoomsHomePage() {
       </section>
     </main>
   );
+}
+
+function primeRoomAudioFromUserGesture() {
+  // Start the shared context while the join/create click still carries a
+  // transient user activation. The room route may receive a playing snapshot
+  // immediately after navigation, before the listener has another gesture.
+  void roomAudioOutput.primeOutputs({ localAudio: null });
 }

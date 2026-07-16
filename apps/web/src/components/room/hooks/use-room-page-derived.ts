@@ -75,6 +75,7 @@ export function resolveRoomPagePlaybackState(input: UseRoomPageDerivedInput) {
   const playbackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
   const playbackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
   const playbackStatus = roomPlayback?.status ?? null;
+  const currentSourcePeerId = resolveCurrentSourcePeerId(input.roomSnapshot, roomPlayback);
 
   return {
     roomPlayback,
@@ -88,7 +89,8 @@ export function resolveRoomPagePlaybackState(input: UseRoomPageDerivedInput) {
     isCurrentSourceOwner: isCurrentPlaybackSourceDevice({
       playback: roomPlayback,
       peerId: input.peerId,
-      activeSessionId: input.activeSessionId
+      activeSessionId: input.activeSessionId,
+      sourcePeerId: currentSourcePeerId
     }),
     playbackSurfaceKey: resolvePlaybackSurfaceKey(roomPlayback),
     playbackTimelineKey: resolvePlaybackTimelineKey(roomPlayback),
@@ -116,6 +118,7 @@ export function useRoomPageDerived({
   const playbackSourcePeerId = roomPlayback?.sourcePeerId ?? null;
   const playbackSourceSessionId = roomPlayback?.sourceSessionId ?? null;
   const playbackStatus = roomPlayback?.status ?? null;
+  const currentSourcePeerId = resolveCurrentSourcePeerId(roomSnapshot, roomPlayback);
 
   const isCurrentSourceOwner = useMemo(
     () => {
@@ -123,8 +126,8 @@ export function useRoomPageDerived({
         return false;
       }
 
-      if (peerId && playbackSourcePeerId) {
-        return playbackSourcePeerId === peerId;
+      if (peerId && currentSourcePeerId) {
+        return currentSourcePeerId === peerId;
       }
 
       return Boolean(activeSessionId && playbackSourceSessionId === activeSessionId);
@@ -132,6 +135,7 @@ export function useRoomPageDerived({
     [
       activeSessionId,
       currentPlaybackTrackId,
+      currentSourcePeerId,
       peerId,
       playbackSourcePeerId,
       playbackSourceSessionId
@@ -196,4 +200,14 @@ export function useRoomPageDerived({
     playbackTopologySnapshot,
     currentTrack
   };
+}
+
+function resolveCurrentSourcePeerId(
+  roomSnapshot: RoomSnapshot | null | undefined,
+  playback: RoomSnapshot["room"]["playback"] | null | undefined
+) {
+  const presencePeerId = playback?.sourceSessionId
+    ? roomSnapshot?.room.members.find((member) => member.id === playback.sourceSessionId)?.peerId ?? null
+    : null;
+  return presencePeerId ?? playback?.sourcePeerId ?? null;
 }

@@ -69,82 +69,39 @@ export function getPlaybackStatus(
   const isCurrentSource = options.isCurrentSource ?? true;
 
   if (presenceState === "offline") {
-    return { label: "离线", detail: "该成员当前不参与实时音频传输。", tone: "warning" as const, badgeText: "offline" };
+    return { label: "离线", detail: "", tone: "neutral" as const, badgeText: "离线" };
   }
   if (presenceState === "reconnecting") {
-    return { label: "链路重连中", detail: "正在恢复 WebRTC RTP Opus 媒体轨道。", tone: "warning" as const, badgeText: "reconnecting" };
+    return { label: "正在重连", detail: "", tone: "warning" as const, badgeText: "正在重连" };
   }
   if (!playbackActive) {
-    return peerDiagnostics?.dataChannelState === "open"
-      ? { label: "已连接", detail: "控制通道已连接，当前房间没有播放。", tone: "accent" as const, badgeText: "Data open" }
-      : { label: "在线", detail: "成员在线，尚未观测到控制通道。", tone: "neutral" as const, badgeText: "online" };
-  }
-  if (!isCurrentSource) {
-    if (peerDiagnostics?.mediaConnectionState === "failed" || peerDiagnostics?.transportScore === "failed") {
-      return {
-        label: "媒体链路失败",
-        detail: peerDiagnostics.lastFailureReason ?? "当前无法接收音频轨道。",
-        tone: "danger" as const,
-        badgeText: "Media failed"
-      };
-    }
-    if (
-      peerDiagnostics &&
-      hasFreshMediaObservation(peerDiagnostics) &&
-      (peerDiagnostics.receiverTrackId || (peerDiagnostics.mediaReceiveBitrateKbps ?? 0) > 0)
-    ) {
-      return {
-        label: "RTP 正常",
-        detail: "接收端已收到当前音源的 RTP Opus 音频。",
-        tone: "success" as const,
-        badgeText: "RTP Opus"
-      };
-    }
-    if (
-      peerDiagnostics &&
-      hasFreshMediaObservation(peerDiagnostics) &&
-      (peerDiagnostics.mediaSendBitrateKbps ?? 0) > 0 &&
-      (peerDiagnostics.mediaReceiveBitrateKbps ?? 0) <= 0
-    ) {
-      return {
-        label: "已连接",
-        detail: "当前成员不是音频源，本机正在向其发送房间音频。",
-        tone: "accent" as const,
-        badgeText: "Media send"
-      };
-    }
-    if (peerDiagnostics?.mediaConnectionState === "connected") {
-      return {
-        label: "已连接",
-        detail: "当前成员不是音频源，音频由当前音源发送。",
-        tone: "accent" as const,
-        badgeText: "not source"
-      };
-    }
-    return peerDiagnostics?.dataChannelState === "open"
-      ? { label: "已连接", detail: "当前不是音频源，不承担本次 RTP Opus 发送。", tone: "accent" as const, badgeText: "not source" }
-      : { label: "在线", detail: "当前不是音频源，暂无本次媒体链路样本。", tone: "neutral" as const, badgeText: "not source" };
+    return peerDiagnostics?.dataChannelState === "open" || peerDiagnostics?.mediaConnectionState === "connected"
+      ? { label: "连接正常", detail: "", tone: "accent" as const, badgeText: "连接正常" }
+      : { label: "连接中", detail: "", tone: "neutral" as const, badgeText: "连接中" };
   }
   if (peerDiagnostics?.mediaConnectionState === "failed" || peerDiagnostics?.transportScore === "failed") {
     return {
-      label: "媒体链路失败",
-      detail: peerDiagnostics.lastFailureReason ?? "当前无法接收 RTP Opus 音频。",
+      label: "音频异常",
+      detail: "",
       tone: "danger" as const,
-      badgeText: "Media failed"
+      badgeText: "音频异常"
     };
   }
   if (hasFreshMediaObservation(peerDiagnostics)) {
+    const isReceivingAudio =
+      (peerDiagnostics?.mediaReceiveBitrateKbps ?? 0) > 0 ||
+      !!peerDiagnostics?.receiverTrackId;
     return {
-      label: "RTP 正常",
-      detail: "最近 6 秒内已观测到当前媒体源的 RTP Opus 数据。",
-      tone: "success" as const,
-      badgeText: "RTP Opus"
+      label: isCurrentSource || isReceivingAudio ? "正常出声" : "连接正常",
+      detail: "",
+      tone: isCurrentSource || isReceivingAudio ? "success" as const : "accent" as const,
+      badgeText: isCurrentSource || isReceivingAudio ? "正常出声" : "连接正常"
     };
   }
   if (peerDiagnostics?.mediaConnectionState === "connected" || peerDiagnostics?.senderTrackId || peerDiagnostics?.receiverTrackId) {
-    return { label: "等待音频数据", detail: "媒体连接已建立，但最近没有有效 RTP 速率样本。", tone: "warning" as const, badgeText: "Media waiting" };
+    return { label: "音频准备中", detail: "", tone: "warning" as const, badgeText: "音频准备中" };
   }
-  return { label: "等待媒体样本", detail: "当前没有可确认的 RTP Opus 媒体观测。", tone: "neutral" as const, badgeText: "Media pending" };
+  return { label: "连接中", detail: "", tone: "neutral" as const, badgeText: "连接中" };
 }
 
 function MemberTelemetry({
@@ -156,7 +113,6 @@ function MemberTelemetry({
   isLocal: boolean;
   localMemberState: LocalMemberPanelState | null;
 }) {
-  const playback = diagnostic?.segmentedPlaybackStatus;
   const receiveRate = isLocal
     ? localMemberState?.mediaSummary?.receiveRateKbps ?? null
     : diagnostic?.mediaReceiveBitrateKbps ?? null;
@@ -165,18 +121,17 @@ function MemberTelemetry({
     : diagnostic?.mediaSendBitrateKbps ?? null;
   const telemetry = isLocal
     ? [
-        `播放 ${playback?.listenerPlaybackState ?? localMemberState?.playbackStatus.badgeText ?? "暂无"}`,
-        `音频 ${playback?.audioContextState ?? "暂无"}`,
-        `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`
+        `上传 ${formatTelemetryMetric(sendRate, " kbps")}`,
+        `下载 ${formatTelemetryMetric(receiveRate, " kbps")}`
       ]
     : [
-        `媒体 ${diagnostic?.mediaConnectionState ?? "暂无"}/${diagnostic?.mediaIceState ?? "暂无"}`,
-        `RTP ↓${formatTelemetryMetric(receiveRate, "kbps")} ↑${formatTelemetryMetric(sendRate, "kbps")}`,
-        `RTT ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, "ms")}`
+        `上传 ${formatTelemetryMetric(sendRate, " kbps")}`,
+        `下载 ${formatTelemetryMetric(receiveRate, " kbps")}`,
+        `延迟 ${formatTelemetryMetric(diagnostic?.currentRoundTripTimeMs, " ms")}`
       ];
 
   return (
-    <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] leading-4 text-foreground-muted/80">
+    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] leading-4 text-foreground-muted/80">
       {telemetry.map((item) => <span key={item} className="whitespace-nowrap">{item}</span>)}
     </p>
   );
@@ -250,22 +205,23 @@ function MembersPanelBase({
                 </header>
 
                 <div className="ml-9 mt-2 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getToneClasses(status.tone)}`}>
-                      {status.label}
-                    </span>
-                    {roomPlaybackStatus === "playing" && isCurrentSource ? (
-                      <span className="text-[10px] text-accent">当前音源</span>
-                    ) : null}
-                  </div>
-                  {status.tone === "warning" || status.tone === "danger" ? (
-                    <p className="mt-1 text-[10px] leading-4 text-foreground-muted">{status.detail}</p>
+                  {member.presenceState === "online" ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getToneClasses(status.tone)}`}>
+                        {status.label}
+                      </span>
+                      {roomPlaybackStatus === "playing" && isCurrentSource ? (
+                        <span className="text-[10px] text-accent">当前音源</span>
+                      ) : null}
+                    </div>
                   ) : null}
-                  <MemberTelemetry
-                    diagnostic={diagnostic}
-                    isLocal={isLocal}
-                    localMemberState={localMemberState}
-                  />
+                  {member.presenceState === "online" ? (
+                    <MemberTelemetry
+                      diagnostic={diagnostic}
+                      isLocal={isLocal}
+                      localMemberState={localMemberState}
+                    />
+                  ) : null}
                 </div>
               </article>
             );

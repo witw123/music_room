@@ -8,7 +8,7 @@ describe("MeshStatusPanel WebRTC diagnostics", () => {
     expect(source).toContain("连接诊断");
     expect(source).toContain("唯一诊断样本");
     expect(source).toContain("连接路径");
-    expect(source).toContain("音频轨道");
+    expect(source).toContain("实际音频流量");
     expect(source).toContain("查看详情");
   });
 

@@ -21,13 +21,46 @@ function formatTimestamp(value: string) {
     : parsed.toLocaleString("zh-CN", { hour12: false });
 }
 
-function formatMaybeTimestamp(value: string | null | undefined) {
-  return value ? formatTimestamp(value) : "暂无";
-}
-
 function formatMetric(value: number | null | undefined, unit: string) {
   if (value === null || value === undefined) return "暂无";
   return `${Math.abs(value) < 100 ? value.toFixed(1) : Math.round(value)}${unit}`;
+}
+
+function formatConnectionState(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    new: "未开始",
+    checking: "检查中",
+    connected: "已连接",
+    completed: "已完成",
+    disconnected: "已断开",
+    failed: "连接失败",
+    closed: "已关闭",
+    open: "已连接",
+    connecting: "连接中"
+  };
+  return value ? labels[value] ?? "状态未知" : "未建立";
+}
+
+function formatHealth(value: PeerDiagnosticsSnapshot["transportHealth"]) {
+  const labels: Record<string, string> = {
+    healthy: "正常",
+    "media-only": "音频正常",
+    degraded: "质量下降",
+    recovering: "恢复中",
+    reconnecting: "重连中",
+    failed: "失败"
+  };
+  return value ? labels[value] ?? "状态未知" : "暂无状态";
+}
+
+function formatIceSource(value: string) {
+  const labels: Record<string, string> = {
+    "short-lived-turn": "短期 TURN",
+    "static-fallback": "静态备用配置",
+    "stun-only": "仅 STUN",
+    loading: "获取中"
+  };
+  return labels[value] ?? value;
 }
 
 function formatEventLabel(event: PeerRecentEvent) {
@@ -84,7 +117,18 @@ function describeCandidatePath(peer: PeerDiagnosticsSnapshot) {
   const candidate = peer.mediaCandidateType ?? peer.dataCandidateType;
   const protocol = peer.mediaProtocol ?? peer.dataRelayProtocol ?? peer.dataProtocol;
   if (!candidate && !protocol) return "路径暂无样本";
-  return `${candidate ?? "未知候选"}${protocol ? ` / ${protocol}` : ""}`;
+  const candidateLabels: Record<string, string> = {
+    host: "直连",
+    srflx: "NAT 直连",
+    prflx: "点对点",
+    relay: "中继"
+  };
+  const protocolLabels: Record<string, string> = {
+    udp: "UDP",
+    tcp: "TCP",
+    tls: "TLS"
+  };
+  return `${candidate ? candidateLabels[candidate] ?? candidate : "未知路径"}${protocol ? ` / ${protocolLabels[protocol] ?? protocol}` : ""}`;
 }
 
 function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; label: string }) {
@@ -95,11 +139,11 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
           <div className="min-w-0">
             <strong className="truncate text-xs text-foreground">{label}</strong>
             <p className="mt-1 text-[10px] text-foreground-muted">
-              数据 {peer.dataChannelState ?? "未建立"} · 媒体 {peer.mediaConnectionState ?? "未建立"}
+              数据通道：{formatConnectionState(peer.dataChannelState)} · 音频通道：{formatConnectionState(peer.mediaConnectionState)}
             </p>
           </div>
           <span className={`rounded-full border px-2 py-0.5 text-[10px] ${getHealthClass(peer)}`}>
-            {peer.transportHealth ?? "暂无状态"}
+            {formatHealth(peer.transportHealth)}
           </span>
         </div>
         {peer.lastError ? <p className="mt-2 text-[10px] text-red-300">{peer.lastError}</p> : null}
@@ -107,22 +151,18 @@ function PeerDiagnosticCard({ peer, label }: { peer: PeerDiagnosticsSnapshot; la
       <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
         <DiagnosticSection title="连接路径">
           <DiagnosticGrid>
-            <span>路径: {describeCandidatePath(peer)}</span>
-            <span>数据 ICE: {peer.dataIceState ?? "暂无"}</span>
-            <span>媒体 ICE: {peer.mediaIceState ?? "暂无"}</span>
-            <span>RTT: {formatMetric(peer.currentRoundTripTimeMs, "ms")}</span>
-            <span>数据协议: {peer.dataRelayProtocol ?? peer.dataProtocol ?? "暂无"}</span>
-            <span>发送队列: {formatMetric(peer.dataBufferedAmountBytes, " bytes")}</span>
+            <span>网络路径：{describeCandidatePath(peer)}</span>
+            <span>往返延迟：{formatMetric(peer.currentRoundTripTimeMs, " ms")}</span>
+            <span>数据通道：{formatConnectionState(peer.dataChannelState)}</span>
+            <span>音频通道：{formatConnectionState(peer.mediaConnectionState)}</span>
           </DiagnosticGrid>
         </DiagnosticSection>
-        <DiagnosticSection title="音频轨道">
+        <DiagnosticSection title="实际音频流量">
           <DiagnosticGrid>
-            <span>编码: {peer.opusCodec ?? "暂无"}</span>
-            <span>发送轨道: {peer.senderTrackId ?? "暂无"}</span>
-            <span>接收轨道: {peer.receiverTrackId ?? "暂无"}</span>
-            <span>媒体包: {formatMaybeTimestamp(peer.lastMediaPacketAt)}</span>
-            <span>发送连接: {peer.mediaConnectionState ?? "暂无"}</span>
-            <span>最近恢复: {peer.lastRecoveryAction ?? "暂无"}</span>
+            <span>上传：{formatMetric(peer.mediaSendBitrateKbps, " kbps")}</span>
+            <span>下载：{formatMetric(peer.mediaReceiveBitrateKbps, " kbps")}</span>
+            <span>丢包：{formatMetric(peer.packetLossRate, "%")}</span>
+            <span>音频编码：{peer.opusCodec ?? "暂无"}</span>
           </DiagnosticGrid>
         </DiagnosticSection>
       </div>
@@ -158,7 +198,7 @@ function MeshStatusPanelBase({
     [normalizedMembers]
   );
   const visibleDiagnostics = normalizedDiagnostics.filter(
-    (peer) => peer.peerId === "system" || activePeerIds.has(peer.peerId)
+    (peer) => activePeerIds.has(peer.peerId)
   );
   const visibleEvents = useMemo(
     () => [...new Map(recentEvents.map((event) => [event.id, event])).values()].slice(0, 8),
@@ -189,7 +229,7 @@ function MeshStatusPanelBase({
         <div className="flex flex-col gap-3">
           <DiagnosticSection title="ICE 配置">
             <DiagnosticGrid>
-              <span>配置来源: {iceConfigSource}</span>
+              <span>配置来源：{formatIceSource(iceConfigSource)}</span>
               <span>{iceConfigStatus}</span>
             </DiagnosticGrid>
           </DiagnosticSection>

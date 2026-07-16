@@ -312,8 +312,8 @@ export function getLocalPlaybackStatus(input: {
   switch (input.segmentedPlayback.state) {
     case "live":
       return {
-        label: "正在发声",
-        detail: "本机正在发送或接收 WebRTC RTP Opus 音频。",
+        label: "正常出声",
+        detail: "本机正在发送或接收可播放的实时音频。",
         tone: "success",
         badgeText: "RTP Opus"
       };
